@@ -21,6 +21,9 @@ import (
 // "file:" URIs is gated on this so POSIX behavior is never altered.
 const goosWindows = "windows"
 
+// opOpen is the Op value for the [fs.PathError]s these FS implementations return.
+const opOpen = "open"
+
 // PermissiveRoot is an [fs.FS] backed by direct calls to [os.Open]. It
 // is the explicit opposite of [os.Root]: rather than sandboxing access
 // to a directory, it accepts any path the caller hands it — absolute,
@@ -72,13 +75,13 @@ func (PermissiveRoot) Open(name string) (fs.File, error) {
 				return f, nil
 			}
 			if errors.Is(err, fs.ErrNotExist) || isInvalidNameOpenError(runtime.GOOS, err) {
-				return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+				return nil, &fs.PathError{Op: opOpen, Path: name, Err: fs.ErrNotExist}
 			}
 			return nil, err //nolint:wrapcheck // intentional passthrough; see type doc
 		}
 		p, err := FileURIToPath(name)
 		if err != nil {
-			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+			return nil, &fs.PathError{Op: opOpen, Path: name, Err: err}
 		}
 		name = p
 	}
@@ -98,7 +101,7 @@ type DenyAll struct{}
 // that treat a missing resource as "skip silently" behave as if no file was
 // present.
 func (DenyAll) Open(name string) (fs.File, error) {
-	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	return nil, &fs.PathError{Op: opOpen, Path: name, Err: fs.ErrNotExist}
 }
 
 const windowsInvalidNameCode = 123

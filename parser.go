@@ -151,6 +151,39 @@ func PermissiveFS() fs.FS {
 	return iofs.PermissiveRoot{}
 }
 
+// DirFS returns an [fs.FS], for use with [Parser.FS], that opens external
+// resources only at or below root. Unlike [PermissiveFS] it refuses any name
+// that resolves outside root, so even with external loading enabled an
+// attacker-supplied SYSTEM identifier ("/etc/passwd", "../../secret") cannot
+// disclose arbitrary local files, and a non-file URI scheme (http, https, ...)
+// is rejected so the FS never reaches the network.
+//
+// It is the general confined-FS adapter: root may be ANY trusted directory, not
+// only the document's own directory. The parser resolves a relative SYSTEM id
+// against the document's base URI into an absolute path; DirFS serves that
+// absolute name directly when it lies within root, so — unlike a bare
+// [os.DirFS] or [os.Root.FS] passed to [Parser.FS] — it does not depend on the
+// parser's base-relative retry (which only recovers the document-directory
+// case). Pass it to opt into confined host access:
+//
+//	doc, err := helium.NewParser().
+//		BlockXXE(false).
+//		LoadExternalDTD(true).
+//		FS(helium.DirFS("/trusted/dtds")).
+//		Parse(ctx, data)
+//
+// Confinement is enforced with [os.Root] (os.OpenRoot, Go 1.24+): a "../"- or
+// absolute-path escape above root is rejected, AND an in-root symlink pointing
+// outside root is refused. DirFS is therefore both path-escape-safe and a
+// symlink sandbox — stronger than [os.DirFS], which follows an in-root symlink
+// out of its root. A relative root is resolved against the process working
+// directory when DirFS is called; if that resolution fails (the working
+// directory is unavailable) the FS fails closed — every open returns the error
+// rather than resolving against a working directory current at open time.
+func DirFS(root string) fs.FS {
+	return iofs.NewConfinedDir(root)
+}
+
 func (p Parser) clone() Parser {
 	p = p.normalized()
 	cp := *p.cfg
@@ -604,10 +637,13 @@ func (p Parser) Catalog(c CatalogResolver) Parser {
 // every open: a parser from [NewParser] loads no external resources from the
 // host filesystem. To opt into host access, pass [PermissiveFS] (any os.Open
 // path) or — preferably — a confined [fs.FS] rooted at a trusted directory. For
-// a confined FS, prefer [os.Root.FS] (os.OpenRoot, Go 1.24+): it refuses any
-// open that escapes the root through a symlink. [os.DirFS] blocks "../"- and
-// absolute-path escape but FOLLOWS an in-root symlink out of the root, so it is
-// path-escape-safe but not a symlink sandbox.
+// a confined FS, prefer [DirFS] (or [os.Root.FS], os.OpenRoot, Go 1.24+): it
+// refuses any open that escapes the root through a symlink. [os.DirFS] blocks
+// "../"- and absolute-path escape but FOLLOWS an in-root symlink out of the
+// root, so it is path-escape-safe but not a symlink sandbox. [DirFS]
+// additionally serves an in-root ABSOLUTE name directly, so it can be rooted at
+// any trusted directory, not only the document's own directory (the
+// base-relative retry below recovers only the document-directory case).
 //
 // A relative SYSTEM id is resolved against the document's base URI, which is
 // absolute whenever one is set (e.g. [Parser.ParseFile] uses the file's
