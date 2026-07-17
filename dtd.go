@@ -289,13 +289,15 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 //   - atype must be a valid enum.Attr* type and def a valid
 //     enum.AttrDefaultNone/Required/Implied/Fixed kind.
 //   - for enum.AttrEnumeration / enum.AttrNotation, enumValues must be a non-empty
-//     list of well-formed, distinct tokens (enumeration tokens are NMTOKENs,
-//     NOTATION tokens are Names); it is ignored for other types.
+//     list of well-formed, distinct tokens (enumeration tokens are NMTOKENs, which
+//     permit a colon; NOTATION tokens are colon-free Names, because a NotationDecl
+//     name forbids a colon); it is ignored for other types.
 //   - #REQUIRED and #IMPLIED must NOT carry a default value (checked against the
 //     value as given, before normalization); enum.AttrDefaultNone and #FIXED carry
 //     one (possibly the empty string), validated against atype, and an
 //     enumeration/NOTATION default must be one of enumValues. Every character of a
-//     value-bearing default must be a legal XML Char.
+//     value-bearing default must be a legal XML Char, and it must not contain a raw
+//     '&' (which the <!ATTLIST> default-value serializer cannot round-trip).
 //   - an ID attribute's default must be #IMPLIED or #REQUIRED (never a value or
 //     #FIXED), per the ID Attribute Default VC.
 //
@@ -426,8 +428,12 @@ func validateAndNormalizeAttrDecl(name string, atype enum.AttributeType, def enu
 
 	// An enumeration or NOTATION type needs a non-empty list of well-formed,
 	// distinct tokens, or the serialized "(...)" would not re-parse. Enumeration
-	// tokens are NMTOKENs; NOTATION tokens are Names (the parser reads them with
-	// parseNmtoken and parseName respectively).
+	// tokens are NMTOKENs (parseNmtoken, colon permitted). A NOTATION token names a
+	// notation, and a NotationDecl Name forbids a colon (parser_dtd_attr.go
+	// parseNotationDecl rejects it as "colons are forbidden from notation names",
+	// Namespaces in XML §6): a colon-bearing token could not be declared as a
+	// notation and so could not round-trip, so validate it with the colon-free Name
+	// production (isValidName), matching the parser's effective rule.
 	if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
 		if len(enumValues) == 0 {
 			return "", fmt.Errorf("enumeration/notation attribute requires at least one token: %w", ErrInvalidArgument)
@@ -436,7 +442,7 @@ func validateAndNormalizeAttrDecl(name string, atype enum.AttributeType, def enu
 		for _, tok := range enumValues {
 			ok := isValidNmtoken(tok)
 			if atype == enum.AttrNotation {
-				ok = isValidNameWithColon(tok)
+				ok = isValidName(tok)
 			}
 			if !ok {
 				return "", fmt.Errorf("invalid enumeration/notation token %q: %w", tok, ErrInvalidArgument)
@@ -480,18 +486,33 @@ func validateAndNormalizeAttrDecl(name string, atype enum.AttributeType, def enu
 	return defvalue, nil
 }
 
-// checkAttrDefaultChars rejects a value-bearing default value that contains a
-// character outside the XML Char production (a NUL or other C0/C1 control, an
-// out-of-range code point) or invalid UTF-8 — either of which would serialize to
-// a "&#x0;"-style reference (or a lone U+FFFD) that a validating parser cannot
-// recover equivalently. It reuses the writer's isInCharacterRange predicate so the
-// accept/reject boundary matches serialization exactly. Every violation wraps
-// ErrInvalidArgument.
+// checkAttrDefaultChars rejects a value-bearing default value that the
+// default-value serializer cannot round-trip equivalently:
+//
+//   - a character outside the XML Char production (a NUL or other C0/C1 control, an
+//     out-of-range code point) or invalid UTF-8, either of which would serialize to
+//     a "&#x0;"-style reference (or a lone U+FFFD) the parser cannot recover. It
+//     reuses the writer's isInCharacterRange predicate so the accept/reject
+//     boundary matches serialization exactly.
+//   - a literal '&'. The writer escapes '&' as "&amp;", but the parser stores an
+//     unsubstituted '&'-producing reference in an <!ATTLIST> default as the literal
+//     text "&#38;" (parser_element.go parseAttributeValueInternal), not a bare '&',
+//     so the value GROWS on each serialize→parse cycle ("&amp;" → "&amp;#38;" → …)
+//     and never stabilizes. The other characters the writer escapes ('<', '>', '"',
+//     TAB/LF/CR) each decode back to themselves and round-trip, so only '&' is
+//     rejected here. (This is a pre-existing writer/parser escaping asymmetry for
+//     '&' in attribute values; guarding the constructor keeps AddAttributeDecl's
+//     round-trip contract without touching the shared escaping.)
+//
+// Every violation wraps ErrInvalidArgument.
 func checkAttrDefaultChars(s string) error {
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if r == utf8.RuneError && size == 1 {
 			return fmt.Errorf("default value %q contains invalid UTF-8: %w", s, ErrInvalidArgument)
+		}
+		if r == '&' {
+			return fmt.Errorf("default value %q must not contain a raw '&' (it does not round-trip through the <!ATTLIST> default-value serializer): %w", s, ErrInvalidArgument)
 		}
 		if !isInCharacterRange(r) {
 			return fmt.Errorf("default value %q contains a character outside the XML Char range (U+%04X): %w", s, r, ErrInvalidArgument)

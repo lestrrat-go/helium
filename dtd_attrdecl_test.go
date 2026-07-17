@@ -206,10 +206,19 @@ func TestAddAttributeDeclRejects(t *testing.T) {
 		{"enumeration token not an NMTOKEN", attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultImplied, "", Enumeration{"a b"}},
 		{"duplicate enumeration token", attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultImplied, "", Enumeration{"a", "a"}},
 		{"notation token not a Name", attrDeclElem, "note", enum.AttrNotation, enum.AttrDefaultImplied, "", Enumeration{"1abc"}},
+		// A NOTATION token naming a notation whose <!NOTATION> declaration cannot hold
+		// a colon (the parser rejects "colons are forbidden from notation names") must
+		// itself be colon-free, or the serialized decl could not round-trip.
+		{"notation token with a colon", attrDeclElem, "note", enum.AttrNotation, enum.AttrDefaultImplied, "", Enumeration{"p:n"}},
 		{"enumeration default not a member", attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultNone, "c", Enumeration{"a", "b"}},
 		{"REQUIRED carrying a default value", attrDeclElem, attrDeclCount, enum.AttrCDATA, enum.AttrDefaultRequired, "x", nil},
 		{"IMPLIED carrying a default value", attrDeclElem, attrDeclCount, enum.AttrCDATA, enum.AttrDefaultImplied, "x", nil},
 		{"invalid ID default value", attrDeclElem, "id", enum.AttrID, enum.AttrDefaultNone, "not a name", nil},
+		// A raw '&' in a value-bearing default does not round-trip: the writer escapes
+		// it as "&amp;" but the parser stores the unsubstituted reference as literal
+		// "&#38;", so the value grows on every serialize→parse cycle.
+		{"FIXED default with a raw ampersand", attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultFixed, "&", nil},
+		{"bare default with a raw ampersand", attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultNone, "a&b", nil},
 	}
 
 	for _, tc := range tests {
@@ -394,6 +403,82 @@ func TestAddAttributeDeclRejectsTrailingColon(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidArgument)
 	require.Nil(t, adecl)
 	require.Empty(t, dtd.attributes)
+}
+
+// TestAddAttributeDeclEnumerationTokenColonAccepted verifies the colon rule
+// difference between the two enumerated types: an enumeration token is an NMTOKEN,
+// whose grammar permits a colon (the parser reads it with parseNmtoken), so a
+// colon-bearing enumeration token is accepted and round-trips — unlike a NOTATION
+// token, which names a colon-forbidding notation.
+func TestAddAttributeDeclEnumerationTokenColonAccepted(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+	require.NoError(t, err)
+	_, err = dtd.AddElementDecl(attrDeclElem, enum.AnyElementType, nil)
+	require.NoError(t, err)
+
+	_, err = dtd.AddAttributeDecl(attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultImplied, "", Enumeration{"x:a", "x:b"})
+	require.NoError(t, err)
+
+	root := doc.CreateElement(attrDeclElem)
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	var buf bytes.Buffer
+	require.NoError(t, Write(&buf, doc))
+	require.Contains(t, buf.String(), "<!ATTLIST item kind (x:a | x:b) #IMPLIED>")
+
+	parsed, err := NewParser().ValidateDTD(true).Parse(t.Context(), buf.Bytes())
+	require.NoError(t, err)
+	d, ok := parsed.IntSubset().LookupAttribute("kind", "", attrDeclElem)
+	require.True(t, ok)
+	require.Equal(t, Enumeration{"x:a", "x:b"}, d.tree)
+}
+
+// TestAddAttributeDeclDefaultRoundTripEquivalence verifies an accepted
+// value-bearing default is stable across serialize→parse→serialize: the default
+// value the parser recovers is identical, and re-serializing the reparsed document
+// yields the same <!ATTLIST> line. It exercises defaults that DO round-trip through
+// the default-value serializer — a '<' (escaped as "&lt;" and decoded back), a '"'
+// (escaped as "&quot;"), and a plain value — so the round-trip contract is proven,
+// not just the rejection of the '&' that does not.
+func TestAddAttributeDeclDefaultRoundTripEquivalence(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		defvalue string
+		want     string
+	}{
+		{"plain", "px", `<!ATTLIST item label CDATA #FIXED "px">`},
+		{"less-than", "a<b", `<!ATTLIST item label CDATA #FIXED "a&lt;b">`},
+		{"double-quote", `a"b`, `<!ATTLIST item label CDATA #FIXED "a&quot;b">`},
+		{"cdata-end", "]]>", `<!ATTLIST item label CDATA #FIXED "]]&gt;">`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddElementDecl(attrDeclElem, enum.AnyElementType, nil)
+			require.NoError(t, err)
+			_, err = dtd.AddAttributeDecl(attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultFixed, tc.defvalue, nil)
+			require.NoError(t, err)
+
+			root := doc.CreateElement(attrDeclElem)
+			require.NoError(t, doc.SetDocumentElement(root))
+
+			var buf bytes.Buffer
+			require.NoError(t, Write(&buf, doc))
+			require.Contains(t, buf.String(), tc.want)
+
+			parsed, err := NewParser().Parse(t.Context(), buf.Bytes())
+			require.NoError(t, err)
+			d, ok := parsed.IntSubset().LookupAttribute("label", "", attrDeclElem)
+			require.True(t, ok)
+			require.Equal(t, tc.defvalue, d.defvalue, "recovered default value")
+
+			var buf2 bytes.Buffer
+			require.NoError(t, Write(&buf2, parsed))
+			require.Contains(t, buf2.String(), tc.want, "re-serialized <!ATTLIST> is stable")
+		})
+	}
 }
 
 // TestDTDSentinelErrors verifies the DTD/document error sites expose matchable
