@@ -302,6 +302,80 @@ func TestDecoderNonDeclProcInstUnaffected(t *testing.T) {
 	}
 }
 
+// tokenSig renders a token as a stable, comparable signature string. Only the
+// discriminating fields are included, which is enough to prove two token
+// sequences match.
+func tokenSig(tok stdxml.Token) string {
+	switch v := tok.(type) {
+	case stdxml.StartElement:
+		return "Start(" + v.Name.Local + ")"
+	case stdxml.EndElement:
+		return "End(" + v.Name.Local + ")"
+	case stdxml.CharData:
+		return "Char(" + string(v) + ")"
+	case stdxml.Comment:
+		return "Comment(" + string(v) + ")"
+	case stdxml.ProcInst:
+		return "PI(" + v.Target + "|" + string(v.Inst) + ")"
+	case stdxml.Directive:
+		return "Directive(" + string(v) + ")"
+	}
+	return "?"
+}
+
+// shimTokenSigs drains a shim Decoder to EOF and returns each token's signature.
+func shimTokenSigs(t *testing.T, xml string) []string {
+	t.Helper()
+	d := shim.NewDecoder(t.Context(), strings.NewReader(xml))
+	defer d.Close()
+	var sigs []string
+	for {
+		tok, err := d.Token()
+		if err == io.EOF {
+			return sigs
+		}
+		require.NoError(t, err)
+		sigs = append(sigs, tokenSig(tok))
+	}
+}
+
+// stdlibTokenSigs drains an encoding/xml Decoder to EOF and returns each token's
+// signature. It is the oracle the shim must match.
+func stdlibTokenSigs(t *testing.T, xml string) []string {
+	t.Helper()
+	d := stdxml.NewDecoder(strings.NewReader(xml))
+	var sigs []string
+	for {
+		tok, err := d.Token()
+		if err == io.EOF {
+			return sigs
+		}
+		require.NoError(t, err)
+		sigs = append(sigs, tokenSig(tok))
+	}
+}
+
+// TestDecoderPrologNoDuplicate proves that non-declaration prolog tokens
+// (comments, processing instructions) are emitted exactly once, matching
+// encoding/xml. In-root comments/PIs must also stay single-emission.
+func TestDecoderPrologNoDuplicate(t *testing.T) {
+	inputs := []string{
+		`<?xml version="1.0"?><!-- hi --><?pi data?><root/>`,
+		`<!-- lead --><root/>`,
+		`<?xml version="1.0"?><?xml-stylesheet href="a.xsl"?><root>text</root>`,
+		`<!-- a --><!-- b --><?p1?><?p2?><root/>`,
+		`<root><!-- inside --><?pi?></root>`,
+		`<?xml version="1.0"?><root/>`,
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			want := stdlibTokenSigs(t, in)
+			got := shimTokenSigs(t, in)
+			require.Equal(t, want, got)
+		})
+	}
+}
+
 // drainDecoder reads every token of xml through a shim Decoder and returns the
 // first error that is not the clean io.EOF ending the stream.
 func drainDecoder(t *testing.T, xml string) error {
