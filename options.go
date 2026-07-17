@@ -13,8 +13,11 @@ import (
 type LoadSubsetOption int
 
 const (
-	// DetectIDs records ID-typed attributes in the document's ID table so they
-	// can be resolved by GetElementByID and fn:id.
+	// DetectIDs is the external-DTD-loading intent bit (derived from
+	// LoadExternalDTD): it is one of the intents that cause the external subset
+	// to be loaded, which lets DTD-declared ID attributes be recognized. The bit
+	// itself does not populate the ID table — ID interning happens for any parse
+	// unless SkipIDs is set.
 	DetectIDs LoadSubsetOption = 1 << (iota + 1)
 	// CompleteAttrs adds attributes that the DTD declares with a default value
 	// but that the instance omits.
