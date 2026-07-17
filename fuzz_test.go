@@ -137,6 +137,11 @@ func FuzzParse(f *testing.F) {
 
 func FuzzParseRoundtrip(f *testing.F) {
 	f.Add([]byte(`<?xml version="1.0"?><root/>`))
+	// A version outside the 1.x family parsed but could not be serialized: the
+	// Writer's VersionNum check is stricter than the grammar parseVersionNum
+	// accepts, so the roundtrip failed. The parser now rejects it outright.
+	f.Add([]byte(`<?xml version="0.0"?><root/>`))
+	f.Add([]byte(`<?xml version="1.9"?><root/>`))
 	f.Add([]byte(`<root xmlns="http://example.com"><child attr="val">text</child></root>`))
 	f.Add([]byte(`<?xml version="1.0"?><root><a><b><c>deep</c></b></a></root>`))
 

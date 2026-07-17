@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding"
 	stdxml "encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -68,6 +69,14 @@ func Unmarshal(data []byte, v any) error {
 	p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
+		// A version outside the 1.x family is a fatal parse error in helium. It
+		// must be reported, not stripped: the retry below would drop the
+		// declaration and parse the document as if it carried no version at all,
+		// silently accepting input stdlib rejects. Report it with stdlib's
+		// wording, as validateXMLDeclFields does for a version that parses.
+		if errors.Is(err, helium.ErrUnsupportedXMLVersion) {
+			return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", declaredXMLVersion(trimmed))
+		}
 		// helium's lenient mode is still stricter than stdlib for some
 		// malformed declarations (e.g. charset=, empty version/encoding).
 		// Strip the declaration and retry.
@@ -115,6 +124,33 @@ func stripXMLDecl(data []byte) ([]byte, bool) {
 		return data, false
 	}
 	return trimLeadingSpace(after), true
+}
+
+// declaredXMLVersion returns the value of the version pseudo-attribute in data's
+// XML declaration, or "" when there is none. It reads the raw bytes because the
+// version it reports is one the parser rejected, so no Document carries it.
+func declaredXMLVersion(data []byte) string {
+	decl, _, found := bytes.Cut(data, []byte("?>"))
+	if !found {
+		return ""
+	}
+	_, after, found := bytes.Cut(decl, []byte("version"))
+	if !found {
+		return ""
+	}
+	after = trimLeadingSpace(after)
+	if len(after) == 0 || after[0] != '=' {
+		return ""
+	}
+	after = trimLeadingSpace(after[1:])
+	if len(after) == 0 || (after[0] != '"' && after[0] != '\'') {
+		return ""
+	}
+	value, _, found := bytes.Cut(after[1:], after[:1])
+	if !found {
+		return ""
+	}
+	return string(value)
 }
 
 // validateXMLDeclFields checks the parsed document's version and encoding

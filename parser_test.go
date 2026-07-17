@@ -91,6 +91,98 @@ func TestParseXMLDecl(t *testing.T) {
 	}
 }
 
+// TestParseUnsupportedXMLVersion covers the XML §2.8 VersionNum constraint as
+// libxml2 applies it in xmlParseXMLDecl: VersionNum ::= '1.' [0-9]+ since XML 1.0
+// 5th edition, so a version outside the 1.x family is fatal
+// (XML_ERR_UNKNOWN_VERSION), while a 1.x version other than "1.0" only warns
+// (XML_WAR_UNKNOWN_VERSION) and parsing continues. The grammar itself is looser
+// than the constraint — parseVersionNum accepts [0-9] '.' [0-9]+, mirroring
+// libxml2's xmlParseVersionNum — so the constraint must be enforced separately.
+func TestParseUnsupportedXMLVersion(t *testing.T) {
+	t.Parallel()
+
+	const content = `<root/>`
+
+	t.Run("a non-1.x version is fatal", func(t *testing.T) {
+		t.Parallel()
+
+		for _, version := range []string{"0.0", "2.0", "9.9", "0.9"} {
+			src := `<?xml version="` + version + `"?>` + content
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.Error(t, err, "version %q must be rejected", version)
+			require.ErrorIs(t, err, helium.ErrUnsupportedXMLVersion)
+			require.Contains(t, err.Error(), version, "the error names the offending version")
+			require.Nil(t, doc)
+		}
+	})
+
+	t.Run("a 1.x version warns but parses", func(t *testing.T) {
+		t.Parallel()
+
+		for _, version := range []string{"1.2", "1.9"} {
+			src := `<?xml version="` + version + `"?>` + content
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err, "version %q must parse", version)
+			require.NotNil(t, doc)
+			require.Equal(t, version, doc.Version(), "the declared version is preserved")
+		}
+	})
+
+	t.Run("1.0 and 1.1 are silent", func(t *testing.T) {
+		t.Parallel()
+
+		for _, version := range []string{ver10, ver11} {
+			var warnings []string
+			s := sax.New()
+			s.SetOnWarning(sax.WarningFunc(func(_ context.Context, err error) error {
+				warnings = append(warnings, err.Error())
+				return nil
+			}))
+			src := `<?xml version="` + version + `"?>` + content
+			_, err := helium.NewParser().SAXHandler(s).Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			require.Empty(t, warnings, "version %q must not warn", version)
+		}
+	})
+
+	t.Run("the fatal version is rejected on the UTF-16 path", func(t *testing.T) {
+		t.Parallel()
+
+		src := utf16Bytes(`<?xml version="2.0" encoding="utf-16"?>`+content, true)
+		_, err := helium.NewParser().Parse(t.Context(), src)
+		require.ErrorIs(t, err, helium.ErrUnsupportedXMLVersion)
+	})
+
+	t.Run("LenientXMLDecl relaxes order, not the version constraint", func(t *testing.T) {
+		t.Parallel()
+
+		src := `<?xml encoding="utf-8" version="2.0"?>` + content
+		_, err := helium.NewParser().LenientXMLDecl(true).Parse(t.Context(), []byte(src))
+		require.ErrorIs(t, err, helium.ErrUnsupportedXMLVersion)
+	})
+
+	// The fuzz roundtrip that surfaced this: the parser accepted a version the
+	// Writer's stricter VersionNum check then refused to serialize, so a parsed
+	// document could not be written back out. Rejecting at parse time keeps the
+	// two grammars from disagreeing.
+	t.Run("every parsed version serializes", func(t *testing.T) {
+		t.Parallel()
+
+		for _, version := range []string{ver10, ver11, "1.9"} {
+			src := `<?xml version="` + version + `"?>` + content
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			var buf bytes.Buffer
+			require.NoError(t, helium.NewWriter().WriteTo(&buf, doc),
+				"a document the parser accepted must serialize")
+
+			_, err = helium.NewParser().Parse(t.Context(), buf.Bytes())
+			require.NoError(t, err, "the serialized output must parse back")
+		}
+	})
+}
+
 func TestParseMisc(t *testing.T) {
 	const decl = `<?xml version="1.0"?>` + "\n"
 	const content = `<root />`

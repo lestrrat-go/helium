@@ -3,6 +3,15 @@ package helium
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+)
+
+// The XML versions helium implements. A document declaring anything else is
+// rejected or warned about by checkDocumentVersion.
+const (
+	xmlVersion10 = "1.0"
+	xmlVersion11 = "1.1"
 )
 
 // should only be here if current buffer is at '<?xml'
@@ -26,6 +35,9 @@ func (pctx *parserCtx) parseXMLDecl(ctx context.Context) error {
 
 	v, err := pctx.parseVersionInfo(ctx)
 	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if err := pctx.checkDocumentVersion(ctx, v); err != nil {
 		return pctx.error(ctx, err)
 	}
 	pctx.version = v
@@ -103,17 +115,45 @@ func (pctx *parserCtx) documentVersion() string {
 // Document node, so it is seeded with the parent document's version by
 // decodeExternalPEContent / decodeFixedWidthExternalContent.
 func (pctx *parserCtx) checkEntityVersion(entityVersion string) error {
-	if entityVersion == "" || entityVersion == "1.0" {
+	if entityVersion == "" || entityVersion == xmlVersion10 {
 		return nil
 	}
 	docVersion := pctx.documentVersion()
 	if docVersion == "" {
-		docVersion = "1.0"
+		docVersion = xmlVersion10
 	}
-	if docVersion != "1.0" {
+	if docVersion != xmlVersion10 {
 		return nil
 	}
 	return ErrEntityVersionMismatch
+}
+
+// checkDocumentVersion enforces the VersionNum constraint on a DOCUMENT's XML
+// declaration (libxml2 xmlParseXMLDecl). XML 1.0 5th edition restricts
+// VersionNum to '1.' [0-9]+, but the grammar parseVersionNum accepts is looser —
+// [0-9] '.' [0-9]+, mirroring libxml2's xmlParseVersionNum — so the constraint is
+// applied here instead:
+//
+//   - "1.0" and "1.1" are supported and pass silently. libxml2 warns on ANY
+//     version other than "1.0", including "1.1"; helium implements XML 1.1
+//     (isXML11 drives 1.1 escaping and the §4.3.4 entity matrix), so warning on
+//     every 1.1 document would contradict that support. This is the one
+//     deliberate divergence here.
+//   - any other "1.x" is reported as a warning and parsing CONTINUES
+//     (XML_WAR_UNKNOWN_VERSION); the declared version is retained.
+//   - anything outside the 1.x family (e.g. "0.0", "2.0") is FATAL
+//     (XML_ERR_UNKNOWN_VERSION).
+//
+// This applies only to a document's XMLDecl, never to an external entity's
+// TextDecl — that carries its own §4.3.4 rule (see checkEntityVersion).
+func (pctx *parserCtx) checkDocumentVersion(ctx context.Context, version string) error {
+	if version == xmlVersion10 || version == xmlVersion11 {
+		return nil
+	}
+	if !strings.HasPrefix(version, "1.") {
+		return fmt.Errorf("%w %q", ErrUnsupportedXMLVersion, version)
+	}
+	return pctx.warning(ctx, "Unsupported version '%s'", version)
 }
 
 // parseTextDecl parses an external-entity TextDecl from the byte cursor,
@@ -277,6 +317,9 @@ func (pctx *parserCtx) parseXMLDeclLenient(ctx context.Context) error {
 		}
 
 		if v, err := pctx.parseVersionInfo(ctx); err == nil {
+			if err := pctx.checkDocumentVersion(ctx, v); err != nil {
+				return pctx.error(ctx, err)
+			}
 			pctx.version = v
 			continue
 		}
@@ -320,6 +363,9 @@ func (pctx *parserCtx) parseXMLDeclFromCursor(ctx context.Context) error {
 
 	v, err := pctx.parseVersionInfoFromCursor(ctx)
 	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	if err := pctx.checkDocumentVersion(ctx, v); err != nil {
 		return pctx.error(ctx, err)
 	}
 	pctx.version = v
@@ -408,6 +454,9 @@ func (pctx *parserCtx) parseXMLDeclFromCursorLenient(ctx context.Context) error 
 		}
 
 		if v, err := pctx.parseVersionInfoFromCursor(ctx); err == nil {
+			if err := pctx.checkDocumentVersion(ctx, v); err != nil {
+				return pctx.error(ctx, err)
+			}
 			pctx.version = v
 			continue
 		}
