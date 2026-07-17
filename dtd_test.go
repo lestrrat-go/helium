@@ -93,6 +93,45 @@ func TestDTDEntityAndNotation(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestAddNotationRejectsColon verifies AddNotation rejects a colon-bearing
+// notation name (a notation name is an XML NCName, no colon), mirroring the
+// parser's own "colons are forbidden from notation names" rule, so nothing is
+// registered or serialized; a valid notation name still round-trips through a
+// validating parser.
+func TestAddNotationRejectsColon(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+
+	// A colon in the notation name is rejected with ErrInvalidArgument, and
+	// nothing is registered.
+	_, err = dtd.AddNotation("p:n", "", "sys")
+	require.ErrorIs(t, err, helium.ErrInvalidArgument)
+	_, ok := dtd.LookupNotation("p:n")
+	require.False(t, ok, "rejected notation must not be registered")
+
+	// A valid (colon-free) notation name is accepted.
+	_, err = dtd.AddNotation("n", "", "sys")
+	require.NoError(t, err)
+
+	// Declare the root element so ValidateDTD accepts the document.
+	_, err = dtd.AddElementDecl("doc", enum.AnyElementType, nil)
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(doc.CreateElement("doc")))
+
+	var buf strings.Builder
+	require.NoError(t, helium.Write(&buf, doc))
+	out := buf.String()
+	require.Contains(t, out, `<!NOTATION n SYSTEM "sys"`)
+	require.NotContains(t, out, "p:n", "rejected notation must not be serialized")
+
+	// Round-trip: a validating parser accepts the serialized document.
+	_, err = helium.NewParser().ValidateDTD(true).Parse(t.Context(), []byte(out))
+	require.NoError(t, err)
+}
+
 // TestDTDRemoveElement covers RemoveElement.
 func TestDTDRemoveElement(t *testing.T) {
 	t.Parallel()
