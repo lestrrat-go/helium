@@ -546,6 +546,24 @@ func noteCrossDocumentEscape(dest *Document, cur Node) {
 	curDoc.slabEscaped = true
 }
 
+// noteCrossDocumentNamespaceEscape is the Namespace counterpart of
+// noteCrossDocumentEscape. A slab-backed Namespace is drawn from its owning
+// document's namespace slab (its owner is Namespace.context, set by
+// Document.CreateNamespace; a heap-allocated Namespace has a nil context and no
+// slab). When AddNamespaceDecl retains such a Namespace in another document's
+// declarations, the owning document must no longer recycle its namespace slab on
+// Free, so mark it escaped exactly as a cross-document node move does.
+func noteCrossDocumentNamespaceEscape(dest *Document, ns *Namespace) {
+	if ns == nil {
+		return
+	}
+	src := ns.context
+	if src == nil || src == dest {
+		return
+	}
+	src.slabEscaped = true
+}
+
 // addChildPreflight runs the shared self/cycle guard and auto-unlink that every
 // AddChild path must perform before relinking. It returns a non-nil error when
 // the operation must be rejected; on success cur is detached from any previous
@@ -1168,6 +1186,13 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 // The caller owns ns; it must not be shared as a declaration across nodes that
 // could be mutated independently. A nil ns is appended verbatim (the dedup scan
 // is skipped) so a caller deliberately corrupting a node is unaffected.
+//
+// When ns is RETAINED (case 1 append and case 3 collapse) and is slab-backed by
+// a DIFFERENT document than this node's owner, that source document is marked so
+// its Free will not recycle the namespace slab out from under the retained
+// declaration — the same guard a cross-document node move applies (see
+// noteCrossDocumentEscape). A same-document or heap-allocated ns, and the cases
+// that do not retain ns (a same-URI no-op, a declined conflict), mark nothing.
 func (n *node) AddNamespaceDecl(ns *Namespace) {
 	if ns == nil {
 		n.nsDefs = append(n.nsDefs, ns)
@@ -1187,9 +1212,17 @@ func (n *node) AddNamespaceDecl(ns *Namespace) {
 		if existing.URI() == ns.URI() {
 			return
 		}
+		// Case 3 (collapse): the caller's ns replaces the slot and is retained. If
+		// ns is slab-backed by a DIFFERENT document, guard that document's Free
+		// against recycling the chunk out from under this retained declaration,
+		// mirroring a cross-document node move.
+		noteCrossDocumentNamespaceEscape(n.doc, ns)
 		n.nsDefs[i] = ns
 		return
 	}
+	// Case 1 (append): the caller's ns is retained in nsDefs; guard a foreign
+	// source document's slab the same way.
+	noteCrossDocumentNamespaceEscape(n.doc, ns)
 	n.nsDefs = append(n.nsDefs, ns)
 }
 

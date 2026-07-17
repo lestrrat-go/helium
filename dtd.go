@@ -122,8 +122,19 @@ func (dtd *DTD) AddEntity(name string, typ enum.EntityType, publicID, systemID, 
 }
 
 // AddNotation declares a notation in the DTD and registers it as a child node.
-// It returns an error if a notation with the same name is already declared.
+// It returns an error (wrapping ErrDuplicateDeclaration) if a notation with the
+// same name is already declared, and an error (wrapping ErrInvalidArgument) if
+// name contains a colon: a notation name is an XML NCName, so a colon-bearing
+// name produces a <!NOTATION> declaration the parser rejects ("colons are
+// forbidden from notation names"). Otherwise it trusts the caller for a
+// well-formed name, public ID, and system ID.
 func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) {
+	// A notation name is an XML NCName; a colon is forbidden. This mirrors the
+	// parser's own NotationDecl Name check exactly (parser_dtd_attr.go), so a
+	// name accepted here always reparses.
+	if strings.ContainsRune(name, ':') {
+		return nil, fmt.Errorf("colon is forbidden in notation name %q: %w", name, ErrInvalidArgument)
+	}
 	if _, ok := dtd.notations[name]; ok {
 		return nil, fmt.Errorf("redefinition of notation %s: %w", name, ErrDuplicateDeclaration)
 	}
