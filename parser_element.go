@@ -1325,7 +1325,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 
 	if normalize {
 		if entities > 0 {
-			nv := pctx.attrNormalizeSpace(v)
+			nv := attrNormalizeSpace(v)
 			if nv != v {
 				pctx.attrNormChanged = true
 			}

@@ -232,6 +232,170 @@ func TestAddAttributeDeclRejects(t *testing.T) {
 	}
 }
 
+// TestAddAttributeDeclNoKeyCollision verifies two distinct declarations whose
+// (local, prefix, elem) triples concatenate to the SAME `local + ":" + prefix +
+// ":" + elem` string are both registered and independently retrievable. The old
+// string key aliased them and wrongly rejected the second as a duplicate; the
+// struct key keeps them distinct.
+//
+// Decl A: name "b:a" -> local "a", prefix "b"; elem "c:d". String key "a:b:c:d".
+// Decl B: name "c:a:b" -> local "a:b", prefix "c"; elem "d". String key "a:b:c:d".
+func TestAddAttributeDeclNoKeyCollision(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+
+	_, err = dtd.AddAttributeDecl("c:d", "b:a", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+	require.NoError(t, err)
+	_, err = dtd.AddAttributeDecl("d", "c:a:b", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+	require.NoError(t, err, "a string-aliasing triple must not be rejected as a duplicate")
+
+	a, ok := dtd.LookupAttribute("a", "b", "c:d")
+	require.True(t, ok)
+	require.Equal(t, "a", a.name)
+	require.Equal(t, "b", a.prefix)
+	require.Equal(t, "c:d", a.elem)
+
+	b, ok := dtd.LookupAttribute("a:b", "c", "d")
+	require.True(t, ok)
+	require.Equal(t, "a:b", b.name)
+	require.Equal(t, "c", b.prefix)
+	require.Equal(t, "d", b.elem)
+
+	require.NotSame(t, a, b)
+	require.Len(t, dtd.attributes, 2)
+}
+
+// TestAddAttributeDeclRejectsOutOfRangeDefault verifies a value-bearing default
+// carrying a NUL or other out-of-XML-Char character is rejected before
+// registration (it would serialize as "&#x0;" and fail to reparse).
+func TestAddAttributeDeclRejectsOutOfRangeDefault(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		defvalue string
+	}{
+		{"NUL", "a\x00b"},
+		{"C0 control", "a\x01b"},
+		{"invalid UTF-8", "a\xffb"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+			require.NoError(t, err)
+
+			adecl, err := dtd.AddAttributeDecl(attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultFixed, tc.defvalue, nil)
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidArgument)
+			require.Nil(t, adecl)
+			require.Empty(t, dtd.attributes)
+		})
+	}
+}
+
+// TestAddAttributeDeclRejectsIDDefault verifies an ID attribute paired with a
+// value-bearing default (#FIXED or a bare default) is rejected — the ID Attribute
+// Default VC requires #IMPLIED or #REQUIRED, so such a decl would be rejected by
+// ValidateDTD(true) on a round-trip.
+func TestAddAttributeDeclRejectsIDDefault(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		def      enum.AttributeDefault
+		defvalue string
+	}{
+		{"ID + FIXED", enum.AttrDefaultFixed, "x1"},
+		{"ID + bare default", enum.AttrDefaultNone, "x1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+			require.NoError(t, err)
+
+			adecl, err := dtd.AddAttributeDecl(attrDeclElem, "id", enum.AttrID, tc.def, tc.defvalue, nil)
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidArgument)
+			require.Nil(t, adecl)
+			require.Empty(t, dtd.attributes)
+		})
+	}
+}
+
+// TestAddAttributeDeclTabDefaultNotFolded verifies the tokenized-default
+// normalization collapses ONLY #x20 (attrNormalizeSpace), matching the parser, not
+// all Unicode whitespace (strings.Fields).
+//
+//   - A #x20-separated NMTOKENS default round-trips: the two normalizers agree on
+//     #x20, so the stored value keeps its single-space separators verbatim.
+//   - A TAB-bearing NMTOKENS default is REJECTED, not silently folded: #x20-only
+//     normalization keeps the TAB inside the token, and a TAB is not an NMTOKEN
+//     character, matching the parser, which normalizes the same way and rejects it.
+//     strings.Fields would fold the TAB into a boundary and wrongly accept.
+func TestAddAttributeDeclTabDefaultNotFolded(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+	require.NoError(t, err)
+
+	adecl, err := dtd.AddAttributeDecl(attrDeclElem, "toks", enum.AttrNmtokens, enum.AttrDefaultFixed, "a b c", nil)
+	require.NoError(t, err)
+	require.Equal(t, "a b c", adecl.defvalue, "#x20 separators are preserved verbatim")
+
+	adecl, err = dtd.AddAttributeDecl(attrDeclElem, "tabbed", enum.AttrNmtokens, enum.AttrDefaultFixed, "a\tb", nil)
+	require.Error(t, err, "a TAB must not be folded into a spuriously-valid token boundary")
+	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.Nil(t, adecl)
+}
+
+// TestAddAttributeDeclSpacesOnlyRequired verifies a #REQUIRED (or #IMPLIED)
+// non-CDATA attribute whose default is spaces-only is rejected: the check runs
+// against the value AS GIVEN, so normalization cannot erase it into acceptance.
+func TestAddAttributeDeclSpacesOnlyRequired(t *testing.T) {
+	for _, def := range []enum.AttributeDefault{enum.AttrDefaultRequired, enum.AttrDefaultImplied} {
+		doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+		dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+		require.NoError(t, err)
+
+		adecl, err := dtd.AddAttributeDecl(attrDeclElem, "tok", enum.AttrNmtoken, def, "   ", nil)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrInvalidArgument)
+		require.Nil(t, adecl)
+	}
+}
+
+// TestAddAttributeDeclDuplicateBeforeParams verifies a duplicate declaration whose
+// parameters are ALSO invalid returns ErrDuplicateDeclaration (the duplicate check
+// runs before the non-identity parameter checks), matching the parser: a repeat
+// declaration is ignored entirely, so its invalid type must not surface as
+// ErrInvalidArgument.
+func TestAddAttributeDeclDuplicateBeforeParams(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+	require.NoError(t, err)
+
+	_, err = dtd.AddAttributeDecl(attrDeclElem, attrDeclCount, enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+	require.NoError(t, err)
+
+	// Same identity, but an invalid attribute type. The duplicate wins.
+	adecl, err := dtd.AddAttributeDecl(attrDeclElem, attrDeclCount, enum.AttributeType(999), enum.AttrDefaultImplied, "", nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrDuplicateDeclaration)
+	require.NotErrorIs(t, err, ErrInvalidArgument)
+	require.Nil(t, adecl)
+}
+
+// TestAddAttributeDeclRejectsTrailingColon verifies a name ending in a colon
+// (empty local part) is rejected, so no degenerate empty-local declaration is
+// stored.
+func TestAddAttributeDeclRejectsTrailingColon(t *testing.T) {
+	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+	dtd, err := doc.CreateInternalSubset(attrDeclElem, "", "")
+	require.NoError(t, err)
+
+	adecl, err := dtd.AddAttributeDecl(attrDeclElem, "p:", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.Nil(t, adecl)
+	require.Empty(t, dtd.attributes)
+}
+
 // TestDTDSentinelErrors verifies the DTD/document error sites expose matchable
 // sentinels.
 func TestDTDSentinelErrors(t *testing.T) {

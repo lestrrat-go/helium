@@ -99,7 +99,7 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 		case AttributeDeclNode:
 			if adecl, ok := AsNode[*AttributeDecl](c); ok {
 				cp := copyAttributeDecl(adecl, dst)
-				dstDTD.attributes[adecl.name+":"+adecl.prefix+":"+adecl.elem] = cp
+				dstDTD.attributes[attrDeclKey{local: adecl.name, prefix: adecl.prefix, elem: adecl.elem}] = cp
 				_ = dstDTD.AddChild(cp)
 			}
 		case NotationNode:

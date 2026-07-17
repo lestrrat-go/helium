@@ -344,7 +344,12 @@ func (pctx *parserCtx) parseDefaultDecl(ctx context.Context) (deftype enum.Attri
 	return
 }
 
-func (ctx *parserCtx) attrNormalizeSpace(s string) (value string) {
+// attrNormalizeSpace collapses runs of #x20 to a single space and trims a
+// leading/trailing #x20, the §3.3.3 tokenized-attribute normalization the parser
+// applies to a non-CDATA <!ATTLIST> default value. It collapses ONLY #x20 (never
+// TAB/NBSP/other whitespace), so it is shared by both the parser's <!ATTLIST>
+// path and DTD.AddAttributeDecl to keep their normalization identical.
+func attrNormalizeSpace(s string) (value string) {
 	if len(s) == 0 {
 		value = s
 		return
@@ -621,7 +626,7 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 		}
 
 		if typ != enum.AttrCDATA && def != enum.AttrDefaultInvalid {
-			defvalue = pctx.attrNormalizeSpace(defvalue)
+			defvalue = attrNormalizeSpace(defvalue)
 		}
 
 		cur = pctx.dtdRefetch(cur)

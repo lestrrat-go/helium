@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -13,13 +14,26 @@ import (
 // DTD represents an XML Document Type Definition (libxml2: xmlDtd).
 type DTD struct {
 	docnode
-	attributes map[string]*AttributeDecl
+	attributes map[attrDeclKey]*AttributeDecl
 	elements   map[string]*ElementDecl
 	entities   map[string]*Entity
 	pentities  map[string]*Entity
 	notations  map[string]*Notation
 	externalID string
 	systemID   string
+}
+
+// attrDeclKey identifies an attribute declaration by its owning element name and
+// the attribute's local name + prefix (the QName split on its first colon). A
+// struct key avoids the ambiguity of a `local + ":" + prefix + ":" + elem` string
+// concatenation, which collides distinct triples — e.g. ("d","c:a:b") and
+// ("c:d","b:a") both concatenate to "a:b:c:d", so the second would be wrongly
+// rejected as a duplicate. This mirrors the parser's specialAttrKey
+// (parser_dtd_attr.go) and libxml2's two-arg hash lookup (xmlHashQLookup3).
+type attrDeclKey struct {
+	local  string
+	prefix string
+	elem   string
 }
 
 // Notation is a notation declaration from a DTD.
@@ -49,7 +63,7 @@ func (n *Notation) Free() {}
 
 func newDTD() *DTD {
 	dtd := &DTD{
-		attributes: map[string]*AttributeDecl{},
+		attributes: map[attrDeclKey]*AttributeDecl{},
 		elements:   map[string]*ElementDecl{},
 		entities:   map[string]*Entity{},
 		pentities:  map[string]*Entity{},
@@ -250,8 +264,7 @@ func (dtd *DTD) RemoveElement(name, prefix string) *ElementDecl {
 // attribute local name, prefix, and owning element name, and reports whether it
 // was found.
 func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool) {
-	key := name + ":" + prefix + ":" + elem
-	decl, ok := dtd.attributes[key]
+	decl, ok := dtd.attributes[attrDeclKey{local: name, prefix: prefix, elem: elem}]
 	if !ok {
 		return nil, false
 	}
@@ -278,42 +291,49 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 //   - for enum.AttrEnumeration / enum.AttrNotation, enumValues must be a non-empty
 //     list of well-formed, distinct tokens (enumeration tokens are NMTOKENs,
 //     NOTATION tokens are Names); it is ignored for other types.
-//   - #REQUIRED and #IMPLIED must NOT carry a default value; enum.AttrDefaultNone
-//     and #FIXED carry one (possibly the empty string), validated against atype,
-//     and an enumeration/NOTATION default must be one of enumValues.
+//   - #REQUIRED and #IMPLIED must NOT carry a default value (checked against the
+//     value as given, before normalization); enum.AttrDefaultNone and #FIXED carry
+//     one (possibly the empty string), validated against atype, and an
+//     enumeration/NOTATION default must be one of enumValues. Every character of a
+//     value-bearing default must be a legal XML Char.
+//   - an ID attribute's default must be #IMPLIED or #REQUIRED (never a value or
+//     #FIXED), per the ID Attribute Default VC.
+//
+// A cross-declaration VC that needs the owning element declaration — a NOTATION
+// attribute is not allowed on an EMPTY element (§3.3.1) — is out of scope here (it
+// is enforced by ValidateDTD), so it is not checked against these parameters.
 //
 // It returns an error wrapping ErrDuplicateDeclaration when an attribute with the
 // same local name, prefix, and owning element is already declared, or an error
-// wrapping ErrInvalidArgument for any parameter violation above.
+// wrapping ErrInvalidArgument for any parameter violation above. The duplicate
+// check runs BEFORE the non-identity parameter checks, matching the parser: a
+// later declaration of the same attribute is ignored entirely, so its (possibly
+// invalid) type/default must not mask the duplicate.
 func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) (*AttributeDecl, error) {
-	// A tokenized (non-CDATA) default is space-normalized the way the parser
-	// normalizes it (parser_dtd_attr.go), so the value stored here matches the
-	// value the parser recovers on a round-trip.
-	if atype != enum.AttrCDATA {
-		defvalue = collapseAttrSpaces(defvalue)
-	}
-
-	if err := validateAttributeDeclParams(elem, name, atype, def, defvalue, enumValues); err != nil {
+	// Identity validation: only what is needed to split the QName and build the
+	// lookup key, so the duplicate check below can run before the non-identity
+	// parameter checks.
+	local, prefix, err := validateAttrDeclIdentity(elem, name)
+	if err != nil {
 		return nil, err
 	}
 
-	// Split a QName into prefix + local on the FIRST colon, mirroring
-	// AddElementDecl (a leading colon is rejected above, so i is always > 0 here
-	// when a colon is present).
-	var prefix string
-	if i := strings.IndexByte(name, ':'); i > 0 {
-		prefix = name[:i]
-		name = name[i+1:]
+	if _, ok := dtd.LookupAttribute(local, prefix, elem); ok {
+		return nil, fmt.Errorf("duplicate attribute %s declared for element %s: %w", name, elem, ErrDuplicateDeclaration)
 	}
 
-	if _, ok := dtd.LookupAttribute(name, prefix, elem); ok {
-		return nil, fmt.Errorf("duplicate attribute %s declared for element %s: %w", name, elem, ErrDuplicateDeclaration)
+	// Non-identity validation, and normalize the tokenized default the way the
+	// parser normalizes it, so the value stored here matches the value the parser
+	// recovers on a round-trip.
+	defvalue, err = validateAndNormalizeAttrDecl(name, atype, def, defvalue, enumValues)
+	if err != nil {
+		return nil, err
 	}
 
 	attr := newAttributeDecl()
 	attr.atype = atype
 	attr.doc = dtd.doc
-	attr.name = name
+	attr.name = local
 	attr.prefix = prefix
 	attr.elem = elem
 	attr.def = def
@@ -333,44 +353,75 @@ func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, de
 	return attr, nil
 }
 
-// validateAttributeDeclParams checks the public AddAttributeDecl parameters
-// against the same rules the parser's <!ATTLIST> path enforces (parser_dtd_attr.go
-// addAttributeDecl / TreeBuilder.AttributeDecl), so a declaration that passes here
-// serializes to an <!ATTLIST> that parses back equivalently. Every violation
-// wraps ErrInvalidArgument.
-func validateAttributeDeclParams(elem, name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) error {
+// validateAttrDeclIdentity validates the parts of an AddAttributeDecl call that
+// determine the attribute's identity — the owning element name and the attribute
+// QName — and returns the QName split into local + prefix on its FIRST colon,
+// mirroring AddElementDecl. It is the minimum needed to build the lookup key, so
+// AddAttributeDecl can run its duplicate check before the non-identity parameter
+// checks. Every violation wraps ErrInvalidArgument.
+func validateAttrDeclIdentity(elem, name string) (local, prefix string, err error) {
 	if elem == "" {
-		return fmt.Errorf("element name required: %w", ErrInvalidArgument)
+		return "", "", fmt.Errorf("element name required: %w", ErrInvalidArgument)
 	}
 	if name == "" {
-		return fmt.Errorf("attribute name required: %w", ErrInvalidArgument)
+		return "", "", fmt.Errorf("attribute name required: %w", ErrInvalidArgument)
 	}
 	if !isValidNameWithColon(elem) {
-		return fmt.Errorf("invalid element name %q: %w", elem, ErrInvalidArgument)
+		return "", "", fmt.Errorf("invalid element name %q: %w", elem, ErrInvalidArgument)
 	}
 	if !isValidNameWithColon(name) {
-		return fmt.Errorf("invalid attribute name %q: %w", name, ErrInvalidArgument)
+		return "", "", fmt.Errorf("invalid attribute name %q: %w", name, ErrInvalidArgument)
 	}
 	// A leading-colon name is a legal Name but not a valid QName: the parser splits
 	// it as (prefix="", local="x"), which never matches the whole ":x" key kept
 	// here, so it could not round-trip.
 	if name[0] == ':' {
-		return fmt.Errorf("attribute name %q must not start with a colon: %w", name, ErrInvalidArgument)
+		return "", "", fmt.Errorf("attribute name %q must not start with a colon: %w", name, ErrInvalidArgument)
 	}
+	local = name
+	if i := strings.IndexByte(name, ':'); i > 0 {
+		prefix = name[:i]
+		local = name[i+1:]
+	}
+	// A trailing colon leaves an empty local part (e.g. "p:"): keying it would store
+	// a degenerate empty-local declaration, so reject it.
+	if local == "" {
+		return "", "", fmt.Errorf("attribute name %q must not end with a colon: %w", name, ErrInvalidArgument)
+	}
+	return local, prefix, nil
+}
+
+// validateAndNormalizeAttrDecl checks the non-identity AddAttributeDecl parameters
+// against the same rules the parser's <!ATTLIST> path enforces (parser_dtd_attr.go
+// addAttributeDecl / TreeBuilder.AttributeDecl) and the declaration-time validity
+// constraints (valid_dtd_decl.go), so a declaration that passes here serializes to
+// an <!ATTLIST> that parses back and validates equivalently. It returns the
+// default value normalized the way the parser normalizes a tokenized default.
+// name is the full QName (for the xml:id check). Every violation wraps
+// ErrInvalidArgument.
+func validateAndNormalizeAttrDecl(name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) (string, error) {
 	if name == lexicon.QNameXMLID && atype != enum.AttrID {
-		return fmt.Errorf("attribute %q must have type ID: %w", name, ErrInvalidArgument)
+		return "", fmt.Errorf("attribute %q must have type ID: %w", name, ErrInvalidArgument)
 	}
 
 	switch atype {
 	case enum.AttrCDATA, enum.AttrID, enum.AttrIDRef, enum.AttrIDRefs, enum.AttrEntity, enum.AttrEntities, enum.AttrNmtoken, enum.AttrNmtokens, enum.AttrEnumeration, enum.AttrNotation:
 	default:
-		return fmt.Errorf("invalid attribute type: %w", ErrInvalidArgument)
+		return "", fmt.Errorf("invalid attribute type: %w", ErrInvalidArgument)
 	}
 
 	switch def {
 	case enum.AttrDefaultNone, enum.AttrDefaultRequired, enum.AttrDefaultImplied, enum.AttrDefaultFixed:
 	default:
-		return fmt.Errorf("invalid attribute default declaration: %w", ErrInvalidArgument)
+		return "", fmt.Errorf("invalid attribute default declaration: %w", ErrInvalidArgument)
+	}
+
+	// ID Attribute Default VC (§3.3.1): an ID attribute must be #IMPLIED or
+	// #REQUIRED, else ValidateDTD(true) would reject the round-tripped declaration.
+	// The predicate is shared with the declaration-time validator so the two paths
+	// cannot drift.
+	if idAttrDefaultInvalid(atype, def) {
+		return "", fmt.Errorf("ID attribute must be declared #IMPLIED or #REQUIRED: %w", ErrInvalidArgument)
 	}
 
 	// An enumeration or NOTATION type needs a non-empty list of well-formed,
@@ -379,7 +430,7 @@ func validateAttributeDeclParams(elem, name string, atype enum.AttributeType, de
 	// parseNmtoken and parseName respectively).
 	if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
 		if len(enumValues) == 0 {
-			return fmt.Errorf("enumeration/notation attribute requires at least one token: %w", ErrInvalidArgument)
+			return "", fmt.Errorf("enumeration/notation attribute requires at least one token: %w", ErrInvalidArgument)
 		}
 		seen := make(map[string]struct{}, len(enumValues))
 		for _, tok := range enumValues {
@@ -388,10 +439,10 @@ func validateAttributeDeclParams(elem, name string, atype enum.AttributeType, de
 				ok = isValidNameWithColon(tok)
 			}
 			if !ok {
-				return fmt.Errorf("invalid enumeration/notation token %q: %w", tok, ErrInvalidArgument)
+				return "", fmt.Errorf("invalid enumeration/notation token %q: %w", tok, ErrInvalidArgument)
 			}
 			if _, dup := seen[tok]; dup {
-				return fmt.Errorf("duplicate enumeration/notation token %q: %w", tok, ErrInvalidArgument)
+				return "", fmt.Errorf("duplicate enumeration/notation token %q: %w", tok, ErrInvalidArgument)
 			}
 			seen[tok] = struct{}{}
 		}
@@ -402,31 +453,52 @@ func validateAttributeDeclParams(elem, name string, atype enum.AttributeType, de
 	// an AttValue (possibly the empty string) that must be legal for the type.
 	switch def {
 	case enum.AttrDefaultRequired, enum.AttrDefaultImplied:
+		// Checked against the value AS GIVEN (before normalization): a spaces-only
+		// value must not be collapsed into acceptance.
 		if defvalue != "" {
-			return fmt.Errorf("a #REQUIRED/#IMPLIED attribute must not carry a default value: %w", ErrInvalidArgument)
+			return "", fmt.Errorf("a #REQUIRED/#IMPLIED attribute must not carry a default value: %w", ErrInvalidArgument)
 		}
 	case enum.AttrDefaultNone, enum.AttrDefaultFixed:
+		// A tokenized (non-CDATA) default is space-normalized the way the parser
+		// normalizes it (attrNormalizeSpace, #x20 only, NOT strings.Fields, which
+		// would also fold TAB/NBSP and diverge from the parser).
+		if atype != enum.AttrCDATA {
+			defvalue = attrNormalizeSpace(defvalue)
+		}
+		if err := checkAttrDefaultChars(defvalue); err != nil {
+			return "", err
+		}
 		if err := validateAttributeValueInternal(nil, atype, defvalue); err != nil {
-			return fmt.Errorf("invalid default value %q: %w: %w", defvalue, err, ErrInvalidArgument)
+			return "", fmt.Errorf("invalid default value %q: %w: %w", defvalue, err, ErrInvalidArgument)
 		}
 		if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
 			if !slices.Contains(enumValues, defvalue) {
-				return fmt.Errorf("default value %q is not one of the declared tokens: %w", defvalue, ErrInvalidArgument)
+				return "", fmt.Errorf("default value %q is not one of the declared tokens: %w", defvalue, ErrInvalidArgument)
 			}
 		}
 	}
-	return nil
+	return defvalue, nil
 }
 
-// collapseAttrSpaces collapses runs of #x20 to a single space and trims leading
-// and trailing spaces, mirroring the tokenized-attribute default normalization
-// the parser applies (parser_dtd_attr.go attrNormalizeSpace).
-func collapseAttrSpaces(s string) string {
-	if s == "" {
-		return s
+// checkAttrDefaultChars rejects a value-bearing default value that contains a
+// character outside the XML Char production (a NUL or other C0/C1 control, an
+// out-of-range code point) or invalid UTF-8 — either of which would serialize to
+// a "&#x0;"-style reference (or a lone U+FFFD) that a validating parser cannot
+// recover equivalently. It reuses the writer's isInCharacterRange predicate so the
+// accept/reject boundary matches serialization exactly. Every violation wraps
+// ErrInvalidArgument.
+func checkAttrDefaultChars(s string) error {
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			return fmt.Errorf("default value %q contains invalid UTF-8: %w", s, ErrInvalidArgument)
+		}
+		if !isInCharacterRange(r) {
+			return fmt.Errorf("default value %q contains a character outside the XML Char range (U+%04X): %w", s, r, ErrInvalidArgument)
+		}
+		i += size
 	}
-	fields := strings.Fields(s)
-	return strings.Join(fields, " ")
+	return nil
 }
 
 // registerAttribute records an already-built attribute declaration in the DTD's
@@ -436,8 +508,7 @@ func collapseAttrSpaces(s string) string {
 // declaration built from public parameters. It returns an error wrapping
 // ErrDuplicateDeclaration if an attribute with the same key is already declared.
 func (dtd *DTD) registerAttribute(attr *AttributeDecl) error {
-	// TODO maybe this shouldn't be normalized, check later
-	key := attr.name + ":" + attr.prefix + ":" + attr.elem
+	key := attrDeclKey{local: attr.name, prefix: attr.prefix, elem: attr.elem}
 	_, ok := dtd.attributes[key]
 	if ok {
 		return fmt.Errorf("duplicate attribute %s declared for element %s: %w", attr.name, attr.elem, ErrDuplicateDeclaration)
