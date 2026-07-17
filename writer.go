@@ -43,6 +43,7 @@ const xmlTextNoEnc = "textnoenc"
 type Writer struct {
 	format             bool
 	indentString       string
+	indentStringSet    bool // IndentString was called (distinguishes an explicit "" from unset)
 	skipDTD            bool
 	noEmpty            bool
 	noDecl             bool
@@ -419,9 +420,13 @@ func (w Writer) Format(v bool) Writer {
 	return w
 }
 
-// IndentString sets the string used for each indent level.
+// IndentString sets the string used for each indent level (honored only when
+// Format is enabled). An explicit empty string requests formatted output with
+// newlines but no per-level indentation; leaving IndentString unset uses the
+// two-space default.
 func (w Writer) IndentString(s string) Writer {
 	w.indentString = s
+	w.indentStringSet = true
 	return w
 }
 
@@ -700,7 +705,9 @@ func (s *writeSession) writeCDATASplit(out io.Writer, c []byte) {
 }
 
 func (s *writeSession) indentStr() string {
-	if s.indentString == "" {
+	// An explicit IndentString("") means "no per-level indentation" (newlines
+	// only); only an unset IndentString falls back to the two-space default.
+	if !s.indentStringSet {
 		return "  "
 	}
 	return s.indentString
@@ -711,6 +718,12 @@ func (s *writeSession) writeIndent(out io.Writer) {
 		return
 	}
 	str := s.indentStr()
+	if str == "" {
+		// An explicit IndentString("") means newline-only formatting: emit no
+		// per-level indentation and never hand the output writer an empty chunk
+		// (a strict writer may reject a zero-length Write).
+		return
+	}
 	for range s.indent {
 		s.writeString(out, str)
 	}
@@ -774,6 +787,16 @@ func (d Writer) WriteTo(out io.Writer, node Node) error {
 	// are valid and disable normalization.
 	if !validNormalizationForm(d.normFormRaw) {
 		return fmt.Errorf("helium: unsupported normalization form %q: %w", d.normFormRaw, ErrUnsupportedNormalizationForm)
+	}
+	// Validate a non-empty OutputVersion override once, ahead of the node-type
+	// branch, so a bare element/fragment is rejected exactly like a Document: the
+	// override drives the XML 1.1 escaping rules here and (on the Document path)
+	// the declaration's version pseudo-attribute, so a malformed value must fail
+	// on every path rather than being silently treated as XML 1.0. An empty
+	// override keeps the document's own version and is validated on the Document
+	// path (writeDoc) against the document's version.
+	if d.outputVersion != "" && !isValidXMLVersion(d.outputVersion) {
+		return fmt.Errorf("helium: invalid output XML version %q: %w", d.outputVersion, ErrInvalidOutputVersion)
 	}
 	if doc, ok := node.(*Document); ok {
 		return d.writeDoc(out, doc)

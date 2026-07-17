@@ -135,7 +135,7 @@ libxml2.
 | BlockXXE(bool) | XML_PARSE_NOXXE | ✅ | Block XXE attacks. **Default true** (NOXXE set by NewParser; libxml2 defaults off) |
 | SkipIDs(bool) | XML_PARSE_SKIP_IDS | ✅ | Skip ID interning |
 | LenientXMLDecl(bool) | *(helium extension)* | ✅ | Relaxed XML decl attribute order |
-| MaxExternalDTDBytes(int) | *(helium extension)* | ✅ | Byte cap for external DTD subset reads; ≤0 → `MaxExternalDTDSize` (10 MiB). Enforced against actual bytes read; over-cap → `ErrExternalDTDTooLarge` |
+| MaxExternalDTDBytes(int) | *(helium extension)* | ✅ | Byte cap for external DTD subset reads; `0` → `MaxExternalDTDSize` (10 MiB), negative disables the cap. Enforced against actual bytes read; over-cap → `ErrExternalDTDTooLarge` |
 | *(dropped)* | XML_PARSE_NOUNZIP | no-op | No decompression support |
 | *(dropped)* | XML_PARSE_NOSYSCATALOG | no-op | No global catalog |
 | *(dropped)* | XML_PARSE_CATALOGPI | no-op | Not yet implemented |
