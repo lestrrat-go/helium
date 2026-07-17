@@ -2,6 +2,7 @@ package shim
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	stdxml "encoding/xml"
 	"errors"
@@ -421,6 +422,15 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			close(d.events)
 		} else {
 			reader := d.combinedReader
+			// A fixed-width Unicode declaration is invisible to scanProlog, so its
+			// encoding gate never ran; apply the policy here from helium's decoded
+			// encoding before the streaming parse.
+			fixedReader, err := d.applyFixedWidthEncodingPolicy(reader)
+			if err != nil {
+				d.combinedReader = nil
+				return nil, err
+			}
+			reader = fixedReader
 			if d.detectedCharset != "" && d.CharsetReader != nil {
 				newr, err := d.CharsetReader(d.detectedCharset, bufio.NewReader(reader))
 				if err != nil {
@@ -600,17 +610,83 @@ func heliumDeclDecision(data string) (string, error) {
 // no-encoding sentinel. Any other encoding requires a CharsetReader to convert
 // it.
 func (d *Decoder) checkDeclEncoding(enc string) error {
-	if enc == "" || enc == heliumNoEncoding {
-		return nil
-	}
-	if strings.EqualFold(enc, "utf-8") {
+	if !encodingNeedsCharsetReader(enc) {
 		return nil
 	}
 	if d.CharsetReader == nil {
-		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+		return errCharsetReaderNil(enc)
 	}
 	d.detectedCharset = enc
 	return nil
+}
+
+// encodingNeedsCharsetReader reports whether enc is an explicitly declared
+// non-UTF-8 encoding that a CharsetReader is required to honor. The empty string
+// and helium's no-encoding sentinel both mean no encoding was declared, and UTF-8
+// (case-insensitive) needs no conversion. This is the shim's single encoding
+// classifier, shared by every entry point so their verdicts cannot drift.
+func encodingNeedsCharsetReader(enc string) bool {
+	if enc == "" || enc == heliumNoEncoding {
+		return false
+	}
+	return !strings.EqualFold(enc, "utf-8")
+}
+
+// errCharsetReaderNil is the error every entry point returns when a document
+// declares a non-UTF-8 encoding that cannot be honored because no CharsetReader
+// is configured. Building it in one place keeps the message identical wherever
+// the policy fires.
+func errCharsetReaderNil(enc string) error {
+	return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+}
+
+// applyFixedWidthEncodingPolicy applies the shim's encoding policy on the
+// reader-backed Decoder path when the declaration is written in a fixed-width
+// Unicode encoding (UTF-16 / UCS-4). The byte-level prolog scanner cannot
+// tokenize such a declaration, so its encoding gate (checkXMLDecl) never fires
+// here. When the stream begins with a fixed-width Unicode marker, the whole
+// document is decoded by helium — the authority on the declared encoding — and a
+// declared non-UTF-8 encoding without a CharsetReader is rejected, matching
+// Unmarshal and the scanner's own gate. The returned reader replays the same
+// bytes for the streaming parse; ASCII-compatible streams are returned untouched
+// so the fast path is undisturbed.
+func (d *Decoder) applyFixedWidthEncodingPolicy(r io.Reader) (io.Reader, error) {
+	br := bufio.NewReader(r)
+	prefix, _ := br.Peek(4)
+	if !looksFixedWidthUnicode(prefix) {
+		return br, nil
+	}
+	buf, err := io.ReadAll(br)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := helium.NewParser().MaxDepth(maxParseDepth).Parse(context.Background(), buf)
+	if err != nil {
+		return nil, convertParseError(err)
+	}
+	enc := doc.Encoding()
+	if encodingNeedsCharsetReader(enc) && d.CharsetReader == nil {
+		return nil, errCharsetReaderNil(enc)
+	}
+	return bytes.NewReader(buf), nil
+}
+
+// looksFixedWidthUnicode reports whether prefix begins a fixed-width Unicode
+// stream (UTF-16 / UCS-4) that the byte-level prolog scanner cannot read: a
+// UTF-16 byte-order mark, or a NUL among the leading bytes (present in every
+// UCS-4 or UTF-16 encoding of the leading ASCII '<'). A UTF-8 or ASCII document,
+// with or without a UTF-8 byte-order mark, has neither, so it stays on the fast
+// path. A false positive only costs a decode that helium then judges correctly.
+func looksFixedWidthUnicode(prefix []byte) bool {
+	if len(prefix) >= 2 {
+		if prefix[0] == 0xFF && prefix[1] == 0xFE {
+			return true
+		}
+		if prefix[0] == 0xFE && prefix[1] == 0xFF {
+			return true
+		}
+	}
+	return bytes.IndexByte(prefix, 0x00) >= 0
 }
 
 func applyDefaultSpace(tok Token, space string) Token {

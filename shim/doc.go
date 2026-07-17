@@ -31,6 +31,14 @@
 //     The three entry points — [Unmarshal], a reader-backed [Decoder], and a
 //     TokenReader-backed [Decoder] — agree on every declaration, with one
 //     encoding/xml limitation noted under "Version support" below.
+//   - Encoding policy: a document that declares a non-UTF-8 encoding (for
+//     example "UTF-16" or "ISO-8859-1") is rejected unless a
+//     [Decoder.CharsetReader] is set to convert it — the same rule as
+//     [encoding/xml]. shim applies this one rule from helium's decoded encoding,
+//     so every entry point reaches the same verdict even when the declaration is
+//     itself written in a fixed-width Unicode encoding (UTF-16 or UCS-4) that a
+//     byte-level scan cannot read. A fixed-width Unicode document that declares
+//     no encoding names none and is accepted.
 //   - Declaration strictness: an XML declaration that does not conform to the
 //     XMLDecl grammar (XML 1.0 §2.8) is rejected. The grammar requires a
 //     version and admits only version, encoding and standalone, in that order

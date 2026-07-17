@@ -117,10 +117,10 @@ func trimLeadingSpace(data []byte) []byte {
 // as absent, so only an explicitly declared non-UTF-8 encoding is rejected.
 func validateXMLDeclFields(doc *helium.Document) error {
 	enc := doc.Encoding()
-	if enc == "" || enc == heliumNoEncoding || strings.EqualFold(enc, "utf-8") {
+	if !encodingNeedsCharsetReader(enc) {
 		return nil
 	}
-	return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+	return errCharsetReaderNil(enc)
 }
 
 func decodeElementInto(target reflect.Value, elem *helium.Element) error {

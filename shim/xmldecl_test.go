@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/lestrrat-go/helium/shim"
 	"github.com/stretchr/testify/require"
@@ -252,6 +253,80 @@ func TestXMLDeclByteOrderMark(t *testing.T) {
 		require.NoError(t, decodeDoc(t, src), "reader-backed Decoder must accept BOM+1.1")
 		require.NoError(t, decodeDeliveredDecl(t, []stdxml.Token{stdxml.CharData(bom)}, `version="1.1"`),
 			"TokenReader must accept a delivered BOM+1.1")
+	})
+}
+
+// utf16leBOM encodes s as little-endian UTF-16 with a leading byte-order mark.
+// A declaration in such a document is not ASCII, so a byte-level scan cannot see
+// it; the reader-backed Decoder's encoding decision must instead come from
+// helium's decoded encoding, matching Unmarshal.
+func utf16leBOM(s string) string {
+	units := utf16.Encode([]rune(s))
+	b := make([]byte, 0, 2+len(units)*2)
+	b = append(b, 0xFF, 0xFE)
+	for _, u := range units {
+		b = append(b, byte(u), byte(u>>8))
+	}
+	return string(b)
+}
+
+// TestXMLDeclNonUTF8Encoding pins the shim's single encoding policy: a document
+// declaring a non-UTF-8 encoding is rejected without a CharsetReader, and every
+// entry point that sees the declaration must reach that verdict coherently — even
+// when the declaration is itself in a fixed-width Unicode encoding that a
+// byte-level scan cannot read.
+func TestXMLDeclNonUTF8Encoding(t *testing.T) {
+	t.Run("declared non-UTF-8 encoding is rejected without a CharsetReader", func(t *testing.T) {
+		// UTF-16-encoded declarations are invisible to the byte-level prolog
+		// scanner, so the reader-backed Decoder must reject them through helium's
+		// decoded encoding, exactly as Unmarshal does. Version 2.0 is rejected for
+		// its version as well; that is still a reject.
+		for name, src := range map[string]string{
+			"UTF-16 declaring 1.0": utf16leBOM(`<?xml version="1.0" encoding="UTF-16"?>` + rootOnly),
+			"UTF-16 declaring 1.1": utf16leBOM(`<?xml version="1.1" encoding="UTF-16"?>` + rootOnly),
+			"UTF-16 declaring 2.0": utf16leBOM(`<?xml version="2.0" encoding="UTF-16"?>` + rootOnly),
+		} {
+			t.Run(name, func(t *testing.T) {
+				require.Error(t, unmarshalDoc(src), "Unmarshal must reject")
+				require.Error(t, decodeDoc(t, src), "reader-backed Decoder must reject")
+			})
+		}
+
+		// A UTF-8 document declaring a non-UTF-8 encoding is rejected on both
+		// paths too. The byte scanner does see this declaration, so this guards
+		// the existing behavior against regression.
+		t.Run("ISO-8859-1 in a UTF-8 document", func(t *testing.T) {
+			src := `<?xml version="1.0" encoding="ISO-8859-1"?>` + rootOnly
+			require.Error(t, unmarshalDoc(src), "Unmarshal must reject")
+			require.Error(t, decodeDoc(t, src), "reader-backed Decoder must reject")
+		})
+	})
+
+	// A fixed-width Unicode document with no declared encoding names no encoding,
+	// so both paths accept it. A byte-order-mark sniff would wrongly reject it,
+	// which is why the policy is driven by helium's decoded encoding, not the BOM.
+	t.Run("UTF-16 without a declared encoding is accepted", func(t *testing.T) {
+		src := utf16leBOM(rootOnly)
+		require.NoError(t, unmarshalDoc(src), "Unmarshal must accept")
+		require.NoError(t, decodeDoc(t, src), "reader-backed Decoder must accept")
+	})
+
+	// With a CharsetReader set, a declared non-UTF-8 encoding is honored, so the
+	// reader-backed Decoder accepts it (policy unchanged).
+	t.Run("declared non-UTF-8 encoding is accepted with a CharsetReader", func(t *testing.T) {
+		src := utf16leBOM(`<?xml version="1.0" encoding="UTF-16"?>` + rootOnly)
+		dec := shim.NewDecoder(t.Context(), strings.NewReader(src))
+		dec.CharsetReader = func(_ string, input io.Reader) (io.Reader, error) { return input, nil }
+		require.NoError(t, drainTokens(dec), "reader-backed Decoder must accept with a CharsetReader")
+	})
+
+	// Ordinary UTF-8 declarations, and a UTF-8 byte-order mark ahead of one, stay
+	// accepted on every entry point — the fixed-width detection must not disturb
+	// them.
+	t.Run("UTF-8 declarations stay accepted", func(t *testing.T) {
+		requireAllAccept(t, `<?xml version="1.0" encoding="UTF-8"?>`+itemOnly)
+		requireAllAccept(t, declV10+itemOnly)
+		requireAllAccept(t, "\uFEFF"+declV10+itemOnly)
 	})
 }
 

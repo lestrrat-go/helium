@@ -52,6 +52,12 @@ source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/h
   decides the XMLDecl grammar, the version rule, and placement, and shim's
   verdict is helium's; `Unmarshal`, a reader-backed `Decoder`, and a
   TokenReader-backed `Decoder` agree.
+- A document declaring a non-UTF-8 encoding (e.g. `UTF-16`, `ISO-8859-1`) is
+  rejected unless a `Decoder.CharsetReader` is set to convert it — the same rule
+  as `encoding/xml`. shim applies it from helium's decoded encoding, so every
+  entry point agrees even when the declaration is itself in a fixed-width Unicode
+  encoding (UTF-16 / UCS-4) that a byte-level scan cannot read. A fixed-width
+  Unicode document that declares no encoding names none and is accepted.
 - shim accepts the XML versions helium accepts — 1.0 **and** 1.1 (helium
   implements XML 1.1) — where `encoding/xml` rejects `version="1.1"`. A version
   outside the 1.x family (e.g. `2.0`) is rejected. `Unmarshal` and the
