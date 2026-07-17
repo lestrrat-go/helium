@@ -35,6 +35,15 @@
 //     all of them. This shim is backed by a spec-conforming parser and does
 //     not accept XML the specification does not permit. [Unmarshal] and
 //     [Decoder] agree: both reject every such declaration.
+//   - Declaration placement: an XML declaration is admitted only as the very
+//     first thing in the document (prolog ::= XMLDecl? Misc* ...), with only
+//     whitespace allowed ahead of it. A "<?xml" appearing after an earlier
+//     declaration, a comment, a processing instruction or a doctype is
+//     rejected. [encoding/xml] accepts it, reporting it as an ordinary
+//     ProcInst. [Unmarshal] and [Decoder] agree in rejecting it. A target that
+//     merely BEGINS with "xml" is unaffected: PITarget subtracts only the exact
+//     name "xml" (XML 1.0 §2.6), so <?xmlversion ="2.0"?> is a well-formed
+//     ordinary PI, declares no version, and is accepted anywhere a PI may go.
 //   - Version strictness: a declaration carrying whitespace around the
 //     version pseudo-attribute's "=" (<?xml version = "2.0"?>) is rejected
 //     as an unsupported version. [encoding/xml] accepts it — it searches

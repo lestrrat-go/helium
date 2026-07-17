@@ -71,7 +71,14 @@ type prologScanner struct {
 	peek         []byte       // ungotten bytes
 	xmlDeclStart int          // byte offset of '<' in <?xml ...?>
 	xmlDeclEnd   int          // byte offset after '>' in <?xml ...?>
+	sawContent   bool         // a PI, comment or directive has been scanned
 	sizeErr      error        // set when the prolog exceeds maxPrologSize
+}
+
+// errDeclNotAtStart is returned when an XML declaration is preceded by anything
+// other than whitespace.
+var errDeclNotAtStart = &stdxml.SyntaxError{
+	Msg: "XML declaration allowed only at the start of the document",
 }
 
 func (s *prologScanner) readByte() (byte, error) {
@@ -163,9 +170,19 @@ func (s *prologScanner) scan() ([]Token, error) {
 			}
 
 			if pi.Target == lexicon.PrefixXML {
+				// XMLDecl ::= '<?xml' ... is the FIRST thing in a document
+				// (prolog ::= XMLDecl? Misc* ...), so anything scanned ahead of
+				// it — an earlier declaration, a comment, a PI, a doctype —
+				// makes it a misplaced PI. Leading whitespace does not count:
+				// it is accumulated as CharData, never as content, matching
+				// Unmarshal, which trims it before parsing.
+				if s.sawContent {
+					return tokens, errDeclNotAtStart
+				}
 				s.xmlDeclStart = piStart
 				s.xmlDeclEnd = s.buf.Len()
 			}
+			s.sawContent = true
 			tokens = append(tokens, tok)
 
 		case '!':
@@ -190,6 +207,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 					if err != nil {
 						return tokens, errUnexpectedEOF
 					}
+					s.sawContent = true
 					tokens = append(tokens, tok)
 				} else {
 					// <!-X where X != '-' → invalid
@@ -208,6 +226,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 				if err != nil {
 					return tokens, errUnexpectedEOF
 				}
+				s.sawContent = true
 				tokens = append(tokens, tok)
 			}
 

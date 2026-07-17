@@ -53,6 +53,12 @@ source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/h
   empty version, an empty encoding, a `standalone` that is not `yes`/`no`, a
   repeated pseudo-attribute, or pseudo-attributes out of order. `encoding/xml`
   accepts them all.
+- An XML declaration is admitted only as the very first thing in the document,
+  with only whitespace allowed ahead of it. Both `Unmarshal` and `Decoder`
+  reject a `<?xml` following an earlier declaration, a comment, a processing
+  instruction, or a doctype; `encoding/xml` accepts it as an ordinary
+  `ProcInst`. A target that merely begins with `xml` (`<?xmlversion ="2.0"?>`)
+  is an ordinary PI, not a declaration, and is accepted.
 - A declaration with whitespace around the version pseudo-attribute's `=`
   (`<?xml version = "2.0"?>`) is rejected as an unsupported version;
   `encoding/xml` accepts it.

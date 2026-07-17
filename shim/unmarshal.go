@@ -144,6 +144,16 @@ func declaredXMLVersion(data []byte) (string, bool) {
 	if !isDecl {
 		return "", false
 	}
+	// "<?xml" is a declaration only when the target ENDS there. A PI target ends
+	// at the first whitespace, or at "?>" when it carries no data — the same
+	// boundary splitPI applies before comparing a target against "xml". Without
+	// this check the prefix also matches inside a longer target, and an ordinary
+	// PI such as <?xmlversion ="2.0"?> is misread as a declaration whose target's
+	// own suffix is a version pseudo-attribute. PITarget subtracts only the exact
+	// name "xml" (XML 1.0 §2.6), so such a PI is well-formed and declares nothing.
+	if len(rest) > 0 && !isWhitespace(rest[0]) {
+		return "", false
+	}
 
 	for {
 		name, value, after, ok := cutPseudoAttr(trimLeadingSpace(rest))
