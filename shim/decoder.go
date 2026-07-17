@@ -251,6 +251,11 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		return push(c, c, line, col)
 	}))
 	h.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ context.Context, target, data string) error {
+		// Suppress only the lowercase "xml" declaration PI: helium re-parses the
+		// blanked-declaration document, so this callback only ever fires for PIs
+		// helium accepts, and helium rejects a reserved-cased target upstream —
+		// none reaches here. An exact match is deliberate: folding here would
+		// silently DROP such a target rather than reject it, if one ever did.
 		if target == lexicon.PrefixXML {
 			return nil // skip XML declaration
 		}
@@ -385,10 +390,13 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		d.lastToken = tok
 		d.advancePosition(tok)
 
-		// A ProcInst targeting "xml" is the XML declaration: hold it to the
-		// XMLDecl grammar and the shim's version/encoding rules.
-		if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
-			if err := d.checkXMLDecl(string(pi.Inst)); err != nil {
+		// A ProcInst whose target is the reserved "xml" name (in any casing) is
+		// held to the declaration gate: the lowercase "xml" is the XML
+		// declaration and is checked against the XMLDecl grammar and the shim's
+		// version/encoding rules, and any other casing is an illegal PITarget
+		// that checkXMLDecl rejects.
+		if pi, ok := tok.(ProcInst); ok && isReservedXMLTarget(pi.Target) {
+			if err := d.checkXMLDecl(pi.Target, string(pi.Inst)); err != nil {
 				return nil, err
 			}
 		}
@@ -489,11 +497,12 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 
 	tok = stdxml.CopyToken(tok)
 
-	// A ProcInst targeting "xml" is the XML declaration wherever it came from,
-	// including a TokenReader, so it is held to the same rules as one the
-	// prolog scanner read. The SAX emitter suppresses its own, so a declaration
-	// only ever reaches this point from a TokenReader.
-	if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
+	// A ProcInst whose target is the reserved "xml" name (in any casing) is held
+	// to the same rules wherever it came from, including a TokenReader. The
+	// lowercase "xml" is the XML declaration; any other casing is an illegal
+	// PITarget. The SAX emitter suppresses its own declaration, so one only ever
+	// reaches this point from a TokenReader.
+	if pi, ok := tok.(ProcInst); ok && isReservedXMLTarget(pi.Target) {
 		// XMLDecl is only legal as the very first thing in a document
 		// (prolog ::= XMLDecl? Misc* ...), with only whitespace ahead of it.
 		// d.sawContent records whether a non-whitespace token already reached
@@ -503,7 +512,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		if d.sawContent {
 			return nil, errDeclNotAtStart
 		}
-		if err := d.checkXMLDecl(string(pi.Inst)); err != nil {
+		if err := d.checkXMLDecl(pi.Target, string(pi.Inst)); err != nil {
 			return nil, err
 		}
 	}
@@ -520,10 +529,35 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	return tok, nil
 }
 
-// checkXMLDecl checks an XML declaration — the data of a ProcInst whose target
-// is "xml" — against the XMLDecl grammar, then applies the shim's version and
-// encoding rules to the values it read.
-func (d *Decoder) checkXMLDecl(data string) error {
+// isReservedXMLTarget reports whether target is the reserved processing-
+// instruction target "xml" in ANY casing. XML 1.0 §2.6 reserves it via
+//
+//	PITarget ::= Name - (('X'|'x')('M'|'m')('L'|'l'))
+//
+// so "xml", "XML", "Xml", "xMl", … are all reserved: only the lowercase "xml"
+// introduces an XML declaration, and every other casing is an illegal target.
+// A longer xml-prefixed name such as "xmlfoo" or "xml-stylesheet" is an
+// ordinary, legal target; strings.EqualFold matches only equal-length strings,
+// so those longer names are left untouched. This is the single classifier the
+// declaration gate uses on all three decode paths, so the reserved-target rule
+// cannot drift apart from the grammar/version/encoding rules.
+func isReservedXMLTarget(target string) bool {
+	return strings.EqualFold(target, lexicon.PrefixXML)
+}
+
+// checkXMLDecl is the declaration gate for a ProcInst whose target is the
+// reserved "xml" name. Only the lowercase "xml" introduces an XML declaration;
+// target in any other casing is an illegal PITarget (isReservedXMLTarget) and is
+// rejected before its pseudo-attributes are read. For the lowercase target the
+// data is checked against the XMLDecl grammar, then the shim's version and
+// encoding rules are applied to the values it read.
+func (d *Decoder) checkXMLDecl(target, data string) error {
+	if target != lexicon.PrefixXML {
+		return &stdxml.SyntaxError{
+			Msg:  fmt.Sprintf("%q is a reserved processing-instruction target", target),
+			Line: d.line,
+		}
+	}
 	decl, err := parseXMLDecl(data)
 	if err != nil {
 		return &stdxml.SyntaxError{Msg: err.Error(), Line: d.line}

@@ -6,7 +6,6 @@ import (
 	"io"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // maxPrologSize bounds the number of bytes the prolog scanner will buffer
@@ -169,13 +168,18 @@ func (s *prologScanner) scan() ([]Token, error) {
 				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
 			}
 
-			if pi.Target == lexicon.PrefixXML {
-				// XMLDecl ::= '<?xml' ... is the FIRST thing in a document
-				// (prolog ::= XMLDecl? Misc* ...), so anything scanned ahead of
-				// it — an earlier declaration, a comment, a PI, a doctype —
-				// makes it a misplaced PI. Leading whitespace does not count:
-				// it is accumulated as CharData, never as content, matching
-				// Unmarshal, which trims it before parsing.
+			if isReservedXMLTarget(pi.Target) {
+				// A target equal to "xml" in any casing is the reserved name
+				// (XML 1.0 §2.6). XMLDecl ::= '<?xml' ... is the FIRST thing in a
+				// document (prolog ::= XMLDecl? Misc* ...), so anything scanned
+				// ahead of it — an earlier declaration, a comment, a PI, a
+				// doctype — makes it a misplaced PI. Leading whitespace does not
+				// count: it is accumulated as CharData, never as content,
+				// matching Unmarshal, which trims it before parsing. The bytes
+				// are blanked out of the replay buffer so helium never re-parses
+				// them; the drained ProcInst is then held to checkXMLDecl (in
+				// readToken), which accepts the lowercase "xml" as a declaration
+				// and rejects any other casing as an illegal target.
 				if s.sawContent {
 					return tokens, errDeclNotAtStart
 				}

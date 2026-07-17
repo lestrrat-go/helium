@@ -57,8 +57,13 @@ source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/h
   with only whitespace allowed ahead of it. Both `Unmarshal` and `Decoder`
   reject a `<?xml` following an earlier declaration, a comment, a processing
   instruction, or a doctype; `encoding/xml` accepts it as an ordinary
-  `ProcInst`. A target that merely begins with `xml` (`<?xmlversion ="2.0"?>`)
-  is an ordinary PI, not a declaration, and is accepted.
+  `ProcInst`.
+- The target `xml` is reserved in any casing (`PITarget ::= Name -
+  (('X'|'x')('M'|'m')('L'|'l'))`), so `<?XML ...?>`, `<?Xml ...?>` and
+  `<?xMl ...?>` are illegal wherever they appear and are rejected by every entry
+  point. A target that merely begins with `xml` (`<?xmlversion ="2.0"?>`,
+  `<?xml-stylesheet ...?>`) is an ordinary PI, not a declaration, and is
+  accepted.
 - A declaration with whitespace around the version pseudo-attribute's `=`
   (`<?xml version = "2.0"?>`) is rejected as an unsupported version;
   `encoding/xml` accepts it.

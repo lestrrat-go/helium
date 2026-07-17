@@ -127,6 +127,48 @@ func TestXMLDeclTargetBoundary(t *testing.T) {
 	}
 }
 
+// TestXMLDeclReservedTargetCase covers the reserved processing-instruction
+// target "xml" in non-lowercase casings. PITarget ::= Name -
+// (('X'|'x')('M'|'m')('L'|'l')) reserves the name in ANY case, so <?XML?>,
+// <?Xml?> and <?xMl?> are illegal targets wherever they appear and every entry
+// point must reject them — while a longer xml-prefixed name stays a legal
+// ordinary PI. This pins that the pre-parsed TokenReader path agrees with
+// Unmarshal and the reader-backed Decoder rather than accepting a reserved-cased
+// target as an ordinary PI.
+func TestXMLDeclReservedTargetCase(t *testing.T) {
+	t.Run("reserved-cased target is rejected everywhere", func(t *testing.T) {
+		for name, src := range map[string]string{
+			"upper as leading declaration":    `<?XML version="1.0"?>` + rootOnly,
+			"title as leading declaration":    `<?Xml version="1.0"?>` + rootOnly,
+			"mixed as leading declaration":    `<?xMl version="1.0"?>` + rootOnly,
+			"upper with no pseudo-attributes": `<?XML?>` + rootOnly,
+			"upper carrying a version 2.0":    `<?XML version="2.0"?>` + rootOnly,
+			"mid-document reserved-cased PI":  rootOpen + `<?XML foo?>` + rootClose,
+		} {
+			t.Run(name, func(t *testing.T) {
+				requireAllReject(t, src)
+			})
+		}
+	})
+
+	// A longer xml-prefixed target is not the reserved name (EqualFold matches
+	// only equal-length strings), so it stays a legal ordinary PI. Pinning the
+	// accept here guards against an over-eager case-fold that starts rejecting
+	// well-formed documents.
+	t.Run("longer xml-prefixed target stays accepted", func(t *testing.T) {
+		for name, src := range map[string]string{
+			"xmlfoo":            `<?xmlfoo?>` + rootOnly,
+			"xml-stylesheet":    `<?xml-stylesheet href="a.xsl"?>` + rootOnly,
+			"xmlversion":        `<?xmlversion ="2.0"?>` + rootOnly,
+			"XMLfoo mixed case": `<?XMLfoo?>` + rootOnly,
+		} {
+			t.Run(name, func(t *testing.T) {
+				requireAllAccept(t, src)
+			})
+		}
+	})
+}
+
 // TestXMLDeclAgreement pins the accept/reject verdict of every declaration
 // shape in the shim's bar, through every entry point, which must agree.
 func TestXMLDeclAgreement(t *testing.T) {

@@ -40,10 +40,17 @@
 //     whitespace allowed ahead of it. A "<?xml" appearing after an earlier
 //     declaration, a comment, a processing instruction or a doctype is
 //     rejected. [encoding/xml] accepts it, reporting it as an ordinary
-//     ProcInst. [Unmarshal] and [Decoder] agree in rejecting it. A target that
-//     merely BEGINS with "xml" is unaffected: PITarget subtracts only the exact
-//     name "xml" (XML 1.0 §2.6), so <?xmlversion ="2.0"?> is a well-formed
-//     ordinary PI, declares no version, and is accepted anywhere a PI may go.
+//     ProcInst. [Unmarshal] and [Decoder] agree in rejecting it.
+//   - Reserved target: the target "xml" is reserved in ANY casing —
+//     PITarget ::= Name - (('X'|'x')('M'|'m')('L'|'l')) (XML 1.0 §2.6) — so
+//     <?XML ...?>, <?Xml ...?> and <?xMl ...?> are illegal wherever they appear.
+//     Only the lowercase "xml" introduces a declaration; any other casing is
+//     rejected as an illegal target. A target that merely BEGINS with "xml" is
+//     unaffected, because the reserved name is subtracted only when it stands
+//     alone: <?xmlversion ="2.0"?> and <?xml-stylesheet ...?> are well-formed
+//     ordinary PIs, declare no version, and are accepted anywhere a PI may go.
+//     [Unmarshal] and [Decoder] agree on every one of these, including a
+//     [Decoder] driven by a TokenReader.
 //   - Version strictness: a declaration carrying whitespace around the
 //     version pseudo-attribute's "=" (<?xml version = "2.0"?>) is rejected
 //     as an unsupported version. [encoding/xml] accepts it — it searches
