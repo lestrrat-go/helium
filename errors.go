@@ -60,6 +60,12 @@ var (
 	// Entity child links back to the reference) from making Walk loop forever.
 	// Match with errors.Is.
 	ErrWalkCycle = errors.New("cycle detected during tree traversal")
+	// ErrCyclicNode is returned by the guarded tree-mutation operations
+	// (AddChild, AddSibling, Replace) when the requested insertion would create
+	// a cycle — inserting a node into itself, into one of its own descendants,
+	// or replacing a node with one of its own ancestors. It wraps the concrete
+	// message via %w so callers can match with errors.Is.
+	ErrCyclicNode = errors.New("insertion would create a cyclic node")
 	// ErrExternalDTDTooLarge is returned when an external DTD subset exceeds
 	// the configured byte cap (set via Parser.MaxExternalDTDBytes), or
 	// MaxExternalDTDSize when no cap is configured. The cap is enforced

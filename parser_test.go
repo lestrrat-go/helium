@@ -1066,6 +1066,8 @@ func TestParseExternalDTDStatAdvisory(t *testing.T) {
 	require.Equal(t, "default", x, "defaulted attribute value must come from the external DTD")
 }
 
+const extDTDName = "ext.dtd"
+
 func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 	t.Parallel()
 
@@ -1078,7 +1080,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 
 		// A 2 KiB DTD must be rejected when the configured cap is 1 KiB.
 		oversized := bytes.Repeat([]byte(" "), 2<<10)
-		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: oversized}}
+		fsys := fstest.MapFS{extDTDName: &fstest.MapFile{Data: oversized}}
 
 		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
@@ -1096,7 +1098,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		// A DTD well under the 1 KiB cap must still load. It defaults an
 		// attribute so the test observes that the DTD was actually applied,
 		// not silently skipped.
-		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: []byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">")}}
+		fsys := fstest.MapFS{extDTDName: &fstest.MapFile{Data: []byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">")}}
 
 		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
@@ -1120,7 +1122,7 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		// under the 10 MiB default) must still load. It defaults an attribute
 		// so the test observes that the DTD was actually applied.
 		large := append([]byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">"), bytes.Repeat([]byte(" "), 4<<10)...)
-		fsys := fstest.MapFS{"ext.dtd": &fstest.MapFile{Data: large}}
+		fsys := fstest.MapFS{extDTDName: &fstest.MapFile{Data: large}}
 
 		p := helium.NewParser().BlockXXE(false).
 			LoadExternalDTD(true).
@@ -1133,6 +1135,52 @@ func TestParseExternalDTDConfigurableLimit(t *testing.T) {
 		require.NotNil(t, root, "root element should exist")
 		x, ok := root.GetAttribute("x")
 		require.True(t, ok, "external DTD ATTLIST default must be applied, proving the DTD was loaded")
+		require.Equal(t, "default", x, "defaulted attribute value must come from the external DTD")
+	})
+
+	// The sentinel convention matches every other Parser byte cap
+	// (MaxNodeContentSize, MaxEntityAmplification, ...): 0 selects the built-in
+	// default, and a negative value removes the cap. Build a DTD larger than the
+	// 10 MiB default cap, but with no single whitespace run over the
+	// node-content cap, so only the external-DTD byte cap decides the outcome.
+	overDefault := []byte("<!ELEMENT r EMPTY>\n<!ATTLIST r x CDATA \"default\">\n")
+	for range 12 {
+		overDefault = append(overDefault, bytes.Repeat([]byte(" "), 1<<20)...)
+		overDefault = append(overDefault, []byte("<!-- pad -->\n")...)
+	}
+
+	t.Run("zero selects the default cap and rejects a DTD over it", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{extDTDName: &fstest.MapFile{Data: overDefault}}
+
+		p := helium.NewParser().BlockXXE(false).
+			LoadExternalDTD(true).
+			DefaultDTDAttributes(true).
+			MaxExternalDTDBytes(0).
+			FS(fsys)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "a DTD over the default cap must be rejected when the cap is the default (0)")
+		require.ErrorIs(t, err, helium.ErrExternalDTDTooLarge, "rejection must come from the byte-count cap")
+	})
+
+	t.Run("negative removes the cap and loads a DTD over the default", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{extDTDName: &fstest.MapFile{Data: overDefault}}
+
+		p := helium.NewParser().BlockXXE(false).
+			LoadExternalDTD(true).
+			DefaultDTDAttributes(true).
+			MaxExternalDTDBytes(-1).
+			FS(fsys)
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "a negative cap must disable the limit, loading a DTD larger than the default")
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root, "root element should exist")
+		x, ok := root.GetAttribute("x")
+		require.True(t, ok, "external DTD ATTLIST default must be applied, proving the oversized DTD was loaded")
 		require.Equal(t, "default", x, "defaulted attribute value must come from the external DTD")
 	})
 }
@@ -2116,7 +2164,7 @@ func TestParserFS(t *testing.T) {
 <doc/>`
 
 		fsys := fstest.MapFS{
-			"ext.dtd": &fstest.MapFile{Data: []byte("<!ELEMENT doc EMPTY>\n")},
+			extDTDName: &fstest.MapFile{Data: []byte("<!ELEMENT doc EMPTY>\n")},
 		}
 
 		p := helium.NewParser().LoadExternalDTD(true).FS(fsys)

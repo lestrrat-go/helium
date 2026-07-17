@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"math"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -490,8 +491,8 @@ func baseRelativeFSName(primary, base string) (string, bool) {
 // original relative name. A RELATIVE document base is out of scope — BuildURI
 // yields a valid-but-absent relative path that fails with fs.ErrNotExist (not
 // fs.ErrInvalid), so the retry never fires; serving an fs.FS rooted elsewhere than
-// the document directory is the job of the deferred root-aware helium.DirFS(root)
-// adapter (a separate public-API proposal), not this retry.
+// the document directory is the job of the root-aware [DirFS] adapter, which
+// serves an in-root absolute name directly, not this retry.
 //
 // The retry name is a validated fs.ValidPath, so a "../"- or absolute-path escape
 // above the FS root is blocked. That path-shape guard does NOT confine symlinks:
@@ -608,11 +609,16 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// bytes read below. Read through a strict byte cap, allowing one extra
 	// byte so a source that under-reports (or lies about) its size is still
 	// caught.
-	limit := ctx.maxExtDTDSize
+	// ctx.maxExtDTDSize is already resolved: MaxExternalDTDSize for the default,
+	// a configured positive cap verbatim, or 0 (the resolveLimit sentinel for
+	// "no limit", from Parser.MaxExternalDTDBytes with a negative argument). A
+	// zero here means the caller explicitly disabled the cap for trusted input,
+	// so read without a byte bound.
+	limit := int64(ctx.maxExtDTDSize)
 	if limit <= 0 {
-		limit = MaxExternalDTDSize
+		limit = math.MaxInt64
 	}
-	data, exceeded, readErr := iolimit.ReadAll(f, int64(limit))
+	data, exceeded, readErr := iolimit.ReadAll(f, limit)
 	// Close the file immediately once the bounded read completes, before the
 	// already-buffered DTD is parsed, so the descriptor is not held open for
 	// the lifetime of the parse.
