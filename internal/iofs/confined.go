@@ -2,8 +2,10 @@ package iofs
 
 import (
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/uripath"
@@ -79,22 +81,80 @@ func (c ConfinedDir) Open(name string) (fs.File, error) {
 
 // localPath converts a name handed to Open into a local filesystem path. A
 // plain relative or absolute path passes through unchanged; a "file:" URI is
-// converted via [FileURIToPath] (percent-decoded, UNC and non-local host
-// rejected); any other URI scheme is refused so the FS never reaches the
-// network.
+// converted to a local path (percent-decoded, UNC and non-local host rejected);
+// any other URI scheme is refused so the FS never reaches the network.
+//
+// The scheme is detected with the full RFC 3986 grammar INCLUDING a one-letter
+// scheme (scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )). This is stricter
+// than [uripath.URIScheme], which returns "" for a one-letter scheme to keep a
+// Windows drive letter ("C:\\x") out of URI space: relying on that here let a
+// one-letter scheme like "x:dtd" slip past the non-"file" refusal and be opened
+// as an in-root name. A native Windows drive path is still allowed, but ONLY on
+// Windows and ONLY when it has the drive-letter shape ("C:\\x", "C:/x", "C:");
+// on any other platform such a prefix is not a valid local path and is treated
+// as a one-letter scheme (and refused unless it is "file").
 func (c ConfinedDir) localPath(name string) (string, error) {
-	scheme := uripath.URIScheme(name)
+	if runtime.GOOS == goosWindows && uripath.HasWindowsDrivePrefix(name) {
+		return name, nil
+	}
+	scheme := rfc3986Scheme(name)
 	if scheme == "" {
 		return name, nil
 	}
 	if scheme != "file" {
 		return "", &fs.PathError{Op: opOpen, Path: name, Err: fs.ErrPermission}
 	}
-	p, err := FileURIToPath(name)
+	return c.fileURILocalPath(name)
+}
+
+// fileURILocalPath converts a "file:" URI into a local filesystem path, matching
+// the private confinedDirFS this shared type replaces. It differs from
+// [FileURIToPath] in ONE respect: an opaque or empty-path form ("file:inside",
+// "file:") is converted to an empty local path rather than rejected. Open then
+// joins that empty path onto root and reads the root directory, which is the
+// observable CLI behavior (an "is a directory" read error) that the promotion
+// must preserve. FileURIToPath instead rejects the opaque form, because its
+// other callers (XInclude, catalog) must not silently read a directory.
+func (c ConfinedDir) fileURILocalPath(name string) (string, error) {
+	u, err := url.Parse(name)
 	if err != nil {
 		return "", &fs.PathError{Op: opOpen, Path: name, Err: err}
 	}
-	return p, nil
+	if u.Host != "" && !strings.EqualFold(u.Host, "localhost") {
+		return "", &fs.PathError{Op: opOpen, Path: name, Err: fs.ErrPermission}
+	}
+	// A "file:////server/share" URI (or a %5C-encoded backslash form) parses to
+	// an empty host with a UNC-shaped path; on Windows that reaches a remote SMB
+	// host, defeating the local-only policy. Reject every UNC form outright.
+	if IsUNCFileURIPath(u.Path) {
+		return "", &fs.PathError{Op: opOpen, Path: name, Err: fs.ErrPermission}
+	}
+	return fileURIPathFor(runtime.GOOS, u.Path), nil
+}
+
+// rfc3986Scheme returns the lowercased URI scheme of name — the leading token of
+// an absolute-URI reference (scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ))
+// up to its delimiting ":" — or "" when name carries no such token. Unlike
+// [uripath.URIScheme] it recognizes a ONE-letter scheme, so a caller that needs
+// to refuse every non-"file" scheme (and has already excluded a Windows
+// drive-letter path) cannot be bypassed by a one-letter scheme like "x:dtd".
+func rfc3986Scheme(name string) string {
+	if len(name) == 0 || !uripath.IsWindowsDriveLetter(name[0]) {
+		return ""
+	}
+	for i := 1; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case uripath.IsWindowsDriveLetter(c) || (c >= '0' && c <= '9') ||
+			c == '+' || c == '-' || c == '.':
+			continue
+		case c == ':':
+			return strings.ToLower(name[:i])
+		default:
+			return ""
+		}
+	}
+	return ""
 }
 
 // rootFile keeps the owning [os.Root] alive for the lifetime of the open file
