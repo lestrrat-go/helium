@@ -219,12 +219,13 @@ var cookedTokensStdlib = []Token{
 	Comment(" missing final newline "),
 }
 
-const testInputAltEncodingStdlib = `
-<?xml version="1.0" encoding="x-testing-uppercase"?>
+// The declaration sits at document position 0: shim rejects a declaration
+// preceded by whitespace (it must be at the start of the document), so the
+// incidental leading newline the stdlib fixture carried is dropped.
+const testInputAltEncodingStdlib = `<?xml version="1.0" encoding="x-testing-uppercase"?>
 <TAG>VALUE</TAG>`
 
 var rawTokensAltEncodingStdlib = []Token{
-	CharData("\n"),
 	ProcInst{Target: lexicon.PrefixXML, Inst: []byte(`version="1.0" encoding="x-testing-uppercase"`)},
 	CharData("\n"),
 	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
@@ -370,19 +371,15 @@ func TestRawTokenAltEncodingStdlib(t *testing.T) {
 
 func TestRawTokenAltEncodingNoConverterStdlib(t *testing.T) {
 	d := NewDecoder(context.Background(), strings.NewReader(testInputAltEncodingStdlib))
+	// The declaration is the first thing in the document, so the
+	// missing-CharsetReader error surfaces on the declaration token itself — the
+	// first RawToken call — rather than after a leading whitespace token.
 	token, err := d.RawToken()
-	if token == nil {
-		t.Fatalf("expected a token on first RawToken call")
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	token, err = d.RawToken()
 	if token != nil {
 		t.Errorf("expected a nil token; got %#v", token)
 	}
 	if err == nil {
-		t.Fatalf("expected an error on second RawToken call")
+		t.Fatalf("expected an error on the first RawToken call")
 	}
 	const encoding = "x-testing-uppercase"
 	if !strings.Contains(err.Error(), encoding) {
@@ -1025,15 +1022,21 @@ func TestIssue11405Stdlib(t *testing.T) {
 	}
 }
 
+// The upstream encoding/xml fixtures declare the encoding BEFORE the version.
+// That is not a conforming XMLDecl — the grammar fixes the order as version,
+// encoding, standalone — and this shim rejects it through both entry points, so
+// the fixtures below use the conforming order. The subject of the test is that
+// the encoding name is matched case-insensitively, which the order does not
+// affect.
 func TestIssue12417Stdlib(t *testing.T) {
 	testCases := []struct {
 		s  string
 		ok bool
 	}{
-		{`<?xml encoding="UtF-8" version="1.0"?><root/>`, true},
-		{`<?xml encoding="UTF-8" version="1.0"?><root/>`, true},
-		{`<?xml encoding="utf-8" version="1.0"?><root/>`, true},
-		{`<?xml encoding="uuu-9" version="1.0"?><root/>`, false},
+		{`<?xml version="1.0" encoding="UtF-8"?><root/>`, true},
+		{`<?xml version="1.0" encoding="UTF-8"?><root/>`, true},
+		{`<?xml version="1.0" encoding="utf-8"?><root/>`, true},
+		{`<?xml version="1.0" encoding="uuu-9"?><root/>`, false},
 	}
 	for _, tc := range testCases {
 		d := NewDecoder(context.Background(), strings.NewReader(tc.s))
@@ -1344,8 +1347,9 @@ func TestParseErrorsStdlib(t *testing.T) {
 			`element <foo> in space zzz closed by </foo> in space ""`, ""},
 		{withDefaultHeader("\xf1"), `invalid UTF-8`, "helium reports different error for invalid UTF-8"},
 
-		// Header-related errors.
-		{`<?xml version="1.1" encoding="UTF-8"?>`, `unsupported version "1.1"; only version 1.0 is supported`, ""},
+		// Header-related: shim accepts XML 1.1 (helium supports it) where stdlib
+		// rejects it, so a 1.1 declaration is not an error for the shim.
+		{`<?xml version="1.1" encoding="UTF-8"?>`, ``, ""},
 
 		// Cases below are for "no errors".
 		{withDefaultHeader(`<?ok?>`), ``, ""},

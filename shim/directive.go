@@ -6,7 +6,6 @@ import (
 	"io"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // maxPrologSize bounds the number of bytes the prolog scanner will buffer
@@ -71,7 +70,14 @@ type prologScanner struct {
 	peek         []byte       // ungotten bytes
 	xmlDeclStart int          // byte offset of '<' in <?xml ...?>
 	xmlDeclEnd   int          // byte offset after '>' in <?xml ...?>
+	sawContent   bool         // whitespace, a PI, comment or directive has been scanned
 	sizeErr      error        // set when the prolog exceeds maxPrologSize
+}
+
+// errDeclNotAtStart is returned when an XML declaration is preceded by anything
+// other than whitespace.
+var errDeclNotAtStart = &stdxml.SyntaxError{
+	Msg: "XML declaration allowed only at the start of the document",
 }
 
 func (s *prologScanner) readByte() (byte, error) {
@@ -121,6 +127,16 @@ func (s *prologScanner) scan() ([]Token, error) {
 		}
 
 		if isWhitespace(b) {
+			// Whitespace ahead of a later "<?xml" declaration displaces it from
+			// the start of the document: a declaration is legal only at position 0
+			// (prolog ::= XMLDecl? Misc* ...), so any whitespace before it is
+			// content for the placement rule and makes the declaration misplaced.
+			// It does not displace a later root ELEMENT — that path never reaches
+			// the reserved-target check below. A leading byte-order mark is not
+			// whitespace and never reaches here: it stops the scan (a non-'<',
+			// non-whitespace byte), leaving helium to judge the BOM+declaration in
+			// context, so the BOM stays exempt.
+			s.sawContent = true
 			wsAccum.WriteByte(b)
 			continue
 		}
@@ -162,10 +178,25 @@ func (s *prologScanner) scan() ([]Token, error) {
 				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
 			}
 
-			if pi.Target == lexicon.PrefixXML {
+			if isReservedXMLTarget(pi.Target) {
+				// A target equal to "xml" in any casing is the reserved name
+				// (XML 1.0 §2.6). XMLDecl ::= '<?xml' ... is the FIRST thing in a
+				// document (prolog ::= XMLDecl? Misc* ...), so anything scanned
+				// ahead of it — leading whitespace, an earlier declaration, a
+				// comment, a PI, a doctype — makes it a misplaced PI, matching
+				// helium's own verdict for a declaration not at position 0. The
+				// bytes are blanked out of the replay buffer so helium never
+				// re-parses them; the drained ProcInst is then held to
+				// checkXMLDecl (in readToken), which accepts the lowercase "xml"
+				// as a declaration and rejects any other casing as an illegal
+				// target.
+				if s.sawContent {
+					return tokens, errDeclNotAtStart
+				}
 				s.xmlDeclStart = piStart
 				s.xmlDeclEnd = s.buf.Len()
 			}
+			s.sawContent = true
 			tokens = append(tokens, tok)
 
 		case '!':
@@ -190,6 +221,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 					if err != nil {
 						return tokens, errUnexpectedEOF
 					}
+					s.sawContent = true
 					tokens = append(tokens, tok)
 				} else {
 					// <!-X where X != '-' → invalid
@@ -208,6 +240,7 @@ func (s *prologScanner) scan() ([]Token, error) {
 				if err != nil {
 					return tokens, errUnexpectedEOF
 				}
+				s.sawContent = true
 				tokens = append(tokens, tok)
 			}
 
@@ -383,4 +416,28 @@ func (s *prologScanner) scanDirective() (Token, error) {
 
 func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+// isLeadingBOM reports whether tok is CharData consisting solely of byte-order
+// marks (U+FEFF). A leading BOM is document framing, not content, so it does not
+// displace a later XML declaration from the start of the document. Leading
+// whitespace, by contrast, DOES count as content: an XML declaration is legal
+// only at document position 0 (prolog ::= XMLDecl? Misc* ...), so any whitespace
+// ahead of it makes it misplaced, matching helium's verdict on the byte paths.
+// Every other token, and any CharData carrying a non-BOM character, counts as
+// content.
+func isLeadingBOM(tok Token) bool {
+	cd, ok := tok.(CharData)
+	if !ok {
+		return false
+	}
+	if len(cd) == 0 {
+		return false
+	}
+	for _, r := range string(cd) {
+		if r != '\uFEFF' {
+			return false
+		}
+	}
+	return true
 }

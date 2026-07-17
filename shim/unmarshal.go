@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding"
 	stdxml "encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -18,9 +17,10 @@ import (
 
 const xmlNameField = "XMLName"
 
-// xmlVersion10 is the only XML version encoding/xml accepts in a declaration, so
-// it is the only one this shim accepts.
-const xmlVersion10 = "1.0"
+// heliumNoEncoding is the sentinel helium's [helium.Document.Encoding] returns
+// for a document whose declaration named no encoding. It must be treated as
+// "no encoding declared", not as an encoding to honor.
+const heliumNoEncoding = "utf8"
 
 type fieldBinding struct {
 	fieldName    string
@@ -65,56 +65,35 @@ func Unmarshal(data []byte, v any) error {
 	if err != nil {
 		return err
 	}
-	trimmed := trimLeadingSpace(data)
-	if len(trimmed) == 0 {
+	// A document that is empty or only whitespace has no root element; match
+	// encoding/xml and report io.EOF. The trim serves only this check — helium
+	// itself sees the original, untrimmed bytes below.
+	if len(trimLeadingSpace(data)) == 0 {
 		return io.EOF
 	}
 
-	// A declared version other than 1.0 is rejected from the RAW declaration,
-	// before parsing, so the rejection does not depend on how helium happens to
-	// fail. Reading the version back out of a parse error is not equivalent: a
-	// pseudo-attribute helium rejects standing ahead of the version makes it fail
-	// on that one first, reporting nothing about the version. Like stdlib, an
-	// ABSENT or empty version is not an error.
-	if ver, ok := declaredXMLVersion(trimmed); ok && ver != "" && ver != xmlVersion10 {
-		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
-	}
-
-	p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth)
-	doc, err := p.Parse(context.Background(), trimmed)
+	// helium sees the whole document verbatim, including any leading whitespace
+	// and any XML declaration, and is the single authority for the XMLDecl
+	// grammar (XML 1.0 §2.8), the version rule (1.0 and 1.1 are supported; a
+	// version outside the 1.x family is rejected), and declaration placement.
+	// Its parse verdict is the answer: a declaration it rejects — a charset=
+	// pseudo-attribute, a missing/empty version, an empty encoding,
+	// pseudo-attributes out of order, an unsupported version, or a misplaced,
+	// reserved-cased, or preceded-by-whitespace declaration (a declaration is
+	// legal only at document position 0, so any whitespace ahead of it makes it
+	// misplaced) — surfaces as a parse error. The bytes are NOT trimmed before
+	// this parse: trimming would hide leading whitespace from helium and make
+	// shim accept a misplaced declaration helium rejects. encoding/xml accepts
+	// many of these; this shim is backed by a spec-conforming parser and does
+	// not.
+	p := helium.NewParser().MaxDepth(maxParseDepth)
+	doc, err := p.Parse(context.Background(), data)
 	if err != nil {
-		// A version outside the 1.x family is a fatal parse error in helium. Give
-		// it the shim's own unsupported-version wording only when a version was
-		// actually READ from the declaration: helium can reject one the raw scan
-		// never reads, notably from a declaration left unclosed by "?>". With no
-		// version read there is nothing to name, so fall through and report the
-		// parse error, which quotes the version helium rejected.
-		if errors.Is(err, helium.ErrUnsupportedXMLVersion) {
-			if ver, ok := declaredXMLVersion(trimmed); ok && ver != "" && ver != xmlVersion10 {
-				return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
-			}
-			// The raw scan and helium disagree about which version this
-			// declaration carries — it is unclosed, or it repeats the
-			// pseudo-attribute — so the scanned value would name the wrong one.
-			// Report helium's error, which quotes the version it rejected.
-			// Never fall through to the strip-and-retry below: helium found an
-			// unsupported version, and dropping the declaration would parse the
-			// document as if it had never declared one.
-			return convertParseError(err)
-		}
-		// helium's lenient mode is still stricter than stdlib for some
-		// malformed declarations (e.g. charset=, empty version/encoding).
-		// Strip the declaration and retry.
-		if stripped, ok := stripXMLDecl(trimmed); ok {
-			doc, err = p.Parse(context.Background(), stripped)
-		}
-		if err != nil {
-			return convertParseError(err)
-		}
+		return convertParseError(err)
 	}
 
-	// Validate version/encoding from the parsed document to match
-	// stdlib error behavior.
+	// The only declaration rule left shim-side is the encoding one: Unmarshal has
+	// no CharsetReader, so a non-UTF-8 encoding cannot be honored.
 	if err := validateXMLDeclFields(doc); err != nil {
 		return err
 	}
@@ -137,103 +116,18 @@ func trimLeadingSpace(data []byte) []byte {
 	return data
 }
 
-// stripXMLDecl removes an XML declaration from data if present, returning
-// the remaining data and true. Returns the original data and false if no
-// declaration is found.
-func stripXMLDecl(data []byte) ([]byte, bool) {
-	if len(data) < 5 || string(data[:5]) != "<?xml" {
-		return data, false
-	}
-	_, after, found := bytes.Cut(data, []byte("?>"))
-	if !found {
-		return data, false
-	}
-	return trimLeadingSpace(after), true
-}
-
-// declaredXMLVersion returns the value of the version pseudo-attribute in data's
-// XML declaration and whether one is present. It reads the raw bytes because the
-// version it reports may be one the parser rejected, so no Document carries it.
-//
-// The scan is ANCHORED: it walks the declaration's pseudo-attributes from the
-// start, taking the version from the one actually named "version". An unanchored
-// search for the literal "version" also matches inside another pseudo-attribute's
-// quoted value (encoding="version"), reading the wrong value or none.
-func declaredXMLVersion(data []byte) (string, bool) {
-	decl, _, found := bytes.Cut(data, []byte("?>"))
-	if !found {
-		return "", false
-	}
-	rest, isDecl := bytes.CutPrefix(decl, []byte("<?xml"))
-	if !isDecl {
-		return "", false
-	}
-
-	for {
-		name, value, after, ok := cutPseudoAttr(trimLeadingSpace(rest))
-		if !ok {
-			return "", false
-		}
-		if string(name) == "version" {
-			return string(value), true
-		}
-		rest = after
-	}
-}
-
-// cutPseudoAttr splits one XML-declaration pseudo-attribute — Name S? '=' S?
-// ('"' value '"' | "'" value "'") — off the front of data, returning its name,
-// its quoted value's contents, and the bytes following the closing quote. The
-// final result is false when data does not begin with a well-formed one.
-func cutPseudoAttr(data []byte) ([]byte, []byte, []byte, bool) {
-	n := 0
-	for n < len(data) && isPseudoAttrNameByte(data[n]) {
-		n++
-	}
-	if n == 0 {
-		return nil, nil, nil, false
-	}
-	name := data[:n]
-
-	rest := trimLeadingSpace(data[n:])
-	if len(rest) == 0 || rest[0] != '=' {
-		return nil, nil, nil, false
-	}
-	rest = trimLeadingSpace(rest[1:])
-	if len(rest) == 0 || (rest[0] != '"' && rest[0] != '\'') {
-		return nil, nil, nil, false
-	}
-
-	value, after, closed := bytes.Cut(rest[1:], rest[:1])
-	if !closed {
-		return nil, nil, nil, false
-	}
-	return name, value, after, true
-}
-
-// isPseudoAttrNameByte reports whether b can appear in an XML-declaration
-// pseudo-attribute name. The three names the declaration admits — version,
-// encoding, standalone — are lowercase ASCII letters throughout.
-func isPseudoAttrNameByte(b byte) bool {
-	return b >= 'a' && b <= 'z'
-}
-
-// validateXMLDeclFields checks the parsed document's version and encoding
-// to match stdlib error behavior (reject non-1.0 versions and non-UTF-8
-// encodings when no CharsetReader is available).
+// validateXMLDeclFields applies the shim's encoding rule to a parsed document's
+// declared encoding: [Unmarshal] has no CharsetReader, so an explicitly declared
+// non-UTF-8 encoding cannot be honored and is rejected. The version and grammar
+// were already judged by helium's parse. doc.Encoding() returns the
+// heliumNoEncoding sentinel when no encoding was declared; that must be treated
+// as absent, so only an explicitly declared non-UTF-8 encoding is rejected.
 func validateXMLDeclFields(doc *helium.Document) error {
-	if ver := doc.Version(); ver != "" && ver != xmlVersion10 {
-		// stdlib uses fmt.Errorf here (not xml.SyntaxError), so we
-		// match that to produce identical Error() strings.
-		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+	enc := doc.Encoding()
+	if !encodingNeedsCharsetReader(enc) {
+		return nil
 	}
-	// doc.Encoding() returns "utf8" (no hyphen) as a default when no
-	// encoding pseudo-attribute was declared. That sentinel must be
-	// excluded so we only reject explicitly declared non-UTF-8 encodings.
-	if enc := doc.Encoding(); enc != "" && enc != "utf8" && !strings.EqualFold(enc, "utf-8") {
-		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
-	}
-	return nil
+	return errCharsetReaderNil(enc)
 }
 
 func decodeElementInto(target reflect.Value, elem *helium.Element) error {

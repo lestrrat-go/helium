@@ -378,7 +378,7 @@ Drop-in replacement for encoding/xml backed by helium parser.
 - **Marshal(v) → ([]byte, error)** / **Unmarshal([]byte, v) → error**
 - API mirrors encoding/xml; strict mode only; undeclared namespace prefixes rejected
 - Known differences: empty elements self-closed, xmlns before regular attrs, InputOffset approximate
-- Files: `decoder.go`, `encoder.go`, `marshal.go`, `unmarshal.go`, `types.go`, `namespace.go`, `escape.go`, `doc.go`
+- Files: `api.go`, `decoder.go`, `directive.go` (prolog scanner), `encoder.go`, `marshal.go`, `unmarshal.go`, `types.go`, `namespace.go`, `escape.go`, `compat_errors.go`, `doc.go`
 - Imports: helium, stream/, internal/encoding/, internal/xmlchar/
 
 ## sink/

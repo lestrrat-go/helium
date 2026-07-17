@@ -2,6 +2,7 @@ package shim
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	stdxml "encoding/xml"
 	"errors"
@@ -69,6 +70,7 @@ type Decoder struct {
 	saxStarted      bool        // true once SAX goroutine has been started
 	detectedCharset string      // non-UTF-8 encoding from XML declaration
 	pendingEvent    *tokenEvent // lookahead event saved during CharData merging
+	sawContent      bool        // TokenReader path: a content token (anything but a leading BOM) has been seen
 }
 
 func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
@@ -250,6 +252,11 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		return push(c, c, line, col)
 	}))
 	h.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ context.Context, target, data string) error {
+		// Suppress only the lowercase "xml" declaration PI: helium re-parses the
+		// blanked-declaration document, so this callback only ever fires for PIs
+		// helium accepts, and helium rejects a reserved-cased target upstream —
+		// none reaches here. An exact match is deliberate: folding here would
+		// silently DROP such a target rather than reject it, if one ever did.
 		if target == lexicon.PrefixXML {
 			return nil // skip XML declaration
 		}
@@ -302,7 +309,12 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 
 	go func() {
 		defer close(d.events)
-		p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth).SAXHandler(h)
+		// The parser is handed a document whose XML declaration has been
+		// blanked out to spaces by scanProlog, which tokenized the prolog
+		// itself. So the parser never parses a declaration in context on this
+		// path; checkXMLDecl instead reconstructs the drained declaration and asks
+		// helium to judge it, so the verdict is still helium's.
+		p := helium.NewParser().MaxDepth(maxParseDepth).SAXHandler(h)
 		_, err := p.ParseReader(ctx, r)
 		if err != nil {
 			select {
@@ -379,12 +391,13 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		d.lastToken = tok
 		d.advancePosition(tok)
 
-		// Check encoding attribute in XML declaration
-		if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
-			if err := d.checkProcInstVersion(string(pi.Inst)); err != nil {
-				return nil, err
-			}
-			if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
+		// A ProcInst whose target is the reserved "xml" name (in any casing) is
+		// held to the declaration gate: the lowercase "xml" is the XML
+		// declaration, which checkXMLDecl reconstructs and lets helium judge
+		// (grammar and version), and any other casing is an illegal PITarget that
+		// checkXMLDecl rejects.
+		if pi, ok := tok.(ProcInst); ok && isReservedXMLTarget(pi.Target) {
+			if err := d.checkXMLDecl(pi.Target, string(pi.Inst)); err != nil {
 				return nil, err
 			}
 		}
@@ -409,6 +422,15 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			close(d.events)
 		} else {
 			reader := d.combinedReader
+			// A fixed-width Unicode declaration is invisible to scanProlog, so its
+			// encoding gate never ran; apply the policy here from helium's decoded
+			// encoding before the streaming parse.
+			fixedReader, err := d.applyFixedWidthEncodingPolicy(reader)
+			if err != nil {
+				d.combinedReader = nil
+				return nil, err
+			}
+			reader = fixedReader
 			if d.detectedCharset != "" && d.CharsetReader != nil {
 				newr, err := d.CharsetReader(d.detectedCharset, bufio.NewReader(reader))
 				if err != nil {
@@ -485,11 +507,36 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 
 	tok = stdxml.CopyToken(tok)
 
-	// Check encoding attribute in XML declaration
-	if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
-		if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
+	// A ProcInst whose target is the reserved "xml" name (in any casing) is held
+	// to the same rules wherever it came from, including a TokenReader. The
+	// lowercase "xml" is the XML declaration; any other casing is an illegal
+	// PITarget. The SAX emitter suppresses its own declaration, so one only ever
+	// reaches this point from a TokenReader.
+	if pi, ok := tok.(ProcInst); ok && isReservedXMLTarget(pi.Target) {
+		// XMLDecl is only legal as the very first thing in a document
+		// (prolog ::= XMLDecl? Misc* ...), with only a byte-order mark ahead of
+		// it. d.sawContent records whether a content token already reached the
+		// caller on the TokenReader path — mirroring prologScanner.sawContent on
+		// the reader path — so a declaration after leading whitespace, a comment,
+		// a PI, a doctype, an earlier declaration, or the root start tag is
+		// rejected here too.
+		if d.sawContent {
+			return nil, errDeclNotAtStart
+		}
+		if err := d.checkXMLDecl(pi.Target, string(pi.Inst)); err != nil {
 			return nil, err
 		}
+	}
+
+	// Record prior content for the TokenReader path's placement rule above.
+	// A leading byte-order mark does not count (isLeadingBOM) — it is document
+	// framing, not content — but leading whitespace DOES: a declaration is legal
+	// only at document position 0, so whitespace ahead of it makes it misplaced.
+	// This matches the reader path (scanProlog sets sawContent on leading
+	// whitespace and lets helium judge a BOM+declaration in context) and helium's
+	// own verdict on the byte paths.
+	if d.tokenReader != nil && !isLeadingBOM(tok) {
+		d.sawContent = true
 	}
 
 	d.lastToken = tok
@@ -497,59 +544,178 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	return tok, nil
 }
 
-// checkProcInstVersion validates the version attribute in an XML declaration.
-// Only version 1.0 is supported.
-func (d *Decoder) checkProcInstVersion(data string) error {
-	ver := procInstValue(data, "version")
-	if ver == "" || ver == "1.0" {
-		return nil
-	}
-	return &stdxml.SyntaxError{
-		Msg:  fmt.Sprintf("unsupported version %q; only version 1.0 is supported", ver),
-		Line: d.line,
-	}
+// isReservedXMLTarget reports whether target is the reserved processing-
+// instruction target "xml" in ANY casing. XML 1.0 §2.6 reserves it via
+//
+//	PITarget ::= Name - (('X'|'x')('M'|'m')('L'|'l'))
+//
+// so "xml", "XML", "Xml", "xMl", … are all reserved: only the lowercase "xml"
+// introduces an XML declaration, and every other casing is an illegal target.
+// A longer xml-prefixed name such as "xmlfoo" or "xml-stylesheet" is an
+// ordinary, legal target; strings.EqualFold matches only equal-length strings,
+// so those longer names are left untouched. This is the single classifier the
+// declaration gate uses on all three decode paths, so the reserved-target rule
+// cannot drift apart from the grammar/version/encoding rules.
+func isReservedXMLTarget(target string) bool {
+	return strings.EqualFold(target, lexicon.PrefixXML)
 }
 
-// checkProcInstEncoding validates the encoding attribute in an XML declaration.
-// UTF-8 (case-insensitive) is always accepted. Non-UTF-8 requires CharsetReader.
-func (d *Decoder) checkProcInstEncoding(data string) error {
-	enc := procInstValue(data, "encoding")
-	if enc == "" {
-		return nil
+// checkXMLDecl is the declaration gate for a ProcInst whose target is the
+// reserved "xml" name, used on the Decoder paths where helium does not otherwise
+// judge the declaration in context (the reader path blanks it out of the bytes
+// replayed to the parser; the TokenReader path carries no bytes at all). Only
+// the lowercase "xml" introduces an XML declaration; a target in any other
+// casing is an illegal PITarget (isReservedXMLTarget) and is rejected before its
+// pseudo-attributes are read. For the lowercase target the declaration is
+// reconstructed and handed to helium — the single authority for the XMLDecl
+// grammar and the version rule — and the encoding it declares is then held to
+// the shim's CharsetReader rule.
+func (d *Decoder) checkXMLDecl(target, data string) error {
+	if target != lexicon.PrefixXML {
+		return &stdxml.SyntaxError{
+			Msg:  fmt.Sprintf("%q is a reserved processing-instruction target", target),
+			Line: d.line,
+		}
 	}
-	if strings.EqualFold(enc, "utf-8") {
+	enc, err := heliumDeclDecision(data)
+	if err != nil {
+		return err
+	}
+	return d.checkDeclEncoding(enc)
+}
+
+// declProbeRoot is the minimal well-formed root appended to a reconstructed
+// declaration so helium has a complete document to parse.
+const declProbeRoot = "<r/>"
+
+// declTerminator is the XML declaration's closing delimiter. It both closes the
+// reconstructed declaration and is the sequence an Inst may not contain (it
+// cannot appear inside a real declaration's pseudo-attribute region).
+const declTerminator = "?>"
+
+// errDeclInstTerminator is returned when a reconstructed declaration's Inst
+// carries an embedded "?>". Such an Inst is smuggling a second PI or arbitrary
+// prolog markup past the declaration boundary and is rejected before parsing.
+var errDeclInstTerminator = &stdxml.SyntaxError{
+	Msg: `XML declaration contains an embedded "?>" terminator`,
+}
+
+// heliumDeclDecision is the shim's single declaration-decision function. It
+// reconstructs the declaration as a standalone document — "<?xml " + data + "?>"
+// followed by a minimal root — and hands it to helium, whose parse is the
+// authority for the XMLDecl grammar (XML 1.0 §2.8) and the version rule: 1.0 and
+// 1.1 are supported (helium implements XML 1.1), and a version outside the 1.x
+// family is rejected. Every Decoder path that has a declaration but no in-context
+// helium parse routes its verdict through here, so the grammar and version rules
+// cannot drift from helium's. On success it returns the declared encoding (the
+// "utf8" sentinel when none was declared) for the CharsetReader rule; on failure
+// it returns helium's verdict as an [encoding/xml.SyntaxError].
+func heliumDeclDecision(data string) (string, error) {
+	// Guard the reconstructed declaration's own boundary. data is the ProcInst
+	// Inst, which on the TokenReader path is arbitrary caller-supplied bytes. A
+	// real declaration's pseudo-attribute region cannot contain "?>" — that is
+	// the declaration's own terminator — so an Inst carrying one would close the
+	// synthetic "<?xml ...?>" early and let the remainder become injected prolog
+	// nodes (a second PI, a comment, arbitrary markup) that helium would parse as
+	// legitimate. Reject it before building the probe. The reader path cannot
+	// reach here with such an Inst: scanPI splits the PI on its first "?>", so its
+	// Inst never contains one. The target is not spliced in — it is validated to
+	// be exactly the lowercase "xml" by checkXMLDecl and hardcoded below — so it
+	// needs no analogous guard.
+	if strings.Contains(data, declTerminator) {
+		return "", errDeclInstTerminator
+	}
+	src := "<?xml " + data + declTerminator + declProbeRoot
+	p := helium.NewParser().MaxDepth(maxParseDepth)
+	doc, err := p.Parse(context.Background(), []byte(src))
+	if err != nil {
+		return "", convertParseError(err)
+	}
+	return doc.Encoding(), nil
+}
+
+// checkDeclEncoding applies the shim's encoding rule to a declaration's
+// EncName. UTF-8 (case-insensitive) is always accepted, as is helium's
+// no-encoding sentinel. Any other encoding requires a CharsetReader to convert
+// it.
+func (d *Decoder) checkDeclEncoding(enc string) error {
+	if !encodingNeedsCharsetReader(enc) {
 		return nil
 	}
 	if d.CharsetReader == nil {
-		return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+		return errCharsetReaderNil(enc)
 	}
 	d.detectedCharset = enc
 	return nil
 }
 
-// procInstValue extracts the value of an attribute from a processing instruction's data.
-func procInstValue(data, param string) string {
-	_, s, found := strings.Cut(data, param)
-	if !found {
-		return ""
+// encodingNeedsCharsetReader reports whether enc is an explicitly declared
+// non-UTF-8 encoding that a CharsetReader is required to honor. The empty string
+// and helium's no-encoding sentinel both mean no encoding was declared, and UTF-8
+// (case-insensitive) needs no conversion. This is the shim's single encoding
+// classifier, shared by every entry point so their verdicts cannot drift.
+func encodingNeedsCharsetReader(enc string) bool {
+	if enc == "" || enc == heliumNoEncoding {
+		return false
 	}
-	s = strings.TrimSpace(s)
-	if s == "" || s[0] != '=' {
-		return ""
+	return !strings.EqualFold(enc, "utf-8")
+}
+
+// errCharsetReaderNil is the error every entry point returns when a document
+// declares a non-UTF-8 encoding that cannot be honored because no CharsetReader
+// is configured. Building it in one place keeps the message identical wherever
+// the policy fires.
+func errCharsetReaderNil(enc string) error {
+	return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
+}
+
+// applyFixedWidthEncodingPolicy applies the shim's encoding policy on the
+// reader-backed Decoder path when the declaration is written in a fixed-width
+// Unicode encoding (UTF-16 / UCS-4). The byte-level prolog scanner cannot
+// tokenize such a declaration, so its encoding gate (checkXMLDecl) never fires
+// here. When the stream begins with a fixed-width Unicode marker, the whole
+// document is decoded by helium — the authority on the declared encoding — and a
+// declared non-UTF-8 encoding without a CharsetReader is rejected, matching
+// Unmarshal and the scanner's own gate. The returned reader replays the same
+// bytes for the streaming parse; ASCII-compatible streams are returned untouched
+// so the fast path is undisturbed.
+func (d *Decoder) applyFixedWidthEncodingPolicy(r io.Reader) (io.Reader, error) {
+	br := bufio.NewReader(r)
+	prefix, _ := br.Peek(4)
+	if !looksFixedWidthUnicode(prefix) {
+		return br, nil
 	}
-	s = strings.TrimSpace(s[1:])
-	if s == "" {
-		return ""
+	buf, err := io.ReadAll(br)
+	if err != nil {
+		return nil, err
 	}
-	q := s[0]
-	if q != '\'' && q != '"' {
-		return ""
+	doc, err := helium.NewParser().MaxDepth(maxParseDepth).Parse(context.Background(), buf)
+	if err != nil {
+		return nil, convertParseError(err)
 	}
-	end := strings.IndexByte(s[1:], q)
-	if end < 0 {
-		return ""
+	enc := doc.Encoding()
+	if encodingNeedsCharsetReader(enc) && d.CharsetReader == nil {
+		return nil, errCharsetReaderNil(enc)
 	}
-	return s[1 : end+1]
+	return bytes.NewReader(buf), nil
+}
+
+// looksFixedWidthUnicode reports whether prefix begins a fixed-width Unicode
+// stream (UTF-16 / UCS-4) that the byte-level prolog scanner cannot read: a
+// UTF-16 byte-order mark, or a NUL among the leading bytes (present in every
+// UCS-4 or UTF-16 encoding of the leading ASCII '<'). A UTF-8 or ASCII document,
+// with or without a UTF-8 byte-order mark, has neither, so it stays on the fast
+// path. A false positive only costs a decode that helium then judges correctly.
+func looksFixedWidthUnicode(prefix []byte) bool {
+	if len(prefix) >= 2 {
+		if prefix[0] == 0xFF && prefix[1] == 0xFE {
+			return true
+		}
+		if prefix[0] == 0xFE && prefix[1] == 0xFF {
+			return true
+		}
+	}
+	return bytes.IndexByte(prefix, 0x00) >= 0
 }
 
 func applyDefaultSpace(tok Token, space string) Token {

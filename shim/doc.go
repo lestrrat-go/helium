@@ -25,6 +25,60 @@
 //   - Namespace strictness: undeclared namespace prefixes are rejected.
 //     [encoding/xml] silently accepts undeclared prefixes and places the
 //     raw prefix string in Name.Space.
+//   - Declaration authority: the helium parser is the single authority for the
+//     XML declaration. Its parse decides the XMLDecl grammar (XML 1.0 §2.8), the
+//     version rule, and declaration placement, and shim's verdict is helium's.
+//     The three entry points — [Unmarshal], a reader-backed [Decoder], and a
+//     TokenReader-backed [Decoder] — agree on every declaration, with one
+//     encoding/xml limitation noted under "Version support" below.
+//   - Encoding policy: a document that declares a non-UTF-8 encoding (for
+//     example "UTF-16" or "ISO-8859-1") is rejected unless a
+//     [Decoder.CharsetReader] is set to convert it — the same rule as
+//     [encoding/xml]. shim applies this one rule from helium's decoded encoding,
+//     so every entry point reaches the same verdict even when the declaration is
+//     itself written in a fixed-width Unicode encoding (UTF-16 or UCS-4) that a
+//     byte-level scan cannot read. A fixed-width Unicode document that declares
+//     no encoding names none and is accepted.
+//   - Declaration strictness: an XML declaration that does not conform to the
+//     XMLDecl grammar (XML 1.0 §2.8) is rejected. The grammar requires a
+//     version and admits only version, encoding and standalone, in that order
+//     and at most once each. Rejected forms include a "charset="
+//     pseudo-attribute, a missing or empty version, an empty encoding, a
+//     standalone that is not "yes" or "no", and pseudo-attributes out of
+//     order (<?xml encoding="UTF-8" version="1.0"?>). [encoding/xml] accepts
+//     all of them. This shim is backed by a spec-conforming parser and does
+//     not accept XML the specification does not permit.
+//   - Version support: shim accepts the XML versions helium accepts — 1.0 AND
+//     1.1 — because helium implements XML 1.1. [encoding/xml] rejects
+//     version="1.1"; shim accepts it. A version outside the 1.x family (for
+//     example "2.0") is rejected. [Unmarshal] and the reader-backed [Decoder]
+//     see the bytes and accept 1.1 directly. A TokenReader-backed [Decoder]
+//     accepts a 1.1 declaration once it is delivered as a token, but an
+//     [encoding/xml.Decoder] used as the TokenReader cannot deliver one: it
+//     rejects version 1.1 during its own tokenization, before the declaration
+//     reaches shim. That is a limitation of [encoding/xml], not of shim.
+//   - Declaration placement: an XML declaration is admitted only as the very
+//     first thing in the document (prolog ::= XMLDecl? Misc* ...) — at document
+//     position 0, with only a byte-order mark allowed ahead of it. A "<?xml"
+//     appearing after ANY leading whitespace, or after an earlier declaration, a
+//     comment, a processing instruction or a doctype, is rejected. [encoding/xml]
+//     tolerates leading whitespace and reports a later "<?xml" as an ordinary
+//     ProcInst — a divergence; shim's verdict is helium's, coherent across
+//     [Unmarshal], the reader-backed [Decoder] and the TokenReader-backed
+//     [Decoder]. Whitespace ahead of the ROOT ELEMENT (with no declaration) is
+//     well-formed and stays accepted; only whitespace ahead of a DECLARATION
+//     rejects, because a declaration must be at position 0 whereas an element
+//     need not.
+//   - Reserved target: the target "xml" is reserved in ANY casing —
+//     PITarget ::= Name - (('X'|'x')('M'|'m')('L'|'l')) (XML 1.0 §2.6) — so
+//     <?XML ...?>, <?Xml ...?> and <?xMl ...?> are illegal wherever they appear.
+//     Only the lowercase "xml" introduces a declaration; any other casing is
+//     rejected as an illegal target. A target that merely BEGINS with "xml" is
+//     unaffected, because the reserved name is subtracted only when it stands
+//     alone: <?xmlversion ="2.0"?> and <?xml-stylesheet ...?> are well-formed
+//     ordinary PIs, declare no version, and are accepted anywhere a PI may go.
+//     [Unmarshal] and [Decoder] agree on every one of these, including a
+//     [Decoder] driven by a TokenReader.
 //   - Version strictness: a declaration carrying whitespace around the
 //     version pseudo-attribute's "=" (<?xml version = "2.0"?>) is rejected
 //     as an unsupported version. [encoding/xml] accepts it — it searches
