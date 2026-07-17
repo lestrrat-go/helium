@@ -461,8 +461,8 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 	return attr, nil
 }
 
-// CreateNamespace builds a namespace node binding prefix to uri, associated with
-// this document. An empty prefix denotes the default namespace.
+// CreateNamespace builds a namespace node binding prefix to uri. An empty prefix
+// denotes the default namespace.
 func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
 	var ns *Namespace
 	if d != nil {
@@ -523,8 +523,7 @@ func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *At
 	return attr
 }
 
-// CreatePI builds a processing-instruction node with the given target and data,
-// owned by this document.
+// CreatePI builds a processing-instruction node with the given target and data.
 func (d *Document) CreatePI(target, data string) *ProcessingInstruction {
 	pi := &ProcessingInstruction{
 		target: target,
@@ -534,8 +533,8 @@ func (d *Document) CreatePI(target, data string) *ProcessingInstruction {
 	return pi
 }
 
-// CreateDTD builds a detached DTD node owned by this document. It is not linked
-// into the tree; use CreateInternalSubset to install an internal subset.
+// CreateDTD builds a detached DTD node. It is not linked into the tree; use
+// CreateInternalSubset to install an internal subset.
 func (d *Document) CreateDTD() (*DTD, error) {
 	dtd := newDTD()
 	dtd.doc = d
