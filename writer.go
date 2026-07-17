@@ -718,6 +718,12 @@ func (s *writeSession) writeIndent(out io.Writer) {
 		return
 	}
 	str := s.indentStr()
+	if str == "" {
+		// An explicit IndentString("") means newline-only formatting: emit no
+		// per-level indentation and never hand the output writer an empty chunk
+		// (a strict writer may reject a zero-length Write).
+		return
+	}
 	for range s.indent {
 		s.writeString(out, str)
 	}
