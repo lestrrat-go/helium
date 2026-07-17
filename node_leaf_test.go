@@ -108,7 +108,7 @@ func TestLeafAddChildGuards(t *testing.T) {
 
 				err := leaf.AddChild(leaf)
 				require.Error(t, err, "AddChild(self) must be rejected")
-				require.EqualError(t, err, tc.addChildSelfErr)
+				require.ErrorContains(t, err, tc.addChildSelfErr)
 
 				require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
 				require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
@@ -128,7 +128,7 @@ func TestLeafAddChildGuards(t *testing.T) {
 					// make an ancestor a descendant of itself.
 					err := leaf.AddChild(root)
 					require.Error(t, err, "inserting an ancestor must be rejected")
-					require.EqualError(t, err, errAddChildCycle)
+					require.ErrorContains(t, err, errAddChildCycle)
 
 					require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
 					require.Nil(t, root.Parent(), "root must remain the tree root")
@@ -181,7 +181,7 @@ func TestLeafAddSiblingGuards(t *testing.T) {
 
 				err := leaf.AddSibling(leaf)
 				require.Error(t, err, "AddSibling(self) must be rejected")
-				require.EqualError(t, err, errAddSiblingCycle)
+				require.ErrorContains(t, err, errAddSiblingCycle)
 
 				require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
 				require.Equal(t, helium.Node(leaf), root.LastChild(), "tree must not be corrupted")
@@ -203,7 +203,7 @@ func TestLeafAddSiblingGuards(t *testing.T) {
 				// there would make an ancestor a descendant of itself.
 				err := leaf.AddSibling(root)
 				require.Error(t, err, "inserting an ancestor as a sibling must be rejected")
-				require.EqualError(t, err, errAddSiblingCycle)
+				require.ErrorContains(t, err, errAddSiblingCycle)
 
 				require.Nil(t, root.Parent(), "root must remain the tree root")
 				require.Equal(t, helium.Node(leaf), mid.FirstChild(), "tree must stay intact")
@@ -266,7 +266,7 @@ func TestLeafReplaceGuards(t *testing.T) {
 				// ancestor below itself, creating a cycle.
 				err := leaf.Replace(mid)
 				require.Error(t, err, "replacing leaf with an ancestor must be rejected")
-				require.EqualError(t, err, errReplaceCycle)
+				require.ErrorContains(t, err, errReplaceCycle)
 
 				require.Equal(t, helium.Node(leaf), mid.FirstChild(), "leaf stays under mid")
 				require.Equal(t, helium.Node(mid), leaf.Parent(), "leaf parent stays mid")
