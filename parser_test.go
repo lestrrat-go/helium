@@ -3913,6 +3913,52 @@ func TestParserOptionSetters(t *testing.T) {
 	require.NotNil(t, doc.DocumentElement())
 }
 
+// TestParserSAXHandlerNilRestoresDefault confirms SAXHandler(nil) restores the
+// default TreeBuilder rather than leaving the parser handler-less. A nil handler
+// otherwise builds no tree, so Parse would report success with a nil *Document —
+// a silent no-output result for a caller passing an optional handler straight
+// through. This mirrors Parser.FS(nil), which likewise restores its default.
+func TestParserSAXHandlerNilRestoresDefault(t *testing.T) {
+	t.Parallel()
+
+	const (
+		src      = `<?xml version="1.0"?><root><child>text</child></root>`
+		rootElem = "root"
+	)
+
+	t.Run("nil handler builds the tree", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().SAXHandler(nil).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc, "SAXHandler(nil) must not yield a nil document with a nil error")
+		require.NotNil(t, doc.DocumentElement())
+		require.Equal(t, rootElem, doc.DocumentElement().Name())
+	})
+
+	t.Run("nil clears a previously set handler", func(t *testing.T) {
+		t.Parallel()
+
+		var seen []string
+		p := helium.NewParser().SAXHandler(startElementRecorder(&seen))
+		doc, err := p.SAXHandler(nil).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc, "the last SAXHandler call wins, so nil restores the default builder")
+		require.NotNil(t, doc.DocumentElement())
+		require.Empty(t, seen, "the replaced handler must receive no events")
+	})
+
+	t.Run("an explicit handler still replaces the default", func(t *testing.T) {
+		t.Parallel()
+
+		var seen []string
+		p := helium.NewParser().SAXHandler(nil).SAXHandler(startElementRecorder(&seen))
+		_, err := p.Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		require.Equal(t, []string{rootElem, "child"}, seen)
+	})
+}
+
 // TestParserCharBufferSizeAffectsParse confirms a tiny char buffer (which forces
 // repeated cursor refills) still parses a larger document correctly.
 func TestParserCharBufferSizeAffectsParse(t *testing.T) {

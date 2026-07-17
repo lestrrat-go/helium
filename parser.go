@@ -552,17 +552,17 @@ func (p Parser) LenientXMLDecl(v bool) Parser {
 // the most recent call wins, and each call returns a new Parser (clone-on-write)
 // leaving the receiver unchanged.
 //
-// Passing nil is allowed and does not panic — every event dispatch is nil-
-// guarded. With a nil handler no events are delivered and no tree is built, so
-// [Parser.Parse] (and the other Parse* methods) return a nil *Document. For
-// simple well-formed input that does not depend on handler-backed state the
-// error is nil too; but parsing that relies on the built tree or handler will
-// not succeed with a nil handler — e.g. resolving a declared entity reference
-// still reports an undeclared-entity error, and DTD validation (ValidateDTD)
-// does nothing because it requires a built document. Provide a [TreeBuilder]
-// (or another handler) to obtain output or to use entity/DTD-dependent features.
+// Passing nil restores the default [TreeBuilder] that [NewParser] installs, so
+// [Parser.Parse] still returns a built *Document. This mirrors [Parser.FS],
+// where nil likewise restores the default, and keeps a caller that forwards an
+// optional handler straight through from silently losing all output. To consume
+// events without building a tree, pass a handler that ignores them rather than
+// nil.
 func (p Parser) SAXHandler(s sax.SAX2Handler) Parser {
 	p = p.clone()
+	if s == nil {
+		s = NewTreeBuilder()
+	}
 	p.cfg.sax = s
 	return p
 }
