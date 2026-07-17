@@ -1158,16 +1158,18 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			name = nser.LocalName()
 		}
 		nslist = nser.Namespaces()
-		// When the element's active namespace is a default (empty prefix) whose
-		// URI differs from a default declaration in its own nsDefs, the active
-		// binding is authoritative — it qualifies the element — so drop the
-		// conflicting declared default. Emitting both would put two xmlns
-		// attributes on the start tag, which is not reparseable. reconcileOne
-		// then synthesizes the single active default. A matching (equal-URI)
-		// declared default is kept, so a normally parsed <e xmlns="u"/> still
-		// declares its default exactly once.
-		if active := nser.Namespace(); active != nil && active.prefix == "" && active.href != "" {
-			nslist = dropConflictingDefaultNS(nslist, active.href)
+		// When the element's active namespace uses a prefix (empty or not) whose
+		// URI differs from a declaration for that same prefix in its own nsDefs,
+		// the active binding is authoritative — it qualifies the element name — so
+		// drop the conflicting declared binding. Emitting both would put two xmlns
+		// (or two xmlns:prefix) attributes on the start tag, which is not
+		// reparseable. reconcileOne then synthesizes the single active binding. A
+		// matching (equal-URI) declaration is kept, so a normally parsed element
+		// still declares its namespace exactly once. Only the SetActiveNamespace/
+		// SetNs-after-declaration pattern creates such a conflict, so this is a
+		// no-op for parsed documents.
+		if active := nser.Namespace(); active != nil && active.href != "" {
+			nslist = dropConflictingActiveNS(nslist, active.prefix, active.href)
 		}
 	} else {
 		name = n.Name()
@@ -1333,16 +1335,26 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 // returns every binding it added to the scope so the caller can restore the
 // scope after the element's children are serialized, or nil when the element
 // neither declares nor uses a namespace (the plain-XML path stays alloc-free).
-// dropConflictingDefaultNS returns nslist without any default-namespace
-// declaration (empty prefix) whose URI differs from activeHref. The element's
-// active default namespace is authoritative, so a conflicting declared default
-// must not also be emitted — two xmlns attributes on one start tag are not
-// reparseable. When no declaration conflicts, nslist is returned unchanged so the
-// common path allocates nothing. Callers pass a non-empty activeHref.
-func dropConflictingDefaultNS(nslist []*Namespace, activeHref string) []*Namespace {
+// dropConflictingActiveNS returns nslist without any declaration whose prefix
+// matches the element's active namespace prefix but whose URI differs from
+// activeHref. The active namespace qualifies the element's serialized name, so
+// it is authoritative: a declared binding for the same prefix at a different URI
+// must not also be emitted — two xmlns (or two xmlns:prefix) attributes on one
+// start tag are not reparseable. reconcileOne then synthesizes the single active
+// binding. A matching (equal-URI) declaration is kept, so a normally parsed
+// element still declares its namespace exactly once. When no declaration
+// conflicts, nslist is returned unchanged so the common path allocates nothing.
+//
+// This is the general form of the default-namespace precedent: activePrefix ""
+// drops a conflicting declared default (xmlns=""), a non-empty activePrefix
+// drops a conflicting declared xmlns:prefix. Only the SetActiveNamespace/SetNs
+// after-declaration pattern produces such a conflict — a real parse never binds
+// a prefix to two URIs on one element — so this is a no-op for parsed documents.
+// Callers pass a non-empty activeHref.
+func dropConflictingActiveNS(nslist []*Namespace, activePrefix, activeHref string) []*Namespace {
 	conflict := false
 	for _, ns := range nslist {
-		if ns.prefix == "" && ns.href != activeHref {
+		if ns.prefix == activePrefix && ns.href != activeHref {
 			conflict = true
 			break
 		}
@@ -1352,7 +1364,7 @@ func dropConflictingDefaultNS(nslist []*Namespace, activeHref string) []*Namespa
 	}
 	out := make([]*Namespace, 0, len(nslist))
 	for _, ns := range nslist {
-		if ns.prefix == "" && ns.href != activeHref {
+		if ns.prefix == activePrefix && ns.href != activeHref {
 			continue
 		}
 		out = append(out, ns)
@@ -1363,20 +1375,36 @@ func dropConflictingDefaultNS(nslist []*Namespace, activeHref string) []*Namespa
 func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespacer, nslist []*Namespace) []nsSaved {
 	var saved []nsSaved
 
+	// emitted records every prefix already occupying an xmlns declaration on THIS
+	// element's start tag — the declarations dumpNsList emitted from nslist, plus
+	// any reconcileOne synthesizes below. It guarantees at most one xmlns:<prefix>
+	// per element even when two sources bind the same prefix to different URIs
+	// (e.g. the element name needs prefix p at one URI and an attribute needs p at
+	// another): the first occupant wins and the later one is suppressed, so the
+	// start tag stays reparseable. The element name (active ns) is reconciled
+	// before attributes, so on a name-vs-attribute clash the name wins. A conflict
+	// only arises from the SetActiveNamespace/SetNs-after-declaration pattern, so
+	// this is a no-op for parsed documents (no prefix binds two URIs there).
+	emitted := make(map[string]struct{})
+
 	// The element's own declarations are already emitted; record them so a
-	// prefix redeclared locally is not synthesized again below.
+	// prefix redeclared locally is not synthesized again below. A real declaration
+	// (non-empty href) also occupies its prefix on this start tag.
 	for _, ns := range nslist {
 		if ns.prefix == lexicon.PrefixXML || ns.prefix == lexicon.PrefixXMLNS {
 			continue
 		}
 		saved = d.nsScopePush(ns.prefix, ns.href, saved)
+		if ns.href != "" {
+			emitted[ns.prefix] = struct{}{}
+		}
 	}
 
 	// The element's active namespace. The empty prefix is allowed here so an
 	// element whose active DEFAULT namespace was set (SetActiveNamespace("", uri))
 	// without a matching declaration gets an xmlns="uri" synthesized.
 	if ns := nser.Namespace(); ns != nil {
-		saved = d.reconcileOne(out, ns.prefix, ns.href, true, saved)
+		saved = d.reconcileOne(out, ns.prefix, ns.href, true, emitted, saved)
 	}
 
 	// Namespaced attributes. The per-list seen guard bounds a corrupt attribute
@@ -1390,7 +1418,7 @@ func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespace
 			}
 			seen[key] = struct{}{}
 			if ans := attr.ns; ans != nil {
-				saved = d.reconcileOne(out, ans.prefix, ans.href, false, saved)
+				saved = d.reconcileOne(out, ans.prefix, ans.href, false, emitted, saved)
 			}
 		}
 	}
@@ -1405,11 +1433,20 @@ func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespace
 // namespace (isElement) as xmlns="href"; an attribute's empty prefix is skipped
 // because an unprefixed attribute is never in a namespace. Appends the recorded
 // binding to saved and returns it.
-func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElement bool, saved []nsSaved) []nsSaved {
+//
+// emitted is the set of prefixes already declared on THIS element's start tag. A
+// prefix already present is not emitted again, even at a different URI: one
+// prefix cannot bind two URIs on one element, and the first occupant (the
+// element's own declarations, then its name) wins. This bounds every element to
+// at most one xmlns:<prefix>. A newly emitted prefix is added to emitted.
+func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElement bool, emitted map[string]struct{}, saved []nsSaved) []nsSaved {
 	if prefix == lexicon.PrefixXML || prefix == lexicon.PrefixXMLNS || href == "" {
 		return saved
 	}
 	if prefix == "" && !isElement {
+		return saved
+	}
+	if _, dup := emitted[prefix]; dup {
 		return saved
 	}
 	if d.nsScope != nil {
@@ -1435,6 +1472,7 @@ func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElemen
 		}
 	}
 	d.writeString(out, `"`)
+	emitted[prefix] = struct{}{}
 	return d.nsScopePush(prefix, href, saved)
 }
 
