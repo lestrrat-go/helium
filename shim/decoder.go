@@ -252,11 +252,13 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		return push(c, c, line, col)
 	}))
 	h.SetOnProcessingInstruction(sax.ProcessingInstructionFunc(func(_ context.Context, target, data string) error {
-		// Suppress only the lowercase "xml" declaration PI: helium re-parses the
-		// blanked-declaration document, so this callback only ever fires for PIs
-		// helium accepts, and helium rejects a reserved-cased target upstream —
-		// none reaches here. An exact match is deliberate: folding here would
-		// silently DROP such a target rather than reject it, if one ever did.
+		// Suppress only the lowercase "xml" declaration PI: scanProlog blanks
+		// every prolog token (declaration, comments, PIs, directives) out of the
+		// document helium re-parses, so this callback fires only for PIs inside
+		// the root element (and epilogue), which helium accepts, and helium
+		// rejects a reserved-cased target upstream — none reaches here. An exact
+		// match is deliberate: folding here would silently DROP such a target
+		// rather than reject it, if one ever did.
 		if target == lexicon.PrefixXML {
 			return nil // skip XML declaration
 		}
@@ -309,11 +311,13 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 
 	go func() {
 		defer close(d.events)
-		// The parser is handed a document whose XML declaration has been
-		// blanked out to spaces by scanProlog, which tokenized the prolog
-		// itself. So the parser never parses a declaration in context on this
-		// path; checkXMLDecl instead reconstructs the drained declaration and asks
-		// helium to judge it, so the verdict is still helium's.
+		// The parser is handed a document whose entire prolog (the XML
+		// declaration, comments, PIs, and directives) has been blanked out to
+		// spaces by scanProlog, which tokenized the prolog itself and delivered
+		// those tokens directly. So the parser re-emits none of them, and never
+		// parses a declaration in context on this path; checkXMLDecl instead
+		// reconstructs the drained declaration and asks helium to judge it, so
+		// the verdict is still helium's.
 		p := helium.NewParser().MaxDepth(maxParseDepth).SAXHandler(h)
 		_, err := p.ParseReader(ctx, r)
 		if err != nil {

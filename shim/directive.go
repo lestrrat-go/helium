@@ -22,14 +22,15 @@ var errPrologTooLarge = &stdxml.SyntaxError{Msg: "prolog exceeds maximum size be
 
 // scanProlog reads from r until the first element start tag, tokenizing
 // the XML prolog. It extracts CharData (whitespace), ProcInst, Comment,
-// and Directive tokens. The SAX parser does not emit any of these for the
-// prolog portion, so we handle them here and let SAX take over from the
-// first element.
+// and Directive tokens and delivers them itself, then blanks each token's
+// bytes out of the replay buffer so the SAX parser re-emits none of them and
+// SAX takes over cleanly from the first element.
 //
 // Returns:
 //   - tokens: the prolog tokens in order
 //   - combined: a reader that replays everything read plus the remaining input
-//     (so the SAX parser still sees the full document including the prolog)
+//     (the prolog tokens blanked to whitespace, so the SAX parser sees only the
+//     root element and everything after)
 //   - prologOnly: true if the entire input is prolog (no root element found)
 func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 	s := &prologScanner{r: r}
@@ -49,13 +50,17 @@ func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 
 	prologOnly := (err == io.EOF)
 
-	// If the prolog contained an XML declaration, blank it out in the
-	// replay buffer so the SAX parser doesn't reject it as a misplaced
-	// PI (the parser errors on <?xml?> when preceded by whitespace).
+	// Blank every scanned prolog token (the XML declaration, comments, PIs,
+	// and directives) out of the replay buffer. scanProlog already delivered
+	// them as prologTokens, so the SAX parser must not re-emit them. Whatever
+	// whitespace lies between them is left untouched; blanking the tokens to
+	// spaces makes the whole pre-root region whitespace, which helium's parser
+	// ignores. This also keeps the parser from rejecting the declaration as a
+	// misplaced PI (it errors on <?xml?> when preceded by whitespace).
 	// Replacing with spaces preserves byte offsets for InputOffset().
-	if s.xmlDeclEnd > s.xmlDeclStart {
-		buf := s.buf.Bytes()
-		for i := s.xmlDeclStart; i < s.xmlDeclEnd && i < len(buf); i++ {
+	buf := s.buf.Bytes()
+	for _, span := range s.blankSpans {
+		for i := span[0]; i < span[1] && i < len(buf); i++ {
 			buf[i] = ' '
 		}
 	}
@@ -65,13 +70,12 @@ func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 }
 
 type prologScanner struct {
-	r            io.Reader
-	buf          bytes.Buffer // all bytes read from r, for replay
-	peek         []byte       // ungotten bytes
-	xmlDeclStart int          // byte offset of '<' in <?xml ...?>
-	xmlDeclEnd   int          // byte offset after '>' in <?xml ...?>
-	sawContent   bool         // whitespace, a PI, comment or directive has been scanned
-	sizeErr      error        // set when the prolog exceeds maxPrologSize
+	r          io.Reader
+	buf        bytes.Buffer // all bytes read from r, for replay
+	peek       []byte       // ungotten bytes
+	blankSpans [][2]int     // [start,end) byte ranges of prolog tokens to blank in the replay buffer
+	sawContent bool         // whitespace, a PI, comment or directive has been scanned
+	sizeErr    error        // set when the prolog exceeds maxPrologSize
 }
 
 // errDeclNotAtStart is returned when an XML declaration is preceded by anything
@@ -178,6 +182,11 @@ func (s *prologScanner) scan() ([]Token, error) {
 				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
 			}
 
+			// Blank this PI (including the declaration) out of the replay
+			// buffer so the SAX parser never re-emits what prologTokens
+			// already delivered.
+			s.blankSpans = append(s.blankSpans, [2]int{piStart, s.buf.Len()})
+
 			if isReservedXMLTarget(pi.Target) {
 				// A target equal to "xml" in any casing is the reserved name
 				// (XML 1.0 §2.6). XMLDecl ::= '<?xml' ... is the FIRST thing in a
@@ -193,8 +202,6 @@ func (s *prologScanner) scan() ([]Token, error) {
 				if s.sawContent {
 					return tokens, errDeclNotAtStart
 				}
-				s.xmlDeclStart = piStart
-				s.xmlDeclEnd = s.buf.Len()
 			}
 			s.sawContent = true
 			tokens = append(tokens, tok)
@@ -217,10 +224,14 @@ func (s *prologScanner) scan() ([]Token, error) {
 				if b4 == '-' {
 					// Comment <!--...-->
 					flushWS()
+					// The '<', '!', '-', '-' are already in buf, so the
+					// comment starts 4 bytes back.
+					commentStart := s.buf.Len() - 4
 					tok, err := s.scanComment()
 					if err != nil {
 						return tokens, errUnexpectedEOF
 					}
+					s.blankSpans = append(s.blankSpans, [2]int{commentStart, s.buf.Len()})
 					s.sawContent = true
 					tokens = append(tokens, tok)
 				} else {
@@ -236,10 +247,14 @@ func (s *prologScanner) scan() ([]Token, error) {
 				// Directive: <!DOCTYPE ...>, etc. Put b3 back so scanDirective sees it.
 				s.unreadByte(b3)
 				flushWS()
+				// The '<', '!', and b3 (unread but retained) are already in
+				// buf, so the directive starts 3 bytes back.
+				directiveStart := s.buf.Len() - 3
 				tok, err := s.scanDirective()
 				if err != nil {
 					return tokens, errUnexpectedEOF
 				}
+				s.blankSpans = append(s.blankSpans, [2]int{directiveStart, s.buf.Len()})
 				s.sawContent = true
 				tokens = append(tokens, tok)
 			}
