@@ -94,8 +94,9 @@ func TestParseXMLDecl(t *testing.T) {
 // TestParseUnsupportedXMLVersion covers the XML §2.8 VersionNum constraint as
 // libxml2 applies it in xmlParseXMLDecl: VersionNum ::= '1.' [0-9]+ since XML 1.0
 // 5th edition, so a version outside the 1.x family is fatal
-// (XML_ERR_UNKNOWN_VERSION), while a 1.x version other than "1.0" only warns
-// (XML_WAR_UNKNOWN_VERSION) and parsing continues. The grammar itself is looser
+// (XML_ERR_UNKNOWN_VERSION), while a 1.x version other than "1.0"/"1.1" only
+// warns (XML_WAR_UNKNOWN_VERSION) and parsing continues — helium implements XML
+// 1.1, so it stays silent there where libxml2 warns. The grammar itself is looser
 // than the constraint — versionNumLen, which both the byte path and the
 // rune-cursor (UTF-16) path scan through, accepts [0-9] '.' [0-9]+, mirroring
 // libxml2's xmlParseVersionNum — so the constraint must be enforced separately.

@@ -67,9 +67,10 @@ var (
 	// ErrUnsupportedXMLVersion is returned when a document's XML declaration
 	// declares a VersionNum outside the '1.x' family (e.g. "0.0", "2.0"). XML 1.0
 	// 5th edition restricts VersionNum to '1.' [0-9]+, so such a declaration is a
-	// fatal error (libxml2 XML_ERR_UNKNOWN_VERSION). A version of the form "1.x"
-	// other than "1.0" is NOT fatal — it is reported as a warning and parsing
-	// continues, matching libxml2's XML_WAR_UNKNOWN_VERSION.
+	// fatal error (libxml2 XML_ERR_UNKNOWN_VERSION). "1.0" and "1.1" are both
+	// supported and parse silently. Any OTHER version of the form "1.x" is NOT
+	// fatal — it is reported as a warning and parsing continues, matching
+	// libxml2's XML_WAR_UNKNOWN_VERSION.
 	ErrUnsupportedXMLVersion = errors.New("unsupported XML version")
 
 	// ErrEntityNotWellBalanced is returned when an internal general entity's
