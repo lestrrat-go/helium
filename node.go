@@ -1000,9 +1000,61 @@ func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 	return false
 }
 
+// prefixInUse reports whether prefix currently qualifies this element's own
+// name (its active namespace n.ns) or any of its attributes. The attribute
+// chain is walked with a per-list seen guard, mirroring the serializer, so a
+// corrupt chain cannot loop.
+func (n *node) prefixInUse(prefix string) bool {
+	if n.ns != nil && n.ns.Prefix() == prefix {
+		return true
+	}
+	seen := make(map[*docnode]struct{})
+	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
+		key := attr.baseDocNode()
+		if _, dup := seen[key]; dup {
+			break
+		}
+		seen[key] = struct{}{}
+		if ans := attr.ns; ans != nil && ans.Prefix() == prefix {
+			return true
+		}
+	}
+	return false
+}
+
 // DeclareNamespace declares a namespace on this node without making it the
-// node's active namespace (libxml2: xmlNewNs).
+// node's active namespace (libxml2: xmlNewNs). It keeps at most one declaration
+// per prefix in nsDefs and never changes the node's active namespace (n.ns) or
+// its expanded name:
+//
+//   - No existing declaration for prefix: the declaration is appended.
+//   - An existing declaration with the same URI: idempotent no-op, returns nil.
+//   - An existing declaration with a different URI, and prefix is NOT in use by
+//     this element's own name or any attribute: the single nsDefs slot is
+//     replaced with a fresh Namespace (the old object is left unmutated, so any
+//     n.ns/attr.ns that aliases it is unaffected).
+//   - An existing declaration with a different URI while prefix IS in use by the
+//     element's name or an attribute: a genuine conflict; rejected with a
+//     %w-wrapped ErrInvalidOperation and the tree left unchanged. Callers that
+//     genuinely rebind an in-use prefix remove it first (RemoveNamespaceByPrefix).
 func (n *node) DeclareNamespace(prefix, uri string) error {
+	for i, ns := range n.nsDefs {
+		if ns.Prefix() != prefix {
+			continue
+		}
+		if ns.URI() == uri {
+			return nil
+		}
+		if n.prefixInUse(prefix) {
+			return fmt.Errorf("cannot rebind namespace prefix %q while it is in use on this element: %w", prefix, ErrInvalidOperation)
+		}
+		fresh, err := n.doc.CreateNamespace(prefix, uri)
+		if err != nil {
+			return err
+		}
+		n.nsDefs[i] = fresh
+		return nil
+	}
 	ns, err := n.doc.CreateNamespace(prefix, uri)
 	if err != nil {
 		return err
@@ -1011,13 +1063,44 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 	return nil
 }
 
-// AddNamespaceDecl appends an existing Namespace to this node's declarations
-// (nsDefs) without allocating a new one. Unlike DeclareNamespace it does not
-// create a fresh Namespace, so a caller building a tree can reuse one Namespace
-// object as both the declaration and an element's active namespace. The caller
-// owns ns; it must not be shared as a declaration across nodes that could be
-// mutated independently.
+// AddNamespaceDecl attaches an existing Namespace to this node's declarations
+// (nsDefs) without allocating a new one, so a caller building a tree can reuse
+// one Namespace object as both a declaration and an element's active namespace.
+// It applies the same at-most-one-per-prefix rule as DeclareNamespace using
+// ns's prefix and URI:
+//
+//   - No existing declaration for ns's prefix: ns is appended.
+//   - An existing declaration with the same URI: no-op (the existing slot is
+//     kept; ns is not installed).
+//   - An existing declaration with a different URI, prefix NOT in use: the slot
+//     is replaced with ns (the previously-installed object is dropped but never
+//     mutated, so a caller still holding it is unaffected).
+//   - An existing declaration with a different URI while prefix IS in use by the
+//     element's name or an attribute: a genuine conflict; ns is not installed
+//     and the tree is left unchanged (the void signature cannot report it).
+//
+// The caller owns ns; it must not be shared as a declaration across nodes that
+// could be mutated independently. A nil ns is appended verbatim (the dedup scan
+// is skipped) so a caller deliberately corrupting a node is unaffected.
 func (n *node) AddNamespaceDecl(ns *Namespace) {
+	if ns == nil {
+		n.nsDefs = append(n.nsDefs, ns)
+		return
+	}
+	prefix := ns.Prefix()
+	for i, existing := range n.nsDefs {
+		if existing.Prefix() != prefix {
+			continue
+		}
+		if existing.URI() == ns.URI() {
+			return
+		}
+		if n.prefixInUse(prefix) {
+			return
+		}
+		n.nsDefs[i] = ns
+		return
+	}
 	n.nsDefs = append(n.nsDefs, ns)
 }
 

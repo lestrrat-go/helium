@@ -425,7 +425,19 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 }
 
 func (d *writeSession) dumpNsList(out io.Writer, nslist []*Namespace) error {
+	// A per-prefix seen guard keeps the start tag reparseable even if some path
+	// left a duplicate prefix in nsDefs: at most one declaration per prefix is
+	// emitted. This mirrors the attribute-chain guard in reconcileNamespaces and
+	// is correct-by-construction backup to DeclareNamespace's collapse rule.
+	var seen map[string]struct{}
 	for _, ns := range nslist {
+		if seen == nil {
+			seen = make(map[string]struct{}, len(nslist))
+		}
+		if _, dup := seen[ns.prefix]; dup {
+			continue
+		}
+		seen[ns.prefix] = struct{}{}
 		if err := d.dumpNs(out, ns); err != nil {
 			return err
 		}
