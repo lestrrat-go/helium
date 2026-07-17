@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -177,6 +178,75 @@ func TestIsMixedElementDeclTypes(t *testing.T) {
 	bare := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 	_, err = bare.IsMixedElement("x")
 	require.ErrorIs(t, err, helium.ErrElementDeclNotFound)
+}
+
+// TestIsMixedElementAcrossSubsets verifies IsMixedElement returns the same
+// classification whether an element is declared in the internal subset or solely
+// in the external subset, mirroring libxml2's xmlIsMixedElement two-subset
+// lookup. It also covers the EMPTY/ANY -> mixed collapse and the not-found error,
+// in both subset placements.
+func TestIsMixedElementAcrossSubsets(t *testing.T) {
+	t.Parallel()
+
+	const decls = `<!ELEMENT r (child)>
+<!ELEMENT child (#PCDATA|em)*>
+<!ELEMENT em EMPTY>
+<!ELEMENT any ANY>`
+
+	// The identical declarations, once in the internal subset and once in an
+	// external DTD referenced by a bare SYSTEM DOCTYPE (no internal subset markup).
+	const internalSrc = `<?xml version="1.0"?>
+<!DOCTYPE r [
+` + decls + `
+]>
+<r><child/></r>`
+	const externalSrc = `<!DOCTYPE r SYSTEM "d.dtd"><r><child/></r>`
+
+	internalDoc, err := helium.NewParser().Parse(t.Context(), []byte(internalSrc))
+	require.NoError(t, err)
+
+	fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(decls)}}
+	externalDoc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(fsys).
+		Parse(t.Context(), []byte(externalSrc))
+	require.NoError(t, err)
+
+	subsets := []struct {
+		label string
+		doc   *helium.Document
+	}{
+		{label: "internal subset", doc: internalDoc},
+		{label: "external subset", doc: externalDoc},
+	}
+
+	testcases := []struct {
+		name    string
+		wantMix bool
+		wantErr bool
+	}{
+		{name: "r", wantMix: false},    // element-only content => not mixed
+		{name: "child", wantMix: true}, // (#PCDATA|em)* => mixed
+		{name: "em", wantMix: true},    // EMPTY collapses to mixed (VC-error path)
+		{name: "any", wantMix: true},   // ANY collapses to mixed
+		{name: "nope", wantErr: true},  // undeclared => ErrElementDeclNotFound
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, ss := range subsets {
+				mixed, err := ss.doc.IsMixedElement(tc.name)
+				if tc.wantErr {
+					require.ErrorIs(t, err, helium.ErrElementDeclNotFound, ss.label)
+					continue
+				}
+				require.NoError(t, err, ss.label)
+				require.Equal(t, tc.wantMix, mixed, ss.label)
+			}
+		})
+	}
 }
 
 // TestInternalSubsetErrors covers InternalSubset and CreateInternalSubset error
