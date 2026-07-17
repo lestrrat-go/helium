@@ -169,6 +169,92 @@ func TestXMLDeclReservedTargetCase(t *testing.T) {
 	})
 }
 
+// deliveredTokens is a permissive TokenReader that hands the shim a fixed token
+// stream verbatim. It stands in for a TokenReader that delivers an XML
+// declaration the shim then judges — unlike encoding/xml's own decoder, which
+// rejects a version outside 1.0 during tokenization (both Token and RawToken
+// error) and so never delivers a 1.1 declaration to the shim at all.
+type deliveredTokens struct {
+	toks []stdxml.Token
+	i    int
+}
+
+func (d *deliveredTokens) Token() (stdxml.Token, error) {
+	if d.i >= len(d.toks) {
+		return nil, io.EOF
+	}
+	tok := d.toks[d.i]
+	d.i++
+	return tok, nil
+}
+
+// decodeDeliveredDecl drains a TokenReader-backed [shim.Decoder] fed the given
+// leading tokens, then a declaration ProcInst carrying inst, then a minimal
+// element. It exercises the shim's declaration decision on the TokenReader path
+// without an encoding/xml decoder in the way.
+func decodeDeliveredDecl(t *testing.T, leading []stdxml.Token, inst string) error {
+	t.Helper()
+	toks := append(append([]stdxml.Token(nil), leading...),
+		stdxml.ProcInst{Target: "xml", Inst: []byte(inst)},
+		stdxml.StartElement{Name: stdxml.Name{Local: "item"}},
+		stdxml.EndElement{Name: stdxml.Name{Local: "item"}},
+	)
+	return drainTokens(shim.NewTokenDecoder(t.Context(), &deliveredTokens{toks: toks}))
+}
+
+// TestXMLDeclVersion11Accepted pins that shim accepts XML version 1.1: helium
+// supports it, and shim's verdict is helium's, where encoding/xml rejects it.
+// Unmarshal and the reader-backed Decoder see the bytes and accept. The
+// TokenReader path defers to helium too, accepting a 1.1 declaration once it is
+// delivered as a token — encoding/xml's own decoder cannot deliver one (it
+// rejects 1.1 during tokenization), so that particular composition is the one
+// place shim cannot exercise, a limitation of encoding/xml rather than of shim.
+func TestXMLDeclVersion11Accepted(t *testing.T) {
+	for name, src := range map[string]string{
+		"version only":         `<?xml version="1.1"?>` + itemOnly,
+		"version and encoding": `<?xml version="1.1" encoding="UTF-8"?>` + itemOnly,
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.NoError(t, unmarshalDoc(src), "Unmarshal must accept 1.1")
+			require.NoError(t, decodeDoc(t, src), "reader-backed Decoder must accept 1.1")
+		})
+	}
+	t.Run("TokenReader accepts a delivered 1.1 declaration", func(t *testing.T) {
+		require.NoError(t, decodeDeliveredDecl(t, nil, `version="1.1"`))
+	})
+}
+
+// TestXMLDeclByteOrderMark pins that a leading UTF-8 byte-order mark does not
+// displace an XML declaration from the start of the document — a BOM is not
+// content.
+func TestXMLDeclByteOrderMark(t *testing.T) {
+	const bom = "\uFEFF"
+
+	// A BOM ahead of a 1.0 declaration is accepted by every entry point,
+	// including the encoding/xml-backed TokenReader (encoding/xml delivers a 1.0
+	// declaration), which pins that a leading BOM token is not counted as content.
+	t.Run("accepted ahead of a 1.0 declaration", func(t *testing.T) {
+		requireAllAccept(t, bom+`<?xml version="1.0"?>`+itemOnly)
+	})
+
+	// A BOM ahead of an unsupported version is rejected by every entry point.
+	t.Run("rejected ahead of an unsupported version", func(t *testing.T) {
+		requireAllReject(t, bom+`<?xml version="2.0"?>`+itemOnly)
+	})
+
+	// A BOM ahead of a 1.1 declaration is accepted wherever the declaration is
+	// seen: Unmarshal and the reader Decoder see the bytes, and the TokenReader
+	// path accepts it once the BOM and declaration are delivered as tokens.
+	// encoding/xml's own decoder again cannot deliver the 1.1 declaration.
+	t.Run("accepted ahead of a 1.1 declaration where seen", func(t *testing.T) {
+		src := bom + `<?xml version="1.1"?>` + itemOnly
+		require.NoError(t, unmarshalDoc(src), "Unmarshal must accept BOM+1.1")
+		require.NoError(t, decodeDoc(t, src), "reader-backed Decoder must accept BOM+1.1")
+		require.NoError(t, decodeDeliveredDecl(t, []stdxml.Token{stdxml.CharData(bom)}, `version="1.1"`),
+			"TokenReader must accept a delivered BOM+1.1")
+	})
+}
+
 // TestXMLDeclAgreement pins the accept/reject verdict of every declaration
 // shape in the shim's bar, through every entry point, which must agree.
 func TestXMLDeclAgreement(t *testing.T) {
@@ -217,11 +303,11 @@ func TestXMLDeclAgreement(t *testing.T) {
 
 		uErr := unmarshalDoc(src)
 		require.Error(t, uErr)
-		require.Contains(t, uErr.Error(), `unsupported version "2.0"`)
+		require.Contains(t, uErr.Error(), `unsupported XML version "2.0"`)
 
 		dErr := decodeDoc(t, src)
 		require.Error(t, dErr)
-		require.Contains(t, dErr.Error(), `unsupported version "2.0"`)
+		require.Contains(t, dErr.Error(), `unsupported XML version "2.0"`)
 
 		requireAllReject(t, src)
 	})

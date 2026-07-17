@@ -210,7 +210,7 @@ func TestDecoderAndUnmarshalAgreeOnXMLDecl(t *testing.T) {
 			name:     "unsupported version",
 			xml:      `<?xml version="2.0"?>` + body,
 			conforms: false,
-			why:      `VersionNum ::= '1.' [0-9]+, and only 1.0 is supported besides`,
+			why:      `helium supports the 1.x family (1.0 and 1.1); a version outside it is rejected`,
 		},
 		{
 			name:     "standalone not yes or no",
@@ -258,7 +258,9 @@ func TestDecoderXMLDeclErrorMessages(t *testing.T) {
 	t.Run("unsupported version", func(t *testing.T) {
 		err := drainDecoder(t, `<?xml version="2.0"?>`+body)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), `unsupported version "2.0"; only version 1.0 is supported`)
+		// The Decoder defers to helium, so the verdict is helium's: it names the
+		// version outside the 1.x family it rejected.
+		require.Contains(t, err.Error(), `unsupported XML version "2.0"`)
 	})
 
 	t.Run("encoding without charset reader", func(t *testing.T) {

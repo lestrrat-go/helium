@@ -48,11 +48,22 @@ source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/h
 - `Decoder.Strict = false` is not supported.
 - `HTMLAutoClose` is omitted and `Decoder.AutoClose` is a no-op.
 - Undeclared namespace prefixes are rejected.
+- The helium parser is the single authority for the XML declaration. Its parse
+  decides the XMLDecl grammar, the version rule, and placement, and shim's
+  verdict is helium's; `Unmarshal`, a reader-backed `Decoder`, and a
+  TokenReader-backed `Decoder` agree.
+- shim accepts the XML versions helium accepts — 1.0 **and** 1.1 (helium
+  implements XML 1.1) — where `encoding/xml` rejects `version="1.1"`. A version
+  outside the 1.x family (e.g. `2.0`) is rejected. `Unmarshal` and the
+  reader-backed `Decoder` accept 1.1 directly; a TokenReader-backed `Decoder`
+  accepts a 1.1 declaration once delivered as a token, but an `encoding/xml`
+  decoder used as the TokenReader cannot deliver one — it rejects 1.1 during its
+  own tokenization, a limitation of `encoding/xml`, not shim.
 - An XML declaration that does not conform to the XMLDecl grammar is rejected
-  by both `Unmarshal` and `Decoder`: a `charset=` pseudo-attribute, a missing or
-  empty version, an empty encoding, a `standalone` that is not `yes`/`no`, a
-  repeated pseudo-attribute, or pseudo-attributes out of order. `encoding/xml`
-  accepts them all.
+  by every entry point: a `charset=` pseudo-attribute, a missing or empty
+  version, an empty encoding, a `standalone` that is not `yes`/`no`, a repeated
+  pseudo-attribute, or pseudo-attributes out of order. `encoding/xml` accepts
+  them all.
 - An XML declaration is admitted only as the very first thing in the document,
   with only whitespace allowed ahead of it. Both `Unmarshal` and `Decoder`
   reject a `<?xml` following an earlier declaration, a comment, a processing

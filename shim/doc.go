@@ -25,6 +25,12 @@
 //   - Namespace strictness: undeclared namespace prefixes are rejected.
 //     [encoding/xml] silently accepts undeclared prefixes and places the
 //     raw prefix string in Name.Space.
+//   - Declaration authority: the helium parser is the single authority for the
+//     XML declaration. Its parse decides the XMLDecl grammar (XML 1.0 §2.8), the
+//     version rule, and declaration placement, and shim's verdict is helium's.
+//     The three entry points — [Unmarshal], a reader-backed [Decoder], and a
+//     TokenReader-backed [Decoder] — agree on every declaration, with one
+//     encoding/xml limitation noted under "Version support" below.
 //   - Declaration strictness: an XML declaration that does not conform to the
 //     XMLDecl grammar (XML 1.0 §2.8) is rejected. The grammar requires a
 //     version and admits only version, encoding and standalone, in that order
@@ -33,8 +39,16 @@
 //     standalone that is not "yes" or "no", and pseudo-attributes out of
 //     order (<?xml encoding="UTF-8" version="1.0"?>). [encoding/xml] accepts
 //     all of them. This shim is backed by a spec-conforming parser and does
-//     not accept XML the specification does not permit. [Unmarshal] and
-//     [Decoder] agree: both reject every such declaration.
+//     not accept XML the specification does not permit.
+//   - Version support: shim accepts the XML versions helium accepts — 1.0 AND
+//     1.1 — because helium implements XML 1.1. [encoding/xml] rejects
+//     version="1.1"; shim accepts it. A version outside the 1.x family (for
+//     example "2.0") is rejected. [Unmarshal] and the reader-backed [Decoder]
+//     see the bytes and accept 1.1 directly. A TokenReader-backed [Decoder]
+//     accepts a 1.1 declaration once it is delivered as a token, but an
+//     [encoding/xml.Decoder] used as the TokenReader cannot deliver one: it
+//     rejects version 1.1 during its own tokenization, before the declaration
+//     reaches shim. That is a limitation of [encoding/xml], not of shim.
 //   - Declaration placement: an XML declaration is admitted only as the very
 //     first thing in the document (prolog ::= XMLDecl? Misc* ...), with only
 //     whitespace allowed ahead of it. A "<?xml" appearing after an earlier

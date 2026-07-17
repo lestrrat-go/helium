@@ -1350,8 +1350,9 @@ func TestParseErrorsStdlib(t *testing.T) {
 			`element <foo> in space zzz closed by </foo> in space ""`, ""},
 		{withDefaultHeader("\xf1"), `invalid UTF-8`, "helium reports different error for invalid UTF-8"},
 
-		// Header-related errors.
-		{`<?xml version="1.1" encoding="UTF-8"?>`, `unsupported version "1.1"; only version 1.0 is supported`, ""},
+		// Header-related: shim accepts XML 1.1 (helium supports it) where stdlib
+		// rejects it, so a 1.1 declaration is not an error for the shim.
+		{`<?xml version="1.1" encoding="UTF-8"?>`, ``, ""},
 
 		// Cases below are for "no errors".
 		{withDefaultHeader(`<?ok?>`), ``, ""},

@@ -104,12 +104,11 @@ func TestUnmarshalDirectChild(t *testing.T) {
 }
 
 // TestUnmarshalUnsupportedVersionNeedsAReadVersion pins that the shim's
-// unsupported-version verdict names only a version the shim itself read out of
-// the declaration and rejects. When the raw scan and the parser disagree about
-// which version a malformed declaration carries, the parser's error is reported
-// instead — it quotes the version actually rejected — so the verdict can never
-// name a version nobody declared, nor contradict itself by calling 1.0
-// unsupported. Every case here still REJECTS; only the wording is at stake.
+// unsupported-version verdict, which comes from helium's parse, names a version
+// only when helium actually read and rejected one. A malformed declaration
+// helium fails on before judging the version names no version, so the verdict
+// can never quote a version nobody declared. The old "only version 1.0 is
+// supported" wording is gone entirely. Every case here still REJECTS.
 func TestUnmarshalUnsupportedVersionNeedsAReadVersion(t *testing.T) {
 	type item struct {
 		Value string `xml:"value"`
@@ -122,15 +121,13 @@ func TestUnmarshalUnsupportedVersionNeedsAReadVersion(t *testing.T) {
 		// itself, so the message must quote the one actually rejected.
 		namesRejectedVersion bool
 	}{
-		// Never closed by "?>", so the raw scan reads no version at all and
-		// there is none to call unsupported. The parser still reads and rejects
-		// the version, so its error names it.
+		// helium reads and rejects the version before reaching the missing "?>",
+		// so its error names it.
 		{"unterminated declaration", `<?xml version="2.0"`, true},
 		// Repeating a pseudo-attribute does not conform to the XMLDecl grammar
-		// (XML 1.0 §2.8), so this is rejected as a malformed declaration before
+		// (XML 1.0 §2.8), so helium rejects it as a malformed declaration before
 		// any version verdict is reached. The verdict is not about a version, so
-		// it names none — and in particular cannot report the scanned "1.0" as
-		// unsupported while claiming 1.0 is supported.
+		// it names none.
 		{"repeated version pseudo-attribute", `<?xml version="1.0" version="2.0"?><item/>`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,7 +135,7 @@ func TestUnmarshalUnsupportedVersionNeedsAReadVersion(t *testing.T) {
 			err := shim.Unmarshal([]byte(tc.xml), &out)
 			require.Error(t, err, "a malformed declaration must never be accepted")
 			require.NotContains(t, err.Error(), "only version 1.0 is supported",
-				"no read version supports this verdict")
+				"the old 1.0-only wording is gone")
 
 			// A malformed declaration is a syntax error, the same category
 			// encoding/xml reports it under. The wording is the shim's own.
@@ -230,11 +227,12 @@ func TestUnmarshalMalformedXMLDeclDivergesFromStdlib(t *testing.T) {
 	}
 }
 
-// TestUnmarshalXMLDeclVersionDivergesFromStdlib pins shim's OWN behavior for
-// declarations where shim and encoding/xml deliberately disagree, so a later
-// change cannot silently alter it. These cases cannot live in
+// TestUnmarshalXMLDeclVersionDivergesFromStdlib pins shim's OWN behavior for an
+// unsupported version, where shim and encoding/xml disagree, so a later change
+// cannot silently alter it. These cases cannot live in
 // TestUnmarshalXMLDeclValidationMatchStdlib: that table asserts agreement with
-// stdlib, and stdlib accepts the spaced-Eq form shim rejects.
+// stdlib. stdlib accepts the spaced-Eq form shim rejects, and for the unspaced
+// form both reject but shim reports helium's wording, not stdlib's.
 func TestUnmarshalXMLDeclVersionDivergesFromStdlib(t *testing.T) {
 	type item struct {
 		Value string `xml:"value"`
@@ -256,7 +254,11 @@ func TestUnmarshalXMLDeclVersionDivergesFromStdlib(t *testing.T) {
 			var out item
 			err := shim.Unmarshal([]byte(tc.xml), &out)
 			require.Error(t, err)
-			require.Equal(t, `xml: unsupported version "2.0"; only version 1.0 is supported`, err.Error())
+			// The verdict is helium's: it names the version outside the 1.x family
+			// it rejected, reported as a syntax error.
+			require.ErrorContains(t, err, `unsupported XML version "2.0"`)
+			var syntaxErr *stdxml.SyntaxError
+			require.ErrorAs(t, err, &syntaxErr)
 		})
 	}
 }

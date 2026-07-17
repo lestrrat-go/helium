@@ -4,6 +4,7 @@ import (
 	"bytes"
 	stdxml "encoding/xml"
 	"io"
+	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -408,20 +409,25 @@ func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
-// isWhitespaceToken reports whether tok is CharData consisting only of XML
-// whitespace (or is empty). Such a token is the leading-whitespace CharData
-// that XMLDecl permits ahead of a declaration; every other token, including a
-// non-whitespace CharData, counts as content that displaces a later
-// declaration from the start of the document.
-func isWhitespaceToken(tok Token) bool {
+// isLeadingNoise reports whether tok is CharData made up only of XML whitespace
+// and/or a byte-order mark (U+FEFF). Such a token may legitimately precede an
+// XML declaration — leading whitespace is permitted by XMLDecl, and a leading
+// BOM is not content — so it does not displace a later declaration from the
+// start of the document. Every other token, including a CharData carrying any
+// other character, counts as content.
+func isLeadingNoise(tok Token) bool {
 	cd, ok := tok.(CharData)
 	if !ok {
 		return false
 	}
-	for _, b := range cd {
-		if !isWhitespace(b) {
-			return false
+	for _, r := range string(cd) {
+		if r == '\uFEFF' {
+			continue
 		}
+		if r < utf8.RuneSelf && isWhitespace(byte(r)) {
+			continue
+		}
+		return false
 	}
 	return true
 }
