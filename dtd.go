@@ -300,6 +300,18 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 //     '&' (which the <!ATTLIST> default-value serializer cannot round-trip).
 //   - an ID attribute's default must be #IMPLIED or #REQUIRED (never a value or
 //     #FIXED), per the ID Attribute Default VC.
+//   - a namespace-declaration attribute — one named "xmlns" (the default
+//     namespace) or one carrying the reserved "xmlns" prefix (xmlns:<prefix>) —
+//     that carries a value-bearing default (enum.AttrDefaultNone or #FIXED, with a
+//     non-empty value) must bind a URI the Namespaces in XML reserved-prefix/URI
+//     rules permit: the xml prefix may bind only the XML namespace URI; the xmlns
+//     prefix may not be declared; and neither reserved URI (the XML namespace or
+//     the xmlns namespace) may be bound to any other prefix or to the default
+//     namespace. The parser applies such a default as a namespace binding on a
+//     matching element and rejects a reserved-rule violation, so it is rejected
+//     here too. An empty default never binds, so it is not checked; and an ordinary
+//     attribute whose name merely starts with "xml" (xml:space, xml:lang, …) is not
+//     a namespace declaration and is unaffected.
 //
 // A cross-declaration VC that needs the owning element declaration — a NOTATION
 // attribute is not allowed on an EMPTY element (§3.3.1) — is out of scope here (it
@@ -477,6 +489,16 @@ func validateAndNormalizeAttrDecl(name string, atype enum.AttributeType, def enu
 		if err := validateAttributeValueInternal(nil, atype, defvalue); err != nil {
 			return "", fmt.Errorf("invalid default value %q: %w: %w", defvalue, err, ErrInvalidArgument)
 		}
+		// A value-bearing default on a namespace-declaration attribute (name
+		// "xmlns" or a name with the reserved "xmlns" prefix) is applied by the
+		// parser as a namespace binding when a matching element is defaulted, so a
+		// binding the parser would reject must be rejected here to keep the
+		// round-trip contract. Only a non-empty value binds.
+		if defvalue != "" {
+			if err := checkNamespaceDeclDefault(name, defvalue); err != nil {
+				return "", err
+			}
+		}
 		if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
 			if !slices.Contains(enumValues, defvalue) {
 				return "", fmt.Errorf("default value %q is not one of the declared tokens: %w", defvalue, ErrInvalidArgument)
@@ -518,6 +540,41 @@ func checkAttrDefaultChars(s string) error {
 			return fmt.Errorf("default value %q contains a character outside the XML Char range (U+%04X): %w", s, r, ErrInvalidArgument)
 		}
 		i += size
+	}
+	return nil
+}
+
+// checkNamespaceDeclDefault rejects a value-bearing namespace-declaration
+// attribute default whose bound URI the validating parser would reject when it
+// applies the default as a namespace binding on a matching element (parseStartTag
+// attribute defaulting in parser_element.go). A namespace-declaration attribute is
+// one named "xmlns" (the default namespace) or one carrying the reserved "xmlns"
+// prefix (xmlns:<prefix>). name is the full QName; uri is the non-empty,
+// already-normalized default value (an empty default is never applied by the
+// parser, so it never reaches here). The reserved-prefix/URI predicates are the
+// same pure functions the parser's start-tag path uses
+// (reservedPrefixedNamespaceViolation / reservedDefaultNamespaceViolation), so an
+// accepted declaration round-trips. An ordinary attribute whose name merely starts
+// with "xml" (xml:space, xml:lang, …) is NOT a namespace declaration and is left
+// alone. Every violation wraps ErrInvalidArgument.
+func checkNamespaceDeclDefault(name, uri string) error {
+	local := name
+	var prefix string
+	if i := strings.IndexByte(name, ':'); i > 0 {
+		prefix = name[:i]
+		local = name[i+1:]
+	}
+	switch {
+	case prefix == lexicon.PrefixXMLNS:
+		// xmlns:<local>="uri": the declared prefix is local.
+		if err := reservedPrefixedNamespaceViolation(local, uri); err != nil {
+			return fmt.Errorf("namespace-declaration attribute %q cannot bind %q (%s): %w", name, uri, err, ErrInvalidArgument)
+		}
+	case prefix == "" && local == lexicon.PrefixXMLNS:
+		// xmlns="uri": default namespace declaration.
+		if err := reservedDefaultNamespaceViolation(uri); err != nil {
+			return fmt.Errorf("namespace-declaration attribute %q cannot bind %q (%s): %w", name, uri, err, ErrInvalidArgument)
+		}
 	}
 	return nil
 }

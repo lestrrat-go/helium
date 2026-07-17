@@ -11,6 +11,15 @@ import (
 const (
 	attrDeclElem  = "item"
 	attrDeclCount = "count"
+
+	// Namespace-declaration attribute names reused across the reserved-namespace
+	// axis tests.
+	nsAttrDefault  = "xmlns"
+	nsAttrXMLPfx   = "xmlns:xml"
+	nsAttrXMLNSPfx = "xmlns:xmlns"
+
+	nsURIXML   = "http://www.w3.org/XML/1998/namespace"
+	nsURIXMLNS = "http://www.w3.org/2000/xmlns/"
 )
 
 // TestAddAttributeDeclSerializes verifies AddAttributeDecl builds a declaration
@@ -477,6 +486,128 @@ func TestAddAttributeDeclDefaultRoundTripEquivalence(t *testing.T) {
 			var buf2 bytes.Buffer
 			require.NoError(t, Write(&buf2, parsed))
 			require.Contains(t, buf2.String(), tc.want, "re-serialized <!ATTLIST> is stable")
+		})
+	}
+}
+
+// TestAddAttributeDeclReservedNamespaceRejects verifies that a value-bearing
+// default (enum.AttrDefaultNone or #FIXED) on a namespace-declaration attribute
+// (name "xmlns" or a name with the reserved "xmlns" prefix) whose bound URI the
+// validating parser would reject as a namespace binding is rejected before
+// registration. Each cell mirrors a Namespaces in XML reserved-prefix/URI rule the
+// parser enforces during attribute defaulting (parser_element.go
+// reservedPrefixedNamespaceViolation / reservedDefaultNamespaceViolation).
+func TestAddAttributeDeclReservedNamespaceRejects(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		attr     string
+		def      enum.AttributeDefault
+		defvalue string
+	}{
+		// Default namespace bound to a reserved URI.
+		{"xmlns = XML URI (fixed)", nsAttrDefault, enum.AttrDefaultFixed, nsURIXML},
+		{"xmlns = XML URI (bare)", nsAttrDefault, enum.AttrDefaultNone, nsURIXML},
+		{"xmlns = xmlns URI (fixed)", nsAttrDefault, enum.AttrDefaultFixed, nsURIXMLNS},
+		{"xmlns = xmlns URI (bare)", nsAttrDefault, enum.AttrDefaultNone, nsURIXMLNS},
+		// The xml prefix bound to any non-XML URI.
+		{"xmlns:xml = xmlns URI", nsAttrXMLPfx, enum.AttrDefaultFixed, nsURIXMLNS},
+		{"xmlns:xml = other URI", nsAttrXMLPfx, enum.AttrDefaultFixed, "urn:bad"},
+		{"xmlns:xml = other URI (bare)", nsAttrXMLPfx, enum.AttrDefaultNone, "urn:bad"},
+		// The xmlns prefix may not be declared, whatever the URI.
+		{"xmlns:xmlns = XML URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, nsURIXML},
+		{"xmlns:xmlns = xmlns URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, nsURIXMLNS},
+		{"xmlns:xmlns = other URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, "urn:ok"},
+		// A non-reserved prefix bound to a reserved URI.
+		{"xmlns:p = XML URI", "xmlns:p", enum.AttrDefaultFixed, nsURIXML},
+		{"xmlns:p = xmlns URI", "xmlns:p", enum.AttrDefaultFixed, nsURIXMLNS},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+
+			adecl, err := dtd.AddAttributeDecl("root", tc.attr, enum.AttrCDATA, tc.def, tc.defvalue, nil)
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidArgument)
+			require.Nil(t, adecl)
+
+			// Nothing registered or serialized.
+			require.Empty(t, dtd.attributes)
+			var buf bytes.Buffer
+			require.NoError(t, Write(&buf, doc))
+			require.NotContains(t, buf.String(), "<!ATTLIST")
+		})
+	}
+}
+
+// TestAddAttributeDeclReservedNamespaceAllows verifies the ALLOW cells of the
+// reserved-namespace axis. A permitted namespace-declaration default round-trips
+// through a validating parser (which applies it as a binding on the instance
+// element), and the non-binding cases (a non-value-bearing default, or an ordinary
+// xml:*-named attribute) are accepted unchanged.
+func TestAddAttributeDeclReservedNamespaceAllows(t *testing.T) {
+	// Cells whose accepted declaration must round-trip through a validating parse
+	// of an instance element that triggers attribute defaulting.
+	for _, tc := range []struct {
+		name     string
+		attr     string
+		def      enum.AttributeDefault
+		defvalue string
+		want     string
+	}{
+		{"xmlns:xml = XML URI (fixed)", nsAttrXMLPfx, enum.AttrDefaultFixed, nsURIXML, `<!ATTLIST root xmlns:xml CDATA #FIXED "` + nsURIXML + `">`},
+		{"xmlns:p = ok URI (fixed)", "xmlns:p", enum.AttrDefaultFixed, "urn:ok", `<!ATTLIST root xmlns:p CDATA #FIXED "urn:ok">`},
+		{"xmlns = ok URI (bare)", nsAttrDefault, enum.AttrDefaultNone, "urn:ok", `<!ATTLIST root xmlns CDATA "urn:ok">`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddElementDecl("root", enum.AnyElementType, nil)
+			require.NoError(t, err)
+
+			_, err = dtd.AddAttributeDecl("root", tc.attr, enum.AttrCDATA, tc.def, tc.defvalue, nil)
+			require.NoError(t, err)
+
+			root := doc.CreateElement("root")
+			require.NoError(t, doc.SetDocumentElement(root))
+
+			var buf bytes.Buffer
+			require.NoError(t, Write(&buf, doc))
+			require.Contains(t, buf.String(), tc.want)
+
+			// The validating parser applies the default as a binding on <root/>
+			// and accepts it.
+			_, err = NewParser().ValidateDTD(true).Parse(t.Context(), buf.Bytes())
+			require.NoError(t, err, "accepted namespace-declaration default must round-trip")
+		})
+	}
+
+	// Non-binding cells: accepted, no reserved-namespace check applies.
+	for _, tc := range []struct {
+		name     string
+		attr     string
+		def      enum.AttributeDefault
+		defvalue string
+	}{
+		// A non-value-bearing default never binds, so even a reserved prefix is
+		// accepted as a (vacuous) declaration.
+		{"xmlns:xmlns #IMPLIED", nsAttrXMLNSPfx, enum.AttrDefaultImplied, ""},
+		{"xmlns:xml #IMPLIED", nsAttrXMLPfx, enum.AttrDefaultImplied, ""},
+		{"xmlns:xml #REQUIRED", nsAttrXMLPfx, enum.AttrDefaultRequired, ""},
+		// An empty value-bearing default never binds either.
+		{"xmlns:xml #FIXED empty", nsAttrXMLPfx, enum.AttrDefaultFixed, ""},
+		// Ordinary xml:*-named attributes are not namespace declarations.
+		{"xml:space #FIXED", "xml:space", enum.AttrDefaultFixed, "preserve"},
+		{"xml:lang #FIXED", "xml:lang", enum.AttrDefaultFixed, "en"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+
+			_, err = dtd.AddAttributeDecl("root", tc.attr, enum.AttrCDATA, tc.def, tc.defvalue, nil)
+			require.NoError(t, err)
 		})
 	}
 }
