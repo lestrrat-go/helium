@@ -877,6 +877,112 @@ func TestFormatOutput(t *testing.T) {
 		expected := "<p>left<b><i/></b>right</p>\n"
 		require.Equal(t, expected, buf.String())
 	})
+
+	t.Run("direct CDATA child suppresses formatting", func(t *testing.T) {
+		t.Parallel()
+
+		// A direct CDATASection child is one of libxml2's mixed-content triggers
+		// (xmlNodeDumpOutputInternal treats TEXT, CDATA, and ENTITY_REF children
+		// alike). <data> mixes a pure-element child (<child> holding a nested
+		// <nested/>) ALONGSIDE the CDATA section, so hasOnlyTextChildren is false —
+		// only hasTextlikeChild keeps the subtree inline. The whole <data> subtree,
+		// including the nested element child, must serialize verbatim with no
+		// indentation injected, while the pure-element container <resources> is
+		// still formatted.
+		const input = `<resources><data><child><nested/></child><![CDATA[<raw> & data]]></data><version>1.0</version></resources>`
+
+		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+		expected := "<resources>\n  <data><child><nested/></child><![CDATA[<raw> & data]]></data>\n  <version>1.0</version>\n</resources>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("direct entity-reference child suppresses formatting", func(t *testing.T) {
+		t.Parallel()
+
+		// A direct EntityRef child is a libxml2 mixed-content trigger. <msg> mixes a
+		// pure-element child (<child> holding a nested <nested/>) ALONGSIDE an
+		// unexpanded &g; reference (default parser keeps entity references as nodes),
+		// so hasOnlyTextChildren is false — only hasTextlikeChild keeps the subtree
+		// inline. The whole <msg> subtree, including the nested element child,
+		// serializes verbatim with no indentation, while the container <resources>
+		// is formatted.
+		const input = `<!DOCTYPE resources [<!ENTITY g "hi there">]><resources><msg><child><nested/></child>&g;</msg><version>1.0</version></resources>`
+
+		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+		expected := "<!DOCTYPE resources [\n<!ENTITY g \"hi there\">\n]>\n<resources>\n  <msg><child><nested/></child>&g;</msg>\n  <version>1.0</version>\n</resources>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("whitespace-only text child suppresses formatting", func(t *testing.T) {
+		t.Parallel()
+
+		// A whitespace-only text child is still a TEXT node, so it triggers
+		// libxml2's mixed-content suppression. <item> mixes a pure-element child
+		// (<child> holding a nested <nested/>) ALONGSIDE a whitespace-only text
+		// node, so hasOnlyTextChildren is false — only hasTextlikeChild keeps the
+		// subtree inline. The significant whitespace must be preserved verbatim (no
+		// indentation injected) and the nested element child must not be formatted,
+		// which would corrupt the content and break idempotence. Blanks are NOT
+		// stripped here so the text child survives.
+		const input = `<resources><item><child><nested/></child>   </item><version>1.0</version></resources>`
+
+		doc, err := helium.NewParser().StripBlanks(false).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+		expected := "<resources>\n  <item><child><nested/></child>   </item>\n  <version>1.0</version>\n</resources>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("pure-element child stays formatted", func(t *testing.T) {
+		t.Parallel()
+
+		// Control for the suppression cases above: with the same container shape
+		// but a pure-element child <a><b/></a> (no text-like child anywhere), the
+		// mixed-content rule does NOT fire, so <a> is formatted with normal nested
+		// indentation.
+		const input = `<resources><a><b/></a><version>1.0</version></resources>`
+
+		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+		expected := "<resources>\n  <a>\n    <b/>\n  </a>\n  <version>1.0</version>\n</resources>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("pure-text child stays inline", func(t *testing.T) {
+		t.Parallel()
+
+		// Control: a child with ONLY text content (<a>text</a>) is emitted inline
+		// (text-only elements never get their sole text wrapped in indentation),
+		// but this is the ordinary text-only path, not subtree-wide suppression:
+		// the container <resources> stays formatted.
+		const input = `<resources><a>text</a><version>1.0</version></resources>`
+
+		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+		expected := "<resources>\n  <a>text</a>\n  <version>1.0</version>\n</resources>\n"
+		require.Equal(t, expected, buf.String())
+	})
 }
 
 func TestXHTML(t *testing.T) {
