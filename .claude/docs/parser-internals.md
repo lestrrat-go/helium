@@ -73,7 +73,7 @@ States: `psStart`, `psContent`, `psPrologue`, `psEpilogue`, `psCDATA`, `psDTD`, 
 - Control-character char references — `parser_entity_ref.go` `parseCharRef` / `isXML11CharValue` (`parser_content.go`)
 
 ### SAX & Tree Building
-- `sax` (sax.SAX2Handler) — callbacks (default: TreeBuilder)
+- `sax` (sax.SAX2Handler) — callbacks (default: TreeBuilder; `Parser.SAXHandler(nil)` restores that default, so this is never nil at parse time)
 - `doc *Document` — parsed document; `elem *Element` — current element
 
 ### DTD & Entities
