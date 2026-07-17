@@ -1086,8 +1086,12 @@ func (p Parser) ParseInNodeContext(ctx context.Context, node Node, data []byte) 
 
 	p = p.normalized()
 
-	if node == nil {
-		return nil, errors.New("node must not be nil")
+	// Reject both a literal nil interface and a typed-nil pointer (e.g. the
+	// *Element that Document.DocumentElement returns for a rootless document)
+	// with the matchable ErrNilNode, before the type switch below dereferences
+	// the node and panics on a typed nil.
+	if isNilNode(node) {
+		return nil, ErrNilNode
 	}
 
 	// Walk up to the nearest element or document node.

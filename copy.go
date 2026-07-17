@@ -7,7 +7,13 @@ import (
 
 // CopyNode creates a deep copy of src, owned by targetDoc.
 // Supports Element, Text, Comment, CDATASection, PI, and EntityRef nodes.
+//
+// A nil or typed-nil src (e.g. the *Element that Document.DocumentElement
+// returns for a rootless document) returns ErrNilNode instead of panicking.
 func CopyNode(src Node, targetDoc *Document) (Node, error) {
+	if isNilNode(src) {
+		return nil, ErrNilNode
+	}
 	switch src.Type() {
 	case DocumentNode:
 		if doc, ok := AsNode[*Document](src); ok {

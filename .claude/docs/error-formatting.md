@@ -18,6 +18,16 @@ All error formatting matches libxml2 output for golden test compatibility.
 - **Writer structural-serialization sentinels** (`errors.go`) — `ErrWriterReservedElementName`, `ErrWriterReservedAttributeName`, `ErrWriterReservedNamespacePrefix`, `ErrWriterInvalidElementName`, `ErrWriterInvalidAttributeName`, `ErrWriterInvalidNamespacePrefix`, `ErrWriterInvalidComment`, `ErrWriterInvalidPITarget`, `ErrWriterInvalidPIContent`, `ErrWriterInvalidDTDNode`. Each flags a DOM node that cannot be serialized into well-formed XML (`writer.go` `checkElementName`/`checkAttributeName`/`checkNamespacePrefix` and the comment/PI guards; `writer_dtd.go` node-type switches). The original human-readable message is preserved and the sentinel appended via `fmt.Errorf("... : %w", …)`, so a caller can distinguish the failure class with `errors.Is`. The name/comment/PI guards route through the sticky-error `check()` so an earlier I/O error is not clobbered. Full list in `packages.md`
 - **`ErrUnsupportedNormalizationForm`** (`errors.go`) — writer sentinel returned by `Writer.WriteTo` when `Writer.Normalization` was given a value outside `{"", "none", "NFC", "NFD", "NFKC", "NFKD"}`. `Normalization` stores the raw form and defers the check to `WriteTo` (both the Document and bare-element paths), which fails closed before any output byte rather than silently disabling normalization. Match with `errors.Is`
 
+### DOM operation sentinels (root package, `errors.go`)
+
+`ErrNilNode`, `ErrInvalidOperation`, and `ErrCyclicNode` back the guarded tree API and are all matchable via `errors.Is`:
+
+- **`ErrNilNode`** — a nil or typed-nil node (including Go's interface nil trap, e.g. the typed-nil `*Element` `Document.DocumentElement()` returns for a rootless doc) reached `AddChild`/`AddSibling`/`Replace`/`Walk`/`CopyNode`/`ParseInNodeContext`/`SetDocumentElement`.
+- **`ErrInvalidOperation`** — an unsupported structural op: an empty `Replace()` (matching `Document.Replace`), a non-attribute sibling/replacement of a property attribute, or duplicate replacement operands.
+- **`ErrCyclicNode`** — a `wouldCreateCycle` rejection in `AddChild`/`AddSibling`/`Replace` (inserting a node into itself or a descendant, or replacing a node with an ancestor).
+
+The `ErrInvalidOperation`/`ErrCyclicNode` mutation sites wrap a descriptive message via `%w`, so the human text is preserved while `errors.Is` still matches.
+
 ### ErrParseError (root package, `errors.go`)
 
 ```
