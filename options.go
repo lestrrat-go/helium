@@ -5,18 +5,30 @@ import (
 	"github.com/lestrrat-go/helium/internal/parser"
 )
 
+// LoadSubsetOption is a bitset of parser tree-building flags governing
+// external-DTD-subset loading, DTD-default attribute completion, and
+// ID-attribute interning. The parser sets its bits from the configured Parser
+// options; the exported constants name the individual bits.
 type LoadSubsetOption int
 
 const (
-	DetectIDs     LoadSubsetOption = 1 << (iota + 1)
-	CompleteAttrs                  // 4
-	SkipIDs                        // 8
+	// DetectIDs is the bit the parser sets from the LoadExternalDTD option.
+	// ID-attribute interning is governed by SkipIDs, not this bit.
+	DetectIDs LoadSubsetOption = 1 << (iota + 1)
+	// CompleteAttrs is the bit the parser sets from the DefaultDTDAttributes
+	// option. It governs adding DTD-declared default attributes that the instance
+	// omits.
+	CompleteAttrs // 4
+	// SkipIDs suppresses ID-attribute interning.
+	SkipIDs // 8
 )
 
+// Set turns on the bits in n.
 func (p *LoadSubsetOption) Set(n LoadSubsetOption) {
 	bitset.Set(p, n)
 }
 
+// IsSet reports whether any bit in n is turned on.
 func (p LoadSubsetOption) IsSet(n LoadSubsetOption) bool {
 	return bitset.IsSet(p, n)
 }
