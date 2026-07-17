@@ -25,6 +25,14 @@
 //   - Namespace strictness: undeclared namespace prefixes are rejected.
 //     [encoding/xml] silently accepts undeclared prefixes and places the
 //     raw prefix string in Name.Space.
+//   - Version strictness: a declaration carrying whitespace around the
+//     version pseudo-attribute's "=" (<?xml version = "2.0"?>) is rejected
+//     as an unsupported version. [encoding/xml] accepts it — it searches
+//     for the literal "version=", so a space before the "=" makes the scan
+//     miss the pseudo-attribute and read the document as declaring no
+//     version at all. XML 1.0 permits the whitespace (Eq ::= S? '=' S?),
+//     so the shim reads such a declaration and applies the same
+//     unsupported-version rule it applies without the spaces.
 //   - Attribute ordering: xmlns namespace declarations are emitted before
 //     regular attributes. Source-document attribute order is not preserved
 //     because the SAX parser delivers namespaces and attributes as
