@@ -412,21 +412,23 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 // computeAndSetSignatureValue canonicalizes SignedInfo, signs it, and sets
 // the SignatureValue element text.
 func computeAndSetSignatureValue(cfg *signerConfig, sigElem *helium.Element, signedInfo, sigValueElem *helium.Element, doc *helium.Document, key any) error {
-	// If the Signature element is not in the document tree (detached mode),
-	// temporarily attach it so canonicalization can walk the tree.
-	needsAttach := sigElem.Parent() == nil
-	if needsAttach {
-		if err := doc.DocumentElement().AddChild(sigElem); err != nil {
-			return err
-		}
+	// Canonicalize SignedInfo. When the Signature is already in the document tree
+	// (enveloped mode), canonicalize its SignedInfo subtree in place. When the
+	// Signature is detached (enveloping/detached mode, sigElem.Parent()==nil),
+	// canonicalize SignedInfo through the throwaway-document proxy: the live
+	// Signature root is moved into a private document rooted at a proxy that
+	// reproduces the caller document element's full inherited canonicalization
+	// context (in-scope namespaces + inherited xml:* per C14N version), so
+	// SignedInfo inherits EXACTLY what it would under doc.DocumentElement() while
+	// the caller's document is never mutated. The move is undone on every exit —
+	// normal return, error, or a panic unwinding out of canonicalization.
+	var canonical []byte
+	var err error
+	if sigElem.Parent() == nil {
+		canonical, err = canonicalizeDetachedSubtree(cfg.c14nMethod, sigElem, signedInfo, nil)
+	} else {
+		canonical, err = canonicalizeSubtree(cfg.c14nMethod, signedInfo, nil)
 	}
-
-	canonical, err := canonicalizeSubtree(cfg.c14nMethod, signedInfo, nil)
-
-	if needsAttach {
-		helium.UnlinkNode(sigElem)
-	}
-
 	if err != nil {
 		return err
 	}

@@ -171,9 +171,11 @@ func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string)
 }
 
 // canonicalizeDetachedSubtree canonicalizes target, an element that lives inside
-// the detached subtree rooted at root — an enveloping Signature whose <Object>
-// content carries a same-document reference (URI="#id") but which has not yet
-// been placed in a document. The c14n canonicalizer walks from a document root,
+// the detached subtree rooted at root — a Signature that has not yet been placed
+// in a document. It serves both a reference into an enveloping Signature's own
+// <Object> content (URI="#id") and the Signature's own <SignedInfo> in detached
+// and enveloping signing, so neither canonicalization ever inserts the Signature
+// into the caller's document. The c14n canonicalizer walks from a document root,
 // so a detached node set would canonicalize to nothing. We move the LIVE root
 // into a private throwaway document for the duration of the canonicalization —
 // never touching the caller's document — then move it back out and restore its
