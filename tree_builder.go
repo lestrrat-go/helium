@@ -355,17 +355,28 @@ func catalogOpenName(ref string) string {
 // network-capable) caller-supplied fs.FS. A name with no scheme, a "file:"
 // scheme, or a bare path is never a network resource and loads as usual; scheme
 // matching is case-insensitive (uripath.URIScheme lowercases its result).
+//
+// Leading/trailing XML whitespace (space, tab, CR, LF) is stripped before the
+// scheme check: a SYSTEM literal is a URI reference (XML §4.2.2), and RFC 3986
+// requires surrounding whitespace to be ignored when a URI is extracted. Without
+// this a whitespace-prefixed id (" http://x") reads as scheme-less to
+// uripath.URIScheme (whose first byte must be an ALPHA) and would slip past the
+// NONET gate to a network-capable caller fs.FS.
 func networkAccessForbidden(ctx *parserCtx, name string) bool {
 	if !ctx.options.IsSet(parseNoNet) {
 		return false
 	}
-	switch uripath.URIScheme(name) {
+	switch uripath.URIScheme(strings.Trim(name, xmlWhitespace)) {
 	case "http", "https", "ftp":
 		return true
 	default:
 		return false
 	}
 }
+
+// xmlWhitespace is the XML whitespace set (S production: #x20 #x9 #xD #xA), used
+// as a cutset to strip whitespace surrounding a SYSTEM-literal URI reference.
+const xmlWhitespace = " \t\r\n"
 
 // systemIDRetryEligible reports whether a declared SYSTEM id is eligible for the
 // confined-FS base-relative retry (openExternalResource). Only an ORIGINALLY

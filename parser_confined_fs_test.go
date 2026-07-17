@@ -237,6 +237,52 @@ func TestConfinedDirFSRefusesNetwork(t *testing.T) {
 	require.ErrorIs(t, err, helium.ErrNetworkAccessForbidden)
 }
 
+// A SYSTEM id with leading XML whitespace before a network scheme (" http://x",
+// "\thttp://x") must NOT slip past the NONET gate: the whitespace is stripped
+// before the scheme check, so the network resource is refused before it can
+// reach a network-capable caller fs.FS. A genuine (whitespace-free) relative id
+// still loads normally.
+func TestConfinedFSRefusesWhitespacePrefixedNetworkScheme(t *testing.T) {
+	t.Parallel()
+
+	for _, sysID := range []string{" http://x/evil.dtd", "\thttp://x/evil.dtd"} {
+		doc := `<?xml version="1.0"?>` + "\n" +
+			`<!DOCTYPE doc SYSTEM "` + sysID + `">` + "\n" +
+			`<doc>hello</doc>`
+
+		var opened []string
+		_, err := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(validPathFS{content: []byte("<!ELEMENT doc (#PCDATA)>\n"), opened: &opened}).
+			Parse(t.Context(), []byte(doc))
+
+		require.ErrorIsf(t, err, helium.ErrNetworkAccessForbidden,
+			"whitespace-prefixed network SYSTEM id %q must be refused under NONET", sysID)
+		for _, n := range opened {
+			require.NotContainsf(t, []string{"http", "https", "ftp"}, schemeOf(strings.TrimLeft(n, " \t\r\n")),
+				"a whitespace-prefixed network id %q must be refused before it reaches Open (opened %q)", sysID, n)
+		}
+	}
+
+	// A legitimate relative SYSTEM id (no whitespace) still loads through the same
+	// network-capable FS.
+	doc := `<?xml version="1.0"?>` + "\n" +
+		`<!DOCTYPE doc SYSTEM "sub.dtd">` + "\n" +
+		`<doc>hello</doc>`
+	var opened []string
+	parsed, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(validPathFS{content: []byte("<!ELEMENT doc (#PCDATA)>\n"), opened: &opened}).
+		Parse(t.Context(), []byte(doc))
+
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	require.NotNil(t, parsed.ExtSubset(), "a relative SYSTEM id must still load")
+	require.Contains(t, opened, "sub.dtd")
+}
+
 // PermissiveRoot still loads an external subset via its absolute resolved path:
 // the base-relative retry only fires for an fs.ErrInvalid rejection, which
 // os.Open-backed PermissiveRoot never returns, so its behavior is unchanged.
