@@ -71,12 +71,11 @@ func Unmarshal(data []byte, v any) error {
 	}
 
 	// A declared version other than 1.0 is rejected from the RAW declaration,
-	// before parsing. It cannot be keyed off a parse error: a malformed
-	// pseudo-attribute standing ahead of the version makes helium fail on that
-	// one first, and the strip-and-retry below would then drop the declaration
-	// and parse the document as if it carried no version at all — silently
-	// accepting input stdlib rejects. Like stdlib, an ABSENT or empty version is
-	// not an error.
+	// before parsing, so the rejection does not depend on how helium happens to
+	// fail. Reading the version back out of a parse error is not equivalent: a
+	// pseudo-attribute helium rejects standing ahead of the version makes it fail
+	// on that one first, reporting nothing about the version. Like stdlib, an
+	// ABSENT or empty version is not an error.
 	if ver, ok := declaredXMLVersion(trimmed); ok && ver != "" && ver != xmlVersion10 {
 		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
 	}
@@ -84,13 +83,24 @@ func Unmarshal(data []byte, v any) error {
 	p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
-		// A version outside the 1.x family is a fatal parse error in helium.
-		// Report it rather than stripping the declaration and retrying. This
-		// backstops the raw check above for a declaration it cannot read a
-		// version out of but helium can (e.g. one never closed by "?>").
+		// A version outside the 1.x family is a fatal parse error in helium. Give
+		// it the shim's own unsupported-version wording only when a version was
+		// actually READ from the declaration: helium can reject one the raw scan
+		// never reads, notably from a declaration left unclosed by "?>". With no
+		// version read there is nothing to name, so fall through and report the
+		// parse error, which quotes the version helium rejected.
 		if errors.Is(err, helium.ErrUnsupportedXMLVersion) {
-			ver, _ := declaredXMLVersion(trimmed)
-			return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+			if ver, ok := declaredXMLVersion(trimmed); ok && ver != "" && ver != xmlVersion10 {
+				return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+			}
+			// The raw scan and helium disagree about which version this
+			// declaration carries — it is unclosed, or it repeats the
+			// pseudo-attribute — so the scanned value would name the wrong one.
+			// Report helium's error, which quotes the version it rejected.
+			// Never fall through to the strip-and-retry below: helium found an
+			// unsupported version, and dropping the declaration would parse the
+			// document as if it had never declared one.
+			return convertParseError(err)
 		}
 		// helium's lenient mode is still stricter than stdlib for some
 		// malformed declarations (e.g. charset=, empty version/encoding).
