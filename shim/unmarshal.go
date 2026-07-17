@@ -18,6 +18,10 @@ import (
 
 const xmlNameField = "XMLName"
 
+// xmlVersion10 is the only XML version encoding/xml accepts in a declaration, so
+// it is the only one this shim accepts.
+const xmlVersion10 = "1.0"
+
 type fieldBinding struct {
 	fieldName    string
 	index        []int
@@ -66,16 +70,27 @@ func Unmarshal(data []byte, v any) error {
 		return io.EOF
 	}
 
+	// A declared version other than 1.0 is rejected from the RAW declaration,
+	// before parsing. It cannot be keyed off a parse error: a malformed
+	// pseudo-attribute standing ahead of the version makes helium fail on that
+	// one first, and the strip-and-retry below would then drop the declaration
+	// and parse the document as if it carried no version at all — silently
+	// accepting input stdlib rejects. Like stdlib, an ABSENT or empty version is
+	// not an error.
+	if ver, ok := declaredXMLVersion(trimmed); ok && ver != "" && ver != xmlVersion10 {
+		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
+	}
+
 	p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
-		// A version outside the 1.x family is a fatal parse error in helium. It
-		// must be reported, not stripped: the retry below would drop the
-		// declaration and parse the document as if it carried no version at all,
-		// silently accepting input stdlib rejects. Report it with stdlib's
-		// wording, as validateXMLDeclFields does for a version that parses.
+		// A version outside the 1.x family is a fatal parse error in helium.
+		// Report it rather than stripping the declaration and retrying. This
+		// backstops the raw check above for a declaration it cannot read a
+		// version out of but helium can (e.g. one never closed by "?>").
 		if errors.Is(err, helium.ErrUnsupportedXMLVersion) {
-			return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", declaredXMLVersion(trimmed))
+			ver, _ := declaredXMLVersion(trimmed)
+			return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
 		}
 		// helium's lenient mode is still stricter than stdlib for some
 		// malformed declarations (e.g. charset=, empty version/encoding).
@@ -127,37 +142,77 @@ func stripXMLDecl(data []byte) ([]byte, bool) {
 }
 
 // declaredXMLVersion returns the value of the version pseudo-attribute in data's
-// XML declaration, or "" when there is none. It reads the raw bytes because the
-// version it reports is one the parser rejected, so no Document carries it.
-func declaredXMLVersion(data []byte) string {
+// XML declaration and whether one is present. It reads the raw bytes because the
+// version it reports may be one the parser rejected, so no Document carries it.
+//
+// The scan is ANCHORED: it walks the declaration's pseudo-attributes from the
+// start, taking the version from the one actually named "version". An unanchored
+// search for the literal "version" also matches inside another pseudo-attribute's
+// quoted value (encoding="version"), reading the wrong value or none.
+func declaredXMLVersion(data []byte) (string, bool) {
 	decl, _, found := bytes.Cut(data, []byte("?>"))
 	if !found {
-		return ""
+		return "", false
 	}
-	_, after, found := bytes.Cut(decl, []byte("version"))
-	if !found {
-		return ""
+	rest, isDecl := bytes.CutPrefix(decl, []byte("<?xml"))
+	if !isDecl {
+		return "", false
 	}
-	after = trimLeadingSpace(after)
-	if len(after) == 0 || after[0] != '=' {
-		return ""
+
+	for {
+		name, value, after, ok := cutPseudoAttr(trimLeadingSpace(rest))
+		if !ok {
+			return "", false
+		}
+		if string(name) == "version" {
+			return string(value), true
+		}
+		rest = after
 	}
-	after = trimLeadingSpace(after[1:])
-	if len(after) == 0 || (after[0] != '"' && after[0] != '\'') {
-		return ""
+}
+
+// cutPseudoAttr splits one XML-declaration pseudo-attribute — Name S? '=' S?
+// ('"' value '"' | "'" value "'") — off the front of data, returning its name,
+// its quoted value's contents, and the bytes following the closing quote. The
+// final result is false when data does not begin with a well-formed one.
+func cutPseudoAttr(data []byte) ([]byte, []byte, []byte, bool) {
+	n := 0
+	for n < len(data) && isPseudoAttrNameByte(data[n]) {
+		n++
 	}
-	value, _, found := bytes.Cut(after[1:], after[:1])
-	if !found {
-		return ""
+	if n == 0 {
+		return nil, nil, nil, false
 	}
-	return string(value)
+	name := data[:n]
+
+	rest := trimLeadingSpace(data[n:])
+	if len(rest) == 0 || rest[0] != '=' {
+		return nil, nil, nil, false
+	}
+	rest = trimLeadingSpace(rest[1:])
+	if len(rest) == 0 || (rest[0] != '"' && rest[0] != '\'') {
+		return nil, nil, nil, false
+	}
+
+	value, after, closed := bytes.Cut(rest[1:], rest[:1])
+	if !closed {
+		return nil, nil, nil, false
+	}
+	return name, value, after, true
+}
+
+// isPseudoAttrNameByte reports whether b can appear in an XML-declaration
+// pseudo-attribute name. The three names the declaration admits — version,
+// encoding, standalone — are lowercase ASCII letters throughout.
+func isPseudoAttrNameByte(b byte) bool {
+	return b >= 'a' && b <= 'z'
 }
 
 // validateXMLDeclFields checks the parsed document's version and encoding
 // to match stdlib error behavior (reject non-1.0 versions and non-UTF-8
 // encodings when no CharsetReader is available).
 func validateXMLDeclFields(doc *helium.Document) error {
-	if ver := doc.Version(); ver != "" && ver != "1.0" {
+	if ver := doc.Version(); ver != "" && ver != xmlVersion10 {
 		// stdlib uses fmt.Errorf here (not xml.SyntaxError), so we
 		// match that to produce identical Error() strings.
 		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)

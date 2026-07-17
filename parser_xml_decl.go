@@ -130,9 +130,11 @@ func (pctx *parserCtx) checkEntityVersion(entityVersion string) error {
 
 // checkDocumentVersion enforces the VersionNum constraint on a DOCUMENT's XML
 // declaration (libxml2 xmlParseXMLDecl). XML 1.0 5th edition restricts
-// VersionNum to '1.' [0-9]+, but the grammar parseVersionNum accepts is looser —
-// [0-9] '.' [0-9]+, mirroring libxml2's xmlParseVersionNum — so the constraint is
-// applied here instead:
+// VersionNum to '1.' [0-9]+, but the grammar both parse paths accept
+// (versionNumLen) is looser — [0-9] '.' [0-9]+, mirroring libxml2's
+// xmlParseVersionNum — so the constraint is applied here instead. The value
+// reaching here has already satisfied that grammar, which is what lets the "1."
+// prefix test below stand in for the whole 1.x family:
 //
 //   - "1.0" and "1.1" are supported and pass silently. libxml2 warns on ANY
 //     version other than "1.0", including "1.1"; helium implements XML 1.1

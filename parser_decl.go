@@ -34,24 +34,54 @@ func (pctx *parserCtx) parseVersionInfoFromCursor(ctx context.Context) (string, 
 		return "", err
 	}
 
-	var buf strings.Builder
-	for {
-		c := cur.Peek()
-		if c == q {
-			if err := cur.Advance(1); err != nil {
-				return "", err
-			}
-			break
-		}
-		if c == 0 {
-			return "", pctx.error(ctx, errors.New("unterminated version value"))
-		}
-		_ = buf.WriteByte(c)
-		if err := cur.Advance(1); err != nil {
-			return "", err
+	// VersionNum [26] — the same grammar the byte path enforces (versionNumLen),
+	// so neither path accepts a version the other rejects. A value the grammar
+	// rejects must not reach checkDocumentVersion: its "1.x" family test would
+	// warn past e.g. "1.x" and retain it as the document version, which the
+	// Writer's stricter '1.' [0-9]+ output check then refuses to serialize.
+	n := versionNumLen(cur)
+	if n == 0 {
+		return "", pctx.error(ctx, ErrInvalidVersionNum)
+	}
+	version := cur.PeekString(n)
+	if err := cur.Advance(n); err != nil {
+		return "", err
+	}
+	if cur.Peek() != q {
+		return "", pctx.error(ctx, errors.New("string not closed"))
+	}
+	if err := cur.Advance(1); err != nil {
+		return "", err
+	}
+	return version, nil
+}
+
+// versionNumLen returns the byte length of the VersionNum [26] at the cursor's
+// current position, or 0 when the bytes there do not form one. The grammar is
+// libxml2's xmlParseVersionNum:
+//
+//	VersionNum ::= [0-9] '.' [0-9]+
+//
+// It is looser than the XML 1.0 5th-edition production ('1.' [0-9]+); the
+// remaining constraint is applied by checkDocumentVersion, which alone knows
+// whether the declaration is a document's XMLDecl or an entity's TextDecl. This
+// is the single definition of the grammar — both the byte path (parseVersionNum)
+// and the rune-cursor path (parseVersionInfoFromCursor) scan through it.
+func versionNumLen(cur strcursor.Cursor) int {
+	if v := cur.PeekAt(0); v > '9' || v < '0' {
+		return 0
+	}
+	if v := cur.PeekAt(1); v != '.' {
+		return 0
+	}
+	if v := cur.PeekAt(2); v > '9' || v < '0' {
+		return 0
+	}
+	for i := 3; ; i++ {
+		if v := cur.PeekAt(i); v > '9' || v < '0' {
+			return i
 		}
 	}
-	return buf.String(), nil
 }
 
 func (pctx *parserCtx) parseEncodingDeclFromCursor(ctx context.Context) (string, error) {
@@ -217,32 +247,21 @@ func (ctx *parserCtx) parseVersionNum(_ byte) (string, error) {
 		return "", ErrByteCursorRequired
 	}
 
-	if v := cur.Peek(); v > '9' || v < '0' {
+	n := versionNumLen(cur)
+	if n == 0 {
 		return "", ErrInvalidVersionNum
 	}
 
-	if v := cur.PeekAt(1); v != '.' {
-		return "", ErrInvalidVersionNum
-	}
+	b := bufferPool.Get()
+	defer releaseBuffer(b)
 
-	if v := cur.PeekAt(2); v > '9' || v < '0' {
-		return "", ErrInvalidVersionNum
+	for x := range n {
+		_ = b.WriteByte(cur.PeekAt(x))
 	}
-
-	for i := 3; ; i++ {
-		if v := cur.PeekAt(i); v > '9' || v < '0' {
-			b := bufferPool.Get()
-			defer releaseBuffer(b)
-
-			for x := range i {
-				_ = b.WriteByte(cur.PeekAt(x))
-			}
-			if err := cur.Advance(i); err != nil {
-				return "", err
-			}
-			return b.String(), nil
-		}
+	if err := cur.Advance(n); err != nil {
+		return "", err
 	}
+	return b.String(), nil
 }
 
 func (ctx *parserCtx) parseQuotedTextBytes(cb qtextHandler) (value string, err error) {

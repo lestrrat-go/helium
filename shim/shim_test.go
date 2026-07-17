@@ -1334,6 +1334,14 @@ func TestUnmarshalXMLDeclValidationMatchStdlib(t *testing.T) {
 		{"encoding empty string", `<?xml version="1.0" encoding=""?><item><value>hello</value></item>`},
 		{"extra whitespace", `<?xml  version="1.0"  ?><item><value>hello</value></item>`},
 		{"encoding with spaces", `<?xml version="1.0" encoding = "UTF-8" ?><item><value>hello</value></item>`},
+		// The literal "version" inside another pseudo-attribute's quoted value is
+		// not the version pseudo-attribute: an unanchored scan reads the wrong
+		// value (or none), and a bad pseudo-attribute standing AHEAD of the
+		// version makes the parser fail on that one first, so the declared
+		// version has to be read independently of the parse outcome.
+		{"encoding value is the word version", `<?xml encoding="version" version="2.0"?><item><value>hello</value></item>`},
+		{"standalone value is the word version", `<?xml standalone="version" version="2.0"?><item><value>hello</value></item>`},
+		{"encoding value looks like a version assignment", `<?xml encoding="version = 'zz'" version="2.0"?><item><value>hello</value></item>`},
 	}
 
 	for _, tc := range cases {

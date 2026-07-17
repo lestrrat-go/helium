@@ -96,7 +96,8 @@ func TestParseXMLDecl(t *testing.T) {
 // 5th edition, so a version outside the 1.x family is fatal
 // (XML_ERR_UNKNOWN_VERSION), while a 1.x version other than "1.0" only warns
 // (XML_WAR_UNKNOWN_VERSION) and parsing continues. The grammar itself is looser
-// than the constraint — parseVersionNum accepts [0-9] '.' [0-9]+, mirroring
+// than the constraint — versionNumLen, which both the byte path and the
+// rune-cursor (UTF-16) path scan through, accepts [0-9] '.' [0-9]+, mirroring
 // libxml2's xmlParseVersionNum — so the constraint must be enforced separately.
 func TestParseUnsupportedXMLVersion(t *testing.T) {
 	t.Parallel()
@@ -151,6 +152,23 @@ func TestParseUnsupportedXMLVersion(t *testing.T) {
 		src := utf16Bytes(`<?xml version="2.0" encoding="utf-16"?>`+content, true)
 		_, err := helium.NewParser().Parse(t.Context(), src)
 		require.ErrorIs(t, err, helium.ErrUnsupportedXMLVersion)
+	})
+
+	// The "1.x" family check that turns a fatal version into a warning presumes
+	// the value already satisfies VersionNum. Both parse paths must therefore
+	// enforce that grammar, or a value like "1.x" is warned past on one of them
+	// and then refused by the Writer, which is stricter than the family check.
+	t.Run("a malformed VersionNum is rejected on both parse paths", func(t *testing.T) {
+		t.Parallel()
+
+		for _, version := range []string{"1.x", "1.0.0", "1.", "x.0"} {
+			utf16Src := utf16Bytes(`<?xml version="`+version+`" encoding="utf-16"?>`+content, true)
+			_, err := helium.NewParser().Parse(t.Context(), utf16Src)
+			require.Error(t, err, "version %q must be rejected on the UTF-16 path", version)
+
+			_, err = helium.NewParser().Parse(t.Context(), []byte(`<?xml version="`+version+`"?>`+content))
+			require.Error(t, err, "version %q must be rejected on the byte path", version)
+		}
 	})
 
 	t.Run("LenientXMLDecl relaxes order, not the version constraint", func(t *testing.T) {
