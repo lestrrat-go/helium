@@ -63,3 +63,100 @@ func TestSameDocumentMoveDoesNotEscape(t *testing.T) {
 	require.NoError(t, b.AddChild(a))
 	require.False(t, d.slabEscaped, "an intra-document move must not mark the document as escaped")
 }
+
+// recycleNamespaceSlab allocates enough namespaces in a fresh document to draw
+// chunks back out of the shared pool and overwrite any chunk a freed document
+// returned to it.
+func recycleNamespaceSlab(t *testing.T) {
+	t.Helper()
+	c := NewDocument("1.0", "", StandaloneImplicitNo)
+	for range 2 * slabSize {
+		_, err := c.CreateNamespace("q", "urn:overwrite")
+		require.NoError(t, err)
+	}
+}
+
+// TestAddNamespaceDeclCrossDocumentAppendSurvivesFree covers case 1 (append):
+// AddNamespaceDecl retains a foreign slab-backed Namespace, so the source
+// document's Free must not recycle its slab out from under the retained decl.
+func TestAddNamespaceDeclCrossDocumentAppendSurvivesFree(t *testing.T) {
+	a := NewDocument("1.0", "", StandaloneImplicitNo)
+	el := a.CreateElement("el")
+	require.NoError(t, a.AddChild(el))
+
+	b := NewDocument("1.0", "", StandaloneImplicitNo)
+	ns, err := b.CreateNamespace("p", "urn:new")
+	require.NoError(t, err)
+
+	el.AddNamespaceDecl(ns) // case 1: no existing entry for "p" -> append (retains ns)
+	require.True(t, b.slabEscaped, "retaining a foreign slab-backed namespace must mark the source escaped")
+
+	b.Free()
+	recycleNamespaceSlab(t)
+
+	require.Equal(t, "p", ns.Prefix(), "retained namespace prefix was overwritten by a reused slab chunk")
+	require.Equal(t, "urn:new", ns.URI(), "retained namespace URI was overwritten by a reused slab chunk")
+	got := el.Namespaces()
+	require.Len(t, got, 1)
+	require.Equal(t, "p", got[0].Prefix())
+	require.Equal(t, "urn:new", got[0].URI())
+}
+
+// TestAddNamespaceDeclCrossDocumentCollapseSurvivesFree covers case 3 (collapse):
+// AddNamespaceDecl replaces an existing same-prefix slot with the caller's
+// foreign slab-backed Namespace, which is likewise retained and must survive the
+// source document's Free.
+func TestAddNamespaceDeclCrossDocumentCollapseSurvivesFree(t *testing.T) {
+	a := NewDocument("1.0", "", StandaloneImplicitNo)
+	el := a.CreateElement("el")
+	require.NoError(t, a.AddChild(el))
+	require.NoError(t, el.DeclareNamespace("p", "urn:old")) // A-owned slot
+
+	b := NewDocument("1.0", "", StandaloneImplicitNo)
+	ns, err := b.CreateNamespace("p", "urn:new")
+	require.NoError(t, err)
+
+	el.AddNamespaceDecl(ns) // case 3: existing "p" at a different URI -> collapse (retains ns)
+	require.True(t, b.slabEscaped, "collapsing in a foreign slab-backed namespace must mark the source escaped")
+
+	b.Free()
+	recycleNamespaceSlab(t)
+
+	require.Equal(t, "p", ns.Prefix(), "retained namespace prefix was overwritten by a reused slab chunk")
+	require.Equal(t, "urn:new", ns.URI(), "retained namespace URI was overwritten by a reused slab chunk")
+	got := el.Namespaces()
+	require.Len(t, got, 1)
+	require.Equal(t, "p", got[0].Prefix())
+	require.Equal(t, "urn:new", got[0].URI())
+}
+
+// TestAddNamespaceDeclSameDocumentDoesNotEscape a namespace owned by the same
+// document as the receiver is not a cross-document escape, so the flag stays
+// clear and Free keeps recycling.
+func TestAddNamespaceDeclSameDocumentDoesNotEscape(t *testing.T) {
+	a := NewDocument("1.0", "", StandaloneImplicitNo)
+	el := a.CreateElement("el")
+	require.NoError(t, a.AddChild(el))
+	ns, err := a.CreateNamespace("p", "urn:x")
+	require.NoError(t, err)
+
+	el.AddNamespaceDecl(ns) // same document -> no escape
+	require.False(t, a.slabEscaped, "a same-document namespace decl must not mark escape")
+}
+
+// TestAddNamespaceDeclCrossDocumentNoOpDoesNotEscape a case-2 no-op (an existing
+// declaration at the same URI keeps its slot; the caller's object is not
+// retained) must not mark the source document escaped.
+func TestAddNamespaceDeclCrossDocumentNoOpDoesNotEscape(t *testing.T) {
+	a := NewDocument("1.0", "", StandaloneImplicitNo)
+	el := a.CreateElement("el")
+	require.NoError(t, a.AddChild(el))
+	require.NoError(t, el.DeclareNamespace("p", "urn:same")) // existing A-owned slot
+
+	b := NewDocument("1.0", "", StandaloneImplicitNo)
+	ns, err := b.CreateNamespace("p", "urn:same") // same URI -> case 2 no-op
+	require.NoError(t, err)
+
+	el.AddNamespaceDecl(ns)
+	require.False(t, b.slabEscaped, "a same-URI no-op must not mark the source escaped")
+}
