@@ -40,6 +40,24 @@ var (
 	ErrNilNode          = errors.New("nil node")
 	ErrInvalidOperation = errors.New("operation cannot be performed")
 	ErrEntityBoundary   = errors.New("entity boundary violation")
+	// ErrInvalidArgument is returned when a public builder is given an
+	// out-of-range enum argument — e.g. an AddAttributeDecl attribute type or
+	// default-declaration kind that is not a defined enum value. It is wrapped
+	// (via %w) into a message describing the specific violation, so a caller can
+	// branch on it with errors.Is while still surfacing the text.
+	ErrInvalidArgument = errors.New("invalid argument")
+	// ErrNoInternalSubset is returned by Document.InternalSubset when the
+	// document has no internal DTD subset associated with it. Match with
+	// errors.Is.
+	ErrNoInternalSubset = errors.New("no internal subset is associated with this document")
+	// ErrDuplicateDeclaration is returned when a DTD declaration collides with an
+	// existing declaration of the same kind and name: a second AddElementDecl,
+	// AddNotation, or AddAttributeDecl for an element, notation, or
+	// (element, attribute) pair that is already declared in the DTD. It is
+	// wrapped (via %w) into a message naming the kind and name, so a caller can
+	// branch on the collision with errors.Is while still surfacing the
+	// human-readable text.
+	ErrDuplicateDeclaration = errors.New("duplicate DTD declaration")
 	// ErrEntityVersionMismatch is returned when an external parsed entity (or
 	// the external DTD subset) declares, in its TextDecl, an XML version later
 	// than the referencing document's (XML §4.3.4). Helium targets XML 1.0, so a

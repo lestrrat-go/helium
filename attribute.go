@@ -2,6 +2,9 @@ package helium
 
 import "github.com/lestrrat-go/helium/enum"
 
+// Enumeration is the list of allowed values recorded for a DTD attribute
+// declared with an enumerated or NOTATION type (for example the tokens in
+// <!ATTLIST e a (x|y|z) #IMPLIED>).
 type Enumeration []string
 
 // Attribute represents an XML attribute (libxml2: xmlAttr).
