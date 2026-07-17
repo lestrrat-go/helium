@@ -702,6 +702,20 @@ func TestWriteOutputUnchanged(t *testing.T) {
 	require.Equal(t, expected, str)
 }
 
+// noEmptyWriteWriter is a strict io.Writer that rejects a zero-length Write,
+// mirroring writers that treat an empty chunk as an error. It records the bytes
+// written so callers can assert on the serialized output.
+type noEmptyWriteWriter struct {
+	buf bytes.Buffer
+}
+
+func (w *noEmptyWriteWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, errors.New("empty write rejected")
+	}
+	return w.buf.Write(p)
+}
+
 func TestFormatOutput(t *testing.T) {
 	t.Parallel()
 
@@ -745,6 +759,45 @@ func TestFormatOutput(t *testing.T) {
 
 		expected := "<?xml version=\"1.0\"?>\n<root>\n\t<child>\n\t\t<grandchild/>\n\t</child>\n</root>\n"
 		require.Equal(t, expected, str)
+	})
+
+	t.Run("explicit empty indent yields newlines with no indentation", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("").WriteTo(&buf, doc))
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n<child>\n<grandchild/>\n</child>\n</root>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("explicit empty indent never writes an empty chunk", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		w := &noEmptyWriteWriter{}
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("").WriteTo(w, doc))
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n<child>\n<grandchild/>\n</child>\n</root>\n"
+		require.Equal(t, expected, w.buf.String())
+	})
+
+	t.Run("unset indent uses two-space default", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
+		require.Equal(t, expected, buf.String())
 	})
 
 	t.Run("without format stays compact", func(t *testing.T) {
