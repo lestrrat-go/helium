@@ -439,8 +439,8 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 // references and the predefined entities (amp, lt, gt, apos, quot) are resolved
 // into text, while any other (general) entity reference is preserved as an
 // EntityRef child node with the declared entity's replacement content attached.
-// name must be a local name: a name containing a colon is rejected, because the
-// namespace is supplied through ns.
+// A colon in name is rejected; supply a namespaced name through ns instead.
+// name is not otherwise validated against the XML Name/NCName grammar.
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
 	if strings.ContainsRune(name, ':') {
 		return nil, fmt.Errorf("attribute name %q contains a colon: use CreateAttribute with a local name and Namespace parameter", name)
