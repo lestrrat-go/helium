@@ -5,25 +5,23 @@ import (
 	"github.com/lestrrat-go/helium/internal/parser"
 )
 
-// LoadSubsetOption is a bitset of parser augmentation flags applied while
-// building the tree: whether to load the external DTD subset, whether to fill
-// in DTD-defaulted attributes, and whether to skip ID-attribute interning (the
-// last applies to any recognized ID attribute, including xml:id without a DTD).
-// The parser derives it from the configured Parser options; the exported
+// LoadSubsetOption is a bitset of parser tree-building flags: load the external
+// DTD subset, fill in DTD-defaulted attributes, and skip ID-attribute interning.
+// The parser sets its bits from the configured Parser options; the exported
 // constants name the individual bits.
 type LoadSubsetOption int
 
 const (
-	// DetectIDs is the external-DTD-loading intent bit (derived from
-	// LoadExternalDTD): it is one of the intents that cause the external subset
-	// to be loaded, which lets DTD-declared ID attributes be recognized. The bit
-	// itself does not populate the ID table — ID interning happens for any parse
-	// unless SkipIDs is set.
+	// DetectIDs is the bit the parser sets from the LoadExternalDTD option. The
+	// parser loads the external DTD subset if any of DetectIDs, CompleteAttrs, or
+	// DTD validation is set. ID-attribute interning is governed by SkipIDs, not
+	// this bit.
 	DetectIDs LoadSubsetOption = 1 << (iota + 1)
-	// CompleteAttrs adds attributes that the DTD declares with a default value
-	// but that the instance omits.
+	// CompleteAttrs is the bit the parser sets from the DefaultDTDAttributes
+	// option. With it set, the parser adds attributes that the DTD declares with a
+	// default value and that the instance omits.
 	CompleteAttrs // 4
-	// SkipIDs suppresses ID-attribute interning, so no ID table is populated.
+	// SkipIDs suppresses ID-attribute interning.
 	SkipIDs // 8
 )
 

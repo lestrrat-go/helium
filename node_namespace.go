@@ -50,8 +50,7 @@ func NewNamespaceNodeWrapper(ns *Namespace, owner Node) *NamespaceNodeWrapper {
 	return n
 }
 
-// Content returns the wrapped namespace's URI as bytes, so a namespace node
-// exposes the URI as its string value on the XPath namespace axis.
+// Content returns the wrapped namespace's URI as bytes.
 func (n *NamespaceNodeWrapper) Content() []byte {
 	return []byte(n.ns.URI())
 }

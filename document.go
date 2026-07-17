@@ -200,22 +200,19 @@ func (d *Document) AppendText(b []byte) error {
 	return appendText(d, b)
 }
 
-// AddSibling always fails: a document node is a tree root and cannot have
-// siblings. It exists to satisfy the Node interface.
+// AddSibling returns an error. It exists to satisfy the Node interface.
 func (d *Document) AddSibling(_ Node) error {
 	return errors.New("can't add sibling to a document")
 }
 
-// SetTreeDoc sets doc as the owning document of this node and its subtree. If
-// the node already reports doc as its owner, it returns immediately without
-// re-walking the subtree.
+// SetTreeDoc sets doc as the owning document of this node and its subtree.
 func (d *Document) SetTreeDoc(doc *Document) {
 	setTreeDoc(d, doc)
 }
 
-// Encoding returns the document's character encoding, synthesizing "utf8" when
-// the source XML declaration omitted an encoding. Use RawEncoding to obtain the
-// recorded value without that default.
+// Encoding returns the document's recorded character encoding, or "utf8" if none
+// is recorded. Use RawEncoding to obtain the recorded value without that
+// default.
 func (d *Document) Encoding() string {
 	// In order to differentiate between a document with explicit
 	// encoding in the XML declaration and one without, the XML dump
@@ -226,9 +223,7 @@ func (d *Document) Encoding() string {
 	return "utf8"
 }
 
-// SetEncoding sets the document's character encoding. An empty value means the
-// source had no encoding declaration, and the serializer omits the encoding
-// pseudo-attribute accordingly.
+// SetEncoding sets the document's recorded encoding; an empty string clears it.
 func (d *Document) SetEncoding(enc string) {
 	d.encoding = enc
 }
@@ -269,8 +264,8 @@ func (d *Document) SetSkipIDs(v bool) {
 	d.idsSkip = v
 }
 
-// Version returns the document's XML declaration version (for example "1.0" or
-// "1.1"), or an empty string when the source had no version declaration.
+// Version returns the document's recorded XML version (for example "1.0" or
+// "1.1"), or an empty string if none is recorded.
 func (d *Document) Version() string {
 	return d.version
 }
@@ -337,8 +332,7 @@ func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
 
-// Replace always fails: a document node cannot be replaced in place. It exists
-// to satisfy the Node interface.
+// Replace returns ErrInvalidOperation. It exists to satisfy the Node interface.
 func (d *Document) Replace(_ ...Node) error {
 	return ErrInvalidOperation
 }
@@ -359,11 +353,8 @@ func (d *Document) DocumentElement() *Element {
 }
 
 // SetDocumentElement installs root as the document's root element, replacing an
-// existing root element if one is present. root must be a concrete *Element;
-// any other node kind (including one that merely reports ElementNode) returns an
-// error, and a nil root returns ErrNilNode. The tree is only linked after the
-// cycle/self preflight succeeds, so a rejected call leaves both root and the
-// document untouched.
+// existing root element if one is present. It returns ErrNilNode if root is nil,
+// and an error wrapping ErrInvalidOperation if root is not an *Element.
 func (d *Document) SetDocumentElement(root MutableNode) error {
 	if d == nil {
 		return ErrNilNode
@@ -434,13 +425,10 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 	return n, nil
 }
 
-// CreateAttribute builds an attribute node named name with the given value and
-// optional namespace. value is parsed into a child node list: character
-// references and the predefined entities (amp, lt, gt, apos, quot) are resolved
-// into text, while any other (general) entity reference is preserved as an
-// EntityRef child node with the declared entity's replacement content attached.
-// A colon in name is rejected; supply a namespaced name through ns instead.
-// name is not otherwise validated against the XML Name/NCName grammar.
+// CreateAttribute builds an attribute node named name, with value parsed into
+// its child node list, and optional namespace ns, owned by this document. A
+// colon in name is rejected; supply a namespaced name through ns instead. name
+// is not otherwise checked against the XML Name/NCName grammar.
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
 	if strings.ContainsRune(name, ':') {
 		return nil, fmt.Errorf("attribute name %q contains a colon: use CreateAttribute with a local name and Namespace parameter", name)
@@ -564,7 +552,7 @@ func (d *Document) InternalSubset() (*DTD, error) {
 
 // CreateInternalSubset creates the document's internal DTD subset with the given
 // root element name and external identifiers, and installs it on the document.
-// It fails if the document already has an internal subset.
+// It returns an error if the document already has an internal subset.
 func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD, error) {
 	// equiv: xmlCreateIntSubset (tree.c)
 	if _, err := d.InternalSubset(); err == nil {
@@ -1212,9 +1200,9 @@ func (d *Document) GetElementByID(id string) *Element {
 	return found
 }
 
-// AddEntity declares an entity in the document's internal subset. It fails when
-// the document has no internal subset (create one with CreateInternalSubset
-// first).
+// AddEntity declares an entity in the document's internal subset. It returns an
+// error if the document has no internal subset (create one with
+// CreateInternalSubset first).
 func (d *Document) AddEntity(name string, typ enum.EntityType, externalID, systemID, content string) (*Entity, error) {
 	if d.intSubset == nil {
 		return nil, errors.New("document without internal subset")
