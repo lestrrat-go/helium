@@ -28,7 +28,7 @@ func (p *LoadSubsetOption) Set(n LoadSubsetOption) {
 	bitset.Set(p, n)
 }
 
-// IsSet reports whether all bits in n are turned on.
+// IsSet reports whether any bit in n is turned on.
 func (p LoadSubsetOption) IsSet(n LoadSubsetOption) bool {
 	return bitset.IsSet(p, n)
 }
