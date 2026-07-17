@@ -669,35 +669,144 @@ func errCharsetReaderNil(enc string) error {
 	return fmt.Errorf("xml: encoding %q declared but Decoder.CharsetReader is nil", enc)
 }
 
+// fixedWidthProbeCap bounds how many leading bytes the fixed-width encoding gate
+// reads to locate and judge the XML declaration. A well-formed declaration is far
+// shorter than this, so the cap is never reached in practice; it exists so the
+// gate can never read the whole stream. It also sizes the bufio buffer that
+// holds the peeked prefix, so peeked bytes cost at most this much memory.
+const fixedWidthProbeCap = 4096
+
+// declOpen is the reserved XML-declaration opening. The declaration must begin
+// the document (after an optional byte-order mark), so the fixed-width gate looks
+// for it there before trusting any following "?>" as the declaration terminator.
+const declOpen = "<?xml"
+
 // applyFixedWidthEncodingPolicy applies the shim's encoding policy on the
 // reader-backed Decoder path when the declaration is written in a fixed-width
 // Unicode encoding (UTF-16 / UCS-4). The byte-level prolog scanner cannot
 // tokenize such a declaration, so its encoding gate (checkXMLDecl) never fires
-// here. When the stream begins with a fixed-width Unicode marker, the whole
-// document is decoded by helium — the authority on the declared encoding — and a
-// declared non-UTF-8 encoding without a CharsetReader is rejected, matching
-// Unmarshal and the scanner's own gate. The returned reader replays the same
-// bytes for the streaming parse; ASCII-compatible streams are returned untouched
+// here. When the stream begins with a fixed-width Unicode marker, only a BOUNDED
+// prefix (fixedWidthProbeCap) is peeked — never the whole stream — and a small
+// synthetic document (the declaration bytes, verbatim in the same fixed-width
+// encoding, followed by a minimal root) is handed to helium, the authority on
+// the declared encoding. A declared non-UTF-8 encoding without a CharsetReader is
+// rejected, matching Unmarshal and the scanner's own gate. The returned reader
+// still yields the COMPLETE original byte stream (the peeked prefix stays in the
+// bufio buffer and is replayed), so the streaming parse is unaffected while only
+// the bounded prefix is held in memory. If no declaration or terminator is found
+// within the bound — including a fixed-width document declaring no encoding — the
+// gate does NOT reject; the full stream is streamed downstream, where helium's
+// parse issues the real verdict. ASCII-compatible streams are returned untouched
 // so the fast path is undisturbed.
 func (d *Decoder) applyFixedWidthEncodingPolicy(r io.Reader) (io.Reader, error) {
-	br := bufio.NewReader(r)
+	br := bufio.NewReaderSize(r, fixedWidthProbeCap)
 	prefix, _ := br.Peek(4)
 	if !looksFixedWidthUnicode(prefix) {
 		return br, nil
 	}
-	buf, err := io.ReadAll(br)
-	if err != nil {
-		return nil, err
+	scheme, ok := detectFixedWidthScheme(prefix)
+	if !ok {
+		return br, nil
 	}
-	doc, err := helium.NewParser().MaxDepth(maxParseDepth).Parse(context.Background(), buf)
-	if err != nil {
-		return nil, convertParseError(err)
+	// Peek the bounded prefix without consuming it: the bytes stay in the bufio
+	// buffer and are replayed to the downstream streaming parse.
+	declBytes, _ := br.Peek(fixedWidthProbeCap)
+	enc, ok := fixedWidthDeclEncoding(scheme, declBytes)
+	if !ok {
+		return br, nil
 	}
-	enc := doc.Encoding()
 	if encodingNeedsCharsetReader(enc) && d.CharsetReader == nil {
 		return nil, errCharsetReaderNil(enc)
 	}
-	return bytes.NewReader(buf), nil
+	return br, nil
+}
+
+// fixedWidthScheme describes a fixed-width Unicode encoding for the ASCII-only
+// bytes of an XML declaration: width is the code-unit size in bytes (2 for
+// UTF-16, 4 for UCS-4) and loIdx is the offset of the significant byte within a
+// code unit (0 for little-endian, width-1 for big-endian). It carries only what
+// is needed to emit and locate ASCII, not a general decoder.
+type fixedWidthScheme struct {
+	width int
+	loIdx int
+}
+
+// encodeASCII emits s in the scheme by placing each ASCII byte at loIdx within a
+// zero-filled code unit. The XML declaration and the synthetic root are ASCII, so
+// this is sufficient to build a probe document helium can parse.
+func (s fixedWidthScheme) encodeASCII(str string) []byte {
+	out := make([]byte, len(str)*s.width)
+	for i := range len(str) {
+		out[i*s.width+s.loIdx] = str[i]
+	}
+	return out
+}
+
+// detectFixedWidthScheme classifies the leading bytes of a fixed-width Unicode
+// stream (with or without a byte-order mark) into a UTF-16 or UCS-4 scheme. An
+// unusual UCS-4 byte order (2143 / 3412) is left unclassified (ok == false), so
+// the caller streams the full document and lets helium judge it rather than
+// guessing.
+func detectFixedWidthScheme(p []byte) (fixedWidthScheme, bool) {
+	if len(p) >= 4 {
+		switch {
+		case p[0] == 0xFF && p[1] == 0xFE && p[2] == 0x00 && p[3] == 0x00:
+			return fixedWidthScheme{width: 4, loIdx: 0}, true // UCS-4 LE, BOM
+		case p[0] == 0x00 && p[1] == 0x00 && p[2] == 0xFE && p[3] == 0xFF:
+			return fixedWidthScheme{width: 4, loIdx: 3}, true // UCS-4 BE, BOM
+		case p[0] == 0x3C && p[1] == 0x00 && p[2] == 0x00 && p[3] == 0x00:
+			return fixedWidthScheme{width: 4, loIdx: 0}, true // UCS-4 LE, no BOM
+		case p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x00 && p[3] == 0x3C:
+			return fixedWidthScheme{width: 4, loIdx: 3}, true // UCS-4 BE, no BOM
+		}
+	}
+	if len(p) >= 2 {
+		switch {
+		case p[0] == 0xFF && p[1] == 0xFE:
+			return fixedWidthScheme{width: 2, loIdx: 0}, true // UTF-16 LE, BOM
+		case p[0] == 0xFE && p[1] == 0xFF:
+			return fixedWidthScheme{width: 2, loIdx: 1}, true // UTF-16 BE, BOM
+		case p[0] == 0x3C && p[1] == 0x00:
+			return fixedWidthScheme{width: 2, loIdx: 0}, true // UTF-16 LE, no BOM
+		case p[0] == 0x00 && p[1] == 0x3C:
+			return fixedWidthScheme{width: 2, loIdx: 1}, true // UTF-16 BE, no BOM
+		}
+	}
+	return fixedWidthScheme{}, false
+}
+
+// fixedWidthDeclEncoding reads the declared encoding from a bounded fixed-width
+// prefix. It locates the "<?xml" opening at the document start (allowing one
+// leading byte-order-mark code unit) and the declaration's "?>" terminator, both
+// in the scheme's bytes, then hands helium a small synthetic document — the
+// declaration bytes verbatim followed by a minimal root in the same encoding — so
+// helium's parse decides the declared encoding. ok is false when the prefix holds
+// no declaration or no terminator (so the caller does not reject), or when the
+// synthetic probe fails to parse (the downstream full parse then issues the real
+// verdict).
+func fixedWidthDeclEncoding(scheme fixedWidthScheme, data []byte) (string, bool) {
+	open := scheme.encodeASCII(declOpen)
+	start := bytes.Index(data, open)
+	// The declaration must begin the document, with at most one byte-order-mark
+	// code unit ahead of it.
+	if start != 0 && start != scheme.width {
+		return "", false
+	}
+	term := scheme.encodeASCII(declTerminator)
+	rel := bytes.Index(data[start:], term)
+	if rel < 0 {
+		return "", false
+	}
+	cut := start + rel + len(term)
+	root := scheme.encodeASCII(declProbeRoot)
+	probe := make([]byte, 0, cut+len(root))
+	probe = append(probe, data[:cut]...)
+	probe = append(probe, root...)
+	doc, err := helium.NewParser().MaxDepth(maxParseDepth).Parse(context.Background(), probe)
+	if err != nil {
+		return "", false
+	}
+	return doc.Encoding(), true
 }
 
 // looksFixedWidthUnicode reports whether prefix begins a fixed-width Unicode
