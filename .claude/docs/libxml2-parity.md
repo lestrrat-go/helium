@@ -92,7 +92,7 @@ libxml2.
 | Feature | What Works | Gap |
 |---------|-----------|-----|
 | HTML parsing | SAX + DOM, auto-close, void elements, entities, encoding | Structural element nesting not enforced, areBlanks heuristic simpler, attribute deduplication missing |
-| encoding/xml shim | Marshal, Unmarshal, Encoder, Decoder, Token, struct tags | Strict-only, xmlns before regular attrs, InputOffset approximate, undeclared prefixes rejected, `version = "2.0"` (spaces around `=`) rejected where encoding/xml accepts it |
+| encoding/xml shim | Marshal, Unmarshal, Encoder, Decoder, Token, struct tags | Strict-only, xmlns before regular attrs, InputOffset approximate, undeclared prefixes rejected, `version = "2.0"` (spaces around `=`) rejected where encoding/xml accepts it, `Unmarshal` rejects a declaration violating the XMLDecl grammar (`charset=`, missing/empty version, empty encoding, pseudo-attributes out of order) where encoding/xml accepts it — `Decoder` stays lenient (`LenientXMLDecl`) |
 | XSD range comparison | decimal/integer via big.Rat; float/double; date/time/g-types; duration partial order | Non-ordered primitives rejected for range facets; NaN ordinary value comparison remains indeterminate |
 | XSD validation mode | DOM-only | No SAX/streaming validation, no subtree validation |
 | Push parser | Incremental parsing in background goroutine from blocking push stream | Blocking on chunk boundaries; semantics differ from libxml2 push APIs |

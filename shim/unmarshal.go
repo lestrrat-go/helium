@@ -80,37 +80,27 @@ func Unmarshal(data []byte, v any) error {
 		return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
 	}
 
-	p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth)
+	// The declaration is parsed against the XMLDecl grammar (XML 1.0 §2.8):
+	// version first, then an optional encoding, then an optional standalone. A
+	// declaration that does not conform — a charset= pseudo-attribute, a missing
+	// or empty version, an empty encoding, pseudo-attributes out of order — is a
+	// parse error. encoding/xml accepts those forms; this shim is backed by a
+	// spec-conforming parser and rejects them.
+	p := helium.NewParser().MaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), trimmed)
 	if err != nil {
 		// A version outside the 1.x family is a fatal parse error in helium. Give
 		// it the shim's own unsupported-version wording only when a version was
 		// actually READ from the declaration: helium can reject one the raw scan
 		// never reads, notably from a declaration left unclosed by "?>". With no
-		// version read there is nothing to name, so fall through and report the
-		// parse error, which quotes the version helium rejected.
+		// version read there is nothing to name, so report the parse error, which
+		// quotes the version helium rejected.
 		if errors.Is(err, helium.ErrUnsupportedXMLVersion) {
 			if ver, ok := declaredXMLVersion(trimmed); ok && ver != "" && ver != xmlVersion10 {
 				return fmt.Errorf("xml: unsupported version %q; only version 1.0 is supported", ver)
 			}
-			// The raw scan and helium disagree about which version this
-			// declaration carries — it is unclosed, or it repeats the
-			// pseudo-attribute — so the scanned value would name the wrong one.
-			// Report helium's error, which quotes the version it rejected.
-			// Never fall through to the strip-and-retry below: helium found an
-			// unsupported version, and dropping the declaration would parse the
-			// document as if it had never declared one.
-			return convertParseError(err)
 		}
-		// helium's lenient mode is still stricter than stdlib for some
-		// malformed declarations (e.g. charset=, empty version/encoding).
-		// Strip the declaration and retry.
-		if stripped, ok := stripXMLDecl(trimmed); ok {
-			doc, err = p.Parse(context.Background(), stripped)
-		}
-		if err != nil {
-			return convertParseError(err)
-		}
+		return convertParseError(err)
 	}
 
 	// Validate version/encoding from the parsed document to match
@@ -135,20 +125,6 @@ func trimLeadingSpace(data []byte) []byte {
 		data = data[1:]
 	}
 	return data
-}
-
-// stripXMLDecl removes an XML declaration from data if present, returning
-// the remaining data and true. Returns the original data and false if no
-// declaration is found.
-func stripXMLDecl(data []byte) ([]byte, bool) {
-	if len(data) < 5 || string(data[:5]) != "<?xml" {
-		return data, false
-	}
-	_, after, found := bytes.Cut(data, []byte("?>"))
-	if !found {
-		return data, false
-	}
-	return trimLeadingSpace(after), true
 }
 
 // declaredXMLVersion returns the value of the version pseudo-attribute in data's

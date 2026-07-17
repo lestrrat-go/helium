@@ -341,8 +341,14 @@ func TestUnmarshalBadPathsStdlib(t *testing.T) {
 }
 
 const okStdlib = "OK"
+
+// The upstream encoding/xml fixture declares charset="utf-8". That is not a
+// conforming XMLDecl — charset is not one of the three pseudo-attributes the
+// grammar admits (version, encoding, standalone) — and this shim rejects it, so
+// the fixture uses the conforming encoding= spelling. The subject of the test
+// below is xml:",attr" unmarshaling, which is unaffected.
 const withoutNameTypeDataStdlib = `
-<?xml version="1.0" charset="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Test3 Attr="OK" />`
 
 type TestThree struct {

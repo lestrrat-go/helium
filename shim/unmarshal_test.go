@@ -118,14 +118,20 @@ func TestUnmarshalUnsupportedVersionNeedsAReadVersion(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		xml  string
+		// namesRejectedVersion is true when the verdict is about the version
+		// itself, so the message must quote the one actually rejected.
+		namesRejectedVersion bool
 	}{
 		// Never closed by "?>", so the raw scan reads no version at all and
-		// there is none to call unsupported.
-		{"unterminated declaration", `<?xml version="2.0"`},
-		// Repeats the pseudo-attribute: the raw scan reads the first (1.0)
-		// while the parser rejects the second (2.0), so naming the scanned one
-		// would report "1.0" as unsupported while claiming 1.0 is supported.
-		{"repeated version pseudo-attribute", `<?xml version="1.0" version="2.0"?><item/>`},
+		// there is none to call unsupported. The parser still reads and rejects
+		// the version, so its error names it.
+		{"unterminated declaration", `<?xml version="2.0"`, true},
+		// Repeating a pseudo-attribute does not conform to the XMLDecl grammar
+		// (XML 1.0 §2.8), so this is rejected as a malformed declaration before
+		// any version verdict is reached. The verdict is not about a version, so
+		// it names none — and in particular cannot report the scanned "1.0" as
+		// unsupported while claiming 1.0 is supported.
+		{"repeated version pseudo-attribute", `<?xml version="1.0" version="2.0"?><item/>`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out item
@@ -140,8 +146,86 @@ func TestUnmarshalUnsupportedVersionNeedsAReadVersion(t *testing.T) {
 			require.ErrorAs(t, err, &syntaxErr)
 			require.NotContains(t, syntaxErr.Msg, `""`,
 				"an empty string is not a version anyone declared")
+			if !tc.namesRejectedVersion {
+				return
+			}
 			require.Contains(t, syntaxErr.Msg, "2.0",
 				"the error names the version actually rejected")
+		})
+	}
+}
+
+// TestUnmarshalMalformedXMLDeclDivergesFromStdlib pins shim's OWN behavior for
+// declarations that do not conform to the XMLDecl grammar (XML 1.0 §2.8):
+//
+//	XMLDecl      ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'
+//	VersionInfo  ::= S 'version' Eq ("'" VersionNum "'" | '"' VersionNum '"')
+//	VersionNum   ::= '1.' [0-9]+
+//	EncodingDecl ::= S 'encoding' Eq ('"' EncName '"' | "'" EncName "'")
+//	EncName      ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+//
+// The version is mandatory, the three pseudo-attributes are the only ones the
+// grammar admits, and it fixes their order. shim rejects every form below;
+// encoding/xml accepts them all. These cases cannot live in
+// TestUnmarshalXMLDeclValidationMatchStdlib: that table asserts agreement with
+// stdlib, and this is a deliberate divergence — shim is backed by a
+// spec-conforming parser and does not accept XML the spec does not permit.
+func TestUnmarshalMalformedXMLDeclDivergesFromStdlib(t *testing.T) {
+	type item struct {
+		Value string `xml:"value"`
+	}
+
+	for _, tc := range []struct {
+		name string
+		// why states what disqualifies the declaration under the grammar above.
+		why string
+		xml string
+	}{
+		{
+			name: "charset pseudo-attribute",
+			why:  "charset is not one of the three admitted pseudo-attributes",
+			xml:  `<?xml version="1.0" charset="UTF-8"?><item><value>hello</value></item>`,
+		},
+		{
+			name: "empty decl",
+			why:  "VersionInfo is mandatory, and this declares nothing at all",
+			xml:  `<?xml?><item><value>hello</value></item>`,
+		},
+		{
+			name: "no version",
+			why:  "VersionInfo is mandatory; an encoding alone does not satisfy it",
+			xml:  `<?xml encoding="UTF-8"?><item><value>hello</value></item>`,
+		},
+		{
+			name: "version empty string",
+			why:  `VersionNum ::= '1.' [0-9]+ — the empty string is not a VersionNum`,
+			xml:  `<?xml version=""?><item><value>hello</value></item>`,
+		},
+		{
+			name: "encoding empty string",
+			why:  "EncName must begin with a letter, so it is never empty",
+			xml:  `<?xml version="1.0" encoding=""?><item><value>hello</value></item>`,
+		},
+		{
+			name: "pseudo-attributes out of order",
+			why:  "XMLDecl fixes the order: version, then encoding, then standalone",
+			xml:  `<?xml encoding="UTF-8" version="1.0"?><item><value>hello</value></item>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// stdlib accepts each of these; the divergence is the point of the test.
+			var stdOut item
+			require.NoError(t, stdxml.Unmarshal([]byte(tc.xml), &stdOut),
+				"the encoding/xml side of the divergence")
+
+			var out item
+			err := shim.Unmarshal([]byte(tc.xml), &out)
+			require.Error(t, err, tc.why)
+
+			// A malformed declaration is a syntax error, the same category
+			// encoding/xml reports its own parse failures under.
+			var syntaxErr *stdxml.SyntaxError
+			require.ErrorAs(t, err, &syntaxErr)
 		})
 	}
 }
