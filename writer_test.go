@@ -747,6 +747,32 @@ func TestFormatOutput(t *testing.T) {
 		require.Equal(t, expected, str)
 	})
 
+	t.Run("explicit empty indent yields newlines with no indentation", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).IndentString("").WriteTo(&buf, doc))
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n<child>\n<grandchild/>\n</child>\n</root>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
+	t.Run("unset indent uses two-space default", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+		require.NoError(t, err)
+
+		var buf strings.Builder
+		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+
+		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
+		require.Equal(t, expected, buf.String())
+	})
+
 	t.Run("without format stays compact", func(t *testing.T) {
 		t.Parallel()
 

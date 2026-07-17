@@ -59,6 +59,61 @@ func TestDeclarationVersionInjectionRejected(t *testing.T) {
 	})
 }
 
+// TestOutputVersionValidatedForFragment asserts that a non-empty OutputVersion
+// override is validated on the bare-element/fragment path exactly as on the
+// Document path: a malformed override fails with ErrInvalidOutputVersion and
+// writes nothing, while a valid override (and no override) serializes normally.
+func TestOutputVersionValidatedForFragment(t *testing.T) {
+	t.Parallel()
+
+	t.Run("element rejects malformed override", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		elem := doc.DocumentElement()
+		var buf bytes.Buffer
+		err := helium.NewWriter().OutputVersion("garbage").WriteTo(&buf, elem)
+		require.ErrorIs(t, err, helium.ErrInvalidOutputVersion)
+		require.Zero(t, buf.Len())
+	})
+
+	t.Run("element rejects injection override", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		elem := doc.DocumentElement()
+		var buf bytes.Buffer
+		err := helium.NewWriter().OutputVersion(`1.0" evil="x`).WriteTo(&buf, elem)
+		require.ErrorIs(t, err, helium.ErrInvalidOutputVersion)
+		require.Zero(t, buf.Len())
+	})
+
+	t.Run("document still rejects malformed override", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		var buf bytes.Buffer
+		err := helium.NewWriter().OutputVersion("garbage").WriteTo(&buf, doc)
+		require.ErrorIs(t, err, helium.ErrInvalidOutputVersion)
+		require.Zero(t, buf.Len())
+	})
+
+	t.Run("element with valid override serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		elem := doc.DocumentElement()
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().OutputVersion(ver11).WriteTo(&buf, elem))
+		require.Equal(t, "<root/>", buf.String())
+	})
+
+	t.Run("element with no override serializes", func(t *testing.T) {
+		t.Parallel()
+		doc := newDocWithRoot(t, ver10, "UTF-8")
+		elem := doc.DocumentElement()
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, elem))
+		require.Equal(t, "<root/>", buf.String())
+	})
+}
+
 // TestDeclarationEncodingInjectionRejected asserts that a malformed effective
 // encoding label (one carrying a quote or a space) cannot inject markup into the
 // encoding pseudo-attribute. The writer must fail closed with
