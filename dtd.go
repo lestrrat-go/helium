@@ -3,9 +3,11 @@ package helium
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // DTD represents an XML Document Type Definition (libxml2: xmlDtd).
@@ -260,64 +262,52 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 // registers it as a child node, so it serializes as an <!ATTLIST> declaration
 // (mirroring how AddElementDecl/AddEntity/AddNotation link their declarations).
 //
-// name may be a QName; its prefix is split off for keying on the FIRST colon,
-// exactly as AddElementDecl does (a leading colon is part of the local name).
-// atype is the attribute type (enum.AttrCDATA, enum.AttrID, enum.AttrIDRef,
-// enum.AttrEnumeration, enum.AttrNotation, ...); def is the default-declaration
-// kind (enum.AttrDefaultNone/Required/Implied/Fixed); defvalue is the default or
-// #FIXED value, validated against atype when non-empty (empty means none);
-// enumValues supplies the token list for an enum.AttrEnumeration or
-// enum.AttrNotation type (required for those, ignored otherwise).
+// Every parameter is validated against the same rules the parser's <!ATTLIST>
+// path enforces, so a declaration returned with a nil error always serializes to
+// an <!ATTLIST> that a validating parser accepts and recovers equivalently:
 //
-// It returns an error wrapping ErrDuplicateDeclaration when an attribute with
-// the same local name, prefix, and owning element is already declared.
+//   - elem and name must be valid XML Names (the parser's Name production, which
+//     permits a colon). name may be a QName; its prefix is split off for keying
+//     on the FIRST colon, exactly as AddElementDecl does. A name that STARTS with
+//     a colon is rejected: it is a legal Name but not a valid QName, and the
+//     parser would split it as (prefix="", local="x") — never matching the whole
+//     ":x" key stored here — so it could not round-trip.
+//   - name "xml:id" must have atype enum.AttrID.
+//   - atype must be a valid enum.Attr* type and def a valid
+//     enum.AttrDefaultNone/Required/Implied/Fixed kind.
+//   - for enum.AttrEnumeration / enum.AttrNotation, enumValues must be a non-empty
+//     list of well-formed, distinct tokens (enumeration tokens are NMTOKENs,
+//     NOTATION tokens are Names); it is ignored for other types.
+//   - #REQUIRED and #IMPLIED must NOT carry a default value; enum.AttrDefaultNone
+//     and #FIXED carry one (possibly the empty string), validated against atype,
+//     and an enumeration/NOTATION default must be one of enumValues.
+//
+// It returns an error wrapping ErrDuplicateDeclaration when an attribute with the
+// same local name, prefix, and owning element is already declared, or an error
+// wrapping ErrInvalidArgument for any parameter violation above.
 func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) (*AttributeDecl, error) {
-	if elem == "" {
-		return nil, errors.New("element name required")
-	}
-	if name == "" {
-		return nil, errors.New("attribute name required")
-	}
-
-	switch atype {
-	case enum.AttrCDATA, enum.AttrID, enum.AttrIDRef, enum.AttrIDRefs, enum.AttrEntity, enum.AttrEntities, enum.AttrNmtoken, enum.AttrNmtokens, enum.AttrEnumeration, enum.AttrNotation:
-	default:
-		return nil, errors.New("invalid attribute type")
+	// A tokenized (non-CDATA) default is space-normalized the way the parser
+	// normalizes it (parser_dtd_attr.go), so the value stored here matches the
+	// value the parser recovers on a round-trip.
+	if atype != enum.AttrCDATA {
+		defvalue = collapseAttrSpaces(defvalue)
 	}
 
-	switch def {
-	case enum.AttrDefaultNone, enum.AttrDefaultRequired, enum.AttrDefaultImplied, enum.AttrDefaultFixed:
-	default:
-		return nil, errors.New("invalid attribute default declaration")
-	}
-
-	// An enumeration or NOTATION type needs a non-empty token list, or the
-	// serialized declaration would emit an empty "()" that cannot re-parse.
-	if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
-		if len(enumValues) == 0 {
-			return nil, errors.New("enumeration/notation attribute requires at least one token")
-		}
+	if err := validateAttributeDeclParams(elem, name, atype, def, defvalue, enumValues); err != nil {
+		return nil, err
 	}
 
 	// Split a QName into prefix + local on the FIRST colon, mirroring
-	// AddElementDecl (a leading colon, i == 0, is part of the local name).
+	// AddElementDecl (a leading colon is rejected above, so i is always > 0 here
+	// when a colon is present).
 	var prefix string
 	if i := strings.IndexByte(name, ':'); i > 0 {
 		prefix = name[:i]
 		name = name[i+1:]
 	}
 
-	// Duplicate detection runs BEFORE validating the default value, matching the
-	// parser: a repeat declaration is rejected without validating its (possibly
-	// invalid) default.
 	if _, ok := dtd.LookupAttribute(name, prefix, elem); ok {
 		return nil, fmt.Errorf("duplicate attribute %s declared for element %s: %w", name, elem, ErrDuplicateDeclaration)
-	}
-
-	if defvalue != "" {
-		if err := validateAttributeValueInternal(dtd.doc, atype, defvalue); err != nil {
-			return nil, fmt.Errorf("attribute %s of %s: invalid default value: %w", name, elem, err)
-		}
 	}
 
 	attr := newAttributeDecl()
@@ -327,7 +317,11 @@ func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, de
 	attr.prefix = prefix
 	attr.elem = elem
 	attr.def = def
-	attr.tree = enumValues
+	// Clone the token list: storing the caller's slice by reference would let a
+	// later mutation of it corrupt the serialized declaration.
+	if len(enumValues) > 0 {
+		attr.tree = append(Enumeration(nil), enumValues...)
+	}
 	attr.defvalue = defvalue
 
 	if err := dtd.registerAttribute(attr); err != nil {
@@ -337,6 +331,102 @@ func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, de
 		return nil, err
 	}
 	return attr, nil
+}
+
+// validateAttributeDeclParams checks the public AddAttributeDecl parameters
+// against the same rules the parser's <!ATTLIST> path enforces (parser_dtd_attr.go
+// addAttributeDecl / TreeBuilder.AttributeDecl), so a declaration that passes here
+// serializes to an <!ATTLIST> that parses back equivalently. Every violation
+// wraps ErrInvalidArgument.
+func validateAttributeDeclParams(elem, name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) error {
+	if elem == "" {
+		return fmt.Errorf("element name required: %w", ErrInvalidArgument)
+	}
+	if name == "" {
+		return fmt.Errorf("attribute name required: %w", ErrInvalidArgument)
+	}
+	if !isValidNameWithColon(elem) {
+		return fmt.Errorf("invalid element name %q: %w", elem, ErrInvalidArgument)
+	}
+	if !isValidNameWithColon(name) {
+		return fmt.Errorf("invalid attribute name %q: %w", name, ErrInvalidArgument)
+	}
+	// A leading-colon name is a legal Name but not a valid QName: the parser splits
+	// it as (prefix="", local="x"), which never matches the whole ":x" key kept
+	// here, so it could not round-trip.
+	if name[0] == ':' {
+		return fmt.Errorf("attribute name %q must not start with a colon: %w", name, ErrInvalidArgument)
+	}
+	if name == lexicon.QNameXMLID && atype != enum.AttrID {
+		return fmt.Errorf("attribute %q must have type ID: %w", name, ErrInvalidArgument)
+	}
+
+	switch atype {
+	case enum.AttrCDATA, enum.AttrID, enum.AttrIDRef, enum.AttrIDRefs, enum.AttrEntity, enum.AttrEntities, enum.AttrNmtoken, enum.AttrNmtokens, enum.AttrEnumeration, enum.AttrNotation:
+	default:
+		return fmt.Errorf("invalid attribute type: %w", ErrInvalidArgument)
+	}
+
+	switch def {
+	case enum.AttrDefaultNone, enum.AttrDefaultRequired, enum.AttrDefaultImplied, enum.AttrDefaultFixed:
+	default:
+		return fmt.Errorf("invalid attribute default declaration: %w", ErrInvalidArgument)
+	}
+
+	// An enumeration or NOTATION type needs a non-empty list of well-formed,
+	// distinct tokens, or the serialized "(...)" would not re-parse. Enumeration
+	// tokens are NMTOKENs; NOTATION tokens are Names (the parser reads them with
+	// parseNmtoken and parseName respectively).
+	if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
+		if len(enumValues) == 0 {
+			return fmt.Errorf("enumeration/notation attribute requires at least one token: %w", ErrInvalidArgument)
+		}
+		seen := make(map[string]struct{}, len(enumValues))
+		for _, tok := range enumValues {
+			ok := isValidNmtoken(tok)
+			if atype == enum.AttrNotation {
+				ok = isValidNameWithColon(tok)
+			}
+			if !ok {
+				return fmt.Errorf("invalid enumeration/notation token %q: %w", tok, ErrInvalidArgument)
+			}
+			if _, dup := seen[tok]; dup {
+				return fmt.Errorf("duplicate enumeration/notation token %q: %w", tok, ErrInvalidArgument)
+			}
+			seen[tok] = struct{}{}
+		}
+	}
+
+	// Default-declaration value-presence rules (DefaultDecl grammar):
+	// #REQUIRED / #IMPLIED carry no value; enum.AttrDefaultNone and #FIXED carry
+	// an AttValue (possibly the empty string) that must be legal for the type.
+	switch def {
+	case enum.AttrDefaultRequired, enum.AttrDefaultImplied:
+		if defvalue != "" {
+			return fmt.Errorf("a #REQUIRED/#IMPLIED attribute must not carry a default value: %w", ErrInvalidArgument)
+		}
+	case enum.AttrDefaultNone, enum.AttrDefaultFixed:
+		if err := validateAttributeValueInternal(nil, atype, defvalue); err != nil {
+			return fmt.Errorf("invalid default value %q: %w: %w", defvalue, err, ErrInvalidArgument)
+		}
+		if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
+			if !slices.Contains(enumValues, defvalue) {
+				return fmt.Errorf("default value %q is not one of the declared tokens: %w", defvalue, ErrInvalidArgument)
+			}
+		}
+	}
+	return nil
+}
+
+// collapseAttrSpaces collapses runs of #x20 to a single space and trims leading
+// and trailing spaces, mirroring the tokenized-attribute default normalization
+// the parser applies (parser_dtd_attr.go attrNormalizeSpace).
+func collapseAttrSpaces(s string) string {
+	if s == "" {
+		return s
+	}
+	fields := strings.Fields(s)
+	return strings.Join(fields, " ")
 }
 
 // registerAttribute records an already-built attribute declaration in the DTD's

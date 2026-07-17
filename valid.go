@@ -184,6 +184,30 @@ func isValidName(s string) bool {
 	return true
 }
 
+// isValidNameWithColon reports whether s matches the XML 1.0 Name production
+// INCLUDING the colon — NameStartChar (colon allowed) followed by NameChar
+// (colon allowed) — exactly as the parser's parseName accepts an element or
+// attribute name. Unlike isValidName (which uses the namespace-aware, colon-free
+// NCName productions), this mirrors what an <!ATTLIST> element/attribute name can
+// legally be, so a name that passes here serializes to markup that parses back.
+func isValidNameWithColon(s string) bool {
+	if s == "" {
+		return false
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	if (r == utf8.RuneError && size == 1) || !isNameStartChar(r) {
+		return false
+	}
+	for i := size; i < len(s); {
+		r, size = utf8.DecodeRuneInString(s[i:])
+		if !isNameCharW(r, size) {
+			return false
+		}
+		i += size
+	}
+	return true
+}
+
 // isValidNmtoken checks whether s matches the XML Nmtoken production:
 // Nmtoken ::= (NameChar)+
 //
