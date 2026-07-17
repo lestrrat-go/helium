@@ -433,9 +433,12 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 }
 
 // CreateAttribute builds an attribute node named name with the given value and
-// optional namespace. value is parsed into a child node list (so entity
-// references in it are expanded). name must be a local name: a name containing a
-// colon is rejected, because the namespace is supplied through ns.
+// optional namespace. value is parsed into a child node list: character
+// references and the predefined entities (amp, lt, gt, apos, quot) are resolved
+// into text, while any other (general) entity reference is preserved as an
+// EntityRef child node with the declared entity's replacement content attached.
+// name must be a local name: a name containing a colon is rejected, because the
+// namespace is supplied through ns.
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
 	if strings.ContainsRune(name, ':') {
 		return nil, fmt.Errorf("attribute name %q contains a colon: use CreateAttribute with a local name and Namespace parameter", name)
