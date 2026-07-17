@@ -33,7 +33,7 @@ func TestAddChildRejectsEntityChildCycle(t *testing.T) {
 	// ref's child is ent, so adding ref under ent closes a child-pointer cycle.
 	err = ent.AddChild(ref)
 	require.Error(t, err, "adding a reference under its own Entity child must be rejected")
-	require.EqualError(t, err, "cannot add a node as a child of itself or one of its descendants")
+	require.ErrorContains(t, err, "cannot add a node as a child of itself or one of its descendants")
 
 	// The tree must be untouched: ent must not have gained ref as a child.
 	require.Nil(t, ent.FirstChild(), "Entity must not gain the reference as a child")

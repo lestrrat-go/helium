@@ -27,7 +27,7 @@ import "iter"
 // [Walk], which returns [ErrWalkCycle].
 func Children(n Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
-		if n == nil {
+		if isNilNode(n) {
 			return
 		}
 		owner := n.baseDocNode()
@@ -66,7 +66,7 @@ func Children(n Node) iter.Seq[Node] {
 // DAG traversal is unchanged.
 func Descendants(n Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
-		if n == nil {
+		if isNilNode(n) {
 			return
 		}
 		onPath := make(map[*docnode]struct{})
@@ -119,7 +119,7 @@ func Descendants(n Node) iter.Seq[Node] {
 // stop at it, traverse with [Walk], which returns [ErrWalkCycle].
 func ChildElements(n Node) iter.Seq[*Element] {
 	return func(yield func(*Element) bool) {
-		if n == nil {
+		if isNilNode(n) {
 			return
 		}
 		owner := n.baseDocNode()

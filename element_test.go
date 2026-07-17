@@ -98,7 +98,7 @@ func TestAddChildCycleGuard(t *testing.T) {
 
 		err := e.AddChild(e)
 		require.Error(t, err, "AddChild(self) must be rejected")
-		require.EqualError(t, err, "cannot add a node as a child of itself or one of its descendants")
+		require.ErrorContains(t, err, "cannot add a node as a child of itself or one of its descendants")
 		require.Nil(t, e.FirstChild(), "tree must not be corrupted")
 		require.Nil(t, e.LastChild(), "tree must not be corrupted")
 		require.Nil(t, e.Parent(), "tree must not be corrupted")
@@ -165,7 +165,7 @@ func TestAddSiblingCycleGuard(t *testing.T) {
 	// root is leaf's own ancestor, creating a cycle.
 	err := leaf.AddSibling(root)
 	require.Error(t, err, "adding an ancestor as a sibling must be rejected")
-	require.EqualError(t, err, "cannot add a node as a sibling of itself or one of its descendants")
+	require.ErrorContains(t, err, "cannot add a node as a sibling of itself or one of its descendants")
 
 	require.Nil(t, root.Parent(), "root must remain the tree root")
 	require.Equal(t, root, mid.Parent(), "existing tree must be intact")
@@ -191,7 +191,7 @@ func TestReplaceCycleGuard(t *testing.T) {
 	// root is mid's own ancestor, creating a cycle.
 	err := leaf.Replace(root)
 	require.Error(t, err, "replacing a node with one of its ancestors must be rejected")
-	require.EqualError(t, err, "cannot replace a node with one of its own ancestors")
+	require.ErrorContains(t, err, "cannot replace a node with one of its own ancestors")
 
 	require.Nil(t, root.Parent(), "root must remain the tree root")
 	require.Equal(t, root, mid.Parent(), "existing tree must be intact")
@@ -212,7 +212,7 @@ func TestAddSiblingSelfRejected(t *testing.T) {
 
 	err := child.AddSibling(child)
 	require.Error(t, err, "AddSibling(self) must be rejected")
-	require.EqualError(t, err, "cannot add a node as a sibling of itself or one of its descendants")
+	require.ErrorContains(t, err, "cannot add a node as a sibling of itself or one of its descendants")
 
 	require.Equal(t, child, root.FirstChild(), "tree must not be corrupted")
 	require.Equal(t, child, root.LastChild(), "tree must not be corrupted")
@@ -260,7 +260,7 @@ func TestTextAddSiblingSelfRejected(t *testing.T) {
 	// text content via the text-merge fast path.
 	err := txt.AddSibling(txt)
 	require.Error(t, err, "Text.AddSibling(self) must be rejected")
-	require.EqualError(t, err, "cannot add a node as a sibling of itself or one of its descendants")
+	require.ErrorContains(t, err, "cannot add a node as a sibling of itself or one of its descendants")
 
 	require.Equal(t, []byte("hello"), txt.Content(), "content must not be doubled")
 	require.Nil(t, txt.NextSibling(), "text must not gain a sibling")
@@ -308,7 +308,7 @@ func TestTextAddChildSelfRejected(t *testing.T) {
 	// text content via the text-merge fast path.
 	err := txt.AddChild(txt)
 	require.Error(t, err, "Text.AddChild(self) must be rejected")
-	require.EqualError(t, err, "cannot add a node as a child of itself or one of its descendants")
+	require.ErrorContains(t, err, "cannot add a node as a child of itself or one of its descendants")
 
 	require.Equal(t, []byte("hello"), txt.Content(), "content must not be doubled")
 	require.Nil(t, txt.FirstChild(), "text must not gain a child")
@@ -356,7 +356,7 @@ func TestCommentAddChildSelfRejected(t *testing.T) {
 	// comment content via the comment-merge fast path.
 	err := comment.AddChild(comment)
 	require.Error(t, err, "Comment.AddChild(self) must be rejected")
-	require.EqualError(t, err, "cannot add a node as a child of itself or one of its descendants")
+	require.ErrorContains(t, err, "cannot add a node as a child of itself or one of its descendants")
 
 	require.Equal(t, []byte("note"), comment.Content(), "content must not be doubled")
 	require.Nil(t, comment.FirstChild(), "comment must not gain a child")
@@ -451,7 +451,7 @@ func TestReplaceDuplicateOperandRejected(t *testing.T) {
 	// would corrupt its sibling links. It must be rejected before any mutation.
 	err := a.Replace(b, b)
 	require.Error(t, err, "duplicate replacement operands must be rejected")
-	require.EqualError(t, err, "cannot replace a node with duplicate replacement operands")
+	require.ErrorContains(t, err, "cannot replace a node with duplicate replacement operands")
 
 	require.Equal(t, a, root.FirstChild(), "tree must be untouched")
 	require.Equal(t, b, root.LastChild(), "tree must be untouched")

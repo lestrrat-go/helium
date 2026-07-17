@@ -1017,7 +1017,7 @@ func TestAttributeReplaceRejectsNonAttribute(t *testing.T) {
 	txt := doc.CreateText([]byte("nope"))
 	err := a.Replace(txt)
 	require.Error(t, err, "replacing an attribute with a text node must be rejected")
-	require.EqualError(t, err, "cannot replace an attribute with a non-attribute node")
+	require.ErrorContains(t, err, "cannot replace an attribute with a non-attribute node")
 
 	require.Equal(t, []string{"a", "b", "c"}, attrNames(e), "property list is untouched")
 	require.Equal(t, helium.Node(e), a.Parent(), "attribute still belongs to the element")

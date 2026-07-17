@@ -14,16 +14,28 @@ import (
 //	if elem, ok := helium.AsNode[*helium.Element](node); ok {
 //	    // use elem
 //	}
+//
+// A typed-nil pointer stored in a non-nil Node interface (Go's interface nil
+// trap — e.g. the *Element returned by [Document.DocumentElement] for a
+// document with no root) reports (zero, false), never (nil, true): a caller
+// that gets ok == true can always safely dereference the result.
 func AsNode[T Node](n Node) (T, bool) {
+	var zero T
 	if n == nil {
-		var zero T
 		return zero, false
 	}
-	if v, ok := n.(T); ok {
-		return v, true
+	v, ok := n.(T)
+	if !ok {
+		return zero, false
 	}
-	var zero T
-	return zero, false
+	// The assertion matched, so v is about to be returned as ok. Reject a
+	// typed-nil pointer here (isNilNode only when the assertion already
+	// succeeded, so ordinary calls skip the reflect check) so callers never
+	// receive a non-nil (T, true) wrapping a nil pointer.
+	if isNilNode(v) {
+		return zero, false
+	}
+	return v, true
 }
 
 // Node is a read-only view of an XML document tree node (libxml2: xmlNode).
@@ -325,8 +337,12 @@ func (f NodeWalkerFunc) Visit(n Node) error {
 // DAG traversal is unchanged. On an acyclic, parent-consistent tree behavior is
 // identical to a naive recursive descent.
 func Walk(n Node, w NodeWalker) error {
-	if n == nil {
-		return errors.New("nil node")
+	// Reject both a literal nil interface and a typed-nil pointer (e.g. the
+	// *Element that Document.DocumentElement returns for a rootless document)
+	// with the matchable ErrNilNode, before any baseDocNode() dereference that
+	// would panic on a typed nil.
+	if isNilNode(n) {
+		return ErrNilNode
 	}
 
 	type walkFrame struct {
@@ -545,7 +561,7 @@ func addChildPreflight(n MutableNode, cur Node) error {
 	// its own descendants (which would make an ancestor a descendant of
 	// itself). This also catches the self-insertion case when n == cur.
 	if wouldCreateCycle(n, cur) {
-		return errors.New("cannot add a node as a child of itself or one of its descendants")
+		return fmt.Errorf("%w: cannot add a node as a child of itself or one of its descendants", ErrCyclicNode)
 	}
 
 	// Detach cur from its current parent/sibling chain before relinking, so a
@@ -637,7 +653,7 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 	// effective insertion parent. This also rejects cur == n (a node cannot be
 	// its own sibling) since n is its parent's child.
 	if cur.baseDocNode() == n.baseDocNode() || wouldCreateCycle(n.Parent(), cur) {
-		return errors.New("cannot add a node as a sibling of itself or one of its descendants")
+		return fmt.Errorf("%w: cannot add a node as a sibling of itself or one of its descendants", ErrCyclicNode)
 	}
 
 	// Detach cur from its current parent/sibling chain before relinking, so a
@@ -678,7 +694,7 @@ func addSibling(n MutableNode, cur Node) error {
 			// Reject a non-attribute operand BEFORE the preflight unlink so a
 			// rejected call leaves cur's old tree position untouched.
 			if _, ok := cur.(*Attribute); !ok {
-				return errors.New("cannot add a non-attribute node as a sibling of an attribute")
+				return fmt.Errorf("%w: cannot add a non-attribute node as a sibling of an attribute", ErrInvalidOperation)
 			}
 
 			if err := addSiblingPreflight(n, cur); err != nil {
@@ -747,8 +763,11 @@ func UnsafeSetNextSibling(n Node, next Node) {
 
 // UnlinkNode detaches a node from its parent and sibling chain.
 // After unlinking, the node has no parent, prev, or next pointers.
+//
+// A nil or typed-nil node (e.g. the *Element that Document.DocumentElement
+// returns for a rootless document) is a no-op — there is nothing to detach.
 func UnlinkNode(n MutableNode) {
-	if n == nil {
+	if isNilNode(n) {
 		return
 	}
 	unlinkNode(n)
@@ -805,8 +824,12 @@ func unlinkNode(n Node) {
 }
 
 func replaceNode(n MutableNode, nodes ...Node) error {
+	// An empty replacement set is rejected with ErrInvalidOperation, matching
+	// Document.Replace: "replace this node with nothing" is not a supported way
+	// to delete a node (use UnlinkNode for that). Reporting success here would
+	// silently do nothing while every other Replace contract mutates the tree.
 	if len(nodes) == 0 {
-		return nil
+		return ErrInvalidOperation
 	}
 
 	// Reject a nil or typed-nil replacement operand BEFORE any baseDocNode()
@@ -842,7 +865,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 				continue
 			}
 			if _, ok := nn.(*Attribute); !ok {
-				return errors.New("cannot replace an attribute with a non-attribute node")
+				return fmt.Errorf("%w: cannot replace an attribute with a non-attribute node", ErrInvalidOperation)
 			}
 		}
 	}
@@ -855,7 +878,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	for _, nn := range nodes {
 		dn := nn.baseDocNode()
 		if _, dup := seen[dn]; dup {
-			return errors.New("cannot replace a node with duplicate replacement operands")
+			return fmt.Errorf("%w: cannot replace a node with duplicate replacement operands", ErrInvalidOperation)
 		}
 		seen[dn] = struct{}{}
 	}
@@ -877,7 +900,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		// noteCrossDocumentEscape.
 		noteCrossDocumentEscape(replDoc, nn)
 		if wouldCreateCycle(parent, nn) {
-			return errors.New("cannot replace a node with one of its own ancestors")
+			return fmt.Errorf("%w: cannot replace a node with one of its own ancestors", ErrCyclicNode)
 		}
 	}
 
@@ -1002,7 +1025,19 @@ func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 
 // DeclareNamespace declares a namespace on this node without making it the
 // node's active namespace (libxml2: xmlNewNs).
+//
+// The declaration is idempotent per prefix: if the prefix is already declared
+// on this node with the same URI the call is a no-op, and if it is declared
+// with a different URI the existing declaration is updated in place. The node
+// therefore holds at most one declaration per prefix, so serialization never
+// emits a duplicate or conflicting xmlns for the same prefix.
 func (n *node) DeclareNamespace(prefix, uri string) error {
+	for _, ns := range n.nsDefs {
+		if ns.Prefix() == prefix {
+			ns.href = uri
+			return nil
+		}
+	}
 	ns, err := n.doc.CreateNamespace(prefix, uri)
 	if err != nil {
 		return err
