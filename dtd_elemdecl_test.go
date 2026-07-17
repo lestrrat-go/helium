@@ -160,8 +160,10 @@ func TestGetElementDescKey(t *testing.T) {
 }
 
 // TestIsMixedElementWhitespace exercises the mixed-content whitespace path that
-// relies on GetElementDesc: a mixed-content element must report IsMixedElement
-// true so whitespace inside it is not misclassified as ignorable.
+// relies on GetElementDesc: a mixed-content element reports elementDeclType
+// MixedElementType (the raw content-model type the whitespace path consults) so
+// whitespace inside it is not misclassified as ignorable. IsMixedElement, which
+// shares the same GetElementDesc lookup, likewise reports it mixed.
 func TestIsMixedElementWhitespace(t *testing.T) {
 	doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
 	dtd := newDTD()

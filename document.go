@@ -796,16 +796,19 @@ func (d *Document) GetParameterEntity(name string) (*Entity, bool) {
 // needing the raw content-model type should inspect the element declaration
 // directly (see elementDeclType, which whitespace classification uses instead).
 //
-// Lookup searches ONLY the internal subset. libxml2's xmlIsMixedElement falls
-// back to the external subset when the internal subset has no declaration; this
-// method does not, so an element declared solely in an external DTD reports
-// ErrElementDeclNotFound rather than its external-subset content type.
+// Mirroring libxml2's xmlIsMixedElement, lookup requires an internal subset
+// (a document with none reports ErrElementDeclNotFound) and then searches the
+// internal subset first, falling back to the external subset when the internal
+// subset has no declaration for name.
 func (d *Document) IsMixedElement(name string) (bool, error) {
 	if d.intSubset == nil {
 		return false, ErrElementDeclNotFound
 	}
 
 	edecl, ok := d.intSubset.GetElementDesc(name)
+	if !ok && d.extSubset != nil {
+		edecl, ok = d.extSubset.GetElementDesc(name)
+	}
 	if !ok {
 		return false, ErrElementDeclNotFound
 	}

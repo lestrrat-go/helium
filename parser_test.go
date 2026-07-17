@@ -514,8 +514,8 @@ func TestStripBlanksEntityPseudorootCollision(t *testing.T) {
 // libxml2's areBlanks checks both doc->intSubset and doc->extSubset; helium's
 // whitespace path uses elementDeclType, which likewise searches both subsets,
 // so declaring the model in the external DTD must behave exactly like declaring
-// it in the internal subset. (The public Document.IsMixedElement searches only
-// the internal subset — see its doc comment — and is not the path exercised here.)
+// it in the internal subset. (The public Document.IsMixedElement is the mixed
+// bool, not the raw content-model type, and is not the path exercised here.)
 func TestStripBlanksExternalSubsetContentModel(t *testing.T) {
 	const extDTD = `<!ELEMENT r ANY>
 <!ELEMENT c EMPTY>`

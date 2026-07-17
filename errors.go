@@ -79,9 +79,10 @@ var (
 	// blank-run cap. The cap fires during accumulation, before the whole run is
 	// buffered; match with errors.Is.
 	ErrNodeContentTooLarge = errors.New("node content exceeds maximum allowed size")
-	// ErrElementDeclNotFound is returned by Document.IsMixedElement when the
-	// document's internal subset has no element declaration for the given name
-	// (or no internal subset at all). Match with errors.Is.
+	// ErrElementDeclNotFound is returned by Document.IsMixedElement when neither
+	// the internal nor the external subset has an element declaration for the
+	// given name (or the document has no internal subset at all). Match with
+	// errors.Is.
 	ErrElementDeclNotFound = errors.New("element declaration not found")
 	// ErrUnsupportedOutputEncoding is returned by the writer for an effective
 	// encoding it cannot faithfully emit. A malformed EncName label — whether
