@@ -396,6 +396,19 @@ func reservedDefaultNamespaceViolation(uri string) error {
 	return nil
 }
 
+// validNamespaceURI reports whether uri is syntactically a valid URI reference,
+// the check a prefixed namespace declaration's bound value must pass. It is the
+// shared authority for the URI-syntax test applied both by the parser's
+// prefixed-namespace-declaration path (validatePrefixedNamespaceDecl) and by
+// DTD.AddAttributeDecl's namespace-declaration-default validation
+// (checkNamespaceDeclDefault), so the two cannot drift. It does NOT enforce the
+// pedantic absolute-URI rule — that depends on parser state (pedantic mode) and
+// each caller applies it separately when relevant.
+func validNamespaceURI(uri string) bool {
+	_, err := url.Parse(uri)
+	return err == nil
+}
+
 // validatePrefixedNamespaceDecl enforces the Namespaces in XML constraints
 // that apply to a prefixed namespace declaration (xmlns:prefix="uri"),
 // regardless of whether the declaration is literal on a start tag or supplied
@@ -424,12 +437,16 @@ func (pctx *parserCtx) validatePrefixedNamespaceDecl(ctx context.Context, prefix
 		}
 		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: Empty XML namespace is not allowed", prefix))
 	}
-	u, err := url.Parse(uri)
-	if err != nil {
+	if !validNamespaceURI(uri) {
 		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: '%s' is not a validURI", prefix, uri))
 	}
-	if pctx.pedantic && u.Scheme == "" {
-		return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, uri))
+	if pctx.pedantic {
+		// The URI is already known valid; re-parse only to inspect its scheme for
+		// the pedantic absolute-URI rule.
+		u, _ := url.Parse(uri)
+		if u.Scheme == "" {
+			return pctx.namespaceError(ctx, fmt.Errorf("xmlns:%s: URI %s is not absolute", prefix, uri))
+		}
 	}
 	return nil
 }

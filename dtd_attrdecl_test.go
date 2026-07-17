@@ -17,6 +17,7 @@ const (
 	nsAttrDefault  = "xmlns"
 	nsAttrXMLPfx   = "xmlns:xml"
 	nsAttrXMLNSPfx = "xmlns:xmlns"
+	nsAttrPPfx     = "xmlns:p"
 
 	nsURIXML   = "http://www.w3.org/XML/1998/namespace"
 	nsURIXMLNS = "http://www.w3.org/2000/xmlns/"
@@ -494,9 +495,11 @@ func TestAddAttributeDeclDefaultRoundTripEquivalence(t *testing.T) {
 // default (enum.AttrDefaultNone or #FIXED) on a namespace-declaration attribute
 // (name "xmlns" or a name with the reserved "xmlns" prefix) whose bound URI the
 // validating parser would reject as a namespace binding is rejected before
-// registration. Each cell mirrors a Namespaces in XML reserved-prefix/URI rule the
-// parser enforces during attribute defaulting (parser_element.go
-// reservedPrefixedNamespaceViolation / reservedDefaultNamespaceViolation).
+// registration. Each cell mirrors a Namespaces in XML rule the parser enforces
+// during attribute defaulting (parser_element.go validatePrefixedNamespaceDecl /
+// validateDefaultNamespaceDecl): the reserved-prefix/URI predicates
+// (reservedPrefixedNamespaceViolation / reservedDefaultNamespaceViolation) and,
+// on the prefixed path, the URI-syntax check (validNamespaceURI).
 func TestAddAttributeDeclReservedNamespaceRejects(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -518,8 +521,14 @@ func TestAddAttributeDeclReservedNamespaceRejects(t *testing.T) {
 		{"xmlns:xmlns = xmlns URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, nsURIXMLNS},
 		{"xmlns:xmlns = other URI", nsAttrXMLNSPfx, enum.AttrDefaultFixed, "urn:ok"},
 		// A non-reserved prefix bound to a reserved URI.
-		{"xmlns:p = XML URI", "xmlns:p", enum.AttrDefaultFixed, nsURIXML},
-		{"xmlns:p = xmlns URI", "xmlns:p", enum.AttrDefaultFixed, nsURIXMLNS},
+		{"xmlns:p = XML URI", nsAttrPPfx, enum.AttrDefaultFixed, nsURIXML},
+		{"xmlns:p = xmlns URI", nsAttrPPfx, enum.AttrDefaultFixed, nsURIXMLNS},
+		// A prefixed declaration bound to a syntactically invalid URI: the parser's
+		// validatePrefixedNamespaceDecl rejects it ("is not a validURI"), so it must
+		// not round-trip. "%" is a legal XML Char sequence (it clears the character
+		// checks) but a malformed percent-escape that url.Parse rejects.
+		{"xmlns:p = malformed URI", nsAttrPPfx, enum.AttrDefaultFixed, "%"},
+		{"xmlns:p = malformed URI (bare)", nsAttrPPfx, enum.AttrDefaultNone, "%"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
@@ -556,8 +565,15 @@ func TestAddAttributeDeclReservedNamespaceAllows(t *testing.T) {
 		want     string
 	}{
 		{"xmlns:xml = XML URI (fixed)", nsAttrXMLPfx, enum.AttrDefaultFixed, nsURIXML, `<!ATTLIST root xmlns:xml CDATA #FIXED "` + nsURIXML + `">`},
-		{"xmlns:p = ok URI (fixed)", "xmlns:p", enum.AttrDefaultFixed, "urn:ok", `<!ATTLIST root xmlns:p CDATA #FIXED "urn:ok">`},
+		{"xmlns:p = ok URI (fixed)", nsAttrPPfx, enum.AttrDefaultFixed, "urn:ok", `<!ATTLIST root xmlns:p CDATA #FIXED "urn:ok">`},
 		{"xmlns = ok URI (bare)", nsAttrDefault, enum.AttrDefaultNone, "urn:ok", `<!ATTLIST root xmlns CDATA "urn:ok">`},
+		// A well-formed relative-reference URI on the prefixed path: url.Parse accepts
+		// it and the parser applies it as a binding, so we must NOT over-reject it.
+		{"xmlns:p = relative-ref URI", nsAttrPPfx, enum.AttrDefaultFixed, "urn/rel", `<!ATTLIST root xmlns:p CDATA #FIXED "urn/rel">`},
+		// The default-namespace "xmlns" path carries no URI-syntax check (the parser's
+		// validateDefaultNamespaceDecl applies none), so a value that would be rejected
+		// on the prefixed path is accepted here and round-trips, matching the parser.
+		{"xmlns = malformed URI (no syntax check)", nsAttrDefault, enum.AttrDefaultFixed, "%", `<!ATTLIST root xmlns CDATA #FIXED "%">`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
