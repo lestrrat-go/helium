@@ -578,9 +578,10 @@ func (p Parser) MaxDepth(depth int) Parser {
 // DTD subset (see [LoadExternalDTD], [ValidateDTD], [DefaultDTDAttributes]).
 // The cap is enforced against the actual number of bytes read, guarding
 // against hostile or pathological sources (e.g. /dev/zero) that could
-// otherwise exhaust memory before any entity or parse limits apply. A value
-// less than or equal to zero (the default) means [MaxExternalDTDSize] (10 MiB)
-// is used.
+// otherwise exhaust memory before any entity or parse limits apply. A value of
+// zero (the default) uses [MaxExternalDTDSize] (10 MiB); a negative value
+// removes the cap. Removing the cap lets a hostile source drive unbounded
+// memory use, so do so only for trusted input.
 func (p Parser) MaxExternalDTDBytes(n int) Parser {
 	p = p.clone()
 	p.cfg.maxExtDTDSize = n

@@ -191,7 +191,7 @@ type parserCtx struct {
 	maxElemDepth     int               // max allowed element nesting depth (0 = unlimited)
 	maxNameLength    int               // max element/attribute/NCName length (0 = unlimited)
 	maxCMDepth       int               // max DTD content-model declaration depth (0 = unlimited)
-	maxExtDTDSize    int               // max bytes read from an external DTD subset (<= 0 = MaxExternalDTDSize)
+	maxExtDTDSize    int               // max bytes read from an external DTD subset (0 = unlimited, the resolveLimit sentinel)
 	maxNodeContent   int               // max bytes of a single CDATA/comment/PI/char-data run or attribute value, AND of a contiguous XML-whitespace blank-skip run (0 = unlimited)
 	currentEntityURI string            // URI of the external entity currently being replayed (for base-uri tracking)
 	nameCache        map[string]string // per-parse string interning for element/attribute names
@@ -652,6 +652,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.maxNameLength = DefaultMaxNameLength
 	ctx.maxCMDepth = DefaultMaxContentModelDepth
 	ctx.maxNodeContent = DefaultMaxNodeContentSize
+	ctx.maxExtDTDSize = MaxExternalDTDSize
 	if p != nil {
 		ctx.sax = p.sax
 		if tb, ok := p.sax.(*TreeBuilder); ok {
@@ -680,7 +681,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 			ctx.loadsubset.Set(SkipIDs)
 		}
 		ctx.maxElemDepth = p.maxDepth
-		ctx.maxExtDTDSize = p.maxExtDTDSize
+		ctx.maxExtDTDSize = resolveLimit(p.maxExtDTDSize, MaxExternalDTDSize)
 		ctx.maxAmpl = resolveLimit(p.maxEntityAmpl, DefaultMaxEntityAmplification)
 		ctx.maxNameLength = resolveLimit(p.maxNameLength, DefaultMaxNameLength)
 		ctx.maxCMDepth = resolveLimit(p.maxCMDepth, DefaultMaxContentModelDepth)
