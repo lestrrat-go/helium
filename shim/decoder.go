@@ -70,7 +70,7 @@ type Decoder struct {
 	saxStarted      bool        // true once SAX goroutine has been started
 	detectedCharset string      // non-UTF-8 encoding from XML declaration
 	pendingEvent    *tokenEvent // lookahead event saved during CharData merging
-	sawContent      bool        // TokenReader path: a non-whitespace token has been seen
+	sawContent      bool        // TokenReader path: a content token (anything but a leading BOM) has been seen
 }
 
 func newDecoderFromReader(ctx context.Context, r io.Reader) (*Decoder, error) { //nolint:unparam // error always nil but callers check for future-proofing
@@ -514,11 +514,12 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	// reaches this point from a TokenReader.
 	if pi, ok := tok.(ProcInst); ok && isReservedXMLTarget(pi.Target) {
 		// XMLDecl is only legal as the very first thing in a document
-		// (prolog ::= XMLDecl? Misc* ...), with only whitespace ahead of it.
-		// d.sawContent records whether a non-whitespace token already reached
-		// the caller on the TokenReader path — mirroring prologScanner.sawContent
-		// on the reader path — so a declaration after a comment, PI, doctype,
-		// earlier declaration, or the root start tag is rejected here too.
+		// (prolog ::= XMLDecl? Misc* ...), with only a byte-order mark ahead of
+		// it. d.sawContent records whether a content token already reached the
+		// caller on the TokenReader path — mirroring prologScanner.sawContent on
+		// the reader path — so a declaration after leading whitespace, a comment,
+		// a PI, a doctype, an earlier declaration, or the root start tag is
+		// rejected here too.
 		if d.sawContent {
 			return nil, errDeclNotAtStart
 		}
@@ -528,11 +529,13 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	}
 
 	// Record prior content for the TokenReader path's placement rule above.
-	// Leading whitespace and a leading byte-order mark do not count (isLeadingNoise),
-	// matching the reader path, where scanProlog accumulates whitespace as CharData
-	// without setting sawContent and a BOM is consumed by helium ahead of the
-	// declaration.
-	if d.tokenReader != nil && !isLeadingNoise(tok) {
+	// A leading byte-order mark does not count (isLeadingBOM) — it is document
+	// framing, not content — but leading whitespace DOES: a declaration is legal
+	// only at document position 0, so whitespace ahead of it makes it misplaced.
+	// This matches the reader path (scanProlog sets sawContent on leading
+	// whitespace and lets helium judge a BOM+declaration in context) and helium's
+	// own verdict on the byte paths.
+	if d.tokenReader != nil && !isLeadingBOM(tok) {
 		d.sawContent = true
 	}
 
@@ -585,6 +588,18 @@ func (d *Decoder) checkXMLDecl(target, data string) error {
 // declaration so helium has a complete document to parse.
 const declProbeRoot = "<r/>"
 
+// declTerminator is the XML declaration's closing delimiter. It both closes the
+// reconstructed declaration and is the sequence an Inst may not contain (it
+// cannot appear inside a real declaration's pseudo-attribute region).
+const declTerminator = "?>"
+
+// errDeclInstTerminator is returned when a reconstructed declaration's Inst
+// carries an embedded "?>". Such an Inst is smuggling a second PI or arbitrary
+// prolog markup past the declaration boundary and is rejected before parsing.
+var errDeclInstTerminator = &stdxml.SyntaxError{
+	Msg: `XML declaration contains an embedded "?>" terminator`,
+}
+
 // heliumDeclDecision is the shim's single declaration-decision function. It
 // reconstructs the declaration as a standalone document — "<?xml " + data + "?>"
 // followed by a minimal root — and hands it to helium, whose parse is the
@@ -596,7 +611,21 @@ const declProbeRoot = "<r/>"
 // "utf8" sentinel when none was declared) for the CharsetReader rule; on failure
 // it returns helium's verdict as an [encoding/xml.SyntaxError].
 func heliumDeclDecision(data string) (string, error) {
-	src := "<?xml " + data + "?>" + declProbeRoot
+	// Guard the reconstructed declaration's own boundary. data is the ProcInst
+	// Inst, which on the TokenReader path is arbitrary caller-supplied bytes. A
+	// real declaration's pseudo-attribute region cannot contain "?>" — that is
+	// the declaration's own terminator — so an Inst carrying one would close the
+	// synthetic "<?xml ...?>" early and let the remainder become injected prolog
+	// nodes (a second PI, a comment, arbitrary markup) that helium would parse as
+	// legitimate. Reject it before building the probe. The reader path cannot
+	// reach here with such an Inst: scanPI splits the PI on its first "?>", so its
+	// Inst never contains one. The target is not spliced in — it is validated to
+	// be exactly the lowercase "xml" by checkXMLDecl and hardcoded below — so it
+	// needs no analogous guard.
+	if strings.Contains(data, declTerminator) {
+		return "", errDeclInstTerminator
+	}
+	src := "<?xml " + data + declTerminator + declProbeRoot
 	p := helium.NewParser().MaxDepth(maxParseDepth)
 	doc, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {

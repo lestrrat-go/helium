@@ -73,8 +73,9 @@ func requireAllAccept(t *testing.T, src string) {
 }
 
 // TestXMLDeclPosition covers where an XML declaration may appear. XMLDecl is
-// only legal as the very first thing in a document (leading whitespace aside),
-// and every entry point must agree on that.
+// only legal as the very first thing in a document — at position 0, with only a
+// byte-order mark allowed ahead of it (leading whitespace displaces it) — and
+// every entry point must agree on that.
 func TestXMLDeclPosition(t *testing.T) {
 	t.Run("declaration not at the start is rejected", func(t *testing.T) {
 		for name, src := range map[string]string{
@@ -91,13 +92,38 @@ func TestXMLDeclPosition(t *testing.T) {
 		}
 	})
 
-	// Leading whitespace ahead of a declaration is accepted by every entry
-	// point: Unmarshal trims it before parsing, the prolog scanner emits it as
-	// CharData without treating it as content that displaces the declaration
-	// from the start of the document, and a TokenReader's leading whitespace
-	// CharData is held to the same rule.
-	t.Run("leading whitespace before a declaration is accepted", func(t *testing.T) {
-		requireAllAccept(t, "  \n\t"+declV10+itemOnly)
+	// Leading whitespace ahead of a declaration is REJECTED by every entry
+	// point: an XML declaration is legal only at document position 0
+	// (prolog ::= XMLDecl? Misc* ...), so any whitespace ahead of it makes it
+	// misplaced. shim's verdict is helium's, and helium rejects a declaration
+	// not at the start of the document.
+	t.Run("leading whitespace before a declaration is rejected", func(t *testing.T) {
+		for name, src := range map[string]string{
+			"space and newline": " \n" + declV10 + rootOnly,
+			"a tab":             "\t" + declV10 + rootOnly,
+			"a newline":         "\n" + declV10 + rootOnly,
+			"spaces then a tab": "  \n\t" + declV10 + itemOnly,
+		} {
+			t.Run(name, func(t *testing.T) {
+				requireAllReject(t, src)
+			})
+		}
+	})
+
+	// Leading whitespace ahead of the ROOT ELEMENT — with no declaration —
+	// stays accepted: whitespace before an element is well-formed. Only
+	// whitespace ahead of a DECLARATION rejects, because a declaration must be at
+	// position 0 whereas an element need not.
+	t.Run("leading whitespace before an element with no declaration is accepted", func(t *testing.T) {
+		for name, src := range map[string]string{
+			"two spaces":       "  " + itemOnly,
+			"newline and tab":  "\n\t" + itemOnly,
+			"no leading space": itemOnly,
+		} {
+			t.Run(name, func(t *testing.T) {
+				requireAllAccept(t, src)
+			})
+		}
 	})
 
 	// An ordinary PI inside the root element is not a declaration and is
@@ -385,5 +411,50 @@ func TestXMLDeclAgreement(t *testing.T) {
 		require.Contains(t, dErr.Error(), `unsupported XML version "2.0"`)
 
 		requireAllReject(t, src)
+	})
+}
+
+// TestXMLDeclInstTerminator pins that a TokenReader delivering an XML
+// declaration whose Inst carries an embedded "?>" is rejected. A real
+// declaration's pseudo-attribute region cannot contain "?>" — it is the
+// declaration's own terminator — so an Inst that does is smuggling a second PI
+// or arbitrary prolog markup past the declaration boundary. shim rejects it
+// before reconstructing the declaration for helium, so the smuggled markup is
+// never parsed as legitimate prolog nodes.
+func TestXMLDeclInstTerminator(t *testing.T) {
+	balanced := []stdxml.Token{
+		stdxml.StartElement{Name: stdxml.Name{Local: "r"}},
+		stdxml.EndElement{Name: stdxml.Name{Local: "r"}},
+	}
+
+	t.Run("an Inst with an embedded ?> is rejected", func(t *testing.T) {
+		for name, inst := range map[string]string{
+			"smuggling a second PI":   `version="1.0"?><?foo`,
+			"smuggling a comment":     `version="1.0"?><!--x-->`,
+			"smuggling a closing tag": `version="1.0"?></root><evil>`,
+			"a bare terminator":       `version="1.0"?>`,
+		} {
+			t.Run(name, func(t *testing.T) {
+				toks := append([]stdxml.Token{
+					stdxml.ProcInst{Target: "xml", Inst: []byte(inst)},
+				}, balanced...)
+				err := drainTokens(shim.NewTokenDecoder(t.Context(), &deliveredTokens{toks: toks}))
+				require.Error(t, err, "an Inst with an embedded ?> must be rejected")
+			})
+		}
+	})
+
+	// A well-formed declaration delivered the same way stays accepted — the
+	// guard rejects only the "?>" terminator, never a valid pseudo-attribute
+	// region.
+	t.Run("a well-formed declaration stays accepted", func(t *testing.T) {
+		for name, inst := range map[string]string{
+			"version only":         `version="1.0"`,
+			"version and encoding": `version="1.1" encoding="UTF-8"`,
+		} {
+			t.Run(name, func(t *testing.T) {
+				require.NoError(t, decodeDeliveredDecl(t, nil, inst))
+			})
+		}
 	})
 }

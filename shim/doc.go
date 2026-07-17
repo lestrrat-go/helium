@@ -58,11 +58,17 @@
 //     rejects version 1.1 during its own tokenization, before the declaration
 //     reaches shim. That is a limitation of [encoding/xml], not of shim.
 //   - Declaration placement: an XML declaration is admitted only as the very
-//     first thing in the document (prolog ::= XMLDecl? Misc* ...), with only
-//     whitespace allowed ahead of it. A "<?xml" appearing after an earlier
-//     declaration, a comment, a processing instruction or a doctype is
-//     rejected. [encoding/xml] accepts it, reporting it as an ordinary
-//     ProcInst. [Unmarshal] and [Decoder] agree in rejecting it.
+//     first thing in the document (prolog ::= XMLDecl? Misc* ...) — at document
+//     position 0, with only a byte-order mark allowed ahead of it. A "<?xml"
+//     appearing after ANY leading whitespace, or after an earlier declaration, a
+//     comment, a processing instruction or a doctype, is rejected. [encoding/xml]
+//     tolerates leading whitespace and reports a later "<?xml" as an ordinary
+//     ProcInst — a divergence; shim's verdict is helium's, coherent across
+//     [Unmarshal], the reader-backed [Decoder] and the TokenReader-backed
+//     [Decoder]. Whitespace ahead of the ROOT ELEMENT (with no declaration) is
+//     well-formed and stays accepted; only whitespace ahead of a DECLARATION
+//     rejects, because a declaration must be at position 0 whereas an element
+//     need not.
 //   - Reserved target: the target "xml" is reserved in ANY casing —
 //     PITarget ::= Name - (('X'|'x')('M'|'m')('L'|'l')) (XML 1.0 §2.6) — so
 //     <?XML ...?>, <?Xml ...?> and <?xMl ...?> are illegal wherever they appear.

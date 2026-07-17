@@ -70,11 +70,15 @@ source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/h
   version, an empty encoding, a `standalone` that is not `yes`/`no`, a repeated
   pseudo-attribute, or pseudo-attributes out of order. `encoding/xml` accepts
   them all.
-- An XML declaration is admitted only as the very first thing in the document,
-  with only whitespace allowed ahead of it. Both `Unmarshal` and `Decoder`
-  reject a `<?xml` following an earlier declaration, a comment, a processing
-  instruction, or a doctype; `encoding/xml` accepts it as an ordinary
-  `ProcInst`.
+- An XML declaration is admitted only as the very first thing in the document —
+  at document position 0, with only a byte-order mark allowed ahead of it. Every
+  entry point (`Unmarshal`, the reader-backed `Decoder`, and the
+  TokenReader-backed `Decoder`) rejects a `<?xml` preceded by any leading
+  whitespace, or following an earlier declaration, a comment, a processing
+  instruction, or a doctype; `encoding/xml` tolerates leading whitespace and
+  reports a later `<?xml` as an ordinary `ProcInst`. Whitespace ahead of the root
+  element (with no declaration) stays accepted — only whitespace ahead of a
+  declaration rejects.
 - The target `xml` is reserved in any casing (`PITarget ::= Name -
   (('X'|'x')('M'|'m')('L'|'l'))`), so `<?XML ...?>`, `<?Xml ...?>` and
   `<?xMl ...?>` are illegal wherever they appear and are rejected by every entry

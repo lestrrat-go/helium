@@ -65,22 +65,29 @@ func Unmarshal(data []byte, v any) error {
 	if err != nil {
 		return err
 	}
-	trimmed := trimLeadingSpace(data)
-	if len(trimmed) == 0 {
+	// A document that is empty or only whitespace has no root element; match
+	// encoding/xml and report io.EOF. The trim serves only this check — helium
+	// itself sees the original, untrimmed bytes below.
+	if len(trimLeadingSpace(data)) == 0 {
 		return io.EOF
 	}
 
-	// helium sees the whole document, including any XML declaration, and is the
-	// single authority for the XMLDecl grammar (XML 1.0 §2.8), the version rule
-	// (1.0 and 1.1 are supported; a version outside the 1.x family is rejected),
-	// and declaration placement. Its parse verdict is the answer: a declaration
-	// it rejects — a charset= pseudo-attribute, a missing/empty version, an empty
-	// encoding, pseudo-attributes out of order, an unsupported version, a
-	// misplaced or reserved-cased declaration — surfaces as a parse error.
-	// encoding/xml accepts many of these; this shim is backed by a
-	// spec-conforming parser and does not.
+	// helium sees the whole document verbatim, including any leading whitespace
+	// and any XML declaration, and is the single authority for the XMLDecl
+	// grammar (XML 1.0 §2.8), the version rule (1.0 and 1.1 are supported; a
+	// version outside the 1.x family is rejected), and declaration placement.
+	// Its parse verdict is the answer: a declaration it rejects — a charset=
+	// pseudo-attribute, a missing/empty version, an empty encoding,
+	// pseudo-attributes out of order, an unsupported version, or a misplaced,
+	// reserved-cased, or preceded-by-whitespace declaration (a declaration is
+	// legal only at document position 0, so any whitespace ahead of it makes it
+	// misplaced) — surfaces as a parse error. The bytes are NOT trimmed before
+	// this parse: trimming would hide leading whitespace from helium and make
+	// shim accept a misplaced declaration helium rejects. encoding/xml accepts
+	// many of these; this shim is backed by a spec-conforming parser and does
+	// not.
 	p := helium.NewParser().MaxDepth(maxParseDepth)
-	doc, err := p.Parse(context.Background(), trimmed)
+	doc, err := p.Parse(context.Background(), data)
 	if err != nil {
 		return convertParseError(err)
 	}

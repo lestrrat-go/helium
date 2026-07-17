@@ -4,7 +4,6 @@ import (
 	"bytes"
 	stdxml "encoding/xml"
 	"io"
-	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -71,7 +70,7 @@ type prologScanner struct {
 	peek         []byte       // ungotten bytes
 	xmlDeclStart int          // byte offset of '<' in <?xml ...?>
 	xmlDeclEnd   int          // byte offset after '>' in <?xml ...?>
-	sawContent   bool         // a PI, comment or directive has been scanned
+	sawContent   bool         // whitespace, a PI, comment or directive has been scanned
 	sizeErr      error        // set when the prolog exceeds maxPrologSize
 }
 
@@ -128,6 +127,16 @@ func (s *prologScanner) scan() ([]Token, error) {
 		}
 
 		if isWhitespace(b) {
+			// Whitespace ahead of a later "<?xml" declaration displaces it from
+			// the start of the document: a declaration is legal only at position 0
+			// (prolog ::= XMLDecl? Misc* ...), so any whitespace before it is
+			// content for the placement rule and makes the declaration misplaced.
+			// It does not displace a later root ELEMENT — that path never reaches
+			// the reserved-target check below. A leading byte-order mark is not
+			// whitespace and never reaches here: it stops the scan (a non-'<',
+			// non-whitespace byte), leaving helium to judge the BOM+declaration in
+			// context, so the BOM stays exempt.
+			s.sawContent = true
 			wsAccum.WriteByte(b)
 			continue
 		}
@@ -173,14 +182,14 @@ func (s *prologScanner) scan() ([]Token, error) {
 				// A target equal to "xml" in any casing is the reserved name
 				// (XML 1.0 §2.6). XMLDecl ::= '<?xml' ... is the FIRST thing in a
 				// document (prolog ::= XMLDecl? Misc* ...), so anything scanned
-				// ahead of it — an earlier declaration, a comment, a PI, a
-				// doctype — makes it a misplaced PI. Leading whitespace does not
-				// count: it is accumulated as CharData, never as content,
-				// matching Unmarshal, which trims it before parsing. The bytes
-				// are blanked out of the replay buffer so helium never re-parses
-				// them; the drained ProcInst is then held to checkXMLDecl (in
-				// readToken), which accepts the lowercase "xml" as a declaration
-				// and rejects any other casing as an illegal target.
+				// ahead of it — leading whitespace, an earlier declaration, a
+				// comment, a PI, a doctype — makes it a misplaced PI, matching
+				// helium's own verdict for a declaration not at position 0. The
+				// bytes are blanked out of the replay buffer so helium never
+				// re-parses them; the drained ProcInst is then held to
+				// checkXMLDecl (in readToken), which accepts the lowercase "xml"
+				// as a declaration and rejects any other casing as an illegal
+				// target.
 				if s.sawContent {
 					return tokens, errDeclNotAtStart
 				}
@@ -409,25 +418,26 @@ func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
-// isLeadingNoise reports whether tok is CharData made up only of XML whitespace
-// and/or a byte-order mark (U+FEFF). Such a token may legitimately precede an
-// XML declaration — leading whitespace is permitted by XMLDecl, and a leading
-// BOM is not content — so it does not displace a later declaration from the
-// start of the document. Every other token, including a CharData carrying any
-// other character, counts as content.
-func isLeadingNoise(tok Token) bool {
+// isLeadingBOM reports whether tok is CharData consisting solely of byte-order
+// marks (U+FEFF). A leading BOM is document framing, not content, so it does not
+// displace a later XML declaration from the start of the document. Leading
+// whitespace, by contrast, DOES count as content: an XML declaration is legal
+// only at document position 0 (prolog ::= XMLDecl? Misc* ...), so any whitespace
+// ahead of it makes it misplaced, matching helium's verdict on the byte paths.
+// Every other token, and any CharData carrying a non-BOM character, counts as
+// content.
+func isLeadingBOM(tok Token) bool {
 	cd, ok := tok.(CharData)
 	if !ok {
 		return false
 	}
-	for _, r := range string(cd) {
-		if r == '\uFEFF' {
-			continue
-		}
-		if r < utf8.RuneSelf && isWhitespace(byte(r)) {
-			continue
-		}
+	if len(cd) == 0 {
 		return false
+	}
+	for _, r := range string(cd) {
+		if r != '\uFEFF' {
+			return false
+		}
 	}
 	return true
 }

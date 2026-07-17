@@ -219,12 +219,13 @@ var cookedTokensStdlib = []Token{
 	Comment(" missing final newline "),
 }
 
-const testInputAltEncodingStdlib = `
-<?xml version="1.0" encoding="x-testing-uppercase"?>
+// The declaration sits at document position 0: shim rejects a declaration
+// preceded by whitespace (it must be at the start of the document), so the
+// incidental leading newline the stdlib fixture carried is dropped.
+const testInputAltEncodingStdlib = `<?xml version="1.0" encoding="x-testing-uppercase"?>
 <TAG>VALUE</TAG>`
 
 var rawTokensAltEncodingStdlib = []Token{
-	CharData("\n"),
 	ProcInst{Target: lexicon.PrefixXML, Inst: []byte(`version="1.0" encoding="x-testing-uppercase"`)},
 	CharData("\n"),
 	StartElement{Name: Name{Space: "", Local: testTag}, Attr: []Attr{}},
@@ -370,19 +371,15 @@ func TestRawTokenAltEncodingStdlib(t *testing.T) {
 
 func TestRawTokenAltEncodingNoConverterStdlib(t *testing.T) {
 	d := NewDecoder(context.Background(), strings.NewReader(testInputAltEncodingStdlib))
+	// The declaration is the first thing in the document, so the
+	// missing-CharsetReader error surfaces on the declaration token itself — the
+	// first RawToken call — rather than after a leading whitespace token.
 	token, err := d.RawToken()
-	if token == nil {
-		t.Fatalf("expected a token on first RawToken call")
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	token, err = d.RawToken()
 	if token != nil {
 		t.Errorf("expected a nil token; got %#v", token)
 	}
 	if err == nil {
-		t.Fatalf("expected an error on second RawToken call")
+		t.Fatalf("expected an error on the first RawToken call")
 	}
 	const encoding = "x-testing-uppercase"
 	if !strings.Contains(err.Error(), encoding) {
