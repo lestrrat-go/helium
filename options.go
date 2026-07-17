@@ -5,11 +5,12 @@ import (
 	"github.com/lestrrat-go/helium/internal/parser"
 )
 
-// LoadSubsetOption is a bitset controlling which DTD-derived augmentations the
-// parser applies while building the tree: detecting ID attributes, filling in
-// defaulted attributes, and skipping ID interning. The parser derives it from
-// the configured Parser options; the exported constants name the individual
-// bits.
+// LoadSubsetOption is a bitset of parser augmentation flags applied while
+// building the tree: whether to load the external DTD subset, whether to fill
+// in DTD-defaulted attributes, and whether to skip ID-attribute interning (the
+// last applies to any recognized ID attribute, including xml:id without a DTD).
+// The parser derives it from the configured Parser options; the exported
+// constants name the individual bits.
 type LoadSubsetOption int
 
 const (

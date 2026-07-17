@@ -206,7 +206,9 @@ func (d *Document) AddSibling(_ Node) error {
 	return errors.New("can't add sibling to a document")
 }
 
-// SetTreeDoc sets doc as the owning document of this node and its subtree.
+// SetTreeDoc sets doc as the owning document of this node and its subtree. If
+// the node already reports doc as its owner, it returns immediately without
+// re-walking the subtree.
 func (d *Document) SetTreeDoc(doc *Document) {
 	setTreeDoc(d, doc)
 }
