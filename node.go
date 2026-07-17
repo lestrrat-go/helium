@@ -1001,12 +1001,21 @@ func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 }
 
 // prefixConflictsInUse reports whether prefix currently qualifies this element's
-// own name (its active namespace n.ns) or any of its attributes at a URI
-// DIFFERENT from uri. Such a use means declaring prefix→uri in nsDefs would make
-// the serializer emit two xmlns:prefix — one from the nsDefs entry (dumpNsList)
-// and one reconciled for the active/attr namespace (reconcileOne) — so the
-// result is a genuine conflict. A use at the SAME uri is not a conflict: the
-// reconciler finds the prefix already bound to that URI and synthesizes nothing.
+// own name (its active namespace n.ns) or any of its non-empty-prefix attributes
+// at a URI DIFFERENT from uri. Such a use means declaring prefix→uri in nsDefs
+// would make the serializer emit two xmlns:prefix — one from the nsDefs entry
+// (dumpNsList) and one reconciled for the active/attr namespace (reconcileOne) —
+// so the result is a genuine conflict. A use at the SAME uri is not a conflict:
+// the reconciler finds the prefix already bound to that URI and synthesizes
+// nothing.
+//
+// An attribute with an EMPTY prefix never uses the default namespace (per XML,
+// an unprefixed attribute name is in no namespace), and the serializer skips its
+// namespace entirely (reconcileOne returns early for prefix=="" && !isElement),
+// so it can never produce a second xmlns declaration and is not counted as a
+// conflict for the empty/default prefix. The element's own name via n.ns with an
+// empty prefix (a real default-namespace name) still counts.
+//
 // The attribute chain is walked with a per-list seen guard, mirroring the
 // serializer, so a corrupt chain cannot loop.
 func (n *node) prefixConflictsInUse(prefix, uri string) bool {
@@ -1020,7 +1029,11 @@ func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 			break
 		}
 		seen[key] = struct{}{}
-		if ans := attr.ns; ans != nil && ans.Prefix() == prefix && ans.URI() != uri {
+		ans := attr.ns
+		if ans == nil || ans.Prefix() == "" {
+			continue
+		}
+		if ans.Prefix() == prefix && ans.URI() != uri {
 			return true
 		}
 	}
@@ -1028,22 +1041,28 @@ func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 }
 
 // DeclareNamespace declares a namespace on this node without making it the
-// node's active namespace (libxml2: xmlNewNs). It keeps at most one declaration
-// per prefix in nsDefs and never changes the node's active namespace (n.ns) or
-// its expanded name:
+// node's active namespace (libxml2: xmlNewNs). It never changes the node's
+// active namespace (n.ns) or its expanded name, and does not itself add a second
+// declaration for a prefix in nsDefs:
 //
-//   - prefix is in use by this element's own name or an attribute at a URI
-//     DIFFERENT from uri: a genuine conflict; rejected with a %w-wrapped
-//     ErrInvalidOperation and the tree left unchanged. This holds whether or not
-//     an nsDefs entry already exists — declaring prefix→uri while the active ns
-//     or an attribute uses prefix→otherURI would make the serializer emit two
-//     xmlns:prefix. Callers that genuinely rebind an in-use prefix remove it
-//     first (RemoveNamespaceByPrefix).
+//   - prefix is in use by this element's own name or a non-empty-prefix
+//     attribute at a URI DIFFERENT from uri: a genuine conflict; rejected with a
+//     %w-wrapped ErrInvalidOperation and the tree left unchanged. This holds
+//     whether or not an nsDefs entry already exists — declaring prefix→uri while
+//     the active ns or such an attribute uses prefix→otherURI would make the
+//     serializer emit two xmlns:prefix. Callers that genuinely rebind an in-use
+//     prefix remove it first (RemoveNamespaceByPrefix).
 //   - Otherwise: no existing declaration for prefix → appended; an existing
 //     declaration with the same URI → idempotent no-op; an existing declaration
-//     with a different URI → the single nsDefs slot is replaced with a fresh
-//     Namespace (the old object is left unmutated, so any n.ns/attr.ns that
-//     aliases it is unaffected).
+//     with a different URI → the single nsDefs slot is replaced in place
+//     (collapse) with a fresh Namespace (the old object is left unmutated, so any
+//     n.ns/attr.ns that aliases it is unaffected).
+//
+// This method does NOT reconcile a conflict introduced AFTER declaration by
+// SetActiveNamespace/SetNs, which set the node's active namespace independently
+// and may bind prefix to a different URI than an nsDefs entry. Guaranteeing at
+// most one xmlns:prefix per element across all mutators is a serializer-level
+// concern, outside this method's scope.
 func (n *node) DeclareNamespace(prefix, uri string) error {
 	if n.prefixConflictsInUse(prefix, uri) {
 		return fmt.Errorf("cannot rebind namespace prefix %q while it is in use on this element: %w", prefix, ErrInvalidOperation)
@@ -1073,18 +1092,24 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 // AddNamespaceDecl attaches an existing Namespace to this node's declarations
 // (nsDefs) without allocating a new one, so a caller building a tree can reuse
 // one Namespace object as both a declaration and an element's active namespace.
-// It applies the same at-most-one-per-prefix rule as DeclareNamespace using
-// ns's prefix and URI:
+// Like DeclareNamespace, it does not itself add a second declaration for a
+// prefix, using ns's prefix and URI:
 //
-//   - ns's prefix is in use by the element's name or an attribute at a URI
-//     DIFFERENT from ns's URI: a genuine conflict; ns is not installed and the
-//     tree is left unchanged (the void signature cannot report it). This holds
-//     whether or not an nsDefs entry already exists.
+//   - ns's prefix is in use by the element's name or a non-empty-prefix
+//     attribute at a URI DIFFERENT from ns's URI: a genuine conflict; ns is not
+//     installed and the tree is left unchanged (the void signature cannot report
+//     it). This holds whether or not an nsDefs entry already exists.
 //   - Otherwise: no existing declaration for ns's prefix → ns is appended; an
 //     existing declaration with the same URI → no-op (the existing slot is kept;
 //     ns is not installed); an existing declaration with a different URI → the
-//     slot is replaced with ns (the previously-installed object is dropped but
-//     never mutated, so a caller still holding it is unaffected).
+//     slot is replaced in place (collapse) with ns (the previously-installed
+//     object is dropped but never mutated, so a caller still holding it is
+//     unaffected).
+//
+// Like DeclareNamespace, this does NOT reconcile a conflict introduced AFTER
+// declaration by SetActiveNamespace/SetNs; keeping at most one xmlns:prefix per
+// element across all mutators is a serializer-level concern outside this method's
+// scope.
 //
 // The caller owns ns; it must not be shared as a declaration across nodes that
 // could be mutated independently. A nil ns is appended verbatim (the dedup scan

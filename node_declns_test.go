@@ -140,6 +140,53 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.Contains(t, str, `xmlns:p="urn:old"`)
 	})
 
+	// An empty-prefix attribute namespace never uses the default namespace (an
+	// unprefixed attribute name is in no namespace) and the serializer skips it, so
+	// it must NOT block a default-prefix rebind. DeclareNamespace("", ...) collapses.
+	t.Run("empty-prefix attribute does not block default rebind", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		require.NoError(t, root.DeclareNamespace("", "urn:old"))
+		attrNS := helium.NewNamespace("", "urn:attr")
+		_, err := root.SetAttributeNS("a", "v", attrNS)
+		require.NoError(t, err)
+
+		require.NoError(t, root.DeclareNamespace("", "urn:new"), "empty-prefix attr does not block default rebind")
+
+		ns := root.Namespaces()
+		require.Len(t, ns, 1, "collapse: exactly one default declaration")
+		require.Equal(t, "urn:new", ns[0].URI(), "default slot rebound")
+
+		str := serializeAndReparse(t, doc)
+		require.Equal(t, 1, strings.Count(str, `xmlns=`), "exactly one default declaration serialized")
+	})
+
+	t.Run("AddNamespaceDecl installs over an empty-prefix attribute", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root := doc.CreateElement("root")
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		require.NoError(t, root.DeclareNamespace("", "urn:old"))
+		attrNS := helium.NewNamespace("", "urn:attr")
+		_, err := root.SetAttributeNS("a", "v", attrNS)
+		require.NoError(t, err)
+
+		install := helium.NewNamespace("", "urn:new")
+		root.AddNamespaceDecl(install)
+
+		ns := root.Namespaces()
+		require.Len(t, ns, 1, "collapse: exactly one default declaration")
+		require.Same(t, install, ns[0], "the caller object is installed")
+		require.Equal(t, "urn:new", ns[0].URI())
+
+		str := serializeAndReparse(t, doc)
+		require.Equal(t, 1, strings.Count(str, `xmlns=`))
+	})
+
 	// Finding-1 path: a prefix put in use by the active namespace with NO nsDefs
 	// entry (the fresh-append path) must still reject a conflicting declaration —
 	// otherwise nsDefs would declare p→declared while the reconciler synthesizes
