@@ -533,3 +533,66 @@ func TestConfinedDirFSDoesNotRetrySchemeSystemIDParameterEntity(t *testing.T) {
 	require.False(t, ok,
 		"a scheme-carrying external parameter entity must not load its declarations via the confined-FS retry")
 }
+
+// helium.DirFS confines to an ARBITRARY directory, not only the document's own
+// directory. Here the document lives in one directory and its external DTD in a
+// SEPARATE trusted directory, referenced by an ABSOLUTE SYSTEM id inside that
+// directory. A bare os.DirFS/os.Root.FS rooted there would reject the absolute
+// name (fs.ErrInvalid) and the base-relative retry — which relativizes against
+// the DOCUMENT directory — would not recover it; DirFS serves the in-root
+// absolute name directly, so the external subset loads.
+func TestDirFSLoadsInRootAbsoluteSystemID(t *testing.T) {
+	t.Parallel()
+
+	dtdDir := t.TempDir()
+	dtdPath := filepath.Join(dtdDir, "sub.dtd")
+	require.NoError(t, os.WriteFile(dtdPath, []byte("<!ELEMENT doc (#PCDATA)>\n"), 0o600))
+
+	docDir := t.TempDir()
+	docPath := filepath.Join(docDir, "doc.xml")
+	require.NoError(t, os.WriteFile(docPath, []byte(
+		`<?xml version="1.0"?>`+"\n"+
+			`<!DOCTYPE doc SYSTEM "`+dtdPath+`">`+"\n"+
+			`<doc>hello</doc>`), 0o600))
+
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(helium.DirFS(dtdDir)).
+		ParseFile(t.Context(), docPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.NotNil(t, doc.ExtSubset(),
+		"helium.DirFS must serve an in-root absolute SYSTEM id from an arbitrary root directory")
+}
+
+// helium.DirFS refuses an absolute SYSTEM id that resolves OUTSIDE its root: the
+// out-of-root file exists and is readable, so the refusal is the confinement
+// guard, not a missing file. The parse stays lenient (no fatal error).
+func TestDirFSRefusesOutOfRootAbsoluteSystemID(t *testing.T) {
+	t.Parallel()
+
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.dtd")
+	require.NoError(t, os.WriteFile(secret, []byte("<!ELEMENT doc EMPTY>\n"), 0o600))
+
+	root := t.TempDir()
+	docDir := t.TempDir()
+	docPath := filepath.Join(docDir, "doc.xml")
+	require.NoError(t, os.WriteFile(docPath, []byte(
+		`<?xml version="1.0"?>`+"\n"+
+			`<!DOCTYPE doc SYSTEM "`+secret+`">`+"\n"+
+			`<doc>hello</doc>`), 0o600))
+
+	doc, err := helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		FS(helium.DirFS(root)).
+		ParseFile(t.Context(), docPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.Nil(t, doc.ExtSubset(),
+		"helium.DirFS must not load an out-of-root absolute-path SYSTEM id")
+}

@@ -479,8 +479,8 @@ func baseRelativeFSName(primary, base string) (string, bool) {
 // original relative name. A RELATIVE document base is out of scope — BuildURI
 // yields a valid-but-absent relative path that fails with fs.ErrNotExist (not
 // fs.ErrInvalid), so the retry never fires; serving an fs.FS rooted elsewhere than
-// the document directory is the job of the deferred root-aware helium.DirFS(root)
-// adapter (a separate public-API proposal), not this retry.
+// the document directory is the job of the root-aware [DirFS] adapter, which
+// serves an in-root absolute name directly, not this retry.
 //
 // The retry name is a validated fs.ValidPath, so a "../"- or absolute-path escape
 // above the FS root is blocked. That path-shape guard does NOT confine symlinks:
