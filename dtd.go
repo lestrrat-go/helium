@@ -112,7 +112,7 @@ func (dtd *DTD) AddEntity(name string, typ enum.EntityType, publicID, systemID, 
 // It returns an error if a notation with the same name is already declared.
 func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) {
 	if _, ok := dtd.notations[name]; ok {
-		return nil, fmt.Errorf("redefinition of notation %s", name)
+		return nil, fmt.Errorf("redefinition of notation %s: %w", name, ErrDuplicateDeclaration)
 	}
 	nota := &Notation{}
 	nota.etype = NotationNode
@@ -180,7 +180,7 @@ func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *Eleme
 	decl, ok := dtd.elements[name+":"+prefix]
 	if ok {
 		if decl.decltype != enum.UndefinedElementType {
-			return nil, errors.New("redefinition of element " + name)
+			return nil, fmt.Errorf("redefinition of element %s: %w", name, ErrDuplicateDeclaration)
 		}
 	} else {
 		decl = newElementDecl()
@@ -256,15 +256,101 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 	return decl, ok
 }
 
-// RegisterAttribute records an attribute declaration in the DTD, keyed by its
-// name, prefix, and owning element. It returns an error if an attribute with
-// the same key is already declared.
-func (dtd *DTD) RegisterAttribute(attr *AttributeDecl) error {
+// AddAttributeDecl declares an attribute for the named element in the DTD and
+// registers it as a child node, so it serializes as an <!ATTLIST> declaration
+// (mirroring how AddElementDecl/AddEntity/AddNotation link their declarations).
+//
+// name may be a QName; its prefix is split off for keying on the FIRST colon,
+// exactly as AddElementDecl does (a leading colon is part of the local name).
+// atype is the attribute type (enum.AttrCDATA, enum.AttrID, enum.AttrIDRef,
+// enum.AttrEnumeration, enum.AttrNotation, ...); def is the default-declaration
+// kind (enum.AttrDefaultNone/Required/Implied/Fixed); defvalue is the default or
+// #FIXED value, validated against atype when non-empty (empty means none);
+// enumValues supplies the token list for an enum.AttrEnumeration or
+// enum.AttrNotation type (required for those, ignored otherwise).
+//
+// It returns an error wrapping ErrDuplicateDeclaration when an attribute with
+// the same local name, prefix, and owning element is already declared.
+func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, def enum.AttributeDefault, defvalue string, enumValues Enumeration) (*AttributeDecl, error) {
+	if elem == "" {
+		return nil, errors.New("element name required")
+	}
+	if name == "" {
+		return nil, errors.New("attribute name required")
+	}
+
+	switch atype {
+	case enum.AttrCDATA, enum.AttrID, enum.AttrIDRef, enum.AttrIDRefs, enum.AttrEntity, enum.AttrEntities, enum.AttrNmtoken, enum.AttrNmtokens, enum.AttrEnumeration, enum.AttrNotation:
+	default:
+		return nil, errors.New("invalid attribute type")
+	}
+
+	switch def {
+	case enum.AttrDefaultNone, enum.AttrDefaultRequired, enum.AttrDefaultImplied, enum.AttrDefaultFixed:
+	default:
+		return nil, errors.New("invalid attribute default declaration")
+	}
+
+	// An enumeration or NOTATION type needs a non-empty token list, or the
+	// serialized declaration would emit an empty "()" that cannot re-parse.
+	if atype == enum.AttrEnumeration || atype == enum.AttrNotation {
+		if len(enumValues) == 0 {
+			return nil, errors.New("enumeration/notation attribute requires at least one token")
+		}
+	}
+
+	// Split a QName into prefix + local on the FIRST colon, mirroring
+	// AddElementDecl (a leading colon, i == 0, is part of the local name).
+	var prefix string
+	if i := strings.IndexByte(name, ':'); i > 0 {
+		prefix = name[:i]
+		name = name[i+1:]
+	}
+
+	// Duplicate detection runs BEFORE validating the default value, matching the
+	// parser: a repeat declaration is rejected without validating its (possibly
+	// invalid) default.
+	if _, ok := dtd.LookupAttribute(name, prefix, elem); ok {
+		return nil, fmt.Errorf("duplicate attribute %s declared for element %s: %w", name, elem, ErrDuplicateDeclaration)
+	}
+
+	if defvalue != "" {
+		if err := validateAttributeValueInternal(dtd.doc, atype, defvalue); err != nil {
+			return nil, fmt.Errorf("attribute %s of %s: invalid default value: %w", name, elem, err)
+		}
+	}
+
+	attr := newAttributeDecl()
+	attr.atype = atype
+	attr.doc = dtd.doc
+	attr.name = name
+	attr.prefix = prefix
+	attr.elem = elem
+	attr.def = def
+	attr.tree = enumValues
+	attr.defvalue = defvalue
+
+	if err := dtd.registerAttribute(attr); err != nil {
+		return nil, err
+	}
+	if err := dtd.AddChild(attr); err != nil {
+		return nil, err
+	}
+	return attr, nil
+}
+
+// registerAttribute records an already-built attribute declaration in the DTD's
+// lookup table, keyed by its name, prefix, and owning element. It does NOT link
+// the declaration into the DTD child list, so it does not serialize on its own;
+// AddAttributeDecl is the public entry point that both registers and links a
+// declaration built from public parameters. It returns an error wrapping
+// ErrDuplicateDeclaration if an attribute with the same key is already declared.
+func (dtd *DTD) registerAttribute(attr *AttributeDecl) error {
 	// TODO maybe this shouldn't be normalized, check later
 	key := attr.name + ":" + attr.prefix + ":" + attr.elem
 	_, ok := dtd.attributes[key]
 	if ok {
-		return errors.New("duplicate attribute declared")
+		return fmt.Errorf("duplicate attribute %s declared for element %s: %w", attr.name, attr.elem, ErrDuplicateDeclaration)
 	}
 	dtd.attributes[key] = attr
 	return nil

@@ -522,7 +522,7 @@ func (d *Document) CreateDTD() (*DTD, error) {
 func (d *Document) InternalSubset() (*DTD, error) {
 	// equiv: xmlGetIntSubset (tree.c)
 	if d.intSubset == nil {
-		return nil, errors.New("no internal subset is associated with this document")
+		return nil, ErrNoInternalSubset
 	}
 	return d.intSubset, nil
 }

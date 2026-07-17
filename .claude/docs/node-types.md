@@ -94,7 +94,9 @@ A `ProcessingInstruction` stores its content in the `data` string field (mirrors
 - Attributes: `name:prefix:elem` (scoped to element)
 - Entities: `name` (flat)
 
-The QName→(name, prefix) split (`AddElementDecl`/`GetElementDesc`) splits on the FIRST colon but treats a LEADING colon as part of the local name (mirrors libxml2 `xmlSplitQName3`): `:x` keys as `(name=":x", prefix="")`, distinct from the unprefixed `x` (`(name="x", prefix="")`), so a leading-colon element declaration is not a spurious redefinition of the unprefixed one (a leading colon is a legal XML 1.0 Name start character even though it is not a valid QName prefix).
+The QName→(name, prefix) split (`AddElementDecl`/`GetElementDesc`, and `AddAttributeDecl` for its attribute `name`) splits on the FIRST colon but treats a LEADING colon as part of the local name (mirrors libxml2 `xmlSplitQName3`): `:x` keys as `(name=":x", prefix="")`, distinct from the unprefixed `x` (`(name="x", prefix="")`), so a leading-colon element declaration is not a spurious redefinition of the unprefixed one (a leading colon is a legal XML 1.0 Name start character even though it is not a valid QName prefix).
+
+The `DTD.Add*` builders (`AddEntity`/`AddNotation`/`AddElementDecl`/`AddAttributeDecl`) build a declaration from public parameters, register it in the lookup table, AND link it into the DTD child list so it serializes. `AddAttributeDecl(elem, name, atype, def, defvalue, enumValues)` is the `<!ATTLIST>` counterpart; the low-level table-only `registerAttribute` is unexported.
 
 `DTD.RemoveElement(name, prefix) → *ElementDecl` deletes the lookup-table entry AND unlinks the `ElementDecl` node from the DTD child list (via `unlinkNode`), so a removed declaration is no longer serialized; it returns the removed decl (nil if none). `AddElementDecl` uses it internally to drop an `UndefinedElementType` placeholder while completing a real declaration.
 

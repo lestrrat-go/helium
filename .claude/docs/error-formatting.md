@@ -180,6 +180,8 @@ All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder`
 
 `Parse()` with `ValidateDTD(true)` returns `ErrDTDValidationFailed` sentinel on failure. Individual errors go to the parser's `ErrorHandler` as `*DTDValidationError` (`valid.go`), delivered by `validCtx.addf`. `DTDValidationError{Message, Level}` implements `ErrorLeveler` returning `ErrorLevelError`, so a level-filtered `ErrorCollector` classifies each diagnostic at its true severity (not the plain-error warning default); callers recover it via `errors.As`. `.Error()` returns `Message`, which is byte-identical to the old `fmt.Errorf` text (golden/error-string parity).
 
+DTD-construction sites expose matchable sentinels (`errors.go`): `ErrNoInternalSubset` (`Document.InternalSubset()` when the document has no internal subset) and `ErrDuplicateDeclaration` (a second `AddElementDecl`/`AddNotation`/`AddAttributeDecl` for an already-declared element, notation, or `(element, attribute)` pair — wrapped via `%w` into a message naming the kind and name). Match with `errors.Is`.
+
 XSD, RelaxNG, Schematron, and DTD all use sentinel error + ErrorHandler pattern.
 
 ### XSD Validation Error Helpers (`xsd/validate.go`)

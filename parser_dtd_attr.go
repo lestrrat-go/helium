@@ -502,7 +502,7 @@ func (ctx *parserCtx) addAttributeDecl(dtd *DTD, elem string, name string, prefi
 	// internal subset's table, so origin cannot be inferred from the subset alone.
 	attr.external = ctx.effectivelyExternal()
 
-	if err = dtd.RegisterAttribute(attr); err != nil {
+	if err = dtd.registerAttribute(attr); err != nil {
 		attr = nil
 		return
 	}
