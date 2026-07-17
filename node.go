@@ -1051,7 +1051,7 @@ func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 //
 // The conflict check is element-scoped: only an element node serializes n.ns as
 // its own name and carries prefixed attributes, so on any non-element node
-// (Text, Comment, PI, …) n.ns is never emitted and there is nothing that could
+// (Text, Comment, CDATASection, …) n.ns is never emitted and there is nothing that could
 // produce a second xmlns:prefix — no conflict is possible.
 func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 	if n.etype != ElementNode {
@@ -1089,7 +1089,7 @@ func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 //     whether or not an nsDefs entry already exists — declaring prefix→uri while
 //     the active ns or such an attribute uses prefix→otherURI would make the
 //     serializer emit two xmlns:prefix. The conflict check is element-scoped:
-//     on a non-element node (Text, Comment, PI, …) n.ns is never serialized, so
+//     on a non-element node (Text, Comment, CDATASection, …) n.ns is never serialized, so
 //     there is no conflict and the declaration proceeds to the dedup step below.
 //     A caller that genuinely rebinds an in-use prefix must first clear the use
 //     itself — reassign the element's active namespace (SetActiveNamespace/SetNs)
@@ -1147,7 +1147,8 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 //     installed and the tree is left unchanged (the void signature cannot report
 //     it). This holds whether or not an nsDefs entry already exists. The conflict
 //     check is element-scoped: on a non-element node n.ns is never serialized, so
-//     there is no conflict and ns is installed via the dedup step below.
+//     there is no conflict and the call proceeds to the dedup step below (a
+//     same-URI redeclare is still a no-op there).
 //   - Otherwise: no existing declaration for ns's prefix → ns is appended; an
 //     existing declaration with the same URI → no-op (the existing slot is kept;
 //     ns is not installed); an existing declaration with a different URI → the
