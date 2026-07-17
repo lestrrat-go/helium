@@ -369,6 +369,39 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.Same(t, first, ns[0], "no-op: original slot retained")
 	})
 
+	// A non-element node (Text) never serializes n.ns, so a prefix put in use by
+	// SetActiveNamespace is not a real conflict: DeclareNamespace must NOT reject,
+	// and the per-prefix nsDefs dedup still applies (collapse to one).
+	t.Run("non-element node does not reject an in-use rebind", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		text := doc.CreateText([]byte("hello"))
+
+		require.NoError(t, text.DeclareNamespace("p", "urn:old"))
+		require.NoError(t, text.SetActiveNamespace("p", "urn:old"))
+
+		// No spurious reject even though the active ns uses p at a different URI.
+		require.NoError(t, text.DeclareNamespace("p", "urn:new"), "non-element: no in-use conflict")
+
+		ns := text.Namespaces()
+		require.Len(t, ns, 1, "collapse: exactly one declaration for p")
+		require.Equal(t, "urn:new", ns[0].URI(), "slot rebound to new uri")
+	})
+
+	t.Run("AddNamespaceDecl installs on a non-element node", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		text := doc.CreateText([]byte("hello"))
+
+		require.NoError(t, text.SetActiveNamespace("p", "urn:active"))
+		install := helium.NewNamespace("p", "urn:new")
+		text.AddNamespaceDecl(install)
+
+		ns := text.Namespaces()
+		require.Len(t, ns, 1, "non-element: caller object installed, no conflict")
+		require.Same(t, install, ns[0], "the caller object is installed")
+	})
+
 	t.Run("remove then declare yields one declaration", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()

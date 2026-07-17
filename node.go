@@ -1011,8 +1011,15 @@ func (n node) Namespaces() []*Namespace {
 	return slices.Clone(n.nsDefs)
 }
 
-// RemoveNamespaceByPrefix removes a namespace declaration with the given prefix.
-// Returns true if a declaration was removed.
+// RemoveNamespaceByPrefix removes a namespace declaration (nsDefs entry) with the
+// given prefix. Returns true if a declaration was removed.
+//
+// This drops ONLY the nsDefs entry. It does not clear the prefix's use by this
+// element's active namespace (n.ns) or a prefixed attribute, so it is not on its
+// own enough to rebind an in-use prefix: a subsequent DeclareNamespace/
+// AddNamespaceDecl at a different URI still (correctly) rejects while that use
+// remains. A caller that rebinds an in-use prefix must also reassign the active
+// namespace (SetActiveNamespace/SetNs) and any prefixed attribute.
 func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 	for i, ns := range n.nsDefs {
 		if ns.Prefix() == prefix {
@@ -1041,7 +1048,15 @@ func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 //
 // The attribute chain is walked with a per-list seen guard, mirroring the
 // serializer, so a corrupt chain cannot loop.
+//
+// The conflict check is element-scoped: only an element node serializes n.ns as
+// its own name and carries prefixed attributes, so on any non-element node
+// (Text, Comment, PI, …) n.ns is never emitted and there is nothing that could
+// produce a second xmlns:prefix — no conflict is possible.
 func (n *node) prefixConflictsInUse(prefix, uri string) bool {
+	if n.etype != ElementNode {
+		return false
+	}
 	if n.ns != nil && n.ns.Prefix() == prefix && n.ns.URI() != uri {
 		return true
 	}
@@ -1068,13 +1083,19 @@ func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 // active namespace (n.ns) or its expanded name, and does not itself add a second
 // declaration for a prefix in nsDefs:
 //
-//   - prefix is in use by this element's own name or a non-empty-prefix
+//   - prefix is in use by this ELEMENT's own name or a non-empty-prefix
 //     attribute at a URI DIFFERENT from uri: a genuine conflict; rejected with a
 //     %w-wrapped ErrInvalidOperation and the tree left unchanged. This holds
 //     whether or not an nsDefs entry already exists — declaring prefix→uri while
 //     the active ns or such an attribute uses prefix→otherURI would make the
-//     serializer emit two xmlns:prefix. Callers that genuinely rebind an in-use
-//     prefix remove it first (RemoveNamespaceByPrefix).
+//     serializer emit two xmlns:prefix. The conflict check is element-scoped:
+//     on a non-element node (Text, Comment, PI, …) n.ns is never serialized, so
+//     there is no conflict and the declaration proceeds to the dedup step below.
+//     A caller that genuinely rebinds an in-use prefix must first clear the use
+//     itself — reassign the element's active namespace (SetActiveNamespace/SetNs)
+//     and any prefixed attribute; RemoveNamespaceByPrefix alone drops only the
+//     nsDefs entry, not the n.ns/attribute use, so a rebind still (correctly)
+//     rejects while the use remains.
 //   - Otherwise: no existing declaration for prefix → appended; an existing
 //     declaration with the same URI → idempotent no-op; an existing declaration
 //     with a different URI → the single nsDefs slot is replaced in place
@@ -1118,10 +1139,12 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 // Like DeclareNamespace, it does not itself add a second declaration for a
 // prefix, using ns's prefix and URI:
 //
-//   - ns's prefix is in use by the element's name or a non-empty-prefix
+//   - ns's prefix is in use by the ELEMENT's name or a non-empty-prefix
 //     attribute at a URI DIFFERENT from ns's URI: a genuine conflict; ns is not
 //     installed and the tree is left unchanged (the void signature cannot report
-//     it). This holds whether or not an nsDefs entry already exists.
+//     it). This holds whether or not an nsDefs entry already exists. The conflict
+//     check is element-scoped: on a non-element node n.ns is never serialized, so
+//     there is no conflict and ns is installed via the dedup step below.
 //   - Otherwise: no existing declaration for ns's prefix → ns is appended; an
 //     existing declaration with the same URI → no-op (the existing slot is kept;
 //     ns is not installed); an existing declaration with a different URI → the
