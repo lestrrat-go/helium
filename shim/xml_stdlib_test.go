@@ -1025,15 +1025,21 @@ func TestIssue11405Stdlib(t *testing.T) {
 	}
 }
 
+// The upstream encoding/xml fixtures declare the encoding BEFORE the version.
+// That is not a conforming XMLDecl — the grammar fixes the order as version,
+// encoding, standalone — and this shim rejects it through both entry points, so
+// the fixtures below use the conforming order. The subject of the test is that
+// the encoding name is matched case-insensitively, which the order does not
+// affect.
 func TestIssue12417Stdlib(t *testing.T) {
 	testCases := []struct {
 		s  string
 		ok bool
 	}{
-		{`<?xml encoding="UtF-8" version="1.0"?><root/>`, true},
-		{`<?xml encoding="UTF-8" version="1.0"?><root/>`, true},
-		{`<?xml encoding="utf-8" version="1.0"?><root/>`, true},
-		{`<?xml encoding="uuu-9" version="1.0"?><root/>`, false},
+		{`<?xml version="1.0" encoding="UtF-8"?><root/>`, true},
+		{`<?xml version="1.0" encoding="UTF-8"?><root/>`, true},
+		{`<?xml version="1.0" encoding="utf-8"?><root/>`, true},
+		{`<?xml version="1.0" encoding="uuu-9"?><root/>`, false},
 	}
 	for _, tc := range testCases {
 		d := NewDecoder(context.Background(), strings.NewReader(tc.s))

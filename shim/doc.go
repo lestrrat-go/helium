@@ -25,15 +25,16 @@
 //   - Namespace strictness: undeclared namespace prefixes are rejected.
 //     [encoding/xml] silently accepts undeclared prefixes and places the
 //     raw prefix string in Name.Space.
-//   - Declaration strictness: [Unmarshal] rejects an XML declaration that
-//     does not conform to the XMLDecl grammar (XML 1.0 §2.8), which requires
-//     a version and admits only version, encoding and standalone, in that
-//     order. Rejected forms include a "charset=" pseudo-attribute, a missing
-//     or empty version, an empty encoding, and pseudo-attributes out of
+//   - Declaration strictness: an XML declaration that does not conform to the
+//     XMLDecl grammar (XML 1.0 §2.8) is rejected. The grammar requires a
+//     version and admits only version, encoding and standalone, in that order
+//     and at most once each. Rejected forms include a "charset="
+//     pseudo-attribute, a missing or empty version, an empty encoding, a
+//     standalone that is not "yes" or "no", and pseudo-attributes out of
 //     order (<?xml encoding="UTF-8" version="1.0"?>). [encoding/xml] accepts
 //     all of them. This shim is backed by a spec-conforming parser and does
-//     not accept XML the specification does not permit. [Decoder] parses the
-//     declaration leniently and accepts these forms.
+//     not accept XML the specification does not permit. [Unmarshal] and
+//     [Decoder] agree: both reject every such declaration.
 //   - Version strictness: a declaration carrying whitespace around the
 //     version pseudo-attribute's "=" (<?xml version = "2.0"?>) is rejected
 //     as an unsupported version. [encoding/xml] accepts it — it searches

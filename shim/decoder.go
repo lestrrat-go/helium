@@ -302,7 +302,12 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 
 	go func() {
 		defer close(d.events)
-		p := helium.NewParser().LenientXMLDecl(true).MaxDepth(maxParseDepth).SAXHandler(h)
+		// The parser is handed a document whose XML declaration has been
+		// blanked out to spaces by scanProlog, which tokenized the prolog
+		// itself. So the parser never parses a declaration on this path and
+		// its declaration options have nothing to act on; checkXMLDecl is what
+		// holds the declaration to the grammar here.
+		p := helium.NewParser().MaxDepth(maxParseDepth).SAXHandler(h)
 		_, err := p.ParseReader(ctx, r)
 		if err != nil {
 			select {
@@ -379,12 +384,10 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		d.lastToken = tok
 		d.advancePosition(tok)
 
-		// Check encoding attribute in XML declaration
+		// A ProcInst targeting "xml" is the XML declaration: hold it to the
+		// XMLDecl grammar and the shim's version/encoding rules.
 		if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
-			if err := d.checkProcInstVersion(string(pi.Inst)); err != nil {
-				return nil, err
-			}
-			if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
+			if err := d.checkXMLDecl(string(pi.Inst)); err != nil {
 				return nil, err
 			}
 		}
@@ -485,9 +488,12 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 
 	tok = stdxml.CopyToken(tok)
 
-	// Check encoding attribute in XML declaration
+	// A ProcInst targeting "xml" is the XML declaration wherever it came from,
+	// including a TokenReader, so it is held to the same rules as one the
+	// prolog scanner read. The SAX emitter suppresses its own, so a declaration
+	// only ever reaches this point from a TokenReader.
 	if pi, ok := tok.(ProcInst); ok && pi.Target == lexicon.PrefixXML {
-		if err := d.checkProcInstEncoding(string(pi.Inst)); err != nil {
+		if err := d.checkXMLDecl(string(pi.Inst)); err != nil {
 			return nil, err
 		}
 	}
@@ -497,11 +503,31 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	return tok, nil
 }
 
-// checkProcInstVersion validates the version attribute in an XML declaration.
-// Only version 1.0 is supported.
-func (d *Decoder) checkProcInstVersion(data string) error {
-	ver := procInstValue(data, "version")
-	if ver == "" || ver == "1.0" {
+// checkXMLDecl checks an XML declaration — the data of a ProcInst whose target
+// is "xml" — against the XMLDecl grammar, then applies the shim's version and
+// encoding rules to the values it read.
+func (d *Decoder) checkXMLDecl(data string) error {
+	decl, err := parseXMLDecl(data)
+	if err != nil {
+		return &stdxml.SyntaxError{Msg: err.Error(), Line: d.line}
+	}
+	if err := d.checkDeclVersion(decl.version); err != nil {
+		return err
+	}
+	return d.checkDeclEncoding(decl.encoding)
+}
+
+// checkDeclVersion applies the shim's version rule to a declaration's
+// VersionNum: only 1.0 is supported. A version outside 1.0 is reported as an
+// unsupported version rather than as a VersionNum that violates the grammar,
+// even though VersionNum ::= '1.' [0-9]+ rules out "2.0" on both counts. Naming
+// the version is the more useful of the two verdicts, and it is the one
+// [Unmarshal] reaches: it reads the declared version off the raw bytes and
+// rejects any non-1.0 value before the parser ever judges the grammar.
+// parseXMLDecl has already established that a version was declared and is
+// non-empty, so there is always a version to name here.
+func (d *Decoder) checkDeclVersion(ver string) error {
+	if ver == xmlVersion10 {
 		return nil
 	}
 	return &stdxml.SyntaxError{
@@ -510,10 +536,10 @@ func (d *Decoder) checkProcInstVersion(data string) error {
 	}
 }
 
-// checkProcInstEncoding validates the encoding attribute in an XML declaration.
-// UTF-8 (case-insensitive) is always accepted. Non-UTF-8 requires CharsetReader.
-func (d *Decoder) checkProcInstEncoding(data string) error {
-	enc := procInstValue(data, "encoding")
+// checkDeclEncoding applies the shim's encoding rule to a declaration's
+// EncName. UTF-8 (case-insensitive) is always accepted. Any other encoding
+// requires a CharsetReader to convert it.
+func (d *Decoder) checkDeclEncoding(enc string) error {
 	if enc == "" {
 		return nil
 	}
@@ -527,29 +553,145 @@ func (d *Decoder) checkProcInstEncoding(data string) error {
 	return nil
 }
 
-// procInstValue extracts the value of an attribute from a processing instruction's data.
-func procInstValue(data, param string) string {
-	_, s, found := strings.Cut(data, param)
-	if !found {
-		return ""
+// XML-declaration pseudo-attribute names, in the order XMLDecl fixes for them.
+const (
+	declVersion    = "version"
+	declEncoding   = "encoding"
+	declStandalone = "standalone"
+)
+
+// xmlDeclNames lists the only pseudo-attributes an XML declaration admits, in
+// the only order it admits them in. Position in this slice IS the ordering
+// rule, so the slice must stay in grammar order.
+var xmlDeclNames = []string{declVersion, declEncoding, declStandalone}
+
+// xmlDecl holds the values read out of a conforming XML declaration. An absent
+// optional pseudo-attribute leaves its field empty.
+type xmlDecl struct {
+	version    string
+	encoding   string
+	standalone string
+}
+
+// parseXMLDecl reads the pseudo-attributes of an XML declaration from data —
+// the ProcInst data following the "xml" target, so without the "<?xml" and
+// "?>" — and checks them against XMLDecl (XML 1.0 §2.8):
+//
+//	XMLDecl      ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'
+//	VersionInfo  ::= S 'version' Eq ("'" VersionNum "'" | '"' VersionNum '"')
+//	VersionNum   ::= '1.' [0-9]+
+//	EncodingDecl ::= S 'encoding' Eq ('"' EncName '"' | "'" EncName "'")
+//	EncName      ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+//	SDDecl       ::= S 'standalone' Eq (('"' ('yes'|'no') '"') | ("'" ('yes'|'no') "'"))
+//	Eq           ::= S? '=' S?
+//
+// So: the version is mandatory and comes first, the three names above are the
+// only ones admitted, each may appear at most once, and their order is fixed.
+// The VersionNum family check is left to checkDeclVersion, which reports a
+// version outside 1.0 as unsupported; emptiness is caught here because an empty
+// version is no version at all and there would be nothing to name.
+//
+// This is the SECOND site in the shim enforcing this grammar — helium's parser
+// enforces it for [Unmarshal], which hands it the raw document. The Decoder
+// cannot lean on that: scanProlog pre-scans the prolog with the shim's own
+// tokenizer and emits the declaration as a ProcInst, then blanks it out of the
+// bytes replayed to the parser, so helium never sees a declaration to judge.
+// Until the Decoder stops pre-scanning, the rule has to exist in both places,
+// and the two must be kept in step: a change to either belongs in the other,
+// or the shim will accept through one entry point what it rejects through the
+// other.
+func parseXMLDecl(data string) (xmlDecl, error) {
+	var decl xmlDecl
+	seen := make([]bool, len(xmlDeclNames))
+	next := 0 // earliest index in xmlDeclNames still admitted
+
+	rest := trimLeadingSpace([]byte(data))
+	for len(rest) > 0 {
+		name, value, after, ok := cutPseudoAttr(rest)
+		if !ok {
+			return xmlDecl{}, errors.New("malformed XML declaration")
+		}
+
+		idx := slices.Index(xmlDeclNames, string(name))
+		if idx < 0 {
+			return xmlDecl{}, fmt.Errorf("%q is not allowed in an XML declaration", name)
+		}
+		if seen[idx] {
+			return xmlDecl{}, fmt.Errorf("%q declared more than once in the XML declaration", name)
+		}
+		if idx < next {
+			return xmlDecl{}, fmt.Errorf("%q out of order in the XML declaration", name)
+		}
+		seen[idx] = true
+		next = idx + 1
+
+		if err := setDeclValue(&decl, string(name), string(value)); err != nil {
+			return xmlDecl{}, err
+		}
+
+		// Each pseudo-attribute after the first is introduced by S.
+		if len(after) > 0 && !isWhitespace(after[0]) {
+			return xmlDecl{}, errors.New("XML declaration pseudo-attributes must be separated by whitespace")
+		}
+		rest = trimLeadingSpace(after)
 	}
-	s = strings.TrimSpace(s)
-	if s == "" || s[0] != '=' {
-		return ""
+
+	if !seen[slices.Index(xmlDeclNames, declVersion)] {
+		return xmlDecl{}, errors.New("an XML declaration must declare a version")
 	}
-	s = strings.TrimSpace(s[1:])
+	return decl, nil
+}
+
+// setDeclValue checks value against the production for the pseudo-attribute
+// named name and stores it on decl.
+func setDeclValue(decl *xmlDecl, name, value string) error {
+	switch name {
+	case declVersion:
+		if value == "" {
+			return errors.New("the XML declaration declares an empty version")
+		}
+		decl.version = value
+		return nil
+	case declEncoding:
+		if !isEncName(value) {
+			return fmt.Errorf("%q is not a valid encoding name", value)
+		}
+		decl.encoding = value
+		return nil
+	case declStandalone:
+		if value != "yes" && value != "no" {
+			return fmt.Errorf("standalone must be %q or %q, not %q", "yes", "no", value)
+		}
+		decl.standalone = value
+		return nil
+	}
+	return fmt.Errorf("%q is not allowed in an XML declaration", name)
+}
+
+// isEncName reports whether s is an EncName (XML 1.0 §4.3.3):
+//
+//	EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+//
+// It must begin with a letter, so it is never empty.
+func isEncName(s string) bool {
 	if s == "" {
-		return ""
+		return false
 	}
-	q := s[0]
-	if q != '\'' && q != '"' {
-		return ""
+	if !isASCIILetter(s[0]) {
+		return false
 	}
-	end := strings.IndexByte(s[1:], q)
-	if end < 0 {
-		return ""
+	for i := 1; i < len(s); i++ {
+		b := s[i]
+		if isASCIILetter(b) || (b >= '0' && b <= '9') || b == '.' || b == '_' || b == '-' {
+			continue
+		}
+		return false
 	}
-	return s[1 : end+1]
+	return true
+}
+
+func isASCIILetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 func applyDefaultSpace(tok Token, space string) Token {

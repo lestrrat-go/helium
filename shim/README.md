@@ -48,10 +48,11 @@ source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/h
 - `Decoder.Strict = false` is not supported.
 - `HTMLAutoClose` is omitted and `Decoder.AutoClose` is a no-op.
 - Undeclared namespace prefixes are rejected.
-- `Unmarshal` rejects an XML declaration that does not conform to the XMLDecl
-  grammar (a `charset=` pseudo-attribute, a missing or empty version, an empty
-  encoding, or pseudo-attributes out of order); `encoding/xml` accepts them.
-  `Decoder` parses the declaration leniently and accepts these forms.
+- An XML declaration that does not conform to the XMLDecl grammar is rejected
+  by both `Unmarshal` and `Decoder`: a `charset=` pseudo-attribute, a missing or
+  empty version, an empty encoding, a `standalone` that is not `yes`/`no`, a
+  repeated pseudo-attribute, or pseudo-attributes out of order. `encoding/xml`
+  accepts them all.
 - A declaration with whitespace around the version pseudo-attribute's `=`
   (`<?xml version = "2.0"?>`) is rejected as an unsupported version;
   `encoding/xml` accepts it.

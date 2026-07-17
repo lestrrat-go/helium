@@ -150,7 +150,7 @@ func declaredXMLVersion(data []byte) (string, bool) {
 		if !ok {
 			return "", false
 		}
-		if string(name) == "version" {
+		if string(name) == declVersion {
 			return string(value), true
 		}
 		rest = after
