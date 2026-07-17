@@ -441,7 +441,7 @@ func (p Parser) MaxContentModelDepth(n int) Parser {
 // a hostile document drive unbounded memory use, so do so only for trusted
 // input.
 //
-// A streaming SAX consumer that configured [Parser.SetCharBufferSize] receives
+// A streaming SAX consumer that configured [Parser.CharBufferSize] receives
 // character data in bounded chunks and is not subject to this cap (its memory is
 // already bounded); the cap still applies to its CDATA, comment, and PI runs.
 func (p Parser) MaxNodeContentSize(n int) Parser {

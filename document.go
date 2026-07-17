@@ -200,14 +200,20 @@ func (d *Document) AppendText(b []byte) error {
 	return appendText(d, b)
 }
 
+// AddSibling always fails: a document node is a tree root and cannot have
+// siblings. It exists to satisfy the Node interface.
 func (d *Document) AddSibling(_ Node) error {
 	return errors.New("can't add sibling to a document")
 }
 
+// SetTreeDoc sets doc as the owning document of this node and its subtree.
 func (d *Document) SetTreeDoc(doc *Document) {
 	setTreeDoc(d, doc)
 }
 
+// Encoding returns the document's character encoding, synthesizing "utf8" when
+// the source XML declaration omitted an encoding. Use RawEncoding to obtain the
+// recorded value without that default.
 func (d *Document) Encoding() string {
 	// In order to differentiate between a document with explicit
 	// encoding in the XML declaration and one without, the XML dump
@@ -218,6 +224,9 @@ func (d *Document) Encoding() string {
 	return "utf8"
 }
 
+// SetEncoding sets the document's character encoding. An empty value means the
+// source had no encoding declaration, and the serializer omits the encoding
+// pseudo-attribute accordingly.
 func (d *Document) SetEncoding(enc string) {
 	d.encoding = enc
 }
@@ -233,6 +242,7 @@ func (d *Document) RawEncoding() string {
 	return d.encoding
 }
 
+// Standalone returns the value of the document's standalone declaration.
 func (d *Document) Standalone() DocumentStandaloneType {
 	return d.standalone
 }
@@ -257,6 +267,8 @@ func (d *Document) SetSkipIDs(v bool) {
 	d.idsSkip = v
 }
 
+// Version returns the document's XML declaration version (for example "1.0" or
+// "1.1"), or an empty string when the source had no version declaration.
 func (d *Document) Version() string {
 	return d.version
 }
@@ -323,6 +335,8 @@ func (d *Document) ExtSubset() *DTD {
 	return d.extSubset
 }
 
+// Replace always fails: a document node cannot be replaced in place. It exists
+// to satisfy the Node interface.
 func (d *Document) Replace(_ ...Node) error {
 	return ErrInvalidOperation
 }
@@ -342,6 +356,12 @@ func (d *Document) DocumentElement() *Element {
 	return nil
 }
 
+// SetDocumentElement installs root as the document's root element, replacing an
+// existing root element if one is present. root must be a concrete *Element;
+// any other node kind (including one that merely reports ElementNode) returns an
+// error, and a nil root returns ErrNilNode. The tree is only linked after the
+// cycle/self preflight succeeds, so a rejected call leaves both root and the
+// document untouched.
 func (d *Document) SetDocumentElement(root MutableNode) error {
 	if d == nil {
 		return ErrNilNode
@@ -412,6 +432,10 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 	return n, nil
 }
 
+// CreateAttribute builds an attribute node named name with the given value and
+// optional namespace. value is parsed into a child node list (so entity
+// references in it are expanded). name must be a local name: a name containing a
+// colon is rejected, because the namespace is supplied through ns.
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
 	if strings.ContainsRune(name, ':') {
 		return nil, fmt.Errorf("attribute name %q contains a colon: use CreateAttribute with a local name and Namespace parameter", name)
@@ -442,6 +466,8 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 	return attr, nil
 }
 
+// CreateNamespace builds a namespace node binding prefix to uri, associated with
+// this document. An empty prefix denotes the default namespace.
 func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
 	var ns *Namespace
 	if d != nil {
@@ -502,6 +528,8 @@ func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *At
 	return attr
 }
 
+// CreatePI builds a processing-instruction node with the given target and data,
+// owned by this document.
 func (d *Document) CreatePI(target, data string) *ProcessingInstruction {
 	pi := &ProcessingInstruction{
 		target: target,
@@ -511,6 +539,8 @@ func (d *Document) CreatePI(target, data string) *ProcessingInstruction {
 	return pi
 }
 
+// CreateDTD builds a detached DTD node owned by this document. It is not linked
+// into the tree; use CreateInternalSubset to install an internal subset.
 func (d *Document) CreateDTD() (*DTD, error) {
 	dtd := newDTD()
 	dtd.doc = d
@@ -527,6 +557,9 @@ func (d *Document) InternalSubset() (*DTD, error) {
 	return d.intSubset, nil
 }
 
+// CreateInternalSubset creates the document's internal DTD subset with the given
+// root element name and external identifiers, and installs it on the document.
+// It fails if the document already has an internal subset.
 func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD, error) {
 	// equiv: xmlCreateIntSubset (tree.c)
 	if _, err := d.InternalSubset(); err == nil {
@@ -1174,6 +1207,9 @@ func (d *Document) GetElementByID(id string) *Element {
 	return found
 }
 
+// AddEntity declares an entity in the document's internal subset. It fails when
+// the document has no internal subset (create one with CreateInternalSubset
+// first).
 func (d *Document) AddEntity(name string, typ enum.EntityType, externalID, systemID, content string) (*Entity, error) {
 	if d.intSubset == nil {
 		return nil, errors.New("document without internal subset")

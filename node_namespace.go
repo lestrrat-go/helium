@@ -21,10 +21,13 @@ func NewNamespace(prefix, uri string) *Namespace {
 	return newNamespace(prefix, uri)
 }
 
+// Prefix returns the namespace prefix, or an empty string for the default
+// namespace.
 func (n Namespace) Prefix() string {
 	return n.prefix
 }
 
+// URI returns the namespace URI.
 func (n Namespace) URI() string {
 	return n.href
 }
@@ -47,6 +50,8 @@ func NewNamespaceNodeWrapper(ns *Namespace, owner Node) *NamespaceNodeWrapper {
 	return n
 }
 
+// Content returns the wrapped namespace's URI as bytes, so a namespace node
+// exposes the URI as its string value on the XPath namespace axis.
 func (n *NamespaceNodeWrapper) Content() []byte {
 	return []byte(n.ns.URI())
 }

@@ -243,6 +243,9 @@ func getParserCtx(ctx context.Context) *parserCtx {
 	return pctx
 }
 
+// SubstitutionType selects which kinds of entity references the entity decoder
+// expands in a given string: none, general references only, parameter-entity
+// references only, or both.
 type SubstitutionType int
 
 const (

@@ -98,6 +98,10 @@ type node struct {
 	qname      string // cached qualified name (prefix:local or just local)
 }
 
+// ElementType identifies the kind of a DOM node (element, text, comment, and so
+// on). It mirrors libxml2's xmlElementType. Use it to distinguish node kinds
+// returned by the Node interface's Type method; the enumerated constants below
+// name each kind.
 type ElementType int
 
 const (
