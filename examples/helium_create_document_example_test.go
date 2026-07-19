@@ -24,7 +24,7 @@ func Example_helium_create_document() {
 
 	// Create a child element and set an attribute on it.
 	book := doc.CreateElement("book")
-	if _, err := book.SetAttribute("id", "b1"); err != nil {
+	if err := book.SetAttribute("id", "b1"); err != nil {
 		fmt.Printf("failed to set attribute: %s\n", err)
 		return
 	}

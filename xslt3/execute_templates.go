@@ -701,7 +701,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 							// prefix undeclared in the serialized output.
 							copyAttributeToElement(elem, attr)
 						} else {
-							if _, err := elem.SetAttribute(attr.LocalName(), string(attr.Content())); err != nil {
+							if err := elem.SetAttribute(attr.LocalName(), string(attr.Content())); err != nil {
 								return err
 							}
 						}

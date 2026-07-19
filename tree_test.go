@@ -355,7 +355,7 @@ func TestNodeGetBase(t *testing.T) {
 		require.NoError(t, doc.AddChild(e))
 
 		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
-		_, err := e.SetAttributeNS("base", "http://example.com/", xmlNS)
+		err := e.SetAttributeNS("base", "http://example.com/", xmlNS)
 		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, e)
@@ -368,7 +368,7 @@ func TestNodeGetBase(t *testing.T) {
 		require.NoError(t, doc.AddChild(parent))
 
 		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
-		_, err := parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS)
+		err := parent.SetAttributeNS("base", "http://example.com/dir/", xmlNS)
 		require.NoError(t, err)
 
 		child := doc.CreateElement("child")
@@ -384,12 +384,12 @@ func TestNodeGetBase(t *testing.T) {
 		require.NoError(t, doc.AddChild(parent))
 
 		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
-		_, err := parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS)
+		err := parent.SetAttributeNS("base", "http://example.com/a/b/", xmlNS)
 		require.NoError(t, err)
 
 		child := doc.CreateElement("child")
 		require.NoError(t, parent.AddChild(child))
-		_, err = child.SetAttributeNS("base", "c/d/", xmlNS)
+		err = child.SetAttributeNS("base", "c/d/", xmlNS)
 		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, child)
@@ -425,7 +425,7 @@ func TestDocumentURL(t *testing.T) {
 		require.NoError(t, doc.AddChild(root))
 
 		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
-		_, err := root.SetAttributeNS("base", "sub/", xmlNS)
+		err := root.SetAttributeNS("base", "sub/", xmlNS)
 		require.NoError(t, err)
 
 		base := helium.NodeGetBase(doc, root)
@@ -445,7 +445,7 @@ func TestCopyNode(t *testing.T) {
 	t.Run("element with children and attrs", func(t *testing.T) {
 		src := helium.NewDefaultDocument()
 		root := src.CreateElement("root")
-		_, err := root.SetAttribute("id", "1")
+		err := root.SetAttribute("id", "1")
 		require.NoError(t, err)
 		require.NoError(t, src.AddChild(root))
 
@@ -574,7 +574,7 @@ func TestCopyDoc(t *testing.T) {
 		require.NoError(t, src.AddChild(root))
 		root.SetLine(7)
 
-		_, err := root.SetAttribute("a", "v")
+		err := root.SetAttribute("a", "v")
 		require.NoError(t, err)
 		plainAttr, ok := root.FindAttribute(helium.NSPredicate{Local: "a", NamespaceURI: ""})
 		require.True(t, ok)
@@ -582,7 +582,7 @@ func TestCopyDoc(t *testing.T) {
 
 		ns, err := src.CreateNamespace("p", "urn:p")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("b", "w", ns)
+		err = root.SetAttributeNS("b", "w", ns)
 		require.NoError(t, err)
 		nsAttr, ok := root.FindAttribute(helium.NSPredicate{Local: "b", NamespaceURI: "urn:p"})
 		require.True(t, ok)
@@ -1016,7 +1016,7 @@ func TestNodeNamespaceMethods(t *testing.T) {
 
 	// AddNamespaceDecl with an existing namespace object.
 	ns := helium.NewNamespace("q", "http://example.com/q")
-	root.AddNamespaceDecl(ns)
+	require.NoError(t, root.AddNamespaceDecl(ns))
 	root.SetNs(ns)
 	require.Equal(t, "q:root", root.Name())
 }
@@ -1121,7 +1121,7 @@ func TestNodeGetBaseAndSet(t *testing.T) {
 
 	child := doc.CreateElement("child")
 	xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
-	require.NoError(t, child.SetLiteralAttributeNS("base", "sub/", xmlNS))
+	require.NoError(t, child.SetAttributeNS("base", "sub/", xmlNS))
 	require.NoError(t, root.AddChild(child))
 
 	// The child's effective base resolves its xml:base against the doc URL.
@@ -1147,7 +1147,7 @@ func TestGetElementByIDFallback(t *testing.T) {
 
 	child := doc.CreateElement("child")
 	xmlNS := helium.NewNamespace("xml", "http://www.w3.org/XML/1998/namespace")
-	_, err := child.SetAttributeNS("id", "target", xmlNS)
+	err := child.SetAttributeNS("id", "target", xmlNS)
 	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 

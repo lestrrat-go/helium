@@ -32,11 +32,11 @@ func TestElementTree(t *testing.T) {
 	e2 := mustCreateElement(t, doc, "e2")
 	e3 := mustCreateElement(t, doc, "e3")
 	e4 := mustCreateElement(t, doc, "e4")
-	_, err := e2.SetAttribute("id", "e2")
+	err := e2.SetAttribute("id", "e2")
 	require.NoError(t, err)
-	_, err = e3.SetAttribute("id", "e3")
+	err = e3.SetAttribute("id", "e3")
 	require.NoError(t, err)
-	_, err = e4.SetAttribute("id", "e4")
+	err = e4.SetAttribute("id", "e4")
 	require.NoError(t, err)
 
 	require.NoError(t, e1.AddChild(e2), "e1.AddChild(e2) succeeds")
@@ -672,7 +672,7 @@ func TestElementNamespaceMutators(t *testing.T) {
 	require.Len(t, e.Namespaces(), 1)
 
 	shared := helium.NewNamespace("q", "urn:q")
-	e.AddNamespaceDecl(shared)
+	require.NoError(t, e.AddNamespaceDecl(shared))
 	require.Len(t, e.Namespaces(), 2)
 
 	require.True(t, e.RemoveNamespaceByPrefix("p"), "existing prefix removed")
@@ -695,11 +695,11 @@ func TestElementGetAttribute(t *testing.T) {
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	elem := doc.CreateElement("e")
-	_, err := elem.SetAttribute("plain", "p")
+	err := elem.SetAttribute("plain", "p")
 	require.NoError(t, err)
 
 	ns := helium.NewNamespace("x", "urn:x")
-	_, err = elem.SetAttributeNS("nsed", "n", ns)
+	err = elem.SetAttributeNS("nsed", "n", ns)
 	require.NoError(t, err)
 
 	v, ok := elem.GetAttribute("plain")

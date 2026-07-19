@@ -41,58 +41,74 @@ func TestSetAttribute(t *testing.T) {
 
 		// A colon in the name parameter is invalid — callers should use
 		// SetAttributeNS with a proper Namespace object.
-		_, err := elem.SetAttribute("xml:space", "preserve")
-		require.Error(t, err)
+		require.Error(t, elem.SetAttribute("xml:space", "preserve"))
+		require.Error(t, elem.SetParsedAttribute("xml:lang", "en"))
 
 		// Passing a proper local name should succeed.
-		_, err = elem.SetAttribute("id", "123")
-		require.NoError(t, err)
+		require.NoError(t, elem.SetAttribute("id", "123"))
+		require.NoError(t, elem.SetParsedAttribute("lang", "en"))
 	})
 
-	t.Run("SetLiteralAttribute rejects colon", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		elem := doc.CreateElement("root")
-
-		// A colon in the name parameter is invalid.
-		err := elem.SetLiteralAttribute("xml:lang", "en")
-		require.Error(t, err)
-
-		// Passing a proper local name should succeed.
-		err = elem.SetLiteralAttribute("lang", "en")
-		require.NoError(t, err)
-	})
-
-	t.Run("parse setters resolve entity references; literal setters store verbatim", func(t *testing.T) {
+	// SetAttribute/SetAttributeNS store the value verbatim: a bare '&' is
+	// kept as-is (no "entity was unterminated" error), and an already-escaped
+	// "&amp;" is stored as the five literal characters. The writer then
+	// escapes on the way out, so the verbatim '&' round-trips as "&amp;".
+	t.Run("SetAttribute stores value verbatim", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		elem := doc.CreateElement("root")
 		ns := helium.NewNamespace("p", "urn:x")
 
-		// SetAttribute / SetAttributeNS parse the value as attribute-value
-		// content, so "&amp;" is resolved to a single '&'.
-		_, err := elem.SetAttribute("a", "x&amp;y")
-		require.NoError(t, err)
+		require.NoError(t, elem.SetAttribute("a", "A&B"))
 		v, ok := elem.GetAttribute("a")
 		require.True(t, ok)
-		require.Equal(t, "x&y", v)
+		require.Equal(t, "A&B", v)
 
-		_, err = elem.SetAttributeNS("c", "x&amp;y", ns)
-		require.NoError(t, err)
-		v, ok = elem.GetAttributeNS("c", "urn:x")
-		require.True(t, ok)
-		require.Equal(t, "x&y", v)
-
-		// The literal setters store the value verbatim (no entity parsing).
-		require.NoError(t, elem.SetLiteralAttribute("b", "x&amp;y"))
+		require.NoError(t, elem.SetAttribute("b", "&amp;"))
 		v, ok = elem.GetAttribute("b")
 		require.True(t, ok)
-		require.Equal(t, "x&amp;y", v)
+		require.Equal(t, "&amp;", v)
 
-		require.NoError(t, elem.SetLiteralAttributeNS("d", "x&amp;y", ns))
+		require.NoError(t, elem.SetAttributeNS("c", "A&B", ns))
+		v, ok = elem.GetAttributeNS("c", "urn:x")
+		require.True(t, ok)
+		require.Equal(t, "A&B", v)
+
+		require.NoError(t, elem.SetAttributeNS("e", "&amp;", ns))
+		v, ok = elem.GetAttributeNS("e", "urn:x")
+		require.True(t, ok)
+		require.Equal(t, "&amp;", v)
+
+		// The verbatim '&' is escaped by the writer, so it round-trips as
+		// A&amp;B rather than corrupting the serialized output.
+		out, err := helium.WriteString(elem)
+		require.NoError(t, err)
+		require.Contains(t, out, `a="A&amp;B"`)
+		require.Contains(t, out, `b="&amp;amp;"`)
+	})
+
+	// SetParsedAttribute/SetParsedAttributeNS parse the value as attribute-value
+	// content: "&amp;" resolves to a single '&', and a malformed reference is an
+	// error.
+	t.Run("SetParsedAttribute resolves entity references", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		elem := doc.CreateElement("root")
+		ns := helium.NewNamespace("p", "urn:x")
+
+		require.NoError(t, elem.SetParsedAttribute("c", "&amp;"))
+		v, ok := elem.GetAttribute("c")
+		require.True(t, ok)
+		require.Equal(t, "&", v)
+
+		require.NoError(t, elem.SetParsedAttributeNS("d", "&amp;", ns))
 		v, ok = elem.GetAttributeNS("d", "urn:x")
 		require.True(t, ok)
-		require.Equal(t, "x&amp;y", v)
+		require.Equal(t, "&", v)
+
+		// A malformed reference is rejected instead of being stored.
+		require.Error(t, elem.SetParsedAttribute("bad", "A&B"))
+		require.Error(t, elem.SetParsedAttributeNS("bad2", "A&B", ns))
 	})
 
 	// Each of the four setters must REPLACE a same-name attribute in place:
@@ -106,44 +122,17 @@ func TestSetAttribute(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		e := doc.CreateElement("r")
 
-		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
-		_, err := e.SetAttribute("a", "1")
+		require.NoError(t, e.SetAttribute("before", "b0"))
+		err := e.SetAttribute("a", "1")
 		require.NoError(t, err)
-		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
+		require.NoError(t, e.SetAttribute("after", "a0"))
 
 		orig, ok := e.FindAttribute(helium.LocalNamePredicate("a"))
 		require.True(t, ok)
 		require.Equal(t, "1", orig.Value())
 
-		_, err = e.SetAttribute("a", "2")
+		err = e.SetAttribute("a", "2")
 		require.NoError(t, err)
-
-		attrs := e.Attributes()
-		require.Len(t, attrs, 3, "replacement must not append a duplicate")
-		require.Equal(t,
-			[]string{"before", "a", "after"},
-			[]string{attrs[0].LocalName(), attrs[1].LocalName(), attrs[2].LocalName()},
-			"order preserved, target stays between its siblings")
-		require.Equal(t, "2", attrs[1].Value(), "target holds the second value, not the stale first")
-		require.Equal(t, "b0", attrs[0].Value(), "sibling before the target untouched")
-		require.Equal(t, "a0", attrs[2].Value(), "sibling after the target untouched")
-		require.Nil(t, orig.Parent(), "original target node detached after replacement")
-	})
-
-	t.Run("SetLiteralAttribute replaces in place", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		e := doc.CreateElement("r")
-
-		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
-		require.NoError(t, e.SetLiteralAttribute("a", "1"))
-		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
-
-		orig, ok := e.FindAttribute(helium.LocalNamePredicate("a"))
-		require.True(t, ok)
-		require.Equal(t, "1", orig.Value())
-
-		require.NoError(t, e.SetLiteralAttribute("a", "2"))
 
 		attrs := e.Attributes()
 		require.Len(t, attrs, 3, "replacement must not append a duplicate")
@@ -163,45 +152,17 @@ func TestSetAttribute(t *testing.T) {
 		ns := helium.NewNamespace("p", "urn:x")
 		e := doc.CreateElement("r")
 
-		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
-		_, err := e.SetAttributeNS("a", "1", ns)
+		require.NoError(t, e.SetAttribute("before", "b0"))
+		err := e.SetAttributeNS("a", "1", ns)
 		require.NoError(t, err)
-		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
+		require.NoError(t, e.SetAttribute("after", "a0"))
 
 		orig := e.GetAttributeNodeNS("a", "urn:x")
 		require.NotNil(t, orig)
 		require.Equal(t, "1", orig.Value())
 
-		_, err = e.SetAttributeNS("a", "2", ns)
+		err = e.SetAttributeNS("a", "2", ns)
 		require.NoError(t, err)
-
-		attrs := e.Attributes()
-		require.Len(t, attrs, 3, "replacement must not append a duplicate")
-		require.Equal(t,
-			[]string{"before", "a", "after"},
-			[]string{attrs[0].LocalName(), attrs[1].LocalName(), attrs[2].LocalName()},
-			"order preserved, target stays between its siblings")
-		require.Equal(t, "2", attrs[1].Value(), "target holds the second value, not the stale first")
-		require.Equal(t, "b0", attrs[0].Value(), "sibling before the target untouched")
-		require.Equal(t, "a0", attrs[2].Value(), "sibling after the target untouched")
-		require.Nil(t, orig.Parent(), "original target node detached after replacement")
-	})
-
-	t.Run("SetLiteralAttributeNS replaces in place", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		ns := helium.NewNamespace("p", "urn:x")
-		e := doc.CreateElement("r")
-
-		require.NoError(t, e.SetLiteralAttribute("before", "b0"))
-		require.NoError(t, e.SetLiteralAttributeNS("a", "1", ns))
-		require.NoError(t, e.SetLiteralAttribute("after", "a0"))
-
-		orig := e.GetAttributeNodeNS("a", "urn:x")
-		require.NotNil(t, orig)
-		require.Equal(t, "1", orig.Value())
-
-		require.NoError(t, e.SetLiteralAttributeNS("a", "2", ns))
 
 		attrs := e.Attributes()
 		require.Len(t, attrs, 3, "replacement must not append a duplicate")
@@ -619,9 +580,9 @@ func TestGetAttribute(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		e := doc.CreateElement("root")
-		_, err := e.SetAttribute("id", "123")
+		err := e.SetAttribute("id", "123")
 		require.NoError(t, err)
-		_, err = e.SetAttribute("class", "main")
+		err = e.SetAttribute("class", "main")
 		require.NoError(t, err)
 
 		val, ok := e.GetAttribute("id")
@@ -642,7 +603,7 @@ func TestGetAttribute(t *testing.T) {
 		e := doc.CreateElement("root")
 
 		ns := helium.NewNamespace("x", "http://example.com")
-		_, err := e.SetAttributeNS("attr", "val", ns)
+		err := e.SetAttributeNS("attr", "val", ns)
 		require.NoError(t, err)
 
 		val, ok := e.GetAttributeNS("attr", "http://example.com")
@@ -661,7 +622,7 @@ func TestHasAttribute(t *testing.T) {
 	t.Parallel()
 	doc := helium.NewDefaultDocument()
 	e := doc.CreateElement("root")
-	_, err := e.SetAttribute("id", "123")
+	err := e.SetAttribute("id", "123")
 	require.NoError(t, err)
 
 	require.True(t, e.HasAttribute("id"))
@@ -675,11 +636,11 @@ func TestFindAttribute(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		e := doc.CreateElement("root")
-		_, err := e.SetAttribute("id", "123")
+		err := e.SetAttribute("id", "123")
 		require.NoError(t, err)
 
 		ns := helium.NewNamespace("x", "http://example.com")
-		_, err = e.SetAttributeNS("attr", "val", ns)
+		err = e.SetAttributeNS("attr", "val", ns)
 		require.NoError(t, err)
 
 		attr, ok := e.FindAttribute(helium.QNamePredicate("id"))
@@ -707,7 +668,7 @@ func TestFindAttribute(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		e := doc.CreateElement("root")
-		_, err := e.SetAttribute("id", "123")
+		err := e.SetAttribute("id", "123")
 		require.NoError(t, err)
 
 		var pred helium.AttributePredicate
@@ -723,7 +684,7 @@ func TestGetAttributeNodeNS(t *testing.T) {
 	e := doc.CreateElement("root")
 
 	ns := helium.NewNamespace("x", "http://example.com")
-	_, err := e.SetAttributeNS("attr", "val", ns)
+	err := e.SetAttributeNS("attr", "val", ns)
 	require.NoError(t, err)
 
 	attr := e.GetAttributeNodeNS("attr", "http://example.com")
@@ -756,10 +717,10 @@ func TestSetAttributeNSDuplicate(t *testing.T) {
 		ns1 := helium.NewNamespace("a", "http://example.com/ns")
 		ns2 := helium.NewNamespace("b", "http://example.com/ns")
 
-		_, err := e.SetAttributeNS("attr", "first", ns1)
+		err := e.SetAttributeNS("attr", "first", ns1)
 		require.NoError(t, err)
 
-		_, err = e.SetAttributeNS("attr", "second", ns2)
+		err = e.SetAttributeNS("attr", "second", ns2)
 		require.NoError(t, err)
 
 		attrs := e.Attributes()
@@ -778,16 +739,16 @@ func TestSetAttributeNSDuplicate(t *testing.T) {
 		ns1 := helium.NewNamespace("a", "http://example.com/ns1")
 		ns2 := helium.NewNamespace("b", "http://example.com/ns2")
 
-		_, err := e.SetAttributeNS("attr", "first", ns1)
+		err := e.SetAttributeNS("attr", "first", ns1)
 		require.NoError(t, err)
 
-		_, err = e.SetAttributeNS("attr", "second", ns2)
+		err = e.SetAttributeNS("attr", "second", ns2)
 		require.NoError(t, err)
 		require.Len(t, e.Attributes(), 2)
 	})
 }
 
-func TestSetLiteralAttributeNSDuplicate(t *testing.T) {
+func TestSetAttributeNSDuplicateDifferentPrefixes(t *testing.T) {
 	t.Parallel()
 
 	t.Run("same namespace URI via different prefixes replaces in place", func(t *testing.T) {
@@ -796,7 +757,7 @@ func TestSetLiteralAttributeNSDuplicate(t *testing.T) {
 		e := doc.CreateElement("root")
 
 		// Two distinct *Namespace values that share the same URI but differ
-		// in prefix. SetLiteralAttributeNS routes through addProperty, which
+		// in prefix. SetAttributeNS routes through addProperty, which
 		// must treat these as the SAME attribute (expanded name {urn:x}a)
 		// and replace in place rather than creating a second property that
 		// serializes to a different QName (p:a vs q:a) yet has an identical
@@ -804,8 +765,8 @@ func TestSetLiteralAttributeNSDuplicate(t *testing.T) {
 		ns1 := helium.NewNamespace("p", "urn:x")
 		ns2 := helium.NewNamespace("q", "urn:x")
 
-		require.NoError(t, e.SetLiteralAttributeNS("a", "first", ns1))
-		require.NoError(t, e.SetLiteralAttributeNS("a", "second", ns2))
+		require.NoError(t, e.SetAttributeNS("a", "first", ns1))
+		require.NoError(t, e.SetAttributeNS("a", "second", ns2))
 
 		attrs := e.Attributes()
 		require.Len(t, attrs, 1)
@@ -823,8 +784,8 @@ func TestSetLiteralAttributeNSDuplicate(t *testing.T) {
 		ns1 := helium.NewNamespace("p", "urn:x")
 		ns2 := helium.NewNamespace("q", "urn:y")
 
-		require.NoError(t, e.SetLiteralAttributeNS("a", "first", ns1))
-		require.NoError(t, e.SetLiteralAttributeNS("a", "second", ns2))
+		require.NoError(t, e.SetAttributeNS("a", "first", ns1))
+		require.NoError(t, e.SetAttributeNS("a", "second", ns2))
 		require.Len(t, e.Attributes(), 2)
 	})
 }
@@ -836,11 +797,11 @@ func TestRemoveAttribute(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		e := doc.CreateElement("root")
-		_, err := e.SetAttribute("a", "1")
+		err := e.SetAttribute("a", "1")
 		require.NoError(t, err)
-		_, err = e.SetAttribute("b", "2")
+		err = e.SetAttribute("b", "2")
 		require.NoError(t, err)
-		_, err = e.SetAttribute("c", "3")
+		err = e.SetAttribute("c", "3")
 		require.NoError(t, err)
 
 		// Remove middle
@@ -872,7 +833,7 @@ func TestRemoveAttribute(t *testing.T) {
 		e := doc.CreateElement("root")
 
 		ns := helium.NewNamespace("x", "http://example.com")
-		_, err := e.SetAttributeNS("attr", "val", ns)
+		err := e.SetAttributeNS("attr", "val", ns)
 		require.NoError(t, err)
 
 		ok := e.RemoveAttributeNS("attr", "http://example.com")
@@ -889,11 +850,11 @@ func TestForEachAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	e := doc.CreateElement("root")
 
-	_, err := e.SetAttribute("a", "1")
+	err := e.SetAttribute("a", "1")
 	require.NoError(t, err)
-	_, err = e.SetAttribute("b", "2")
+	err = e.SetAttribute("b", "2")
 	require.NoError(t, err)
-	_, err = e.SetAttribute("c", "3")
+	err = e.SetAttribute("c", "3")
 	require.NoError(t, err)
 
 	expected := e.Attributes()
@@ -917,11 +878,11 @@ func TestForEachAttribute(t *testing.T) {
 func buildAttrElement(t *testing.T, doc *helium.Document) (*helium.Element, *helium.Attribute, *helium.Attribute, *helium.Attribute) {
 	t.Helper()
 	e := doc.CreateElement("root")
-	_, err := e.SetAttribute("a", "1")
+	err := e.SetAttribute("a", "1")
 	require.NoError(t, err, "set attribute a")
-	_, err = e.SetAttribute("b", "2")
+	err = e.SetAttribute("b", "2")
 	require.NoError(t, err, "set attribute b")
-	_, err = e.SetAttribute("c", "3")
+	err = e.SetAttribute("c", "3")
 	require.NoError(t, err, "set attribute c")
 	attrs := e.Attributes()
 	require.Len(t, attrs, 3, "element starts with three attributes")
@@ -1065,7 +1026,7 @@ func TestAttributeAddSiblingMoveRepairsPropertyList(t *testing.T) {
 			movingName := moving.Name()
 
 			dst := doc.CreateElement("dst")
-			_, err := dst.SetAttribute("anchor", "0")
+			err := dst.SetAttribute("anchor", "0")
 			require.NoError(t, err, "create anchor attribute on dst")
 			anchor, ok := dst.FindAttribute(helium.QNamePredicate("anchor"))
 			require.True(t, ok, "anchor attribute is present on dst")
@@ -1284,7 +1245,7 @@ func TestAttributeAddSibling(t *testing.T) {
 		elem := doc.CreateElement("root")
 
 		// Seed a property-list attribute as the anchor.
-		_, err := elem.SetAttribute("anchor", "1")
+		err := elem.SetAttribute("anchor", "1")
 		require.NoError(t, err)
 		anchor, ok := elem.FindAttribute(helium.QNamePredicate("anchor"))
 		require.True(t, ok, "anchor attribute is reachable from properties")
@@ -1314,7 +1275,7 @@ func TestAttributeAddSibling(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		elem := doc.CreateElement("root")
 
-		_, err := elem.SetAttribute("anchor", "1")
+		err := elem.SetAttribute("anchor", "1")
 		require.NoError(t, err)
 		anchor, ok := elem.FindAttribute(helium.QNamePredicate("anchor"))
 		require.True(t, ok, "anchor attribute is reachable from properties")

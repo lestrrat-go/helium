@@ -25,7 +25,7 @@ func buildDoc(t *testing.T) (*helium.Document, *helium.Element, *helium.Element)
 	require.NoError(t, root.AddChild(child))
 
 	ns := helium.NewNamespace("ns", "urn:ns")
-	_, err := child.SetAttributeNS("attr", "v", ns)
+	err := child.SetAttributeNS("attr", "v", ns)
 	require.NoError(t, err)
 
 	return doc, root, child

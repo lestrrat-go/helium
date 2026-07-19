@@ -843,7 +843,7 @@ func TestVerifyUnsupportedTransform(t *testing.T) {
 	// leaving the pipeline as [enveloped, xpath].
 	signedInfo := findChild(t, sigElem, "SignedInfo")
 	excTransform := findTransformByAlgorithm(t, signedInfo, ExcC14N10)
-	require.NoError(t, excTransform.SetLiteralAttribute("Algorithm", TransformXPath))
+	require.NoError(t, excTransform.SetAttribute("Algorithm", TransformXPath))
 
 	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
 
@@ -879,7 +879,7 @@ func TestVerifyTransformAfterCanonicalization(t *testing.T) {
 	transforms := findChild(t, refElem, "Transforms")
 	extra := doc.CreateElement("Transform")
 	require.NoError(t, extra.SetActiveNamespace(nsPrefix, NamespaceDSig))
-	require.NoError(t, extra.SetLiteralAttribute("Algorithm", TransformEnvelopedSignature))
+	require.NoError(t, extra.SetAttribute("Algorithm", TransformEnvelopedSignature))
 	require.NoError(t, transforms.AddChild(extra))
 
 	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
@@ -956,7 +956,7 @@ func TestVerifySignedInfoInclusiveNamespaces(t *testing.T) {
 	inc := doc.CreateElement("InclusiveNamespaces")
 	require.NoError(t, inc.DeclareNamespace("ec", ExcC14N10))
 	require.NoError(t, inc.SetActiveNamespace("ec", ExcC14N10))
-	require.NoError(t, inc.SetLiteralAttribute("PrefixList", "extra"))
+	require.NoError(t, inc.SetAttribute("PrefixList", "extra"))
 	require.NoError(t, c14nMethodElem.AddChild(inc))
 
 	// Recompute the SignatureValue using the declared exclusive c14n + PrefixList.

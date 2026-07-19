@@ -94,9 +94,9 @@ func TestSerializeEscaping(t *testing.T) {
 	require.NoError(t, doc.AddChild(root))
 
 	// Attribute value containing both quote characters plus markup chars.
-	// SetLiteralAttribute stores the value verbatim (no entity parsing) so the
+	// SetAttribute stores the value verbatim (no entity parsing) so the
 	// serializer is the component responsible for escaping it.
-	err := root.SetLiteralAttribute("attr", `he said "hi" & 'bye' <x>`)
+	err := root.SetAttribute("attr", `he said "hi" & 'bye' <x>`)
 	require.NoError(t, err)
 
 	// Text content with markup, ampersand, tab and newline.

@@ -21,7 +21,7 @@ func Example_helium_modify_document() {
 
 	// Change the host attribute on <db>.
 	db := root.FirstChild().(*helium.Element)
-	if _, err := db.SetAttribute("host", "new.example.com"); err != nil {
+	if err := db.SetAttribute("host", "new.example.com"); err != nil {
 		fmt.Printf("set attribute failed: %s\n", err)
 		return
 	}
@@ -43,7 +43,7 @@ func Example_helium_modify_document() {
 
 	// Replace <db> with a renamed copy.
 	newDB := doc.CreateElement("database")
-	if _, err := newDB.SetAttribute("host", "new.example.com"); err != nil {
+	if err := newDB.SetAttribute("host", "new.example.com"); err != nil {
 		fmt.Printf("set attribute failed: %s\n", err)
 		return
 	}

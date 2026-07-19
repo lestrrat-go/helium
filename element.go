@@ -52,29 +52,18 @@ func (n *Element) SetTreeDoc(doc *Document) {
 	setTreeDoc(n, doc)
 }
 
-// SetAttribute creates or replaces the attribute named name, parsing value for
-// entity references, and returns the element for chaining. An existing
-// attribute with the same QName is replaced in place. The name must not
-// contain a colon; use SetAttributeNS for namespaced attributes, or
-// SetLiteralAttribute to store value verbatim without parsing.
-func (n *Element) SetAttribute(name, value string) (*Element, error) {
-	attr, err := n.doc.CreateAttribute(name, value, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	n.addProperty(attr)
-	return n, nil
-}
-
-// SetLiteralAttribute creates or replaces an attribute with a literal text
-// value. Unlike SetAttribute, the value is not parsed for entity references.
-// This is useful for HTML where the parser has already resolved entities.
-// An empty value creates a text child with empty content (distinguishing
-// it from a boolean attribute which has no children).
-func (n *Element) SetLiteralAttribute(name, value string) error {
+// SetAttribute creates or replaces the attribute named name, storing value
+// verbatim as a literal text child WITHOUT parsing it for entity references
+// (so "A&B" is stored as the four characters A&B, and "&amp;" as the five
+// characters &amp;). This mirrors libxml2 xmlSetProp. An existing attribute
+// with the same QName is replaced in place. An empty value creates a text
+// child with empty content, distinguishing it from a boolean attribute (see
+// SetBooleanAttribute) which has no children. The name must not contain a
+// colon; use SetAttributeNS for namespaced attributes. To parse entity
+// references in value into the attribute's child list, use SetParsedAttribute.
+func (n *Element) SetAttribute(name, value string) error {
 	if strings.ContainsRune(name, ':') {
-		return fmt.Errorf("attribute name %q contains a colon: use SetLiteralAttributeNS with a local name and Namespace parameter", name)
+		return fmt.Errorf("attribute name %q contains a colon: use SetAttributeNS with a local name and Namespace parameter", name)
 	}
 	attr := newAttribute(name, nil)
 	attr.doc = n.doc
@@ -83,6 +72,25 @@ func (n *Element) SetLiteralAttribute(name, value string) error {
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
 	t.parent = attr
+	n.addProperty(attr)
+	return nil
+}
+
+// SetParsedAttribute creates or replaces the attribute named name, parsing
+// value for entity references into the attribute's child node list (so
+// "&amp;" resolves to a single '&', and a malformed reference such as "A&B"
+// is an error). This mirrors libxml2 xmlNewDocProp. Prefer SetAttribute,
+// which stores value verbatim; this variant is for callers that genuinely
+// need raw XML entity syntax in value expanded (e.g. a parser building the
+// DOM from unresolved attribute text). An existing attribute with the same
+// QName is replaced in place. The name must not contain a colon; use
+// SetParsedAttributeNS for namespaced attributes.
+func (n *Element) SetParsedAttribute(name, value string) error {
+	attr, err := n.doc.CreateAttribute(name, value, nil)
+	if err != nil {
+		return err
+	}
+
 	n.addProperty(attr)
 	return nil
 }
@@ -111,7 +119,7 @@ func (n *Element) SetBooleanAttribute(name string) error {
 //
 // This is the single attribute-identity check used by addProperty, which
 // backs every attribute-creation entry point (SetAttribute, SetAttributeNS,
-// SetLiteralAttribute, and SetLiteralAttributeNS). A matching attribute is
+// SetParsedAttribute, and SetParsedAttributeNS). A matching attribute is
 // replaced in place; a new one is appended.
 func attrMatches(existing *Attribute, qname, nsURI, localName string) bool {
 	if existing.URI() == nsURI && existing.LocalName() == localName {
@@ -166,11 +174,15 @@ func (n *Element) addProperty(attr *Attribute) {
 	attr.parent = n
 }
 
-// SetLiteralAttributeNS creates or replaces an attribute with a literal text
-// value and namespace. Unlike SetAttributeNS, the value is not parsed for
-// entity references. This is useful when the parser has already resolved
-// entities in attribute values.
-func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) error {
+// SetAttributeNS creates or replaces the attribute with the given local name
+// and namespace, storing value verbatim as a literal text child WITHOUT
+// parsing it for entity references. This is the namespaced analogue of
+// SetAttribute and mirrors libxml2 xmlSetProp. An existing attribute with the
+// same expanded name (namespace URI + local name) or serialized QName is
+// replaced in place. The local name must not contain a colon. To parse entity
+// references in value into the attribute's child list, use
+// SetParsedAttributeNS.
+func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	if strings.ContainsRune(localname, ':') {
 		return fmt.Errorf("attribute local name %q contains a colon", localname)
 	}
@@ -185,20 +197,22 @@ func (n *Element) SetLiteralAttributeNS(localname, value string, ns *Namespace) 
 	return nil
 }
 
-// SetAttributeNS creates or replaces the attribute with the given local name
-// and namespace, parsing value for entity references, and returns the element
-// for chaining. An existing attribute with the same expanded name (namespace
-// URI + local name) or serialized QName is replaced in place. The local name
-// must not contain a colon. This is the namespaced analogue of SetAttribute;
-// use SetLiteralAttributeNS to store value verbatim without parsing.
-func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) (*Element, error) {
+// SetParsedAttributeNS creates or replaces the attribute with the given local
+// name and namespace, parsing value for entity references into the attribute's
+// child node list. This is the namespaced analogue of SetParsedAttribute and
+// mirrors libxml2 xmlNewDocProp. Prefer SetAttributeNS, which stores value
+// verbatim; this variant is for callers that genuinely need raw XML entity
+// syntax in value expanded. An existing attribute with the same expanded name
+// (namespace URI + local name) or serialized QName is replaced in place. The
+// local name must not contain a colon.
+func (n *Element) SetParsedAttributeNS(localname, value string, ns *Namespace) error {
 	attr, err := n.doc.CreateAttribute(localname, value, ns)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	n.addProperty(attr)
-	return n, nil
+	return nil
 }
 
 // AttributePredicate reports whether an attribute matches a lookup.

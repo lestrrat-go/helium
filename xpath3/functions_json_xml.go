@@ -184,13 +184,13 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 				return err
 			}
 			keyText := key.StringVal()
-			_ = child.SetLiteralAttribute("key", keyText)
+			_ = child.SetAttribute("key", keyText)
 			// escaped-key is emitted only under escape=true AND only when the key
 			// actually contains a backslash escape (F&O 3.1 §17.6.1): "Any element
 			// that contains a key attribute whose string value contains a backslash
 			// character must have the attribute escaped-key='true'."
 			if opts.escape && strings.Contains(keyText, "\\") {
-				_ = child.SetLiteralAttribute("escaped-key", lexicon.ValueTrue)
+				_ = child.SetAttribute("escaped-key", lexicon.ValueTrue)
 			}
 			if err := elem.AddChild(child); err != nil {
 				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
@@ -218,7 +218,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 			// have the attribute value escaped='true'." When escape is false the
 			// attribute is never present.
 			if opts.escape && strings.Contains(v.StringVal(), "\\") {
-				_ = elem.SetLiteralAttribute("escaped", lexicon.ValueTrue)
+				_ = elem.SetAttribute("escaped", lexicon.ValueTrue)
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
 				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}

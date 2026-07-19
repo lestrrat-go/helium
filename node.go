@@ -1186,21 +1186,23 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 // (nsDefs) without allocating a new one, so a caller building a tree can reuse
 // one Namespace object as both a declaration and an element's active namespace.
 // Like DeclareNamespace, it does not itself add a second declaration for a
-// prefix, using ns's prefix and URI:
+// prefix, using ns's prefix and URI, and reports the same outcomes:
 //
+//   - ns is nil: ErrNilNode is returned and nsDefs is left unchanged.
 //   - ns's prefix is in use by the ELEMENT's name or a non-empty-prefix
 //     attribute at a URI DIFFERENT from ns's URI: a genuine conflict; ns is not
-//     installed and the tree is left unchanged (the void signature cannot report
-//     it). This holds whether or not an nsDefs entry already exists. The conflict
-//     check is element-scoped: on a non-element node n.ns is never serialized, so
-//     there is no conflict and the call proceeds to the dedup step below (a
-//     same-URI redeclare is still a no-op there).
-//   - Otherwise: no existing declaration for ns's prefix → ns is appended; an
-//     existing declaration with the same URI → no-op (the existing slot is kept;
-//     ns is not installed); an existing declaration with a different URI → the
-//     slot is replaced in place (collapse) with ns (the previously-installed
-//     object is dropped but never mutated, so a caller still holding it is
-//     unaffected).
+//     installed, the tree is left unchanged, and the same %w-wrapped
+//     ErrInvalidOperation DeclareNamespace produces is returned (matchable with
+//     errors.Is). This holds whether or not an nsDefs entry already exists. The
+//     conflict check is element-scoped: on a non-element node n.ns is never
+//     serialized, so there is no conflict and the call proceeds to the dedup step
+//     below (a same-URI redeclare is still a no-op there).
+//   - Otherwise nil is returned: no existing declaration for ns's prefix → ns is
+//     appended; an existing declaration with the same URI → no-op (the existing
+//     slot is kept; ns is not installed); an existing declaration with a
+//     different URI → the slot is replaced in place (collapse) with ns (the
+//     previously-installed object is dropped but never mutated, so a caller still
+//     holding it is unaffected).
 //
 // Like DeclareNamespace, this does NOT reconcile a conflict introduced AFTER
 // declaration by SetActiveNamespace/SetNs; keeping at most one xmlns:prefix per
@@ -1208,8 +1210,7 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 // scope.
 //
 // The caller owns ns; it must not be shared as a declaration across nodes that
-// could be mutated independently. A nil ns is appended verbatim (the dedup scan
-// is skipped) so a caller deliberately corrupting a node is unaffected.
+// could be mutated independently.
 //
 // When ns is RETAINED (case 1 append and case 3 collapse) and is slab-backed by
 // a DIFFERENT document than this node's owner, that source document is marked so
@@ -1217,14 +1218,13 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 // declaration — the same guard a cross-document node move applies (see
 // noteCrossDocumentEscape). A same-document or heap-allocated ns, and the cases
 // that do not retain ns (a same-URI no-op, a declined conflict), mark nothing.
-func (n *node) AddNamespaceDecl(ns *Namespace) {
+func (n *node) AddNamespaceDecl(ns *Namespace) error {
 	if ns == nil {
-		n.nsDefs = append(n.nsDefs, ns)
-		return
+		return ErrNilNode
 	}
 	prefix := ns.Prefix()
 	if n.prefixConflictsInUse(prefix, ns.URI()) {
-		return
+		return fmt.Errorf("cannot rebind namespace prefix %q while it is in use on this element: %w", prefix, ErrInvalidOperation)
 	}
 	for i, existing := range n.nsDefs {
 		if existing == nil {
@@ -1234,7 +1234,7 @@ func (n *node) AddNamespaceDecl(ns *Namespace) {
 			continue
 		}
 		if existing.URI() == ns.URI() {
-			return
+			return nil
 		}
 		// Case 3 (collapse): the caller's ns replaces the slot and is retained. If
 		// ns is slab-backed by a DIFFERENT document, guard that document's Free
@@ -1242,12 +1242,13 @@ func (n *node) AddNamespaceDecl(ns *Namespace) {
 		// mirroring a cross-document node move.
 		noteCrossDocumentNamespaceEscape(n.doc, ns)
 		n.nsDefs[i] = ns
-		return
+		return nil
 	}
 	// Case 1 (append): the caller's ns is retained in nsDefs; guard a foreign
 	// source document's slab the same way.
 	noteCrossDocumentNamespaceEscape(n.doc, ns)
 	n.nsDefs = append(n.nsDefs, ns)
+	return nil
 }
 
 // SetActiveNamespace declares a namespace and sets it as this node's active

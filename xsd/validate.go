@@ -2094,9 +2094,9 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			} else if ns == nil {
 				ns = helium.NewNamespace("", au.Name.NS)
 			}
-			_, _ = elem.SetAttributeNS(au.Name.Local, defVal, ns)
+			_ = elem.SetAttributeNS(au.Name.Local, defVal, ns)
 		} else {
-			_, _ = elem.SetAttribute(au.Name.Local, defVal)
+			_ = elem.SetAttribute(au.Name.Local, defVal)
 		}
 		// Annotate the newly inserted attribute and, for XSD 1.1, record it as
 		// inheritable when its use is — a defaulted/fixed attribute is part of the
@@ -2266,7 +2266,10 @@ func materializeQNameToken(elem *helium.Element, token string, declNS map[string
 		return token, false // already resolves to the intended URI
 	}
 	if !bound {
-		elem.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+		// prefix is not in scope here, so it cannot be in use by the element's name
+		// or an attribute: AddNamespaceDecl's only error (a prefix conflict) is
+		// unreachable, and NewNamespace never returns nil.
+		_ = elem.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
 		return token, false
 	}
 	key := prefix + "\x00" + uri
@@ -2275,7 +2278,9 @@ func materializeQNameToken(elem *helium.Element, token string, declNS map[string
 	}
 	np := freshNSPrefix(inScope, prefix)
 	rewrites[key] = np
-	elem.AddNamespaceDecl(helium.NewNamespace(np, uri))
+	// np is freshly minted (not in inScope), so it cannot be in use: the prefix
+	// conflict is unreachable and NewNamespace never returns nil.
+	_ = elem.AddNamespaceDecl(helium.NewNamespace(np, uri))
 	return np + ":" + local, true
 }
 
@@ -2310,7 +2315,9 @@ func (vc *validationContext) fixupDefaultAttrNamespace(elem *helium.Element, au 
 	if prefer != "" {
 		if cur, bound := inScope[prefer]; !bound || cur == uri {
 			ns := helium.NewNamespace(prefer, uri)
-			elem.AddNamespaceDecl(ns)
+			// prefer is either unbound or already bound to uri, so AddNamespaceDecl
+			// cannot hit a prefix conflict, and ns is never nil.
+			_ = elem.AddNamespaceDecl(ns)
 			return ns
 		}
 	}
@@ -2320,7 +2327,9 @@ func (vc *validationContext) fixupDefaultAttrNamespace(elem *helium.Element, au 
 	}
 	np := freshNSPrefix(inScope, base)
 	ns := helium.NewNamespace(np, uri)
-	elem.AddNamespaceDecl(ns)
+	// np is freshly minted (not in inScope), so the prefix conflict is unreachable
+	// and ns is never nil.
+	_ = elem.AddNamespaceDecl(ns)
 	return ns
 }
 
