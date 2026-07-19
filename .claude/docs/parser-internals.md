@@ -70,7 +70,7 @@ States: `psStart`, `psContent`, `psPrologue`, `psEpilogue`, `psCDATA`, `psDTD`, 
 ### XML 1.1 Version-Gated Rules
 `pctx.isXML11()` gates version-specific rules; every non-1.1 document stays byte-identical:
 - Namespace prefix undeclaration (`xmlns:pfx=""`) — `parser_element.go` `validatePrefixedNamespaceDecl`
-- Restricted characters — raw literal values reject in text, attributes, comments, PIs, and CDATA via `parser_content.go` `isLiteralCharValue` and shared `writer_escape.go` `isXML11RestrictedChar`; character references accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` / `isXML11CharValue`
+- Restricted characters — raw literal values reject in text, attributes, comments, PIs, CDATA, and non-PUBLIC DTD literals via `parser_content.go` `isLiteralCharValue` and `parser_dtd_attr.go` `scanQuotedLiteral`; character references accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` / `isXML11CharValue`
 
 ### SAX & Tree Building
 - `sax` (sax.SAX2Handler) — callbacks (default: TreeBuilder; `Parser.SAXHandler(nil)` restores that default, so this is never nil at parse time)

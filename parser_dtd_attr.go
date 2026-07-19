@@ -32,11 +32,12 @@ const literalScanChunk = 4096
 // ErrNodeContentTooLarge. A byte that is not a permitted literal character ends
 // the scan WITHOUT error (the caller validates the closing quote), matching the
 // prior unbounded scanners. When pubid is true only the ASCII PubidChar subset
-// is accepted; otherwise the full XML Char production is accepted (multi-byte
-// runes decoded via decodeRuneAt). HasByteAt distinguishes a real end-of-input
-// (a clean unterminated literal, returned to the caller for the quote check)
-// from a cursor read error such as a push-stream Read returning context.Canceled
-// (PeekAt also reports 0 there), which is surfaced rather than swallowed.
+// is accepted; otherwise the XML version's literal character rules apply
+// (multi-byte runes decoded via decodeRuneAt). HasByteAt distinguishes a real
+// end-of-input (a clean unterminated literal, returned to the caller for the
+// quote check) from a cursor read error such as a push-stream Read returning
+// context.Canceled (PeekAt also reports 0 there), which is surfaced rather than
+// swallowed.
 func (pctx *parserCtx) scanQuotedLiteral(ctx context.Context, cur strcursor.Cursor, qch byte, pubid bool) (string, error) {
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
@@ -77,7 +78,7 @@ func (pctx *parserCtx) scanQuotedLiteral(ctx context.Context, cur strcursor.Curs
 				continue
 			}
 			if b < 0x80 {
-				if !isChar(rune(b)) {
+				if !pctx.isLiteralChar(rune(b)) {
 					stop = true
 					break
 				}
@@ -86,7 +87,7 @@ func (pctx *parserCtx) scanQuotedLiteral(ctx context.Context, cur strcursor.Curs
 				continue
 			}
 			r, w, ok := decodeRuneAt(cur, off)
-			if !ok || !isCharWidth(r, w) {
+			if !ok || !pctx.isLiteralCharWidth(r, w) {
 				stop = true
 				break
 			}

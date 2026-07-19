@@ -49,6 +49,24 @@ func TestParseXML11RawRestrictedChars(t *testing.T) {
 				return `<?xml version="` + version + `"?><root attr="value` + value + `"/>`
 			},
 		},
+		{
+			name: "internal entity value",
+			source: func(version, value string) string {
+				return `<?xml version="` + version + `"?><!DOCTYPE root [<!ENTITY entity "value` + value + `">]><root/>`
+			},
+		},
+		{
+			name: "DOCTYPE system literal",
+			source: func(version, value string) string {
+				return `<?xml version="` + version + `"?><!DOCTYPE root SYSTEM "id` + value + `"><root/>`
+			},
+		},
+		{
+			name: "notation system literal",
+			source: func(version, value string) string {
+				return `<?xml version="` + version + `"?><!DOCTYPE root [<!NOTATION notation SYSTEM "id` + value + `">]><root/>`
+			},
+		},
 	} {
 		for _, version := range []struct {
 			name    string
