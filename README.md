@@ -117,7 +117,8 @@ with no extra configuration. By default:
   even a document that reaches a loader cannot open host paths.
 - Network access is **forbidden** (`AllowNetwork(false)`). The core parser has
   no network loader, so this is belt-and-suspenders.
-- Element nesting depth is **capped at 256** (`MaxDepth(256)`; `0` = unbounded).
+- Element nesting depth is **capped at 256** (`MaxDepth(256)`; `0` selects the
+  256 default, a negative value removes the cap).
 - Entity substitution and external DTD loading are off
   (`SubstituteEntities(false)`, `LoadExternalDTD(false)`); the entity-expansion
   amplification, name-length, and content-model-depth guards are at their
