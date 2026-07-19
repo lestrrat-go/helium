@@ -20,6 +20,10 @@ func newCDATASection(b []byte) *CDATASection {
 }
 
 func (n *CDATASection) AddChild(cur Node) error {
+	// Returning the bare ErrInvalidOperation sentinel is deliberate: errors.Is
+	// matches a bare sentinel identically to a wrapped one, no caller contract
+	// promises errors.Unwrap on AddChild errors, and this generic rejection
+	// predates the attribute-routing change (which wraps only the paths it added).
 	return ErrInvalidOperation
 }
 
@@ -82,6 +86,10 @@ func (n *Comment) AddChild(cur Node) error {
 		}
 		return n.AppendText(t.content)
 	}
+	// Returning the bare ErrInvalidOperation sentinel is deliberate: errors.Is
+	// matches a bare sentinel identically to a wrapped one, no caller contract
+	// promises errors.Unwrap on AddChild errors, and this generic rejection
+	// predates the attribute-routing change (which wraps only the paths it added).
 	return ErrInvalidOperation
 }
 
@@ -269,6 +277,10 @@ func (n *Text) AddChild(cur Node) error {
 		n.fromCharRef = n.fromCharRef || t.fromCharRef
 		return n.AppendText(t.content)
 	}
+	// Returning the bare ErrInvalidOperation sentinel is deliberate: errors.Is
+	// matches a bare sentinel identically to a wrapped one, no caller contract
+	// promises errors.Unwrap on AddChild errors, and this generic rejection
+	// predates the attribute-routing change (which wraps only the paths it added).
 	return ErrInvalidOperation
 }
 
