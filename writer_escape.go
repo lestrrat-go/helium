@@ -1,7 +1,6 @@
 package helium
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"strings"
@@ -43,29 +42,37 @@ func validNormalizationForm(form string) bool {
 	return false
 }
 
+// contentSegment is one piece of a text or attribute node's character content
+// after pre-normalization character-map matching: either a normalized run of
+// non-mapped characters the escaper processes normally, or the replacement for
+// one mapped input rune, which the caller emits verbatim.
+type contentSegment struct {
+	// text is the normalized non-mapped run (mapped is false).
+	text []byte
+	// repl is the character-map replacement for one mapped input rune (mapped
+	// is true).
+	repl   string
+	mapped bool
+}
+
 // normalizeContent applies the writer's requested Unicode normalization to a text
-// or attribute node's character content and returns the content together with the
-// character map the escaper must apply to it. Character-map matching is decided
-// on the PRE-normalization content — Serialization 3.1 §4 applies character
-// mapping (rule c) before Unicode normalization (rule d) and never re-applies it
-// — so a rune CREATED by normalization (e.g. NFC composing "e"+U+0301 into
-// U+00E9) is ordinary content, never newly matched by the map. Each mapped input
-// rune is replaced by a private-use sentinel rune absent from the content, every
-// maximal run of non-mapped characters is normalized on its own, and the returned
-// map translates each sentinel to the original rune's replacement, which the
-// escaper emits verbatim (not re-escaped, not normalized), matching Serialization
-// 3.1 §7. It must only be called when d.normalize is true.
-func (d *writeSession) normalizeContent(s []byte) ([]byte, map[rune]string) {
+// or attribute node's character content and returns it as segments.
+// Character-map matching is decided on the PRE-normalization content —
+// Serialization 3.1 §4 applies character mapping (rule c) before Unicode
+// normalization (rule d) and never re-applies it — so a rune CREATED by
+// normalization (e.g. NFC composing "e"+U+0301 into U+00E9) is ordinary content,
+// never newly matched by the map. The content is split at each mapped input
+// rune: every maximal run of non-mapped characters is normalized on its own and
+// becomes a text segment, and each mapped rune becomes a replacement segment the
+// caller emits verbatim (not re-escaped, not normalized), matching Serialization
+// 3.1 §7. Splitting keeps replacements out of the escaped byte stream entirely,
+// so matching cannot be perturbed by any content, and the escaper runs with no
+// character map. It must only be called when d.normalize is true.
+func (d *writeSession) normalizeContent(s []byte) []contentSegment {
 	if len(d.charMap) == 0 {
-		return d.normForm.Bytes(s), nil
+		return []contentSegment{{text: d.normForm.Bytes(s)}}
 	}
-	var b bytes.Buffer
-	b.Grow(len(s))
-	// Sentinel state is allocated lazily on the first mapped rune, so content
-	// containing no mapped rune pays only the scan.
-	var used map[rune]struct{}
-	var sentinelFor map[rune]rune
-	var sentinels map[rune]string
+	var segs []contentSegment
 	seg := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
@@ -74,93 +81,82 @@ func (d *writeSession) normalizeContent(s []byte) ([]byte, map[rune]string) {
 			i += width
 			continue
 		}
-		// Normalize the non-mapped run ending just before this mapped character,
-		// then write the character's sentinel so the escaper substitutes exactly
-		// this pre-normalization occurrence.
+		// Close the non-mapped run ending just before this mapped character,
+		// then record the replacement for exactly this pre-normalization
+		// occurrence.
 		if i > seg {
-			b.Write(d.normForm.Bytes(s[seg:i]))
+			segs = append(segs, contentSegment{text: d.normForm.Bytes(s[seg:i])})
 		}
-		if used == nil {
-			used = contentRunes(s)
-			sentinelFor = make(map[rune]rune, len(d.charMap))
-			sentinels = make(map[rune]string, len(d.charMap))
-		}
-		sent, ok := sentinelFor[r]
-		if !ok {
-			sent = nextCharMapSentinel(used, r)
-			sentinelFor[r] = sent
-			sentinels[sent] = repl
-		}
-		b.WriteRune(sent)
+		segs = append(segs, contentSegment{repl: repl, mapped: true})
 		i += width
 		seg = i
 	}
-	if sentinels == nil {
-		// No mapped rune in the content: normalize it whole and give the escaper
-		// no character map, so a normalization-created rune stays unmapped.
-		return d.normForm.Bytes(s), nil
+	if segs == nil {
+		// No mapped rune in the content: normalize it whole.
+		return []contentSegment{{text: d.normForm.Bytes(s)}}
 	}
 	if seg < len(s) {
-		b.Write(d.normForm.Bytes(s[seg:]))
+		segs = append(segs, contentSegment{text: d.normForm.Bytes(s[seg:])})
 	}
-	return b.Bytes(), sentinels
+	return segs
 }
 
-// contentRunes collects the distinct runes present in s. normalizeContent uses
-// the set to pick character-map sentinel runes that cannot collide with real
-// content.
-func contentRunes(s []byte) map[rune]struct{} {
-	set := make(map[rune]struct{})
-	for i := 0; i < len(s); {
-		r, width := utf8.DecodeRune(s[i:])
-		set[r] = struct{}{}
-		i += width
+// writeReplacementSegment writes a character-map replacement verbatim, per
+// Serialization 3.1 §7 (a replacement is never re-escaped or normalized). A
+// non-ASCII replacement cannot be represented under a US-ASCII output encoding,
+// so it is rejected when rejectNonASCII is set, mirroring
+// writeCharMapReplacement on the non-normalizing path.
+func writeReplacementSegment(w io.Writer, repl string, rejectNonASCII bool) error {
+	if rejectNonASCII && hasNonASCII(repl) {
+		return unsupportedASCIIErr("character-map replacement")
 	}
-	return set
+	_, err := io.WriteString(w, repl)
+	return err
 }
 
-// charMapSentinelRanges lists the Unicode private-use ranges normalizeContent
-// draws sentinel runes from. Normalization never produces a private-use rune from
-// other input (private-use characters have no decompositions and take part in no
-// compositions), so a private-use rune absent from the raw content cannot appear
-// in a normalized run.
-var charMapSentinelRanges = [...][2]rune{
-	{0xE000, 0xF8FF},     // Private Use Area (BMP)
-	{0xF0000, 0xFFFFD},   // Supplementary Private Use Area-A
-	{0x100000, 0x10FFFD}, // Supplementary Private Use Area-B
-}
-
-// nextCharMapSentinel returns a private-use rune not present in used, marking it
-// used. In the unreachable-in-practice case that every private-use rune occurs in
-// the content (~137k distinct runes), it falls back to orig — that rune then also
-// matches post-normalization occurrences, which degrades gracefully instead of
-// corrupting output.
-func nextCharMapSentinel(used map[rune]struct{}, orig rune) rune {
-	for _, rng := range charMapSentinelRanges {
-		for r := rng[0]; r <= rng[1]; r++ {
-			if _, ok := used[r]; ok {
-				continue
+// writeNormalizedText writes a text node's character content under an active
+// Normalization request: each non-mapped segment is normalized and escaped as
+// ordinary text with no character map (so a normalization-created rune is never
+// newly matched), and each replacement segment is emitted verbatim. It must
+// only be called when d.normalize is true.
+func (d *writeSession) writeNormalizedText(out io.Writer, content []byte) error {
+	for _, seg := range d.normalizeContent(content) {
+		if seg.mapped {
+			if err := writeReplacementSegment(out, seg.repl, d.asciiReject()); err != nil {
+				return err
 			}
-			used[r] = struct{}{}
-			return r
+			continue
+		}
+		if err := escapeText(out, seg.text, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+			return err
 		}
 	}
-	return orig
+	return nil
 }
 
 // writeAttrValueContent escapes an attribute value's character content, applying
 // the requested Unicode normalization (scoped to attribute nodes) and character
-// maps. Shared by the generic and XHTML serialization paths.
+// maps. Shared by the generic and XHTML serialization paths. Under an active
+// Normalization request, character-map matches are decided on the
+// pre-normalization content: normalizeContent splits the content at each mapped
+// rune, so a normalization-created rune is never newly matched and each
+// replacement is emitted verbatim.
 func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) error {
-	charMap := d.charMap
-	if d.normalize {
-		// Character-map matches are decided on the pre-normalization content:
-		// normalizeContent swaps each mapped rune for a sentinel and returns the
-		// sentinel map for the escaper, so a normalization-created rune is never
-		// newly matched and each replacement is still emitted verbatim.
-		content, charMap = d.normalizeContent(content)
+	if !d.normalize {
+		return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap)
 	}
-	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, charMap)
+	for _, seg := range d.normalizeContent(content) {
+		if seg.mapped {
+			if err := writeReplacementSegment(out, seg.repl, d.asciiReject()); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := escapeAttrValue(out, seg.text, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var (

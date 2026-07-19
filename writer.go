@@ -96,11 +96,11 @@ type Writer struct {
 	// PIs, the DOCTYPE, and the XML declaration are never normalized. Character-map
 	// matches are decided on the PRE-normalization content (Serialization 3.1 §4:
 	// character mapping precedes normalization and is never re-applied):
-	// normalizeContent normalizes only the runs around each mapped character,
-	// swaps the character for a sentinel the escaper replaces verbatim
-	// (un-escaped, un-normalized), and leaves a rune CREATED by normalization
-	// unmapped. normalize is false by default, keeping output byte-identical when
-	// no normalization is requested.
+	// normalizeContent splits the content at each mapped character, normalizes
+	// each non-mapped run on its own, and returns the replacement as its own
+	// segment written verbatim (un-escaped, un-normalized), leaving a rune
+	// CREATED by normalization unmapped. normalize is false by default, keeping
+	// output byte-identical when no normalization is requested.
 	normalize bool
 	normForm  norm.Form
 	// normFormRaw is the exact form string passed to Normalization, retained so
@@ -1121,19 +1121,17 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				c = d.normForm.Bytes(c)
 			}
 			d.writeCDATASplit(out, c)
-		} else {
-			charMap := d.charMap
-			if d.normalize {
-				// Character-map matches are decided on the pre-normalization
-				// content: normalizeContent swaps each mapped rune for a sentinel
-				// and returns the sentinel map for the escaper, so a
-				// normalization-created rune is never newly matched and each
-				// replacement is still emitted verbatim.
-				c, charMap = d.normalizeContent(c)
-			}
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, charMap); err != nil {
+		} else if d.normalize {
+			// Character-map matches are decided on the pre-normalization
+			// content: normalizeContent splits the content at each mapped rune
+			// and normalizes each non-mapped run on its own, so a
+			// normalization-created rune is never newly matched and each
+			// replacement is emitted verbatim.
+			if err := d.writeNormalizedText(out, c); err != nil {
 				return err
 			}
+		} else if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
+			return err
 		}
 		return d.err // no recursing down
 	case CDATASectionNode:

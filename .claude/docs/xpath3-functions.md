@@ -415,12 +415,13 @@ during serialization (XML/HTML/text/json alike), then `expandCharMapSentinels`
 restores the verbatim replacement AFTER normalization — so replacements pass
 through un-normalized while the surrounding content is normalized (the markup
 writer decides character-map matches on the PRE-normalization content —
-`normalizeContent` normalizes only the runs AROUND a mapped key, swaps each
-matched key for its own internal sentinel, and hands the escaper the sentinel
-map — so the key's replacement — here the xpath3 sentinel — is emitted verbatim,
-never touched by the normalize pass, and a mapped rune CREATED by normalization
-is ordinary content, not newly matched: Serialization 3.1 §4 applies character
-mapping — rule c — before normalization — rule d — and never re-applies it).
+`normalizeContent` splits the content into segments at each mapped key,
+normalizes each non-mapped run on its own, and emits each key's replacement —
+here the xpath3 sentinel — verbatim as its own segment, never touched by the
+normalize pass or the escaper, so a mapped rune CREATED by normalization is
+ordinary content, not newly matched, regardless of what runes the content
+contains: Serialization 3.1 §4 applies character mapping — rule c — before
+normalization — rule d — and never re-applies it).
 `json-node-output-method` is validated against its OWN
 narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
 `json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default

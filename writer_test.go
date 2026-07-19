@@ -1876,6 +1876,42 @@ func TestWriterCharMapNormalizationCreatedRune(t *testing.T) {
 	})
 }
 
+// TestWriterCharMapNormalizationPrivateUseSaturation verifies that
+// pre-normalization character-map matching does not depend on finding a rune
+// absent from the content: with content containing EVERY Unicode private-use
+// rune, a mapped rune present in the input is replaced exactly once, and a
+// mapped rune CREATED by NFKC composition (fullwidth Ａ → A) still stays
+// literal.
+func TestWriterCharMapNormalizationPrivateUseSaturation(t *testing.T) {
+	t.Parallel()
+
+	// All 137,468 private-use runes: the BMP Private Use Area plus both
+	// supplementary private-use planes.
+	var pu strings.Builder
+	for _, rng := range [][2]rune{{0xE000, 0xF8FF}, {0xF0000, 0xFFFFD}, {0x100000, 0x10FFFD}} {
+		for r := rng[0]; r <= rng[1]; r++ {
+			pu.WriteRune(r)
+		}
+	}
+	// Content: every private-use rune, then fullwidth Ａ (U+FF21, which NFKC
+	// maps to ASCII A — must stay literal), then ASCII A (mapped — exactly one
+	// replacement).
+	src := "<a>" + pu.String() + "ＡA</a>"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	var buf strings.Builder
+	err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
+		CharacterMap(map[rune]string{'A': "<mapped>"}).Normalization("NFKC").
+		WriteTo(&buf, doc)
+	require.NoError(t, err)
+	out := buf.String()
+	require.Equal(t, 1, strings.Count(out, "<mapped>"),
+		"exactly one replacement: the input A maps, the NFKC-created A does not")
+	require.Contains(t, out, "A<mapped></a>",
+		"NFKC-composed A stays literal ahead of the replacement: %q", out[len(out)-40:])
+}
+
 // TestWriteReconcilesSubtreeNamespaces verifies that serializing a subtree
 // re-declares any namespace prefix its elements or attributes use but that was
 // bound only on an ancestor outside the subtree, so the output reparses. This
