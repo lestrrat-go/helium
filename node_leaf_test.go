@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -35,12 +36,12 @@ type leafCase struct {
 	// exercised. Types whose AddChild only ever rejects (CDATASection, PI) or
 	// only content-merges its own kind (Text, Comment) set this false.
 	canContainChildren bool
-	// addChildSelfErr is the exact error AddChild(self) must return. For Text,
-	// Comment and EntityRef the shared cycle guard fires; CDATASection and PI
-	// reject AddChild before reaching the shared cycle guard (CDATASection with
-	// ErrInvalidOperation, PI with errPIAddChild for a non-text node), so
-	// self-insertion surfaces that rejection instead.
-	addChildSelfErr string
+	// addChildSelfErr is the sentinel AddChild(self) must wrap (errors.Is). For
+	// Text, Comment and EntityRef the shared cycle guard fires, and
+	// ProcessingInstruction detects the self-add by identity (ErrCyclicNode);
+	// CDATASection rejects AddChild before any self-add check
+	// (ErrInvalidOperation), so self-insertion surfaces that rejection instead.
+	addChildSelfErr error
 }
 
 func leafCases() []leafCase {
@@ -50,36 +51,37 @@ func leafCases() []leafCase {
 			new: func(t *testing.T, doc *helium.Document) helium.MutableNode {
 				return mustCreateText(t, doc, []byte("x"))
 			},
-			addChildSelfErr: errAddChildCycle,
+			addChildSelfErr: helium.ErrCyclicNode,
 		},
 		{
 			name: "Comment",
 			new: func(t *testing.T, doc *helium.Document) helium.MutableNode {
 				return mustCreateComment(t, doc, []byte("x"))
 			},
-			addChildSelfErr: errAddChildCycle,
+			addChildSelfErr: helium.ErrCyclicNode,
 		},
 		{
 			name: "CDATASection",
 			new: func(t *testing.T, doc *helium.Document) helium.MutableNode {
 				return doc.CreateCDATASection([]byte("x"))
 			},
-			addChildSelfErr: helium.ErrInvalidOperation.Error(),
+			addChildSelfErr: helium.ErrInvalidOperation,
 		},
 		{
 			// A PI carries its content as a string, not as element/text
-			// children, so its AddChild rejects a foreign (non-text) node
-			// before the shared cycle guard, just like CDATASection. A PI is
-			// not a text node, so PI.AddChild(self) hits that rejection.
+			// children, so its AddChild rejects a foreign (non-text) node with
+			// ErrInvalidOperation. A self-add is detected by identity on the
+			// reject path (a PI is not a text node, so it reaches that check),
+			// returning ErrCyclicNode like every other leaf self-add.
 			name:            "ProcessingInstruction",
 			new:             func(t *testing.T, doc *helium.Document) helium.MutableNode { return mustCreatePI(t, doc) },
-			addChildSelfErr: errPIAddChild,
+			addChildSelfErr: helium.ErrCyclicNode,
 		},
 		{
 			name:               "EntityRef",
 			new:                func(t *testing.T, doc *helium.Document) helium.MutableNode { return mustCreateEntityRef(t, doc) },
 			canContainChildren: true,
-			addChildSelfErr:    errAddChildCycle,
+			addChildSelfErr:    helium.ErrCyclicNode,
 		},
 	}
 }
@@ -87,7 +89,6 @@ func leafCases() []leafCase {
 const (
 	errAddChildCycle   = "cannot add a node as a child of itself or one of its descendants"
 	errAddSiblingCycle = "cannot add a node as a sibling of itself or one of its descendants"
-	errPIAddChild      = "helium: cannot add ProcessingInstructionNode as a child of a processing instruction"
 )
 
 // TestLeafAddChildGuards exercises every leaf-type AddChild override against the
@@ -108,7 +109,7 @@ func TestLeafAddChildGuards(t *testing.T) {
 
 				err := leaf.AddChild(leaf)
 				require.Error(t, err, "AddChild(self) must be rejected")
-				require.ErrorContains(t, err, tc.addChildSelfErr)
+				require.ErrorIs(t, err, tc.addChildSelfErr)
 
 				require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
 				require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
@@ -157,6 +158,38 @@ func TestLeafAddChildGuards(t *testing.T) {
 					require.Nil(t, moving.NextSibling(), "moving has no stale next")
 					requireNoCycle(t, container)
 					requireNoCycle(t, oldParent)
+				})
+			} else {
+				// The strict leaves (Text, Comment, CDATASection, PI) never hold
+				// children, so an ancestor operand is not a potential cycle — it
+				// is just another invalid operand, and must take the shared
+				// ErrInvalidOperation shape (not ErrCyclicNode, which is reserved
+				// for the self-add).
+				t.Run("ancestor operand is rejected as invalid operation", func(t *testing.T) {
+					t.Parallel()
+					doc := helium.NewDefaultDocument()
+					root := mustCreateElement(t, doc, "root")
+					mid := mustCreateElement(t, doc, "mid")
+					require.NoError(t, root.AddChild(mid), "mid starts under root")
+					leaf := tc.new(t, doc)
+					require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
+
+					for name, operand := range map[string]helium.Node{
+						"parent":   mid,
+						"ancestor": root,
+					} {
+						err := leaf.AddChild(operand)
+						require.Error(t, err, "AddChild(%s) must be rejected", name)
+						require.ErrorIs(t, err, helium.ErrInvalidOperation)
+						require.NotErrorIs(t, err, helium.ErrCyclicNode)
+						require.ErrorContains(t, err,
+							fmt.Sprintf("cannot add a %s as a child of a %s node", helium.ElementNode, leaf.Type()))
+					}
+
+					require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
+					require.Equal(t, helium.Node(mid), leaf.Parent(), "tree must stay intact")
+					require.Nil(t, root.Parent(), "root must remain the tree root")
+					requireNoCycle(t, root)
 				})
 			}
 		})
@@ -432,6 +465,33 @@ func TestLeafFastPathNilOperand(t *testing.T) {
 	}
 }
 
+// TestPIAddChildNilReceiver verifies that AddChild on a typed-nil
+// *ProcessingInstruction receiver rejects a non-mergeable operand with the
+// shared ErrInvalidOperation shape instead of panicking: the self-add identity
+// check compares the operand interface against the receiver pointer directly
+// and never dereferences the receiver. The other strict leaves (Text, Comment,
+// CDATASection) are not covered here — their rejection message formats
+// n.Type() through the value-receiver docnode method, which dereferences a nil
+// receiver, and that is out-of-contract caller misuse rather than guarded
+// behavior.
+func TestPIAddChildNilReceiver(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDefaultDocument()
+	elem := mustCreateElement(t, doc, "root")
+
+	var pi *helium.ProcessingInstruction
+	var err error
+	// The closure adapts the call for NotPanics while capturing the error for
+	// the shape assertions below.
+	require.NotPanics(t, func() { err = pi.AddChild(elem) },
+		"nil-receiver AddChild must return an error, not panic")
+	require.ErrorIs(t, err, helium.ErrInvalidOperation)
+	require.NotErrorIs(t, err, helium.ErrCyclicNode,
+		"a nil receiver must not be mistaken for a self-add")
+	require.ErrorContains(t, err,
+		fmt.Sprintf("cannot add a %s as a child of a %s node", helium.ElementNode, helium.ProcessingInstructionNode))
+}
+
 // TestTextAddSiblingNonTextFallback covers Text.AddSibling's non-text fallback
 // path (the `return addSibling(n, cur)` branch). Moving an already-linked
 // non-text node via text.AddSibling must auto-unlink it from its old parent and
@@ -542,6 +602,8 @@ func TestPIContentIsStringNotChildren(t *testing.T) {
 
 		err := pi.AddChild(mustCreateElement(t, doc, "child"))
 		require.Error(t, err, "adding an element child to a PI must be rejected")
+		require.ErrorIs(t, err, helium.ErrInvalidOperation,
+			"a non-text PI child rejection must wrap ErrInvalidOperation like every other leaf rejection")
 		require.Nil(t, pi.FirstChild(), "PI must not gain a child")
 		require.Equal(t, "data", string(pi.Content()), "PI data must be unchanged")
 	})
@@ -720,10 +782,10 @@ func TestPINodeMethods(t *testing.T) {
 	require.NoError(t, pi.AppendText([]byte("Y")))
 	require.Contains(t, string(pi.Content()), "Y")
 
-	// Adding an element child is rejected.
+	// Adding an element child is rejected with a wrapped ErrInvalidOperation.
 	e, err := doc.CreateElement("e")
 	require.NoError(t, err)
-	require.Error(t, pi.AddChild(e))
+	require.ErrorIs(t, pi.AddChild(e), helium.ErrInvalidOperation)
 
 	// Adding a nil node is rejected with ErrNilNode (not a panic).
 	require.Error(t, pi.AddChild(nil))
