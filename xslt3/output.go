@@ -91,6 +91,8 @@ func (out *outputFrame) captureSequenceItems(items xpath3.ItemSlice) {
 // SerializeItems writes a sequence of items (maps, arrays, atomics, nodes)
 // using the specified output definition's method (json or adaptive).
 // This is used for result-documents with method="json" or method="adaptive".
+// A node carrying a character invalid for the target XML version fails with the
+// serialization error SERE0006 rather than emitting truncated output.
 func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
 	if outDef == nil {
 		outDef = defaultOutputDef()
@@ -137,7 +139,9 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 			var buf bytes.Buffer
 			switch v.Node.(type) {
 			case *helium.Element, *helium.Document:
-				_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, v.Node)
+				if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, v.Node); err != nil {
+					return xmlInvalidCharError(err)
+				}
 			default:
 				if v.Node.Type() == helium.CommentNode {
 					buf.WriteString("<!--")
@@ -356,7 +360,7 @@ func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) (stri
 		outDef := defaultOutputDef()
 		outDef.Method = methodXHTML
 		if err := serializeXHTML(&buf, doc, outDef, nil); err != nil {
-			return "", err
+			return "", xmlInvalidCharError(err)
 		}
 		return buf.String(), nil
 	case methodText:
@@ -365,7 +369,7 @@ func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) (stri
 		switch node.(type) {
 		case *helium.Element, *helium.Document:
 			if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node); err != nil {
-				return "", err
+				return "", xmlInvalidCharError(err)
 			}
 		default:
 			buf.Write(node.Content())

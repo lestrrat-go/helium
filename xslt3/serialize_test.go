@@ -98,3 +98,61 @@ func TestDefaultOutputDefNilStylesheet(t *testing.T) {
 	outDef := ss.DefaultOutputDef()
 	require.Nil(t, outDef)
 }
+
+// outMethodXML is the "xml" output method, held as a const so these invalid-char
+// tests do not add repeated string literals (goconst).
+const outMethodXML = "xml"
+
+// newBadCharElement builds a small <r> element whose text content carries an
+// XML-invalid control character (U+0001), via the public DOM API. The DOM
+// accepts the control byte; the writer is the enforcement point.
+func newBadCharElement(t *testing.T) *helium.Element {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	root, err := doc.CreateElement("r")
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(root))
+	require.NoError(t, root.AddChild(doc.CreateText([]byte("a\x01b"))))
+	return root
+}
+
+// requireSERE0006 asserts err is the XSLT serialization error SERE0006 that the
+// serializer raises when the writer rejects an XML-invalid character.
+func requireSERE0006(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	var xe *xslt3.XSLTError
+	require.ErrorAs(t, err, &xe)
+	require.Equal(t, "SERE0006", xe.Code)
+}
+
+// SerializeItems with method="xml" must propagate the writer's invalid-char
+// rejection as SERE0006 rather than silently truncating the output.
+func TestSerializeItemsXMLInvalidChar(t *testing.T) {
+	root := newBadCharElement(t)
+	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}}
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodXML})
+	requireSERE0006(t, err)
+}
+
+// SerializeItems with method="json" and json-node-output-method="xml" must
+// propagate the writer's invalid-char rejection as SERE0006.
+func TestSerializeItemsJSONNodeXMLInvalidChar(t *testing.T) {
+	root := newBadCharElement(t)
+	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}}
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "json", JSONNodeOutputMethod: outMethodXML})
+	requireSERE0006(t, err)
+}
+
+// SerializeItems with method="adaptive" over a multi-item sequence containing a
+// node with an invalid character must propagate SERE0006 (the single-element
+// path already propagates via serializeXML; this exercises the per-item path).
+func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
+	root := newBadCharElement(t)
+	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}, xpath3.NodeItem{Node: root}}
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "adaptive"})
+	requireSERE0006(t, err)
+}
