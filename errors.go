@@ -178,6 +178,14 @@ var (
 	// namespace) is unaffected, as is the reserved "xml" prefix, which is
 	// implicitly bound to the XML namespace and needs no declaration.
 	ErrWriterUnboundNamespacePrefix = errors.New("unbound namespace prefix")
+	// ErrWriterInvalidName flags a name emitted verbatim in a DTD declaration or
+	// an entity reference (a DOCTYPE, <!ENTITY>, <!NOTATION>, <!ELEMENT>/<!ATTLIST>
+	// or content-model name, the NDATA notation name, or the "&name;" of an entity
+	// reference) that is not a valid XML Name. The Name grammar subsumes the
+	// character-range check, so this also flags a name carrying a character invalid
+	// in the target XML version; either way the name has no faithful serialization
+	// and is rejected in both the reject and replace modes.
+	ErrWriterInvalidName = errors.New("invalid name")
 	// ErrWriterInvalidComment flags comment content that contains "--" or ends
 	// with "-" (either would break the "-->" delimiter).
 	ErrWriterInvalidComment = errors.New("invalid comment content")

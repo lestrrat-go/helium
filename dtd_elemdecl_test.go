@@ -114,9 +114,9 @@ func TestRemoveElementUnlinks(t *testing.T) {
 }
 
 // TestGetElementDescKey verifies that an element declaration registered via
-// AddElementDecl can be retrieved through GetElementDesc using the same QName.
-// Registration keys decls as "name:prefix"; GetElementDesc must compose the
-// lookup key the same way instead of using the raw QName.
+// AddElementDecl can be retrieved through GetElementDesc using the same DTD Name.
+// Registration splits the raw spelling for lookup; GetElementDesc must compose the
+// same key instead of treating the DTD Name as a namespace-aware QName.
 func TestGetElementDescKey(t *testing.T) {
 	t.Run("unprefixed", func(t *testing.T) {
 		dtd := newDTD()
@@ -157,6 +157,66 @@ func TestGetElementDescKey(t *testing.T) {
 		require.True(t, ok, "GetElementDesc must still find the unprefixed decl")
 		require.Equal(t, enum.EmptyElementType, decl.decltype)
 	})
+}
+
+// TestWriterPreservesColonBearingDTDElementNames verifies that DTD element and
+// content-model names retain the XML Name spelling supplied by the caller.
+func TestWriterPreservesColonBearingDTDElementNames(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+	}{
+		{name: "a:"},
+		{name: ":r"},
+		{name: ":"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddElementDecl(tc.name, enum.AnyElementType, nil)
+			require.NoError(t, err)
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			var buf bytes.Buffer
+			require.NoError(t, Write(&buf, doc))
+			require.Contains(t, buf.String(), "<!ELEMENT "+tc.name+" ANY>")
+			_, err = NewParser().Parse(t.Context(), buf.Bytes())
+			require.NoError(t, err)
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+	}{
+		{name: "a:"},
+		{name: ":r"},
+		{name: ":"},
+	} {
+		t.Run("content-"+tc.name, func(t *testing.T) {
+			doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+			dtd, err := doc.CreateInternalSubset("root", "", "")
+			require.NoError(t, err)
+			pcdata, err := doc.CreateElementContent("", ElementContentPCDATA)
+			require.NoError(t, err)
+			leaf, err := doc.CreateElementContent(tc.name, ElementContentElement)
+			require.NoError(t, err)
+			model, err := doc.CreateElementContentChoice(pcdata, leaf, ElementContentMult)
+			require.NoError(t, err)
+			_, err = dtd.AddElementDecl("model", enum.MixedElementType, model)
+			require.NoError(t, err)
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			var buf bytes.Buffer
+			require.NoError(t, Write(&buf, doc))
+			require.Contains(t, buf.String(), "#PCDATA | "+tc.name)
+			_, err = NewParser().Parse(t.Context(), buf.Bytes())
+			require.NoError(t, err)
+		})
+	}
 }
 
 // TestIsMixedElementWhitespace checks that Document.IsMixedElement reports an

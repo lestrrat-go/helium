@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -345,7 +346,7 @@ func isInCharacterRange(r rune) bool {
 	return r == 0x09 ||
 		r == 0x0A ||
 		r == 0x0D ||
-		r >= 0x20 && r <= 0xDF77 ||
+		r >= 0x20 && r <= 0xD7FF ||
 		r >= 0xE000 && r <= 0xFFFD ||
 		r >= 0x10000 && r <= 0x10FFFF
 }
@@ -362,18 +363,19 @@ func isSerializableChar(r rune, xml11 bool) bool {
 // serializeRefFree screens content bound for a REFERENCE-LESS serialization
 // context — comment text, processing-instruction data, and CDATA-section content.
 // None of these admits a character reference, so the literal-serializable set is
-// exactly the XML 1.0 Char range (isInCharacterRange) for BOTH target versions: an
-// XML 1.1 RestrictedChar, which element/attribute text may carry only as a
-// character reference, has no valid form here regardless of the target version.
-// This is why the check does NOT use isSerializableChar(r, xml11), which would
-// wrongly admit a 1.1 RestrictedChar.
+// XML 1.0 Char range (isInCharacterRange). XML 1.1 adds a second constraint: its
+// RestrictedChar set, plus NEL and LINE SEPARATOR, must be written as a character
+// reference to preserve their value. That form is unavailable in this context, so
+// it must be rejected or replaced here too. This is why the check does NOT use
+// isSerializableChar(r, xml11), which would wrongly admit a 1.1 RestrictedChar.
 //
-// A character outside that range is a serialization error: under the default
-// policy it is rejected with a sticky ErrInvalidXMLChar (returning stop=true, with
-// nothing to write); under RejectInvalidChars(false) it is replaced by U+FFFD. A
-// byte that is not valid UTF-8 is always replaced by U+FFFD, matching the
-// text/attribute escapers (it has no character-reference form either). When the
-// content is already clean it returns b unchanged so no copy is made.
+// A character outside that range, or one with an XML 1.1 character-reference-only
+// form, is a serialization error: under the default policy it is rejected with a
+// sticky ErrInvalidXMLChar (returning stop=true, with nothing to write); under
+// RejectInvalidChars(false) it is replaced by U+FFFD. A byte that is not valid
+// UTF-8 is always replaced by U+FFFD, matching the text/attribute escapers (it
+// has no character-reference form either). When the content is already clean it
+// returns b unchanged so no copy is made.
 func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop bool) {
 	work := false
 	for i := 0; i < len(b); {
@@ -382,7 +384,7 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 		case r == utf8.RuneError && width == 1:
 			// A malformed UTF-8 byte is always replaced with U+FFFD.
 			work = true
-		case !isInCharacterRange(r):
+		case !isInCharacterRange(r) || (s.xml11 && isXML11SerializeAsCharRef(r)):
 			if !s.replaceInvalidChars {
 				s.check(fmt.Errorf("helium: %s contains a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
 				return nil, true
@@ -397,7 +399,7 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 	out = make([]byte, 0, len(b))
 	for i := 0; i < len(b); {
 		r, width := utf8.DecodeRune(b[i:])
-		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) {
+		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) || (s.xml11 && isXML11SerializeAsCharRef(r)) {
 			out = append(out, esc_fffd...)
 		} else {
 			out = append(out, b[i:i+width]...)
@@ -408,8 +410,9 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 }
 
 // dtdLiteral applies the reference-free serialization policy to a DTD literal.
-// DTD literals cannot carry a character reference, so XML-invalid characters
-// are rejected by default or replaced with U+FFFD in replacement mode.
+// This covers DTD literals that cannot carry a character reference, so XML-invalid
+// and XML 1.1 serialization-only characters are rejected by default or replaced
+// with U+FFFD in replacement mode.
 func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
 	if value == "" {
 		return value, false
@@ -419,6 +422,167 @@ func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
 		return "", true
 	}
 	return string(out), false
+}
+
+// entityValueLiteral validates EntityValue markup before applying its raw-literal
+// character policy. EntityValue can carry character references, unlike the other
+// DTD literals: validated references stay verbatim and XML 1.1 serialization-only
+// raw characters become decimal character references. A malformed reference always
+// fails; only a syntactically valid character-reference target may follow
+// RejectInvalidChars replacement. Parsed orig values are checked for parameter-
+// entity syntax because this writer emits an internal subset, where that syntax
+// cannot be preserved in a declaration.
+func (s *writeSession) entityValueLiteral(what, value string, checkParameterEntityRefs bool) (string, bool) {
+	refs, stop := s.screenCharRefs(what, value, checkParameterEntityRefs)
+	if stop {
+		return "", true
+	}
+	return s.serializeEntityValue(what, refs)
+}
+
+// serializeEntityValue applies the raw-character part of the EntityValue policy
+// after screenCharRefs has validated every reference. Existing references stay
+// untouched. XML 1.1 serialization-only raw characters use their available
+// decimal-reference form; characters invalid in both target versions retain the
+// DTD literal U+FFFD replacement behavior.
+func (s *writeSession) serializeEntityValue(what, value string) (string, bool) {
+	work := false
+	for i := 0; i < len(value); {
+		if value[i] == '&' {
+			end := i + 1
+			for value[end] != ';' {
+				end++
+			}
+			i = end + 1
+			continue
+		}
+
+		r, width := utf8.DecodeRuneInString(value[i:])
+		switch {
+		case r == utf8.RuneError && width == 1:
+			work = true
+		case !isInCharacterRange(r):
+			if !s.replaceInvalidChars {
+				s.check(fmt.Errorf("helium: %s contains a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+				return "", true
+			}
+			work = true
+		case s.xml11 && isXML11SerializeAsCharRef(r):
+			work = true
+		}
+		i += width
+	}
+	if !work {
+		return value, false
+	}
+
+	var b strings.Builder
+	b.Grow(len(value))
+	for i := 0; i < len(value); {
+		if value[i] == '&' {
+			end := i + 1
+			for value[end] != ';' {
+				end++
+			}
+			b.WriteString(value[i : end+1])
+			i = end + 1
+			continue
+		}
+
+		r, width := utf8.DecodeRuneInString(value[i:])
+		switch {
+		case r == utf8.RuneError && width == 1, !isInCharacterRange(r):
+			b.Write(esc_fffd)
+		case s.xml11 && isXML11SerializeAsCharRef(r):
+			var dbuf [12]byte
+			b.Write(decimalCharRef(&dbuf, r))
+		default:
+			b.WriteString(value[i : i+width])
+		}
+		i += width
+	}
+	return b.String(), false
+}
+
+// screenCharRefs makes one forward pass over EntityValue markup. It shares
+// parseCharRefBody with EntityRefNode output and validates every '&' as either a
+// CharRef or a named general reference. checkParameterEntityRefs applies to a
+// parsed Entity.orig value, where any raw percent starts a forbidden PEReference
+// in the internal subset emitted by this writer.
+func (s *writeSession) screenCharRefs(what, value string, checkParameterEntityRefs bool) (string, bool) {
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(value); {
+		switch value[i] {
+		case '&':
+			end := i + 1
+			for end < len(value) && value[end] != ';' {
+				end++
+			}
+			if end == len(value) {
+				s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+
+			body := value[i+1 : end]
+			if len(body) == 0 {
+				s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			if body[0] != '#' {
+				if !xmlchar.IsValidName(body) {
+					s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+					return "", true
+				}
+				i = end + 1
+				continue
+			}
+
+			cp, ok := parseCharRefBody(body[1:])
+			if !ok {
+				s.check(fmt.Errorf("helium: %s contains a malformed character reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			if isSerializableChar(cp, s.xml11) {
+				i = end + 1
+				continue
+			}
+			if !s.replaceInvalidChars {
+				s.check(fmt.Errorf("helium: %s contains a character reference to a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+				return "", true
+			}
+			b.WriteString(value[last:i])
+			if s.escapeNonASCII || s.asciiOutput {
+				b.Write(esc_fffd_ref)
+			} else {
+				b.Write(esc_fffd)
+			}
+			last = end + 1
+			i = end + 1
+		case '%':
+			if !checkParameterEntityRefs {
+				i++
+				continue
+			}
+			end := i + 1
+			for end < len(value) && value[end] != ';' {
+				end++
+			}
+			if end == len(value) || !xmlchar.IsValidName(value[i+1:end]) {
+				s.check(fmt.Errorf("helium: %s contains a malformed parameter-entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			s.check(fmt.Errorf("helium: %s contains a parameter-entity reference that cannot be serialized in an internal subset: %w", what, ErrWriterInvalidName))
+			return "", true
+		default:
+			i++
+		}
+	}
+	if last == 0 {
+		return value, false
+	}
+	b.WriteString(value[last:])
+	return b.String(), false
 }
 
 // writeCharMapReplacement flushes s[last:cut] to w and writes the raw
