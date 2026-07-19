@@ -947,9 +947,20 @@ func isNilNode(node Node) bool {
 }
 
 // WriteTo serializes a node (document or element) to the given writer.
-// When the node is a Document, document-level setup (encoding, XHTML
-// detection, DTD filtering) is applied automatically.
+// It first runs the serialization through io.Discard, so any validation error is
+// returned before the caller's writer receives bytes. When the node is a
+// Document, document-level setup (encoding, XHTML detection, DTD filtering) is
+// applied automatically.
 func (d Writer) WriteTo(out io.Writer, node Node) error {
+	if err := d.writeTo(io.Discard, node); err != nil {
+		return err
+	}
+	return d.writeTo(out, node)
+}
+
+// writeTo performs one serialization pass. WriteTo uses an io.Discard pass to
+// validate the complete node before this pass writes to the caller's writer.
+func (d Writer) writeTo(out io.Writer, node Node) error {
 	// Guard against a nil node — both a literal nil interface and a typed-nil
 	// concrete pointer (e.g. a (*Element)(nil) stored in a Node) — so callers
 	// get ErrNilNode instead of a panic from method calls on the nil node.

@@ -1467,9 +1467,11 @@ func TestWriteRejectsMalformedPITarget(t *testing.T) {
 type failOnSubstringWriter struct {
 	trigger string
 	tail    string
+	writes  int
 }
 
 func (w *failOnSubstringWriter) Write(p []byte) (int, error) {
+	w.writes++
 	window := w.tail + string(p)
 	if strings.Contains(window, w.trigger) {
 		return 0, errShortWrite
@@ -1484,24 +1486,25 @@ func (w *failOnSubstringWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// TestWriteValidationPreservesStickyIOError ensures that when an earlier
-// io.Writer failure has already set the sticky error, a subsequent malformed
-// comment/PI sibling does not clobber it: WriteTo must surface the original I/O
-// error, not the validation error.
-func TestWriteValidationPreservesStickyIOError(t *testing.T) {
+// TestWriteValidationPrecedesOutput verifies that malformed nodes are rejected
+// during the discard pass, before WriteTo calls the caller's writer.
+func TestWriteValidationPrecedesOutput(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name    string
 		sibling func(*helium.Document) helium.Node
+		wantErr error
 	}{
 		{
 			name:    "comment",
 			sibling: func(d *helium.Document) helium.Node { return d.CreateComment([]byte("a--b")) },
+			wantErr: helium.ErrWriterInvalidComment,
 		},
 		{
 			name:    "pi",
 			sibling: func(d *helium.Document) helium.Node { return d.CreatePI("t", "a?>b") },
+			wantErr: helium.ErrWriterInvalidPIContent,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1510,17 +1513,14 @@ func TestWriteValidationPreservesStickyIOError(t *testing.T) {
 			root, err := doc.CreateElement("r")
 			require.NoError(t, err)
 			require.NoError(t, doc.SetDocumentElement(root))
-			// A malformed top-level sibling serialized after the root element.
-			// The newline separator written between top-level nodes is forced
-			// to fail, setting the sticky I/O error before the malformed
-			// sibling's validation runs. (Unlike a failed element write, the
-			// separator failure does not short-circuit the child loop, so the
-			// sibling is still reached.)
+			// A malformed top-level sibling follows the root element. The target
+			// writer would reject the separator between them if it were called.
 			require.NoError(t, doc.AddChild(tc.sibling(doc)))
 
-			err = helium.NewWriter().XMLDeclaration(false).WriteTo(&failOnSubstringWriter{trigger: "\n"}, doc)
-			require.ErrorIs(t, err, errShortWrite,
-				"original I/O error must win over the sibling validation error")
+			out := &failOnSubstringWriter{trigger: "\n"}
+			err = helium.NewWriter().XMLDeclaration(false).WriteTo(out, doc)
+			require.ErrorIs(t, err, tc.wantErr)
+			require.Zero(t, out.writes, "validation must not call the target writer")
 		})
 	}
 }
@@ -1652,6 +1652,50 @@ func TestWriterOptions(t *testing.T) {
 	err = helium.NewWriter().EscapeNonASCII(true).WriteTo(&buf, d2)
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "&#")
+}
+
+func TestWriterValidationErrorsLeaveNoOutput(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		build   func(*testing.T) *helium.Document
+		wantErr error
+	}{
+		{
+			name: "empty DTD name",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				_, err := doc.CreateInternalSubset("", "", "")
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			wantErr: helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name: "invalid text character",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				require.NoError(t, root.AppendText([]byte("bad\x01text")))
+				return doc
+			},
+			wantErr: helium.ErrInvalidXMLChar,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			err := helium.NewWriter().WriteTo(&out, tc.build(t))
+			require.ErrorIs(t, err, tc.wantErr)
+			require.Empty(t, out.String(), "validation errors must leave no output bytes")
+		})
+	}
 }
 
 func TestWriterRejectInvalidChars(t *testing.T) {
