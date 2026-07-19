@@ -147,39 +147,27 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", opts.normalizationForm)}
 	}
 
-	// Serialization 3.1 §11: a character-map replacement string is NOT subjected
-	// to Unicode Normalization. When BOTH a normalization pass and a character map
-	// are in force, substitute each mapped key with a unique SENTINEL rune during
-	// serialization, normalize (sentinels — Supplementary Private Use Area-A — are
-	// unaffected by normalization), then expand each sentinel to its verbatim
-	// replacement AFTER normalization, so replacements pass through un-normalized.
-	dispatchOpts := opts
-	var charMapSentinels map[rune]string
-	if opts.methodAppliesNormalization() && serializeNormalizationActive(opts.normalizationForm) && len(opts.charMap) > 0 {
-		dispatchOpts, charMapSentinels = withCharMapSentinels(opts)
-	}
-
 	var result string
-	switch dispatchOpts.method {
+	switch opts.method {
 	case "":
 		// The unspecified default is the xml family: sequence normalization
 		// (Serialization 3.1 §2) flattens array inputs into their members. It
 		// otherwise reuses the adaptive machinery, whose node-kind guard treats the
 		// default method as a markup method (SENR0001 for attribute/namespace/map/
 		// function items).
-		result, err = serializeAdaptiveSequence(flattenSerializeArrays(args[0]), dispatchOpts)
+		result, err = serializeAdaptiveSequence(flattenSerializeArrays(args[0]), opts)
 	case serializeMethodAdaptive:
-		result, err = serializeAdaptiveSequence(args[0], dispatchOpts)
+		result, err = serializeAdaptiveSequence(args[0], opts)
 	case serializeMethodJSON:
-		result, err = serializeJSONSequence(args[0], dispatchOpts)
+		result, err = serializeJSONSequence(args[0], opts)
 	case serializeMethodHTML:
-		result, err = serializeHTMLSequence(args[0], dispatchOpts)
+		result, err = serializeHTMLSequence(args[0], opts)
 	case serializeMethodText:
-		result, err = serializeTextSequence(args[0], dispatchOpts)
+		result, err = serializeTextSequence(args[0], opts)
 	default:
 		// The xml method (and xhtml, serialized as XML — a defensible
 		// approximation, since helium implements no XHTML-specific rules).
-		result, err = serializeXMLSequence(args[0], dispatchOpts)
+		result, err = serializeXMLSequence(args[0], opts)
 	}
 	if err != nil {
 		return nil, err
@@ -192,16 +180,20 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// DOCTYPE, and the XML declaration are never normalized. The text and json
 	// methods emit pure character data (no element/attribute names; the json
 	// structure is ASCII), so normalizing the whole output is equivalent to
-	// node-scoped normalization and is applied here. adaptive ignores normalization.
-	switch dispatchOpts.method {
+	// node-scoped normalization and is applied here — EXCEPT when a character map
+	// is in force: then the character-map application sites (applyCharMapToString
+	// for text, encodeJSONStringForSerialization for json) apply the normalization
+	// themselves, segmented around mapped runes, so a replacement string passes
+	// through un-normalized (Serialization 3.1 §11) and a literal content rune is
+	// never rewritten. adaptive ignores normalization.
+	switch opts.method {
 	case serializeMethodText, serializeMethodJSON:
-		result, err = applySerializeNormalization(result, dispatchOpts)
-		if err != nil {
-			return nil, err
+		if len(opts.charMap) == 0 {
+			result, err = applySerializeNormalization(result, opts)
+			if err != nil {
+				return nil, err
+			}
 		}
-	}
-	if charMapSentinels != nil {
-		result = expandCharMapSentinels(result, charMapSentinels)
 	}
 	return SingleString(result), nil
 }
@@ -223,44 +215,55 @@ func serializeNormalizationActive(form string) bool {
 	return form != "" && form != "none"
 }
 
-// withCharMapSentinels returns a copy of opts whose character map substitutes each
-// mapped key with a unique SENTINEL rune (from Supplementary Private Use Area-A,
-// U+F0000+, which Unicode normalization never alters), together with the
-// sentinel→replacement table for post-normalization expansion. This keeps a
-// character-map replacement string out of the normalization pass (Serialization
-// 3.1 §11: replacement strings are not subjected to Unicode Normalization).
-func withCharMapSentinels(opts serializeOptions) (serializeOptions, map[rune]string) {
-	sentinelMap := make(map[rune]string, len(opts.charMap))
-	replacements := make(map[rune]string, len(opts.charMap))
-	next := rune(0xF0000)
-	for key, repl := range opts.charMap {
-		sentinelMap[key] = string(next)
-		replacements[next] = repl
-		next++
+// serializeNormForm maps a supported normalization-form name (NFC/NFD/NFKC/NFKD)
+// to its golang.org/x/text norm.Form. Any other value (none/"", or the
+// unsupported "fully-normalized", which fnSerialize rejects up front as SESU0011)
+// reports false.
+func serializeNormForm(form string) (norm.Form, bool) {
+	switch form {
+	case "NFC":
+		return norm.NFC, true
+	case "NFD":
+		return norm.NFD, true
+	case "NFKC":
+		return norm.NFKC, true
+	case "NFKD":
+		return norm.NFKD, true
 	}
-	opts.charMap = sentinelMap
-	return opts, replacements
+	return norm.NFC, false
 }
 
-// expandCharMapSentinels replaces each sentinel rune in s with its verbatim
-// character-map replacement string (the final step, after normalization).
-func expandCharMapSentinels(s string, replacements map[rune]string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		if repl, ok := replacements[r]; ok {
-			b.WriteString(repl)
-			continue
-		}
-		b.WriteRune(r)
+// serializeCharMapNorm returns the norm.Form the text/json character-map
+// application sites apply to each non-mapped content run, and whether that
+// inline normalization is active. It is active exactly when a character map is
+// in force AND the method applies an active, supported normalization-form —
+// the same condition under which fnSerialize skips its whole-output
+// normalization pass, so normalization runs exactly once. Splitting the content
+// at each mapped rune and normalizing only the non-mapped runs keeps a
+// replacement string un-normalized (Serialization 3.1 §11) without rewriting
+// any literal content rune.
+func serializeCharMapNorm(opts serializeOptions) (norm.Form, bool) {
+	if len(opts.charMap) == 0 || !opts.methodAppliesNormalization() || !serializeNormalizationActive(opts.normalizationForm) {
+		return norm.NFC, false
 	}
-	return b.String()
+	return serializeNormForm(opts.normalizationForm)
+}
+
+// normalizeSerializeRun returns one non-mapped content run normalized by form
+// when inline normalization is active, unchanged otherwise.
+func normalizeSerializeRun(run string, normalize bool, form norm.Form) string {
+	if !normalize {
+		return run
+	}
+	return form.String(run)
 }
 
 // applySerializeNormalization applies the normalization-form parameter to a whole
-// serialized string. It is used only by the text and json output methods, whose
-// output is pure character data (text) or ASCII-delimited character data (json),
-// so normalizing the whole string is equivalent to the node-scoped
+// serialized string. It is used only by the text and json output methods (and
+// only when no character map is in force — with one, the character-map
+// application sites normalize each non-mapped run themselves), whose output is
+// pure character data (text) or ASCII-delimited character data (json), so
+// normalizing the whole string is equivalent to the node-scoped
 // character-expansion phase (Serialization 3.1 §4); the markup methods
 // (xml/xhtml/html) normalize inside their writer instead so element/attribute
 // names and other markup are never touched. none/"" is a no-op;
@@ -271,17 +274,11 @@ func applySerializeNormalization(s string, opts serializeOptions) (string, error
 	if form == "" || form == "none" || !opts.methodAppliesNormalization() {
 		return s, nil
 	}
-	switch form {
-	case "NFC":
-		return norm.NFC.String(s), nil
-	case "NFD":
-		return norm.NFD.String(s), nil
-	case "NFKC":
-		return norm.NFKC.String(s), nil
-	case "NFKD":
-		return norm.NFKD.String(s), nil
+	f, ok := serializeNormForm(form)
+	if !ok {
+		return "", &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", form)}
 	}
-	return "", &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", form)}
+	return f.String(s), nil
 }
 
 type serializeOptions struct {
@@ -1640,7 +1637,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 					return err
 				}
 			}
-			parts = append(parts, `"`+encodeJSONStringForSerialization(keyText, opts.encoding, opts.charMap)+`":`+valueSeparator(opts.indent)+valText)
+			parts = append(parts, `"`+encodeJSONStringForSerialization(keyText, opts)+`":`+valueSeparator(opts.indent)+valText)
 			return nil
 		})
 		if err != nil {
@@ -1660,7 +1657,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return `"` + encodeJSONStringForSerialization(text, opts.encoding, opts.charMap) + `"`, nil
+		return `"` + encodeJSONStringForSerialization(text, opts) + `"`, nil
 	case FunctionItem:
 		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item as JSON"}
 	default:
@@ -1693,10 +1690,11 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 		// applicable to the json output method (Serialization 3.1; matching Saxon,
 		// e.g. a character map that maps "/"→"/" prevents JSON-escaping it as "\/").
 		// A mapped character is replaced by its verbatim replacement instead of
-		// being JSON-escaped; when normalization is also in force fnSerialize routes
-		// the map through sentinel runes so a replacement is neither re-escaped nor
-		// normalized (§11), then normalizes the json output.
-		return `"` + encodeJSONStringForSerialization(s, opts.encoding, opts.charMap) + `"`, nil
+		// being JSON-escaped; when normalization is also in force the encoder
+		// splits the content at each mapped rune and normalizes only the
+		// non-mapped runs, so a replacement is neither re-escaped nor normalized
+		// (§11).
+		return `"` + encodeJSONStringForSerialization(s, opts) + `"`, nil
 	}
 }
 
@@ -1722,7 +1720,7 @@ func serializeTextSequence(seq Sequence, opts serializeOptions) (string, error) 
 		_, isAtomic := item.(AtomicValue)
 		atomic = append(atomic, isAtomic)
 	}
-	return applyCharMapToString(joinSerializedItems(parts, atomic, opts), opts.charMap), nil
+	return applyCharMapToString(joinSerializedItems(parts, atomic, opts), opts), nil
 }
 
 func serializeTextItem(item Item) (string, error) {
@@ -1745,18 +1743,42 @@ func serializeTextItem(item Item) (string, error) {
 }
 
 // applyCharMapToString substitutes each mapped rune in s with its replacement
-// string (used by the text output method, where the whole output is text).
-func applyCharMapToString(s string, charMap map[rune]string) string {
+// string (used by the text output method, where the whole output is text). When
+// an active normalization-form accompanies the character map, the content is
+// split at each mapped rune (matching decided on the pre-normalization content,
+// Serialization 3.1 §4 rules c/d), each non-mapped run is normalized on its own,
+// and each replacement is spliced in verbatim — never normalized (§11). A
+// literal content rune that happens to equal no mapped key always passes through
+// unchanged, whatever codepoint it is.
+func applyCharMapToString(s string, opts serializeOptions) string {
+	charMap := opts.charMap
 	if len(charMap) == 0 {
 		return s
 	}
+	normForm, normalize := serializeCharMapNorm(opts)
 	var b strings.Builder
-	for _, r := range s {
-		if repl, ok := charMap[r]; ok {
-			b.WriteString(repl)
+	b.Grow(len(s))
+	seg := 0
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRuneInString(s[i:])
+		repl, mapped := charMap[r]
+		if !mapped {
+			i += width
 			continue
 		}
-		b.WriteRune(r)
+		if i > seg {
+			b.WriteString(normalizeSerializeRun(s[seg:i], normalize, normForm))
+		}
+		b.WriteString(repl)
+		i += width
+		seg = i
+	}
+	if seg == 0 {
+		// No mapped rune in the content: normalize (or return) it whole.
+		return normalizeSerializeRun(s, normalize, normForm)
+	}
+	if seg < len(s) {
+		b.WriteString(normalizeSerializeRun(s[seg:], normalize, normForm))
 	}
 	return b.String()
 }
@@ -2456,27 +2478,54 @@ func inheritedInScopeNamespaces(elem *helium.Element) []*helium.Namespace {
 // non-ASCII as \u sequences) and the use-character-maps parameter: a mapped
 // character is replaced by its replacement string INSTEAD of being JSON-escaped,
 // and the replacement is emitted verbatim (not re-escaped), per Serialization 3.1
-// §9.1.11 (use-character-maps applies to the JSON output method) / §11. A nil/empty
-// charMap disables mapping.
-func encodeJSONStringForSerialization(s, encoding string, charMap map[rune]string) string {
-	utf8Out := encoding == "" || strings.EqualFold(encoding, "utf-8") || strings.EqualFold(encoding, "utf8")
+// §9.1.11 (use-character-maps applies to the JSON output method) / §11. A
+// nil/empty opts.charMap disables mapping. When an active normalization-form
+// accompanies the character map, the content is split at each mapped rune
+// (matching decided on the pre-normalization content), each non-mapped run is
+// normalized before escaping, and each replacement is spliced in verbatim —
+// never normalized (§11). A literal content rune that equals no mapped key
+// always encodes as ordinary content, whatever codepoint it is.
+func encodeJSONStringForSerialization(s string, opts serializeOptions) string {
+	utf8Out := opts.encoding == "" || strings.EqualFold(opts.encoding, "utf-8") || strings.EqualFold(opts.encoding, "utf8")
+	charMap := opts.charMap
+	normForm, normalize := serializeCharMapNorm(opts)
 	var b strings.Builder
-	for _, r := range s {
-		if repl, ok := charMap[r]; ok {
-			b.WriteString(repl)
+	b.Grow(len(s))
+	seg := 0
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRuneInString(s[i:])
+		repl, mapped := charMap[r]
+		if !mapped {
+			i += width
 			continue
 		}
-		switch {
-		case utf8Out || r <= 0x7F:
-			appendSerializedJSONStringRune(&b, r)
-		case r <= 0xFFFF:
-			fmt.Fprintf(&b, `\u%04X`, r)
-		default:
-			hi, lo := utf16SurrogatePair(r)
-			fmt.Fprintf(&b, `\u%04X\u%04X`, hi, lo)
+		if i > seg {
+			encodeJSONStringRun(&b, normalizeSerializeRun(s[seg:i], normalize, normForm), utf8Out)
 		}
+		b.WriteString(repl)
+		i += width
+		seg = i
+	}
+	if seg < len(s) {
+		encodeJSONStringRun(&b, normalizeSerializeRun(s[seg:], normalize, normForm), utf8Out)
 	}
 	return b.String()
+}
+
+// encodeJSONStringRun escapes one run of non-mapped characters as JSON string
+// content (utf8Out=false escapes non-ASCII as \u sequences).
+func encodeJSONStringRun(b *strings.Builder, run string, utf8Out bool) {
+	for _, r := range run {
+		switch {
+		case utf8Out || r <= 0x7F:
+			appendSerializedJSONStringRune(b, r)
+		case r <= 0xFFFF:
+			fmt.Fprintf(b, `\u%04X`, r)
+		default:
+			hi, lo := utf16SurrogatePair(r)
+			fmt.Fprintf(b, `\u%04X\u%04X`, hi, lo)
+		}
+	}
 }
 
 func utf16SurrogatePair(r rune) (uint16, uint16) {

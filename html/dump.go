@@ -385,62 +385,137 @@ func htmlNormalizationForm(form string) (norm.Form, bool) {
 	return norm.NFC, false
 }
 
-// normalizeContent applies the dumper's requested Unicode normalization to a text
-// or attribute node's character content, substituting character-map keys with
-// their (normalization-inert sentinel) replacement FIRST so a replacement passes
-// through un-normalized (Serialization 3.1 §4). Because the character map has been
-// applied here, the caller passes a nil map to the escape funnel. Only called when
-// d.normalize is true.
-func (d *htmlDumper) normalizeContent(s []byte) []byte {
+// htmlContentSegment is one piece of a text or attribute node's character
+// content after pre-normalization character-map matching: either a normalized
+// run of non-mapped characters the escape funnel processes normally, or the
+// replacement for one mapped input rune, which the caller emits verbatim.
+type htmlContentSegment struct {
+	// text is the normalized non-mapped run (mapped is false).
+	text []byte
+	// repl is the character-map replacement for one mapped input rune (mapped
+	// is true).
+	repl   string
+	mapped bool
+}
+
+// normalizeContent applies the dumper's requested Unicode normalization to a
+// text or attribute node's character content and returns it as segments.
+// Character-map matching is decided on the PRE-normalization content
+// (Serialization 3.1 §4 applies character mapping — rule c — before Unicode
+// normalization — rule d — and never re-applies it): the content is split at
+// each mapped input rune, every maximal run of non-mapped characters is
+// normalized on its own, and each mapped rune becomes a replacement segment the
+// caller emits verbatim — never normalized (§11) and never escaped. Splitting
+// keeps a literal content rune, whatever codepoint it is, from ever being read
+// as a replacement placeholder. Only called when d.normalize is true.
+func (d *htmlDumper) normalizeContent(s []byte) []htmlContentSegment {
 	if len(d.charMap) == 0 {
-		return d.normForm.Bytes(s)
+		return []htmlContentSegment{{text: d.normForm.Bytes(s)}}
 	}
-	var b bytes.Buffer
-	b.Grow(len(s))
+	var segs []htmlContentSegment
+	seg := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
-		i += width
-		if repl, ok := d.charMap[r]; ok {
-			b.WriteString(repl)
+		repl, mapped := d.charMap[r]
+		if !mapped {
+			i += width
 			continue
 		}
-		b.WriteRune(r)
+		// Close the non-mapped run ending just before this mapped character,
+		// then record the replacement for exactly this pre-normalization
+		// occurrence.
+		if i > seg {
+			segs = append(segs, htmlContentSegment{text: d.normForm.Bytes(s[seg:i])})
+		}
+		segs = append(segs, htmlContentSegment{repl: repl, mapped: true})
+		i += width
+		seg = i
 	}
-	return d.normForm.Bytes(b.Bytes())
+	if segs == nil {
+		// No mapped rune in the content: normalize it whole.
+		return []htmlContentSegment{{text: d.normForm.Bytes(s)}}
+	}
+	if seg < len(s) {
+		segs = append(segs, htmlContentSegment{text: d.normForm.Bytes(s[seg:])})
+	}
+	return segs
 }
 
 // dumpText outputs text content, escaping &, <, > unless inside a raw text element.
 func (d *htmlDumper) dumpText(out io.Writer, n helium.Node) error {
-	// Unicode normalization is scoped to text nodes: normalize the character
-	// content first (character maps are folded in), then the escape funnel emits it
-	// with a nil map since mapping is already applied.
 	content := n.Content()
-	cm := d.charMap
-	if d.normalize {
-		content = d.normalizeContent(content)
-		cm = nil
-	}
-
+	rawText := false
 	parent := n.Parent()
 	if parent != nil && parent.Type() == helium.ElementNode {
 		parentName := strings.ToLower(parent.Name())
 		if desc := lookupElement(parentName); desc != nil && desc.dataMode >= dataRawText {
-			// Raw text element: no escaping (character maps still apply).
-			if len(cm) == 0 {
-				d.writeBytes(out, content)
-			} else {
-				d.check(writeHTMLCharMapped(out, content, cm))
-			}
-			return d.err
+			rawText = true
 		}
+	}
+
+	// Unicode normalization is scoped to text nodes: normalizeContent splits the
+	// content at each mapped rune (matching decided on the pre-normalization
+	// content), each non-mapped run is normalized and escaped with a nil map, and
+	// each replacement is emitted verbatim.
+	if d.normalize {
+		return d.writeNormalizedText(out, content, rawText)
+	}
+
+	if rawText {
+		// Raw text element: no escaping (character maps still apply).
+		if len(d.charMap) == 0 {
+			d.writeBytes(out, content)
+		} else {
+			d.check(writeHTMLCharMapped(out, content, d.charMap))
+		}
+		return d.err
 	}
 
 	// Normal text: escape &, <, >
 	if d.err != nil {
 		return d.err
 	}
-	d.check(htmlEscapeText(out, content, d.escapeControlChars, cm))
+	d.check(htmlEscapeText(out, content, d.escapeControlChars, d.charMap))
 	return d.err
+}
+
+// writeNormalizedText writes a text node's character content under an active
+// Normalization request: each non-mapped segment is normalized and (outside a
+// raw text element) escaped as ordinary text with no character map, and each
+// replacement segment is emitted verbatim. Only called when d.normalize is true.
+func (d *htmlDumper) writeNormalizedText(out io.Writer, content []byte, rawText bool) error {
+	for _, seg := range d.normalizeContent(content) {
+		if d.err != nil {
+			return d.err
+		}
+		if seg.mapped {
+			d.writeString(out, seg.repl)
+			continue
+		}
+		if rawText {
+			d.writeBytes(out, seg.text)
+			continue
+		}
+		d.check(htmlEscapeText(out, seg.text, d.escapeControlChars, nil))
+	}
+	return d.err
+}
+
+// writeNormalizedAttrValue writes a non-URI-escaped attribute value under an
+// active Normalization request: each non-mapped segment is normalized and
+// escaped with a nil map, and each replacement segment is emitted verbatim.
+// Only called when d.normalize is true.
+func (d *htmlDumper) writeNormalizedAttrValue(out io.Writer, val string, isURI bool) {
+	for _, seg := range d.normalizeContent([]byte(val)) {
+		if d.err != nil {
+			return
+		}
+		if seg.mapped {
+			d.writeString(out, seg.repl)
+			continue
+		}
+		d.check(htmlEscapeAttrValue(out, string(seg.text), isURI, d.preserveCase, nil))
+	}
 }
 
 // writeHTMLCharMapped writes s to w, substituting each character-map rune with
@@ -812,14 +887,14 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 			// is likewise scoped to the attribute value's character content; a
 			// URI-escaped value is already ASCII (percent-encoded), so normalization
 			// is a no-op there and character mapping is skipped.
-			attrCharMap := d.charMap
-			if uriEscaped {
-				attrCharMap = nil
-			} else if d.normalize {
-				val = string(d.normalizeContent([]byte(val)))
-				attrCharMap = nil
+			switch {
+			case uriEscaped:
+				d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase, nil))
+			case d.normalize:
+				d.writeNormalizedAttrValue(out, val, isURI)
+			default:
+				d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase, d.charMap))
 			}
-			d.check(htmlEscapeAttrValue(out, val, isURI, d.preserveCase, attrCharMap))
 		}
 		d.writeString(out, "\"")
 	}
