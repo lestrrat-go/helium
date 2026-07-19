@@ -53,11 +53,13 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 			idx := strings.LastIndex(name, ":")
 			prefix, local = name[:idx], name[idx+1:]
 		}
-		// An empty-URI prefix namespace here serializes identically to the
-		// pre-CreateElementNS code: the writer's reconcileOne skips href=="" so
-		// no xmlns is synthesized; unbound-prefix output for HTML colon names
-		// predates this path (verified byte-identical against the previous
-		// CreateElement-based literal colon name).
+		// The empty-URI prefix binding is the parse-side representation of a
+		// colon-bearing HTML tag name: the prefix is left unbound (href ""),
+		// preserving the original "prefix:local" name for the HTML serializer,
+		// which emits it verbatim (html/dump.go). The generic XML writer instead
+		// REJECTS such an element (ErrWriterUnboundNamespacePrefix): "prefix:local"
+		// with no xmlns:prefix is not reparseable. Keep this binding as-is — only
+		// the generic writer's emission decision changed.
 		var ns *helium.Namespace
 		ns, err = t.doc.CreateNamespace(prefix, "")
 		if err != nil {

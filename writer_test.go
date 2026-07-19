@@ -1844,6 +1844,36 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			sentinel: helium.ErrWriterInvalidNamespacePrefix,
 		},
 		{
+			name: "unbound element namespace prefix",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				// A non-empty prefix bound to an empty URI: the element name
+				// serializes as "foo:root" with no xmlns:foo, which the parser
+				// cannot reparse.
+				ns, err := doc.CreateNamespace("foo", "")
+				require.NoError(t, err)
+				root, err := doc.CreateElementNS("root", ns)
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterUnboundNamespacePrefix,
+		},
+		{
+			name: "unbound attribute namespace prefix",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				ns, err := doc.CreateNamespace("foo", "")
+				require.NoError(t, err)
+				require.NoError(t, root.SetAttributeNS("bar", "v", ns))
+				return doc
+			},
+			sentinel: helium.ErrWriterUnboundNamespacePrefix,
+		},
+		{
 			name: "invalid comment content",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
