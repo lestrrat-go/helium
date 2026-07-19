@@ -134,12 +134,21 @@ func TestSafeDefaults(t *testing.T) {
 		require.Contains(t, err.Error(), "exceeded max depth")
 	})
 
-	t.Run("MaxDepth(0) disables the cap", func(t *testing.T) {
+	t.Run("MaxDepth(0) keeps the 256 default cap", func(t *testing.T) {
+		t.Parallel()
+
+		deep := strings.Repeat("<a>", 300) + strings.Repeat("</a>", 300)
+		_, err := helium.NewParser().MaxDepth(0).Parse(t.Context(), []byte(deep))
+		require.Error(t, err, "MaxDepth(0) must select the 256 default, not disable the cap")
+		require.Contains(t, err.Error(), "exceeded max depth")
+	})
+
+	t.Run("MaxDepth(-1) disables the cap", func(t *testing.T) {
 		t.Parallel()
 
 		deep := strings.Repeat("<a>", 512) + strings.Repeat("</a>", 512)
-		_, err := helium.NewParser().MaxDepth(0).Parse(t.Context(), []byte(deep))
-		require.NoError(t, err, "MaxDepth(0) must opt out of the depth cap")
+		_, err := helium.NewParser().MaxDepth(-1).Parse(t.Context(), []byte(deep))
+		require.NoError(t, err, "a negative MaxDepth must opt out of the depth cap")
 	})
 }
 

@@ -683,7 +683,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 		if ctx.options.IsSet(parseSkipIDs) {
 			ctx.loadsubset.Set(SkipIDs)
 		}
-		ctx.maxElemDepth = p.maxDepth
+		ctx.maxElemDepth = resolveLimit(p.maxDepth, defaultMaxDepth)
 		ctx.maxExtDTDSize = resolveLimit(p.maxExtDTDSize, MaxExternalDTDSize)
 		ctx.maxAmpl = resolveLimit(p.maxEntityAmpl, DefaultMaxEntityAmplification)
 		ctx.maxNameLength = resolveLimit(p.maxNameLength, DefaultMaxNameLength)

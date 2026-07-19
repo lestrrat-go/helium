@@ -200,6 +200,7 @@ After parsing a start tag (`parser_element.go`): (1) DTD lookup; (2) apply defau
 | MaxEntityAmplification(-1) | maxAmpl=0 (disable amplification ratio check; 1 GiB hard ceiling still applies) |
 | MaxNameLength(-1) / MaxContentModelDepth(-1) | disable the name-length / DTD content-model-depth caps |
 | MaxNodeContentSize(-1) | disable the node-content + blank-run caps |
+| MaxDepth(-1) | maxElemDepth=0 (disable the element-nesting cap; MaxDepth(0) selects the 256 default) |
 | MergeCDATA(true) | deliver CDATA as Characters (not CDataBlock) |
 | RecoverOnError(true) | error recovery (continue on errors) |
 | IgnoreEncoding(true) | don't use XML decl encoding |

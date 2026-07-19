@@ -236,10 +236,7 @@ func (c *xsdValidateCommand) processInput(ctx context.Context, cfg *xsdValidateC
 		t0 = time.Now()
 	}
 
-	p := helium.NewParser()
-	if cfg.maxDepth >= 0 {
-		p = p.MaxDepth(cfg.maxDepth)
-	}
+	p := applyMaxDepth(helium.NewParser(), cfg.maxDepth)
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}
