@@ -3,6 +3,7 @@ package helium_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -1851,6 +1852,101 @@ func TestWriterRejectInvalidCharsRefFreeContexts(t *testing.T) {
 				require.NotContains(t, buf.String(), "&#1;")
 			})
 		}
+	}
+}
+
+// TestWriterRefFreeXML11RestrictedC1 covers the C1 half of the XML 1.1
+// RestrictedChar set (0x7F-0x84, 0x86-0x9F) in the reference-less contexts —
+// comment text, PI data, CDATA-section content, and a DTD entity-value literal.
+// Unlike the C0 half, a C1 control is a legal literal XML 1.0 Char, so XML 1.0
+// output keeps it literally in both modes. XML 1.1 forbids a literal
+// RestrictedChar anywhere in the document (production [1]) and these contexts
+// admit no character reference, so for XML 1.1 output the default policy rejects
+// with ErrInvalidXMLChar and RejectInvalidChars(false) substitutes a raw U+FFFD —
+// never a bogus &#127;. NEL (U+0085) and LINE SEPARATOR (U+2028) are NOT
+// RestrictedChar and stay legal literally in a 1.1 reference-less context.
+func TestWriterRefFreeXML11RestrictedC1(t *testing.T) {
+	t.Parallel()
+
+	build := map[string]func(version, payload string) *helium.Document{
+		"comment-node": func(v, p string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(r))
+			require.NoError(t, r.AddChild(d.CreateComment([]byte(p))))
+			return d
+		},
+		"pi-data": func(v, p string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(r))
+			require.NoError(t, r.AddChild(d.CreatePI("t", p)))
+			return d
+		},
+		"cdata-section-node": func(v, p string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(r))
+			require.NoError(t, r.AddChild(d.CreateCDATASection([]byte(p))))
+			return d
+		},
+		"entity-value": func(v, p string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("r", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", p)
+			require.NoError(t, err)
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(r))
+			return d
+		},
+	}
+
+	// Both ends of the C1 RestrictedChar range: U+007F (1 byte) and U+009F (2
+	// bytes in UTF-8).
+	for _, payload := range []string{"a\x7fb", "a\u009fb"} {
+		for name, mk := range build {
+			t.Run(fmt.Sprintf("%s/U+%04X", name, []rune(payload)[1]), func(t *testing.T) {
+				t.Parallel()
+
+				// XML 1.0: a C1 control is a legal literal Char — accepted
+				// unchanged in both modes.
+				var buf bytes.Buffer
+				require.NoError(t, helium.NewWriter().WriteTo(&buf, mk(ver10, payload)))
+				require.Contains(t, buf.String(), payload)
+				buf.Reset()
+				require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(ver10, payload)))
+				require.Contains(t, buf.String(), payload)
+
+				// XML 1.1: default policy rejects.
+				buf.Reset()
+				require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk(ver11, payload)), helium.ErrInvalidXMLChar)
+
+				// XML 1.1 replacement mode substitutes a raw U+FFFD, never a
+				// character reference (these contexts admit none).
+				buf.Reset()
+				require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(ver11, payload)))
+				require.Contains(t, buf.String(), "a�b")
+				require.NotContains(t, buf.String(), payload)
+				require.NotContains(t, buf.String(), "&#127;")
+				require.NotContains(t, buf.String(), "&#159;")
+			})
+		}
+	}
+
+	// NEL and LINE SEPARATOR are not RestrictedChar: legal literally in an XML
+	// 1.1 reference-less context, so the default policy accepts them unchanged.
+	for name, mk := range build {
+		t.Run(name+"/nel-ls-legal", func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			require.NoError(t, helium.NewWriter().WriteTo(&buf, mk(ver11, "a\u0085b\u2028c")))
+			require.Contains(t, buf.String(), "a\u0085b\u2028c")
+		})
 	}
 }
 

@@ -361,14 +361,21 @@ func isSerializableChar(r rune, xml11 bool) bool {
 
 // serializeRefFree screens content bound for a REFERENCE-LESS serialization
 // context — comment text, processing-instruction data, and CDATA-section content.
-// None of these admits a character reference, so the literal-serializable set is
-// exactly the XML 1.0 Char range (isInCharacterRange) for BOTH target versions: an
-// XML 1.1 RestrictedChar, which element/attribute text may carry only as a
-// character reference, has no valid form here regardless of the target version.
-// This is why the check does NOT use isSerializableChar(r, xml11), which would
-// wrongly admit a 1.1 RestrictedChar.
+// None of these admits a character reference, so a character must be serializable
+// LITERALLY. For XML 1.0 output the literal set is the XML 1.0 Char range
+// (isInCharacterRange). For XML 1.1 output it is that range MINUS the
+// RestrictedChar set (isXML11RestrictedChar): element/attribute text may carry a
+// RestrictedChar only as a character reference (XML 1.1 production [1] forbids a
+// literal occurrence anywhere in the document), and these contexts have no
+// reference form, so a RestrictedChar has no valid form here at all. The C1 half
+// of that set (0x7F-0x84, 0x86-0x9F) is a legal literal XML 1.0 Char, so 1.0
+// output keeps accepting it unchanged. The 1.1 screen is deliberately
+// RestrictedChar, NOT isXML11SerializeAsCharRef: NEL (U+0085) and LINE SEPARATOR
+// (U+2028) are not RestrictedChar and are legal literally in a 1.1 comment/PI/
+// CDATA section (they are merely line-end-normalized to LF on re-parse), so
+// rejecting them would refuse a well-formed document.
 //
-// A character outside that range is a serialization error: under the default
+// A character failing the screen is a serialization error: under the default
 // policy it is rejected with a sticky ErrInvalidXMLChar (returning stop=true, with
 // nothing to write); under RejectInvalidChars(false) it is replaced by U+FFFD. A
 // byte that is not valid UTF-8 is always replaced by U+FFFD, matching the
@@ -382,7 +389,7 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 		case r == utf8.RuneError && width == 1:
 			// A malformed UTF-8 byte is always replaced with U+FFFD.
 			work = true
-		case !isInCharacterRange(r):
+		case !isInCharacterRange(r) || (s.xml11 && isXML11RestrictedChar(r)):
 			if !s.replaceInvalidChars {
 				s.check(fmt.Errorf("helium: %s contains a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
 				return nil, true
@@ -397,7 +404,7 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 	out = make([]byte, 0, len(b))
 	for i := 0; i < len(b); {
 		r, width := utf8.DecodeRune(b[i:])
-		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) {
+		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) || (s.xml11 && isXML11RestrictedChar(r)) {
 			out = append(out, esc_fffd...)
 		} else {
 			out = append(out, b[i:i+width]...)
@@ -410,10 +417,11 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 // dtdLiteral applies the reference-less serialization policy (serializeRefFree) to
 // a DTD literal supplied as a string: an entity value, an external-ID system or
 // public literal, or an enumeration token. A DTD literal admits no character
-// reference, so the policy is applied UNIFORMLY across both target versions — an
-// XML 1.1 EntityValue could in principle char-reference a RestrictedChar, but the
-// writer rejects (default) or U+FFFD-substitutes (RejectInvalidChars(false))
-// instead, keeping a single reference-less rule for every DTD literal site. It
+// reference for its LITERAL runes, so serializeRefFree's version-aware
+// reference-less screen applies to every DTD literal site — a literal XML 1.1
+// RestrictedChar (an EntityValue could in principle carry it as a character
+// reference instead, but the writer does not rewrite literals into references) is
+// rejected (default) or U+FFFD-substituted (RejectInvalidChars(false)). It
 // returns the value to emit and whether the caller should stop because the default
 // reject policy recorded a sticky ErrInvalidXMLChar.
 func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
