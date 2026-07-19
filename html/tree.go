@@ -40,6 +40,24 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 	var elem *helium.Element
 	var err error
 	if prefix, local, found := strings.Cut(name, ":"); found {
+		// CreateElementNS rejects a colon in the local part, so a malformed
+		// multi-colon name such as <foo:bar:baz> (first-colon split leaves
+		// local "bar:baz") would fail and drop the node entirely. Split at the
+		// LAST colon instead in that case: prefix "foo:bar", local "baz". The
+		// local part is then guaranteed colon-free so element creation never
+		// fails and the node is always attached, keeping t.cur consistent with
+		// EndElement. Element.Name() reconstructs prefix+":"+local, so the
+		// serialized name stays "foo:bar:baz" — byte-identical to how a
+		// colon-bearing name was built before the CreateElement colon check.
+		if strings.ContainsRune(local, ':') {
+			idx := strings.LastIndex(name, ":")
+			prefix, local = name[:idx], name[idx+1:]
+		}
+		// An empty-URI prefix namespace here serializes identically to the
+		// pre-CreateElementNS code: the writer's reconcileOne skips href=="" so
+		// no xmlns is synthesized; unbound-prefix output for HTML colon names
+		// predates this path (verified byte-identical against the previous
+		// CreateElement-based literal colon name).
 		var ns *helium.Namespace
 		ns, err = t.doc.CreateNamespace(prefix, "")
 		if err != nil {
