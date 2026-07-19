@@ -50,7 +50,7 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 			continue
 		}
 		if b < 0x80 {
-			if !isChar(rune(b)) {
+			if !ctx.isLiteralChar(rune(b)) {
 				return "", ErrInvalidChar
 			}
 			buf.WriteByte(b)
@@ -61,7 +61,7 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 		if !ok {
 			break
 		}
-		if !isCharWidth(r, w) {
+		if !ctx.isLiteralCharWidth(r, w) {
 			return "", ErrInvalidChar
 		}
 		buf.WriteRune(r)
@@ -170,7 +170,7 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 			break
 		}
 		if b < 0x80 {
-			if !isChar(rune(b)) {
+			if !pctx.isLiteralChar(rune(b)) {
 				break
 			}
 			buf.WriteByte(b)
@@ -178,7 +178,7 @@ func (pctx *parserCtx) parsePI(ctx context.Context) error {
 			continue
 		}
 		r, w, ok := decodeRuneAt(cur, off)
-		if !ok || !isCharWidth(r, w) {
+		if !ok || !pctx.isLiteralCharWidth(r, w) {
 			break
 		}
 		buf.WriteRune(r)
@@ -252,6 +252,54 @@ func isCharWidth(r rune, w int) bool {
 		return false
 	}
 	return isXMLCharValue(uint32(r))
+}
+
+// isLiteralChar reports whether r is valid in literal document content for the
+// parsed XML version. XML 1.1 RestrictedChar values remain valid character
+// reference targets but must not appear literally.
+func (pctx *parserCtx) isLiteralChar(r rune) bool {
+	if r == utf8.RuneError {
+		return false
+	}
+	return pctx.isLiteralCharValue(uint32(r))
+}
+
+// isLiteralCharWidth is the width-aware counterpart of isLiteralChar. A real
+// U+FFFD is valid, while a width-one RuneError reports invalid UTF-8.
+func (pctx *parserCtx) isLiteralCharWidth(r rune, w int) bool {
+	if r == utf8.RuneError && w == 1 {
+		return false
+	}
+	return pctx.isLiteralCharValue(uint32(r))
+}
+
+func (pctx *parserCtx) isLiteralCharValue(c uint32) bool {
+	if pctx.isXML11() {
+		return isXML11CharValue(c) && !isXML11RestrictedChar(rune(c))
+	}
+	return isXMLCharValue(c)
+}
+
+func (pctx *parserCtx) literalBytesValid(b []byte) bool {
+	for len(b) > 0 {
+		r, w := utf8.DecodeRune(b)
+		if !pctx.isLiteralCharWidth(r, w) {
+			return false
+		}
+		b = b[w:]
+	}
+	return true
+}
+
+func (pctx *parserCtx) literalStringValid(s string) bool {
+	for len(s) > 0 {
+		r, w := utf8.DecodeRuneInString(s)
+		if !pctx.isLiteralCharWidth(r, w) {
+			return false
+		}
+		s = s[w:]
+	}
+	return true
 }
 
 func isXMLCharValue(c uint32) bool {
@@ -346,14 +394,14 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 
 	off := 0
 	q, qw, qok := decodeRuneAt(cur, off)
-	if !qok || !isCharWidth(q, qw) {
+	if !qok || !pctx.isLiteralCharWidth(q, qw) {
 		return pctx.error(ctx, ErrInvalidChar)
 	}
 	buf.WriteRune(q)
 	off += qw
 
 	r, rw, rok := decodeRuneAt(cur, off)
-	if !rok || !isCharWidth(r, rw) {
+	if !rok || !pctx.isLiteralCharWidth(r, rw) {
 		return pctx.error(ctx, ErrInvalidChar)
 	}
 	buf.WriteRune(r)
@@ -369,7 +417,7 @@ func (pctx *parserCtx) parseComment(ctx context.Context) error {
 		if !ok {
 			return pctx.error(ctx, ErrInvalidComment)
 		}
-		if !isCharWidth(c, w) {
+		if !pctx.isLiteralCharWidth(c, w) {
 			return pctx.error(ctx, ErrInvalidChar)
 		}
 		if q == '-' && r == '-' && c == '>' {
