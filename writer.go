@@ -381,6 +381,31 @@ func (s *writeSession) checkAttributeName(name string) bool {
 	return true
 }
 
+// checkNamespaceBinding rejects a QName whose non-empty prefix resolves to an
+// empty (absent) namespace URI. Such a name serializes verbatim as
+// "prefix:local" with no in-scope xmlns:prefix declaration — reconcileOne skips
+// an empty href, so nothing is synthesized — and helium's own parser then
+// rejects the output with "namespace 'prefix' not found". The generic writer
+// must never emit output it cannot itself reparse. A prefixless name (no
+// namespace, or the default namespace, prefix "") is unaffected: only a
+// non-empty prefix with an empty URI is rejected. The reserved "xml" prefix is
+// always accepted regardless of the namespace object's href: Namespaces in XML
+// binds it by definition to lexicon.NamespaceXML, so "xml:local" reparses
+// without any declaration (the parser resolves it in lookupNamespace, and
+// LookupNSByPrefix/dumpNs treat it the same way). On failure it records a sticky
+// error (preserving any earlier one) and returns false. Shared by the element
+// and attribute serialization paths so they cannot diverge.
+func (s *writeSession) checkNamespaceBinding(what, name, prefix, href string) bool {
+	if prefix == "xml" {
+		return true
+	}
+	if prefix != "" && href == "" {
+		s.check(fmt.Errorf("helium: %s %q uses prefix %q bound to an empty namespace URI: %w", what, name, prefix, ErrWriterUnboundNamespacePrefix))
+		return false
+	}
+	return true
+}
+
 // checkNamespacePrefix validates a namespace declaration prefix about to be
 // emitted as "xmlns:"+prefix. An unvalidated prefix (e.g. from
 // DeclareNamespace) can carry whitespace, quotes, or '>' that inject raw markup
@@ -1186,6 +1211,15 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		return d.err
 	}
 
+	// A prefixed element name whose prefix is bound to an empty namespace URI
+	// (e.g. an html.Parse colon name built via CreateNamespace(prefix, "")) has
+	// no reparseable serialization: the name emits as "prefix:local" but no
+	// xmlns:prefix is synthesized. Reject it rather than emit output the parser
+	// cannot read.
+	if isNser && !d.checkNamespaceBinding("element name", name, nser.Prefix(), nser.URI()) {
+		return d.err
+	}
+
 	d.writeString(out, "<")
 	d.writeString(out, name)
 
@@ -1230,6 +1264,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			// The attribute name is emitted verbatim. checkAttributeName
 			// rejects names that would inject raw markup into the start tag.
 			if !d.checkAttributeName(attr.Name()) {
+				return d.err
+			}
+			// A prefixed attribute name whose prefix is bound to an empty
+			// namespace URI (constructible via SetAttributeNS with a
+			// CreateNamespace(prefix, "") binding) is likewise unreparseable.
+			if !d.checkNamespaceBinding("attribute name", attr.Name(), attr.Prefix(), attr.URI()) {
 				return d.err
 			}
 			d.writeString(out, " "+attr.Name()+`="`)

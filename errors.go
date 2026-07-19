@@ -169,6 +169,15 @@ var (
 	ErrWriterInvalidElementName     = errors.New("invalid element name")
 	ErrWriterInvalidAttributeName   = errors.New("invalid attribute name")
 	ErrWriterInvalidNamespacePrefix = errors.New("invalid namespace prefix")
+	// ErrWriterUnboundNamespacePrefix flags an element or attribute QName whose
+	// non-empty prefix resolves to an empty (absent) namespace URI. Emitting such
+	// a name verbatim ("prefix:local") produces output with no in-scope
+	// xmlns:prefix declaration, which helium's own parser rejects with
+	// "namespace 'prefix' not found"; the generic writer must never emit output it
+	// cannot itself reparse. A prefixless name (no namespace or the default
+	// namespace) is unaffected, as is the reserved "xml" prefix, which is
+	// implicitly bound to the XML namespace and needs no declaration.
+	ErrWriterUnboundNamespacePrefix = errors.New("unbound namespace prefix")
 	// ErrWriterInvalidComment flags comment content that contains "--" or ends
 	// with "-" (either would break the "-->" delimiter).
 	ErrWriterInvalidComment = errors.New("invalid comment content")
