@@ -31,7 +31,11 @@ func Example_helium_modify_document() {
 
 	// Add a new child element to <cache>.
 	cache := db.NextSibling().(*helium.Element)
-	ttl := doc.CreateElement("ttl")
+	ttl, err := doc.CreateElement("ttl")
+	if err != nil {
+		fmt.Printf("failed to create element: %s\n", err)
+		return
+	}
 	if err := ttl.AppendText([]byte("300")); err != nil {
 		fmt.Printf("append text failed: %s\n", err)
 		return
@@ -42,7 +46,11 @@ func Example_helium_modify_document() {
 	}
 
 	// Replace <db> with a renamed copy.
-	newDB := doc.CreateElement("database")
+	newDB, err := doc.CreateElement("database")
+	if err != nil {
+		fmt.Printf("failed to create element: %s\n", err)
+		return
+	}
 	if _, err := newDB.SetAttribute("host", "new.example.com"); err != nil {
 		fmt.Printf("set attribute failed: %s\n", err)
 		return

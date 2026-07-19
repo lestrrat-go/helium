@@ -65,12 +65,14 @@ func TestGetElementByID(t *testing.T) {
 		// Documents built without parsing have no ID table,
 		// so GetElementByID falls back to O(n) tree walk.
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(root))
 
-		child := doc.CreateElement("child")
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
 		ns := helium.NewNamespace("xml", lexicon.NamespaceXML)
-		_, err := child.SetAttributeNS("id", "myid", ns)
+		_, err = child.SetAttributeNS("id", "myid", ns)
 		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
 
@@ -174,8 +176,10 @@ func TestGetElementByID(t *testing.T) {
 		// table path is that RegisterID overwrites, so a lookup returns the LAST
 		// element registered for that value.
 		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-		first := doc.CreateElement("a")
-		second := doc.CreateElement("b")
+		first, err := doc.CreateElement("a")
+		require.NoError(t, err)
+		second, err := doc.CreateElement("b")
+		require.NoError(t, err)
 		doc.RegisterID("dup", first)
 		doc.RegisterID("dup", second)
 
@@ -194,7 +198,8 @@ func TestIDTable(t *testing.T) {
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 	require.Nil(t, doc.IDTable(), "an API-built document has no interned ID table")
 
-	elem := doc.CreateElement("a")
+	elem, err := doc.CreateElement("a")
+	require.NoError(t, err)
 	doc.RegisterID("k1", elem)
 
 	tbl := doc.IDTable()
@@ -203,7 +208,8 @@ func TestIDTable(t *testing.T) {
 
 	// The returned map aliases the internal one: a later RegisterID shows through
 	// the map already handed out.
-	elem2 := doc.CreateElement("b")
+	elem2, err := doc.CreateElement("b")
+	require.NoError(t, err)
 	doc.RegisterID("k2", elem2)
 	require.Same(t, elem2, tbl["k2"],
 		"IDTable returns the live internal map, so later registrations are visible")
@@ -307,7 +313,9 @@ func TestDocumentAccessors(t *testing.T) {
 	require.Equal(t, helium.StandaloneExplicitYes, doc.Standalone())
 
 	// AddSibling/Replace on a document are rejected.
-	require.Error(t, doc.AddSibling(doc.CreateElement("x")))
+	x, err := doc.CreateElement("x")
+	require.NoError(t, err)
+	require.Error(t, doc.AddSibling(x))
 	require.Error(t, doc.Replace())
 
 	// SetTreeDoc on a document is a no-op-ish but must not panic.

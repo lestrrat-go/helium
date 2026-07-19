@@ -8,7 +8,10 @@ import (
 
 // marshalEncryptedData builds the EncryptedData DOM element tree.
 func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Element, error) {
-	root := doc.CreateElement("EncryptedData")
+	root, err := doc.CreateElement("EncryptedData")
+	if err != nil {
+		return nil, err
+	}
 	if err := root.DeclareNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
 		return nil, err
 	}
@@ -41,7 +44,10 @@ func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Elem
 	// precedence over the deprecated single EncryptedKey field.
 	encKeys := ed.effectiveEncryptedKeys()
 	if len(encKeys) > 0 {
-		keyInfo := doc.CreateElement("KeyInfo")
+		keyInfo, err := doc.CreateElement("KeyInfo")
+		if err != nil {
+			return nil, err
+		}
 		if err := keyInfo.DeclareNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
 			return nil, err
 		}
@@ -73,7 +79,10 @@ func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Elem
 
 // marshalEncryptedKey builds the EncryptedKey DOM element tree.
 func marshalEncryptedKey(doc *helium.Document, ek *EncryptedKey) (*helium.Element, error) {
-	root := doc.CreateElement("EncryptedKey")
+	root, err := doc.CreateElement("EncryptedKey")
+	if err != nil {
+		return nil, err
+	}
 	if err := root.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
 		return nil, err
 	}
@@ -101,7 +110,10 @@ func marshalEncryptedKey(doc *helium.Document, ek *EncryptedKey) (*helium.Elemen
 }
 
 func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*helium.Element, error) {
-	elem := doc.CreateElement("EncryptionMethod")
+	elem, err := doc.CreateElement("EncryptionMethod")
+	if err != nil {
+		return nil, err
+	}
 	if err := elem.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
 		return nil, err
 	}
@@ -110,7 +122,10 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 	}
 
 	if em.DigestMethod != "" {
-		dm := doc.CreateElement("DigestMethod")
+		dm, err := doc.CreateElement("DigestMethod")
+		if err != nil {
+			return nil, err
+		}
 		if err := dm.SetActiveNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
 			return nil, err
 		}
@@ -123,7 +138,10 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 	}
 
 	if em.MGFAlgorithm != "" {
-		mgf := doc.CreateElement("MGF")
+		mgf, err := doc.CreateElement("MGF")
+		if err != nil {
+			return nil, err
+		}
 		if err := mgf.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc11); err != nil {
 			return nil, err
 		}
@@ -136,7 +154,10 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 	}
 
 	if len(em.OAEPParams) > 0 {
-		params := doc.CreateElement("OAEPparams")
+		params, err := doc.CreateElement("OAEPparams")
+		if err != nil {
+			return nil, err
+		}
 		if err := params.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
 			return nil, err
 		}
@@ -153,12 +174,18 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 }
 
 func marshalCipherData(doc *helium.Document, cipherValue []byte) (*helium.Element, error) {
-	cd := doc.CreateElement("CipherData")
+	cd, err := doc.CreateElement("CipherData")
+	if err != nil {
+		return nil, err
+	}
 	if err := cd.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
 		return nil, err
 	}
 
-	cv := doc.CreateElement("CipherValue")
+	cv, err := doc.CreateElement("CipherValue")
+	if err != nil {
+		return nil, err
+	}
 	if err := cv.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
 		return nil, err
 	}

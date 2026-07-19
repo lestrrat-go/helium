@@ -55,7 +55,8 @@ func TestAddAttributeDeclSerializes(t *testing.T) {
 	require.Equal(t, adecl, got)
 
 	// A conforming instance so ValidateDTD accepts the round-tripped document.
-	root := doc.CreateElement(attrDeclElem)
+	root, err := doc.CreateElement(attrDeclElem)
+	require.NoError(t, err)
 	_, err = root.SetAttribute(attrDeclCount, "5")
 	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
@@ -234,7 +235,8 @@ func TestAddAttributeDeclEnumerationTokenColonAccepted(t *testing.T) {
 	_, err = dtd.AddAttributeDecl(attrDeclElem, "kind", enum.AttrEnumeration, enum.AttrDefaultImplied, "", Enumeration{"x:a", "x:b"})
 	require.NoError(t, err)
 
-	root := doc.CreateElement(attrDeclElem)
+	root, err := doc.CreateElement(attrDeclElem)
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer
@@ -274,7 +276,8 @@ func TestAddAttributeDeclDefaultRoundTripEquivalence(t *testing.T) {
 			_, err = dtd.AddAttributeDecl(attrDeclElem, "label", enum.AttrCDATA, enum.AttrDefaultFixed, tc.defvalue, nil)
 			require.NoError(t, err)
 
-			root := doc.CreateElement(attrDeclElem)
+			root, err := doc.CreateElement(attrDeclElem)
+			require.NoError(t, err)
 			require.NoError(t, doc.SetDocumentElement(root))
 
 			var buf bytes.Buffer

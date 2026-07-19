@@ -16,16 +16,18 @@ import (
 func buildDoc(t *testing.T) (*helium.Document, *helium.Element, *helium.Element) {
 	t.Helper()
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 
-	child := doc.CreateElement("child")
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 
 	ns := helium.NewNamespace("ns", "urn:ns")
-	_, err := child.SetAttributeNS("attr", "v", ns)
+	_, err = child.SetAttributeNS("attr", "v", ns)
 	require.NoError(t, err)
 
 	return doc, root, child
@@ -156,12 +158,14 @@ func TestDeduplicateNodes_ExceedsLimit(t *testing.T) {
 func buildWideDoc(t *testing.T, childCount int) []helium.Node {
 	t.Helper()
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	children := make([]helium.Node, 0, childCount)
 	for range childCount {
-		child := doc.CreateElement("child")
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
 		children = append(children, child)
 	}

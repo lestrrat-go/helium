@@ -13,12 +13,14 @@ import (
 // is a no-op once a node escaped, so the moved node keeps its content.
 func TestCrossDocumentMoveSurvivesFree(t *testing.T) {
 	a := NewDocument("1.0", "", StandaloneImplicitNo)
-	moved := a.CreateElement("moved")
+	moved, err := a.CreateElement("moved")
+	require.NoError(t, err)
 	txt := a.CreateText([]byte("ORIGINAL-CONTENT"))
 	require.NoError(t, moved.AddChild(txt))
 
 	b := NewDocument("1.0", "", StandaloneImplicitNo)
-	broot := b.CreateElement("broot")
+	broot, err := b.CreateElement("broot")
+	require.NoError(t, err)
 	require.NoError(t, b.AddChild(broot))
 
 	// Move the subtree from A into B. This must mark A as having escaped storage.
@@ -30,7 +32,8 @@ func TestCrossDocumentMoveSurvivesFree(t *testing.T) {
 	a.Free()
 	c := NewDocument("1.0", "", StandaloneImplicitNo)
 	for range 512 {
-		e := c.CreateElement("OVERWRITE")
+		e, err := c.CreateElement("OVERWRITE")
+		require.NoError(t, err)
 		tx := c.CreateText([]byte("XXXXXXXXXXXXXXXX"))
 		require.NoError(t, e.AddChild(tx))
 	}
@@ -52,10 +55,13 @@ func TestPlainParseDoesNotEscape(t *testing.T) {
 // cross-document escape, so the flag stays clear and Free keeps recycling.
 func TestSameDocumentMoveDoesNotEscape(t *testing.T) {
 	d := NewDocument("1.0", "", StandaloneImplicitNo)
-	root := d.CreateElement("root")
+	root, err := d.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, d.AddChild(root))
-	a := d.CreateElement("a")
-	b := d.CreateElement("b")
+	a, err := d.CreateElement("a")
+	require.NoError(t, err)
+	b, err := d.CreateElement("b")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(a))
 	require.NoError(t, root.AddChild(b))
 
@@ -81,7 +87,8 @@ func recycleNamespaceSlab(t *testing.T) {
 // document's Free must not recycle its slab out from under the retained decl.
 func TestAddNamespaceDeclCrossDocumentAppendSurvivesFree(t *testing.T) {
 	a := NewDocument("1.0", "", StandaloneImplicitNo)
-	el := a.CreateElement("el")
+	el, err := a.CreateElement("el")
+	require.NoError(t, err)
 	require.NoError(t, a.AddChild(el))
 
 	b := NewDocument("1.0", "", StandaloneImplicitNo)
@@ -108,7 +115,8 @@ func TestAddNamespaceDeclCrossDocumentAppendSurvivesFree(t *testing.T) {
 // source document's Free.
 func TestAddNamespaceDeclCrossDocumentCollapseSurvivesFree(t *testing.T) {
 	a := NewDocument("1.0", "", StandaloneImplicitNo)
-	el := a.CreateElement("el")
+	el, err := a.CreateElement("el")
+	require.NoError(t, err)
 	require.NoError(t, a.AddChild(el))
 	require.NoError(t, el.DeclareNamespace("p", "urn:old")) // A-owned slot
 
@@ -135,7 +143,8 @@ func TestAddNamespaceDeclCrossDocumentCollapseSurvivesFree(t *testing.T) {
 // clear and Free keeps recycling.
 func TestAddNamespaceDeclSameDocumentDoesNotEscape(t *testing.T) {
 	a := NewDocument("1.0", "", StandaloneImplicitNo)
-	el := a.CreateElement("el")
+	el, err := a.CreateElement("el")
+	require.NoError(t, err)
 	require.NoError(t, a.AddChild(el))
 	ns, err := a.CreateNamespace("p", "urn:x")
 	require.NoError(t, err)
@@ -149,7 +158,8 @@ func TestAddNamespaceDeclSameDocumentDoesNotEscape(t *testing.T) {
 // retained) must not mark the source document escaped.
 func TestAddNamespaceDeclCrossDocumentNoOpDoesNotEscape(t *testing.T) {
 	a := NewDocument("1.0", "", StandaloneImplicitNo)
-	el := a.CreateElement("el")
+	el, err := a.CreateElement("el")
+	require.NoError(t, err)
 	require.NoError(t, a.AddChild(el))
 	require.NoError(t, el.DeclareNamespace("p", "urn:same")) // existing A-owned slot
 

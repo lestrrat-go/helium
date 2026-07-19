@@ -222,7 +222,10 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 // over-declaring it. It then copies attributes and recurses into children using
 // helium.UnsafeAppendChild for direct linkage.
 func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*helium.Namespace, xmlSpacePreserve bool) (helium.Node, error) {
-	elem := sc.dst.CreateElement(src.LocalName())
+	elem, err := sc.dst.CreateElement(src.LocalName())
+	if err != nil {
+		return nil, err
+	}
 	sc.record(src, elem)
 	if sc.elemMap != nil {
 		sc.elemMap[src] = elem

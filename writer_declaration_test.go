@@ -19,7 +19,8 @@ const (
 func newDocWithRoot(t *testing.T, version, encoding string) *helium.Document {
 	t.Helper()
 	doc := helium.NewDocument(version, encoding, helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 	return doc
 }

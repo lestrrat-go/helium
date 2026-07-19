@@ -51,6 +51,10 @@ Attributes are a **linked list via next/prev** on the Element, NOT children:
 - Attribute VALUE stored as children Text/EntityRef nodes of the Attribute itself
 - `Attribute.Value()` aggregates child content as string
 
+## Node Builders (colon rule)
+
+`Document.CreateElement(name) → (*Element, error)` and `Document.CreateAttribute(name, value, ns) → (*Attribute, error)` REJECT a colon in `name` (the single name field holds a bare local name; a colon there is an unbound prefix that would serialize as namespace-ill-formed XML). Supply a namespaced name through the `NS` siblings instead: `Document.CreateElementNS(localname, ns) → (*Element, error)` rejects a colon in `localname`, allocates the element via `CreateElement`, then installs `ns` as the active namespace with `SetNs` (so `Name()` renders `prefix:localname` and the cached qname is invalidated); `Element.SetAttributeNS(localname, value, ns)` is the attribute counterpart. A nil receiver allocates a standalone (heap, non-slab) element/attribute. Neither builder checks the rest of the XML Name/NCName grammar. The parser/copy code never passes a colon — it splits a QName into prefix+local and sets the namespace via `SetActiveNamespace`/`SetNs` — so the rejection only guards hand-built trees.
+
 ## ElementType Enum (21 values)
 
 ```

@@ -2148,7 +2148,7 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string)
 	// its position or how many exist.
 	removeHTMLContentTypeMetas(head)
 
-	meta := doc.CreateElement("meta")
+	meta, _ := doc.CreateElement("meta")
 	if headURI := head.URI(); headURI != "" {
 		_ = meta.SetActiveNamespace(head.Prefix(), headURI)
 	}

@@ -209,7 +209,8 @@ func TestSerializeNoEncodingOverrideUnchanged(t *testing.T) {
 	// An unloadable encoding recorded on the document must still serialize
 	// (declaration-only) when there is no OutputEncoding override.
 	built := helium.NewDefaultDocument()
-	root := built.CreateElement("root")
+	root, err := built.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, built.SetDocumentElement(root))
 	built.SetEncoding("x-unknown-enc")
 
@@ -318,14 +319,18 @@ func TestOutputEncodingUSASCIIRejectsDTDLiterals(t *testing.T) {
 			doc := helium.NewDefaultDocument()
 			_, err := doc.CreateInternalSubset("root", "", nonASCII+".dtd")
 			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(root))
 			return doc
 		},
 		"doctype-public-id": func(t *testing.T) *helium.Document {
 			doc := helium.NewDefaultDocument()
 			_, err := doc.CreateInternalSubset("root", "-//"+nonASCII+"//EN", "sys.dtd")
 			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(root))
 			return doc
 		},
 		"entity-external-system-id": func(t *testing.T) *helium.Document {
@@ -334,7 +339,9 @@ func TestOutputEncodingUSASCIIRejectsDTDLiterals(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddEntity("e", enum.ExternalGeneralParsedEntity, "", nonASCII+".ent", "")
 			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(root))
 			return doc
 		},
 		"entity-internal-value": func(t *testing.T) *helium.Document {
@@ -343,7 +350,9 @@ func TestOutputEncodingUSASCIIRejectsDTDLiterals(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", nonASCII)
 			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(root))
 			return doc
 		},
 		"ndata-notation-name": func(t *testing.T) *helium.Document {
@@ -354,7 +363,9 @@ func TestOutputEncodingUSASCIIRejectsDTDLiterals(t *testing.T) {
 			// external ID literal is ASCII so the leak is isolated to the name.
 			_, err = dtd.AddEntity("e", enum.ExternalGeneralUnparsedEntity, "", "e.dat", nonASCII)
 			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(root))
 			return doc
 		},
 		"notation-system-id": func(t *testing.T) *helium.Document {
@@ -363,7 +374,9 @@ func TestOutputEncodingUSASCIIRejectsDTDLiterals(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddNotation("n", "", nonASCII+".not")
 			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(doc.CreateElement("root")))
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(root))
 			return doc
 		},
 	}
@@ -456,7 +469,8 @@ func TestSerializeNoOverrideASCIIAliasBytesUnchanged(t *testing.T) {
 	build := func(t *testing.T, enc string) string {
 		t.Helper()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.AddChild(doc.CreateText([]byte("é"))))
 		doc.SetEncoding(enc)

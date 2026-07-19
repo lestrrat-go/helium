@@ -27,7 +27,9 @@ func TestInternalSubsetAccessors(t *testing.T) {
 	// Exercise the DTD node-interface methods (delegating wrappers). They must
 	// not panic; their success/error is implementation-defined for an
 	// already-attached internal subset.
-	_ = dtd.AddSibling(doc.CreateElement("x"))
+	x, err := doc.CreateElement("x")
+	require.NoError(t, err)
+	_ = dtd.AddSibling(x)
 	_ = dtd.Replace()
 	dtd.SetTreeDoc(doc)
 	dtd.Free()
@@ -119,7 +121,9 @@ func TestAddNotationRejectsColon(t *testing.T) {
 	// Declare the root element so ValidateDTD accepts the document.
 	_, err = dtd.AddElementDecl("doc", enum.AnyElementType, nil)
 	require.NoError(t, err)
-	require.NoError(t, doc.SetDocumentElement(doc.CreateElement("doc")))
+	docElem, err := doc.CreateElement("doc")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(docElem))
 
 	var buf strings.Builder
 	require.NoError(t, helium.Write(&buf, doc))
@@ -314,7 +318,8 @@ func TestInternalSubsetErrors(t *testing.T) {
 func TestCreateInternalSubsetBeforeRoot(t *testing.T) {
 	t.Parallel()
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("doc")
+	root, err := doc.CreateElement("doc")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	dtd, err := doc.CreateInternalSubset("doc", "-//X//EN", "x.dtd")

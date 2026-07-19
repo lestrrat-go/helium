@@ -36,7 +36,10 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 		localName = l
 	}
 
-	elem := ec.resultDoc.CreateElement(localName)
+	elem, err := ec.resultDoc.CreateElement(localName)
+	if err != nil {
+		return err
+	}
 
 	hasNS := false
 	if inst.Namespace != nil {
@@ -899,7 +902,10 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			// Create a standalone attribute node by attaching it to a
 			// temporary element, then capturing it as a node item.
 			tmpDoc := helium.NewDefaultDocument()
-			tmpElem := tmpDoc.CreateElement("_tmp")
+			tmpElem, err := tmpDoc.CreateElement("_tmp")
+			if err != nil {
+				return err
+			}
 			{
 				if resolved.nsURI != "" {
 					ns, _ := tmpDoc.CreateNamespace(resolved.prefix, resolved.nsURI)

@@ -25,8 +25,9 @@ func TestResolveHrefWindowsBase(t *testing.T) {
 	mkElem := func(docURL, href string) *helium.Element {
 		doc := helium.NewDefaultDocument()
 		doc.SetURL(docURL)
-		elem := doc.CreateElement("include")
-		_, err := elem.SetAttribute("href", href)
+		elem, err := doc.CreateElement("include")
+		require.NoError(t, err)
+		_, err = elem.SetAttribute("href", href)
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(elem))
 		return elem

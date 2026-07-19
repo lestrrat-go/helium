@@ -198,7 +198,10 @@ func (dc *deepCopier) recorded(src, cp Node) Node {
 // *Namespace declaration in scope on the COPY. parentState is the user state of
 // the source parent element.
 func (dc *deepCopier) copyElement(src *Element, inScope map[string]*Namespace, parentState any) (Node, error) {
-	elem := dc.dst.CreateElement(src.LocalName())
+	elem, err := dc.dst.CreateElement(src.LocalName())
+	if err != nil {
+		return nil, err
+	}
 	dc.record(src, elem)
 
 	childScope, err := dc.bindNamespaces(src, elem, inScope)

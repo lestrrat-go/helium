@@ -23,7 +23,8 @@ func TestSign(t *testing.T) {
 		// reference against the live document tree.
 		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
 
-		payload := doc.CreateElement("Payload")
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
 		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
 
 		signer := xmldsig1.NewSigner().
@@ -61,7 +62,8 @@ func TestSign(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
 
-		payload := doc.CreateElement("Payload")
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
 		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
 
 		signer := xmldsig1.NewSigner().
@@ -207,7 +209,8 @@ func TestSign(t *testing.T) {
 		before, err := helium.WriteString(doc)
 		require.NoError(t, err)
 
-		payload := doc.CreateElement("Payload")
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
 		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
 
 		signer := xmldsig1.NewSigner().
@@ -270,7 +273,8 @@ func TestSign(t *testing.T) {
 			before, err := helium.WriteString(doc)
 			require.NoError(t, err)
 
-			payload := doc.CreateElement("Payload")
+			payload, err := doc.CreateElement("Payload")
+			require.NoError(t, err)
 			require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
 
 			sigElem, err := newSigner().SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
@@ -308,7 +312,8 @@ func TestSign(t *testing.T) {
 			before, err := helium.WriteString(doc)
 			require.NoError(t, err)
 
-			payload := doc.CreateElement("Payload")
+			payload, err := doc.CreateElement("Payload")
+			require.NoError(t, err)
 			require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
 
 			sigElem, err := newSigner().SignEnveloping(t.Context(), doc, []helium.Node{payload}, ecKey)

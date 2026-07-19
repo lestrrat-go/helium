@@ -198,14 +198,17 @@ func TestChildElements(t *testing.T) {
 func TestChildElementsAndIterators(t *testing.T) {
 	t.Parallel()
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	require.NoError(t, root.AppendText([]byte("text")))
-	e1 := doc.CreateElement("a")
+	e1, err := doc.CreateElement("a")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(e1))
 	require.NoError(t, root.AddChild(doc.CreateComment([]byte("c"))))
-	e2 := doc.CreateElement("b")
+	e2, err := doc.CreateElement("b")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(e2))
 
 	// ChildElements skips text/comment.

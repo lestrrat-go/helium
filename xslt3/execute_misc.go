@@ -295,7 +295,10 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *wherePopula
 
 	// Execute body into a temporary document, then filter per XSLT 3.0 section 8.4.
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot := tmpDoc.CreateElement("_tmp")
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return err
+	}
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return err
 	}
@@ -546,7 +549,10 @@ func (ec *execContext) execOnNonEmpty(ctx context.Context, inst *onNonEmptyInst)
 // xsl:map-entry instructions.
 func (ec *execContext) execMap(ctx context.Context, inst *mapInst) error {
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot := tmpDoc.CreateElement("_tmp")
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return err
+	}
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return err
 	}

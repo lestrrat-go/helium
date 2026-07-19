@@ -123,7 +123,10 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 		return errors.New("element placed in wrong location")
 	}
 
-	e := doc.CreateElement(localname)
+	e, err := doc.CreateElement(localname)
+	if err != nil {
+		return err
+	}
 	e.SetLine(pctx.LineNumber())
 	if pctx.currentEntityURI != "" {
 		e.entityBaseURI = pctx.currentEntityURI

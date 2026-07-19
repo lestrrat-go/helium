@@ -328,14 +328,16 @@ func TestActiveRelativeNamespaceURIRejected(t *testing.T) {
 	// even though it was never added as a declared namespace.
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
-	child := doc.CreateElement("child")
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 	require.NoError(t, child.SetActiveNamespace("p", "relative/uri"))
 
-	_, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "relative namespace URI")
 }

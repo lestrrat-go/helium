@@ -59,7 +59,8 @@ func TestTypedNilNodeHandling(t *testing.T) {
 // Document.Replace().
 func TestEmptyReplaceContract(t *testing.T) {
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-	el := doc.CreateElement("root")
+	el, err := doc.CreateElement("root")
+	require.NoError(t, err)
 
 	errNode := el.Replace()
 	require.ErrorIs(t, errNode, helium.ErrInvalidOperation)
@@ -73,22 +74,27 @@ func TestEmptyReplaceContract(t *testing.T) {
 func TestCyclicNodeSentinel(t *testing.T) {
 	t.Run("AddChild self insertion", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-		el := doc.CreateElement("root")
+		el, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.ErrorIs(t, el.AddChild(el), helium.ErrCyclicNode)
 	})
 
 	t.Run("AddSibling self insertion", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-		parent := doc.CreateElement("parent")
-		child := doc.CreateElement("child")
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 		require.ErrorIs(t, child.AddSibling(child), helium.ErrCyclicNode)
 	})
 
 	t.Run("Replace with an ancestor", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-		parent := doc.CreateElement("parent")
-		child := doc.CreateElement("child")
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 		require.ErrorIs(t, child.Replace(parent), helium.ErrCyclicNode)
 	})

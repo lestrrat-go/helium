@@ -29,15 +29,18 @@ func ecElem(t *testing.T, inner string) *helium.Element {
 func newKeyInfoCertElem(t *testing.T, doc *helium.Document, px, ns string, certDER []byte) *helium.Element {
 	t.Helper()
 
-	keyInfo := doc.CreateElement("KeyInfo")
+	keyInfo, err := doc.CreateElement("KeyInfo")
+	require.NoError(t, err)
 	require.NoError(t, keyInfo.DeclareNamespace(px, ns))
 	require.NoError(t, keyInfo.SetActiveNamespace(px, ns))
 
-	x509Data := doc.CreateElement("X509Data")
+	x509Data, err := doc.CreateElement("X509Data")
+	require.NoError(t, err)
 	require.NoError(t, x509Data.SetActiveNamespace(px, ns))
 	require.NoError(t, keyInfo.AddChild(x509Data))
 
-	certElem := doc.CreateElement("X509Certificate")
+	certElem, err := doc.CreateElement("X509Certificate")
+	require.NoError(t, err)
 	require.NoError(t, certElem.SetActiveNamespace(px, ns))
 	require.NoError(t, certElem.AddChild(
 		doc.CreateText([]byte(base64.StdEncoding.EncodeToString(certDER)))))
@@ -284,19 +287,23 @@ func TestKeyInfoNamespace(t *testing.T) {
 		require.NoError(t, err)
 
 		const evilNS = "urn:example:evil"
-		keyInfo := doc.CreateElement("KeyInfo")
+		keyInfo, err := doc.CreateElement("KeyInfo")
+		require.NoError(t, err)
 		require.NoError(t, keyInfo.DeclareNamespace("evil", evilNS))
 		require.NoError(t, keyInfo.SetActiveNamespace("evil", evilNS))
 
-		keyValue := doc.CreateElement("KeyValue")
+		keyValue, err := doc.CreateElement("KeyValue")
+		require.NoError(t, err)
 		require.NoError(t, keyValue.SetActiveNamespace("evil", evilNS))
 		require.NoError(t, keyInfo.AddChild(keyValue))
 
-		rsaKV := doc.CreateElement("RSAKeyValue")
+		rsaKV, err := doc.CreateElement("RSAKeyValue")
+		require.NoError(t, err)
 		require.NoError(t, rsaKV.SetActiveNamespace("evil", evilNS))
 		require.NoError(t, keyValue.AddChild(rsaKV))
 
-		mod := doc.CreateElement("Modulus")
+		mod, err := doc.CreateElement("Modulus")
+		require.NoError(t, err)
 		require.NoError(t, mod.SetActiveNamespace("evil", evilNS))
 		require.NoError(t, mod.AddChild(doc.CreateText([]byte(base64.StdEncoding.EncodeToString([]byte{1, 2, 3})))))
 		require.NoError(t, rsaKV.AddChild(mod))

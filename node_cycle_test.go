@@ -53,7 +53,8 @@ func TestAddChildAllowsLegitimateEntityReference(t *testing.T) {
 	_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
 	require.NoError(t, err)
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	ref, err := doc.CreateReference("e")
@@ -80,7 +81,8 @@ func sharedEntityFixture(t *testing.T) (root *helium.Element, ref *helium.Entity
 	_, err = dtd.AddEntity("e2", enum.InternalGeneralEntity, "", "", "y")
 	require.NoError(t, err)
 
-	root = doc.CreateElement("root")
+	root, err = doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	ref, err = doc.CreateReference("e1")
@@ -165,7 +167,8 @@ func TestContentTerminatesOnCyclicSiblingList(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDefaultDocument()
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	txt := doc.CreateText([]byte("a"))
 	require.NoError(t, root.AddChild(txt))
 
@@ -185,14 +188,16 @@ func TestWalkRejectsSelfSiblingLoop(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDefaultDocument()
-	parent := doc.CreateElement("parent")
-	c := doc.CreateElement("c")
+	parent, err := doc.CreateElement("parent")
+	require.NoError(t, err)
+	c, err := doc.CreateElement("c")
+	require.NoError(t, err)
 	require.NoError(t, parent.AddChild(c))
 
 	// Corrupt the sibling list into a one-node self-loop: c.next = c.
 	helium.UnsafeSetNextSibling(c, c)
 
-	err := helium.Walk(parent, helium.NodeWalkerFunc(func(helium.Node) error { return nil }))
+	err = helium.Walk(parent, helium.NodeWalkerFunc(func(helium.Node) error { return nil }))
 	require.ErrorIs(t, err, helium.ErrWalkCycle,
 		"Walk must return ErrWalkCycle on a one-node sibling self-loop, not report success")
 }
@@ -210,7 +215,8 @@ func TestWalkVisitsSharedEntityDAGTwice(t *testing.T) {
 	ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
 	require.NoError(t, err)
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	ref1, err := doc.CreateReference("e")

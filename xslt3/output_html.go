@@ -499,7 +499,7 @@ func insertHTMLMeta(doc *helium.Document, outDef *OutputDef) {
 		}
 	}
 	// Create and insert the meta element.
-	meta := doc.CreateElement("meta")
+	meta, _ := doc.CreateElement("meta")
 	// If the head element is in a namespace, put the meta element in the same namespace.
 	if headURI := head.URI(); headURI != "" {
 		_ = meta.SetActiveNamespace(head.Prefix(), headURI)

@@ -24,13 +24,15 @@ func buildDeepChain(t *testing.T, depth int) (*helium.Document, *helium.Element,
 	t.Helper()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	parent := root
 	// go.mod requires Go 1.25, so integer range is part of the supported toolchain.
 	for range depth {
-		child := doc.CreateElement("level")
+		child, err := doc.CreateElement("level")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 		parent = child
 	}
@@ -53,23 +55,27 @@ func TestTraverseAxisPreceding_DeepChain(t *testing.T) {
 	depth := deepChainDepth(t)
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
-	left := doc.CreateElement("left")
+	left, err := doc.CreateElement("left")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(left))
 
 	parent := left
 	var leaf helium.Node = left
 	// go.mod requires Go 1.25, so integer range is part of the supported toolchain.
 	for range depth {
-		child := doc.CreateElement("level")
+		child, err := doc.CreateElement("level")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 		parent = child
 		leaf = child
 	}
 
-	right := doc.CreateElement("right")
+	right, err := doc.CreateElement("right")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(right))
 
 	nodes, err := ixpath.TraverseAxis(t.Context(), ixpath.AxisPreceding, right, ixpath.DefaultMaxNodeSetLength)
@@ -86,12 +92,14 @@ func TestTraverseAxisDescendant_ContextCancelled(t *testing.T) {
 	// A wide tree so that, absent a context check, traversal would visit a
 	// large number of nodes before returning.
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	parent := root
 	for range 5000 {
-		child := doc.CreateElement("level")
+		child, err := doc.CreateElement("level")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 		parent = child
 	}
@@ -134,12 +142,14 @@ func TestTraverseAxisDescendant_ContextCancelledMidWalk(t *testing.T) {
 	const cancelAfter = 10
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	parent := root
 	for range depth {
-		child := doc.CreateElement("level")
+		child, err := doc.CreateElement("level")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 		parent = child
 	}
@@ -181,11 +191,13 @@ func TestTraverseAxisDescendant_WideChildEnumerationChecksContext(t *testing.T) 
 	const width = 20000
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	for range width {
-		child := doc.CreateElement("child")
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
 	}
 
@@ -209,10 +221,12 @@ func TestTraverseAxisChild_WideContextCancelledMidWalk(t *testing.T) {
 	const cancelAfter = 10
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 	for range width {
-		child := doc.CreateElement("child")
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
 	}
 
@@ -234,9 +248,11 @@ func TestTraverseAxisAttribute_WideContextCancelledMidWalk(t *testing.T) {
 	const cancelAfter = 10
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
-	elem := doc.CreateElement("e")
+	elem, err := doc.CreateElement("e")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(elem))
 	for i := range width {
 		_, err := elem.SetAttribute("a"+strconv.Itoa(i), "v")
@@ -270,19 +286,23 @@ func TestTraverseAxisPreceding_WideChildEnumerationChecksContext(t *testing.T) {
 	const width = 20000
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	// A wide left subtree whose descendants precede the context node; the
 	// preceding axis walks them via collectDescendantsReverse.
-	left := doc.CreateElement("left")
+	left, err := doc.CreateElement("left")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(left))
 	for range width {
-		child := doc.CreateElement("child")
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
 		require.NoError(t, left.AddChild(child))
 	}
 
-	ctx0 := doc.CreateElement("ctx")
+	ctx0, err := doc.CreateElement("ctx")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(ctx0))
 
 	ctx := &countingContext{}
@@ -308,9 +328,11 @@ func TestTraverseAxisNamespace_WideContextCancelledMidWalk(t *testing.T) {
 	const cancelAfter = 10
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
-	elem := doc.CreateElement("e")
+	elem, err := doc.CreateElement("e")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(elem))
 	for i := range width {
 		require.NoError(t, elem.DeclareNamespace("p"+strconv.Itoa(i), "urn:ns:"+strconv.Itoa(i)))
@@ -337,9 +359,11 @@ func TestTraverseAxisNamespace_WideEnumerationChecksContext(t *testing.T) {
 	const width = 20000
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
-	elem := doc.CreateElement("e")
+	elem, err := doc.CreateElement("e")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(elem))
 	for i := range width {
 		require.NoError(t, elem.DeclareNamespace("p"+strconv.Itoa(i), "urn:ns:"+strconv.Itoa(i)))

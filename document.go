@@ -619,11 +619,16 @@ var (
 
 // CreateElement allocates a new Element named name and owned by this
 // document, but does not attach it to the tree; the caller must insert it
-// via AddChild or a sibling/parent method. When d is non-nil the element is
-// drawn from the document's slab allocator, so the element must not outlive a
-// call to Document.Free. A nil receiver allocates a standalone element with no
-// owning document.
-func (d *Document) CreateElement(name string) *Element {
+// via AddChild or a sibling/parent method. A colon in name is rejected;
+// supply a namespaced name through CreateElementNS instead. name is not
+// otherwise checked against the XML Name/NCName grammar. When d is non-nil the
+// element is drawn from the document's slab allocator, so the element must not
+// outlive a call to Document.Free. A nil receiver allocates a standalone
+// element with no owning document.
+func (d *Document) CreateElement(name string) (*Element, error) {
+	if strings.ContainsRune(name, ':') {
+		return nil, fmt.Errorf("element name %q contains a colon: use CreateElementNS with a local name and Namespace parameter", name)
+	}
 	var e *Element
 	if d != nil {
 		e = d.allocElement()
@@ -633,7 +638,22 @@ func (d *Document) CreateElement(name string) *Element {
 	e.name = name
 	e.etype = ElementNode
 	e.doc = d
-	return e
+	return e, nil
+}
+
+// CreateElementNS allocates a new Element with local name localname and active
+// namespace ns, owned by this document, without attaching it to the tree. The
+// local name must not contain a colon; supply the namespace through ns. This is
+// the namespaced analogue of CreateElement (mirroring the SetAttribute /
+// SetAttributeNS pairing). A nil ns leaves the element unqualified. A nil
+// receiver allocates a standalone element with no owning document.
+func (d *Document) CreateElementNS(localname string, ns *Namespace) (*Element, error) {
+	e, err := d.CreateElement(localname)
+	if err != nil {
+		return nil, err
+	}
+	e.SetNs(ns)
+	return e, nil
 }
 
 func (d *Document) allocElement() *Element {

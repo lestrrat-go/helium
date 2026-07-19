@@ -1,6 +1,8 @@
 package html
 
 import (
+	"strings"
+
 	"github.com/lestrrat-go/helium"
 )
 
@@ -31,7 +33,25 @@ func (t *treeBuilder) EndDocument() error {
 }
 
 func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
-	elem := t.doc.CreateElement(name)
+	// The HTML tokenizer can produce tag names that carry a colon (e.g. the
+	// MS-Office construct <o:p>). CreateElement rejects a colon, so such a name
+	// is built through CreateElementNS with the colon split into a namespace
+	// prefix and a local name, preserving the original "prefix:local" name.
+	var elem *helium.Element
+	var err error
+	if prefix, local, found := strings.Cut(name, ":"); found {
+		var ns *helium.Namespace
+		ns, err = t.doc.CreateNamespace(prefix, "")
+		if err != nil {
+			return err
+		}
+		elem, err = t.doc.CreateElementNS(local, ns)
+	} else {
+		elem, err = t.doc.CreateElement(name)
+	}
+	if err != nil {
+		return err
+	}
 
 	// Use SetLiteralAttribute because the HTML parser has already resolved
 	// entities in attribute values. SetAttribute would re-parse them as XML

@@ -90,13 +90,14 @@ func TestSerializeEscaping(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	// Attribute value containing both quote characters plus markup chars.
 	// SetLiteralAttribute stores the value verbatim (no entity parsing) so the
 	// serializer is the component responsible for escaping it.
-	err := root.SetLiteralAttribute("attr", `he said "hi" & 'bye' <x>`)
+	err = root.SetLiteralAttribute("attr", `he said "hi" & 'bye' <x>`)
 	require.NoError(t, err)
 
 	// Text content with markup, ampersand, tab and newline.
@@ -168,7 +169,8 @@ func TestWriteRichDTDWithEntities(t *testing.T) {
 	_, err = dtd.AddEntity("pub", enum.ExternalGeneralParsedEntity, "-//E//T//EN", "pub.xml", "")
 	require.NoError(t, err)
 
-	root := doc.CreateElement("doc")
+	root, err := doc.CreateElement("doc")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	out, err := helium.WriteString(doc)

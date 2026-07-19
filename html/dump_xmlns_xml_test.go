@@ -21,16 +21,18 @@ func TestWriteNeverEmitsXmlnsXml(t *testing.T) {
 	const xmlNS = "http://www.w3.org/XML/1998/namespace"
 
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("html")
+	root, err := doc.CreateElement("html")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	// A non-HTML-table element that carries a spurious xml namespace decl node
 	// plus a genuine namespace decl and an xml:lang attribute.
-	child := doc.CreateElement("header")
+	child, err := doc.CreateElement("header")
+	require.NoError(t, err)
 	require.NoError(t, child.DeclareNamespace("xml", xmlNS))
 	require.NoError(t, child.DeclareNamespace("foo", "urn:example:foo"))
 	langNS := helium.NewNamespace("xml", xmlNS)
-	_, err := child.SetAttributeNS("lang", "en", langNS)
+	_, err = child.SetAttributeNS("lang", "en", langNS)
 	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 

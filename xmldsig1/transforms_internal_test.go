@@ -21,20 +21,24 @@ import (
 func buildExcC14NReference(t *testing.T, doc *helium.Document, incPx, incNS, prefixList string) *helium.Element {
 	t.Helper()
 
-	ref := doc.CreateElement("Reference")
+	ref, err := doc.CreateElement("Reference")
+	require.NoError(t, err)
 	require.NoError(t, ref.DeclareNamespace(nsPrefix, NamespaceDSig))
 	require.NoError(t, ref.SetActiveNamespace(nsPrefix, NamespaceDSig))
 
-	transforms := doc.CreateElement("Transforms")
+	transforms, err := doc.CreateElement("Transforms")
+	require.NoError(t, err)
 	require.NoError(t, transforms.SetActiveNamespace(nsPrefix, NamespaceDSig))
 	require.NoError(t, ref.AddChild(transforms))
 
-	transform := doc.CreateElement("Transform")
+	transform, err := doc.CreateElement("Transform")
+	require.NoError(t, err)
 	require.NoError(t, transform.SetActiveNamespace(nsPrefix, NamespaceDSig))
 	require.NoError(t, transform.SetLiteralAttribute("Algorithm", ExcC14N10))
 	require.NoError(t, transforms.AddChild(transform))
 
-	inc := doc.CreateElement("InclusiveNamespaces")
+	inc, err := doc.CreateElement("InclusiveNamespaces")
+	require.NoError(t, err)
 	require.NoError(t, inc.DeclareNamespace(incPx, incNS))
 	require.NoError(t, inc.SetActiveNamespace(incPx, incNS))
 	require.NoError(t, inc.SetLiteralAttribute("PrefixList", prefixList))
@@ -44,12 +48,14 @@ func buildExcC14NReference(t *testing.T, doc *helium.Document, incPx, incNS, pre
 	// include them: parseReferenceElement now rejects a Reference missing either,
 	// and this helper exercises the transform/InclusiveNamespaces parsing of an
 	// otherwise complete Reference.
-	digestMethod := doc.CreateElement("DigestMethod")
+	digestMethod, err := doc.CreateElement("DigestMethod")
+	require.NoError(t, err)
 	require.NoError(t, digestMethod.SetActiveNamespace(nsPrefix, NamespaceDSig))
 	require.NoError(t, digestMethod.SetLiteralAttribute("Algorithm", DigestSHA256))
 	require.NoError(t, ref.AddChild(digestMethod))
 
-	digestValue := doc.CreateElement("DigestValue")
+	digestValue, err := doc.CreateElement("DigestValue")
+	require.NoError(t, err)
 	require.NoError(t, digestValue.SetActiveNamespace(nsPrefix, NamespaceDSig))
 	require.NoError(t, digestValue.AddChild(doc.CreateText([]byte("AA=="))))
 	require.NoError(t, ref.AddChild(digestValue))
