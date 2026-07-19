@@ -41,15 +41,15 @@ const xmlTextNoEnc = "textnoenc"
 // escapeNonASCII flag, XHTML detection) lives in a writeSession created
 // inside each terminal method.
 type Writer struct {
-	format             bool
-	indentString       string
-	indentStringSet    bool // IndentString was called (distinguishes an explicit "" from unset)
-	skipDTD            bool
-	noEmpty            bool
-	noDecl             bool
-	noEscapeNonASCII   bool
-	allowPrefixUndecl  bool // emit xmlns:prefix="" undeclarations (XML 1.1)
-	rejectInvalidChars bool // error (SERE0006) instead of replacing XML-invalid chars
+	format              bool
+	indentString        string
+	indentStringSet     bool // IndentString was called (distinguishes an explicit "" from unset)
+	skipDTD             bool
+	noEmpty             bool
+	noDecl              bool
+	noEscapeNonASCII    bool
+	allowPrefixUndecl   bool // emit xmlns:prefix="" undeclarations (XML 1.1)
+	replaceInvalidChars bool // replace an XML-invalid char with U+FFFD instead of failing (SERE0006); the zero value rejects
 	// charMap substitutes a mapped rune in text and attribute-value content
 	// with its literal replacement string (XSLT/XQuery Serialization 3.1 §7
 	// character maps). Empty/nil disables the feature.
@@ -494,12 +494,14 @@ func (w Writer) AllowPrefixUndeclarations(v bool) Writer {
 
 // RejectInvalidChars controls how the writer handles a character that is not
 // valid in the target XML version (e.g. a C0/C1 control character in XML 1.0
-// output). When false (the default) such a character is replaced with U+FFFD;
-// when true the write fails with ErrInvalidXMLChar (the XSLT/XQuery
-// serialization error SERE0006). This detection is folded into the existing
-// text/attribute escaping pass, so it adds no extra traversal.
+// output). When true (the default) the write fails with ErrInvalidXMLChar (the
+// XSLT/XQuery serialization error SERE0006); when false such a character is
+// replaced with U+FFFD instead. This detection is folded into the existing
+// text/attribute escaping pass, so it adds no extra traversal. A valid XML 1.1
+// restricted character is never affected — it serializes as a decimal character
+// reference in both modes.
 func (w Writer) RejectInvalidChars(v bool) Writer {
-	w.rejectInvalidChars = v
+	w.replaceInvalidChars = !v
 	return w
 }
 
@@ -1130,7 +1132,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if err := d.writeNormalizedText(out, c); err != nil {
 				return err
 			}
-		} else if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
+		} else if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, d.charMap); err != nil {
 			return err
 		}
 		return d.err // no recursing down
@@ -1516,7 +1518,7 @@ func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElemen
 	}
 	d.writeString(out, `="`)
 	if d.err == nil {
-		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
 			d.err = err
 		}
 	}

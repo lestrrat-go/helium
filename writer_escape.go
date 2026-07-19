@@ -127,7 +127,7 @@ func (d *writeSession) writeNormalizedText(out io.Writer, content []byte) error 
 			}
 			continue
 		}
-		if err := escapeText(out, seg.text, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+		if err := escapeText(out, seg.text, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
 			return err
 		}
 	}
@@ -143,7 +143,7 @@ func (d *writeSession) writeNormalizedText(out io.Writer, content []byte) error 
 // replacement is emitted verbatim.
 func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) error {
 	if !d.normalize {
-		return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap)
+		return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, d.charMap)
 	}
 	for _, seg := range d.normalizeContent(content) {
 		if seg.mapped {
@@ -152,7 +152,7 @@ func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) erro
 			}
 			continue
 		}
-		if err := escapeAttrValue(out, seg.text, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+		if err := escapeAttrValue(out, seg.text, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
 			return err
 		}
 	}
@@ -349,6 +349,15 @@ func isInCharacterRange(r rune) bool {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
+// isSerializableChar reports whether r is a character the writer may serialize
+// for the target XML version: any XML 1.0 Char (isInCharacterRange) plus, when
+// targeting XML 1.1, the restricted control characters (isXML11SerializeAsCharRef)
+// that are valid in 1.1 but must be emitted as character references. A character
+// failing this is rejected with ErrInvalidXMLChar when RejectInvalidChars is set.
+func isSerializableChar(r rune, xml11 bool) bool {
+	return isInCharacterRange(r) || (xml11 && isXML11SerializeAsCharRef(r))
+}
+
 // writeCharMapReplacement flushes s[last:cut] to w and writes the raw
 // (unescaped) character-map replacement, returning the new value of last (the
 // byte offset just past the mapped character). It is shared by escapeText and
@@ -410,18 +419,35 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 		default:
 			// A character outside the XML character range (e.g. a C0/C1 control
 			// char) is a serialization error when rejection is enabled — checked
-			// before the escapeNonASCII char-reference branch so it is caught
-			// regardless of that setting. A malformed UTF-8 byte decodes to
-			// U+FFFD, which is IN range, so it is not a version error here.
-			if rejectInvalidChars && !isInCharacterRange(r) {
+			// before every emission branch so it is caught regardless of the
+			// escaping setting. A valid XML 1.1 restricted character is exempt: it
+			// is in-range for the target version and serializes as a character
+			// reference below. A malformed UTF-8 byte decodes to U+FFFD, which is
+			// IN range, so it is not a version error here.
+			if rejectInvalidChars && !isSerializableChar(r, xml11) {
 				return ErrInvalidXMLChar
 			}
 			// XML 1.1 restricted control characters (and the NEL/LINE SEPARATOR
 			// end-of-line characters) are valid but may not appear literally: emit
-			// them as decimal character references (before the escapeNonASCII hex
-			// branch and the out-of-range replacement).
+			// them as decimal character references (before the out-of-range
+			// replacement and the escapeNonASCII hex branch).
 			if xml11 && isXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(&dbuf, r)
+				break
+			}
+			// A character outside the XML character range (or a lone U+FFFD from a
+			// malformed UTF-8 byte) has no valid literal or numeric-reference form,
+			// so in replacement mode it becomes U+FFFD — the &#xFFFD; reference
+			// when non-ASCII characters are being escaped (matching libxml2) and
+			// the raw replacement character otherwise. Checked BEFORE the
+			// escapeNonASCII / asciiOutput char-reference branches so an
+			// out-of-range char never serializes as a bogus reference (e.g. &#x1;).
+			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				if escapeNonASCII || asciiOutput {
+					esc = esc_fffd_ref
+				} else {
+					esc = esc_fffd
+				}
 				break
 			}
 			// US-ASCII output cannot represent a non-ASCII character literally, so
@@ -429,7 +455,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 			// (the full range, not just Latin-1) — the octets stay pure US-ASCII,
 			// consistent with the encoding declaration. Checked before the Latin-1-only
 			// escapeNonASCII branch so BMP/astral characters are covered too.
-			if asciiOutput && r >= 0x80 && isInCharacterRange(r) {
+			if asciiOutput && r >= 0x80 {
 				esc = hexCharRefWide(&wbuf, r)
 				break
 			}
@@ -439,10 +465,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 					break
 				}
 			}
-			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
-				esc = esc_fffd
-				break
-			}
+			// A genuine in-range U+FFFD is emitted as a character reference.
 			if r == 0xFFFD {
 				esc = esc_fffd_ref
 				break
@@ -499,18 +522,35 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 		default:
 			// A character outside the XML character range (e.g. a C0/C1 control
 			// char) is a serialization error when rejection is enabled — checked
-			// before the escapeNonASCII char-reference branch so it is caught
-			// regardless of that setting. A malformed UTF-8 byte decodes to
-			// U+FFFD, which is IN range, so it is not a version error here.
-			if rejectInvalidChars && !isInCharacterRange(r) {
+			// before every emission branch so it is caught regardless of the
+			// escaping setting. A valid XML 1.1 restricted character is exempt: it
+			// is in-range for the target version and serializes as a character
+			// reference below. A malformed UTF-8 byte decodes to U+FFFD, which is
+			// IN range, so it is not a version error here.
+			if rejectInvalidChars && !isSerializableChar(r, xml11) {
 				return ErrInvalidXMLChar
 			}
 			// XML 1.1 restricted control characters (and the NEL/LINE SEPARATOR
 			// end-of-line characters) are valid but may not appear literally: emit
-			// them as decimal character references (before the escapeNonASCII hex
-			// branch and the out-of-range replacement).
+			// them as decimal character references (before the out-of-range
+			// replacement and the escapeNonASCII hex branch).
 			if xml11 && isXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(&dbuf, r)
+				break
+			}
+			// A character outside the XML character range (or a lone U+FFFD from a
+			// malformed UTF-8 byte) has no valid literal or numeric-reference form,
+			// so in replacement mode it becomes U+FFFD — the &#xFFFD; reference
+			// when non-ASCII characters are being escaped (matching libxml2) and
+			// the raw replacement character otherwise. Checked BEFORE the
+			// escapeNonASCII / asciiOutput char-reference branches so an
+			// out-of-range char never serializes as a bogus reference (e.g. &#x1;).
+			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				if escapeNonASCII || asciiOutput {
+					esc = esc_fffd_ref
+				} else {
+					esc = esc_fffd
+				}
 				break
 			}
 			// US-ASCII output cannot represent a non-ASCII character literally, so
@@ -518,7 +558,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 			// (the full range, not just Latin-1) — the octets stay pure US-ASCII,
 			// consistent with the encoding declaration. Checked before the Latin-1-only
 			// escapeNonASCII branch so BMP/astral characters are covered too.
-			if asciiOutput && r >= 0x80 && isInCharacterRange(r) {
+			if asciiOutput && r >= 0x80 {
 				esc = hexCharRefWide(&wbuf, r)
 				break
 			}
@@ -528,10 +568,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 					break
 				}
 			}
-			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
-				esc = esc_fffd
-				break
-			}
+			// A genuine in-range U+FFFD is emitted as a character reference.
 			if r == 0xFFFD {
 				esc = esc_fffd_ref
 				break
