@@ -61,7 +61,11 @@ func serializeItemJSON(item xpath3.Item, outDef *OutputDef) (string, error) {
 			if outDef != nil {
 				htmlVersion = outDef.HTMLVersion
 			}
-			return jsonEscapeString(serializeNodeWithMethod(v.Node, nodeMethod, htmlVersion)), nil
+			s, err := serializeNodeWithMethod(v.Node, nodeMethod, htmlVersion)
+			if err != nil {
+				return "", err
+			}
+			return jsonEscapeString(s), nil
 		}
 		return jsonEscapeString(nodeStringValue(v.Node)), nil
 	case xpath3.AtomicValue:
