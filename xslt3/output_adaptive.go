@@ -12,7 +12,7 @@ import (
 
 // serializeAdaptiveItems serializes a sequence of items using the adaptive
 // serialization method. Each item is serialized according to its type.
-func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, itemSep *string, xmlVersion string, charMaps ...map[rune]string) error {
+func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, itemSep *string, xmlVersion, normalizationForm string, charMaps ...map[rune]string) error {
 	if (items == nil || sequence.Len(items) == 0) && doc != nil {
 		var cm map[rune]string
 		if len(charMaps) > 0 {
@@ -20,6 +20,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		}
 		xmlOutDef := defaultOutputDef()
 		xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
+		xmlOutDef.NormalizationForm = normalizationForm
 		return serializeXML(w, doc, xmlOutDef, cm)
 	}
 	var cm map[rune]string
@@ -53,6 +54,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 					}
 					xmlOutDef := defaultOutputDef()
 					xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
+					xmlOutDef.NormalizationForm = normalizationForm
 					if err := serializeXML(w, tmpDoc, xmlOutDef, cm); err != nil {
 						return err
 					}

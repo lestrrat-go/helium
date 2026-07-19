@@ -194,7 +194,11 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		undeclarePrefixes: outDef.UndeclarePrefixes,
 	}
 
-	err := serializeXMLNodeWithCharMap(&sw, doc, charMap, cdataSet, enc, outDef.NormalizationForm, ictx)
+	inlineNormalizationForm := ""
+	if len(charMap) > 0 {
+		inlineNormalizationForm = outDef.NormalizationForm
+	}
+	err := serializeXMLNodeWithCharMap(&sw, doc, charMap, cdataSet, enc, inlineNormalizationForm, ictx)
 	if err != nil {
 		return err
 	}
@@ -340,7 +344,7 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 			}
 			// Write attributes
 			for _, attr := range elem.Attributes() {
-				if err := writeAttrWithCharMap(sw, attr.Name(), attr.Value(), charMap); err != nil {
+				if err := writeAttrWithCharMap(sw, attr.Name(), attr.Value(), charMap, normForm); err != nil {
 					return err
 				}
 			}
@@ -373,14 +377,14 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 				continue
 			}
 			if doeActive {
-				if err := sw.WriteRaw(text); err != nil {
+				if err := sw.WriteRaw(normalizeRawXMLContent(text, normForm)); err != nil {
 					return err
 				}
 			} else if inCDATAElement(n, cdataElems) {
 				if err := writeCDATAWithEncoding(sw, text, encoding, normForm); err != nil {
 					return err
 				}
-			} else if err := writeTextWithCharMap(sw, text, charMap); err != nil {
+			} else if err := writeTextWithCharMap(sw, text, charMap, normForm); err != nil {
 				return err
 			}
 		case helium.CommentNode:
@@ -399,16 +403,23 @@ func serializeXMLNodeWithCharMap(sw *stream.Writer, n helium.Node, charMap map[r
 // writeTextWithCharMap writes text content, applying character map substitutions.
 // Mapped characters are written raw (unescaped), unmapped characters are written
 // as normal text (with XML escaping).
-func writeTextWithCharMap(sw *stream.Writer, text string, charMap map[rune]string) error {
+func writeTextWithCharMap(sw *stream.Writer, text string, charMap map[rune]string, normalizationForm string) error {
 	var unmapped strings.Builder
+	flushUnmapped := func() error {
+		if unmapped.Len() == 0 {
+			return nil
+		}
+		if err := sw.WriteString(normalizeText(unmapped.String(), normalizationForm)); err != nil {
+			return err
+		}
+		unmapped.Reset()
+		return nil
+	}
 	for _, r := range text {
 		if repl, ok := charMap[r]; ok {
 			// Flush any accumulated unmapped text first
-			if unmapped.Len() > 0 {
-				if err := sw.WriteString(unmapped.String()); err != nil {
-					return err
-				}
-				unmapped.Reset()
+			if err := flushUnmapped(); err != nil {
+				return err
 			}
 			// Write the replacement raw
 			if err := sw.WriteRaw(repl); err != nil {
@@ -418,18 +429,15 @@ func writeTextWithCharMap(sw *stream.Writer, text string, charMap map[rune]strin
 			unmapped.WriteRune(r)
 		}
 	}
-	if unmapped.Len() > 0 {
-		return sw.WriteString(unmapped.String())
-	}
-	return nil
+	return flushUnmapped()
 }
 
 // writeAttrWithCharMap writes an XML attribute with character map awareness.
 // Mapped characters are written raw (unescaped) while unmapped characters
 // go through normal XML attribute escaping.
-func writeAttrWithCharMap(sw *stream.Writer, name, value string, charMap map[rune]string) error {
+func writeAttrWithCharMap(sw *stream.Writer, name, value string, charMap map[rune]string, normalizationForm string) error {
 	if len(charMap) == 0 {
-		return sw.WriteAttribute(name, value)
+		return sw.WriteAttribute(name, normalizeText(value, normalizationForm))
 	}
 	// Check if any character in the value has a mapping
 	hasMapped := false
@@ -440,20 +448,27 @@ func writeAttrWithCharMap(sw *stream.Writer, name, value string, charMap map[run
 		}
 	}
 	if !hasMapped {
-		return sw.WriteAttribute(name, value)
+		return sw.WriteAttribute(name, normalizeText(value, normalizationForm))
 	}
 	// Write attribute with mixed raw/escaped content
 	if err := sw.StartAttribute(name); err != nil {
 		return err
 	}
 	var unmapped strings.Builder
+	flushUnmapped := func() error {
+		if unmapped.Len() == 0 {
+			return nil
+		}
+		if err := sw.WriteString(normalizeText(unmapped.String(), normalizationForm)); err != nil {
+			return err
+		}
+		unmapped.Reset()
+		return nil
+	}
 	for _, r := range value {
 		if repl, ok := charMap[r]; ok {
-			if unmapped.Len() > 0 {
-				if err := sw.WriteString(unmapped.String()); err != nil {
-					return err
-				}
-				unmapped.Reset()
+			if err := flushUnmapped(); err != nil {
+				return err
 			}
 			if err := sw.WriteRaw(repl); err != nil {
 				return err
@@ -462,10 +477,8 @@ func writeAttrWithCharMap(sw *stream.Writer, name, value string, charMap map[run
 			unmapped.WriteRune(r)
 		}
 	}
-	if unmapped.Len() > 0 {
-		if err := sw.WriteString(unmapped.String()); err != nil {
-			return err
-		}
+	if err := flushUnmapped(); err != nil {
+		return err
 	}
 	return sw.EndAttribute()
 }
