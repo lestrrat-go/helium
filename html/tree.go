@@ -60,6 +60,13 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 		// REJECTS such an element (ErrWriterUnboundNamespacePrefix): "prefix:local"
 		// with no xmlns:prefix is not reparseable. Keep this binding as-is — only
 		// the generic writer's emission decision changed.
+		// A colon-bearing HTML ATTRIBUTE, by contrast, never reaches the writer
+		// at all: SetAttribute/SetBooleanAttribute reject the name and the parser
+		// routes that rejection through strictness handling (strict: fatal parse
+		// error; tolerant: warning, attribute dropped — the attribute loop below,
+		// behavior adjudicated in PR #1254). Output missing a dropped attribute is
+		// fully parseable, so the writer's unbound-prefix rejection is not
+		// reachable from html.Parse attribute input.
 		var ns *helium.Namespace
 		ns, err = t.doc.CreateNamespace(prefix, "")
 		if err != nil {
