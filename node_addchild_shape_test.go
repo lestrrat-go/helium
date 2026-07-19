@@ -47,7 +47,7 @@ func TestAddChildAttributeReplacesSameName(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	elem := doc.CreateElement("root")
 
-	_, err := elem.SetAttribute("id", "first")
+	err := elem.SetAttribute("id", "first")
 	require.NoError(t, err)
 
 	replacement, err := doc.CreateAttribute("id", "second", nil)
@@ -67,7 +67,7 @@ func TestAddChildAttributeDetachesFromPreviousElement(t *testing.T) {
 	src := doc.CreateElement("src")
 	dst := doc.CreateElement("dst")
 
-	_, err := src.SetAttribute("moved", "v")
+	err := src.SetAttribute("moved", "v")
 	require.NoError(t, err)
 	attr := src.Attributes()[0]
 
