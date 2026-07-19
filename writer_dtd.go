@@ -415,6 +415,11 @@ func (d *writeSession) dumpExternalEntityID(out io.Writer, ent *Entity) error {
 		if d.checkPubid(pubLit) {
 			return d.err
 		}
+	}
+	if d.checkSystemLiteral(sysLit) {
+		return d.err
+	}
+	if pubLit != "" {
 		d.writeString(out, " PUBLIC ")
 		d.check(dumpQuotedString(out, pubLit))
 		d.writeString(out, " ")
@@ -453,6 +458,9 @@ func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
 		if d.checkPubid(pubLit) {
 			return d.err
 		}
+	}
+	if d.checkSystemLiteral(sysLit) {
+		return d.err
 	}
 	d.writeString(out, "<!NOTATION ")
 	d.writeString(out, n.name)
