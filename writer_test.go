@@ -1676,7 +1676,7 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 		r, err := d.CreateElement("r")
 		require.NoError(t, err)
 		require.NoError(t, d.AddChild(r))
-		_, err = r.SetAttribute("v", "x\x01y")
+		err = r.SetAttribute("v", "x\x01y")
 		require.NoError(t, err)
 		return d
 	}
@@ -1719,7 +1719,7 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 	// RejectInvalidChars rejects the control char regardless of the
 	// EscapeNonASCII setting (the check runs before char-reference escaping).
 	buf.Reset()
-	err := helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, textDoc())
+	err = helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, textDoc())
 	require.ErrorIs(t, err, helium.ErrInvalidXMLChar)
 	buf.Reset()
 	err = helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(true).WriteTo(&buf, textDoc())
@@ -1756,16 +1756,18 @@ func TestWriterXML11RestrictedChars(t *testing.T) {
 	// U+FFFD \u2014 regardless of the RejectInvalidChars setting.
 	textDoc := func() *helium.Document {
 		d := helium.NewDocument("1.1", "UTF-8", helium.StandaloneImplicitNo)
-		r := d.CreateElement("r")
+		r, err := d.CreateElement("r")
+		require.NoError(t, err)
 		require.NoError(t, d.AddChild(r))
 		require.NoError(t, r.AppendText([]byte("a\x01b")))
 		return d
 	}
 	attrDoc := func() *helium.Document {
 		d := helium.NewDocument("1.1", "UTF-8", helium.StandaloneImplicitNo)
-		r := d.CreateElement("r")
+		r, err := d.CreateElement("r")
+		require.NoError(t, err)
 		require.NoError(t, d.AddChild(r))
-		_, err := r.SetAttribute("v", "x\x01y")
+		err = r.SetAttribute("v", "x\x01y")
 		require.NoError(t, err)
 		return d
 	}
@@ -1802,28 +1804,32 @@ func TestWriterRejectInvalidCharsRefFreeContexts(t *testing.T) {
 	build := map[string]func(version string) *helium.Document{
 		"comment-node": func(v string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r := d.CreateElement("r")
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
 			require.NoError(t, r.AddChild(d.CreateComment([]byte("a\x01b"))))
 			return d
 		},
 		"pi-data": func(v string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r := d.CreateElement("r")
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
 			require.NoError(t, r.AddChild(d.CreatePI("t", "a\x01b")))
 			return d
 		},
 		"cdata-section-node": func(v string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r := d.CreateElement("r")
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
 			require.NoError(t, r.AddChild(d.CreateCDATASection([]byte("a\x01b"))))
 			return d
 		},
 		"cdata-section-element": func(v string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r := d.CreateElement("r")
+			r, err := d.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
 			require.NoError(t, r.AppendText([]byte("a\x01b")))
 			return d
@@ -1963,7 +1969,8 @@ func TestWriterRejectInvalidCharsDTDLiterals(t *testing.T) {
 		require.NoError(t, err)
 		_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "a\x01b")
 		require.NoError(t, err)
-		root := d.CreateElement("doc")
+		root, err := d.CreateElement("doc")
+		require.NoError(t, err)
 		require.NoError(t, d.AddChild(root))
 		return d
 	}
@@ -1996,7 +2003,8 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
 			_, err := d.CreateInternalSubset("r\x01", "", "")
 			require.NoError(t, err)
-			root := d.CreateElement("r")
+			root, err := d.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
@@ -2006,7 +2014,8 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddEntity("e\x01", enum.InternalGeneralEntity, "", "", "v")
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
@@ -2016,7 +2025,8 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddNotation("n\x01", "", "sys")
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
@@ -2026,7 +2036,8 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddEntity("img", enum.ExternalGeneralUnparsedEntity, "", "pic.gif", "nota\x01")
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
@@ -2036,7 +2047,8 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddElementDecl("e\x01", enum.EmptyElementType, nil)
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
@@ -2052,7 +2064,8 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddElementDecl("m", enum.MixedElementType, model)
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
@@ -2062,7 +2075,8 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddAttributeDecl("el\x01", "a", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
@@ -2072,13 +2086,15 @@ func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddAttributeDecl("el", "a\x01", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
 		"entity-reference-name": func(t *testing.T, v string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			root := d.CreateElement("r")
+			root, err := d.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			ref, err := d.CreateCharRef("e\x01")
 			require.NoError(t, err)
@@ -2116,7 +2132,8 @@ func TestWriterRejectInvalidCharsCharRefTargets(t *testing.T) {
 	build := map[string]func(t *testing.T, v string) *helium.Document{
 		"entity-ref-charref": func(t *testing.T, v string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			root := d.CreateElement("r")
+			root, err := d.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			ref, err := d.CreateCharRef("#1")
 			require.NoError(t, err)
@@ -2129,7 +2146,8 @@ func TestWriterRejectInvalidCharsCharRefTargets(t *testing.T) {
 			require.NoError(t, err)
 			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&#1;")
 			require.NoError(t, err)
-			root := d.CreateElement("doc")
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
 			require.NoError(t, d.AddChild(root))
 			return d
 		},
