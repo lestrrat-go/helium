@@ -388,10 +388,17 @@ func (s *writeSession) checkAttributeName(name string) bool {
 // rejects the output with "namespace 'prefix' not found". The generic writer
 // must never emit output it cannot itself reparse. A prefixless name (no
 // namespace, or the default namespace, prefix "") is unaffected: only a
-// non-empty prefix with an empty URI is rejected. On failure it records a sticky
+// non-empty prefix with an empty URI is rejected. The reserved "xml" prefix is
+// always accepted regardless of the namespace object's href: Namespaces in XML
+// binds it by definition to lexicon.NamespaceXML, so "xml:local" reparses
+// without any declaration (the parser resolves it in lookupNamespace, and
+// LookupNSByPrefix/dumpNs treat it the same way). On failure it records a sticky
 // error (preserving any earlier one) and returns false. Shared by the element
 // and attribute serialization paths so they cannot diverge.
 func (s *writeSession) checkNamespaceBinding(what, name, prefix, href string) bool {
+	if prefix == "xml" {
+		return true
+	}
 	if prefix != "" && href == "" {
 		s.check(fmt.Errorf("helium: %s %q uses prefix %q bound to an empty namespace URI: %w", what, name, prefix, ErrWriterUnboundNamespacePrefix))
 		return false

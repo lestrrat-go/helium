@@ -34,3 +34,25 @@ func TestUnboundPrefixSerialization(t *testing.T) {
 	require.Error(t, err, "generic writer must reject the unbound prefix")
 	require.ErrorIs(t, err, helium.ErrWriterUnboundNamespacePrefix)
 }
+
+// TestImplicitXMLPrefixSerialization pins the exception to the generic writer's
+// unbound-prefix rejection: an "xml:*" tag name from html.Parse carries the same
+// empty-URI binding as any colon name, but the reserved "xml" prefix is
+// implicitly bound to the XML namespace, so both serializers accept it.
+func TestImplicitXMLPrefixSerialization(t *testing.T) {
+	const input = `<div><xml:foo>inner</xml:foo></div>`
+
+	doc, err := html.NewParser().Parse(t.Context(), []byte(input))
+	require.NoError(t, err)
+
+	elem := findElement(doc, "xml:foo")
+	require.NotNil(t, elem, "parser must build the xml-prefixed element")
+
+	htmlOut, err := html.WriteString(elem)
+	require.NoError(t, err)
+	require.Contains(t, htmlOut, "xml:foo")
+
+	xmlOut, err := helium.WriteString(elem)
+	require.NoError(t, err, "generic writer must accept the implicitly bound xml prefix")
+	require.Contains(t, xmlOut, "<xml:foo")
+}

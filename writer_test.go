@@ -548,6 +548,90 @@ func TestXHTMLWriteRejectsUnboundNamespacePrefix(t *testing.T) {
 	})
 }
 
+// TestWriterAcceptsImplicitXMLPrefix verifies that checkNamespaceBinding treats
+// the reserved "xml" prefix as bound even when the namespace object carries an
+// empty href: Namespaces in XML binds "xml" by definition to the XML namespace,
+// so "xml:local" reparses without any in-scope declaration (the parser resolves
+// it in lookupNamespace). The empty-href case arises from
+// CreateNamespace("xml", "") and from html.Parse building colon names. A
+// non-xml prefix with an empty href must still be rejected.
+func TestWriterAcceptsImplicitXMLPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty-URI xml attribute serializes and reparses", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		ns, err := doc.CreateNamespace("xml", "")
+		require.NoError(t, err)
+		require.NoError(t, root.SetAttributeNS("lang", "en", ns))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err, "xml:lang with an empty-href xml namespace must serialize")
+		require.Contains(t, str, `xml:lang="en"`)
+
+		reparsed, err := helium.NewParser().Parse(t.Context(), []byte(str))
+		require.NoError(t, err, "writer output must reparse")
+		require.NotNil(t, reparsed)
+	})
+
+	t.Run("xml-prefixed element serializes and reparses", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		ns, err := doc.CreateNamespace("xml", "")
+		require.NoError(t, err)
+		root, err := doc.CreateElementNS("foo", ns)
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err, "an xml:-prefixed element must serialize")
+		require.Contains(t, str, `<xml:foo`)
+
+		reparsed, err := helium.NewParser().Parse(t.Context(), []byte(str))
+		require.NoError(t, err, "writer output must reparse")
+		require.NotNil(t, reparsed)
+	})
+
+	t.Run("XHTML path accepts empty-URI xml attribute", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		_, err := doc.CreateInternalSubset(
+			"html",
+			"-//W3C//DTD XHTML 1.0 Strict//EN",
+			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+		)
+		require.NoError(t, err)
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		ns, err := doc.CreateNamespace("xml", "")
+		require.NoError(t, err)
+		require.NoError(t, root.SetAttributeNS("lang", "en", ns))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err, "XHTML serializer must accept the implicit xml prefix")
+		require.Contains(t, str, `xml:lang="en"`)
+	})
+
+	t.Run("non-xml prefix with empty URI still rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		ns, err := doc.CreateNamespace("foo", "")
+		require.NoError(t, err)
+		require.NoError(t, root.SetAttributeNS("lang", "en", ns))
+
+		_, err = helium.WriteString(doc)
+		require.Error(t, err, "a non-xml prefix bound to an empty URI must not serialize")
+		require.ErrorIs(t, err, helium.ErrWriterUnboundNamespacePrefix)
+	})
+}
+
 // TestXHTMLAttrErrorEmitsNoPartialChildren reproduces Finding 1: when an XHTML
 // element has an invalid attribute name AND non-element child content, the
 // serializer must abort at the first error and must NOT emit any of the child

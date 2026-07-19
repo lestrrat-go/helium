@@ -175,7 +175,8 @@ var (
 	// xmlns:prefix declaration, which helium's own parser rejects with
 	// "namespace 'prefix' not found"; the generic writer must never emit output it
 	// cannot itself reparse. A prefixless name (no namespace or the default
-	// namespace) is unaffected.
+	// namespace) is unaffected, as is the reserved "xml" prefix, which is
+	// implicitly bound to the XML namespace and needs no declaration.
 	ErrWriterUnboundNamespacePrefix = errors.New("unbound namespace prefix")
 	// ErrWriterInvalidComment flags comment content that contains "--" or ends
 	// with "-" (either would break the "-->" delimiter).

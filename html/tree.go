@@ -58,8 +58,10 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 		// preserving the original "prefix:local" name for the HTML serializer,
 		// which emits it verbatim (html/dump.go). The generic XML writer instead
 		// REJECTS such an element (ErrWriterUnboundNamespacePrefix): "prefix:local"
-		// with no xmlns:prefix is not reparseable. Keep this binding as-is — only
-		// the generic writer's emission decision changed.
+		// with no xmlns:prefix is not reparseable. The reserved "xml" prefix is
+		// the exception — it is implicitly bound to the XML namespace, so an
+		// "xml:*" tag name serializes through the generic writer too. Keep this
+		// binding as-is — only the generic writer's emission decision changed.
 		// A colon-bearing HTML ATTRIBUTE, by contrast, never reaches the writer
 		// at all: SetAttribute/SetBooleanAttribute reject the name and the parser
 		// routes that rejection through strictness handling (strict: fatal parse
