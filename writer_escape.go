@@ -456,9 +456,12 @@ func (s *writeSession) entityValueLiteral(what, value string) (string, bool) {
 // stop=true); under RejectInvalidChars(false) the whole reference is replaced by
 // the U+FFFD representation — the &#xFFFD; reference when non-ASCII characters are
 // being escaped (EscapeNonASCII / US-ASCII output), the raw U+FFFD character
-// otherwise (matching the text/attribute escapers). A malformed "&#…" sequence is
-// left verbatim (a name-grammar matter outside the character policy). When nothing
-// is replaced it returns value unchanged so no copy is retained.
+// otherwise (matching the text/attribute escapers). A "&#…" sequence whose body is
+// syntactically numeric but out of range (> U+10FFFF, e.g. "&#x110000;") is a
+// CharRef with an invalid CHARACTER target and is handled like a non-serializable
+// one — rejected or replaced. A non-numeric "&#…" sequence (a name-grammar matter
+// outside the character policy) is left verbatim. When nothing is replaced it
+// returns value unchanged so no copy is retained.
 func (s *writeSession) screenCharRefs(what, value string) (string, bool) {
 	var b strings.Builder
 	last := 0
@@ -473,12 +476,12 @@ func (s *writeSession) screenCharRefs(what, value string) (string, bool) {
 			break
 		}
 		refEnd := i + semi + 1
-		cp, ok := parseCharRefBody(value[i+2 : i+semi])
-		if !ok {
+		cp, kind := parseCharRefBody(value[i+2 : i+semi])
+		if kind == charRefNotNumeric {
 			i += 2
 			continue
 		}
-		if isSerializableChar(cp, s.xml11) {
+		if kind == charRefInRange && isSerializableChar(cp, s.xml11) {
 			i = refEnd
 			continue
 		}

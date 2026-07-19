@@ -2168,6 +2168,100 @@ func TestWriterRejectInvalidCharsSurrogateCharRefTargets(t *testing.T) {
 	}
 }
 
+// TestWriterRejectInvalidCharsOutOfRangeCharRefTargets guards the numeric
+// character-reference TARGET upper bound. A fully numeric CharRef body whose value
+// exceeds U+10FFFF — whether an in-bounds-overflowing "#x110000" or a wildly
+// overflowing "#x99999999999999" — matches the CharRef grammar (XML 1.0 §4.1) but
+// is illegal via the "Legal Character" WFC, so it is an invalid CHARACTER target in
+// BOTH XML versions: rejected with ErrInvalidXMLChar under the default policy and
+// U+FFFD-substituted (never emitted verbatim) under RejectInvalidChars(false). This
+// covers both the CreateCharRef EntityRefNode site (writeCharRef) and a &#…; inside
+// an entity value (screenCharRefs). A genuinely non-numeric "&#…" body stays a
+// name-grammar matter and keeps its existing path.
+func TestWriterRejectInvalidCharsOutOfRangeCharRefTargets(t *testing.T) {
+	t.Parallel()
+
+	// Each builder aims a distinct char-ref site at the code point named by ref.
+	build := map[string]func(t *testing.T, v, ref string) *helium.Document{
+		"entity-ref-charref": func(t *testing.T, v, ref string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			root, err := d.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(root))
+			cr, err := d.CreateCharRef(ref)
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(cr))
+			return d
+		},
+		"entity-value-charref": func(t *testing.T, v, ref string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&"+ref+";")
+			require.NoError(t, err)
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+	}
+
+	// "#x110000" is one past the last Unicode code point; "#x99999999999999"
+	// overflows far past it. Both are out of range in every version.
+	for _, version := range []string{ver10, ver11} {
+		for _, ref := range []string{"#x110000", "#x99999999999999", "#1114112"} {
+			for name, mk := range build {
+				t.Run(version+"/"+name+"/"+ref, func(t *testing.T) {
+					t.Parallel()
+					verbatim := "&" + ref + ";"
+
+					// Default (reject) mode: ErrInvalidXMLChar, in both versions.
+					var buf bytes.Buffer
+					require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk(t, version, ref)), helium.ErrInvalidXMLChar)
+
+					// Replacement mode with the default EscapeNonASCII: the &#xFFFD;
+					// reference, never the out-of-range target verbatim.
+					buf.Reset()
+					require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, version, ref)))
+					require.Contains(t, buf.String(), "&#xFFFD;")
+					require.NotContains(t, buf.String(), verbatim)
+
+					// Replacement mode with EscapeNonASCII(false): the raw U+FFFD character.
+					buf.Reset()
+					require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, mk(t, version, ref)))
+					require.Contains(t, buf.String(), "�")
+					require.NotContains(t, buf.String(), verbatim)
+				})
+			}
+		}
+	}
+
+	// A non-numeric "&#…" body is NOT a CharRef target: inside an entity value it is
+	// left verbatim (a name-grammar matter outside the character policy), so the
+	// serialization succeeds and the sequence survives unchanged in both modes.
+	t.Run("non-numeric-body-in-entity-value", func(t *testing.T) {
+		t.Parallel()
+		mk := func(t *testing.T) *helium.Document {
+			d := helium.NewDocument(ver10, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&#garbage;")
+			require.NoError(t, err)
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(root))
+			return d
+		}
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, mk(t)))
+		require.Contains(t, buf.String(), "&#garbage;")
+
+		buf.Reset()
+		require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t)))
+		require.Contains(t, buf.String(), "&#garbage;")
+	})
+}
+
 // TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
 func TestWriteStringWithoutDTD(t *testing.T) {
 	t.Parallel()

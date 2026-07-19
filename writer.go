@@ -464,20 +464,44 @@ func (s *writeSession) checkVerbatimName(what, name string) bool {
 	return true
 }
 
+// charRefKind classifies the numeric body of a character reference.
+type charRefKind int
+
+const (
+	// charRefNotNumeric means the body does not match the numeric CharRef grammar
+	// at all — empty, or holding a non-digit (hex/decimal) character. This is a
+	// name-grammar matter, outside the character policy: such a body is not a
+	// character reference the writer screens.
+	charRefNotNumeric charRefKind = iota
+	// charRefInRange means the body matches the CharRef grammar and its value is a
+	// Unicode code point (<= U+10FFFF); the decoded rune is returned. Whether that
+	// code point is serializable in the target XML version is decided separately.
+	charRefInRange
+	// charRefOutOfRange means the body matches the CharRef grammar (all decimal
+	// digits, or 'x'/'X' followed by hex digits) but its value exceeds U+10FFFF
+	// (including an overflowing value). Per XML 1.0 §4.1 a fully numeric body is a
+	// CharRef; an out-of-range one is illegal via the "Legal Character" WFC — an
+	// invalid CHARACTER target, not a name-grammar problem.
+	charRefOutOfRange
+)
+
 // parseCharRefBody decodes the numeric body of a character reference — the text
 // after the '#' in an EntityRefNode name ("1" or "xAB") or between "&#" and ";"
-// in an entity value — to its code point. It reports ok=false for an empty or
-// malformed body (a non-digit, or a value beyond U+10FFFF).
-func parseCharRefBody(body string) (rune, bool) {
+// in an entity value — to its code point. It returns charRefNotNumeric for an
+// empty or non-numeric body, charRefOutOfRange for a syntactically numeric body
+// whose value exceeds U+10FFFF (including overflow), and charRefInRange with the
+// decoded rune otherwise.
+func parseCharRefBody(body string) (rune, charRefKind) {
 	if body == "" {
-		return 0, false
+		return 0, charRefNotNumeric
 	}
-	v := 0
 	if body[0] == 'x' || body[0] == 'X' {
 		hex := body[1:]
 		if hex == "" {
-			return 0, false
+			return 0, charRefNotNumeric
 		}
+		v := 0
+		overflow := false
 		for i := range len(hex) {
 			c := hex[i]
 			var d int
@@ -489,26 +513,40 @@ func parseCharRefBody(body string) (rune, bool) {
 			case c >= 'A' && c <= 'F':
 				d = int(c-'A') + 10
 			default:
-				return 0, false
+				return 0, charRefNotNumeric
+			}
+			if overflow {
+				continue
 			}
 			v = v*16 + d
 			if v > 0x10FFFF {
-				return 0, false
+				overflow = true
 			}
 		}
-		return rune(v), true
+		if overflow {
+			return 0, charRefOutOfRange
+		}
+		return rune(v), charRefInRange
 	}
+	v := 0
+	overflow := false
 	for i := range len(body) {
 		c := body[i]
 		if c < '0' || c > '9' {
-			return 0, false
+			return 0, charRefNotNumeric
+		}
+		if overflow {
+			continue
 		}
 		v = v*10 + int(c-'0')
 		if v > 0x10FFFF {
-			return 0, false
+			overflow = true
 		}
 	}
-	return rune(v), true
+	if overflow {
+		return 0, charRefOutOfRange
+	}
+	return rune(v), charRefInRange
 }
 
 // writeCharRef serializes an EntityRefNode whose name is a numeric character
@@ -520,14 +558,16 @@ func parseCharRefBody(body string) (rune, bool) {
 // RejectInvalidChars(false) it substitutes the U+FFFD representation used by the
 // text/attribute escapers — the &#xFFFD; reference when non-ASCII characters are
 // being escaped (EscapeNonASCII / US-ASCII output), the raw U+FFFD character
-// otherwise. A malformed body (e.g. "#xZZ") is rejected as an invalid name.
+// otherwise. A body that is syntactically numeric but out of range (e.g.
+// "#x110000") is an invalid character target, handled like a non-serializable one;
+// only a non-numeric body (e.g. "#xZZ") is rejected as an invalid name.
 func (d *writeSession) writeCharRef(out io.Writer, name string) (stop bool) {
-	cp, ok := parseCharRefBody(name[1:])
-	if !ok {
+	cp, kind := parseCharRefBody(name[1:])
+	if kind == charRefNotNumeric {
 		d.check(fmt.Errorf("helium: invalid character reference %q: %w", "&"+name+";", ErrWriterInvalidName))
 		return true
 	}
-	if isSerializableChar(cp, d.xml11) {
+	if kind == charRefInRange && isSerializableChar(cp, d.xml11) {
 		d.writeString(out, "&")
 		d.writeString(out, name)
 		d.writeString(out, ";")

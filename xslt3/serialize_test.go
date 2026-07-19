@@ -103,6 +103,10 @@ func TestDefaultOutputDefNilStylesheet(t *testing.T) {
 // tests do not add repeated string literals (goconst).
 const outMethodXML = "xml"
 
+// outMethodXHTML is the "xhtml" output method. Its version parameter is an XML
+// VersionNum (Serialization 3.0 §6.1.1), identical in meaning to the xml method's.
+const outMethodXHTML = "xhtml"
+
 // newBadCharElement builds a small <r> element whose text content carries an
 // XML-invalid control character (U+0001), via the public DOM API. The DOM
 // accepts the control byte; the writer is the enforcement point.
@@ -155,6 +159,29 @@ func TestSerializeItemsXMLInvalidChar(t *testing.T) {
 
 	var buf11 bytes.Buffer
 	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: "1.1"})
+	require.NoError(t, err)
+	requireControlCharRef(t, buf11.String())
+}
+
+// SerializeItems with method="xhtml" threads the version parameter into the
+// per-item writer exactly like the xml method (the xhtml version is an XML
+// VersionNum, Serialization 3.0 §6.1.1). Under version 1.1, U+0001 is a legal
+// character reference, so the item serializes with nil error and a char reference;
+// the default and 1.0 versions reject it as SERE0006.
+func TestSerializeItemsXHTMLInvalidChar(t *testing.T) {
+	root := newBadCharElement(t)
+	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}}
+
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodXHTML})
+	requireSERE0006(t, err)
+
+	var buf10 bytes.Buffer
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: "1.0"})
+	requireSERE0006(t, err)
+
+	var buf11 bytes.Buffer
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: "1.1"})
 	require.NoError(t, err)
 	requireControlCharRef(t, buf11.String())
 }

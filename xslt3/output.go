@@ -146,13 +146,15 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 			switch v.Node.(type) {
 			case *helium.Element, *helium.Document:
 				writer := helium.NewWriter().XMLDeclaration(false)
-				// The xml output method's version parameter drives the writer's
-				// XML 1.0/1.1 validity rules: under v1.1, U+0001 is a legal
-				// character reference, so a bare (1.0-only) writer would wrongly
-				// reject it with SERE0006. The default branch also serves
-				// html/xhtml/text, whose Version is not an XML VersionNum, so gate
-				// on the xml method with a valid XML version.
-				if outDef.Method == methodXML {
+				// The version parameter drives the writer's XML 1.0/1.1 validity
+				// rules: under v1.1, U+0001 is a legal character reference, so a
+				// bare (1.0-only) writer would wrongly reject it with SERE0006. The
+				// xhtml method's version has the same meaning as the xml method's
+				// (Serialization 3.0 §6.1.1/§5.1.1: an XML VersionNum; the XHTML
+				// flavor is the separate html-version parameter), so thread it for
+				// both. Only the html method's version names an HTML version, which
+				// is not an XML VersionNum, so it stays excluded.
+				if outDef.Method == methodXML || outDef.Method == methodXHTML {
 					if ver := validOutputXMLVersion(outDef.Version); ver != "" {
 						writer = writer.OutputVersion(ver)
 					}
