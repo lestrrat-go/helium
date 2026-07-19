@@ -2245,7 +2245,12 @@ func serializeNodeItem(item NodeItem, opts serializeOptions) (string, error) {
 	// the DOCTYPE is injected as its internal subset, named after the document
 	// element. A node with no document element (bare text/comment/PI) has no name
 	// to declare, so no DOCTYPE is emitted and the node serializes unchanged.
-	if opts.doctypeSystem != "" {
+	//
+	// Only the DOCTYPE-emitting methods (xml/xhtml/html and the unspecified
+	// default) inject the declaration — the adaptive method, which also reaches
+	// this function, ignores doctype-system, matching the methodEmitsDoctype gate
+	// on the SEPM0016 SystemLiteral check.
+	if opts.doctypeSystem != "" && opts.methodEmitsDoctype() {
 		withDT, err := applyDoctype(node, opts)
 		if err != nil {
 			return "", err

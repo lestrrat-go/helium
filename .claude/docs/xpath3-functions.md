@@ -411,9 +411,10 @@ are BOTH in force, `withCharMapSentinels` substitutes each mapped key with a uni
 sentinel rune (Supplementary Private Use Area-A, unaffected by normalization)
 during serialization (XML/HTML/text/json alike), then `expandCharMapSentinels`
 restores the verbatim replacement AFTER normalization — so replacements pass
-through un-normalized while the surrounding content is normalized (in the markup
-writers the mapped key is folded to its sentinel BEFORE the per-node normalize
-pass, so the ordering — character mapping precedes normalization — holds).
+through un-normalized while the surrounding content is normalized (the markup
+writer normalizes only the runs AROUND a mapped key and emits the key's
+replacement — here the sentinel — verbatim, so the sentinel, and thus the
+eventual replacement, is never touched by the normalize pass).
 `json-node-output-method` is validated against its OWN
 narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
 `json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default

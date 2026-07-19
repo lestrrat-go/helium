@@ -16,6 +16,32 @@ func dtdQuoteChar(value string) byte {
 	return '"'
 }
 
+// checkPubid records a sticky error when s carries a character outside the
+// PubidChar production (isPubidChar), i.e. a public identifier that cannot be
+// serialized as a well-formed PubidLiteral. It is the shared check for the
+// DOCTYPE and notation public-identifier paths. Returns true when it recorded
+// the error.
+func (d *writeSession) checkPubid(s string) bool {
+	for _, r := range s {
+		if !isPubidChar(r) {
+			d.check(fmt.Errorf("helium: public identifier %q contains an invalid PubidChar: %w", s, ErrWriterInvalidDTDNode))
+			return true
+		}
+	}
+	return false
+}
+
+// checkSystemLiteral records a sticky error when s contains BOTH quote
+// characters and therefore cannot be delimited as a SystemLiteral (which admits
+// no character references). Returns true when it recorded the error.
+func (d *writeSession) checkSystemLiteral(s string) bool {
+	if strings.ContainsRune(s, '"') && strings.ContainsRune(s, '\'') {
+		d.check(fmt.Errorf("helium: system literal %q contains both quote characters: %w", s, ErrWriterInvalidDTDNode))
+		return true
+	}
+	return false
+}
+
 func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 	dtd, ok := AsNode[*DTD](n)
 	if !ok {
@@ -28,13 +54,31 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 	if d.rejectNonASCIIStr("DOCTYPE name", dtd.Name()) {
 		return d.err
 	}
+	// A DOCTYPE name must be a non-empty XML Name; an empty or all-whitespace name
+	// serializes as "<!DOCTYPE >", which no parser accepts.
+	if strings.TrimSpace(dtd.Name()) == "" {
+		d.check(fmt.Errorf("helium: empty DOCTYPE name: %w", ErrWriterInvalidDTDNode))
+		return d.err
+	}
 	d.writeString(out, dtd.Name())
 
 	if d.err == nil && dtd.externalID != "" {
+		// A non-ASCII public id has no faithful US-ASCII serialization; reject that
+		// (encoding error) before the PubidChar check so the US-ASCII path keeps
+		// reporting the encoding failure rather than a PubidChar failure.
+		if d.rejectNonASCIIStr("DOCTYPE public identifier", dtd.externalID) {
+			return d.err
+		}
+		if d.checkPubid(dtd.externalID) || d.checkSystemLiteral(dtd.systemID) {
+			return d.err
+		}
 		pubQ := dtdQuoteChar(dtd.externalID)
 		sysQ := dtdQuoteChar(dtd.systemID)
 		d.writeString(out, fmt.Sprintf(" PUBLIC %c%s%c %c%s%c", pubQ, dtd.externalID, pubQ, sysQ, dtd.systemID, sysQ))
 	} else if d.err == nil && dtd.systemID != "" {
+		if d.checkSystemLiteral(dtd.systemID) {
+			return d.err
+		}
 		sysQ := dtdQuoteChar(dtd.systemID)
 		d.writeString(out, fmt.Sprintf(" SYSTEM %c%s%c", sysQ, dtd.systemID, sysQ))
 	}
@@ -322,6 +366,17 @@ func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
 	// no faithful US-ASCII serialization.
 	if d.rejectNonASCIIStr("notation name", n.name) {
 		return d.err
+	}
+	// A non-ASCII public id has no faithful US-ASCII serialization; reject that
+	// (encoding error) before the PubidChar check so the US-ASCII path keeps
+	// reporting the encoding failure rather than a PubidChar failure.
+	if n.publicID != "" {
+		if d.rejectNonASCIIStr("notation public identifier", n.publicID) {
+			return d.err
+		}
+		if d.checkPubid(n.publicID) {
+			return d.err
+		}
 	}
 	d.writeString(out, "<!NOTATION ")
 	d.writeString(out, n.name)

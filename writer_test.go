@@ -1760,6 +1760,68 @@ func TestWriterNormalization(t *testing.T) {
 	require.NotContains(t, raw.String(), composed, "no normalization by default: %q", raw.String())
 }
 
+// TestWriterCharMapNormalizationVerbatim verifies that a character-map
+// replacement is emitted verbatim (never re-escaped, Unicode-normalized, or
+// rejected by the invalid-char policy) per XSLT/XQuery Serialization 3.1 §7, and
+// that this holds identically whether or not Normalization is active. The
+// surrounding content is still normalized; only the replacement span is inert.
+func TestWriterCharMapNormalizationVerbatim(t *testing.T) {
+	t.Parallel()
+
+	const decomposed = "é" // "e" + combining acute
+	const composed = "é"    // U+00E9
+
+	serialize := func(t *testing.T, w helium.Writer, src string) (string, error) {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		var buf strings.Builder
+		err = w.WriteTo(&buf, doc)
+		return buf.String(), err
+	}
+
+	// '@' maps to a replacement carrying XML markup characters; those must survive
+	// verbatim (not become &lt;/&amp;) in both text and attribute value, and the
+	// decomposed é around them must still compose under NFC.
+	t.Run("markup chars in replacement", func(t *testing.T) {
+		t.Parallel()
+		m := map[rune]string{'@': "<b>&"}
+		src := `<a x="` + decomposed + `@` + decomposed + `">` + decomposed + `@` + decomposed + `</a>`
+		for _, form := range []string{"", "NFC"} {
+			// The surrounding é composes under NFC; without normalization it stays
+			// decomposed. The '@' replacement is verbatim in both.
+			surround := decomposed
+			if form == "NFC" {
+				surround = composed
+			}
+			w := helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
+				CharacterMap(m).Normalization(form)
+			out, err := serialize(t, w, src)
+			require.NoError(t, err, "form=%q", form)
+			require.Contains(t, out, ">"+surround+"<b>&"+surround+"</a>",
+				"text replacement verbatim, surround normalized (form=%q): %q", form, out)
+			require.Contains(t, out, `x="`+surround+`<b>&`+surround+`"`,
+				"attr replacement verbatim, surround normalized (form=%q): %q", form, out)
+		}
+	})
+
+	// A replacement carrying a control character (an invalid XML char) is emitted
+	// verbatim; RejectInvalidChars must not reject it, and Normalization must not
+	// change that.
+	t.Run("control char in replacement with RejectInvalidChars", func(t *testing.T) {
+		t.Parallel()
+		m := map[rune]string{'@': "x\x01y"}
+		for _, form := range []string{"", "NFC"} {
+			w := helium.NewWriter().XMLDeclaration(false).CharacterMap(m).
+				RejectInvalidChars(true).Normalization(form)
+			out, err := serialize(t, w, `<a x="@">@</a>`)
+			require.NoError(t, err, "control-char replacement must not be rejected (form=%q)", form)
+			require.Contains(t, out, ">x\x01y</a>", "text replacement verbatim (form=%q): %q", form, out)
+			require.Contains(t, out, `x="x`+"\x01"+`y"`, "attr replacement verbatim (form=%q): %q", form, out)
+		}
+	})
+}
+
 // TestWriteReconcilesSubtreeNamespaces verifies that serializing a subtree
 // re-declares any namespace prefix its elements or attributes use but that was
 // bound only on an ancestor outside the subtree, so the output reparses. This
@@ -2058,6 +2120,60 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 				return doc
 			},
 			sentinel: helium.ErrWriterInvalidPIContent,
+		},
+		{
+			name: "empty DOCTYPE name",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				_, err := doc.CreateInternalSubset("   ", "", "")
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name: "DOCTYPE system literal with both quotes",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				_, err := doc.CreateInternalSubset("root", "", `a"b'c.dtd`)
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name: "DOCTYPE public id with invalid PubidChar",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				_, err := doc.CreateInternalSubset("root", "bad{pubid", "sys.dtd")
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name: "notation public id with invalid PubidChar",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				dtd, err := doc.CreateInternalSubset("root", "", "")
+				require.NoError(t, err)
+				_, err = dtd.AddNotation("n", "bad{pubid", "n.exe")
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

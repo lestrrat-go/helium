@@ -44,41 +44,55 @@ func validNormalizationForm(form string) bool {
 }
 
 // normalizeContent applies the writer's requested Unicode normalization to a text
-// or attribute node's character content. When a character map is in force its
-// mapped characters are substituted FIRST (their replacement — a
-// normalization-inert sentinel supplied by fn:serialize — is left un-normalized),
-// matching Serialization 3.1 §4: character mapping precedes normalization and a
-// replacement is not normalized. Because the character map has already been
-// applied here, the caller passes a nil map to the escaper. It must only be
-// called when d.normalize is true.
+// or attribute node's character content while leaving character-map replacement
+// spans inert. When a character map is in force, each maximal run of non-mapped
+// characters is normalized on its own and every mapped character is copied
+// through UNCHANGED, so the caller still passes the character map to the escaper
+// — which substitutes the mapped character with its replacement verbatim (not
+// re-escaped, not normalized), matching Serialization 3.1 §7. Normalizing around
+// (rather than through) a mapped character keeps the replacement byte-identical
+// regardless of the requested form. It must only be called when d.normalize is
+// true.
 func (d *writeSession) normalizeContent(s []byte) []byte {
 	if len(d.charMap) == 0 {
 		return d.normForm.Bytes(s)
 	}
 	var b bytes.Buffer
 	b.Grow(len(s))
+	seg := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
-		i += width
-		if repl, ok := d.charMap[r]; ok {
-			b.WriteString(repl)
+		if _, ok := d.charMap[r]; !ok {
+			i += width
 			continue
 		}
-		b.WriteRune(r)
+		// Normalize the non-mapped run ending just before this mapped character,
+		// then copy the mapped character through unchanged so the escaper still
+		// recognizes it and emits its replacement verbatim.
+		if i > seg {
+			b.Write(d.normForm.Bytes(s[seg:i]))
+		}
+		b.Write(s[i : i+width])
+		i += width
+		seg = i
 	}
-	return d.normForm.Bytes(b.Bytes())
+	if seg < len(s) {
+		b.Write(d.normForm.Bytes(s[seg:]))
+	}
+	return b.Bytes()
 }
 
 // writeAttrValueContent escapes an attribute value's character content, applying
 // the requested Unicode normalization (scoped to attribute nodes) and character
 // maps. Shared by the generic and XHTML serialization paths.
 func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) error {
-	cm := d.charMap
 	if d.normalize {
+		// normalizeContent normalizes only the non-mapped runs and leaves mapped
+		// characters in place, so the character map still drives the escaper to
+		// emit each replacement verbatim.
 		content = d.normalizeContent(content)
-		cm = nil
 	}
-	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, cm)
+	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap)
 }
 
 var (

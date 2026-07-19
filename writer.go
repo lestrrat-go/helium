@@ -94,10 +94,11 @@ type Writer struct {
 	// parameter, Serialization 3.1 §4 character-expansion phase). Normalization is
 	// scoped to text and attribute nodes ONLY — element/attribute names, comments,
 	// PIs, the DOCTYPE, and the XML declaration are never normalized. A
-	// character-map replacement is assumed to be normalization-inert (fn:serialize
-	// substitutes a sentinel rune for a mapped character), so a replacement passes
-	// through un-normalized. normalize is false by default, keeping output
-	// byte-identical when no normalization is requested.
+	// character-map replacement is kept inert: normalizeContent normalizes only
+	// the runs around a mapped character and leaves the mapped character in place,
+	// so the escaper emits its replacement verbatim (un-escaped, un-normalized),
+	// matching the character-map contract. normalize is false by default, keeping
+	// output byte-identical when no normalization is requested.
 	normalize bool
 	normForm  norm.Form
 	// normFormRaw is the exact form string passed to Normalization, retained so
@@ -640,9 +641,9 @@ func (w Writer) OutputEncoding(v string) Writer {
 // swallowed. Normalization is scoped to text and attribute nodes (Serialization
 // 3.1 §4 character-expansion phase) — element/attribute names, comments, PIs, the
 // DOCTYPE, and the XML declaration are never normalized. A character map
-// (CharacterMap) is expected to carry normalization-inert replacements
-// (fn:serialize substitutes sentinel runes), so a mapped character's replacement
-// is not normalized.
+// (CharacterMap) replacement is kept inert: only the content around a mapped
+// character is normalized, so the replacement itself is emitted verbatim
+// (un-escaped, un-normalized) regardless of the requested form.
 func (w Writer) Normalization(form string) Writer {
 	w.normFormRaw = form
 	w.normForm, w.normalize = xmlNormalizationForm(form)
@@ -1119,12 +1120,13 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			}
 			d.writeCDATASplit(out, c)
 		} else {
-			cm := d.charMap
 			if d.normalize {
+				// normalizeContent normalizes only the non-mapped runs and leaves
+				// mapped characters in place, so the character map still drives the
+				// escaper to emit each replacement verbatim.
 				c = d.normalizeContent(c)
-				cm = nil
 			}
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, cm); err != nil {
+			if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
 				return err
 			}
 		}
