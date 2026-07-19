@@ -13,7 +13,8 @@ import (
 // from Children(), and serializes as an attribute rather than a child element.
 func TestAddChildRoutesAttributeToProperties(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	elem := doc.CreateElement("root")
+	elem, err := doc.CreateElement("root")
+	require.NoError(t, err)
 
 	attr, err := doc.CreateAttribute("orphan", "v", nil)
 	require.NoError(t, err)
@@ -45,9 +46,10 @@ func TestAddChildRoutesAttributeToProperties(t *testing.T) {
 // attribute in place (libxml2 xmlAddChild parity via addProperty).
 func TestAddChildAttributeReplacesSameName(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	elem := doc.CreateElement("root")
+	elem, err := doc.CreateElement("root")
+	require.NoError(t, err)
 
-	err := elem.SetAttribute("id", "first")
+	err = elem.SetAttribute("id", "first")
 	require.NoError(t, err)
 
 	replacement, err := doc.CreateAttribute("id", "second", nil)
@@ -64,10 +66,12 @@ func TestAddChildAttributeReplacesSameName(t *testing.T) {
 // spliced onto the new element.
 func TestAddChildAttributeDetachesFromPreviousElement(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	src := doc.CreateElement("src")
-	dst := doc.CreateElement("dst")
+	src, err := doc.CreateElement("src")
+	require.NoError(t, err)
+	dst, err := doc.CreateElement("dst")
+	require.NoError(t, err)
 
-	err := src.SetAttribute("moved", "v")
+	err = src.SetAttribute("moved", "v")
 	require.NoError(t, err)
 	attr := src.Attributes()[0]
 
@@ -86,7 +90,8 @@ func TestAddChildAttributeDetachesFromPreviousElement(t *testing.T) {
 // a document node), and the attribute-routing type switch must not block it.
 func TestDocumentAddChildElement(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 	require.Equal(t, root, doc.DocumentElement())
 }
@@ -125,7 +130,9 @@ func TestTextAddChildRejectsNonText(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	text := doc.CreateText([]byte("hello"))
 
-	err := text.AddChild(doc.CreateElement("child"))
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
+	err = text.AddChild(child)
 	require.Error(t, err)
 	require.ErrorIs(t, err, helium.ErrInvalidOperation)
 	require.NotEqual(t, helium.ErrInvalidOperation.Error(), err.Error())
@@ -138,7 +145,9 @@ func TestCommentAddChildRejectsNonComment(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	comment := doc.CreateComment([]byte("c"))
 
-	err := comment.AddChild(doc.CreateElement("child"))
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
+	err = comment.AddChild(child)
 	require.Error(t, err)
 	require.ErrorIs(t, err, helium.ErrInvalidOperation)
 	require.NotEqual(t, helium.ErrInvalidOperation.Error(), err.Error())
@@ -185,7 +194,8 @@ func TestPIAddChildRejectsAttribute(t *testing.T) {
 // stray child element in the serialized output.
 func TestAddChildAttributeSerializationShape(t *testing.T) {
 	doc := helium.NewDefaultDocument()
-	elem := doc.CreateElement("root")
+	elem, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	attr, err := doc.CreateAttribute("k", "v", nil)
 	require.NoError(t, err)
 	require.NoError(t, elem.AddChild(attr))
