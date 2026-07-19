@@ -551,7 +551,7 @@ func noteCrossDocumentEscape(dest *Document, cur Node) {
 // document's namespace slab (its owner is Namespace.context, set by
 // Document.CreateNamespace; a heap-allocated Namespace has a nil context and no
 // slab). When AddNamespaceDecl retains such a Namespace in another document's
-// declarations, or SetNs installs it as another document's node's active
+// declarations, or SetNamespace installs it as another document's node's active
 // namespace, the owning document must no longer recycle its namespace slab on
 // Free, so mark it escaped exactly as a cross-document node move does.
 func noteCrossDocumentNamespaceEscape(dest *Document, ns *Namespace) {
@@ -1042,7 +1042,7 @@ func (n node) Namespaces() []*Namespace {
 // own enough to rebind an in-use prefix: a subsequent DeclareNamespace/
 // AddNamespaceDecl at a different URI still (correctly) rejects while that use
 // remains. A caller that rebinds an in-use prefix must also reassign the active
-// namespace (SetActiveNamespace/SetNs) and any prefixed attribute.
+// namespace (SetActiveNamespace/SetNamespace) and any prefixed attribute.
 func (n *node) RemoveNamespaceByPrefix(prefix string) bool {
 	for i, ns := range n.nsDefs {
 		if ns.Prefix() == prefix {
@@ -1115,7 +1115,7 @@ func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 //     on a non-element node (Text, Comment, CDATASection, …) n.ns is never serialized, so
 //     there is no conflict and the declaration proceeds to the dedup step below.
 //     A caller that genuinely rebinds an in-use prefix must first clear the use
-//     itself — reassign the element's active namespace (SetActiveNamespace/SetNs)
+//     itself — reassign the element's active namespace (SetActiveNamespace/SetNamespace)
 //     and any prefixed attribute; RemoveNamespaceByPrefix alone drops only the
 //     nsDefs entry, not the n.ns/attribute use, so a rebind still (correctly)
 //     rejects while the use remains.
@@ -1126,7 +1126,7 @@ func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 //     n.ns/attr.ns that aliases it is unaffected).
 //
 // This method does NOT reconcile a conflict introduced AFTER declaration by
-// SetActiveNamespace/SetNs, which set the node's active namespace independently
+// SetActiveNamespace/SetNamespace, which set the node's active namespace independently
 // and may bind prefix to a different URI than an nsDefs entry. Guaranteeing at
 // most one xmlns:prefix per element across all mutators is a serializer-level
 // concern, outside this method's scope.
@@ -1182,7 +1182,7 @@ func (n *node) DeclareNamespace(prefix, uri string) error {
 //     holding it is unaffected).
 //
 // Like DeclareNamespace, this does NOT reconcile a conflict introduced AFTER
-// declaration by SetActiveNamespace/SetNs; keeping at most one xmlns:prefix per
+// declaration by SetActiveNamespace/SetNamespace; keeping at most one xmlns:prefix per
 // element across all mutators is a serializer-level concern outside this method's
 // scope.
 //
@@ -1229,7 +1229,7 @@ func (n *node) AddNamespaceDecl(ns *Namespace) error {
 }
 
 // SetActiveNamespace declares a namespace and sets it as this node's active
-// namespace (libxml2: xmlSetNs).
+// namespace.
 func (n *node) SetActiveNamespace(prefix, uri string) error {
 	ns, err := n.doc.CreateNamespace(prefix, uri)
 	if err != nil {
@@ -1240,7 +1240,7 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 	return nil
 }
 
-// SetNs sets the node's active namespace to an existing Namespace object
+// SetNamespace sets the node's active namespace to an existing Namespace object
 // without creating a new declaration.
 //
 // When ns is slab-backed by a DIFFERENT document than this node's owner, that
@@ -1248,7 +1248,7 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 // from under the retained active namespace — the same guard AddNamespaceDecl and
 // a cross-document node move apply (see noteCrossDocumentNamespaceEscape). A nil,
 // heap-allocated, or same-document ns marks nothing.
-func (n *node) SetNs(ns *Namespace) {
+func (n *node) SetNamespace(ns *Namespace) {
 	noteCrossDocumentNamespaceEscape(n.doc, ns)
 	n.ns = ns
 	n.invalidateQName()

@@ -233,7 +233,7 @@ func normalizeXHTMLNamespace(doc *helium.Document) {
 
 		// Set the element's namespace to the shared default NS node
 		if sharedNS != nil {
-			elem.SetNs(sharedNS)
+			elem.SetNamespace(sharedNS)
 		}
 
 		return nil
@@ -267,7 +267,7 @@ func normalizeForeignNamespaces(doc *helium.Document) {
 		// Find the ns node we just created and set it as the element's ns
 		for _, ns := range elem.Namespaces() {
 			if ns.Prefix() == "" && ns.URI() == uri {
-				elem.SetNs(ns)
+				elem.SetNamespace(ns)
 				break
 			}
 		}

@@ -1072,7 +1072,7 @@ func TestNamespaceNodeWrapperContent(t *testing.T) {
 	require.Equal(t, "p", nsw.Name())
 }
 
-// TestNodeNamespaceMethods covers DeclareNamespace, SetActiveNamespace, SetNs,
+// TestNodeNamespaceMethods covers DeclareNamespace, SetActiveNamespace, SetNamespace,
 // AddNamespaceDecl and the qname caching in Name().
 func TestNodeNamespaceMethods(t *testing.T) {
 	t.Parallel()
@@ -1093,7 +1093,7 @@ func TestNodeNamespaceMethods(t *testing.T) {
 	// AddNamespaceDecl with an existing namespace object.
 	ns := helium.NewNamespace("q", "http://example.com/q")
 	require.NoError(t, root.AddNamespaceDecl(ns))
-	root.SetNs(ns)
+	root.SetNamespace(ns)
 	require.Equal(t, "q:root", root.Name())
 }
 

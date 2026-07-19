@@ -274,7 +274,7 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 			childScope[ns.Prefix()] = decl
 			active = decl
 		}
-		elem.SetNs(active)
+		elem.SetNamespace(active)
 	}
 
 	// Copy attributes, preserving namespace information. Use the literal setters

@@ -662,7 +662,7 @@ func TestReplaceNilOperand(t *testing.T) {
 
 // TestElementNamespaceMutators exercises the namespace-declaration mutators on
 // an element: DeclareNamespace, AddNamespaceDecl, RemoveNamespaceByPrefix,
-// SetActiveNamespace and SetNs.
+// SetActiveNamespace and SetNamespace.
 func TestElementNamespaceMutators(t *testing.T) {
 	t.Parallel()
 
@@ -686,7 +686,7 @@ func TestElementNamespaceMutators(t *testing.T) {
 	require.Equal(t, "urn:a", e.URI())
 	require.Equal(t, "a:e", e.Name())
 
-	e.SetNs(shared)
+	e.SetNamespace(shared)
 	require.Equal(t, "q", e.Prefix())
 	require.Equal(t, "urn:q", e.URI())
 }
