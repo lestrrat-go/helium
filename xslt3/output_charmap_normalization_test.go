@@ -17,7 +17,7 @@ func TestCharacterMapReplacementSkipsNormalization(t *testing.T) {
 
 	var out bytes.Buffer
 	require.NoError(t, xslt3.SerializeResult(&out, doc, &xslt3.OutputDef{
-		Method:            "xml",
+		Method:            outMethodXML,
 		OmitDeclaration:   true,
 		NormalizationForm: "NFC",
 		ResolvedCharMap:   map[rune]string{'x': decomposed},
@@ -45,7 +45,7 @@ func TestCharacterMapNormalizationKeepsRawDOEContent(t *testing.T) {
 
 	var out bytes.Buffer
 	require.NoError(t, xslt3.SerializeResult(&out, doc, &xslt3.OutputDef{
-		Method:            "xml",
+		Method:            outMethodXML,
 		OmitDeclaration:   true,
 		NormalizationForm: "NFC",
 		ResolvedCharMap:   map[rune]string{'x': decomposed},
@@ -71,7 +71,7 @@ func TestCharacterMapNormalizationPreservesRawDOEMarkup(t *testing.T) {
 
 	var out bytes.Buffer
 	require.NoError(t, xslt3.SerializeResult(&out, doc, &xslt3.OutputDef{
-		Method:            "xml",
+		Method:            outMethodXML,
 		OmitDeclaration:   true,
 		NormalizationForm: "NFC",
 		ResolvedCharMap:   map[rune]string{'x': "x"},
