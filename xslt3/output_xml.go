@@ -49,7 +49,12 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	// This path only handles XML 1.0-family output (needsXML11 is false above),
 	// so a character invalid in XML 1.0 is a SERE0006 serialization error. The
 	// check is folded into the writer's existing escape pass (no extra traversal).
+	// Apply a valid output definition version so XML 1.0 overrides a document's
+	// own version on this direct writer path.
 	writer := helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(true)
+	if version := validOutputXMLVersion(outDef.Version); version != "" {
+		writer = writer.OutputVersion(version)
+	}
 	if outDef.Indent {
 		writer = writer.Format(true)
 	}

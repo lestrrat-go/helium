@@ -18,7 +18,9 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		if len(charMaps) > 0 {
 			cm = charMaps[0]
 		}
-		return serializeXML(w, doc, defaultOutputDef(), cm)
+		xmlOutDef := defaultOutputDef()
+		xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
+		return serializeXML(w, doc, xmlOutDef, cm)
 	}
 	var cm map[rune]string
 	if len(charMaps) > 0 {
@@ -50,6 +52,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 						_ = tmpDoc.AddChild(clone)
 					}
 					xmlOutDef := defaultOutputDef()
+					xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
 					if err := serializeXML(w, tmpDoc, xmlOutDef, cm); err != nil {
 						return err
 					}
@@ -67,6 +70,16 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		adaptIdx++
 	}
 	return nil
+}
+
+// adaptiveXMLVersion returns the XML version used whenever adaptive output
+// delegates an element or document item to XML serialization. xmlVersion was
+// validated by validOutputXMLVersion; an absent value uses the XML 1.0 default.
+func adaptiveXMLVersion(xmlVersion string) string {
+	if xmlVersion != "" {
+		return xmlVersion
+	}
+	return defaultOutputDef().Version
 }
 
 // adaptiveQuoteString wraps a string in double quotes for adaptive output.
@@ -104,10 +117,9 @@ func isAdaptiveQuotedType(typeName string) bool {
 }
 
 // serializeItemAdaptive serializes a single item using the adaptive method.
-// xmlVersion is the effective xml-method version (a valid XML VersionNum, or ""
-// for the 1.0 default) applied when embedding element/document nodes, so a v1.1
-// sequence emits U+0001 as a legal character reference instead of a wrongful
-// SERE0006.
+// xmlVersion is the validated xml-method version. Every element and document
+// item uses adaptiveXMLVersion, so the XML 1.0 default does not inherit a
+// document's own version.
 func serializeItemAdaptive(item xpath3.Item, xmlVersion string, charMap map[rune]string) (string, error) {
 	maybeApply := func(s string) string {
 		if len(charMap) > 0 {
@@ -124,10 +136,7 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion string, charMap map[rune
 		var buf bytes.Buffer
 		switch v.Node.(type) {
 		case *helium.Element, *helium.Document:
-			writer := helium.NewWriter().XMLDeclaration(false)
-			if xmlVersion != "" {
-				writer = writer.OutputVersion(xmlVersion)
-			}
+			writer := helium.NewWriter().XMLDeclaration(false).OutputVersion(adaptiveXMLVersion(xmlVersion))
 			if err := writer.WriteTo(&buf, v.Node); err != nil {
 				return "", xmlInvalidCharError(err)
 			}

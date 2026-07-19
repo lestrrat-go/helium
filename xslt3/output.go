@@ -111,10 +111,9 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		}
 		return serializeJSONItems(w, items, doc, outDef)
 	case methodAdaptive:
-		// Adaptive serialization embeds element/document nodes via the XML method,
-		// which inherits the version serialization parameter, so a valid XML
-		// version (e.g. "1.1") flows into the nested writer; html-style versions
-		// never reach here (adaptive Version is an XML VersionNum).
+		// Adaptive serialization uses its version serialization parameter for every
+		// XML fallback and embedded element/document writer. An absent version uses
+		// the XML 1.0 default; html-style versions never reach here.
 		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.ResolvedCharMap)
 	default:
 		if items != nil && sequence.Len(items) > 0 {

@@ -120,6 +120,15 @@ func newBadCharElement(t *testing.T) *helium.Element {
 	return root
 }
 
+// newBadCharDocument records XML 1.1 so the adaptive XML 1.0 default must
+// override the source document's version.
+func newBadCharDocument(t *testing.T) *helium.Document {
+	t.Helper()
+	doc := newBadCharElement(t).OwnerDocument()
+	doc.SetVersion("1.1")
+	return doc
+}
+
 // requireSERE0006 asserts err is the XSLT serialization error SERE0006 that the
 // serializer raises when the writer rejects an XML-invalid character.
 func requireSERE0006(t *testing.T, err error) {
@@ -243,4 +252,96 @@ func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
 	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: "1.1"})
 	require.NoError(t, err)
 	requireControlCharRef(t, buf11.String())
+}
+
+// Adaptive XML serialization uses its output version consistently for each
+// path that delegates element or document items to the XML writer. A source
+// document marked XML 1.1 cannot change the default XML 1.0 result.
+func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
+	tests := []struct {
+		name               string
+		items              func(*testing.T) xpath3.Sequence
+		doc                func(*testing.T) *helium.Document
+		wantXMLDeclaration bool
+	}{
+		{
+			name:               "NoItemsDocument",
+			doc:                newBadCharDocument,
+			wantXMLDeclaration: true,
+		},
+		{
+			name: "SingletonElement",
+			items: func(t *testing.T) xpath3.Sequence {
+				return xpath3.ItemSlice{xpath3.NodeItem{Node: newBadCharElement(t)}}
+			},
+			wantXMLDeclaration: true,
+		},
+		{
+			name: "SingletonDocument",
+			items: func(t *testing.T) xpath3.Sequence {
+				return xpath3.ItemSlice{xpath3.NodeItem{Node: newBadCharDocument(t)}}
+			},
+		},
+		{
+			name: "MapContainedDocument",
+			items: func(t *testing.T) xpath3.Sequence {
+				doc := newBadCharDocument(t)
+				return xpath3.ItemSlice{xpath3.NewMap([]xpath3.MapEntry{{
+					Key:   xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "doc"},
+					Value: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+				}})}
+			},
+		},
+		{
+			name: "ArrayContainedDocument",
+			items: func(t *testing.T) xpath3.Sequence {
+				doc := newBadCharDocument(t)
+				return xpath3.ItemSlice{xpath3.NewArray([]xpath3.Sequence{
+					xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+				})}
+			},
+		},
+	}
+	versions := []struct {
+		name    string
+		version string
+	}{
+		{name: "Default"},
+		{name: "XML10", version: "1.0"},
+		{name: "XML11", version: "1.1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, version := range versions {
+				t.Run(version.name, func(t *testing.T) {
+					var buf bytes.Buffer
+					var items xpath3.Sequence
+					if tt.items != nil {
+						items = tt.items(t)
+					}
+					var doc *helium.Document
+					if tt.doc != nil {
+						doc = tt.doc(t)
+					}
+					err := xslt3.SerializeItems(&buf, items, doc, &xslt3.OutputDef{
+						Method:  "adaptive",
+						Version: version.version,
+					})
+					if version.version != "1.1" {
+						requireSERE0006(t, err)
+						return
+					}
+
+					require.NoError(t, err)
+					requireControlCharRef(t, buf.String())
+					if tt.wantXMLDeclaration {
+						require.Contains(t, buf.String(), `<?xml version="1.1"`)
+					} else {
+						require.NotContains(t, buf.String(), "<?xml")
+					}
+				})
+			}
+		})
+	}
 }
