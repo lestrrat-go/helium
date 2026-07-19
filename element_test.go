@@ -672,7 +672,7 @@ func TestElementNamespaceMutators(t *testing.T) {
 	require.Len(t, e.Namespaces(), 1)
 
 	shared := helium.NewNamespace("q", "urn:q")
-	e.AddNamespaceDecl(shared)
+	require.NoError(t, e.AddNamespaceDecl(shared))
 	require.Len(t, e.Namespaces(), 2)
 
 	require.True(t, e.RemoveNamespaceByPrefix("p"), "existing prefix removed")
