@@ -1562,11 +1562,7 @@ func TestWriteNilNode(t *testing.T) {
 	})
 }
 
-// TestSerializeQuotedStringBranches drives the dumpQuotedString writer helper
-// through all three quoting branches by serializing notation system IDs that
-// contain: no quote, a double quote only (forces single-quote delimiting), and
-// both quote kinds (forces double-quote delimiting with &quot; escaping).
-func TestSerializeQuotedStringBranches(t *testing.T) {
+func TestSerializeNotationSystemLiteralQuotes(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
@@ -1579,8 +1575,8 @@ func TestSerializeQuotedStringBranches(t *testing.T) {
 	// double quote only -> single-quote delimited.
 	_, err = dtd.AddNotation("dq", "", `has"dquote`)
 	require.NoError(t, err)
-	// both quotes -> double-quote delimited with &quot; escaping of the dquote.
-	_, err = dtd.AddNotation("both", "", `has"dq and 'sq'`)
+	// single quote only -> double-quote delimited.
+	_, err = dtd.AddNotation("sq", "", `has'squote`)
 	require.NoError(t, err)
 
 	root, err := doc.CreateElement("doc")
@@ -1591,7 +1587,9 @@ func TestSerializeQuotedStringBranches(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, `"plain.exe"`, "no-quote value double-quote delimited")
 	require.Contains(t, out, `'has"dquote'`, "double-quote-only value single-quote delimited")
-	require.Contains(t, out, "&quot;", "both-quote value escapes the embedded double quote")
+	require.Contains(t, out, `"has'squote"`, "single-quote-only value double-quote delimited")
+	_, err = helium.NewParser().Parse(t.Context(), []byte(out))
+	require.NoError(t, err)
 }
 
 // TestSerializeEntityContentWithPercent serializes an internal general entity
@@ -2081,6 +2079,115 @@ func TestWriterValidatesExternalEntityIDs(t *testing.T) {
 			err = helium.NewWriter().WriteTo(&buf, doc)
 			require.ErrorIs(t, err, tc.wantErr)
 			require.NotContains(t, buf.String(), "\uFFFD")
+		})
+	}
+}
+
+func TestWriterSerializesValidExternalEntitySystemLiterals(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		systemID string
+		want     string
+	}{
+		{
+			name:     "no quote",
+			systemID: "external.ent",
+			want:     `"external.ent"`,
+		},
+		{
+			name:     "double quote",
+			systemID: `external"quote.ent`,
+			want:     `'external"quote.ent'`,
+		},
+		{
+			name:     "single quote",
+			systemID: `external'quote.ent`,
+			want:     `"external'quote.ent"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := doc.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("ext", enum.ExternalGeneralParsedEntity, "", tc.systemID, "")
+			require.NoError(t, err)
+			root, err := doc.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			out, err := helium.WriteString(doc)
+			require.NoError(t, err)
+			require.Contains(t, out, "SYSTEM "+tc.want)
+			_, err = helium.NewParser().Parse(t.Context(), []byte(out))
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestWriterRejectsUnrepresentableSystemLiterals(t *testing.T) {
+	t.Parallel()
+
+	const systemID = `external"quote'and-apostrophe.ent`
+	for _, tc := range []struct {
+		name string
+		add  func(*helium.DTD) error
+	}{
+		{
+			name: "parsed general entity with system ID",
+			add: func(dtd *helium.DTD) error {
+				_, err := dtd.AddEntity("ext", enum.ExternalGeneralParsedEntity, "", systemID, "")
+				return err
+			},
+		},
+		{
+			name: "unparsed general entity with public and system IDs",
+			add: func(dtd *helium.DTD) error {
+				_, err := dtd.AddEntity("ext", enum.ExternalGeneralUnparsedEntity, "Example", systemID, "")
+				return err
+			},
+		},
+		{
+			name: "parameter entity with system ID",
+			add: func(dtd *helium.DTD) error {
+				_, err := dtd.AddEntity("ext", enum.ExternalParameterEntity, "", systemID, "")
+				return err
+			},
+		},
+		{
+			name: "notation with system ID",
+			add: func(dtd *helium.DTD) error {
+				_, err := dtd.AddNotation("notation", "", systemID)
+				return err
+			},
+		},
+		{
+			name: "notation with public and system IDs",
+			add: func(dtd *helium.DTD) error {
+				_, err := dtd.AddNotation("notation", "Example", systemID)
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := doc.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			require.NoError(t, tc.add(dtd))
+			root, err := doc.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			var buf bytes.Buffer
+			err = helium.NewWriter().WriteTo(&buf, doc)
+			require.ErrorIs(t, err, helium.ErrWriterInvalidDTDNode)
+			require.NotContains(t, buf.String(), systemID)
+			require.NotContains(t, buf.String(), "&quot;")
 		})
 	}
 }
