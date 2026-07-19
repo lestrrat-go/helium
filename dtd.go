@@ -33,6 +33,24 @@ type attrDeclKey struct {
 	elem   string
 }
 
+// splitDTDName separates a DTD Name at its first non-leading colon for the
+// existing declaration lookup tables. DTD names are not namespace-aware: the
+// split is storage-only, and dtdName restores the exact spelling for output.
+// Leading, trailing, and repeated colons are valid XML Name characters.
+func splitDTDName(name string) (prefix, local string) {
+	if i := strings.IndexByte(name, ':'); i > 0 {
+		return name[:i], name[i+1:]
+	}
+	return "", name
+}
+
+func dtdName(prefix, local string) string {
+	if prefix == "" {
+		return local
+	}
+	return prefix + ":" + local
+}
+
 // Notation is a notation declaration from a DTD.
 type Notation struct {
 	docnode
@@ -126,8 +144,8 @@ func (dtd *DTD) AddEntity(name string, typ enum.EntityType, publicID, systemID, 
 // same name is already declared, and an error (wrapping ErrInvalidArgument) if
 // name contains a colon: a notation name is an XML NCName, so a colon-bearing
 // name produces a <!NOTATION> declaration the parser rejects ("colons are
-// forbidden from notation names"). Otherwise it trusts the caller for a
-// well-formed name, public ID, and system ID.
+// forbidden from notation names"). Otherwise it stores caller input; the writer
+// checks the complete NCName and literal grammar before output.
 func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) {
 	// A notation name is an XML NCName; a colon is forbidden. This mirrors the
 	// parser's own NotationDecl Name check exactly (parser_dtd_attr.go), so a
@@ -152,7 +170,8 @@ func (dtd *DTD) AddNotation(name, publicID, systemID string) (*Notation, error) 
 }
 
 // AddElementDecl declares an element content model in the DTD and registers it
-// as a child node. The name may be a QName; its prefix is split off for keying.
+// as a child node. The DTD Name is split for keying only and retains its exact
+// spelling for serialization.
 // content must be nil for EMPTY/ANY element types and non-nil for MIXED/ELEMENT
 // types. A previously undefined declaration (created when one of the element's
 // attributes was declared first) is completed in place; a second concrete
@@ -177,15 +196,9 @@ func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *Eleme
 		return nil, errors.New("invalid ElementContent")
 	}
 
-	// Split a QName into prefix + local on the FIRST colon, mirroring libxml2's
-	// xmlSplitQName3: a leading colon (i == 0) is NOT a prefix separator — the
-	// whole string (colon included) is the local name — so ":x" does not collide
-	// with the unprefixed "x" (XML 1.0 5th-edition Name; eduni ibm04v01).
-	var prefix string
-	if i := strings.IndexByte(name, ':'); i > 0 {
-		prefix = name[:i]
-		name = name[i+1:]
-	}
+	// The split is storage-only. A leading colon remains part of the local name,
+	// while a trailing colon leaves an empty local part that dtdName restores.
+	prefix, name := splitDTDName(name)
 
 	var oldattrs *AttributeDecl
 	// lookup old attributes inserted on an undefined element in the
@@ -285,18 +298,14 @@ func (dtd *DTD) LookupAttribute(name, prefix, elem string) (*AttributeDecl, bool
 //
 // It validates the enum parameters — atype must be a valid enum.Attr* type and
 // def a valid enum.AttrDefaultNone/Required/Implied/Fixed kind — and rejects a
-// duplicate. name may be a QName; its prefix is split off for keying on the FIRST
-// colon, exactly as AddElementDecl does.
+// duplicate. name is a DTD Name; it is split off for keying on the first
+// non-leading colon, exactly as AddElementDecl does, then recombined unchanged
+// when serialized.
 //
-// Like its sibling constructors (AddNotation checks only the duplicate; AddEntity
-// only the type enum; AddElementDecl only the content-model structure), it TRUSTS
-// the Go caller to supply well-formed input. It does NOT validate the element or
-// attribute name against the Name grammar, the default value's characters, a
-// namespace-declaration default's URI, or any cross-declaration validity
-// constraint (those are enforced by ValidateDTD when the document is validated).
-// A caller that passes a malformed name or value gets a declaration that may not
-// round-trip through a validating parse — that is the caller's responsibility,
-// exactly as for the siblings.
+// Like its sibling constructors, it stores caller-provided names and values
+// without eager grammar or cross-declaration validation. The writer checks every
+// emitted DTD Name and enumeration token before output, while ValidateDTD handles
+// document-level declaration constraints.
 //
 // The caller's enumValues slice is cloned before it is stored, so a later mutation
 // of the caller's slice cannot corrupt the serialized declaration.
@@ -317,14 +326,8 @@ func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, de
 		return nil, fmt.Errorf("invalid attribute default declaration: %w", ErrInvalidArgument)
 	}
 
-	// Split the QName into prefix + local on the FIRST colon, mirroring
-	// AddElementDecl.
-	local := name
-	var prefix string
-	if i := strings.IndexByte(name, ':'); i > 0 {
-		prefix = name[:i]
-		local = name[i+1:]
-	}
+	// The split is storage-only, matching AddElementDecl.
+	prefix, local := splitDTDName(name)
 
 	if _, ok := dtd.LookupAttribute(local, prefix, elem); ok {
 		return nil, fmt.Errorf("duplicate attribute %s declared for element %s: %w", name, elem, ErrDuplicateDeclaration)

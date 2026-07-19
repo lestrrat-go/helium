@@ -327,6 +327,47 @@ func hasXmlnsPrefix(name string) bool {
 	return strings.HasPrefix(name, "xmlns:")
 }
 
+// rawNameGrammar identifies the XML grammar used by a raw serialization site.
+// DOM element and attribute names are QNames, while DTD grammar keeps its full
+// Name spelling without namespace interpretation.
+type rawNameGrammar uint8
+
+const (
+	rawNameQName rawNameGrammar = iota
+	rawNameNCName
+	rawNameName
+	rawNamePITarget
+)
+
+// checkRawName validates one complete spelling before a writer path emits it.
+// The grammar is explicit at the call site so namespace-aware DOM QNames cannot
+// accidentally share a rule with DTD Names or declaration NCNames.
+func (s *writeSession) checkRawName(what, name string, grammar rawNameGrammar, sentinel error) bool {
+	var valid bool
+	switch grammar {
+	case rawNameQName:
+		valid = xmlchar.IsValidQName(name)
+	case rawNameNCName:
+		valid = xmlchar.IsValidNCName(name)
+	case rawNameName:
+		valid = xmlchar.IsValidName(name)
+	case rawNamePITarget:
+		valid = xmlchar.IsValidPITarget(name)
+	default:
+		valid = false
+	}
+	if !valid {
+		s.check(fmt.Errorf("helium: invalid %s %q: %w", what, name, sentinel))
+		return false
+	}
+	// A name cannot hold a character reference, so a non-ASCII name has no
+	// faithful US-ASCII serialization.
+	if s.rejectNonASCIIStr(what, name) {
+		return false
+	}
+	return true
+}
+
 // checkElementName validates an element name about to be emitted verbatim. An
 // unvalidated name (e.g. from CreateElement) can carry whitespace, quotes, or
 // '>' that inject raw markup into the output. On failure it records a sticky
@@ -344,16 +385,7 @@ func (s *writeSession) checkElementName(name string) bool {
 		s.check(fmt.Errorf("helium: reserved element name %q: namespace declarations must use DeclareNamespace: %w", name, ErrWriterReservedElementName))
 		return false
 	}
-	if !xmlchar.IsValidQName(name) {
-		s.check(fmt.Errorf("helium: invalid element name %q: %w", name, ErrWriterInvalidElementName))
-		return false
-	}
-	// An element name cannot hold a character reference, so a non-ASCII name has
-	// no faithful US-ASCII serialization.
-	if s.rejectNonASCIIStr("element name", name) {
-		return false
-	}
-	return true
+	return s.checkRawName("element name", name, rawNameQName, ErrWriterInvalidElementName)
 }
 
 // checkAttributeName validates an attribute name about to be emitted verbatim.
@@ -372,16 +404,7 @@ func (s *writeSession) checkAttributeName(name string) bool {
 		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace: %w", name, ErrWriterReservedAttributeName))
 		return false
 	}
-	if !xmlchar.IsValidQName(name) {
-		s.check(fmt.Errorf("helium: invalid attribute name %q: %w", name, ErrWriterInvalidAttributeName))
-		return false
-	}
-	// An attribute name cannot hold a character reference, so a non-ASCII name
-	// has no faithful US-ASCII serialization.
-	if s.rejectNonASCIIStr("attribute name", name) {
-		return false
-	}
-	return true
+	return s.checkRawName("attribute name", name, rawNameQName, ErrWriterInvalidAttributeName)
 }
 
 // checkNamespaceBinding rejects a QName whose non-empty prefix resolves to an
@@ -424,17 +447,116 @@ func (s *writeSession) checkNamespacePrefix(prefix string) bool {
 		s.check(fmt.Errorf("helium: reserved namespace prefix %q must not be declared: %w", prefix, ErrWriterReservedNamespacePrefix))
 		return false
 	}
-	if prefix != "" && !xmlchar.IsValidNCName(prefix) {
-		s.check(fmt.Errorf("helium: invalid namespace prefix %q: %w", prefix, ErrWriterInvalidNamespacePrefix))
+	if prefix == "" {
+		return true
+	}
+	return s.checkRawName("namespace prefix", prefix, rawNameNCName, ErrWriterInvalidNamespacePrefix)
+}
+
+// checkVerbatimName validates a name about to be emitted verbatim in a DTD
+// declaration or an entity reference: a DOCTYPE, <!ENTITY>, <!NOTATION>,
+// <!ELEMENT>/<!ATTLIST> or content-model name, the NDATA notation name, and the
+// "&name;" of a named entity reference. Such a name is written raw between markup
+// delimiters, so an unvalidated name (the tree-construction APIs — AddEntity,
+// AddNotation, AddElementDecl, AddAttributeDecl, CreateCharRef — check only for a
+// stray colon) carrying a control character, whitespace, quote, or '>' would
+// inject raw markup or emit a character the parser rejects. The XML Name grammar
+// (IsValidName) subsumes the character-range check — NameChar is a subset of Char
+// — so an invalid name is REJECTED in BOTH the default and the
+// RejectInvalidChars(false) mode: a name has no faithful U+FFFD replacement form
+// (U+FFFD is not a NameChar), mirroring checkElementName's unconditional
+// rejection. On failure it records a sticky error (preserving any earlier one)
+// and returns false.
+func (s *writeSession) checkVerbatimName(what, name string) bool {
+	return s.checkRawName(what, name, rawNameName, ErrWriterInvalidName)
+}
+
+// checkVerbatimNCName validates a DTD declaration name that the parser requires
+// to be an NCName rather than a full DTD Name.
+func (s *writeSession) checkVerbatimNCName(what, name string) bool {
+	return s.checkRawName(what, name, rawNameNCName, ErrWriterInvalidName)
+}
+
+// parseCharRefBody decodes the numeric body of a character reference — the text
+// after the '#' in an EntityRefNode name ("1" or "xAB") or between "&#" and ";"
+// in an entity value — to its code point. It reports ok=false for an empty or
+// malformed body (a non-digit, or a value beyond U+10FFFF).
+func parseCharRefBody(body string) (rune, bool) {
+	if body == "" {
+		return 0, false
+	}
+	v := 0
+	if body[0] == 'x' {
+		hex := body[1:]
+		if hex == "" {
+			return 0, false
+		}
+		for i := range len(hex) {
+			c := hex[i]
+			var d int
+			switch {
+			case c >= '0' && c <= '9':
+				d = int(c - '0')
+			case c >= 'a' && c <= 'f':
+				d = int(c-'a') + 10
+			case c >= 'A' && c <= 'F':
+				d = int(c-'A') + 10
+			default:
+				return 0, false
+			}
+			// Each per-digit limit bounds the next calculation to 17,825,791 (hex) or 11,141,119 (decimal), both 32-bit int-safe.
+			v = v*16 + d
+			if v > 0x10FFFF {
+				return 0, false
+			}
+		}
+		return rune(v), true
+	}
+	for i := range len(body) {
+		c := body[i]
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		v = v*10 + int(c-'0')
+		if v > 0x10FFFF {
+			return 0, false
+		}
+	}
+	return rune(v), true
+}
+
+// writeCharRef serializes an EntityRefNode whose name is a numeric character
+// reference ("#N" / "#xN"). It decodes the referenced code point and, when that
+// code point is serializable in the target XML version (isSerializableChar — so a
+// RestrictedChar such as U+0001 is legal for XML 1.1 output but not XML 1.0),
+// emits the reference verbatim. Otherwise the target is invalid: under the default
+// policy it records a sticky ErrInvalidXMLChar (returning stop=true); under
+// RejectInvalidChars(false) it substitutes the U+FFFD representation used by the
+// text/attribute escapers — the &#xFFFD; reference when non-ASCII characters are
+// being escaped (EscapeNonASCII / US-ASCII output), the raw U+FFFD character
+// otherwise. A malformed body (e.g. "#xZZ") is rejected as an invalid name.
+func (d *writeSession) writeCharRef(out io.Writer, name string) (stop bool) {
+	cp, ok := parseCharRefBody(name[1:])
+	if !ok {
+		d.check(fmt.Errorf("helium: invalid character reference %q: %w", "&"+name+";", ErrWriterInvalidName))
+		return true
+	}
+	if isSerializableChar(cp, d.xml11) {
+		d.writeString(out, "&")
+		d.writeString(out, name)
+		d.writeString(out, ";")
 		return false
 	}
-	// A namespace prefix cannot hold a character reference, so a non-ASCII prefix
-	// has no faithful US-ASCII serialization. (The namespace URI is an attribute
-	// value and stays char-referenced.)
-	if s.rejectNonASCIIStr("namespace prefix", prefix) {
-		return false
+	if !d.replaceInvalidChars {
+		d.check(fmt.Errorf("helium: character reference %q targets a character invalid in the target XML version: %w", "&"+name+";", ErrInvalidXMLChar))
+		return true
 	}
-	return true
+	if d.escapeNonASCII || d.asciiOutput {
+		d.writeString(out, "&#xFFFD;")
+	} else {
+		d.writeString(out, "�")
+	}
+	return false
 }
 
 // NewWriter creates a new Writer with default settings.
@@ -496,10 +618,34 @@ func (w Writer) AllowPrefixUndeclarations(v bool) Writer {
 // valid in the target XML version (e.g. a C0/C1 control character in XML 1.0
 // output). When true (the default) the write fails with ErrInvalidXMLChar (the
 // XSLT/XQuery serialization error SERE0006); when false such a character is
-// replaced with U+FFFD instead. This detection is folded into the existing
-// text/attribute escaping pass, so it adds no extra traversal. A valid XML 1.1
-// restricted character is never affected — it serializes as a decimal character
-// reference in both modes.
+// replaced with U+FFFD instead. The policy covers every serialization context
+// except the character-map exemption noted below:
+//   - Text and attribute values, where the detection is folded into the escaping
+//     pass, adding no extra traversal. A valid XML 1.1 restricted character is
+//     never affected — it serializes as a decimal character reference in both
+//     modes.
+//   - The reference-less contexts — comment text, processing-instruction data,
+//     CDATA-section content, and DTD literals (entity values, external-ID
+//     system/public literals, enumeration tokens). A valid XML 1.1 restricted
+//     character has no character-reference form here, so it is rejected/replaced
+//     in these contexts too.
+//   - Verbatim names — the DOCTYPE, <!ENTITY>, <!NOTATION>, <!ELEMENT>/<!ATTLIST>
+//     and content-model names, the NDATA notation name, element/attribute names,
+//     and the name of a named entity reference. A name is validated against the
+//     XML Name grammar (which subsumes the character check); an invalid name has
+//     no U+FFFD form and is REJECTED in both modes (ErrWriterInvalidName).
+//   - Numeric character-reference targets — a CreateCharRef("#N") node and a
+//     &#N; reference inside an entity value. The referenced code point is checked
+//     against the target version, so it is version-sensitive (e.g. &#1; is
+//     invalid for XML 1.0 output but a legal RestrictedChar reference for XML
+//     1.1); an invalid target is rejected (default) or its reference replaced by
+//     U+FFFD.
+//
+// A character map (CharacterMap) is the one exemption: it is applied before the
+// check, so a mapped-away invalid character is not rejected — the SERE0006
+// condition is defined on the serialized result, which no longer contains it, and
+// per Serialization 3.1 §7 a replacement string is emitted verbatim (a caller
+// mapping a rune to an XML-invalid replacement opts into that explicitly).
 func (w Writer) RejectInvalidChars(v bool) Writer {
 	w.replaceInvalidChars = !v
 	return w
@@ -1048,6 +1194,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		if d.rejectNonASCIIBytes("comment content", content) {
 			return d.err
 		}
+		// A comment cannot carry a character reference either, so an XML-invalid
+		// character has no serializable form: reject (default) or U+FFFD-replace.
+		content, stop := d.serializeRefFree("comment content", content)
+		if stop {
+			return d.err
+		}
 		d.writeString(out, "<!--")
 		d.writeBytes(out, content)
 		d.writeString(out, "-->")
@@ -1058,10 +1210,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			// The PI target must be a valid XML Name (and not the reserved
 			// "xml"); otherwise an invalid/crafted target injects raw markup
 			// into the output (it is emitted verbatim below).
-			if !xmlchar.IsValidPITarget(pi.target) {
-				// check() keeps the first sticky error, so an earlier I/O failure
-				// is not clobbered by this validation error.
-				d.check(fmt.Errorf("helium: invalid PI target: %w", ErrWriterInvalidPITarget))
+			if !d.checkRawName("PI target", pi.target, rawNamePITarget, ErrWriterInvalidPITarget) {
 				return d.err
 			}
 			// PI data must not contain "?>", which would terminate the PI early.
@@ -1071,30 +1220,47 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				d.check(fmt.Errorf("helium: PI content must not contain \"?>\": %w", ErrWriterInvalidPIContent))
 				return d.err
 			}
-			// Neither the PI target nor its data can hold a character reference, so
-			// non-ASCII in either has no faithful US-ASCII serialization.
-			if d.rejectNonASCIIStr("PI target", pi.target) || d.rejectNonASCIIStr("PI data", pi.data) {
+			// PI data cannot hold a character reference, so non-ASCII data has no
+			// faithful US-ASCII serialization. checkRawName handled the target.
+			if d.rejectNonASCIIStr("PI data", pi.data) {
+				return d.err
+			}
+			// PI data cannot carry a character reference either, so an XML-invalid
+			// character has no serializable form: reject (default) or U+FFFD-replace.
+			// The target is already constrained to Name characters by IsValidPITarget.
+			data, stop := d.serializeRefFree("PI data", []byte(pi.data))
+			if stop {
 				return d.err
 			}
 			d.writeString(out, "<?")
 			d.writeString(out, pi.target)
-			if pi.data != "" {
+			if len(data) > 0 {
 				d.writeString(out, " ")
-				d.writeString(out, pi.data)
+				d.writeBytes(out, data)
 			}
 			d.writeString(out, "?>")
 		}
 		return d.err
 	case EntityRefNode:
-		// An entity-reference name is emitted verbatim between "&" and ";", so it
-		// cannot hold a character reference: a non-ASCII name has no faithful
-		// US-ASCII serialization. Guard before the first write so no raw octet
-		// leaks ahead of the sticky error.
-		if d.rejectNonASCIIStr("entity reference name", n.Name()) {
+		name := n.Name()
+		// A numeric character reference (&#N; / &#xN;) carries its character as a
+		// reference TARGET, so validate the referenced code point against the target
+		// XML version rather than the name grammar.
+		if strings.HasPrefix(name, "#") {
+			if d.writeCharRef(out, name) {
+				return d.err
+			}
+			return d.err
+		}
+		// A named entity reference is emitted verbatim between "&" and ";", so its
+		// name must be a valid XML Name (which subsumes the character-range check and
+		// the US-ASCII guard). checkVerbatimName guards before the first write so no
+		// raw octet leaks ahead of the sticky error.
+		if !d.checkVerbatimName("entity reference name", name) {
 			return d.err
 		}
 		d.writeString(out, "&")
-		d.writeString(out, n.Name())
+		d.writeString(out, name)
 		d.writeString(out, ";")
 		return d.err
 	case TextNode:
@@ -1117,6 +1283,13 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			// A CDATA section cannot hold a character reference, so non-ASCII
 			// content has no faithful US-ASCII serialization.
 			if d.rejectNonASCIIBytes("CDATA section", c) {
+				return d.err
+			}
+			// Nor can it carry a character reference for an XML-invalid character:
+			// reject (default) or U+FFFD-replace before splitting on "]]>".
+			var stop bool
+			c, stop = d.serializeRefFree("CDATA section", c)
+			if stop {
 				return d.err
 			}
 			if d.normalize {
@@ -1146,6 +1319,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// A CDATA section cannot hold a character reference, so non-ASCII content
 		// has no faithful US-ASCII serialization.
 		if d.rejectNonASCIIBytes("CDATA section", cdata) {
+			return d.err
+		}
+		// Nor can it carry a character reference for an XML-invalid character:
+		// reject (default) or U+FFFD-replace before splitting on "]]>".
+		cdata, stop := d.serializeRefFree("CDATA section", cdata)
+		if stop {
 			return d.err
 		}
 		if d.normalize {

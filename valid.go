@@ -21,12 +21,7 @@ func newElementContent(name string, ctype ElementContentType) (*ElementContent, 
 		if name == "" {
 			return nil, errors.New("ElementContent (element) must have name")
 		}
-		if p, l, ok := strings.Cut(name, ":"); ok {
-			prefix = p
-			local = l
-		} else {
-			local = name
-		}
+		prefix, local = splitDTDName(name)
 	case ElementContentPCDATA, ElementContentSeq, ElementContentOr:
 		if name != "" {
 			return nil, errors.New("ElementContent (element) must NOT have name")
@@ -94,7 +89,7 @@ func validateElementContentModel(c *ElementContent) error {
 	case ElementContentPCDATA:
 		return nil
 	case ElementContentElement:
-		if c.name == "" {
+		if c.name == "" && c.prefix == "" {
 			return errors.New("element-reference content leaf must have a name")
 		}
 		return nil
@@ -118,10 +113,7 @@ func validateElementContentModel(c *ElementContent) error {
 // written, mirroring libxml2 (which compares node->name, the full qualified
 // name).
 func (c *ElementContent) rawName() string {
-	if c.prefix != "" {
-		return c.prefix + ":" + c.name
-	}
-	return c.name
+	return dtdName(c.prefix, c.name)
 }
 
 func (elem *ElementContent) copyElementContent() *ElementContent {
