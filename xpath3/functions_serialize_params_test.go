@@ -879,6 +879,22 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.NotContains(t, out, "<!ELEMENT", "output:\n%s", out)
 	})
 
+	// The adaptive method ignores doctype-system (Serialization 3.1 §5.1.7 scopes
+	// the parameter to the DOCTYPE-emitting methods), and a source document's DTD
+	// is not part of the XDM data model, so adaptive output carries no document
+	// type declaration at all — in particular the SOURCE document's own DTD must
+	// not leak out when doctype-system is supplied.
+	t.Run("adaptive + doctype-system emits no DTD from the source document", func(t *testing.T) {
+		doc := mustParseXML(t, `<!DOCTYPE root SYSTEM "source.dtd"><root/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"adaptive","doctype-system":"requested.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.NotContains(t, out, "<!DOCTYPE", "output:\n%s", out)
+		require.NotContains(t, out, "source.dtd", "output:\n%s", out)
+		require.Contains(t, out, "<root/>", "output:\n%s", out)
+	})
+
 	t.Run("html method with doctype-system does not raise SEPM0009", func(t *testing.T) {
 		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body/></html>`)
 		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)
@@ -1371,6 +1387,81 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 			`serialize(., map{"method":"json","json-node-output-method":"xml"})`)
 		require.NoError(t, err)
 		require.Contains(t, res.StringValue(), "<a>x", "output:\n%s", res.StringValue())
+	})
+}
+
+// TestSerialize_CharMapLiteralPrivateUseContent covers the interplay of
+// use-character-maps with normalization-form for the text/json/html methods: a
+// literal content rune the map does not name — including a Supplementary
+// Private Use Area-A rune such as U+F0000 — must serialize identically with and
+// without normalization, while a mapped rune still maps and its replacement
+// passes through un-normalized (Serialization 3.1 §11). The character-map
+// application sites split the content at each mapped rune and normalize only
+// the non-mapped runs, so no placeholder rune ever stands in for a replacement.
+func TestSerialize_CharMapLiteralPrivateUseContent(t *testing.T) {
+	// U+F0000 (codepoint 983040), Supplementary Private Use Area-A.
+	const pua = "\U000F0000"
+	// U+00E9 (composed é) vs "e" + U+0301 (decomposed).
+	const composed = "\u00e9"
+	const decomposed = "e\u0301"
+
+	t.Run("text: literal U+F0000 survives NFC with an unrelated map", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string(983040), map{"method":"text","normalization-form":"NFC","use-character-maps":map{"A":"mapped"}})`)
+		require.NoError(t, err)
+		require.Equal(t, pua, res.StringValue())
+	})
+	t.Run("text: literal U+F0000..U+F0001 survive NFC with a two-entry map", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string((983040, 983041)), map{"method":"text","normalization-form":"NFC","use-character-maps":map{"A":"mapped","B":"other"}})`)
+		require.NoError(t, err)
+		require.Equal(t, pua+"\U000F0001", res.StringValue())
+	})
+	t.Run("text: same output without normalization", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string(983040), map{"method":"text","use-character-maps":map{"A":"mapped"}})`)
+		require.NoError(t, err)
+		require.Equal(t, pua, res.StringValue())
+	})
+	t.Run("text: mapped rune still maps under NFC beside a literal U+F0000", func(t *testing.T) {
+		// Content "X" + decomposed é + U+F0000; X maps to a decomposed é. The
+		// replacement stays decomposed (§11), the surrounding decomposed é
+		// composes, and the literal private-use rune is untouched.
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string((88, 101, 769, 983040)), `+
+				`map{"method":"text","normalization-form":"NFC","use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
+		require.NoError(t, err)
+		require.Equal(t, decomposed+composed+pua, res.StringValue())
+	})
+
+	t.Run("json: literal U+F0000 survives NFC with an unrelated map", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string(983040), map{"method":"json","normalization-form":"NFC","use-character-maps":map{"A":"mapped"}})`)
+		require.NoError(t, err)
+		require.Equal(t, `"`+pua+`"`, res.StringValue())
+	})
+	t.Run("json: mapped rune still maps under NFC, replacement un-normalized", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(codepoints-to-string((88, 101, 769, 983040)), `+
+				`map{"method":"json","normalization-form":"NFC","use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
+		require.NoError(t, err)
+		require.Equal(t, `"`+decomposed+composed+pua+`"`, res.StringValue())
+	})
+
+	t.Run("html: literal U+F0000 in text survives NFC with an unrelated map", func(t *testing.T) {
+		doc := mustParseXML(t, `<p>`+pua+decomposed+`</p>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","normalization-form":"NFC","use-character-maps":map{"A":"mapped"}})`)
+		require.NoError(t, err)
+		require.Equal(t, `<p>`+pua+composed+`</p>`, res.StringValue())
+	})
+	t.Run("html: mapped rune still maps under NFC, replacement un-normalized", func(t *testing.T) {
+		doc := mustParseXML(t, `<p a="X`+decomposed+`">X`+decomposed+`</p>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"html","normalization-form":"NFC",`+
+				`"use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
+		require.NoError(t, err)
+		require.Equal(t, `<p a="`+decomposed+composed+`">`+decomposed+composed+`</p>`, res.StringValue())
 	})
 }
 

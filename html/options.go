@@ -138,9 +138,10 @@ func (w Writer) CharacterMap(m map[rune]string) Writer {
 // of "NFC", "NFD", "NFKC", "NFKD"; "", "none", or any other value disables it,
 // leaving output byte-identical. Normalization is scoped to text and attribute
 // nodes (Serialization 3.1 §4 character-expansion phase) — element/attribute
-// names, comments, PIs, and the DOCTYPE are never normalized. A character map is
-// expected to carry normalization-inert replacements (fn:serialize substitutes
-// sentinel runes), so a mapped character's replacement is not normalized.
+// names, comments, PIs, and the DOCTYPE are never normalized. Character-map
+// matches are decided on the pre-normalization content: the content is split at
+// each mapped rune, each non-mapped run is normalized on its own, and each
+// replacement is emitted verbatim, never normalized (Serialization 3.1 §11).
 func (w Writer) Normalization(form string) Writer {
 	w.normForm, w.normalize = htmlNormalizationForm(form)
 	return w

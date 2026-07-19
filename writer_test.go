@@ -1760,6 +1760,158 @@ func TestWriterNormalization(t *testing.T) {
 	require.NotContains(t, raw.String(), composed, "no normalization by default: %q", raw.String())
 }
 
+// TestWriterCharMapNormalizationVerbatim verifies that a character-map
+// replacement is emitted verbatim (never re-escaped, Unicode-normalized, or
+// rejected by the invalid-char policy) per XSLT/XQuery Serialization 3.1 §7, and
+// that this holds identically whether or not Normalization is active. The
+// surrounding content is still normalized; only the replacement span is inert.
+func TestWriterCharMapNormalizationVerbatim(t *testing.T) {
+	t.Parallel()
+
+	const decomposed = "é" // "e" + combining acute
+	const composed = "é"    // U+00E9
+
+	serialize := func(t *testing.T, w helium.Writer, src string) (string, error) {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		var buf strings.Builder
+		err = w.WriteTo(&buf, doc)
+		return buf.String(), err
+	}
+
+	// '@' maps to a replacement carrying XML markup characters; those must survive
+	// verbatim (not become &lt;/&amp;) in both text and attribute value, and the
+	// decomposed é around them must still compose under NFC.
+	t.Run("markup chars in replacement", func(t *testing.T) {
+		t.Parallel()
+		m := map[rune]string{'@': "<b>&"}
+		src := `<a x="` + decomposed + `@` + decomposed + `">` + decomposed + `@` + decomposed + `</a>`
+		for _, form := range []string{"", "NFC"} {
+			// The surrounding é composes under NFC; without normalization it stays
+			// decomposed. The '@' replacement is verbatim in both.
+			surround := decomposed
+			if form == "NFC" {
+				surround = composed
+			}
+			w := helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
+				CharacterMap(m).Normalization(form)
+			out, err := serialize(t, w, src)
+			require.NoError(t, err, "form=%q", form)
+			require.Contains(t, out, ">"+surround+"<b>&"+surround+"</a>",
+				"text replacement verbatim, surround normalized (form=%q): %q", form, out)
+			require.Contains(t, out, `x="`+surround+`<b>&`+surround+`"`,
+				"attr replacement verbatim, surround normalized (form=%q): %q", form, out)
+		}
+	})
+
+	// A replacement carrying a control character (an invalid XML char) is emitted
+	// verbatim; RejectInvalidChars must not reject it, and Normalization must not
+	// change that.
+	t.Run("control char in replacement with RejectInvalidChars", func(t *testing.T) {
+		t.Parallel()
+		m := map[rune]string{'@': "x\x01y"}
+		for _, form := range []string{"", "NFC"} {
+			w := helium.NewWriter().XMLDeclaration(false).CharacterMap(m).
+				RejectInvalidChars(true).Normalization(form)
+			out, err := serialize(t, w, `<a x="@">@</a>`)
+			require.NoError(t, err, "control-char replacement must not be rejected (form=%q)", form)
+			require.Contains(t, out, ">x\x01y</a>", "text replacement verbatim (form=%q): %q", form, out)
+			require.Contains(t, out, `x="x`+"\x01"+`y"`, "attr replacement verbatim (form=%q): %q", form, out)
+		}
+	})
+}
+
+// TestWriterCharMapNormalizationCreatedRune verifies that character-map matching
+// is decided on the PRE-normalization content (Serialization 3.1 §4: character
+// mapping — rule c — precedes Unicode normalization — rule d — and is never
+// re-applied): a mapped rune CREATED by NFC composition is emitted as that rune,
+// not as the replacement, so mapped-rune treatment is identical with and without
+// Normalization; a mapped rune PRESENT in the input still maps in both.
+func TestWriterCharMapNormalizationCreatedRune(t *testing.T) {
+	t.Parallel()
+
+	const decomposed = "é" // "e" + combining acute
+	const composed = "é"    // U+00E9
+	m := map[rune]string{'é': "<mapped>"}
+
+	serialize := func(t *testing.T, form, src string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		var buf strings.Builder
+		err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
+			CharacterMap(m).Normalization(form).WriteTo(&buf, doc)
+		require.NoError(t, err)
+		return buf.String()
+	}
+
+	t.Run("NFC-composed rune is not newly matched", func(t *testing.T) {
+		t.Parallel()
+		src := `<a x="` + decomposed + `">` + decomposed + `</a>`
+		// Without Normalization the decomposed pair matches nothing.
+		out := serialize(t, "", src)
+		require.Contains(t, out, ">"+decomposed+"</a>", "text unmapped without normalization: %q", out)
+		require.Contains(t, out, `x="`+decomposed+`"`, "attr unmapped without normalization: %q", out)
+		require.NotContains(t, out, "<mapped>", "no replacement without normalization: %q", out)
+		// With NFC the pair composes to é — a rune CREATED by normalization — so
+		// it is emitted as é, not substituted with the replacement.
+		out = serialize(t, "NFC", src)
+		require.Contains(t, out, ">"+composed+"</a>", "text composed, not mapped: %q", out)
+		require.Contains(t, out, `x="`+composed+`"`, "attr composed, not mapped: %q", out)
+		require.NotContains(t, out, "<mapped>", "no replacement for a normalization-created rune: %q", out)
+	})
+
+	t.Run("input-present mapped rune still maps under NFC", func(t *testing.T) {
+		t.Parallel()
+		// Text mixes an input-present é (must map in both configurations) with a
+		// decomposed pair (must map in neither).
+		src := `<a x="` + composed + `">` + composed + decomposed + `</a>`
+		out := serialize(t, "", src)
+		require.Contains(t, out, `x="<mapped>"`, "attr mapped without normalization: %q", out)
+		require.Contains(t, out, "><mapped>"+decomposed+"</a>", "text: input é mapped, pair untouched: %q", out)
+		out = serialize(t, "NFC", src)
+		require.Contains(t, out, `x="<mapped>"`, "attr mapped under NFC: %q", out)
+		require.Contains(t, out, "><mapped>"+composed+"</a>", "text: input é mapped, pair composed unmapped: %q", out)
+	})
+}
+
+// TestWriterCharMapNormalizationPrivateUseSaturation verifies that
+// pre-normalization character-map matching does not depend on finding a rune
+// absent from the content: with content containing EVERY Unicode private-use
+// rune, a mapped rune present in the input is replaced exactly once, and a
+// mapped rune CREATED by NFKC composition (fullwidth Ａ → A) still stays
+// literal.
+func TestWriterCharMapNormalizationPrivateUseSaturation(t *testing.T) {
+	t.Parallel()
+
+	// All 137,468 private-use runes: the BMP Private Use Area plus both
+	// supplementary private-use planes.
+	var pu strings.Builder
+	for _, rng := range [][2]rune{{0xE000, 0xF8FF}, {0xF0000, 0xFFFFD}, {0x100000, 0x10FFFD}} {
+		for r := rng[0]; r <= rng[1]; r++ {
+			pu.WriteRune(r)
+		}
+	}
+	// Content: every private-use rune, then fullwidth Ａ (U+FF21, which NFKC
+	// maps to ASCII A — must stay literal), then ASCII A (mapped — exactly one
+	// replacement).
+	src := "<a>" + pu.String() + "ＡA</a>"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	var buf strings.Builder
+	err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
+		CharacterMap(map[rune]string{'A': "<mapped>"}).Normalization("NFKC").
+		WriteTo(&buf, doc)
+	require.NoError(t, err)
+	out := buf.String()
+	require.Equal(t, 1, strings.Count(out, "<mapped>"),
+		"exactly one replacement: the input A maps, the NFKC-created A does not")
+	require.Contains(t, out, "A<mapped></a>",
+		"NFKC-composed A stays literal ahead of the replacement: %q", out[len(out)-40:])
+}
+
 // TestWriteReconcilesSubtreeNamespaces verifies that serializing a subtree
 // re-declares any namespace prefix its elements or attributes use but that was
 // bound only on an ancestor outside the subtree, so the output reparses. This
@@ -2058,6 +2210,60 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 				return doc
 			},
 			sentinel: helium.ErrWriterInvalidPIContent,
+		},
+		{
+			name: "empty DOCTYPE name",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				_, err := doc.CreateInternalSubset("   ", "", "")
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name: "DOCTYPE system literal with both quotes",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				_, err := doc.CreateInternalSubset("root", "", `a"b'c.dtd`)
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name: "DOCTYPE public id with invalid PubidChar",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				_, err := doc.CreateInternalSubset("root", "bad{pubid", "sys.dtd")
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name: "notation public id with invalid PubidChar",
+			build: func(t *testing.T) *helium.Document {
+				doc := helium.NewDefaultDocument()
+				dtd, err := doc.CreateInternalSubset("root", "", "")
+				require.NoError(t, err)
+				_, err = dtd.AddNotation("n", "bad{pubid", "n.exe")
+				require.NoError(t, err)
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				return doc
+			},
+			sentinel: helium.ErrWriterInvalidDTDNode,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

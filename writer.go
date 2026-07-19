@@ -93,11 +93,14 @@ type Writer struct {
 	// attribute-value character content (the normalization-form serialization
 	// parameter, Serialization 3.1 §4 character-expansion phase). Normalization is
 	// scoped to text and attribute nodes ONLY — element/attribute names, comments,
-	// PIs, the DOCTYPE, and the XML declaration are never normalized. A
-	// character-map replacement is assumed to be normalization-inert (fn:serialize
-	// substitutes a sentinel rune for a mapped character), so a replacement passes
-	// through un-normalized. normalize is false by default, keeping output
-	// byte-identical when no normalization is requested.
+	// PIs, the DOCTYPE, and the XML declaration are never normalized. Character-map
+	// matches are decided on the PRE-normalization content (Serialization 3.1 §4:
+	// character mapping precedes normalization and is never re-applied):
+	// normalizeContent splits the content at each mapped character, normalizes
+	// each non-mapped run on its own, and returns the replacement as its own
+	// segment written verbatim (un-escaped, un-normalized), leaving a rune
+	// CREATED by normalization unmapped. normalize is false by default, keeping
+	// output byte-identical when no normalization is requested.
 	normalize bool
 	normForm  norm.Form
 	// normFormRaw is the exact form string passed to Normalization, retained so
@@ -640,9 +643,9 @@ func (w Writer) OutputEncoding(v string) Writer {
 // swallowed. Normalization is scoped to text and attribute nodes (Serialization
 // 3.1 §4 character-expansion phase) — element/attribute names, comments, PIs, the
 // DOCTYPE, and the XML declaration are never normalized. A character map
-// (CharacterMap) is expected to carry normalization-inert replacements
-// (fn:serialize substitutes sentinel runes), so a mapped character's replacement
-// is not normalized.
+// (CharacterMap) replacement is kept inert: only the content around a mapped
+// character is normalized, so the replacement itself is emitted verbatim
+// (un-escaped, un-normalized) regardless of the requested form.
 func (w Writer) Normalization(form string) Writer {
 	w.normFormRaw = form
 	w.normForm, w.normalize = xmlNormalizationForm(form)
@@ -1118,15 +1121,17 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				c = d.normForm.Bytes(c)
 			}
 			d.writeCDATASplit(out, c)
-		} else {
-			cm := d.charMap
-			if d.normalize {
-				c = d.normalizeContent(c)
-				cm = nil
-			}
-			if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, cm); err != nil {
+		} else if d.normalize {
+			// Character-map matches are decided on the pre-normalization
+			// content: normalizeContent splits the content at each mapped rune
+			// and normalizes each non-mapped run on its own, so a
+			// normalization-created rune is never newly matched and each
+			// replacement is emitted verbatim.
+			if err := d.writeNormalizedText(out, c); err != nil {
 				return err
 			}
+		} else if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap); err != nil {
+			return err
 		}
 		return d.err // no recursing down
 	case CDATASectionNode:

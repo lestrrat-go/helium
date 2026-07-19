@@ -185,9 +185,12 @@ var (
 	// valid PITarget; ErrWriterInvalidPIContent flags PI content containing "?>".
 	ErrWriterInvalidPITarget  = errors.New("invalid processing-instruction target")
 	ErrWriterInvalidPIContent = errors.New("invalid processing-instruction content")
-	// ErrWriterInvalidDTDNode flags a DTD node (element-content particle, entity,
-	// element/attribute declaration) whose type/enum field holds an unrecognized
-	// value, so it cannot be serialized.
+	// ErrWriterInvalidDTDNode flags a DTD node that cannot be serialized into
+	// well-formed XML: an element-content particle, entity, or
+	// element/attribute declaration whose type/enum field holds an unrecognized
+	// value; an empty DOCTYPE name; a public identifier carrying a character
+	// outside the PubidChar production; or a system literal containing both quote
+	// characters (unrepresentable as a SystemLiteral).
 	ErrWriterInvalidDTDNode = errors.New("invalid DTD node")
 	// ErrUnsupportedNormalizationForm is returned by Writer.WriteTo when
 	// Writer.Normalization was given a value outside the supported set

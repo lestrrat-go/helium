@@ -287,10 +287,12 @@ element form keeps the Serialization-spec default (declaration emitted).
 The DTD / internal subset of a SOURCE document node is NOT part of the XDM data
 model (a document node's children are element/PI/comment/text nodes only), so
 `fn:serialize` never reproduces it: `newSerializeXMLWriter` sets
-`Writer.IncludeDTD(opts.doctypeSystem != "")`, dropping any source DTD unless a
-`doctype-system` param is present (in which case the writer emits the freshly
-injected empty-internal-subset DTD from the doctype path). W3C
-fn-doc-25/26/29, parse-xml-006/008/009/013.
+`Writer.IncludeDTD(opts.doctypeSystem != "" && opts.methodEmitsDoctype())`,
+dropping any source DTD unless a `doctype-system` param is present on a
+DOCTYPE-emitting method (in which case the writer emits the freshly injected
+empty-internal-subset DTD from the doctype path); the adaptive and json methods,
+whose node items serialize through the same writer, ignore `doctype-system` and
+never emit a DTD. W3C fn-doc-25/26/29, parse-xml-006/008/009/013.
 
 **In-scope namespaces on an isolated element.** `fn:serialize` serializes an
 element as if it were the root of a tree, so an element selected from a larger
@@ -398,7 +400,7 @@ DOCTYPE, and the XML declaration are NEVER normalized. The markup methods
 and attribute value in `escapeText`/`escapeAttrValue`, and CDATA content, before
 escaping) and the `helium/html` writer via `Writer.Normalization(form)`
 (`dumpText`/`dumpAttributes`). The `text` and `json` methods emit pure character
-data (text) or ASCII-delimited character data (json), so
+data (text) or ASCII-delimited character data (json), so with no character map
 `applySerializeNormalization` normalizes their WHOLE output — equivalent to
 node-scoped normalization for those methods. `use-character-maps` is likewise
 applicable to the `json` output method (§9.1.11, matching Saxon): a mapped
@@ -407,13 +409,22 @@ and object keys) INSTEAD of being JSON-escaped — e.g. a map `"/"→"/"` preven
 escaping `/` as `\/` (`encodeJSONStringForSerialization` consults `opts.charMap`).
 A character-map REPLACEMENT string is NOT subjected to Unicode Normalization or
 re-escaping (Serialization 3.1 §11): when a normalization pass and a character map
-are BOTH in force, `withCharMapSentinels` substitutes each mapped key with a unique
-sentinel rune (Supplementary Private Use Area-A, unaffected by normalization)
-during serialization (XML/HTML/text/json alike), then `expandCharMapSentinels`
-restores the verbatim replacement AFTER normalization — so replacements pass
-through un-normalized while the surrounding content is normalized (in the markup
-writers the mapped key is folded to its sentinel BEFORE the per-node normalize
-pass, so the ordering — character mapping precedes normalization — holds).
+are BOTH in force, every method applies the same SEGMENTATION — character-map
+matches are decided on the PRE-normalization content, the content is split at
+each mapped rune, each maximal non-mapped run is normalized on its own, and each
+replacement is spliced in verbatim as its own segment, never touched by the
+normalize pass or the escaper. So a mapped rune CREATED by normalization is
+ordinary content, not newly matched, and a literal content rune — whatever
+codepoint, including a private-use one — is never rewritten (no placeholder rune
+ever stands in for a replacement): Serialization 3.1 §4 applies character
+mapping — rule c — before normalization — rule d — and never re-applies it. The
+segmenters are `normalizeContent` in the `helium` XML writer and (as
+`htmlContentSegment`) in the `helium/html` writer, and in xpath3 itself
+`applyCharMapToString` (text) and `encodeJSONStringForSerialization` (json),
+both driven by `serializeCharMapNorm` — active exactly when a character map is
+in force and the method applies an active supported form, the same condition
+under which `fnSerialize` skips its whole-output pass, so normalization runs
+exactly once.
 `json-node-output-method` is validated against its OWN
 narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
 `json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default
