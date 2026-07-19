@@ -107,6 +107,10 @@ const outMethodXML = "xml"
 // VersionNum, just like the XML output method's version parameter.
 const outMethodXHTML = "xhtml"
 
+// xmlVersion11 is the XML 1.1 output version used by the invalid-character
+// serialization tests.
+const xmlVersion11 = "1.1"
+
 // newBadCharElement builds a small <r> element whose text content carries an
 // XML-invalid control character (U+0001), via the public DOM API. The DOM
 // accepts the control byte; the writer is the enforcement point.
@@ -125,7 +129,7 @@ func newBadCharElement(t *testing.T) *helium.Element {
 func newBadCharDocument(t *testing.T) *helium.Document {
 	t.Helper()
 	doc := newBadCharElement(t).OwnerDocument()
-	doc.SetVersion("1.1")
+	doc.SetVersion(xmlVersion11)
 	return doc
 }
 
@@ -167,7 +171,7 @@ func TestSerializeItemsXMLInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
-	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: "1.1"})
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: xmlVersion11})
 	require.NoError(t, err)
 	requireControlCharRef(t, buf11.String())
 }
@@ -188,7 +192,7 @@ func TestSerializeItemsXHTMLInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
-	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: "1.1"})
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: xmlVersion11})
 	require.NoError(t, err)
 	requireControlCharRef(t, buf11.String())
 }
@@ -249,7 +253,7 @@ func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
-	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: "1.1"})
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: xmlVersion11})
 	require.NoError(t, err)
 	requireControlCharRef(t, buf11.String())
 }
@@ -308,7 +312,7 @@ func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
 	}{
 		{name: "Default"},
 		{name: "XML10", version: "1.0"},
-		{name: "XML11", version: "1.1"},
+		{name: "XML11", version: xmlVersion11},
 	}
 
 	for _, tt := range tests {
@@ -328,7 +332,7 @@ func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
 						Method:  "adaptive",
 						Version: version.version,
 					})
-					if version.version != "1.1" {
+					if version.version != xmlVersion11 {
 						requireSERE0006(t, err)
 						return
 					}
@@ -336,7 +340,7 @@ func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
 					require.NoError(t, err)
 					requireControlCharRef(t, buf.String())
 					if tt.wantXMLDeclaration {
-						require.Contains(t, buf.String(), `<?xml version="1.1"`)
+						require.Contains(t, buf.String(), `<?xml version="`+xmlVersion11+`"`)
 					} else {
 						require.NotContains(t, buf.String(), "<?xml")
 					}
