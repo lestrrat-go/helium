@@ -126,14 +126,37 @@ func requireSERE0006(t *testing.T, err error) {
 	require.Equal(t, "SERE0006", xe.Code)
 }
 
+// requireControlCharRef asserts the serialized output carries a character
+// reference to U+0001 (decimal or hex form) around the surrounding text, i.e.
+// XML 1.1 char-referenced the restricted control instead of rejecting it.
+func requireControlCharRef(t *testing.T, out string) {
+	t.Helper()
+	hasRef := strings.Contains(out, "&#1;") || strings.Contains(out, "&#x1;")
+	require.True(t, hasRef, "expected a U+0001 character reference in %q", out)
+	require.Contains(t, out, "a")
+	require.Contains(t, out, "b")
+}
+
 // SerializeItems with method="xml" must propagate the writer's invalid-char
-// rejection as SERE0006 rather than silently truncating the output.
+// rejection as SERE0006 rather than silently truncating the output. Under an
+// XML 1.1 OutputDef version, U+0001 is a legal character reference, so the same
+// item serializes with nil error and a char reference instead.
 func TestSerializeItemsXMLInvalidChar(t *testing.T) {
 	root := newBadCharElement(t)
 	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}}
+
 	var buf bytes.Buffer
 	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodXML})
 	requireSERE0006(t, err)
+
+	var buf10 bytes.Buffer
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: "1.0"})
+	requireSERE0006(t, err)
+
+	var buf11 bytes.Buffer
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: "1.1"})
+	require.NoError(t, err)
+	requireControlCharRef(t, buf11.String())
 }
 
 // SerializeItems with method="json" and json-node-output-method="xml" must
@@ -149,10 +172,22 @@ func TestSerializeItemsJSONNodeXMLInvalidChar(t *testing.T) {
 // SerializeItems with method="adaptive" over a multi-item sequence containing a
 // node with an invalid character must propagate SERE0006 (the single-element
 // path already propagates via serializeXML; this exercises the per-item path).
+// Under an XML 1.1 version, adaptive inherits the version parameter for the
+// embedded node serialization, so U+0001 becomes a char reference with nil error.
 func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
 	root := newBadCharElement(t)
 	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}, xpath3.NodeItem{Node: root}}
+
 	var buf bytes.Buffer
 	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "adaptive"})
 	requireSERE0006(t, err)
+
+	var buf10 bytes.Buffer
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: "1.0"})
+	requireSERE0006(t, err)
+
+	var buf11 bytes.Buffer
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: "1.1"})
+	require.NoError(t, err)
+	requireControlCharRef(t, buf11.String())
 }
