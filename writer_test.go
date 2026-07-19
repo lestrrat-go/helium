@@ -2079,6 +2079,95 @@ func TestWriterRejectInvalidCharsCharRefTargets(t *testing.T) {
 	}
 }
 
+// TestWriterRejectInvalidCharsSurrogateCharRefTargets guards the char-reference
+// TARGET character-range bound at the XML Char boundary U+D7FF. A surrogate code
+// point (U+D800..U+DFFF) is excluded from the Char production in BOTH XML 1.0 and
+// XML 1.1 — unlike an XML 1.1 RestrictedChar it has no legal character-reference
+// form in either version. So a numeric reference targeting a surrogate, whether an
+// EntityRefNode "#xD800" (CreateCharRef) or a &#xD800; inside an entity value, is
+// rejected with ErrInvalidXMLChar under the default policy and U+FFFD-substituted
+// under RejectInvalidChars(false), in BOTH versions. U+DF77 is the former
+// transposed upper bound (0xDF77 vs the correct 0xD7FF); it is a surrogate and must
+// be treated like any other surrogate. U+D7FF, the last non-surrogate Char, stays
+// valid and serializes verbatim.
+func TestWriterRejectInvalidCharsSurrogateCharRefTargets(t *testing.T) {
+	t.Parallel()
+
+	// Each builder aims a distinct char-ref site at the code point named by ref
+	// (a char-ref body such as "#xD800"): an EntityRefNode in element content, and a
+	// &ref; numeric reference inside an entity value (screenCharRefs).
+	build := map[string]func(t *testing.T, v, ref string) *helium.Document{
+		"entity-ref-charref": func(t *testing.T, v, ref string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			root, err := d.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(root))
+			cr, err := d.CreateCharRef(ref)
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(cr))
+			return d
+		},
+		"entity-value-charref": func(t *testing.T, v, ref string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&"+ref+";")
+			require.NoError(t, err)
+			root, err := d.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+	}
+
+	// A surrogate target is invalid in BOTH versions. "#xD800" is a high surrogate;
+	// "#xDF77" is the former transposed bound that wrongly passed.
+	for _, version := range []string{ver10, ver11} {
+		for _, ref := range []string{"#xD800", "#xDF77"} {
+			for name, mk := range build {
+				t.Run(version+"/"+name+"/"+ref, func(t *testing.T) {
+					t.Parallel()
+					verbatim := "&" + ref + ";"
+
+					// Default (reject) mode: ErrInvalidXMLChar (SERE0006), in both versions.
+					var buf bytes.Buffer
+					require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk(t, version, ref)), helium.ErrInvalidXMLChar)
+
+					// Replacement mode with the default EscapeNonASCII: the &#xFFFD;
+					// reference, never the surrogate target verbatim.
+					buf.Reset()
+					require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, version, ref)))
+					require.Contains(t, buf.String(), "&#xFFFD;")
+					require.NotContains(t, buf.String(), verbatim)
+
+					// Replacement mode with EscapeNonASCII(false): the raw U+FFFD character.
+					buf.Reset()
+					require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, mk(t, version, ref)))
+					require.Contains(t, buf.String(), "�")
+					require.NotContains(t, buf.String(), verbatim)
+				})
+			}
+		}
+	}
+
+	// The lower boundary U+D7FF is the last valid Char before the surrogate block:
+	// it serializes verbatim, with no error, in both versions and both modes.
+	for _, version := range []string{ver10, ver11} {
+		for name, mk := range build {
+			t.Run(version+"/"+name+"/boundary-D7FF", func(t *testing.T) {
+				t.Parallel()
+				var buf bytes.Buffer
+				require.NoError(t, helium.NewWriter().WriteTo(&buf, mk(t, version, "#xD7FF")))
+				require.Contains(t, buf.String(), "&#xD7FF;")
+				buf.Reset()
+				require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, version, "#xD7FF")))
+				require.Contains(t, buf.String(), "&#xD7FF;")
+				require.NotContains(t, buf.String(), "�")
+			})
+		}
+	}
+}
+
 // TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
 func TestWriteStringWithoutDTD(t *testing.T) {
 	t.Parallel()
