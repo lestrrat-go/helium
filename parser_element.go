@@ -932,9 +932,9 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 		}
 		// Width-aware char validation: a real U+FFFD is encoded as valid
 		// 3-byte UTF-8 and is a legal XML Char, whereas invalid/incomplete
-		// UTF-8 decodes to RuneError with width 1. isChar rejects every
-		// RuneError, so decode with width here to tell the two apart and
-		// keep the slow path consistent with the fast path.
+		// UTF-8 decodes to RuneError with width 1. Decode with width here to
+		// tell the two apart and keep the slow path consistent with the fast
+		// path.
 		dr, dw, ok := decodeRuneAt(cur, 0)
 		if !ok {
 			break

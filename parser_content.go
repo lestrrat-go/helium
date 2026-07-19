@@ -233,27 +233,6 @@ func (pctx *parserCtx) parsePITarget(ctx context.Context) (string, error) {
 	return name, nil
 }
 
-func isChar(r rune) bool {
-	if r == utf8.RuneError {
-		return false
-	}
-
-	c := uint32(r)
-	return isXMLCharValue(c)
-}
-
-// isCharWidth is the width-aware counterpart of isChar. A utf8.RuneError with
-// width 1 denotes genuinely invalid UTF-8 and must be rejected, but a real
-// U+FFFD decodes as utf8.RuneError with width 3 and is a valid XML Char. The
-// fast UTF-8 scanners make the same distinction (see
-// internal/strcursor/utf8cursor.go).
-func isCharWidth(r rune, w int) bool {
-	if r == utf8.RuneError && w == 1 {
-		return false
-	}
-	return isXMLCharValue(uint32(r))
-}
-
 // isLiteralChar reports whether r is valid in literal document content for the
 // parsed XML version. XML 1.1 RestrictedChar values remain valid character
 // reference targets but must not appear literally.
