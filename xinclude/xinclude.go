@@ -1394,7 +1394,7 @@ func setXMLBase(elem *helium.Element, base string) {
 		return
 	}
 	xmlBaseNS := helium.NewNamespace(lexicon.PrefixXML, lexicon.NamespaceXML)
-	_ = elem.SetLiteralAttributeNS("base", base, xmlBaseNS)
+	_ = elem.SetAttributeNS("base", base, xmlBaseNS)
 }
 
 // computeAndSetBaseURI computes the relative URI of the included resource

@@ -158,7 +158,7 @@ func (d *htmlDumper) writeString(out io.Writer, s string) {
 
 // checkName verifies that an element or attribute name is safe to write into
 // an HTML tag. Names built through public DOM construction paths
-// (CreateElement, SetLiteralAttribute, ...) are not validated, so a name
+// (CreateElement, SetAttribute, ...) are not validated, so a name
 // containing characters that terminate or escape a tag — whitespace, quotes,
 // '<', '>', '=', '/', or control characters — would otherwise be written
 // verbatim and produce malformed or injected markup. When name is unsafe (or

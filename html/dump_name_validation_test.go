@@ -86,7 +86,7 @@ func TestWriteRejectsInvalidAttributeName(t *testing.T) {
 		root := doc.CreateElement("div")
 		// Use the namespaced setter to bypass the colon check; these names
 		// contain no colon but are still invalid.
-		require.NoError(t, root.SetLiteralAttribute(name, "v"))
+		require.NoError(t, root.SetAttribute(name, "v"))
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		out, err := html.WriteString(doc)
@@ -164,7 +164,7 @@ func TestWriteRejectsInjectedAttributeNamespacePrefix(t *testing.T) {
 	root := doc.CreateElement("svg")
 	ns, err := doc.CreateNamespace(`p injected="1`, "urn:x")
 	require.NoError(t, err)
-	require.NoError(t, root.SetLiteralAttributeNS("href", "v", ns))
+	require.NoError(t, root.SetAttributeNS("href", "v", ns))
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer
@@ -213,7 +213,7 @@ func TestRoundTripReplacementCharInAttrName(t *testing.T) {
 func TestWriteRejectsInvalidUTF8InAttributeName(t *testing.T) {
 	doc := helium.NewHTMLDocument()
 	root := doc.CreateElement("div")
-	require.NoError(t, root.SetLiteralAttribute("a\xffb", "v"))
+	require.NoError(t, root.SetAttribute("a\xffb", "v"))
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer

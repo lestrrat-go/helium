@@ -356,7 +356,7 @@ func swapEncryptionMethodAlgorithm(t *testing.T, edElem *helium.Element, newAlg 
 		if !strings.HasSuffix(name, "EncryptionMethod") {
 			continue
 		}
-		require.NoError(t, e.SetLiteralAttribute("Algorithm", newAlg))
+		require.NoError(t, e.SetAttribute("Algorithm", newAlg))
 		return
 	}
 	t.Fatalf("EncryptionMethod child not found in EncryptedData")

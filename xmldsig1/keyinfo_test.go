@@ -133,7 +133,7 @@ func injectECKeyInfo(t *testing.T, doc *helium.Document, curveURI string, pub []
 
 	nc := doc.CreateElement("NamedCurve")
 	require.NoError(t, nc.SetActiveNamespace("dsig11", dsig11))
-	require.NoError(t, nc.SetLiteralAttribute("URI", curveURI))
+	require.NoError(t, nc.SetAttribute("URI", curveURI))
 	require.NoError(t, ec.AddChild(nc))
 
 	pk := doc.CreateElement("PublicKey")

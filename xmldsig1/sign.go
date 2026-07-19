@@ -211,7 +211,7 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 		return nil, nil, nil, err
 	}
 	if cfg.signatureID != "" {
-		if err := sigElem.SetLiteralAttribute("Id", cfg.signatureID); err != nil {
+		if err := sigElem.SetAttribute("Id", cfg.signatureID); err != nil {
 			return nil, nil, nil, err
 		}
 	}
@@ -228,7 +228,7 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 	if err := c14nMethod.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, nil, nil, err
 	}
-	if err := c14nMethod.SetLiteralAttribute("Algorithm", cfg.c14nMethod); err != nil {
+	if err := c14nMethod.SetAttribute("Algorithm", cfg.c14nMethod); err != nil {
 		return nil, nil, nil, err
 	}
 	if err := signedInfo.AddChild(c14nMethod); err != nil {
@@ -239,7 +239,7 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 	if err := sigMethod.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, nil, nil, err
 	}
-	if err := sigMethod.SetLiteralAttribute("Algorithm", cfg.signatureAlgorithm); err != nil {
+	if err := sigMethod.SetAttribute("Algorithm", cfg.signatureAlgorithm); err != nil {
 		return nil, nil, nil, err
 	}
 	if err := signedInfo.AddChild(sigMethod); err != nil {
@@ -322,21 +322,21 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		return err
 	}
 	if ref.URI != "" {
-		if err := refElem.SetLiteralAttribute("URI", ref.URI); err != nil {
+		if err := refElem.SetAttribute("URI", ref.URI); err != nil {
 			return err
 		}
 	} else {
-		if err := refElem.SetLiteralAttribute("URI", ""); err != nil {
+		if err := refElem.SetAttribute("URI", ""); err != nil {
 			return err
 		}
 	}
 	if ref.ID != "" {
-		if err := refElem.SetLiteralAttribute("Id", ref.ID); err != nil {
+		if err := refElem.SetAttribute("Id", ref.ID); err != nil {
 			return err
 		}
 	}
 	if ref.Type != "" {
-		if err := refElem.SetLiteralAttribute("Type", ref.Type); err != nil {
+		if err := refElem.SetAttribute("Type", ref.Type); err != nil {
 			return err
 		}
 	}
@@ -352,7 +352,7 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 			if err := tElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 				return err
 			}
-			if err := tElem.SetLiteralAttribute("Algorithm", t.URI()); err != nil {
+			if err := tElem.SetAttribute("Algorithm", t.URI()); err != nil {
 				return err
 			}
 			// For Exclusive C14N with prefixes, add InclusiveNamespaces child.
@@ -365,7 +365,7 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 					return err
 				}
 				prefixList := strings.Join(exc.prefixes, " ")
-				if err := incNS.SetLiteralAttribute("PrefixList", prefixList); err != nil {
+				if err := incNS.SetAttribute("PrefixList", prefixList); err != nil {
 					return err
 				}
 				if err := tElem.AddChild(incNS); err != nil {
@@ -386,7 +386,7 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	if err := digestMethod.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return err
 	}
-	if err := digestMethod.SetLiteralAttribute("Algorithm", ref.DigestAlgorithm); err != nil {
+	if err := digestMethod.SetAttribute("Algorithm", ref.DigestAlgorithm); err != nil {
 		return err
 	}
 	if err := refElem.AddChild(digestMethod); err != nil {

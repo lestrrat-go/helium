@@ -528,9 +528,9 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 							if nsErr != nil {
 								return nsErr
 							}
-							_ = elem.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
+							_ = elem.SetAttributeNS(attr.LocalName(), attr.Value(), ns)
 						} else {
-							_ = elem.SetLiteralAttribute(attr.Name(), attr.Value())
+							_ = elem.SetAttribute(attr.Name(), attr.Value())
 						}
 						continue
 					}

@@ -2152,8 +2152,8 @@ func insertHTMLContentTypeMeta(doc *helium.Document, encoding, mediaType string)
 	if headURI := head.URI(); headURI != "" {
 		_ = meta.SetActiveNamespace(head.Prefix(), headURI)
 	}
-	_ = meta.SetLiteralAttribute("http-equiv", "Content-Type")
-	_ = meta.SetLiteralAttribute("content", contentValue)
+	_ = meta.SetAttribute("http-equiv", "Content-Type")
+	_ = meta.SetAttribute("content", contentValue)
 
 	// Detach the current children, add meta first, then re-add them, so meta
 	// becomes the head's first child.
