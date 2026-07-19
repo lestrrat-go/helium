@@ -283,7 +283,9 @@ func (dc *deepCopier) bindNamespacesExact(src, elem *Element, inScope map[string
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			childScope[ns.Prefix()] = decl
 		}
 	}
@@ -295,7 +297,9 @@ func (dc *deepCopier) bindNamespacesExact(src, elem *Element, inScope map[string
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			if len(ownDecls) == 0 {
 				childScope = make(map[string]*Namespace, len(inScope)+1)
 				maps.Copy(childScope, inScope)

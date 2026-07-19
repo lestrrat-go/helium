@@ -3,13 +3,26 @@ package xmldsig1_test
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"reflect"
 	"testing"
+	"unsafe"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/xmldsig1"
 	"github.com/stretchr/testify/require"
 )
+
+// injectNilNamespaceDecl appends a nil entry to elem's unexported nsDefs slice,
+// reproducing the caller-corrupted state that the public AddNamespaceDecl (which
+// now rejects a nil ns with ErrNilNode) no longer allows. It exists only to force
+// a downstream canonicalization panic; production code cannot reach this state.
+func injectNilNamespaceDecl(t *testing.T, elem *helium.Element) {
+	t.Helper()
+	f := reflect.ValueOf(elem).Elem().FieldByName("nsDefs")
+	f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
+	f.Set(reflect.Append(f, reflect.Zero(f.Type().Elem())))
+}
 
 // uriManifest is the same-document reference URI used by the #1220 in-Object
 // reference tests, pointing at the <ds:Manifest Id="manifest"> under <ds:Object>.
@@ -200,8 +213,14 @@ func TestSignEnveloping_CanonicalizationPanicRestoresSignature(t *testing.T) {
 	require.NoError(t, manifest.SetLiteralAttribute("Id", "manifest"))
 	// Corrupt the manifest with a nil namespace declaration so canonicalizing it
 	// dereferences a nil pointer. This models any downstream canonicalization
-	// panic.
-	manifest.AddNamespaceDecl(nil)
+	// panic: canonicalization reads the declaration (via collectSubtreeNodes /
+	// domutil.InScopeNamespaces) while the tree operations that undo the temporary
+	// document move (UnlinkNode, SetTreeDoc) never touch nsDefs, so the panic lands
+	// squarely in the canonicalization step the deferred restore must survive.
+	// AddNamespaceDecl now rejects a nil ns with ErrNilNode, so the nil entry can
+	// only be injected by a direct field write; this test-only reflection
+	// reproduces the caller-corrupted state the public API no longer permits.
+	injectNilNamespaceDecl(t, manifest)
 
 	signer := xmldsig1.NewSigner().
 		CanonicalizationMethod(xmldsig1.ExcC14N10).

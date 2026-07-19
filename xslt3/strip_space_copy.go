@@ -242,7 +242,9 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			childScope[ns.Prefix()] = decl
 		}
 	}
@@ -259,7 +261,9 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			if childScope == nil || len(ownDecls) == 0 {
 				childScope = make(map[string]*helium.Namespace, len(inScope)+1)
 				maps.Copy(childScope, inScope)

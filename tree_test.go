@@ -1016,7 +1016,7 @@ func TestNodeNamespaceMethods(t *testing.T) {
 
 	// AddNamespaceDecl with an existing namespace object.
 	ns := helium.NewNamespace("q", "http://example.com/q")
-	root.AddNamespaceDecl(ns)
+	require.NoError(t, root.AddNamespaceDecl(ns))
 	root.SetNs(ns)
 	require.Equal(t, "q:root", root.Name())
 }
