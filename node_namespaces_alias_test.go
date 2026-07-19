@@ -15,7 +15,8 @@ import (
 func TestNamespacesDefensiveCopy(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
 
-	elem := doc.CreateElement("root")
+	elem, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, elem.DeclareNamespace("a", "urn:a"))
 	require.NoError(t, elem.DeclareNamespace("b", "urn:b"))
 

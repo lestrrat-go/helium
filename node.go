@@ -551,7 +551,8 @@ func noteCrossDocumentEscape(dest *Document, cur Node) {
 // document's namespace slab (its owner is Namespace.context, set by
 // Document.CreateNamespace; a heap-allocated Namespace has a nil context and no
 // slab). When AddNamespaceDecl retains such a Namespace in another document's
-// declarations, the owning document must no longer recycle its namespace slab on
+// declarations, or SetNs installs it as another document's node's active
+// namespace, the owning document must no longer recycle its namespace slab on
 // Free, so mark it escaped exactly as a cross-document node move does.
 func noteCrossDocumentNamespaceEscape(dest *Document, ns *Namespace) {
 	if ns == nil {
@@ -1241,7 +1242,14 @@ func (n *node) SetActiveNamespace(prefix, uri string) error {
 
 // SetNs sets the node's active namespace to an existing Namespace object
 // without creating a new declaration.
+//
+// When ns is slab-backed by a DIFFERENT document than this node's owner, that
+// source document is marked so its Free will not recycle the namespace slab out
+// from under the retained active namespace — the same guard AddNamespaceDecl and
+// a cross-document node move apply (see noteCrossDocumentNamespaceEscape). A nil,
+// heap-allocated, or same-document ns marks nothing.
 func (n *node) SetNs(ns *Namespace) {
+	noteCrossDocumentNamespaceEscape(n.doc, ns)
 	n.ns = ns
 	n.invalidateQName()
 }

@@ -116,7 +116,10 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 	ctx := t.pctx(ctxif)
 	doc := ctx.doc
 
-	e := doc.CreateElement(localname)
+	e, err := doc.CreateElement(localname)
+	if err != nil {
+		return err
+	}
 
 	e.SetLine(ctx.LineNumber())
 

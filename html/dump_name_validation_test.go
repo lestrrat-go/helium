@@ -18,7 +18,8 @@ import (
 func TestWriteRejectsInvalidElementName(t *testing.T) {
 	for _, name := range []string{"a b", "a>x", `a"x`, "a<x", ""} {
 		doc := helium.NewHTMLDocument()
-		root := doc.CreateElement(name)
+		root, err := doc.CreateElement(name)
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		out, err := html.WriteString(doc)
@@ -35,7 +36,8 @@ func TestWriteRejectsInvalidElementName(t *testing.T) {
 func TestWriteRejectsMalformedElementName(t *testing.T) {
 	for _, name := range []string{"a?b", "a&b", "a=b"} {
 		doc := helium.NewHTMLDocument()
-		root := doc.CreateElement(name)
+		root, err := doc.CreateElement(name)
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		out, err := html.WriteString(doc)
@@ -49,13 +51,23 @@ func TestWriteRejectsMalformedElementName(t *testing.T) {
 func TestWriteAcceptsValidElementNames(t *testing.T) {
 	for _, name := range []string{"div", "my-elem", "a.b", "x_y", "h1", "svg:rect"} {
 		doc := helium.NewHTMLDocument()
-		root := doc.CreateElement("html")
-		child := doc.CreateElement(name)
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
+
+		var child *helium.Element
+		if prefix, local, found := strings.Cut(name, ":"); found {
+			ns, nsErr := doc.CreateNamespace(prefix, "http://www.w3.org/2000/svg")
+			require.NoError(t, nsErr)
+			child, err = doc.CreateElementNS(local, ns)
+		} else {
+			child, err = doc.CreateElement(name)
+		}
+		require.NoError(t, err)
 		require.NoError(t, root.AddChild(child))
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		var buf bytes.Buffer
-		err := html.NewWriter().PreserveCase(true).Format(false).
+		err = html.NewWriter().PreserveCase(true).Format(false).
 			DefaultDTD(false).WriteTo(&buf, doc)
 		require.NoError(t, err, "serializing valid element name %q must not error", name)
 		require.Contains(t, buf.String(), name, "got %q", buf.String())
@@ -67,12 +79,13 @@ func TestWriteAcceptsValidElementNames(t *testing.T) {
 // though they are rejected in ELEMENT names.
 func TestRoundTripLooseCharsInAttrNameNotElement(t *testing.T) {
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("img")
+	root, err := doc.CreateElement("img")
+	require.NoError(t, err)
 	require.NoError(t, root.SetBooleanAttribute("a?b"))
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer
-	err := html.NewWriter().DefaultDTD(false).Format(false).WriteTo(&buf, doc)
+	err = html.NewWriter().DefaultDTD(false).Format(false).WriteTo(&buf, doc)
 	require.NoError(t, err, "attribute name 'a?b' must remain valid (loose rule)")
 	require.Contains(t, buf.String(), "a?b", "got %q", buf.String())
 }
@@ -83,7 +96,8 @@ func TestRoundTripLooseCharsInAttrNameNotElement(t *testing.T) {
 func TestWriteRejectsInvalidAttributeName(t *testing.T) {
 	for _, name := range []string{"a b", `a"x`, "a=x", "a>x"} {
 		doc := helium.NewHTMLDocument()
-		root := doc.CreateElement("div")
+		root, err := doc.CreateElement("div")
+		require.NoError(t, err)
 		// Use the namespaced setter to bypass the colon check; these names
 		// contain no colon but are still invalid.
 		require.NoError(t, root.SetAttribute(name, "v"))
@@ -98,7 +112,8 @@ func TestWriteRejectsInvalidAttributeName(t *testing.T) {
 // path (attribute with no value child).
 func TestWriteRejectsInvalidBooleanAttributeName(t *testing.T) {
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("input")
+	root, err := doc.CreateElement("input")
+	require.NoError(t, err)
 	require.NoError(t, root.SetBooleanAttribute("a b"))
 	require.NoError(t, doc.SetDocumentElement(root))
 
@@ -111,13 +126,17 @@ func TestWriteRejectsInvalidBooleanAttributeName(t *testing.T) {
 // accepted.
 func TestWriteAcceptsValidNamespacedName(t *testing.T) {
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("html")
-	child := doc.CreateElement("svg:rect")
+	root, err := doc.CreateElement("html")
+	require.NoError(t, err)
+	svgNS, err := doc.CreateNamespace("svg", "http://www.w3.org/2000/svg")
+	require.NoError(t, err)
+	child, err := doc.CreateElementNS("rect", svgNS)
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer
-	err := html.NewWriter().PreserveCase(true).Format(false).
+	err = html.NewWriter().PreserveCase(true).Format(false).
 		DefaultDTD(false).WriteTo(&buf, doc)
 	require.NoError(t, err)
 	require.True(t, strings.Contains(buf.String(), "svg:rect"), "got %q", buf.String())
@@ -128,12 +147,13 @@ func TestWriteAcceptsValidNamespacedName(t *testing.T) {
 // from malformed markup) are still serialized verbatim, matching libxml2.
 func TestWriteAcceptsHTMLLooseName(t *testing.T) {
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("img")
+	root, err := doc.CreateElement("img")
+	require.NoError(t, err)
 	require.NoError(t, root.SetBooleanAttribute("gentus?.?"))
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer
-	err := html.NewWriter().DefaultDTD(false).Format(false).WriteTo(&buf, doc)
+	err = html.NewWriter().DefaultDTD(false).Format(false).WriteTo(&buf, doc)
 	require.NoError(t, err)
 	require.True(t, strings.Contains(buf.String(), "gentus?.?"), "got %q", buf.String())
 }
@@ -145,12 +165,13 @@ func TestWriteAcceptsHTMLLooseName(t *testing.T) {
 // under PreserveCase(true), producing an injected attribute in the tag.
 func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("html")
+	root, err := doc.CreateElement("html")
+	require.NoError(t, err)
 	require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn:x"))
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer
-	err := html.NewWriter().PreserveCase(true).Format(false).
+	err = html.NewWriter().PreserveCase(true).Format(false).
 		DefaultDTD(false).WriteTo(&buf, doc)
 	require.Error(t, err, "serializing injected namespace prefix must error, got output %q", buf.String())
 	require.NotContains(t, buf.String(), `injected="1`, "injected markup must not be written")
@@ -161,7 +182,8 @@ func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 // also be rejected rather than emitted as an xmlns: declaration.
 func TestWriteRejectsInjectedAttributeNamespacePrefix(t *testing.T) {
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("svg")
+	root, err := doc.CreateElement("svg")
+	require.NoError(t, err)
 	ns, err := doc.CreateNamespace(`p injected="1`, "urn:x")
 	require.NoError(t, err)
 	require.NoError(t, root.SetAttributeNS("href", "v", ns))
@@ -212,11 +234,12 @@ func TestRoundTripReplacementCharInAttrName(t *testing.T) {
 // U+FFFD before validation.
 func TestWriteRejectsInvalidUTF8InAttributeName(t *testing.T) {
 	doc := helium.NewHTMLDocument()
-	root := doc.CreateElement("div")
+	root, err := doc.CreateElement("div")
+	require.NoError(t, err)
 	require.NoError(t, root.SetAttribute("a\xffb", "v"))
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	var buf bytes.Buffer
-	err := html.NewWriter().PreserveCase(true).DefaultDTD(false).Format(false).WriteTo(&buf, doc)
+	err = html.NewWriter().PreserveCase(true).DefaultDTD(false).Format(false).WriteTo(&buf, doc)
 	require.Error(t, err, "serializing attribute name with invalid UTF-8 must error, got output %q", buf.String())
 }

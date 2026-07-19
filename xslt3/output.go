@@ -389,7 +389,7 @@ func wrapNodeInHTMLDoc(node helium.Node) *helium.Document {
 			_ = doc.AddChild(copiedElem)
 		} else {
 			// Wrap in an <html> element
-			htmlElem := doc.CreateElement("html")
+			htmlElem, _ := doc.CreateElement("html")
 			_ = doc.AddChild(htmlElem)
 			_ = htmlElem.AddChild(copiedElem)
 		}

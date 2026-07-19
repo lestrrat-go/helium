@@ -65,7 +65,8 @@ func TestVerifyResult(t *testing.T) {
 		require.Nil(t, res.SignedElement("#nope"))
 		require.True(t, res.Covers(root))
 
-		other := doc.CreateElement("other")
+		other, err := doc.CreateElement("other")
+		require.NoError(t, err)
 		require.False(t, res.Covers(other))
 		require.False(t, res.Covers(nil))
 

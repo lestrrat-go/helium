@@ -156,7 +156,10 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 		return nil
 	case helium.ElementNode:
 		srcElem, _ := helium.AsNode[*helium.Element](node)
-		newElem := ec.resultDoc.CreateElement(srcElem.LocalName())
+		newElem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
+		if err != nil {
+			return err
+		}
 		for _, ns := range srcElem.Namespaces() {
 			_ = newElem.DeclareNamespace(ns.Prefix(), ns.URI())
 		}

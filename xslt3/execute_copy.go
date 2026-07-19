@@ -260,7 +260,10 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 	case helium.ElementNode:
 		srcElem, _ := helium.AsNode[*helium.Element](node)
 		// Use LocalName to avoid prefix doubling with SetActiveNamespace
-		elem := ec.resultDoc.CreateElement(srcElem.LocalName())
+		elem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
+		if err != nil {
+			return err
+		}
 
 		if opts.copyNamespaces {
 			// copy-namespaces="yes": copy all in-scope namespace declarations
@@ -999,7 +1002,10 @@ func propagateAncestorNamespaces(src, dst *helium.Element) {
 // declarations (copy-namespaces="no").  Only the namespaces required for
 // well-formedness (element name and attribute names) are preserved.
 func (ec *execContext) copyElementNoNamespaces(src *helium.Element) error {
-	elem := ec.resultDoc.CreateElement(src.LocalName())
+	elem, err := ec.resultDoc.CreateElement(src.LocalName())
+	if err != nil {
+		return err
+	}
 
 	// Declare only the element's own namespace (required for well-formedness).
 	if src.URI() != "" {

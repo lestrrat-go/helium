@@ -159,7 +159,8 @@ func TestCreateCharRefSerializes(t *testing.T) {
 		{name: "amp", want: "&amp;"},
 	} {
 		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		ref, err := doc.CreateCharRef(tc.name)

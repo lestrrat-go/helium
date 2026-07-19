@@ -208,7 +208,10 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	// attribute nodes returned by xsl:sequence are preserved directly
 	// (writing them to a DOM tree loses them as attributes of the wrapper).
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot := tmpDoc.CreateElement("_xsl_fn_result")
+	tmpRoot, err := tmpDoc.CreateElement("_xsl_fn_result")
+	if err != nil {
+		return nil, err
+	}
 	_ = tmpDoc.SetDocumentElement(tmpRoot)
 
 	atomicReturn := f.def.As != "" && isAtomicTypeName(f.def.As)

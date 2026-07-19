@@ -1153,7 +1153,10 @@ found:
 	}
 
 	// Create pseudoroot element, push to node stack.
-	newRoot := doc.CreateElement(pseudoRootName)
+	newRoot, err := doc.CreateElement(pseudoRootName)
+	if err != nil {
+		return nil, err
+	}
 	newctx.pushNodeEntry(nodeEntry{local: pseudoRootName, qname: pseudoRootName, synthetic: true})
 	newctx.elem = newRoot
 	if err := doc.AddChild(newRoot); err != nil {

@@ -9,7 +9,8 @@ import (
 
 func mustCreateElement(t *testing.T, doc *helium.Document, name string) *helium.Element {
 	t.Helper()
-	e := doc.CreateElement(name)
+	e, err := doc.CreateElement(name)
+	require.NoError(t, err)
 	return e
 }
 
@@ -666,7 +667,8 @@ func TestElementNamespaceMutators(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	e := doc.CreateElement("e")
+	e, err := doc.CreateElement("e")
+	require.NoError(t, err)
 
 	require.NoError(t, e.DeclareNamespace("p", "urn:p"))
 	require.Len(t, e.Namespaces(), 1)
@@ -694,8 +696,9 @@ func TestElementGetAttribute(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	elem := doc.CreateElement("e")
-	err := elem.SetAttribute("plain", "p")
+	elem, err := doc.CreateElement("e")
+	require.NoError(t, err)
+	err = elem.SetAttribute("plain", "p")
 	require.NoError(t, err)
 
 	ns := helium.NewNamespace("x", "urn:x")

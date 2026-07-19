@@ -989,7 +989,10 @@ func (d *Decoder) DecodeElement(v any, start *StartElement) error {
 func (d *Decoder) buildElementFromTokens(start stdxml.StartElement) (*helium.Element, error) {
 	doc := helium.NewDefaultDocument()
 
-	root := doc.CreateElement(start.Name.Local)
+	root, err := doc.CreateElement(start.Name.Local)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set namespace if present
 	if start.Name.Space != "" {
@@ -1036,7 +1039,10 @@ func (d *Decoder) populateElement(doc *helium.Document, parent *helium.Element, 
 
 		switch v := tok.(type) {
 		case StartElement:
-			child := doc.CreateElement(v.Name.Local)
+			child, err := doc.CreateElement(v.Name.Local)
+			if err != nil {
+				return err
+			}
 			if v.Name.Space != "" {
 				if err := child.SetActiveNamespace("", v.Name.Space); err != nil {
 					return err

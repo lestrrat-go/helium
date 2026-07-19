@@ -539,7 +539,10 @@ func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath
 func (ec *execContext) evaluateBody(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	// Create a temporary document to capture output
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot := tmpDoc.CreateElement("_tmp")
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}
@@ -592,7 +595,10 @@ func (ec *execContext) evaluateBody(ctx context.Context, body []instruction) (xp
 // order between xsl:text and xsl:sequence output.
 func (ec *execContext) evaluateBodyForAttr(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot := tmpDoc.CreateElement("_tmp")
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}
@@ -627,7 +633,10 @@ func (ec *execContext) evaluateBodyForAttr(ctx context.Context, body []instructi
 // so that each text value is a distinct item for separator insertion.
 func (ec *execContext) evaluateBodySeparateText(ctx context.Context, body []instruction) (xpath3.Sequence, error) {
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot := tmpDoc.CreateElement("_tmp")
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}
@@ -970,7 +979,10 @@ func (ec *execContext) evaluateBodyAsSequence(ctx context.Context, body []instru
 	if baseURI := ec.effectiveStaticBaseURI(); baseURI != "" {
 		tmpDoc.SetURL(baseURI)
 	}
-	tmpRoot := tmpDoc.CreateElement("_tmp")
+	tmpRoot, err := tmpDoc.CreateElement("_tmp")
+	if err != nil {
+		return nil, err
+	}
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return nil, err
 	}

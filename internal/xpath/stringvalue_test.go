@@ -10,13 +10,15 @@ import (
 
 func TestStringValue_Element(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	txt1 := doc.CreateText([]byte("hello "))
 	require.NoError(t, root.AddChild(txt1))
 
-	child := doc.CreateElement("child")
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 
 	txt2 := doc.CreateText([]byte("world"))
@@ -28,7 +30,8 @@ func TestStringValue_Element(t *testing.T) {
 
 func TestStringValue_Document(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	txt := doc.CreateText([]byte("doc text"))
@@ -39,7 +42,8 @@ func TestStringValue_Document(t *testing.T) {
 
 func TestStringValue_ElementWithCDATA(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	txt := doc.CreateText([]byte("before "))
@@ -58,7 +62,8 @@ func TestStringValue_MixedContent(t *testing.T) {
 	comment := doc.CreateComment([]byte("ignored document comment"))
 	require.NoError(t, doc.AddChild(comment))
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	text1 := doc.CreateText([]byte("alpha"))
@@ -67,7 +72,8 @@ func TestStringValue_MixedContent(t *testing.T) {
 	comment = doc.CreateComment([]byte("ignored element comment"))
 	require.NoError(t, root.AddChild(comment))
 
-	child := doc.CreateElement("child")
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 
 	text2 := doc.CreateText([]byte("beta"))
@@ -88,9 +94,10 @@ func TestStringValue_MixedContent(t *testing.T) {
 
 func TestStringValue_Attribute(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
-	err := root.SetAttribute("key", "value")
+	err = root.SetAttribute("key", "value")
 	require.NoError(t, err)
 
 	attrs := root.Attributes()
@@ -112,7 +119,8 @@ func TestStringValue_PI(t *testing.T) {
 
 func TestStringValue_Namespace(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	ns := helium.NewNamespace("ns", "urn:example")
@@ -122,7 +130,8 @@ func TestStringValue_Namespace(t *testing.T) {
 
 func TestLocalNameOf(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	// Element local name
@@ -131,7 +140,7 @@ func TestLocalNameOf(t *testing.T) {
 	// Namespaced attribute local name
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	err := root.SetAttributeNS("myattr", "v", ns)
+	err = root.SetAttributeNS("myattr", "v", ns)
 	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
@@ -148,7 +157,8 @@ func TestLocalNameOf(t *testing.T) {
 
 func TestNodeNamespaceURI(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	// Non-namespaced element
@@ -157,7 +167,7 @@ func TestNodeNamespaceURI(t *testing.T) {
 	// Namespaced attribute
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	err := root.SetAttributeNS("a", "v", ns)
+	err = root.SetAttributeNS("a", "v", ns)
 	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
@@ -170,7 +180,8 @@ func TestNodeNamespaceURI(t *testing.T) {
 
 func TestNodePrefix(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	// Non-prefixed element
@@ -179,7 +190,7 @@ func TestNodePrefix(t *testing.T) {
 	// Namespaced attribute has prefix
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	err := root.SetAttributeNS("a", "v", ns)
+	err = root.SetAttributeNS("a", "v", ns)
 	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
@@ -192,7 +203,8 @@ func TestNodePrefix(t *testing.T) {
 
 func TestStringValue_DeepTreeDoesNotTruncate(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	prefix := doc.CreateText([]byte("prefix"))
@@ -200,7 +212,8 @@ func TestStringValue_DeepTreeDoesNotTruncate(t *testing.T) {
 
 	parent := root
 	for range 4096 {
-		child := doc.CreateElement("level")
+		child, err := doc.CreateElement("level")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(child))
 		parent = child
 	}

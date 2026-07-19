@@ -90,7 +90,8 @@ func TestDOMToXMLString(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	//	defer doc.Free()
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.AppendText([]byte(`Hello, World!`)))
@@ -107,21 +108,23 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("element name injection", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement(`root injected="1"`)
+		root, err := doc.CreateElement(`root injected="1"`)
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
-		_, err := helium.WriteString(doc)
+		_, err = helium.WriteString(doc)
 		require.Error(t, err, "injected element name must not serialize")
 	})
 
 	t.Run("attribute name injection", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		// SetAttribute only rejects colons, so a space-bearing name slips
 		// through and would inject a second attribute on serialization.
-		err := root.SetAttribute(`x onmouseover`, "1")
+		err = root.SetAttribute(`x onmouseover`, "1")
 		require.NoError(t, err)
 
 		_, err = helium.WriteString(doc)
@@ -131,12 +134,13 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("reserved xmlns attribute name rejected", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		// "xmlns" is a valid NCName, but a normal attribute named "xmlns"
 		// would be emitted as a namespace declaration that never went through
 		// DeclareNamespace.
-		err := root.SetAttribute("xmlns", "urn:evil")
+		err = root.SetAttribute("xmlns", "urn:evil")
 		require.NoError(t, err)
 
 		_, err = helium.WriteString(doc)
@@ -146,7 +150,8 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("reserved xmlns-prefixed attribute name rejected", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		// An attribute whose QName prefix is "xmlns" (e.g. "xmlns:foo") is a
 		// namespace declaration and must not be emitted as a normal attribute.
@@ -162,7 +167,8 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("valid element name serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		str, err := helium.WriteString(doc)
@@ -173,7 +179,8 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("valid namespaced name serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
 
@@ -189,7 +196,8 @@ func TestWriteActiveDefaultNamespace(t *testing.T) {
 	t.Run("active default namespace emits xmlns", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("", "urn:x"))
 
@@ -201,7 +209,8 @@ func TestWriteActiveDefaultNamespace(t *testing.T) {
 	t.Run("active prefixed namespace still emits xmlns:p", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:x"))
 
@@ -223,10 +232,11 @@ func TestWriteActiveDefaultNamespace(t *testing.T) {
 	t.Run("unprefixed attribute gains no spurious xmlns", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:x"))
-		err := root.SetAttribute("id", "1")
+		err = root.SetAttribute("id", "1")
 		require.NoError(t, err)
 
 		str, err := helium.WriteString(doc)
@@ -237,7 +247,8 @@ func TestWriteActiveDefaultNamespace(t *testing.T) {
 	t.Run("conflicting declared and active default emits a single reparseable xmlns", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		// A declared default that conflicts with the element's active default: the
 		// active binding wins and only one xmlns is emitted, so the output reparses.
@@ -313,19 +324,21 @@ func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("element name injection", func(t *testing.T) {
 		t.Parallel()
 		doc := newXHTMLDoc(t)
-		root := doc.CreateElement(`html injected="1"`)
+		root, err := doc.CreateElement(`html injected="1"`)
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
-		_, err := helium.WriteString(doc)
+		_, err = helium.WriteString(doc)
 		require.Error(t, err, "injected XHTML element name must not serialize")
 	})
 
 	t.Run("attribute name injection", func(t *testing.T) {
 		t.Parallel()
 		doc := newXHTMLDoc(t)
-		root := doc.CreateElement("html")
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
-		err := root.SetAttribute(`x onmouseover`, "1")
+		err = root.SetAttribute(`x onmouseover`, "1")
 		require.NoError(t, err)
 
 		_, err = helium.WriteString(doc)
@@ -335,7 +348,8 @@ func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("valid element name serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := newXHTMLDoc(t)
-		root := doc.CreateElement("html")
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		str, err := helium.WriteString(doc)
@@ -346,7 +360,8 @@ func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
 	t.Run("valid namespaced name serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := newXHTMLDoc(t)
-		root := doc.CreateElement("html")
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
 
@@ -362,20 +377,22 @@ func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 	t.Run("namespace prefix injection", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		// DeclareNamespace does not validate the prefix, so a crafted prefix
 		// would inject raw markup into the start tag on serialization.
 		require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn"))
 
-		_, err := helium.WriteString(doc)
+		_, err = helium.WriteString(doc)
 		require.Error(t, err, "injected namespace prefix must not serialize")
 	})
 
 	t.Run("valid prefix serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.DeclareNamespace("p", "urn:example"))
 
@@ -387,7 +404,8 @@ func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 	t.Run("default namespace serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.DeclareNamespace("", "urn:default"))
 
@@ -399,24 +417,26 @@ func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 	t.Run("reserved xml prefix serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.DeclareNamespace("xml", lexicon.NamespaceXML))
 
-		_, err := helium.WriteString(doc)
+		_, err = helium.WriteString(doc)
 		require.NoError(t, err, "reserved xml prefix must still serialize")
 	})
 
 	t.Run("reserved xmlns prefix rejected", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		// Namespaces-in-XML forbids declaring the xmlns prefix; the serializer
 		// must not emit xmlns:xmlns="...".
 		require.NoError(t, root.DeclareNamespace("xmlns", "urn"))
 
-		_, err := helium.WriteString(doc)
+		_, err = helium.WriteString(doc)
 		require.Error(t, err, "reserved xmlns prefix must not serialize")
 	})
 }
@@ -439,18 +459,20 @@ func TestXHTMLWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 	t.Run("namespace prefix injection", func(t *testing.T) {
 		t.Parallel()
 		doc := newXHTMLDoc(t)
-		root := doc.CreateElement("html")
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn"))
 
-		_, err := helium.WriteString(doc)
+		_, err = helium.WriteString(doc)
 		require.Error(t, err, "injected XHTML namespace prefix must not serialize")
 	})
 
 	t.Run("valid prefix serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := newXHTMLDoc(t)
-		root := doc.CreateElement("html")
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.DeclareNamespace("p", "urn:example"))
 
@@ -475,7 +497,8 @@ func TestXHTMLAttrErrorEmitsNoPartialChildren(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	root := doc.CreateElement("html")
+	root, err := doc.CreateElement("html")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	// Invalid attribute name on the element: serialization must fail before any
@@ -503,21 +526,23 @@ func TestWriteRejectsXmlnsElementName(t *testing.T) {
 	t.Run("xmlns-prefixed element name rejected", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		// SetActiveNamespace sets the node's active namespace directly, so the
 		// "xmlns" prefix is emitted as the element QName prefix (<xmlns:root/>),
 		// which Namespaces-in-XML forbids.
 		require.NoError(t, root.SetActiveNamespace("xmlns", "urn:evil"))
 
-		_, err := helium.WriteString(doc)
+		_, err = helium.WriteString(doc)
 		require.Error(t, err, "xmlns-prefixed element name must not serialize")
 	})
 
 	t.Run("valid namespaced element name serializes", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
 
@@ -533,7 +558,8 @@ func TestWriteRejectsXmlnsElementName(t *testing.T) {
 		// an element literally named "xmlns" must serialize without error. This
 		// is the regression case from xslt3 test si-element-261.
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("xmlns")
+		root, err := doc.CreateElement("xmlns")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		str, err := helium.WriteString(doc)
@@ -569,7 +595,8 @@ func TestDumpNsSkipsXmlPrefix(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDefaultDocument()
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	// Add explicit xml: namespace declaration to the element
@@ -587,12 +614,13 @@ func TestDumpNsPropagatesWriteError(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDefaultDocument()
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.DeclareNamespace("p", "urn:test"))
 
 	writer := helium.NewWriter().XMLDeclaration(false)
-	err := writer.WriteTo(&namespaceFailWriter{failOn: "xmlns"}, doc)
+	err = writer.WriteTo(&namespaceFailWriter{failOn: "xmlns"}, doc)
 	require.ErrorIs(t, err, errNamespaceWrite)
 }
 
@@ -1259,12 +1287,13 @@ func TestWriteRejectsMalformedPITarget(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			doc := helium.NewDefaultDocument()
-			root := doc.CreateElement("r")
+			root, err := doc.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, doc.SetDocumentElement(root))
 			require.NoError(t, root.AddChild(doc.CreatePI(tc.target, "")))
 
 			var sb strings.Builder
-			err := helium.Write(&sb, doc)
+			err = helium.Write(&sb, doc)
 			require.Error(t, err, "invalid PI target must be rejected")
 			require.NotContains(t, sb.String(), "<evil/>",
 				"injection must not be emitted")
@@ -1273,7 +1302,8 @@ func TestWriteRejectsMalformedPITarget(t *testing.T) {
 
 	// A valid target still serializes.
 	doc := helium.NewDefaultDocument()
-	root := doc.CreateElement("r")
+	root, err := doc.CreateElement("r")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.AddChild(doc.CreatePI("php", "echo 1")))
 	var sb strings.Builder
@@ -1327,7 +1357,8 @@ func TestWriteValidationPreservesStickyIOError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			doc := helium.NewDefaultDocument()
-			root := doc.CreateElement("r")
+			root, err := doc.CreateElement("r")
+			require.NoError(t, err)
 			require.NoError(t, doc.SetDocumentElement(root))
 			// A malformed top-level sibling serialized after the root element.
 			// The newline separator written between top-level nodes is forced
@@ -1337,7 +1368,7 @@ func TestWriteValidationPreservesStickyIOError(t *testing.T) {
 			// sibling is still reached.)
 			require.NoError(t, doc.AddChild(tc.sibling(doc)))
 
-			err := helium.NewWriter().XMLDeclaration(false).WriteTo(&failOnSubstringWriter{trigger: "\n"}, doc)
+			err = helium.NewWriter().XMLDeclaration(false).WriteTo(&failOnSubstringWriter{trigger: "\n"}, doc)
 			require.ErrorIs(t, err, errShortWrite,
 				"original I/O error must win over the sibling validation error")
 		})
@@ -1402,7 +1433,8 @@ func TestSerializeQuotedStringBranches(t *testing.T) {
 	_, err = dtd.AddNotation("both", "", `has"dq and 'sq'`)
 	require.NoError(t, err)
 
-	root := doc.CreateElement("doc")
+	root, err := doc.CreateElement("doc")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	out, err := helium.WriteString(doc)
@@ -1428,7 +1460,8 @@ func TestSerializeEntityContentWithPercent(t *testing.T) {
 	_, err = dtd.AddEntity("pct", enum.InternalGeneralEntity, "", "", `50% "done"`)
 	require.NoError(t, err)
 
-	root := doc.CreateElement("doc")
+	root, err := doc.CreateElement("doc")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	out, err := helium.WriteString(doc)
@@ -1462,7 +1495,8 @@ func TestWriterOptions(t *testing.T) {
 
 	// EscapeNonASCII path with a non-ASCII text node.
 	d2 := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	r := d2.CreateElement("r")
+	r, err := d2.CreateElement("r")
+	require.NoError(t, err)
 	require.NoError(t, d2.AddChild(r))
 	require.NoError(t, r.AppendText([]byte("café")))
 
@@ -1480,7 +1514,8 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 	// ErrInvalidXMLChar (the SERE0006 serialization error).
 	textDoc := func() *helium.Document {
 		d := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-		r := d.CreateElement("r")
+		r, err := d.CreateElement("r")
+		require.NoError(t, err)
 		require.NoError(t, d.AddChild(r))
 		require.NoError(t, r.AppendText([]byte("a\x07b")))
 		return d
@@ -1504,7 +1539,8 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 	// A control char in an attribute value is rejected too (escaping covers
 	// attribute values, not only text nodes).
 	attrDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	r := attrDoc.CreateElement("r")
+	r, err := attrDoc.CreateElement("r")
+	require.NoError(t, err)
 	require.NoError(t, attrDoc.AddChild(r))
 	err = r.SetAttribute("v", "x\x07y")
 	require.NoError(t, err)
@@ -1514,7 +1550,8 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 
 	// A valid document still serializes cleanly with rejection enabled.
 	okDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	e := okDoc.CreateElement("r")
+	e, err := okDoc.CreateElement("r")
+	require.NoError(t, err)
 	require.NoError(t, okDoc.AddChild(e))
 	require.NoError(t, e.AppendText([]byte("plain text\tok")))
 	buf.Reset()
@@ -1526,7 +1563,8 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 func TestWriteStringWithoutDTD(t *testing.T) {
 	t.Parallel()
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 	require.NoError(t, root.AppendText([]byte("text & more")))
 
@@ -1731,7 +1769,8 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "invalid element name",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement(`root injected="1"`)
+				root, err := doc.CreateElement(`root injected="1"`)
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
 				return doc
 			},
@@ -1741,7 +1780,14 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "reserved element name",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("xmlns:root")
+				// CreateElement rejects a colon, so build the reserved
+				// "xmlns:root" name through an active namespace whose prefix
+				// is the reserved "xmlns" — the element's Name() is then
+				// "xmlns:root", which the writer must reject.
+				ns, err := doc.CreateNamespace("xmlns", "urn:reserved")
+				require.NoError(t, err)
+				root, err := doc.CreateElementNS("root", ns)
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
 				return doc
 			},
@@ -1751,9 +1797,10 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "invalid attribute name",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("root")
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
-				err := root.SetAttribute(`x onmouseover`, "1")
+				err = root.SetAttribute(`x onmouseover`, "1")
 				require.NoError(t, err)
 				return doc
 			},
@@ -1763,9 +1810,10 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "reserved attribute name",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("root")
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
-				err := root.SetAttribute("xmlns", "urn:evil")
+				err = root.SetAttribute("xmlns", "urn:evil")
 				require.NoError(t, err)
 				return doc
 			},
@@ -1775,7 +1823,8 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "reserved namespace prefix",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("root")
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
 				require.NoError(t, root.DeclareNamespace("xmlns", "urn:x"))
 				return doc
@@ -1786,7 +1835,8 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "invalid namespace prefix",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("root")
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
 				require.NoError(t, root.DeclareNamespace("bad prefix", "urn:x"))
 				return doc
@@ -1797,7 +1847,8 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "invalid comment content",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("root")
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
 				require.NoError(t, root.AddChild(doc.CreateComment([]byte("a--b"))))
 				return doc
@@ -1808,7 +1859,8 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "invalid PI target",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("root")
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
 				require.NoError(t, root.AddChild(doc.CreatePI("1bad", "")))
 				return doc
@@ -1819,7 +1871,8 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 			name: "invalid PI content",
 			build: func(t *testing.T) *helium.Document {
 				doc := helium.NewDefaultDocument()
-				root := doc.CreateElement("root")
+				root, err := doc.CreateElement("root")
+				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
 				require.NoError(t, root.AddChild(doc.CreatePI("t", "a?>b")))
 				return doc
@@ -1847,7 +1900,8 @@ func TestWriterNormalizationRejectsInvalidForm(t *testing.T) {
 
 	newDoc := func(t *testing.T) *helium.Document {
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.AppendText([]byte("x")))
 		return doc

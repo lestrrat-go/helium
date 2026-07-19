@@ -72,7 +72,7 @@ func (vc *validationContext) ctaContextNode(elem *helium.Element) *helium.Elemen
 	// Use the LOCAL name: elem.Name() is the lexical QName (e.g. "p:root") for a
 	// prefixed element, which CreateElement would store verbatim and SetActiveNamespace
 	// would then leave with a wrong local part, so a name test in @test would miss.
-	synth := doc.CreateElement(elem.LocalName())
+	synth, _ := doc.CreateElement(elem.LocalName())
 	for prefix, uri := range collectNSContext(elem) {
 		_ = synth.DeclareNamespace(prefix, uri)
 	}

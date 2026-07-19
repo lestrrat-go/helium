@@ -56,7 +56,8 @@ func TestComputeFixupBasesWindowsShaped(t *testing.T) {
 	// An xi:include element with no xml:base of its own, so the effective target
 	// base reduces to the relativized target document path.
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	inc := doc.CreateElement("include")
+	inc, err := doc.CreateElement("include")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(inc))
 
 	p := &processor{baseURI: winBase}
@@ -68,7 +69,8 @@ func TestComputeFixupBasesWindowsShaped(t *testing.T) {
 
 	t.Run("posix unchanged", func(t *testing.T) {
 		pdoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-		pinc := pdoc.CreateElement("include")
+		pinc, err := pdoc.CreateElement("include")
+		require.NoError(t, err)
 		require.NoError(t, pdoc.AddChild(pinc))
 		pp := &processor{baseURI: "/proj/xinclude/docs/base.xml"}
 		rs, tgt := pp.computeFixupBases(pinc, "/proj/xinclude/ents/base-inc.xml")

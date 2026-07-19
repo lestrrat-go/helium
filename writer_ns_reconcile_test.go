@@ -19,7 +19,8 @@ func TestSerializerNSReconcile(t *testing.T) {
 	t.Run("active vs nsDefs conflict: one xmlns:p, active wins", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		require.NoError(t, root.DeclareNamespace("p", "urn:declared"))
@@ -37,7 +38,8 @@ func TestSerializerNSReconcile(t *testing.T) {
 	t.Run("SetNs object form after declare: one xmlns:p, active wins", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		require.NoError(t, root.DeclareNamespace("p", "urn:declared"))
@@ -51,7 +53,8 @@ func TestSerializerNSReconcile(t *testing.T) {
 	t.Run("default namespace conflict still reconciled", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		require.NoError(t, root.DeclareNamespace("", "urn:d1"))
@@ -65,7 +68,8 @@ func TestSerializerNSReconcile(t *testing.T) {
 	t.Run("SetActiveNamespace-first path: DeclareNamespace rejects the conflict", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		require.NoError(t, root.SetActiveNamespace("p", "urn:active"))
@@ -85,7 +89,8 @@ func TestSerializerNSReconcileNoRegression(t *testing.T) {
 	t.Run("only nsDefs", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.DeclareNamespace("p", "urn:p"))
 
@@ -97,7 +102,8 @@ func TestSerializerNSReconcileNoRegression(t *testing.T) {
 	t.Run("nsDefs and active agree", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.DeclareNamespace("p", "urn:p"))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:p"))
@@ -110,7 +116,8 @@ func TestSerializerNSReconcileNoRegression(t *testing.T) {
 	t.Run("only active (reconcileOne synthesizes)", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:p"))
 
@@ -133,10 +140,11 @@ func TestSerializerNSReconcileNameAttrConflict(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDefaultDocument()
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.SetActiveNamespace("p", "urn:Y"))
-	err := root.SetAttributeNS("a", "v", helium.NewNamespace("p", "urn:X"))
+	err = root.SetAttributeNS("a", "v", helium.NewNamespace("p", "urn:X"))
 	require.NoError(t, err)
 
 	str := serializeAndReparse(t, doc)

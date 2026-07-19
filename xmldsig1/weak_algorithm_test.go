@@ -135,7 +135,8 @@ func TestWeakAlgorithmPreflight(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, `<wrapper/>`)
 
-		payload := doc.CreateElement("payload")
+		payload, err := doc.CreateElement("payload")
+		require.NoError(t, err)
 		require.NoError(t, payload.AddChild(doc.CreateText([]byte("data"))))
 
 		signer := xmldsig1.NewSigner().

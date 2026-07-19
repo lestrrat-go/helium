@@ -953,7 +953,10 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 		return nil, err
 	}
 
-	newRoot := newctx.doc.CreateElement(pseudoRootName)
+	newRoot, err := newctx.doc.CreateElement(pseudoRootName)
+	if err != nil {
+		return nil, err
+	}
 	newctx.pushNodeEntry(nodeEntry{local: pseudoRootName, qname: pseudoRootName, synthetic: true})
 	newctx.elem = newRoot
 	if err := newctx.doc.AddChild(newRoot); err != nil {
@@ -1050,7 +1053,10 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	newctx.maxAmpl = pctx.maxAmpl
 	defer func() { pctx.sizeentcopy = newctx.sizeentcopy }()
 
-	newRoot := newctx.doc.CreateElement(pseudoRootName)
+	newRoot, err := newctx.doc.CreateElement(pseudoRootName)
+	if err != nil {
+		return nil, err
+	}
 	newctx.pushNodeEntry(nodeEntry{local: pseudoRootName, qname: pseudoRootName, synthetic: true})
 	newctx.elem = newRoot
 	if err := newctx.doc.AddChild(newRoot); err != nil {

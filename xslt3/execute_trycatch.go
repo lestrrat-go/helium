@@ -162,7 +162,10 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 	// If the try succeeds, copy the buffered output to the real output.
 	// If it fails, discard the buffer and execute the catch.
 	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot := tmpDoc.CreateElement("_try")
+	tmpRoot, err := tmpDoc.CreateElement("_try")
+	if err != nil {
+		return err
+	}
 	if err := tmpDoc.AddChild(tmpRoot); err != nil {
 		return err
 	}

@@ -557,7 +557,8 @@ func TestPIContentIsStringNotChildren(t *testing.T) {
 	t.Run("PI serializes as <?target data?>", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
-		root := doc.CreateElement("root")
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		pi := doc.CreatePI("target", "")
@@ -720,7 +721,9 @@ func TestPINodeMethods(t *testing.T) {
 	require.Contains(t, string(pi.Content()), "Y")
 
 	// Adding an element child is rejected.
-	require.Error(t, pi.AddChild(doc.CreateElement("e")))
+	e, err := doc.CreateElement("e")
+	require.NoError(t, err)
+	require.Error(t, pi.AddChild(e))
 
 	// Adding a nil node is rejected with ErrNilNode (not a panic).
 	require.Error(t, pi.AddChild(nil))
@@ -771,7 +774,8 @@ func TestCDATANodeMethods(t *testing.T) {
 	cd.SetTreeDoc(doc)
 
 	// AddSibling and Replace must run without panicking.
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 	require.NoError(t, root.AddChild(cd))
 	require.NoError(t, cd.AddSibling(doc.CreateCDATASection([]byte("sib"))))
@@ -787,7 +791,8 @@ func TestEntityRefNodeMethods(t *testing.T) {
 	ref.SetTreeDoc(doc)
 	require.NoError(t, ref.AppendText([]byte("x")))
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 	require.NoError(t, root.AddChild(ref))
 	require.NoError(t, ref.AddSibling(doc.CreateText([]byte("after"))))
@@ -838,7 +843,9 @@ func TestNotationNodeInterfaceMethods(t *testing.T) {
 
 	// These delegate to the shared tree primitives; exercise without asserting
 	// implementation-defined success on an already-attached node.
-	_ = nota.AddSibling(doc.CreateElement("x"))
+	x, err := doc.CreateElement("x")
+	require.NoError(t, err)
+	_ = nota.AddSibling(x)
 	_ = nota.Replace()
 	_ = nota.AddChild(doc.CreateText([]byte("t")))
 	nota.Free()

@@ -34,7 +34,8 @@ func TestMixedInitialValueDeepAcyclicChain(t *testing.T) {
 		require.NoError(t, ent.AddChild(ref))
 	}
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 	top, err := doc.CreateReference(fmt.Sprintf("e%d", depth))
 	require.NoError(t, err)
@@ -69,7 +70,8 @@ func TestMixedFixedCyclicEntityRejectedByAddChild(t *testing.T) {
 	ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
 	require.NoError(t, err)
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 
 	ref, err := doc.CreateReference("e")
@@ -107,7 +109,8 @@ func TestMixedFixedCorruptSiblingCycleFailsClosed(t *testing.T) {
 	require.NoError(t, ent.AddChild(text))
 	helium.UnsafeSetNextSibling(text, text)
 
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 	ref, err := doc.CreateReference("e")
 	require.NoError(t, err)

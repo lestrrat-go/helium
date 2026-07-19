@@ -83,7 +83,10 @@ func X509DataKeyInfo(certs ...*x509.Certificate) KeyInfoBuilder {
 }
 
 func (b *x509DataKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, _ any) (*helium.Element, error) {
-	keyInfo := doc.CreateElement("KeyInfo")
+	keyInfo, err := doc.CreateElement("KeyInfo")
+	if err != nil {
+		return nil, err
+	}
 	if err := keyInfo.DeclareNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}
@@ -91,7 +94,10 @@ func (b *x509DataKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, 
 		return nil, err
 	}
 
-	x509Data := doc.CreateElement("X509Data")
+	x509Data, err := doc.CreateElement("X509Data")
+	if err != nil {
+		return nil, err
+	}
 	if err := x509Data.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}
@@ -100,7 +106,10 @@ func (b *x509DataKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, 
 	}
 
 	for _, cert := range b.certs {
-		certElem := doc.CreateElement("X509Certificate")
+		certElem, err := doc.CreateElement("X509Certificate")
+		if err != nil {
+			return nil, err
+		}
 		if err := certElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 			return nil, err
 		}
@@ -135,7 +144,10 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 		return nil, fmt.Errorf("%w: expected RSA key, got %T", ErrKeyMismatch, key)
 	}
 
-	keyInfo := doc.CreateElement("KeyInfo")
+	keyInfo, err := doc.CreateElement("KeyInfo")
+	if err != nil {
+		return nil, err
+	}
 	if err := keyInfo.DeclareNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}
@@ -143,7 +155,10 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 		return nil, err
 	}
 
-	keyValue := doc.CreateElement("KeyValue")
+	keyValue, err := doc.CreateElement("KeyValue")
+	if err != nil {
+		return nil, err
+	}
 	if err := keyValue.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}
@@ -151,7 +166,10 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 		return nil, err
 	}
 
-	rsaKV := doc.CreateElement("RSAKeyValue")
+	rsaKV, err := doc.CreateElement("RSAKeyValue")
+	if err != nil {
+		return nil, err
+	}
 	if err := rsaKV.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}
@@ -159,7 +177,10 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 		return nil, err
 	}
 
-	modElem := doc.CreateElement("Modulus")
+	modElem, err := doc.CreateElement("Modulus")
+	if err != nil {
+		return nil, err
+	}
 	if err := modElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}
@@ -171,7 +192,10 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 		return nil, err
 	}
 
-	expElem := doc.CreateElement("Exponent")
+	expElem, err := doc.CreateElement("Exponent")
+	if err != nil {
+		return nil, err
+	}
 	if err := expElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}

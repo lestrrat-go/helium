@@ -38,19 +38,23 @@ func TestSignEnveloping_ReferenceIntoOwnObject(t *testing.T) {
 	doc := mustParseXML(t, `<Foo><Bar Id="data"><Baz Value="v"/></Bar></Foo>`)
 
 	// Build a <ds:Manifest Id="manifest"> to place under <ds:Object>.
-	manifest := doc.CreateElement("Manifest")
+	manifest, err := doc.CreateElement("Manifest")
+	require.NoError(t, err)
 	require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, manifest.SetAttribute("Id", "manifest"))
 
-	ref := doc.CreateElement("Reference")
+	ref, err := doc.CreateElement("Reference")
+	require.NoError(t, err)
 	require.NoError(t, manifest.AddChild(ref))
 	require.NoError(t, ref.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, ref.SetAttribute("URI", "test.txt"))
-	dm := doc.CreateElement("DigestMethod")
+	dm, err := doc.CreateElement("DigestMethod")
+	require.NoError(t, err)
 	require.NoError(t, ref.AddChild(dm))
 	require.NoError(t, dm.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, dm.SetAttribute("Algorithm", "http://www.w3.org/2001/04/xmlenc#sha256"))
-	dv := doc.CreateElement("DigestValue")
+	dv, err := doc.CreateElement("DigestValue")
+	require.NoError(t, err)
 	require.NoError(t, ref.AddChild(dv))
 	require.NoError(t, dv.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	h := sha256.Sum256([]byte("hello world"))
@@ -113,7 +117,8 @@ func TestSignEnveloping_ReferenceToDocumentElement(t *testing.T) {
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, `<root Id="root"><child>hello</child></root>`)
 
-	payload := doc.CreateElement("Payload")
+	payload, err := doc.CreateElement("Payload")
+	require.NoError(t, err)
 	require.NoError(t, payload.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, payload.AddChild(doc.CreateText([]byte("data"))))
 
@@ -167,10 +172,12 @@ func TestSignEnveloping_InclusiveC14NInObjectRef_UnusedRootNamespace(t *testing.
 	// under this root.
 	doc := mustParseXML(t, `<Foo xmlns:extra="urn:extra"><Bar Id="data"><Baz Value="v"/></Bar></Foo>`)
 
-	manifest := doc.CreateElement("Manifest")
+	manifest, err := doc.CreateElement("Manifest")
+	require.NoError(t, err)
 	require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, manifest.SetAttribute("Id", "manifest"))
-	child := doc.CreateElement("SignatureProperties")
+	child, err := doc.CreateElement("SignatureProperties")
+	require.NoError(t, err)
 	require.NoError(t, child.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, manifest.AddChild(child))
 
@@ -208,7 +215,8 @@ func TestSignEnveloping_CanonicalizationPanicRestoresSignature(t *testing.T) {
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, `<Foo><Bar Id="data"><Baz Value="v"/></Bar></Foo>`)
 
-	manifest := doc.CreateElement("Manifest")
+	manifest, err := doc.CreateElement("Manifest")
+	require.NoError(t, err)
 	require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, manifest.SetAttribute("Id", "manifest"))
 	// Corrupt the manifest with a nil namespace declaration so canonicalizing it
@@ -264,7 +272,8 @@ func TestSignEnveloping_AmbiguousIDAcrossTrees(t *testing.T) {
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, `<Foo><Bar Id="dup"><Baz Value="v"/></Bar></Foo>`)
 
-	manifest := doc.CreateElement("Manifest")
+	manifest, err := doc.CreateElement("Manifest")
+	require.NoError(t, err)
 	require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, manifest.SetAttribute("Id", "dup"))
 
@@ -278,7 +287,7 @@ func TestSignEnveloping_AmbiguousIDAcrossTrees(t *testing.T) {
 		}).
 		KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
 
-	_, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{manifest}, key)
+	_, err = signer.SignEnveloping(t.Context(), doc, []helium.Node{manifest}, key)
 	require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference,
 		"an id present in both the document and the Signature's Object must be rejected")
 }
@@ -326,10 +335,12 @@ func TestSignEnveloping_InclusiveC14NInObjectRef_InheritedXMLAttrs(t *testing.T)
 			key := generateRSAKey(t)
 			doc := mustParseXML(t, `<Foo `+tc.rootAttr+`><Bar Id="data"><Baz Value="v"/></Bar></Foo>`)
 
-			manifest := doc.CreateElement("Manifest")
+			manifest, err := doc.CreateElement("Manifest")
+			require.NoError(t, err)
 			require.NoError(t, manifest.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 			require.NoError(t, manifest.SetAttribute("Id", "manifest"))
-			child := doc.CreateElement("SignatureProperties")
+			child, err := doc.CreateElement("SignatureProperties")
+			require.NoError(t, err)
 			require.NoError(t, child.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 			require.NoError(t, child.AddChild(doc.CreateText([]byte("content"))))
 			require.NoError(t, manifest.AddChild(child))

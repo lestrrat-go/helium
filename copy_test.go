@@ -74,7 +74,8 @@ func TestCopyDocWithMixedChildren(t *testing.T) {
 	t.Parallel()
 
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
 	require.NoError(t, root.AddChild(doc.CreateText([]byte("text"))))
@@ -242,7 +243,8 @@ func TestCopyNodeVariants(t *testing.T) {
 	src := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	dst := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 
-	root := src.CreateElement("root")
+	root, err := src.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, src.AddChild(root))
 
 	text := src.CreateText([]byte("hi"))

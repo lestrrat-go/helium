@@ -14,12 +14,15 @@ import (
 // reused after a mutation.
 func TestDocOrderCache_Reset_AfterMutation(t *testing.T) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root := doc.CreateElement("root")
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
 
-	a := doc.CreateElement("a")
+	a, err := doc.CreateElement("a")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(a))
-	b := doc.CreateElement("b")
+	b, err := doc.CreateElement("b")
+	require.NoError(t, err)
 	require.NoError(t, root.AddChild(b))
 
 	cache := xpath3.NewDocOrderCache()

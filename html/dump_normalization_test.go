@@ -19,12 +19,13 @@ func TestWriterNormalization(t *testing.T) {
 
 	doc := helium.NewHTMLDocument()
 	// Element named "p" + decomposed é, with a decomposed text child.
-	root := doc.CreateElement("p" + decomposed)
+	root, err := doc.CreateElement("p" + decomposed)
+	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.AddChild(doc.CreateText([]byte(decomposed))))
 
 	var buf strings.Builder
-	err := html.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
+	err = html.NewWriter().DefaultDTD(false).Format(false).PreserveCase(true).
 		Normalization("NFC").WriteTo(&buf, root)
 	require.NoError(t, err)
 	out := buf.String()

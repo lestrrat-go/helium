@@ -1350,7 +1350,10 @@ func renderAnalyzeStringGroup(doc *helium.Document, parent *helium.Element, node
 }
 
 func createAnalyzeStringElement(doc *helium.Document, localName string) (*helium.Element, error) {
-	elem := doc.CreateElement(localName)
+	elem, err := doc.CreateElement(localName)
+	if err != nil {
+		return nil, err
+	}
 	if err := elem.SetActiveNamespace("fn", NSFn); err != nil {
 		return nil, err
 	}

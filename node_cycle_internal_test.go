@@ -17,10 +17,12 @@ func TestChildReachesNoDepthCap(t *testing.T) {
 	// A single-child chain first -> n -> n -> ... -> deep, deeper than the
 	// removed 4096 cap. childReaches must descend the whole chain.
 	const depth = 5000
-	first := doc.CreateElement("n0")
+	first, err := doc.CreateElement("n0")
+	require.NoError(t, err)
 	prev := first
 	for i := 1; i <= depth; i++ {
-		cur := doc.CreateElement("n")
+		cur, err := doc.CreateElement("n")
+		require.NoError(t, err)
 		require.NoError(t, prev.AddChild(cur))
 		prev = cur
 	}
@@ -29,7 +31,8 @@ func TestChildReachesNoDepthCap(t *testing.T) {
 		"a target %d levels deep must be found — the search must not cap depth and fail open", depth)
 
 	// A node NOT in the subtree is not reachable.
-	outside := doc.CreateElement("outside")
+	outside, err := doc.CreateElement("outside")
+	require.NoError(t, err)
 	require.False(t, childReaches(first, outside.baseDocNode()),
 		"a node outside the subtree must not be reported reachable")
 }
@@ -42,14 +45,17 @@ func TestChildReachesNoDepthCap(t *testing.T) {
 func TestChildReachesTerminatesOnCyclicSiblingList(t *testing.T) {
 	t.Run("self-cycle", func(t *testing.T) {
 		doc := NewDefaultDocument()
-		parent := doc.CreateElement("parent")
-		c := doc.CreateElement("c")
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		c, err := doc.CreateElement("c")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(c))
 
 		// Corrupt the sibling list into a self-cycle: c.next = c.
 		UnsafeSetNextSibling(c, c)
 
-		outside := doc.CreateElement("outside")
+		outside, err := doc.CreateElement("outside")
+		require.NoError(t, err)
 		require.False(t, childReaches(parent, outside.baseDocNode()),
 			"a target not in the cyclic list must terminate and report false")
 		require.True(t, childReaches(parent, c.baseDocNode()),
@@ -58,16 +64,20 @@ func TestChildReachesTerminatesOnCyclicSiblingList(t *testing.T) {
 
 	t.Run("two-cycle", func(t *testing.T) {
 		doc := NewDefaultDocument()
-		parent := doc.CreateElement("parent")
-		c1 := doc.CreateElement("c1")
-		c2 := doc.CreateElement("c2")
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		c1, err := doc.CreateElement("c1")
+		require.NoError(t, err)
+		c2, err := doc.CreateElement("c2")
+		require.NoError(t, err)
 		require.NoError(t, parent.AddChild(c1))
 		require.NoError(t, parent.AddChild(c2))
 
 		// Close a 2-cycle: c1 -> c2 -> c1.
 		UnsafeSetNextSibling(c2, c1)
 
-		outside := doc.CreateElement("outside")
+		outside, err := doc.CreateElement("outside")
+		require.NoError(t, err)
 		require.False(t, childReaches(parent, outside.baseDocNode()),
 			"a target not in the cyclic list must terminate and report false")
 	})
@@ -106,9 +116,11 @@ func TestWalkRejectsEntityChildCycle(t *testing.T) {
 // the active path) is skipped and the sibling text is still aggregated.
 func TestContentTerminatesOnChildPointerCycle(t *testing.T) {
 	doc := NewDefaultDocument()
-	a := doc.CreateElement("a")
+	a, err := doc.CreateElement("a")
+	require.NoError(t, err)
 	txt := doc.CreateText([]byte("x"))
-	b := doc.CreateElement("b")
+	b, err := doc.CreateElement("b")
+	require.NoError(t, err)
 	require.NoError(t, a.AddChild(txt))
 	require.NoError(t, a.AddChild(b))
 
@@ -130,16 +142,19 @@ func TestContentTerminatesOnChildPointerCycle(t *testing.T) {
 // the per-frame seenChildren set must return ErrWalkCycle.
 func TestWalkRejectsSiblingCycle(t *testing.T) {
 	doc := NewDefaultDocument()
-	parent := doc.CreateElement("parent")
-	a := doc.CreateElement("a")
-	b := doc.CreateElement("b")
+	parent, err := doc.CreateElement("parent")
+	require.NoError(t, err)
+	a, err := doc.CreateElement("a")
+	require.NoError(t, err)
+	b, err := doc.CreateElement("b")
+	require.NoError(t, err)
 	require.NoError(t, parent.AddChild(a))
 	require.NoError(t, parent.AddChild(b))
 
 	// Close a 2-cycle in the sibling list: a -> b -> a.
 	UnsafeSetNextSibling(b, a)
 
-	err := Walk(parent, NodeWalkerFunc(func(Node) error { return nil }))
+	err = Walk(parent, NodeWalkerFunc(func(Node) error { return nil }))
 	require.ErrorIs(t, err, ErrWalkCycle,
 		"Walk must detect the sibling cycle and return ErrWalkCycle instead of hanging")
 }

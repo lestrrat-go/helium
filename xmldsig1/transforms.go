@@ -219,7 +219,10 @@ func canonicalizeDetachedSubtree(method string, root, target *helium.Element, pr
 	origDoc := root.OwnerDocument()
 	tmp := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 
-	proxy := tmp.CreateElement("proxy")
+	proxy, err := tmp.CreateElement("proxy")
+	if err != nil {
+		return nil, err
+	}
 	if origDoc != nil {
 		if docElem := origDoc.DocumentElement(); docElem != nil {
 			for prefix, ns := range domutil.InScopeNamespaces(docElem, true) {

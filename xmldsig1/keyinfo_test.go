@@ -120,23 +120,28 @@ func injectECKeyInfo(t *testing.T, doc *helium.Document, curveURI string, pub []
 
 	sig := findSig(t, doc)
 
-	keyInfo := doc.CreateElement("KeyInfo")
+	keyInfo, err := doc.CreateElement("KeyInfo")
+	require.NoError(t, err)
 	require.NoError(t, keyInfo.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
-	keyValue := doc.CreateElement("KeyValue")
+	keyValue, err := doc.CreateElement("KeyValue")
+	require.NoError(t, err)
 	require.NoError(t, keyValue.SetActiveNamespace("ds", xmldsig1.NamespaceDSig))
 	require.NoError(t, keyInfo.AddChild(keyValue))
 
-	ec := doc.CreateElement("ECKeyValue")
+	ec, err := doc.CreateElement("ECKeyValue")
+	require.NoError(t, err)
 	require.NoError(t, ec.DeclareNamespace("dsig11", dsig11))
 	require.NoError(t, ec.SetActiveNamespace("dsig11", dsig11))
 	require.NoError(t, keyValue.AddChild(ec))
 
-	nc := doc.CreateElement("NamedCurve")
+	nc, err := doc.CreateElement("NamedCurve")
+	require.NoError(t, err)
 	require.NoError(t, nc.SetActiveNamespace("dsig11", dsig11))
 	require.NoError(t, nc.SetAttribute("URI", curveURI))
 	require.NoError(t, ec.AddChild(nc))
 
-	pk := doc.CreateElement("PublicKey")
+	pk, err := doc.CreateElement("PublicKey")
+	require.NoError(t, err)
 	require.NoError(t, pk.SetActiveNamespace("dsig11", dsig11))
 	encoded := base64StdEncode(pub)
 	require.NoError(t, pk.AddChild(doc.CreateText([]byte(encoded))))

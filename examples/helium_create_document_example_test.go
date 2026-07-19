@@ -14,7 +14,11 @@ func Example_helium_create_document() {
 
 	// CreateElement creates a new element node owned by this document.
 	// The element is not yet attached to the tree.
-	root := doc.CreateElement("catalog")
+	root, err := doc.CreateElement("catalog")
+	if err != nil {
+		fmt.Printf("failed to create element: %s\n", err)
+		return
+	}
 
 	// SetDocumentElement attaches the element as the root (document element).
 	if err := doc.SetDocumentElement(root); err != nil {
@@ -23,7 +27,11 @@ func Example_helium_create_document() {
 	}
 
 	// Create a child element and set an attribute on it.
-	book := doc.CreateElement("book")
+	book, err := doc.CreateElement("book")
+	if err != nil {
+		fmt.Printf("failed to create element: %s\n", err)
+		return
+	}
 	if err := book.SetAttribute("id", "b1"); err != nil {
 		fmt.Printf("failed to set attribute: %s\n", err)
 		return
@@ -36,7 +44,11 @@ func Example_helium_create_document() {
 	}
 
 	// Build a nested structure: catalog > book > title
-	title := doc.CreateElement("title")
+	title, err := doc.CreateElement("title")
+	if err != nil {
+		fmt.Printf("failed to create element: %s\n", err)
+		return
+	}
 
 	// AppendText creates a text node with the given bytes and
 	// appends it as a child of the element.

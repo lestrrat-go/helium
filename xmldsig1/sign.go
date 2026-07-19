@@ -98,7 +98,10 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	}
 
 	// Create Object element to wrap the content.
-	objElem := doc.CreateElement("Object")
+	objElem, err := doc.CreateElement("Object")
+	if err != nil {
+		return nil, err
+	}
 	if err := objElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, err
 	}
@@ -203,7 +206,10 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 // buildSignatureSkeleton creates the Signature element with SignedInfo and
 // SignatureValue children, but no References yet.
 func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.Element, *helium.Element, *helium.Element, error) {
-	sigElem := doc.CreateElement("Signature")
+	sigElem, err := doc.CreateElement("Signature")
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if err := sigElem.DeclareNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, nil, nil, err
 	}
@@ -216,7 +222,10 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 		}
 	}
 
-	signedInfo := doc.CreateElement("SignedInfo")
+	signedInfo, err := doc.CreateElement("SignedInfo")
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if err := signedInfo.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, nil, nil, err
 	}
@@ -224,7 +233,10 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 		return nil, nil, nil, err
 	}
 
-	c14nMethod := doc.CreateElement("CanonicalizationMethod")
+	c14nMethod, err := doc.CreateElement("CanonicalizationMethod")
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if err := c14nMethod.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, nil, nil, err
 	}
@@ -235,7 +247,10 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 		return nil, nil, nil, err
 	}
 
-	sigMethod := doc.CreateElement("SignatureMethod")
+	sigMethod, err := doc.CreateElement("SignatureMethod")
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if err := sigMethod.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, nil, nil, err
 	}
@@ -246,7 +261,10 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 		return nil, nil, nil, err
 	}
 
-	sigValue := doc.CreateElement("SignatureValue")
+	sigValue, err := doc.CreateElement("SignatureValue")
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if err := sigValue.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return nil, nil, nil, err
 	}
@@ -317,7 +335,10 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	}
 
 	// Build the Reference element.
-	refElem := doc.CreateElement("Reference")
+	refElem, err := doc.CreateElement("Reference")
+	if err != nil {
+		return err
+	}
 	if err := refElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return err
 	}
@@ -343,12 +364,18 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 
 	// Transforms element.
 	if len(ref.Transforms) > 0 {
-		transformsElem := doc.CreateElement("Transforms")
+		transformsElem, err := doc.CreateElement("Transforms")
+		if err != nil {
+			return err
+		}
 		if err := transformsElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 			return err
 		}
 		for _, t := range ref.Transforms {
-			tElem := doc.CreateElement("Transform")
+			tElem, err := doc.CreateElement("Transform")
+			if err != nil {
+				return err
+			}
 			if err := tElem.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 				return err
 			}
@@ -357,7 +384,10 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 			}
 			// For Exclusive C14N with prefixes, add InclusiveNamespaces child.
 			if exc, ok := t.(excC14NTransform); ok && len(exc.prefixes) > 0 {
-				incNS := doc.CreateElement("InclusiveNamespaces")
+				incNS, err := doc.CreateElement("InclusiveNamespaces")
+				if err != nil {
+					return err
+				}
 				if err := incNS.DeclareNamespace("ec", "http://www.w3.org/2001/10/xml-exc-c14n#"); err != nil {
 					return err
 				}
@@ -382,7 +412,10 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	}
 
 	// DigestMethod.
-	digestMethod := doc.CreateElement("DigestMethod")
+	digestMethod, err := doc.CreateElement("DigestMethod")
+	if err != nil {
+		return err
+	}
 	if err := digestMethod.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return err
 	}
@@ -394,7 +427,10 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	}
 
 	// DigestValue.
-	digestValue := doc.CreateElement("DigestValue")
+	digestValue, err := doc.CreateElement("DigestValue")
+	if err != nil {
+		return err
+	}
 	if err := digestValue.SetActiveNamespace(nsPrefix, NamespaceDSig); err != nil {
 		return err
 	}

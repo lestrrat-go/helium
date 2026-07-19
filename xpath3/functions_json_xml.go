@@ -149,7 +149,10 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 		}
 	}
 
-	elem := doc.CreateElement(name)
+	elem, err := doc.CreateElement(name)
+	if err != nil {
+		return nil, err
+	}
 	if annotations != nil {
 		if ann := jsonToXMLTypeAnnotation(name); ann != "" {
 			annotations[elem] = ann
