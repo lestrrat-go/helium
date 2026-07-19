@@ -101,6 +101,32 @@ func TestResultDocumentSecondaryValidationFailRollbackTryCatch(t *testing.T) {
 	require.Equal(t, 1, childCount, "the catch's document must contain only <good/>")
 }
 
+// A secondary xsl:result-document with an item-serialization method (adaptive)
+// stages its element items into resultDocItems and serializes them in the
+// end-of-transform materialization loop. When that serialization fails — here a
+// two-element sequence whose text carries U+0001, an XML-invalid character — the
+// error MUST surface from the transform rather than being swallowed into a
+// silently empty secondary document.
+func TestResultDocumentSecondarySerializationErrorSurfaces(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="e" as="element()">
+      <r><xsl:value-of select="codepoints-to-string(1)"/></r>
+    </xsl:variable>
+    <xsl:result-document href="out.txt" method="adaptive">
+      <xsl:sequence select="($e, $e)"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	collector := &resultDocCollect{docs: map[string]*helium.Document{}}
+	_, err := ss.Transform(parseTransformSource(t)).
+		ResultDocumentHandler(collector).
+		Do(t.Context())
+	requireSERE0006(t, err)
+}
+
 type resultDocCollect struct {
 	docs map[string]*helium.Document
 }
