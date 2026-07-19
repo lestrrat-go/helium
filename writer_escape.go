@@ -421,6 +421,81 @@ func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
 	return string(out), false
 }
 
+// entityValueLiteral applies the DTD-literal policy to an entity-VALUE literal and
+// additionally validates every character reference the value carries. Unlike an
+// external-ID or enumeration literal (plain dtdLiteral), an EntityValue is subject
+// to reference recognition (XML §4.4.5): a &#N; / &#xN; is a real character
+// reference whose target must be serializable in the target XML version. So the
+// literal runes are screened by dtdLiteral (reference-less rule) and every numeric
+// character reference is validated by screenCharRefs against isSerializableChar —
+// a 1.1 EntityValue may reference a RestrictedChar (legal as &#1; under a 1.1
+// target), a 1.0 one may not. An invalid target is rejected (default) or its
+// reference replaced by the U+FFFD representation (RejectInvalidChars(false)).
+func (s *writeSession) entityValueLiteral(what, value string) (string, bool) {
+	lit, stop := s.dtdLiteral(what, value)
+	if stop {
+		return "", true
+	}
+	if strings.IndexByte(lit, '&') == -1 {
+		return lit, false
+	}
+	return s.screenCharRefs(what, lit)
+}
+
+// screenCharRefs validates every numeric character reference ("&#N;" / "&#xN;") in
+// an entity value, leaving named references (&amp;, &e;) and non-reference text
+// untouched. A reference whose target is serializable in the target XML version
+// (isSerializableChar) is preserved verbatim. An invalid target is a serialization
+// error: under the default policy it records a sticky ErrInvalidXMLChar (returning
+// stop=true); under RejectInvalidChars(false) the whole reference is replaced by
+// the U+FFFD representation — the &#xFFFD; reference when non-ASCII characters are
+// being escaped (EscapeNonASCII / US-ASCII output), the raw U+FFFD character
+// otherwise (matching the text/attribute escapers). A malformed "&#…" sequence is
+// left verbatim (a name-grammar matter outside the character policy). When nothing
+// is replaced it returns value unchanged so no copy is retained.
+func (s *writeSession) screenCharRefs(what, value string) (string, bool) {
+	var b strings.Builder
+	last := 0
+	i := 0
+	for i < len(value) {
+		if value[i] != '&' || i+1 >= len(value) || value[i+1] != '#' {
+			i++
+			continue
+		}
+		semi := strings.IndexByte(value[i:], ';')
+		if semi == -1 {
+			break
+		}
+		refEnd := i + semi + 1
+		cp, ok := parseCharRefBody(value[i+2 : i+semi])
+		if !ok {
+			i += 2
+			continue
+		}
+		if isSerializableChar(cp, s.xml11) {
+			i = refEnd
+			continue
+		}
+		if !s.replaceInvalidChars {
+			s.check(fmt.Errorf("helium: %s contains a character reference to a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+			return "", true
+		}
+		b.WriteString(value[last:i])
+		if s.escapeNonASCII || s.asciiOutput {
+			b.Write(esc_fffd_ref)
+		} else {
+			b.Write(esc_fffd)
+		}
+		last = refEnd
+		i = refEnd
+	}
+	if last == 0 {
+		return value, false
+	}
+	b.WriteString(value[last:])
+	return b.String(), false
+}
+
 // writeCharMapReplacement flushes s[last:cut] to w and writes the raw
 // (unescaped) character-map replacement, returning the new value of last (the
 // byte offset just past the mapped character). It is shared by escapeText and
