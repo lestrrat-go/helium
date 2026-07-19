@@ -1096,11 +1096,12 @@ func childNames(e *helium.Element) []string {
 }
 
 // TestChildListAttributeAddChildMoveRepairsChildList verifies that an attribute
-// placed in the normal child list via Element.AddChild (NOT the property list)
-// is treated as a generic child when it is later moved. Moving it onto another
-// element auto-unlinks it from the source child list; firstChild/lastChild on
-// the source must be repaired and no stale links must remain. The property-list
-// splice path must not run for a child-list attribute.
+// forced into the normal child list (via UnsafeAppendChild, NOT the property
+// list) is auto-unlinked generically when it is later moved. Moving it onto
+// another element via AddChild must repair the SOURCE child list's
+// firstChild/lastChild (the generic child-list unlink runs, not the property-list
+// splice, because the attribute is not reachable from src.properties), while the
+// destination AddChild routes the attribute into dst's PROPERTY list.
 func TestChildListAttributeAddChildMoveRepairsChildList(t *testing.T) {
 	t.Parallel()
 
@@ -1140,11 +1141,11 @@ func TestChildListAttributeAddChildMoveRepairsChildList(t *testing.T) {
 			c, err := doc.CreateAttribute("c", "3", nil)
 			require.NoError(t, err, "create attribute c")
 
-			// Deliberately route the attributes into the CHILD list, not the
-			// property list.
-			require.NoError(t, src.AddChild(a), "add attribute a as child")
-			require.NoError(t, src.AddChild(b), "add attribute b as child")
-			require.NoError(t, src.AddChild(c), "add attribute c as child")
+			// Force the attributes into the CHILD list, bypassing the property-list
+			// routing AddChild would otherwise apply to an attribute operand.
+			require.NoError(t, helium.UnsafeAppendChild(src, a), "add attribute a as child")
+			require.NoError(t, helium.UnsafeAppendChild(src, b), "add attribute b as child")
+			require.NoError(t, helium.UnsafeAppendChild(src, c), "add attribute c as child")
 			require.Equal(t, []string{"a", "b", "c"}, childNames(src), "attributes start in the child list")
 			require.Empty(t, src.Attributes(), "attributes are not in the property list")
 
@@ -1155,7 +1156,9 @@ func TestChildListAttributeAddChildMoveRepairsChildList(t *testing.T) {
 
 			require.Equal(t, tc.want, childNames(src), "source child list is repaired")
 			require.Equal(t, helium.Node(dst), moving.Parent(), "moved attribute parent is dst")
-			require.Equal(t, []string{moving.Name()}, childNames(dst), "moved attribute is dst's only child")
+			// AddChild routes the attribute into dst's property list, not its children.
+			require.Empty(t, childNames(dst), "moved attribute is not a child of dst")
+			require.Equal(t, []string{moving.Name()}, attrNames(dst), "moved attribute is now a property of dst")
 
 			require.NotEqual(t, helium.Node(moving), src.FirstChild(), "source firstChild is not the moved node")
 			require.NotEqual(t, helium.Node(moving), src.LastChild(), "source lastChild is not the moved node")
@@ -1178,8 +1181,8 @@ func TestChildListAttributeAddSiblingMoveRepairsChildList(t *testing.T) {
 	b, err := doc.CreateAttribute("b", "2", nil)
 	require.NoError(t, err, "create attribute b")
 
-	require.NoError(t, src.AddChild(a), "add attribute a as child")
-	require.NoError(t, src.AddChild(b), "add attribute b as child")
+	require.NoError(t, helium.UnsafeAppendChild(src, a), "add attribute a as child")
+	require.NoError(t, helium.UnsafeAppendChild(src, b), "add attribute b as child")
 	require.Equal(t, []string{"a", "b"}, childNames(src), "attributes start in the child list")
 
 	dst := doc.CreateElement("dst")
@@ -1245,9 +1248,9 @@ func TestChildListAttributeReplaceRepairsChildList(t *testing.T) {
 			c, err := doc.CreateAttribute("c", "3", nil)
 			require.NoError(t, err, "create attribute c")
 
-			require.NoError(t, src.AddChild(a), "add attribute a as child")
-			require.NoError(t, src.AddChild(b), "add attribute b as child")
-			require.NoError(t, src.AddChild(c), "add attribute c as child")
+			require.NoError(t, helium.UnsafeAppendChild(src, a), "add attribute a as child")
+			require.NoError(t, helium.UnsafeAppendChild(src, b), "add attribute b as child")
+			require.NoError(t, helium.UnsafeAppendChild(src, c), "add attribute c as child")
 			require.Equal(t, []string{"a", "b", "c"}, childNames(src), "attributes start in the child list")
 
 			target := tc.pick(a, b, c)

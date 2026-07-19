@@ -310,11 +310,12 @@ func (n *Element) RemoveAttributeNS(localName, nsURI string) bool {
 
 // hasAttributeInProperties reports whether p is reachable from this element's
 // properties linked list by identity. An *Attribute whose parent is an *Element
-// is not guaranteed to live in that element's properties chain: public paths
-// such as elem.AddChild(attr) or a generic Replace(attr) can instead place the
-// attribute in the normal child list. Property-list splicing must only be used
-// when the attribute is genuinely a property; otherwise firstChild/lastChild
-// would be left stale.
+// is not guaranteed to live in that element's properties chain: a generic
+// Replace(attr) that swaps a child node for an attribute places the attribute in
+// the normal child list instead (elem.AddChild(attr) always routes into the
+// properties list, so it never produces such a case). Property-list splicing must
+// only be used when the attribute is genuinely a property; otherwise
+// firstChild/lastChild would be left stale.
 func (n *Element) hasAttributeInProperties(p *Attribute) bool {
 	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
 		if attr == p {
