@@ -82,6 +82,74 @@ func TestSerializeItemsWithDocument(t *testing.T) {
 	require.Contains(t, buf.String(), "content")
 }
 
+func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	replacement := "a\u030a"
+	value := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "x" + decomposed}
+	mapItem := xpath3.NewMap([]xpath3.MapEntry{{
+		Key:   xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "key"},
+		Value: xpath3.ItemSlice{value},
+	}})
+	arrayItem := xpath3.NewArray([]xpath3.Sequence{xpath3.ItemSlice{value}})
+
+	tests := []struct {
+		name   string
+		method string
+		item   xpath3.Item
+		want   string
+	}{
+		{
+			name:   "JSONAtomic",
+			method: "json",
+			item:   value,
+			want:   `"` + replacement + composed + `"`,
+		},
+		{
+			name:   "JSONMap",
+			method: "json",
+			item:   mapItem,
+			want:   `{"key":"` + replacement + composed + `"}`,
+		},
+		{
+			name:   "JSONArray",
+			method: "json",
+			item:   arrayItem,
+			want:   `["` + replacement + composed + `"]`,
+		},
+		{
+			name:   "AdaptiveAtomic",
+			method: "adaptive",
+			item:   value,
+			want:   `"` + replacement + composed + `"`,
+		},
+		{
+			name:   "AdaptiveMap",
+			method: "adaptive",
+			item:   mapItem,
+			want:   `map{"key":"` + replacement + composed + `"}`,
+		},
+		{
+			name:   "AdaptiveArray",
+			method: "adaptive",
+			item:   arrayItem,
+			want:   `["` + replacement + composed + `"]`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{tt.item}, nil, &xslt3.OutputDef{
+				Method:            tt.method,
+				NormalizationForm: "NFC",
+				ResolvedCharMap:   map[rune]string{'x': replacement},
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, buf.String())
+		})
+	}
+}
+
 func TestDefaultOutputDef(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

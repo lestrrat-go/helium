@@ -101,12 +101,12 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 	}
 	switch outDef.Method {
 	case methodJSON:
-		if len(outDef.ResolvedCharMap) > 0 {
+		if len(outDef.ResolvedCharMap) > 0 || outDef.NormalizationForm != "" {
 			var buf strings.Builder
 			if err := serializeJSONItems(&buf, items, doc, outDef); err != nil {
 				return err
 			}
-			_, err := io.WriteString(w, applyCharMapJSON(buf.String(), outDef.ResolvedCharMap, ""))
+			_, err := io.WriteString(w, applyCharMapJSON(buf.String(), outDef.ResolvedCharMap, outDef.NormalizationForm))
 			return err
 		}
 		return serializeJSONItems(w, items, doc, outDef)
@@ -114,7 +114,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		// Adaptive serialization uses its version serialization parameter for every
 		// XML fallback and embedded element/document writer. An absent version uses
 		// the XML 1.0 default; html-style versions never reach here.
-		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), "", outDef.ResolvedCharMap)
+		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.NormalizationForm, outDef.ResolvedCharMap)
 	default:
 		if items != nil && sequence.Len(items) > 0 {
 			return serializeItemsWithSeparator(w, items, doc, outDef)
