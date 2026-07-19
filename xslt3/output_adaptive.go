@@ -18,6 +18,13 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		if len(charMaps) > 0 {
 			cm = charMaps[0]
 		}
+		// This path hardcodes the default (1.0) output definition, so a
+		// Version "1.1" request false-rejects XML 1.1 restricted chars here
+		// (SERE0006 instead of a character reference). Verified pre-existing,
+		// not a regression of this PR: origin/main returns the identical
+		// SERE0006 with empty output at this cell (serializeXML has rejected
+		// invalid chars since #1005). Tracked as separate follow-up work, with
+		// threading the effective xmlVersion into the output def as the fix.
 		return serializeXML(w, doc, defaultOutputDef(), cm)
 	}
 	var cm map[rune]string
@@ -49,6 +56,15 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 					if clone != nil {
 						_ = tmpDoc.AddChild(clone)
 					}
+					// Same as the doc-fallback path above: this hardcodes the
+					// default (1.0) output definition, so a Version "1.1"
+					// request false-rejects XML 1.1 restricted chars here
+					// (SERE0006 instead of a character reference). Verified
+					// pre-existing, not a regression of this PR: origin/main
+					// returns the identical SERE0006 with empty output at this
+					// cell (serializeXML has rejected invalid chars since
+					// #1005). Tracked as separate follow-up work, with threading
+					// the effective xmlVersion into the output def as the fix.
 					xmlOutDef := defaultOutputDef()
 					if err := serializeXML(w, tmpDoc, xmlOutDef, cm); err != nil {
 						return err
