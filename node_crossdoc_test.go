@@ -57,14 +57,19 @@ func TestPlainParseDoesNotEscape(t *testing.T) {
 // land on B with its value, mark A as having escaped storage, and keep its
 // value after A.Free() recycles its slab chunks under allocation pressure. This
 // exercises the noteCrossDocumentEscape path for a property-list (attribute)
-// move, distinct from the child-list moves covered above.
+// move, distinct from the child-list moves covered above. The attribute is
+// built with a.CreateAttribute so both its struct and its value text are
+// slab-backed by A, and the churn below allocates through c.CreateAttribute so
+// the matching attribute/text slabs are actually redrawn from the pool — a
+// wrongly recycled chunk zeroes the moved attribute and fails the assertions.
 func TestCrossDocumentAttributeMoveViaAddChild(t *testing.T) {
 	a := NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
 	aroot, err := a.CreateElement("aroot")
 	require.NoError(t, err)
 	require.NoError(t, a.AddChild(aroot))
-	require.NoError(t, aroot.SetAttribute("moved", "CROSSDOC-VALUE"))
-	attr := aroot.Attributes()[0]
+	attr, err := a.CreateAttribute("moved", "CROSSDOC-VALUE", nil)
+	require.NoError(t, err)
+	require.NoError(t, aroot.AddChild(attr))
 
 	b := NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
 	broot, err := b.CreateElement("broot")
@@ -93,14 +98,17 @@ func TestCrossDocumentAttributeMoveViaAddChild(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, bout, `moved="CROSSDOC-VALUE"`, "doc B does not serialize the moved attribute")
 
-	// Slab-safety: free A, churn allocations in a fresh document to reuse any
-	// recycled chunks, then confirm the moved attribute's storage is intact.
+	// Slab-safety: free A, churn slab allocations (element, attribute, text,
+	// and text-content) in a fresh document to redraw any recycled chunks from
+	// the pool, then confirm the moved attribute's storage is intact.
 	a.Free()
 	c := NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
 	for range 512 {
 		e, err := c.CreateElement("OVERWRITE")
 		require.NoError(t, err)
-		require.NoError(t, e.SetAttribute("k", "XXXXXXXXXXXXXXXX"))
+		ka, err := c.CreateAttribute("k", "XXXXXXXXXXXXXXXX", nil)
+		require.NoError(t, err)
+		require.NoError(t, e.AddChild(ka))
 	}
 
 	got2, ok := broot.GetAttribute("moved")
