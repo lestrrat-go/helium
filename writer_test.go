@@ -1881,6 +1881,204 @@ func TestWriterRejectInvalidCharsDTDLiterals(t *testing.T) {
 	require.NotContains(t, buf.String(), "&#x1;")
 }
 
+// TestWriterRejectInvalidCharsVerbatimNames covers every DTD/entity-reference NAME
+// emission site. A name is written verbatim between markup delimiters and has no
+// character-reference (and no U+FFFD) form, so a name carrying a C0 control
+// (U+0001) is REJECTED with ErrWriterInvalidName in BOTH the default and the
+// RejectInvalidChars(false) mode, and in BOTH XML versions (the Name grammar
+// subsumes the character-range check and is version-independent) — mirroring how
+// element/attribute names already behave. These names never reach the writer from
+// a parsed document (the parser validates them); they are reachable only through
+// the tree-construction APIs, which check only for a stray colon.
+func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
+	t.Parallel()
+
+	// Each builder produces a document whose only defect is a control character in
+	// one verbatim name; every other name is valid.
+	build := map[string]func(t *testing.T, v string) *helium.Document{
+		"doctype-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			_, err := d.CreateInternalSubset("r\x01", "", "")
+			require.NoError(t, err)
+			root := d.CreateElement("r")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"entity-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e\x01", enum.InternalGeneralEntity, "", "", "v")
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"notation-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddNotation("n\x01", "", "sys")
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"ndata-notation-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("img", enum.ExternalGeneralUnparsedEntity, "", "pic.gif", "nota\x01")
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"element-decl-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddElementDecl("e\x01", enum.EmptyElementType, nil)
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"content-model-child-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			pcdata, err := d.CreateElementContent("", helium.ElementContentPCDATA)
+			require.NoError(t, err)
+			child, err := d.CreateElementContent("a\x01", helium.ElementContentElement)
+			require.NoError(t, err)
+			model, err := d.CreateElementContentChoice(pcdata, child, helium.ElementContentMult)
+			require.NoError(t, err)
+			_, err = dtd.AddElementDecl("m", enum.MixedElementType, model)
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"attlist-element-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddAttributeDecl("el\x01", "a", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"attlist-attr-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddAttributeDecl("el", "a\x01", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+		"entity-reference-name": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			root := d.CreateElement("r")
+			require.NoError(t, d.AddChild(root))
+			ref, err := d.CreateCharRef("e\x01")
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(ref))
+			return d
+		},
+	}
+
+	for _, version := range []string{ver10, ver11} {
+		for name, mk := range build {
+			t.Run(version+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				// Default (reject) mode fails with ErrWriterInvalidName.
+				var buf bytes.Buffer
+				require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk(t, version)), helium.ErrWriterInvalidName)
+				// RejectInvalidChars(false) does NOT rescue a name (it has no U+FFFD
+				// form): the same rejection stands.
+				buf.Reset()
+				require.ErrorIs(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, version)), helium.ErrWriterInvalidName)
+			})
+		}
+	}
+}
+
+// TestWriterRejectInvalidCharsCharRefTargets covers the numeric character-reference
+// TARGET sites — an EntityRefNode "#N" (CreateCharRef) in element content and a
+// &#N; reference inside an entity value. Unlike a verbatim name, a character
+// reference carries its character as a target that must be serializable in the
+// target XML version, so the decision is VERSION-SENSITIVE: U+0001 is out of range
+// for XML 1.0 (rejected/replaced) but a RestrictedChar valid for XML 1.1 output
+// (emitted as &#1;). This is the &#1;-in-1.1 legality case.
+func TestWriterRejectInvalidCharsCharRefTargets(t *testing.T) {
+	t.Parallel()
+
+	build := map[string]func(t *testing.T, v string) *helium.Document{
+		"entity-ref-charref": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			root := d.CreateElement("r")
+			require.NoError(t, d.AddChild(root))
+			ref, err := d.CreateCharRef("#1")
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(ref))
+			return d
+		},
+		"entity-value-charref": func(t *testing.T, v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := d.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&#1;")
+			require.NoError(t, err)
+			root := d.CreateElement("doc")
+			require.NoError(t, d.AddChild(root))
+			return d
+		},
+	}
+
+	for name, mk := range build {
+		t.Run("xml10/"+name, func(t *testing.T) {
+			t.Parallel()
+			// XML 1.0: &#1; targets an out-of-range character.
+			// Default mode rejects with ErrInvalidXMLChar (SERE0006).
+			var buf bytes.Buffer
+			require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk(t, "1.0")), helium.ErrInvalidXMLChar)
+
+			// Replacement mode substitutes the U+FFFD representation and NEVER emits a
+			// bogus &#1;. With the default EscapeNonASCII it is the &#xFFFD; reference.
+			buf.Reset()
+			require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, "1.0")))
+			require.Contains(t, buf.String(), "&#xFFFD;")
+			require.NotContains(t, buf.String(), "&#1;")
+
+			// With EscapeNonASCII(false) the replacement is the raw U+FFFD character.
+			buf.Reset()
+			require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, mk(t, "1.0")))
+			require.Contains(t, buf.String(), "�")
+			require.NotContains(t, buf.String(), "&#1;")
+		})
+
+		t.Run("xml11/"+name, func(t *testing.T) {
+			t.Parallel()
+			// XML 1.1: &#1; targets a RestrictedChar that is legal as a character
+			// reference, so it is emitted verbatim in BOTH modes — never rejected,
+			// never replaced.
+			var buf bytes.Buffer
+			require.NoError(t, helium.NewWriter().WriteTo(&buf, mk(t, "1.1")))
+			require.Contains(t, buf.String(), "&#1;")
+			require.NotContains(t, buf.String(), "�")
+
+			buf.Reset()
+			require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, "1.1")))
+			require.Contains(t, buf.String(), "&#1;")
+			require.NotContains(t, buf.String(), "�")
+		})
+	}
+}
+
 // TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
 func TestWriteStringWithoutDTD(t *testing.T) {
 	t.Parallel()
