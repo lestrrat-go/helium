@@ -482,6 +482,72 @@ func TestXHTMLWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 	})
 }
 
+// TestXHTMLWriteRejectsUnboundNamespacePrefix verifies that the XHTML
+// serialization path (taken when the internal subset is an XHTML 1.0 DTD)
+// applies the same unbound-prefix guard as the generic writeNode path: a QName
+// whose prefix is bound to an empty namespace URI has no reparseable
+// serialization and must fail with ErrWriterUnboundNamespacePrefix.
+func TestXHTMLWriteRejectsUnboundNamespacePrefix(t *testing.T) {
+	t.Parallel()
+
+	newXHTMLDoc := func(t *testing.T) *helium.Document {
+		t.Helper()
+		doc := helium.NewDefaultDocument()
+		_, err := doc.CreateInternalSubset(
+			"html",
+			"-//W3C//DTD XHTML 1.0 Strict//EN",
+			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+		)
+		require.NoError(t, err)
+		return doc
+	}
+
+	t.Run("unbound element prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		ns, err := doc.CreateNamespace("foo", "")
+		require.NoError(t, err)
+		root, err := doc.CreateElementNS("html", ns)
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+
+		_, err = helium.WriteString(doc)
+		require.Error(t, err, "unbound XHTML element prefix must not serialize")
+		require.ErrorIs(t, err, helium.ErrWriterUnboundNamespacePrefix)
+	})
+
+	t.Run("unbound attribute prefix rejected", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		ns, err := doc.CreateNamespace("foo", "")
+		require.NoError(t, err)
+		require.NoError(t, root.SetAttributeNS("bar", "baz", ns))
+
+		_, err = helium.WriteString(doc)
+		require.Error(t, err, "unbound XHTML attribute prefix must not serialize")
+		require.ErrorIs(t, err, helium.ErrWriterUnboundNamespacePrefix)
+	})
+
+	t.Run("well-formed XHTML serializes unchanged", func(t *testing.T) {
+		t.Parallel()
+		doc := newXHTMLDoc(t)
+		root, err := doc.CreateElement("html")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.SetAttribute("lang", "en"))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, `<?xml version="1.0"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"></html>
+`, str)
+	})
+}
+
 // TestXHTMLAttrErrorEmitsNoPartialChildren reproduces Finding 1: when an XHTML
 // element has an invalid attribute name AND non-element child content, the
 // serializer must abort at the first error and must NOT emit any of the child

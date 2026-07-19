@@ -57,7 +57,8 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	localName := e.LocalName()
 
 	var name string
-	if nser, ok := n.(Namespacer); ok {
+	nser, isNser := n.(Namespacer)
+	if isNser {
 		if prefix := nser.Prefix(); prefix != "" {
 			name = prefix + ":" + localName
 		} else {
@@ -71,6 +72,13 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	// Validate it just like writeNode so an injected name (e.g. from
 	// CreateElement) cannot inject raw markup through the XHTML path.
 	if !d.checkElementName(name) {
+		return d.err
+	}
+
+	// A prefixed element name whose prefix is bound to an empty namespace URI
+	// has no reparseable serialization. Reject it here just like writeNode does,
+	// so the XHTML path cannot emit output the parser rejects.
+	if isNser && !d.checkNamespaceBinding("element name", name, nser.Prefix(), nser.URI()) {
 		return d.err
 	}
 
@@ -228,6 +236,13 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 		// first invalid name and return the sticky error so the caller aborts
 		// before emitting any element body or child content.
 		if !d.checkAttributeName(attrName) {
+			return d.err
+		}
+
+		// A prefixed attribute name whose prefix is bound to an empty namespace
+		// URI is likewise unreparseable — no xmlns:prefix declaration is
+		// synthesized. Reject it just like writeNode's attribute path.
+		if !d.checkNamespaceBinding("attribute name", attrName, attr.Prefix(), attr.URI()) {
 			return d.err
 		}
 
