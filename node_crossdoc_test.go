@@ -171,10 +171,10 @@ func TestAddNamespaceDeclCrossDocumentNoOpDoesNotEscape(t *testing.T) {
 	require.False(t, b.slabEscaped, "a same-URI no-op must not mark the source escaped")
 }
 
-// TestSetNsCrossDocumentSurvivesFree covers the active-namespace retention path:
-// SetNs installs a foreign slab-backed Namespace as the node's active namespace,
+// TestSetNamespaceCrossDocumentSurvivesFree covers the active-namespace retention path:
+// SetNamespace installs a foreign slab-backed Namespace as the node's active namespace,
 // so the source document's Free must not recycle its slab out from under it.
-func TestSetNsCrossDocumentSurvivesFree(t *testing.T) {
+func TestSetNamespaceCrossDocumentSurvivesFree(t *testing.T) {
 	a := NewDocument("1.0", "", StandaloneImplicitNo)
 	el, err := a.CreateElement("root")
 	require.NoError(t, err)
@@ -184,7 +184,7 @@ func TestSetNsCrossDocumentSurvivesFree(t *testing.T) {
 	ns, err := b.CreateNamespace("p", "urn:original")
 	require.NoError(t, err)
 
-	el.SetNs(ns)
+	el.SetNamespace(ns)
 	require.True(t, b.slabEscaped, "installing a foreign slab-backed active namespace must mark the source escaped")
 
 	b.Free()
@@ -196,7 +196,7 @@ func TestSetNsCrossDocumentSurvivesFree(t *testing.T) {
 }
 
 // TestCreateElementNSCrossDocumentSurvivesFree covers the PR's new constructor
-// reaching SetNs: an element created in one document with a namespace owned by
+// reaching SetNamespace: an element created in one document with a namespace owned by
 // another must keep its prefix/URI after the source document is freed and its
 // slab is recycled. Mirrors the audit repro, asserting the observable
 // serialization stays <p:root> rather than mutating to the reused binding.
@@ -221,9 +221,9 @@ func TestCreateElementNSCrossDocumentSurvivesFree(t *testing.T) {
 	require.NotContains(t, s, "urn:overwrite")
 }
 
-// TestSetNsSameDocumentDoesNotEscape a same-document active namespace is not a
+// TestSetNamespaceSameDocumentDoesNotEscape a same-document active namespace is not a
 // cross-document escape, so the flag stays clear and Free keeps recycling.
-func TestSetNsSameDocumentDoesNotEscape(t *testing.T) {
+func TestSetNamespaceSameDocumentDoesNotEscape(t *testing.T) {
 	a := NewDocument("1.0", "", StandaloneImplicitNo)
 	el, err := a.CreateElement("root")
 	require.NoError(t, err)
@@ -231,7 +231,7 @@ func TestSetNsSameDocumentDoesNotEscape(t *testing.T) {
 	ns, err := a.CreateNamespace("p", "urn:x")
 	require.NoError(t, err)
 
-	el.SetNs(ns)
+	el.SetNamespace(ns)
 	require.False(t, a.slabEscaped, "a same-document active namespace must not mark escape")
 }
 

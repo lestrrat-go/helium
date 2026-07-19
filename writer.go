@@ -1166,7 +1166,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// reparseable. reconcileOne then synthesizes the single active binding. A
 		// matching (equal-URI) declaration is kept, so a normally parsed element
 		// still declares its namespace exactly once. Only the SetActiveNamespace/
-		// SetNs-after-declaration pattern creates such a conflict, so this is a
+		// SetNamespace-after-declaration pattern creates such a conflict, so this is a
 		// no-op for parsed documents.
 		if active := nser.Namespace(); active != nil && active.href != "" {
 			nslist = dropConflictingActiveNS(nslist, active.prefix, active.href)
@@ -1347,7 +1347,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 //
 // This is the general form of the default-namespace precedent: activePrefix ""
 // drops a conflicting declared default (xmlns=""), a non-empty activePrefix
-// drops a conflicting declared xmlns:prefix. Only the SetActiveNamespace/SetNs
+// drops a conflicting declared xmlns:prefix. Only the SetActiveNamespace/SetNamespace
 // after-declaration pattern produces such a conflict — a real parse never binds
 // a prefix to two URIs on one element — so this is a no-op for parsed documents.
 // Callers pass a non-empty activeHref.
@@ -1383,7 +1383,7 @@ func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespace
 	// another): the first occupant wins and the later one is suppressed, so the
 	// start tag stays reparseable. The element name (active ns) is reconciled
 	// before attributes, so on a name-vs-attribute clash the name wins. A conflict
-	// only arises from the SetActiveNamespace/SetNs-after-declaration pattern, so
+	// only arises from the SetActiveNamespace/SetNamespace-after-declaration pattern, so
 	// this is a no-op for parsed documents (no prefix binds two URIs there).
 	emitted := make(map[string]struct{})
 

@@ -11,7 +11,7 @@ import (
 // TestSerializerNSReconcile covers the serializer-level guarantee that an
 // element serializes AT MOST ONE xmlns:<prefix> regardless of which mutator
 // created a prefix conflict. The conflict a well-formed DOM cannot express in
-// its own setters is introduced by SetActiveNamespace/SetNs AFTER a declaration:
+// its own setters is introduced by SetActiveNamespace/SetNamespace AFTER a declaration:
 // nsDefs binds prefix→X while the active namespace binds the same prefix→Y.
 func TestSerializerNSReconcile(t *testing.T) {
 	t.Parallel()
@@ -35,7 +35,7 @@ func TestSerializerNSReconcile(t *testing.T) {
 		require.NotContains(t, str, `urn:declared`, "conflicting nsDefs binding is suppressed")
 	})
 
-	t.Run("SetNs object form after declare: one xmlns:p, active wins", func(t *testing.T) {
+	t.Run("SetNamespace object form after declare: one xmlns:p, active wins", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		root, err := doc.CreateElement("root")
@@ -43,7 +43,7 @@ func TestSerializerNSReconcile(t *testing.T) {
 		require.NoError(t, doc.SetDocumentElement(root))
 
 		require.NoError(t, root.DeclareNamespace("p", "urn:declared"))
-		root.SetNs(helium.NewNamespace("p", "urn:active"))
+		root.SetNamespace(helium.NewNamespace("p", "urn:active"))
 
 		str := serializeAndReparse(t, doc)
 		require.Equal(t, 1, strings.Count(str, `xmlns:p=`), "exactly one xmlns:p emitted: %s", str)
@@ -75,7 +75,7 @@ func TestSerializerNSReconcile(t *testing.T) {
 		require.NoError(t, root.SetActiveNamespace("p", "urn:active"))
 		// The DOM setter guards this direction, so the conflict never reaches the
 		// writer through DeclareNamespace: the only path to a serialized conflict
-		// is SetActiveNamespace/SetNs AFTER declaration.
+		// is SetActiveNamespace/SetNamespace AFTER declaration.
 		require.Error(t, root.DeclareNamespace("p", "urn:declared"))
 	})
 }

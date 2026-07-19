@@ -310,7 +310,7 @@ func (dc *deepCopier) bindNamespacesExact(src, elem *Element, inScope map[string
 			childScope[ns.Prefix()] = decl
 			active = decl
 		}
-		elem.SetNs(active)
+		elem.SetNamespace(active)
 	}
 	return childScope, nil
 }
