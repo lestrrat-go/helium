@@ -317,9 +317,8 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		return nil
 	}
 
-	// The parser requires entity declaration names to be NCNames, not broad DTD
-	// Names, so guard once before any branch emits the name.
-	// Guard once before any write so no raw octet leaks ahead of the sticky error.
+	// Entity names are intentionally NCNames: Helium's parser and streaming writer
+	// reject colon-bearing names.
 	if !d.checkVerbatimNCName("entity name", ent.name) {
 		return d.err
 	}
