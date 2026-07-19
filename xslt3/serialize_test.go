@@ -103,6 +103,10 @@ func TestDefaultOutputDefNilStylesheet(t *testing.T) {
 // tests do not add repeated string literals (goconst).
 const outMethodXML = "xml"
 
+// outMethodXHTML is the XHTML output method. Its version parameter uses an XML
+// VersionNum, just like the XML output method's version parameter.
+const outMethodXHTML = "xhtml"
+
 // newBadCharElement builds a small <r> element whose text content carries an
 // XML-invalid control character (U+0001), via the public DOM API. The DOM
 // accepts the control byte; the writer is the enforcement point.
@@ -159,6 +163,27 @@ func TestSerializeItemsXMLInvalidChar(t *testing.T) {
 	requireControlCharRef(t, buf11.String())
 }
 
+// SerializeItems with method="xhtml" passes its XML version to the per-item
+// writer. Under XML 1.1, U+0001 is a legal character reference; the default
+// and XML 1.0 versions reject it as SERE0006.
+func TestSerializeItemsXHTMLInvalidChar(t *testing.T) {
+	root := newBadCharElement(t)
+	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}}
+
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodXHTML})
+	requireSERE0006(t, err)
+
+	var buf10 bytes.Buffer
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: "1.0"})
+	requireSERE0006(t, err)
+
+	var buf11 bytes.Buffer
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: "1.1"})
+	require.NoError(t, err)
+	requireControlCharRef(t, buf11.String())
+}
+
 // SerializeItems with method="json" and json-node-output-method="xml" must
 // propagate the writer's invalid-char rejection as SERE0006.
 func TestSerializeItemsJSONNodeXMLInvalidChar(t *testing.T) {
@@ -167,6 +192,34 @@ func TestSerializeItemsJSONNodeXMLInvalidChar(t *testing.T) {
 	var buf bytes.Buffer
 	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "json", JSONNodeOutputMethod: outMethodXML})
 	requireSERE0006(t, err)
+}
+
+// messageRecordingHandler records each xsl:message delivered to it.
+type messageRecordingHandler struct {
+	messages []string
+}
+
+func (h *messageRecordingHandler) HandleMessage(msg string, _ bool) error {
+	h.messages = append(h.messages, msg)
+	return nil
+}
+
+// xsl:message must report a node serialization failure as SERE0006 and avoid
+// delivering a partial message to its handler.
+func TestMessageInvalidCharSERE0006(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:message select="/*"/>
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	root := newBadCharElement(t)
+	handler := &messageRecordingHandler{}
+	_, err := ss.Transform(root.OwnerDocument()).MessageHandler(handler).Do(t.Context())
+	requireSERE0006(t, err)
+	require.Empty(t, handler.messages)
 }
 
 // SerializeItems with method="adaptive" over a multi-item sequence containing a
