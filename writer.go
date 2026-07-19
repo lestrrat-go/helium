@@ -327,6 +327,47 @@ func hasXmlnsPrefix(name string) bool {
 	return strings.HasPrefix(name, "xmlns:")
 }
 
+// rawNameGrammar identifies the XML grammar used by a raw serialization site.
+// DOM element and attribute names are QNames, while DTD grammar keeps its full
+// Name spelling without namespace interpretation.
+type rawNameGrammar uint8
+
+const (
+	rawNameQName rawNameGrammar = iota
+	rawNameNCName
+	rawNameName
+	rawNamePITarget
+)
+
+// checkRawName validates one complete spelling before a writer path emits it.
+// The grammar is explicit at the call site so namespace-aware DOM QNames cannot
+// accidentally share a rule with DTD Names or declaration NCNames.
+func (s *writeSession) checkRawName(what, name string, grammar rawNameGrammar, sentinel error) bool {
+	var valid bool
+	switch grammar {
+	case rawNameQName:
+		valid = xmlchar.IsValidQName(name)
+	case rawNameNCName:
+		valid = xmlchar.IsValidNCName(name)
+	case rawNameName:
+		valid = xmlchar.IsValidName(name)
+	case rawNamePITarget:
+		valid = xmlchar.IsValidPITarget(name)
+	default:
+		valid = false
+	}
+	if !valid {
+		s.check(fmt.Errorf("helium: invalid %s %q: %w", what, name, sentinel))
+		return false
+	}
+	// A name cannot hold a character reference, so a non-ASCII name has no
+	// faithful US-ASCII serialization.
+	if s.rejectNonASCIIStr(what, name) {
+		return false
+	}
+	return true
+}
+
 // checkElementName validates an element name about to be emitted verbatim. An
 // unvalidated name (e.g. from CreateElement) can carry whitespace, quotes, or
 // '>' that inject raw markup into the output. On failure it records a sticky
@@ -344,16 +385,7 @@ func (s *writeSession) checkElementName(name string) bool {
 		s.check(fmt.Errorf("helium: reserved element name %q: namespace declarations must use DeclareNamespace: %w", name, ErrWriterReservedElementName))
 		return false
 	}
-	if !xmlchar.IsValidQName(name) {
-		s.check(fmt.Errorf("helium: invalid element name %q: %w", name, ErrWriterInvalidElementName))
-		return false
-	}
-	// An element name cannot hold a character reference, so a non-ASCII name has
-	// no faithful US-ASCII serialization.
-	if s.rejectNonASCIIStr("element name", name) {
-		return false
-	}
-	return true
+	return s.checkRawName("element name", name, rawNameQName, ErrWriterInvalidElementName)
 }
 
 // checkAttributeName validates an attribute name about to be emitted verbatim.
@@ -372,16 +404,7 @@ func (s *writeSession) checkAttributeName(name string) bool {
 		s.check(fmt.Errorf("helium: reserved attribute name %q: namespace declarations must use DeclareNamespace: %w", name, ErrWriterReservedAttributeName))
 		return false
 	}
-	if !xmlchar.IsValidQName(name) {
-		s.check(fmt.Errorf("helium: invalid attribute name %q: %w", name, ErrWriterInvalidAttributeName))
-		return false
-	}
-	// An attribute name cannot hold a character reference, so a non-ASCII name
-	// has no faithful US-ASCII serialization.
-	if s.rejectNonASCIIStr("attribute name", name) {
-		return false
-	}
-	return true
+	return s.checkRawName("attribute name", name, rawNameQName, ErrWriterInvalidAttributeName)
 }
 
 // checkNamespaceBinding rejects a QName whose non-empty prefix resolves to an
@@ -424,17 +447,10 @@ func (s *writeSession) checkNamespacePrefix(prefix string) bool {
 		s.check(fmt.Errorf("helium: reserved namespace prefix %q must not be declared: %w", prefix, ErrWriterReservedNamespacePrefix))
 		return false
 	}
-	if prefix != "" && !xmlchar.IsValidNCName(prefix) {
-		s.check(fmt.Errorf("helium: invalid namespace prefix %q: %w", prefix, ErrWriterInvalidNamespacePrefix))
-		return false
+	if prefix == "" {
+		return true
 	}
-	// A namespace prefix cannot hold a character reference, so a non-ASCII prefix
-	// has no faithful US-ASCII serialization. (The namespace URI is an attribute
-	// value and stays char-referenced.)
-	if s.rejectNonASCIIStr("namespace prefix", prefix) {
-		return false
-	}
-	return true
+	return s.checkRawName("namespace prefix", prefix, rawNameNCName, ErrWriterInvalidNamespacePrefix)
 }
 
 // checkVerbatimName validates a name about to be emitted verbatim in a DTD
@@ -452,16 +468,13 @@ func (s *writeSession) checkNamespacePrefix(prefix string) bool {
 // rejection. On failure it records a sticky error (preserving any earlier one)
 // and returns false.
 func (s *writeSession) checkVerbatimName(what, name string) bool {
-	if !xmlchar.IsValidName(name) {
-		s.check(fmt.Errorf("helium: invalid %s %q: %w", what, name, ErrWriterInvalidName))
-		return false
-	}
-	// A name cannot hold a character reference, so a non-ASCII name has no faithful
-	// US-ASCII serialization.
-	if s.rejectNonASCIIStr(what, name) {
-		return false
-	}
-	return true
+	return s.checkRawName(what, name, rawNameName, ErrWriterInvalidName)
+}
+
+// checkVerbatimNCName validates a DTD declaration name that the parser requires
+// to be an NCName rather than a full DTD Name.
+func (s *writeSession) checkVerbatimNCName(what, name string) bool {
+	return s.checkRawName(what, name, rawNameNCName, ErrWriterInvalidName)
 }
 
 // parseCharRefBody decodes the numeric body of a character reference — the text
@@ -473,7 +486,7 @@ func parseCharRefBody(body string) (rune, bool) {
 		return 0, false
 	}
 	v := 0
-	if body[0] == 'x' || body[0] == 'X' {
+	if body[0] == 'x' {
 		hex := body[1:]
 		if hex == "" {
 			return 0, false
@@ -1196,10 +1209,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			// The PI target must be a valid XML Name (and not the reserved
 			// "xml"); otherwise an invalid/crafted target injects raw markup
 			// into the output (it is emitted verbatim below).
-			if !xmlchar.IsValidPITarget(pi.target) {
-				// check() keeps the first sticky error, so an earlier I/O failure
-				// is not clobbered by this validation error.
-				d.check(fmt.Errorf("helium: invalid PI target: %w", ErrWriterInvalidPITarget))
+			if !d.checkRawName("PI target", pi.target, rawNamePITarget, ErrWriterInvalidPITarget) {
 				return d.err
 			}
 			// PI data must not contain "?>", which would terminate the PI early.
@@ -1209,9 +1219,9 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 				d.check(fmt.Errorf("helium: PI content must not contain \"?>\": %w", ErrWriterInvalidPIContent))
 				return d.err
 			}
-			// Neither the PI target nor its data can hold a character reference, so
-			// non-ASCII in either has no faithful US-ASCII serialization.
-			if d.rejectNonASCIIStr("PI target", pi.target) || d.rejectNonASCIIStr("PI data", pi.data) {
+			// PI data cannot hold a character reference, so non-ASCII data has no
+			// faithful US-ASCII serialization. checkRawName handled the target.
+			if d.rejectNonASCIIStr("PI data", pi.data) {
 				return d.err
 			}
 			// PI data cannot carry a character reference either, so an XML-invalid

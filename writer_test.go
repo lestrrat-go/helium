@@ -2115,6 +2115,224 @@ func TestWriterRejectInvalidCharsCharRefTargets(t *testing.T) {
 	}
 }
 
+// TestWriterRejectsMalformedCharRefMarkup keeps lexical failures separate from
+// target-range handling. EntityRefNode stores a body without delimiters, while
+// EntityValue carries complete reference markup in both content and orig paths.
+func TestWriterRejectsMalformedCharRefMarkup(t *testing.T) {
+	t.Parallel()
+
+	newEntityDoc := func(t *testing.T, version, value string, orig bool) *helium.Document {
+		t.Helper()
+		doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("doc", "", "")
+		require.NoError(t, err)
+		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", value)
+		require.NoError(t, err)
+		if orig {
+			ent.SetOrig(value)
+		}
+		root, err := doc.CreateElement("doc")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+		return doc
+	}
+
+	for _, version := range []string{ver10, ver11} {
+		t.Run(version+"/entity-ref-uppercase-hex-introducer", func(t *testing.T) {
+			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
+			root, err := doc.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+			ref, err := doc.CreateCharRef("#X41")
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(ref))
+
+			var buf bytes.Buffer
+			require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, doc), helium.ErrWriterInvalidName)
+			require.NotContains(t, buf.String(), "&#X41;")
+		})
+
+		for _, tc := range []struct {
+			name  string
+			value string
+			orig  bool
+		}{
+			{name: "content-uppercase-hex-introducer", value: "&#X41;"},
+			{name: "content-missing-digits", value: "&#x;"},
+			{name: "content-bad-digit", value: "&#12z;"},
+			{name: "content-missing-semicolon", value: "&#12"},
+			{name: "content-overflow", value: "&#x110000;"},
+			{name: "orig-uppercase-hex-introducer", value: "&#X41;", orig: true},
+			{name: "orig-missing-digits", value: "&#x;", orig: true},
+			{name: "orig-bad-digit", value: "&#12z;", orig: true},
+			{name: "orig-missing-semicolon", value: "&#12", orig: true},
+			{name: "orig-overflow", value: "&#x110000;", orig: true},
+		} {
+			t.Run(version+"/"+tc.name, func(t *testing.T) {
+				var buf bytes.Buffer
+				err := helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, newEntityDoc(t, version, tc.value, tc.orig))
+				require.ErrorIs(t, err, helium.ErrWriterInvalidName)
+				require.NotContains(t, buf.String(), tc.value)
+			})
+		}
+	}
+}
+
+// TestWriterRejectsSurrogateCharRefTargets verifies that both numeric-reference
+// emitters reject the complete surrogate block in XML 1.0 and XML 1.1. Replacement
+// remains available only because the numeric syntax itself is valid.
+func TestWriterRejectsSurrogateCharRefTargets(t *testing.T) {
+	t.Parallel()
+
+	build := map[string]func(t *testing.T, version string) *helium.Document{
+		"entity-ref": func(t *testing.T, version string) *helium.Document {
+			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
+			root, err := doc.CreateElement("r")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+			ref, err := doc.CreateCharRef("#xD800")
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(ref))
+			return doc
+		},
+		"entity-value-content": func(t *testing.T, version string) *helium.Document {
+			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := doc.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&#xD800;")
+			require.NoError(t, err)
+			root, err := doc.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+			return doc
+		},
+		"entity-value-orig": func(t *testing.T, version string) *helium.Document {
+			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := doc.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "plain")
+			require.NoError(t, err)
+			ent.SetOrig("&#xD800;")
+			root, err := doc.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+			return doc
+		},
+	}
+
+	for _, version := range []string{ver10, ver11} {
+		for name, makeDoc := range build {
+			t.Run(version+"/"+name, func(t *testing.T) {
+				var buf bytes.Buffer
+				require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, makeDoc(t, version)), helium.ErrInvalidXMLChar)
+
+				buf.Reset()
+				require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, makeDoc(t, version)))
+				require.NotContains(t, buf.String(), "&#xD800;")
+				require.Contains(t, buf.String(), "&#xFFFD;")
+			})
+		}
+	}
+}
+
+// TestWriterRejectsMalformedEntityValueMarkup verifies that every ampersand in
+// content and parsed orig values is syntax, not repairable character data.
+func TestWriterRejectsMalformedEntityValueMarkup(t *testing.T) {
+	t.Parallel()
+
+	newEntityDoc := func(t *testing.T, value string, orig bool) *helium.Document {
+		t.Helper()
+		doc := helium.NewDocument(ver10, "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("doc", "", "")
+		require.NoError(t, err)
+		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", value)
+		require.NoError(t, err)
+		if orig {
+			ent.SetOrig(value)
+		}
+		root, err := doc.CreateElement("doc")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+		return doc
+	}
+
+	for _, tc := range []struct {
+		name  string
+		value string
+		orig  bool
+	}{
+		{name: "content-bare-ampersand", value: "&"},
+		{name: "content-missing-semicolon", value: "&name"},
+		{name: "content-invalid-name", value: "&9name;"},
+		{name: "content-whitespace-name", value: "&bad name;"},
+		{name: "orig-bare-ampersand", value: "&", orig: true},
+		{name: "orig-missing-semicolon", value: "&name", orig: true},
+		{name: "orig-invalid-name", value: "&9name;", orig: true},
+		{name: "orig-whitespace-name", value: "&bad name;", orig: true},
+		{name: "orig-bare-percent", value: "%", orig: true},
+		{name: "orig-parameter-missing-semicolon", value: "%pe", orig: true},
+		{name: "orig-parameter-invalid-name", value: "%9pe;", orig: true},
+		{name: "orig-parameter-reference", value: "%pe;", orig: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			require.ErrorIs(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, newEntityDoc(t, tc.value, tc.orig)), helium.ErrWriterInvalidName)
+			require.NotContains(t, buf.String(), tc.value)
+		})
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, newEntityDoc(t, "value&amp;more", false)))
+	require.Contains(t, buf.String(), "value&amp;more")
+}
+
+// TestWriterRejectsDTDDeclarationNamesRequiringNCName keeps DTD declaration
+// names distinct from the broader DTD Name grammar used by element constructs.
+func TestWriterRejectsDTDDeclarationNamesRequiringNCName(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		typ  enum.EntityType
+	}{
+		{name: "general", typ: enum.InternalGeneralEntity},
+		{name: "parameter", typ: enum.InternalParameterEntity},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := helium.NewDocument(ver10, "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := doc.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("p:e", tc.typ, "", "", "value")
+			require.NoError(t, err)
+			root, err := doc.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			var buf bytes.Buffer
+			require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, doc), helium.ErrWriterInvalidName)
+			require.NotContains(t, buf.String(), "<!ENTITY p:e")
+		})
+	}
+}
+
+// TestWriterEntityValueScannerHandlesRepeatedMalformedPrefixes gives the scanner
+// one terminal semicolon after many malformed starts. A one-pass scanner rejects
+// the first reference without repeatedly searching the remaining suffix.
+func TestWriterEntityValueScannerHandlesRepeatedMalformedPrefixes(t *testing.T) {
+	value := strings.Repeat("&#", 32*1024) + ";"
+	doc := helium.NewDocument(ver10, "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+	_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", value)
+	require.NoError(t, err)
+	root, err := doc.CreateElement("doc")
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(root))
+
+	var buf bytes.Buffer
+	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, doc), helium.ErrWriterInvalidName)
+}
+
 // TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
 func TestWriteStringWithoutDTD(t *testing.T) {
 	t.Parallel()

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -345,7 +346,7 @@ func isInCharacterRange(r rune) bool {
 	return r == 0x09 ||
 		r == 0x0A ||
 		r == 0x0D ||
-		r >= 0x20 && r <= 0xDF77 ||
+		r >= 0x20 && r <= 0xD7FF ||
 		r >= 0xE000 && r <= 0xFFFD ||
 		r >= 0x10000 && r <= 0x10FFFF
 }
@@ -421,73 +422,92 @@ func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
 	return string(out), false
 }
 
-// entityValueLiteral applies the DTD-literal policy to an entity-VALUE literal and
-// additionally validates every character reference the value carries. Unlike an
-// external-ID or enumeration literal (plain dtdLiteral), an EntityValue is subject
-// to reference recognition (XML §4.4.5): a &#N; / &#xN; is a real character
-// reference whose target must be serializable in the target XML version. So the
-// literal runes are screened by dtdLiteral (reference-less rule) and every numeric
-// character reference is validated by screenCharRefs against isSerializableChar —
-// a 1.1 EntityValue may reference a RestrictedChar (legal as &#1; under a 1.1
-// target), a 1.0 one may not. An invalid target is rejected (default) or its
-// reference replaced by the U+FFFD representation (RejectInvalidChars(false)).
-func (s *writeSession) entityValueLiteral(what, value string) (string, bool) {
-	lit, stop := s.dtdLiteral(what, value)
+// entityValueLiteral validates EntityValue markup before applying the raw-literal
+// character policy. A malformed reference always fails; only a syntactically
+// valid character-reference target may follow RejectInvalidChars replacement.
+// Parsed orig values are checked for parameter-entity syntax because this writer
+// emits an internal subset, where that syntax cannot be preserved in a declaration.
+func (s *writeSession) entityValueLiteral(what, value string, checkParameterEntityRefs bool) (string, bool) {
+	refs, stop := s.screenCharRefs(what, value, checkParameterEntityRefs)
 	if stop {
 		return "", true
 	}
-	if strings.IndexByte(lit, '&') == -1 {
-		return lit, false
-	}
-	return s.screenCharRefs(what, lit)
+	return s.dtdLiteral(what, refs)
 }
 
-// screenCharRefs validates every numeric character reference ("&#N;" / "&#xN;") in
-// an entity value, leaving named references (&amp;, &e;) and non-reference text
-// untouched. A reference whose target is serializable in the target XML version
-// (isSerializableChar) is preserved verbatim. An invalid target is a serialization
-// error: under the default policy it records a sticky ErrInvalidXMLChar (returning
-// stop=true); under RejectInvalidChars(false) the whole reference is replaced by
-// the U+FFFD representation — the &#xFFFD; reference when non-ASCII characters are
-// being escaped (EscapeNonASCII / US-ASCII output), the raw U+FFFD character
-// otherwise (matching the text/attribute escapers). A malformed "&#…" sequence is
-// left verbatim (a name-grammar matter outside the character policy). When nothing
-// is replaced it returns value unchanged so no copy is retained.
-func (s *writeSession) screenCharRefs(what, value string) (string, bool) {
+// screenCharRefs makes one forward pass over EntityValue markup. It shares
+// parseCharRefBody with EntityRefNode output and validates every '&' as either a
+// CharRef or a named general reference. checkParameterEntityRefs applies to a
+// parsed Entity.orig value, where any raw percent starts a forbidden PEReference
+// in the internal subset emitted by this writer.
+func (s *writeSession) screenCharRefs(what, value string, checkParameterEntityRefs bool) (string, bool) {
 	var b strings.Builder
 	last := 0
-	i := 0
-	for i < len(value) {
-		if value[i] != '&' || i+1 >= len(value) || value[i+1] != '#' {
-			i++
-			continue
-		}
-		semi := strings.IndexByte(value[i:], ';')
-		if semi == -1 {
-			break
-		}
-		refEnd := i + semi + 1
-		cp, ok := parseCharRefBody(value[i+2 : i+semi])
-		if !ok {
-			i += 2
-			continue
-		}
-		if isSerializableChar(cp, s.xml11) {
-			i = refEnd
-			continue
-		}
-		if !s.replaceInvalidChars {
-			s.check(fmt.Errorf("helium: %s contains a character reference to a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+	for i := 0; i < len(value); {
+		switch value[i] {
+		case '&':
+			end := i + 1
+			for end < len(value) && value[end] != ';' {
+				end++
+			}
+			if end == len(value) {
+				s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+
+			body := value[i+1 : end]
+			if len(body) == 0 {
+				s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			if body[0] != '#' {
+				if !xmlchar.IsValidName(body) {
+					s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+					return "", true
+				}
+				i = end + 1
+				continue
+			}
+
+			cp, ok := parseCharRefBody(body[1:])
+			if !ok {
+				s.check(fmt.Errorf("helium: %s contains a malformed character reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			if isSerializableChar(cp, s.xml11) {
+				i = end + 1
+				continue
+			}
+			if !s.replaceInvalidChars {
+				s.check(fmt.Errorf("helium: %s contains a character reference to a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+				return "", true
+			}
+			b.WriteString(value[last:i])
+			if s.escapeNonASCII || s.asciiOutput {
+				b.Write(esc_fffd_ref)
+			} else {
+				b.Write(esc_fffd)
+			}
+			last = end + 1
+			i = end + 1
+		case '%':
+			if !checkParameterEntityRefs {
+				i++
+				continue
+			}
+			end := i + 1
+			for end < len(value) && value[end] != ';' {
+				end++
+			}
+			if end == len(value) || !xmlchar.IsValidName(value[i+1:end]) {
+				s.check(fmt.Errorf("helium: %s contains a malformed parameter-entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			s.check(fmt.Errorf("helium: %s contains a parameter-entity reference that cannot be serialized in an internal subset: %w", what, ErrWriterInvalidName))
 			return "", true
+		default:
+			i++
 		}
-		b.WriteString(value[last:i])
-		if s.escapeNonASCII || s.asciiOutput {
-			b.Write(esc_fffd_ref)
-		} else {
-			b.Write(esc_fffd)
-		}
-		last = refEnd
-		i = refEnd
 	}
 	if last == 0 {
 		return value, false
