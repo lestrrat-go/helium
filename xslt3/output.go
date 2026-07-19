@@ -332,7 +332,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 // output. htmlVersion carries the effective html-version serialization
 // parameter (empty when unset) so nested html/xhtml serialization observes the
 // same version as the principal output, e.g. HTML 4.01 minimization rules.
-func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) string {
+func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) (string, error) {
 	var buf bytes.Buffer
 	switch method {
 	case methodHTML:
@@ -341,30 +341,36 @@ func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) strin
 		outDef.Method = methodHTML
 		outDef.OmitDeclaration = true
 		outDef.HTMLVersion = htmlVersion
-		_ = serializeHTML(&buf, doc, outDef)
+		if err := serializeHTML(&buf, doc, outDef); err != nil {
+			return "", err
+		}
 		s := buf.String()
 		// If we wrapped the node in <html>, strip the wrapper tags
 		if elem, ok := node.(*helium.Element); ok && !strings.EqualFold(elem.LocalName(), "html") {
 			s = strings.TrimPrefix(s, "<html>")
 			s = strings.TrimSuffix(s, "</html>")
 		}
-		return s
+		return s, nil
 	case methodXHTML:
 		doc := wrapNodeInDoc(node)
 		outDef := defaultOutputDef()
 		outDef.Method = methodXHTML
-		_ = serializeXHTML(&buf, doc, outDef, nil)
-		return buf.String()
+		if err := serializeXHTML(&buf, doc, outDef, nil); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
 	case methodText:
-		return nodeStringValue(node)
+		return nodeStringValue(node), nil
 	default: // "xml" or empty
 		switch node.(type) {
 		case *helium.Element, *helium.Document:
-			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node)
+			if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node); err != nil {
+				return "", err
+			}
 		default:
 			buf.Write(node.Content())
 		}
-		return buf.String()
+		return buf.String(), nil
 	}
 }
 

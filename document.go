@@ -430,7 +430,10 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 // CreateAttribute builds an attribute node named name, with value parsed into
 // its child node list, and optional namespace ns. A colon in name is rejected;
 // supply a namespaced name through ns instead. name is not otherwise checked
-// against the XML Name/NCName grammar.
+// against the XML Name/NCName grammar. When d is non-nil the attribute is
+// drawn from the document's slab allocator and records d as its owner
+// document, so it must not outlive a call to Document.Free. A nil receiver
+// allocates a standalone attribute with no owning document.
 func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Attribute, err error) {
 	if strings.ContainsRune(name, ':') {
 		return nil, fmt.Errorf("attribute name %q contains a colon: use CreateAttribute with a local name and Namespace parameter", name)
@@ -501,6 +504,11 @@ func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
 	attr.etype = AttributeNode
 	attr.name = name
 	attr.ns = ns
+	// Record the owning document, mirroring CreateElement/CreateText: a
+	// slab-backed attribute must report its owner so a cross-document move can
+	// mark the source document escaped (noteCrossDocumentEscape) and keep Free
+	// from recycling the chunk out from under the moved attribute.
+	attr.doc = d
 	return attr
 }
 

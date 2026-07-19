@@ -22,7 +22,12 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 			value = err.Error()
 		} else {
 			bodySeq = xpath3.ItemSlice(sequence.Materialize(result.Sequence()))
-			value = serializeMessageSequence(bodySeq)
+			s, serr := serializeMessageSequence(bodySeq)
+			if serr != nil {
+				return dynamicErrorCause(errCodeSERE0006, serr,
+					"xsl:message content could not be serialized: %s", serr)
+			}
+			value = s
 		}
 	}
 	if len(inst.Body) > 0 {
@@ -45,7 +50,12 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 			value += err.Error()
 		} else {
 			bodySeq = append(bodySeq, sequence.Materialize(val)...)
-			value += serializeMessageSequence(val)
+			s, serr := serializeMessageSequence(val)
+			if serr != nil {
+				return dynamicErrorCause(errCodeSERE0006, serr,
+					"xsl:message content could not be serialized: %s", serr)
+			}
+			value += s
 		}
 	}
 
@@ -96,9 +106,9 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 // xsl:message output. Node items (elements, documents) are serialized as
 // XML so that the message preserves markup structure. Atomic values are
 // converted to their string representations and joined with spaces.
-func serializeMessageSequence(seq xpath3.Sequence) string {
+func serializeMessageSequence(seq xpath3.Sequence) (string, error) {
 	if seq == nil || sequence.Len(seq) == 0 {
-		return ""
+		return "", nil
 	}
 	var sb strings.Builder
 	prevWasAtomic := false
@@ -125,9 +135,13 @@ func serializeMessageSequence(seq xpath3.Sequence) string {
 		var buf bytes.Buffer
 		switch n := ni.Node.(type) {
 		case *helium.Document:
-			_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, n)
+			if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, n); err != nil {
+				return "", err
+			}
 		case *helium.Element:
-			_ = helium.Write(&buf, n)
+			if err := helium.Write(&buf, n); err != nil {
+				return "", err
+			}
 		case *helium.Comment:
 			// Serialize comments as XML so they roundtrip properly
 			buf.WriteString("<!--")
@@ -148,7 +162,7 @@ func serializeMessageSequence(seq xpath3.Sequence) string {
 		}
 		sb.WriteString(strings.TrimSpace(buf.String()))
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) error {
