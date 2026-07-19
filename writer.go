@@ -504,6 +504,7 @@ func parseCharRefBody(body string) (rune, bool) {
 			default:
 				return 0, false
 			}
+			// Each per-digit limit bounds the next calculation to 17,825,791 (hex) or 11,141,119 (decimal), both 32-bit int-safe.
 			v = v*16 + d
 			if v > 0x10FFFF {
 				return 0, false
