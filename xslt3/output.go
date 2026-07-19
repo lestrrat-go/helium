@@ -412,6 +412,16 @@ func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) (stri
 	case methodText:
 		return nodeStringValue(node), nil
 	default: // "xml" or empty
+		// OutputDef.Version is deliberately NOT threaded here. Serialization 3.1
+		// §9.1/§9.1.17 delegate nodes serialized under the json output method to
+		// json-node-output-method with omit-xml-declaration=yes and "no other
+		// serialization parameters are passed down"; §9.1.1 declares the version
+		// parameter not applicable to the JSON output method. So this nested XML
+		// serialization runs at the default XML 1.0, and §5.1.1 requires SERE0006
+		// for the control characters #x1-#x1F under 1.0 (surfaced as the error
+		// below). Threading Version="1.1" to emit &#1; would be non-conformant.
+		// Contrast the adaptive method (§10.1), which passes all serialization
+		// parameters down — hence only the adaptive path threads the version.
 		switch node.(type) {
 		case *helium.Element, *helium.Document:
 			if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node); err != nil {
