@@ -1659,22 +1659,60 @@ func TestWriterOptions(t *testing.T) {
 func TestWriterRejectInvalidChars(t *testing.T) {
 	t.Parallel()
 
-	// A C0 control character (U+0007) is invalid in XML 1.0. By default the
-	// writer replaces it with U+FFFD; with RejectInvalidChars it fails with
-	// ErrInvalidXMLChar (the SERE0006 serialization error).
+	// A C0 control character (U+0001) is invalid in XML 1.0. By default the
+	// writer REJECTS it with ErrInvalidXMLChar (the SERE0006 serialization
+	// error); RejectInvalidChars(false) opts into U+FFFD replacement.
 	textDoc := func() *helium.Document {
 		d := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 		r, err := d.CreateElement("r")
 		require.NoError(t, err)
 		require.NoError(t, d.AddChild(r))
-		require.NoError(t, r.AppendText([]byte("a\x07b")))
+		require.NoError(t, r.AppendText([]byte("a\x01b")))
+		return d
+	}
+	attrDoc := func() *helium.Document {
+		d := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		r, err := d.CreateElement("r")
+		require.NoError(t, err)
+		require.NoError(t, d.AddChild(r))
+		_, err = r.SetAttribute("v", "x\x01y")
+		require.NoError(t, err)
 		return d
 	}
 
-	// Default (with EscapeNonASCII off, matching the xslt3 XML path): the
-	// control char is replaced with U+FFFD and no error is raised.
+	// Default (zero-value Writer / NewWriter): an invalid char in text OR in an
+	// attribute value is rejected, and the failure matches ErrInvalidXMLChar.
+	_, err := helium.WriteString(textDoc())
+	require.ErrorIs(t, err, helium.ErrInvalidXMLChar)
 	var buf bytes.Buffer
-	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).WriteTo(&buf, textDoc()))
+	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, textDoc()), helium.ErrInvalidXMLChar)
+	buf.Reset()
+	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, attrDoc()), helium.ErrInvalidXMLChar)
+
+	// EscapeNonASCII(false) still rejects by default \u2014 the check runs before any
+	// char-reference/replacement branch, independent of the escaping setting.
+	buf.Reset()
+	require.ErrorIs(t, helium.NewWriter().EscapeNonASCII(false).WriteTo(&buf, textDoc()), helium.ErrInvalidXMLChar)
+
+	// RejectInvalidChars(false) replaces the invalid char with U+FFFD. Under the
+	// default EscapeNonASCII the replacement is the &#xFFFD; reference (matching
+	// libxml2) \u2014 NEVER a bogus &#x1; reference for the out-of-range char.
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, textDoc()))
+	require.Contains(t, buf.String(), "&#xFFFD;")
+	require.NotContains(t, buf.String(), "&#x1;")
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, attrDoc()))
+	require.Contains(t, buf.String(), "&#xFFFD;")
+	require.NotContains(t, buf.String(), "&#x1;")
+
+	// With EscapeNonASCII(false) the replacement is the raw U+FFFD character.
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, textDoc()))
+	require.Contains(t, buf.String(), "\uFFFD")
+	require.NotContains(t, buf.String(), "&#x1;")
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, attrDoc()))
 	require.Contains(t, buf.String(), "\uFFFD")
 
 	// RejectInvalidChars rejects the control char regardless of the
@@ -1688,25 +1726,66 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 
 	// A control char in an attribute value is rejected too (escaping covers
 	// attribute values, not only text nodes).
-	attrDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	r, err := attrDoc.CreateElement("r")
+	explicitAttrDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	r, err := explicitAttrDoc.CreateElement("r")
 	require.NoError(t, err)
-	require.NoError(t, attrDoc.AddChild(r))
+	require.NoError(t, explicitAttrDoc.AddChild(r))
 	err = r.SetAttribute("v", "x\x07y")
 	require.NoError(t, err)
 	buf.Reset()
-	err = helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, attrDoc)
+	err = helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, explicitAttrDoc)
 	require.ErrorIs(t, err, helium.ErrInvalidXMLChar)
 
-	// A valid document still serializes cleanly with rejection enabled.
+	// A valid document still serializes cleanly under the default rejection.
 	okDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 	e, err := okDoc.CreateElement("r")
 	require.NoError(t, err)
 	require.NoError(t, okDoc.AddChild(e))
 	require.NoError(t, e.AppendText([]byte("plain text\tok")))
 	buf.Reset()
-	require.NoError(t, helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, okDoc))
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, okDoc))
 	require.Contains(t, buf.String(), "plain text\tok")
+}
+
+func TestWriterXML11RestrictedChars(t *testing.T) {
+	t.Parallel()
+
+	// U+0001 is a restricted-but-VALID character in XML 1.1, serialized as a
+	// decimal character reference \u2014 never rejected and never replaced with
+	// U+FFFD \u2014 regardless of the RejectInvalidChars setting.
+	textDoc := func() *helium.Document {
+		d := helium.NewDocument("1.1", "UTF-8", helium.StandaloneImplicitNo)
+		r := d.CreateElement("r")
+		require.NoError(t, d.AddChild(r))
+		require.NoError(t, r.AppendText([]byte("a\x01b")))
+		return d
+	}
+	attrDoc := func() *helium.Document {
+		d := helium.NewDocument("1.1", "UTF-8", helium.StandaloneImplicitNo)
+		r := d.CreateElement("r")
+		require.NoError(t, d.AddChild(r))
+		_, err := r.SetAttribute("v", "x\x01y")
+		require.NoError(t, err)
+		return d
+	}
+
+	// Default (rejection) mode: the restricted char serializes as &#1;.
+	var buf bytes.Buffer
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, textDoc()))
+	require.Contains(t, buf.String(), "&#1;")
+	require.NotContains(t, buf.String(), "\uFFFD")
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, attrDoc()))
+	require.Contains(t, buf.String(), "&#1;")
+
+	// Replacement mode: same decimal character reference, unaffected.
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, textDoc()))
+	require.Contains(t, buf.String(), "&#1;")
+	require.NotContains(t, buf.String(), "\uFFFD")
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, attrDoc()))
+	require.Contains(t, buf.String(), "&#1;")
 }
 
 // TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
