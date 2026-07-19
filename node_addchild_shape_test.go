@@ -115,6 +115,26 @@ func TestTextAddChildRejectsAttribute(t *testing.T) {
 	require.ErrorIs(t, err, helium.ErrInvalidOperation)
 }
 
+// A ProcessingInstruction carries its content as a string, not as child nodes,
+// so an attribute has no valid placement on it. Its AddChild override handles
+// the operand itself (never reaching the shared addChild rejection), so it must
+// reject an Attribute operand with a wrapped ErrInvalidOperation and leave the
+// PI unchanged.
+func TestPIAddChildRejectsAttribute(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	pi := doc.CreatePI("target", "data")
+
+	attr, err := doc.CreateAttribute("a", "v", nil)
+	require.NoError(t, err)
+
+	err = pi.AddChild(attr)
+	require.Error(t, err)
+	require.ErrorIs(t, err, helium.ErrInvalidOperation)
+
+	// The PI content is unchanged by the rejected operand.
+	require.Equal(t, "data", string(pi.Content()))
+}
+
 // Regression guard: routing an attribute through AddChild must not leave a
 // stray child element in the serialized output.
 func TestAddChildAttributeSerializationShape(t *testing.T) {

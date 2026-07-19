@@ -150,6 +150,13 @@ func (p *ProcessingInstruction) AddChild(cur Node) error {
 	if isNilNode(cur) {
 		return ErrNilNode
 	}
+	// An Attribute has no valid placement on a PI (attributes belong on an
+	// element). Reject it BEFORE the type switch with the same %w-wrapped
+	// ErrInvalidOperation shape the shared addChild uses for a non-element
+	// parent, so callers can errors.Is it like every other AddChild rejection.
+	if _, ok := cur.(*Attribute); ok {
+		return fmt.Errorf("%w: cannot add an attribute as a child of a %s node; attributes belong on an element", ErrInvalidOperation, p.Type())
+	}
 	switch cur.Type() {
 	case TextNode, CDATASectionNode:
 		// Run the shared self/cycle guard and auto-unlink BEFORE merging the
