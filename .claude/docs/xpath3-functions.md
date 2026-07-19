@@ -287,10 +287,12 @@ element form keeps the Serialization-spec default (declaration emitted).
 The DTD / internal subset of a SOURCE document node is NOT part of the XDM data
 model (a document node's children are element/PI/comment/text nodes only), so
 `fn:serialize` never reproduces it: `newSerializeXMLWriter` sets
-`Writer.IncludeDTD(opts.doctypeSystem != "")`, dropping any source DTD unless a
-`doctype-system` param is present (in which case the writer emits the freshly
-injected empty-internal-subset DTD from the doctype path). W3C
-fn-doc-25/26/29, parse-xml-006/008/009/013.
+`Writer.IncludeDTD(opts.doctypeSystem != "" && opts.methodEmitsDoctype())`,
+dropping any source DTD unless a `doctype-system` param is present on a
+DOCTYPE-emitting method (in which case the writer emits the freshly injected
+empty-internal-subset DTD from the doctype path); the adaptive and json methods,
+whose node items serialize through the same writer, ignore `doctype-system` and
+never emit a DTD. W3C fn-doc-25/26/29, parse-xml-006/008/009/013.
 
 **In-scope namespaces on an isolated element.** `fn:serialize` serializes an
 element as if it were the root of a tree, so an element selected from a larger
@@ -412,9 +414,13 @@ sentinel rune (Supplementary Private Use Area-A, unaffected by normalization)
 during serialization (XML/HTML/text/json alike), then `expandCharMapSentinels`
 restores the verbatim replacement AFTER normalization — so replacements pass
 through un-normalized while the surrounding content is normalized (the markup
-writer normalizes only the runs AROUND a mapped key and emits the key's
-replacement — here the sentinel — verbatim, so the sentinel, and thus the
-eventual replacement, is never touched by the normalize pass).
+writer decides character-map matches on the PRE-normalization content —
+`normalizeContent` normalizes only the runs AROUND a mapped key, swaps each
+matched key for its own internal sentinel, and hands the escaper the sentinel
+map — so the key's replacement — here the xpath3 sentinel — is emitted verbatim,
+never touched by the normalize pass, and a mapped rune CREATED by normalization
+is ordinary content, not newly matched: Serialization 3.1 §4 applies character
+mapping — rule c — before normalization — rule d — and never re-applies it).
 `json-node-output-method` is validated against its OWN
 narrower domain (`xml`/`html`/`xhtml`/`text` or an extension QName — NOT
 `json`/`adaptive`, via `serializeJSONNodeOutputMethodValid`); only its default

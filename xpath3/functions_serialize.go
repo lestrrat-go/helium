@@ -1852,8 +1852,11 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 	// empty). When doctype-system is set, serializeNodeItem/applyDoctype inject a
 	// fresh empty-internal-subset DTD carrying the requested identifiers, and the
 	// writer must emit that; otherwise any DTD present on the source tree is
-	// dropped.
-	writer = writer.IncludeDTD(opts.doctypeSystem != "")
+	// dropped. The gate mirrors serializeNodeItem's applyDoctype gate: the
+	// adaptive and json methods, whose node items also serialize through this
+	// writer, ignore doctype-system entirely — no fresh DTD is injected for them,
+	// so IncludeDTD(true) would leak the SOURCE document's own DTD.
+	writer = writer.IncludeDTD(opts.doctypeSystem != "" && opts.methodEmitsDoctype())
 	if opts.omitXMLDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}

@@ -879,6 +879,22 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.NotContains(t, out, "<!ELEMENT", "output:\n%s", out)
 	})
 
+	// The adaptive method ignores doctype-system (Serialization 3.1 §5.1.7 scopes
+	// the parameter to the DOCTYPE-emitting methods), and a source document's DTD
+	// is not part of the XDM data model, so adaptive output carries no document
+	// type declaration at all — in particular the SOURCE document's own DTD must
+	// not leak out when doctype-system is supplied.
+	t.Run("adaptive + doctype-system emits no DTD from the source document", func(t *testing.T) {
+		doc := mustParseXML(t, `<!DOCTYPE root SYSTEM "source.dtd"><root/>`)
+		res, err := evaluate(t.Context(), doc,
+			`serialize(., map{"method":"adaptive","doctype-system":"requested.dtd"})`)
+		require.NoError(t, err)
+		out := res.StringValue()
+		require.NotContains(t, out, "<!DOCTYPE", "output:\n%s", out)
+		require.NotContains(t, out, "source.dtd", "output:\n%s", out)
+		require.Contains(t, out, "<root/>", "output:\n%s", out)
+	})
+
 	t.Run("html method with doctype-system does not raise SEPM0009", func(t *testing.T) {
 		doc := mustParseXML(t, `<?xml version="1.0" encoding="UTF-8"?><html><head/><body/></html>`)
 		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"html","doctype-system":"about:legacy-compat"})`)

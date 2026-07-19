@@ -1822,6 +1822,60 @@ func TestWriterCharMapNormalizationVerbatim(t *testing.T) {
 	})
 }
 
+// TestWriterCharMapNormalizationCreatedRune verifies that character-map matching
+// is decided on the PRE-normalization content (Serialization 3.1 §4: character
+// mapping — rule c — precedes Unicode normalization — rule d — and is never
+// re-applied): a mapped rune CREATED by NFC composition is emitted as that rune,
+// not as the replacement, so mapped-rune treatment is identical with and without
+// Normalization; a mapped rune PRESENT in the input still maps in both.
+func TestWriterCharMapNormalizationCreatedRune(t *testing.T) {
+	t.Parallel()
+
+	const decomposed = "é" // "e" + combining acute
+	const composed = "é"    // U+00E9
+	m := map[rune]string{'é': "<mapped>"}
+
+	serialize := func(t *testing.T, form, src string) string {
+		t.Helper()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		var buf strings.Builder
+		err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
+			CharacterMap(m).Normalization(form).WriteTo(&buf, doc)
+		require.NoError(t, err)
+		return buf.String()
+	}
+
+	t.Run("NFC-composed rune is not newly matched", func(t *testing.T) {
+		t.Parallel()
+		src := `<a x="` + decomposed + `">` + decomposed + `</a>`
+		// Without Normalization the decomposed pair matches nothing.
+		out := serialize(t, "", src)
+		require.Contains(t, out, ">"+decomposed+"</a>", "text unmapped without normalization: %q", out)
+		require.Contains(t, out, `x="`+decomposed+`"`, "attr unmapped without normalization: %q", out)
+		require.NotContains(t, out, "<mapped>", "no replacement without normalization: %q", out)
+		// With NFC the pair composes to é — a rune CREATED by normalization — so
+		// it is emitted as é, not substituted with the replacement.
+		out = serialize(t, "NFC", src)
+		require.Contains(t, out, ">"+composed+"</a>", "text composed, not mapped: %q", out)
+		require.Contains(t, out, `x="`+composed+`"`, "attr composed, not mapped: %q", out)
+		require.NotContains(t, out, "<mapped>", "no replacement for a normalization-created rune: %q", out)
+	})
+
+	t.Run("input-present mapped rune still maps under NFC", func(t *testing.T) {
+		t.Parallel()
+		// Text mixes an input-present é (must map in both configurations) with a
+		// decomposed pair (must map in neither).
+		src := `<a x="` + composed + `">` + composed + decomposed + `</a>`
+		out := serialize(t, "", src)
+		require.Contains(t, out, `x="<mapped>"`, "attr mapped without normalization: %q", out)
+		require.Contains(t, out, "><mapped>"+decomposed+"</a>", "text: input é mapped, pair untouched: %q", out)
+		out = serialize(t, "NFC", src)
+		require.Contains(t, out, `x="<mapped>"`, "attr mapped under NFC: %q", out)
+		require.Contains(t, out, "><mapped>"+composed+"</a>", "text: input é mapped, pair composed unmapped: %q", out)
+	})
+}
+
 // TestWriteReconcilesSubtreeNamespaces verifies that serializing a subtree
 // re-declares any namespace prefix its elements or attributes use but that was
 // bound only on an ancestor outside the subtree, so the output reparses. This

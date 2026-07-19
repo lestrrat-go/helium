@@ -44,55 +44,123 @@ func validNormalizationForm(form string) bool {
 }
 
 // normalizeContent applies the writer's requested Unicode normalization to a text
-// or attribute node's character content while leaving character-map replacement
-// spans inert. When a character map is in force, each maximal run of non-mapped
-// characters is normalized on its own and every mapped character is copied
-// through UNCHANGED, so the caller still passes the character map to the escaper
-// — which substitutes the mapped character with its replacement verbatim (not
-// re-escaped, not normalized), matching Serialization 3.1 §7. Normalizing around
-// (rather than through) a mapped character keeps the replacement byte-identical
-// regardless of the requested form. It must only be called when d.normalize is
-// true.
-func (d *writeSession) normalizeContent(s []byte) []byte {
+// or attribute node's character content and returns the content together with the
+// character map the escaper must apply to it. Character-map matching is decided
+// on the PRE-normalization content — Serialization 3.1 §4 applies character
+// mapping (rule c) before Unicode normalization (rule d) and never re-applies it
+// — so a rune CREATED by normalization (e.g. NFC composing "e"+U+0301 into
+// U+00E9) is ordinary content, never newly matched by the map. Each mapped input
+// rune is replaced by a private-use sentinel rune absent from the content, every
+// maximal run of non-mapped characters is normalized on its own, and the returned
+// map translates each sentinel to the original rune's replacement, which the
+// escaper emits verbatim (not re-escaped, not normalized), matching Serialization
+// 3.1 §7. It must only be called when d.normalize is true.
+func (d *writeSession) normalizeContent(s []byte) ([]byte, map[rune]string) {
 	if len(d.charMap) == 0 {
-		return d.normForm.Bytes(s)
+		return d.normForm.Bytes(s), nil
 	}
 	var b bytes.Buffer
 	b.Grow(len(s))
+	// Sentinel state is allocated lazily on the first mapped rune, so content
+	// containing no mapped rune pays only the scan.
+	var used map[rune]struct{}
+	var sentinelFor map[rune]rune
+	var sentinels map[rune]string
 	seg := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
-		if _, ok := d.charMap[r]; !ok {
+		repl, mapped := d.charMap[r]
+		if !mapped {
 			i += width
 			continue
 		}
 		// Normalize the non-mapped run ending just before this mapped character,
-		// then copy the mapped character through unchanged so the escaper still
-		// recognizes it and emits its replacement verbatim.
+		// then write the character's sentinel so the escaper substitutes exactly
+		// this pre-normalization occurrence.
 		if i > seg {
 			b.Write(d.normForm.Bytes(s[seg:i]))
 		}
-		b.Write(s[i : i+width])
+		if used == nil {
+			used = contentRunes(s)
+			sentinelFor = make(map[rune]rune, len(d.charMap))
+			sentinels = make(map[rune]string, len(d.charMap))
+		}
+		sent, ok := sentinelFor[r]
+		if !ok {
+			sent = nextCharMapSentinel(used, r)
+			sentinelFor[r] = sent
+			sentinels[sent] = repl
+		}
+		b.WriteRune(sent)
 		i += width
 		seg = i
+	}
+	if sentinels == nil {
+		// No mapped rune in the content: normalize it whole and give the escaper
+		// no character map, so a normalization-created rune stays unmapped.
+		return d.normForm.Bytes(s), nil
 	}
 	if seg < len(s) {
 		b.Write(d.normForm.Bytes(s[seg:]))
 	}
-	return b.Bytes()
+	return b.Bytes(), sentinels
+}
+
+// contentRunes collects the distinct runes present in s. normalizeContent uses
+// the set to pick character-map sentinel runes that cannot collide with real
+// content.
+func contentRunes(s []byte) map[rune]struct{} {
+	set := make(map[rune]struct{})
+	for i := 0; i < len(s); {
+		r, width := utf8.DecodeRune(s[i:])
+		set[r] = struct{}{}
+		i += width
+	}
+	return set
+}
+
+// charMapSentinelRanges lists the Unicode private-use ranges normalizeContent
+// draws sentinel runes from. Normalization never produces a private-use rune from
+// other input (private-use characters have no decompositions and take part in no
+// compositions), so a private-use rune absent from the raw content cannot appear
+// in a normalized run.
+var charMapSentinelRanges = [...][2]rune{
+	{0xE000, 0xF8FF},     // Private Use Area (BMP)
+	{0xF0000, 0xFFFFD},   // Supplementary Private Use Area-A
+	{0x100000, 0x10FFFD}, // Supplementary Private Use Area-B
+}
+
+// nextCharMapSentinel returns a private-use rune not present in used, marking it
+// used. In the unreachable-in-practice case that every private-use rune occurs in
+// the content (~137k distinct runes), it falls back to orig — that rune then also
+// matches post-normalization occurrences, which degrades gracefully instead of
+// corrupting output.
+func nextCharMapSentinel(used map[rune]struct{}, orig rune) rune {
+	for _, rng := range charMapSentinelRanges {
+		for r := rng[0]; r <= rng[1]; r++ {
+			if _, ok := used[r]; ok {
+				continue
+			}
+			used[r] = struct{}{}
+			return r
+		}
+	}
+	return orig
 }
 
 // writeAttrValueContent escapes an attribute value's character content, applying
 // the requested Unicode normalization (scoped to attribute nodes) and character
 // maps. Shared by the generic and XHTML serialization paths.
 func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) error {
+	charMap := d.charMap
 	if d.normalize {
-		// normalizeContent normalizes only the non-mapped runs and leaves mapped
-		// characters in place, so the character map still drives the escaper to
-		// emit each replacement verbatim.
-		content = d.normalizeContent(content)
+		// Character-map matches are decided on the pre-normalization content:
+		// normalizeContent swaps each mapped rune for a sentinel and returns the
+		// sentinel map for the escaper, so a normalization-created rune is never
+		// newly matched and each replacement is still emitted verbatim.
+		content, charMap = d.normalizeContent(content)
 	}
-	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap)
+	return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, charMap)
 }
 
 var (
