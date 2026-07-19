@@ -1793,71 +1793,157 @@ func TestWriterXML11RestrictedChars(t *testing.T) {
 // TestWriterRejectInvalidCharsRefFreeContexts covers the reference-less
 // serialization contexts — comment, PI data, and CDATA-section content — where a
 // character reference is not available. A C0 control (U+0001) is invalid in XML
-// 1.0 AND a RestrictedChar in XML 1.1, so it is unserializable in these contexts
-// in BOTH versions (unlike element/attribute text, where XML 1.1 may carry it as a
-// character reference). The default policy rejects with ErrInvalidXMLChar;
-// RejectInvalidChars(false) substitutes a raw U+FFFD, never a bogus &#x1;/&#1;.
+// 1.0 and restricted in XML 1.1. U+007F is valid in XML 1.0 but must be a
+// character reference in XML 1.1. Both are unserializable in these contexts. The
+// default policy rejects with ErrInvalidXMLChar; RejectInvalidChars(false)
+// substitutes a raw U+FFFD, never a character reference.
 func TestWriterRejectInvalidCharsRefFreeContexts(t *testing.T) {
 	t.Parallel()
 
-	build := map[string]func(version string) *helium.Document{
-		"comment-node": func(v string) *helium.Document {
+	build := map[string]func(version, value string) *helium.Document{
+		"comment-node": func(v, value string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
 			r, err := d.CreateElement("r")
 			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AddChild(d.CreateComment([]byte("a\x01b"))))
+			require.NoError(t, r.AddChild(d.CreateComment([]byte(value))))
 			return d
 		},
-		"pi-data": func(v string) *helium.Document {
+		"pi-data": func(v, value string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
 			r, err := d.CreateElement("r")
 			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AddChild(d.CreatePI("t", "a\x01b")))
+			require.NoError(t, r.AddChild(d.CreatePI("t", value)))
 			return d
 		},
-		"cdata-section-node": func(v string) *helium.Document {
+		"cdata-section-node": func(v, value string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
 			r, err := d.CreateElement("r")
 			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AddChild(d.CreateCDATASection([]byte("a\x01b"))))
+			require.NoError(t, r.AddChild(d.CreateCDATASection([]byte(value))))
 			return d
 		},
-		"cdata-section-element": func(v string) *helium.Document {
+		"cdata-section-element": func(v, value string) *helium.Document {
 			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
 			r, err := d.CreateElement("r")
 			require.NoError(t, err)
 			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AppendText([]byte("a\x01b")))
+			require.NoError(t, r.AppendText([]byte(value)))
 			return d
 		},
 	}
 
-	for _, version := range []string{ver10, ver11} {
+	for _, tc := range []struct {
+		name    string
+		version string
+		value   string
+		ref     string
+	}{
+		{name: "xml10-c0", version: ver10, value: "a\x01b", ref: "&#1;"},
+		{name: "xml11-c0", version: ver11, value: "a\x01b", ref: "&#1;"},
+		{name: "xml11-restricted", version: ver11, value: "a\x7fb", ref: "&#127;"},
+	} {
 		for name, mk := range build {
-			t.Run(version+"/"+name, func(t *testing.T) {
+			t.Run(tc.name+"/"+name, func(t *testing.T) {
 				t.Parallel()
 				w := helium.NewWriter()
 				if name == "cdata-section-element" {
 					w = w.CDATASectionElements(map[string]struct{}{"{}r": {}})
 				}
 
-				// Default policy rejects with ErrInvalidXMLChar in both versions.
+				// Default policy rejects with ErrInvalidXMLChar.
 				var buf bytes.Buffer
-				require.ErrorIs(t, w.WriteTo(&buf, mk(version)), helium.ErrInvalidXMLChar)
+				require.ErrorIs(t, w.WriteTo(&buf, mk(tc.version, tc.value)), helium.ErrInvalidXMLChar)
 
 				// Replacement mode substitutes a raw U+FFFD (a reference-less
-				// context cannot emit &#xFFFD;), never a bogus &#x1;/&#1;.
+				// context cannot emit a character reference).
 				buf.Reset()
-				require.NoError(t, w.RejectInvalidChars(false).WriteTo(&buf, mk(version)))
+				require.NoError(t, w.RejectInvalidChars(false).WriteTo(&buf, mk(tc.version, tc.value)))
 				require.Contains(t, buf.String(), "�")
-				require.NotContains(t, buf.String(), "&#x1;")
-				require.NotContains(t, buf.String(), "&#1;")
+				require.NotContains(t, buf.String(), tc.ref)
 			})
 		}
 	}
+}
+
+func TestWriterXML11EntityValueRestrictedChars(t *testing.T) {
+	t.Parallel()
+
+	newDoc := func(t *testing.T, version string, typ enum.EntityType, orig bool, value string) *helium.Document {
+		t.Helper()
+		doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("doc", "", "")
+		require.NoError(t, err)
+		ent, err := dtd.AddEntity("e", typ, "", "", value)
+		require.NoError(t, err)
+		if orig {
+			ent.SetOrig(value)
+		}
+		root, err := doc.CreateElement("doc")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+		return doc
+	}
+
+	for _, tc := range []struct {
+		name string
+		typ  enum.EntityType
+		orig bool
+	}{
+		{name: "general-content", typ: enum.InternalGeneralEntity},
+		{name: "general-orig", typ: enum.InternalGeneralEntity, orig: true},
+		{name: "parameter-content", typ: enum.InternalParameterEntity},
+		{name: "parameter-orig", typ: enum.InternalParameterEntity, orig: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, writer := range []helium.Writer{
+				helium.NewWriter(),
+				helium.NewWriter().RejectInvalidChars(false),
+			} {
+				var buf bytes.Buffer
+				require.NoError(t, writer.WriteTo(&buf, newDoc(t, ver11, tc.typ, tc.orig, "a\x7fb")))
+				require.Contains(t, buf.String(), "a&#127;b")
+				require.NotContains(t, buf.String(), "a\x7fb")
+			}
+
+			// XML 1.0 keeps U+007F literal in every EntityValue storage path.
+			var buf bytes.Buffer
+			require.NoError(t, helium.NewWriter().WriteTo(&buf, newDoc(t, ver10, tc.typ, tc.orig, "a\x7fb")))
+			require.Contains(t, buf.String(), "a\x7fb")
+			require.NotContains(t, buf.String(), "a&#127;b")
+
+			// A validated reference remains verbatim instead of being double-escaped.
+			buf.Reset()
+			require.NoError(t, helium.NewWriter().WriteTo(&buf, newDoc(t, ver11, tc.typ, tc.orig, "a&#127;b")))
+			require.Contains(t, buf.String(), "a&#127;b")
+		})
+	}
+}
+
+func TestWriterRejectsXML11RestrictedCharsInDTDLiterals(t *testing.T) {
+	t.Parallel()
+
+	newDoc := func() *helium.Document {
+		doc := helium.NewDocument(ver11, "UTF-8", helium.StandaloneImplicitNo)
+		_, err := doc.CreateInternalSubset("doc", "", "sys\x7fid")
+		require.NoError(t, err)
+		root, err := doc.CreateElement("doc")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+		return doc
+	}
+
+	var buf bytes.Buffer
+	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, newDoc()), helium.ErrInvalidXMLChar)
+
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, newDoc()))
+	require.Contains(t, buf.String(), "sys�id")
+	require.NotContains(t, buf.String(), "&#127;")
 }
 
 func TestWriterRejectInvalidCharsExternalEntityPublicID(t *testing.T) {
