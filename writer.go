@@ -496,10 +496,17 @@ func (w Writer) AllowPrefixUndeclarations(v bool) Writer {
 // valid in the target XML version (e.g. a C0/C1 control character in XML 1.0
 // output). When true (the default) the write fails with ErrInvalidXMLChar (the
 // XSLT/XQuery serialization error SERE0006); when false such a character is
-// replaced with U+FFFD instead. This detection is folded into the existing
-// text/attribute escaping pass, so it adds no extra traversal. A valid XML 1.1
-// restricted character is never affected — it serializes as a decimal character
-// reference in both modes.
+// replaced with U+FFFD instead. The policy covers every serialization context:
+// text and attribute values (where the detection is folded into the escaping
+// pass, adding no extra traversal), and the reference-less contexts — comment
+// text, processing-instruction data, CDATA-section content, and DTD literals
+// (entity values, external-ID system/public literals, enumeration tokens). In a
+// reference-less context a valid XML 1.1 restricted character has no
+// character-reference form, so it is rejected/replaced there too; in text and
+// attribute values it is never affected — it serializes as a decimal character
+// reference in both modes. A character map (CharacterMap) is applied before the
+// check, so a mapped-away invalid character is not rejected — the SERE0006
+// condition is defined on the serialized result, which no longer contains it.
 func (w Writer) RejectInvalidChars(v bool) Writer {
 	w.replaceInvalidChars = !v
 	return w
@@ -1048,6 +1055,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		if d.rejectNonASCIIBytes("comment content", content) {
 			return d.err
 		}
+		// A comment cannot carry a character reference either, so an XML-invalid
+		// character has no serializable form: reject (default) or U+FFFD-replace.
+		content, stop := d.serializeRefFree("comment content", content)
+		if stop {
+			return d.err
+		}
 		d.writeString(out, "<!--")
 		d.writeBytes(out, content)
 		d.writeString(out, "-->")
@@ -1076,11 +1089,18 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if d.rejectNonASCIIStr("PI target", pi.target) || d.rejectNonASCIIStr("PI data", pi.data) {
 				return d.err
 			}
+			// PI data cannot carry a character reference either, so an XML-invalid
+			// character has no serializable form: reject (default) or U+FFFD-replace.
+			// The target is already constrained to Name characters by IsValidPITarget.
+			data, stop := d.serializeRefFree("PI data", []byte(pi.data))
+			if stop {
+				return d.err
+			}
 			d.writeString(out, "<?")
 			d.writeString(out, pi.target)
-			if pi.data != "" {
+			if len(data) > 0 {
 				d.writeString(out, " ")
-				d.writeString(out, pi.data)
+				d.writeBytes(out, data)
 			}
 			d.writeString(out, "?>")
 		}
@@ -1119,6 +1139,13 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if d.rejectNonASCIIBytes("CDATA section", c) {
 				return d.err
 			}
+			// Nor can it carry a character reference for an XML-invalid character:
+			// reject (default) or U+FFFD-replace before splitting on "]]>".
+			var stop bool
+			c, stop = d.serializeRefFree("CDATA section", c)
+			if stop {
+				return d.err
+			}
 			if d.normalize {
 				c = d.normForm.Bytes(c)
 			}
@@ -1146,6 +1173,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		// A CDATA section cannot hold a character reference, so non-ASCII content
 		// has no faithful US-ASCII serialization.
 		if d.rejectNonASCIIBytes("CDATA section", cdata) {
+			return d.err
+		}
+		// Nor can it carry a character reference for an XML-invalid character:
+		// reject (default) or U+FFFD-replace before splitting on "]]>".
+		cdata, stop := d.serializeRefFree("CDATA section", cdata)
+		if stop {
 			return d.err
 		}
 		if d.normalize {

@@ -1788,6 +1788,99 @@ func TestWriterXML11RestrictedChars(t *testing.T) {
 	require.Contains(t, buf.String(), "&#1;")
 }
 
+// TestWriterRejectInvalidCharsRefFreeContexts covers the reference-less
+// serialization contexts — comment, PI data, and CDATA-section content — where a
+// character reference is not available. A C0 control (U+0001) is invalid in XML
+// 1.0 AND a RestrictedChar in XML 1.1, so it is unserializable in these contexts
+// in BOTH versions (unlike element/attribute text, where XML 1.1 may carry it as a
+// character reference). The default policy rejects with ErrInvalidXMLChar;
+// RejectInvalidChars(false) substitutes a raw U+FFFD, never a bogus &#x1;/&#1;.
+func TestWriterRejectInvalidCharsRefFreeContexts(t *testing.T) {
+	t.Parallel()
+
+	build := map[string]func(version string) *helium.Document{
+		"comment-node": func(v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			r := d.CreateElement("r")
+			require.NoError(t, d.AddChild(r))
+			require.NoError(t, r.AddChild(d.CreateComment([]byte("a\x01b"))))
+			return d
+		},
+		"pi-data": func(v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			r := d.CreateElement("r")
+			require.NoError(t, d.AddChild(r))
+			require.NoError(t, r.AddChild(d.CreatePI("t", "a\x01b")))
+			return d
+		},
+		"cdata-section-node": func(v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			r := d.CreateElement("r")
+			require.NoError(t, d.AddChild(r))
+			require.NoError(t, r.AddChild(d.CreateCDATASection([]byte("a\x01b"))))
+			return d
+		},
+		"cdata-section-element": func(v string) *helium.Document {
+			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
+			r := d.CreateElement("r")
+			require.NoError(t, d.AddChild(r))
+			require.NoError(t, r.AppendText([]byte("a\x01b")))
+			return d
+		},
+	}
+
+	for _, version := range []string{ver10, ver11} {
+		for name, mk := range build {
+			t.Run(version+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				w := helium.NewWriter()
+				if name == "cdata-section-element" {
+					w = w.CDATASectionElements(map[string]struct{}{"{}r": {}})
+				}
+
+				// Default policy rejects with ErrInvalidXMLChar in both versions.
+				var buf bytes.Buffer
+				require.ErrorIs(t, w.WriteTo(&buf, mk(version)), helium.ErrInvalidXMLChar)
+
+				// Replacement mode substitutes a raw U+FFFD (a reference-less
+				// context cannot emit &#xFFFD;), never a bogus &#x1;/&#1;.
+				buf.Reset()
+				require.NoError(t, w.RejectInvalidChars(false).WriteTo(&buf, mk(version)))
+				require.Contains(t, buf.String(), "�")
+				require.NotContains(t, buf.String(), "&#x1;")
+				require.NotContains(t, buf.String(), "&#1;")
+			})
+		}
+	}
+}
+
+// TestWriterRejectInvalidCharsDTDLiterals covers the DTD literal emission sites,
+// which are likewise reference-less: an entity value carrying a C0 control
+// (U+0001) is rejected with ErrInvalidXMLChar under the default policy and
+// substituted with U+FFFD under RejectInvalidChars(false).
+func TestWriterRejectInvalidCharsDTDLiterals(t *testing.T) {
+	t.Parallel()
+
+	mk := func() *helium.Document {
+		d := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := d.CreateInternalSubset("doc", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "a\x01b")
+		require.NoError(t, err)
+		root := d.CreateElement("doc")
+		require.NoError(t, d.AddChild(root))
+		return d
+	}
+
+	var buf bytes.Buffer
+	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk()), helium.ErrInvalidXMLChar)
+
+	buf.Reset()
+	require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk()))
+	require.Contains(t, buf.String(), "�")
+	require.NotContains(t, buf.String(), "&#x1;")
+}
+
 // TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
 func TestWriteStringWithoutDTD(t *testing.T) {
 	t.Parallel()

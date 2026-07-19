@@ -2,6 +2,7 @@ package helium
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"unicode/utf8"
@@ -358,6 +359,74 @@ func isSerializableChar(r rune, xml11 bool) bool {
 	return isInCharacterRange(r) || (xml11 && isXML11SerializeAsCharRef(r))
 }
 
+// serializeRefFree screens content bound for a REFERENCE-LESS serialization
+// context — comment text, processing-instruction data, and CDATA-section content.
+// None of these admits a character reference, so the literal-serializable set is
+// exactly the XML 1.0 Char range (isInCharacterRange) for BOTH target versions: an
+// XML 1.1 RestrictedChar, which element/attribute text may carry only as a
+// character reference, has no valid form here regardless of the target version.
+// This is why the check does NOT use isSerializableChar(r, xml11), which would
+// wrongly admit a 1.1 RestrictedChar.
+//
+// A character outside that range is a serialization error: under the default
+// policy it is rejected with a sticky ErrInvalidXMLChar (returning stop=true, with
+// nothing to write); under RejectInvalidChars(false) it is replaced by U+FFFD. A
+// byte that is not valid UTF-8 is always replaced by U+FFFD, matching the
+// text/attribute escapers (it has no character-reference form either). When the
+// content is already clean it returns b unchanged so no copy is made.
+func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop bool) {
+	work := false
+	for i := 0; i < len(b); {
+		r, width := utf8.DecodeRune(b[i:])
+		switch {
+		case r == utf8.RuneError && width == 1:
+			// A malformed UTF-8 byte is always replaced with U+FFFD.
+			work = true
+		case !isInCharacterRange(r):
+			if !s.replaceInvalidChars {
+				s.check(fmt.Errorf("helium: %s contains a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+				return nil, true
+			}
+			work = true
+		}
+		i += width
+	}
+	if !work {
+		return b, false
+	}
+	out = make([]byte, 0, len(b))
+	for i := 0; i < len(b); {
+		r, width := utf8.DecodeRune(b[i:])
+		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) {
+			out = append(out, esc_fffd...)
+		} else {
+			out = append(out, b[i:i+width]...)
+		}
+		i += width
+	}
+	return out, false
+}
+
+// dtdLiteral applies the reference-less serialization policy (serializeRefFree) to
+// a DTD literal supplied as a string: an entity value, an external-ID system or
+// public literal, or an enumeration token. A DTD literal admits no character
+// reference, so the policy is applied UNIFORMLY across both target versions — an
+// XML 1.1 EntityValue could in principle char-reference a RestrictedChar, but the
+// writer rejects (default) or U+FFFD-substitutes (RejectInvalidChars(false))
+// instead, keeping a single reference-less rule for every DTD literal site. It
+// returns the value to emit and whether the caller should stop because the default
+// reject policy recorded a sticky ErrInvalidXMLChar.
+func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
+	if value == "" {
+		return value, false
+	}
+	out, stop := s.serializeRefFree(what, []byte(value))
+	if stop {
+		return "", true
+	}
+	return string(out), false
+}
+
 // writeCharMapReplacement flushes s[last:cut] to w and writes the raw
 // (unescaped) character-map replacement, returning the new value of last (the
 // byte offset just past the mapped character). It is shared by escapeText and
@@ -393,6 +462,12 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
+		// The character-map lookup deliberately PRECEDES the invalid-char rejection
+		// below: Serialization 3.1 §5.1.11 applies character maps before character
+		// checking, and SERE0006 is defined on the SERIALIZED result — after mapping,
+		// a mapped invalid character is gone, so no forbidden character survives to
+		// reject. Mapping an invalid char to a safe replacement is explicit per-rune
+		// configuration (fn:serialize use-character-maps), not silent mutation.
 		if repl, ok := charMap[r]; ok {
 			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
@@ -497,6 +572,12 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
+		// The character-map lookup deliberately PRECEDES the invalid-char rejection
+		// below: Serialization 3.1 §5.1.11 applies character maps before character
+		// checking, and SERE0006 is defined on the SERIALIZED result — after mapping,
+		// a mapped invalid character is gone, so no forbidden character survives to
+		// reject. Mapping an invalid char to a safe replacement is explicit per-rune
+		// configuration (fn:serialize use-character-maps), not silent mutation.
 		if repl, ok := charMap[r]; ok {
 			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
