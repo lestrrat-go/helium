@@ -196,6 +196,35 @@ func TestSerializeItemsJSONNodeXMLInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 }
 
+// messageRecordingHandler records every xsl:message delivered to it.
+type messageRecordingHandler struct {
+	messages []string
+}
+
+func (h *messageRecordingHandler) HandleMessage(msg string, _ bool) error {
+	h.messages = append(h.messages, msg)
+	return nil
+}
+
+// xsl:message selecting a source node with an XML-invalid character must
+// surface the writer's rejection as SERE0006 and deliver no truncated message,
+// rather than reporting partial output as a successful transform.
+func TestMessageInvalidCharSERE0006(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:message select="/*"/>
+    <out/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	root := newBadCharElement(t)
+	handler := &messageRecordingHandler{}
+	_, err := ss.Transform(root.OwnerDocument()).MessageHandler(handler).Do(t.Context())
+	requireSERE0006(t, err)
+	require.Empty(t, handler.messages)
+}
+
 // SerializeItems with method="adaptive" over a multi-item sequence containing a
 // node with an invalid character must propagate SERE0006 (the single-element
 // path already propagates via serializeXML; this exercises the per-item path).
