@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -36,10 +37,10 @@ type leafCase struct {
 	// only content-merges its own kind (Text, Comment) set this false.
 	canContainChildren bool
 	// addChildSelfErr is the sentinel AddChild(self) must wrap (errors.Is). For
-	// Text, Comment, ProcessingInstruction and EntityRef the shared cycle guard
-	// fires (ErrCyclicNode); CDATASection rejects AddChild before reaching the
-	// shared cycle guard (ErrInvalidOperation), so self-insertion surfaces that
-	// rejection instead.
+	// Text, Comment and EntityRef the shared cycle guard fires, and
+	// ProcessingInstruction detects the self-add by identity (ErrCyclicNode);
+	// CDATASection rejects AddChild before any self-add check
+	// (ErrInvalidOperation), so self-insertion surfaces that rejection instead.
 	addChildSelfErr error
 }
 
@@ -69,9 +70,9 @@ func leafCases() []leafCase {
 		{
 			// A PI carries its content as a string, not as element/text
 			// children, so its AddChild rejects a foreign (non-text) node with
-			// ErrInvalidOperation. A self-add is caught by the cycle guard first
-			// (a PI is not a text node, so it reaches the guard on the reject
-			// path), returning ErrCyclicNode like every other leaf self-add.
+			// ErrInvalidOperation. A self-add is detected by identity on the
+			// reject path (a PI is not a text node, so it reaches that check),
+			// returning ErrCyclicNode like every other leaf self-add.
 			name:            "ProcessingInstruction",
 			new:             func(t *testing.T, doc *helium.Document) helium.MutableNode { return mustCreatePI(t, doc) },
 			addChildSelfErr: helium.ErrCyclicNode,
@@ -157,6 +158,38 @@ func TestLeafAddChildGuards(t *testing.T) {
 					require.Nil(t, moving.NextSibling(), "moving has no stale next")
 					requireNoCycle(t, container)
 					requireNoCycle(t, oldParent)
+				})
+			} else {
+				// The strict leaves (Text, Comment, CDATASection, PI) never hold
+				// children, so an ancestor operand is not a potential cycle — it
+				// is just another invalid operand, and must take the shared
+				// ErrInvalidOperation shape (not ErrCyclicNode, which is reserved
+				// for the self-add).
+				t.Run("ancestor operand is rejected as invalid operation", func(t *testing.T) {
+					t.Parallel()
+					doc := helium.NewDefaultDocument()
+					root := mustCreateElement(t, doc, "root")
+					mid := mustCreateElement(t, doc, "mid")
+					require.NoError(t, root.AddChild(mid), "mid starts under root")
+					leaf := tc.new(t, doc)
+					require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
+
+					for name, operand := range map[string]helium.Node{
+						"parent":   mid,
+						"ancestor": root,
+					} {
+						err := leaf.AddChild(operand)
+						require.Error(t, err, "AddChild(%s) must be rejected", name)
+						require.ErrorIs(t, err, helium.ErrInvalidOperation)
+						require.NotErrorIs(t, err, helium.ErrCyclicNode)
+						require.ErrorContains(t, err,
+							fmt.Sprintf("cannot add a %s as a child of a %s node", helium.ElementNode, leaf.Type()))
+					}
+
+					require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
+					require.Equal(t, helium.Node(mid), leaf.Parent(), "tree must stay intact")
+					require.Nil(t, root.Parent(), "root must remain the tree root")
+					requireNoCycle(t, root)
 				})
 			}
 		})

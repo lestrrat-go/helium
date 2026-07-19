@@ -184,11 +184,14 @@ func (p *ProcessingInstruction) AddChild(cur Node) error {
 		return nil
 	default:
 		// A self-add (pi.AddChild(pi)) reaches here because a PI is not a text
-		// node; surface the cycle guard first so it matches every other leaf
-		// self-add (ErrCyclicNode) rather than the generic type rejection below.
-		// A PI is a leaf (it never holds children), so wouldCreateCycle is true
-		// only when cur is the PI itself.
-		if wouldCreateCycle(p, cur) {
+		// node; detect it by identity so it matches every other leaf self-add
+		// (ErrCyclicNode) rather than the generic type rejection below. The
+		// check must be identity, NOT wouldCreateCycle: that guard walks the
+		// PI's ancestor chain, so it would also match an ancestor operand
+		// (pi.AddChild(parentElement)), which — like on the other strict
+		// leaves — is just another invalid operand and takes the shared
+		// ErrInvalidOperation shape below.
+		if cur.baseDocNode() == p.baseDocNode() {
 			return fmt.Errorf("%w: cannot add a node as a child of itself or one of its descendants", ErrCyclicNode)
 		}
 		// Any other node type has no valid placement on a PI. Reject with the same
