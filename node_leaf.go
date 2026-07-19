@@ -184,14 +184,17 @@ func (p *ProcessingInstruction) AddChild(cur Node) error {
 		return nil
 	default:
 		// A self-add (pi.AddChild(pi)) reaches here because a PI is not a text
-		// node; detect it by identity so it matches every other leaf self-add
-		// (ErrCyclicNode) rather than the generic type rejection below. The
-		// check must be identity, NOT wouldCreateCycle: that guard walks the
-		// PI's ancestor chain, so it would also match an ancestor operand
-		// (pi.AddChild(parentElement)), which — like on the other strict
-		// leaves — is just another invalid operand and takes the shared
-		// ErrInvalidOperation shape below.
-		if cur.baseDocNode() == p.baseDocNode() {
+		// node; detect it by direct pointer identity so it matches every other
+		// leaf self-add (ErrCyclicNode) rather than the generic type rejection
+		// below. The check must be identity, NOT wouldCreateCycle: that guard
+		// walks the PI's ancestor chain, so it would also match an ancestor
+		// operand (pi.AddChild(parentElement)), which — like on the other
+		// strict leaves — is just another invalid operand and takes the shared
+		// ErrInvalidOperation shape below. The comparison is against p itself,
+		// not p.baseDocNode(), so a typed-nil receiver
+		// (var pi *ProcessingInstruction; pi.AddChild(elem)) never dereferences
+		// p and falls through to the error return below instead of panicking.
+		if cur == Node(p) {
 			return fmt.Errorf("%w: cannot add a node as a child of itself or one of its descendants", ErrCyclicNode)
 		}
 		// Any other node type has no valid placement on a PI. Reject with the same

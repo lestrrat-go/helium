@@ -465,6 +465,33 @@ func TestLeafFastPathNilOperand(t *testing.T) {
 	}
 }
 
+// TestPIAddChildNilReceiver verifies that AddChild on a typed-nil
+// *ProcessingInstruction receiver rejects a non-mergeable operand with the
+// shared ErrInvalidOperation shape instead of panicking: the self-add identity
+// check compares the operand interface against the receiver pointer directly
+// and never dereferences the receiver. The other strict leaves (Text, Comment,
+// CDATASection) are not covered here — their rejection message formats
+// n.Type() through the value-receiver docnode method, which dereferences a nil
+// receiver, and that is out-of-contract caller misuse rather than guarded
+// behavior.
+func TestPIAddChildNilReceiver(t *testing.T) {
+	t.Parallel()
+	doc := helium.NewDefaultDocument()
+	elem := mustCreateElement(t, doc, "root")
+
+	var pi *helium.ProcessingInstruction
+	var err error
+	// The closure adapts the call for NotPanics while capturing the error for
+	// the shape assertions below.
+	require.NotPanics(t, func() { err = pi.AddChild(elem) },
+		"nil-receiver AddChild must return an error, not panic")
+	require.ErrorIs(t, err, helium.ErrInvalidOperation)
+	require.NotErrorIs(t, err, helium.ErrCyclicNode,
+		"a nil receiver must not be mistaken for a self-add")
+	require.ErrorContains(t, err,
+		fmt.Sprintf("cannot add a %s as a child of a %s node", helium.ElementNode, helium.ProcessingInstructionNode))
+}
+
 // TestTextAddSiblingNonTextFallback covers Text.AddSibling's non-text fallback
 // path (the `return addSibling(n, cur)` branch). Moving an already-linked
 // non-text node via text.AddSibling must auto-unlink it from its old parent and
