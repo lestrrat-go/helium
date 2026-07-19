@@ -786,11 +786,15 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		if outDef == nil {
 			outDef = ss.outputs[""] // fallback to default
 		}
-		if err := SerializeItems(&buf, items, doc, outDef); err == nil {
-			text := doc.CreateText([]byte(buf.String()))
-			if text != nil {
-				_ = doc.AddChild(text)
-			}
+		// A serialization failure (e.g. SERE0006 for a character invalid in the
+		// target XML version) must surface as a transform error, not a silently
+		// empty secondary document.
+		if err := SerializeItems(&buf, items, doc, outDef); err != nil {
+			return nil, err
+		}
+		text := doc.CreateText([]byte(buf.String()))
+		if text != nil {
+			_ = doc.AddChild(text)
 		}
 	}
 
