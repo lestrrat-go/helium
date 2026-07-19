@@ -103,7 +103,8 @@ func TestDocumentAddChildRejectsAttribute(t *testing.T) {
 }
 
 // An attribute has no valid placement on a non-element parent (Text) and is
-// rejected.
+// rejected with a descriptive %w-wrapped ErrInvalidOperation, not a bare
+// sentinel.
 func TestTextAddChildRejectsAttribute(t *testing.T) {
 	doc := helium.NewDefaultDocument()
 	text := doc.CreateText([]byte("hello"))
@@ -113,6 +114,51 @@ func TestTextAddChildRejectsAttribute(t *testing.T) {
 	err = text.AddChild(attr)
 	require.Error(t, err)
 	require.ErrorIs(t, err, helium.ErrInvalidOperation)
+	// The message carries context beyond the bare sentinel text.
+	require.NotEqual(t, helium.ErrInvalidOperation.Error(), err.Error())
+	require.Contains(t, err.Error(), "cannot add")
+}
+
+// A Text node merges only another Text node; any other operand (here an Element)
+// is rejected with a descriptive %w-wrapped ErrInvalidOperation.
+func TestTextAddChildRejectsNonText(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	text := doc.CreateText([]byte("hello"))
+
+	err := text.AddChild(doc.CreateElement("child"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, helium.ErrInvalidOperation)
+	require.NotEqual(t, helium.ErrInvalidOperation.Error(), err.Error())
+	require.Contains(t, err.Error(), "cannot add")
+}
+
+// A Comment node merges only another Comment node; any other operand (here an
+// Element) is rejected with a descriptive %w-wrapped ErrInvalidOperation.
+func TestCommentAddChildRejectsNonComment(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	comment := doc.CreateComment([]byte("c"))
+
+	err := comment.AddChild(doc.CreateElement("child"))
+	require.Error(t, err)
+	require.ErrorIs(t, err, helium.ErrInvalidOperation)
+	require.NotEqual(t, helium.ErrInvalidOperation.Error(), err.Error())
+	require.Contains(t, err.Error(), "cannot add")
+}
+
+// A CDATA section carries character data, not child nodes, so every operand is
+// rejected with a descriptive %w-wrapped ErrInvalidOperation.
+func TestCDATASectionAddChildRejectsChild(t *testing.T) {
+	doc := helium.NewDefaultDocument()
+	cdata := doc.CreateCDATASection([]byte("x"))
+
+	err := cdata.AddChild(doc.CreateText([]byte("y")))
+	require.Error(t, err)
+	require.ErrorIs(t, err, helium.ErrInvalidOperation)
+	require.NotEqual(t, helium.ErrInvalidOperation.Error(), err.Error())
+	require.Contains(t, err.Error(), "cannot add")
+
+	// A nil operand is rejected with ErrNilNode, not a panic.
+	require.ErrorIs(t, cdata.AddChild(nil), helium.ErrNilNode)
 }
 
 // A ProcessingInstruction carries its content as a string, not as child nodes,
