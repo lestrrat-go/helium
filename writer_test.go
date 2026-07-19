@@ -1860,6 +1860,52 @@ func TestWriterRejectInvalidCharsRefFreeContexts(t *testing.T) {
 	}
 }
 
+func TestWriterRejectInvalidCharsExternalEntityPublicID(t *testing.T) {
+	t.Parallel()
+
+	for name, entityType := range map[string]enum.EntityType{
+		"general":   enum.ExternalGeneralParsedEntity,
+		"parameter": enum.ExternalParameterEntity,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := doc.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("ext", entityType, "pub\x01id", "ext.ent", "")
+			require.NoError(t, err)
+			root, err := doc.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			var buf bytes.Buffer
+			err = helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, doc)
+			require.ErrorIs(t, err, helium.ErrWriterInvalidDTDNode)
+			require.NotContains(t, buf.String(), "\uFFFD")
+		})
+	}
+}
+
+func TestWriterExternalParameterEntityClosingDelimiter(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	dtd, err := doc.CreateInternalSubset("doc", "", "")
+	require.NoError(t, err)
+	_, err = dtd.AddEntity("ext", enum.ExternalParameterEntity, "", "ext.ent", "")
+	require.NoError(t, err)
+	root, err := doc.CreateElement("doc")
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(root))
+
+	var buf bytes.Buffer
+	require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+	require.Contains(t, buf.String(), "<!ENTITY % ext SYSTEM \"ext.ent\">")
+	_, err = helium.NewParser().Parse(t.Context(), buf.Bytes())
+	require.NoError(t, err)
+}
+
 // TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
 func TestWriteStringWithoutDTD(t *testing.T) {
 	t.Parallel()

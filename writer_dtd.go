@@ -70,25 +70,36 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 	}
 	d.writeString(out, dtd.Name())
 
-	if d.err == nil && dtd.externalID != "" {
+	// The DOCTYPE external-ID public/system literals are reference-less DTD
+	// literals: an XML-invalid character is rejected (default) or U+FFFD-substituted.
+	pubLit, stop := d.dtdLiteral("DOCTYPE public-ID literal", dtd.externalID)
+	if stop {
+		return d.err
+	}
+	sysLit, stop := d.dtdLiteral("DOCTYPE system-ID literal", dtd.systemID)
+	if stop {
+		return d.err
+	}
+
+	if d.err == nil && pubLit != "" {
 		// A non-ASCII public id has no faithful US-ASCII serialization; reject that
 		// (encoding error) before the PubidChar check so the US-ASCII path keeps
 		// reporting the encoding failure rather than a PubidChar failure.
-		if d.rejectNonASCIIStr("DOCTYPE public identifier", dtd.externalID) {
+		if d.rejectNonASCIIStr("DOCTYPE public identifier", pubLit) {
 			return d.err
 		}
-		if d.checkPubid(dtd.externalID) || d.checkSystemLiteral(dtd.systemID) {
+		if d.checkPubid(pubLit) || d.checkSystemLiteral(sysLit) {
 			return d.err
 		}
-		pubQ := dtdQuoteChar(dtd.externalID)
-		sysQ := dtdQuoteChar(dtd.systemID)
-		d.writeString(out, fmt.Sprintf(" PUBLIC %c%s%c %c%s%c", pubQ, dtd.externalID, pubQ, sysQ, dtd.systemID, sysQ))
-	} else if d.err == nil && dtd.systemID != "" {
-		if d.checkSystemLiteral(dtd.systemID) {
+		pubQ := dtdQuoteChar(pubLit)
+		sysQ := dtdQuoteChar(sysLit)
+		d.writeString(out, fmt.Sprintf(" PUBLIC %c%s%c %c%s%c", pubQ, pubLit, pubQ, sysQ, sysLit, sysQ))
+	} else if d.err == nil && sysLit != "" {
+		if d.checkSystemLiteral(sysLit) {
 			return d.err
 		}
-		sysQ := dtdQuoteChar(dtd.systemID)
-		d.writeString(out, fmt.Sprintf(" SYSTEM %c%s%c", sysQ, dtd.systemID, sysQ))
+		sysQ := dtdQuoteChar(sysLit)
+		d.writeString(out, fmt.Sprintf(" SYSTEM %c%s%c", sysQ, sysLit, sysQ))
 	}
 
 	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 && len(dtd.notations) == 0 {
@@ -127,7 +138,13 @@ func (d *writeSession) dumpEnumeration(out io.Writer, n Enumeration) error {
 		if d.rejectNonASCIIStr("enumeration token", v) {
 			return d.err
 		}
-		d.writeString(out, v)
+		// It cannot carry a character reference for an XML-invalid character either:
+		// reject (default) or U+FFFD-substitute.
+		token, stop := d.dtdLiteral("enumeration token", v)
+		if stop {
+			return d.err
+		}
+		d.writeString(out, token)
 		if i != l-1 {
 			d.writeString(out, " | ")
 		}
@@ -241,6 +258,12 @@ func (d *writeSession) dumpElementContent(out io.Writer, n *ElementContent, glob
 }
 
 func (d *writeSession) dumpEntityContent(out io.Writer, content string) error {
+	// An entity value is a reference-less DTD literal: an XML-invalid character is
+	// rejected (default) or U+FFFD-substituted before the quote/percent escaping.
+	content, stop := d.dtdLiteral("entity value", content)
+	if stop {
+		return d.err
+	}
 	if strings.IndexByte(content, '%') == -1 {
 		if err := dumpQuotedString(out, content); err != nil {
 			d.check(err)
@@ -296,13 +319,33 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		return d.err
 	}
 
+	// The external-ID public/system literals are reference-less DTD literals: an
+	// XML-invalid character is rejected (default) or U+FFFD-substituted. They are
+	// empty for an internal entity, whose VALUE literal is sanitized at its own
+	// emission site below (the ent.orig path here and dumpEntityContent).
+	pubLit, stop := d.dtdLiteral("entity public-ID literal", ent.externalID)
+	if stop {
+		return d.err
+	}
+	sysLit, stop := d.dtdLiteral("entity system-ID literal", ent.systemID)
+	if stop {
+		return d.err
+	}
+	if pubLit != "" && d.checkPubid(pubLit) {
+		return d.err
+	}
+
 	switch etype := ent.entityType; etype {
 	case enum.InternalGeneralEntity:
 		d.writeString(out, "<!ENTITY ")
 		d.writeString(out, ent.name)
 		d.writeString(out, " ")
 		if ent.orig != "" {
-			if err := dumpQuotedString(out, ent.orig); err != nil {
+			orig, stop := d.dtdLiteral("entity value", ent.orig)
+			if stop {
+				return d.err
+			}
+			if err := dumpQuotedString(out, orig); err != nil {
 				d.check(err)
 				return d.err
 			}
@@ -315,14 +358,14 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case enum.ExternalGeneralParsedEntity, enum.ExternalGeneralUnparsedEntity:
 		d.writeString(out, "<!ENTITY ")
 		d.writeString(out, ent.name)
-		if ent.externalID != "" {
+		if pubLit != "" {
 			d.writeString(out, " PUBLIC ")
-			d.check(dumpQuotedString(out, ent.externalID))
+			d.check(dumpQuotedString(out, pubLit))
 			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, ent.systemID))
+			d.check(dumpQuotedString(out, sysLit))
 		} else {
 			d.writeString(out, " SYSTEM ")
-			d.check(dumpQuotedString(out, ent.systemID))
+			d.check(dumpQuotedString(out, sysLit))
 		}
 
 		if etype == enum.ExternalGeneralUnparsedEntity {
@@ -341,7 +384,11 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		d.writeString(out, ent.name)
 		d.writeString(out, " ")
 		if ent.orig != "" {
-			if err := dumpQuotedString(out, ent.orig); err != nil {
+			orig, stop := d.dtdLiteral("parameter-entity value", ent.orig)
+			if stop {
+				return d.err
+			}
+			if err := dumpQuotedString(out, orig); err != nil {
 				d.check(err)
 				return d.err
 			}
@@ -354,15 +401,16 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case enum.ExternalParameterEntity:
 		d.writeString(out, "<!ENTITY % ")
 		d.writeString(out, ent.name)
-		if ent.externalID != "" {
+		if pubLit != "" {
 			d.writeString(out, " PUBLIC ")
-			d.check(dumpQuotedString(out, ent.externalID))
+			d.check(dumpQuotedString(out, pubLit))
 			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, ent.systemID))
+			d.check(dumpQuotedString(out, sysLit))
 		} else {
 			d.writeString(out, " SYSTEM ")
-			d.check(dumpQuotedString(out, ent.systemID))
+			d.check(dumpQuotedString(out, sysLit))
 		}
+		d.writeString(out, ">\n")
 	default:
 		return fmt.Errorf("invalid entity type: %w", ErrWriterInvalidDTDNode)
 	}
@@ -375,29 +423,40 @@ func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
 	if d.rejectNonASCIIStr("notation name", n.name) {
 		return d.err
 	}
+	// The public/system-ID literals are reference-less DTD literals: an XML-invalid
+	// character is rejected (default) or U+FFFD-substituted.
+	pubLit, stop := d.dtdLiteral("notation public-ID literal", n.publicID)
+	if stop {
+		return d.err
+	}
+	sysLit, stop := d.dtdLiteral("notation system-ID literal", n.systemID)
+	if stop {
+		return d.err
+	}
+
 	// A non-ASCII public id has no faithful US-ASCII serialization; reject that
 	// (encoding error) before the PubidChar check so the US-ASCII path keeps
 	// reporting the encoding failure rather than a PubidChar failure.
-	if n.publicID != "" {
-		if d.rejectNonASCIIStr("notation public identifier", n.publicID) {
+	if pubLit != "" {
+		if d.rejectNonASCIIStr("notation public identifier", pubLit) {
 			return d.err
 		}
-		if d.checkPubid(n.publicID) {
+		if d.checkPubid(pubLit) {
 			return d.err
 		}
 	}
 	d.writeString(out, "<!NOTATION ")
 	d.writeString(out, n.name)
-	if n.publicID != "" {
+	if pubLit != "" {
 		d.writeString(out, " PUBLIC ")
-		d.check(dumpQuotedString(out, n.publicID))
-		if n.systemID != "" {
+		d.check(dumpQuotedString(out, pubLit))
+		if sysLit != "" {
 			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, n.systemID))
+			d.check(dumpQuotedString(out, sysLit))
 		}
 	} else {
 		d.writeString(out, " SYSTEM ")
-		d.check(dumpQuotedString(out, n.systemID))
+		d.check(dumpQuotedString(out, sysLit))
 	}
 	d.writeString(out, " >\n")
 	return d.err

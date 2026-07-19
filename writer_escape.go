@@ -407,6 +407,20 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 	return out, false
 }
 
+// dtdLiteral applies the reference-free serialization policy to a DTD literal.
+// DTD literals cannot carry a character reference, so XML-invalid characters
+// are rejected by default or replaced with U+FFFD in replacement mode.
+func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
+	if value == "" {
+		return value, false
+	}
+	out, stop := s.serializeRefFree(what, []byte(value))
+	if stop {
+		return "", true
+	}
+	return string(out), false
+}
+
 // writeCharMapReplacement flushes s[last:cut] to w and writes the raw
 // (unescaped) character-map replacement, returning the new value of last (the
 // byte offset just past the mapped character). It is shared by escapeText and
