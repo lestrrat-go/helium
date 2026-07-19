@@ -286,7 +286,9 @@ func (dc *deepCopier) bindNamespacesExact(src, elem *Element, inScope map[string
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			childScope[ns.Prefix()] = decl
 		}
 	}
@@ -298,7 +300,9 @@ func (dc *deepCopier) bindNamespacesExact(src, elem *Element, inScope map[string
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			if len(ownDecls) == 0 {
 				childScope = make(map[string]*Namespace, len(inScope)+1)
 				maps.Copy(childScope, inScope)
@@ -311,11 +315,11 @@ func (dc *deepCopier) bindNamespacesExact(src, elem *Element, inScope map[string
 	return childScope, nil
 }
 
-// copyAttributes copies src's attributes onto elem using the LITERAL setters
-// (SetLiteralAttribute/SetLiteralAttributeNS): a.Value() is the parser's
-// already-resolved value, so re-parsing it (SetAttribute/SetAttributeNS runs
-// CreateAttribute, which interprets entity references) would choke on a bare
-// '&' or '<' that was originally an entity (e.g. an href value carrying
+// copyAttributes copies src's attributes onto elem using the literal setters
+// (SetAttribute/SetAttributeNS store value verbatim): a.Value() is the parser's
+// already-resolved value, so parsing it (as SetParsedAttribute/SetParsedAttributeNS
+// would, running CreateAttribute, which interprets entity references) would choke
+// on a bare '&' or '<' that was originally an entity (e.g. an href value carrying
 // '&amp;'), and silently double-resolve a value like '&amp;amp;'. Storing the
 // resolved value literally serializes byte-for-byte identically (the serializer
 // re-escapes '&'/'<') while never re-interpreting it. This loop is identical
@@ -327,13 +331,13 @@ func (dc *deepCopier) copyAttributes(src, elem *Element) error {
 			if nsErr != nil {
 				return nsErr
 			}
-			if err := elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
+			if err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
 				return err
 			}
-		} else if err := elem.SetLiteralAttribute(a.Name(), a.Value()); err != nil {
+		} else if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
 			return err
 		}
-		// Preserve the source attribute's line. SetAttribute* returns the element,
+		// Preserve the source attribute's line. The setters return only an error,
 		// so look the copy back up by expanded name. This is the attribute analogue
 		// of record()'s line preservation, but done HERE (not via dc.record) so it
 		// stays metadata-only and does not start surfacing attributes to onCopy

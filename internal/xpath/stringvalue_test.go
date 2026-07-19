@@ -97,7 +97,7 @@ func TestStringValue_Attribute(t *testing.T) {
 	root, err := doc.CreateElement("root")
 	require.NoError(t, err)
 	require.NoError(t, doc.AddChild(root))
-	_, err = root.SetAttribute("key", "value")
+	err = root.SetAttribute("key", "value")
 	require.NoError(t, err)
 
 	attrs := root.Attributes()
@@ -140,7 +140,7 @@ func TestLocalNameOf(t *testing.T) {
 	// Namespaced attribute local name
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	_, err = root.SetAttributeNS("myattr", "v", ns)
+	err = root.SetAttributeNS("myattr", "v", ns)
 	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
@@ -167,7 +167,7 @@ func TestNodeNamespaceURI(t *testing.T) {
 	// Namespaced attribute
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	_, err = root.SetAttributeNS("a", "v", ns)
+	err = root.SetAttributeNS("a", "v", ns)
 	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)
@@ -190,7 +190,7 @@ func TestNodePrefix(t *testing.T) {
 	// Namespaced attribute has prefix
 	require.NoError(t, root.DeclareNamespace("ns", "urn:ns"))
 	ns := helium.NewNamespace("ns", "urn:ns")
-	_, err = root.SetAttributeNS("a", "v", ns)
+	err = root.SetAttributeNS("a", "v", ns)
 	require.NoError(t, err)
 	attrs := root.Attributes()
 	require.NotEmpty(t, attrs)

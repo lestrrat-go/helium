@@ -95,7 +95,7 @@ func TestAddNamespaceDeclCrossDocumentAppendSurvivesFree(t *testing.T) {
 	ns, err := b.CreateNamespace("p", "urn:new")
 	require.NoError(t, err)
 
-	el.AddNamespaceDecl(ns) // case 1: no existing entry for "p" -> append (retains ns)
+	require.NoError(t, el.AddNamespaceDecl(ns)) // case 1: no existing entry for "p" -> append (retains ns)
 	require.True(t, b.slabEscaped, "retaining a foreign slab-backed namespace must mark the source escaped")
 
 	b.Free()
@@ -124,7 +124,7 @@ func TestAddNamespaceDeclCrossDocumentCollapseSurvivesFree(t *testing.T) {
 	ns, err := b.CreateNamespace("p", "urn:new")
 	require.NoError(t, err)
 
-	el.AddNamespaceDecl(ns) // case 3: existing "p" at a different URI -> collapse (retains ns)
+	require.NoError(t, el.AddNamespaceDecl(ns)) // case 3: existing "p" at a different URI -> collapse (retains ns)
 	require.True(t, b.slabEscaped, "collapsing in a foreign slab-backed namespace must mark the source escaped")
 
 	b.Free()
@@ -149,7 +149,7 @@ func TestAddNamespaceDeclSameDocumentDoesNotEscape(t *testing.T) {
 	ns, err := a.CreateNamespace("p", "urn:x")
 	require.NoError(t, err)
 
-	el.AddNamespaceDecl(ns) // same document -> no escape
+	require.NoError(t, el.AddNamespaceDecl(ns)) // same document -> no escape
 	require.False(t, a.slabEscaped, "a same-document namespace decl must not mark escape")
 }
 
@@ -167,6 +167,27 @@ func TestAddNamespaceDeclCrossDocumentNoOpDoesNotEscape(t *testing.T) {
 	ns, err := b.CreateNamespace("p", "urn:same") // same URI -> case 2 no-op
 	require.NoError(t, err)
 
-	el.AddNamespaceDecl(ns)
+	require.NoError(t, el.AddNamespaceDecl(ns))
 	require.False(t, b.slabEscaped, "a same-URI no-op must not mark the source escaped")
+}
+
+// TestNamespaceDeclSkipsNilNsDefsEntry proves the per-prefix dedup scan in
+// DeclareNamespace/AddNamespaceDecl tolerates a nil nsDefs slot. The public
+// AddNamespaceDecl now rejects a nil ns with ErrNilNode, so a nil entry can only
+// arise from a direct in-package field write; the scan must skip it rather than
+// dereference it.
+func TestNamespaceDeclSkipsNilNsDefsEntry(t *testing.T) {
+	doc := NewDefaultDocument()
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	root.nsDefs = append(root.nsDefs, nil)
+
+	require.NotPanics(t, func() {
+		require.NoError(t, root.DeclareNamespace("p", "urn:p"))
+	})
+	require.NotPanics(t, func() {
+		require.NoError(t, root.AddNamespaceDecl(NewNamespace("q", "urn:q")))
+	})
 }

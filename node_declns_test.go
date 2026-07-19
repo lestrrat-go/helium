@@ -40,22 +40,19 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.Equal(t, 1, strings.Count(str, `xmlns:q="urn:q"`))
 	})
 
-	t.Run("nil nsDefs entry is skipped by the dedup scan", func(t *testing.T) {
+	t.Run("nil ns returns ErrNilNode and leaves nsDefs unchanged", func(t *testing.T) {
 		t.Parallel()
 		doc := helium.NewDefaultDocument()
 		root, err := doc.CreateElement("root")
 		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 
-		// AddNamespaceDecl(nil) appends a nil entry verbatim (a deliberate
-		// corruption path). A subsequent dedup scan must skip it, not panic.
-		root.AddNamespaceDecl(nil)
-		require.NotPanics(t, func() {
-			require.NoError(t, root.DeclareNamespace("p", "urn:p"))
-		})
-		require.NotPanics(t, func() {
-			root.AddNamespaceDecl(helium.NewNamespace("q", "urn:q"))
-		})
+		require.NoError(t, root.DeclareNamespace("p", "urn:p"))
+		before := root.Namespaces()
+
+		err = root.AddNamespaceDecl(nil)
+		require.ErrorIs(t, err, helium.ErrNilNode, "a nil ns is reported, not appended")
+		require.Equal(t, before, root.Namespaces(), "nsDefs unchanged: nothing appended")
 	})
 
 	t.Run("case2 same prefix and uri is a no-op", func(t *testing.T) {
@@ -149,7 +146,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.NoError(t, root.DeclareNamespace("p", "urn:old"))
 		attrNS, err := doc.CreateNamespace("p", "urn:old")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		err = root.DeclareNamespace("p", "urn:new")
@@ -176,7 +173,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		require.NoError(t, root.DeclareNamespace("", "urn:old"))
 		attrNS := helium.NewNamespace("", "urn:attr")
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		require.NoError(t, root.DeclareNamespace("", "urn:new"), "empty-prefix attr does not block default rebind")
@@ -198,11 +195,11 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		require.NoError(t, root.DeclareNamespace("", "urn:old"))
 		attrNS := helium.NewNamespace("", "urn:attr")
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		install := helium.NewNamespace("", "urn:new")
-		root.AddNamespaceDecl(install)
+		require.NoError(t, root.AddNamespaceDecl(install))
 
 		ns := root.Namespaces()
 		require.Len(t, ns, 1, "collapse: exactly one default declaration")
@@ -246,7 +243,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		attrNS, err := doc.CreateNamespace("p", "urn:attr")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 		require.Empty(t, root.Namespaces(), "no nsDefs entry yet: fresh-append path")
 
@@ -284,7 +281,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		ns, err := doc.CreateNamespace("p", "urn:p")
 		require.NoError(t, err)
-		root.AddNamespaceDecl(ns)
+		require.NoError(t, root.AddNamespaceDecl(ns))
 		require.Len(t, root.Namespaces(), 1, "fresh prefix appended")
 
 		str := serializeAndReparse(t, doc)
@@ -302,7 +299,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		old := root.Namespaces()[0]
 		rebind, err := doc.CreateNamespace("p", "urn:two")
 		require.NoError(t, err)
-		root.AddNamespaceDecl(rebind)
+		require.NoError(t, root.AddNamespaceDecl(rebind))
 
 		ns := root.Namespaces()
 		require.Len(t, ns, 1, "collapse: exactly one declaration for p")
@@ -326,7 +323,8 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		conflict, err := doc.CreateNamespace("p", "urn:new")
 		require.NoError(t, err)
-		root.AddNamespaceDecl(conflict)
+		err = root.AddNamespaceDecl(conflict)
+		require.ErrorIs(t, err, helium.ErrInvalidOperation, "in-use active-name prefix conflict is reported")
 
 		ns := root.Namespaces()
 		require.Len(t, ns, 1, "declined: still one declaration")
@@ -347,12 +345,13 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.NoError(t, root.DeclareNamespace("p", "urn:old"))
 		attrNS, err := doc.CreateNamespace("p", "urn:old")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		conflict, err := doc.CreateNamespace("p", "urn:new")
 		require.NoError(t, err)
-		root.AddNamespaceDecl(conflict)
+		err = root.AddNamespaceDecl(conflict)
+		require.ErrorIs(t, err, helium.ErrInvalidOperation, "in-use attribute prefix conflict is reported")
 
 		ns := root.Namespaces()
 		require.Len(t, ns, 1, "declined: still one declaration")
@@ -376,7 +375,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.Equal(t, "urn:one", retained.URI(), "collapse did not mutate the retained handle")
 
 		// Re-attaching the retained handle must not reintroduce a duplicate.
-		root.AddNamespaceDecl(retained)
+		require.NoError(t, root.AddNamespaceDecl(retained))
 		require.Equal(t, "urn:one", retained.URI(), "AddNamespaceDecl did not mutate the caller object")
 
 		ns := root.Namespaces()
@@ -397,7 +396,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		first := root.Namespaces()[0]
 		dup, err := doc.CreateNamespace("p", "urn:p")
 		require.NoError(t, err)
-		root.AddNamespaceDecl(dup)
+		require.NoError(t, root.AddNamespaceDecl(dup))
 
 		ns := root.Namespaces()
 		require.Len(t, ns, 1, "same prefix+uri is a no-op")
@@ -430,7 +429,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		require.NoError(t, text.SetActiveNamespace("p", "urn:active"))
 		install := helium.NewNamespace("p", "urn:new")
-		text.AddNamespaceDecl(install)
+		require.NoError(t, text.AddNamespaceDecl(install))
 
 		ns := text.Namespaces()
 		require.Len(t, ns, 1, "non-element: caller object installed, no conflict")

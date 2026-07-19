@@ -57,7 +57,7 @@ func TestAddAttributeDeclSerializes(t *testing.T) {
 	// A conforming instance so ValidateDTD accepts the round-tripped document.
 	root, err := doc.CreateElement(attrDeclElem)
 	require.NoError(t, err)
-	_, err = root.SetAttribute(attrDeclCount, "5")
+	err = root.SetAttribute(attrDeclCount, "5")
 	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 

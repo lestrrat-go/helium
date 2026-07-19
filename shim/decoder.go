@@ -1118,11 +1118,11 @@ func setElementAttrs(doc *helium.Document, elem *helium.Element, attrs []stdxml.
 			if err != nil {
 				return err
 			}
-			if _, err := elem.SetAttributeNS(attr.Name.Local, attr.Value, ns); err != nil {
+			if err := elem.SetAttributeNS(attr.Name.Local, attr.Value, ns); err != nil {
 				return err
 			}
 		} else {
-			if _, err := elem.SetAttribute(attr.Name.Local, attr.Value); err != nil {
+			if err := elem.SetAttribute(attr.Name.Local, attr.Value); err != nil {
 				return err
 			}
 		}

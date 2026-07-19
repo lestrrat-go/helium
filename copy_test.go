@@ -137,11 +137,11 @@ func TestCopyDocWithDTD(t *testing.T) {
 
 // TestCopyDocEntityBearingAttributes exercises the deep-copy attribute path with
 // values that the parser has already entity-resolved. Copying such values with
-// the value-PARSING setters (SetAttribute/SetAttributeNS) would re-interpret a
-// bare '&'/'<' — raising "entity was unterminated" for a value that came from
-// '&amp;', and silently double-resolving '&amp;amp;'. The literal setters store
-// the resolved value as-is and let the serializer re-escape it, so a CopyDoc
-// round-trips byte-for-byte identically.
+// the value-PARSING setters (SetParsedAttribute/SetParsedAttributeNS) would
+// re-interpret a bare '&'/'<' — raising "entity was unterminated" for a value
+// that came from '&amp;', and silently double-resolving '&amp;amp;'. The literal
+// setters (SetAttribute/SetAttributeNS) store the resolved value as-is and let
+// the serializer re-escape it, so a CopyDoc round-trips byte-for-byte identically.
 func TestCopyDocEntityBearingAttributes(t *testing.T) {
 	t.Parallel()
 

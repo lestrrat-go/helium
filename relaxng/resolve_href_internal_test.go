@@ -27,7 +27,7 @@ func TestResolveHrefWindowsBase(t *testing.T) {
 		doc.SetURL(docURL)
 		elem, err := doc.CreateElement("include")
 		require.NoError(t, err)
-		_, err = elem.SetAttribute("href", href)
+		err = elem.SetAttribute("href", href)
 		require.NoError(t, err)
 		require.NoError(t, doc.AddChild(elem))
 		return elem

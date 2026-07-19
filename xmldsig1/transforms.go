@@ -290,7 +290,7 @@ func copyInheritedXMLAttrs(proxy, docElem *helium.Element, mode c14n.Mode) error
 			continue
 		}
 		xmlNS := helium.NewNamespace("xml", lexicon.NamespaceXML)
-		if err := proxy.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), xmlNS); err != nil {
+		if err := proxy.SetAttributeNS(attr.LocalName(), attr.Value(), xmlNS); err != nil {
 			return err
 		}
 	}

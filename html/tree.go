@@ -53,16 +53,17 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 		return err
 	}
 
-	// Use SetLiteralAttribute because the HTML parser has already resolved
-	// entities in attribute values. SetAttribute would re-parse them as XML
-	// entity references and fail on bare '&' characters.
+	// SetAttribute stores the value verbatim, which is what we want: the HTML
+	// parser has already resolved entities in attribute values, so parsing them
+	// again (SetParsedAttribute) would re-interpret them as XML entity references
+	// and fail on bare '&' characters.
 	// Boolean attributes use SetBooleanAttribute (no children) so the
 	// serializer can distinguish them from attrs with empty string values.
 	for _, a := range attrs {
 		if a.Boolean {
 			_ = elem.SetBooleanAttribute(a.Name)
 		} else {
-			_ = elem.SetLiteralAttribute(a.Name, a.Value)
+			_ = elem.SetAttribute(a.Name, a.Value)
 		}
 	}
 

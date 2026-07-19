@@ -32,7 +32,7 @@ func TestWriteNeverEmitsXmlnsXml(t *testing.T) {
 	require.NoError(t, child.DeclareNamespace("xml", xmlNS))
 	require.NoError(t, child.DeclareNamespace("foo", "urn:example:foo"))
 	langNS := helium.NewNamespace("xml", xmlNS)
-	_, err = child.SetAttributeNS("lang", "en", langNS)
+	err = child.SetAttributeNS("lang", "en", langNS)
 	require.NoError(t, err)
 	require.NoError(t, root.AddChild(child))
 

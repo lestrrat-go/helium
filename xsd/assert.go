@@ -207,7 +207,10 @@ func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *heliu
 		if prefix == "" && uri == "" {
 			continue // no default namespace in scope; nothing to re-declare
 		}
-		ce.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
+		// Only prefixes not already declared on (or actively used by) the copy reach
+		// here, drawn from the well-formed source's in-scope context, so the prefix
+		// conflict is unreachable and NewNamespace never returns nil.
+		_ = ce.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
 	}
 
 	var ann map[helium.Node]string

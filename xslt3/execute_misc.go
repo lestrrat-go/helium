@@ -343,11 +343,11 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *wherePopula
 			}
 			if attr.URI() != "" {
 				ns, _ := out.doc.CreateNamespace(attr.Prefix(), attr.URI())
-				if err := elem.SetLiteralAttributeNS(attr.LocalName(), string(attr.Content()), ns); err != nil {
+				if err := elem.SetAttributeNS(attr.LocalName(), string(attr.Content()), ns); err != nil {
 					return err
 				}
 			} else {
-				if _, err := elem.SetAttribute(attr.LocalName(), string(attr.Content())); err != nil {
+				if err := elem.SetAttribute(attr.LocalName(), string(attr.Content())); err != nil {
 					return err
 				}
 			}

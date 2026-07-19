@@ -124,7 +124,7 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 		require.NoError(t, doc.SetDocumentElement(root))
 		// SetAttribute only rejects colons, so a space-bearing name slips
 		// through and would inject a second attribute on serialization.
-		_, err = root.SetAttribute(`x onmouseover`, "1")
+		err = root.SetAttribute(`x onmouseover`, "1")
 		require.NoError(t, err)
 
 		_, err = helium.WriteString(doc)
@@ -140,7 +140,7 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 		// "xmlns" is a valid NCName, but a normal attribute named "xmlns"
 		// would be emitted as a namespace declaration that never went through
 		// DeclareNamespace.
-		_, err = root.SetAttribute("xmlns", "urn:evil")
+		err = root.SetAttribute("xmlns", "urn:evil")
 		require.NoError(t, err)
 
 		_, err = helium.WriteString(doc)
@@ -157,7 +157,7 @@ func TestWriteRejectsInjectedNames(t *testing.T) {
 		// namespace declaration and must not be emitted as a normal attribute.
 		ns, err := doc.CreateNamespace("xmlns", "urn:x")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("foo", "v", ns)
+		err = root.SetAttributeNS("foo", "v", ns)
 		require.NoError(t, err)
 
 		_, err = helium.WriteString(doc)
@@ -236,7 +236,7 @@ func TestWriteActiveDefaultNamespace(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
 		require.NoError(t, root.SetActiveNamespace("p", "urn:x"))
-		_, err = root.SetAttribute("id", "1")
+		err = root.SetAttribute("id", "1")
 		require.NoError(t, err)
 
 		str, err := helium.WriteString(doc)
@@ -338,7 +338,7 @@ func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
 		root, err := doc.CreateElement("html")
 		require.NoError(t, err)
 		require.NoError(t, doc.SetDocumentElement(root))
-		_, err = root.SetAttribute(`x onmouseover`, "1")
+		err = root.SetAttribute(`x onmouseover`, "1")
 		require.NoError(t, err)
 
 		_, err = helium.WriteString(doc)
@@ -503,7 +503,7 @@ func TestXHTMLAttrErrorEmitsNoPartialChildren(t *testing.T) {
 
 	// Invalid attribute name on the element: serialization must fail before any
 	// child content is written.
-	_, err = root.SetAttribute(`x onmouseover`, "1")
+	err = root.SetAttribute(`x onmouseover`, "1")
 	require.NoError(t, err)
 
 	const childMarker = "SECRET_CHILD_TEXT"
@@ -1542,7 +1542,7 @@ func TestWriterRejectInvalidChars(t *testing.T) {
 	r, err := attrDoc.CreateElement("r")
 	require.NoError(t, err)
 	require.NoError(t, attrDoc.AddChild(r))
-	_, err = r.SetAttribute("v", "x\x07y")
+	err = r.SetAttribute("v", "x\x07y")
 	require.NoError(t, err)
 	buf.Reset()
 	err = helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, attrDoc)
@@ -1800,7 +1800,7 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 				root, err := doc.CreateElement("root")
 				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
-				_, err = root.SetAttribute(`x onmouseover`, "1")
+				err = root.SetAttribute(`x onmouseover`, "1")
 				require.NoError(t, err)
 				return doc
 			},
@@ -1813,7 +1813,7 @@ func TestWriterStructuralErrorsMatchable(t *testing.T) {
 				root, err := doc.CreateElement("root")
 				require.NoError(t, err)
 				require.NoError(t, doc.SetDocumentElement(root))
-				_, err = root.SetAttribute("xmlns", "urn:evil")
+				err = root.SetAttribute("xmlns", "urn:evil")
 				require.NoError(t, err)
 				return doc
 			},

@@ -116,8 +116,8 @@ func isNamespaceDeclAttr(a *helium.Attribute) bool {
 // source were already resolved during parsing).
 func addSynthAttr(synth *helium.Element, a *helium.Attribute) {
 	if a.URI() == "" {
-		_ = synth.SetLiteralAttribute(a.LocalName(), a.Value())
+		_ = synth.SetAttribute(a.LocalName(), a.Value())
 		return
 	}
-	_ = synth.SetLiteralAttributeNS(a.LocalName(), a.Value(), helium.NewNamespace(a.Prefix(), a.URI()))
+	_ = synth.SetAttributeNS(a.LocalName(), a.Value(), helium.NewNamespace(a.Prefix(), a.URI()))
 }

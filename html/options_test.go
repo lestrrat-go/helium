@@ -75,7 +75,7 @@ func TestWriteNodeDocumentPreservesWriterOptions(t *testing.T) {
 
 	link, err := doc.CreateElement("A")
 	require.NoError(t, err)
-	_ = link.SetLiteralAttribute("HREF", "caf\u00e9")
+	_ = link.SetAttribute("HREF", "caf\u00e9")
 
 	text := doc.CreateText([]byte("\u0080"))
 	require.NoError(t, link.AddChild(text))

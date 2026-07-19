@@ -1330,7 +1330,7 @@ func renderAnalyzeStringGroup(doc *helium.Document, parent *helium.Element, node
 		if err != nil {
 			return err
 		}
-		if err := groupElem.SetLiteralAttribute("nr", fmt.Sprintf("%d", child.nr)); err != nil {
+		if err := groupElem.SetAttribute("nr", fmt.Sprintf("%d", child.nr)); err != nil {
 			return err
 		}
 		if err := renderAnalyzeStringGroup(doc, groupElem, child, s); err != nil {

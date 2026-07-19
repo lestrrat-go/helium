@@ -255,7 +255,7 @@ func TestTraverseAxisAttribute_WideContextCancelledMidWalk(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, root.AddChild(elem))
 	for i := range width {
-		_, err := elem.SetAttribute("a"+strconv.Itoa(i), "v")
+		err := elem.SetAttribute("a"+strconv.Itoa(i), "v")
 		require.NoError(t, err)
 	}
 

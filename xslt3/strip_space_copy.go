@@ -245,7 +245,9 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			childScope[ns.Prefix()] = decl
 		}
 	}
@@ -262,7 +264,9 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 			if err != nil {
 				return nil, err
 			}
-			elem.AddNamespaceDecl(decl)
+			if err := elem.AddNamespaceDecl(decl); err != nil {
+				return nil, err
+			}
 			if childScope == nil || len(ownDecls) == 0 {
 				childScope = make(map[string]*helium.Namespace, len(inScope)+1)
 				maps.Copy(childScope, inScope)
@@ -273,11 +277,11 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 		elem.SetNs(active)
 	}
 
-	// Copy attributes, preserving namespace information. Use the LITERAL setters
-	// (SetLiteralAttribute/SetLiteralAttributeNS): a.Value() is the parser's
-	// already-resolved value, so re-parsing it (SetAttribute/SetAttributeNS runs
-	// CreateAttribute, which interprets entity references) would choke on a bare
-	// '&' or '<' that was originally an entity (e.g. an href value carrying
+	// Copy attributes, preserving namespace information. Use the literal setters
+	// (SetAttribute/SetAttributeNS store value verbatim): a.Value() is the parser's
+	// already-resolved value, so parsing it (as SetParsedAttribute/SetParsedAttributeNS
+	// would, running CreateAttribute, which interprets entity references) would choke
+	// on a bare '&' or '<' that was originally an entity (e.g. an href value carrying
 	// '&amp;'), and silently double-resolve a value like '&amp;amp;'. Storing the
 	// resolved value literally serializes byte-for-byte identically (the serializer
 	// re-escapes '&'/'<') while never re-interpreting it.
@@ -287,12 +291,12 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 			if nsErr != nil {
 				return nil, nsErr
 			}
-			if err := elem.SetLiteralAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
+			if err := elem.SetAttributeNS(a.LocalName(), a.Value(), ns); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		if err := elem.SetLiteralAttribute(a.Name(), a.Value()); err != nil {
+		if err := elem.SetAttribute(a.Name(), a.Value()); err != nil {
 			return nil, err
 		}
 	}

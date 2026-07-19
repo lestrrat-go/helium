@@ -144,7 +144,7 @@ func TestSerializerNSReconcileNameAttrConflict(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, doc.SetDocumentElement(root))
 	require.NoError(t, root.SetActiveNamespace("p", "urn:Y"))
-	_, err = root.SetAttributeNS("a", "v", helium.NewNamespace("p", "urn:X"))
+	err = root.SetAttributeNS("a", "v", helium.NewNamespace("p", "urn:X"))
 	require.NoError(t, err)
 
 	str := serializeAndReparse(t, doc)
