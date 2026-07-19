@@ -607,6 +607,30 @@ func addChild(n MutableNode, cur Node) error {
 		return ErrNilNode
 	}
 
+	// An Attribute is never an ordinary child node. On an *Element it belongs in
+	// the properties list, mirroring libxml2's xmlAddChild, which routes an
+	// attribute operand into the parent's properties (replacing a same-named one)
+	// rather than the child list; on any other parent an attribute has no valid
+	// placement and is rejected. Handle this BEFORE the generic child-splice (and
+	// before any leaf content-merge fast path, which the leaf AddChild overrides
+	// reach only for text-like operands) so an attribute can never land in a child
+	// list and serialize as a spurious child element.
+	if attr, ok := cur.(*Attribute); ok {
+		elem, ok := n.(*Element)
+		if !ok {
+			return fmt.Errorf("%w: cannot add an attribute as a child of a %s node; attributes belong on an element", ErrInvalidOperation, n.Type())
+		}
+		// Preflight through the normal guards (cross-document escape marking,
+		// auto-unlink from any previous parent/property chain). An attribute cannot
+		// form a child-list cycle, but it must be detached from a prior location
+		// before addProperty splices it in.
+		if err := addChildPreflight(elem, attr); err != nil {
+			return err
+		}
+		elem.addProperty(attr)
+		return nil
+	}
+
 	pdn := n.baseDocNode()
 	cdn := cur.baseDocNode()
 
@@ -708,8 +732,8 @@ func addSibling(n MutableNode, cur Node) error {
 	// must stay within the attribute chain, never touching firstChild/lastChild.
 	//
 	// But an *Attribute with an *Element parent is not guaranteed to live in that
-	// element's properties chain: public paths (elem.AddChild(attr), a generic
-	// Replace(attr)) can place it in the normal child list instead. Only use
+	// element's properties chain: a generic Replace(attr) that swaps a child node
+	// for an attribute can place it in the normal child list instead. Only use
 	// property-list logic when the anchor is genuinely reachable from
 	// ownerElem.properties; otherwise fall through to the generic child-list path.
 	if nAttr, ok := n.(*Attribute); ok {
@@ -812,9 +836,9 @@ func unlinkNode(n Node) {
 	// list, NOT in the parent's child list. Detach via spliceOutAttribute so the
 	// Element.properties head is repaired and the attribute sibling chain is
 	// patched, without ever touching the parent's firstChild/lastChild. But an
-	// attribute with an *Element parent is not guaranteed to be a property:
-	// public paths (elem.AddChild(attr), a generic Replace(attr)) can place it in
-	// the normal child list instead. Confirm it is actually reachable from
+	// attribute with an *Element parent is not guaranteed to be a property: a
+	// generic Replace(attr) that swaps a child node for an attribute can place it
+	// in the normal child list instead. Confirm it is actually reachable from
 	// elem.properties before using property-list logic; otherwise fall through to
 	// the generic child-list unlink below.
 	if attr, ok := n.(*Attribute); ok {
@@ -874,8 +898,8 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	// rejected call leaves the tree untouched.
 	//
 	// But an *Attribute with an *Element parent is not guaranteed to live in that
-	// element's properties chain: public paths (elem.AddChild(attr), a generic
-	// Replace(attr)) can place it in the normal child list instead. Only use
+	// element's properties chain: a generic Replace(attr) that swaps a child node
+	// for an attribute can place it in the normal child list instead. Only use
 	// property-list logic when the attribute is genuinely reachable from
 	// ownerElem.properties; otherwise fall back to the generic child-list splice
 	// so firstChild/lastChild are repaired.

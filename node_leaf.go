@@ -20,7 +20,17 @@ func newCDATASection(b []byte) *CDATASection {
 }
 
 func (n *CDATASection) AddChild(cur Node) error {
-	return ErrInvalidOperation
+	// Reject a nil or typed-nil operand BEFORE the operand-type reference below so
+	// the call returns ErrNilNode instead of panicking and leaves the tree
+	// untouched.
+	if isNilNode(cur) {
+		return ErrNilNode
+	}
+	// A CDATA section carries character data, not child nodes, so no operand kind
+	// is a valid child. Reject with the same %w-wrapped ErrInvalidOperation shape
+	// the shared addChild uses for an invalid parent, so callers can errors.Is it
+	// like every other AddChild rejection.
+	return fmt.Errorf("%w: cannot add a %s as a child of a %s node", ErrInvalidOperation, cur.Type(), n.Type())
 }
 
 func (n *CDATASection) AppendText(b []byte) error {
@@ -82,7 +92,11 @@ func (n *Comment) AddChild(cur Node) error {
 		}
 		return n.AppendText(t.content)
 	}
-	return ErrInvalidOperation
+	// A comment carries character data, not child nodes; only another comment
+	// merges (handled above). Reject any other operand with the same %w-wrapped
+	// ErrInvalidOperation shape the shared addChild uses for an invalid parent, so
+	// callers can errors.Is it like every other AddChild rejection.
+	return fmt.Errorf("%w: cannot add a %s as a child of a %s node", ErrInvalidOperation, cur.Type(), n.Type())
 }
 
 func (n *Comment) AppendText(b []byte) error {
@@ -149,6 +163,13 @@ func (p *ProcessingInstruction) AddChild(cur Node) error {
 	// panic) so the call returns ErrNilNode and leaves the tree untouched.
 	if isNilNode(cur) {
 		return ErrNilNode
+	}
+	// An Attribute has no valid placement on a PI (attributes belong on an
+	// element). Reject it BEFORE the type switch with the same %w-wrapped
+	// ErrInvalidOperation shape the shared addChild uses for a non-element
+	// parent, so callers can errors.Is it like every other AddChild rejection.
+	if _, ok := cur.(*Attribute); ok {
+		return fmt.Errorf("%w: cannot add an attribute as a child of a %s node; attributes belong on an element", ErrInvalidOperation, p.Type())
 	}
 	switch cur.Type() {
 	case TextNode, CDATASectionNode:
@@ -262,7 +283,11 @@ func (n *Text) AddChild(cur Node) error {
 		n.fromCharRef = n.fromCharRef || t.fromCharRef
 		return n.AppendText(t.content)
 	}
-	return ErrInvalidOperation
+	// A text node carries character data, not child nodes; only another text node
+	// merges (handled above). Reject any other operand with the same %w-wrapped
+	// ErrInvalidOperation shape the shared addChild uses for an invalid parent, so
+	// callers can errors.Is it like every other AddChild rejection.
+	return fmt.Errorf("%w: cannot add a %s as a child of a %s node", ErrInvalidOperation, cur.Type(), n.Type())
 }
 
 func (n *Text) AppendText(b []byte) error {
