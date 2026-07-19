@@ -981,7 +981,11 @@ func (d *writeSession) dumpDocContent(out io.Writer, n Node) error {
 func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	var err error
 	switch n.Type() {
-	case DocumentNode:
+	case DocumentNode, HTMLDocumentNode:
+		// An HTML document node (NewHTMLDocument / the HTML parser) is a *Document
+		// with a distinct etype; serialize it through the same document path so its
+		// children serialize rather than the node falling to the element path and
+		// being rejected for its "(document)" name.
 		if !d.noDecl {
 			if err = d.dumpDocContent(out, n); err != nil {
 				return err
