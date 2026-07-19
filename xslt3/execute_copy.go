@@ -924,7 +924,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 		prefix := nsw.Name()
 		uri := string(nsw.Content())
 		// Check for conflicts (same prefix, different URI) and apply
-		// namespace fixup when allowed (e.g. xsl:element auto-generated ns).
+		// namespace fixup when the current element is eligible.
 		_, fixupOK := ec.nsFixupAllowed[elem]
 		for _, ns := range elem.Namespaces() {
 			if ns.Prefix() == prefix && ns.URI() != uri {
