@@ -1946,28 +1946,130 @@ func TestWriterRejectsXML11RestrictedCharsInDTDLiterals(t *testing.T) {
 	require.NotContains(t, buf.String(), "&#127;")
 }
 
-func TestWriterRejectInvalidCharsExternalEntityPublicID(t *testing.T) {
+func TestWriterIgnoresStoredExternalIDsOnInternalEntities(t *testing.T) {
 	t.Parallel()
 
-	for name, entityType := range map[string]enum.EntityType{
-		"general":   enum.ExternalGeneralParsedEntity,
-		"parameter": enum.ExternalParameterEntity,
+	for _, tc := range []struct {
+		name       string
+		entityType enum.EntityType
+		publicID   string
+		systemID   string
+	}{
+		{
+			name:       "general public ID",
+			entityType: enum.InternalGeneralEntity,
+			publicID:   "bad{pubid",
+		},
+		{
+			name:       "general system ID",
+			entityType: enum.InternalGeneralEntity,
+			systemID:   "bad\x01system",
+		},
+		{
+			name:       "parameter public ID",
+			entityType: enum.InternalParameterEntity,
+			publicID:   "bad{pubid",
+		},
+		{
+			name:       "parameter system ID",
+			entityType: enum.InternalParameterEntity,
+			systemID:   "bad\x01system",
+		},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 			dtd, err := doc.CreateInternalSubset("doc", "", "")
 			require.NoError(t, err)
-			_, err = dtd.AddEntity("ext", entityType, "pub\x01id", "ext.ent", "")
+			_, err = dtd.AddEntity("entity", tc.entityType, tc.publicID, tc.systemID, "entity value")
+			require.NoError(t, err)
+			root, err := doc.CreateElement("doc")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			out, err := helium.WriteString(doc)
+			require.NoError(t, err)
+			require.Contains(t, out, "<!ENTITY")
+			require.Contains(t, out, "entity value")
+			if tc.publicID != "" {
+				require.NotContains(t, out, tc.publicID)
+			}
+			if tc.systemID != "" {
+				require.NotContains(t, out, tc.systemID)
+			}
+			require.NotContains(t, out, "\uFFFD")
+			_, err = helium.NewParser().Parse(t.Context(), []byte(out))
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestWriterValidatesExternalEntityIDs(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		entityType enum.EntityType
+		publicID   string
+		systemID   string
+		wantErr    error
+	}{
+		{
+			name:       "parsed general public ID",
+			entityType: enum.ExternalGeneralParsedEntity,
+			publicID:   "bad{pubid",
+			systemID:   "ext.ent",
+			wantErr:    helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name:       "unparsed general public ID",
+			entityType: enum.ExternalGeneralUnparsedEntity,
+			publicID:   "bad{pubid",
+			systemID:   "ext.ent",
+			wantErr:    helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name:       "parameter public ID",
+			entityType: enum.ExternalParameterEntity,
+			publicID:   "bad{pubid",
+			systemID:   "ext.ent",
+			wantErr:    helium.ErrWriterInvalidDTDNode,
+		},
+		{
+			name:       "parsed general system ID",
+			entityType: enum.ExternalGeneralParsedEntity,
+			systemID:   "bad\x01system",
+			wantErr:    helium.ErrInvalidXMLChar,
+		},
+		{
+			name:       "unparsed general system ID",
+			entityType: enum.ExternalGeneralUnparsedEntity,
+			systemID:   "bad\x01system",
+			wantErr:    helium.ErrInvalidXMLChar,
+		},
+		{
+			name:       "parameter system ID",
+			entityType: enum.ExternalParameterEntity,
+			systemID:   "bad\x01system",
+			wantErr:    helium.ErrInvalidXMLChar,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+			dtd, err := doc.CreateInternalSubset("doc", "", "")
+			require.NoError(t, err)
+			_, err = dtd.AddEntity("ext", tc.entityType, tc.publicID, tc.systemID, "")
 			require.NoError(t, err)
 			root, err := doc.CreateElement("doc")
 			require.NoError(t, err)
 			require.NoError(t, doc.AddChild(root))
 
 			var buf bytes.Buffer
-			err = helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, doc)
-			require.ErrorIs(t, err, helium.ErrWriterInvalidDTDNode)
+			err = helium.NewWriter().WriteTo(&buf, doc)
+			require.ErrorIs(t, err, tc.wantErr)
 			require.NotContains(t, buf.String(), "\uFFFD")
 		})
 	}

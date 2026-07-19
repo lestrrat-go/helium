@@ -324,22 +324,6 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		return d.err
 	}
 
-	// The external-ID public/system literals are reference-less DTD literals: an
-	// XML-invalid character is rejected (default) or U+FFFD-substituted. They are
-	// empty for an internal entity, whose VALUE literal is sanitized at its own
-	// emission site below (the ent.orig path here and dumpEntityContent).
-	pubLit, stop := d.dtdLiteral("entity public-ID literal", ent.externalID)
-	if stop {
-		return d.err
-	}
-	sysLit, stop := d.dtdLiteral("entity system-ID literal", ent.systemID)
-	if stop {
-		return d.err
-	}
-	if pubLit != "" && d.checkPubid(pubLit) {
-		return d.err
-	}
-
 	switch etype := ent.entityType; etype {
 	case enum.InternalGeneralEntity:
 		d.writeString(out, "<!ENTITY ")
@@ -363,14 +347,8 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case enum.ExternalGeneralParsedEntity, enum.ExternalGeneralUnparsedEntity:
 		d.writeString(out, "<!ENTITY ")
 		d.writeString(out, ent.name)
-		if pubLit != "" {
-			d.writeString(out, " PUBLIC ")
-			d.check(dumpQuotedString(out, pubLit))
-			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, sysLit))
-		} else {
-			d.writeString(out, " SYSTEM ")
-			d.check(dumpQuotedString(out, sysLit))
+		if err := d.dumpExternalEntityID(out, ent); err != nil {
+			return err
 		}
 
 		if etype == enum.ExternalGeneralUnparsedEntity {
@@ -412,19 +390,41 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case enum.ExternalParameterEntity:
 		d.writeString(out, "<!ENTITY % ")
 		d.writeString(out, ent.name)
-		if pubLit != "" {
-			d.writeString(out, " PUBLIC ")
-			d.check(dumpQuotedString(out, pubLit))
-			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, sysLit))
-		} else {
-			d.writeString(out, " SYSTEM ")
-			d.check(dumpQuotedString(out, sysLit))
+		if err := d.dumpExternalEntityID(out, ent); err != nil {
+			return err
 		}
 		d.writeString(out, ">\n")
 	default:
 		return fmt.Errorf("invalid entity type: %w", ErrWriterInvalidDTDNode)
 	}
+	return d.err
+}
+
+// dumpExternalEntityID writes the external identifier for an entity type that
+// emits one. Internal entity declarations retain these fields in the DOM but do
+// not consume them in XML, so their EntityValue paths handle their own content.
+func (d *writeSession) dumpExternalEntityID(out io.Writer, ent *Entity) error {
+	pubLit, stop := d.dtdLiteral("entity public-ID literal", ent.externalID)
+	if stop {
+		return d.err
+	}
+	sysLit, stop := d.dtdLiteral("entity system-ID literal", ent.systemID)
+	if stop {
+		return d.err
+	}
+	if pubLit != "" {
+		if d.checkPubid(pubLit) {
+			return d.err
+		}
+		d.writeString(out, " PUBLIC ")
+		d.check(dumpQuotedString(out, pubLit))
+		d.writeString(out, " ")
+		d.check(dumpQuotedString(out, sysLit))
+		return d.err
+	}
+
+	d.writeString(out, " SYSTEM ")
+	d.check(dumpQuotedString(out, sysLit))
 	return d.err
 }
 
