@@ -2094,9 +2094,9 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			} else if ns == nil {
 				ns = helium.NewNamespace("", au.Name.NS)
 			}
-			_, _ = elem.SetAttributeNS(au.Name.Local, defVal, ns)
+			_ = elem.SetAttributeNS(au.Name.Local, defVal, ns)
 		} else {
-			_, _ = elem.SetAttribute(au.Name.Local, defVal)
+			_ = elem.SetAttribute(au.Name.Local, defVal)
 		}
 		// Annotate the newly inserted attribute and, for XSD 1.1, record it as
 		// inheritable when its use is — a defaulted/fixed attribute is part of the

@@ -13,8 +13,9 @@ import (
 // xsl:copy) duplicates the source element into the result tree via a deep copy;
 // the attribute value returned by the parser is already entity-resolved, so it
 // must be stored LITERALLY (and re-escaped by the serializer) rather than fed
-// back through the value-parsing setter, which would choke on a bare '&' (an
-// "entity was unterminated" error) or silently double-resolve '&amp;amp;'.
+// back through a value-parsing setter (SetParsedAttribute), which would choke on
+// a bare '&' (an "entity was unterminated" error) or silently double-resolve
+// '&amp;amp;'.
 func TestCopyOfAttributeValuesNotReparsed(t *testing.T) {
 	t.Parallel()
 
@@ -61,7 +62,7 @@ func TestCopyOfAttributeValuesNotReparsed(t *testing.T) {
 }
 
 // TestCopyOfNamespacedAttributeNotReparsed exercises the namespaced-attribute
-// branch of the deep-copy attribute loop (SetLiteralAttributeNS).
+// branch of the deep-copy attribute loop (SetAttributeNS).
 func TestCopyOfNamespacedAttributeNotReparsed(t *testing.T) {
 	t.Parallel()
 

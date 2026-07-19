@@ -31,13 +31,13 @@ func buildExcC14NReference(t *testing.T, doc *helium.Document, incPx, incNS, pre
 
 	transform := doc.CreateElement("Transform")
 	require.NoError(t, transform.SetActiveNamespace(nsPrefix, NamespaceDSig))
-	require.NoError(t, transform.SetLiteralAttribute("Algorithm", ExcC14N10))
+	require.NoError(t, transform.SetAttribute("Algorithm", ExcC14N10))
 	require.NoError(t, transforms.AddChild(transform))
 
 	inc := doc.CreateElement("InclusiveNamespaces")
 	require.NoError(t, inc.DeclareNamespace(incPx, incNS))
 	require.NoError(t, inc.SetActiveNamespace(incPx, incNS))
-	require.NoError(t, inc.SetLiteralAttribute("PrefixList", prefixList))
+	require.NoError(t, inc.SetAttribute("PrefixList", prefixList))
 	require.NoError(t, transform.AddChild(inc))
 
 	// DigestMethod/DigestValue are mandatory under Reference's content model, so
@@ -46,7 +46,7 @@ func buildExcC14NReference(t *testing.T, doc *helium.Document, incPx, incNS, pre
 	// otherwise complete Reference.
 	digestMethod := doc.CreateElement("DigestMethod")
 	require.NoError(t, digestMethod.SetActiveNamespace(nsPrefix, NamespaceDSig))
-	require.NoError(t, digestMethod.SetLiteralAttribute("Algorithm", DigestSHA256))
+	require.NoError(t, digestMethod.SetAttribute("Algorithm", DigestSHA256))
 	require.NoError(t, ref.AddChild(digestMethod))
 
 	digestValue := doc.CreateElement("DigestValue")

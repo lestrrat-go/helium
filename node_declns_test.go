@@ -142,7 +142,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.NoError(t, root.DeclareNamespace("p", "urn:old"))
 		attrNS, err := doc.CreateNamespace("p", "urn:old")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		err = root.DeclareNamespace("p", "urn:new")
@@ -168,7 +168,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		require.NoError(t, root.DeclareNamespace("", "urn:old"))
 		attrNS := helium.NewNamespace("", "urn:attr")
-		_, err := root.SetAttributeNS("a", "v", attrNS)
+		err := root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		require.NoError(t, root.DeclareNamespace("", "urn:new"), "empty-prefix attr does not block default rebind")
@@ -189,7 +189,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		require.NoError(t, root.DeclareNamespace("", "urn:old"))
 		attrNS := helium.NewNamespace("", "urn:attr")
-		_, err := root.SetAttributeNS("a", "v", attrNS)
+		err := root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		install := helium.NewNamespace("", "urn:new")
@@ -235,7 +235,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 
 		attrNS, err := doc.CreateNamespace("p", "urn:attr")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 		require.Empty(t, root.Namespaces(), "no nsDefs entry yet: fresh-append path")
 
@@ -331,7 +331,7 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		require.NoError(t, root.DeclareNamespace("p", "urn:old"))
 		attrNS, err := doc.CreateNamespace("p", "urn:old")
 		require.NoError(t, err)
-		_, err = root.SetAttributeNS("a", "v", attrNS)
+		err = root.SetAttributeNS("a", "v", attrNS)
 		require.NoError(t, err)
 
 		conflict, err := doc.CreateNamespace("p", "urn:new")

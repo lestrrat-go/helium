@@ -154,20 +154,24 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 			if ctx.replaceEntities {
 				// When replaceEntities is true (ParseNoEnt), entity
 				// references are already resolved in the attribute
-				// value. Use literal mode to avoid re-parsing & as
-				// new entity reference starts.
-				_ = e.SetLiteralAttributeNS(attr.LocalName(), attr.Value(), ns)
+				// value. Use the literal setter to avoid re-parsing &
+				// as new entity reference starts.
+				_ = e.SetAttributeNS(attr.LocalName(), attr.Value(), ns)
 				carrySyntheticBase(e, attr, ns)
 			} else {
-				if _, err := e.SetAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
+				// The attribute value still carries raw entity syntax that
+				// must be parsed into the attribute's child list.
+				if err := e.SetParsedAttributeNS(attr.LocalName(), attr.Value(), ns); err != nil {
 					return err
 				}
 			}
 		} else {
 			if ctx.replaceEntities {
-				_ = e.SetLiteralAttribute(attr.Name(), attr.Value())
+				_ = e.SetAttribute(attr.Name(), attr.Value())
 			} else {
-				if _, err := e.SetAttribute(attr.Name(), attr.Value()); err != nil {
+				// The attribute value still carries raw entity syntax that
+				// must be parsed into the attribute's child list.
+				if err := e.SetParsedAttribute(attr.Name(), attr.Value()); err != nil {
 					return err
 				}
 			}

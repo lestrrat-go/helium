@@ -1008,9 +1008,9 @@ func (c *compiler) resolveShadowAttributes(ctx context.Context, elem *helium.Ele
 		}
 
 		// Remove the shadow attribute and set the real one.
-		// Use literal mode: avt values are plain text that may contain &.
+		// SetAttribute stores verbatim: avt values are plain text that may contain &.
 		elem.RemoveAttribute("_" + realName)
-		_ = elem.SetLiteralAttribute(realName, val)
+		_ = elem.SetAttribute(realName, val)
 	}
 	return nil
 }
@@ -1035,7 +1035,7 @@ func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *heliu
 			"error evaluating shadow attribute _%s: %v", name, err)
 	}
 	elem.RemoveAttribute(shadowName)
-	_ = elem.SetLiteralAttribute(name, val)
+	_ = elem.SetAttribute(name, val)
 	return nil
 }
 

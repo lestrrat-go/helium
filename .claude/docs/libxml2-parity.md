@@ -75,6 +75,7 @@ libxml2.
 | DTD | Internal subsets, external subsets (limited), entity/notation/element/attribute decls |
 | Encoding | Auto-detection, BOM, UTF-8/16, ISO-8859-*, Windows-*, CJK, EBCDIC, UCS-4 |
 | Tree ops | AppendChild, InsertBefore, RemoveChild, ReplaceChild, CopyNode, Walk |
+| Attribute setters | `Element.SetAttribute`/`SetAttributeNS` store the value verbatim (literal), mirroring libxml2 `xmlSetProp`; `Element.SetParsedAttribute`/`SetParsedAttributeNS` parse the value for entity references, mirroring `xmlNewDocProp` (the parsed variant libxml2 itself flags as a mistake the API can't change) |
 | XPath 1.0 | Full expression eval, all 13 axes, 27+ functions, custom function registration |
 | C14N | All 3 modes (1.0, Exclusive 1.0, 1.1), comments, node-set, inclusive NS, xml:* inheritance |
 | XSD | Complex/simple types, all compositors, facets, IDC (key/unique/keyref), substitution groups, import/include, xsi:type/nil |

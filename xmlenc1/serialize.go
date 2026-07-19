@@ -16,12 +16,12 @@ func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Elem
 		return nil, err
 	}
 	if ed.Type != "" {
-		if err := root.SetLiteralAttribute("Type", ed.Type); err != nil {
+		if err := root.SetAttribute("Type", ed.Type); err != nil {
 			return nil, err
 		}
 	}
 	if ed.ID != "" {
-		if err := root.SetLiteralAttribute("Id", ed.ID); err != nil {
+		if err := root.SetAttribute("Id", ed.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -78,7 +78,7 @@ func marshalEncryptedKey(doc *helium.Document, ek *EncryptedKey) (*helium.Elemen
 		return nil, err
 	}
 	if ek.ID != "" {
-		if err := root.SetLiteralAttribute("Id", ek.ID); err != nil {
+		if err := root.SetAttribute("Id", ek.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -105,7 +105,7 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 	if err := elem.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
 		return nil, err
 	}
-	if err := elem.SetLiteralAttribute("Algorithm", em.Algorithm); err != nil {
+	if err := elem.SetAttribute("Algorithm", em.Algorithm); err != nil {
 		return nil, err
 	}
 
@@ -114,7 +114,7 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 		if err := dm.SetActiveNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
 			return nil, err
 		}
-		if err := dm.SetLiteralAttribute("Algorithm", em.DigestMethod); err != nil {
+		if err := dm.SetAttribute("Algorithm", em.DigestMethod); err != nil {
 			return nil, err
 		}
 		if err := elem.AddChild(dm); err != nil {
@@ -127,7 +127,7 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 		if err := mgf.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc11); err != nil {
 			return nil, err
 		}
-		if err := mgf.SetLiteralAttribute("Algorithm", em.MGFAlgorithm); err != nil {
+		if err := mgf.SetAttribute("Algorithm", em.MGFAlgorithm); err != nil {
 			return nil, err
 		}
 		if err := elem.AddChild(mgf); err != nil {
