@@ -48,6 +48,14 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 		return nil
 	}
 	d.writeString(out, "<!DOCTYPE ")
+	// A review finding claimed these rejections must not leave the already-written
+	// "<!DOCTYPE " prefix behind. Partial output on a mid-stream error is the
+	// streaming writer's pre-existing contract, not introduced here: at this
+	// PR's merge base the non-ASCII DOCTYPE-name rejection below sat after the
+	// same write and left the identical bytes, and a RejectInvalidChars error
+	// mid-document likewise leaves the preceding output. The writer signals the
+	// error (sticky d.err, non-nil WriteTo return); it does not promise atomic
+	// output. Validate-before-first-byte is tracked as separate hardening work.
 	// A DOCTYPE name is emitted verbatim and cannot hold a character reference, so
 	// a non-ASCII name has no faithful US-ASCII serialization. Guard before the
 	// write so no raw octet leaks ahead of the sticky error.
