@@ -1415,9 +1415,10 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 
 	// XTDE0430: it is a non-recoverable dynamic error if two namespace
 	// nodes for the same element have the same prefix but different URIs.
-	// Exception: when the element's prefix namespace was auto-generated
-	// (from xsl:element name resolution), namespace fixup can rename the
-	// element's prefix instead of raising an error.
+	// Exception: when the element's prefix namespace is eligible for
+	// namespace fixup, rename the element's prefix instead of raising an
+	// error. This applies to auto-generated xsl:element names and excluded
+	// literal result element prefixes.
 	_, fixupOK := ec.nsFixupAllowed[elem]
 	for _, ns := range elem.Namespaces() {
 		if ns.Prefix() == name && ns.URI() != value {

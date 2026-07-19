@@ -114,7 +114,7 @@ type execContext struct {
 	primaryResolvedCharMap       map[rune]string                          // resolved character map from parameter-document for primary output
 	primaryOutputOverrides       *OutputDef                               // serialization param overrides from primary xsl:result-document
 	rawResultSequence            xpath3.Sequence                          // raw XDM result sequence (set when initial template has as="...")
-	nsFixupAllowed               map[*helium.Element]struct{}             // elements whose prefix NS was auto-generated (fixup eligible)
+	nsFixupAllowed               map[*helium.Element]struct{}             // elements whose prefix namespace is eligible for fixup
 	overridingTemplate           *template                                // currently executing overriding template (for xsl:original)
 	overridingVarDef             *variable                                // currently evaluating overriding variable (for $xsl:original)
 	originalFunc                 xpath3.Function                          // current xsl:original function (set during overriding function call)

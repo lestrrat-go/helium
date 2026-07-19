@@ -66,6 +66,13 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 			}
 		} else {
 			prefixExcluded = true
+			// The declaration for the literal result element's own prefix is
+			// intentionally deferred. xsl:namespace may bind that prefix to a
+			// different URI, in which case namespace fixup renames the element.
+			if ec.nsFixupAllowed == nil {
+				ec.nsFixupAllowed = make(map[*helium.Element]struct{})
+			}
+			ec.nsFixupAllowed[elem] = struct{}{}
 		}
 	} else if inst.Prefix == "" && ec.hasDefaultNSInScope() {
 		// No namespace on this LRE but default namespace in scope — undeclare it
@@ -514,12 +521,16 @@ func fixDescendantDefaultNSWalk(parent *helium.Element, activeDefaultNS string) 
 }
 
 // fixupExcludedElementNS handles namespace fixup for a literal result element
-// whose own prefix was excluded via exclude-result-prefixes. After the body
-// (including xsl:namespace instructions) has been executed, the element's
-// prefix may now be bound to a different URI. In that case, invent a new
-// prefix for the element's original namespace. If the prefix is still free,
-// just declare it normally.
+// whose own prefix was excluded via exclude-result-prefixes. If no
+// xsl:namespace instruction claimed the prefix, it declares the element's
+// original namespace after the body. A claimed prefix is fixed up while that
+// instruction executes.
 func (ec *execContext) fixupExcludedElementNS(elem *helium.Element, origPrefix, origURI string) {
+	// xsl:namespace already renamed the element while claiming origPrefix.
+	if elem.Prefix() != origPrefix || elem.URI() != origURI {
+		return
+	}
+
 	// Check if the prefix is now bound to a different URI
 	for _, ns := range elem.Namespaces() {
 		if ns.Prefix() == origPrefix {
