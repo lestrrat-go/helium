@@ -7,16 +7,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	commentCase    = "comment"
+	restrictedChar = "\x7f"
+)
+
 func TestParseXML11RawRestrictedChars(t *testing.T) {
 	t.Parallel()
 
-	const restricted = "\x7f"
 	for _, tc := range []struct {
 		name   string
 		source func(string, string) string
 	}{
 		{
-			name: "comment",
+			name: commentCase,
 			source: func(version, value string) string {
 				return `<?xml version="` + version + `"?><!--value` + value + `--><root/>`
 			},
@@ -51,13 +55,13 @@ func TestParseXML11RawRestrictedChars(t *testing.T) {
 			value   string
 			wantErr bool
 		}{
-			{name: "XML 1.0", value: "1.0"},
-			{name: "XML 1.1", value: "1.1", wantErr: true},
+			{name: "XML 1.0", value: ver10},
+			{name: "XML 1.1", value: ver11, wantErr: true},
 		} {
 			t.Run(tc.name+" "+version.name, func(t *testing.T) {
 				t.Parallel()
 
-				_, err := helium.NewParser().Parse(t.Context(), []byte(tc.source(version.value, restricted)))
+				_, err := helium.NewParser().Parse(t.Context(), []byte(tc.source(version.value, restrictedChar)))
 				if version.wantErr {
 					require.Error(t, err)
 					return
@@ -78,14 +82,14 @@ func TestParseXML11RestrictedCharacterReferences(t *testing.T) {
 	}{
 		{
 			name:   "text",
-			source: `<?xml version="1.1"?><root>&#127;</root>`,
+			source: `<?xml version="` + ver11 + `"?><root>&#127;</root>`,
 			check: func(t *testing.T, doc *helium.Document) {
 				require.Equal(t, "\x7f", string(doc.DocumentElement().Content()))
 			},
 		},
 		{
 			name:   "attribute",
-			source: `<?xml version="1.1"?><root attr="&#127;"/>`,
+			source: `<?xml version="` + ver11 + `"?><root attr="&#127;"/>`,
 			check: func(t *testing.T, doc *helium.Document) {
 				value, ok := doc.DocumentElement().GetAttribute("attr")
 				require.True(t, ok)
