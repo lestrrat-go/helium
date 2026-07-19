@@ -1949,6 +1949,11 @@ func TestWriterRejectsXML11RestrictedCharsInDTDLiterals(t *testing.T) {
 func TestWriterIgnoresStoredExternalIDsOnInternalEntities(t *testing.T) {
 	t.Parallel()
 
+	const (
+		invalidPublicID = "bad{pubid"
+		invalidSystemID = "bad\x01system"
+	)
+
 	for _, tc := range []struct {
 		name       string
 		entityType enum.EntityType
@@ -1958,22 +1963,22 @@ func TestWriterIgnoresStoredExternalIDsOnInternalEntities(t *testing.T) {
 		{
 			name:       "general public ID",
 			entityType: enum.InternalGeneralEntity,
-			publicID:   "bad{pubid",
+			publicID:   invalidPublicID,
 		},
 		{
 			name:       "general system ID",
 			entityType: enum.InternalGeneralEntity,
-			systemID:   "bad\x01system",
+			systemID:   invalidSystemID,
 		},
 		{
 			name:       "parameter public ID",
 			entityType: enum.InternalParameterEntity,
-			publicID:   "bad{pubid",
+			publicID:   invalidPublicID,
 		},
 		{
 			name:       "parameter system ID",
 			entityType: enum.InternalParameterEntity,
-			systemID:   "bad\x01system",
+			systemID:   invalidSystemID,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2008,6 +2013,11 @@ func TestWriterIgnoresStoredExternalIDsOnInternalEntities(t *testing.T) {
 func TestWriterValidatesExternalEntityIDs(t *testing.T) {
 	t.Parallel()
 
+	const (
+		invalidPublicID = "bad{pubid"
+		invalidSystemID = "bad\x01system"
+	)
+
 	for _, tc := range []struct {
 		name       string
 		entityType enum.EntityType
@@ -2018,40 +2028,40 @@ func TestWriterValidatesExternalEntityIDs(t *testing.T) {
 		{
 			name:       "parsed general public ID",
 			entityType: enum.ExternalGeneralParsedEntity,
-			publicID:   "bad{pubid",
+			publicID:   invalidPublicID,
 			systemID:   "ext.ent",
 			wantErr:    helium.ErrWriterInvalidDTDNode,
 		},
 		{
 			name:       "unparsed general public ID",
 			entityType: enum.ExternalGeneralUnparsedEntity,
-			publicID:   "bad{pubid",
+			publicID:   invalidPublicID,
 			systemID:   "ext.ent",
 			wantErr:    helium.ErrWriterInvalidDTDNode,
 		},
 		{
 			name:       "parameter public ID",
 			entityType: enum.ExternalParameterEntity,
-			publicID:   "bad{pubid",
+			publicID:   invalidPublicID,
 			systemID:   "ext.ent",
 			wantErr:    helium.ErrWriterInvalidDTDNode,
 		},
 		{
 			name:       "parsed general system ID",
 			entityType: enum.ExternalGeneralParsedEntity,
-			systemID:   "bad\x01system",
+			systemID:   invalidSystemID,
 			wantErr:    helium.ErrInvalidXMLChar,
 		},
 		{
 			name:       "unparsed general system ID",
 			entityType: enum.ExternalGeneralUnparsedEntity,
-			systemID:   "bad\x01system",
+			systemID:   invalidSystemID,
 			wantErr:    helium.ErrInvalidXMLChar,
 		},
 		{
 			name:       "parameter system ID",
 			entityType: enum.ExternalParameterEntity,
-			systemID:   "bad\x01system",
+			systemID:   invalidSystemID,
 			wantErr:    helium.ErrInvalidXMLChar,
 		},
 	} {
