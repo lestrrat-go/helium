@@ -2,10 +2,12 @@ package helium
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -127,7 +129,7 @@ func (d *writeSession) writeNormalizedText(out io.Writer, content []byte) error 
 			}
 			continue
 		}
-		if err := escapeText(out, seg.text, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+		if err := escapeText(out, seg.text, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
 			return err
 		}
 	}
@@ -143,7 +145,7 @@ func (d *writeSession) writeNormalizedText(out io.Writer, content []byte) error 
 // replacement is emitted verbatim.
 func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) error {
 	if !d.normalize {
-		return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, d.charMap)
+		return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, d.charMap)
 	}
 	for _, seg := range d.normalizeContent(content) {
 		if seg.mapped {
@@ -152,7 +154,7 @@ func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) erro
 			}
 			continue
 		}
-		if err := escapeAttrValue(out, seg.text, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+		if err := escapeAttrValue(out, seg.text, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
 			return err
 		}
 	}
@@ -344,9 +346,243 @@ func isInCharacterRange(r rune) bool {
 	return r == 0x09 ||
 		r == 0x0A ||
 		r == 0x0D ||
-		r >= 0x20 && r <= 0xDF77 ||
+		r >= 0x20 && r <= 0xD7FF ||
 		r >= 0xE000 && r <= 0xFFFD ||
 		r >= 0x10000 && r <= 0x10FFFF
+}
+
+// isSerializableChar reports whether r is a character the writer may serialize
+// for the target XML version: any XML 1.0 Char (isInCharacterRange) plus, when
+// targeting XML 1.1, the restricted control characters (isXML11SerializeAsCharRef)
+// that are valid in 1.1 but must be emitted as character references. A character
+// failing this is rejected with ErrInvalidXMLChar when RejectInvalidChars is set.
+func isSerializableChar(r rune, xml11 bool) bool {
+	return isInCharacterRange(r) || (xml11 && isXML11SerializeAsCharRef(r))
+}
+
+// serializeRefFree screens content bound for a REFERENCE-LESS serialization
+// context — comment text, processing-instruction data, and CDATA-section content.
+// None of these admits a character reference, so the literal-serializable set is
+// XML 1.0 Char range (isInCharacterRange). XML 1.1 adds a second constraint: its
+// RestrictedChar set, plus NEL and LINE SEPARATOR, must be written as a character
+// reference to preserve their value. That form is unavailable in this context, so
+// it must be rejected or replaced here too. This is why the check does NOT use
+// isSerializableChar(r, xml11), which would wrongly admit a 1.1 RestrictedChar.
+//
+// A character outside that range, or one with an XML 1.1 character-reference-only
+// form, is a serialization error: under the default policy it is rejected with a
+// sticky ErrInvalidXMLChar (returning stop=true, with nothing to write); under
+// RejectInvalidChars(false) it is replaced by U+FFFD. A byte that is not valid
+// UTF-8 is always replaced by U+FFFD, matching the text/attribute escapers (it
+// has no character-reference form either). When the content is already clean it
+// returns b unchanged so no copy is made.
+func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop bool) {
+	work := false
+	for i := 0; i < len(b); {
+		r, width := utf8.DecodeRune(b[i:])
+		switch {
+		case r == utf8.RuneError && width == 1:
+			// A malformed UTF-8 byte is always replaced with U+FFFD.
+			work = true
+		case !isInCharacterRange(r) || (s.xml11 && isXML11SerializeAsCharRef(r)):
+			if !s.replaceInvalidChars {
+				s.check(fmt.Errorf("helium: %s contains a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+				return nil, true
+			}
+			work = true
+		}
+		i += width
+	}
+	if !work {
+		return b, false
+	}
+	out = make([]byte, 0, len(b))
+	for i := 0; i < len(b); {
+		r, width := utf8.DecodeRune(b[i:])
+		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) || (s.xml11 && isXML11SerializeAsCharRef(r)) {
+			out = append(out, esc_fffd...)
+		} else {
+			out = append(out, b[i:i+width]...)
+		}
+		i += width
+	}
+	return out, false
+}
+
+// dtdLiteral applies the reference-free serialization policy to a DTD literal.
+// This covers DTD literals that cannot carry a character reference, so XML-invalid
+// and XML 1.1 serialization-only characters are rejected by default or replaced
+// with U+FFFD in replacement mode.
+func (s *writeSession) dtdLiteral(what, value string) (string, bool) {
+	if value == "" {
+		return value, false
+	}
+	out, stop := s.serializeRefFree(what, []byte(value))
+	if stop {
+		return "", true
+	}
+	return string(out), false
+}
+
+// entityValueLiteral validates EntityValue markup before applying its raw-literal
+// character policy. EntityValue can carry character references, unlike the other
+// DTD literals: validated references stay verbatim and XML 1.1 serialization-only
+// raw characters become decimal character references. A malformed reference always
+// fails; only a syntactically valid character-reference target may follow
+// RejectInvalidChars replacement. Parsed orig values are checked for parameter-
+// entity syntax because this writer emits an internal subset, where that syntax
+// cannot be preserved in a declaration.
+func (s *writeSession) entityValueLiteral(what, value string, checkParameterEntityRefs bool) (string, bool) {
+	refs, stop := s.screenCharRefs(what, value, checkParameterEntityRefs)
+	if stop {
+		return "", true
+	}
+	return s.serializeEntityValue(what, refs)
+}
+
+// serializeEntityValue applies the raw-character part of the EntityValue policy
+// after screenCharRefs has validated every reference. Existing references stay
+// untouched. XML 1.1 serialization-only raw characters use their available
+// decimal-reference form; characters invalid in both target versions retain the
+// DTD literal U+FFFD replacement behavior.
+func (s *writeSession) serializeEntityValue(what, value string) (string, bool) {
+	work := false
+	for i := 0; i < len(value); {
+		if value[i] == '&' {
+			end := i + 1
+			for value[end] != ';' {
+				end++
+			}
+			i = end + 1
+			continue
+		}
+
+		r, width := utf8.DecodeRuneInString(value[i:])
+		switch {
+		case r == utf8.RuneError && width == 1:
+			work = true
+		case !isInCharacterRange(r):
+			if !s.replaceInvalidChars {
+				s.check(fmt.Errorf("helium: %s contains a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+				return "", true
+			}
+			work = true
+		case s.xml11 && isXML11SerializeAsCharRef(r):
+			work = true
+		}
+		i += width
+	}
+	if !work {
+		return value, false
+	}
+
+	var b strings.Builder
+	b.Grow(len(value))
+	for i := 0; i < len(value); {
+		if value[i] == '&' {
+			end := i + 1
+			for value[end] != ';' {
+				end++
+			}
+			b.WriteString(value[i : end+1])
+			i = end + 1
+			continue
+		}
+
+		r, width := utf8.DecodeRuneInString(value[i:])
+		switch {
+		case r == utf8.RuneError && width == 1, !isInCharacterRange(r):
+			b.Write(esc_fffd)
+		case s.xml11 && isXML11SerializeAsCharRef(r):
+			var dbuf [12]byte
+			b.Write(decimalCharRef(&dbuf, r))
+		default:
+			b.WriteString(value[i : i+width])
+		}
+		i += width
+	}
+	return b.String(), false
+}
+
+// screenCharRefs makes one forward pass over EntityValue markup. It shares
+// parseCharRefBody with EntityRefNode output and validates every '&' as either a
+// CharRef or a named general reference. checkParameterEntityRefs applies to a
+// parsed Entity.orig value, where any raw percent starts a forbidden PEReference
+// in the internal subset emitted by this writer.
+func (s *writeSession) screenCharRefs(what, value string, checkParameterEntityRefs bool) (string, bool) {
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(value); {
+		switch value[i] {
+		case '&':
+			end := i + 1
+			for end < len(value) && value[end] != ';' {
+				end++
+			}
+			if end == len(value) {
+				s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+
+			body := value[i+1 : end]
+			if len(body) == 0 {
+				s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			if body[0] != '#' {
+				if !xmlchar.IsValidName(body) {
+					s.check(fmt.Errorf("helium: %s contains a malformed entity reference: %w", what, ErrWriterInvalidName))
+					return "", true
+				}
+				i = end + 1
+				continue
+			}
+
+			cp, ok := parseCharRefBody(body[1:])
+			if !ok {
+				s.check(fmt.Errorf("helium: %s contains a malformed character reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			if isSerializableChar(cp, s.xml11) {
+				i = end + 1
+				continue
+			}
+			if !s.replaceInvalidChars {
+				s.check(fmt.Errorf("helium: %s contains a character reference to a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
+				return "", true
+			}
+			b.WriteString(value[last:i])
+			if s.escapeNonASCII || s.asciiOutput {
+				b.Write(esc_fffd_ref)
+			} else {
+				b.Write(esc_fffd)
+			}
+			last = end + 1
+			i = end + 1
+		case '%':
+			if !checkParameterEntityRefs {
+				i++
+				continue
+			}
+			end := i + 1
+			for end < len(value) && value[end] != ';' {
+				end++
+			}
+			if end == len(value) || !xmlchar.IsValidName(value[i+1:end]) {
+				s.check(fmt.Errorf("helium: %s contains a malformed parameter-entity reference: %w", what, ErrWriterInvalidName))
+				return "", true
+			}
+			s.check(fmt.Errorf("helium: %s contains a parameter-entity reference that cannot be serialized in an internal subset: %w", what, ErrWriterInvalidName))
+			return "", true
+		default:
+			i++
+		}
+	}
+	if last == 0 {
+		return value, false
+	}
+	b.WriteString(value[last:])
+	return b.String(), false
 }
 
 // writeCharMapReplacement flushes s[last:cut] to w and writes the raw
@@ -384,6 +620,12 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
+		// The character-map lookup deliberately PRECEDES the invalid-char rejection
+		// below: Serialization 3.1 §5.1.11 applies character maps before character
+		// checking, and SERE0006 is defined on the SERIALIZED result — after mapping,
+		// a mapped invalid character is gone, so no forbidden character survives to
+		// reject. Mapping an invalid char to a safe replacement is explicit per-rune
+		// configuration (fn:serialize use-character-maps), not silent mutation.
 		if repl, ok := charMap[r]; ok {
 			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
@@ -410,18 +652,35 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 		default:
 			// A character outside the XML character range (e.g. a C0/C1 control
 			// char) is a serialization error when rejection is enabled — checked
-			// before the escapeNonASCII char-reference branch so it is caught
-			// regardless of that setting. A malformed UTF-8 byte decodes to
-			// U+FFFD, which is IN range, so it is not a version error here.
-			if rejectInvalidChars && !isInCharacterRange(r) {
+			// before every emission branch so it is caught regardless of the
+			// escaping setting. A valid XML 1.1 restricted character is exempt: it
+			// is in-range for the target version and serializes as a character
+			// reference below. A malformed UTF-8 byte decodes to U+FFFD, which is
+			// IN range, so it is not a version error here.
+			if rejectInvalidChars && !isSerializableChar(r, xml11) {
 				return ErrInvalidXMLChar
 			}
 			// XML 1.1 restricted control characters (and the NEL/LINE SEPARATOR
 			// end-of-line characters) are valid but may not appear literally: emit
-			// them as decimal character references (before the escapeNonASCII hex
-			// branch and the out-of-range replacement).
+			// them as decimal character references (before the out-of-range
+			// replacement and the escapeNonASCII hex branch).
 			if xml11 && isXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(&dbuf, r)
+				break
+			}
+			// A character outside the XML character range (or a lone U+FFFD from a
+			// malformed UTF-8 byte) has no valid literal or numeric-reference form,
+			// so in replacement mode it becomes U+FFFD — the &#xFFFD; reference
+			// when non-ASCII characters are being escaped (matching libxml2) and
+			// the raw replacement character otherwise. Checked BEFORE the
+			// escapeNonASCII / asciiOutput char-reference branches so an
+			// out-of-range char never serializes as a bogus reference (e.g. &#x1;).
+			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				if escapeNonASCII || asciiOutput {
+					esc = esc_fffd_ref
+				} else {
+					esc = esc_fffd
+				}
 				break
 			}
 			// US-ASCII output cannot represent a non-ASCII character literally, so
@@ -429,7 +688,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 			// (the full range, not just Latin-1) — the octets stay pure US-ASCII,
 			// consistent with the encoding declaration. Checked before the Latin-1-only
 			// escapeNonASCII branch so BMP/astral characters are covered too.
-			if asciiOutput && r >= 0x80 && isInCharacterRange(r) {
+			if asciiOutput && r >= 0x80 {
 				esc = hexCharRefWide(&wbuf, r)
 				break
 			}
@@ -439,10 +698,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 					break
 				}
 			}
-			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
-				esc = esc_fffd
-				break
-			}
+			// A genuine in-range U+FFFD is emitted as a character reference.
 			if r == 0xFFFD {
 				esc = esc_fffd_ref
 				break
@@ -474,6 +730,12 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
 		i += width
+		// The character-map lookup deliberately PRECEDES the invalid-char rejection
+		// below: Serialization 3.1 §5.1.11 applies character maps before character
+		// checking, and SERE0006 is defined on the SERIALIZED result — after mapping,
+		// a mapped invalid character is gone, so no forbidden character survives to
+		// reject. Mapping an invalid char to a safe replacement is explicit per-rune
+		// configuration (fn:serialize use-character-maps), not silent mutation.
 		if repl, ok := charMap[r]; ok {
 			newLast, err := writeCharMapReplacement(w, s, last, i-width, i, repl, rejectCharMapNonASCII)
 			if err != nil {
@@ -499,18 +761,35 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 		default:
 			// A character outside the XML character range (e.g. a C0/C1 control
 			// char) is a serialization error when rejection is enabled — checked
-			// before the escapeNonASCII char-reference branch so it is caught
-			// regardless of that setting. A malformed UTF-8 byte decodes to
-			// U+FFFD, which is IN range, so it is not a version error here.
-			if rejectInvalidChars && !isInCharacterRange(r) {
+			// before every emission branch so it is caught regardless of the
+			// escaping setting. A valid XML 1.1 restricted character is exempt: it
+			// is in-range for the target version and serializes as a character
+			// reference below. A malformed UTF-8 byte decodes to U+FFFD, which is
+			// IN range, so it is not a version error here.
+			if rejectInvalidChars && !isSerializableChar(r, xml11) {
 				return ErrInvalidXMLChar
 			}
 			// XML 1.1 restricted control characters (and the NEL/LINE SEPARATOR
 			// end-of-line characters) are valid but may not appear literally: emit
-			// them as decimal character references (before the escapeNonASCII hex
-			// branch and the out-of-range replacement).
+			// them as decimal character references (before the out-of-range
+			// replacement and the escapeNonASCII hex branch).
 			if xml11 && isXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(&dbuf, r)
+				break
+			}
+			// A character outside the XML character range (or a lone U+FFFD from a
+			// malformed UTF-8 byte) has no valid literal or numeric-reference form,
+			// so in replacement mode it becomes U+FFFD — the &#xFFFD; reference
+			// when non-ASCII characters are being escaped (matching libxml2) and
+			// the raw replacement character otherwise. Checked BEFORE the
+			// escapeNonASCII / asciiOutput char-reference branches so an
+			// out-of-range char never serializes as a bogus reference (e.g. &#x1;).
+			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
+				if escapeNonASCII || asciiOutput {
+					esc = esc_fffd_ref
+				} else {
+					esc = esc_fffd
+				}
 				break
 			}
 			// US-ASCII output cannot represent a non-ASCII character literally, so
@@ -518,7 +797,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 			// (the full range, not just Latin-1) — the octets stay pure US-ASCII,
 			// consistent with the encoding declaration. Checked before the Latin-1-only
 			// escapeNonASCII branch so BMP/astral characters are covered too.
-			if asciiOutput && r >= 0x80 && isInCharacterRange(r) {
+			if asciiOutput && r >= 0x80 {
 				esc = hexCharRefWide(&wbuf, r)
 				break
 			}
@@ -528,10 +807,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 					break
 				}
 			}
-			if !isInCharacterRange(r) || (r == 0xFFFD && width == 1) {
-				esc = esc_fffd
-				break
-			}
+			// A genuine in-range U+FFFD is emitted as a character reference.
 			if r == 0xFFFD {
 				esc = esc_fffd_ref
 				break

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
 func dtdQuoteChar(value string) byte {
@@ -48,47 +49,50 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 		return nil
 	}
 	d.writeString(out, "<!DOCTYPE ")
-	// A review finding claimed these rejections must not leave the already-written
-	// "<!DOCTYPE " prefix behind. Partial output on a mid-stream error is the
-	// streaming writer's pre-existing contract, not introduced here: at this
-	// PR's merge base the non-ASCII DOCTYPE-name rejection below sat after the
-	// same write and left the identical bytes, and a RejectInvalidChars error
-	// mid-document likewise leaves the preceding output. The writer signals the
-	// error (sticky d.err, non-nil WriteTo return); it does not promise atomic
-	// output. Validate-before-first-byte is tracked as separate hardening work.
-	// A DOCTYPE name is emitted verbatim and cannot hold a character reference, so
-	// a non-ASCII name has no faithful US-ASCII serialization. Guard before the
-	// write so no raw octet leaks ahead of the sticky error.
-	if d.rejectNonASCIIStr("DOCTYPE name", dtd.Name()) {
-		return d.err
-	}
 	// A DOCTYPE name must be a non-empty XML Name; an empty or all-whitespace name
 	// serializes as "<!DOCTYPE >", which no parser accepts.
 	if strings.TrimSpace(dtd.Name()) == "" {
 		d.check(fmt.Errorf("helium: empty DOCTYPE name: %w", ErrWriterInvalidDTDNode))
 		return d.err
 	}
+	// A DOCTYPE name is emitted verbatim and must be a valid XML Name (which
+	// subsumes the character-range check and the US-ASCII guard). Guard before the
+	// name write so no raw octet leaks ahead of the sticky error.
+	if !d.checkVerbatimName("DOCTYPE name", dtd.Name()) {
+		return d.err
+	}
 	d.writeString(out, dtd.Name())
 
-	if d.err == nil && dtd.externalID != "" {
+	// The DOCTYPE external-ID public/system literals are reference-less DTD
+	// literals: an XML-invalid character is rejected (default) or U+FFFD-substituted.
+	pubLit, stop := d.dtdLiteral("DOCTYPE public-ID literal", dtd.externalID)
+	if stop {
+		return d.err
+	}
+	sysLit, stop := d.dtdLiteral("DOCTYPE system-ID literal", dtd.systemID)
+	if stop {
+		return d.err
+	}
+
+	if d.err == nil && pubLit != "" {
 		// A non-ASCII public id has no faithful US-ASCII serialization; reject that
 		// (encoding error) before the PubidChar check so the US-ASCII path keeps
 		// reporting the encoding failure rather than a PubidChar failure.
-		if d.rejectNonASCIIStr("DOCTYPE public identifier", dtd.externalID) {
+		if d.rejectNonASCIIStr("DOCTYPE public identifier", pubLit) {
 			return d.err
 		}
-		if d.checkPubid(dtd.externalID) || d.checkSystemLiteral(dtd.systemID) {
+		if d.checkPubid(pubLit) || d.checkSystemLiteral(sysLit) {
 			return d.err
 		}
-		pubQ := dtdQuoteChar(dtd.externalID)
-		sysQ := dtdQuoteChar(dtd.systemID)
-		d.writeString(out, fmt.Sprintf(" PUBLIC %c%s%c %c%s%c", pubQ, dtd.externalID, pubQ, sysQ, dtd.systemID, sysQ))
-	} else if d.err == nil && dtd.systemID != "" {
-		if d.checkSystemLiteral(dtd.systemID) {
+		pubQ := dtdQuoteChar(pubLit)
+		sysQ := dtdQuoteChar(sysLit)
+		d.writeString(out, fmt.Sprintf(" PUBLIC %c%s%c %c%s%c", pubQ, pubLit, pubQ, sysQ, sysLit, sysQ))
+	} else if d.err == nil && sysLit != "" {
+		if d.checkSystemLiteral(sysLit) {
 			return d.err
 		}
-		sysQ := dtdQuoteChar(dtd.systemID)
-		d.writeString(out, fmt.Sprintf(" SYSTEM %c%s%c", sysQ, dtd.systemID, sysQ))
+		sysQ := dtdQuoteChar(sysLit)
+		d.writeString(out, fmt.Sprintf(" SYSTEM %c%s%c", sysQ, sysLit, sysQ))
 	}
 
 	if len(dtd.entities) == 0 && len(dtd.elements) == 0 && len(dtd.pentities) == 0 && len(dtd.attributes) == 0 && len(dtd.notations) == 0 {
@@ -118,17 +122,43 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 	return d.err
 }
 
-func (d *writeSession) dumpEnumeration(out io.Writer, n Enumeration) error {
-	l := len(n)
-	for i, v := range n {
-		// An enumeration token (NMTOKEN / NOTATION name) is emitted verbatim and
-		// cannot hold a character reference, so a non-ASCII token has no faithful
-		// US-ASCII serialization. Guard before the write.
+func (d *writeSession) dumpEnumeration(out io.Writer, atype enum.AttributeType, n Enumeration) error {
+	if len(n) == 0 {
+		d.check(fmt.Errorf("helium: attribute type %d enumeration must contain at least one token: %w", atype, ErrWriterInvalidName))
+		return d.err
+	}
+
+	seen := make(map[string]struct{}, len(n))
+	for _, v := range n {
+		var valid bool
+		switch atype {
+		case enum.AttrEnumeration:
+			valid = isValidNmtoken(v)
+		case enum.AttrNotation:
+			valid = xmlchar.IsValidName(v)
+		default:
+			d.check(fmt.Errorf("helium: invalid enumeration attribute type: %w", ErrWriterInvalidDTDNode))
+			return d.err
+		}
+		if !valid {
+			d.check(fmt.Errorf("helium: invalid enumeration token %q: %w", v, ErrWriterInvalidName))
+			return d.err
+		}
+		if _, duplicate := seen[v]; duplicate {
+			d.check(fmt.Errorf("helium: duplicate enumeration token %q: %w", v, ErrWriterInvalidName))
+			return d.err
+		}
+		seen[v] = struct{}{}
+		// Enumeration members are grammar tokens, not character content. Validate
+		// before this US-ASCII check and never substitute an invalid token.
 		if d.rejectNonASCIIStr("enumeration token", v) {
 			return d.err
 		}
+	}
+
+	for i, v := range n {
 		d.writeString(out, v)
-		if i != l-1 {
+		if i != len(n)-1 {
 			d.writeString(out, " | ")
 		}
 	}
@@ -136,24 +166,15 @@ func (d *writeSession) dumpEnumeration(out io.Writer, n Enumeration) error {
 	return d.err
 }
 
-// writePrefixedName emits an optionally namespace-prefixed name as
-// "prefix:name" (or just "name" when prefix is empty), preserving the
-// writeString order so the sticky-error handling is identical to the
-// inline sequences it replaces.
+// writePrefixedName emits a DTD Name held in split storage. The split is not a
+// QName interpretation: dtdName restores the exact original spelling before
+// validating it with the DTD Name grammar.
 func (d *writeSession) writePrefixedName(out io.Writer, prefix, name string) {
-	// The prefix and name are emitted verbatim and cannot hold a character
-	// reference, so a non-ASCII component has no faithful US-ASCII serialization.
-	// Guard before the first write so no raw octet leaks ahead of the sticky
-	// error. This is the shared chokepoint for <!ELEMENT>/<!ATTLIST> names and
-	// element-content child names.
-	if d.rejectNonASCIIStr("DTD declaration name", prefix) || d.rejectNonASCIIStr("DTD declaration name", name) {
+	fullName := dtdName(prefix, name)
+	if !d.checkVerbatimName("DTD declaration name", fullName) {
 		return
 	}
-	if prefix != "" {
-		d.writeString(out, prefix)
-		d.writeString(out, ":")
-	}
-	d.writeString(out, name)
+	d.writeString(out, fullName)
 }
 
 func (d *writeSession) dumpElementDeclPrologue(out io.Writer, n *ElementDecl) {
@@ -241,6 +262,14 @@ func (d *writeSession) dumpElementContent(out io.Writer, n *ElementContent, glob
 }
 
 func (d *writeSession) dumpEntityContent(out io.Writer, content string) error {
+	// An entity value screens both its literal runes (the reference-less DTD-literal
+	// policy) and every character reference it carries: a &#N;/&#xN; target must be
+	// serializable in the target XML version, else it is rejected (default) or its
+	// reference replaced by U+FFFD.
+	content, stop := d.entityValueLiteral("entity value", content, false)
+	if stop {
+		return d.err
+	}
 	if strings.IndexByte(content, '%') == -1 {
 		if err := dumpQuotedString(out, content); err != nil {
 			d.check(err)
@@ -288,11 +317,9 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		return nil
 	}
 
-	// The entity name is emitted verbatim in every branch below and cannot hold a
-	// character reference, so a non-ASCII name has no faithful US-ASCII
-	// serialization. Guard once before any write so no raw octet leaks ahead of
-	// the sticky error.
-	if d.rejectNonASCIIStr("entity name", ent.name) {
+	// Entity names are intentionally NCNames: Helium's parser and streaming writer
+	// reject colon-bearing names.
+	if !d.checkVerbatimNCName("entity name", ent.name) {
 		return d.err
 	}
 
@@ -302,7 +329,11 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		d.writeString(out, ent.name)
 		d.writeString(out, " ")
 		if ent.orig != "" {
-			if err := dumpQuotedString(out, ent.orig); err != nil {
+			orig, stop := d.entityValueLiteral("entity value", ent.orig, true)
+			if stop {
+				return d.err
+			}
+			if err := dumpQuotedString(out, orig); err != nil {
 				d.check(err)
 				return d.err
 			}
@@ -315,24 +346,24 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case enum.ExternalGeneralParsedEntity, enum.ExternalGeneralUnparsedEntity:
 		d.writeString(out, "<!ENTITY ")
 		d.writeString(out, ent.name)
-		if ent.externalID != "" {
-			d.writeString(out, " PUBLIC ")
-			d.check(dumpQuotedString(out, ent.externalID))
-			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, ent.systemID))
-		} else {
-			d.writeString(out, " SYSTEM ")
-			d.check(dumpQuotedString(out, ent.systemID))
+		if err := d.dumpExternalEntityID(out, ent); err != nil {
+			return err
 		}
 
 		if etype == enum.ExternalGeneralUnparsedEntity {
 			if ent.content != "" {
-				d.writeString(out, " NDATA ")
+				// The NDATA notation name is emitted verbatim and must be a valid XML
+				// Name. Guard before the " NDATA " write so no raw octet leaks ahead of
+				// the sticky error.
+				notationName := ent.content
 				if ent.orig != "" {
-					d.writeString(out, ent.orig)
-				} else {
-					d.writeString(out, ent.content)
+					notationName = ent.orig
 				}
+				if !d.checkVerbatimName("NDATA notation name", notationName) {
+					return d.err
+				}
+				d.writeString(out, " NDATA ")
+				d.writeString(out, notationName)
 			}
 		}
 		d.writeString(out, ">\n")
@@ -341,7 +372,11 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 		d.writeString(out, ent.name)
 		d.writeString(out, " ")
 		if ent.orig != "" {
-			if err := dumpQuotedString(out, ent.orig); err != nil {
+			orig, stop := d.entityValueLiteral("parameter-entity value", ent.orig, true)
+			if stop {
+				return d.err
+			}
+			if err := dumpQuotedString(out, orig); err != nil {
 				d.check(err)
 				return d.err
 			}
@@ -354,50 +389,83 @@ func (d *writeSession) dumpEntityDecl(out io.Writer, ent *Entity) error {
 	case enum.ExternalParameterEntity:
 		d.writeString(out, "<!ENTITY % ")
 		d.writeString(out, ent.name)
-		if ent.externalID != "" {
-			d.writeString(out, " PUBLIC ")
-			d.check(dumpQuotedString(out, ent.externalID))
-			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, ent.systemID))
-		} else {
-			d.writeString(out, " SYSTEM ")
-			d.check(dumpQuotedString(out, ent.systemID))
+		if err := d.dumpExternalEntityID(out, ent); err != nil {
+			return err
 		}
+		d.writeString(out, ">\n")
 	default:
 		return fmt.Errorf("invalid entity type: %w", ErrWriterInvalidDTDNode)
 	}
 	return d.err
 }
 
-func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
-	// A notation name cannot hold a character reference, so a non-ASCII name has
-	// no faithful US-ASCII serialization.
-	if d.rejectNonASCIIStr("notation name", n.name) {
+// dumpExternalEntityID writes the external identifier for an entity type that
+// emits one. Internal entity declarations retain these fields in the DOM but do
+// not consume them in XML, so their EntityValue paths handle their own content.
+func (d *writeSession) dumpExternalEntityID(out io.Writer, ent *Entity) error {
+	pubLit, stop := d.dtdLiteral("entity public-ID literal", ent.externalID)
+	if stop {
 		return d.err
 	}
+	sysLit, stop := d.dtdLiteral("entity system-ID literal", ent.systemID)
+	if stop {
+		return d.err
+	}
+	if pubLit != "" {
+		if d.checkPubid(pubLit) {
+			return d.err
+		}
+		d.writeString(out, " PUBLIC ")
+		d.check(dumpQuotedString(out, pubLit))
+		d.writeString(out, " ")
+		d.check(dumpQuotedString(out, sysLit))
+		return d.err
+	}
+
+	d.writeString(out, " SYSTEM ")
+	d.check(dumpQuotedString(out, sysLit))
+	return d.err
+}
+
+func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
+	// The parser requires a notation declaration name to be an NCName.
+	if !d.checkVerbatimNCName("notation name", n.name) {
+		return d.err
+	}
+	// The public/system-ID literals are reference-less DTD literals: an XML-invalid
+	// character is rejected (default) or U+FFFD-substituted.
+	pubLit, stop := d.dtdLiteral("notation public-ID literal", n.publicID)
+	if stop {
+		return d.err
+	}
+	sysLit, stop := d.dtdLiteral("notation system-ID literal", n.systemID)
+	if stop {
+		return d.err
+	}
+
 	// A non-ASCII public id has no faithful US-ASCII serialization; reject that
 	// (encoding error) before the PubidChar check so the US-ASCII path keeps
 	// reporting the encoding failure rather than a PubidChar failure.
-	if n.publicID != "" {
-		if d.rejectNonASCIIStr("notation public identifier", n.publicID) {
+	if pubLit != "" {
+		if d.rejectNonASCIIStr("notation public identifier", pubLit) {
 			return d.err
 		}
-		if d.checkPubid(n.publicID) {
+		if d.checkPubid(pubLit) {
 			return d.err
 		}
 	}
 	d.writeString(out, "<!NOTATION ")
 	d.writeString(out, n.name)
-	if n.publicID != "" {
+	if pubLit != "" {
 		d.writeString(out, " PUBLIC ")
-		d.check(dumpQuotedString(out, n.publicID))
-		if n.systemID != "" {
+		d.check(dumpQuotedString(out, pubLit))
+		if sysLit != "" {
 			d.writeString(out, " ")
-			d.check(dumpQuotedString(out, n.systemID))
+			d.check(dumpQuotedString(out, sysLit))
 		}
 	} else {
 		d.writeString(out, " SYSTEM ")
-		d.check(dumpQuotedString(out, n.systemID))
+		d.check(dumpQuotedString(out, sysLit))
 	}
 	d.writeString(out, " >\n")
 	return d.err
@@ -426,10 +494,10 @@ func (d *writeSession) dumpElementDecl(out io.Writer, n *ElementDecl) error {
 
 func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error {
 	d.writeString(out, "<!ATTLIST ")
-	// The element name is emitted verbatim and cannot hold a character reference,
-	// so a non-ASCII name has no faithful US-ASCII serialization. Guard before the
+	// The element name is emitted verbatim and must be a valid XML Name (which
+	// subsumes the character-range check and the US-ASCII guard). Guard before the
 	// write. (The attribute name/prefix are guarded inside writePrefixedName.)
-	if d.rejectNonASCIIStr("attribute-list element name", n.elem) {
+	if !d.checkVerbatimName("attribute-list element name", n.elem) {
 		return d.err
 	}
 	d.writeString(out, n.elem)
@@ -454,12 +522,12 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 		d.writeString(out, " NMTOKENS")
 	case enum.AttrEnumeration:
 		d.writeString(out, " (")
-		if err := d.dumpEnumeration(out, n.tree); err != nil {
+		if err := d.dumpEnumeration(out, n.atype, n.tree); err != nil {
 			return err
 		}
 	case enum.AttrNotation:
 		d.writeString(out, " NOTATION (")
-		if err := d.dumpEnumeration(out, n.tree); err != nil {
+		if err := d.dumpEnumeration(out, n.atype, n.tree); err != nil {
 			return err
 		}
 	default:
@@ -480,7 +548,7 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 
 	if n.defvalue != "" {
 		d.writeString(out, ` "`)
-		d.check(escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil))
+		d.check(escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil))
 		d.writeString(out, `"`)
 	}
 	d.writeString(out, ">\n")
@@ -549,7 +617,7 @@ func (d *writeSession) dumpNs(out io.Writer, ns *Namespace) error {
 	if _, err := io.WriteString(out, `="`); err != nil {
 		return err
 	}
-	if err := escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), d.rejectInvalidChars, d.xml11, nil); err != nil {
+	if err := escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
 		return err
 	}
 	if _, err := io.WriteString(out, `"`); err != nil {

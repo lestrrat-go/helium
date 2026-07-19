@@ -91,6 +91,10 @@ func (out *outputFrame) captureSequenceItems(items xpath3.ItemSlice) {
 // SerializeItems writes a sequence of items (maps, arrays, atomics, nodes)
 // using the specified output definition's method (json or adaptive).
 // This is used for result-documents with method="json" or method="adaptive".
+// An element or document node item carrying a character invalid for the target
+// XML version fails with the serialization error SERE0006 rather than emitting
+// truncated output. Other item kinds (text/comment/PI nodes and atomics) are not
+// yet range-checked and emit their content unmodified.
 func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
 	if outDef == nil {
 		outDef = defaultOutputDef()
@@ -107,7 +111,10 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		}
 		return serializeJSONItems(w, items, doc, outDef)
 	case methodAdaptive:
-		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, outDef.ResolvedCharMap)
+		// Adaptive serialization uses its version serialization parameter for every
+		// XML fallback and embedded element/document writer. An absent version uses
+		// the XML 1.0 default; html-style versions never reach here.
+		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.ResolvedCharMap)
 	default:
 		if items != nil && sequence.Len(items) > 0 {
 			return serializeItemsWithSeparator(w, items, doc, outDef)
@@ -137,7 +144,20 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 			var buf bytes.Buffer
 			switch v.Node.(type) {
 			case *helium.Element, *helium.Document:
-				_ = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, v.Node)
+				writer := helium.NewWriter().XMLDeclaration(false)
+				// The XML and XHTML output methods use their version parameter for
+				// the writer's XML 1.0/1.1 validity rules. Under XML 1.1, U+0001
+				// is a legal character reference, so a default writer would wrongly
+				// reject it with SERE0006. The HTML method uses an HTML version and
+				// must not pass it to OutputVersion.
+				if outDef.Method == methodXML || outDef.Method == methodXHTML {
+					if ver := validOutputXMLVersion(outDef.Version); ver != "" {
+						writer = writer.OutputVersion(ver)
+					}
+				}
+				if err := writer.WriteTo(&buf, v.Node); err != nil {
+					return xmlInvalidCharError(err)
+				}
 			default:
 				if v.Node.Type() == helium.CommentNode {
 					buf.WriteString("<!--")
@@ -172,6 +192,32 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 		idx++
 	}
 	return nil
+}
+
+// validOutputXMLVersion returns v when it is a valid XML VersionNum suitable for
+// the writer's OutputVersion override, or "" otherwise. The html/xhtml output
+// methods carry a non-XML Version (e.g. "4.01"), which must never reach
+// OutputVersion (it would fail serialization with ErrInvalidOutputVersion).
+func validOutputXMLVersion(v string) string {
+	if isValidOutputXMLVersion(v) {
+		return v
+	}
+	return ""
+}
+
+// isValidOutputXMLVersion reports whether v is a valid XML VersionNum
+// ("1." followed by one or more digits, XML §2.8).
+func isValidOutputXMLVersion(v string) bool {
+	rest, ok := strings.CutPrefix(v, "1.")
+	if !ok || rest == "" {
+		return false
+	}
+	for i := range len(rest) {
+		if rest[i] < '0' || rest[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // SerializeResult writes the result document to a writer according to the
@@ -293,7 +339,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		}
 		_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), serCharMap))
 	case methodAdaptive:
-		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, serCharMap)
+		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), serCharMap)
 	default:
 		err = serializeXML(target, doc, outDef, serCharMap)
 	}
@@ -356,7 +402,7 @@ func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) (stri
 		outDef := defaultOutputDef()
 		outDef.Method = methodXHTML
 		if err := serializeXHTML(&buf, doc, outDef, nil); err != nil {
-			return "", err
+			return "", xmlInvalidCharError(err)
 		}
 		return buf.String(), nil
 	case methodText:
@@ -365,7 +411,7 @@ func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) (stri
 		switch node.(type) {
 		case *helium.Element, *helium.Document:
 			if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node); err != nil {
-				return "", err
+				return "", xmlInvalidCharError(err)
 			}
 		default:
 			buf.Write(node.Content())
