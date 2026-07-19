@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const adaptiveMethod = "adaptive"
+
 func TestSerializeResultXML(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -119,19 +121,19 @@ func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
 		},
 		{
 			name:   "AdaptiveAtomic",
-			method: "adaptive",
+			method: adaptiveMethod,
 			item:   value,
 			want:   `"` + replacement + composed + `"`,
 		},
 		{
 			name:   "AdaptiveMap",
-			method: "adaptive",
+			method: adaptiveMethod,
 			item:   mapItem,
 			want:   `map{"key":"` + replacement + composed + `"}`,
 		},
 		{
 			name:   "AdaptiveArray",
-			method: "adaptive",
+			method: adaptiveMethod,
 			item:   arrayItem,
 			want:   `["` + replacement + composed + `"]`,
 		},
@@ -313,15 +315,15 @@ func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
 	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}, xpath3.NodeItem{Node: root}}
 
 	var buf bytes.Buffer
-	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "adaptive"})
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: adaptiveMethod})
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: "1.0"})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
-	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: xmlVersion11})
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: xmlVersion11})
 	require.NoError(t, err)
 	requireControlCharRef(t, buf11.String())
 }
@@ -397,7 +399,7 @@ func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
 						doc = tt.doc(t)
 					}
 					err := xslt3.SerializeItems(&buf, items, doc, &xslt3.OutputDef{
-						Method:  "adaptive",
+						Method:  adaptiveMethod,
 						Version: version.version,
 					})
 					if version.version != xmlVersion11 {

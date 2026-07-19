@@ -218,21 +218,6 @@ func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
 	return nil
 }
 
-// applyCharMap applies a character map to a serialized string, replacing
-// each mapped character with its replacement string.
-func applyCharMap(s string, charMap map[rune]string) string {
-	var out strings.Builder
-	out.Grow(len(s))
-	for _, r := range s {
-		if repl, ok := charMap[r]; ok {
-			out.WriteString(repl)
-		} else {
-			out.WriteRune(r)
-		}
-	}
-	return out.String()
-}
-
 // normalizeText applies the requested normalization form to text. An absent
 // or unsupported form leaves the text unchanged; parameter validation reports
 // unsupported forms before serialization begins.
