@@ -646,7 +646,9 @@ func (d *Document) CreateElement(name string) (*Element, error) {
 // local name must not contain a colon; supply the namespace through ns. This is
 // the namespaced analogue of CreateElement (mirroring the SetAttribute /
 // SetAttributeNS pairing). A nil ns leaves the element unqualified. A nil
-// receiver allocates a standalone element with no owning document.
+// receiver allocates a standalone element with no owning document. When ns is
+// slab-backed by a different document, the installing SetNs marks that source
+// document escaped so its Free will not recycle the namespace slab.
 func (d *Document) CreateElementNS(localname string, ns *Namespace) (*Element, error) {
 	e, err := d.CreateElement(localname)
 	if err != nil {
