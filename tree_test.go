@@ -302,7 +302,7 @@ func TestText(t *testing.T) {
 		n1 := doc.CreateText([]byte("Hello "))
 		n2 := &helium.ProcessingInstruction{}
 
-		require.Equal(t, helium.ErrInvalidOperation, n1.AddChild(n2), "AddChild fails")
+		require.ErrorIs(t, n1.AddChild(n2), helium.ErrInvalidOperation, "AddChild fails")
 		require.Equal(t, []byte("Hello "), n1.Content(), "Content matches")
 	})
 }
