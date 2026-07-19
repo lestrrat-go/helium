@@ -48,16 +48,16 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 		return nil
 	}
 	d.writeString(out, "<!DOCTYPE ")
-	// A DOCTYPE name is emitted verbatim and must be a valid XML Name (which
-	// subsumes the character-range check and the US-ASCII guard). Guard before the
-	// name write so no raw octet leaks ahead of the sticky error.
-	if !d.checkVerbatimName("DOCTYPE name", dtd.Name()) {
-		return d.err
-	}
 	// A DOCTYPE name must be a non-empty XML Name; an empty or all-whitespace name
 	// serializes as "<!DOCTYPE >", which no parser accepts.
 	if strings.TrimSpace(dtd.Name()) == "" {
 		d.check(fmt.Errorf("helium: empty DOCTYPE name: %w", ErrWriterInvalidDTDNode))
+		return d.err
+	}
+	// A DOCTYPE name is emitted verbatim and must be a valid XML Name (which
+	// subsumes the character-range check and the US-ASCII guard). Guard before the
+	// name write so no raw octet leaks ahead of the sticky error.
+	if !d.checkVerbatimName("DOCTYPE name", dtd.Name()) {
 		return d.err
 	}
 	d.writeString(out, dtd.Name())
