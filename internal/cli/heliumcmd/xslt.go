@@ -147,9 +147,7 @@ func (c *xsltCommand) runContext(ctx context.Context, args []string) int {
 	if cfg.loadExternal {
 		ssParser = ssParser.BlockXXE(false).FS(newConfinedDirFS(absSS))
 	}
-	if cfg.maxDepth >= 0 {
-		ssParser = ssParser.MaxDepth(cfg.maxDepth)
-	}
+	ssParser = applyMaxDepth(ssParser, cfg.maxDepth)
 	ssDoc, err := ssParser.Parse(ctx, ssBuf)
 	if err != nil {
 		_, _ = fmt.Fprintf(c.stderr, "%s: failed to parse stylesheet: %s\n", c.prog, err)
@@ -290,10 +288,7 @@ func (c *xsltCommand) processInput(ctx context.Context, cfg *xsltConfig, input x
 		t0 = time.Now()
 	}
 
-	p := helium.NewParser()
-	if cfg.maxDepth >= 0 {
-		p = p.MaxDepth(cfg.maxDepth)
-	}
+	p := applyMaxDepth(helium.NewParser(), cfg.maxDepth)
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}

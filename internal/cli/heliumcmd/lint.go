@@ -486,11 +486,9 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 			MaxEntityAmplification(-1).
 			MaxContentModelDepth(-1).
 			MaxNodeContentSize(-1).
-			MaxDepth(0)
+			MaxDepth(-1)
 	}
-	if cfg.maxDepth >= 0 {
-		cfg.parser = cfg.parser.MaxDepth(cfg.maxDepth)
-	}
+	cfg.parser = applyMaxDepth(cfg.parser, cfg.maxDepth)
 
 	return cfg, files
 }

@@ -169,10 +169,7 @@ func (c *xpathCommand) processInput(ctx context.Context, cfg *xpathConfig, input
 		return ExitReadFile
 	}
 
-	p := helium.NewParser()
-	if cfg.maxDepth >= 0 {
-		p = p.MaxDepth(cfg.maxDepth)
-	}
+	p := applyMaxDepth(helium.NewParser(), cfg.maxDepth)
 	if !input.stdin {
 		p = p.BaseURI(input.name)
 	}

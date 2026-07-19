@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/cliutil"
 )
 
@@ -15,6 +16,21 @@ const (
 	flagMaxInputBytes = "--max-input-bytes"
 	flagMaxDepth      = "--max-depth"
 )
+
+// applyMaxDepth applies the --max-depth flag value to p following the CLI
+// contract: a negative value (the unset sentinel) leaves the parser's default
+// cap in place, 0 disables the cap, and a positive value caps nesting at that
+// depth. It maps the CLI's 0 to [helium.Parser.MaxDepth](-1), the API's
+// disable-the-cap sentinel.
+func applyMaxDepth(p helium.Parser, maxDepth int) helium.Parser {
+	if maxDepth < 0 {
+		return p
+	}
+	if maxDepth == 0 {
+		return p.MaxDepth(-1)
+	}
+	return p.MaxDepth(maxDepth)
+}
 
 type ioContextKey struct{}
 

@@ -86,7 +86,7 @@ type Parser struct {
 // defaultMaxDepth is the element-nesting limit applied by [NewParser]. It bounds
 // recursion/stack growth from hostile deeply-nested input. Callers parsing
 // legitimately deep documents can raise it with [Parser.MaxDepth] or disable the
-// check entirely with MaxDepth(0).
+// check entirely with a negative value (MaxDepth(-1)).
 const defaultMaxDepth = 256
 
 // NewParser creates a new Parser with secure defaults suited to untrusted input:
@@ -110,9 +110,8 @@ func NewParser() Parser {
 // NewParser().
 func newParserConfig() *parserConfig {
 	cfg := &parserConfig{
-		sax:      NewTreeBuilder(),
-		fsys:     iofs.DenyAll{},
-		maxDepth: defaultMaxDepth,
+		sax:  NewTreeBuilder(),
+		fsys: iofs.DenyAll{},
 	}
 	cfg.options.Set(parseNoXXE)
 	cfg.options.Set(parseNoNet)
@@ -593,14 +592,19 @@ func (p Parser) CharBufferSize(size int) Parser {
 	return p
 }
 
-// MaxDepth sets the maximum element nesting depth allowed during parsing.
-// When depth is greater than zero, the parser returns an error if the input
-// document contains elements nested deeper than this limit. A value of zero
-// means no limit is enforced.
+// MaxDepth sets the maximum element nesting depth allowed during parsing. When
+// depth is greater than zero, the parser returns an error if the input document
+// contains elements nested deeper than this limit. A value of zero (the default)
+// uses the 256-level cap ([NewParser] applies it to bound recursion from hostile
+// input); a negative value removes the cap. Removing the cap lets hostile
+// deeply-nested input drive unbounded recursion/stack growth, so do so only for
+// trusted input.
 //
-// [NewParser] defaults this to 256 (defaultMaxDepth) to bound recursion from
-// hostile input; pass a larger value for legitimately deep documents, or
-// MaxDepth(0) to disable the check.
+// This matches the convention of the other parser limit options
+// ([Parser.MaxNameLength], [Parser.MaxEntityAmplification],
+// [Parser.MaxContentModelDepth], [Parser.MaxNodeContentSize],
+// [Parser.MaxExternalDTDBytes]): zero selects the documented default, a negative
+// value disables the limit.
 func (p Parser) MaxDepth(depth int) Parser {
 	p = p.clone()
 	p.cfg.maxDepth = depth
