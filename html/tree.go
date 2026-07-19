@@ -86,11 +86,25 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 	// and fail on bare '&' characters.
 	// Boolean attributes use SetBooleanAttribute (no children) so the
 	// serializer can distinguish them from attrs with empty string values.
+	//
+	// Both setters reject a colon-bearing attribute name (SetAttributeNS is the
+	// namespaced entry point). The first such rejection is captured but the loop
+	// keeps going so the element and every other attribute are still built, then
+	// the error is returned to the parser. The parser routes it through
+	// handleSAXErr: in tolerant mode it is downgraded to a warning and the
+	// dropped attribute is the only casualty; in strict mode it is surfaced as
+	// the fatal parse error. Returning after the element is attached (below)
+	// keeps t.cur consistent with EndElement in both modes.
+	var attrErr error
 	for _, a := range attrs {
+		var err error
 		if a.Boolean {
-			_ = elem.SetBooleanAttribute(a.Name)
+			err = elem.SetBooleanAttribute(a.Name)
 		} else {
-			_ = elem.SetAttribute(a.Name, a.Value)
+			err = elem.SetAttribute(a.Name, a.Value)
+		}
+		if err != nil && attrErr == nil {
+			attrErr = err
 		}
 	}
 
@@ -98,7 +112,7 @@ func (t *treeBuilder) StartElement(name string, attrs []Attribute) error {
 		return err
 	}
 	t.cur = elem
-	return nil
+	return attrErr
 }
 
 func (t *treeBuilder) EndElement(name string) error {
