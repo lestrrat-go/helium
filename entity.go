@@ -2,7 +2,6 @@ package helium
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -80,8 +79,9 @@ var predefinedEntityContent = map[string]string{
 }
 
 // resolveCharRefs resolves all numeric character references (&#NNN; and
-// &#xHHH;) in s, returning the resolved string. Used to normalize entity
-// content before comparing against predefined entity values.
+// &#xHHH;) in s, returning the resolved string. It shares parseCharRefBody with
+// writer output so lowercase-x lexical validation cannot diverge. Used to
+// normalize entity content before comparing against predefined entity values.
 func resolveCharRefs(s string) string {
 	if !strings.Contains(s, "&#") {
 		return s
@@ -95,37 +95,14 @@ func resolveCharRefs(s string) string {
 		}
 		b.WriteString(s[:idx])
 		s = s[idx+2:] // skip "&#"
-		var r rune
-		var ok bool
-		if len(s) > 0 && s[0] == 'x' {
-			// hex: &#xHHH;
-			s = s[1:]
-			semi := strings.IndexByte(s, ';')
-			if semi < 0 {
-				b.WriteString("&#x")
-				continue
-			}
-			v, err := strconv.ParseInt(s[:semi], 16, 32)
-			if err == nil && v > 0 && utf8.ValidRune(rune(v)) {
-				r = rune(v)
-				ok = true
-			}
-			s = s[semi+1:]
-		} else {
-			// decimal: &#NNN;
-			semi := strings.IndexByte(s, ';')
-			if semi < 0 {
-				b.WriteString("&#")
-				continue
-			}
-			v, err := strconv.ParseInt(s[:semi], 10, 32)
-			if err == nil && v > 0 && utf8.ValidRune(rune(v)) {
-				r = rune(v)
-				ok = true
-			}
-			s = s[semi+1:]
+		semi := strings.IndexByte(s, ';')
+		if semi < 0 {
+			b.WriteString("&#")
+			continue
 		}
-		if ok {
+		r, ok := parseCharRefBody(s[:semi])
+		s = s[semi+1:]
+		if ok && r > 0 && utf8.ValidRune(r) {
 			b.WriteRune(r)
 		} else {
 			b.WriteString("&#") // malformed ref, keep literal
