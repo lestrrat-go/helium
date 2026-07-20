@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -132,10 +133,14 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm strin
 		var buf bytes.Buffer
 		switch v.Node.(type) {
 		case *helium.Element, *helium.Document:
+			writerNormalizationForm := normalizationForm
+			if writerNormalizationForm == lexicon.NormFullyNormalized {
+				writerNormalizationForm = "NFC"
+			}
 			writer := helium.NewWriter().XMLDeclaration(false).
 				OutputVersion(adaptiveXMLVersion(xmlVersion)).
 				CharacterMap(charMap).
-				Normalization(normalizationForm)
+				Normalization(writerNormalizationForm)
 			if err := writer.WriteTo(&buf, v.Node); err != nil {
 				return "", xmlInvalidCharError(err)
 			}

@@ -222,6 +222,47 @@ func TestSerializeItemsAdaptiveSingletonElementNormalization(t *testing.T) {
 	}
 }
 
+func TestSerializeItemsAdaptiveFullyNormalizedNodeCharacterMap(t *testing.T) {
+	decomposed := "e\u0301"
+	mappedNFC := "mapped&#xE9;"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte("<out>x"+decomposed+"</out>"))
+	require.NoError(t, err)
+
+	root := doc.DocumentElement()
+	tests := []struct {
+		name  string
+		items xpath3.Sequence
+		want  string
+	}{
+		{
+			name:  "Document",
+			items: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+			want:  "<out>" + mappedNFC + "</out>\n",
+		},
+		{
+			name: "MultiItemElement",
+			items: xpath3.ItemSlice{
+				xpath3.NodeItem{Node: root},
+				xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "tail"},
+			},
+			want: "<out>" + mappedNFC + "</out>\n\"tail\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, tt.items, nil, &xslt3.OutputDef{
+				Method:            adaptiveMethod,
+				NormalizationForm: "FULLY-NORMALIZED",
+				ResolvedCharMap:   map[rune]string{'x': "mapped"},
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, buf.String())
+		})
+	}
+}
+
 func TestSerializeItemsAdaptiveNodeCharacterDataTransformations(t *testing.T) {
 	decomposed := "e\u0301"
 	replacement := "a\u030a"
