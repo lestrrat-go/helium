@@ -101,12 +101,12 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 	}
 	switch outDef.Method {
 	case methodJSON:
-		if len(outDef.ResolvedCharMap) > 0 {
+		if len(outDef.ResolvedCharMap) > 0 || outDef.NormalizationForm != "" {
 			var buf strings.Builder
 			if err := serializeJSONItems(&buf, items, doc, outDef); err != nil {
 				return err
 			}
-			_, err := io.WriteString(w, applyCharMapJSON(buf.String(), outDef.ResolvedCharMap))
+			_, err := io.WriteString(w, applyCharMapJSON(buf.String(), outDef.ResolvedCharMap, outDef.NormalizationForm))
 			return err
 		}
 		return serializeJSONItems(w, items, doc, outDef)
@@ -114,7 +114,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		// Adaptive serialization uses its version serialization parameter for every
 		// XML fallback and embedded element/document writer. An absent version uses
 		// the XML 1.0 default; html-style versions never reach here.
-		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.ResolvedCharMap)
+		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.NormalizationForm, outDef.ResolvedCharMap)
 	default:
 		if items != nil && sequence.Len(items) > 0 {
 			return serializeItemsWithSeparator(w, items, doc, outDef)
@@ -272,21 +272,16 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	// Check if we need Unicode normalization
 	needsNormalization := outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE"
 
-	// Per the serialization spec, character map output is "immune" to
-	// normalization. When both are active, use sentinel-wrapped char
-	// map substitutions so that normalization skips them.
-	serCharMap := charMap
-	var sentinelCharMap map[rune]string
-	if needsNormalization && len(charMap) > 0 {
-		sentinelCharMap = make(map[rune]string, len(charMap))
-		for k, v := range charMap {
-			sentinelCharMap[k] = "\x00CMSTART\x00" + v + "\x00CMEND\x00"
-		}
-		serCharMap = sentinelCharMap
-	}
+	// A character-map replacement is immune to normalization. Each output
+	// method preserves that provenance while serializing, so normalization is
+	// applied there instead of to a byte stream containing both kinds of text.
+	// This keeps caller-provided raw output from being interpreted as metadata.
+	charMapNormalizesContent := needsNormalization && len(charMap) > 0
 
-	// Buffer when post-processing is needed
-	needsBuffer := needsEncodingConversion || needsNormalization || isUTF16
+	// Buffer when post-processing is needed. Character-map-aware serializers
+	// normalize their ordinary content before writing it, so they do not need a
+	// normalization-only buffer.
+	needsBuffer := needsEncodingConversion || (needsNormalization && !charMapNormalizesContent) || isUTF16
 	var target io.Writer
 	var buf bytes.Buffer
 	if needsBuffer {
@@ -313,7 +308,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	var err error
 	switch outDef.Method {
 	case methodText:
-		err = serializeText(target, doc, serCharMap)
+		err = serializeText(target, doc, charMap, outDef.NormalizationForm)
 	case methodHTML:
 		var htmlBuf bytes.Buffer
 		err = serializeHTML(&htmlBuf, doc, outDef)
@@ -321,14 +316,14 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			break
 		}
 		result := htmlBuf.String()
-		if len(serCharMap) > 0 {
-			result = applyCharMapToHTMLText(result, serCharMap)
+		if len(charMap) > 0 {
+			result = applyCharMapToHTMLText(result, charMap, outDef.NormalizationForm)
 		}
 		_, err = io.WriteString(target, escapeC1ControlsInString(result))
 	case methodXHTML:
-		err = serializeXHTML(target, doc, outDef, serCharMap)
+		err = serializeXHTML(target, doc, outDef, charMap)
 	case methodJSON:
-		if len(serCharMap) == 0 {
+		if len(charMap) == 0 {
 			err = serializeJSONItems(target, nil, doc, outDef)
 			break
 		}
@@ -337,11 +332,11 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		if err != nil {
 			break
 		}
-		_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), serCharMap))
+		_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), charMap, outDef.NormalizationForm))
 	case methodAdaptive:
-		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), serCharMap)
+		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.NormalizationForm, charMap)
 	default:
-		err = serializeXML(target, doc, outDef, serCharMap)
+		err = serializeXML(target, doc, outDef, charMap)
 	}
 	if err != nil {
 		return err
@@ -351,14 +346,8 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		data := buf.Bytes()
 
 		// Apply Unicode normalization if requested
-		if needsNormalization {
-			if sentinelCharMap != nil {
-				// Extract sentinel-wrapped segments, normalize the rest,
-				// then re-insert the original (un-normalized) segments.
-				data = normalizeSentinelAware(data, outDef.NormalizationForm)
-			} else {
-				data = applyUnicodeNormalization(data, outDef.NormalizationForm)
-			}
+		if needsNormalization && !charMapNormalizesContent {
+			data = applyUnicodeNormalization(data, outDef.NormalizationForm)
 		}
 
 		if isUTF16 {
@@ -502,21 +491,46 @@ func nodeStringValue(n helium.Node) string {
 	return string(n.Content())
 }
 
-func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string) error {
+func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string, normalizationForm string) error {
 	// Text output: just write the text content of the document
 	sw := stream.NewWriter(w)
+	var unmapped strings.Builder
+	flushUnmapped := func() error {
+		if unmapped.Len() == 0 {
+			return nil
+		}
+		if err := sw.WriteRaw(normalizeText(unmapped.String(), normalizationForm)); err != nil {
+			return err
+		}
+		unmapped.Reset()
+		return nil
+	}
 	err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		switch n.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			text := string(n.Content())
-			if len(charMap) > 0 {
-				text = applyCharacterMap(text, charMap)
+			if len(charMap) == 0 {
+				return sw.WriteRaw(normalizeText(text, normalizationForm))
 			}
-			return sw.WriteRaw(text)
+			for _, r := range text {
+				if replacement, ok := charMap[r]; ok {
+					if err := flushUnmapped(); err != nil {
+						return err
+					}
+					if err := sw.WriteRaw(replacement); err != nil {
+						return err
+					}
+					continue
+				}
+				unmapped.WriteRune(r)
+			}
 		}
 		return nil
 	}))
 	if err != nil {
+		return err
+	}
+	if err := flushUnmapped(); err != nil {
 		return err
 	}
 	return sw.Flush()

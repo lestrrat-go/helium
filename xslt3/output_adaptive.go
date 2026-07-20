@@ -6,13 +6,14 @@ import (
 	"io"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
 // serializeAdaptiveItems serializes a sequence of items using the adaptive
 // serialization method. Each item is serialized according to its type.
-func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, itemSep *string, xmlVersion string, charMaps ...map[rune]string) error {
+func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, itemSep *string, xmlVersion, normalizationForm string, charMaps ...map[rune]string) error {
 	if (items == nil || sequence.Len(items) == 0) && doc != nil {
 		var cm map[rune]string
 		if len(charMaps) > 0 {
@@ -20,6 +21,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		}
 		xmlOutDef := defaultOutputDef()
 		xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
+		xmlOutDef.NormalizationForm = normalizationForm
 		return serializeXML(w, doc, xmlOutDef, cm)
 	}
 	var cm map[rune]string
@@ -53,6 +55,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 					}
 					xmlOutDef := defaultOutputDef()
 					xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
+					xmlOutDef.NormalizationForm = normalizationForm
 					if err := serializeXML(w, tmpDoc, xmlOutDef, cm); err != nil {
 						return err
 					}
@@ -60,7 +63,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 				}
 			}
 		}
-		s, err := serializeItemAdaptive(item, xmlVersion, cm)
+		s, err := serializeItemAdaptive(item, xmlVersion, normalizationForm, cm)
 		if err != nil {
 			return err
 		}
@@ -119,40 +122,42 @@ func isAdaptiveQuotedType(typeName string) bool {
 // serializeItemAdaptive serializes a single item using the adaptive method.
 // xmlVersion is the validated xml-method version. Every element and document
 // item uses adaptiveXMLVersion, so the XML 1.0 default does not inherit a
-// document's own version.
-func serializeItemAdaptive(item xpath3.Item, xmlVersion string, charMap map[rune]string) (string, error) {
-	maybeApply := func(s string) string {
-		if len(charMap) > 0 {
-			return applyCharMap(s, charMap)
-		}
-		return s
-	}
+// document's own version. Normalization applies only to unmapped runs.
+func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm string, charMap map[rune]string) (string, error) {
 	switch v := item.(type) {
 	case xpath3.MapItem:
-		return serializeMapAdaptive(v, xmlVersion, charMap)
+		return serializeMapAdaptive(v, xmlVersion, normalizationForm, charMap)
 	case xpath3.ArrayItem:
-		return serializeArrayAdaptive(v, xmlVersion, charMap)
+		return serializeArrayAdaptive(v, xmlVersion, normalizationForm, charMap)
 	case xpath3.NodeItem:
 		var buf bytes.Buffer
 		switch v.Node.(type) {
 		case *helium.Element, *helium.Document:
-			writer := helium.NewWriter().XMLDeclaration(false).OutputVersion(adaptiveXMLVersion(xmlVersion))
+			writerNormalizationForm := normalizationForm
+			if writerNormalizationForm == lexicon.NormFullyNormalized {
+				writerNormalizationForm = "NFC"
+			}
+			writer := helium.NewWriter().XMLDeclaration(false).
+				OutputVersion(adaptiveXMLVersion(xmlVersion)).
+				CharacterMap(charMap).
+				Normalization(writerNormalizationForm)
 			if err := writer.WriteTo(&buf, v.Node); err != nil {
 				return "", xmlInvalidCharError(err)
 			}
+			return buf.String(), nil
 		case *helium.Attribute:
 			attr, _ := helium.AsNode[*helium.Attribute](v.Node)
 			buf.WriteString(attr.Name())
 			buf.WriteString("=\"")
-			buf.Write(attr.Content())
+			buf.WriteString(adaptiveAtomicString(string(attr.Content()), charMap, normalizationForm))
 			buf.WriteString("\"")
 		default:
-			buf.Write(v.Node.Content())
+			buf.WriteString(adaptiveAtomicString(string(v.Node.Content()), charMap, normalizationForm))
 		}
-		return maybeApply(buf.String()), nil
+		return buf.String(), nil
 	case xpath3.AtomicValue:
 		s, _ := xpath3.AtomicToString(v)
-		s = maybeApply(s)
+		s = adaptiveAtomicString(s, charMap, normalizationForm)
 		if isAdaptiveQuotedType(v.TypeName) {
 			return adaptiveQuoteString(s), nil
 		}
@@ -160,7 +165,7 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion string, charMap map[rune
 	default:
 		if av, ok := item.(xpath3.AtomicValue); ok {
 			s, _ := xpath3.AtomicToString(av)
-			s = maybeApply(s)
+			s = adaptiveAtomicString(s, charMap, normalizationForm)
 			if isAdaptiveQuotedType(av.TypeName) {
 				return adaptiveQuoteString(s), nil
 			}
@@ -170,8 +175,14 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion string, charMap map[rune
 	}
 }
 
+// adaptiveAtomicString delegates atomic character-data processing to the Text
+// output method before adaptive serialization quotes or escapes the value.
+func adaptiveAtomicString(s string, charMap map[rune]string, normalizationForm string) string {
+	return applyCharacterMapWithNormalization(s, charMap, normalizationForm)
+}
+
 // serializeMapAdaptive serializes a map using adaptive serialization.
-func serializeMapAdaptive(m xpath3.MapItem, xmlVersion string, charMap map[rune]string) (string, error) {
+func serializeMapAdaptive(m xpath3.MapItem, xmlVersion, normalizationForm string, charMap map[rune]string) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteString("map{")
 	first := true
@@ -185,6 +196,7 @@ func serializeMapAdaptive(m xpath3.MapItem, xmlVersion string, charMap map[rune]
 		}
 		first = false
 		ks, _ := xpath3.AtomicToString(k)
+		ks = adaptiveAtomicString(ks, charMap, normalizationForm)
 		buf.WriteString(jsonEscapeString(ks))
 		buf.WriteByte(':')
 		vLen2 := 0
@@ -193,7 +205,7 @@ func serializeMapAdaptive(m xpath3.MapItem, xmlVersion string, charMap map[rune]
 		}
 		switch vLen2 {
 		case 1:
-			s, err := serializeItemAdaptive(v.Get(0), xmlVersion, charMap)
+			s, err := serializeItemAdaptive(v.Get(0), xmlVersion, normalizationForm, charMap)
 			if err != nil {
 				serErr = err
 				return err
@@ -207,7 +219,7 @@ func serializeMapAdaptive(m xpath3.MapItem, xmlVersion string, charMap map[rune]
 				if i > 0 {
 					buf.WriteByte(',')
 				}
-				s, err := serializeItemAdaptive(v.Get(i), xmlVersion, charMap)
+				s, err := serializeItemAdaptive(v.Get(i), xmlVersion, normalizationForm, charMap)
 				if err != nil {
 					serErr = err
 					return err
@@ -226,7 +238,7 @@ func serializeMapAdaptive(m xpath3.MapItem, xmlVersion string, charMap map[rune]
 }
 
 // serializeArrayAdaptive serializes an array using adaptive serialization.
-func serializeArrayAdaptive(a xpath3.ArrayItem, xmlVersion string, charMap map[rune]string) (string, error) {
+func serializeArrayAdaptive(a xpath3.ArrayItem, xmlVersion, normalizationForm string, charMap map[rune]string) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('[')
 	members := a.Members()
@@ -240,7 +252,7 @@ func serializeArrayAdaptive(a xpath3.ArrayItem, xmlVersion string, charMap map[r
 		}
 		switch mLen2 {
 		case 1:
-			s, err := serializeItemAdaptive(member.Get(0), xmlVersion, charMap)
+			s, err := serializeItemAdaptive(member.Get(0), xmlVersion, normalizationForm, charMap)
 			if err != nil {
 				return "", err
 			}
@@ -253,7 +265,7 @@ func serializeArrayAdaptive(a xpath3.ArrayItem, xmlVersion string, charMap map[r
 				if j > 0 {
 					buf.WriteByte(',')
 				}
-				s, err := serializeItemAdaptive(member.Get(j), xmlVersion, charMap)
+				s, err := serializeItemAdaptive(member.Get(j), xmlVersion, normalizationForm, charMap)
 				if err != nil {
 					return "", err
 				}

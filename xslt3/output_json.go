@@ -19,7 +19,7 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 	}
 	if itemsLen == 0 && doc != nil {
 		// No captured items: serialize DOM content as text for JSON
-		return serializeAdaptiveItems(w, items, doc, nil, "")
+		return serializeAdaptiveItems(w, items, doc, nil, "", "")
 	}
 	if itemsLen == 1 {
 		s, err := serializeItemJSON(items.Get(0), outDef)

@@ -384,15 +384,16 @@ and `json` methods are exempt from BOTH steps: they serialize maps/arrays native
 (`json` → JSON, `adaptive` → the `map{…}`/`[…]` form) and keep `FOER0000` for a
 bare function item.
 
-**Normalization + character maps (all methods incl. JSON).** `normalization-form`
+**Normalization + character maps (all methods incl. adaptive + JSON).** `normalization-form`
 is APPLIED for the methods that support it — xml/xhtml/html/text, the unspecified
-default, AND `json` (Serialization 3.1 §9.1.9) — `NFC`/`NFD`/`NFKC`/`NFKD` via
+default, `adaptive`, AND `json` (Serialization 3.1 §9.1.9) — `NFC`/`NFD`/`NFKC`/`NFKD` via
 `golang.org/x/text/unicode/norm`; `none`/`""` is a no-op; the W3C-specific
 `fully-normalized` form is not provided by that package and is the `SESU0011`
 unsupported-normalization error (rejected up front in `fnSerialize` via
 `isSupportedSerializeNormForm`, so it fires for every applicable method even with
-no text to normalize). Only the `adaptive` method ignores it. Normalization is
-SCOPED to text-node and attribute-value character content (Serialization 3.1 §4
+no text to normalize). The `adaptive` method applies character maps and
+normalization to atomic values, map keys, and node character data. Normalization
+is SCOPED to text-node and attribute-value character content (Serialization 3.1 §4
 character-expansion phase) — element/attribute NAMES, comment/PI markup, the
 DOCTYPE, and the XML declaration are NEVER normalized. The markup methods
 (xml/xhtml/html and the unspecified default) apply it INSIDE their writer: the

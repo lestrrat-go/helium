@@ -44,45 +44,6 @@ func applyUnicodeNormalization(data []byte, form string) []byte {
 	return normalizeXMLContent(data, nf)
 }
 
-// normalizeSentinelAware applies Unicode normalization while preserving
-// sentinel-wrapped character map segments intact.  Segments delimited by
-// \x00CMSTART\x00 ... \x00CMEND\x00 are extracted before normalization
-// and re-inserted afterwards, then the sentinel markers are stripped.
-func normalizeSentinelAware(data []byte, form string) []byte {
-	nf, ok := resolveNormForm(form)
-	if !ok {
-		// Unknown form — just strip sentinels.
-		s := strings.ReplaceAll(string(data), "\x00CMSTART\x00", "")
-		return []byte(strings.ReplaceAll(s, "\x00CMEND\x00", ""))
-	}
-
-	// Split on sentinels, normalize non-sentinel parts, recombine.
-	s := string(data)
-	var out strings.Builder
-	out.Grow(len(s))
-	for {
-		startIdx := strings.Index(s, "\x00CMSTART\x00")
-		if startIdx < 0 {
-			// No more sentinels — normalize the rest.
-			out.Write(normalizeXMLContent([]byte(s), nf))
-			break
-		}
-		// Normalize the part before the sentinel.
-		out.Write(normalizeXMLContent([]byte(s[:startIdx]), nf))
-		s = s[startIdx+len("\x00CMSTART\x00"):]
-		endIdx := strings.Index(s, "\x00CMEND\x00")
-		if endIdx < 0 {
-			// Malformed — write remainder as-is.
-			out.WriteString(s)
-			break
-		}
-		// Write the char-map segment un-normalized.
-		out.WriteString(s[:endIdx])
-		s = s[endIdx+len("\x00CMEND\x00"):]
-	}
-	return []byte(out.String())
-}
-
 // normalizeXMLContent applies Unicode normalization to text content and
 // attribute values in serialized XML, preserving element/attribute names
 // and other markup verbatim.
@@ -257,18 +218,54 @@ func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
 	return nil
 }
 
-// applyCharMap applies a character map to a serialized string, replacing
-// each mapped character with its replacement string.
-func applyCharMap(s string, charMap map[rune]string) string {
-	var out strings.Builder
-	out.Grow(len(s))
-	for _, r := range s {
-		if repl, ok := charMap[r]; ok {
-			out.WriteString(repl)
-		} else {
-			out.WriteRune(r)
-		}
+// normalizeText applies the requested normalization form to text. An absent
+// or unsupported form leaves the text unchanged; parameter validation reports
+// unsupported forms before serialization begins.
+func normalizeText(text, form string) string {
+	nf, ok := resolveNormForm(form)
+	if !ok {
+		return text
 	}
+	return nf.String(text)
+}
+
+// normalizeRawXMLContent preserves markup in raw DOE output while normalizing
+// its character content, matching the normal XML post-processing path.
+func normalizeRawXMLContent(text, form string) string {
+	nf, ok := resolveNormForm(form)
+	if !ok {
+		return text
+	}
+	return string(normalizeXMLContent([]byte(text), nf))
+}
+
+// applyCharacterMapWithNormalization normalizes only runs that do not produce
+// a character-map replacement. The replacement itself remains byte-for-byte
+// intact, as required by the serialization specification.
+func applyCharacterMapWithNormalization(text string, charMap map[rune]string, form string) string {
+	if len(charMap) == 0 {
+		return normalizeText(text, form)
+	}
+
+	var out strings.Builder
+	out.Grow(len(text))
+	var unmapped strings.Builder
+	flushUnmapped := func() {
+		if unmapped.Len() == 0 {
+			return
+		}
+		out.WriteString(normalizeText(unmapped.String(), form))
+		unmapped.Reset()
+	}
+	for _, r := range text {
+		if repl, ok := charMap[r]; ok {
+			flushUnmapped()
+			out.WriteString(repl)
+			continue
+		}
+		unmapped.WriteRune(r)
+	}
+	flushUnmapped()
 	return out.String()
 }
 
@@ -276,9 +273,17 @@ func applyCharMap(s string, charMap map[rune]string) string {
 // JSON escape sequences (e.g., \/) are recognized: if the unescaped
 // character is in the character map, the entire escape sequence is
 // replaced with the map value.
-func applyCharMapJSON(s string, charMap map[rune]string) string {
+func applyCharMapJSON(s string, charMap map[rune]string, normalizationForm string) string {
 	var out strings.Builder
 	out.Grow(len(s))
+	var unmapped strings.Builder
+	flushUnmapped := func() {
+		if unmapped.Len() == 0 {
+			return
+		}
+		out.WriteString(normalizeText(unmapped.String(), normalizationForm))
+		unmapped.Reset()
+	}
 	i := 0
 	for i < len(s) {
 		if s[i] == '\\' && i+1 < len(s) {
@@ -303,34 +308,37 @@ func applyCharMapJSON(s string, charMap map[rune]string) string {
 			case '\\':
 				unescaped = '\\'
 			default:
-				out.WriteByte(s[i])
+				unmapped.WriteByte(s[i])
 				i++
 				continue
 			}
 			if repl, ok := charMap[unescaped]; ok {
+				flushUnmapped()
 				out.WriteString(repl)
 				i += 2
 				continue
 			}
-			out.WriteByte(s[i])
-			i++
+			unmapped.WriteString(s[i : i+2])
+			i += 2
 			continue
 		}
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if repl, ok := charMap[r]; ok {
+			flushUnmapped()
 			out.WriteString(repl)
 		} else {
-			out.WriteRune(r)
+			unmapped.WriteRune(r)
 		}
 		i += size
 	}
+	flushUnmapped()
 	return out.String()
 }
 
 // applyCharMapToHTMLText applies a character map to serialized HTML output,
 // applying to text content and non-URI attribute values, but skipping
 // URI attributes (href, src, etc.) per the XSLT serialization spec.
-func applyCharMapToHTMLText(html string, charMap map[rune]string) string {
+func applyCharMapToHTMLText(html string, charMap map[rune]string, normalizationForm string) string {
 	var out strings.Builder
 	out.Grow(len(html))
 	i := 0
@@ -343,25 +351,25 @@ func applyCharMapToHTMLText(html string, charMap map[rune]string) string {
 				break
 			}
 			tag := html[i : i+tagEnd+1]
-			out.WriteString(applyCharMapToHTMLTag(tag, charMap))
+			out.WriteString(applyCharMapToHTMLTag(tag, charMap, normalizationForm))
 			i += tagEnd + 1
 			continue
 		}
-		// Text content — apply character map
-		r, size := utf8.DecodeRuneInString(html[i:])
-		if repl, ok := charMap[r]; ok {
-			out.WriteString(repl)
-		} else {
-			out.WriteString(html[i : i+size])
+		// Text content — normalize unmapped runs and apply replacements.
+		tagStart := strings.IndexByte(html[i:], '<')
+		if tagStart < 0 {
+			out.WriteString(applyCharacterMapWithNormalization(html[i:], charMap, normalizationForm))
+			break
 		}
-		i += size
+		out.WriteString(applyCharacterMapWithNormalization(html[i:i+tagStart], charMap, normalizationForm))
+		i += tagStart
 	}
 	return out.String()
 }
 
 // applyCharMapToHTMLTag applies character map to attribute values within an
 // HTML tag, skipping URI attributes.
-func applyCharMapToHTMLTag(tag string, charMap map[rune]string) string {
+func applyCharMapToHTMLTag(tag string, charMap map[rune]string, normalizationForm string) string {
 	// For closing tags and self-closing without attributes, return as-is
 	if strings.HasPrefix(tag, "</") || !strings.Contains(tag, "=") {
 		return tag
@@ -407,9 +415,9 @@ func applyCharMapToHTMLTag(tag string, charMap map[rune]string) string {
 			}
 			attrVal := tag[i : i+endQuote]
 			if isURI {
-				out.WriteString(attrVal)
+				out.WriteString(normalizeText(attrVal, normalizationForm))
 			} else {
-				out.WriteString(applyCharacterMap(attrVal, charMap))
+				out.WriteString(applyCharacterMapWithNormalization(attrVal, charMap, normalizationForm))
 			}
 			out.WriteByte(quote)
 			i += endQuote + 1
@@ -467,17 +475,17 @@ func inCDATAElement(parent helium.Node, cdataElems map[string]struct{}) bool {
 // between CDATA sections. The stream.Writer.WriteCDATA method already handles
 // splitting ]]> sequences.
 func writeCDATAWithEncoding(sw *stream.Writer, text, encoding, normForm string) error {
+	// Apply Unicode normalization before CDATA serialization so that the
+	// content follows the same rule as ordinary text, including UTF-8 output.
+	text = normalizeText(text, normForm)
 	if !needsCDATASplit(encoding) {
 		return sw.WriteCDATA(text)
 	}
-	// Apply Unicode normalization before CDATA splitting so that
-	// decomposed characters are split at the correct boundaries.
+	// Normalization runs before CDATA splitting so that decomposed characters
+	// are split at the correct boundaries.
 	// For example, NFD of ç (U+00E7) is c (U+0063) + combining cedilla
 	// (U+0327); 'c' is representable in US-ASCII and stays in CDATA,
 	// while U+0327 must be emitted as a character reference.
-	if nf, ok := resolveNormForm(normForm); ok {
-		text = string(nf.Bytes([]byte(text)))
-	}
 	// Split text into runs of representable and non-representable characters.
 	var buf strings.Builder
 	for _, r := range text {
@@ -526,18 +534,6 @@ func canRepresentInEncoding(r rune, encoding string) bool {
 		// For unknown encodings, assume ASCII-safe
 		return r < 128
 	}
-}
-
-func applyCharacterMap(text string, charMap map[rune]string) string {
-	var b strings.Builder
-	for _, r := range text {
-		if repl, ok := charMap[r]; ok {
-			b.WriteString(repl)
-		} else {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }
 
 // resolveCharacterMaps builds a merged character map from a list of map names.

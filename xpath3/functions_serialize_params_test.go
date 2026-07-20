@@ -1059,7 +1059,7 @@ func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
 
 // TestSerialize_NormalizationJSONNodeAndQNameMethod locks in the round-2 fixes:
 // normalization-form NFC/NFD/NFKC/NFKD actually normalize the serialized output
-// (json/adaptive ignore it, fully-normalized is SESU0011); json-node-output-method
+// (json and adaptive apply it, fully-normalized is SESU0011); json-node-output-method
 // non-default over a serialized node is an honest unsupported error (not silent
 // xml); and a map-form namespaced-QName method is treated as an unsupported
 // extension (SEPM0016) rather than losing its namespace to XPTY0004.
@@ -1462,6 +1462,51 @@ func TestSerialize_CharMapLiteralPrivateUseContent(t *testing.T) {
 				`"use-character-maps":map{"X": codepoints-to-string((101, 769))}})`)
 		require.NoError(t, err)
 		require.Equal(t, `<p a="`+decomposed+composed+`">`+decomposed+composed+`</p>`, res.StringValue())
+	})
+}
+
+// TestSerialize_AdaptiveCharacterMapsAndNormalization verifies that adaptive
+// serialization applies the character-expansion phase to every string-like
+// output path before quoting. Character-map replacements remain verbatim while
+// each unmapped run is normalized.
+func TestSerialize_AdaptiveCharacterMapsAndNormalization(t *testing.T) {
+	const composed = "\u00e9"
+	const decomposed = "e\u0301"
+	const opts = `map{"method":"adaptive","normalization-form":"NFC","use-character-maps":map{"X": codepoints-to-string((101, 769))}}`
+	const source = `codepoints-to-string((88, 101, 769))`
+	wantString := `"` + decomposed + composed + `"`
+
+	t.Run("atomic string", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil, `serialize(`+source+`, `+opts+`)`)
+		require.NoError(t, err)
+		require.Equal(t, wantString, res.StringValue())
+	})
+
+	t.Run("atomic anyURI", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(xs:anyURI(`+source+`), map{"method":"adaptive","normalization-form":"NFC","use-character-maps":map{"X":"mapped"}})`)
+		require.NoError(t, err)
+		require.Equal(t, `"mapped`+composed+`"`, res.StringValue())
+	})
+
+	t.Run("map key and value", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(map{`+source+`:`+source+`}, `+opts+`)`)
+		require.NoError(t, err)
+		require.Equal(t, `map{`+wantString+`:`+wantString+`}`, res.StringValue())
+	})
+
+	t.Run("array member", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil, `serialize([`+source+`], `+opts+`)`)
+		require.NoError(t, err)
+		require.Equal(t, `[`+wantString+`]`, res.StringValue())
+	})
+
+	t.Run("node text", func(t *testing.T) {
+		doc := mustParseXML(t, `<e>X`+decomposed+`</e>`)
+		res, err := evaluate(t.Context(), doc, `serialize(., `+opts+`)`)
+		require.NoError(t, err)
+		require.Equal(t, `<e>`+decomposed+`&#xE9;</e>`, res.StringValue())
 	})
 }
 

@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const adaptiveMethod = "adaptive"
+
 func TestSerializeResultXML(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -80,6 +82,215 @@ func TestSerializeItemsWithDocument(t *testing.T) {
 	err = xslt3.SerializeItems(&buf, nil, doc, nil)
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "content")
+}
+
+func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	replacement := "a\u030a"
+	value := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "x" + decomposed}
+	mapItem := xpath3.NewMap([]xpath3.MapEntry{{
+		Key:   xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "key"},
+		Value: xpath3.ItemSlice{value},
+	}})
+	arrayItem := xpath3.NewArray([]xpath3.Sequence{xpath3.ItemSlice{value}})
+
+	tests := []struct {
+		name   string
+		method string
+		item   xpath3.Item
+		want   string
+	}{
+		{
+			name:   "JSONAtomic",
+			method: "json",
+			item:   value,
+			want:   `"` + replacement + composed + `"`,
+		},
+		{
+			name:   "JSONMap",
+			method: "json",
+			item:   mapItem,
+			want:   `{"key":"` + replacement + composed + `"}`,
+		},
+		{
+			name:   "JSONArray",
+			method: "json",
+			item:   arrayItem,
+			want:   `["` + replacement + composed + `"]`,
+		},
+		{
+			name:   "AdaptiveAtomic",
+			method: adaptiveMethod,
+			item:   value,
+			want:   `"` + replacement + composed + `"`,
+		},
+		{
+			name:   "AdaptiveMap",
+			method: adaptiveMethod,
+			item:   mapItem,
+			want:   `map{"key":"` + replacement + composed + `"}`,
+		},
+		{
+			name:   "AdaptiveArray",
+			method: adaptiveMethod,
+			item:   arrayItem,
+			want:   `["` + replacement + composed + `"]`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{tt.item}, nil, &xslt3.OutputDef{
+				Method:            tt.method,
+				NormalizationForm: normalizationFormNFC,
+				ResolvedCharMap:   map[rune]string{'x': replacement},
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, buf.String())
+		})
+	}
+}
+
+func TestSerializeItemsAdaptiveMapKeyNormalizationWithCharacterMap(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	replacement := "\"a\u030a"
+	key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "x" + decomposed}
+	inner := xpath3.NewMap([]xpath3.MapEntry{{
+		Key:   key,
+		Value: xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "value"}},
+	}})
+	outer := xpath3.NewMap([]xpath3.MapEntry{{
+		Key:   key,
+		Value: xpath3.ItemSlice{inner},
+	}})
+
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{outer}, nil, &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: normalizationFormNFC,
+		ResolvedCharMap:   map[rune]string{'x': replacement},
+	})
+	require.NoError(t, err)
+	escapedKey := `\"å` + composed
+	require.Equal(t, `map{"`+escapedKey+`":map{"`+escapedKey+`":"value"}}`, buf.String())
+}
+
+func TestSerializeItemsAdaptiveStringNormalization(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	item := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: decomposed}
+
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{item}, nil, &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: normalizationFormNFC,
+	})
+	require.NoError(t, err)
+	require.Equal(t, `"`+composed+`"`, buf.String())
+}
+
+func TestSerializeItemsAdaptiveSingletonElementNormalization(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	tests := []struct {
+		name    string
+		charMap map[rune]string
+	}{
+		{name: "NoCharacterMap"},
+		{name: "UnrelatedCharacterMap", charMap: map[rune]string{'x': "unused"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			elem, err := doc.CreateElement("out")
+			require.NoError(t, err)
+			require.NoError(t, elem.AddChild(doc.CreateText([]byte(decomposed))))
+
+			var buf bytes.Buffer
+			err = xslt3.SerializeItems(&buf, xpath3.ItemSlice{xpath3.NodeItem{Node: elem}}, nil, &xslt3.OutputDef{
+				Method:            adaptiveMethod,
+				NormalizationForm: normalizationFormNFC,
+				ResolvedCharMap:   tt.charMap,
+			})
+			require.NoError(t, err)
+			require.Contains(t, buf.String(), "<out>"+composed+"</out>")
+			require.NotContains(t, buf.String(), decomposed)
+		})
+	}
+}
+
+func TestSerializeItemsAdaptiveFullyNormalizedNodeCharacterMap(t *testing.T) {
+	decomposed := "e\u0301"
+	mappedNFC := "mapped&#xE9;"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte("<out>x"+decomposed+"</out>"))
+	require.NoError(t, err)
+
+	root := doc.DocumentElement()
+	tests := []struct {
+		name  string
+		items xpath3.Sequence
+		want  string
+	}{
+		{
+			name:  "Document",
+			items: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
+			want:  "<out>" + mappedNFC + "</out>\n",
+		},
+		{
+			name: "MultiItemElement",
+			items: xpath3.ItemSlice{
+				xpath3.NodeItem{Node: root},
+				xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "tail"},
+			},
+			want: "<out>" + mappedNFC + "</out>\n\"tail\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, tt.items, nil, &xslt3.OutputDef{
+				Method:            adaptiveMethod,
+				NormalizationForm: "FULLY-NORMALIZED",
+				ResolvedCharMap:   map[rune]string{'x': "mapped"},
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, buf.String())
+		})
+	}
+}
+
+func TestSerializeItemsAdaptiveNodeCharacterDataTransformations(t *testing.T) {
+	decomposed := "e\u0301"
+	replacement := "a\u030a"
+	doc := helium.NewDefaultDocument()
+	elem, err := doc.CreateElement("x" + decomposed)
+	require.NoError(t, err)
+	require.NoError(t, elem.SetAttribute("a"+decomposed, "x"+decomposed))
+	require.NoError(t, elem.AddChild(doc.CreateText([]byte("x"+decomposed))))
+
+	node := xpath3.NodeItem{Node: elem}
+	nested := xpath3.NewMap([]xpath3.MapEntry{{
+		Key: xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "key"},
+		Value: xpath3.ItemSlice{xpath3.NewArray([]xpath3.Sequence{
+			xpath3.ItemSlice{node},
+		})},
+	}})
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeItems(&buf, xpath3.ItemSlice{node, node, nested}, nil, &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: normalizationFormNFC,
+		ResolvedCharMap:   map[rune]string{'x': replacement},
+	})
+	require.NoError(t, err)
+
+	serializedContent := replacement + "&#xE9;"
+	wantNode := "<x" + decomposed + " a" + decomposed + `="` + serializedContent + `">` + serializedContent + "</x" + decomposed + ">"
+	require.Equal(t, wantNode+"\n"+wantNode+"\n"+`map{"key":[`+wantNode+"]}", buf.String())
 }
 
 func TestDefaultOutputDef(t *testing.T) {
@@ -245,15 +456,15 @@ func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
 	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}, xpath3.NodeItem{Node: root}}
 
 	var buf bytes.Buffer
-	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "adaptive"})
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: adaptiveMethod})
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: "1.0"})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
-	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: "adaptive", Version: xmlVersion11})
+	err = xslt3.SerializeItems(&buf11, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: xmlVersion11})
 	require.NoError(t, err)
 	requireControlCharRef(t, buf11.String())
 }
@@ -329,7 +540,7 @@ func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
 						doc = tt.doc(t)
 					}
 					err := xslt3.SerializeItems(&buf, items, doc, &xslt3.OutputDef{
-						Method:  "adaptive",
+						Method:  adaptiveMethod,
 						Version: version.version,
 					})
 					if version.version != xmlVersion11 {
