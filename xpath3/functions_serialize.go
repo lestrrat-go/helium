@@ -1531,10 +1531,10 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// Per XPath 3.1 §12.2 (Adaptive): string and untypedAtomic values
-		// are serialized enclosed in double quotes, with internal quotes
+		// Per XPath 3.1 §12.2 (Adaptive): string, anyURI, and untypedAtomic
+		// values are serialized enclosed in double quotes, with internal quotes
 		// escaped as "".
-		if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic {
+		if v.TypeName == TypeString || v.TypeName == TypeAnyURI || v.TypeName == TypeUntypedAtomic {
 			if opts.method == serializeMethodAdaptive {
 				s, err = serializeAdaptiveStringContent(s, opts)
 				if err != nil {

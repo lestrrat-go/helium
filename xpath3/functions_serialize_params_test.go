@@ -1482,6 +1482,13 @@ func TestSerialize_AdaptiveCharacterMapsAndNormalization(t *testing.T) {
 		require.Equal(t, wantString, res.StringValue())
 	})
 
+	t.Run("atomic anyURI", func(t *testing.T) {
+		res, err := evaluate(t.Context(), nil,
+			`serialize(xs:anyURI(`+source+`), map{"method":"adaptive","normalization-form":"NFC","use-character-maps":map{"X":"mapped"}})`)
+		require.NoError(t, err)
+		require.Equal(t, `"mapped`+composed+`"`, res.StringValue())
+	})
+
 	t.Run("map key and value", func(t *testing.T) {
 		res, err := evaluate(t.Context(), nil,
 			`serialize(map{`+source+`:`+source+`}, `+opts+`)`)
