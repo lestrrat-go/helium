@@ -16,11 +16,13 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+const normalizationFormNFC = "NFC"
+
 // resolveNormForm returns the norm.Form for the given normalization form name.
 // Returns (form, true) on success or (0, false) for unknown/NONE forms.
 func resolveNormForm(form string) (norm.Form, bool) {
 	switch form {
-	case "NFC", lexicon.NormFullyNormalized:
+	case normalizationFormNFC, lexicon.NormFullyNormalized:
 		return norm.NFC, true
 	case "NFD":
 		return norm.NFD, true

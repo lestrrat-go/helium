@@ -768,6 +768,13 @@ func (ec *execContext) addNode(node helium.Node) error {
 
 	// For text nodes, compute whitespace-only once; used by multiple checks below.
 	isNonWhitespaceText := isText && strings.TrimSpace(string(node.Content())) != ""
+	if len(out.deferredMarkupSeps) > 0 &&
+		(!isText || len(node.Content()) > 0) &&
+		!isAdaptiveStandaloneMarkupNode(node) {
+		if err := out.materializeDeferredMarkupSeps(); err != nil {
+			return err
+		}
+	}
 
 	// When item-separator is explicitly set, insert it between any pair
 	// of adjacent items in the result sequence (XSLT 3.0 serialization).
@@ -777,7 +784,7 @@ func (ec *execContext) addNode(node helium.Node) error {
 	// are not separate "items" in the serialization sense.
 	if out.itemSeparator != nil && out.prevHadOutput && !isText && nodeType != helium.AttributeNode {
 		sepStr := *out.itemSeparator
-		if sepStr != "" && !ec.deferPrimaryAdaptiveMarkupSeparator(out, node) {
+		if sepStr != "" && !ec.deferAdaptiveMarkupSeparator(out, node, sepStr) {
 			sep := ec.resultDoc.CreateText([]byte(sepStr))
 			if err := out.current.AddChild(sep); err != nil {
 				return err
@@ -827,19 +834,36 @@ func (ec *execContext) addNode(node helium.Node) error {
 	return nil
 }
 
-// deferPrimaryAdaptiveMarkupSeparator reports whether adaptive serialization
-// will insert the item separator between top-level primary markup items. The
-// separator must not become a text node, or the XML fallback adds a declaration.
-func (ec *execContext) deferPrimaryAdaptiveMarkupSeparator(out *outputFrame, node helium.Node) bool {
-	if len(ec.outputStack) != 1 || ec.currentResultDocMethod != methodAdaptive || out.current != out.doc {
-		return false
-	}
+// isAdaptiveStandaloneMarkupNode reports whether node can remain in a
+// declaration-free adaptive markup-only document.
+func isAdaptiveStandaloneMarkupNode(node helium.Node) bool {
 	switch node.Type() {
 	case helium.CommentNode, helium.ProcessingInstructionNode:
-		return adaptiveStandaloneMarkupDocument(out.doc)
+		return true
 	default:
 		return false
 	}
+}
+
+// deferAdaptiveMarkupSeparator keeps an adaptive item separator outside the
+// DOM while the current result document contains only top-level markup. A later
+// fallback restores every deferred separator at its original boundary.
+func (ec *execContext) deferAdaptiveMarkupSeparator(out *outputFrame, node helium.Node, sep string) bool {
+	if ec.currentResultDocMethod != methodAdaptive || out.current != out.doc || !isAdaptiveStandaloneMarkupNode(node) {
+		return false
+	}
+	if !adaptiveStandaloneMarkupDocument(out.doc) {
+		return false
+	}
+	right, ok := node.(helium.MutableNode)
+	if !ok {
+		return false
+	}
+	out.deferredMarkupSeps = append(out.deferredMarkupSeps, deferredMarkupSeparator{
+		right: right,
+		text:  sep,
+	})
+	return true
 }
 
 func (ec *execContext) executeSequenceConstructor(ctx context.Context, body []instruction) error {

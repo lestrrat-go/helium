@@ -13,6 +13,19 @@ import (
 
 const adaptiveMethod = "adaptive"
 
+type adaptiveResultDocSerializer struct {
+	serialized string
+}
+
+func (h *adaptiveResultDocSerializer) HandleResultDocument(_ string, doc *helium.Document, outDef *xslt3.OutputDef) error {
+	var out bytes.Buffer
+	if err := xslt3.SerializeResult(&out, doc, outDef); err != nil {
+		return err
+	}
+	h.serialized = out.String()
+	return nil
+}
+
 func TestSerializeResultXML(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -111,6 +124,60 @@ func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparator(t *
 	require.NoError(t, err)
 	require.Equal(t, "<!--first--> | <?target data?> | <!--last-->", out)
 	require.NotContains(t, out, "<?xml")
+}
+
+func TestPrimaryAdaptiveMarkupThenElementKeepsDeferredSeparators(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:processing-instruction name="target" select="'data'"/>
+    <result/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, `<?xml version="1.0"`)
+	require.Contains(t, out, "<!--first-->\n | \n<?target data?>\n | \n<result/>")
+}
+
+func TestPrimaryAdaptiveMarkupSeparatorAppliesCharacterMapAndNormalization(t *testing.T) {
+	decomposed := "e\u0301"
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:character-map name="map">
+    <xsl:output-character character="x" string="mapped"/>
+  </xsl:character-map>
+  <xsl:output method="adaptive" item-separator="x`+decomposed+`" normalization-form="NFC" use-character-maps="map"/>
+  <xsl:template match="/">
+    <xsl:comment select="'x`+decomposed+`'"/>
+    <xsl:processing-instruction name="target" select="'x`+decomposed+`'"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "<!--x"+decomposed+"-->mapped&#xE9;<?target x"+decomposed+"?>", out)
+}
+
+func TestSecondaryAdaptiveMarkupSequenceItemSeparatorHasNoDeclaration(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="secondary.xml" method="adaptive" item-separator=" | ">
+      <xsl:comment select="'first'"/>
+      <xsl:processing-instruction name="target" select="'data'"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	handler := &adaptiveResultDocSerializer{}
+	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentHandler(handler).Do(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "<!--first--> | <?target data?>", handler.serialized)
+	require.NotContains(t, handler.serialized, "<?xml")
 }
 
 func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparatorTextFallback(t *testing.T) {

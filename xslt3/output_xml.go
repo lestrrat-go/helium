@@ -57,7 +57,7 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	}
 	writerNormalizationForm := outDef.NormalizationForm
 	if writerNormalizationForm == lexicon.NormFullyNormalized {
-		writerNormalizationForm = "NFC"
+		writerNormalizationForm = normalizationFormNFC
 	} else if _, ok := resolveNormForm(writerNormalizationForm); !ok {
 		writerNormalizationForm = ""
 	}

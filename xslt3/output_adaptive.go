@@ -20,7 +20,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 			cm = charMaps[0]
 		}
 		if adaptiveStandaloneMarkupDocument(doc) {
-			return serializeAdaptiveStandaloneMarkup(w, doc, itemSep, xmlVersion)
+			return serializeAdaptiveStandaloneMarkup(w, doc, itemSep, xmlVersion, normalizationForm, cm)
 		}
 		xmlOutDef := defaultOutputDef()
 		xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
@@ -99,18 +99,29 @@ func adaptiveStandaloneMarkupDocument(doc *helium.Document) bool {
 
 // serializeAdaptiveStandaloneMarkup serializes every top-level comment and
 // processing instruction as an adaptive item. The XML writer validates each
-// item against the output version without adding a document declaration.
-func serializeAdaptiveStandaloneMarkup(w io.Writer, doc *helium.Document, itemSep *string, xmlVersion string) error {
+// item against the output version without adding a document declaration. Its
+// separator is text character data, so character maps and normalization apply
+// to it but not to the comment or processing-instruction data.
+func serializeAdaptiveStandaloneMarkup(w io.Writer, doc *helium.Document, itemSep *string, xmlVersion, normalizationForm string, charMap map[rune]string) error {
 	sep := "\n"
 	if itemSep != nil {
 		sep = *itemSep
 	}
+	writerNormalizationForm := normalizationForm
+	if writerNormalizationForm == lexicon.NormFullyNormalized {
+		writerNormalizationForm = normalizationFormNFC
+	} else if _, ok := resolveNormForm(writerNormalizationForm); !ok {
+		writerNormalizationForm = ""
+	}
 	writer := helium.NewWriter().XMLDeclaration(false).
-		OutputVersion(adaptiveXMLVersion(xmlVersion))
+		OutputVersion(adaptiveXMLVersion(xmlVersion)).
+		CharacterMap(charMap).
+		Normalization(writerNormalizationForm)
 	first := true
 	for child := range helium.Children(doc) {
 		if !first && sep != "" {
-			if _, err := io.WriteString(w, sep); err != nil {
+			separator := doc.CreateText([]byte(sep))
+			if err := xmlInvalidCharError(writer.WriteTo(w, separator)); err != nil {
 				return err
 			}
 		}
@@ -185,7 +196,7 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm strin
 		case *helium.Element, *helium.Document:
 			writerNormalizationForm := normalizationForm
 			if writerNormalizationForm == lexicon.NormFullyNormalized {
-				writerNormalizationForm = "NFC"
+				writerNormalizationForm = normalizationFormNFC
 			}
 			writer := helium.NewWriter().XMLDeclaration(false).
 				OutputVersion(adaptiveXMLVersion(xmlVersion)).

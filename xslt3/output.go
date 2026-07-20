@@ -33,9 +33,31 @@ type outputFrame struct {
 	wherePopulated      bool                             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
 	itemSeparator       *string                          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
 	prevHadOutput       bool                             // true when any item (node or atomic) was previously output; used for item-separator between non-atomic items
+	deferredMarkupSeps  []deferredMarkupSeparator        // top-level adaptive markup separators, held outside the DOM until XML fallback is required
 	outputSerial        int                              // monotonically increases whenever visible output is produced
 	seqConstructorGen   uint64                           // incremented each time executeSequenceConstructor is called
 	conditionalScopes   []conditionalScope
+}
+
+// deferredMarkupSeparator records an item separator that belongs
+// immediately before right. Keeping it outside the DOM preserves declaration-free
+// adaptive serialization while the output contains only top-level markup.
+type deferredMarkupSeparator struct {
+	right helium.MutableNode
+	text  string
+}
+
+// materializeDeferredMarkupSeps restores deferred separators in
+// document order when a non-markup node requires XML fallback.
+func (out *outputFrame) materializeDeferredMarkupSeps() error {
+	for _, deferred := range out.deferredMarkupSeps {
+		separator := out.doc.CreateText([]byte(deferred.text))
+		if err := deferred.right.Replace(separator, deferred.right); err != nil {
+			return err
+		}
+	}
+	out.deferredMarkupSeps = nil
+	return nil
 }
 
 type conditionalKind int
@@ -623,7 +645,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	// SESU0011: unsupported normalization-form
 	if outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE" {
 		switch outDef.NormalizationForm {
-		case "NFC", "NFD", "NFKC", "NFKD", "FULLY-NORMALIZED":
+		case normalizationFormNFC, "NFD", "NFKC", "NFKD", "FULLY-NORMALIZED":
 			// supported
 		default:
 			return dynamicError(errCodeSESU0011,
