@@ -48,6 +48,10 @@ type Entity struct {
 	// URI), cached alongside `content` so a later reference parses the cached
 	// bytes against the SAME base the first load used — not the declared URI().
 	resolvedURI string
+	// textDeclVersion is the effective XML version of cached external parameter
+	// entity replacement text. It scopes version-dependent validation while the cached
+	// input is parsed without changing the owning document's recorded version.
+	textDeclVersion string
 	// owner      bool       // does the entity own children
 	checked      int   // was the entity content checked
 	attrWFCFlags int   // attribute-value WFC memoization (entWFCValidated/entWFCChecked)

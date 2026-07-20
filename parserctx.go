@@ -199,6 +199,7 @@ type parserCtx struct {
 	attrBuf          []attrData        // reusable attribute scratch buffer for start-tag parsing
 	nsDeclaredBuf    []string          // reusable scratch buffer of ns prefixes declared on the current start tag
 	baseURIScopes    []baseURIScope    // per-input baseURI overrides (restored when the input is popped)
+	versionScopes    []versionScope    // per-input XML-version overrides (restored when the input is popped)
 	// externalPEScopes records, per pushed external parameter-entity input, the
 	// entity whose replacement text the input holds. activeExternalPECount is the
 	// set of external PEs currently on the input stack (count per entity, to
@@ -219,6 +220,14 @@ type parserCtx struct {
 type baseURIScope struct {
 	input   any
 	baseURI string
+}
+
+// versionScope records the parser version to restore when an external DTD or
+// parameter-entity input is popped. A TextDecl controls version-dependent
+// validation for that input only; it never changes the document's recorded XML version.
+type versionScope struct {
+	input   any
+	version string
 }
 
 // externalPEScope records which external parameter entity a pushed input belongs
@@ -405,12 +414,32 @@ func (ctx *parserCtx) pushInputWithBaseURI(in any, baseURI string) {
 	ctx.pushInput(in)
 }
 
+// scopeInputVersion applies an external input's effective XML version until
+// that exact input is popped. An empty version leaves the current parser state
+// unchanged.
+func (ctx *parserCtx) scopeInputVersion(in any, version string) {
+	if version == "" {
+		return
+	}
+	ctx.versionScopes = append(ctx.versionScopes, versionScope{input: in, version: ctx.version})
+	ctx.version = version
+}
+
+// pushInputWithVersion pushes an external DTD input and scopes its effective
+// TextDecl version until the DTD cursor is popped.
+func (ctx *parserCtx) pushInputWithVersion(in any, version string) {
+	ctx.pushInput(in)
+	ctx.scopeInputVersion(in, version)
+}
+
 // pushExternalPEInput pushes an external parameter entity's replacement text
-// (scoping baseURI to its resolved URI) AND records the entity as active so a
-// nested reference to the same PE — while its earlier input is still being
-// drained — is detected as recursion. The active mark is cleared in popInput.
-func (ctx *parserCtx) pushExternalPEInput(in any, baseURI string, ent *Entity) {
+// (scoping baseURI and its effective TextDecl version) AND records the entity
+// as active so a nested reference to the same PE — while its earlier input is
+// still being drained — is detected as recursion. The active mark and scoped
+// state are cleared in popInput.
+func (ctx *parserCtx) pushExternalPEInput(in any, baseURI, version string, ent *Entity) {
 	ctx.pushInputWithBaseURI(in, baseURI)
+	ctx.scopeInputVersion(in, version)
 	if ctx.activeExternalPECount == nil {
 		ctx.activeExternalPECount = make(map[*Entity]int)
 	}
@@ -521,6 +550,13 @@ func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for
 	if n := len(ctx.baseURIScopes); n > 0 && ctx.baseURIScopes[n-1].input == popped {
 		ctx.baseURI = ctx.baseURIScopes[n-1].baseURI
 		ctx.baseURIScopes = ctx.baseURIScopes[:n-1]
+	}
+	// Restore the parent XML version for an external DTD or parameter entity as
+	// soon as its input is drained. The document's version is held separately on
+	// Document and is never changed by this scoped parser state.
+	if n := len(ctx.versionScopes); n > 0 && ctx.versionScopes[n-1].input == popped {
+		ctx.version = ctx.versionScopes[n-1].version
+		ctx.versionScopes = ctx.versionScopes[:n-1]
 	}
 	// Clear the active mark for an external parameter entity whose pushed input is
 	// being popped (strictly LIFO, like the baseURI scope above), so a later

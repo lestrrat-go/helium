@@ -32,7 +32,7 @@ import (
 func (pctx *parserCtx) parameterEntityReplacement(ctx context.Context, ent sax.Entity) ([]byte, error) {
 	if ent.EntityType() == enum.ExternalParameterEntity {
 		if he, ok := ent.(*Entity); ok {
-			content, _, err := pctx.loadExternalParameterEntityContent(ctx, he)
+			content, _, _, err := pctx.loadExternalParameterEntityContent(ctx, he)
 			if err != nil {
 				return nil, err
 			}
@@ -951,7 +951,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
 	// A leading TextDecl (and any declared encoding) has already been consumed and
-	// the body decoded to UTF-8 by decodeExternalPEContent above, so the byte
+	// the body decoded to UTF-8 by decodeExternalPEContentVersion above, so the byte
 	// stream here never begins with a '<?xml' declaration; detectEncoding /
 	// switchEncoding still handle a BOM-only external entity carrying no TextDecl.
 	if err := newctx.switchEncoding(); err != nil {

@@ -374,10 +374,11 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 				}
 				continue
 			}
-			if !pctx.isLiteralChar(rune(c)) {
+			r, width, ok := decodeRuneAt(cur, 0)
+			if !ok || !pctx.isLiteralCharWidth(r, width) {
 				return ErrInvalidChar
 			}
-			if err := cur.Advance(1); err != nil {
+			if err := cur.Advance(width); err != nil {
 				return err
 			}
 		}
@@ -642,7 +643,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 			// post-TextDecl replacement text ready for the declaration loop — the
 			// "<?xml" is never seen as a stray PI, and the entity-value expansion
 			// path sees the identical decoded bytes.
-			content, peURI, err := pctx.loadExternalParameterEntityContent(ctx, ent)
+			content, peURI, peVersion, err := pctx.loadExternalParameterEntityContent(ctx, ent)
 			if err != nil {
 				return err
 			}
@@ -659,7 +660,7 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 				// resolves against the PE's location, not the containing DTD. The
 				// override (and the active-recursion mark) is cleared when this
 				// pushed cursor is popped.
-				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), peURI, ent)
+				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), peURI, peVersion, ent)
 			}
 			pctx.hasPERefs = true
 			pctx.hasExternalPERef = true
@@ -716,24 +717,24 @@ func padPEContent(content []byte, pad bool) []byte {
 	return out
 }
 
-// loadExternalParameterEntityContent returns the replacement text of an external
-// parameter entity, loading it from the resolved external resource on first use
-// and caching it on the entity for subsequent references. External loading
-// honors the parser's secure-default gating: when XXE loading is disabled
-// (parseNoXXE) or the resolver declines to open the resource, nothing is loaded
-// and empty content is returned, leaving the caller's behavior unchanged. The
-// read is byte-capped (externalEntityMaxBytes) and the opened input is closed as
-// soon as the bounded read completes, mirroring parseExternalEntityPrivate.
-func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, string, error) {
+// loadExternalParameterEntityContent returns the replacement text, resolved URI,
+// and effective TextDecl version of an external parameter entity. It loads and
+// caches all three on the entity at first use. External loading honors the
+// parser's secure-default gating: when XXE loading is disabled (parseNoXXE) or
+// the resolver declines to open the resource, nothing is loaded and empty
+// content is returned, leaving the caller's behavior unchanged. The read is
+// byte-capped (externalEntityMaxBytes) and the opened input is closed as soon as
+// the bounded read completes, mirroring parseExternalEntityPrivate.
+func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, string, string, error) {
 	if len(e.content) > 0 {
 		// Return the URI the bytes were ORIGINALLY loaded from (cached on first
 		// load), not e.URI(): the first load may have used a catalog/custom-resolver
 		// URI, and relative system IDs inside the cached PE must resolve against
 		// that same base regardless of which reference triggered the load first.
-		return []byte(e.content), e.resolvedURI, nil
+		return []byte(e.content), e.resolvedURI, e.textDeclVersion, nil
 	}
 	if pctx.options.IsSet(parseNoXXE) {
-		return nil, "", nil
+		return nil, "", "", nil
 	}
 
 	var input sax.ParseInput
@@ -750,11 +751,11 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 			input = resolved
 		case sax.ErrHandlerUnspecified:
 		default:
-			return nil, "", pctx.error(ctx, err)
+			return nil, "", "", pctx.error(ctx, err)
 		}
 	}
 	if input == nil {
-		return nil, "", nil
+		return nil, "", "", nil
 	}
 
 	// The resolved input carries the URI actually opened (a catalog-resolved URI
@@ -774,10 +775,10 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 		_ = c.Close()
 	}
 	if err != nil {
-		return nil, "", pctx.error(ctx, fmt.Errorf("reading external parameter entity: %w", err))
+		return nil, "", "", pctx.error(ctx, fmt.Errorf("reading external parameter entity: %w", err))
 	}
 	if exceeded {
-		return nil, "", pctx.error(ctx, fmt.Errorf("external parameter entity (URI=%s) exceeds maximum size of %d bytes", e.URI(), externalEntityMaxBytes))
+		return nil, "", "", pctx.error(ctx, fmt.Errorf("external parameter entity (URI=%s) exceeds maximum size of %d bytes", e.URI(), externalEntityMaxBytes))
 	}
 
 	// Strip and decode any leading TextDecl ("<?xml ... encoding=...?>") HERE, at
@@ -789,35 +790,20 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 	// bytes means a later reference (from either path) reuses them consistently,
 	// instead of one path getting raw bytes that embed the TextDecl into a
 	// general entity's stored value.
-	content, err = pctx.decodeExternalPEContent(ctx, uri, content)
+	content, textDeclVersion, err := pctx.decodeExternalPEContentVersion(ctx, uri, content)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 
 	e.content = string(content)
 	e.resolvedURI = uri
-	return content, uri, nil
+	e.textDeclVersion = textDeclVersion
+	return content, uri, textDeclVersion, nil
 }
 
-// decodeExternalPEContent consumes an OPTIONAL TextDecl at the start of an
-// external parameter entity's replacement text and returns the post-TextDecl
-// bytes decoded to UTF-8. An external parsed entity may begin with
-// "<?xml version=... encoding=...?>"; pushed raw, the DTD declaration loop would
-// reject the "<?xml" as a processing instruction (a PI target may not be "xml"),
-// so the TextDecl must be stripped here and any declared encoding honored — the
-// same treatment parseExternalEntityPrivate gives an external general entity.
-// When no TextDecl is present the ASCII-compatible content is returned unchanged.
-// UTF-16 / UCS-4 content (BOM- or encoded-'<'-led) is decoded to UTF-8 by
-// decodeFixedWidthExternalContent, which also consumes a TextDecl that is itself
-// in that fixed-width encoding.
-func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
-	content, _, err := pctx.decodeExternalPEContentVersion(ctx, srcURI, content)
-	return content, err
-}
-
-// decodeExternalPEContentVersion is decodeExternalPEContent with the effective
-// XML version of the external resource. A TextDecl version overrides the
-// referencing document's version after compatibility is checked.
+// decodeExternalPEContentVersion returns decoded external content and its
+// effective XML version. A TextDecl version overrides the referencing
+// document's version after compatibility is checked.
 func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
 	entityVersion := pctx.documentVersion()
 	if len(content) == 0 {
