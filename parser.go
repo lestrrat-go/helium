@@ -254,6 +254,13 @@ func (p Parser) DefaultDTDAttributes(v bool) Parser {
 // external-DTD loading, or default-attribute application is requested; the
 // three intents are independent, so call order does not matter and turning
 // this off does not leave loading stuck on.
+//
+// A document with neither an internal nor an external subset is a validity
+// error under this option, not a pass: nothing declares its elements, so Parse
+// returns [ErrNoDTDFound] (which wraps [ErrDTDValidationFailed]). Callers that
+// want "validate against a DTD only when the document carries one" should check
+// for [ErrNoDTDFound] and treat it as success.
+//
 // libxml2: XML_PARSE_DTDVALID
 // Default: false
 func (p Parser) ValidateDTD(v bool) Parser {
@@ -765,7 +772,8 @@ func (p Parser) finalize(ctx context.Context, doc *Document) (*Document, error) 
 // (libxml2: xmlParseDoc / xmlParseMemory).
 //
 // When [ValidateDTD] is enabled and the document fails validation, the
-// returned error is [ErrDTDValidationFailed] and the document is still
+// returned error is [ErrDTDValidationFailed] — or [ErrNoDTDFound], which wraps
+// it, when the document has no DTD at all — and the document is still
 // returned. Individual validation errors are delivered to the [ErrorHandler]
 // configured via [Parser.ErrorHandler].
 //

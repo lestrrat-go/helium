@@ -743,6 +743,35 @@ func TestValidateNoDTD(t *testing.T) {
 			"expected a 'no DTD found' validity error, got %v", h.errs)
 	})
 
+	// The returned error must name the reason on its own. A caller that sets no
+	// ErrorHandler (the default NilErrorHandler discards diagnostics) otherwise
+	// sees only the bare "dtd: validation failed" sentinel and cannot tell a
+	// document that violates its DTD from one that has no DTD to violate.
+	t.Run("ValidateDTD(true) with no DTD reports the reason without a handler", func(t *testing.T) {
+		_, err := helium.NewParser().
+			ValidateDTD(true).
+			Parse(t.Context(), []byte(noDTD))
+		require.ErrorIs(t, err, helium.ErrNoDTDFound)
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.Contains(t, err.Error(), "no DTD found")
+	})
+
+	// A document that HAS a DTD but violates it must stay distinguishable from
+	// the no-DTD case, so a caller can branch on ErrNoDTDFound.
+	t.Run("a document violating its DTD is not ErrNoDTDFound", func(t *testing.T) {
+		const violatesDTD = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+]>
+<root><wrong/></root>`
+		_, err := helium.NewParser().
+			ValidateDTD(true).
+			Parse(t.Context(), []byte(violatesDTD))
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.NotErrorIs(t, err, helium.ErrNoDTDFound)
+	})
+
 	t.Run("ValidateDTD(false) with no DTD succeeds", func(t *testing.T) {
 		_, err := helium.NewParser().
 			ValidateDTD(false).

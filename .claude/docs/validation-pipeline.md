@@ -834,8 +834,9 @@ type, enumeration/notation value membership, ID uniqueness, IDREF cross-referenc
 ENTITY/ENTITIES declared+unparsed, content-model matching) and a
 **declaration-consistency** pass over the
 DTD declarations themselves. A document with neither internal nor external subset
-reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`). Errors go to the configured
-`ErrorHandler` via `validCtx.addf`; a failed validation returns
+reports `no DTD found` (libxml2 `XML_DTD_NO_DTD`) and returns `ErrNoDTDFound`,
+which wraps `ErrDTDValidationFailed` so `errors.Is` matches both. Errors go to the
+configured `ErrorHandler` via `validCtx.addf`; any other failed validation returns
 `ErrDTDValidationFailed`.
 
 The content-model matcher (`matchContentModel`) and the DTD serializer assume every
