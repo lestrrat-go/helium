@@ -1090,6 +1090,166 @@ func TestExternalParameterEntityWithTextDecl(t *testing.T) {
 		"external PE beginning with a TextDecl must parse its declarations")
 }
 
+// A parameter entity's TextDecl version applies while that entity input is on
+// the DTD stack, then the surrounding external DTD's version is restored. This
+// keeps a TextDecl 1.0 PE under an XML 1.1 document from accepting XML 1.1-only
+// character references, without leaking that stricter rule to declarations after
+// it.
+func TestExternalParameterEntityTextDeclVersionScoped(t *testing.T) {
+	t.Parallel()
+
+	t.Run("XML 1.0 PE retains XML 1.0 character-reference rules", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{
+			dtdSystemID: {Data: []byte(
+				`<!ENTITY ctrl "control">` + "\n" +
+					`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+					`%pe;`)},
+			peSystemID: {Data: []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
+				`<!ENTITY fromPE "&#1;">`)},
+		}
+		const input = `<?xml version="1.1"?>` + "\n" +
+			`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+		_, err := helium.NewParser().BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(input))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid XML char value 1")
+	})
+
+	t.Run("parent XML version is restored", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{
+			dtdSystemID: {Data: []byte(
+				`<!ENTITY ctrl "control">` + "\n" +
+					`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+					`%pe;` + "\n" +
+					`<!ENTITY afterPE "&#1;">`)},
+			peSystemID: {Data: []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
+				`<!ENTITY fromPE "loaded">`)},
+		}
+		const input = `<?xml version="1.1"?>` + "\n" +
+			`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+		parsed, err := helium.NewParser().BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.Equal(t, "1.1", parsed.Version())
+		_, ok := parsed.GetEntity("fromPE")
+		require.True(t, ok)
+		_, ok = parsed.GetEntity("afterPE")
+		require.True(t, ok)
+	})
+}
+
+// TestExternalParameterEntityEntityValueLiteralValidation covers an external PE
+// used only inside another entity value. That path caches the decoded body rather
+// than pushing it through the DTD declaration loop, so raw literals must be
+// checked before caching under the PE's TextDecl version.
+func TestExternalParameterEntityEntityValueLiteralValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		textDecl   string
+		body       string
+		wantErr    bool
+		wantEntity string
+	}{
+		{
+			name:     "XML 1.1 rejects raw restricted character",
+			textDecl: `<?xml version="1.1" encoding="UTF-8"?>`,
+			body:     "\x7f",
+			wantErr:  true,
+		},
+		{
+			name:       "XML 1.1 accepts character reference",
+			textDecl:   `<?xml version="1.1" encoding="UTF-8"?>`,
+			body:       "&#127;",
+			wantEntity: "\n\x7f",
+		},
+		{
+			name:       "XML 1.0 accepts raw C1 character",
+			textDecl:   `<?xml version="1.0" encoding="UTF-8"?>`,
+			body:       "\x7f",
+			wantEntity: "\n\x7f",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			fsys := fstest.MapFS{
+				dtdSystemID: {Data: []byte(
+					`<!ENTITY ctrl "control">` + "\n" +
+						`<!ENTITY % pe SYSTEM "pe.ent">` + "\n" +
+						`<!ENTITY e "%pe;">`)},
+				peSystemID: {Data: []byte(tc.textDecl + "\n" + tc.body)},
+			}
+			const input = `<?xml version="1.1"?>` + "\n" +
+				`<!DOCTYPE r SYSTEM "d.dtd"><r/>`
+
+			doc, err := helium.NewParser().BlockXXE(false).
+				LoadExternalDTD(true).
+				FS(fsys).
+				Parse(t.Context(), []byte(input))
+			if tc.wantErr {
+				require.ErrorIs(t, err, helium.ErrInvalidChar)
+				return
+			}
+			require.NoError(t, err)
+			ent, ok := doc.GetEntity("e")
+			require.True(t, ok, "general entity using the external PE must be registered")
+			require.Equal(t, tc.wantEntity, string(ent.Content()))
+		})
+	}
+}
+
+// TestInternalGeneralEntityXML11CharacterReferenceExpansion keeps an XML 1.1
+// restricted character reference as a reference until the nested internal-entity
+// parser handles it. The XML 1.1 reference is therefore valid, while an XML 1.0
+// reference and an XML 1.1 raw restricted character remain invalid.
+func TestInternalGeneralEntityXML11CharacterReferenceExpansion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("XML 1.1 character reference expands", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.1"?>
+<!DOCTYPE r [<!ENTITY e "&#1;">]><r>&e;</r>`
+		doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.Equal(t, "\x01", string(doc.DocumentElement().Content()))
+		ent, ok := doc.GetEntity("e")
+		require.True(t, ok)
+		require.Equal(t, "\x01", string(ent.Content()))
+	})
+
+	t.Run("XML 1.0 character reference remains invalid", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY e "&#1;">]><r>&e;</r>`
+		_, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(input))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid XML char value 1")
+	})
+
+	t.Run("XML 1.1 raw restricted character remains invalid", func(t *testing.T) {
+		t.Parallel()
+
+		input := `<?xml version="1.1"?>` + "\n" +
+			`<!DOCTYPE r [<!ENTITY e "` + "\x01" + `">]><r>&e;</r>`
+		_, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(input))
+		require.Error(t, err)
+	})
+}
+
 // TestExternalParameterEntityInEntityValueStripsTextDecl proves that when an
 // external parameter entity whose replacement text begins with a TextDecl is
 // referenced inside a GENERAL entity's value ("<!ENTITY g "%p;">"), the stored

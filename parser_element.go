@@ -7,12 +7,10 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/strcursor"
-	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -72,6 +70,9 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		if pctx.nodeContentTooLong(i) {
 			return pctx.error(ctx, ErrNodeContentTooLarge)
 		}
+		if !pctx.literalBytesValid(data) {
+			return pctx.error(ctx, ErrInvalidChar)
+		}
 
 		if err := cur.AdvanceFast(i); err != nil {
 			return err
@@ -117,6 +118,9 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	}
 	if pctx.nodeContentTooLong(buf.Len()) {
 		return pctx.error(ctx, ErrNodeContentTooLarge)
+	}
+	if !pctx.literalBytesValid(buf.Bytes()) {
+		return pctx.error(ctx, ErrInvalidChar)
 	}
 
 	if err := cur.AdvanceFast(i); err != nil {
@@ -219,6 +223,9 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 			break
 		}
 		first = false
+		if !pctx.literalBytesValid(acc[prev:]) {
+			return pctx.error(ctx, ErrInvalidChar)
+		}
 
 		if err := u8.AdvanceFast(i); err != nil {
 			return err
@@ -306,6 +313,9 @@ func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.U
 		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], limit)
 		if i <= 0 {
 			return nil
+		}
+		if !pctx.literalBytesValid(data) {
+			return pctx.error(ctx, ErrInvalidChar)
 		}
 
 		if err := u8.AdvanceFast(i); err != nil {
@@ -891,6 +901,10 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					err = pctx.error(ctx, ErrNodeContentTooLarge)
 					return
 				}
+				if !pctx.literalStringValid(v) {
+					err = pctx.error(ctx, ErrInvalidChar)
+					return
+				}
 				if err = u8.AdvanceFast(nBytes); err != nil {
 					return
 				}
@@ -918,17 +932,14 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 		}
 		// Width-aware char validation: a real U+FFFD is encoded as valid
 		// 3-byte UTF-8 and is a legal XML Char, whereas invalid/incomplete
-		// UTF-8 decodes to RuneError with width 1. isChar rejects every
-		// RuneError, so decode with width here to tell the two apart and
-		// keep the slow path consistent with the fast path.
+		// UTF-8 decodes to RuneError with width 1. Decode with width here to
+		// tell the two apart and keep the slow path consistent with the fast
+		// path.
 		dr, dw, ok := decodeRuneAt(cur, 0)
 		if !ok {
 			break
 		}
-		if dr == utf8.RuneError && dw == 1 {
-			break
-		}
-		if !xmlchar.IsChar(dr) {
+		if !pctx.isLiteralCharWidth(dr, dw) {
 			break
 		}
 		switch c {
@@ -987,7 +998,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					// would exceed the remaining budget — the cap is enforced
 					// incrementally during decode, never after a fully-built rep.
 					sink := &attrEntitySink{pctx: pctx, b: b}
-					if err = pctx.decodeEntitiesToSink(ctx, ent.Content(), SubstituteRef, 0, sink); err != nil {
+					if err = pctx.decodeEntitiesToSink(ctx, ent.Content(), SubstituteRef, 0, sink, false, true); err != nil {
 						err = pctx.error(ctx, err)
 						return
 					}

@@ -37,17 +37,26 @@ const (
 // Entity represents an XML entity declaration (libxml2: xmlEntity).
 type Entity struct {
 	node
-	orig       string          // content without substitution
-	content    string          // content or ndata if unparsed
-	entityType enum.EntityType // the entity type
-	externalID string          // external identifier for PUBLIC
-	systemID   string          // URI for a SYSTEM or PUBLIC entity
-	uri        string          // the full URI as computed
+	orig    string // content without substitution
+	content string // content or ndata if unparsed
+	// replacement retains XML 1.1 restricted-character-reference spelling from an
+	// EntityValue after parameter-entity expansion. content remains the decoded
+	// public value, while replacement lets an internal general entity reparse the
+	// reference instead of mistaking its decoded character for a raw literal.
+	replacement string
+	entityType  enum.EntityType // the entity type
+	externalID  string          // external identifier for PUBLIC
+	systemID    string          // URI for a SYSTEM or PUBLIC entity
+	uri         string          // the full URI as computed
 	// resolvedURI is the URI an external parameter entity's content was actually
 	// loaded from (a catalog/custom-resolver URI or the entity's resolved system
 	// URI), cached alongside `content` so a later reference parses the cached
 	// bytes against the SAME base the first load used — not the declared URI().
 	resolvedURI string
+	// textDeclVersion is the effective XML version of cached external parameter
+	// entity replacement text. It scopes version-dependent validation while the cached
+	// input is parsed without changing the owning document's recorded version.
+	textDeclVersion string
 	// owner      bool       // does the entity own children
 	checked      int   // was the entity content checked
 	attrWFCFlags int   // attribute-value WFC memoization (entWFCValidated/entWFCChecked)
@@ -179,6 +188,17 @@ func (e *Entity) URI() string {
 
 func (e *Entity) Content() []byte {
 	return []byte(e.content)
+}
+
+func (e *Entity) replacementContent() []byte {
+	if e.replacement != "" {
+		return []byte(e.replacement)
+	}
+	return []byte(e.content)
+}
+
+func (e *Entity) setReplacementContent(s string) {
+	e.replacement = s
 }
 
 func (e *Entity) AddChild(cur Node) error {

@@ -120,6 +120,7 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 
 func copyEntity(src *Entity, doc *Document) *Entity {
 	e := newEntity(src.name, src.entityType, src.externalID, src.systemID, src.content, src.orig)
+	e.replacement = src.replacement
 	e.uri = src.uri
 	e.checked = src.checked
 	e.expandedSize = src.expandedSize

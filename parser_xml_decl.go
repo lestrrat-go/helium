@@ -113,7 +113,7 @@ func (pctx *parserCtx) documentVersion() string {
 // compatible and never rejected. The comparison is against the actual document
 // version (documentVersion) — the sub-context that parses the TextDecl carries no
 // Document node, so it is seeded with the parent document's version by
-// decodeExternalPEContent / decodeFixedWidthExternalContent.
+// decodeExternalPEContentVersion / decodeFixedWidthExternalContent.
 func (pctx *parserCtx) checkEntityVersion(entityVersion string) error {
 	if entityVersion == "" || entityVersion == xmlVersion10 {
 		return nil

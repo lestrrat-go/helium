@@ -88,7 +88,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		sizeBefore := pctx.sizeentcopy
 
 		if ent.EntityType() == enum.InternalGeneralEntity {
-			parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, ent.Content())
+			parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, entityReplacementContent(ent))
 			switch err {
 			case nil, errParseSucceeded:
 			default:
@@ -134,7 +134,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	if ent.firstChild == nil {
 		if wasChecked != 0 {
 			if ent.EntityType() == enum.InternalGeneralEntity {
-				parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, ent.Content())
+				parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, entityReplacementContent(ent))
 				_ = parsedEnt
 				switch err {
 				case nil, errParseSucceeded:
@@ -187,6 +187,13 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func entityReplacementContent(ent sax.Entity) []byte {
+	if entity, ok := ent.(*Entity); ok {
+		return entity.replacementContent()
+	}
+	return ent.Content()
 }
 
 func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {
@@ -298,7 +305,10 @@ func accumulateHexCharRef(val int32, c rune) (int32, error) {
 	return val, nil
 }
 
-func parseStringCharRef(s []byte) (r rune, width int, err error) {
+// parseStringCharRef parses a character reference held in stored entity text.
+// XML 1.1 permits the C0/C1 control values through character references, while
+// XML 1.0 rejects them.
+func parseStringCharRef(s []byte, xml11 bool) (r rune, width int, err error) {
 	var val int32
 	r = utf8.RuneError
 	width = 0
@@ -365,7 +375,11 @@ func parseStringCharRef(s []byte) (r rune, width int, err error) {
 	width++
 
 	r = val
-	if !isXMLCharValue(uint32(val)) {
+	charOK := isXMLCharValue(uint32(val))
+	if !charOK && xml11 {
+		charOK = isXML11CharValue(uint32(val))
+	}
+	if !charOK {
 		return utf8.RuneError, 0, fmt.Errorf("invalid XML char value %d", val)
 	}
 	return
