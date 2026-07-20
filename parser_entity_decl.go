@@ -178,7 +178,7 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 
 	for len(s) > 0 {
 		if bytes.HasPrefix(s, []byte{'&', '#'}) {
-			val, width, err := parseStringCharRef(s)
+			val, width, err := parseStringCharRef(s, pctx.isXML11())
 			if err != nil {
 				return err
 			}
@@ -344,7 +344,7 @@ func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) er
 	if err != nil {
 		return err
 	}
-	return scanEntityValueGeneralRefs(expanded, pctx.maxNameLength)
+	return pctx.scanEntityValueGeneralRefs(expanded)
 }
 
 // expandEntityValueForRefCheck produces the lexical stream over which general
@@ -370,7 +370,7 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 			// Direct character reference: validate its syntax but treat the
 			// result as character data, not as a character that could form a
 			// general reference with surrounding text.
-			_, width, err := parseStringCharRef(s)
+			_, width, err := parseStringCharRef(s, pctx.isXML11())
 			if err != nil {
 				return nil, err
 			}
@@ -440,7 +440,7 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 // scanEntityValueGeneralRefs validates that every '&' in the (PE-expanded)
 // EntityValue stream begins a well-formed character or general reference. A
 // missing semicolon or an otherwise malformed reference is rejected.
-func scanEntityValueGeneralRefs(s []byte, maxNameLength int) error {
+func (pctx *parserCtx) scanEntityValueGeneralRefs(s []byte) error {
 	for len(s) > 0 {
 		i := bytes.IndexByte(s, '&')
 		if i < 0 {
@@ -448,7 +448,7 @@ func scanEntityValueGeneralRefs(s []byte, maxNameLength int) error {
 		}
 		s = s[i:]
 		if bytes.HasPrefix(s, []byte{'&', '#'}) {
-			_, width, err := parseStringCharRef(s)
+			_, width, err := parseStringCharRef(s, pctx.isXML11())
 			if err != nil {
 				return err
 			}
@@ -460,7 +460,7 @@ func scanEntityValueGeneralRefs(s []byte, maxNameLength int) error {
 		if len(s) < 2 {
 			return errors.New("malformed entity reference in entity value")
 		}
-		_, width, err := parseStringName(s[1:], maxNameLength)
+		_, width, err := parseStringName(s[1:], pctx.maxNameLength)
 		if err != nil {
 			return errors.New("malformed entity reference in entity value")
 		}
@@ -876,7 +876,8 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	// the decoded stream would be rejected by parseContent as a PI whose target may
 	// not be "xml". A malformed TextDecl (e.g. a standalone pseudo-attribute, or a
 	// version-only declaration) is rejected here by parseTextDecl.
-	content, err = pctx.decodeExternalPEContent(ctx, uri, content)
+	var entityVersion string
+	content, entityVersion, err = pctx.decodeExternalPEContentVersion(ctx, uri, content)
 	if err != nil {
 		return nil, err
 	}
@@ -921,6 +922,10 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	// limit AND current depth, etc.) from the parent so external entity
 	// replacement text cannot bypass MaxDepth or escape the configured sandbox.
 	pctx.inheritNestedParserState(newctx)
+	// An external entity without a TextDecl uses the document's XML version. A
+	// TextDecl version governs its replacement text after compatibility has been
+	// checked during decoding.
+	newctx.version = entityVersion
 	// Carry the amplification counters through the nested parse so any entity
 	// expansion performed while parsing this external entity (including further
 	// nested external entities) is charged against the same accumulated budget

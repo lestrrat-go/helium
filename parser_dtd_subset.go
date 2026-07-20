@@ -374,6 +374,9 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 				}
 				continue
 			}
+			if !pctx.isLiteralChar(rune(c)) {
+				return ErrInvalidChar
+			}
 			if err := cur.Advance(1); err != nil {
 				return err
 			}
@@ -808,8 +811,17 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 // decodeFixedWidthExternalContent, which also consumes a TextDecl that is itself
 // in that fixed-width encoding.
 func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
+	content, _, err := pctx.decodeExternalPEContentVersion(ctx, srcURI, content)
+	return content, err
+}
+
+// decodeExternalPEContentVersion is decodeExternalPEContent with the effective
+// XML version of the external resource. A TextDecl version overrides the
+// referencing document's version after compatibility is checked.
+func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
+	entityVersion := pctx.documentVersion()
 	if len(content) == 0 {
-		return content, nil
+		return content, entityVersion, nil
 	}
 
 	// UTF-16 / UCS-4 external content is not ASCII-compatible: the body, a
@@ -821,7 +833,7 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 	}
 
 	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(content))) {
-		return content, nil
+		return content, entityVersion, nil
 	}
 
 	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
@@ -834,7 +846,7 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 	// standalone-bearing declaration is rejected rather than leniently accepted.
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
@@ -846,25 +858,25 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 
 	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
 		if err := sub.parseTextDecl(ctx); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	if err := sub.switchEncoding(); err != nil {
 		// Wrap through sub.error so the failure (e.g. an unsupported declared
 		// encoding) carries srcURI, matching the parseTextDecl branch; otherwise
 		// it would be rewrapped at the caller's location and lose the source file.
-		return nil, sub.error(ctx, err)
+		return nil, "", sub.error(ctx, err)
 	}
 
 	cur := sub.getCursor()
 	if cur == nil {
-		return nil, nil
+		return nil, sub.version, nil
 	}
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
-		return nil, sub.error(ctx, err)
+		return nil, "", sub.error(ctx, err)
 	}
-	return rest, nil
+	return rest, sub.version, nil
 }
 
 // decodeFixedWidthExternalContent decodes an external resource's replacement text
@@ -876,10 +888,10 @@ func (pctx *parserCtx) decodeExternalPEContent(ctx context.Context, srcURI strin
 // it is consumed on the decoded rune cursor after switchEncoding, enforcing the
 // same grammar as the ASCII path (VersionInfo OPTIONAL, EncodingDecl REQUIRED, NO
 // StandaloneDecl). srcURI scopes any error to the source resource.
-func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, error) {
+func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
@@ -894,16 +906,16 @@ func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcU
 	// before reading the TextDecl or the body.
 	enc, err := sub.detectEncoding()
 	if err != nil {
-		return nil, sub.error(ctx, err)
+		return nil, "", sub.error(ctx, err)
 	}
 	sub.detectedEncoding = enc
 	if err := sub.switchEncoding(); err != nil {
-		return nil, sub.error(ctx, err)
+		return nil, "", sub.error(ctx, err)
 	}
 
 	cur := sub.getCursor()
 	if cur == nil {
-		return nil, nil
+		return nil, sub.version, nil
 	}
 
 	// Consume an optional leading TextDecl on the decoded rune cursor. The
@@ -919,17 +931,17 @@ func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcU
 	// xml corpus case exercising it. Not covered here.
 	if looksLikeXMLDeclString(cur) {
 		if err := sub.parseTextDeclFromCursor(ctx); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		cur = sub.getCursor()
 		if cur == nil {
-			return nil, nil
+			return nil, sub.version, nil
 		}
 	}
 
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
-		return nil, sub.error(ctx, err)
+		return nil, "", sub.error(ctx, err)
 	}
-	return rest, nil
+	return rest, sub.version, nil
 }
