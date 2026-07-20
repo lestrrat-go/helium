@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const normalizationFormNFC = "NFC"
+
 func TestCharacterMapReplacementSkipsNormalization(t *testing.T) {
 	decomposed := "e\u0301"
 	composed := "é"
@@ -19,7 +21,7 @@ func TestCharacterMapReplacementSkipsNormalization(t *testing.T) {
 	require.NoError(t, xslt3.SerializeResult(&out, doc, &xslt3.OutputDef{
 		Method:            outMethodXML,
 		OmitDeclaration:   true,
-		NormalizationForm: "NFC",
+		NormalizationForm: normalizationFormNFC,
 		ResolvedCharMap:   map[rune]string{'x': decomposed},
 	}))
 
@@ -47,7 +49,7 @@ func TestCharacterMapNormalizationKeepsRawDOEContent(t *testing.T) {
 	require.NoError(t, xslt3.SerializeResult(&out, doc, &xslt3.OutputDef{
 		Method:            outMethodXML,
 		OmitDeclaration:   true,
-		NormalizationForm: "NFC",
+		NormalizationForm: normalizationFormNFC,
 		ResolvedCharMap:   map[rune]string{'x': decomposed},
 	}))
 
@@ -73,7 +75,7 @@ func TestCharacterMapNormalizationPreservesRawDOEMarkup(t *testing.T) {
 	require.NoError(t, xslt3.SerializeResult(&out, doc, &xslt3.OutputDef{
 		Method:            outMethodXML,
 		OmitDeclaration:   true,
-		NormalizationForm: "NFC",
+		NormalizationForm: normalizationFormNFC,
 		ResolvedCharMap:   map[rune]string{'x': "x"},
 	}))
 

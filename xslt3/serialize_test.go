@@ -143,7 +143,7 @@ func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
 			var buf bytes.Buffer
 			err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{tt.item}, nil, &xslt3.OutputDef{
 				Method:            tt.method,
-				NormalizationForm: "NFC",
+				NormalizationForm: normalizationFormNFC,
 				ResolvedCharMap:   map[rune]string{'x': replacement},
 			})
 			require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestSerializeItemsAdaptiveMapKeyNormalizationWithCharacterMap(t *testing.T)
 	var buf bytes.Buffer
 	err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{outer}, nil, &xslt3.OutputDef{
 		Method:            adaptiveMethod,
-		NormalizationForm: "NFC",
+		NormalizationForm: normalizationFormNFC,
 		ResolvedCharMap:   map[rune]string{'x': replacement},
 	})
 	require.NoError(t, err)
@@ -197,7 +197,7 @@ func TestSerializeItemsAdaptiveNodeCharacterDataTransformations(t *testing.T) {
 	var buf bytes.Buffer
 	err = xslt3.SerializeItems(&buf, xpath3.ItemSlice{node, node, nested}, nil, &xslt3.OutputDef{
 		Method:            adaptiveMethod,
-		NormalizationForm: "NFC",
+		NormalizationForm: normalizationFormNFC,
 		ResolvedCharMap:   map[rune]string{'x': replacement},
 	})
 	require.NoError(t, err)
