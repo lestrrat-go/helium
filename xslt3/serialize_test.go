@@ -366,7 +366,7 @@ func TestSerializeItemsAdaptiveCommentAndProcessingInstructionInvalidChars(t *te
 				comment, _ := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
 				return xpath3.NodeItem{Node: comment}
 			},
-			ver:   "1.0",
+			ver:   xmlVersion10,
 			valid: true,
 		},
 		{
@@ -436,9 +436,11 @@ const outMethodXML = "xml"
 // VersionNum, just like the XML output method's version parameter.
 const outMethodXHTML = "xhtml"
 
-// xmlVersion11 is the XML 1.1 output version used by the invalid-character
-// serialization tests.
-const xmlVersion11 = "1.1"
+// XML output versions used by the invalid-character serialization tests.
+const (
+	xmlVersion10 = "1.0"
+	xmlVersion11 = "1.1"
+)
 
 // newBadCharElement builds a small <r> element whose text content carries an
 // XML-invalid control character (U+0001), via the public DOM API. The DOM
@@ -496,7 +498,7 @@ func TestSerializeItemsXMLInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: xmlVersion10})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
@@ -517,7 +519,7 @@ func TestSerializeItemsXHTMLInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: xmlVersion10})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
@@ -578,7 +580,7 @@ func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: xmlVersion10})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
@@ -640,7 +642,7 @@ func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
 		version string
 	}{
 		{name: "Default"},
-		{name: "XML10", version: "1.0"},
+		{name: "XML10", version: xmlVersion10},
 		{name: "XML11", version: xmlVersion11},
 	}
 
