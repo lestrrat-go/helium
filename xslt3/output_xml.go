@@ -55,6 +55,13 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if version := validOutputXMLVersion(outDef.Version); version != "" {
 		writer = writer.OutputVersion(version)
 	}
+	writerNormalizationForm := outDef.NormalizationForm
+	if writerNormalizationForm == lexicon.NormFullyNormalized {
+		writerNormalizationForm = "NFC"
+	} else if _, ok := resolveNormForm(writerNormalizationForm); !ok {
+		writerNormalizationForm = ""
+	}
+	writer = writer.Normalization(writerNormalizationForm)
 	if outDef.Indent {
 		writer = writer.Format(true)
 	}
@@ -194,11 +201,7 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		undeclarePrefixes: outDef.UndeclarePrefixes,
 	}
 
-	inlineNormalizationForm := ""
-	if len(charMap) > 0 {
-		inlineNormalizationForm = outDef.NormalizationForm
-	}
-	err := serializeXMLNodeWithCharMap(&sw, doc, charMap, cdataSet, enc, inlineNormalizationForm, ictx)
+	err := serializeXMLNodeWithCharMap(&sw, doc, charMap, cdataSet, enc, outDef.NormalizationForm, ictx)
 	if err != nil {
 		return err
 	}

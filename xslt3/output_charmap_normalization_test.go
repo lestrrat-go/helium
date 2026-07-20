@@ -81,3 +81,18 @@ func TestCharacterMapNormalizationPreservesRawDOEMarkup(t *testing.T) {
 
 	require.Equal(t, `<out><inner a="`+composed+`">`+composed+`</inner></out>`, out.String())
 }
+
+func TestTextCharacterMapNormalizationCrossesOmittedPI(t *testing.T) {
+	composed := "é"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte("<out>e<?split?>\u0301</out>"))
+	require.NoError(t, err)
+
+	var out bytes.Buffer
+	require.NoError(t, xslt3.SerializeResult(&out, doc, &xslt3.OutputDef{
+		Method:            "text",
+		NormalizationForm: normalizationFormNFC,
+		ResolvedCharMap:   map[rune]string{'x': "unused"},
+	}))
+
+	require.Equal(t, composed, out.String())
+}

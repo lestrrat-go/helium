@@ -170,9 +170,8 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm strin
 	}
 }
 
-// adaptiveAtomicString applies adaptive serialization's character-data
-// transformation to an atomic lexical value before that value is quoted or
-// escaped for its surrounding adaptive syntax.
+// adaptiveAtomicString delegates atomic character-data processing to the Text
+// output method before adaptive serialization quotes or escapes the value.
 func adaptiveAtomicString(s string, charMap map[rune]string, normalizationForm string) string {
 	return applyCharacterMapWithNormalization(s, charMap, normalizationForm)
 }

@@ -494,20 +494,43 @@ func nodeStringValue(n helium.Node) string {
 func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string, normalizationForm string) error {
 	// Text output: just write the text content of the document
 	sw := stream.NewWriter(w)
+	var unmapped strings.Builder
+	flushUnmapped := func() error {
+		if unmapped.Len() == 0 {
+			return nil
+		}
+		if err := sw.WriteRaw(normalizeText(unmapped.String(), normalizationForm)); err != nil {
+			return err
+		}
+		unmapped.Reset()
+		return nil
+	}
 	err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		switch n.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			text := string(n.Content())
-			if len(charMap) > 0 {
-				text = applyCharacterMapWithNormalization(text, charMap, normalizationForm)
-			} else {
-				text = normalizeText(text, normalizationForm)
+			if len(charMap) == 0 {
+				return sw.WriteRaw(normalizeText(text, normalizationForm))
 			}
-			return sw.WriteRaw(text)
+			for _, r := range text {
+				if replacement, ok := charMap[r]; ok {
+					if err := flushUnmapped(); err != nil {
+						return err
+					}
+					if err := sw.WriteRaw(replacement); err != nil {
+						return err
+					}
+					continue
+				}
+				unmapped.WriteRune(r)
+			}
 		}
 		return nil
 	}))
 	if err != nil {
+		return err
+	}
+	if err := flushUnmapped(); err != nil {
 		return err
 	}
 	return sw.Flush()

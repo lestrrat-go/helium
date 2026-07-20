@@ -177,6 +177,51 @@ func TestSerializeItemsAdaptiveMapKeyNormalizationWithCharacterMap(t *testing.T)
 	require.Equal(t, `map{"`+escapedKey+`":map{"`+escapedKey+`":"value"}}`, buf.String())
 }
 
+func TestSerializeItemsAdaptiveStringNormalization(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	item := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: decomposed}
+
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{item}, nil, &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: normalizationFormNFC,
+	})
+	require.NoError(t, err)
+	require.Equal(t, `"`+composed+`"`, buf.String())
+}
+
+func TestSerializeItemsAdaptiveSingletonElementNormalization(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	tests := []struct {
+		name    string
+		charMap map[rune]string
+	}{
+		{name: "NoCharacterMap"},
+		{name: "UnrelatedCharacterMap", charMap: map[rune]string{'x': "unused"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			elem, err := doc.CreateElement("out")
+			require.NoError(t, err)
+			require.NoError(t, elem.AddChild(doc.CreateText([]byte(decomposed))))
+
+			var buf bytes.Buffer
+			err = xslt3.SerializeItems(&buf, xpath3.ItemSlice{xpath3.NodeItem{Node: elem}}, nil, &xslt3.OutputDef{
+				Method:            adaptiveMethod,
+				NormalizationForm: normalizationFormNFC,
+				ResolvedCharMap:   tt.charMap,
+			})
+			require.NoError(t, err)
+			require.Contains(t, buf.String(), "<out>"+composed+"</out>")
+			require.NotContains(t, buf.String(), decomposed)
+		})
+	}
+}
+
 func TestSerializeItemsAdaptiveNodeCharacterDataTransformations(t *testing.T) {
 	decomposed := "e\u0301"
 	replacement := "a\u030a"
