@@ -589,16 +589,21 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		if err != nil {
 			return err
 		}
+		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
 
 		v := inst.Validation
 		if inst.TypeName != "" && v == "" {
 			// type attribute without explicit validation: build into temp doc, validate type, copy.
 			tmpDoc := helium.NewDefaultDocument()
+			savedMethod := ec.currentResultDocMethod
+			ec.currentResultDocMethod = effectiveMethod
 			ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc, itemSeparator: itemSep})
 			if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+				ec.currentResultDocMethod = savedMethod
 				ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 				return err
 			}
+			ec.currentResultDocMethod = savedMethod
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 			root := findDocumentElement(tmpDoc)
 			if root != nil && ec.schemaRegistry != nil {
@@ -624,11 +629,15 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			// output. This is the only way we can inspect the complete document
 			// structure before emitting it.
 			tmpDoc := helium.NewDefaultDocument()
+			savedMethod := ec.currentResultDocMethod
+			ec.currentResultDocMethod = effectiveMethod
 			ec.outputStack = append(ec.outputStack, &outputFrame{doc: tmpDoc, current: tmpDoc, itemSeparator: itemSep})
 			if err := ec.executeSequenceConstructor(ctx, inst.Body); err != nil {
+				ec.currentResultDocMethod = savedMethod
 				ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 				return err
 			}
+			ec.currentResultDocMethod = savedMethod
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
 			// XTTE1550: validate document structure.
 			if v == validationStrict {
@@ -658,7 +667,6 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			committed = true
 			return nil
 		}
-		effectiveMethod := ec.resolveResultDocMethod(ctx, inst)
 		// Drive build-tree from the EVALUATED effective output def (primaryOverrides),
 		// not a static compile-time bool: build-tree may be an AVT (e.g.
 		// build-tree="{false()}") and may also be inherited from the named format or
