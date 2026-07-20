@@ -295,6 +295,20 @@ type standaloneNormAttr struct {
 // to the configured [ErrorHandler].
 var ErrDTDValidationFailed = errors.New("dtd: validation failed")
 
+// ErrNoDTDFound is returned when [Parser.ValidateDTD](true) is used on a
+// document that has neither an internal nor an external subset. Nothing
+// declares the document's elements, so a validating processor must report a
+// validity error (VC: Element Declared, XML §3.2; libxml2 XML_DTD_NO_DTD
+// "no DTD found!") rather than pass the document.
+//
+// It wraps [ErrDTDValidationFailed], so [errors.Is] matches both: a caller
+// that only cares whether validation failed keeps matching the general
+// sentinel, while one that wants to treat "this document has no DTD at all"
+// differently from "this document violates its DTD" can match this. That
+// distinction is otherwise only visible through the [ErrorHandler], which
+// defaults to discarding diagnostics.
+var ErrNoDTDFound = fmt.Errorf("%w: no DTD found", ErrDTDValidationFailed)
+
 // DTDValidationError is a single DTD-validation diagnostic delivered to the
 // configured [ErrorHandler]. It implements [ErrorLeveler], reporting its true
 // severity, so a level-filtered [ErrorCollector] classifies it at that level
@@ -391,7 +405,7 @@ func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) 
 	// elements. This path is reached only under ValidateDTD(true).
 	if doc.intSubset == nil && doc.extSubset == nil {
 		vctx.addf(ctx, "no DTD found")
-		return ErrDTDValidationFailed
+		return ErrNoDTDFound
 	}
 
 	// Check that the root element name matches the DTD name
