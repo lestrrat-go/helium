@@ -152,6 +152,61 @@ func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
 	}
 }
 
+func TestSerializeItemsAdaptiveMapKeyNormalizationWithCharacterMap(t *testing.T) {
+	decomposed := "e\u0301"
+	composed := "é"
+	replacement := "\"a\u030a"
+	key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "x" + decomposed}
+	inner := xpath3.NewMap([]xpath3.MapEntry{{
+		Key:   key,
+		Value: xpath3.ItemSlice{xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "value"}},
+	}})
+	outer := xpath3.NewMap([]xpath3.MapEntry{{
+		Key:   key,
+		Value: xpath3.ItemSlice{inner},
+	}})
+
+	var buf bytes.Buffer
+	err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{outer}, nil, &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: "NFC",
+		ResolvedCharMap:   map[rune]string{'x': replacement},
+	})
+	require.NoError(t, err)
+	escapedKey := `\"å` + composed
+	require.Equal(t, `map{"`+escapedKey+`":map{"`+escapedKey+`":"value"}}`, buf.String())
+}
+
+func TestSerializeItemsAdaptiveNodeCharacterDataTransformations(t *testing.T) {
+	decomposed := "e\u0301"
+	replacement := "a\u030a"
+	doc := helium.NewDefaultDocument()
+	elem, err := doc.CreateElement("x" + decomposed)
+	require.NoError(t, err)
+	require.NoError(t, elem.SetAttribute("a"+decomposed, "x"+decomposed))
+	require.NoError(t, elem.AddChild(doc.CreateText([]byte("x"+decomposed))))
+
+	node := xpath3.NodeItem{Node: elem}
+	nested := xpath3.NewMap([]xpath3.MapEntry{{
+		Key: xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "key"},
+		Value: xpath3.ItemSlice{xpath3.NewArray([]xpath3.Sequence{
+			xpath3.ItemSlice{node},
+		})},
+	}})
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeItems(&buf, xpath3.ItemSlice{node, node, nested}, nil, &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: "NFC",
+		ResolvedCharMap:   map[rune]string{'x': replacement},
+	})
+	require.NoError(t, err)
+
+	serializedContent := replacement + "&#xE9;"
+	wantNode := "<x" + decomposed + " a" + decomposed + `="` + serializedContent + `">` + serializedContent + "</x" + decomposed + ">"
+	require.Equal(t, wantNode+"\n"+wantNode+"\n"+`map{"key":[`+wantNode+"]}", buf.String())
+}
+
 func TestDefaultOutputDef(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
