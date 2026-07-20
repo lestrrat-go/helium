@@ -46,7 +46,7 @@ jobs:
       # Check out this helium repo at the triggering ref (the code under test).
       # No repository:/ref: so it uses the ref the calling workflow ran against.
       - name: Check out helium (code under test)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: helium
 
@@ -56,7 +56,7 @@ jobs:
       # defaults to main; a caller may pin an exact commit/tag for a
       # reproducible audit run.
       - name: Check out helium-w3c-tests (sibling harness)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lestrrat-go/helium-w3c-tests
           ref: ${{ inputs.harness_ref }}
