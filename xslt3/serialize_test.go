@@ -13,6 +13,19 @@ import (
 
 const adaptiveMethod = "adaptive"
 
+type adaptiveResultDocSerializer struct {
+	serialized string
+}
+
+func (h *adaptiveResultDocSerializer) HandleResultDocument(_ string, doc *helium.Document, outDef *xslt3.OutputDef) error {
+	var out bytes.Buffer
+	if err := xslt3.SerializeResult(&out, doc, outDef); err != nil {
+		return err
+	}
+	h.serialized = out.String()
+	return nil
+}
+
 func TestSerializeResultXML(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -58,6 +71,173 @@ func TestSerializeResultText(t *testing.T) {
 	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
 	require.NoError(t, err)
 	require.Equal(t, "hello world", strings.TrimSpace(buf.String()))
+}
+
+// Top-level xsl:comment and xsl:processing-instruction output uses standalone
+// adaptive-item serialization rather than an XML declaration.
+func TestPrimaryAdaptiveCommentAndProcessingInstruction(t *testing.T) {
+	tests := []struct {
+		name        string
+		instruction string
+		want        string
+	}{
+		{
+			name:        "Comment",
+			instruction: `<xsl:comment select="'comment'"/>`,
+			want:        "<!--comment-->",
+		},
+		{
+			name:        "ProcessingInstruction",
+			instruction: `<xsl:processing-instruction name="target" select="'data'"/>`,
+			want:        "<?target data?>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive"/>
+  <xsl:template match="/">`+tt.instruction+`</xsl:template>
+</xsl:stylesheet>`)
+
+			out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, tt.want, out)
+			require.NotContains(t, out, "<?xml")
+		})
+	}
+}
+
+func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparator(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:processing-instruction name="target" select="'data'"/>
+    <xsl:comment select="'last'"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "<!--first--> | <?target data?> | <!--last-->", out)
+	require.NotContains(t, out, "<?xml")
+}
+
+func TestPrimaryAdaptiveMarkupThenElementKeepsDeferredSeparators(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:processing-instruction name="target" select="'data'"/>
+    <result/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, `<?xml version="1.0"`)
+	require.Contains(t, out, "<!--first-->\n | \n<?target data?>\n | \n<result/>")
+}
+
+func TestPrimaryAdaptiveMarkupSeparatorAppliesCharacterMapAndNormalization(t *testing.T) {
+	decomposed := "e\u0301"
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:character-map name="map">
+    <xsl:output-character character="x" string="mapped"/>
+  </xsl:character-map>
+  <xsl:output method="adaptive" item-separator="x`+decomposed+`" normalization-form="NFC" use-character-maps="map"/>
+  <xsl:template match="/">
+    <xsl:comment select="'x`+decomposed+`'"/>
+    <xsl:processing-instruction name="target" select="'x`+decomposed+`'"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "<!--x"+decomposed+"-->mapped&#xE9;<?target x"+decomposed+"?>", out)
+}
+
+func TestSecondaryAdaptiveMarkupSequenceItemSeparatorHasNoDeclaration(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="secondary.xml" method="adaptive" item-separator=" | ">
+      <xsl:comment select="'first'"/>
+      <xsl:processing-instruction name="target" select="'data'"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	handler := &adaptiveResultDocSerializer{}
+	_, err := ss.Transform(parseTransformSource(t)).ResultDocumentHandler(handler).Do(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "<!--first--> | <?target data?>", handler.serialized)
+	require.NotContains(t, handler.serialized, "<?xml")
+}
+
+func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparatorTextFallback(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:text>text</xsl:text>
+    <xsl:comment select="'last'"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, `<?xml version="1.0"`)
+	require.Contains(t, out, "<!--first-->text | <!--last-->")
+}
+
+func TestPrimaryAdaptiveCommentAndProcessingInstructionInvalidCharacter(t *testing.T) {
+	tests := []struct {
+		name        string
+		instruction string
+	}{
+		{
+			name:        "Comment",
+			instruction: `<xsl:comment select="codepoints-to-string(1)"/>`,
+		},
+		{
+			name:        "ProcessingInstruction",
+			instruction: `<xsl:processing-instruction name="target" select="codepoints-to-string(1)"/>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive"/>
+  <xsl:template match="/">`+tt.instruction+`</xsl:template>
+</xsl:stylesheet>`)
+
+			_, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+			requireSERE0006(t, err)
+		})
+	}
+}
+
+func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparatorInvalidCharacter(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:processing-instruction name="target" select="codepoints-to-string(1)"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	requireSERE0006(t, err)
 }
 
 func TestSerializeItemsAtomics(t *testing.T) {
@@ -293,6 +473,124 @@ func TestSerializeItemsAdaptiveNodeCharacterDataTransformations(t *testing.T) {
 	require.Equal(t, wantNode+"\n"+wantNode+"\n"+`map{"key":[`+wantNode+"]}", buf.String())
 }
 
+func newAdaptiveCommentAndProcessingInstruction(t *testing.T, data string) (*helium.Comment, *helium.ProcessingInstruction) {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	return doc.CreateComment([]byte(data)), doc.CreatePI("p", data)
+}
+
+func TestSerializeItemsAdaptiveCommentAndProcessingInstruction(t *testing.T) {
+	decomposed := "e\u0301"
+	data := "x" + decomposed
+	comment, pi := newAdaptiveCommentAndProcessingInstruction(t, data)
+	outDef := &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: normalizationFormNFC,
+		ResolvedCharMap:   map[rune]string{'x': "mapped"},
+	}
+
+	var topLevel bytes.Buffer
+	err := xslt3.SerializeItems(&topLevel, xpath3.ItemSlice{
+		xpath3.NodeItem{Node: comment},
+		xpath3.NodeItem{Node: pi},
+	}, nil, outDef)
+	require.NoError(t, err)
+	require.Equal(t, "<!--"+data+"-->\n<?p "+data+"?>", topLevel.String())
+
+	nestedMap := xpath3.NewMap([]xpath3.MapEntry{
+		{
+			Key:   xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "comment"},
+			Value: xpath3.ItemSlice{xpath3.NodeItem{Node: comment}},
+		},
+		{
+			Key:   xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "pi"},
+			Value: xpath3.ItemSlice{xpath3.NodeItem{Node: pi}},
+		},
+	})
+	nestedArray := xpath3.NewArray([]xpath3.Sequence{
+		xpath3.ItemSlice{xpath3.NodeItem{Node: comment}},
+		xpath3.ItemSlice{xpath3.NodeItem{Node: pi}},
+	})
+
+	var nested bytes.Buffer
+	err = xslt3.SerializeItems(&nested, xpath3.ItemSlice{nestedMap, nestedArray}, nil, outDef)
+	require.NoError(t, err)
+	require.Equal(t, `map{"comment":<!--`+data+`-->,"pi":<?p `+data+`?>}`+"\n[<!--"+data+"-->,<?p "+data+"?>]", nested.String())
+}
+
+func TestSerializeItemsAdaptiveCommentAndProcessingInstructionInvalidChars(t *testing.T) {
+	tests := []struct {
+		name  string
+		item  func(*testing.T) xpath3.Item
+		ver   string
+		valid bool
+	}{
+		{
+			name: "CommentControlDefault",
+			item: func(t *testing.T) xpath3.Item {
+				comment, _ := newAdaptiveCommentAndProcessingInstruction(t, "a\x01b")
+				return xpath3.NodeItem{Node: comment}
+			},
+		},
+		{
+			name: "ProcessingInstructionControlXML11",
+			item: func(t *testing.T) xpath3.Item {
+				_, pi := newAdaptiveCommentAndProcessingInstruction(t, "a\x01b")
+				return xpath3.NodeItem{Node: pi}
+			},
+			ver: xmlVersion11,
+		},
+		{
+			name: "CommentNELXML10",
+			item: func(t *testing.T) xpath3.Item {
+				comment, _ := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: comment}
+			},
+			ver:   xmlVersion10,
+			valid: true,
+		},
+		{
+			name: "ProcessingInstructionNELDefault",
+			item: func(t *testing.T) xpath3.Item {
+				_, pi := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: pi}
+			},
+			valid: true,
+		},
+		{
+			name: "CommentNELXML11",
+			item: func(t *testing.T) xpath3.Item {
+				comment, _ := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: comment}
+			},
+			ver: xmlVersion11,
+		},
+		{
+			name: "ProcessingInstructionNELXML11",
+			item: func(t *testing.T) xpath3.Item {
+				_, pi := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: pi}
+			},
+			ver: xmlVersion11,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{tt.item(t)}, nil, &xslt3.OutputDef{
+				Method:  adaptiveMethod,
+				Version: tt.ver,
+			})
+			if tt.valid {
+				require.NoError(t, err)
+				return
+			}
+			requireSERE0006(t, err)
+		})
+	}
+}
+
 func TestDefaultOutputDef(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -318,9 +616,11 @@ const outMethodXML = "xml"
 // VersionNum, just like the XML output method's version parameter.
 const outMethodXHTML = "xhtml"
 
-// xmlVersion11 is the XML 1.1 output version used by the invalid-character
-// serialization tests.
-const xmlVersion11 = "1.1"
+// XML output versions used by the invalid-character serialization tests.
+const (
+	xmlVersion10 = "1.0"
+	xmlVersion11 = "1.1"
+)
 
 // newBadCharElement builds a small <r> element whose text content carries an
 // XML-invalid control character (U+0001), via the public DOM API. The DOM
@@ -378,7 +678,7 @@ func TestSerializeItemsXMLInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXML, Version: xmlVersion10})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
@@ -399,7 +699,7 @@ func TestSerializeItemsXHTMLInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: outMethodXHTML, Version: xmlVersion10})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
@@ -460,7 +760,7 @@ func TestSerializeItemsAdaptiveInvalidChar(t *testing.T) {
 	requireSERE0006(t, err)
 
 	var buf10 bytes.Buffer
-	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: "1.0"})
+	err = xslt3.SerializeItems(&buf10, items, nil, &xslt3.OutputDef{Method: adaptiveMethod, Version: xmlVersion10})
 	requireSERE0006(t, err)
 
 	var buf11 bytes.Buffer
@@ -522,7 +822,7 @@ func TestSerializeItemsAdaptiveXMLVersion(t *testing.T) {
 		version string
 	}{
 		{name: "Default"},
-		{name: "XML10", version: "1.0"},
+		{name: "XML10", version: xmlVersion10},
 		{name: "XML11", version: xmlVersion11},
 	}
 

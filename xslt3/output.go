@@ -33,9 +33,31 @@ type outputFrame struct {
 	wherePopulated      bool                             // when true, xsl:document emits document node (not children) so xsl:where-populated can check emptiness
 	itemSeparator       *string                          // item-separator serialization parameter; nil means default (" " between adjacent atomics)
 	prevHadOutput       bool                             // true when any item (node or atomic) was previously output; used for item-separator between non-atomic items
+	deferredMarkupSeps  []deferredMarkupSeparator        // top-level adaptive markup separators, held outside the DOM until XML fallback is required
 	outputSerial        int                              // monotonically increases whenever visible output is produced
 	seqConstructorGen   uint64                           // incremented each time executeSequenceConstructor is called
 	conditionalScopes   []conditionalScope
+}
+
+// deferredMarkupSeparator records an item separator that belongs
+// immediately before right. Keeping it outside the DOM preserves declaration-free
+// adaptive serialization while the output contains only top-level markup.
+type deferredMarkupSeparator struct {
+	right helium.MutableNode
+	text  string
+}
+
+// materializeDeferredMarkupSeps restores deferred separators in
+// document order when a non-markup node requires XML fallback.
+func (out *outputFrame) materializeDeferredMarkupSeps() error {
+	for _, deferred := range out.deferredMarkupSeps {
+		separator := out.doc.CreateText([]byte(deferred.text))
+		if err := deferred.right.Replace(separator, deferred.right); err != nil {
+			return err
+		}
+	}
+	out.deferredMarkupSeps = nil
+	return nil
 }
 
 type conditionalKind int
@@ -91,10 +113,11 @@ func (out *outputFrame) captureSequenceItems(items xpath3.ItemSlice) {
 // SerializeItems writes a sequence of items (maps, arrays, atomics, nodes)
 // using the specified output definition's method (json or adaptive).
 // This is used for result-documents with method="json" or method="adaptive".
-// An element or document node item carrying a character invalid for the target
-// XML version fails with the serialization error SERE0006 rather than emitting
-// truncated output. Other item kinds (text/comment/PI nodes and atomics) are not
-// yet range-checked and emit their content unmodified.
+// An element, document, comment, or processing-instruction node item carrying
+// a character invalid for the target XML version fails with the serialization
+// error SERE0006 rather than emitting truncated output. Other item kinds (text,
+// attribute nodes, and atomics) are not range-checked and emit their content
+// unmodified.
 func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
 	if outDef == nil {
 		outDef = defaultOutputDef()
@@ -112,8 +135,8 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		return serializeJSONItems(w, items, doc, outDef)
 	case methodAdaptive:
 		// Adaptive serialization uses its version serialization parameter for every
-		// XML fallback and embedded element/document writer. An absent version uses
-		// the XML 1.0 default; html-style versions never reach here.
+		// XML fallback and embedded element/document/comment/PI writer. An absent
+		// version uses the XML 1.0 default; html-style versions never reach here.
 		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.NormalizationForm, outDef.ResolvedCharMap)
 	default:
 		if items != nil && sequence.Len(items) > 0 {
@@ -622,7 +645,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	// SESU0011: unsupported normalization-form
 	if outDef.NormalizationForm != "" && outDef.NormalizationForm != "NONE" {
 		switch outDef.NormalizationForm {
-		case "NFC", "NFD", "NFKC", "NFKD", "FULLY-NORMALIZED":
+		case normalizationFormNFC, "NFD", "NFKC", "NFKD", "FULLY-NORMALIZED":
 			// supported
 		default:
 			return dynamicError(errCodeSESU0011,
