@@ -42,6 +42,26 @@ func (pctx *parserCtx) parameterEntityReplacement(ctx context.Context, ent sax.E
 	return ent.Content(), nil
 }
 
+// parameterEntityReplacementForReparse returns the lexical replacement text
+// used while an internal general entity is parsed. Its XML 1.1 restricted-
+// character-reference segments must remain references while a raw restricted
+// character remains a raw literal and is rejected.
+func (pctx *parserCtx) parameterEntityReplacementForReparse(ctx context.Context, ent sax.Entity) ([]byte, error) {
+	if ent.EntityType() == enum.ExternalParameterEntity {
+		if he, ok := ent.(*Entity); ok {
+			content, _, _, err := pctx.loadExternalParameterEntityContent(ctx, he)
+			if err != nil {
+				return nil, err
+			}
+			return content, nil
+		}
+	}
+	if he, ok := ent.(*Entity); ok {
+		return he.replacementContent(), nil
+	}
+	return ent.Content(), nil
+}
+
 func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (string, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
@@ -55,7 +75,7 @@ func (pctx *parserCtx) parseEntityValueInternal(ctx context.Context, qch byte) (
 }
 
 func (pctx *parserCtx) decodeEntities(ctx context.Context, s []byte, what SubstitutionType) (ret string, err error) {
-	ret, err = pctx.decodeEntitiesInternal(ctx, s, what, 0)
+	ret, err = pctx.decodeEntitiesInternal(ctx, s, what, 0, false, true)
 	return
 }
 
@@ -153,12 +173,12 @@ func (s *attrEntitySink) writeRune(ctx context.Context, r rune) error {
 
 func (s *attrEntitySink) count() int { return s.b.Len() }
 
-func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, what SubstitutionType, depth int) (string, error) {
+func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, what SubstitutionType, depth int, preserveCharRefs, account bool) (string, error) {
 	out := bufferPool.Get()
 	defer releaseBuffer(out)
 
 	sink := &entityStringSink{buf: out}
-	if err := pctx.decodeEntitiesToSink(ctx, s, what, depth, sink); err != nil {
+	if err := pctx.decodeEntitiesToSink(ctx, s, what, depth, sink, preserveCharRefs, account); err != nil {
 		return "", err
 	}
 	return out.String(), nil
@@ -171,7 +191,7 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 // is measured as the sink's count() delta across the recursive call (equal to
 // len(rep) in the old string-only code), so amplification accounting is
 // unchanged.
-func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what SubstitutionType, depth int, sink entityDecodeSink) error {
+func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what SubstitutionType, depth int, sink entityDecodeSink, preserveCharRefs, account bool) error {
 	if depth > 40 {
 		return errors.New("entity loop (depth > 40)")
 	}
@@ -182,7 +202,12 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 			if err != nil {
 				return err
 			}
-			if err := sink.writeRune(ctx, val); err != nil {
+			if preserveCharRefs && pctx.isXML11() && isXML11RestrictedChar(val) {
+				err = sink.write(ctx, s[:width])
+			} else {
+				err = sink.writeRune(ctx, val)
+			}
+			if err != nil {
 				return err
 			}
 			s = s[width:]
@@ -198,8 +223,10 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 				s = s[width:]
 				continue
 			}
-			if err := pctx.entityCheck(ent, 0); err != nil {
-				return err
+			if account {
+				if err := pctx.entityCheck(ent, 0); err != nil {
+					return err
+				}
 			}
 
 			if ent.EntityType() == enum.InternalPredefinedEntity {
@@ -211,11 +238,13 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 				}
 			} else if len(ent.Content()) != 0 {
 				before := sink.count()
-				if err := pctx.decodeEntitiesToSink(ctx, ent.Content(), what, depth+1, sink); err != nil {
+				if err := pctx.decodeEntitiesToSink(ctx, ent.Content(), what, depth+1, sink, preserveCharRefs, account); err != nil {
 					return err
 				}
-				if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
-					return err
+				if account {
+					if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
+						return err
+					}
 				}
 			} else {
 				if err := sink.writeString(ctx, ent.Name()); err != nil {
@@ -238,25 +267,36 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 				// Still charge the reference against entity-expansion accounting
 				// (entityCheck tolerates a nil ent) so an unresolved PE ref can't
 				// be used to dodge the amplification/ceiling limits.
-				if err := pctx.entityCheck(ent, width); err != nil {
-					return err
+				if account {
+					if err := pctx.entityCheck(ent, width); err != nil {
+						return err
+					}
 				}
 				s = s[width:]
 				continue
 			}
-			if err := pctx.entityCheck(ent, width); err != nil {
-				return err
+			if account {
+				if err := pctx.entityCheck(ent, width); err != nil {
+					return err
+				}
 			}
-			peContent, err := pctx.parameterEntityReplacement(ctx, ent)
+			var peContent []byte
+			if preserveCharRefs {
+				peContent, err = pctx.parameterEntityReplacementForReparse(ctx, ent)
+			} else {
+				peContent, err = pctx.parameterEntityReplacement(ctx, ent)
+			}
 			if err != nil {
 				return err
 			}
 			before := sink.count()
-			if err := pctx.decodeEntitiesToSink(ctx, peContent, what, depth+1, sink); err != nil {
+			if err := pctx.decodeEntitiesToSink(ctx, peContent, what, depth+1, sink, preserveCharRefs, account); err != nil {
 				return err
 			}
-			if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
-				return err
+			if account {
+				if err := pctx.entityCheck(ent, sink.count()-before); err != nil {
+					return err
+				}
 			}
 			s = s[width:]
 		} else {
@@ -269,14 +309,14 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 	return nil
 }
 
-func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, error) {
+func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, string, error) {
 	pctx.instate = psEntityValue
 
 	literal, err := pctx.parseQuotedText(func(qch byte) (string, error) {
 		return pctx.parseEntityValueInternal(ctx, qch)
 	})
 	if err != nil {
-		return "", "", pctx.error(ctx, err)
+		return "", "", "", pctx.error(ctx, err)
 	}
 
 	// decodeEntities below only substitutes parameter-entity references; general
@@ -293,15 +333,24 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, er
 	// data and never form a general reference with following text, so they are
 	// consumed as data; only PE replacement text re-participates in ref scanning.
 	if err := pctx.validateEntityValueRefs(ctx, []byte(literal)); err != nil {
-		return "", "", pctx.error(ctx, err)
+		return "", "", "", pctx.error(ctx, err)
 	}
 
 	val, err := pctx.decodeEntities(ctx, []byte(literal), SubstitutePERef)
 	if err != nil {
-		return "", "", pctx.error(ctx, err)
+		return "", "", "", pctx.error(ctx, err)
 	}
 
-	return literal, val, nil
+	// Keep a second, lexical form for internal-general-entity reparse. It uses
+	// the same parameter-entity expansion as val, but keeps XML 1.1 restricted
+	// character references in reference syntax. The decoded form above performs
+	// the real entity accounting; this replay form only records the source shape.
+	replacement, err := pctx.decodeEntitiesInternal(ctx, []byte(literal), SubstitutePERef, 0, true, false)
+	if err != nil {
+		return "", "", "", pctx.error(ctx, err)
+	}
+
+	return literal, val, replacement, nil
 }
 
 // validateEntityValueRefs checks that every general reference in an EntityValue
@@ -419,7 +468,7 @@ func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byt
 				if err != nil {
 					return nil, err
 				}
-				rep, err := pctx.decodeEntitiesInternal(ctx, peContent, SubstitutePERef, depth+1)
+				rep, err := pctx.decodeEntitiesInternal(ctx, peContent, SubstitutePERef, depth+1, false, true)
 				if err != nil {
 					return nil, err
 				}
@@ -537,12 +586,13 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 	pctx.instate = psEntityDecl
 	var literal string
 	var value string
+	var replacement string
 	var uri string
 	var hasOrig bool
 
 	if isParameter {
 		if c := cur.Peek(); c == '"' || c == '\'' {
-			literal, value, err = pctx.parseEntityValue(ctx)
+			literal, value, replacement, err = pctx.parseEntityValue(ctx)
 			hasOrig = true
 			if err != nil {
 				return pctx.error(ctx, err)
@@ -596,7 +646,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		}
 	} else {
 		if c := cur.Peek(); c == '"' || c == '\'' {
-			literal, value, err = pctx.parseEntityValue(ctx)
+			literal, value, replacement, err = pctx.parseEntityValue(ctx)
 			hasOrig = true
 			if err != nil {
 				return pctx.error(ctx, err)
@@ -712,8 +762,11 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 			}
 		}
 		if current != nil {
-			if ent, ok := current.(*Entity); ok && ent != nil && ent.orig == "" {
-				ent.SetOrig(literal)
+			if ent, ok := current.(*Entity); ok && ent != nil {
+				if ent.orig == "" {
+					ent.SetOrig(literal)
+					ent.setReplacementContent(replacement)
+				}
 			}
 		}
 	}
@@ -1048,6 +1101,11 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	// replacement text honors the same limits as the top-level parse instead of
 	// restarting depth accounting at 0 or falling back to zero-value defaults.
 	pctx.inheritNestedParserState(newctx)
+	// Internal general entities use the effective XML version of the context that
+	// references them. In particular, a retained XML 1.1 numeric character
+	// reference must be parsed under XML 1.1 instead of the nested context's
+	// zero-value XML 1.0 default.
+	newctx.version = pctx.version
 	if pctx.elem != nil {
 		for _, ns := range collectInScopeNamespaces(pctx.elem) {
 			newctx.pushNS(ns.Prefix(), ns.URI())

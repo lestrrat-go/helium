@@ -88,7 +88,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 		sizeBefore := pctx.sizeentcopy
 
 		if ent.EntityType() == enum.InternalGeneralEntity {
-			parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, ent.Content())
+			parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, entityReplacementContent(ent))
 			switch err {
 			case nil, errParseSucceeded:
 			default:
@@ -134,7 +134,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	if ent.firstChild == nil {
 		if wasChecked != 0 {
 			if ent.EntityType() == enum.InternalGeneralEntity {
-				parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, ent.Content())
+				parsedEnt, err = pctx.parseBalancedChunkInternal(ctx, entityReplacementContent(ent))
 				_ = parsedEnt
 				switch err {
 				case nil, errParseSucceeded:
@@ -187,6 +187,13 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func entityReplacementContent(ent sax.Entity) []byte {
+	if entity, ok := ent.(*Entity); ok {
+		return entity.replacementContent()
+	}
+	return ent.Content()
 }
 
 func (pctx *parserCtx) replayEntityNode(ctx context.Context, n Node) error {

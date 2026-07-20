@@ -719,12 +719,13 @@ func padPEContent(content []byte, pad bool) []byte {
 
 // loadExternalParameterEntityContent returns the replacement text, resolved URI,
 // and effective TextDecl version of an external parameter entity. It loads and
-// caches all three on the entity at first use. External loading honors the
-// parser's secure-default gating: when XXE loading is disabled (parseNoXXE) or
-// the resolver declines to open the resource, nothing is loaded and empty
-// content is returned, leaving the caller's behavior unchanged. The read is
-// byte-capped (externalEntityMaxBytes) and the opened input is closed as soon as
-// the bounded read completes, mirroring parseExternalEntityPrivate.
+// caches all three on the entity at first use after validating literal characters
+// against that effective version. External loading honors the parser's
+// secure-default gating: when XXE loading is disabled (parseNoXXE) or the
+// resolver declines to open the resource, nothing is loaded and empty content is
+// returned, leaving the caller's behavior unchanged. The read is byte-capped
+// (externalEntityMaxBytes) and the opened input is closed as soon as the bounded
+// read completes, mirroring parseExternalEntityPrivate.
 func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e *Entity) ([]byte, string, string, error) {
 	if len(e.content) > 0 {
 		// Return the URI the bytes were ORIGINALLY loaded from (cached on first
@@ -793,6 +794,15 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 	content, textDeclVersion, err := pctx.decodeExternalPEContentVersion(ctx, uri, content)
 	if err != nil {
 		return nil, "", "", err
+	}
+	// This PE can be expanded inside another EntityValue, where its decoded body
+	// becomes stored replacement text instead of being reparsed by the DTD loop.
+	// Validate raw literal characters before caching so that path enforces the
+	// PE's effective TextDecl version too. Character-reference syntax stays ASCII
+	// here and is validated later by the normal reference parser.
+	validator := parserCtx{version: textDeclVersion}
+	if !validator.literalBytesValid(content) {
+		return nil, "", "", pctx.error(ctx, ErrInvalidChar)
 	}
 
 	e.content = string(content)

@@ -998,7 +998,7 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 					// would exceed the remaining budget — the cap is enforced
 					// incrementally during decode, never after a fully-built rep.
 					sink := &attrEntitySink{pctx: pctx, b: b}
-					if err = pctx.decodeEntitiesToSink(ctx, ent.Content(), SubstituteRef, 0, sink); err != nil {
+					if err = pctx.decodeEntitiesToSink(ctx, ent.Content(), SubstituteRef, 0, sink, false, true); err != nil {
 						err = pctx.error(ctx, err)
 						return
 					}
