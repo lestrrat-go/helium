@@ -60,6 +60,71 @@ func TestSerializeResultText(t *testing.T) {
 	require.Equal(t, "hello world", strings.TrimSpace(buf.String()))
 }
 
+// Top-level xsl:comment and xsl:processing-instruction output uses standalone
+// adaptive-item serialization rather than an XML declaration.
+func TestPrimaryAdaptiveCommentAndProcessingInstruction(t *testing.T) {
+	tests := []struct {
+		name        string
+		instruction string
+		want        string
+	}{
+		{
+			name:        "Comment",
+			instruction: `<xsl:comment select="'comment'"/>`,
+			want:        "<!--comment-->",
+		},
+		{
+			name:        "ProcessingInstruction",
+			instruction: `<xsl:processing-instruction name="target" select="'data'"/>`,
+			want:        "<?target data?>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive"/>
+  <xsl:template match="/">`+tt.instruction+`</xsl:template>
+</xsl:stylesheet>`)
+
+			out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, tt.want, out)
+			require.NotContains(t, out, "<?xml")
+		})
+	}
+}
+
+func TestPrimaryAdaptiveCommentAndProcessingInstructionInvalidCharacter(t *testing.T) {
+	tests := []struct {
+		name        string
+		instruction string
+	}{
+		{
+			name:        "Comment",
+			instruction: `<xsl:comment select="codepoints-to-string(1)"/>`,
+		},
+		{
+			name:        "ProcessingInstruction",
+			instruction: `<xsl:processing-instruction name="target" select="codepoints-to-string(1)"/>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive"/>
+  <xsl:template match="/">`+tt.instruction+`</xsl:template>
+</xsl:stylesheet>`)
+
+			_, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+			requireSERE0006(t, err)
+		})
+	}
+}
+
 func TestSerializeItemsAtomics(t *testing.T) {
 	items := xpath3.ItemSlice{
 		xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "alpha"},

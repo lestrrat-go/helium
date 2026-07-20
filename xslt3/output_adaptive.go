@@ -19,6 +19,9 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		if len(charMaps) > 0 {
 			cm = charMaps[0]
 		}
+		if adaptiveStandaloneMarkupDocument(doc) {
+			return serializeAdaptiveStandaloneMarkup(w, doc, itemSep, xmlVersion)
+		}
 		xmlOutDef := defaultOutputDef()
 		xmlOutDef.Version = adaptiveXMLVersion(xmlVersion)
 		xmlOutDef.NormalizationForm = normalizationForm
@@ -71,6 +74,50 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 			return err
 		}
 		adaptIdx++
+	}
+	return nil
+}
+
+// adaptiveStandaloneMarkupDocument reports whether doc contains only top-level
+// comments and processing instructions. The adaptive method serializes that
+// markup without an XML declaration.
+func adaptiveStandaloneMarkupDocument(doc *helium.Document) bool {
+	if doc == nil || doc.DocumentElement() != nil {
+		return false
+	}
+	hasMarkup := false
+	for child := range helium.Children(doc) {
+		switch child.Type() {
+		case helium.CommentNode, helium.ProcessingInstructionNode:
+			hasMarkup = true
+		default:
+			return false
+		}
+	}
+	return hasMarkup
+}
+
+// serializeAdaptiveStandaloneMarkup serializes every top-level comment and
+// processing instruction as an adaptive item. The XML writer validates each
+// item against the output version without adding a document declaration.
+func serializeAdaptiveStandaloneMarkup(w io.Writer, doc *helium.Document, itemSep *string, xmlVersion string) error {
+	sep := "\n"
+	if itemSep != nil {
+		sep = *itemSep
+	}
+	writer := helium.NewWriter().XMLDeclaration(false).
+		OutputVersion(adaptiveXMLVersion(xmlVersion))
+	first := true
+	for child := range helium.Children(doc) {
+		if !first && sep != "" {
+			if _, err := io.WriteString(w, sep); err != nil {
+				return err
+			}
+		}
+		if err := xmlInvalidCharError(writer.WriteTo(w, child)); err != nil {
+			return err
+		}
+		first = false
 	}
 	return nil
 }
