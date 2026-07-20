@@ -31,11 +31,12 @@ jobs:
           go-version-file: go.mod
           cache: false
       - name: Restore fuzz cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/go-build/fuzz
-          key: fuzz-${{ hashFiles('go.mod') }}-${{ matrix.package }}-${{ github.ref }}
+          key: fuzz-${{ hashFiles('go.mod') }}-${{ matrix.package }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            fuzz-${{ hashFiles('go.mod') }}-${{ matrix.package }}-${{ github.ref }}-
             fuzz-${{ hashFiles('go.mod') }}-${{ matrix.package }}-
       - name: Run fuzz tests
         run: |
@@ -188,3 +189,10 @@ jobs:
           path: ${{ runner.temp }}/fuzz-failures/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Save fuzz cache
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build/fuzz
+          key: fuzz-${{ hashFiles('go.mod') }}-${{ matrix.package }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}

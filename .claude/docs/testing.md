@@ -156,6 +156,8 @@ Run specific test subsets via env vars:
 
 ## Fuzz CI
 
+- Each matrix job restores newest Go fuzz corpus for same `go.mod`/package/ref, then falls back to same `go.mod`/package across refs.
+- Each matrix job saves its corpus under an immutable run/attempt key after success or failure.
 - Pull requests run NO fuzzing — `ci.yml` is normal test/build/lint/vuln verification only, so PR turnaround stays fast and deterministic (live fuzzing is nondeterministic and cannot gate a PR without flaking).
 - `fuzz.yml` runs fuzzing OFF the PR path, always non-gating:
   - on every `push` to `main` (in practice, each PR merge) → short `60s` per target, for a prompt signal attributed to the pushed commit.
