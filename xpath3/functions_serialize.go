@@ -141,8 +141,8 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// normalization, even when the serialized output has no text/attribute content
 	// to normalize (e.g. an empty element under the xml method). NFC/NFD/NFKC/NFKD
 	// are applied later — inside the writer for the markup methods (scoped to
-	// text/attribute nodes) or to the whole output for text/json (pure character
-	// data).
+	// text/attribute nodes), to the whole output for text/json (pure character
+	// data), or while adaptive serializes its string-like atomics.
 	if opts.methodAppliesNormalization() && serializeNormalizationActive(opts.normalizationForm) && !isSupportedSerializeNormForm(opts.normalizationForm) {
 		return nil, &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", opts.normalizationForm)}
 	}
@@ -185,7 +185,8 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// for text, encodeJSONStringForSerialization for json) apply the normalization
 	// themselves, segmented around mapped runes, so a replacement string passes
 	// through un-normalized (Serialization 3.1 §11) and a literal content rune is
-	// never rewritten. adaptive ignores normalization.
+	// never rewritten. Adaptive applies character mapping and normalization while
+	// serializing its string-like atomics.
 	switch opts.method {
 	case serializeMethodText, serializeMethodJSON:
 		if len(opts.charMap) == 0 {
@@ -233,7 +234,7 @@ func serializeNormForm(form string) (norm.Form, bool) {
 	return norm.NFC, false
 }
 
-// serializeCharMapNorm returns the norm.Form the text/json character-map
+// serializeCharMapNorm returns the norm.Form the text/json/adaptive character-map
 // application sites apply to each non-mapped content run, and whether that
 // inline normalization is active. It is active exactly when a character map is
 // in force AND the method applies an active, supported normalization-form —
@@ -327,9 +328,9 @@ type serializeOptions struct {
 	mediaType string
 	// normalizationForm is the requested Unicode normalization form ("" / "none"
 	// = no normalization). NFC/NFD/NFKC/NFKD are applied to the serialized output
-	// for the methods that support normalization — xml/xhtml/html/text and json
-	// (§9.1.9); "fully-normalized" is the SESU0011 unsupported-normalization
-	// serialization error; only the adaptive method ignores the parameter.
+	// for the methods that support normalization — xml/xhtml/html/text, json, and
+	// adaptive (§9.1.9); "fully-normalized" is the SESU0011 unsupported-
+	// normalization serialization error.
 	normalizationForm string
 	// jsonNodeOutputMethod is the requested json-node-output-method value ("" =
 	// the default xml). helium serializes a node embedded in JSON only with the
@@ -340,11 +341,11 @@ type serializeOptions struct {
 
 // methodAppliesNormalization reports whether the output method applies the
 // normalization-form parameter. Per Serialization 3.1 it is a parameter of the
-// xml/xhtml/html/text AND json (§9.1.9) output methods and the unspecified
-// default; the adaptive method ignores it.
+// xml/xhtml/html/text, json, AND adaptive (§9.1.9) output methods and the
+// unspecified default.
 func (o serializeOptions) methodAppliesNormalization() bool {
 	switch o.method {
-	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML, serializeMethodText, serializeMethodJSON:
+	case "", serializeMethodXML, serializeMethodXHTML, serializeMethodHTML, serializeMethodText, serializeMethodJSON, serializeMethodAdaptive:
 		return true
 	}
 	return false
@@ -1534,6 +1535,12 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 		// are serialized enclosed in double quotes, with internal quotes
 		// escaped as "".
 		if v.TypeName == TypeString || v.TypeName == TypeUntypedAtomic {
+			if opts.method == serializeMethodAdaptive {
+				s, err = serializeAdaptiveStringContent(s, opts)
+				if err != nil {
+					return "", err
+				}
+			}
 			escaped := strings.ReplaceAll(s, `"`, `""`)
 			return `"` + escaped + `"`, nil
 		}
@@ -1553,6 +1560,17 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 	}
 }
 
+// serializeAdaptiveStringContent applies the character-expansion phase to
+// string-like atomic values before adaptive quoting. A character-map replacement
+// is emitted verbatim, while each non-mapped content run is normalized on its
+// own. Without a map, the whole string is normalized.
+func serializeAdaptiveStringContent(s string, opts serializeOptions) (string, error) {
+	if len(opts.charMap) > 0 {
+		return applyCharMapToString(s, opts), nil
+	}
+	return applySerializeNormalization(s, opts)
+}
+
 func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, m.Size())
 	err := m.forEach0(func(key AtomicValue, value Sequence) error {
@@ -1560,7 +1578,10 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 		if err != nil {
 			return err
 		}
-		valText, err := serializeAdaptiveSequence(value, serializeOptions{method: serializeMethodAdaptive, itemSeparator: ","})
+		nestedOpts := opts
+		nestedOpts.method = serializeMethodAdaptive
+		nestedOpts.itemSeparator = ","
+		valText, err := serializeAdaptiveSequence(value, nestedOpts)
 		if err != nil {
 			return err
 		}
@@ -1573,10 +1594,13 @@ func serializeAdaptiveMap(m MapItem, opts serializeOptions) (string, error) {
 	return "map{" + strings.Join(parts, ",") + "}", nil
 }
 
-func serializeAdaptiveArray(a ArrayItem, _ serializeOptions) (string, error) {
+func serializeAdaptiveArray(a ArrayItem, opts serializeOptions) (string, error) {
 	parts := make([]string, 0, a.Size())
 	for _, member := range a.members0() {
-		text, err := serializeAdaptiveSequence(member, serializeOptions{method: serializeMethodAdaptive, itemSeparator: ","})
+		nestedOpts := opts
+		nestedOpts.method = serializeMethodAdaptive
+		nestedOpts.itemSeparator = ","
+		text, err := serializeAdaptiveSequence(member, nestedOpts)
 		if err != nil {
 			return "", err
 		}
@@ -1915,9 +1939,8 @@ func newSerializeXMLWriter(opts serializeOptions) helium.Writer {
 	// normalized. An unsupported form (fully-normalized) is rejected up front, so
 	// the writer only ever sees NFC/NFD/NFKC/NFKD (or none/"" = disabled). Gated to
 	// methods that apply normalization: serializeNodeItem uses this writer for the
-	// xml/xhtml and unspecified-default methods AND for the adaptive method (which
-	// ignores normalization) and json-embedded nodes, so the adaptive method must
-	// not normalize a serialized node's text.
+	// xml/xhtml and unspecified-default methods, the adaptive method, and
+	// json-embedded nodes.
 	if opts.methodAppliesNormalization() {
 		writer = writer.Normalization(opts.normalizationForm)
 	}
