@@ -161,7 +161,10 @@ Run specific test subsets via env vars:
   - on every `push` to `main` (in practice, each PR merge) → short `60s` per target, for a prompt signal attributed to the pushed commit.
   - on the weekly `schedule` → deep `5m` per target.
   - on manual `workflow_dispatch` → its `fuzz-time` input (default `5m`).
-- Fuzz targets are discovered per package via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`; a failing run uploads the crashing corpus as an artifact (it is not committed).
+- Fuzz targets are discovered per package via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`; each target writes a separate log and retains its raw `go test` status.
+- Every nonzero raw status or log-capture failure uploads target log + metadata (`package`, target, Go version, fuzz budget, raw/log statuses, classification) as a diagnostic artifact; log-capture failures fail the job.
+- Only Go coordinator failures matching the complete deadline-only signature are warnings ([golang/go#75804](https://github.com/golang/go/issues/75804)); any extra diagnostic, panic, worker hang, source failure, or crashing input fails the job.
+- Go-written crashing corpus files are uploaded separately for real failures; fuzz artifacts are not committed.
 
 ## Common Test Patterns
 

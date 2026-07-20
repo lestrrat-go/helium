@@ -40,40 +40,151 @@ jobs:
       - name: Run fuzz tests
         run: |
           set -o pipefail
+          is_known_go_deadline_race() {
+            local log="$1"
+            local target="$2"
+            local raw_status="$3"
+            local unexpected="${log}.unexpected"
+            local fail_pattern="^--- FAIL: ${target} \\([^)]+\\)$"
+            local deadline_pattern='^[[:space:]]+context deadline exceeded$'
+            local footer_pattern='^FAIL[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+$'
+            local -a result_lines
+
+            # Go issue #75804 can surface the parent fuzz deadline as a test
+            # failure. Match its complete output shape so target failures that
+            # happen to mention a deadline still fail the job.
+            [ "$raw_status" -eq 1 ] || return 1
+            grep -Ev "^(fuzz: elapsed: .+|--- FAIL: ${target} \\([^)]+\\)|[[:space:]]+context deadline exceeded|FAIL|exit status 1|FAIL[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+)$" "$log" > "$unexpected" || true
+            [ ! -s "$unexpected" ] || return 1
+
+            mapfile -t result_lines < <(grep -Ev '^fuzz: elapsed: .+$' "$log")
+            [ "${#result_lines[@]}" -eq 5 ] || return 1
+            [[ "${result_lines[0]}" =~ $fail_pattern ]] || return 1
+            [[ "${result_lines[1]}" =~ $deadline_pattern ]] || return 1
+            [ "${result_lines[2]}" = 'FAIL' ] || return 1
+            [ "${result_lines[3]}" = 'exit status 1' ] || return 1
+            [[ "${result_lines[4]}" =~ $footer_pattern ]]
+          }
+
           # Merge (push) runs get a short budget for a prompt post-merge signal;
           # the weekly schedule runs deep; manual dispatch uses its input.
           # (github.event.inputs.fuzz-time is valid dot-access — GitHub Actions
           # allows hyphens in property dereference; it is NOT parsed as subtraction.)
           FUZZTIME="${{ github.event.inputs.fuzz-time || (github.event_name == 'push' && '60s') || '5m' }}"
-          mkdir -p /tmp/fuzz-output
+          output_dir="${RUNNER_TEMP}/fuzz-output"
+          mkdir -p "${output_dir}/logs" "${output_dir}/diagnostics"
+          go_version="$(go version)"
+          job_status=0
           for target in $(go test ./${{ matrix.package }}/ -list '^Fuzz' -run '^$' | grep '^Fuzz' || true); do
+            log="${output_dir}/logs/${target}.log"
             echo "::group::${target}"
+            set +e
             go test ./${{ matrix.package }}/ -run '^$' -fuzz "^${target}\$" -fuzztime "${FUZZTIME}" 2>&1 \
-              | tee -a /tmp/fuzz-output/log.txt
+              | tee "$log"
+            pipeline_status=("${PIPESTATUS[@]}")
+            set -e
             echo "::endgroup::"
+
+            raw_status="${pipeline_status[0]}"
+            log_status="${pipeline_status[1]:-1}"
+            if [ "$raw_status" -eq 0 ] && [ "$log_status" -eq 0 ]; then
+              continue
+            fi
+
+            diagnostic_dir="${output_dir}/diagnostics/${target}"
+            mkdir -p "$diagnostic_dir"
+            if [ -f "$log" ]; then
+              cp "$log" "${diagnostic_dir}/target.log"
+            else
+              printf 'target log unavailable; tee status: %s\n' "$log_status" > "${diagnostic_dir}/target.log"
+            fi
+
+            classification="real-failure"
+            if [ "$log_status" -ne 0 ]; then
+              classification="log-capture-failure"
+              job_status=1
+              echo "::error title=Fuzz log capture failed::${{ matrix.package }}/${target} tee exited with status ${log_status}; raw go test status was ${raw_status}"
+            elif is_known_go_deadline_race "$log" "$target" "$raw_status"; then
+              classification="known-go-deadline-race"
+              echo "::warning title=Known Go fuzz deadline race::${{ matrix.package }}/${target} matched golang/go#75804; diagnostics will be uploaded. See https://github.com/golang/go/issues/75804"
+            else
+              job_status=1
+              if [ -s "${log}.unexpected" ]; then
+                cp "${log}.unexpected" "${diagnostic_dir}/unexpected.log"
+              fi
+            fi
+
+            printf '%s\n' \
+              "package=${{ matrix.package }}" \
+              "target=${target}" \
+              "go_version=${go_version}" \
+              "fuzz_budget=${FUZZTIME}" \
+              "raw_status=${raw_status}" \
+              "log_status=${log_status}" \
+              "classification=${classification}" \
+              "known_issue=https://github.com/golang/go/issues/75804" \
+              > "${diagnostic_dir}/metadata.txt"
           done
 
-      - name: Collect failing corpus
-        if: failure()
+          exit "$job_status"
+
+      - name: Check fuzz diagnostics
+        id: fuzz-diagnostics
+        if: always()
         run: |
-          mkdir -p /tmp/fuzz-failures
-          grep -oP 'Failing input written to \K\S+' /tmp/fuzz-output/log.txt \
-            | while read -r f; do
-                pkg="${{ matrix.package }}"
-                path="${f}"
-                if [ "$pkg" != "." ]; then
-                  path="${pkg}/${f}"
-                fi
-                if [ -f "$path" ]; then
-                  cp --parents "$path" /tmp/fuzz-failures/
-                fi
-              done
+          if find "${RUNNER_TEMP}/fuzz-output/diagnostics" -type f -print -quit | grep -q .; then
+            echo "has-files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-files=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload fuzz diagnostics
+        if: ${{ always() && steps.fuzz-diagnostics.outputs.has-files == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-diagnostics-${{ matrix.package }}
+          path: ${{ runner.temp }}/fuzz-output/diagnostics/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Collect failing corpus
+        id: failing-corpus
+        if: always()
+        run: |
+          failures="${RUNNER_TEMP}/fuzz-failures"
+          matches="${RUNNER_TEMP}/fuzz-corpus-paths.txt"
+          mkdir -p "$failures"
+          : > "$matches"
+          shopt -s nullglob
+          logs=("${RUNNER_TEMP}/fuzz-output/logs/"*.log)
+          grep_status=0
+          if [ "${#logs[@]}" -gt 0 ]; then
+            grep -hoP 'Failing input written to \K\S+' "${logs[@]}" > "$matches" || grep_status=$?
+            if [ "$grep_status" -gt 1 ]; then
+              exit "$grep_status"
+            fi
+          fi
+          while read -r f; do
+            pkg="${{ matrix.package }}"
+            path="${f}"
+            if [ "$pkg" != "." ]; then
+              path="${pkg}/${f}"
+            fi
+            if [ -f "$path" ]; then
+              cp --parents "$path" "$failures/"
+            fi
+          done < "$matches"
+          if find "$failures" -type f -print -quit | grep -q .; then
+            echo "has-files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-files=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload failing corpus
-        if: failure()
+        if: ${{ always() && steps.failing-corpus.outputs.has-files == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-corpus-${{ matrix.package }}
-          path: /tmp/fuzz-failures/
-          if-no-files-found: ignore
+          path: ${{ runner.temp }}/fuzz-failures/
+          if-no-files-found: error
           retention-days: 30
