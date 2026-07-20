@@ -777,7 +777,7 @@ func (ec *execContext) addNode(node helium.Node) error {
 	// are not separate "items" in the serialization sense.
 	if out.itemSeparator != nil && out.prevHadOutput && !isText && nodeType != helium.AttributeNode {
 		sepStr := *out.itemSeparator
-		if sepStr != "" {
+		if sepStr != "" && !ec.deferPrimaryAdaptiveMarkupSeparator(out, node) {
 			sep := ec.resultDoc.CreateText([]byte(sepStr))
 			if err := out.current.AddChild(sep); err != nil {
 				return err
@@ -825,6 +825,21 @@ func (ec *execContext) addNode(node helium.Node) error {
 		out.prevHadOutput = true
 	}
 	return nil
+}
+
+// deferPrimaryAdaptiveMarkupSeparator reports whether adaptive serialization
+// will insert the item separator between top-level primary markup items. The
+// separator must not become a text node, or the XML fallback adds a declaration.
+func (ec *execContext) deferPrimaryAdaptiveMarkupSeparator(out *outputFrame, node helium.Node) bool {
+	if len(ec.outputStack) != 1 || ec.currentResultDocMethod != methodAdaptive || out.current != out.doc {
+		return false
+	}
+	switch node.Type() {
+	case helium.CommentNode, helium.ProcessingInstructionNode:
+		return adaptiveStandaloneMarkupDocument(out.doc)
+	default:
+		return false
+	}
 }
 
 func (ec *execContext) executeSequenceConstructor(ctx context.Context, body []instruction) error {

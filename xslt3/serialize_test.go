@@ -96,6 +96,40 @@ func TestPrimaryAdaptiveCommentAndProcessingInstruction(t *testing.T) {
 	}
 }
 
+func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparator(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:processing-instruction name="target" select="'data'"/>
+    <xsl:comment select="'last'"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "<!--first--> | <?target data?> | <!--last-->", out)
+	require.NotContains(t, out, "<?xml")
+}
+
+func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparatorTextFallback(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:text>text</xsl:text>
+    <xsl:comment select="'last'"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, `<?xml version="1.0"`)
+	require.Contains(t, out, "<!--first-->text | <!--last-->")
+}
+
 func TestPrimaryAdaptiveCommentAndProcessingInstructionInvalidCharacter(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -123,6 +157,20 @@ func TestPrimaryAdaptiveCommentAndProcessingInstructionInvalidCharacter(t *testi
 			requireSERE0006(t, err)
 		})
 	}
+}
+
+func TestPrimaryAdaptiveCommentAndProcessingInstructionSequenceItemSeparatorInvalidCharacter(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive" item-separator=" | "/>
+  <xsl:template match="/">
+    <xsl:comment select="'first'"/>
+    <xsl:processing-instruction name="target" select="codepoints-to-string(1)"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	_, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+	requireSERE0006(t, err)
 }
 
 func TestSerializeItemsAtomics(t *testing.T) {
