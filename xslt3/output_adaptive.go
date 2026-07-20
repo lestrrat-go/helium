@@ -76,8 +76,9 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 }
 
 // adaptiveXMLVersion returns the XML version used whenever adaptive output
-// delegates an element or document item to XML serialization. xmlVersion was
-// validated by validOutputXMLVersion; an absent value uses the XML 1.0 default.
+// delegates an element, document, comment, or processing-instruction item to
+// XML serialization. xmlVersion was validated by validOutputXMLVersion; an
+// absent value uses the XML 1.0 default.
 func adaptiveXMLVersion(xmlVersion string) string {
 	if xmlVersion != "" {
 		return xmlVersion
@@ -120,9 +121,11 @@ func isAdaptiveQuotedType(typeName string) bool {
 }
 
 // serializeItemAdaptive serializes a single item using the adaptive method.
-// xmlVersion is the validated xml-method version. Every element and document
-// item uses adaptiveXMLVersion, so the XML 1.0 default does not inherit a
-// document's own version. Normalization applies only to unmapped runs.
+// xmlVersion is the validated xml-method version. Every element, document,
+// comment, and processing-instruction item uses adaptiveXMLVersion, so the XML
+// 1.0 default does not inherit a document's own version. Normalization applies
+// only to unmapped character-data runs; comments and processing instructions
+// preserve their data.
 func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm string, charMap map[rune]string) (string, error) {
 	switch v := item.(type) {
 	case xpath3.MapItem:
@@ -141,6 +144,13 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm strin
 				OutputVersion(adaptiveXMLVersion(xmlVersion)).
 				CharacterMap(charMap).
 				Normalization(writerNormalizationForm)
+			if err := writer.WriteTo(&buf, v.Node); err != nil {
+				return "", xmlInvalidCharError(err)
+			}
+			return buf.String(), nil
+		case *helium.Comment, *helium.ProcessingInstruction:
+			writer := helium.NewWriter().XMLDeclaration(false).
+				OutputVersion(adaptiveXMLVersion(xmlVersion))
 			if err := writer.WriteTo(&buf, v.Node); err != nil {
 				return "", xmlInvalidCharError(err)
 			}

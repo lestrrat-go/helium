@@ -293,6 +293,124 @@ func TestSerializeItemsAdaptiveNodeCharacterDataTransformations(t *testing.T) {
 	require.Equal(t, wantNode+"\n"+wantNode+"\n"+`map{"key":[`+wantNode+"]}", buf.String())
 }
 
+func newAdaptiveCommentAndProcessingInstruction(t *testing.T, data string) (*helium.Comment, *helium.ProcessingInstruction) {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	return doc.CreateComment([]byte(data)), doc.CreatePI("p", data)
+}
+
+func TestSerializeItemsAdaptiveCommentAndProcessingInstruction(t *testing.T) {
+	decomposed := "e\u0301"
+	data := "x" + decomposed
+	comment, pi := newAdaptiveCommentAndProcessingInstruction(t, data)
+	outDef := &xslt3.OutputDef{
+		Method:            adaptiveMethod,
+		NormalizationForm: normalizationFormNFC,
+		ResolvedCharMap:   map[rune]string{'x': "mapped"},
+	}
+
+	var topLevel bytes.Buffer
+	err := xslt3.SerializeItems(&topLevel, xpath3.ItemSlice{
+		xpath3.NodeItem{Node: comment},
+		xpath3.NodeItem{Node: pi},
+	}, nil, outDef)
+	require.NoError(t, err)
+	require.Equal(t, "<!--"+data+"-->\n<?p "+data+"?>", topLevel.String())
+
+	nestedMap := xpath3.NewMap([]xpath3.MapEntry{
+		{
+			Key:   xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "comment"},
+			Value: xpath3.ItemSlice{xpath3.NodeItem{Node: comment}},
+		},
+		{
+			Key:   xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "pi"},
+			Value: xpath3.ItemSlice{xpath3.NodeItem{Node: pi}},
+		},
+	})
+	nestedArray := xpath3.NewArray([]xpath3.Sequence{
+		xpath3.ItemSlice{xpath3.NodeItem{Node: comment}},
+		xpath3.ItemSlice{xpath3.NodeItem{Node: pi}},
+	})
+
+	var nested bytes.Buffer
+	err = xslt3.SerializeItems(&nested, xpath3.ItemSlice{nestedMap, nestedArray}, nil, outDef)
+	require.NoError(t, err)
+	require.Equal(t, `map{"comment":<!--`+data+`-->,"pi":<?p `+data+`?>}`+"\n[<!--"+data+"-->,<?p "+data+"?>]", nested.String())
+}
+
+func TestSerializeItemsAdaptiveCommentAndProcessingInstructionInvalidChars(t *testing.T) {
+	tests := []struct {
+		name  string
+		item  func(*testing.T) xpath3.Item
+		ver   string
+		valid bool
+	}{
+		{
+			name: "CommentControlDefault",
+			item: func(t *testing.T) xpath3.Item {
+				comment, _ := newAdaptiveCommentAndProcessingInstruction(t, "a\x01b")
+				return xpath3.NodeItem{Node: comment}
+			},
+		},
+		{
+			name: "ProcessingInstructionControlXML11",
+			item: func(t *testing.T) xpath3.Item {
+				_, pi := newAdaptiveCommentAndProcessingInstruction(t, "a\x01b")
+				return xpath3.NodeItem{Node: pi}
+			},
+			ver: xmlVersion11,
+		},
+		{
+			name: "CommentNELXML10",
+			item: func(t *testing.T) xpath3.Item {
+				comment, _ := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: comment}
+			},
+			ver:   "1.0",
+			valid: true,
+		},
+		{
+			name: "ProcessingInstructionNELDefault",
+			item: func(t *testing.T) xpath3.Item {
+				_, pi := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: pi}
+			},
+			valid: true,
+		},
+		{
+			name: "CommentNELXML11",
+			item: func(t *testing.T) xpath3.Item {
+				comment, _ := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: comment}
+			},
+			ver: xmlVersion11,
+		},
+		{
+			name: "ProcessingInstructionNELXML11",
+			item: func(t *testing.T) xpath3.Item {
+				_, pi := newAdaptiveCommentAndProcessingInstruction(t, "a\u0085b")
+				return xpath3.NodeItem{Node: pi}
+			},
+			ver: xmlVersion11,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, xpath3.ItemSlice{tt.item(t)}, nil, &xslt3.OutputDef{
+				Method:  adaptiveMethod,
+				Version: tt.ver,
+			})
+			if tt.valid {
+				require.NoError(t, err)
+				return
+			}
+			requireSERE0006(t, err)
+		})
+	}
+}
+
 func TestDefaultOutputDef(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

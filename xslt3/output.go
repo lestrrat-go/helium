@@ -91,10 +91,11 @@ func (out *outputFrame) captureSequenceItems(items xpath3.ItemSlice) {
 // SerializeItems writes a sequence of items (maps, arrays, atomics, nodes)
 // using the specified output definition's method (json or adaptive).
 // This is used for result-documents with method="json" or method="adaptive".
-// An element or document node item carrying a character invalid for the target
-// XML version fails with the serialization error SERE0006 rather than emitting
-// truncated output. Other item kinds (text/comment/PI nodes and atomics) are not
-// yet range-checked and emit their content unmodified.
+// An element, document, comment, or processing-instruction node item carrying
+// a character invalid for the target XML version fails with the serialization
+// error SERE0006 rather than emitting truncated output. Other item kinds (text,
+// attribute nodes, and atomics) are not range-checked and emit their content
+// unmodified.
 func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
 	if outDef == nil {
 		outDef = defaultOutputDef()
@@ -112,8 +113,8 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 		return serializeJSONItems(w, items, doc, outDef)
 	case methodAdaptive:
 		// Adaptive serialization uses its version serialization parameter for every
-		// XML fallback and embedded element/document writer. An absent version uses
-		// the XML 1.0 default; html-style versions never reach here.
+		// XML fallback and embedded element/document/comment/PI writer. An absent
+		// version uses the XML 1.0 default; html-style versions never reach here.
 		return serializeAdaptiveItems(w, items, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.NormalizationForm, outDef.ResolvedCharMap)
 	default:
 		if items != nil && sequence.Len(items) > 0 {
