@@ -349,7 +349,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - **NewVerifier(KeySource) → Verifier** — create fluent builder for verification (clone-on-write value type)
   - `AllowSHA1(bool)` — builder method
   - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods. `VerifyElement` takes the target element straight from the caller (bypassing `findSignatureElements`), so it applies the same gate itself before any work: a nil `sigElem`, or one that is not local-name `Signature` in the core XML-Signature namespace (`isDSigCoreNS`), is rejected with `ErrInvalidSignature` rather than nil-dereferencing or being parsed as a ds:Signature.
-- **NewEnvelopedReference() → ReferenceConfig** — SAML-optimized defaults (enveloped + ExcC14N + SHA-256)
+- **NewEnvelopedReference() → ReferenceConfig** — WHOLE-DOCUMENT enveloped defaults: empty URI (always resolves to the document element, regardless of the `SignEnveloped` parent) + enveloped-signature transform + ExcC14N + SHA-256
+- **NewEnvelopedReferenceByID(id) → ReferenceConfig** — element-scoped enveloped defaults: `URI="#id"` (covers only the element carrying that id) + enveloped-signature transform + ExcC14N + SHA-256. Correct for signing a specific nested element (e.g. a SAML Assertion by its ID); the id must be recognized as an ID attribute per the package's ID rules
 - Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`. `X509CertKeySource(nil)` resolves to `ErrNoKeySource` at `ResolveKey` time (fails closed on a per-request registry miss) rather than panicking on `cert.PublicKey`.
 - Key info builders: `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`. `X509DataKeyInfo()` with zero certificates fails `BuildKeyInfo`/signing with `ErrInvalidKeyInfo` rather than emitting a schema-invalid empty `<X509Data>`.
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`

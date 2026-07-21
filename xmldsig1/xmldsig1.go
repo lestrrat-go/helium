@@ -18,12 +18,37 @@ type ReferenceConfig struct {
 	Type            string
 }
 
-// NewEnvelopedReference returns a ReferenceConfig pre-configured for the
-// common SAML enveloped signature pattern: empty URI, enveloped-signature
-// transform + Exclusive C14N, SHA-256 digest.
+// NewEnvelopedReference returns a ReferenceConfig for a WHOLE-DOCUMENT
+// enveloped signature: an empty URI, an enveloped-signature transform +
+// Exclusive C14N, and a SHA-256 digest. The empty URI always resolves to the
+// document element, so the reference covers the entire document regardless of
+// which parent element the Signature is inserted into by [Signer.SignEnveloped].
+//
+// To envelope-sign a specific nested element by its id (for example a SAML
+// Assertion inside a Response), use [NewEnvelopedReferenceByID] instead — an
+// empty URI does NOT scope coverage to the SignEnveloped parent.
 func NewEnvelopedReference() ReferenceConfig {
 	return ReferenceConfig{
 		URI:             "",
+		DigestAlgorithm: DigestSHA256,
+		Transforms:      []Transform{Enveloped(), ExcC14NTransform()},
+	}
+}
+
+// NewEnvelopedReferenceByID returns a ReferenceConfig for an enveloped
+// signature that covers the single element carrying the given id (URI="#id"),
+// with an enveloped-signature transform + Exclusive C14N and a SHA-256 digest.
+// This is the correct choice for signing a specific nested element — for
+// example a SAML Assertion by its AssertionID/ID — where [NewEnvelopedReference]
+// (empty URI) would cover the whole document instead.
+//
+// The id must be recognized as an ID attribute per the package's ID rules: a
+// DTD/schema-declared ID-typed attribute, xml:id, or the "id" token in the
+// casings "Id", "ID", or "id" (see [Verifier.Verify]). More than one element
+// matching the id makes the reference ambiguous (ErrAmbiguousReference).
+func NewEnvelopedReferenceByID(id string) ReferenceConfig {
+	return ReferenceConfig{
+		URI:             "#" + id,
 		DigestAlgorithm: DigestSHA256,
 		Transforms:      []Transform{Enveloped(), ExcC14NTransform()},
 	}
