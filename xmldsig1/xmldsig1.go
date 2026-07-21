@@ -181,12 +181,30 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // the caller's tree; if signing then fails at any later step, every moved node
 // is restored to its exact original position (parent, siblings, and order),
 // leaving the caller's document byte-identical to before the call.
+//
+// Lifetime: the returned Signature is allocated from doc's slab storage (its
+// nodes are created via doc.CreateElement) and is owned by doc, but a successful
+// sign leaves it safe to keep after doc.Free(). Canonicalizing SignedInfo grafts
+// the live Signature into a throwaway document, a cross-document move that marks
+// doc's slab as escaped; doc.Free() then becomes a no-op and never recycles the
+// chunks backing the Signature. So the returned Signature stays valid after
+// doc.Free() — the caller does NOT need to move it into another document first
+// to keep it.
 func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
 	return signEnveloping(ctx, s.config(), doc, content, key)
 }
 
 // SignDetached creates a detached Signature element referencing URIs
 // specified in the configured References. Returns the Signature element.
+//
+// Lifetime: the returned Signature is allocated from doc's slab storage (its
+// nodes are created via doc.CreateElement) and is owned by doc, but a successful
+// sign leaves it safe to keep after doc.Free(). Canonicalizing SignedInfo grafts
+// the live Signature into a throwaway document, a cross-document move that marks
+// doc's slab as escaped; doc.Free() then becomes a no-op and never recycles the
+// chunks backing the Signature. So the returned Signature stays valid after
+// doc.Free() — the caller does NOT need to move it into another document first
+// to keep it.
 func (s Signer) SignDetached(ctx context.Context, doc *helium.Document, key any) (*helium.Element, error) {
 	return signDetached(ctx, s.config(), doc, key)
 }
@@ -253,7 +271,22 @@ func (v Verifier) AllowSHA1(allow bool) Verifier {
 // DTD/schema, or by marking the attribute's type as an ID before verifying —
 // rather than have it inferred from the name. If more than one element matches
 // the referenced ID the reference is refused (ErrAmbiguousReference).
+//
+// Verification honors ctx: an already-cancelled or already-expired context
+// short-circuits before any work, and cancellation is rechecked between
+// References. Because a SignedInfo may carry arbitrarily many References and each
+// empty-URI enveloped Reference canonicalizes a copy of the whole document, the
+// per-Reference work scales with the number of References; bound it by passing a
+// ctx with a deadline. On cancellation the context error (ctx.Err()) is returned.
 func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResult, error) {
+	// Honor an already-cancelled or already-expired context before the
+	// signature-discovery walk. findSignatureElements below traverses the whole
+	// document, which is unbounded on a large or attacker-supplied input, so a
+	// context the caller cancelled before calling must short-circuit here rather
+	// than pay for the full walk only to return ErrSignatureNotFound.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sigs := findSignatureElements(doc.DocumentElement())
 	switch len(sigs) {
 	case 0:
@@ -271,7 +304,20 @@ func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResu
 //
 // Same-document reference resolution recognizes the same ID attributes as
 // [Verifier.Verify].
+//
+// Verification honors ctx the same way as [Verifier.Verify]: an already-cancelled
+// or already-expired context short-circuits before any work, cancellation is
+// rechecked between References, and a ctx deadline is the lever for bounding the
+// per-Reference work of a SignedInfo that carries many References.
 func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *helium.Element) (*VerifyResult, error) {
+	// Honor an already-cancelled or already-expired context before any work,
+	// including the nil / local-name / namespace validation guards below. The
+	// caller supplies sig directly, so on an attacker-controlled element a
+	// cancelled context must short-circuit here rather than pay for the
+	// validation before verifySignature's own ctx check would catch it.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Verify reaches verifySignature only through findSignatureElements, which
 	// already gates on local-name Signature in the core XML-Signature namespace.
 	// VerifyElement takes the target element straight from the caller, so it must
