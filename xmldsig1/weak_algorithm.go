@@ -41,9 +41,14 @@ func preflightSignerWeakAlgorithms(cfg *signerConfig) error {
 	if err := rejectWeakSignatureAlgorithm(cfg.signatureAlgorithm, cfg.allowSHA1); err != nil {
 		return err
 	}
-	for _, ref := range cfg.references {
+	for i, ref := range cfg.references {
 		if err := rejectWeakDigestAlgorithm(ref.DigestAlgorithm, cfg.allowSHA1); err != nil {
-			return err
+			// Carry the failing reference's index and URI so a caller signing
+			// over a multi-reference configuration can pinpoint the offending
+			// Reference, symmetric with the per-reference digest and transform
+			// loops. The ErrWeakAlgorithm sentinel stays matchable via errors.Is
+			// through ReferenceError.Unwrap.
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 	return nil

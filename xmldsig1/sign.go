@@ -44,7 +44,7 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
 			// Detach the signature on failure.
 			helium.UnlinkNode(sigElem)
-			return &ReferenceError{Op: "sign", Reference: i, URI: ref.URI, Err: err}
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 
@@ -137,7 +137,7 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	// an unchanged subtree and produces byte-identical output.
 	for i, ref := range cfg.references {
 		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, sigElem); err != nil {
-			return nil, &ReferenceError{Op: "sign", Reference: i, URI: ref.URI, Err: err}
+			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 
@@ -192,7 +192,7 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 
 	for i, ref := range cfg.references {
 		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
-			return nil, &ReferenceError{Op: "sign", Reference: i, URI: ref.URI, Err: err}
+			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 

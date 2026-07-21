@@ -95,7 +95,7 @@ func preflightSignerTransforms(cfg *signerConfig) error {
 			// Reference, symmetric with the per-reference digest loop. The
 			// underlying sentinel (e.g. ErrUnsupportedTransform) stays matchable
 			// via errors.Is through ReferenceError.Unwrap.
-			return &ReferenceError{Op: "sign", Reference: i, URI: ref.URI, Err: err}
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 	return nil

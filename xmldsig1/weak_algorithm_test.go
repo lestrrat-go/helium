@@ -2,6 +2,7 @@ package xmldsig1_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -101,6 +102,35 @@ func TestWeakAlgorithmPreflight(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
 		require.Equal(t, 0, countLocalElements(parent, "Signature"), "a Signature element was added despite rejection")
+	})
+
+	// weak digest error carries index and uri asserts that a per-reference
+	// weak-digest rejection in the signing preflight identifies WHICH reference
+	// failed. Here the FIRST reference uses SHA-256 but the SECOND ("#second")
+	// uses SHA-1, so the returned error must both match ErrWeakAlgorithm and
+	// expose the failing reference's index (1) and URI through a *ReferenceError.
+	t.Run("weak digest error carries index and uri", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">first</data><more Id="second">second</more></root>`)
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#second",
+				DigestAlgorithm: xmldsig1.DigestSHA1,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			})
+		_, err := signer.SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+
+		var refErr *xmldsig1.ReferenceError
+		require.True(t, errors.As(err, &refErr))
+		require.Equal(t, 1, refErr.Reference)
+		require.Equal(t, "#second", refErr.URI)
 	})
 
 	// verify sha1 rejected before key resolution asserts that verifying a SHA-1

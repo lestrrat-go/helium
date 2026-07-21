@@ -60,6 +60,9 @@ var (
 	ErrNoKeySource = errors.New("xmldsig1: no key source configured")
 )
 
+// opSign is the ReferenceError.Op value for a signing-side per-reference failure.
+const opSign = "sign"
+
 // ReferenceError identifies which Reference failed during a signing operation.
 // A per-reference failure carries the reference's 0-based index and URI so a
 // caller signing over a multi-reference configuration can pinpoint the offending
