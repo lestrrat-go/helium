@@ -283,6 +283,14 @@ func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResu
 // rechecked between References, and a ctx deadline is the lever for bounding the
 // per-Reference work of a SignedInfo that carries many References.
 func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *helium.Element) (*VerifyResult, error) {
+	// Honor an already-cancelled or already-expired context before any work,
+	// including the nil / local-name / namespace validation guards below. The
+	// caller supplies sig directly, so on an attacker-controlled element a
+	// cancelled context must short-circuit here rather than pay for the
+	// validation before verifySignature's own ctx check would catch it.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Verify reaches verifySignature only through findSignatureElements, which
 	// already gates on local-name Signature in the core XML-Signature namespace.
 	// VerifyElement takes the target element straight from the caller, so it must
