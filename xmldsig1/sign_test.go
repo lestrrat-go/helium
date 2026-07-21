@@ -293,6 +293,35 @@ func TestSign(t *testing.T) {
 		require.ErrorIs(t, err, xmldsig1.ErrReferenceNotFound)
 	})
 
+	// A per-reference signing failure must identify WHICH reference failed
+	// (index + URI), symmetric with verification's VerificationError. Here the
+	// FIRST reference resolves but the SECOND ("#does-not-exist") does not, so
+	// the returned error must both match ErrReferenceNotFound and expose the
+	// failing reference's index (1) and URI through a *ReferenceError.
+	t.Run("reference error carries index and uri", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#does-not-exist",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			})
+		_, err := signer.SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrReferenceNotFound)
+
+		var refErr *xmldsig1.ReferenceError
+		require.ErrorAs(t, err, &refErr)
+		require.Equal(t, 1, refErr.Reference)
+		require.Equal(t, "#does-not-exist", refErr.URI)
+	})
+
 	// invalid transform pipeline on enveloping is preflighted: a transform list
 	// rejected by resolveTransformPipeline (here Enveloped ordered after a c14n
 	// transform) must return ErrUnsupportedTransform WITHOUT moving the caller's

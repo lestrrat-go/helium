@@ -60,6 +60,32 @@ var (
 	ErrNoKeySource = errors.New("xmldsig1: no key source configured")
 )
 
+// ReferenceError identifies which Reference failed during a signing operation.
+// A per-reference failure carries the reference's 0-based index and URI so a
+// caller signing over a multi-reference configuration can pinpoint the offending
+// Reference, symmetric with how VerificationError reports a verification-side
+// per-reference failure. The underlying cause stays reachable via errors.Is and
+// errors.As (Unwrap), so a bare sentinel such as ErrReferenceNotFound or
+// ErrUnsupportedTransform remains matchable through the wrapper.
+type ReferenceError struct {
+	// Op is the operation during which the failure occurred ("sign").
+	Op string
+	// Reference is the 0-based index of the failing Reference.
+	Reference int
+	// URI is the Reference URI that failed.
+	URI string
+	// Err is the underlying cause.
+	Err error
+}
+
+func (e *ReferenceError) Error() string {
+	return fmt.Sprintf("xmldsig1: %s reference %d (%q) failed: %v", e.Op, e.Reference, e.URI, e.Err)
+}
+
+func (e *ReferenceError) Unwrap() error {
+	return e.Err
+}
+
 // VerificationError provides details about which step of verification failed.
 type VerificationError struct {
 	// Reference is the 0-based index of the failing Reference, or -1 for
