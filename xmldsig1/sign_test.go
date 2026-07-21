@@ -1,6 +1,7 @@
 package xmldsig1_test
 
 import (
+	"context"
 	"crypto/elliptic"
 	"testing"
 
@@ -17,6 +18,31 @@ const refURID1 = "#d1"
 // signing and verification tests, pointing at the element carrying Id="mydata"
 // in their fixture documents.
 const refURIMyData = "#mydata"
+
+// parentInspectingKeyInfo is a custom KeyInfoBuilder that records the parent of
+// a watched content node at the moment BuildKeyInfo is invoked. It proves the
+// timing contract an arbitrary caller builder observes: for an enveloping
+// signature BuildKeyInfo must run AFTER the content is wrapped in the <Object>,
+// so the watched node's parent is the Object element.
+type parentInspectingKeyInfo struct {
+	watched    helium.Node
+	seenParent helium.Node
+}
+
+func (b *parentInspectingKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, _ any) (*helium.Element, error) {
+	b.seenParent = b.watched.Parent()
+	keyInfo, err := doc.CreateElement("KeyInfo")
+	if err != nil {
+		return nil, err
+	}
+	if err := keyInfo.DeclareNamespace("ds", xmldsig1.NamespaceDSig); err != nil {
+		return nil, err
+	}
+	if err := keyInfo.SetActiveNamespace("ds", xmldsig1.NamespaceDSig); err != nil {
+		return nil, err
+	}
+	return keyInfo, nil
+}
 
 func TestSign(t *testing.T) {
 	// enveloping drives signEnveloping (content wrapped in an Object element)
@@ -97,10 +123,78 @@ func TestSign(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// enveloping with an empty X509DataKeyInfo (→ ErrInvalidKeyInfo) must leave
+	// the caller's content node under its ORIGINAL parent. A narrow preflight
+	// detects the empty x509DataKeyInfo before the <Object> is created or any
+	// content is moved, so the error strands nothing.
+	t.Run("enveloping keyinfo error leaves content unmoved", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
+		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
+		// Parent the payload under <root> so the test can confirm the failed sign
+		// leaves it exactly where it started.
+		root := doc.DocumentElement()
+		require.NoError(t, root.AddChild(payload))
+		require.Equal(t, helium.Node(root), payload.Parent())
+
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			KeyInfo(xmldsig1.X509DataKeyInfo())
+
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+		require.Nil(t, sigElem)
+		// The payload was NOT stranded under a detached <Object>; it stays under
+		// its original <root> parent.
+		require.Equal(t, helium.Node(root), payload.Parent())
+	})
+
+	// An arbitrary caller-provided KeyInfoBuilder must observe the established
+	// timing contract: BuildKeyInfo runs AFTER the content is wrapped in the
+	// <Object>, so a builder inspecting the content sees its parent as the
+	// Object element. The narrow empty-X509DataKeyInfo preflight must NOT move
+	// this general builder timing earlier.
+	t.Run("enveloping general keyinfo builder sees wrapped content", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
+		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
+
+		builder := &parentInspectingKeyInfo{watched: payload}
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			KeyInfo(builder)
+
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.NoError(t, err)
+		require.NotNil(t, sigElem)
+
+		// BuildKeyInfo must have observed the payload already wrapped in <Object>.
+		parent, ok := builder.seenParent.(*helium.Element)
+		require.True(t, ok)
+		require.Equal(t, "Object", parent.LocalName())
+	})
+
 	// detached with KeyInfo and ID drives the full signDetached path including
 	// the KeyInfo builder branch and Id/Type attributes.
 	t.Run("detached with keyinfo and id", func(t *testing.T) {
 		key := generateRSAKey(t)
+		cert := generateSelfSignedCert(t, key)
 		doc := mustParseXML(t, `<root><data Id="mydata">Hello</data></root>`)
 
 		signer := xmldsig1.NewSigner().
@@ -113,7 +207,7 @@ func TestSign(t *testing.T) {
 				Type:            xmldsig1.TypeObject,
 				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 			}).
-			KeyInfo(xmldsig1.X509DataKeyInfo())
+			KeyInfo(xmldsig1.X509DataKeyInfo(cert))
 
 		sigElem, err := signer.SignDetached(t.Context(), doc, key)
 		require.NoError(t, err)
@@ -204,6 +298,35 @@ func TestSign(t *testing.T) {
 		require.ErrorIs(t, err, xmldsig1.ErrReferenceNotFound)
 	})
 
+	// A per-reference signing failure must identify WHICH reference failed
+	// (index + URI), symmetric with verification's VerificationError. Here the
+	// FIRST reference resolves but the SECOND ("#does-not-exist") does not, so
+	// the returned error must both match ErrReferenceNotFound and expose the
+	// failing reference's index (1) and URI through a *ReferenceError.
+	t.Run("reference error carries index and uri", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#does-not-exist",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			})
+		_, err := signer.SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrReferenceNotFound)
+
+		var refErr *xmldsig1.ReferenceError
+		require.ErrorAs(t, err, &refErr)
+		require.Equal(t, 1, refErr.Reference)
+		require.Equal(t, "#does-not-exist", refErr.URI)
+	})
+
 	// invalid transform pipeline on enveloping is preflighted: a transform list
 	// rejected by resolveTransformPipeline (here Enveloped ordered after a c14n
 	// transform) must return ErrUnsupportedTransform WITHOUT moving the caller's
@@ -239,6 +362,38 @@ func TestSign(t *testing.T) {
 		after, err := helium.WriteString(doc)
 		require.NoError(t, err)
 		require.Equal(t, before, after)
+	})
+
+	// A per-reference transform-pipeline failure detected in the signing
+	// PREFLIGHT (before any DOM mutation) must ALSO identify which reference
+	// failed. Here the FIRST reference has a valid pipeline but the SECOND
+	// ("#second") orders Enveloped after a c14n transform, so the returned error
+	// must both match ErrUnsupportedTransform and expose the failing reference's
+	// index (1) and URI through a *ReferenceError.
+	t.Run("preflight transform error carries index and uri", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">first</data><more Id="second">second</more></root>`)
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#second",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				// c14n transform produces octets; the trailing Enveloped is ordered
+				// after canonicalization and is rejected by the preflight.
+				Transforms: []xmldsig1.Transform{xmldsig1.ExcC14NTransform(), xmldsig1.Enveloped()},
+			})
+		_, err := signer.SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrUnsupportedTransform)
+
+		var refErr *xmldsig1.ReferenceError
+		require.ErrorAs(t, err, &refErr)
+		require.Equal(t, 1, refErr.Reference)
+		require.Equal(t, "#second", refErr.URI)
 	})
 
 	// caller document is not mutated by a detached or enveloping signature: the

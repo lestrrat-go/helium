@@ -40,11 +40,11 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 	}
 
 	// Process references: compute digests and add Reference elements.
-	for _, ref := range cfg.references {
+	for i, ref := range cfg.references {
 		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
 			// Detach the signature on failure.
 			helium.UnlinkNode(sigElem)
-			return err
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 
@@ -97,6 +97,16 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
+	// Narrow preflight for the built-in empty X509DataKeyInfo. An x509DataKeyInfo
+	// with zero certificates always fails with ErrInvalidKeyInfo; detecting that
+	// here — before the <Object> is created or any caller content is moved into
+	// it — leaves the caller's input nodes unmoved and the input tree untouched.
+	// Arbitrary caller-provided builders keep the established timing (their
+	// BuildKeyInfo runs after the content is wrapped, in the block below).
+	if b, ok := cfg.keyInfoBuilder.(*x509DataKeyInfo); ok && len(b.certs) == 0 {
+		return nil, fmt.Errorf("%w: X509DataKeyInfo requires at least one certificate", ErrInvalidKeyInfo)
+	}
+
 	// Create Object element to wrap the content.
 	objElem, err := doc.CreateElement("Object")
 	if err != nil {
@@ -125,9 +135,9 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	// the Signature stays detached. The Signature is never inserted into the
 	// caller's document, so a reference to a document element (URI="#root") sees
 	// an unchanged subtree and produces byte-identical output.
-	for _, ref := range cfg.references {
+	for i, ref := range cfg.references {
 		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, sigElem); err != nil {
-			return nil, err
+			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 
@@ -180,9 +190,9 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 		return nil, err
 	}
 
-	for _, ref := range cfg.references {
+	for i, ref := range cfg.references {
 		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
-			return nil, err
+			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 
