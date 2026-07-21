@@ -359,6 +359,38 @@ func TestSign(t *testing.T) {
 		require.Equal(t, before, after)
 	})
 
+	// A per-reference transform-pipeline failure detected in the signing
+	// PREFLIGHT (before any DOM mutation) must ALSO identify which reference
+	// failed. Here the FIRST reference has a valid pipeline but the SECOND
+	// ("#second") orders Enveloped after a c14n transform, so the returned error
+	// must both match ErrUnsupportedTransform and expose the failing reference's
+	// index (1) and URI through a *ReferenceError.
+	t.Run("preflight transform error carries index and uri", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">first</data><more Id="second">second</more></root>`)
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#second",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				// c14n transform produces octets; the trailing Enveloped is ordered
+				// after canonicalization and is rejected by the preflight.
+				Transforms: []xmldsig1.Transform{xmldsig1.ExcC14NTransform(), xmldsig1.Enveloped()},
+			})
+		_, err := signer.SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrUnsupportedTransform)
+
+		var refErr *xmldsig1.ReferenceError
+		require.ErrorAs(t, err, &refErr)
+		require.Equal(t, 1, refErr.Reference)
+		require.Equal(t, "#second", refErr.URI)
+	})
+
 	// caller document is not mutated by a detached or enveloping signature: the
 	// returned Signature is never inserted into the caller's document (fu10), on
 	// both the success and the signing-error paths.
