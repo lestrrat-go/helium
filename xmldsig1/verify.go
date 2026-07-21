@@ -54,6 +54,17 @@ type parsedTransform struct {
 }
 
 func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
+	// Honor an already-cancelled or already-expired context before any work. All
+	// of the pre-loop steps below — signature-element parse, weak-algorithm
+	// preflight, KeyInfo parse (x509.ParseCertificate per cert), KeySource
+	// resolution, SignedInfo canonicalization, and one SignatureValue crypto
+	// verify — are bounded but non-trivial, so a context the caller cancelled
+	// before calling must short-circuit here rather than run them to completion.
+	// The per-Reference loop below repeats this check each iteration.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// A zero-value Verifier{} constructed directly (bypassing NewVerifier) has
 	// a nil cfg, and a nil KeySource (e.g. NewVerifier(nil)) cannot resolve a
 	// key. isNilKeySource also catches a typed-nil pointer KeySource, whose

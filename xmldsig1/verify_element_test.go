@@ -1,6 +1,7 @@
 package xmldsig1_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xmldsig1"
@@ -65,4 +66,53 @@ func TestVerifyElementValid(t *testing.T) {
 	result, err := verifier.VerifyElement(t.Context(), doc, sigElem)
 	require.NoError(t, err)
 	require.NotNil(t, result)
+}
+
+// TestVerifyElementShortCircuitsCancelledContextBeforeValidation confirms an
+// already-cancelled context short-circuits VerifyElement before its nil /
+// local-name / namespace validation guards run, not just before verifySignature.
+// Each case passes a cancelled context and asserts the returned error is the
+// context error rather than a validation error, proving the cancellation check
+// precedes the nil/namespace validation on an attacker-controlled element.
+func TestVerifyElementShortCircuitsCancelledContextBeforeValidation(t *testing.T) {
+	key := generateRSAKey(t)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+
+	newCancelledContext := func(t *testing.T) context.Context {
+		t.Helper()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		return ctx
+	}
+
+	t.Run("nil signature", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := verifier.VerifyElement(newCancelledContext(t), doc, nil)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("wrong-namespace element", func(t *testing.T) {
+		doc := mustParseXML(t, `<Signature xmlns="http://example.com/not-dsig"><SignedInfo/></Signature>`)
+		_, err := verifier.VerifyElement(newCancelledContext(t), doc, doc.DocumentElement())
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("valid signature", func(t *testing.T) {
+		xml := `<root><data Id="signed">Hello</data></root>`
+		doc := mustParseXML(t, xml)
+		ref := xmldsig1.ReferenceConfig{
+			URI:             "#signed",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		}
+		sigElem, err := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(ref).
+			SignDetached(t.Context(), doc, key)
+		require.NoError(t, err)
+		require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+		_, err = verifier.VerifyElement(newCancelledContext(t), doc, sigElem)
+		require.ErrorIs(t, err, context.Canceled)
+	})
 }
