@@ -901,18 +901,29 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 // first reference site, so re-resolve the element's prefix against the current
 // reference-site context.
 //
-// An unprefixed entity-replacement element is governed by the reference-site
-// default namespace normally (unlike an attribute), so it resolves to the
-// in-scope default URI, or the empty URI when no default is in scope. A prefixed
-// entity element whose prefix is not in scope at the current reference site
-// cannot be canonicalized (a prefixed name with an out-of-scope prefix is
-// namespace-not-well-formed for that expansion), so this is an error rather than
-// a borrowed stale first-site binding or a dangling prefix.
+// The reserved "xml" prefix is always implicitly in scope and resolves to the
+// XML namespace. An unprefixed entity-replacement element is governed by the
+// reference-site default namespace normally (unlike an attribute), so it
+// resolves to the in-scope default URI, or the empty URI when no default is in
+// scope. Any other prefixed entity element whose prefix is not in scope at the
+// current reference site cannot be canonicalized (a prefixed name with an
+// out-of-scope prefix is namespace-not-well-formed for that expansion), so this
+// is an error rather than a borrowed stale first-site binding or a dangling
+// prefix.
 func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) (string, error) {
 	if c.currentEntityFrame() == nil {
 		return ns.URI(), nil
 	}
 	prefix := ns.Prefix()
+	if prefix == lexicon.PrefixXML {
+		// The reserved "xml" prefix is implicitly bound to the XML namespace at
+		// every point in the data model, so it is always in scope at the
+		// reference site regardless of the site's declared bindings. Resolve it
+		// to that implicit URI; like a non-entity xml:* name it is never emitted
+		// as an explicit xmlns:xml declaration (collectInScopeNamespaces drops it
+		// on the inclusive/node-set paths, matching the non-entity axis).
+		return lexicon.NamespaceXML, nil
+	}
 	if uri, ok := c.collectInScopeNamespaces(e)[prefix]; ok {
 		return uri, nil
 	}
@@ -944,10 +955,12 @@ func (c *canonicalizer) entityDefaultNSURI(e *helium.Element) string {
 //
 // An unprefixed attribute is in no namespace — the default namespace never
 // applies to attributes — so it always resolves to the empty URI (mirroring the
-// non-entity attr.URI()). A prefixed entity attribute whose prefix is not in
-// scope at the current reference site cannot be canonicalized (a prefixed name
-// with an out-of-scope prefix is namespace-not-well-formed for that expansion),
-// so this is an error rather than a borrowed stale first-site binding.
+// non-entity attr.URI()). The reserved "xml" prefix (xml:lang, xml:space) is
+// always implicitly in scope and resolves to the XML namespace. Any other
+// prefixed entity attribute whose prefix is not in scope at the current
+// reference site cannot be canonicalized (a prefixed name with an out-of-scope
+// prefix is namespace-not-well-formed for that expansion), so this is an error
+// rather than a borrowed stale first-site binding.
 func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attribute) (string, error) {
 	if c.currentEntityFrame() == nil {
 		return attr.URI(), nil
@@ -955,6 +968,14 @@ func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attrib
 	prefix := attr.Prefix()
 	if prefix == "" {
 		return "", nil
+	}
+	if prefix == lexicon.PrefixXML {
+		// The reserved "xml" prefix (e.g. xml:lang, xml:space) is implicitly
+		// bound to the XML namespace everywhere, so it is always in scope at the
+		// reference site. Resolve it to that implicit URI; like a non-entity
+		// xml:* attribute it is never emitted as an explicit xmlns:xml
+		// declaration on the inclusive/node-set paths.
+		return lexicon.NamespaceXML, nil
 	}
 	if uri, ok := c.collectInScopeNamespaces(e)[prefix]; ok {
 		return uri, nil

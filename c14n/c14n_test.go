@@ -538,6 +538,132 @@ func TestEntityReferenceReplacementDefaultNamespaceReverseOrderExclusive(t *test
 		string(got))
 }
 
+func TestEntityReferenceReplacementReservedXMLPrefixAttr(t *testing.T) {
+	t.Parallel()
+	// The reserved "xml" prefix is implicitly bound to the XML namespace
+	// everywhere in the data model, so an entity-replacement element carrying an
+	// xml:lang attribute is namespace-well-formed at any reference site and must
+	// canonicalize successfully. Its output must be byte-identical to the
+	// equivalent fully-expanded document in every mode (the xml namespace is
+	// never emitted as an explicit xmlns:xml declaration on the inclusive and
+	// node-set axes, matching the non-entity xml:* path).
+	entitySrc := `<!DOCTYPE r [<!ENTITY x "<e xml:lang=&#34;en&#34;/>">]><r>&x;</r>`
+	expandedSrc := `<r><e xml:lang="en"/></r>`
+
+	entityDoc, err := helium.NewParser().Parse(t.Context(), []byte(entitySrc))
+	require.NoError(t, err)
+	expandedDoc, err := helium.NewParser().Parse(t.Context(), []byte(expandedSrc))
+	require.NoError(t, err)
+
+	for _, mode := range []c14n.Mode{c14n.C14N10, c14n.C14N11, c14n.ExclusiveC14N10} {
+		entityGot, err := c14n.NewCanonicalizer(mode).CanonicalizeTo(entityDoc)
+		require.NoError(t, err, "mode %d", mode)
+		expandedGot, err := c14n.NewCanonicalizer(mode).CanonicalizeTo(expandedDoc)
+		require.NoError(t, err, "mode %d", mode)
+		require.Equal(t, string(expandedGot), string(entityGot),
+			"entity expansion must match the fully-expanded document, mode %d", mode)
+	}
+
+	// Inclusive C14N 1.0/1.1 never emit an explicit xmlns:xml declaration.
+	inclusive, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(entityDoc)
+	require.NoError(t, err)
+	require.Equal(t, `<r><e xml:lang="en"></e></r>`, string(inclusive))
+	require.NotContains(t, string(inclusive), "xmlns:xml")
+
+	// Node-set (inclusive + exclusive) with the whole tree selected.
+	inclusiveNodes := evaluateNodeSet(t, entityDoc, "//. | //@* | //namespace::*", nil)
+	inclusiveNS, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(inclusiveNodes).CanonicalizeTo(entityDoc)
+	require.NoError(t, err)
+	require.Equal(t, `<r><e xml:lang="en"></e></r>`, string(inclusiveNS))
+	require.NotContains(t, string(inclusiveNS), "xmlns:xml")
+
+	exclusiveNodes := evaluateNodeSet(t, entityDoc, "//. | //@* | //namespace::*", nil)
+	_, err = c14n.NewCanonicalizer(c14n.ExclusiveC14N10).NodeSet(exclusiveNodes).CanonicalizeTo(entityDoc)
+	require.NoError(t, err)
+}
+
+func TestEntityReferenceReplacementReservedXMLPrefixElementName(t *testing.T) {
+	t.Parallel()
+	// An entity-replacement element whose NAME uses the reserved "xml" prefix is
+	// namespace-well-formed at any reference site (the prefix is implicitly
+	// bound) and must canonicalize successfully rather than erroring as an
+	// out-of-scope prefix. Output must be byte-identical to the fully-expanded
+	// document in every mode.
+	entitySrc := `<!DOCTYPE r [<!ENTITY x "<xml:e/>">]><r>&x;</r>`
+	expandedSrc := `<r><xml:e/></r>`
+
+	entityDoc, err := helium.NewParser().Parse(t.Context(), []byte(entitySrc))
+	require.NoError(t, err)
+	expandedDoc, err := helium.NewParser().Parse(t.Context(), []byte(expandedSrc))
+	require.NoError(t, err)
+
+	for _, mode := range []c14n.Mode{c14n.C14N10, c14n.C14N11, c14n.ExclusiveC14N10} {
+		entityGot, err := c14n.NewCanonicalizer(mode).CanonicalizeTo(entityDoc)
+		require.NoError(t, err, "mode %d", mode)
+		expandedGot, err := c14n.NewCanonicalizer(mode).CanonicalizeTo(expandedDoc)
+		require.NoError(t, err, "mode %d", mode)
+		require.Equal(t, string(expandedGot), string(entityGot),
+			"entity expansion must match the fully-expanded document, mode %d", mode)
+	}
+
+	// Inclusive C14N 1.0 writes the xml-prefixed name without an xmlns:xml decl.
+	inclusive, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(entityDoc)
+	require.NoError(t, err)
+	require.Equal(t, `<r><xml:e></xml:e></r>`, string(inclusive))
+	require.NotContains(t, string(inclusive), "xmlns:xml")
+
+	nodes := evaluateNodeSet(t, entityDoc, "//. | //@* | //namespace::*", nil)
+	inclusiveNS, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).CanonicalizeTo(entityDoc)
+	require.NoError(t, err)
+	require.Equal(t, `<r><xml:e></xml:e></r>`, string(inclusiveNS))
+	require.NotContains(t, string(inclusiveNS), "xmlns:xml")
+}
+
+func TestEntityReferenceReplacementReservedXMLPrefixRegressionGuards(t *testing.T) {
+	t.Parallel()
+	// Guard the other three enumerated prefix classes alongside the new xml
+	// handling: a bound non-xml prefix still resolves, a non-empty non-xml
+	// unbound prefix still errors on both the element-name and attribute axes,
+	// and a plain document with no entity references stays byte-identical.
+
+	// A bound non-xml prefix resolves normally.
+	bound := `<!DOCTYPE r [<!ENTITY x "<p:e p:a=&#34;v&#34;/>">]>` +
+		`<r xmlns:p="urn:p">&x;</r>`
+	boundDoc, err := helium.NewParser().Parse(t.Context(), []byte(bound))
+	require.NoError(t, err)
+	boundGot, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(boundDoc)
+	require.NoError(t, err)
+	require.Equal(t, `<r xmlns:p="urn:p"><p:e p:a="v"></p:e></r>`, string(boundGot))
+
+	// A non-empty non-xml unbound prefix on the element name still errors. The
+	// prefix is bound at the first reference site (so the entity parses) but
+	// unbound at the second, where canonicalization must error.
+	elemUnbound := `<!DOCTYPE r [<!ENTITY x "<q:e/>">]>` +
+		`<r><a xmlns:q="urn:one">&x;</a><b>&x;</b></r>`
+	elemDoc, err := helium.NewParser().Parse(t.Context(), []byte(elemUnbound))
+	require.NoError(t, err)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(elemDoc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+
+	// A non-empty non-xml unbound prefix on an attribute still errors.
+	attrUnbound := `<!DOCTYPE r [<!ENTITY x "<e q:a=&#34;v&#34;/>">]>` +
+		`<r><a xmlns:q="urn:one">&x;</a><b>&x;</b></r>`
+	attrDoc, err := helium.NewParser().Parse(t.Context(), []byte(attrUnbound))
+	require.NoError(t, err)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(attrDoc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+
+	// A document with no entity references is unaffected by the entity path.
+	plain := `<r><e xml:lang="en">t</e></r>`
+	plainDoc, err := helium.NewParser().Parse(t.Context(), []byte(plain))
+	require.NoError(t, err)
+	plainGot, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(plainDoc)
+	require.NoError(t, err)
+	require.Equal(t, `<r><e xml:lang="en">t</e></r>`, string(plainGot))
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.
