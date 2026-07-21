@@ -1,8 +1,10 @@
 package xmldsig1_test
 
 import (
+	"context"
 	"crypto"
 	"crypto/elliptic"
+	"crypto/rsa"
 	"io"
 	"regexp"
 	"testing"
@@ -137,6 +139,46 @@ func TestSignDetachedWithCryptoSigner(t *testing.T) {
 
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
 	_, err = verifier.Verify(t.Context(), doc)
+	require.NoError(t, err)
+}
+
+// TestSignCryptoSignerKeyInfo confirms RSAKeyValueKeyInfo derives the
+// RSAKeyValue from an opaque crypto.Signer's public key (via Public()), so a
+// signature by an HSM/KMS-style RSA key completes with a correct KeyInfo. The
+// emitted SignatureValue and KeyInfo must match the concrete-*rsa.PrivateKey
+// output, and the signature must verify against the KeyInfo's RSAKeyValue.
+func TestSignCryptoSignerKeyInfo(t *testing.T) {
+	key := generateRSAKey(t)
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.NewEnvelopedReference()).
+		KeyInfo(xmldsig1.RSAKeyValueKeyInfo())
+
+	doc := mustParseXML(t, samlAssertion)
+	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), hsmSigner{inner: key}))
+
+	// The opaque-signer output must be byte-identical to the concrete-key output
+	// (PKCS1v15 is deterministic and the KeyInfo derives from the same public key).
+	concrete := mustParseXML(t, samlAssertion)
+	require.NoError(t, signer.SignEnveloped(t.Context(), concrete, concrete.DocumentElement(), key))
+	require.Equal(t, signatureValue(t, concrete), signatureValue(t, doc))
+
+	concreteXML, err := helium.WriteString(concrete)
+	require.NoError(t, err)
+	opaqueXML, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Equal(t, concreteXML, opaqueXML)
+
+	// Resolve the verification key straight out of the emitted RSAKeyValue to
+	// prove the KeyInfo carries the correct modulus/exponent and the signature
+	// verifies against it.
+	ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
+		require.NotNil(t, ki.RSAKeyValue)
+		require.Equal(t, key.PublicKey.N, ki.RSAKeyValue.Modulus)
+		require.Equal(t, key.PublicKey.E, ki.RSAKeyValue.Exponent)
+		return &rsa.PublicKey{N: ki.RSAKeyValue.Modulus, E: ki.RSAKeyValue.Exponent}, nil
+	})
+	_, err = xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
 
