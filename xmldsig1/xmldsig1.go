@@ -172,12 +172,30 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // XML 1.1 inherits only xml:lang/xml:space and lexically joins xml:base) — so a
 // reference into the Object verifies under inclusive Canonical XML 1.0 or 1.1.
 // Exclusive Canonical XML inherits no xml:*, so its digests are unaffected.
+//
+// Lifetime: the returned Signature is allocated from doc's slab storage (its
+// nodes are created via doc.CreateElement) and is owned by doc. It stays valid
+// only while doc is alive and un-Free()d — calling doc.Free() while you still
+// hold the returned Signature recycles the slab chunks backing it and corrupts
+// it. To keep the Signature after freeing doc, first move it into a destination
+// document, e.g. dest.DocumentElement().AddChild(sig): moving a slab-backed node
+// into another document marks doc as escaped, so the later doc.Free() becomes a
+// safe no-op.
 func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
 	return signEnveloping(ctx, s.config(), doc, content, key)
 }
 
 // SignDetached creates a detached Signature element referencing URIs
 // specified in the configured References. Returns the Signature element.
+//
+// Lifetime: the returned Signature is allocated from doc's slab storage (its
+// nodes are created via doc.CreateElement) and is owned by doc. It stays valid
+// only while doc is alive and un-Free()d — calling doc.Free() while you still
+// hold the returned Signature recycles the slab chunks backing it and corrupts
+// it. To keep the Signature after freeing doc, first move it into a destination
+// document, e.g. dest.DocumentElement().AddChild(sig): moving a slab-backed node
+// into another document marks doc as escaped, so the later doc.Free() becomes a
+// safe no-op.
 func (s Signer) SignDetached(ctx context.Context, doc *helium.Document, key any) (*helium.Element, error) {
 	return signDetached(ctx, s.config(), doc, key)
 }
