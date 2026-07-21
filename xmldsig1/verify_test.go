@@ -621,3 +621,86 @@ func TestVerifyHonorsContextCancellation(t *testing.T) {
 	_, err = verifier.Verify(ctx, doc)
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+// recordingKeySource wraps a fixed key and records whether ResolveKey was ever
+// invoked, so a test can prove that verification short-circuited before reaching
+// key resolution.
+type recordingKeySource struct {
+	key    any
+	called bool
+}
+
+func (r *recordingKeySource) ResolveKey(_ context.Context, _ *xmldsig1.KeyInfoData, _ string) (any, error) {
+	r.called = true
+	return r.key, nil
+}
+
+// TestVerifyShortCircuitsCancelledContext ensures an already-cancelled context
+// aborts verification before any pre-loop work — signature parse, KeyInfo parse,
+// key resolution, SignedInfo canonicalization, and the SignatureValue crypto
+// verify. The recording KeySource proves ResolveKey is never reached, and the
+// returned error is the context error. This complements
+// TestVerifyHonorsContextCancellation, which covers the per-Reference loop.
+func TestVerifyShortCircuitsCancelledContext(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	require.NoError(t, xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.NewEnvelopedReference()).
+		SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+
+	t.Run("verify", func(t *testing.T) {
+		ks := &recordingKeySource{key: &key.PublicKey}
+		verifier := xmldsig1.NewVerifier(ks)
+
+		// Sanity: under a live context verification reaches key resolution and
+		// succeeds.
+		_, err := verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+		require.True(t, ks.called, "live verify must reach key resolution")
+
+		ks.called = false
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err = verifier.Verify(ctx, doc)
+		require.ErrorIs(t, err, context.Canceled)
+		require.False(t, ks.called, "cancelled context must short-circuit before key resolution")
+	})
+
+	t.Run("verify element", func(t *testing.T) {
+		sig := findSignatureElement(doc.DocumentElement())
+		require.NotNil(t, sig)
+
+		ks := &recordingKeySource{key: &key.PublicKey}
+		verifier := xmldsig1.NewVerifier(ks)
+
+		_, err := verifier.VerifyElement(t.Context(), doc, sig)
+		require.NoError(t, err)
+		require.True(t, ks.called, "live verify must reach key resolution")
+
+		ks.called = false
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err = verifier.VerifyElement(ctx, doc, sig)
+		require.ErrorIs(t, err, context.Canceled)
+		require.False(t, ks.called, "cancelled context must short-circuit before key resolution")
+	})
+}
+
+// TestVerifyShortCircuitsBeforeSignatureDiscovery ensures an already-cancelled
+// context aborts Verify before the signature-discovery walk. Verify walks the
+// whole document to locate ds:Signature elements before delegating to the
+// per-signature verify path, so the cancellation check must sit ahead of that
+// walk: on a large or attacker-supplied document with no Signature, a cancelled
+// context must return the context error immediately rather than pay for the
+// unbounded discovery walk and then report ErrSignatureNotFound.
+func TestVerifyShortCircuitsBeforeSignatureDiscovery(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(nil))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := verifier.Verify(ctx, doc)
+	require.ErrorIs(t, err, context.Canceled)
+}
