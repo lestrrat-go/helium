@@ -210,6 +210,55 @@ func TestKeySourceError(t *testing.T) {
 	require.ErrorIs(t, err, sentinel)
 }
 
+// TestVerificationFailedSentinel confirms a failed cryptographic signature
+// verification is classifiable via errors.Is(err, ErrVerificationFailed) for
+// every signature algorithm, both on the raw algorithm error and through the
+// *VerificationError (Reference == -1) returned by the public Verify. Each case
+// signs with one key and verifies with a different, well-typed key so the
+// SignatureValue check (which runs before any per-Reference digest check) is the
+// failing step, without tripping ErrKeyMismatch. The RSA case additionally
+// keeps rsa.ErrVerification observable so callers checking for it still can.
+func TestVerificationFailedSentinel(t *testing.T) {
+	ecB := generateECDSAKey(t, elliptic.P256())
+	edB := generateEd25519Key(t)
+
+	tests := []struct {
+		name      string
+		alg       string
+		signKey   any
+		verifyKey any
+		cause     error
+	}{
+		{"rsa", xmldsig1.AlgRSASHA256, generateRSAKey(t), &generateRSAKey(t).PublicKey, rsa.ErrVerification},
+		{"ecdsa", xmldsig1.AlgECDSASHA256, generateECDSAKey(t, elliptic.P256()), &ecB.PublicKey, nil},
+		{"hmac", xmldsig1.AlgHMACSHA256, mustHMAC(t), mustHMAC(t), nil},
+		{"ed25519", xmldsig1.AlgEd25519, generateEd25519Key(t), edB.Public(), nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := mustParseXML(t, samlAssertion)
+			signer := xmldsig1.NewSigner().
+				SignatureAlgorithm(tt.alg).
+				Reference(xmldsig1.NewEnvelopedReference())
+			require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), tt.signKey))
+
+			verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(tt.verifyKey))
+			_, err := verifier.Verify(t.Context(), doc)
+			require.Error(t, err)
+			require.ErrorIs(t, err, xmldsig1.ErrVerificationFailed)
+
+			var verErr *xmldsig1.VerificationError
+			require.ErrorAs(t, err, &verErr)
+			require.Equal(t, -1, verErr.Reference)
+
+			if tt.cause != nil {
+				require.ErrorIs(t, err, tt.cause, "underlying cause must remain observable")
+			}
+		})
+	}
+}
+
 func mustRSA(t *testing.T) *rsa.PrivateKey  { t.Helper(); return generateRSAKey(t) }
 func mustEC(t *testing.T) *ecdsa.PrivateKey { t.Helper(); return generateECDSAKey(t, elliptic.P256()) }
 func mustEd(t *testing.T) ed25519.PrivateKey {
