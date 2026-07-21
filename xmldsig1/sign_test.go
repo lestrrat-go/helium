@@ -1,6 +1,7 @@
 package xmldsig1_test
 
 import (
+	"context"
 	"crypto/elliptic"
 	"testing"
 
@@ -12,6 +13,31 @@ import (
 // refURID1 is the same-document reference URI ("#d1") used across the signing
 // tests, pointing at the <data Id="d1"> element in their fixture documents.
 const refURID1 = "#d1"
+
+// parentInspectingKeyInfo is a custom KeyInfoBuilder that records the parent of
+// a watched content node at the moment BuildKeyInfo is invoked. It proves the
+// timing contract an arbitrary caller builder observes: for an enveloping
+// signature BuildKeyInfo must run AFTER the content is wrapped in the <Object>,
+// so the watched node's parent is the Object element.
+type parentInspectingKeyInfo struct {
+	watched    helium.Node
+	seenParent helium.Node
+}
+
+func (b *parentInspectingKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, _ any) (*helium.Element, error) {
+	b.seenParent = b.watched.Parent()
+	keyInfo, err := doc.CreateElement("KeyInfo")
+	if err != nil {
+		return nil, err
+	}
+	if err := keyInfo.DeclareNamespace("ds", xmldsig1.NamespaceDSig); err != nil {
+		return nil, err
+	}
+	if err := keyInfo.SetActiveNamespace("ds", xmldsig1.NamespaceDSig); err != nil {
+		return nil, err
+	}
+	return keyInfo, nil
+}
 
 func TestSign(t *testing.T) {
 	// enveloping drives signEnveloping (content wrapped in an Object element)
@@ -92,10 +118,10 @@ func TestSign(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	// enveloping with a KeyInfo builder that fails (empty X509DataKeyInfo →
-	// ErrInvalidKeyInfo) must leave the caller's content node under its ORIGINAL
-	// parent. The KeyInfo is built before content is moved into the <Object>, so
-	// a KeyInfo error strands nothing.
+	// enveloping with an empty X509DataKeyInfo (→ ErrInvalidKeyInfo) must leave
+	// the caller's content node under its ORIGINAL parent. A narrow preflight
+	// detects the empty x509DataKeyInfo before the <Object> is created or any
+	// content is moved, so the error strands nothing.
 	t.Run("enveloping keyinfo error leaves content unmoved", func(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
@@ -124,6 +150,39 @@ func TestSign(t *testing.T) {
 		// The payload was NOT stranded under a detached <Object>; it stays under
 		// its original <root> parent.
 		require.Equal(t, helium.Node(root), payload.Parent())
+	})
+
+	// An arbitrary caller-provided KeyInfoBuilder must observe the established
+	// timing contract: BuildKeyInfo runs AFTER the content is wrapped in the
+	// <Object>, so a builder inspecting the content sees its parent as the
+	// Object element. The narrow empty-X509DataKeyInfo preflight must NOT move
+	// this general builder timing earlier.
+	t.Run("enveloping general keyinfo builder sees wrapped content", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
+		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
+
+		builder := &parentInspectingKeyInfo{watched: payload}
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			KeyInfo(builder)
+
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.NoError(t, err)
+		require.NotNil(t, sigElem)
+
+		// BuildKeyInfo must have observed the payload already wrapped in <Object>.
+		parent, ok := builder.seenParent.(*helium.Element)
+		require.True(t, ok)
+		require.Equal(t, "Object", parent.LocalName())
 	})
 
 	// detached with KeyInfo and ID drives the full signDetached path including

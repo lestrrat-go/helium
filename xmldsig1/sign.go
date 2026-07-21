@@ -97,17 +97,14 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
-	// Build the KeyInfo (when configured) BEFORE moving any caller content into
-	// the <Object>. A KeyInfo builder can fail (e.g. an empty X509DataKeyInfo
-	// returns ErrInvalidKeyInfo); building it up front means that failure leaves
-	// the caller's input nodes unmoved and the input tree untouched. The built
-	// element is inserted below, after the Object, in its correct schema position.
-	var keyInfoElem *helium.Element
-	if cfg.keyInfoBuilder != nil {
-		keyInfoElem, err = cfg.keyInfoBuilder.BuildKeyInfo(ctx, doc, key)
-		if err != nil {
-			return nil, err
-		}
+	// Narrow preflight for the built-in empty X509DataKeyInfo. An x509DataKeyInfo
+	// with zero certificates always fails with ErrInvalidKeyInfo; detecting that
+	// here — before the <Object> is created or any caller content is moved into
+	// it — leaves the caller's input nodes unmoved and the input tree untouched.
+	// Arbitrary caller-provided builders keep the established timing (their
+	// BuildKeyInfo runs after the content is wrapped, in the block below).
+	if b, ok := cfg.keyInfoBuilder.(*x509DataKeyInfo); ok && len(b.certs) == 0 {
+		return nil, fmt.Errorf("%w: X509DataKeyInfo requires at least one certificate", ErrInvalidKeyInfo)
 	}
 
 	// Create Object element to wrap the content.
@@ -148,13 +145,17 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
-	if keyInfoElem != nil {
+	if cfg.keyInfoBuilder != nil {
+		keyInfoElem, err := cfg.keyInfoBuilder.BuildKeyInfo(ctx, doc, key)
+		if err != nil {
+			return nil, err
+		}
 		// The XML-DSig schema content model is (SignedInfo, SignatureValue,
-		// KeyInfo?, Object*), so KeyInfo must precede the Object. Append the
-		// already-built KeyInfo (landing it after SignatureValue, before Object),
-		// then re-append the Object so it moves to the end after KeyInfo. AddChild
-		// auto-unlinks the already-linked Object before relinking it, so this is a
-		// move, not a duplicate.
+		// KeyInfo?, Object*), so KeyInfo must precede the Object. Append KeyInfo
+		// (landing it after SignatureValue, before Object), then re-append the
+		// Object so it moves to the end after KeyInfo. AddChild auto-unlinks the
+		// already-linked Object before relinking it, so this is a move, not a
+		// duplicate.
 		if err := sigElem.AddChild(keyInfoElem); err != nil {
 			return nil, err
 		}
