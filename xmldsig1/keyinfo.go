@@ -43,6 +43,13 @@ func StaticKey(key any) KeySource {
 // a trusted X.509 certificate. This is the common SAML pattern.
 func X509CertKeySource(cert *x509.Certificate) KeySource {
 	return KeySourceFunc(func(_ context.Context, _ *KeyInfoData, _ string) (any, error) {
+		// A nil certificate (e.g. a per-request registry lookup that misses on an
+		// unknown issuer) would panic on cert.PublicKey below. Fail closed with a
+		// typed key-source error at resolve time instead, mirroring the nil-func
+		// guard in KeySourceFunc.ResolveKey.
+		if cert == nil {
+			return nil, fmt.Errorf("%w: nil certificate", ErrNoKeySource)
+		}
 		return cert.PublicKey, nil
 	})
 }
@@ -83,6 +90,13 @@ func X509DataKeyInfo(certs ...*x509.Certificate) KeyInfoBuilder {
 }
 
 func (b *x509DataKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, _ any) (*helium.Element, error) {
+	// With no certificates the loop below runs zero times and would emit a
+	// schema-invalid empty <X509Data>. Reject that up front so signing fails
+	// loudly instead of producing an empty X509Data.
+	if len(b.certs) == 0 {
+		return nil, fmt.Errorf("%w: X509DataKeyInfo requires at least one certificate", ErrInvalidKeyInfo)
+	}
+
 	keyInfo, err := doc.CreateElement("KeyInfo")
 	if err != nil {
 		return nil, err

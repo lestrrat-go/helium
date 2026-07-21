@@ -97,6 +97,16 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
+	// Narrow preflight for the built-in empty X509DataKeyInfo. An x509DataKeyInfo
+	// with zero certificates always fails with ErrInvalidKeyInfo; detecting that
+	// here — before the <Object> is created or any caller content is moved into
+	// it — leaves the caller's input nodes unmoved and the input tree untouched.
+	// Arbitrary caller-provided builders keep the established timing (their
+	// BuildKeyInfo runs after the content is wrapped, in the block below).
+	if b, ok := cfg.keyInfoBuilder.(*x509DataKeyInfo); ok && len(b.certs) == 0 {
+		return nil, fmt.Errorf("%w: X509DataKeyInfo requires at least one certificate", ErrInvalidKeyInfo)
+	}
+
 	// Create Object element to wrap the content.
 	objElem, err := doc.CreateElement("Object")
 	if err != nil {
