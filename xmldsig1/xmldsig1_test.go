@@ -63,6 +63,8 @@ func generateSelfSignedCert(t *testing.T, key *rsa.PrivateKey) *x509.Certificate
 
 const samlAssertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_abc123" IssueInstant="2024-01-01T00:00:00Z" Version="2.0"><saml:Issuer>https://idp.example.com</saml:Issuer><saml:Subject><saml:NameID>user@example.com</saml:NameID></saml:Subject></saml:Assertion>`
 
+const refURIMydata = "#mydata"
+
 func TestSignVerifyRoundTrip(t *testing.T) {
 	t.Run("rsa-sha256", func(t *testing.T) {
 		key := generateRSAKey(t)
@@ -402,7 +404,7 @@ func TestSignVerifyWithFragmentReference(t *testing.T) {
 	doc := mustParseXML(t, xml)
 
 	ref := xmldsig1.ReferenceConfig{
-		URI:             "#mydata",
+		URI:             refURIMydata,
 		DigestAlgorithm: xmldsig1.DigestSHA256,
 		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 	}

@@ -50,7 +50,7 @@ func TestVerifyElementValid(t *testing.T) {
 	doc := mustParseXML(t, xml)
 
 	ref := xmldsig1.ReferenceConfig{
-		URI:             "#mydata",
+		URI:             refURIMydata,
 		DigestAlgorithm: xmldsig1.DigestSHA256,
 		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 	}

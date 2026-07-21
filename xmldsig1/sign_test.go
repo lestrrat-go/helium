@@ -196,7 +196,7 @@ func TestSign(t *testing.T) {
 			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
 			SignatureID("detached-sig").
 			Reference(xmldsig1.ReferenceConfig{
-				URI:             "#mydata",
+				URI:             refURIMydata,
 				DigestAlgorithm: xmldsig1.DigestSHA256,
 				ID:              "r1",
 				Type:            xmldsig1.TypeObject,
