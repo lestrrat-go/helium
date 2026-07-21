@@ -433,6 +433,63 @@ func TestSignEnvelopingRollbackLinkage(t *testing.T) {
 		// A descendant's owner is restored too (SetTreeDoc walks the subtree).
 		require.Equal(t, otherDoc, payload.FirstChild().OwnerDocument())
 	})
+
+	// When the last content node in a slice falls to the parent-append fallback
+	// during restore (its original next sibling is still pending and its prev
+	// anchor is not yet back), the append must be non-coalescing: appending a Text
+	// node next to a residual last Text child must NOT merge them. Three adjacent
+	// Text children A/B/C are built with the public non-coalescing Replace; passing
+	// [B,C] (and [C,B]) as content with a failing KeyInfoBuilder must restore all
+	// three children in exact order with exact per-node content.
+	t.Run("adjacent text fallback restored without coalescing", func(t *testing.T) {
+		runAdjacentTextFallback := func(t *testing.T, order func(a, b helium.Node) []helium.Node) {
+			t.Helper()
+			key := generateRSAKey(t)
+			doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+			root := doc.DocumentElement()
+
+			textA := doc.CreateText([]byte("AAA"))
+			textB := doc.CreateText([]byte("BBB"))
+			textC := doc.CreateText([]byte("CCC"))
+			// Build three adjacent Text children WITHOUT coalescing (Replace is a
+			// pointer-level insert): A, B, C.
+			require.NoError(t, root.AddChild(textA))
+			require.NoError(t, textA.Replace(textA, textB))
+			require.NoError(t, textB.Replace(textB, textC))
+			originalChildren := childElements(root)
+
+			signer, wantErr := newFailingSigner(t)
+			sigElem, err := signer.SignEnveloping(t.Context(), doc, order(textB, textC), key)
+			require.ErrorIs(t, err, wantErr)
+			require.Nil(t, sigElem)
+
+			// All three children back under root, in order, with exact content and
+			// none coalesced or detached.
+			require.Equal(t, "AAA", string(textA.Content()))
+			require.Equal(t, "BBB", string(textB.Content()))
+			require.Equal(t, "CCC", string(textC.Content()))
+			require.Equal(t, root, textA.Parent())
+			require.Equal(t, root, textB.Parent())
+			require.Equal(t, root, textC.Parent())
+			require.Equal(t, textB, textA.NextSibling())
+			require.Equal(t, textA, textB.PrevSibling())
+			require.Equal(t, textC, textB.NextSibling())
+			require.Equal(t, textB, textC.PrevSibling())
+			require.Nil(t, textC.NextSibling())
+			require.Equal(t, originalChildren, childElements(root))
+		}
+
+		t.Run("content order [B,C]", func(t *testing.T) {
+			runAdjacentTextFallback(t, func(a, b helium.Node) []helium.Node {
+				return []helium.Node{a, b}
+			})
+		})
+		t.Run("content order [C,B]", func(t *testing.T) {
+			runAdjacentTextFallback(t, func(a, b helium.Node) []helium.Node {
+				return []helium.Node{b, a}
+			})
+		})
+	})
 }
 
 // childElements returns the ordered child nodes of n.

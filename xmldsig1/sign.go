@@ -368,11 +368,17 @@ func restoreOneContent(m movedContent, pending map[helium.Node]struct{}) bool {
 			}
 		}
 	}
-	// No usable sibling anchor: the node was the only child (parent now empty, so
-	// AddChild cannot coalesce), or a fallback when both original siblings are
-	// unavailable. Append to the original parent.
+	// No usable sibling anchor: the node was the only child, or a fallback when
+	// both original siblings are unavailable. Splice after the parent's current
+	// last child with a non-coalescing Replace so an appended Text node is never
+	// merged into a residual last Text child; only when the parent is empty (no
+	// last child to merge with) does a plain AddChild apply.
 	if parent, ok := m.parent.(helium.MutableNode); ok {
-		if err := parent.AddChild(m.node); err == nil {
+		if last, ok := parent.LastChild().(helium.MutableNode); ok {
+			if err := last.Replace(last, m.node); err == nil {
+				return true
+			}
+		} else if err := parent.AddChild(m.node); err == nil {
 			return true
 		}
 	}
