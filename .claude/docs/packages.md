@@ -350,8 +350,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   - `AllowSHA1(bool)` — builder method
   - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods
 - **NewEnvelopedReference() → ReferenceConfig** — SAML-optimized defaults (enveloped + ExcC14N + SHA-256)
-- Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`
-- Key info builders: `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`
+- Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`. `X509CertKeySource(nil)` resolves to `ErrNoKeySource` at `ResolveKey` time (fails closed on a per-request registry miss) rather than panicking on `cert.PublicKey`.
+- Key info builders: `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`. `X509DataKeyInfo()` with zero certificates fails `BuildKeyInfo`/signing with `ErrInvalidKeyInfo` rather than emitting a schema-invalid empty `<X509Data>`.
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
 - Same-document reference (`URI="#id"`) resolution recognizes an attribute as an ID when it is DTD/schema-declared ID-typed (`enum.AttrID`), `xml:id`, or the `id` token in the casings `Id`/`ID`/`id`. This name set is FROZEN in `findElementsByID` (`transforms.go`) — distinct tokens (`wsu:Id`, SAML `AssertionID`) are not recognized by name; such documents must carry ID typing via schema. `>1` match → `ErrAmbiguousReference`.
 - Reference transforms run as an ordered pipeline (node-set → octets): a c14n transform ends the pipeline, so a transform/2nd c14n ordered after it is rejected (`ErrUnsupportedTransform`); an omitted final transform defaults to **inclusive C14N 1.0** (not ExcC14N). `ec:InclusiveNamespaces` PrefixList on SignedInfo/CanonicalizationMethod is parsed and threaded into SignedInfo c14n; unknown CanonicalizationMethod parameters and any SignatureMethod child parameter (e.g. HMACOutputLength) are rejected fail-closed.

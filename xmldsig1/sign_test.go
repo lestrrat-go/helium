@@ -96,6 +96,7 @@ func TestSign(t *testing.T) {
 	// the KeyInfo builder branch and Id/Type attributes.
 	t.Run("detached with keyinfo and id", func(t *testing.T) {
 		key := generateRSAKey(t)
+		cert := generateSelfSignedCert(t, key)
 		doc := mustParseXML(t, `<root><data Id="mydata">Hello</data></root>`)
 
 		signer := xmldsig1.NewSigner().
@@ -108,7 +109,7 @@ func TestSign(t *testing.T) {
 				Type:            xmldsig1.TypeObject,
 				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 			}).
-			KeyInfo(xmldsig1.X509DataKeyInfo())
+			KeyInfo(xmldsig1.X509DataKeyInfo(cert))
 
 		sigElem, err := signer.SignDetached(t.Context(), doc, key)
 		require.NoError(t, err)

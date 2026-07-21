@@ -64,6 +64,31 @@ func TestResolveKey(t *testing.T) {
 	})
 }
 
+// TestX509CertKeySourceNil confirms that a KeySource built from a nil
+// certificate resolves to a typed ErrNoKeySource instead of panicking on a nil
+// dereference. This is reachable from realistic per-request certificate
+// resolution where an unknown issuer yields a nil *x509.Certificate.
+func TestX509CertKeySourceNil(t *testing.T) {
+	ks := xmldsig1.X509CertKeySource(nil)
+	_, err := ks.ResolveKey(t.Context(), nil, "")
+	require.ErrorIs(t, err, xmldsig1.ErrNoKeySource)
+}
+
+// TestX509DataKeyInfoEmpty confirms that X509DataKeyInfo with zero certificates
+// fails signing with ErrInvalidKeyInfo rather than silently emitting a
+// schema-invalid empty <X509Data>.
+func TestX509DataKeyInfoEmpty(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.NewEnvelopedReference()).
+		KeyInfo(xmldsig1.X509DataKeyInfo())
+	err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+	require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+}
+
 // TestParseECKeyValue drives parseECKeyValue (P-256 and P-384) and isDSig11NS
 // through a verification using a dsig11 ECKeyValue KeyInfo.
 func TestParseECKeyValue(t *testing.T) {
