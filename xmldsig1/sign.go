@@ -97,6 +97,19 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
+	// Build the KeyInfo (when configured) BEFORE moving any caller content into
+	// the <Object>. A KeyInfo builder can fail (e.g. an empty X509DataKeyInfo
+	// returns ErrInvalidKeyInfo); building it up front means that failure leaves
+	// the caller's input nodes unmoved and the input tree untouched. The built
+	// element is inserted below, after the Object, in its correct schema position.
+	var keyInfoElem *helium.Element
+	if cfg.keyInfoBuilder != nil {
+		keyInfoElem, err = cfg.keyInfoBuilder.BuildKeyInfo(ctx, doc, key)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Create Object element to wrap the content.
 	objElem, err := doc.CreateElement("Object")
 	if err != nil {
@@ -135,17 +148,13 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
-	if cfg.keyInfoBuilder != nil {
-		keyInfoElem, err := cfg.keyInfoBuilder.BuildKeyInfo(ctx, doc, key)
-		if err != nil {
-			return nil, err
-		}
+	if keyInfoElem != nil {
 		// The XML-DSig schema content model is (SignedInfo, SignatureValue,
-		// KeyInfo?, Object*), so KeyInfo must precede the Object. Append KeyInfo
-		// (landing it after SignatureValue, before Object), then re-append the
-		// Object so it moves to the end after KeyInfo. AddChild auto-unlinks the
-		// already-linked Object before relinking it, so this is a move, not a
-		// duplicate.
+		// KeyInfo?, Object*), so KeyInfo must precede the Object. Append the
+		// already-built KeyInfo (landing it after SignatureValue, before Object),
+		// then re-append the Object so it moves to the end after KeyInfo. AddChild
+		// auto-unlinks the already-linked Object before relinking it, so this is a
+		// move, not a duplicate.
 		if err := sigElem.AddChild(keyInfoElem); err != nil {
 			return nil, err
 		}

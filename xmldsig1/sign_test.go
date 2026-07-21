@@ -92,6 +92,40 @@ func TestSign(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// enveloping with a KeyInfo builder that fails (empty X509DataKeyInfo →
+	// ErrInvalidKeyInfo) must leave the caller's content node under its ORIGINAL
+	// parent. The KeyInfo is built before content is moved into the <Object>, so
+	// a KeyInfo error strands nothing.
+	t.Run("enveloping keyinfo error leaves content unmoved", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
+		require.NoError(t, payload.AddChild(doc.CreateText([]byte("hello"))))
+		// Parent the payload under <root> so the test can confirm the failed sign
+		// leaves it exactly where it started.
+		root := doc.DocumentElement()
+		require.NoError(t, root.AddChild(payload))
+		require.Equal(t, helium.Node(root), payload.Parent())
+
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			KeyInfo(xmldsig1.X509DataKeyInfo())
+
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+		require.Nil(t, sigElem)
+		// The payload was NOT stranded under a detached <Object>; it stays under
+		// its original <root> parent.
+		require.Equal(t, helium.Node(root), payload.Parent())
+	})
+
 	// detached with KeyInfo and ID drives the full signDetached path including
 	// the KeyInfo builder branch and Id/Type attributes.
 	t.Run("detached with keyinfo and id", func(t *testing.T) {
