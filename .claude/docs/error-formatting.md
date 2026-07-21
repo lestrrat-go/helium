@@ -167,6 +167,13 @@ matches any joined sentinel (see `dynamicErrorCause`).
 - `"invalid name start char"` → `"expected element name after <"`
 - Namespace errors mapped to stdlib phrasing
 
+### XML Digital Signatures (`xmldsig1/errors.go`)
+
+Per-reference failures use parallel wrapper types so sign and verify report the offending Reference symmetrically. Both hold `Reference int` (0-based index), `URI string`, `Err error`, and `Unwrap()` to the cause so sentinels (`ErrReferenceNotFound`, `ErrUnsupportedTransform`, `ErrDigestMismatch`, …) stay `errors.Is`/`errors.As`-reachable through the wrapper.
+
+- `ReferenceError` (signing): adds `Op string` (`"sign"`). Format: `xmldsig1: sign reference N ("URI") failed: <cause>`. Wrapped both in the `processReference` loops of `signEnveloped`/`signEnveloping`/`signDetached` and in the pre-mutation `preflightSignerTransforms` transform-pipeline validation (`transforms.go`), so a rejected pipeline still names its Reference.
+- `VerificationError` (verification): `Reference == -1` marks a SignatureValue failure (`xmldsig1: signature value verification failed: <cause>`); otherwise `xmldsig1: reference N ("URI") verification failed: <cause>`.
+
 ## Error Accumulation Pattern
 
 ### XSD

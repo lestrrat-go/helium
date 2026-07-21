@@ -88,9 +88,14 @@ func transformSteps(ref ReferenceConfig) []transformStep {
 // content into an <Object>, adding a Signature element, or otherwise mutating
 // the input tree.
 func preflightSignerTransforms(cfg *signerConfig) error {
-	for _, ref := range cfg.references {
+	for i, ref := range cfg.references {
 		if _, _, _, err := resolveTransformPipeline(transformSteps(ref)); err != nil {
-			return err
+			// Carry the failing reference's index and URI so a caller signing
+			// over a multi-reference configuration can pinpoint the offending
+			// Reference, symmetric with the per-reference digest loop. The
+			// underlying sentinel (e.g. ErrUnsupportedTransform) stays matchable
+			// via errors.Is through ReferenceError.Unwrap.
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
 	return nil
