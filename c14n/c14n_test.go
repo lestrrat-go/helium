@@ -432,6 +432,28 @@ func TestEntityReferenceReplacementDefaultNamespaceContextPerSiteExclusive(t *te
 		string(got))
 }
 
+func TestEntityReferenceReplacementDefaultNamespaceReverseOrderExclusive(t *testing.T) {
+	t.Parallel()
+	// Exclusive C14N, reverse order of the case above: the same entity, whose
+	// replacement is an unprefixed element, is referenced first inside an element
+	// with NO default namespace and then inside a sibling that declares a default
+	// namespace. Parsing caches the replacement element's active namespace at the
+	// first (no-default) site as nil, so the second site must re-derive the
+	// element's own namespace from the reference-site default binding rather than
+	// trusting the cached nil. At the first site <e> is in no namespace; at the
+	// second it is in urn:two and must emit xmlns="urn:two".
+	src := `<!DOCTYPE r [<!ENTITY x "<e/>">]>` +
+		`<r xmlns:p="urn:p"><p:a>&x;</p:a><p:b xmlns="urn:two">&x;</p:b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t,
+		`<r><p:a xmlns:p="urn:p"><e></e></p:a><p:b xmlns:p="urn:p"><e xmlns="urn:two"></e></p:b></r>`,
+		string(got))
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.

@@ -749,6 +749,13 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 	// Element's own namespace
 	if ns := e.Namespace(); ns != nil {
 		utilized[ns.Prefix()] = c.resolvedNSURI(e, ns)
+	} else if uri := c.entityDefaultNSURI(e); uri != "" {
+		// Inside an entity expansion an unprefixed replacement element has a nil
+		// cached active namespace when the FIRST reference site had no default
+		// namespace. At THIS reference site the in-scope default namespace may be
+		// non-empty, so the element is actually in that namespace and visibly
+		// utilizes the default prefix — the cached nil is not authoritative here.
+		utilized[""] = uri
 	} else {
 		// Check if default namespace needs to be undeclared
 		if existingURI, found := c.nsStack.lookup(""); found && existingURI != "" {
@@ -887,6 +894,21 @@ func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) s
 		return ns.URI()
 	}
 	return c.collectInScopeNamespaces(e)[ns.Prefix()]
+}
+
+// entityDefaultNSURI returns the reference-site default-namespace URI for an
+// unprefixed entity-replacement element whose cached active namespace is nil.
+// The parser resolves and caches the replacement element's active namespace
+// against the first reference site, so a nil pointer only means "no default
+// namespace at the first site"; the element may still be under a default
+// namespace at the site currently being walked. It returns "" outside an entity
+// expansion (the cached nil is authoritative there) and when the reference site
+// has no default namespace in scope.
+func (c *canonicalizer) entityDefaultNSURI(e *helium.Element) string {
+	if c.currentEntityFrame() == nil {
+		return ""
+	}
+	return c.collectInScopeNamespaces(e)[""]
 }
 
 // resolvedAttrNSURI returns the URI of a namespaced attribute's prefix, resolved
