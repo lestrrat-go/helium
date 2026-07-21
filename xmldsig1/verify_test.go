@@ -281,7 +281,7 @@ func TestVerifyEnveloped(t *testing.T) {
 		signer := xmldsig1.NewSigner().
 			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
 			Reference(xmldsig1.ReferenceConfig{
-				URI:             refURIMydata,
+				URI:             refURIMyData,
 				DigestAlgorithm: xmldsig1.DigestSHA256,
 				Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
 			})
