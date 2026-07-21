@@ -2,6 +2,7 @@ package xmldsig1
 
 import (
 	"context"
+	"crypto"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
@@ -155,7 +156,19 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 	case *rsa.PublicKey:
 		pub = k
 	default:
-		return nil, fmt.Errorf("%w: expected RSA key, got %T", ErrKeyMismatch, key)
+		// Fall back to an opaque crypto.Signer (HSM/KMS/PKCS#11) whose concrete
+		// type is not *rsa.*, mirroring the signing path in signRSA. Read its
+		// public key and require an *rsa.PublicKey so the emitted RSAKeyValue
+		// matches the key that produced the signature.
+		signer, ok := key.(crypto.Signer)
+		if !ok {
+			return nil, fmt.Errorf("%w: expected RSA key, got %T", ErrKeyMismatch, key)
+		}
+		rsaPub, ok := signer.Public().(*rsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("%w: crypto.Signer public key is %T, not *rsa.PublicKey", ErrKeyMismatch, signer.Public())
+		}
+		pub = rsaPub
 	}
 
 	keyInfo, err := doc.CreateElement("KeyInfo")

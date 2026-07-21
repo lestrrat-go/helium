@@ -145,8 +145,10 @@ func (s Signer) AllowSHA1(allow bool) Signer {
 }
 
 // SignEnveloped creates an enveloped signature inside the given parent
-// element of the document. The key is a crypto.Signer (rsa.PrivateKey,
-// ecdsa.PrivateKey, ed25519.PrivateKey) or []byte for HMAC.
+// element of the document. The key is a concrete *rsa.PrivateKey,
+// *ecdsa.PrivateKey, or ed25519.PrivateKey, any crypto.Signer whose public key
+// is one of those types (for example an HSM/KMS/PKCS#11-backed key), or []byte
+// for HMAC.
 func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent *helium.Element, key any) error {
 	return signEnveloped(ctx, s.config(), doc, parent, key)
 }

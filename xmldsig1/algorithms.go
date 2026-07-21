@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/rsa"
 	"encoding/asn1"
 	"fmt"
@@ -110,11 +111,21 @@ func verifyBytes(algURI string, key any, data, sig []byte, allowSHA1 bool) error
 // RSA
 
 func signRSA(hash crypto.Hash, key any, data []byte) ([]byte, error) {
-	priv, ok := key.(*rsa.PrivateKey)
+	if priv, ok := key.(*rsa.PrivateKey); ok {
+		return rsa.SignPKCS1v15(nil, priv, hash, hashData(hash, data))
+	}
+	// Fall back to an opaque crypto.Signer (HSM/KMS/PKCS#11). For an
+	// *rsa.PrivateKey backing, Sign with a crypto.Hash opts yields the same
+	// deterministic PKCS1v15 signature as rsa.SignPKCS1v15 above; rand is
+	// ignored for PKCS1v15.
+	signer, ok := key.(crypto.Signer)
 	if !ok {
 		return nil, fmt.Errorf("%w: expected *rsa.PrivateKey, got %T", ErrKeyMismatch, key)
 	}
-	return rsa.SignPKCS1v15(nil, priv, hash, hashData(hash, data))
+	if _, ok := signer.Public().(*rsa.PublicKey); !ok {
+		return nil, fmt.Errorf("%w: crypto.Signer public key is %T, not *rsa.PublicKey", ErrKeyMismatch, signer.Public())
+	}
+	return signer.Sign(rand.Reader, hashData(hash, data), hash)
 }
 
 func verifyRSA(hash crypto.Hash, key any, data, sig []byte) error {
@@ -131,15 +142,29 @@ func verifyRSA(hash crypto.Hash, key any, data, sig []byte) error {
 // ECDSA
 
 func signECDSA(hash crypto.Hash, key any, data []byte) ([]byte, error) {
-	priv, ok := key.(*ecdsa.PrivateKey)
+	if priv, ok := key.(*ecdsa.PrivateKey); ok {
+		derSig, err := ecdsa.SignASN1(nil, priv, hashData(hash, data))
+		if err != nil {
+			return nil, err
+		}
+		return ecdsaDERToRaw(derSig, curveKeySize(priv.Curve))
+	}
+	// Fall back to an opaque crypto.Signer (HSM/KMS/PKCS#11). Sign returns an
+	// ASN.1 DER signature; convert it to the XML-DSig r||s format with the key
+	// size taken from the signer's public key.
+	signer, ok := key.(crypto.Signer)
 	if !ok {
 		return nil, fmt.Errorf("%w: expected *ecdsa.PrivateKey, got %T", ErrKeyMismatch, key)
 	}
-	derSig, err := ecdsa.SignASN1(nil, priv, hashData(hash, data))
+	pub, ok := signer.Public().(*ecdsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("%w: crypto.Signer public key is %T, not *ecdsa.PublicKey", ErrKeyMismatch, signer.Public())
+	}
+	derSig, err := signer.Sign(rand.Reader, hashData(hash, data), hash)
 	if err != nil {
 		return nil, err
 	}
-	return ecdsaDERToRaw(derSig, curveKeySize(priv.Curve))
+	return ecdsaDERToRaw(derSig, curveKeySize(pub.Curve))
 }
 
 func verifyECDSA(hash crypto.Hash, key any, data, sig []byte) error {
@@ -217,11 +242,20 @@ func verifyHMAC(hash crypto.Hash, key any, data, sig []byte) error {
 // Ed25519
 
 func signEd25519(key any, data []byte) ([]byte, error) {
-	priv, ok := key.(ed25519.PrivateKey)
+	if priv, ok := key.(ed25519.PrivateKey); ok {
+		return ed25519.Sign(priv, data), nil
+	}
+	// Fall back to an opaque crypto.Signer (HSM/KMS/PKCS#11). A crypto.Hash(0)
+	// opts selects pure Ed25519 over the raw message, matching ed25519.Sign;
+	// the result is deterministic.
+	signer, ok := key.(crypto.Signer)
 	if !ok {
 		return nil, fmt.Errorf("%w: expected ed25519.PrivateKey, got %T", ErrKeyMismatch, key)
 	}
-	return ed25519.Sign(priv, data), nil
+	if _, ok := signer.Public().(ed25519.PublicKey); !ok {
+		return nil, fmt.Errorf("%w: crypto.Signer public key is %T, not ed25519.PublicKey", ErrKeyMismatch, signer.Public())
+	}
+	return signer.Sign(rand.Reader, data, crypto.Hash(0))
 }
 
 func verifyEd25519(key any, data, sig []byte) error {
