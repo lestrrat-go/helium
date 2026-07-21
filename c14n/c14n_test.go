@@ -308,6 +308,47 @@ func TestNoNodeSetEmitsFullDocument(t *testing.T) {
 	require.Equal(t, `<root><child></child></root>`, string(got))
 }
 
+func TestEntityReferenceReplacementTextInContent(t *testing.T) {
+	t.Parallel()
+	// The default parser leaves internal general entity references unexpanded,
+	// so an EntityRef node is present in element content. Canonicalization must
+	// emit the entity's replacement text per the W3C Canonical XML spec, or the
+	// content is excluded from any digest computed over the canonical output.
+	src := `<!DOCTYPE r [<!ENTITY x "hello-entity-content">]><r>before-&x;-after</r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<r>before-hello-entity-content-after</r>`, string(got))
+}
+
+func TestEntityReferenceReplacementTextWithMarkup(t *testing.T) {
+	t.Parallel()
+	// An internal entity whose replacement text contains markup must have that
+	// markup canonicalized (nested element emitted), not dropped.
+	src := `<!DOCTYPE r [<!ENTITY x "<b>bold</b>">]><r>a&x;b</r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<r>a<b>bold</b>b</r>`, string(got))
+}
+
+func TestEntityReferenceReplacementTextInAttribute(t *testing.T) {
+	t.Parallel()
+	// Attribute-context entity expansion already works; lock it in alongside
+	// the element-content fix.
+	src := `<!DOCTYPE r [<!ENTITY x "hello-entity-content">]><r a="before-&x;-after"/>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<r a="before-hello-entity-content-after"></r>`, string(got))
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.

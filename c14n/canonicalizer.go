@@ -257,7 +257,18 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 		}
 		return c.writeComment(cm)
 	case helium.EntityRefNode:
-		// Expand entity ref children
+		// Expand entity ref children. For an unexpanded reference the child is
+		// the shared Entity declaration node, handled by the EntityNode case.
+		for child := range helium.Children(n) {
+			if err := c.processNode(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	case helium.EntityNode:
+		// The Entity declaration node holds the parsed replacement content as
+		// its children; emit it so the reference contributes its replacement
+		// text (and any markup) to the canonical output.
 		for child := range helium.Children(n) {
 			if err := c.processNode(child); err != nil {
 				return err
