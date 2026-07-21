@@ -2,6 +2,7 @@ package xmldsig1
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -237,6 +238,19 @@ func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResu
 // Same-document reference resolution recognizes the same ID attributes as
 // [Verifier.Verify].
 func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *helium.Element) (*VerifyResult, error) {
+	// Verify reaches verifySignature only through findSignatureElements, which
+	// already gates on local-name Signature in the core XML-Signature namespace.
+	// VerifyElement takes the target element straight from the caller, so it must
+	// perform the same validation before any work: a nil sig (e.g. a caller's
+	// lookup that matched nothing) would otherwise nil-deref in
+	// parseSignatureElement, and a non-Signature/wrong-namespace element would be
+	// parsed as if it were a ds:Signature.
+	if sig == nil {
+		return nil, fmt.Errorf("%w: nil Signature element", ErrInvalidSignature)
+	}
+	if domutil.LocalName(sig) != "Signature" || !isDSigCoreNS(sig) {
+		return nil, fmt.Errorf("%w: element is not a ds:Signature", ErrInvalidSignature)
+	}
 	return verifySignature(ctx, v.cfg, doc, sig)
 }
 
