@@ -174,8 +174,8 @@ func TestSignCryptoSignerKeyInfo(t *testing.T) {
 	// verifies against it.
 	ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
 		require.NotNil(t, ki.RSAKeyValue)
-		require.Equal(t, key.PublicKey.N, ki.RSAKeyValue.Modulus)
-		require.Equal(t, key.PublicKey.E, ki.RSAKeyValue.Exponent)
+		require.Equal(t, key.N, ki.RSAKeyValue.Modulus)
+		require.Equal(t, key.E, ki.RSAKeyValue.Exponent)
 		return &rsa.PublicKey{N: ki.RSAKeyValue.Modulus, E: ki.RSAKeyValue.Exponent}, nil
 	})
 	_, err = xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
