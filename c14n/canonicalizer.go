@@ -496,6 +496,12 @@ func (c *canonicalizer) writeComment(cm *helium.Comment) error {
 func (c *canonicalizer) writeQualifiedName(e *helium.Element) error {
 	ns := e.Namespace()
 	if ns != nil && ns.Prefix() != "" {
+		// Resolve the element prefix against the reference site. For an
+		// entity-replacement element whose prefix is out of scope at this
+		// reference site this errors rather than emitting a dangling prefix.
+		if _, err := c.resolvedNSURI(e, ns); err != nil {
+			return err
+		}
 		if _, err := io.WriteString(c.out, ns.Prefix()); err != nil {
 			return err
 		}
@@ -748,7 +754,11 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 
 	// Element's own namespace
 	if ns := e.Namespace(); ns != nil {
-		utilized[ns.Prefix()] = c.resolvedNSURI(e, ns)
+		uri, err := c.resolvedNSURI(e, ns)
+		if err != nil {
+			return err
+		}
+		utilized[ns.Prefix()] = uri
 	} else if uri := c.entityDefaultNSURI(e); uri != "" {
 		// Inside an entity expansion an unprefixed replacement element has a nil
 		// cached active namespace when the FIRST reference site had no default
@@ -885,19 +895,31 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 	return nil
 }
 
-// resolvedNSURI returns the URI of the element's name namespace. Inside an
-// entity expansion the element's cached active-namespace pointer was resolved
-// once at parse time against the first reference site, so re-resolve the
-// element's prefix against the current reference-site context; outside an entity
-// the cached pointer is authoritative. When the prefix is not bound at the
-// reference site the element is in no namespace there (an empty default, or an
-// unbound prefix in malformed input), so return the empty URI rather than the
-// stale cached value.
-func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) string {
+// resolvedNSURI returns the URI of the element's name namespace. Outside an
+// entity expansion the cached active-namespace pointer is authoritative. Inside
+// an entity expansion that pointer was resolved once at parse time against the
+// first reference site, so re-resolve the element's prefix against the current
+// reference-site context.
+//
+// An unprefixed entity-replacement element is governed by the reference-site
+// default namespace normally (unlike an attribute), so it resolves to the
+// in-scope default URI, or the empty URI when no default is in scope. A prefixed
+// entity element whose prefix is not in scope at the current reference site
+// cannot be canonicalized (a prefixed name with an out-of-scope prefix is
+// namespace-not-well-formed for that expansion), so this is an error rather than
+// a borrowed stale first-site binding or a dangling prefix.
+func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) (string, error) {
 	if c.currentEntityFrame() == nil {
-		return ns.URI()
+		return ns.URI(), nil
 	}
-	return c.collectInScopeNamespaces(e)[ns.Prefix()]
+	prefix := ns.Prefix()
+	if uri, ok := c.collectInScopeNamespaces(e)[prefix]; ok {
+		return uri, nil
+	}
+	if prefix != "" {
+		return "", fmt.Errorf("c14n: namespace prefix %q of entity-replacement element %q is not in scope at the reference site", prefix, e.Name())
+	}
+	return "", nil
 }
 
 // entityDefaultNSURI returns the reference-site default-namespace URI for an

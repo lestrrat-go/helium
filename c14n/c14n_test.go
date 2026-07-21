@@ -438,6 +438,41 @@ func TestEntityReferenceReplacementUnboundPrefixAtSecondSiteErrors(t *testing.T)
 	require.Contains(t, err.Error(), "not in scope")
 }
 
+func TestEntityReferenceReplacementElementUnboundPrefixAtSecondSiteErrors(t *testing.T) {
+	t.Parallel()
+	// The same entity, whose replacement is a p-prefixed ELEMENT, is referenced
+	// first where p is bound and then where p is UNBOUND. The second expansion
+	// cannot borrow the first site's cached binding — an element name whose prefix
+	// is not in scope at the reference site is not namespace-well-formed there, so
+	// canonicalization must error rather than emit a dangling prefix. This mirrors
+	// the attribute-axis case on the element-name axis and must hold in every mode.
+	src := `<!DOCTYPE r [<!ENTITY x "<p:e/>">]>` +
+		`<r><a xmlns:p="urn:one">&x;</a><b>&x;</b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+
+	_, err = c14n.NewCanonicalizer(c14n.C14N11).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+
+	_, err = c14n.NewCanonicalizer(c14n.ExclusiveC14N10).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+
+	nodes := evaluateNodeSet(t, doc, "//. | //@* | //namespace::*", nil)
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+
+	_, err = c14n.NewCanonicalizer(c14n.ExclusiveC14N10).NodeSet(nodes).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+}
+
 func TestEntityReferenceReplacementNamespaceContextPerSiteNodeSet(t *testing.T) {
 	t.Parallel()
 	// Node-set C14N: the same entity, whose replacement is a q-prefixed element, is
