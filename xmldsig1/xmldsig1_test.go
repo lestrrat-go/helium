@@ -345,6 +345,34 @@ func TestSignerImmutability(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestZeroValueSignerReturnsErrNoReferences guards the three sign terminals
+// against a nil cfg: a zero-value Signer{} (built directly, not via NewSigner)
+// has no references configured, so each terminal must return ErrNoReferences
+// exactly as NewSigner() with no references does — never panic on a nil cfg.
+func TestZeroValueSignerReturnsErrNoReferences(t *testing.T) {
+	key := generateRSAKey(t)
+
+	t.Run("SignEnveloped", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		err := xmldsig1.Signer{}.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+		require.ErrorIs(t, err, xmldsig1.ErrNoReferences)
+	})
+
+	t.Run("SignEnveloping", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
+		_, err = xmldsig1.Signer{}.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.ErrorIs(t, err, xmldsig1.ErrNoReferences)
+	})
+
+	t.Run("SignDetached", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := xmldsig1.Signer{}.SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrNoReferences)
+	})
+}
+
 // TestVerifyAcceptsEnvelopedExcC14N guards against the unsupported-transform
 // rejection over-rejecting: a normal enveloped + exclusive-c14n signature must
 // still verify (both transform URIs must pass the new default-arm guard).
