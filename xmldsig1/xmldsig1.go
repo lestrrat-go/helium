@@ -244,6 +244,13 @@ func (v Verifier) AllowSHA1(allow bool) Verifier {
 // DTD/schema, or by marking the attribute's type as an ID before verifying —
 // rather than have it inferred from the name. If more than one element matches
 // the referenced ID the reference is refused (ErrAmbiguousReference).
+//
+// Verification honors ctx: an already-cancelled or already-expired context
+// short-circuits before any work, and cancellation is rechecked between
+// References. Because a SignedInfo may carry arbitrarily many References and each
+// empty-URI enveloped Reference canonicalizes a copy of the whole document, the
+// per-Reference work scales with the number of References; bound it by passing a
+// ctx with a deadline. On cancellation the context error (ctx.Err()) is returned.
 func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResult, error) {
 	sigs := findSignatureElements(doc.DocumentElement())
 	switch len(sigs) {
@@ -262,6 +269,11 @@ func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResu
 //
 // Same-document reference resolution recognizes the same ID attributes as
 // [Verifier.Verify].
+//
+// Verification honors ctx the same way as [Verifier.Verify]: an already-cancelled
+// or already-expired context short-circuits before any work, cancellation is
+// rechecked between References, and a ctx deadline is the lever for bounding the
+// per-Reference work of a SignedInfo that carries many References.
 func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *helium.Element) (*VerifyResult, error) {
 	// Verify reaches verifySignature only through findSignatureElements, which
 	// already gates on local-name Signature in the core XML-Signature namespace.
