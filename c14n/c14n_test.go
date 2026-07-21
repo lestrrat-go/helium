@@ -369,6 +369,69 @@ func TestEntityReferenceReplacementNamespaceContextPerSite(t *testing.T) {
 		string(got))
 }
 
+func TestEntityReferenceReplacementNamespaceContextPerSiteExclusive(t *testing.T) {
+	t.Parallel()
+	// Exclusive C14N: the same entity, whose replacement is an unprefixed element
+	// carrying a q-prefixed attribute, is referenced twice under DIFFERENT q
+	// bindings. Exclusive mode emits a namespace only where it is visibly utilized;
+	// the q:a attribute utilizes q on the entity-replacement element. Each expansion
+	// must render ITS OWN reference-site binding for q, not the binding cached on the
+	// shared Entity declaration node at first parse.
+	src := `<!DOCTYPE r [<!ENTITY x "<e q:a=&#34;v&#34;/>">]>` +
+		`<r><a xmlns:q="urn:one">&x;</a><b xmlns:q="urn:two">&x;</b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t,
+		`<r><a><e xmlns:q="urn:one" q:a="v"></e></a><b><e xmlns:q="urn:two" q:a="v"></e></b></r>`,
+		string(got))
+}
+
+func TestEntityReferenceReplacementNamespaceContextPerSiteNodeSet(t *testing.T) {
+	t.Parallel()
+	// Node-set C14N: the same entity, whose replacement is a q-prefixed element, is
+	// referenced twice under DIFFERENT q bindings, with the whole tree selected. The
+	// node-set namespace rendering must reflect each reference site's own binding for
+	// q rather than the URI cached on the shared Entity declaration node.
+	src := `<!DOCTYPE r [<!ENTITY x "<p:x/>">]>` +
+		`<r xmlns:p="urn:default"><a xmlns:p="urn:one">&x;</a><b xmlns:p="urn:two">&x;</b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	nodes := evaluateNodeSet(t, doc, "//. | //@* | //namespace::*", nil)
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t,
+		`<r xmlns:p="urn:default"><a xmlns:p="urn:one"><p:x></p:x></a><b xmlns:p="urn:two"><p:x></p:x></b></r>`,
+		string(got))
+}
+
+func TestEntityReferenceReplacementDefaultNamespaceContextPerSiteExclusive(t *testing.T) {
+	t.Parallel()
+	// Exclusive C14N: the same entity, whose replacement is an unprefixed element, is
+	// referenced first inside an element with default namespace urn:one and then
+	// inside a sibling with NO default namespace. At the first site the replacement
+	// element is in urn:one and visibly utilizes the default namespace; at the second
+	// it is in no namespace. The default-namespace resolution must follow each
+	// reference site, not the default binding cached on the shared Entity node.
+	src := `<!DOCTYPE r [<!ENTITY x "<c/>">]>` +
+		`<r><a xmlns="urn:one">&x;</a><b>&x;</b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	// <a> itself is in urn:one (unprefixed under the default namespace) so it
+	// visibly utilizes and emits xmlns="urn:one"; the replacement <c> inherits it
+	// and adds nothing. At <b> there is no default namespace, so the replacement
+	// <c> is in no namespace and must NOT re-emit the first site's urn:one.
+	require.Equal(t,
+		`<r><a xmlns="urn:one"><c></c></a><b><c></c></b></r>`,
+		string(got))
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.

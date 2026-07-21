@@ -24,14 +24,25 @@ type canonicalizer struct {
 	// nsNodesByElement indexes NamespaceNodeWrapper nodes by their parent element.
 	// Built once during process() when nodeSet is non-nil.
 	nsNodesByElement map[helium.Node][]nsSortEntry
-	// entityNSContext is a stack of reference-site in-scope namespace bindings
-	// (prefix→URI), pushed when the walk descends through an EntityRef. While
-	// non-empty, an entity-replacement element resolves the prefixes it does not
-	// itself declare against the reference site's bindings rather than the shared
-	// Entity declaration node's DTD-context parent chain and its cached
-	// active-namespace pointers (both resolved once at parse time against the
-	// first reference site).
-	entityNSContext []map[string]string
+	// entityNSContext is a stack of entity-expansion frames, pushed when the walk
+	// descends through an EntityRef. While non-empty, an entity-replacement element
+	// resolves the prefixes it does not itself declare against the reference site's
+	// bindings rather than the shared Entity declaration node's DTD-context parent
+	// chain and its cached active-namespace pointers (both resolved once at parse
+	// time against the first reference site). The frame also carries the reference
+	// site's visibility so, in node-set mode, the replacement subtree is emitted iff
+	// the reference site is selected — helium's XPath cannot place entity-internal
+	// nodes in a node set, so their visibility is inherited from the reference site.
+	entityNSContext []entityFrame
+}
+
+// entityFrame records the reference-site context for one entity expansion.
+type entityFrame struct {
+	// ns is the reference-site in-scope namespace bindings (prefix→URI).
+	ns map[string]string
+	// visible is whether the replacement subtree is emitted. In whole-document mode
+	// it is always true; in node-set mode it mirrors the reference site's selection.
+	visible bool
 }
 
 func (c *canonicalizer) process() error {
@@ -57,9 +68,15 @@ func (c *canonicalizer) process() error {
 }
 
 // isVisible returns true if the node is in the node set (or if no node set filter is active).
+// Inside an entity expansion the replacement subtree is not independently selectable
+// (helium's XPath cannot address entity-internal nodes), so every node in it inherits
+// the reference site's visibility recorded on the active entity frame.
 func (c *canonicalizer) isVisible(n helium.Node) bool {
 	if c.nodeSet == nil {
 		return true
+	}
+	if fr := c.currentEntityFrame(); fr != nil {
+		return fr.visible
 	}
 	_, ok := c.nodeSet[n]
 	return ok
@@ -273,7 +290,11 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 		// textually substituted here), so a prefix in the replacement resolves
 		// against the site's in-scope bindings.
 		c.pushEntityContext(n)
+		seeded := c.seedEntityNSStack()
 		err := c.processChildren(n)
+		if seeded {
+			c.nsStack.restore()
+		}
 		c.popEntityContext()
 		return err
 	case helium.EntityNode:
@@ -294,15 +315,25 @@ func (c *canonicalizer) processChildren(n helium.Node) error {
 	return nil
 }
 
-// currentEntityContext returns the reference-site namespace bindings for the
-// entity expansion currently being walked, or nil when the walk is not inside
-// one.
-func (c *canonicalizer) currentEntityContext() map[string]string {
+// currentEntityFrame returns the active entity-expansion frame, or nil when the
+// walk is not inside an entity.
+func (c *canonicalizer) currentEntityFrame() *entityFrame {
 	n := len(c.entityNSContext)
 	if n == 0 {
 		return nil
 	}
-	return c.entityNSContext[n-1]
+	return &c.entityNSContext[n-1]
+}
+
+// currentEntityContext returns the reference-site namespace bindings for the
+// entity expansion currently being walked, or nil when the walk is not inside
+// one.
+func (c *canonicalizer) currentEntityContext() map[string]string {
+	fr := c.currentEntityFrame()
+	if fr == nil {
+		return nil
+	}
+	return fr.ns
 }
 
 // pushEntityContext records the in-scope namespace bindings at an entity
@@ -315,23 +346,59 @@ func (c *canonicalizer) currentEntityContext() map[string]string {
 func (c *canonicalizer) pushEntityContext(entityRef helium.Node) {
 	ctx := make(map[string]string)
 	parent, ok := helium.AsNode[*helium.Element](entityRef.Parent())
-	outer := c.currentEntityContext()
+	outer := c.currentEntityFrame()
+	// Whole-document mode always emits; node-set mode inherits the reference site's
+	// selection (the enclosing entity's for a nested reference, else the parent
+	// element's node-set membership).
+	visible := c.nodeSet == nil
 	switch {
 	case outer == nil && ok:
 		for prefix, ns := range domutil.InScopeNamespaces(parent, c.nodeSet == nil) {
 			ctx[prefix] = ns.URI()
 		}
+		if c.nodeSet != nil {
+			visible = c.isVisible(parent)
+		}
 	case outer != nil:
-		maps.Copy(ctx, outer)
+		maps.Copy(ctx, outer.ns)
 		if ok {
 			c.overlayEntityNSDecls(ctx, parent)
 		}
+		visible = outer.visible
 	}
-	c.entityNSContext = append(c.entityNSContext, ctx)
+	c.entityNSContext = append(c.entityNSContext, entityFrame{ns: ctx, visible: visible})
 }
 
 func (c *canonicalizer) popEntityContext() {
 	c.entityNSContext = c.entityNSContext[:len(c.entityNSContext)-1]
+}
+
+// seedEntityNSStack primes the rendered-namespace stack with the reference site's
+// in-scope bindings before an entity replacement is walked, and reports whether a
+// frame was pushed (so the caller pops it afterwards). It applies only to inclusive
+// node-set canonicalization: there the ancestor elements render their namespaces via
+// the node-set path, which tracks membership through nsNodesByElement and never
+// populates nsStack, so an entity-replacement element — rendered through the
+// reference-site (whole-document) algorithm — would otherwise re-declare namespaces
+// already in scope at the reference site. Whole-document mode already carries the
+// ancestor bindings on nsStack, and every exclusive path populates nsStack directly,
+// so neither needs seeding.
+func (c *canonicalizer) seedEntityNSStack() bool {
+	if c.mode == ExclusiveC14N10 || c.nodeSet == nil {
+		return false
+	}
+	fr := c.currentEntityFrame()
+	if fr == nil {
+		return false
+	}
+	c.nsStack.save()
+	for prefix, uri := range fr.ns {
+		if prefix == lexicon.PrefixXML {
+			continue
+		}
+		c.nsStack.add(prefix, uri)
+	}
+	return true
 }
 
 // overlayEntityNSDecls applies the xmlns declarations physically present in the
@@ -446,11 +513,22 @@ func (c *canonicalizer) renderNamespaces(e *helium.Element) error {
 		return c.renderNamespacesExclusive(e)
 	}
 
-	if c.nodeSet != nil {
+	// Entity-replacement elements are canonicalized as if substituted at the
+	// reference site, so their namespace axis is resolved through the reference-site
+	// (whole-document) algorithm even under a node set — the node-set path keys off
+	// nsNodesByElement, which cannot hold entity-internal namespace nodes.
+	if c.nodeSet != nil && c.currentEntityFrame() == nil {
 		return c.renderNamespacesNodeSet(e)
 	}
 
-	// Whole-document mode: collect in-scope namespaces
+	return c.renderNamespacesInclusive(e)
+}
+
+// renderNamespacesInclusive outputs the namespace axis for whole-document (and
+// entity-replacement) inclusive canonicalization using in-scope bindings and the
+// rendered-namespace stack.
+func (c *canonicalizer) renderNamespacesInclusive(e *helium.Element) error {
+	// Collect in-scope namespaces
 	nsMap := c.collectInScopeNamespaces(e)
 
 	// Determine which need to be output (not yet on the rendered stack)
@@ -655,7 +733,12 @@ func (c *canonicalizer) findNearestRenderedDefaultNS(e *helium.Element) string {
 }
 
 func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
-	if c.nodeSet != nil {
+	// Entity-replacement elements resolve their visibly-utilized namespaces against
+	// the reference site, so they use the whole-document exclusive algorithm even
+	// under a node set (the node-set path keys off nsNodesByElement, which cannot
+	// hold entity-internal namespace nodes; every exclusive path populates nsStack,
+	// so redundancy suppression against ancestors still holds).
+	if c.nodeSet != nil && c.currentEntityFrame() == nil {
 		return c.renderNamespacesExclusiveNodeSet(e)
 	}
 
@@ -676,7 +759,7 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 	// Attribute namespaces
 	for _, attr := range e.Attributes() {
 		if p := attr.Prefix(); p != "" {
-			utilized[p] = attr.URI()
+			utilized[p] = c.resolvedAttrNSURI(e, attr)
 		}
 	}
 
@@ -795,15 +878,28 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 // entity expansion the element's cached active-namespace pointer was resolved
 // once at parse time against the first reference site, so re-resolve the
 // element's prefix against the current reference-site context; outside an entity
-// the cached pointer is authoritative.
+// the cached pointer is authoritative. When the prefix is not bound at the
+// reference site the element is in no namespace there (an empty default, or an
+// unbound prefix in malformed input), so return the empty URI rather than the
+// stale cached value.
 func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) string {
-	if c.currentEntityContext() == nil {
+	if c.currentEntityFrame() == nil {
 		return ns.URI()
 	}
-	if uri, ok := c.collectInScopeNamespaces(e)[ns.Prefix()]; ok {
+	return c.collectInScopeNamespaces(e)[ns.Prefix()]
+}
+
+// resolvedAttrNSURI returns the URI of a namespaced attribute's prefix, resolved
+// against the reference site inside an entity expansion (where the attribute's
+// cached URI reflects the first reference site) and from the cached URI otherwise.
+func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attribute) string {
+	if c.currentEntityFrame() == nil {
+		return attr.URI()
+	}
+	if uri, ok := c.collectInScopeNamespaces(e)[attr.Prefix()]; ok {
 		return uri
 	}
-	return ns.URI()
+	return attr.URI()
 }
 
 // collectInScopeNamespaces collects all in-scope namespace bindings for an element
@@ -874,7 +970,7 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 		entries = append(entries, attrSortEntry{
 			attr:      attr,
 			localName: attr.LocalName(),
-			nsURI:     attr.URI(),
+			nsURI:     c.resolvedAttrNSURI(e, attr),
 		})
 	}
 
