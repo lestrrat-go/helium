@@ -316,6 +316,18 @@ func restoreMovedContent(moved []movedContent) {
 // it), so a restored Text node is never merged into an adjacent Text sibling and
 // a former last child lands in its exact slot. Replace also auto-unlinks the
 // node from the discarded Object first, so each is a move, not a duplicate.
+//
+// Invariant (falsifiable): in a tree helium parsed, every content sibling
+// (Element/Text/Comment/CDATA/PI/EntityRef) implements helium.MutableNode, so
+// m.next/m.prev satisfy the MutableNode branches above and content order is
+// restored exactly. A helium.NamespaceNodeWrapper is a virtual XPath-only node
+// with nil sibling links and is never linked into a content sibling chain by the
+// parser; the "read-only next sibling reverses order" path is reachable only if a
+// caller manually splices a non-MutableNode between content nodes, which the
+// documented content contract does not permit. m.next/m.prev are position anchors
+// snapshotted before the move: a caller-supplied KeyInfoBuilder must not relocate
+// them mid-sign, and a builder that does has already invalidated its own snapshot,
+// so no snapshot-based restore can define a correct original position.
 func restoreOneContent(m movedContent, pending map[helium.Node]struct{}) bool {
 	if m.parent == nil {
 		// The node was detached when the caller handed it in; return it to a
