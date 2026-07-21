@@ -766,7 +766,11 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 	// Attribute namespaces
 	for _, attr := range e.Attributes() {
 		if p := attr.Prefix(); p != "" {
-			utilized[p] = c.resolvedAttrNSURI(e, attr)
+			uri, err := c.resolvedAttrNSURI(e, attr)
+			if err != nil {
+				return err
+			}
+			utilized[p] = uri
 		}
 	}
 
@@ -911,17 +915,29 @@ func (c *canonicalizer) entityDefaultNSURI(e *helium.Element) string {
 	return c.collectInScopeNamespaces(e)[""]
 }
 
-// resolvedAttrNSURI returns the URI of a namespaced attribute's prefix, resolved
-// against the reference site inside an entity expansion (where the attribute's
-// cached URI reflects the first reference site) and from the cached URI otherwise.
-func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attribute) string {
+// resolvedAttrNSURI returns the URI of an attribute's namespace. Outside an
+// entity expansion the cached URI is authoritative. Inside an entity expansion
+// the attribute's cached URI reflects the first reference site, so re-resolve
+// against the current reference site instead.
+//
+// An unprefixed attribute is in no namespace — the default namespace never
+// applies to attributes — so it always resolves to the empty URI (mirroring the
+// non-entity attr.URI()). A prefixed entity attribute whose prefix is not in
+// scope at the current reference site cannot be canonicalized (a prefixed name
+// with an out-of-scope prefix is namespace-not-well-formed for that expansion),
+// so this is an error rather than a borrowed stale first-site binding.
+func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attribute) (string, error) {
 	if c.currentEntityFrame() == nil {
-		return attr.URI()
+		return attr.URI(), nil
 	}
-	if uri, ok := c.collectInScopeNamespaces(e)[attr.Prefix()]; ok {
-		return uri
+	prefix := attr.Prefix()
+	if prefix == "" {
+		return "", nil
 	}
-	return attr.URI()
+	if uri, ok := c.collectInScopeNamespaces(e)[prefix]; ok {
+		return uri, nil
+	}
+	return "", fmt.Errorf("c14n: namespace prefix %q of entity-replacement attribute %q is not in scope at the reference site", prefix, attr.Name())
 }
 
 // collectInScopeNamespaces collects all in-scope namespace bindings for an element
@@ -989,10 +1005,14 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 		if c.nodeSet != nil && !c.isVisible(attr) {
 			continue
 		}
+		uri, err := c.resolvedAttrNSURI(e, attr)
+		if err != nil {
+			return err
+		}
 		entries = append(entries, attrSortEntry{
 			attr:      attr,
 			localName: attr.LocalName(),
-			nsURI:     c.resolvedAttrNSURI(e, attr),
+			nsURI:     uri,
 		})
 	}
 

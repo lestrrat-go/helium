@@ -389,6 +389,55 @@ func TestEntityReferenceReplacementNamespaceContextPerSiteExclusive(t *testing.T
 		string(got))
 }
 
+func TestEntityReferenceReplacementUnprefixedAttrSortOrder(t *testing.T) {
+	t.Parallel()
+	// An entity-replacement element carries an unprefixed attribute and a prefixed
+	// one, expanded under an in-scope default namespace. An unprefixed attribute is
+	// in NO namespace — the default namespace never applies to attributes — so it
+	// must sort ahead of the prefixed attribute (empty namespace URI sorts first).
+	// The canonical output must match the equivalent fully-expanded document.
+	entitySrc := `<!DOCTYPE r [<!ENTITY x "<e z=&#34;0&#34; p:a=&#34;1&#34;/>">]>` +
+		`<r><a xmlns="urn:def" xmlns:p="urn:a">&x;</a></r>`
+	expandedSrc := `<r><a xmlns="urn:def" xmlns:p="urn:a"><e z="0" p:a="1"/></a></r>`
+
+	entityDoc, err := helium.NewParser().Parse(t.Context(), []byte(entitySrc))
+	require.NoError(t, err)
+	expandedDoc, err := helium.NewParser().Parse(t.Context(), []byte(expandedSrc))
+	require.NoError(t, err)
+
+	entityGot, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(entityDoc)
+	require.NoError(t, err)
+	expandedGot, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(expandedDoc)
+	require.NoError(t, err)
+
+	require.Equal(t, string(expandedGot), string(entityGot))
+	require.Equal(t,
+		`<r><a xmlns="urn:def" xmlns:p="urn:a"><e z="0" p:a="1"></e></a></r>`,
+		string(entityGot))
+}
+
+func TestEntityReferenceReplacementUnboundPrefixAtSecondSiteErrors(t *testing.T) {
+	t.Parallel()
+	// The same entity, whose replacement carries a q-prefixed attribute, is
+	// referenced first where q is bound and then where q is UNBOUND. The second
+	// expansion cannot borrow the first site's cached binding — a prefixed name
+	// whose prefix is not in scope at the reference site is not namespace-well-formed
+	// there, so canonicalization must error rather than emit a borrowed binding.
+	src := `<!DOCTYPE r [<!ENTITY x "<e q:a=&#34;v&#34;/>">]>` +
+		`<r><a xmlns:q="urn:one">&x;</a><b>&x;</b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	_, err = c14n.NewCanonicalizer(c14n.ExclusiveC14N10).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+
+	// Inclusive C14N10 reaches the same out-of-scope prefix via the attribute axis.
+	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not in scope")
+}
+
 func TestEntityReferenceReplacementNamespaceContextPerSiteNodeSet(t *testing.T) {
 	t.Parallel()
 	// Node-set C14N: the same entity, whose replacement is a q-prefixed element, is
