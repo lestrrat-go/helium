@@ -355,6 +355,86 @@ func TestSignEnvelopingRollbackFidelity(t *testing.T) {
 	})
 }
 
+// TestSignEnvelopingRollbackLinkage covers rollback for ordinary caller content
+// whose original linkage is not a plain "child under a parent": a detached but
+// sibling-linked chain, and content owned by a different helium.Document. Each
+// case injects a KeyInfo error after the content has been moved into the
+// <ds:Object>, then asserts the original linkage (sibling anchors, owner
+// document) is restored exactly.
+func TestSignEnvelopingRollbackLinkage(t *testing.T) {
+	newFailingSigner := func(t *testing.T) (xmldsig1.Signer, error) {
+		t.Helper()
+		wantErr := errors.New("keyinfo boom")
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+			}).
+			KeyInfo(failingKeyInfo{err: wantErr})
+		return signer, wantErr
+	}
+
+	// A parentless node that is nonetheless linked to a sibling (an AddSibling
+	// chain never attached to any parent) must be spliced back onto that sibling
+	// chain, not just unlinked. Only the first element is signed; after rollback
+	// the first<->second sibling linkage must be exactly restored.
+	t.Run("detached sibling-linked chain restored", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+
+		first, err := doc.CreateElement("first")
+		require.NoError(t, err)
+		second, err := doc.CreateElement("second")
+		require.NoError(t, err)
+		// Link the two as siblings without ever attaching them to a parent.
+		require.NoError(t, first.AddSibling(second))
+		require.Nil(t, first.Parent())
+		require.Nil(t, second.Parent())
+		require.Equal(t, helium.Node(second), first.NextSibling())
+		require.Equal(t, helium.Node(first), second.PrevSibling())
+
+		signer, wantErr := newFailingSigner(t)
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{first}, key)
+		require.ErrorIs(t, err, wantErr)
+		require.Nil(t, sigElem)
+
+		// The detached sibling chain is restored to its exact original linkage.
+		require.Nil(t, first.Parent())
+		require.Nil(t, second.Parent())
+		require.Equal(t, helium.Node(second), first.NextSibling())
+		require.Equal(t, helium.Node(first), second.PrevSibling())
+	})
+
+	// Content attached to a DIFFERENT helium.Document has its owner rewritten to
+	// the signing document while canonicalizing the detached subtree. After
+	// rollback the content's OwnerDocument must be restored to its original
+	// document, not left pointing at the signing document.
+	t.Run("cross-document content owner restored", func(t *testing.T) {
+		key := generateRSAKey(t)
+		signDoc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		otherDoc := mustParseXML(t, `<other><payload>content</payload></other>`)
+
+		payload, ok := otherDoc.DocumentElement().FirstChild().(*helium.Element)
+		require.True(t, ok)
+		require.Equal(t, "payload", payload.LocalName())
+		require.Equal(t, otherDoc, payload.OwnerDocument())
+		otherRoot := payload.Parent()
+
+		signer, wantErr := newFailingSigner(t)
+		sigElem, err := signer.SignEnveloping(t.Context(), signDoc, []helium.Node{payload}, key)
+		require.ErrorIs(t, err, wantErr)
+		require.Nil(t, sigElem)
+
+		// The payload is back under its original parent in the original document,
+		// and its OwnerDocument points at that document, not the signing document.
+		require.Equal(t, otherRoot, payload.Parent())
+		require.Equal(t, otherDoc, payload.OwnerDocument())
+		// A descendant's owner is restored too (SetTreeDoc walks the subtree).
+		require.Equal(t, otherDoc, payload.FirstChild().OwnerDocument())
+	})
+}
+
 // childElements returns the ordered child nodes of n.
 func childElements(n helium.Node) []helium.Node {
 	var out []helium.Node

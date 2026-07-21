@@ -141,7 +141,7 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 			// Unreachable: the preflight above rejected every non-movable entry.
 			return nil, fmt.Errorf("%w: content is nil or not movable (%T)", ErrInvalidSignature, n)
 		}
-		snapshots[i] = movedContent{node: mn, parent: mn.Parent(), prev: mn.PrevSibling(), next: mn.NextSibling()}
+		snapshots[i] = movedContent{node: mn, parent: mn.Parent(), prev: mn.PrevSibling(), next: mn.NextSibling(), ownerDoc: mn.OwnerDocument()}
 	}
 
 	// Moving each content node into the Object detaches it from the caller's tree.
@@ -231,12 +231,17 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 // into the <Object>. Both sibling anchors are captured: the restore inserts
 // before the next sibling when it can, and otherwise (former last child, or a
 // read-only next sibling) inserts after the previous sibling — a non-coalescing
-// splice that needs no movable next sibling.
+// splice that needs no movable next sibling. ownerDoc is the node's original
+// OwnerDocument, captured before the move: canonicalizeDetachedSubtree rewrites
+// the moved subtree's owners to the signing document, so content that came from
+// a different helium.Document must have its owner restored after the structural
+// rollback puts the node back in place.
 type movedContent struct {
-	node   helium.MutableNode
-	parent helium.Node
-	prev   helium.Node
-	next   helium.Node
+	node     helium.MutableNode
+	parent   helium.Node
+	prev     helium.Node
+	next     helium.Node
+	ownerDoc *helium.Document
 }
 
 // contentMovable reports whether a SignEnveloping content entry can be relinked
@@ -297,6 +302,15 @@ func restoreMovedContent(moved []movedContent) {
 			delete(pending, m.node)
 		}
 	}
+	// Structural rollback is complete; every node is back at its original
+	// position. canonicalizeDetachedSubtree rewrote each moved subtree's owner to
+	// the signing document, so restore each node's original OwnerDocument over its
+	// whole subtree. For content that already belonged to the signing document
+	// this is a no-op; for content from a different helium.Document it hands the
+	// subtree back pointing at its original owner.
+	for _, m := range moved {
+		m.node.SetTreeDoc(m.ownerDoc)
+	}
 }
 
 // restoreOneContent reinserts one moved content node at its recorded original
@@ -329,9 +343,9 @@ func restoreMovedContent(moved []movedContent) {
 // them mid-sign, and a builder that does has already invalidated its own snapshot,
 // so no snapshot-based restore can define a correct original position.
 func restoreOneContent(m movedContent, pending map[helium.Node]struct{}) bool {
-	if m.parent == nil {
-		// The node was detached when the caller handed it in; return it to a
-		// detached state.
+	if m.parent == nil && m.prev == nil && m.next == nil {
+		// The node was fully detached when the caller handed it in — no parent and
+		// no siblings — so return it to that detached state.
 		helium.UnlinkNode(m.node)
 		return true
 	}
