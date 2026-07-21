@@ -126,7 +126,7 @@ func TestSignDetachedWithCryptoSigner(t *testing.T) {
 	signer := xmldsig1.NewSigner().
 		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
 		Reference(xmldsig1.ReferenceConfig{
-			URI:             "#mydata",
+			URI:             refURIMyData,
 			DigestAlgorithm: xmldsig1.DigestSHA256,
 			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 		})

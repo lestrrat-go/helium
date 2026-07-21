@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/asn1"
-	"errors"
 	"fmt"
 	"math/big"
 )
@@ -134,7 +133,10 @@ func verifyRSA(hash crypto.Hash, key any, data, sig []byte) error {
 	if !ok {
 		return fmt.Errorf("%w: expected *rsa.PublicKey, got %T", ErrKeyMismatch, key)
 	}
-	return rsa.VerifyPKCS1v15(pub, hash, hashData(hash, data), sig)
+	if err := rsa.VerifyPKCS1v15(pub, hash, hashData(hash, data), sig); err != nil {
+		return fmt.Errorf("%w: %w", ErrVerificationFailed, err)
+	}
+	return nil
 }
 
 // ECDSA
@@ -270,7 +272,7 @@ func verifyEd25519(key any, data, sig []byte) error {
 		}
 	}
 	if !ed25519.Verify(pub, data, sig) {
-		return errors.New("xmldsig1: ed25519 verification failed")
+		return fmt.Errorf("%w: ed25519 verification failed", ErrVerificationFailed)
 	}
 	return nil
 }

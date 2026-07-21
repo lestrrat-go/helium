@@ -13,6 +13,11 @@ import (
 // tests, pointing at the <data Id="d1"> element in their fixture documents.
 const refURID1 = "#d1"
 
+// refURIMyData is the same-document reference URI ("#mydata") used across the
+// signing and verification tests, pointing at the element carrying Id="mydata"
+// in their fixture documents.
+const refURIMyData = "#mydata"
+
 func TestSign(t *testing.T) {
 	// enveloping drives signEnveloping (content wrapped in an Object element)
 	// plus KeyInfo construction, then verifies it.
@@ -102,7 +107,7 @@ func TestSign(t *testing.T) {
 			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
 			SignatureID("detached-sig").
 			Reference(xmldsig1.ReferenceConfig{
-				URI:             "#mydata",
+				URI:             refURIMyData,
 				DigestAlgorithm: xmldsig1.DigestSHA256,
 				ID:              "r1",
 				Type:            xmldsig1.TypeObject,

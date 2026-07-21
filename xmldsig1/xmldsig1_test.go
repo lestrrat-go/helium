@@ -402,7 +402,7 @@ func TestSignVerifyWithFragmentReference(t *testing.T) {
 	doc := mustParseXML(t, xml)
 
 	ref := xmldsig1.ReferenceConfig{
-		URI:             "#mydata",
+		URI:             refURIMyData,
 		DigestAlgorithm: xmldsig1.DigestSHA256,
 		Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
 	}
