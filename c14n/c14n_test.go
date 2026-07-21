@@ -349,6 +349,26 @@ func TestEntityReferenceReplacementTextInAttribute(t *testing.T) {
 	require.Equal(t, `<r a="before-hello-entity-content-after"></r>`, string(got))
 }
 
+func TestEntityReferenceReplacementNamespaceContextPerSite(t *testing.T) {
+	t.Parallel()
+	// The same entity, whose replacement text is a namespace-prefixed element,
+	// is referenced twice under DIFFERENT in-scope bindings for that prefix.
+	// Per W3C Canonical XML the replacement is canonicalized as if textually
+	// substituted at each reference site, so each expansion must reflect ITS OWN
+	// binding for the prefix — the second must not inherit the first site's
+	// namespace resolution cached on the shared Entity declaration node.
+	src := `<!DOCTYPE r [<!ENTITY x "<p:x/>">]>` +
+		`<r xmlns:p="urn:default"><a xmlns:p="urn:one">&x;</a><b xmlns:p="urn:two">&x;</b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t,
+		`<r xmlns:p="urn:default"><a xmlns:p="urn:one"><p:x></p:x></a><b xmlns:p="urn:two"><p:x></p:x></b></r>`,
+		string(got))
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.

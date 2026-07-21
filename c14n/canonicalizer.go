@@ -3,6 +3,7 @@ package c14n
 import (
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"slices"
 
@@ -23,6 +24,14 @@ type canonicalizer struct {
 	// nsNodesByElement indexes NamespaceNodeWrapper nodes by their parent element.
 	// Built once during process() when nodeSet is non-nil.
 	nsNodesByElement map[helium.Node][]nsSortEntry
+	// entityNSContext is a stack of reference-site in-scope namespace bindings
+	// (prefix→URI), pushed when the walk descends through an EntityRef. While
+	// non-empty, an entity-replacement element resolves the prefixes it does not
+	// itself declare against the reference site's bindings rather than the shared
+	// Entity declaration node's DTD-context parent chain and its cached
+	// active-namespace pointers (both resolved once at parse time against the
+	// first reference site).
+	entityNSContext []map[string]string
 }
 
 func (c *canonicalizer) process() error {
@@ -259,24 +268,93 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 	case helium.EntityRefNode:
 		// Expand entity ref children. For an unexpanded reference the child is
 		// the shared Entity declaration node, handled by the EntityNode case.
-		for child := range helium.Children(n) {
-			if err := c.processNode(child); err != nil {
-				return err
-			}
-		}
-		return nil
+		// Canonicalize the replacement subtree in the namespace context of THIS
+		// reference site (per W3C Canonical XML the replacement is included as if
+		// textually substituted here), so a prefix in the replacement resolves
+		// against the site's in-scope bindings.
+		c.pushEntityContext(n)
+		err := c.processChildren(n)
+		c.popEntityContext()
+		return err
 	case helium.EntityNode:
 		// The Entity declaration node holds the parsed replacement content as
 		// its children; emit it so the reference contributes its replacement
 		// text (and any markup) to the canonical output.
-		for child := range helium.Children(n) {
-			if err := c.processNode(child); err != nil {
-				return err
-			}
-		}
-		return nil
+		return c.processChildren(n)
 	}
 	return nil
+}
+
+func (c *canonicalizer) processChildren(n helium.Node) error {
+	for child := range helium.Children(n) {
+		if err := c.processNode(child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// currentEntityContext returns the reference-site namespace bindings for the
+// entity expansion currently being walked, or nil when the walk is not inside
+// one.
+func (c *canonicalizer) currentEntityContext() map[string]string {
+	n := len(c.entityNSContext)
+	if n == 0 {
+		return nil
+	}
+	return c.entityNSContext[n-1]
+}
+
+// pushEntityContext records the in-scope namespace bindings at an entity
+// reference site so the replacement subtree canonicalizes as if the text were
+// inserted there. In ordinary document content the reference site's ancestors
+// carry reliable bindings. For a reference nested inside another entity, inherit
+// the enclosing entity's reference-site context and overlay the xmlns
+// declarations physically present in the enclosing entity subtree (the cached
+// active-namespace pointers there are unreliable).
+func (c *canonicalizer) pushEntityContext(entityRef helium.Node) {
+	ctx := make(map[string]string)
+	parent, ok := helium.AsNode[*helium.Element](entityRef.Parent())
+	outer := c.currentEntityContext()
+	switch {
+	case outer == nil && ok:
+		for prefix, ns := range domutil.InScopeNamespaces(parent, c.nodeSet == nil) {
+			ctx[prefix] = ns.URI()
+		}
+	case outer != nil:
+		maps.Copy(ctx, outer)
+		if ok {
+			c.overlayEntityNSDecls(ctx, parent)
+		}
+	}
+	c.entityNSContext = append(c.entityNSContext, ctx)
+}
+
+func (c *canonicalizer) popEntityContext() {
+	c.entityNSContext = c.entityNSContext[:len(c.entityNSContext)-1]
+}
+
+// overlayEntityNSDecls applies the xmlns declarations physically present in the
+// entity subtree onto ctx: the element and its ancestors up to the entity
+// boundary (the first non-element parent — the shared Entity declaration node),
+// outermost first so an inner declaration wins. Only real declarations
+// (nsDefs) are consulted; the elements' cached active-namespace pointers are
+// not, since those were resolved at parse time against a specific reference
+// site.
+func (c *canonicalizer) overlayEntityNSDecls(ctx map[string]string, e *helium.Element) {
+	var chain []*helium.Element
+	for n := helium.Node(e); ; n = n.Parent() {
+		el, ok := helium.AsNode[*helium.Element](n)
+		if !ok {
+			break
+		}
+		chain = append(chain, el)
+	}
+	for _, el := range slices.Backward(chain) {
+		for _, ns := range el.Namespaces() {
+			ctx[ns.Prefix()] = ns.URI()
+		}
+	}
 }
 
 func (c *canonicalizer) processText(n helium.Node) error {
@@ -587,7 +665,7 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 
 	// Element's own namespace
 	if ns := e.Namespace(); ns != nil {
-		utilized[ns.Prefix()] = ns.URI()
+		utilized[ns.Prefix()] = c.resolvedNSURI(e, ns)
 	} else {
 		// Check if default namespace needs to be undeclared
 		if existingURI, found := c.nsStack.lookup(""); found && existingURI != "" {
@@ -713,9 +791,40 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 	return nil
 }
 
+// resolvedNSURI returns the URI of the element's name namespace. Inside an
+// entity expansion the element's cached active-namespace pointer was resolved
+// once at parse time against the first reference site, so re-resolve the
+// element's prefix against the current reference-site context; outside an entity
+// the cached pointer is authoritative.
+func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) string {
+	if c.currentEntityContext() == nil {
+		return ns.URI()
+	}
+	if uri, ok := c.collectInScopeNamespaces(e)[ns.Prefix()]; ok {
+		return uri
+	}
+	return ns.URI()
+}
+
 // collectInScopeNamespaces collects all in-scope namespace bindings for an element
 // by walking up the ancestor chain.
 func (c *canonicalizer) collectInScopeNamespaces(e *helium.Element) map[string]string {
+	// Inside an entity expansion the element's parent chain stops at the shared
+	// Entity declaration node, so its own parent-chain walk (and its cached
+	// active-namespace pointer) can only see the entity declaration's context.
+	// Resolve against the reference site instead: start from the reference-site
+	// bindings and overlay the xmlns declarations physically present in the
+	// entity subtree.
+	if ctx := c.currentEntityContext(); ctx != nil {
+		nsMap := make(map[string]string, len(ctx))
+		maps.Copy(nsMap, ctx)
+		c.overlayEntityNSDecls(nsMap, e)
+		if c.nodeSet == nil {
+			delete(nsMap, lexicon.PrefixXML)
+		}
+		return nsMap
+	}
+
 	// Remove the xml namespace (never explicitly output per C14N spec) unless
 	// it's inherited via xml:* attributes in node-set mode.
 	byPrefix := domutil.InScopeNamespaces(e, c.nodeSet == nil)
