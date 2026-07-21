@@ -173,6 +173,188 @@ func TestSignEnvelopingContentSafety(t *testing.T) {
 	})
 }
 
+// TestSignEnvelopingRollbackFidelity covers rollback cases where a naive
+// move-and-restore corrupts the caller's tree: adjacent Text entries coalescing
+// during the move or the restore, content passed out of document order, and a
+// read-only next sibling as the restore anchor. Every case injects a KeyInfo
+// error after the content has been moved into the <ds:Object>, then asserts the
+// caller's DOM is byte-identical to before the call.
+func TestSignEnvelopingRollbackFidelity(t *testing.T) {
+	newFailingSigner := func(t *testing.T) (xmldsig1.Signer, error) {
+		t.Helper()
+		wantErr := errors.New("keyinfo boom")
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             refURID1,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+			}).
+			KeyInfo(failingKeyInfo{err: wantErr})
+		return signer, wantErr
+	}
+
+	// Two Text nodes handed in as content coalesce when the second is moved into
+	// the <ds:Object> next to the first (AddChild merges adjacent text), so a
+	// naive move corrupts the first node's content to "firstsecond" and detaches
+	// the second before the failure even happens. The move must be
+	// non-coalescing so rollback restores each node's original content.
+	t.Run("adjacent text content restored without coalescing", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		root := doc.DocumentElement()
+
+		firstText := doc.CreateText([]byte("first"))
+		mid, err := doc.CreateElement("mid")
+		require.NoError(t, err)
+		secondText := doc.CreateText([]byte("second"))
+
+		// root children: data, firstText, mid, secondText (an element separates the
+		// two text nodes so they are not adjacent in the caller tree).
+		require.NoError(t, root.AddChild(firstText))
+		require.NoError(t, root.AddChild(mid))
+		require.NoError(t, root.AddChild(secondText))
+		originalChildren := childElements(root)
+
+		signer, wantErr := newFailingSigner(t)
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{firstText, secondText}, key)
+		require.ErrorIs(t, err, wantErr)
+		require.Nil(t, sigElem)
+
+		require.Equal(t, "first", string(firstText.Content()))
+		require.Equal(t, "second", string(secondText.Content()))
+		require.Equal(t, root, firstText.Parent())
+		require.Equal(t, root, secondText.Parent())
+		require.Equal(t, mid, firstText.NextSibling())
+		require.Equal(t, firstText, mid.PrevSibling())
+		require.Equal(t, mid, secondText.PrevSibling())
+		require.Nil(t, secondText.NextSibling())
+		require.Equal(t, originalChildren, childElements(root))
+	})
+
+	// A content node that was the last child must be restored without coalescing
+	// into its previous Text sibling. AddChild-based restore would merge the
+	// restored Text node into the sibling and leave it detached.
+	t.Run("last-child text restored without merging into previous sibling", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		root := doc.DocumentElement()
+
+		firstText := doc.CreateText([]byte("first"))
+		secondText := doc.CreateText([]byte("second"))
+		require.NoError(t, root.AddChild(firstText))
+		// Splice secondText right after firstText WITHOUT coalescing (Replace is a
+		// pointer-level insert), producing two adjacent Text children.
+		require.NoError(t, firstText.Replace(firstText, secondText))
+		originalChildren := childElements(root)
+
+		signer, wantErr := newFailingSigner(t)
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{secondText}, key)
+		require.ErrorIs(t, err, wantErr)
+		require.Nil(t, sigElem)
+
+		require.Equal(t, "first", string(firstText.Content()))
+		require.Equal(t, "second", string(secondText.Content()))
+		require.Equal(t, root, secondText.Parent())
+		require.Equal(t, firstText, secondText.PrevSibling())
+		require.Equal(t, secondText, firstText.NextSibling())
+		require.Nil(t, secondText.NextSibling())
+		require.Equal(t, originalChildren, childElements(root))
+	})
+
+	// Content passed in reverse document order must still be restored to its
+	// original order. Recording each node's anchor at move time captures a stale
+	// sibling link (moving an earlier node changes a later node's siblings), so
+	// the positions must be snapshotted before any node is moved.
+	t.Run("reverse-order content restored in original order", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		root := doc.DocumentElement()
+
+		first, err := doc.CreateElement("first")
+		require.NoError(t, err)
+		second, err := doc.CreateElement("second")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(first))
+		require.NoError(t, root.AddChild(second))
+		originalChildren := childElements(root)
+
+		signer, wantErr := newFailingSigner(t)
+		// Reversed relative to document order.
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{second, first}, key)
+		require.ErrorIs(t, err, wantErr)
+		require.Nil(t, sigElem)
+
+		require.Equal(t, root, first.Parent())
+		require.Equal(t, root, second.Parent())
+		require.Equal(t, second, first.NextSibling())
+		require.Equal(t, first, second.PrevSibling())
+		require.Equal(t, originalChildren, childElements(root))
+	})
+
+	// Two adjacent content nodes with no sibling before them (they open the
+	// parent's child list) must still be restored in order. The leftmost node has
+	// no previous sibling to anchor on, so the restore must resolve the pair from
+	// the right without deadlocking.
+	t.Run("adjacent leading content restored in order", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<data Id="d1"><first/><second/></data>`)
+		root := doc.DocumentElement()
+
+		first, ok := root.FirstChild().(*helium.Element)
+		require.True(t, ok)
+		require.Equal(t, "first", first.LocalName())
+		second, ok := first.NextSibling().(*helium.Element)
+		require.True(t, ok)
+		require.Equal(t, "second", second.LocalName())
+		originalChildren := childElements(root)
+
+		signer, wantErr := newFailingSigner(t)
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{first, second}, key)
+		require.ErrorIs(t, err, wantErr)
+		require.Nil(t, sigElem)
+
+		require.Equal(t, root, first.Parent())
+		require.Equal(t, root, second.Parent())
+		require.Nil(t, first.PrevSibling())
+		require.Equal(t, second, first.NextSibling())
+		require.Equal(t, first, second.PrevSibling())
+		require.Equal(t, originalChildren, childElements(root))
+	})
+
+	// The original next sibling of a content node may be a read-only node (a
+	// namespace-node wrapper) that cannot anchor an insert-before. Restore must
+	// still land the node at its exact original position by anchoring on the
+	// previous sibling instead of appending it after the read-only node.
+	t.Run("restored before a read-only next sibling", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		root := doc.DocumentElement()
+
+		before, err := doc.CreateElement("before")
+		require.NoError(t, err)
+		payload, err := doc.CreateElement("payload")
+		require.NoError(t, err)
+		ns := helium.NewNamespace("x", "urn:x")
+		readOnly := helium.NewNamespaceNodeWrapper(ns, root)
+		require.NoError(t, root.AddChild(before))
+		require.NoError(t, root.AddChild(payload))
+		// Splice the read-only wrapper in as payload's next sibling.
+		require.NoError(t, root.AddChild(readOnly))
+		originalChildren := childElements(root)
+
+		signer, wantErr := newFailingSigner(t)
+		sigElem, err := signer.SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.ErrorIs(t, err, wantErr)
+		require.Nil(t, sigElem)
+
+		require.Equal(t, root, payload.Parent())
+		require.Equal(t, before, payload.PrevSibling())
+		require.Equal(t, payload, before.NextSibling())
+		require.Equal(t, helium.Node(readOnly), payload.NextSibling())
+		require.Equal(t, originalChildren, childElements(root))
+	})
+}
+
 // childElements returns the ordered child nodes of n.
 func childElements(n helium.Node) []helium.Node {
 	var out []helium.Node

@@ -129,13 +129,27 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		return nil, err
 	}
 
-	// Moving each content node into the Object detaches it from the caller's tree
-	// (AddChild auto-unlinks). If ANY later step fails — reference processing,
-	// signing, or KeyInfo construction — the returned Signature is discarded and
-	// the moved nodes would be stranded under it, silently lost to the caller.
-	// Record each node's original position as it is moved and restore every moved
-	// node to its exact original location on the error/panic path only; on success
-	// they stay in the Object (the intended enveloping semantics). This mirrors the
+	// Snapshot every content node's original position (parent + both sibling
+	// anchors) BEFORE moving any node. Moving one node changes the live sibling
+	// links of the others, so a per-node capture taken at move time would record a
+	// stale anchor and restore the nodes out of order; a pre-move snapshot is the
+	// only faithful record.
+	snapshots := make([]movedContent, len(content))
+	for i, n := range content {
+		mn, ok := n.(helium.MutableNode)
+		if !ok {
+			// Unreachable: the preflight above rejected every non-movable entry.
+			return nil, fmt.Errorf("%w: content is nil or not movable (%T)", ErrInvalidSignature, n)
+		}
+		snapshots[i] = movedContent{node: mn, parent: mn.Parent(), prev: mn.PrevSibling(), next: mn.NextSibling()}
+	}
+
+	// Moving each content node into the Object detaches it from the caller's tree.
+	// If ANY later step fails — reference processing, signing, or KeyInfo
+	// construction — the returned Signature is discarded and the moved nodes would
+	// be stranded under it, silently lost to the caller. Restore every moved node
+	// to its exact original location on the error/panic path only; on success they
+	// stay in the Object (the intended enveloping semantics). This mirrors the
 	// restore-on-every-failure-exit discipline of canonicalizeDetachedSubtree.
 	var moved []movedContent
 	success := false
@@ -146,19 +160,27 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		restoreMovedContent(moved)
 	}()
 
-	for _, n := range content {
-		mn, ok := n.(helium.MutableNode)
-		if !ok {
-			// Unreachable: the preflight above rejected every non-movable entry.
-			return nil, fmt.Errorf("%w: content is nil or not movable (%T)", ErrInvalidSignature, n)
+	// Splice each node onto the end of the Object with a non-coalescing insert:
+	// AddChild for the first node (the Object is empty, so nothing to merge with),
+	// then Replace(prev, node) to place each subsequent node immediately after the
+	// previous one. Plain AddChild would merge two adjacent Text content entries
+	// into one node, corrupting the first node's content so a later rollback could
+	// not restore the originals. Record a node in moved only once its move
+	// succeeds, so the restore never touches a node left in place.
+	var prevMoved helium.MutableNode
+	for i := range snapshots {
+		mn := snapshots[i].node
+		if prevMoved == nil {
+			if err := objElem.AddChild(mn); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := prevMoved.Replace(prevMoved, mn); err != nil {
+				return nil, err
+			}
 		}
-		// Capture the pre-move position, then move; record it only once the move
-		// succeeds, so the restore never touches a node that was left in place.
-		rec := movedContent{node: mn, parent: mn.Parent(), next: mn.NextSibling()}
-		if err := objElem.AddChild(mn); err != nil {
-			return nil, err
-		}
-		moved = append(moved, rec)
+		prevMoved = mn
+		moved = append(moved, snapshots[i])
 	}
 	if err := sigElem.AddChild(objElem); err != nil {
 		return nil, err
@@ -206,10 +228,14 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 
 // movedContent records a caller content node's original tree position so
 // signEnveloping can restore it if signing fails after the node has been moved
-// into the <Object>.
+// into the <Object>. Both sibling anchors are captured: the restore inserts
+// before the next sibling when it can, and otherwise (former last child, or a
+// read-only next sibling) inserts after the previous sibling — a non-coalescing
+// splice that needs no movable next sibling.
 type movedContent struct {
 	node   helium.MutableNode
 	parent helium.Node
+	prev   helium.Node
 	next   helium.Node
 }
 
@@ -236,12 +262,10 @@ func contentMovable(n helium.Node) bool {
 // byte-identical to before enveloping signing began. It runs only on the
 // error/panic path; on success the moved nodes stay in the <Object>.
 //
-// A node is restored by inserting it immediately before its original next
-// sibling, appending it to its original parent when it was the last child, or
-// leaving it detached when it had no parent. A node whose original next sibling
-// is itself a still-unrestored moved node is deferred until that anchor is back
-// in place, so each node is always inserted against an anchor already at its
-// final position regardless of the order the nodes were moved.
+// A node is restored against a sibling anchor that is itself already back at its
+// final position. When the anchor a node needs is still a pending (unrestored)
+// moved node, the node is deferred until that anchor is in place, so the restore
+// order is independent of the order the nodes were moved.
 func restoreMovedContent(moved []movedContent) {
 	pending := make(map[helium.Node]struct{}, len(moved))
 	for _, m := range moved {
@@ -253,19 +277,16 @@ func restoreMovedContent(moved []movedContent) {
 			if _, ok := pending[m.node]; !ok {
 				continue
 			}
-			if m.next != nil {
-				if _, blocked := pending[m.next]; blocked {
-					continue
-				}
+			if !restoreOneContent(m, pending) {
+				continue
 			}
-			restoreOneContent(m)
 			delete(pending, m.node)
 		}
 		if len(pending) < remaining {
 			continue
 		}
 		// No anchor became ready this pass. A well-formed tree cannot reach here
-		// (next-sibling links form a strict order with no cycle), but never spin:
+		// (sibling links form a strict order with no cycle), but never spin:
 		// detach the rest so they end up cleanly unlinked rather than left
 		// double-linked inside the discarded Object.
 		for _, m := range moved {
@@ -279,34 +300,59 @@ func restoreMovedContent(moved []movedContent) {
 }
 
 // restoreOneContent reinserts one moved content node at its recorded original
-// position. Its original next sibling (the anchor), when present, is assumed to
-// already hold its final position — a precondition restoreMovedContent enforces.
-func restoreOneContent(m movedContent) {
+// position, reporting false (restore deferred) when the anchor it must splice
+// against is a still-pending moved node.
+//
+// It inserts the node immediately BEFORE its original next sibling when that
+// sibling is a movable node, deferring until the sibling is back at its final
+// position. This drives a right-to-left restore that always terminates: a node
+// whose next sibling is nil, read-only, or a node that never moved is placed
+// without waiting on anything, and each placement frees its left neighbor.
+//
+// When there is no movable next sibling to insert before (the node was the last
+// child, or its next sibling is a read-only node), it inserts the node
+// immediately AFTER its previous sibling instead. Both are pointer-level,
+// non-coalescing splices (Replace keeps the anchor and moves the node next to
+// it), so a restored Text node is never merged into an adjacent Text sibling and
+// a former last child lands in its exact slot. Replace also auto-unlinks the
+// node from the discarded Object first, so each is a move, not a duplicate.
+func restoreOneContent(m movedContent, pending map[helium.Node]struct{}) bool {
 	if m.parent == nil {
 		// The node was detached when the caller handed it in; return it to a
 		// detached state.
 		helium.UnlinkNode(m.node)
-		return
+		return true
 	}
-	if m.next != nil {
-		if anchor, ok := m.next.(helium.MutableNode); ok {
-			// Replace the anchor with [node, anchor], inserting node immediately
-			// before it. Replace auto-unlinks node from the discarded Object first,
-			// so this is a move, not a duplicate.
-			if err := anchor.Replace(m.node, m.next); err == nil {
-				return
+	if next, ok := m.next.(helium.MutableNode); ok {
+		if _, blocked := pending[m.next]; blocked {
+			return false
+		}
+		if err := next.Replace(m.node, m.next); err == nil {
+			return true
+		}
+	}
+	// No movable next sibling to insert before. Insert after the previous sibling
+	// when it is movable and already back in place — a non-coalescing splice that
+	// restores a former last child (and a node before a read-only next sibling)
+	// without merging adjacent Text nodes.
+	if prev, ok := m.prev.(helium.MutableNode); ok {
+		if _, blocked := pending[m.prev]; !blocked {
+			if err := prev.Replace(prev, m.node); err == nil {
+				return true
 			}
 		}
 	}
-	// The node was the last child, or the guarded insert-before could not run:
-	// append it to its original parent.
+	// No usable sibling anchor: the node was the only child (parent now empty, so
+	// AddChild cannot coalesce), or a fallback when both original siblings are
+	// unavailable. Append to the original parent.
 	if parent, ok := m.parent.(helium.MutableNode); ok {
 		if err := parent.AddChild(m.node); err == nil {
-			return
+			return true
 		}
 	}
 	// Last resort: leave the node detached rather than double-linked.
 	helium.UnlinkNode(m.node)
+	return true
 }
 
 func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, key any) (*helium.Element, error) {
