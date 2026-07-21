@@ -687,3 +687,20 @@ func TestVerifyShortCircuitsCancelledContext(t *testing.T) {
 		require.False(t, ks.called, "cancelled context must short-circuit before key resolution")
 	})
 }
+
+// TestVerifyShortCircuitsBeforeSignatureDiscovery ensures an already-cancelled
+// context aborts Verify before the signature-discovery walk. Verify walks the
+// whole document to locate ds:Signature elements before delegating to the
+// per-signature verify path, so the cancellation check must sit ahead of that
+// walk: on a large or attacker-supplied document with no Signature, a cancelled
+// context must return the context error immediately rather than pay for the
+// unbounded discovery walk and then report ErrSignatureNotFound.
+func TestVerifyShortCircuitsBeforeSignatureDiscovery(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(nil))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := verifier.Verify(ctx, doc)
+	require.ErrorIs(t, err, context.Canceled)
+}

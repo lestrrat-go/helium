@@ -252,6 +252,14 @@ func (v Verifier) AllowSHA1(allow bool) Verifier {
 // per-Reference work scales with the number of References; bound it by passing a
 // ctx with a deadline. On cancellation the context error (ctx.Err()) is returned.
 func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResult, error) {
+	// Honor an already-cancelled or already-expired context before the
+	// signature-discovery walk. findSignatureElements below traverses the whole
+	// document, which is unbounded on a large or attacker-supplied input, so a
+	// context the caller cancelled before calling must short-circuit here rather
+	// than pay for the full walk only to return ErrSignatureNotFound.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sigs := findSignatureElements(doc.DocumentElement())
 	switch len(sigs) {
 	case 0:
