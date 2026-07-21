@@ -61,6 +61,18 @@ func (s Signer) clone() Signer {
 	return Signer{cfg: &cp}
 }
 
+// config returns the Signer's configuration, substituting NewSigner defaults
+// when the Signer was constructed directly (a zero-value Signer{} whose cfg is
+// nil). This mirrors clone's nil handling so the sign terminals never
+// dereference a nil cfg: a zero-value Signer signs as a default Signer with no
+// references, returning ErrNoReferences rather than panicking.
+func (s Signer) config() *signerConfig {
+	if s.cfg == nil {
+		return &signerConfig{c14nMethod: ExcC14N10}
+	}
+	return s.cfg
+}
+
 // SignatureAlgorithm sets the signature algorithm URI.
 func (s Signer) SignatureAlgorithm(alg string) Signer {
 	s = s.clone()
@@ -110,7 +122,7 @@ func (s Signer) AllowSHA1(allow bool) Signer {
 // element of the document. The key is a crypto.Signer (rsa.PrivateKey,
 // ecdsa.PrivateKey, ed25519.PrivateKey) or []byte for HMAC.
 func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent *helium.Element, key any) error {
-	return signEnveloped(ctx, s.cfg, doc, parent, key)
+	return signEnveloped(ctx, s.config(), doc, parent, key)
 }
 
 // SignEnveloping creates an enveloping signature wrapping the given content
@@ -135,13 +147,13 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // reference into the Object verifies under inclusive Canonical XML 1.0 or 1.1.
 // Exclusive Canonical XML inherits no xml:*, so its digests are unaffected.
 func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
-	return signEnveloping(ctx, s.cfg, doc, content, key)
+	return signEnveloping(ctx, s.config(), doc, content, key)
 }
 
 // SignDetached creates a detached Signature element referencing URIs
 // specified in the configured References. Returns the Signature element.
 func (s Signer) SignDetached(ctx context.Context, doc *helium.Document, key any) (*helium.Element, error) {
-	return signDetached(ctx, s.cfg, doc, key)
+	return signDetached(ctx, s.config(), doc, key)
 }
 
 // verifierConfig holds the configuration for a Verifier.
