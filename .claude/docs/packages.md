@@ -349,7 +349,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - **NewVerifier(KeySource) → Verifier** — create fluent builder for verification (clone-on-write value type)
   - `AllowSHA1(bool)` — builder method
   - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods
-- **NewEnvelopedReference() → ReferenceConfig** — SAML-optimized defaults (enveloped + ExcC14N + SHA-256)
+- **NewEnvelopedReference() → ReferenceConfig** — WHOLE-DOCUMENT enveloped defaults: empty URI (always resolves to the document element, regardless of the `SignEnveloped` parent) + enveloped-signature transform + ExcC14N + SHA-256
+- **NewEnvelopedReferenceByID(id) → ReferenceConfig** — element-scoped enveloped defaults: `URI="#id"` (covers only the element carrying that id) + enveloped-signature transform + ExcC14N + SHA-256. Correct for signing a specific nested element (e.g. a SAML Assertion by its ID); the id must be recognized as an ID attribute per the package's ID rules
 - Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeySourceFunc`
 - Key info builders: `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
