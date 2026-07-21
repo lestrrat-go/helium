@@ -251,18 +251,18 @@ func TestSignEnveloping_CanonicalizationPanicRestoresSignature(t *testing.T) {
 	}()
 	require.True(t, panicked, "the corrupted manifest must force a canonicalization panic")
 
-	// Walk up from the manifest (still under the Signature's Object) to find the
-	// Signature. It must be detached and re-owned by the caller document.
-	var sig *helium.Element
-	for n := helium.Node(manifest); n != nil; n = n.Parent() {
-		if e, ok := n.(*helium.Element); ok && e.LocalName() == "Signature" {
-			sig = e
-		}
-	}
-	require.NotNil(t, sig, "the Signature must still be reachable from the manifest")
-	require.Nil(t, sig.Parent(), "the Signature must be detached after a canonicalization panic")
-	require.Equal(t, doc, sig.OwnerDocument(),
-		"the Signature's owning document must be restored to the caller document")
+	// The manifest is the caller's handle to the content it passed in. On the
+	// panic-unwind path SignEnveloping restores it to its original state: detached
+	// (it had no parent when handed in) and re-owned by the caller document, rather
+	// than left parented into the discarded Signature's Object or a throwaway
+	// canonicalization document. This is the caller-facing form of the #1220
+	// owner-document restoration guarantee: canonicalizeDetachedSubtree restores the
+	// Signature subtree's owning document to the caller document on the unwind, and
+	// the enveloping content restore then returns the manifest to a detached state.
+	require.Nil(t, manifest.Parent(),
+		"the caller's content must be detached again after a canonicalization panic")
+	require.Equal(t, doc, manifest.OwnerDocument(),
+		"the caller's content owning document must be restored to the caller document")
 }
 
 // An id that exists BOTH in the caller's document and in the Signature's own

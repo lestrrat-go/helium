@@ -172,6 +172,15 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // XML 1.1 inherits only xml:lang/xml:space and lexically joins xml:base) — so a
 // reference into the Object verifies under inclusive Canonical XML 1.0 or 1.1.
 // Exclusive Canonical XML inherits no xml:*, so its digests are unaffected.
+//
+// Every content entry must be a movable node (helium.MutableNode); an ordinary
+// DOM element qualifies. A nil, typed-nil, or read-only content entry (e.g. a
+// namespace-node wrapper) is rejected with an indexed error wrapping
+// ErrInvalidSignature before any node is moved, rather than being silently
+// dropped from the Object. Moving the content into the Object detaches it from
+// the caller's tree; if signing then fails at any later step, every moved node
+// is restored to its exact original position (parent, siblings, and order),
+// leaving the caller's document byte-identical to before the call.
 func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
 	return signEnveloping(ctx, s.config(), doc, content, key)
 }
