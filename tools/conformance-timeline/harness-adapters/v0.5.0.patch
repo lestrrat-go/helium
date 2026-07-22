@@ -1,0 +1,71 @@
+diff --git a/xmldsig/harness_test.go b/xmldsig/harness_test.go
+index 7564218..bba5282 100644
+--- a/xmldsig/harness_test.go
++++ b/xmldsig/harness_test.go
+@@ -2,7 +2,6 @@ package xmldsig_test
+ 
+ import (
+ 	"context"
+-	"crypto/dsa" //nolint:staticcheck // DSA is required to verify the 2002 baseline DSA-SHA1 interop vectors
+ 	"crypto/ecdsa"
+ 	"crypto/rsa"
+ 	"crypto/x509"
+@@ -152,10 +151,6 @@ func (k keyResolver) ResolveKey(_ context.Context, keyInfo *xmldsig1.KeyInfoData
+ 	if keyInfo.ECKeyValue != nil {
+ 		return &ecdsa.PublicKey{Curve: keyInfo.ECKeyValue.Curve, X: keyInfo.ECKeyValue.X, Y: keyInfo.ECKeyValue.Y}, nil
+ 	}
+-	if keyInfo.DSAKeyValue != nil {
+-		v := keyInfo.DSAKeyValue
+-		return &dsa.PublicKey{Parameters: dsa.Parameters{P: v.P, Q: v.Q, G: v.G}, Y: v.Y}, nil
+-	}
+ 	if cert := k.matchDNameCert(keyInfo); cert != nil {
+ 		return cert.PublicKey, nil
+ 	}
+@@ -177,17 +172,11 @@ func (k keyResolver) ResolveKey(_ context.Context, keyInfo *xmldsig1.KeyInfoData
+ // is written with different escaping (e.g. "Trailing\20\20" vs "Trailing \ "),
+ // which decodes to the same value but is not byte-equal as a string.
+ func (k keyResolver) matchDNameCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certificate {
+-	for _, subjectName := range keyInfo.X509SubjectNames {
+-		want := decodeDNameCN(subjectName)
+-		if want == "" {
+-			continue
+-		}
+-		for _, cert := range k.certs {
+-			if cert.Subject.CommonName == want {
+-				return cert
+-			}
+-		}
+-	}
++	// tag-adapt: this helium release's KeyInfoData has no X509SubjectNames field
++	// (DName-only KeyInfo resolution postdates the tag), so there is no subject
++	// name to match against. Degrade to no match; the xmldsig2ed dname cases then
++	// fail honestly instead of resolving a signing cert out of band.
++	_ = keyInfo
+ 	return nil
+ }
+ 
+@@ -197,20 +186,10 @@ func (k keyResolver) matchDNameCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certifi
+ // serial number, then confirms the issuer CN matches after decoding, so a stray
+ // serial collision cannot pick the wrong cert.
+ func (k keyResolver) matchIssuerSerialCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certificate {
+-	for _, is := range keyInfo.X509IssuerSerials {
+-		if is.SerialNumber == nil {
+-			continue
+-		}
+-		wantIssuerCN := decodeDNameCN(is.IssuerName)
+-		for _, cert := range k.certs {
+-			if cert.SerialNumber == nil || cert.SerialNumber.Cmp(is.SerialNumber) != 0 {
+-				continue
+-			}
+-			if wantIssuerCN == "" || cert.Issuer.CommonName == wantIssuerCN {
+-				return cert
+-			}
+-		}
+-	}
++	// tag-adapt: this helium release's KeyInfoData has no X509IssuerSerials field.
++	// Degrade to no match; the X509IssuerSerial-only merlin case then fails
++	// honestly.
++	_ = keyInfo
+ 	return nil
+ }
+ 
