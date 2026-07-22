@@ -34,10 +34,49 @@ permissions:
   contents: read
 
 jobs:
+  # Fast presence check: the release-to-be must already have a row in the
+  # committed cross-release conformance timeline (tools/conformance-timeline).
+  # This runs FIRST, before the slow suite, so a forgotten timeline row fails the
+  # release in seconds rather than after the multi-minute gate. It exists because
+  # v0.6.0 was released without a timeline row (the tag was cut after the last
+  # regeneration); this gate prevents that recurring.
+  timeline-presence:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require a conformance-timeline row for this version
+        env:
+          VERSION: ${{ inputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          version, sha = os.environ["VERSION"], os.environ["SHA"]
+          data = json.load(open("tools/conformance-timeline/data.json"))
+          if version in data.get("tags", []):
+              print(f"conformance-timeline has a row for {version}")
+              sys.exit(0)
+          sys.exit(
+              f"::error::No conformance-timeline row for {version}.\n"
+              f"Measure the release candidate and commit the regenerated timeline docs "
+              f"before dispatching the release:\n"
+              f"  tools/conformance-timeline/run.sh --ref {sha} --as {version}\n"
+              f"  git add tools/conformance-timeline/data.json "
+              f"tools/conformance-timeline/conformance-timeline.svg "
+              f"tools/conformance-timeline/conformance-timeline.html CONFORMANCE.md\n"
+              f"  git commit && push, then re-dispatch the release."
+          )
+          PY
+
   # Release-gating conformance run: the full slow XSLT 3.0 suite must pass with
   # zero failures before anything is tagged or published. The release job needs:
   # this, so a red slow run blocks the release BEFORE a tag is ever created.
   conformance-gate:
+    needs: timeline-presence
     permissions:
       contents: read
     uses: ./.github/workflows/conformance-run.yml

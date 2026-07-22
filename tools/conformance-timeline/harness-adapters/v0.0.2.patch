@@ -528,3 +528,100 @@ index 0000000..529a8c8
 +func permissiveFS() fs.FS {
 +	return permissiveRootFS{}
 +}
+diff --git a/xmldsig/harness_test.go b/xmldsig/harness_test.go
+index 7564218..bba5282 100644
+--- a/xmldsig/harness_test.go
++++ b/xmldsig/harness_test.go
+@@ -2,7 +2,6 @@ package xmldsig_test
+ 
+ import (
+ 	"context"
+-	"crypto/dsa" //nolint:staticcheck // DSA is required to verify the 2002 baseline DSA-SHA1 interop vectors
+ 	"crypto/ecdsa"
+ 	"crypto/rsa"
+ 	"crypto/x509"
+@@ -152,10 +151,6 @@ func (k keyResolver) ResolveKey(_ context.Context, keyInfo *xmldsig1.KeyInfoData
+ 	if keyInfo.ECKeyValue != nil {
+ 		return &ecdsa.PublicKey{Curve: keyInfo.ECKeyValue.Curve, X: keyInfo.ECKeyValue.X, Y: keyInfo.ECKeyValue.Y}, nil
+ 	}
+-	if keyInfo.DSAKeyValue != nil {
+-		v := keyInfo.DSAKeyValue
+-		return &dsa.PublicKey{Parameters: dsa.Parameters{P: v.P, Q: v.Q, G: v.G}, Y: v.Y}, nil
+-	}
+ 	if cert := k.matchDNameCert(keyInfo); cert != nil {
+ 		return cert.PublicKey, nil
+ 	}
+@@ -177,17 +172,11 @@ func (k keyResolver) ResolveKey(_ context.Context, keyInfo *xmldsig1.KeyInfoData
+ // is written with different escaping (e.g. "Trailing\20\20" vs "Trailing \ "),
+ // which decodes to the same value but is not byte-equal as a string.
+ func (k keyResolver) matchDNameCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certificate {
+-	for _, subjectName := range keyInfo.X509SubjectNames {
+-		want := decodeDNameCN(subjectName)
+-		if want == "" {
+-			continue
+-		}
+-		for _, cert := range k.certs {
+-			if cert.Subject.CommonName == want {
+-				return cert
+-			}
+-		}
+-	}
++	// tag-adapt: this helium release's KeyInfoData has no X509SubjectNames field
++	// (DName-only KeyInfo resolution postdates the tag), so there is no subject
++	// name to match against. Degrade to no match; the xmldsig2ed dname cases then
++	// fail honestly instead of resolving a signing cert out of band.
++	_ = keyInfo
+ 	return nil
+ }
+ 
+@@ -197,20 +186,10 @@ func (k keyResolver) matchDNameCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certifi
+ // serial number, then confirms the issuer CN matches after decoding, so a stray
+ // serial collision cannot pick the wrong cert.
+ func (k keyResolver) matchIssuerSerialCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certificate {
+-	for _, is := range keyInfo.X509IssuerSerials {
+-		if is.SerialNumber == nil {
+-			continue
+-		}
+-		wantIssuerCN := decodeDNameCN(is.IssuerName)
+-		for _, cert := range k.certs {
+-			if cert.SerialNumber == nil || cert.SerialNumber.Cmp(is.SerialNumber) != 0 {
+-				continue
+-			}
+-			if wantIssuerCN == "" || cert.Issuer.CommonName == wantIssuerCN {
+-				return cert
+-			}
+-		}
+-	}
++	// tag-adapt: this helium release's KeyInfoData has no X509IssuerSerials field.
++	// Degrade to no match; the X509IssuerSerial-only merlin case then fails
++	// honestly.
++	_ = keyInfo
+ 	return nil
+ }
+ 
+diff --git a/xmldsig/merlinxmldsig_harness_test.go b/xmldsig/merlinxmldsig_harness_test.go
+index 0c9685e..8bc3769 100644
+--- a/xmldsig/merlinxmldsig_harness_test.go
++++ b/xmldsig/merlinxmldsig_harness_test.go
+@@ -57,7 +57,7 @@ func runMerlinCase(t *testing.T, o *outcome, root string, c merlinCase, ks xmlds
+ 		o.errorf("%s: parse signed document: %v", c.ID, err)
+ 		return
+ 	}
+-	_, verr := xmldsig1.NewVerifier(ks).AllowSHA1(true).Verify(t.Context(), doc)
++	_, verr := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
+ 
+ 	if !c.MustFail {
+ 		if verr != nil {
+diff --git a/xmldsig/xmldsig2ed_harness_test.go b/xmldsig/xmldsig2ed_harness_test.go
+index 4397de1..00b3f30 100644
+--- a/xmldsig/xmldsig2ed_harness_test.go
++++ b/xmldsig/xmldsig2ed_harness_test.go
+@@ -134,7 +134,7 @@ func runSigCase(t *testing.T, o *outcome, root, id, input string, ks xmldsig1.Ke
+ 		o.errorf("%s: parse signed document: %v", id, err)
+ 		return
+ 	}
+-	if _, err := xmldsig1.NewVerifier(ks).AllowSHA1(true).Verify(t.Context(), doc); err != nil {
++	if _, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc); err != nil {
+ 		o.errorf("%s: verification failed: %v", id, err)
+ 	}
+ }

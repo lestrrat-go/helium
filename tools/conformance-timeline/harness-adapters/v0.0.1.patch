@@ -525,3 +525,354 @@ index d3352f3..730e191 100644
  	if err != nil {
  		return nil, err
  	}
+diff --git a/xmldsig/harness_test.go b/xmldsig/harness_test.go
+index 7564218..0f4fa3e 100644
+--- a/xmldsig/harness_test.go
++++ b/xmldsig/harness_test.go
+@@ -1,10 +1,6 @@
+ package xmldsig_test
+ 
+ import (
+-	"context"
+-	"crypto/dsa" //nolint:staticcheck // DSA is required to verify the 2002 baseline DSA-SHA1 interop vectors
+-	"crypto/ecdsa"
+-	"crypto/rsa"
+ 	"crypto/x509"
+ 	"encoding/json"
+ 	"encoding/pem"
+@@ -17,7 +13,6 @@ import (
+ 
+ 	"github.com/lestrrat-go/helium"
+ 	"github.com/lestrrat-go/helium-w3c-tests/internal/harness"
+-	"github.com/lestrrat-go/helium/xmldsig1"
+ )
+ 
+ // containedPath joins root and a testdata-relative slash path, rejecting an
+@@ -115,190 +110,28 @@ func runCase(t *testing.T, exp expectations, id string, fn func(o *outcome)) {
+ 	t.Logf("xfail (%s): %s", xreason, strings.Join(o.fails, "; "))
+ }
+ 
+-// keySource builds a KeySource for the interop vectors: HMAC signatures use the
+-// suite's literal secret; asymmetric signatures resolve a public key from the
+-// signature's inline KeyInfo (X509Certificate, RSAKeyValue, or ECKeyValue).
+-func keySource(secret []byte) xmldsig1.KeySource {
+-	return keyResolver{secret: secret}
+-}
+-
+-// keySourceWithCerts extends keySource with an out-of-band certificate set the
+-// resolver selects from when the KeyInfo carries only an X509 Distinguished Name
+-// reference (X509SubjectName / X509IssuerSerial) rather than a full certificate.
+-func keySourceWithCerts(secret []byte, certs []*x509.Certificate) xmldsig1.KeySource {
+-	return keyResolver{secret: secret, certs: certs}
+-}
++// keySource / keySourceWithCerts stand in for the xmldsig1.KeySource the later
++// tags use. v0.0.1 tag-adapt: helium v0.0.1 has no xmldsig1 package, so signature
++// verification cannot run at all -- these return a marker and every
++// signature-verification case degrades to errNoXMLDSig1 and fails honestly. The
++// pure Canonical XML 1.1 node-set cases (xmldsig2ed C14N) still run for real
++// against c14n + xpath1, which v0.0.1 does have.
++type stubKeySource struct{}
+ 
+-type keyResolver struct {
+-	secret []byte
+-	// certs is the out-of-band certificate pool for DName-only KeyInfo (the
+-	// xmldsig2ed dname cases). Empty for suites whose KeyInfo carries the key.
+-	certs []*x509.Certificate
++func keySource(secret []byte) stubKeySource {
++	_ = secret
++	return stubKeySource{}
+ }
+ 
+-func (k keyResolver) ResolveKey(_ context.Context, keyInfo *xmldsig1.KeyInfoData, alg string) (any, error) {
+-	if strings.Contains(alg, "hmac") {
+-		return k.secret, nil
+-	}
+-	if keyInfo == nil {
+-		return nil, fmt.Errorf("no KeyInfo to resolve key for %s", alg)
+-	}
+-	if len(keyInfo.X509Certificates) > 0 {
+-		return keyInfo.X509Certificates[0].PublicKey, nil
+-	}
+-	if keyInfo.RSAKeyValue != nil {
+-		return &rsa.PublicKey{N: keyInfo.RSAKeyValue.Modulus, E: keyInfo.RSAKeyValue.Exponent}, nil
+-	}
+-	if keyInfo.ECKeyValue != nil {
+-		return &ecdsa.PublicKey{Curve: keyInfo.ECKeyValue.Curve, X: keyInfo.ECKeyValue.X, Y: keyInfo.ECKeyValue.Y}, nil
+-	}
+-	if keyInfo.DSAKeyValue != nil {
+-		v := keyInfo.DSAKeyValue
+-		return &dsa.PublicKey{Parameters: dsa.Parameters{P: v.P, Q: v.Q, G: v.G}, Y: v.Y}, nil
+-	}
+-	if cert := k.matchDNameCert(keyInfo); cert != nil {
+-		return cert.PublicKey, nil
+-	}
+-	if cert := k.matchIssuerSerialCert(keyInfo); cert != nil {
+-		return cert.PublicKey, nil
+-	}
+-	return nil, fmt.Errorf("no supported key material in KeyInfo for %s", alg)
++func keySourceWithCerts(secret []byte, certs []*x509.Certificate) stubKeySource {
++	_ = secret
++	_ = certs
++	return stubKeySource{}
+ }
+ 
+-// matchDNameCert resolves a DName-only KeyInfo (X509SubjectName, the form the
+-// xmldsig2ed dname cases use) to a vendored certificate.
+-//
+-// Division of labor: helium's keyinfo parser surfaces the ds:X509SubjectName
+-// string VERBATIM and performs NO DName canonicalization or matching. The
+-// HARNESS decodes that RFC 2253/4514 string into attribute VALUES and compares
+-// them to each candidate certificate's Subject, which Go's crypto/x509 has
+-// already decoded. Matching on decoded values (not on the escaped string) is
+-// what lets these cases pass: the very thing they test is that the same subject
+-// is written with different escaping (e.g. "Trailing\20\20" vs "Trailing \ "),
+-// which decodes to the same value but is not byte-equal as a string.
+-func (k keyResolver) matchDNameCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certificate {
+-	for _, subjectName := range keyInfo.X509SubjectNames {
+-		want := decodeDNameCN(subjectName)
+-		if want == "" {
+-			continue
+-		}
+-		for _, cert := range k.certs {
+-			if cert.Subject.CommonName == want {
+-				return cert
+-			}
+-		}
+-	}
+-	return nil
+-}
+-
+-// matchIssuerSerialCert resolves an X509IssuerSerial-only KeyInfo (the merlin
+-// signature-x509-is case) to a vendored certificate. Helium surfaces the issuer
+-// DName and serial VERBATIM (no matching); the harness selects the cert by
+-// serial number, then confirms the issuer CN matches after decoding, so a stray
+-// serial collision cannot pick the wrong cert.
+-func (k keyResolver) matchIssuerSerialCert(keyInfo *xmldsig1.KeyInfoData) *x509.Certificate {
+-	for _, is := range keyInfo.X509IssuerSerials {
+-		if is.SerialNumber == nil {
+-			continue
+-		}
+-		wantIssuerCN := decodeDNameCN(is.IssuerName)
+-		for _, cert := range k.certs {
+-			if cert.SerialNumber == nil || cert.SerialNumber.Cmp(is.SerialNumber) != 0 {
+-				continue
+-			}
+-			if wantIssuerCN == "" || cert.Issuer.CommonName == wantIssuerCN {
+-				return cert
+-			}
+-		}
+-	}
+-	return nil
+-}
+-
+-// decodeDNameCN extracts and unescapes the CN attribute value from an RFC
+-// 2253/4514 distinguished name string. It splits RDNs on unescaped commas,
+-// finds the CN attribute, and decodes its value's backslash escapes (\XX hex
+-// pairs and \<char> single-character escapes). Returns "" if there is no CN.
+-func decodeDNameCN(dname string) string {
+-	for _, rdn := range splitUnescaped(strings.TrimSpace(dname), ',') {
+-		eq := indexUnescaped(rdn, '=')
+-		if eq < 0 {
+-			continue
+-		}
+-		if !strings.EqualFold(strings.TrimSpace(rdn[:eq]), "CN") {
+-			continue
+-		}
+-		return unescapeDNameValue(rdn[eq+1:])
+-	}
+-	return ""
+-}
+-
+-// splitUnescaped splits s on every occurrence of sep not preceded by a
+-// backslash escape.
+-func splitUnescaped(s string, sep byte) []string {
+-	var parts []string
+-	start := 0
+-	for i := 0; i < len(s); i++ {
+-		if s[i] == '\\' {
+-			i++
+-			continue
+-		}
+-		if s[i] == sep {
+-			parts = append(parts, s[start:i])
+-			start = i + 1
+-		}
+-	}
+-	return append(parts, s[start:])
+-}
+-
+-// indexUnescaped returns the index of the first unescaped sep, or -1.
+-func indexUnescaped(s string, sep byte) int {
+-	for i := 0; i < len(s); i++ {
+-		if s[i] == '\\' {
+-			i++
+-			continue
+-		}
+-		if s[i] == sep {
+-			return i
+-		}
+-	}
+-	return -1
+-}
+-
+-// unescapeDNameValue decodes RFC 2253/4514 escapes in an attribute value: a
+-// backslash followed by two hex digits is one byte; a backslash followed by any
+-// other character is that character literally.
+-func unescapeDNameValue(v string) string {
+-	var b strings.Builder
+-	for i := 0; i < len(v); i++ {
+-		if v[i] != '\\' || i+1 >= len(v) {
+-			b.WriteByte(v[i])
+-			continue
+-		}
+-		if i+2 < len(v) && isHex(v[i+1]) && isHex(v[i+2]) {
+-			b.WriteByte(hexVal(v[i+1])<<4 | hexVal(v[i+2]))
+-			i += 2
+-			continue
+-		}
+-		b.WriteByte(v[i+1])
+-		i++
+-	}
+-	return b.String()
+-}
+-
+-func isHex(c byte) bool {
+-	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+-}
+-
+-func hexVal(c byte) byte {
+-	switch {
+-	case c >= '0' && c <= '9':
+-		return c - '0'
+-	case c >= 'a' && c <= 'f':
+-		return c - 'a' + 10
+-	default:
+-		return c - 'A' + 10
+-	}
+-}
++// errNoXMLDSig1 is the honest failure every signature-verification case reports on
++// helium v0.0.1, which predates the xmldsig1 package.
++var errNoXMLDSig1 = fmt.Errorf("xmldsig1 signature verification unavailable in this helium release")
+ 
+ // loadCerts parses every .crt (PEM or DER) certificate in dir. Returns an empty
+ // slice when the directory is absent (fixtures not fetched).
+@@ -345,7 +178,9 @@ func parseCert(t *testing.T, name string, data []byte) *x509.Certificate {
+ // substitution or DTD validation, external references confined to the testdata
+ // root, XXE unblocked so any inline DOCTYPE parses.
+ func signedDocParser(testdataRoot string) helium.Parser {
+-	return helium.NewParser().
+-		BlockXXE(false).
+-		FS(newConfinedFS(testdataRoot))
++	// v0.0.1 tag-adapt: helium v0.0.1 has no Parser.FS. This parser is only
++	// reached by the stubbed signature runners (which never actually verify on
++	// v0.0.1), so external-reference confinement is moot here.
++	_ = testdataRoot
++	return helium.NewParser().BlockXXE(false)
+ }
+diff --git a/xmldsig/merlinxmldsig_harness_test.go b/xmldsig/merlinxmldsig_harness_test.go
+index 0c9685e..f330339 100644
+--- a/xmldsig/merlinxmldsig_harness_test.go
++++ b/xmldsig/merlinxmldsig_harness_test.go
+@@ -2,11 +2,9 @@ package xmldsig_test
+ 
+ import (
+ 	"path/filepath"
+-	"strings"
+ 	"testing"
+ 
+ 	"github.com/lestrrat-go/helium-w3c-tests/internal/harness"
+-	"github.com/lestrrat-go/helium/xmldsig1"
+ )
+ 
+ // merlinCase is one document from the 2002 merlin-xmldsig-twenty-three baseline
+@@ -45,37 +43,12 @@ func TestMerlinXMLDSigW3C(t *testing.T) {
+ 	}
+ }
+ 
+-func runMerlinCase(t *testing.T, o *outcome, root string, c merlinCase, ks xmldsig1.KeySource) {
++func runMerlinCase(t *testing.T, o *outcome, root string, c merlinCase, ks stubKeySource) {
+ 	t.Helper()
+ 	defer recoverAsFailure(o, c.ID)
+-
+-	docPath := mustContained(t, root, c.File)
+-	src := readFixture(t, docPath, "merlinxmldsig")
+-
+-	doc, err := signedDocParser(root).BaseURI(c.File).Parse(t.Context(), src)
+-	if err != nil {
+-		o.errorf("%s: parse signed document: %v", c.ID, err)
+-		return
+-	}
+-	_, verr := xmldsig1.NewVerifier(ks).AllowSHA1(true).Verify(t.Context(), doc)
+-
+-	if !c.MustFail {
+-		if verr != nil {
+-			o.errorf("%s: verification failed: %v", c.ID, verr)
+-		}
+-		return
+-	}
+-
+-	// Expected-INVALID case: the interop collection requires this signature to be
+-	// rejected (its HMACOutputLength truncates the MAC to 40 bits). helium rejects
+-	// any HMACOutputLength fail-closed, which satisfies the must-reject: the case
+-	// passes when verification returns an error mentioning the truncation
+-	// parameter, and fails loudly if the bad signature were accepted.
+-	if verr == nil {
+-		o.errorf("%s: expected verification to FAIL (truncated HMACOutputLength) but it succeeded", c.ID)
+-		return
+-	}
+-	if !strings.Contains(verr.Error(), "HMACOutputLength") {
+-		o.errorf("%s: verification failed but not for the expected reason: %v", c.ID, verr)
+-	}
++	// v0.0.1 tag-adapt: no xmldsig1 package; neither the valid signatures nor the
++	// deliberately-invalid must-reject vector can be verified. Fail honestly.
++	_ = ks
++	_ = root
++	o.errorf("%s: %v", c.ID, errNoXMLDSig1)
+ }
+diff --git a/xmldsig/xmldsig2ed_harness_test.go b/xmldsig/xmldsig2ed_harness_test.go
+index 4397de1..8475ca6 100644
+--- a/xmldsig/xmldsig2ed_harness_test.go
++++ b/xmldsig/xmldsig2ed_harness_test.go
+@@ -10,7 +10,6 @@ import (
+ 	"github.com/lestrrat-go/helium"
+ 	"github.com/lestrrat-go/helium-w3c-tests/internal/harness"
+ 	"github.com/lestrrat-go/helium/c14n"
+-	"github.com/lestrrat-go/helium/xmldsig1"
+ 	"github.com/lestrrat-go/helium/xpath1"
+ )
+ 
+@@ -89,7 +88,6 @@ func runC14NCase(t *testing.T, o *outcome, root string, c dsig2edC14NCase) {
+ 		LoadExternalDTD(true).
+ 		DefaultDTDAttributes(true).
+ 		SubstituteEntities(true).
+-		FS(newConfinedFS(root)).
+ 		BaseURI(c.Input).
+ 		Parse(t.Context(), src)
+ 	if err != nil {
+@@ -122,21 +120,13 @@ func runC14NCase(t *testing.T, o *outcome, root string, c dsig2edC14NCase) {
+ 	}
+ }
+ 
+-func runSigCase(t *testing.T, o *outcome, root, id, input string, ks xmldsig1.KeySource) {
++func runSigCase(t *testing.T, o *outcome, root, id, input string, ks stubKeySource) {
+ 	t.Helper()
+ 	defer recoverAsFailure(o, id)
+-
+-	docPath := mustContained(t, root, input)
+-	src := readFixture(t, docPath, "xmldsig2ed")
+-
+-	doc, err := signedDocParser(root).BaseURI(input).Parse(t.Context(), src)
+-	if err != nil {
+-		o.errorf("%s: parse signed document: %v", id, err)
+-		return
+-	}
+-	if _, err := xmldsig1.NewVerifier(ks).AllowSHA1(true).Verify(t.Context(), doc); err != nil {
+-		o.errorf("%s: verification failed: %v", id, err)
+-	}
++	// v0.0.1 tag-adapt: no xmldsig1 package, so signature verification cannot run.
++	// Report the honest failure; the case counts as not-passing.
++	_ = ks
++	o.errorf("%s: %v", id, errNoXMLDSig1)
+ }
+ 
+ // mustContained resolves a testdata-relative path or fails the test as an

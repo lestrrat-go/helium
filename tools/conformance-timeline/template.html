@@ -5,6 +5,7 @@
     --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
     --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
     --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300; --s-xml:#b5359c;
+    --s-xmldsig2ed:#d1342f; --s-xmldsig11:#6d4bd8; --s-merlinxmldsig:#a06a30;
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
@@ -13,6 +14,7 @@
       --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
       --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
       --s-xslt30:#3987e5; --s-qt3:#199e70; --s-xsd11:#c98500; --s-xsd10:#008300; --s-xml:#cc51b4;
+      --s-xmldsig2ed:#e0554f; --s-xmldsig11:#8a6ee8; --s-merlinxmldsig:#b07d45;
     }
   }
   :root[data-theme="dark"] .viz-root {
@@ -26,6 +28,7 @@
     --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
     --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
     --s-xslt30:#2a78d6; --s-qt3:#1baf7a; --s-xsd11:#eda100; --s-xsd10:#008300; --s-xml:#b5359c;
+    --s-xmldsig2ed:#d1342f; --s-xmldsig11:#6d4bd8; --s-merlinxmldsig:#a06a30;
   }
   .viz-root {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -124,7 +127,8 @@
 const DATA = /*__DATA__*/null;
 (function () {
   const SUITES = DATA.suites;                 // [{key,label,denom}]
-  const CVAR = { xml:"--s-xml", xslt30:"--s-xslt30", qt3:"--s-qt3", xsd11:"--s-xsd11", xsd10:"--s-xsd10" };
+  const CVAR = { xml:"--s-xml", xslt30:"--s-xslt30", qt3:"--s-qt3", xsd11:"--s-xsd11", xsd10:"--s-xsd10",
+                 xmldsig2ed:"--s-xmldsig2ed", xmldsig11:"--s-xmldsig11", merlinxmldsig:"--s-merlinxmldsig" };
   const tags = DATA.tags;
   const byTagSuite = {};
   DATA.rows.forEach(r => { byTagSuite[r.tag + "|" + r.suite] = r; });
