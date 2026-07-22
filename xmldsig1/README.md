@@ -265,6 +265,10 @@ evidence:
 - [XML Signature 1.1 interop vectors](summary-xmldsig11.md) — enveloping
   signatures covering ECDSA P-256/P-384/P-521, RSA and HMAC with the SHA-2
   family, and RFC 4050 ECDSAKeyValue KeyInfo.
+- [merlin-xmldsig-twenty-three baseline](summary-merlinxmldsig.md) (2002
+  IETF/W3C interop collection) — DSA/RSA/HMAC-SHA1 signatures, the base64
+  transform, the truncated-HMAC must-reject case, and the X.509 KeyInfo
+  variants.
 
 The remaining expected failures are deliberate fail-closed design choices
 (no external-reference dereferencing, no XSLT transform), each documented

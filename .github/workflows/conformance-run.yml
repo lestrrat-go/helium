@@ -12,7 +12,7 @@ on:
   workflow_call:
     inputs:
       suite:
-        description: Conformance suite to run (xslt30, qt3, xsd11, xsd10, xml, xmldsig2ed, xmldsig11)
+        description: Conformance suite to run (xslt30, qt3, xsd11, xsd10, xml, xmldsig2ed, xmldsig11, merlinxmldsig)
         type: string
         default: xslt30
       slow:

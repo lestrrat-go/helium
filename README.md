@@ -261,6 +261,7 @@ expected-failure (documented known gap) breakdowns where applicable.
 | XSD 1.1 (opt-in) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd11.md) |
 | C14N 1.1 + XMLDSig interop (xmldsig2ed-tests) | [`xmldsig1`](xmldsig1/README.md) | [summary](xmldsig1/summary-xmldsig2ed.md) |
 | XML Signature 1.1 interop | [`xmldsig1`](xmldsig1/README.md) | [summary](xmldsig1/summary-xmldsig11.md) |
+| XMLDSig 1.0 baseline (merlin-xmldsig-twenty-three) | [`xmldsig1`](xmldsig1/README.md) | [summary](xmldsig1/summary-merlinxmldsig.md) |
 
 ## libxml2 compatibility (golden tests)
 
