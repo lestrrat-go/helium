@@ -310,12 +310,17 @@ func interpretRetrievalOctets(ctx context.Context, budget *verifyBudget, cfg *ve
 }
 
 // parseRetrievalDoc parses externally retrieved octets into a document with the
-// locked-down reference parser.
+// locked-down reference parser. A resolved resource that is not well-formed XML
+// is resolved-but-corrupt key material, so it fails with ErrInvalidKeyInfo (like
+// a malformed inline X509Data), NOT ErrReferenceNotFound: the resource WAS
+// dereferenced, it just isn't usable. This keeps a garbage resource a hard
+// failure and, under Verifier.LenientKeyInfo, non-skippable — leniency skips only
+// the genuinely unavailable case (ErrReferenceNotFound).
 func parseRetrievalDoc(ctx context.Context, cfg *verifierConfig, octets []byte) (*helium.Document, error) {
 	parser := cfg.parser()
 	extDoc, err := parser.Parse(ctx, octets)
 	if err != nil {
-		return nil, fmt.Errorf("%w: cannot parse RetrievalMethod resource as XML: %v", ErrReferenceNotFound, err)
+		return nil, fmt.Errorf("%w: cannot parse RetrievalMethod resource as XML: %v", ErrInvalidKeyInfo, err)
 	}
 	return extDoc, nil
 }
