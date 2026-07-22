@@ -85,6 +85,14 @@ var (
 	// way to resolve a verification key, so this is rejected before any key
 	// resolution rather than panicking on a nil dereference.
 	ErrNoKeySource = errors.New("xmldsig1: no key source configured")
+
+	// ErrHereUnavailable is returned when the XPath here() function is invoked in
+	// a context that has no bearing node. here() (XMLDSig core §6.6.3.1) resolves
+	// to the element carrying the XPath expression — the ds:XPath element of an
+	// XPath filter transform. It is threaded through only on the XPath filter
+	// transform path; the signing path and a URI-borne XPointer carry no bearing
+	// element, so here() fails closed there rather than resolving to a wrong node.
+	ErrHereUnavailable = errors.New("xmldsig1: here() has no bearing node in this context")
 )
 
 // opSign is the ReferenceError.Op value for a signing-side per-reference failure.

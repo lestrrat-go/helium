@@ -57,6 +57,7 @@ type parsedTransform struct {
 	prefixes   []string          // for Exclusive C14N InclusiveNamespaces
 	xpathExpr  string            // for the XPath filter transform (ds:Transform/XPath text)
 	xpathNS    map[string]string // in-scope namespace bindings on the ds:Transform/XPath element
+	xpathHere  helium.Node       // the ds:XPath element bearing the expression (here() resolves to it)
 	stylesheet []byte            // for the XSLT transform: the serialized xsl:stylesheet subtree
 }
 
@@ -267,10 +268,21 @@ func verifyReference(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 // and whether the reference was satisfied externally. It is the shared reference
 // node-set → octet path for the verify digest check.
 func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
-	// A URI that is not one of the four same-document forms is an external
-	// reference. It is dereferenced only through a configured ReferenceResolver;
-	// without one it stays fail-closed exactly as before.
+	// A URI that is not one of the four same-document forms is either a general
+	// XPointer (opt-in) or an external reference.
 	if _, _, _, ok := referenceURIForm(ref.uri); !ok {
+		// A general XPointer is resolved only when Verifier.AllowXPointer(true)
+		// opted in; otherwise it stays fail-closed as an external reference, so the
+		// default four-form behavior is byte-identical.
+		if cfg.allowXPointer {
+			target, canonical, handled, err := canonicalizeGeneralXPointer(ctx, cfg, doc, sigElem, ref)
+			if handled {
+				if err != nil {
+					return nil, nil, false, err
+				}
+				return target, canonical, false, nil
+			}
+		}
 		octets, err := resolveExternalReference(ctx, cfg, doc, ref)
 		if err != nil {
 			return nil, nil, false, err
@@ -283,29 +295,39 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 		return nil, nil, false, err
 	}
 
-	// Interpret the transforms as an ordered pipeline. Fail closed: any
-	// transform whose URI we cannot apply, or one ordered after an
-	// octet-producing c14n transform, is rejected before digesting — otherwise a
-	// Reference could declare an unsupported or mis-ordered transform and still
-	// verify against the untransformed canonical bytes. When no c14n transform is
-	// declared the default node-set->octet conversion is inclusive Canonical
-	// XML 1.0.
-	steps := make([]transformStep, len(ref.transforms))
-	for i, t := range ref.transforms {
+	// Classify the URI's node-set form (§4.3.3.2-3). wholeDoc selects the
+	// document root; includeComments governs whether comment nodes are part of
+	// the selected node-set.
+	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
+
+	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, wholeDoc, includeComments, ref.transforms)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return target, canonical, false, nil
+}
+
+// applyReferenceTransforms interprets a Reference's transform list as an ordered
+// pipeline and returns the canonical octet stream its DigestValue is computed
+// over, given the already-resolved target element and the reference form's
+// wholeDoc / includeComments classification. It is shared by the four same-document
+// forms and the general XPointer resolver so both interpret a transform list
+// identically.
+//
+// Fail closed: any transform whose URI cannot be applied, or one ordered after an
+// octet-producing c14n transform, is rejected before digesting — otherwise a
+// Reference could declare an unsupported or mis-ordered transform and still verify
+// against the untransformed canonical bytes. When no c14n transform is declared
+// the default node-set->octet conversion is inclusive Canonical XML 1.0.
+func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, transforms []parsedTransform) ([]byte, error) {
+	steps := make([]transformStep, len(transforms))
+	for i, t := range transforms {
 		steps[i] = transformStep(t)
 	}
 	pipe, err := resolveTransformPipeline(steps)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, err
 	}
-
-	// Classify the URI's node-set form (§4.3.3.2-3). wholeDoc selects the
-	// document root; includeComments governs whether comment nodes are part of
-	// the selected node-set. A C14N WithComments method only emits comment nodes
-	// present in the set, so when the form excludes comments the method is
-	// downgraded to its plain variant — keeping "#id"/"" free of comments even
-	// under a WithComments c14n, and reserving comments for the #xpointer forms.
-	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
 
 	// The base64 decode transform ends the pipeline with decoded octets that are
 	// digested directly (XMLDSig core §6.6.2): the resolved node-set's XPath 1.0
@@ -316,15 +338,15 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	// fail-closed here rather than digesting an unintended string-value.
 	if pipe.base64 {
 		if pipe.hasEnveloped || len(pipe.xpathFilters) > 0 {
-			return nil, nil, false, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
+			return nil, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
 		}
-		octets, err := base64TransformOctets(target)
-		if err != nil {
-			return nil, nil, false, err
-		}
-		return target, octets, false, nil
+		return base64TransformOctets(target)
 	}
 
+	// A C14N WithComments method only emits comment nodes present in the set, so
+	// when the form excludes comments the method is downgraded to its plain
+	// variant — keeping "#id"/"" free of comments even under a WithComments c14n,
+	// and reserving comments for the #xpointer forms.
 	c14nMethod := effectiveC14NMethod(pipe.c14nMethod, includeComments)
 
 	// Compute the pre-XSLT octets. When one or more XPath filter transforms are
@@ -350,7 +372,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 		canonical, err = canonicalizeSubtree(c14nMethod, target, pipe.prefixes)
 	}
 	if err != nil {
-		return nil, nil, false, err
+		return nil, err
 	}
 
 	// XSLT transform (verify-only, opt-in): octet-in -> octet-out. The octets
@@ -360,14 +382,42 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	// stance — helium never runs attacker-controlled XSLT on its own.
 	if pipe.xslt != nil {
 		if isNilInterface(cfg.xsltTransformer) {
-			return nil, nil, false, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
+			return nil, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
 		}
 		canonical, err = cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, canonical)
 		if err != nil {
-			return nil, nil, false, err
+			return nil, err
 		}
 	}
-	return target, canonical, false, nil
+	return canonical, nil
+}
+
+// canonicalizeGeneralXPointer resolves a general XPointer Reference URI (opt-in,
+// XPointer framework: zero+ xmlns() parts then one xpointer(<expr>)) to its
+// single element apex and applies the Reference's transform pipeline over that
+// subtree. handled reports whether ref.uri matched the general XPointer shape at
+// all: when it did not, the caller falls through to external-reference handling;
+// when it did, the returned err (if any) is the fail-closed resolution result.
+//
+// The apex is enforced to a SINGLE element (the XSW defense, singleElementApex):
+// an empty node-set is ErrReferenceNotFound and a scattered/multi-element or
+// non-element node-set is ErrAmbiguousReference. The full-XPointer forms include
+// comment nodes, so includeComments is true. here() is NOT registered for a
+// URI-borne XPointer, so an xpointer(here()...) fails closed.
+func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
+	overrides, expr, matched := parseGeneralXPointer(ref.uri)
+	if !matched {
+		return nil, nil, false, nil
+	}
+	target, err := resolveGeneralXPointerTarget(ctx, doc, overrides, expr)
+	if err != nil {
+		return nil, nil, true, err
+	}
+	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, false, true, ref.transforms)
+	if err != nil {
+		return nil, nil, true, err
+	}
+	return target, canonical, true, nil
 }
 
 // resolveExternalReference dereferences an external Reference URI through the
@@ -652,11 +702,11 @@ func parseTransformList(transformsElem *helium.Element) ([]parsedTransform, erro
 		// parameter), so parse it separately; every other transform is validated
 		// by the InclusiveNamespaces gate below.
 		if alg == TransformXPath {
-			expr, nsBindings, err := parseXPathTransform(te)
+			expr, nsBindings, hereElem, err := parseXPathTransform(te)
 			if err != nil {
 				return nil, err
 			}
-			transforms = append(transforms, parsedTransform{algorithm: alg, xpathExpr: expr, xpathNS: nsBindings})
+			transforms = append(transforms, parsedTransform{algorithm: alg, xpathExpr: expr, xpathNS: nsBindings, xpathHere: hereElem})
 			continue
 		}
 		// The XSLT transform carries its stylesheet in a
@@ -861,8 +911,9 @@ func gateInclusiveNamespaces(alg string) error {
 // a missing, duplicate, or foreign child so a malformed XPath transform never
 // digests an unfiltered node-set. The default (empty-prefix) namespace is not
 // forwarded: XPath 1.0 has no default element namespace, so an unprefixed name
-// test matches only no-namespace nodes.
-func parseXPathTransform(te *helium.Element) (string, map[string]string, error) {
+// test matches only no-namespace nodes. The ds:XPath element itself is returned
+// as the bearing node so the here() function (core §6.6.3.1) resolves to it.
+func parseXPathTransform(te *helium.Element) (string, map[string]string, *helium.Element, error) {
 	var xpathElem *helium.Element
 	for c := te.FirstChild(); c != nil; c = c.NextSibling() {
 		ce, ok := helium.AsNode[*helium.Element](c)
@@ -870,19 +921,19 @@ func parseXPathTransform(te *helium.Element) (string, map[string]string, error) 
 			continue
 		}
 		if !isDSigCoreNS(ce) || domutil.LocalName(ce) != "XPath" {
-			return "", nil, fmt.Errorf("%w: unsupported XPath transform child %s", ErrUnsupportedTransform, domutil.LocalName(ce))
+			return "", nil, nil, fmt.Errorf("%w: unsupported XPath transform child %s", ErrUnsupportedTransform, domutil.LocalName(ce))
 		}
 		if xpathElem != nil {
-			return "", nil, fmt.Errorf("%w: multiple XPath elements in XPath transform", ErrUnsupportedTransform)
+			return "", nil, nil, fmt.Errorf("%w: multiple XPath elements in XPath transform", ErrUnsupportedTransform)
 		}
 		xpathElem = ce
 	}
 	if xpathElem == nil {
-		return "", nil, fmt.Errorf("%w: XPath transform missing XPath element", ErrUnsupportedTransform)
+		return "", nil, nil, fmt.Errorf("%w: XPath transform missing XPath element", ErrUnsupportedTransform)
 	}
 	expr := strings.TrimSpace(domutil.TextContent(xpathElem))
 	if expr == "" {
-		return "", nil, fmt.Errorf("%w: XPath transform has empty expression", ErrUnsupportedTransform)
+		return "", nil, nil, fmt.Errorf("%w: XPath transform has empty expression", ErrUnsupportedTransform)
 	}
 	nsBindings := make(map[string]string)
 	for prefix, ns := range domutil.InScopeNamespaces(xpathElem, true) {
@@ -891,7 +942,7 @@ func parseXPathTransform(te *helium.Element) (string, map[string]string, error) 
 		}
 		nsBindings[prefix] = ns.URI()
 	}
-	return expr, nsBindings, nil
+	return expr, nsBindings, xpathElem, nil
 }
 
 // rejectSignatureMethodParameters fails closed on any child element of

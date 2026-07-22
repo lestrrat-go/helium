@@ -314,6 +314,11 @@ type verifierConfig struct {
 	maxReferences     int
 	maxKeyInfoEntries int
 	maxDecodedBytes   int
+	// allowXPointer opts into resolving a general XPointer Reference URI (an
+	// xmlns()*xpointer(expr) framework form) beyond the four safe same-document
+	// forms. Default false keeps a general XPointer fail-closed as an external
+	// reference, so default verification is byte-identical.
+	allowXPointer bool
 }
 
 // maxReferencesLimit returns the effective cap on the number of ds:Reference
@@ -499,6 +504,29 @@ func (v Verifier) MaxKeyInfoEntries(n int) Verifier {
 func (v Verifier) MaxDecodedBytes(n int) Verifier {
 	v = v.clone()
 	v.cfg.maxDecodedBytes = n
+	return v
+}
+
+// AllowXPointer opts into resolving a general XPointer Reference URI — an
+// XPointer framework URI of the form "#xmlns(prefix=uri)...xpointer(<expr>)"
+// (zero or more xmlns() namespace-binding parts followed by one xpointer() XPath
+// expression) — in addition to the four safe same-document forms (see
+// [Verifier.Verify]). It is opt-in and fail-closed by default: with AllowXPointer
+// off (the default) a general XPointer URI is treated as an external reference
+// and, without a [ReferenceResolver], rejected with [ErrReferenceNotFound], so
+// default verification is byte-identical.
+//
+// When enabled, the xpointer() expression is evaluated on a bounded XPath 1.0
+// evaluator under the document element's in-scope namespaces overlaid with the
+// xmlns() bindings, and its result MUST identify a single element apex — the XML
+// Signature Wrapping defense: an empty node-set is [ErrReferenceNotFound], and a
+// multi-element or non-element node-set is [ErrAmbiguousReference]. A literal
+// xpointer(id('X')) keeps the duplicate-detecting id resolution (never a
+// last-one-wins id table). The XMLDSig here() function is not available inside a
+// URI-borne XPointer.
+func (v Verifier) AllowXPointer(allow bool) Verifier {
+	v = v.clone()
+	v.cfg.allowXPointer = allow
 	return v
 }
 
