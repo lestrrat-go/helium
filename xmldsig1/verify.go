@@ -43,6 +43,7 @@ type parsedSignature struct {
 
 type parsedReference struct {
 	uri             string
+	refType         string // Reference Type attribute (e.g. TypeManifest); "" when absent
 	digestAlgorithm string
 	digestValue     []byte
 	transforms      []parsedTransform
@@ -136,7 +137,36 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 			Element:         target,
 			External:        external,
 			DigestAlgorithm: ref.digestAlgorithm,
+			Type:            ref.refType,
 		})
+	}
+
+	// After every top-level Reference digest has verified, optionally walk the
+	// inner references of any Manifest-typed Reference (XMLDSig core §5.1). This
+	// is opt-in (Verifier.ValidateManifests) and purely advisory: inner digests
+	// are recorded but never change whether Verify succeeds, and coverage is
+	// never attributed through a Manifest. Taking addresses into
+	// result.References is safe because that slice is complete here.
+	if cfg.validateManifests {
+		for i, ref := range parsed.references {
+			if ref.refType != TypeManifest {
+				continue
+			}
+			// A Manifest whose top-level Reference resolved externally (Element
+			// nil) has no in-document Manifest element to walk; skip it.
+			manifestElem := result.References[i].Element
+			if manifestElem == nil {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			result.Manifests = append(result.Manifests, ManifestResult{
+				Reference:  &result.References[i],
+				Element:    manifestElem,
+				References: validateManifestReferences(ctx, cfg, doc, sigElem, manifestElem),
+			})
+		}
 	}
 
 	return result, nil
@@ -480,6 +510,10 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 	ref := parsedReference{}
 	ref.uri, _ = elem.GetAttribute("URI")
+	// The Type attribute is advisory metadata (XMLDSig core §4.3.3.1): it names
+	// what the URI points at (e.g. a ds:Manifest). It never affects the
+	// top-level digest; it only gates the opt-in Manifest inner-reference walk.
+	ref.refType, _ = elem.GetAttribute("Type")
 
 	// The XML-Signature schema fixes Reference's content model as
 	// (Transforms?, DigestMethod, DigestValue) with at most one Transforms and

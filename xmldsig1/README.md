@@ -191,6 +191,52 @@ side, letting a detached signature cover external content. The sign and verify
 paths funnel through the same octet-to-digest logic, so the signed digest is
 byte-identical to what verification recomputes for the same input.
 
+## Manifest inner-reference validation (opt-in)
+
+A `ds:Reference` whose `Type` is
+`http://www.w3.org/2000/09/xmldsig#Manifest` points at a `ds:Manifest`, which
+holds its own list of `ds:Reference` elements (XMLDSig core §5.1). The signature
+commits to the Manifest's own bytes — the top-level Manifest reference's digest
+over the `ds:Manifest` subtree is checked exactly like any other reference — but
+by design it says nothing about whether the Manifest's **inner** references still
+match their targets. Per §5.1 that is left to the application.
+
+`Verifier.ValidateManifests(true)` opts in to walking those inner references.
+When enabled, after a top-level Manifest-typed reference has itself verified,
+each inner `ds:Reference` is resolved, run through its transform pipeline, and
+digested through the **same fail-closed path** as a top-level reference, and the
+per-reference outcome is reported in `VerifyResult.Manifests`:
+
+```go
+type ManifestResult struct {
+    Reference  *VerifiedReference // the top-level Manifest reference
+    Element    *helium.Element    // the ds:Manifest element
+    References []ManifestReference
+}
+type ManifestReference struct {
+    URI, DigestAlgorithm string
+    Element              *helium.Element
+    Valid                bool
+    Err                  error
+}
+```
+
+Inner-reference results are **advisory**. A failed inner digest, an unsupported
+inner transform, or an unresolved external inner reference is recorded as that
+`ManifestReference`'s `Valid:false` / `Err` — it does **not** fail `Verify`, and
+it never contributes to `VerifyResult.Covers` or `SignedElement`. Coverage is
+never attributed through a Manifest, preserving the XML Signature Wrapping
+guarantee: confirming a specific `*Element` was signed still requires a
+top-level same-document reference. Only one level is walked — a Manifest nested
+inside a Manifest is digested but not recursively expanded, which bounds the
+work.
+
+The toggle defaults to **false**: `VerifyResult.Manifests` is nil and no inner
+references are walked, byte-identical to a Verifier without it. It is opt-in
+because inner references may pull in transforms or external URIs the top-level
+policy did not intend. The top-level `VerifiedReference.Type` is reported in the
+result regardless of the toggle.
+
 ## Security: SHA-1 rejected by default
 
 SHA-1-based algorithms (`rsa-sha1`, `ecdsa-sha1`, `hmac-sha1`, and the `sha1`
