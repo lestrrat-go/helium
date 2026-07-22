@@ -102,6 +102,13 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		if err != nil {
 			return nil, err
 		}
+		// A second, resolution-aware pass dereferences any ds:RetrievalMethod and
+		// merges the retrieved certificate material into keyInfoData before key
+		// resolution. It inherits the external-Reference fail-closed posture
+		// (opt-in resolver, size cap, base-URI join).
+		if err := resolveRetrievalMethods(ctx, cfg, doc, parsed.keyInfoElem, sigElem, keyInfoData); err != nil {
+			return nil, err
+		}
 	}
 
 	key, err := cfg.keySource.ResolveKey(ctx, keyInfoData, parsed.signatureAlg)

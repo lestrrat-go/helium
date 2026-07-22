@@ -60,6 +60,12 @@ var (
 	// ErrInvalidKeyInfo is returned when KeyInfo content cannot be parsed.
 	ErrInvalidKeyInfo = errors.New("xmldsig1: invalid KeyInfo")
 
+	// ErrRetrievalMethodLoop is returned when a ds:RetrievalMethod chain is
+	// cyclic or exceeds the maximum follow depth. A RetrievalMethod whose target
+	// is itself a RetrievalMethod is followed, so an unbounded or self-referential
+	// chain is rejected fail-closed rather than dereferenced without limit.
+	ErrRetrievalMethodLoop = errors.New("xmldsig1: RetrievalMethod chain is cyclic or too deep")
+
 	// ErrInvalidSignature is returned when the Signature element is malformed.
 	ErrInvalidSignature = errors.New("xmldsig1: invalid signature structure")
 

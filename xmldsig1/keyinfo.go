@@ -1,6 +1,7 @@
 package xmldsig1
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/elliptic"
@@ -9,6 +10,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -56,9 +58,90 @@ func X509CertKeySource(cert *x509.Certificate) KeySource {
 	})
 }
 
+// KeyByNameSource returns a KeySource that maps a ds:KeyName to a key. The
+// KeyInfo's KeyNames are tried in document order and the first name present in
+// keys wins; a KeyInfo with no matching KeyName (including one that carries no
+// KeyName at all) fails closed with ErrNoKeySource. A ds:KeyName is an opaque,
+// producer-chosen label, so the caller owns the name→key mapping and the trust
+// decision that a named key is acceptable.
+func KeyByNameSource(keys map[string]any) KeySource {
+	return KeySourceFunc(func(_ context.Context, keyInfo *KeyInfoData, _ string) (any, error) {
+		if keyInfo == nil {
+			return nil, ErrNoKeySource
+		}
+		for _, name := range keyInfo.KeyNames {
+			key, ok := keys[name]
+			if ok {
+				return key, nil
+			}
+		}
+		return nil, ErrNoKeySource
+	})
+}
+
+// X509CertPoolKeySource returns a KeySource that selects a certificate from the
+// given set by matching the verification-side KeyInfo against it, and returns
+// the matched certificate's PublicKey. Selection is tried in this order for each
+// candidate certificate:
+//
+//   - an exact raw-DER match against a ds:X509Certificate in the KeyInfo;
+//   - a ds:X509SKI match against the certificate's SubjectKeyId;
+//   - a ds:X509IssuerSerial match against the certificate's Issuer and
+//     SerialNumber;
+//   - a ds:X509SubjectName match against the certificate's Subject.
+//
+// The raw-DER and SubjectKeyId paths are exact and reliable. The IssuerSerial
+// and SubjectName paths compare Go's pkix.Name.String() rendering, which is NOT
+// RFC 2253 canonical, so DName matching is best-effort — prefer supplying the
+// certificate whose SKI or raw bytes the signature carries. Selecting a
+// certificate never establishes trust: the returned public key is still subject
+// to the same out-of-band trust decision as any other verification key.
+func X509CertPoolKeySource(certs ...*x509.Certificate) KeySource {
+	return KeySourceFunc(func(_ context.Context, keyInfo *KeyInfoData, _ string) (any, error) {
+		if keyInfo == nil {
+			return nil, ErrNoKeySource
+		}
+		for _, cert := range certs {
+			if cert == nil {
+				continue
+			}
+			if certMatchesKeyInfo(cert, keyInfo) {
+				return cert.PublicKey, nil
+			}
+		}
+		return nil, ErrNoKeySource
+	})
+}
+
+// certMatchesKeyInfo reports whether cert is the certificate a KeyInfo selects,
+// trying the exact raw-DER and SubjectKeyId paths before the best-effort
+// IssuerSerial and SubjectName DName comparisons.
+func certMatchesKeyInfo(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
+	for _, kc := range keyInfo.X509Certificates {
+		if kc != nil && bytes.Equal(kc.Raw, cert.Raw) {
+			return true
+		}
+	}
+	for _, ski := range keyInfo.X509SKIs {
+		if len(cert.SubjectKeyId) > 0 && bytes.Equal(ski, cert.SubjectKeyId) {
+			return true
+		}
+	}
+	for _, is := range keyInfo.X509IssuerSerials {
+		if cert.SerialNumber != nil && is.SerialNumber != nil &&
+			cert.SerialNumber.Cmp(is.SerialNumber) == 0 &&
+			cert.Issuer.String() == is.IssuerName {
+			return true
+		}
+	}
+	return slices.Contains(keyInfo.X509SubjectNames, cert.Subject.String())
+}
+
 // KeyInfoData holds parsed KeyInfo content for verification.
 type KeyInfoData struct {
+	KeyNames          []string
 	X509Certificates  []*x509.Certificate
+	X509SKIs          [][]byte
 	X509IssuerSerials []*X509IssuerSerial
 	X509SubjectNames  []string
 	RSAKeyValue       *RSAKeyValueData
@@ -291,6 +374,10 @@ func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 			continue
 		}
 		switch domutil.LocalName(elem) {
+		case "KeyName":
+			// A ds:KeyName is an opaque producer-chosen label; surface it verbatim
+			// (whitespace-trimmed) for a KeySource to map to a key.
+			data.KeyNames = append(data.KeyNames, strings.TrimSpace(domutil.TextContent(elem)))
 		case "X509Data":
 			if err := parseX509Data(elem, data); err != nil {
 				return nil, err
@@ -326,6 +413,16 @@ func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 				return fmt.Errorf("%w: invalid X509Certificate: %v", ErrInvalidKeyInfo, err)
 			}
 			data.X509Certificates = append(data.X509Certificates, cert)
+		case "X509SKI":
+			// The X509SKI carries the raw DER SubjectKeyIdentifier octets,
+			// base64-encoded. Decode to the raw bytes so a KeySource can compare
+			// them against a certificate's SubjectKeyId; a decode error is
+			// malformed key material and fails closed.
+			ski, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			if err != nil {
+				return fmt.Errorf("%w: invalid X509SKI base64: %v", ErrInvalidKeyInfo, err)
+			}
+			data.X509SKIs = append(data.X509SKIs, ski)
 		case "X509SubjectName":
 			data.X509SubjectNames = append(data.X509SubjectNames, domutil.TextContent(e))
 		case "X509IssuerSerial":
