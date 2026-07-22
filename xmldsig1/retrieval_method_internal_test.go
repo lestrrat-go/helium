@@ -344,3 +344,83 @@ func TestRetrievalMethodAppliesSupportedTransform(t *testing.T) {
 		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
 	})
 }
+
+// xsltTransformElem is a ds:Transforms carrying a single XSLT transform whose
+// xsl:stylesheet is an identity transform. It is well-formed and parses, so the
+// RetrievalMethod path must decide whether to apply or reject it — never ignore
+// it while still accepting the resolved certificate.
+const xsltTransformElem = `<ds:Transforms><ds:Transform Algorithm="` + TransformXSLT + `">` +
+	`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
+	`<xsl:template match="/"><xsl:copy-of select="."/></xsl:template>` +
+	`</xsl:stylesheet></ds:Transform></ds:Transforms>`
+
+// TestRetrievalMethodXSLTFailsClosed proves an XSLT transform on a
+// RetrievalMethod is NOT silently ignored: with no XSLTTransformer configured it
+// fails closed with ErrUnsupportedTransform on both the external and
+// same-document branches, and the resolved certificate is never merged. This is
+// the same fail-closed posture the Reference paths apply to an XSLT transform.
+func TestRetrievalMethodXSLTFailsClosed(t *testing.T) {
+	t.Run("external", func(t *testing.T) {
+		_, der := selfSignedCert(t)
+		fsys := fstest.MapFS{"certs/signer.der": {Data: der}}
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">`+
+			`<ds:RetrievalMethod URI="certs/signer.der" Type="`+TypeRawX509Certificate+`">`+xsltTransformElem+`</ds:RetrievalMethod></ds:KeyInfo>`)
+		cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Empty(t, data.X509Certificates)
+	})
+
+	t.Run("same-document", func(t *testing.T) {
+		_, der := selfSignedCert(t)
+		certB64 := base64.StdEncoding.EncodeToString(der)
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">`+
+			`<ds:RetrievalMethod URI="#x509" Type="`+TypeX509Data+`">`+xsltTransformElem+`</ds:RetrievalMethod>`+
+			`<ds:X509Data Id="x509"><ds:X509Certificate>`+certB64+`</ds:X509Certificate></ds:X509Data></ds:KeyInfo>`)
+		cfg := &verifierConfig{}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Empty(t, data.X509Certificates)
+	})
+}
+
+// TestRetrievalMethodRawCertCountsAgainstBudget proves a retrieved
+// rawX509Certificate is charged to the per-Verify decoded-byte budget exactly
+// like an inline ds:X509Certificate, so a RetrievalMethod cannot fetch and parse
+// certificate octets that escape MaxDecodedBytes. A budget whose decoded cap is
+// far below a certificate's DER length trips ErrResourceLimitExceeded.
+func TestRetrievalMethodRawCertCountsAgainstBudget(t *testing.T) {
+	tinyBudget := func() *verifyBudget {
+		return &verifyBudget{maxRefs: 1024, maxEntries: 256, maxDecoded: 8}
+	}
+
+	t.Run("external", func(t *testing.T) {
+		_, der := selfSignedCert(t)
+		require.Greater(t, len(der), 8)
+		fsys := fstest.MapFS{"certs/signer.der": {Data: der}}
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="certs/signer.der" Type="`+TypeRawX509Certificate+`"/></ds:KeyInfo>`)
+		cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), tinyBudget(), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrResourceLimitExceeded)
+		require.Empty(t, data.X509Certificates)
+	})
+
+	t.Run("same-document", func(t *testing.T) {
+		_, der := selfSignedCert(t)
+		certB64 := base64.StdEncoding.EncodeToString(der)
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="#raw" Type="`+TypeRawX509Certificate+`"/>`+
+			`<ds:SPKIData Id="raw">`+certB64+`</ds:SPKIData></ds:KeyInfo>`)
+		cfg := &verifierConfig{}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), tinyBudget(), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrResourceLimitExceeded)
+		require.Empty(t, data.X509Certificates)
+	})
+}

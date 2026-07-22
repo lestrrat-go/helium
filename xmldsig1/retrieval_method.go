@@ -108,6 +108,10 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 		if err != nil {
 			return err
 		}
+		transformed, err = applyRetrievalXSLT(ctx, cfg, pipe, transformed)
+		if err != nil {
+			return err
+		}
 		return interpretRetrievalOctets(ctx, budget, cfg, transformed, typ, data)
 	}
 
@@ -151,7 +155,31 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	if err != nil {
 		return err
 	}
+	octets, err = applyRetrievalXSLT(ctx, cfg, pipe, octets)
+	if err != nil {
+		return err
+	}
 	return interpretRetrievalOctets(ctx, budget, cfg, octets, typ, data)
+}
+
+// applyRetrievalXSLT applies a RetrievalMethod's XSLT transform to the pre-XSLT
+// octets, or fails closed when the pipeline carries an XSLT step but no usable
+// XSLTTransformer is configured. It mirrors the Reference paths
+// (resolveExternalReference / the same-document canonicalizeReference XSLT step):
+// externalReferenceDigestInput and retrievalTransformOctets do NOT consult
+// pipe.xslt, so without this an attacker-supplied XSLT transform on a
+// RetrievalMethod would be silently dropped while the resolved certificate
+// material is still merged (fail-open). helium never runs attacker-controlled
+// XSLT itself — a nil or typed-nil transformer rejects with
+// ErrUnsupportedTransform, the same stance as the Reference path.
+func applyRetrievalXSLT(ctx context.Context, cfg *verifierConfig, pipe transformPipeline, octets []byte) ([]byte, error) {
+	if pipe.xslt == nil {
+		return octets, nil
+	}
+	if isNilInterface(cfg.xsltTransformer) {
+		return nil, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
+	}
+	return cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, octets)
 }
 
 // parseRetrievalTransforms parses the optional single ds:Transforms child of a
@@ -234,6 +262,16 @@ func resolveRetrievalOctets(ctx context.Context, cfg *verifierConfig, doc *heliu
 func interpretRetrievalOctets(ctx context.Context, budget *verifyBudget, cfg *verifierConfig, octets []byte, typ string, data *KeyInfoData) error {
 	switch typ {
 	case TypeRawX509Certificate:
+		// Count the retrieved certificate against the same per-Verify budget as an
+		// inline ds:X509Certificate (keyinfo.go parseX509Data), so a RetrievalMethod
+		// cannot fetch and parse certificate octets that escape the entry and
+		// decoded-byte caps.
+		if err := budget.addKeyInfoEntry(); err != nil {
+			return err
+		}
+		if err := budget.consume(len(octets)); err != nil {
+			return err
+		}
 		cert, err := x509.ParseCertificate(octets)
 		if err != nil {
 			return fmt.Errorf("%w: invalid rawX509Certificate: %v", ErrInvalidKeyInfo, err)
@@ -282,6 +320,15 @@ func interpretRetrievalElement(ctx context.Context, budget *verifyBudget, target
 		der, err := xmlbase64.DecodeString(domutil.TextContent(target))
 		if err != nil {
 			return fmt.Errorf("%w: invalid rawX509Certificate base64: %v", ErrInvalidKeyInfo, err)
+		}
+		// Count the retrieved certificate against the same per-Verify budget as an
+		// inline ds:X509Certificate, so a same-document RetrievalMethod cannot
+		// decode and parse certificate octets that escape the caps.
+		if err := budget.addKeyInfoEntry(); err != nil {
+			return err
+		}
+		if err := budget.consume(len(der)); err != nil {
+			return err
 		}
 		cert, err := x509.ParseCertificate(der)
 		if err != nil {
