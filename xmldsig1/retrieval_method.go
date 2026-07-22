@@ -30,7 +30,7 @@ const maxRetrievalMethodDepth = 5
 // Retrieved certificates are appended to data.X509Certificates; parsing a
 // certificate never trusts it, so the caller's KeySource and out-of-band trust
 // decision still governs an obtained cert exactly as it does an inline one.
-func resolveRetrievalMethods(ctx context.Context, cfg *verifierConfig, doc *helium.Document, keyInfoElem, sigElem *helium.Element, data *KeyInfoData) error {
+func resolveRetrievalMethods(ctx context.Context, cfg *verifierConfig, doc *helium.Document, keyInfoElem *helium.Element, data *KeyInfoData) error {
 	visited := make(map[string]struct{})
 	for child := keyInfoElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := helium.AsNode[*helium.Element](child)
@@ -42,7 +42,7 @@ func resolveRetrievalMethods(ctx context.Context, cfg *verifierConfig, doc *heli
 		if !isDSigCoreNS(elem) || domutil.LocalName(elem) != "RetrievalMethod" {
 			continue
 		}
-		if err := processRetrievalMethod(ctx, cfg, doc, sigElem, elem, data, visited, 0); err != nil {
+		if err := processRetrievalMethod(ctx, cfg, doc, elem, data, visited, 0); err != nil {
 			return err
 		}
 	}
@@ -54,7 +54,7 @@ func resolveRetrievalMethods(ctx context.Context, cfg *verifierConfig, doc *heli
 // a RetrievalMethod the chain is followed, guarded by a depth cap and a
 // visited-URI set so a cyclic or unbounded chain fails closed with
 // ErrRetrievalMethodLoop.
-func processRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, rm *helium.Element, data *KeyInfoData, visited map[string]struct{}, depth int) error {
+func processRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *helium.Document, rm *helium.Element, data *KeyInfoData, visited map[string]struct{}, depth int) error {
 	if depth > maxRetrievalMethodDepth {
 		return fmt.Errorf("%w: chain exceeds %d links", ErrRetrievalMethodLoop, maxRetrievalMethodDepth)
 	}
@@ -66,34 +66,130 @@ func processRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *heliu
 	}
 	visited[uri] = struct{}{}
 
+	// A RetrievalMethod may carry a ds:Transforms just like a Reference; parse and
+	// resolve it as an ordered pipeline so an unsupported or mis-ordered transform
+	// fails closed rather than being silently ignored while the resolved material
+	// is accepted anyway.
+	steps, err := parseRetrievalTransforms(rm)
+	if err != nil {
+		return err
+	}
+	pipe, err := resolveTransformPipeline(steps)
+	if err != nil {
+		return err
+	}
+	// The enveloped-signature transform removes the Signature's own subtree from a
+	// node-set; it is meaningless on a RetrievalMethod (which retrieves key
+	// material, not the signed content), so reject it fail-closed.
+	if pipe.hasEnveloped {
+		return fmt.Errorf("%w: enveloped-signature transform is not valid on a RetrievalMethod", ErrUnsupportedTransform)
+	}
+
 	// An external URI (not one of the four same-document forms) is dereferenced
-	// only through a configured ReferenceResolver, fail-closed otherwise.
+	// only through a configured ReferenceResolver, fail-closed otherwise. The
+	// resolved octets run through the same transform pipeline the external
+	// Reference digest path uses before Type interpretation.
 	if _, _, _, ok := referenceURIForm(uri); !ok {
 		octets, err := resolveRetrievalOctets(ctx, cfg, doc, uri)
 		if err != nil {
 			return err
 		}
-		return interpretRetrievalOctets(ctx, cfg, octets, typ, data)
+		transformed, err := externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
+		if err != nil {
+			return err
+		}
+		return interpretRetrievalOctets(ctx, cfg, transformed, typ, data)
 	}
 
-	// Same-document target, resolved through the XSW-hardened resolver (a
-	// duplicate-id match is rejected as ErrAmbiguousReference).
-	target, err := resolveReference(doc, uri, sigElem)
+	// Same-document target, resolved against the document through the XSW-hardened
+	// resolver (a duplicate-id match is rejected as ErrAmbiguousReference).
+	target, err := resolveReference(doc, uri)
 	if err != nil {
 		return err
 	}
-	// A RetrievalMethod may point at another RetrievalMethod; follow the chain
-	// under the depth/visited guard rather than misinterpreting it as key material.
-	if isDSigCoreNS(target) && domutil.LocalName(target) == "RetrievalMethod" {
-		return processRetrievalMethod(ctx, cfg, doc, sigElem, target, data, visited, depth+1)
+	// A transform-free RetrievalMethod may point at another RetrievalMethod;
+	// follow the chain under the depth/visited guard rather than misinterpreting
+	// it as key material.
+	if len(steps) == 0 && isDSigCoreNS(target) && domutil.LocalName(target) == "RetrievalMethod" {
+		return processRetrievalMethod(ctx, cfg, doc, target, data, visited, depth+1)
 	}
-	return interpretRetrievalElement(target, typ, data)
+	// Without transforms the resolved element is interpreted directly, keeping the
+	// no-transform behavior byte-identical.
+	if len(steps) == 0 {
+		return interpretRetrievalElement(target, typ, data)
+	}
+	// With transforms, the target node-set is run through the pipeline to octets,
+	// then interpreted by Type exactly as an externally retrieved octet stream.
+	octets, err := retrievalTransformOctets(ctx, target, pipe)
+	if err != nil {
+		return err
+	}
+	return interpretRetrievalOctets(ctx, cfg, octets, typ, data)
+}
+
+// parseRetrievalTransforms parses the optional single ds:Transforms child of a
+// RetrievalMethod into transform steps, enforcing at most one core-namespace
+// Transforms element. A foreign-namespace look-alike is ignored so it cannot
+// steer processing.
+func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
+	var transforms []parsedTransform
+	seen := false
+	for child := rm.FirstChild(); child != nil; child = child.NextSibling() {
+		e, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if !isDSigCoreNS(e) || domutil.LocalName(e) != "Transforms" {
+			continue
+		}
+		if seen {
+			return nil, fmt.Errorf("%w: multiple Transforms elements in RetrievalMethod", ErrInvalidKeyInfo)
+		}
+		seen = true
+		list, err := parseTransformList(e)
+		if err != nil {
+			return nil, err
+		}
+		transforms = list
+	}
+	steps := make([]transformStep, len(transforms))
+	for i, t := range transforms {
+		steps[i] = transformStep(t)
+	}
+	return steps, nil
+}
+
+// retrievalTransformOctets applies a same-document RetrievalMethod's transform
+// pipeline to the resolved target element's node-set, producing the octet stream
+// that is then interpreted by Type. It mirrors the Reference node-set → octet
+// path: a base64 transform decodes the target's string-value, one or more XPath
+// filters narrow the subtree node-set before canonicalization, and otherwise the
+// subtree is canonicalized with the pipeline's effective c14n method.
+func retrievalTransformOctets(ctx context.Context, target *helium.Element, pipe transformPipeline) ([]byte, error) {
+	if pipe.base64 {
+		if len(pipe.xpathFilters) > 0 {
+			return nil, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
+		}
+		return base64TransformOctets(target)
+	}
+	if len(pipe.xpathFilters) > 0 {
+		nodes := collectSubtreeNodes(target)
+		for _, f := range pipe.xpathFilters {
+			filtered, err := applyXPathFilter(ctx, nodes, f)
+			if err != nil {
+				return nil, err
+			}
+			nodes = filtered
+		}
+		return canonicalizeNodeSet(pipe.c14nMethod, nodes, target.OwnerDocument(), pipe.prefixes)
+	}
+	return canonicalizeSubtree(pipe.c14nMethod, target, pipe.prefixes)
 }
 
 // resolveRetrievalOctets dereferences an external RetrievalMethod URI through the
 // configured ReferenceResolver, joining it against the document's base URI first.
 // Without a resolver it stays fail-closed with ErrReferenceNotFound, identical to
-// the external-Reference posture, and it inherits the resolver's size cap.
+// the external-Reference posture, and it inherits the shared 64 MiB resolver cap.
 func resolveRetrievalOctets(ctx context.Context, cfg *verifierConfig, doc *helium.Document, uri string) ([]byte, error) {
 	if cfg.referenceResolver == nil {
 		return nil, fmt.Errorf("%w: unsupported RetrievalMethod URI: %s", ErrReferenceNotFound, uri)
@@ -102,7 +198,7 @@ func resolveRetrievalOctets(ctx context.Context, cfg *verifierConfig, doc *heliu
 	if err != nil {
 		return nil, err
 	}
-	return cfg.referenceResolver.ResolveReference(ctx, joined)
+	return resolveReferenceOctets(ctx, cfg.referenceResolver, joined)
 }
 
 // interpretRetrievalOctets interprets externally retrieved octets by the

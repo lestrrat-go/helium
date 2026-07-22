@@ -81,52 +81,76 @@ func KeyByNameSource(keys map[string]any) KeySource {
 
 // X509CertPoolKeySource returns a KeySource that selects a certificate from the
 // given set by matching the verification-side KeyInfo against it, and returns
-// the matched certificate's PublicKey. Selection is tried in this order for each
-// candidate certificate:
+// the matched certificate's PublicKey. Selector strength is applied across the
+// WHOLE pool, strongest first, so a strong match on a later certificate is never
+// masked by a weak match on an earlier one:
 //
-//   - an exact raw-DER match against a ds:X509Certificate in the KeyInfo;
-//   - a ds:X509SKI match against the certificate's SubjectKeyId;
-//   - a ds:X509IssuerSerial match against the certificate's Issuer and
+//   - first, an exact raw-DER match against a ds:X509Certificate in the KeyInfo,
+//     over every certificate in the pool;
+//   - then a ds:X509SKI match against the certificate's SubjectKeyId;
+//   - then a ds:X509IssuerSerial match against the certificate's Issuer and
 //     SerialNumber;
-//   - a ds:X509SubjectName match against the certificate's Subject.
+//   - finally a ds:X509SubjectName match against the certificate's Subject.
 //
-// The raw-DER and SubjectKeyId paths are exact and reliable. The IssuerSerial
-// and SubjectName paths compare Go's pkix.Name.String() rendering, which is NOT
-// RFC 2253 canonical, so DName matching is best-effort — prefer supplying the
-// certificate whose SKI or raw bytes the signature carries. Selecting a
-// certificate never establishes trust: the returned public key is still subject
-// to the same out-of-band trust decision as any other verification key.
+// Pool order is preserved only within a single selector class. The raw-DER and
+// SubjectKeyId paths are exact and reliable. The IssuerSerial and SubjectName
+// paths compare Go's pkix.Name.String() rendering, which is NOT RFC 2253
+// canonical, so DName matching is best-effort — prefer supplying the certificate
+// whose SKI or raw bytes the signature carries. Selecting a certificate never
+// establishes trust: the returned public key is still subject to the same
+// out-of-band trust decision as any other verification key.
 func X509CertPoolKeySource(certs ...*x509.Certificate) KeySource {
 	return KeySourceFunc(func(_ context.Context, keyInfo *KeyInfoData, _ string) (any, error) {
 		if keyInfo == nil {
 			return nil, ErrNoKeySource
 		}
-		for _, cert := range certs {
-			if cert == nil {
-				continue
-			}
-			if certMatchesKeyInfo(cert, keyInfo) {
-				return cert.PublicKey, nil
+		// Try the strongest selector class against every certificate before
+		// falling to the next weaker one, so pool order only breaks ties within a
+		// class. Iterating each certificate through all classes first (the naive
+		// nesting) would instead let an earlier certificate's weak SubjectName
+		// match win over a later certificate's exact raw-DER match.
+		selectors := []func(*x509.Certificate, *KeyInfoData) bool{
+			certMatchesRawDER, certMatchesSKI, certMatchesIssuerSerial, certMatchesSubjectName,
+		}
+		for _, matches := range selectors {
+			for _, cert := range certs {
+				if cert == nil {
+					continue
+				}
+				if matches(cert, keyInfo) {
+					return cert.PublicKey, nil
+				}
 			}
 		}
 		return nil, ErrNoKeySource
 	})
 }
 
-// certMatchesKeyInfo reports whether cert is the certificate a KeyInfo selects,
-// trying the exact raw-DER and SubjectKeyId paths before the best-effort
-// IssuerSerial and SubjectName DName comparisons.
-func certMatchesKeyInfo(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
+// certMatchesRawDER reports whether the KeyInfo carries cert's exact DER bytes in
+// a ds:X509Certificate. This is the strongest, exact selector.
+func certMatchesRawDER(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
 	for _, kc := range keyInfo.X509Certificates {
 		if kc != nil && bytes.Equal(kc.Raw, cert.Raw) {
 			return true
 		}
 	}
+	return false
+}
+
+// certMatchesSKI reports whether a ds:X509SKI matches cert's SubjectKeyId. Exact.
+func certMatchesSKI(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
 	for _, ski := range keyInfo.X509SKIs {
 		if len(cert.SubjectKeyId) > 0 && bytes.Equal(ski, cert.SubjectKeyId) {
 			return true
 		}
 	}
+	return false
+}
+
+// certMatchesIssuerSerial reports whether a ds:X509IssuerSerial matches cert's
+// Issuer and SerialNumber. Best-effort: the issuer DName comparison uses Go's
+// pkix.Name.String() rendering.
+func certMatchesIssuerSerial(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
 	for _, is := range keyInfo.X509IssuerSerials {
 		if cert.SerialNumber != nil && is.SerialNumber != nil &&
 			cert.SerialNumber.Cmp(is.SerialNumber) == 0 &&
@@ -134,6 +158,13 @@ func certMatchesKeyInfo(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// certMatchesSubjectName reports whether a ds:X509SubjectName matches cert's
+// Subject. Best-effort: the DName comparison uses Go's pkix.Name.String()
+// rendering, so it is the weakest selector.
+func certMatchesSubjectName(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
 	return slices.Contains(keyInfo.X509SubjectNames, cert.Subject.String())
 }
 

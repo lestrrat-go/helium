@@ -98,3 +98,22 @@ func TestX509CertPoolKeySource(t *testing.T) {
 		require.ErrorIs(t, err, xmldsig1.ErrNoKeySource)
 	})
 }
+
+// TestPoolPrefersRawOverEarlierSubject proves selector strength is applied across
+// the WHOLE pool, not per certificate in pool order: an exact raw-DER match on a
+// later certificate must win over a best-effort SubjectName match on an earlier
+// one. With the pool ordered [weak, strong] and a KeyInfo carrying strong's raw
+// DER plus weak's SubjectName, a per-certificate-first scan would return weak's
+// key; pool-wide selector priority returns strong's.
+func TestPoolPrefersRawOverEarlierSubject(t *testing.T) {
+	weak := poolCert(t, "weak-signer", 111, []byte{0x11})
+	strong := poolCert(t, "strong-signer", 222, []byte{0x22})
+	ks := xmldsig1.X509CertPoolKeySource(weak, strong)
+
+	got, err := ks.ResolveKey(t.Context(), &xmldsig1.KeyInfoData{
+		X509Certificates: []*x509.Certificate{strong},
+		X509SubjectNames: []string{weak.Subject.String()},
+	}, "")
+	require.NoError(t, err)
+	require.Same(t, strong.PublicKey, got)
+}
