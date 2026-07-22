@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/big"
+	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
@@ -57,9 +58,27 @@ func X509CertKeySource(cert *x509.Certificate) KeySource {
 
 // KeyInfoData holds parsed KeyInfo content for verification.
 type KeyInfoData struct {
-	X509Certificates []*x509.Certificate
-	RSAKeyValue      *RSAKeyValueData
-	ECKeyValue       *ECKeyValueData
+	X509Certificates  []*x509.Certificate
+	X509IssuerSerials []*X509IssuerSerial
+	X509SubjectNames  []string
+	RSAKeyValue       *RSAKeyValueData
+	ECKeyValue        *ECKeyValueData
+	DSAKeyValue       *DSAKeyValueData
+}
+
+// X509IssuerSerial holds a parsed ds:X509IssuerSerial: the issuer distinguished
+// name and certificate serial number. The library performs no DName
+// canonicalization or matching; it extracts the values verbatim so a KeySource
+// can select the corresponding certificate out of band.
+type X509IssuerSerial struct {
+	IssuerName   string
+	SerialNumber *big.Int
+}
+
+// DSAKeyValueData holds parsed DSAKeyValue content (the P, Q, G, Y
+// CryptoBinary parameters). A KeySource builds a *dsa.PublicKey from these.
+type DSAKeyValueData struct {
+	P, Q, G, Y *big.Int
 }
 
 // RSAKeyValueData holds parsed RSAKeyValue content.
@@ -271,29 +290,69 @@ func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 
 func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		certElem, ok := helium.AsNode[*helium.Element](child)
+		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
-		// X509Certificate is a core XML-Signature element; a foreign-namespace
-		// look-alike must not supply a verification certificate.
-		if !isDSigCoreNS(certElem) {
+		// X509Data children are core XML-Signature elements; a foreign-namespace
+		// look-alike must not supply a verification certificate or selector.
+		if !isDSigCoreNS(e) {
 			continue
 		}
-		if domutil.LocalName(certElem) != "X509Certificate" {
-			continue
+		switch domutil.LocalName(e) {
+		case "X509Certificate":
+			derBytes, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			if err != nil {
+				return fmt.Errorf("%w: invalid X509Certificate base64: %v", ErrInvalidKeyInfo, err)
+			}
+			cert, err := x509.ParseCertificate(derBytes)
+			if err != nil {
+				return fmt.Errorf("%w: invalid X509Certificate: %v", ErrInvalidKeyInfo, err)
+			}
+			data.X509Certificates = append(data.X509Certificates, cert)
+		case "X509SubjectName":
+			data.X509SubjectNames = append(data.X509SubjectNames, domutil.TextContent(e))
+		case "X509IssuerSerial":
+			is, err := parseX509IssuerSerial(e)
+			if err != nil {
+				return err
+			}
+			data.X509IssuerSerials = append(data.X509IssuerSerials, is)
 		}
-		derBytes, err := xmlbase64.DecodeString(domutil.TextContent(certElem))
-		if err != nil {
-			return fmt.Errorf("%w: invalid X509Certificate base64: %v", ErrInvalidKeyInfo, err)
-		}
-		cert, err := x509.ParseCertificate(derBytes)
-		if err != nil {
-			return fmt.Errorf("%w: invalid X509Certificate: %v", ErrInvalidKeyInfo, err)
-		}
-		data.X509Certificates = append(data.X509Certificates, cert)
 	}
 	return nil
+}
+
+// parseX509IssuerSerial extracts the issuer distinguished name and serial number
+// from a ds:X509IssuerSerial. The values are extracted verbatim (no DName
+// canonicalization) for out-of-band certificate selection by a KeySource.
+func parseX509IssuerSerial(elem *helium.Element) (*X509IssuerSerial, error) {
+	is := &X509IssuerSerial{}
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		e, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		// X509IssuerName and X509SerialNumber are core XML-Signature elements;
+		// reject foreign-namespace look-alikes.
+		if !isDSigCoreNS(e) {
+			continue
+		}
+		switch domutil.LocalName(e) {
+		case "X509IssuerName":
+			is.IssuerName = domutil.TextContent(e)
+		case "X509SerialNumber":
+			serial, ok := new(big.Int).SetString(strings.TrimSpace(domutil.TextContent(e)), 10)
+			if !ok {
+				return nil, fmt.Errorf("%w: X509SerialNumber is not a decimal integer", ErrInvalidKeyInfo)
+			}
+			is.SerialNumber = serial
+		}
+	}
+	if is.IssuerName == "" || is.SerialNumber == nil {
+		return nil, fmt.Errorf("%w: X509IssuerSerial requires both X509IssuerName and X509SerialNumber", ErrInvalidKeyInfo)
+	}
+	return is, nil
 }
 
 func parseKeyValue(elem *helium.Element, data *KeyInfoData) error {
@@ -318,6 +377,21 @@ func parseKeyValue(elem *helium.Element, data *KeyInfoData) error {
 				continue
 			}
 			return parseECKeyValue(kvElem, data)
+		case "ECDSAKeyValue":
+			// RFC 4050 legacy ECDSAKeyValue lives in the xmldsig-more#
+			// namespace. Require that exact namespace and reject
+			// foreign-namespace look-alikes.
+			if !isDSigMoreNS(kvElem) {
+				continue
+			}
+			return parseRFC4050ECDSAKeyValue(kvElem, data)
+		case "DSAKeyValue":
+			// DSAKeyValue is a core XML-Signature element; reject
+			// foreign-namespace look-alikes.
+			if !isDSigCoreNS(kvElem) {
+				continue
+			}
+			return parseDSAKeyValue(kvElem, data)
 		}
 	}
 	return nil
@@ -377,16 +451,11 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		switch domutil.LocalName(e) {
 		case "NamedCurve":
 			uri, _ := e.GetAttribute("URI")
-			switch uri {
-			case "urn:oid:1.2.840.10045.3.1.7":
-				kv.Curve = elliptic.P256()
-			case "urn:oid:1.3.132.0.34":
-				kv.Curve = elliptic.P384()
-			case "urn:oid:1.3.132.0.35":
-				kv.Curve = elliptic.P521()
-			default:
-				return fmt.Errorf("%w: unsupported EC curve: %s", ErrInvalidKeyInfo, uri)
+			curve, err := curveForOID(uri)
+			if err != nil {
+				return err
 			}
+			kv.Curve = curve
 		case "PublicKey":
 			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
@@ -408,6 +477,168 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		return fmt.Errorf("%w: ECKeyValue requires both NamedCurve and PublicKey", ErrInvalidKeyInfo)
 	}
 	data.ECKeyValue = kv
+	return nil
+}
+
+// curveForOID maps a NamedCurve OID URN (used by both the XML-Signature 1.1
+// ECKeyValue NamedCurve@URI and the RFC 4050 ECDSAKeyValue NamedCurve@URN) to a
+// supported elliptic curve, rejecting an unrecognized curve with
+// ErrInvalidKeyInfo so unknown key material never reaches the KeySource.
+func curveForOID(oid string) (elliptic.Curve, error) {
+	switch oid {
+	case "urn:oid:1.2.840.10045.3.1.7":
+		return elliptic.P256(), nil
+	case "urn:oid:1.3.132.0.34":
+		return elliptic.P384(), nil
+	case "urn:oid:1.3.132.0.35":
+		return elliptic.P521(), nil
+	default:
+		return nil, fmt.Errorf("%w: unsupported EC curve: %s", ErrInvalidKeyInfo, oid)
+	}
+}
+
+// parseRFC4050ECDSAKeyValue parses an RFC 4050 ECDSAKeyValue (in the
+// xmldsig-more# namespace) into an ECKeyValueData, so an RFC 4050 key surfaces
+// through the same KeyInfoData.ECKeyValue as an XML-Signature 1.1 ECKeyValue.
+// The curve comes from DomainParameters/NamedCurve@URN and the point from
+// PublicKey/X and /Y, whose Value attributes are DECIMAL integer strings (RFC
+// 4050 §2). This is verification input only; RFC 4050 emission is not supported.
+func parseRFC4050ECDSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
+	kv := &ECKeyValueData{}
+	var x, y *big.Int
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		e, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		// DomainParameters and PublicKey are RFC 4050 xmldsig-more# elements;
+		// reject foreign-namespace look-alikes.
+		if !isDSigMoreNS(e) {
+			continue
+		}
+		switch domutil.LocalName(e) {
+		case "DomainParameters":
+			curve, err := parseRFC4050NamedCurve(e)
+			if err != nil {
+				return err
+			}
+			kv.Curve = curve
+		case "PublicKey":
+			px, py, err := parseRFC4050PublicKey(e)
+			if err != nil {
+				return err
+			}
+			x, y = px, py
+		}
+	}
+	// An RFC 4050 ECDSAKeyValue requires both the curve and the public-key
+	// point; refuse to emit a partial key.
+	if kv.Curve == nil {
+		return fmt.Errorf("%w: RFC 4050 ECDSAKeyValue missing DomainParameters/NamedCurve", ErrInvalidKeyInfo)
+	}
+	if x == nil || y == nil {
+		return fmt.Errorf("%w: RFC 4050 ECDSAKeyValue missing PublicKey X/Y", ErrInvalidKeyInfo)
+	}
+	// Reject a point that is not on the named curve so invalid key material
+	// never reaches the KeySource, mirroring elliptic.Unmarshal's on-curve check
+	// for the 1.1 ECKeyValue path.
+	if !kv.Curve.IsOnCurve(x, y) {
+		return fmt.Errorf("%w: RFC 4050 ECDSAKeyValue public key point is not on the named curve", ErrInvalidKeyInfo)
+	}
+	kv.X, kv.Y = x, y
+	data.ECKeyValue = kv
+	return nil
+}
+
+// parseRFC4050NamedCurve resolves the curve from an RFC 4050 DomainParameters
+// element via its NamedCurve@URN. Explicit (non-named) domain parameters are
+// not supported.
+func parseRFC4050NamedCurve(elem *helium.Element) (elliptic.Curve, error) {
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		e, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if !isDSigMoreNS(e) || domutil.LocalName(e) != "NamedCurve" {
+			continue
+		}
+		urn, _ := e.GetAttribute("URN")
+		return curveForOID(urn)
+	}
+	return nil, fmt.Errorf("%w: RFC 4050 DomainParameters missing NamedCurve", ErrInvalidKeyInfo)
+}
+
+// parseRFC4050PublicKey reads the decimal X and Y Value attributes from an RFC
+// 4050 PublicKey element.
+func parseRFC4050PublicKey(elem *helium.Element) (*big.Int, *big.Int, error) {
+	var x, y *big.Int
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		e, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		if !isDSigMoreNS(e) {
+			continue
+		}
+		name := domutil.LocalName(e)
+		if name != "X" && name != "Y" {
+			continue
+		}
+		val, _ := e.GetAttribute("Value")
+		n, ok := new(big.Int).SetString(strings.TrimSpace(val), 10)
+		if !ok {
+			return nil, nil, fmt.Errorf("%w: RFC 4050 PublicKey %s Value is not a decimal integer", ErrInvalidKeyInfo, name)
+		}
+		if name == "X" {
+			x = n
+			continue
+		}
+		y = n
+	}
+	return x, y, nil
+}
+
+// parseDSAKeyValue parses a core-namespace DSAKeyValue into a DSAKeyValueData.
+// P, Q, G, and Y are base64 CryptoBinary values; the optional J, Seed, and
+// PgenCounter are not needed for verification and are ignored. A KeySource
+// builds a *dsa.PublicKey from the result. DSA is verify-only legacy interop.
+func parseDSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
+	kv := &DSAKeyValueData{}
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		e, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			continue
+		}
+		// P, Q, G, Y are core XML-Signature elements; reject foreign-namespace
+		// look-alikes before consuming their base64 content.
+		if !isDSigCoreNS(e) {
+			continue
+		}
+		name := domutil.LocalName(e)
+		var dst **big.Int
+		switch name {
+		case "P":
+			dst = &kv.P
+		case "Q":
+			dst = &kv.Q
+		case "G":
+			dst = &kv.G
+		case "Y":
+			dst = &kv.Y
+		default:
+			continue
+		}
+		decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+		if err != nil {
+			return fmt.Errorf("%w: invalid DSAKeyValue %s base64: %v", ErrInvalidKeyInfo, name, err)
+		}
+		*dst = new(big.Int).SetBytes(decoded)
+	}
+	// A DSAKeyValue requires P, Q, G, and Y; refuse to emit a partial key.
+	if kv.P == nil || kv.Q == nil || kv.G == nil || kv.Y == nil {
+		return fmt.Errorf("%w: DSAKeyValue requires P, Q, G, and Y", ErrInvalidKeyInfo)
+	}
+	data.DSAKeyValue = kv
 	return nil
 }
 

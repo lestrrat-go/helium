@@ -385,6 +385,16 @@ func isDSig11NS(e *helium.Element) bool {
 	return elementNamespaceURI(e) == NamespaceDSig11
 }
 
+// isDSigMoreNS reports whether e is in the xmldsig-more namespace
+// (http://www.w3.org/2001/04/xmldsig-more#). RFC 4050's legacy ECDSAKeyValue
+// and its DomainParameters/NamedCurve/PublicKey children live ONLY in this
+// namespace; as with the core and 1.1 checks, matching on local name alone
+// would let a foreign-namespace look-alike supply attacker-chosen key material,
+// so the exact namespace is required.
+func isDSigMoreNS(e *helium.Element) bool {
+	return elementNamespaceURI(e) == NamespaceDSigMore
+}
+
 // isExcC14NNS reports whether e is in the Exclusive XML Canonicalization
 // namespace (http://www.w3.org/2001/10/xml-exc-c14n#). The InclusiveNamespaces
 // element lives only here, not in the core XML-Signature namespace.

@@ -7,6 +7,12 @@ const (
 
 	// NamespaceDSig11 is the XML Digital Signatures 1.1 namespace.
 	NamespaceDSig11 = "http://www.w3.org/2009/xmldsig11#"
+
+	// NamespaceDSigMore is the xmldsig-more namespace. RFC 4050 places its
+	// legacy ECDSAKeyValue (and its DomainParameters/NamedCurve/PublicKey
+	// children) in this namespace, distinct from both the core xmldsig#
+	// namespace and the XML-Signature 1.1 xmldsig11# namespace.
+	NamespaceDSigMore = "http://www.w3.org/2001/04/xmldsig-more#"
 )
 
 // Signature algorithm URIs.
@@ -27,6 +33,9 @@ const (
 	AlgHMACSHA384  = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha384"
 	AlgHMACSHA512  = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha512"
 	AlgEd25519     = "http://www.w3.org/2021/04/xmldsig-more#eddsa-ed25519"
+	// AlgDSASHA1 is DSA-SHA1. It is verify-only (signing is not supported) and
+	// SHA-1-weak, so it is rejected on verify unless Verifier.AllowSHA1(true).
+	AlgDSASHA1 = "http://www.w3.org/2000/09/xmldsig#dsa-sha1"
 )
 
 // Digest algorithm URIs.

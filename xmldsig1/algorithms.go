@@ -2,6 +2,7 @@ package xmldsig1
 
 import (
 	"crypto"
+	"crypto/dsa" // deprecated but standard; used verify-only for legacy XML-DSig interop (dsa-sha1). Signing is not offered.
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -29,12 +30,15 @@ var signatureAlgorithms = map[string]algorithm{
 	AlgECDSASHA256: {hash: crypto.SHA256},
 	AlgECDSASHA384: {hash: crypto.SHA384},
 	AlgECDSASHA512: {hash: crypto.SHA512},
-	AlgHMACSHA1:    {hash: crypto.SHA1, weak: true},
-	AlgHMACSHA224:  {hash: crypto.SHA224},
-	AlgHMACSHA256:  {hash: crypto.SHA256},
-	AlgHMACSHA384:  {hash: crypto.SHA384},
-	AlgHMACSHA512:  {hash: crypto.SHA512},
-	AlgEd25519:     {hash: 0},
+	// DSA-SHA1 is verify-only legacy interop; signBytes rejects a signing
+	// attempt with a clear DSA-unsupported error.
+	AlgDSASHA1:    {hash: crypto.SHA1, weak: true},
+	AlgHMACSHA1:   {hash: crypto.SHA1, weak: true},
+	AlgHMACSHA224: {hash: crypto.SHA224},
+	AlgHMACSHA256: {hash: crypto.SHA256},
+	AlgHMACSHA384: {hash: crypto.SHA384},
+	AlgHMACSHA512: {hash: crypto.SHA512},
+	AlgEd25519:    {hash: 0},
 }
 
 var digestAlgorithms = map[string]algorithm{
@@ -80,6 +84,14 @@ func computeDigest(algURI string, data []byte, allowSHA1 bool) ([]byte, error) {
 // signature algorithms are rejected with ErrWeakAlgorithm unless allowSHA1 is
 // true.
 func signBytes(algURI string, key any, data []byte, allowSHA1 bool) ([]byte, error) {
+	// DSA is verify-only legacy interop. It is present in the signature table so
+	// the verify path recognizes it, so a signing attempt would otherwise fall
+	// through to signRSA and fail with a confusing key-type mismatch. Reject it
+	// here with a clear, DSA-specific message instead.
+	if algURI == AlgDSASHA1 {
+		return nil, fmt.Errorf("%w: DSA signing is not supported (dsa-sha1 is verify-only for legacy interop)", ErrUnsupportedAlgorithm)
+	}
+
 	hash, err := lookupAlg(signatureAlgorithms, algURI, allowSHA1)
 	if err != nil {
 		return nil, err
@@ -113,6 +125,8 @@ func verifyBytes(algURI string, key any, data, sig []byte, allowSHA1 bool) error
 		return verifyHMAC(hash, key, data, sig)
 	case AlgECDSASHA1, AlgECDSASHA224, AlgECDSASHA256, AlgECDSASHA384, AlgECDSASHA512:
 		return verifyECDSA(hash, key, data, sig)
+	case AlgDSASHA1:
+		return verifyDSA(hash, key, data, sig)
 	default:
 		return verifyRSA(hash, key, data, sig)
 	}
@@ -224,6 +238,34 @@ func ecdsaRawToDER(raw []byte, keySize int) ([]byte, error) {
 	sig.R = new(big.Int).SetBytes(raw[:keySize])
 	sig.S = new(big.Int).SetBytes(raw[keySize:])
 	return asn1.Marshal(sig)
+}
+
+// DSA
+//
+// DSA is supported for VERIFICATION ONLY, for legacy XML-DSig interop
+// (dsa-sha1). crypto/dsa is deprecated but remains the standard library type;
+// an *dsa.PublicKey also arrives when x509.ParseCertificate parses a DSA
+// certificate, so a cert-derived DSA key verifies through this same path.
+
+func verifyDSA(hash crypto.Hash, key any, data, sig []byte) error {
+	pub, ok := key.(*dsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("%w: expected *dsa.PublicKey, got %T", ErrKeyMismatch, key)
+	}
+	// XML-DSig encodes a DSA signature as the fixed-width r||s concatenation,
+	// each integer left-padded to the byte length of the subgroup order Q (20
+	// bytes for a 160-bit Q). Split at the midpoint: both halves share Q's
+	// width, so an odd total length cannot be a valid encoding.
+	if len(sig) == 0 || len(sig)%2 != 0 {
+		return fmt.Errorf("%w: DSA signature length %d is not a valid r||s encoding", ErrVerificationFailed, len(sig))
+	}
+	half := len(sig) / 2
+	r := new(big.Int).SetBytes(sig[:half])
+	s := new(big.Int).SetBytes(sig[half:])
+	if !dsa.Verify(pub, hashData(hash, data), r, s) {
+		return ErrVerificationFailed
+	}
+	return nil
 }
 
 // HMAC
