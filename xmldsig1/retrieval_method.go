@@ -116,6 +116,15 @@ func processRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *heliu
 	// follow the chain under the depth/visited guard rather than misinterpreting
 	// it as key material.
 	if len(steps) == 0 && isDSigCoreNS(target) && domutil.LocalName(target) == "RetrievalMethod" {
+		// The wrapper's own Type is interpreted by neither the recursion nor the
+		// target's terminal interpretation, so a present-but-unsupported wrapper
+		// Type would be silently accepted here while interpretRetrievalElement/
+		// interpretRetrievalOctets reject the same value on every other branch.
+		// Reject it fail-closed. Type is advisory (XMLDSig §4.4.3), so an absent
+		// wrapper Type stays permissive and the chain is followed.
+		if typ != "" && typ != TypeRawX509Certificate && typ != TypeX509Data {
+			return fmt.Errorf("%w: unsupported RetrievalMethod Type %q", ErrInvalidKeyInfo, typ)
+		}
 		return processRetrievalMethod(ctx, cfg, doc, target, data, visited, depth+1)
 	}
 	// Without transforms the resolved element is interpreted directly, keeping the

@@ -209,6 +209,50 @@ func TestReviewSiblingRetrievalMethodsSharingURI(t *testing.T) {
 	require.Equal(t, cert.Raw, data.X509Certificates[1].Raw)
 }
 
+// TestReviewUnsupportedWrapperTypeFailsClosed proves a top-level
+// ds:RetrievalMethod whose own Type is unsupported (advisory but not one of the
+// recognized forms) fails closed even when its URI points at a chained
+// RetrievalMethod that would otherwise resolve to a valid certificate. Without
+// validating the wrapper's Type before the target-RetrievalMethod recursion, the
+// unsupported wrapper Type would be silently accepted. An absent wrapper Type
+// stays permissive, so the same chain resolves when the wrapper carries no Type.
+func TestReviewUnsupportedWrapperTypeFailsClosed(t *testing.T) {
+	cert, der := selfSignedCert(t)
+	certB64 := base64.StdEncoding.EncodeToString(der)
+
+	// The chained target RetrievalMethod and the terminal X509Data live inside a
+	// ds:Object so only the wrapper is a top-level KeyInfo child; resolveReference
+	// still finds them by id anywhere in the document.
+	t.Run("unsupported wrapper type rejected", func(t *testing.T) {
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`">`+
+			`<ds:RetrievalMethod URI="#next" Type="urn:unsupported"/>`+
+			`<ds:Object><ds:RetrievalMethod Id="next" URI="#cert" Type="`+TypeX509Data+`"/>`+
+			`<ds:X509Data Id="cert"><ds:X509Certificate>`+certB64+
+			`</ds:X509Certificate></ds:X509Data></ds:Object></ds:KeyInfo>`)
+		cfg := &verifierConfig{}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.Empty(t, data.X509Certificates)
+	})
+
+	t.Run("absent wrapper type still follows chain", func(t *testing.T) {
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`">`+
+			`<ds:RetrievalMethod URI="#next"/>`+
+			`<ds:Object><ds:RetrievalMethod Id="next" URI="#cert" Type="`+TypeX509Data+`"/>`+
+			`<ds:X509Data Id="cert"><ds:X509Certificate>`+certB64+
+			`</ds:X509Certificate></ds:X509Data></ds:Object></ds:KeyInfo>`)
+		cfg := &verifierConfig{}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), cfg, doc, doc.DocumentElement(), data)
+		require.NoError(t, err)
+		require.Len(t, data.X509Certificates, 1)
+		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	})
+}
+
 // TestRetrievalMethodRejectsUnsupportedTransform proves a RetrievalMethod's
 // ds:Transforms are inspected and applied, not ignored: an unsupported transform
 // fails closed with ErrUnsupportedTransform for both external and same-document
