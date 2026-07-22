@@ -122,6 +122,14 @@ func processRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *heliu
 		// interpretRetrievalOctets reject the same value on every other branch.
 		// Reject it fail-closed. Type is advisory (XMLDSig §4.4.3), so an absent
 		// wrapper Type stays permissive and the chain is followed.
+		//
+		// An absent wrapper Type here is not fail-open: this branch only chains to
+		// another RetrievalMethod, and the appended certificate is always decided
+		// by the TERMINAL RetrievalMethod's own Type via interpretRetrievalElement/
+		// interpretRetrievalOctets, whose default case returns ErrInvalidKeyInfo.
+		// A chain ending in an absent- or unsupported-Type leaf still fails closed,
+		// so an absent wrapper Type cannot accept material a Type-validated terminal
+		// would reject.
 		if typ != "" && typ != TypeRawX509Certificate && typ != TypeX509Data {
 			return fmt.Errorf("%w: unsupported RetrievalMethod Type %q", ErrInvalidKeyInfo, typ)
 		}
