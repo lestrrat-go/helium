@@ -17,6 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// certSignerDERPath is the fs path a test FSReferenceResolver serves and the
+// matching ds:RetrievalMethod URI references.
+const certSignerDERPath = "certs/signer.der"
+
 // selfSignedCert returns a throwaway self-signed certificate and its DER bytes.
 func selfSignedCert(t *testing.T) (*x509.Certificate, []byte) {
 	t.Helper()
@@ -37,7 +41,7 @@ func selfSignedCert(t *testing.T) (*x509.Certificate, []byte) {
 
 func TestResolveRetrievalMethodExternalRawX509(t *testing.T) {
 	cert, der := selfSignedCert(t)
-	fsys := fstest.MapFS{"certs/signer.der": {Data: der}}
+	fsys := fstest.MapFS{certSignerDERPath: {Data: der}}
 
 	doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="certs/signer.der" Type="`+TypeRawX509Certificate+`"/></ds:KeyInfo>`)
 	cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
@@ -282,7 +286,7 @@ func TestReviewUnsupportedWrapperTypeFailsClosed(t *testing.T) {
 func TestRetrievalMethodRejectsUnsupportedTransform(t *testing.T) {
 	t.Run("external", func(t *testing.T) {
 		_, der := selfSignedCert(t)
-		fsys := fstest.MapFS{"certs/signer.der": {Data: der}}
+		fsys := fstest.MapFS{certSignerDERPath: {Data: der}}
 		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="certs/signer.der" Type="`+TypeRawX509Certificate+`">`+
 			`<ds:Transforms><ds:Transform Algorithm="urn:unsupported"/></ds:Transforms></ds:RetrievalMethod></ds:KeyInfo>`)
 		cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
@@ -362,7 +366,7 @@ const xsltTransformElem = `<ds:Transforms><ds:Transform Algorithm="` + Transform
 func TestRetrievalMethodXSLTFailsClosed(t *testing.T) {
 	t.Run("external", func(t *testing.T) {
 		_, der := selfSignedCert(t)
-		fsys := fstest.MapFS{"certs/signer.der": {Data: der}}
+		fsys := fstest.MapFS{certSignerDERPath: {Data: der}}
 		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">`+
 			`<ds:RetrievalMethod URI="certs/signer.der" Type="`+TypeRawX509Certificate+`">`+xsltTransformElem+`</ds:RetrievalMethod></ds:KeyInfo>`)
 		cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
@@ -401,7 +405,7 @@ func TestRetrievalMethodRawCertCountsAgainstBudget(t *testing.T) {
 	t.Run("external", func(t *testing.T) {
 		_, der := selfSignedCert(t)
 		require.Greater(t, len(der), 8)
-		fsys := fstest.MapFS{"certs/signer.der": {Data: der}}
+		fsys := fstest.MapFS{certSignerDERPath: {Data: der}}
 		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="certs/signer.der" Type="`+TypeRawX509Certificate+`"/></ds:KeyInfo>`)
 		cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
 		data := &KeyInfoData{}
@@ -422,5 +426,66 @@ func TestRetrievalMethodRawCertCountsAgainstBudget(t *testing.T) {
 		err := resolveRetrievalMethods(t.Context(), tinyBudget(), cfg, doc, doc.DocumentElement(), data)
 		require.ErrorIs(t, err, ErrResourceLimitExceeded)
 		require.Empty(t, data.X509Certificates)
+	})
+}
+
+// TestRetrievalMethodLenientKeyInfo proves LenientKeyInfo skips only an
+// UNRESOLVABLE RetrievalMethod (no resolver / not found), while a
+// resolved-but-invalid one still fails closed regardless of the setting.
+func TestRetrievalMethodLenientKeyInfo(t *testing.T) {
+	externalRM := `<ds:KeyInfo xmlns:ds="` + NamespaceDSig + `"><ds:RetrievalMethod URI="certs/signer.der" Type="` + TypeRawX509Certificate + `"/></ds:KeyInfo>`
+
+	t.Run("unresolvable external fails hard by default", func(t *testing.T) {
+		doc := mustParse(t, externalRM)
+		cfg := &verifierConfig{} // no resolver, not lenient
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+
+	t.Run("unresolvable external skipped when lenient", func(t *testing.T) {
+		doc := mustParse(t, externalRM)
+		cfg := &verifierConfig{lenientKeyInfo: true} // no resolver
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.NoError(t, err)
+		require.Empty(t, data.X509Certificates)
+	})
+
+	t.Run("inline material preserved alongside a skipped RetrievalMethod", func(t *testing.T) {
+		cert, _ := selfSignedCert(t)
+		doc := mustParse(t, externalRM)
+		cfg := &verifierConfig{lenientKeyInfo: true}
+		// Simulate parseKeyInfo having already collected an inline certificate.
+		data := &KeyInfoData{X509Certificates: []*x509.Certificate{cert}}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.NoError(t, err)
+		require.Len(t, data.X509Certificates, 1)
+		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	})
+
+	t.Run("resolved but corrupt external still fails hard when lenient", func(t *testing.T) {
+		fsys := fstest.MapFS{certSignerDERPath: {Data: []byte("not a certificate")}}
+		doc := mustParse(t, externalRM)
+		cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys), lenientKeyInfo: true}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+	})
+
+	t.Run("unsupported Type still fails hard when lenient", func(t *testing.T) {
+		_, der := selfSignedCert(t)
+		certB64 := base64.StdEncoding.EncodeToString(der)
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="#x509" Type="urn:bogus"/>`+
+			`<ds:X509Data Id="x509"><ds:X509Certificate>`+certB64+`</ds:X509Certificate></ds:X509Data></ds:KeyInfo>`)
+		cfg := &verifierConfig{lenientKeyInfo: true}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
 	})
 }

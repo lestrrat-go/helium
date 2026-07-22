@@ -3,6 +3,7 @@ package xmldsig1
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 
 	helium "github.com/lestrrat-go/helium"
@@ -47,9 +48,22 @@ func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *ver
 		// set across siblings would misreport the second as a loop. It flows only
 		// through the recursive processRetrievalMethod calls that follow a chain.
 		visited := make(map[string]struct{})
-		if err := processRetrievalMethod(ctx, budget, cfg, doc, elem, data, visited, 0); err != nil {
-			return err
+		err := processRetrievalMethod(ctx, budget, cfg, doc, elem, data, visited, 0)
+		if err == nil {
+			continue
 		}
+		// A RetrievalMethod is an optional hint. In lenient mode, one that could
+		// not be dereferenced at all (no resolver, or the target was not found —
+		// both surface as ErrReferenceNotFound) is skipped so inline key material a
+		// KeySource could use still gets its chance. A RESOLVED-but-invalid
+		// RetrievalMethod fails with a different sentinel (ErrInvalidKeyInfo,
+		// ErrUnsupportedTransform, ErrRetrievalMethodLoop, ErrReferenceTooLarge,
+		// ErrAmbiguousReference) and still fails closed here even under leniency —
+		// a corrupt hint is an error, not a missing one.
+		if cfg.lenientKeyInfo && errors.Is(err, ErrReferenceNotFound) {
+			continue
+		}
+		return err
 	}
 	return nil
 }
