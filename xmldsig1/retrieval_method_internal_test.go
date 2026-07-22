@@ -489,3 +489,20 @@ func TestRetrievalMethodLenientKeyInfo(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
 	})
 }
+
+// TestResolveRetrievalMethodResolvedButNotXML proves a RESOLVED external
+// X509Data resource whose octets are not well-formed XML is treated as
+// resolved-but-corrupt (ErrInvalidKeyInfo), not as an unavailable resource
+// (ErrReferenceNotFound). This keeps a garbage resource a hard failure and, under
+// Verifier.LenientKeyInfo, non-skippable — leniency only skips the genuinely
+// unavailable case.
+func TestResolveRetrievalMethodResolvedButNotXML(t *testing.T) {
+	fsys := fstest.MapFS{"keyinfo/data.xml": {Data: []byte("this is not <well-formed> xml")}}
+	doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="keyinfo/data.xml" Type="`+TypeX509Data+`"/></ds:KeyInfo>`)
+	cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
+	data := &KeyInfoData{}
+
+	err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+	require.ErrorIs(t, err, ErrInvalidKeyInfo)
+	require.Empty(t, data.X509Certificates)
+}
