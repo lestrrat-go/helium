@@ -20,6 +20,7 @@ on:
           - xml
           - xmldsig2ed
           - xmldsig11
+          - merlinxmldsig
       slow:
         description: Run performance-gated slow tests (sets HELIUM_SLOW_TESTS=1)
         type: boolean
