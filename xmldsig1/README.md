@@ -112,16 +112,26 @@ rejected with `ErrAmbiguousReference`, defending against XML Signature Wrapping.
 
 The supported transforms are the enveloped-signature transform, the
 canonicalization transforms (Canonical XML 1.0 / 1.1 and Exclusive C14N 1.0,
-each with an optional `#WithComments` variant), and the XPath filter transform
-(`http://www.w3.org/TR/1999/REC-xpath-19991116`). The XPath filter evaluates its
+each with an optional `#WithComments` variant), the XPath filter transform
+(`http://www.w3.org/TR/1999/REC-xpath-19991116`), and the base64 decode transform
+(`http://www.w3.org/2000/09/xmldsig#base64`). The XPath filter evaluates its
 `ds:Transform/XPath` expression once per input node — with that node as the
 context node, under the `XPath` element's in-scope namespace bindings — and keeps
 each node whose result converts to boolean true (XPath 1.0 semantics: no default
-element namespace). A node-set transform (enveloped-signature or XPath) may
-precede the canonicalization transform; any transform ordered **after** the
-octet-producing canonicalization — including an octet-consuming transform such as
-XSLT or base64 — is rejected fail-closed with `ErrUnsupportedTransform`, as is
-any transform URI the package does not implement.
+element namespace). The base64 transform (**verify only**) takes the resolved
+node-set's XPath 1.0 string-value — the referenced element's concatenated
+descendant text, tags and comments stripped — base64-decodes it (whitespace in
+the base64 text is ignored), and digests the decoded octets directly with no
+canonicalization afterward; combining it with a preceding node-set transform is
+not supported.
+
+A node-set transform (enveloped-signature or XPath) may precede an octet-producing
+transform (canonicalization or base64), which ends the pipeline; any transform
+ordered **after** an octet-producing transform — a second canonicalization, a
+base64 after a canonicalization, or an octet-consuming transform such as XSLT — is
+rejected fail-closed with `ErrUnsupportedTransform`, as is any transform URI the
+package does not implement. Signing does not support the base64 transform: it has
+no typed `Transform` constructor and the sign preflight rejects it fail-closed.
 
 ## Security: SHA-1 rejected by default
 

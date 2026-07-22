@@ -194,6 +194,25 @@ func canonicalizeReference(ctx context.Context, doc *helium.Document, sigElem *h
 	// downgraded to its plain variant — keeping "#id"/"" free of comments even
 	// under a WithComments c14n, and reserving comments for the #xpointer forms.
 	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
+
+	// The base64 decode transform ends the pipeline with decoded octets that are
+	// digested directly (XMLDSig core §6.6.2): the resolved node-set's XPath 1.0
+	// string-value is base64-decoded and no canonicalization runs afterward.
+	// resolveTransformPipeline already fails closed on any transform ordered
+	// after base64; combining it with a preceding node-set transform
+	// (enveloped-signature or XPath filter) is not supported and is rejected
+	// fail-closed here rather than digesting an unintended string-value.
+	if pipe.base64 {
+		if pipe.hasEnveloped || len(pipe.xpathFilters) > 0 {
+			return nil, nil, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
+		}
+		octets, err := base64TransformOctets(target)
+		if err != nil {
+			return nil, nil, err
+		}
+		return target, octets, nil
+	}
+
 	c14nMethod := effectiveC14NMethod(pipe.c14nMethod, includeComments)
 
 	// When one or more XPath filter transforms are present the reference is
