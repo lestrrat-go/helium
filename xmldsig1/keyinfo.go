@@ -382,6 +382,8 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 				kv.Curve = elliptic.P256()
 			case "urn:oid:1.3.132.0.34":
 				kv.Curve = elliptic.P384()
+			case "urn:oid:1.3.132.0.35":
+				kv.Curve = elliptic.P521()
 			default:
 				return fmt.Errorf("%w: unsupported EC curve: %s", ErrInvalidKeyInfo, uri)
 			}

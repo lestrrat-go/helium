@@ -12,17 +12,27 @@ const (
 // Signature algorithm URIs.
 const (
 	AlgRSASHA1     = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+	AlgRSASHA224   = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha224"
 	AlgRSASHA256   = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+	AlgRSASHA384   = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384"
+	AlgRSASHA512   = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"
+	AlgECDSASHA1   = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha1"
+	AlgECDSASHA224 = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha224"
 	AlgECDSASHA256 = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"
 	AlgECDSASHA384 = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384"
+	AlgECDSASHA512 = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512"
 	AlgHMACSHA1    = "http://www.w3.org/2000/09/xmldsig#hmac-sha1"
+	AlgHMACSHA224  = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha224"
 	AlgHMACSHA256  = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha256"
+	AlgHMACSHA384  = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha384"
+	AlgHMACSHA512  = "http://www.w3.org/2001/04/xmldsig-more#hmac-sha512"
 	AlgEd25519     = "http://www.w3.org/2021/04/xmldsig-more#eddsa-ed25519"
 )
 
 // Digest algorithm URIs.
 const (
 	DigestSHA1   = "http://www.w3.org/2000/09/xmldsig#sha1"
+	DigestSHA224 = "http://www.w3.org/2001/04/xmldsig-more#sha224"
 	DigestSHA256 = "http://www.w3.org/2001/04/xmlenc#sha256"
 	DigestSHA384 = "http://www.w3.org/2001/04/xmldsig-more#sha384"
 	DigestSHA512 = "http://www.w3.org/2001/04/xmlenc#sha512"
