@@ -27,9 +27,18 @@
 #   * python3 (for aggregate.py)
 #
 # Usage: tools/conformance-timeline/run.sh [--force] [--suites "a b"] [tag ...]
+#        tools/conformance-timeline/run.sh --ref <committish> --as vX.Y.Z [--suites ...]
 #   --force          re-run even if a cached summary exists
-#   --suites "..."   subset of: xml xsd10 xsd11 xslt30 qt3  (default: all)
+#   --suites "..."   subset of: xml xsd10 xsd11 xslt30 qt3 xmldsig2ed xmldsig11
+#                    merlinxmldsig  (default: all)
 #   tag ...          restrict to specific tags (default: all v* tags)
+#   --ref <c> --as vX.Y.Z
+#                    measure an UNTAGGED committish (e.g. a release candidate)
+#                    under the version label vX.Y.Z. Results are keyed by the
+#                    label and its date is taken from the ref's commit date;
+#                    a later re-measure at the real tag supersedes it. This is
+#                    what the release gate uses to seed a row before the tag
+#                    exists (see .github/workflows/release.yml).
 
 set -euo pipefail
 
@@ -42,20 +51,33 @@ ADAPTERS="$OUTDIR/harness-adapters"
 WTROOT="$MAIN_ROOT/.worktrees"
 HWTROOT="$HARNESS/.worktrees"
 
-FORCE=0; SUITES="xml xsd10 xsd11 xslt30 qt3"; ONLY_TAGS=""
+FORCE=0; SUITES="xml xsd10 xsd11 xslt30 qt3 xmldsig2ed xmldsig11 merlinxmldsig"; ONLY_TAGS=""
+REF=""; ASLABEL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --force) FORCE=1 ;;
     --suites) SUITES="$2"; shift ;;
+    --ref) REF="$2"; shift ;;
+    --as) ASLABEL="$2"; shift ;;
     *) ONLY_TAGS="$ONLY_TAGS $1" ;;
   esac; shift
 done
+
+if [ -n "$REF" ] || [ -n "$ASLABEL" ]; then
+  [ -n "$REF" ] && [ -n "$ASLABEL" ] || { echo "--ref and --as must be given together" >&2; exit 2; }
+  [ -n "${ONLY_TAGS// }" ] && { echo "--ref/--as cannot be combined with explicit tags" >&2; exit 2; }
+  case "$ASLABEL" in
+    v[0-9]*) ;;
+    *) echo "--as label must look like vX.Y.Z (got $ASLABEL)" >&2; exit 2 ;;
+  esac
+fi
 
 [ -d "$HARNESS" ] || { echo "harness not found at $HARNESS" >&2; exit 1; }
 mkdir -p "$RESULTS"
 
 TAGS=$(git -C "$MAIN_ROOT" tag --sort=creatordate | grep -E '^v[0-9]')
 [ -n "${ONLY_TAGS// }" ] && TAGS="$ONLY_TAGS"
+[ -n "$ASLABEL" ] && TAGS="$ASLABEL"
 REFERENCE_TAG=$(git -C "$MAIN_ROOT" tag --sort=creatordate | grep -E '^v[0-9]' | tail -1)
 GO_MINOR="$(go version | awk '{print $3}' | sed 's/^go//')"
 
@@ -66,13 +88,29 @@ echo "suites:    $SUITES"
 echo
 
 for tag in $TAGS; do
-  # pristine helium checkout at the tag
-  hwt="$WTROOT/probe-$tag"
-  [ -d "$hwt" ] || git -C "$MAIN_ROOT" worktree add -q --detach "$hwt" "$tag"
+  # The committish to check out. For a real tag it IS the tag; for an untagged
+  # --ref/--as measurement it is the ref, checked out under the version label.
+  checkout="$tag"
+  [ -n "$ASLABEL" ] && [ "$tag" = "$ASLABEL" ] && checkout="$REF"
 
-  # harness worktree: unmodified for the reference tag, patched otherwise
+  # pristine helium checkout at the committish
+  hwt="$WTROOT/probe-$tag"
+  [ -d "$hwt" ] || git -C "$MAIN_ROOT" worktree add -q --detach "$hwt" "$checkout"
+
+  # Record the commit date + untagged marker for an --as label so aggregate.py
+  # can date the row (a label is not a git ref, so it cannot resolve it itself).
+  if [ -n "$ASLABEL" ] && [ "$tag" = "$ASLABEL" ]; then
+    printf '%s\tuntagged\n' "$(git -C "$MAIN_ROOT" log -1 --format=%cs "$checkout")" \
+      > "$RESULTS/$tag.meta"
+  fi
+
+  # Harness worktree: unmodified when no adapter patch exists for this tag,
+  # patched otherwise. The reference tag is NOT special-cased: the xmldsig
+  # harness API postdates every tagged release, so even the newest tag carries
+  # an xmldsig-only adapter (it degrades the missing key-resolution so those
+  # cases fail honestly). A patch touches only the suites a tag needs adapting.
   patch="$ADAPTERS/$tag.patch"
-  if [ "$tag" = "$REFERENCE_TAG" ] || [ ! -f "$patch" ]; then
+  if [ ! -f "$patch" ]; then
     hbase="$HARNESS"
   else
     hbase="$HWTROOT/adapt-$tag"
@@ -89,11 +127,14 @@ for tag in $TAGS; do
 
   for suite in $SUITES; do
     case "$suite" in
-      qt3)    ROOTNAME=TestQT3W3C ;;
-      xsd10)  ROOTNAME=TestXSD10W3C ;;
-      xsd11)  ROOTNAME=TestXSD11W3C ;;
-      xslt30) ROOTNAME=TestXSLT30W3C ;;
-      xml)    ROOTNAME=TestXMLW3C ;;
+      qt3)           ROOTNAME=TestQT3W3C ;;
+      xsd10)         ROOTNAME=TestXSD10W3C ;;
+      xsd11)         ROOTNAME=TestXSD11W3C ;;
+      xslt30)        ROOTNAME=TestXSLT30W3C ;;
+      xml)           ROOTNAME=TestXMLW3C ;;
+      xmldsig2ed)    ROOTNAME=TestXMLDSig2EdW3C ;;
+      xmldsig11)     ROOTNAME=TestXMLDSig11W3C ;;
+      merlinxmldsig) ROOTNAME=TestMerlinXMLDSigW3C ;;
       *) echo "unknown suite $suite" >&2; continue ;;
     esac
     summ="$RESULTS/$tag-$suite-summary.md"
