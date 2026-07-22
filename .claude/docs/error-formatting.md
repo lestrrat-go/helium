@@ -174,6 +174,8 @@ Per-reference failures use parallel wrapper types so sign and verify report the 
 - `ReferenceError` (signing): adds `Op string` (`"sign"`). Format: `xmldsig1: sign reference N ("URI") failed: <cause>`. Wrapped both in the `processReference` loops of `signEnveloped`/`signEnveloping`/`signDetached` and in the pre-mutation `preflightSignerTransforms` transform-pipeline validation (`transforms.go`), so a rejected pipeline still names its Reference.
 - `VerificationError` (verification): `Reference == -1` marks a SignatureValue failure (`xmldsig1: signature value verification failed: <cause>`); otherwise `xmldsig1: reference N ("URI") verification failed: <cause>`.
 
+External-reference resolution sentinels (`errors.go`, `reference_resolver.go`): `ErrReferenceNotFound` is the fail-closed default for an external Reference with no configured `ReferenceResolver`, AND every `FSReferenceResolver` rejection short of the size cap — a scheme URI, a path escaping the root, a leftover fragment, a missing file, and an unparseable external XML resource. `ErrReferenceTooLarge` is returned when an external resource exceeds the resolver's 64 MiB cap. Both wrap via `%w` and are matchable with `errors.Is`. A per-reference external failure still surfaces through `VerificationError` (verify) / `ReferenceError` (sign) with the sentinel reachable via `Unwrap`.
+
 ## Error Accumulation Pattern
 
 ### XSD
