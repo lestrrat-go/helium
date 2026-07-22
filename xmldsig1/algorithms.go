@@ -219,9 +219,17 @@ func ecdsaDERToRaw(der []byte, keySize int) ([]byte, error) {
 	if _, err := asn1.Unmarshal(der, &sig); err != nil {
 		return nil, err
 	}
-	raw := make([]byte, keySize*2)
 	rBytes := sig.R.Bytes()
 	sBytes := sig.S.Bytes()
+	// A well-formed signer emits r and s in [1, n), each fitting the curve's byte
+	// width. A malformed signer (e.g. a buggy HSM/PKCS#11 plugin) can hand back an
+	// oversized component; left unchecked, keySize-len(rBytes) goes negative and
+	// the copy below panics with a slice-bounds error. Reject it as an invalid
+	// signature instead of trusting the signer's output.
+	if len(rBytes) > keySize || len(sBytes) > keySize {
+		return nil, fmt.Errorf("%w: ECDSA signature component exceeds %d-byte curve width (r=%d, s=%d bytes)", ErrInvalidSignature, keySize, len(rBytes), len(sBytes))
+	}
+	raw := make([]byte, keySize*2)
 	copy(raw[keySize-len(rBytes):keySize], rBytes)
 	copy(raw[2*keySize-len(sBytes):], sBytes)
 	return raw, nil

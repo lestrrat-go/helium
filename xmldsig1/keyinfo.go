@@ -109,12 +109,28 @@ func X509DataKeyInfo(certs ...*x509.Certificate) KeyInfoBuilder {
 	return &x509DataKeyInfo{certs: certs}
 }
 
-func (b *x509DataKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, _ any) (*helium.Element, error) {
-	// With no certificates the loop below runs zero times and would emit a
-	// schema-invalid empty <X509Data>. Reject that up front so signing fails
-	// loudly instead of producing an empty X509Data.
+// validate reports whether the configured certificate list can build a
+// schema-valid <X509Data>: it must be non-empty (an empty list would emit a
+// schema-invalid empty element) and contain no nil entry (a nil
+// *x509.Certificate would panic on cert.Raw below). Shared by BuildKeyInfo and
+// the SignEnveloping preflight so both reject the same inputs — the preflight
+// before any caller content is moved into the <Object>, BuildKeyInfo as the
+// single source of truth on every signing path.
+func (b *x509DataKeyInfo) validate() error {
 	if len(b.certs) == 0 {
-		return nil, fmt.Errorf("%w: X509DataKeyInfo requires at least one certificate", ErrInvalidKeyInfo)
+		return fmt.Errorf("%w: X509DataKeyInfo requires at least one certificate", ErrInvalidKeyInfo)
+	}
+	for i, cert := range b.certs {
+		if cert == nil {
+			return fmt.Errorf("%w: X509DataKeyInfo certificate[%d] is nil", ErrInvalidKeyInfo, i)
+		}
+	}
+	return nil
+}
+
+func (b *x509DataKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Document, _ any) (*helium.Element, error) {
+	if err := b.validate(); err != nil {
+		return nil, err
 	}
 
 	keyInfo, err := doc.CreateElement("KeyInfo")
