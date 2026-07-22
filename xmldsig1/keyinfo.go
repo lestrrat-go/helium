@@ -1,6 +1,7 @@
 package xmldsig1
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/elliptic"
@@ -9,6 +10,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -72,6 +74,116 @@ func X509CertKeySource(cert *x509.Certificate) KeySource {
 	})
 }
 
+// KeyByNameSource returns a KeySource that maps a ds:KeyName to a key. The
+// KeyInfo's KeyNames are tried in document order and the first name present in
+// keys wins; a KeyInfo with no matching KeyName (including one that carries no
+// KeyName at all) fails closed with ErrNoKeySource. A ds:KeyName is an opaque,
+// producer-chosen label, so the caller owns the name→key mapping and the trust
+// decision that a named key is acceptable.
+func KeyByNameSource(keys map[string]any) KeySource {
+	return KeySourceFunc(func(_ context.Context, keyInfo *KeyInfoData, _ string) (any, error) {
+		if keyInfo == nil {
+			return nil, ErrNoKeySource
+		}
+		for _, name := range keyInfo.KeyNames {
+			key, ok := keys[name]
+			if ok {
+				return key, nil
+			}
+		}
+		return nil, ErrNoKeySource
+	})
+}
+
+// X509CertPoolKeySource returns a KeySource that selects a certificate from the
+// given set by matching the verification-side KeyInfo against it, and returns
+// the matched certificate's PublicKey. Selector strength is applied across the
+// WHOLE pool, strongest first, so a strong match on a later certificate is never
+// masked by a weak match on an earlier one:
+//
+//   - first, an exact raw-DER match against a ds:X509Certificate in the KeyInfo,
+//     over every certificate in the pool;
+//   - then a ds:X509SKI match against the certificate's SubjectKeyId;
+//   - then a ds:X509IssuerSerial match against the certificate's Issuer and
+//     SerialNumber;
+//   - finally a ds:X509SubjectName match against the certificate's Subject.
+//
+// Pool order is preserved only within a single selector class. The raw-DER and
+// SubjectKeyId paths are exact and reliable. The IssuerSerial and SubjectName
+// paths compare Go's pkix.Name.String() rendering, which is NOT RFC 2253
+// canonical, so DName matching is best-effort — prefer supplying the certificate
+// whose SKI or raw bytes the signature carries. Selecting a certificate never
+// establishes trust: the returned public key is still subject to the same
+// out-of-band trust decision as any other verification key.
+func X509CertPoolKeySource(certs ...*x509.Certificate) KeySource {
+	return KeySourceFunc(func(_ context.Context, keyInfo *KeyInfoData, _ string) (any, error) {
+		if keyInfo == nil {
+			return nil, ErrNoKeySource
+		}
+		// Try the strongest selector class against every certificate before
+		// falling to the next weaker one, so pool order only breaks ties within a
+		// class. Iterating each certificate through all classes first (the naive
+		// nesting) would instead let an earlier certificate's weak SubjectName
+		// match win over a later certificate's exact raw-DER match.
+		selectors := []func(*x509.Certificate, *KeyInfoData) bool{
+			certMatchesRawDER, certMatchesSKI, certMatchesIssuerSerial, certMatchesSubjectName,
+		}
+		for _, matches := range selectors {
+			for _, cert := range certs {
+				if cert == nil {
+					continue
+				}
+				if matches(cert, keyInfo) {
+					return cert.PublicKey, nil
+				}
+			}
+		}
+		return nil, ErrNoKeySource
+	})
+}
+
+// certMatchesRawDER reports whether the KeyInfo carries cert's exact DER bytes in
+// a ds:X509Certificate. This is the strongest, exact selector.
+func certMatchesRawDER(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
+	for _, kc := range keyInfo.X509Certificates {
+		if kc != nil && bytes.Equal(kc.Raw, cert.Raw) {
+			return true
+		}
+	}
+	return false
+}
+
+// certMatchesSKI reports whether a ds:X509SKI matches cert's SubjectKeyId. Exact.
+func certMatchesSKI(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
+	for _, ski := range keyInfo.X509SKIs {
+		if len(cert.SubjectKeyId) > 0 && bytes.Equal(ski, cert.SubjectKeyId) {
+			return true
+		}
+	}
+	return false
+}
+
+// certMatchesIssuerSerial reports whether a ds:X509IssuerSerial matches cert's
+// Issuer and SerialNumber. Best-effort: the issuer DName comparison uses Go's
+// pkix.Name.String() rendering.
+func certMatchesIssuerSerial(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
+	for _, is := range keyInfo.X509IssuerSerials {
+		if cert.SerialNumber != nil && is.SerialNumber != nil &&
+			cert.SerialNumber.Cmp(is.SerialNumber) == 0 &&
+			cert.Issuer.String() == is.IssuerName {
+			return true
+		}
+	}
+	return false
+}
+
+// certMatchesSubjectName reports whether a ds:X509SubjectName matches cert's
+// Subject. Best-effort: the DName comparison uses Go's pkix.Name.String()
+// rendering, so it is the weakest selector.
+func certMatchesSubjectName(cert *x509.Certificate, keyInfo *KeyInfoData) bool {
+	return slices.Contains(keyInfo.X509SubjectNames, cert.Subject.String())
+}
+
 // KeyInfoData holds parsed KeyInfo content for verification.
 //
 // SECURITY: every field is parsed from the document's ds:KeyInfo, which is
@@ -82,7 +194,9 @@ func X509CertKeySource(cert *x509.Certificate) KeySource {
 // embedded X509Certificate is not proof of anything on its own: an attacker can
 // embed a certificate for a key they control. See the [KeySource] contract.
 type KeyInfoData struct {
+	KeyNames          []string
 	X509Certificates  []*x509.Certificate
+	X509SKIs          [][]byte
 	X509IssuerSerials []*X509IssuerSerial
 	X509SubjectNames  []string
 	RSAKeyValue       *RSAKeyValueData
@@ -326,6 +440,10 @@ func parseKeyInfo(ctx context.Context, budget *verifyBudget, keyInfoElem *helium
 			return nil, err
 		}
 		switch domutil.LocalName(elem) {
+		case "KeyName":
+			// A ds:KeyName is an opaque producer-chosen label; surface it verbatim
+			// (whitespace-trimmed) for a KeySource to map to a key.
+			data.KeyNames = append(data.KeyNames, strings.TrimSpace(domutil.TextContent(elem)))
 		case "X509Data":
 			if err := parseX509Data(ctx, budget, elem, data); err != nil {
 				return nil, err
@@ -373,6 +491,16 @@ func parseX509Data(ctx context.Context, budget *verifyBudget, elem *helium.Eleme
 				return fmt.Errorf("%w: invalid X509Certificate: %v", ErrInvalidKeyInfo, err)
 			}
 			data.X509Certificates = append(data.X509Certificates, cert)
+		case "X509SKI":
+			// The X509SKI carries the raw DER SubjectKeyIdentifier octets,
+			// base64-encoded. Decode to the raw bytes so a KeySource can compare
+			// them against a certificate's SubjectKeyId; a decode error is
+			// malformed key material and fails closed.
+			ski, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			if err != nil {
+				return fmt.Errorf("%w: invalid X509SKI base64: %v", ErrInvalidKeyInfo, err)
+			}
+			data.X509SKIs = append(data.X509SKIs, ski)
 		case "X509SubjectName":
 			data.X509SubjectNames = append(data.X509SubjectNames, domutil.TextContent(e))
 		case "X509IssuerSerial":
