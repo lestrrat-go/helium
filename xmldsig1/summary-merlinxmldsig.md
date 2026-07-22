@@ -5,14 +5,14 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 - Generated: 2026-07-22
 - Upstream suite: https://github.com/apache/santuario-xml-security-java @ `bec6484bbb170c163d572742c3781cecb2232fea`
-- helium: `59fda463`
-- helium-w3c-tests (harness): `73b5ffe`
+- helium: `725bef91`
+- helium-w3c-tests (harness): `b68911a`
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 6 |
+| Pass | 12 |
 | Skip | 0 |
-| XFail (documented gap) | 10 |
+| XFail (documented gap) | 4 |
 | Fail | 0 |
 | **Total** | **16** |
 
@@ -22,13 +22,7 @@ Documented known gaps: the harness expects these to fail and treats an unexpecte
 
 | Reason | Count |
 |--------|------:|
-| ds:KeyName is not parsed by helium, so no key is surfaced to the KeySource; the Reference is also an external resource that xmldsig1 fail-closes on | 1 |
-| ds:RetrievalMethod is not parsed by helium, so no key is surfaced to the KeySource; the Reference is also an external resource that xmldsig1 fail-closes on | 1 |
-| ds:X509SKI (SubjectKeyIdentifier) is not parsed by helium, so no key is surfaced to the KeySource; the Reference is also an external resource that xmldsig1 fail-closes on | 1 |
-| the Reference is an EXTERNAL resource (http://www.w3.org/TR/xml-stylesheet); xmldsig1 is fail-closed and does not dereference external references (ErrReferenceNotFound: unsupported reference URI) | 1 |
-| the Reference is an EXTERNAL resource (xml-stylesheet); xmldsig1 fail-closes on external references. The X509IssuerSerial resolves the cert (harness match by serial), so the external reference is the sole blocker | 1 |
-| the Reference is an EXTERNAL resource (xml-stylesheet); xmldsig1 fail-closes on external references. The X509SubjectName resolves the cert via harness decoded-DName match, so the external reference is the sole blocker | 1 |
-| the Reference is an EXTERNAL resource (xml-stylesheet); xmldsig1 fail-closes on external references. The inline X509Certificate resolves the key fine, so the external reference is the sole blocker | 1 |
-| the Reference is an EXTERNAL resource (xml-stylesheet); xmldsig1 fail-closes on external references. The signing cert resolves; the X509CRL revocation is a trust-layer concern helium does not evaluate | 1 |
-| the Reference is an EXTERNAL resource (xml-stylesheet.b64); xmldsig1 fail-closes on external references | 1 |
-| the large composite signature: KeyInfo supplies the key via ds:RetrievalMethod (not parsed by helium) and its References require base64, XPointer, XSLT, here() XPath, Manifest, and external-resource support that xmldsig1 does not implement | 1 |
+| ds:KeyName is not parsed by helium, so no key is surfaced to the KeySource. The external Reference now resolves via the harness resolver, so KeyName is the sole blocker (no supported key material in KeyInfo) | 1 |
+| ds:RetrievalMethod is not parsed by helium, so no key is surfaced to the KeySource. The external Reference now resolves via the harness resolver, so RetrievalMethod is the sole blocker (no supported key material in KeyInfo) | 1 |
+| ds:X509SKI (SubjectKeyIdentifier) is not parsed by helium, so no key is surfaced to the KeySource. The external Reference now resolves via the harness resolver, so X509SKI is the sole blocker (no supported key material in KeyInfo) | 1 |
+| the large composite signature: KeyInfo supplies the key via ds:RetrievalMethod (not parsed by helium), so no key is surfaced (no supported key material in KeyInfo) and verification stops before its References, which also require base64, XPointer, XSLT, here() XPath, and Manifest support xmldsig1 does not implement | 1 |
