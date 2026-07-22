@@ -19,7 +19,7 @@ import (
 // is recorded as that inner reference's Err/Valid=false, never a panic and
 // never a silent pass. Because the results are advisory (XMLDSig core §5.1), an
 // inner failure is captured rather than propagated.
-func validateManifestReferences(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, manifestElem *helium.Element) []ManifestReference {
+func validateManifestReferences(ctx context.Context, budget *verifyBudget, cfg *verifierConfig, doc *helium.Document, sigElem, manifestElem *helium.Element) []ManifestReference {
 	var results []ManifestReference
 	for child := manifestElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := helium.AsNode[*helium.Element](child)
@@ -38,7 +38,7 @@ func validateManifestReferences(ctx context.Context, cfg *verifierConfig, doc *h
 		if err := ctx.Err(); err != nil {
 			break
 		}
-		results = append(results, validateManifestReference(ctx, cfg, doc, sigElem, elem))
+		results = append(results, validateManifestReference(ctx, budget, cfg, doc, sigElem, elem))
 	}
 	return results
 }
@@ -48,11 +48,11 @@ func validateManifestReferences(ctx context.Context, cfg *verifierConfig, doc *h
 // declared DigestValue. It never returns an error: every failure mode is folded
 // into the returned ManifestReference's Err (with Valid left false) so the
 // caller can surface it advisorily.
-func validateManifestReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, refElem *helium.Element) ManifestReference {
+func validateManifestReference(ctx context.Context, budget *verifyBudget, cfg *verifierConfig, doc *helium.Document, sigElem, refElem *helium.Element) ManifestReference {
 	uri, _ := refElem.GetAttribute("URI")
 	result := ManifestReference{URI: uri}
 
-	ref, err := parseReferenceElement(refElem)
+	ref, err := parseReferenceElement(ctx, budget, refElem)
 	if err != nil {
 		result.Err = err
 		return result

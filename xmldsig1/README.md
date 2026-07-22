@@ -355,12 +355,66 @@ source: [examples/xmldsig1_sha1_optin_example_test.go](https://github.com/lestrr
 > SHA-1 signatures must call `Signer.AllowSHA1(true)`. SHA-256 and stronger
 > algorithms are unaffected.
 
+## Verification resource limits
+
+An attacker-controlled, unsigned document can force verification to do
+substantial decode/parse work *before* the `SignatureValue` is ever checked:
+many or large `DigestValue`/`SignatureValue`/`X509Certificate` values to
+base64-decode, and one `x509.ParseCertificate` per embedded certificate. To
+bound that work the `Verifier` enforces three parse-time caps, each with a
+conservative default that sits well above any legitimate signature so existing
+documents verify unchanged:
+
+| Builder | Bounds | Default |
+|---------|--------|---------|
+| `Verifier.MaxReferences(n)` | number of `ds:Reference` elements | 1024 |
+| `Verifier.MaxKeyInfoEntries(n)` | `KeyInfo` children + `X509Data` children | 256 |
+| `Verifier.MaxDecodedBytes(n)` | running total of base64-decoded bytes | 10 MiB |
+
+Exceeding a cap fails with `ErrResourceLimitExceeded` before any Reference is
+digested or the signature is checked. For each builder, `n == 0` selects the
+default and a negative `n` disables that cap. Verification also polls the
+context inside the KeyInfo and Reference parse loops, so a cancelled context or
+passed deadline stops the work promptly rather than only at loop boundaries —
+pass a `ctx` with a deadline to bound the per-Reference canonicalization of a
+SignedInfo that declares many References.
+
+## Detached signature placement (inclusive C14N)
+
+`SignDetached` and `SignEnveloping` return a detached `ds:Signature` for the
+caller to place. `SignedInfo` (and any in-Object Reference for `SignEnveloping`)
+is canonicalized under a proxy carrying the **signing document element's**
+inherited canonicalization context. If `SignedInfo`'s `CanonicalizationMethod`
+— or an in-Object Reference — uses **inclusive** Canonical XML (`C14N10` /
+`C14N11`), the caller MUST place the returned Signature directly under the
+document element, or under an element with the same in-scope namespaces and
+inherited `xml:*` attributes. Placing it under an element that contributes extra
+in-scope namespace declarations or `xml:*` attributes changes the bytes
+inclusive C14N canonicalizes, so verification recomputes a different canonical
+form and fails. **Exclusive** Canonical XML (the `NewSigner` default,
+`ExcC14NTransform`) inherits no namespaces or `xml:*` and is unaffected by
+placement.
+
 ## Legacy and interop KeyInfo (verification)
 
 For interoperating with older producers, verification-side `KeyInfo` parsing
 recognizes several legacy constructs and surfaces them through `KeyInfoData` so
 a `KeySource` can build the verification key. Parsing is namespace-strict and
 fails closed (`ErrInvalidKeyInfo`) on unknown or partial key material.
+
+**Security: `KeyInfoData` is untrusted.** A `KeySource` receives the parsed
+`KeyInfoData` *before* the signature is verified, so every value in it —
+embedded `X509Certificate`s, `RSAKeyValue`/`ECKeyValue`/`DSAKeyValue`,
+issuer/serial and subject-name selectors — is attacker-controlled and NOT
+authenticated by the signature. A `KeySource.ResolveKey` implementation MUST
+decide trust itself: match the `KeyInfoData` against a trust store, a pinned
+key, or a validated certificate chain, and return a key the caller already
+trusts. It MUST NOT blindly return an embedded certificate's public key or a
+`KeyValue` as the verification key — that lets an attacker sign with their own
+key and have it verify. `KeyInfoData` is a *selector* into trusted key material,
+never the key material itself. `StaticKey` and `X509CertKeySource` ignore
+`KeyInfoData` entirely and return a pre-trusted key, which is the safe default; a
+custom `KeySource` that consults `KeyInfoData` owns the trust decision.
 
 - **RFC 4050 `ECDSAKeyValue`** (namespace `http://www.w3.org/2001/04/xmldsig-more#`):
   `DomainParameters/NamedCurve@URN` selects the curve (P-256/P-384/P-521) and

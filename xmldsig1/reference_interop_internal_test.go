@@ -1,6 +1,7 @@
 package xmldsig1
 
 import (
+	"context"
 	"encoding/base64"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ func parseVectorSignature(t *testing.T, name string) (*helium.Document, *parsedS
 	require.NoError(t, err)
 	sig := findSig(doc.DocumentElement())
 	require.NotNil(t, sig, "vector %s must contain a ds:Signature", name)
-	parsed, err := parseSignatureElement(sig)
+	parsed, err := parseSignatureElement(context.Background(), testVerifyBudget(), sig)
 	require.NoError(t, err)
 	return doc, parsed
 }

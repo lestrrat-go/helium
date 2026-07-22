@@ -60,6 +60,58 @@ type parsedTransform struct {
 	stylesheet []byte            // for the XSLT transform: the serialized xsl:stylesheet subtree
 }
 
+// verifyBudget bounds the parse-time work verification performs on an
+// attacker-controlled Signature element BEFORE the SignatureValue is checked. An
+// unsigned document can otherwise force large base64 decodes (many/large
+// DigestValue/SignatureValue/X509Certificate) and a per-cert x509.ParseCertificate
+// for every embedded certificate. The three caps come from the Verifier config
+// (with conservative defaults); a non-positive effective cap disables that check.
+// The context is polled separately inside the KeyInfo/Reference parse loops so a
+// cancelled context stops the work promptly rather than only at their boundaries.
+type verifyBudget struct {
+	maxRefs    int
+	maxEntries int
+	maxDecoded int
+	references int
+	entries    int
+	decoded    int
+}
+
+func newVerifyBudget(cfg *verifierConfig) *verifyBudget {
+	return &verifyBudget{
+		maxRefs:    cfg.maxReferencesLimit(),
+		maxEntries: cfg.maxKeyInfoEntriesLimit(),
+		maxDecoded: cfg.maxDecodedBytesLimit(),
+	}
+}
+
+// addReference counts one ds:Reference and fails closed once the cap is passed.
+func (b *verifyBudget) addReference() error {
+	b.references++
+	if b.maxRefs > 0 && b.references > b.maxRefs {
+		return fmt.Errorf("%w: too many References (limit %d)", ErrResourceLimitExceeded, b.maxRefs)
+	}
+	return nil
+}
+
+// addKeyInfoEntry counts one KeyInfo/X509Data entry and fails closed past the cap.
+func (b *verifyBudget) addKeyInfoEntry() error {
+	b.entries++
+	if b.maxEntries > 0 && b.entries > b.maxEntries {
+		return fmt.Errorf("%w: too many KeyInfo entries (limit %d)", ErrResourceLimitExceeded, b.maxEntries)
+	}
+	return nil
+}
+
+// consume adds n decoded bytes to the running total and fails closed past the cap.
+func (b *verifyBudget) consume(n int) error {
+	b.decoded += n
+	if b.maxDecoded > 0 && b.decoded > b.maxDecoded {
+		return fmt.Errorf("%w: decoded byte budget exceeded (limit %d)", ErrResourceLimitExceeded, b.maxDecoded)
+	}
+	return nil
+}
+
 func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
 	// Honor an already-cancelled or already-expired context before any work. All
 	// of the pre-loop steps below — signature-element parse, weak-algorithm
@@ -82,7 +134,13 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		return nil, ErrNoKeySource
 	}
 
-	parsed, err := parseSignatureElement(sigElem)
+	// budget bounds the pre-SignatureValue parse work (base64 decodes, per-cert
+	// x509 parses) and carries ctx for in-loop cancellation polling. It is shared
+	// across the signature-element parse and the KeyInfo parse below so the
+	// decoded-byte total spans both.
+	budget := newVerifyBudget(cfg)
+
+	parsed, err := parseSignatureElement(ctx, budget, sigElem)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +156,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	// Resolve key.
 	var keyInfoData *KeyInfoData
 	if parsed.keyInfoElem != nil {
-		keyInfoData, err = parseKeyInfo(parsed.keyInfoElem)
+		keyInfoData, err = parseKeyInfo(ctx, budget, parsed.keyInfoElem)
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +226,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 			result.Manifests = append(result.Manifests, ManifestResult{
 				Reference:  &result.References[i],
 				Element:    manifestElem,
-				References: validateManifestReferences(ctx, cfg, doc, sigElem, manifestElem),
+				References: validateManifestReferences(ctx, budget, cfg, doc, sigElem, manifestElem),
 			})
 		}
 	}
@@ -394,7 +452,7 @@ func digestEqual(a, b []byte) bool {
 	return v == 0
 }
 
-func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
+func parseSignatureElement(ctx context.Context, budget *verifyBudget, sigElem *helium.Element) (*parsedSignature, error) {
 	parsed := &parsedSignature{}
 
 	// The XML-Signature schema mandates exactly one SignedInfo and exactly one
@@ -408,6 +466,9 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 	// duplicate SignedInfo / SignatureValue / KeyInfo outright.
 	var signatureValueSeen bool
 	for child := sigElem.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
@@ -427,7 +488,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 				return nil, fmt.Errorf("%w: multiple SignedInfo elements", ErrInvalidSignature)
 			}
 			parsed.signedInfoElem = elem
-			if err := parseSignedInfo(elem, parsed); err != nil {
+			if err := parseSignedInfo(ctx, budget, elem, parsed); err != nil {
 				return nil, err
 			}
 		case "SignatureValue":
@@ -438,6 +499,9 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 			decoded, err := xmlbase64.DecodeString(domutil.TextContent(elem))
 			if err != nil {
 				return nil, fmt.Errorf("%w: invalid SignatureValue base64: %v", ErrInvalidSignature, err)
+			}
+			if err := budget.consume(len(decoded)); err != nil {
+				return nil, err
 			}
 			parsed.signatureValue = decoded
 		case "KeyInfo":
@@ -458,7 +522,7 @@ func parseSignatureElement(sigElem *helium.Element) (*parsedSignature, error) {
 	return parsed, nil
 }
 
-func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
+func parseSignedInfo(ctx context.Context, budget *verifyBudget, elem *helium.Element, parsed *parsedSignature) error {
 	// The XML-Signature schema fixes SignedInfo's content model as
 	// (CanonicalizationMethod, SignatureMethod, Reference+) with exactly one
 	// CanonicalizationMethod and exactly one SignatureMethod. Enforce that
@@ -468,6 +532,9 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 	// signature actually commits to, so a conforming verifier must reject it.
 	var c14nSeen, sigMethodSeen bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
@@ -510,7 +577,13 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 				return err
 			}
 		case "Reference":
-			ref, err := parseReferenceElement(e)
+			// Count the Reference before parsing it so a flood of References is
+			// rejected up front, bounding the per-Reference canonicalization the
+			// verify loop would otherwise perform.
+			if err := budget.addReference(); err != nil {
+				return err
+			}
+			ref, err := parseReferenceElement(ctx, budget, e)
 			if err != nil {
 				return err
 			}
@@ -541,7 +614,7 @@ func parseSignedInfo(elem *helium.Element, parsed *parsedSignature) error {
 	return nil
 }
 
-func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
+func parseReferenceElement(ctx context.Context, budget *verifyBudget, elem *helium.Element) (parsedReference, error) {
 	ref := parsedReference{}
 	ref.uri, _ = elem.GetAttribute("URI")
 	// The Type attribute is advisory metadata (XMLDSig core §4.3.3.1): it names
@@ -558,6 +631,9 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 	// commits to, so a conforming verifier must reject it.
 	var transformsSeen, digestMethodSeen, digestValueSeen bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := ctx.Err(); err != nil {
+			return ref, err
+		}
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
@@ -576,6 +652,9 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 			}
 			transformsSeen = true
 			for tc := e.FirstChild(); tc != nil; tc = tc.NextSibling() {
+				if err := ctx.Err(); err != nil {
+					return ref, err
+				}
 				te, ok := helium.AsNode[*helium.Element](tc)
 				if !ok {
 					continue
@@ -653,6 +732,9 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return ref, fmt.Errorf("%w: invalid DigestValue base64: %v", ErrInvalidSignature, err)
+			}
+			if err := budget.consume(len(decoded)); err != nil {
+				return ref, err
 			}
 			ref.digestValue = decoded
 		}

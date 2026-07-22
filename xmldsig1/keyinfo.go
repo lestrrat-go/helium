@@ -17,7 +17,23 @@ import (
 )
 
 // KeySource provides keys for signature verification.
+//
+// SECURITY: the keyInfo passed to ResolveKey is parsed from the document's
+// ds:KeyInfo BEFORE the signature is verified, so it is entirely
+// attacker-controlled (see [KeyInfoData]). A KeySource MUST decide trust itself:
+// select the verification key by matching keyInfo against a trust store, a
+// pinned key, or a validated certificate chain. It MUST NOT blindly return an
+// embedded X509Certificate's public key or a KeyValue as the verification key —
+// doing so lets an attacker present a signature made with their own key and have
+// it verify. keyInfo is a selector into trusted key material, never the key
+// material itself. [StaticKey] and [X509CertKeySource] ignore keyInfo and return
+// a key the caller already trusts, which is the safe pattern; a custom KeySource
+// that consults keyInfo carries the trust decision.
 type KeySource interface {
+	// ResolveKey returns the verification key for a signature. keyInfo is the
+	// document's parsed, UNTRUSTED KeyInfo (nil when the Signature carries no
+	// KeyInfo); alg is the SignatureMethod algorithm URI. See the [KeySource]
+	// contract: match keyInfo against trusted material rather than trusting it.
 	ResolveKey(ctx context.Context, keyInfo *KeyInfoData, alg string) (any, error)
 }
 
@@ -57,6 +73,14 @@ func X509CertKeySource(cert *x509.Certificate) KeySource {
 }
 
 // KeyInfoData holds parsed KeyInfo content for verification.
+//
+// SECURITY: every field is parsed from the document's ds:KeyInfo, which is
+// attacker-controlled and NOT authenticated by the signature — KeyInfo is
+// resolved before the signature is checked. Treat these values as untrusted
+// hints for selecting a key from trusted material (a trust store, a pinned key,
+// a validated chain), never as the key material to verify with. In particular an
+// embedded X509Certificate is not proof of anything on its own: an attacker can
+// embed a certificate for a key they control. See the [KeySource] contract.
 type KeyInfoData struct {
 	X509Certificates  []*x509.Certificate
 	X509IssuerSerials []*X509IssuerSerial
@@ -273,10 +297,16 @@ func (b *rsaKeyValueKeyInfo) BuildKeyInfo(_ context.Context, doc *helium.Documen
 	return keyInfo, nil
 }
 
-// parseKeyInfo extracts key information from a ds:KeyInfo element.
-func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
+// parseKeyInfo extracts key information from a ds:KeyInfo element. budget bounds
+// the parse-time work an attacker-controlled KeyInfo can force (a per-cert
+// x509.ParseCertificate for every embedded certificate, plus base64 decodes) and
+// carries ctx for in-loop cancellation polling.
+func parseKeyInfo(ctx context.Context, budget *verifyBudget, keyInfoElem *helium.Element) (*KeyInfoData, error) {
 	data := &KeyInfoData{}
 	for child := keyInfoElem.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
@@ -290,9 +320,14 @@ func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 		if !isDSigCoreNS(elem) {
 			continue
 		}
+		// Count each core KeyInfo child so a KeyInfo stuffed with many entries is
+		// rejected before it drives repeated key-material parsing.
+		if err := budget.addKeyInfoEntry(); err != nil {
+			return nil, err
+		}
 		switch domutil.LocalName(elem) {
 		case "X509Data":
-			if err := parseX509Data(elem, data); err != nil {
+			if err := parseX509Data(ctx, budget, elem, data); err != nil {
 				return nil, err
 			}
 		case "KeyValue":
@@ -304,8 +339,11 @@ func parseKeyInfo(keyInfoElem *helium.Element) (*KeyInfoData, error) {
 	return data, nil
 }
 
-func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
+func parseX509Data(ctx context.Context, budget *verifyBudget, elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
@@ -315,11 +353,20 @@ func parseX509Data(elem *helium.Element, data *KeyInfoData) error {
 		if !isDSigCoreNS(e) {
 			continue
 		}
+		// Count each X509Data child (X509Certificate/X509SubjectName/
+		// X509IssuerSerial) so a flood of certificates cannot drive an unbounded
+		// number of x509.ParseCertificate calls.
+		if err := budget.addKeyInfoEntry(); err != nil {
+			return err
+		}
 		switch domutil.LocalName(e) {
 		case "X509Certificate":
 			derBytes, err := xmlbase64.DecodeString(domutil.TextContent(e))
 			if err != nil {
 				return fmt.Errorf("%w: invalid X509Certificate base64: %v", ErrInvalidKeyInfo, err)
+			}
+			if err := budget.consume(len(derBytes)); err != nil {
+				return err
 			}
 			cert, err := x509.ParseCertificate(derBytes)
 			if err != nil {

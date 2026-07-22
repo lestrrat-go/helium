@@ -177,12 +177,12 @@ func TestParseX509Data(t *testing.T) {
 		// well-formed base64 but not a certificate.
 		d := mustParse(t, `<ds:X509Data xmlns:ds="`+NamespaceDSig+`"><ds:X509Certificate xmlns:ds="`+NamespaceDSig+`">aGVsbG8=</ds:X509Certificate></ds:X509Data>`)
 		var data KeyInfoData
-		err := parseX509Data(d.DocumentElement(), &data)
+		err := parseX509Data(context.Background(), testVerifyBudget(), d.DocumentElement(), &data)
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
 
 		d2 := mustParse(t, `<ds:X509Data xmlns:ds="`+NamespaceDSig+`"><ds:X509Certificate xmlns:ds="`+NamespaceDSig+`">!!!bad</ds:X509Certificate></ds:X509Data>`)
 		var data2 KeyInfoData
-		err = parseX509Data(d2.DocumentElement(), &data2)
+		err = parseX509Data(context.Background(), testVerifyBudget(), d2.DocumentElement(), &data2)
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
 		require.Contains(t, err.Error(), "base64")
 	})
@@ -192,7 +192,7 @@ func TestParseX509Data(t *testing.T) {
 	t.Run("foreign cert", func(t *testing.T) {
 		doc := mustParse(t, `<ds:X509Data xmlns:ds="`+NamespaceDSig+`"><evil:X509Certificate xmlns:evil="urn:evil">AA==</evil:X509Certificate></ds:X509Data>`)
 		var data KeyInfoData
-		require.NoError(t, parseX509Data(doc.DocumentElement(), &data))
+		require.NoError(t, parseX509Data(context.Background(), testVerifyBudget(), doc.DocumentElement(), &data))
 		require.Empty(t, data.X509Certificates)
 	})
 }
@@ -234,7 +234,7 @@ func TestParseForeignChild(t *testing.T) {
 	// X509Data look-alike.
 	t.Run("key info child", func(t *testing.T) {
 		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><evil:X509Data xmlns:evil="urn:evil"/></ds:KeyInfo>`)
-		data, err := parseKeyInfo(doc.DocumentElement())
+		data, err := parseKeyInfo(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.NoError(t, err)
 		require.Empty(t, data.X509Certificates)
 	})
@@ -257,7 +257,7 @@ func TestKeyInfoNamespace(t *testing.T) {
 		keyInfo := newKeyInfoCertElem(t, doc, "evil", evilNS, certDER)
 		require.Equal(t, evilNS, elementNamespaceURI(keyInfo))
 
-		data, err := parseKeyInfo(keyInfo)
+		data, err := parseKeyInfo(context.Background(), testVerifyBudget(), keyInfo)
 		require.NoError(t, err)
 		require.Empty(t, data.X509Certificates,
 			"a foreign-namespace X509Data look-alike must not supply a certificate")
@@ -273,7 +273,7 @@ func TestKeyInfoNamespace(t *testing.T) {
 		keyInfo := newKeyInfoCertElem(t, doc, nsPrefix, NamespaceDSig, certDER)
 		require.Equal(t, NamespaceDSig, elementNamespaceURI(keyInfo))
 
-		data, err := parseKeyInfo(keyInfo)
+		data, err := parseKeyInfo(context.Background(), testVerifyBudget(), keyInfo)
 		require.NoError(t, err)
 		require.Len(t, data.X509Certificates, 1,
 			"a correctly ds-namespaced X509Certificate must still parse")
@@ -308,7 +308,7 @@ func TestKeyInfoNamespace(t *testing.T) {
 		require.NoError(t, mod.AddChild(doc.CreateText([]byte(base64.StdEncoding.EncodeToString([]byte{1, 2, 3})))))
 		require.NoError(t, rsaKV.AddChild(mod))
 
-		data, err := parseKeyInfo(keyInfo)
+		data, err := parseKeyInfo(context.Background(), testVerifyBudget(), keyInfo)
 		require.NoError(t, err)
 		require.Nil(t, data.RSAKeyValue,
 			"a foreign-namespace RSAKeyValue look-alike must not supply key material")
@@ -327,7 +327,7 @@ func TestParseKeyInfoRSAExponentRange(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
-		data, err := parseKeyInfo(doc.DocumentElement())
+		data, err := parseKeyInfo(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.NoError(t, err)
 		require.NotNil(t, data.RSAKeyValue)
 		require.Equal(t, 65537, data.RSAKeyValue.Exponent)
@@ -347,7 +347,7 @@ func TestParseKeyInfoRSAExponentRange(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 			require.NoError(t, err)
 
-			_, err = parseKeyInfo(doc.DocumentElement())
+			_, err = parseKeyInfo(context.Background(), testVerifyBudget(), doc.DocumentElement())
 			require.Error(t, err)
 			require.ErrorIs(t, err, ErrInvalidKeyInfo)
 		})
@@ -358,7 +358,7 @@ func TestParseKeyInfoRSAExponentRange(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
 		require.NoError(t, err)
 
-		_, err = parseKeyInfo(doc.DocumentElement())
+		_, err = parseKeyInfo(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
 	})
