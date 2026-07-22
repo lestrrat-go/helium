@@ -73,6 +73,44 @@ func TestParseXSLTTransform(t *testing.T) {
 	})
 }
 
+// TestParseXSLTTransformEntityHidden locks the fail-closed contract against an
+// entity-reference child that hides extra markup. helium.NewParser() is
+// non-substituting by default, so an internal DTD entity referenced inside the
+// ds:Transform stays an EntityRefNode instead of being inlined. An element-only
+// scan would miss the hidden second/foreign stylesheet and wrongly accept the
+// transform; parseXSLTTransform must reject any entity-reference child so exactly
+// one direct xsl:stylesheet/xsl:transform element is permitted.
+func TestParseXSLTTransformEntityHidden(t *testing.T) {
+	const head = `<Reference xmlns="http://www.w3.org/2000/09/xmldsig#" URI="#x"><Transforms><Transform Algorithm="http://www.w3.org/TR/1999/REC-xslt-19991116">`
+	const tail = `</Transform></Transforms><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>AA==</DigestValue></Reference>`
+	const style = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>`
+
+	t.Run("entity replacement is a second stylesheet rejected", func(t *testing.T) {
+		// Children parse as [Element xsl:stylesheet, EntityRefNode evil]; the
+		// entity replacement is a second stylesheet the element-only scan cannot
+		// see. Must fail closed rather than accept the single visible element.
+		doctype := `<!DOCTYPE Reference [ <!ENTITY evil "<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='1.0'/>"> ]>`
+		_, err := parseReferenceFragment(t, doctype+head+style+`&evil;`+tail)
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+	})
+
+	t.Run("entity replacement is a foreign element rejected", func(t *testing.T) {
+		doctype := `<!DOCTYPE Reference [ <!ENTITY foreign "<inject xmlns='urn:not-xslt'/>"> ]>`
+		_, err := parseReferenceFragment(t, doctype+head+style+`&foreign;`+tail)
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+	})
+
+	t.Run("legitimate single stylesheet still parses", func(t *testing.T) {
+		// A ds:Transform with exactly one xsl:stylesheet and no entity child is
+		// unaffected by the entity guard.
+		ref, err := parseReferenceFragment(t, head+style+tail)
+		require.NoError(t, err)
+		require.Len(t, ref.transforms, 1)
+		require.Equal(t, TransformXSLT, ref.transforms[0].algorithm)
+		require.NotEmpty(t, ref.transforms[0].stylesheet)
+	})
+}
+
 // TestResolveXSLTPipeline locks the pipeline placement of the XSLT transform: a
 // bare XSLT resolves with the default inclusive C14N 1.0 fill-in and pipe.xslt
 // set, a preceding node-set transform is allowed, and any octet-ender before or

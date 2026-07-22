@@ -57,6 +57,18 @@ func isXSLTNS(e *helium.Element) bool {
 func parseXSLTTransform(te *helium.Element) ([]byte, error) {
 	var styleElem *helium.Element
 	for c := te.FirstChild(); c != nil; c = c.NextSibling() {
+		// An entity-reference child can hide a second stylesheet or a foreign
+		// element inside its replacement content. helium.NewParser() is
+		// non-substituting by default, so an internal DTD entity stays an
+		// EntityRefNode rather than being inlined — the element-only scan below
+		// would never see the hidden markup and would wrongly accept the
+		// transform. Validate the EFFECTIVE child sequence by rejecting any
+		// entity node fail-closed, so exactly one direct xsl:stylesheet /
+		// xsl:transform element is permitted.
+		switch c.Type() {
+		case helium.EntityRefNode, helium.EntityNode:
+			return nil, fmt.Errorf("%w: entity reference in XSLT transform", ErrUnsupportedTransform)
+		}
 		ce, ok := helium.AsNode[*helium.Element](c)
 		if !ok {
 			continue
