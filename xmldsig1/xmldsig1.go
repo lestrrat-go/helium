@@ -260,6 +260,9 @@ type verifierConfig struct {
 	// into XML for a c14n/XPath transform chain. nil selects the locked-down
 	// default (see parser).
 	referenceParser *helium.Parser
+	// xsltTransformer applies the XSLT transform. nil (the default) keeps the XSLT
+	// transform fail-closed with ErrUnsupportedTransform.
+	xsltTransformer XSLTTransformer
 }
 
 // parser returns the parser used for external reference octets: the configured
@@ -361,6 +364,23 @@ func (v Verifier) ValidateManifests(validate bool) Verifier {
 func (v Verifier) ReferenceParser(p helium.Parser) Verifier {
 	v = v.clone()
 	v.cfg.referenceParser = &p
+	return v
+}
+
+// XSLTTransformer configures the [XSLTTransformer] that applies the XSLT
+// transform (http://www.w3.org/TR/1999/REC-xslt-19991116) to a Reference that
+// carries one. It is opt-in: the default is nil, which keeps the XSLT transform
+// fail-closed with [ErrUnsupportedTransform], byte-identical to a Verifier
+// without one. When set, a Reference's ds:Transform/xsl:stylesheet subtree is
+// serialized and passed to t together with the pre-XSLT octet stream, and t's
+// output becomes the digest input.
+//
+// XSLT is a powerful language and both the stylesheet and its input are
+// attacker-controlled on verify, so the transformer owns all resource and XXE
+// policy (see [XSLTTransformer]). helium ships no transformer.
+func (v Verifier) XSLTTransformer(t XSLTTransformer) Verifier {
+	v = v.clone()
+	v.cfg.xsltTransformer = t
 	return v
 }
 

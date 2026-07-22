@@ -126,12 +126,40 @@ canonicalization afterward; combining it with a preceding node-set transform is
 not supported.
 
 A node-set transform (enveloped-signature or XPath) may precede an octet-producing
-transform (canonicalization or base64), which ends the pipeline; any transform
-ordered **after** an octet-producing transform — a second canonicalization, a
-base64 after a canonicalization, or an octet-consuming transform such as XSLT — is
-rejected fail-closed with `ErrUnsupportedTransform`, as is any transform URI the
-package does not implement. Signing does not support the base64 transform: it has
-no typed `Transform` constructor and the sign preflight rejects it fail-closed.
+transform (canonicalization or base64) or the octet-in→octet-out XSLT transform
+(`http://www.w3.org/TR/1999/REC-xslt-19991116`), each of which ends the pipeline;
+any transform ordered **after** an octet-ending transform — a second
+canonicalization, a base64 after a canonicalization, an XSLT after a
+canonicalization/base64, a second XSLT, or a canonicalization/base64 after an
+XSLT — is rejected fail-closed with `ErrUnsupportedTransform`, as is any transform
+URI the package does not implement. Signing does not support the base64 or XSLT
+transforms: neither has a typed `Transform` constructor and the sign preflight
+rejects both fail-closed.
+
+### XSLT transform (opt-in, verify-only)
+
+The XSLT transform is **off by default and verify-only**. XSLT is a powerful
+language (`document()`, unbounded recursion and compute), and both the stylesheet
+and its input are attacker-controlled on verification, so helium never runs XSLT
+on its own: an XSLT transform fails closed with `ErrUnsupportedTransform` unless a
+transformer is injected, mirroring the "no HTTP resolver shipped" stance for
+external references.
+
+To verify a signature whose Reference carries an XSLT transform, supply an
+`XSLTTransformer`:
+
+```go
+type XSLTTransformer interface {
+    TransformXSLT(ctx context.Context, stylesheet []byte, input []byte) ([]byte, error)
+}
+```
+
+`Verifier.XSLTTransformer(t)` opts in. The single `ds:Transform/xsl:stylesheet`
+(or `xsl:transform`) child is captured and serialized, and passed to `t` together
+with the reference's pre-XSLT canonical octets; `t`'s output becomes the digest
+input. The implementer **owns all resource and XXE policy** — compute/time/memory
+limits and disabling `document()`/external access — because both inputs are
+attacker-controlled. helium ships no transformer.
 
 ### External references (opt-in)
 
@@ -375,5 +403,6 @@ evidence:
   variants.
 
 The remaining expected failures are deliberate fail-closed design choices
-(no external-reference dereferencing, no XSLT transform), each documented
-with its reason in the harness expectations.
+(no external-reference dereferencing without a resolver, no XSLT transform
+without an injected transformer), each documented with its reason in the harness
+expectations.

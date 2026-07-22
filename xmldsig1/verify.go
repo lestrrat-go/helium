@@ -50,10 +50,11 @@ type parsedReference struct {
 }
 
 type parsedTransform struct {
-	algorithm string
-	prefixes  []string          // for Exclusive C14N InclusiveNamespaces
-	xpathExpr string            // for the XPath filter transform (ds:Transform/XPath text)
-	xpathNS   map[string]string // in-scope namespace bindings on the ds:Transform/XPath element
+	algorithm  string
+	prefixes   []string          // for Exclusive C14N InclusiveNamespaces
+	xpathExpr  string            // for the XPath filter transform (ds:Transform/XPath text)
+	xpathNS    map[string]string // in-scope namespace bindings on the ds:Transform/XPath element
+	stylesheet []byte            // for the XSLT transform: the serialized xsl:stylesheet subtree
 }
 
 func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
@@ -258,26 +259,21 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 
 	c14nMethod := effectiveC14NMethod(pipe.c14nMethod, includeComments)
 
-	// When one or more XPath filter transforms are present the reference is
-	// processed as an explicit node-set: build the initial node-set, apply the
-	// enveloped-signature removal and each XPath filter in order, then
-	// canonicalize the surviving node-set. This node-set path runs only for a
-	// declared XPath transform; the plain paths below stay byte-identical.
-	if len(pipe.xpathFilters) > 0 {
-		canonical, err := canonicalizeWithXPathFilters(ctx, doc, target, sigElem, wholeDoc, c14nMethod, pipe)
-		if err != nil {
-			return nil, nil, false, err
-		}
-		return target, canonical, false, nil
-	}
-
-	// For enveloped signatures the Signature element and its descendants must
-	// be omitted from the canonical input. canonicalizeEnveloped does this on a
-	// deep copy of the document, never mutating the caller's live DOM (which
-	// would race with concurrent readers and risk leaving the tree corrupted if
-	// a restore failed).
+	// Compute the pre-XSLT octets. When one or more XPath filter transforms are
+	// present the reference is processed as an explicit node-set: build the
+	// initial node-set, apply the enveloped-signature removal and each XPath
+	// filter in order, then canonicalize the surviving node-set. Otherwise the
+	// enveloped/whole-document/subtree canonicalization applies. For enveloped
+	// signatures the Signature element and its descendants must be omitted from
+	// the canonical input; canonicalizeEnveloped does this on a deep copy of the
+	// document, never mutating the caller's live DOM (which would race with
+	// concurrent readers and risk leaving the tree corrupted if a restore failed).
+	// None of these paths change when no XSLT transform is present, so a Reference
+	// without XSLT canonicalizes byte-identically.
 	var canonical []byte
 	switch {
+	case len(pipe.xpathFilters) > 0:
+		canonical, err = canonicalizeWithXPathFilters(ctx, doc, target, sigElem, wholeDoc, c14nMethod, pipe)
 	case pipe.hasEnveloped:
 		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, wholeDoc, pipe.prefixes)
 	case wholeDoc:
@@ -287,6 +283,21 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	}
 	if err != nil {
 		return nil, nil, false, err
+	}
+
+	// XSLT transform (verify-only, opt-in): octet-in -> octet-out. The octets
+	// above are the pre-XSLT input; hand them plus the stylesheet to the injected
+	// transformer and digest its output. Fail closed with ErrUnsupportedTransform
+	// when no transformer is configured, mirroring the "no HTTP resolver shipped"
+	// stance — helium never runs attacker-controlled XSLT on its own.
+	if pipe.xslt != nil {
+		if cfg.xsltTransformer == nil {
+			return nil, nil, false, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
+		}
+		canonical, err = cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, canonical)
+		if err != nil {
+			return nil, nil, false, err
+		}
 	}
 	return target, canonical, false, nil
 }
@@ -569,6 +580,21 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 						return ref, err
 					}
 					ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, xpathExpr: expr, xpathNS: nsBindings})
+					continue
+				}
+				// The XSLT transform carries its stylesheet in a
+				// ds:Transform/xsl:stylesheet child element (not an
+				// ec:InclusiveNamespaces parameter), so capture that subtree
+				// separately. Whether the XSLT transform can actually run is decided
+				// later (fail-closed unless a Verifier.XSLTTransformer is configured);
+				// parsing it here does not accept an unsupported transform, it only
+				// records the stylesheet the pipeline will hand to the transformer.
+				if alg == TransformXSLT {
+					stylesheet, err := parseXSLTTransform(te)
+					if err != nil {
+						return ref, err
+					}
+					ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, stylesheet: stylesheet})
 					continue
 				}
 				// Validate the Transform's child elements by algorithm. For a
