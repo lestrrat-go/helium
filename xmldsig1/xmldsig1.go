@@ -319,6 +319,14 @@ type verifierConfig struct {
 	// forms. Default false keeps a general XPointer fail-closed as an external
 	// reference, so default verification is byte-identical.
 	allowXPointer bool
+	// lenientKeyInfo makes an UNRESOLVABLE ds:RetrievalMethod (one that cannot be
+	// dereferenced at all — no ReferenceResolver, or the target is not found) a
+	// skipped hint rather than a fatal error, so inline key material a KeySource
+	// could use still gets its chance. It never relaxes a RESOLVED-but-invalid
+	// RetrievalMethod (bad/absent Type, unsupported transform, cyclic chain,
+	// over-cap resource, ambiguous same-document target), which still fails
+	// closed. Default false keeps the strict behavior.
+	lenientKeyInfo bool
 }
 
 // maxReferencesLimit returns the effective cap on the number of ds:Reference
@@ -527,6 +535,29 @@ func (v Verifier) MaxDecodedBytes(n int) Verifier {
 func (v Verifier) AllowXPointer(allow bool) Verifier {
 	v = v.clone()
 	v.cfg.allowXPointer = allow
+	return v
+}
+
+// LenientKeyInfo controls how an UNRESOLVABLE ds:RetrievalMethod in the
+// ds:KeyInfo is treated. A RetrievalMethod is an optional hint pointing at key
+// material held elsewhere; ds:KeyInfo may carry several such hints alongside
+// inline key material. By default (lenient off), a RetrievalMethod that cannot be
+// dereferenced at all — there is no [ReferenceResolver] configured, or the target
+// cannot be found — fails the whole verification with [ErrReferenceNotFound],
+// even when other, usable key material is present. With LenientKeyInfo(true) such
+// an unresolvable RetrievalMethod is skipped instead, so a [KeySource] still sees
+// the inline certificates/keys and any RetrievalMethod that DID resolve.
+//
+// Leniency covers ONLY the "could not dereference" case. A RetrievalMethod that
+// resolves but is invalid — an unsupported or absent Type, an unsupported or
+// mis-ordered transform, a cyclic or over-deep chain, an over-cap resource, or an
+// ambiguous same-document target (the XML Signature Wrapping guard) — still fails
+// closed regardless of this setting: a corrupt hint is an error, not a missing
+// one. Neither mode ever trusts retrieved material by itself; the KeySource's
+// out-of-band trust decision still governs, exactly as for an inline certificate.
+func (v Verifier) LenientKeyInfo(lenient bool) Verifier {
+	v = v.clone()
+	v.cfg.lenientKeyInfo = lenient
 	return v
 }
 
