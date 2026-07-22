@@ -127,13 +127,14 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		target, err := verifyReference(ctx, doc, sigElem, ref, cfg.allowSHA1)
+		target, external, err := verifyReference(ctx, cfg, doc, sigElem, ref)
 		if err != nil {
 			return nil, &VerificationError{Reference: i, URI: ref.uri, Err: err}
 		}
 		result.References = append(result.References, VerifiedReference{
 			URI:             ref.uri,
 			Element:         target,
+			External:        external,
 			DigestAlgorithm: ref.digestAlgorithm,
 		})
 	}
@@ -141,34 +142,46 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	return result, nil
 }
 
-func verifyReference(ctx context.Context, doc *helium.Document, sigElem *helium.Element, ref parsedReference, allowSHA1 bool) (*helium.Element, error) {
-	target, canonical, err := canonicalizeReference(ctx, doc, sigElem, ref)
+func verifyReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, bool, error) {
+	target, canonical, external, err := canonicalizeReference(ctx, cfg, doc, sigElem, ref)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// Compute and compare digest. A SHA-1 digest is rejected unless the
 	// caller opted in via Verifier.AllowSHA1(true).
-	computed, err := computeDigest(ref.digestAlgorithm, canonical, allowSHA1)
+	computed, err := computeDigest(ref.digestAlgorithm, canonical, cfg.allowSHA1)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if !digestEqual(computed, ref.digestValue) {
-		return nil, ErrDigestMismatch
+		return nil, false, ErrDigestMismatch
 	}
 
-	return target, nil
+	return target, external, nil
 }
 
 // canonicalizeReference resolves a Reference URI and applies its transform
-// pipeline, returning the resolved target element and the canonical octet
-// stream that the DigestValue is computed over. It is the shared reference
+// pipeline, returning the resolved target element (nil for an external
+// reference), the canonical octet stream that the DigestValue is computed over,
+// and whether the reference was satisfied externally. It is the shared reference
 // node-set → octet path for the verify digest check.
-func canonicalizeReference(ctx context.Context, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, error) {
+func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
+	// A URI that is not one of the four same-document forms is an external
+	// reference. It is dereferenced only through a configured ReferenceResolver;
+	// without one it stays fail-closed exactly as before.
+	if _, _, _, ok := referenceURIForm(ref.uri); !ok {
+		octets, err := resolveExternalReference(ctx, cfg, doc, ref)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		return nil, octets, true, nil
+	}
+
 	target, err := resolveReference(doc, ref.uri)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	// Interpret the transforms as an ordered pipeline. Fail closed: any
@@ -184,7 +197,7 @@ func canonicalizeReference(ctx context.Context, doc *helium.Document, sigElem *h
 	}
 	pipe, err := resolveTransformPipeline(steps)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	// Classify the URI's node-set form (§4.3.3.2-3). wholeDoc selects the
@@ -204,13 +217,13 @@ func canonicalizeReference(ctx context.Context, doc *helium.Document, sigElem *h
 	// fail-closed here rather than digesting an unintended string-value.
 	if pipe.base64 {
 		if pipe.hasEnveloped || len(pipe.xpathFilters) > 0 {
-			return nil, nil, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
+			return nil, nil, false, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
 		}
 		octets, err := base64TransformOctets(target)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return target, octets, nil
+		return target, octets, false, nil
 	}
 
 	c14nMethod := effectiveC14NMethod(pipe.c14nMethod, includeComments)
@@ -223,9 +236,9 @@ func canonicalizeReference(ctx context.Context, doc *helium.Document, sigElem *h
 	if len(pipe.xpathFilters) > 0 {
 		canonical, err := canonicalizeWithXPathFilters(ctx, doc, target, sigElem, wholeDoc, c14nMethod, pipe)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return target, canonical, nil
+		return target, canonical, false, nil
 	}
 
 	// For enveloped signatures the Signature element and its descendants must
@@ -243,9 +256,41 @@ func canonicalizeReference(ctx context.Context, doc *helium.Document, sigElem *h
 		canonical, err = canonicalizeSubtree(c14nMethod, target, pipe.prefixes)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
-	return target, canonical, nil
+	return target, canonical, false, nil
+}
+
+// resolveExternalReference dereferences an external Reference URI through the
+// configured ReferenceResolver and returns the octet stream its DigestValue is
+// computed over. Without a resolver it stays fail-closed with the same
+// ErrReferenceNotFound the same-document resolver returns, so a nil-resolver
+// Verifier is byte-identical to before. The URI is joined against the document's
+// base URI before resolution; the resolved octets then run through the
+// Reference's transform pipeline (see externalReferenceDigestInput).
+func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, ref parsedReference) ([]byte, error) {
+	if cfg.referenceResolver == nil {
+		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, ref.uri)
+	}
+
+	steps := make([]transformStep, len(ref.transforms))
+	for i, t := range ref.transforms {
+		steps[i] = transformStep(t)
+	}
+	pipe, err := resolveTransformPipeline(steps)
+	if err != nil {
+		return nil, err
+	}
+
+	joined, err := joinReferenceURI(doc.URL(), ref.uri)
+	if err != nil {
+		return nil, err
+	}
+	octets, err := cfg.referenceResolver.ResolveReference(ctx, joined)
+	if err != nil {
+		return nil, err
+	}
+	return externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
 }
 
 // canonicalizeWithXPathFilters processes a Reference that carries one or more

@@ -40,7 +40,7 @@ func TestUnsupportedTransformErrorWrapping(t *testing.T) {
 		},
 	}
 
-	_, refErr := verifyReference(t.Context(), doc, nil, ref, false)
+	_, _, refErr := verifyReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 	require.Error(t, refErr)
 
 	// Wrap in the actual type callers receive and confirm errors.Is still

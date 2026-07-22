@@ -90,7 +90,7 @@ func TestBase64ReferenceDecode(t *testing.T) {
 				digestAlgorithm: DigestSHA1,
 				transforms:      []parsedTransform{{algorithm: TransformBase64}},
 			}
-			target, octets, err := canonicalizeReference(t.Context(), doc, nil, ref)
+			target, octets, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 			require.NoError(t, err)
 			require.Equal(t, "Object", target.LocalName())
 			require.Equal(t, "some text", string(octets),
@@ -110,8 +110,9 @@ func TestBase64ReferenceInvalidInput(t *testing.T) {
 		digestAlgorithm: DigestSHA1,
 		transforms:      []parsedTransform{{algorithm: TransformBase64}},
 	}
-	_, _, err = canonicalizeReference(t.Context(), doc, nil, ref)
+	_, canon, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 	require.ErrorIs(t, err, ErrInvalidSignature)
+	require.Nil(t, canon)
 }
 
 // TestBase64ReferenceFailClosed locks the unsupported combinations of the base64
@@ -133,8 +134,9 @@ func TestBase64ReferenceFailClosed(t *testing.T) {
 				{algorithm: TransformBase64},
 			},
 		}
-		_, _, err := canonicalizeReference(t.Context(), doc, sig, ref)
+		_, canon, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, sig, ref)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Nil(t, canon)
 	})
 
 	t.Run("xpath filter before base64", func(t *testing.T) {
@@ -146,8 +148,9 @@ func TestBase64ReferenceFailClosed(t *testing.T) {
 				{algorithm: TransformBase64},
 			},
 		}
-		_, _, err := canonicalizeReference(t.Context(), doc, sig, ref)
+		_, canon, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, sig, ref)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Nil(t, canon)
 	})
 }
 

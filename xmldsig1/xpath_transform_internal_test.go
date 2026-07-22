@@ -82,7 +82,7 @@ func TestXPathTransformThroughPipeline(t *testing.T) {
 		},
 	}
 
-	target, canonical, err := canonicalizeReference(t.Context(), doc, nil, ref)
+	target, canonical, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 	require.NoError(t, err)
 	require.Equal(t, sec, target)
 	require.Contains(t, string(canonical), "KEEPVAL", "kept subtree must survive the XPath filter")
@@ -102,8 +102,9 @@ func TestXPathTransformFailClosed(t *testing.T) {
 			digestAlgorithm: DigestSHA256,
 			transforms:      []parsedTransform{{algorithm: TransformXPath}},
 		}
-		_, _, err = canonicalizeReference(t.Context(), doc, nil, ref)
+		_, canon, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Nil(t, canon)
 	})
 
 	t.Run("defCan-2 XSLT chain rejected", func(t *testing.T) {
@@ -137,7 +138,7 @@ func TestXPathTransformNamespaceContextIsolated(t *testing.T) {
 			{algorithm: C14N11URI},
 		},
 	}
-	_, canonical, err := canonicalizeReference(t.Context(), doc, nil, ref)
+	_, canonical, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 	require.NoError(t, err)
 	require.Contains(t, string(canonical), "V")
 }

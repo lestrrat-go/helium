@@ -42,7 +42,7 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 
 	// Process references: compute digests and add Reference elements.
 	for i, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
+		if err := processReference(ctx, cfg, doc, sigElem, signedInfo, ref, nil); err != nil {
 			// Detach the signature on failure.
 			helium.UnlinkNode(sigElem)
 			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
@@ -194,7 +194,7 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	// caller's document, so a reference to a document element (URI="#root") sees
 	// an unchanged subtree and produces byte-identical output.
 	for i, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, sigElem); err != nil {
+		if err := processReference(ctx, cfg, doc, sigElem, signedInfo, ref, sigElem); err != nil {
 			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
@@ -411,7 +411,7 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 	}
 
 	for i, ref := range cfg.references {
-		if err := processReference(ctx, doc, sigElem, signedInfo, ref, cfg.allowSHA1, nil); err != nil {
+		if err := processReference(ctx, cfg, doc, sigElem, signedInfo, ref, nil); err != nil {
 			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
 	}
@@ -510,7 +510,35 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 // internalRoot, when non-nil, is the enveloping Signature whose own (detached)
 // <Object> content may hold the reference target; it is searched in addition to
 // the document and a target found inside it is canonicalized while detached.
-func processReference(_ context.Context, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, allowSHA1 bool, internalRoot *helium.Element) error {
+// signReferenceOctets computes the canonical byte stream a Reference's
+// DigestValue is signed over. It handles a same-document reference (resolving and
+// canonicalizing the target subtree/document) and, when a ReferenceResolver is
+// configured, an external reference (dereferencing its octets and applying the
+// transform pipeline through the SAME externalReferenceDigestInput the verifier
+// uses, so the signed digest is byte-identical to what verification recomputes).
+// Without a resolver an external URI stays fail-closed with ErrReferenceNotFound.
+func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Document, sigElem *helium.Element, ref ReferenceConfig, internalRoot *helium.Element) ([]byte, error) {
+	// An external reference is dereferenced only through a configured resolver.
+	if _, _, _, ok := referenceURIForm(ref.URI); !ok {
+		if cfg.referenceResolver == nil {
+			return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, ref.URI)
+		}
+		steps := transformSteps(ref)
+		pipe, err := resolveTransformPipeline(steps)
+		if err != nil {
+			return nil, err
+		}
+		joined, err := joinReferenceURI(doc.URL(), ref.URI)
+		if err != nil {
+			return nil, err
+		}
+		octets, err := cfg.referenceResolver.ResolveReference(ctx, joined)
+		if err != nil {
+			return nil, err
+		}
+		return externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
+	}
+
 	// Resolve the reference target. For an enveloping signature the target may
 	// live inside the Signature's own detached Object content, so search it too.
 	var target *helium.Element
@@ -521,7 +549,7 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		target, err = resolveReference(doc, ref.URI)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Interpret the configured transforms as an ordered pipeline so the digest
@@ -531,7 +559,7 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	// node-set->octet conversion is inclusive Canonical XML 1.0.
 	pipe, err := resolveTransformPipeline(transformSteps(ref))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	c14nMethod := pipe.c14nMethod
 	prefixes := pipe.prefixes
@@ -565,12 +593,20 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
 	}
 	if err != nil {
+		return nil, err
+	}
+	return canonical, nil
+}
+
+func processReference(ctx context.Context, cfg *signerConfig, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, internalRoot *helium.Element) error {
+	canonical, err := signReferenceOctets(ctx, cfg, doc, sigElem, ref, internalRoot)
+	if err != nil {
 		return err
 	}
 
 	// Compute digest. A SHA-1 digest is rejected unless the caller opted in
 	// via Signer.AllowSHA1(true).
-	digest, err := computeDigest(ref.DigestAlgorithm, canonical, allowSHA1)
+	digest, err := computeDigest(ref.DigestAlgorithm, canonical, cfg.allowSHA1)
 	if err != nil {
 		return err
 	}

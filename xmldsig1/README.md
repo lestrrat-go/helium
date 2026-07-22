@@ -133,6 +133,64 @@ rejected fail-closed with `ErrUnsupportedTransform`, as is any transform URI the
 package does not implement. Signing does not support the base64 transform: it has
 no typed `Transform` constructor and the sign preflight rejects it fail-closed.
 
+### External references (opt-in)
+
+By default a `Reference` URI that is not one of the four same-document forms — an
+absolute URL, or a relative path pointing outside the document — is rejected with
+`ErrReferenceNotFound`. This fail-closed default is unchanged: helium never
+dereferences external content on its own.
+
+To verify a detached signature whose References point outside the document,
+supply a `ReferenceResolver`:
+
+```go
+type ReferenceResolver interface {
+    ResolveReference(ctx context.Context, uri string) ([]byte, error)
+}
+```
+
+`Verifier.ReferenceResolver(r)` opts in. An external Reference URI is joined
+against the document's base URI (the `BaseURI` the document was parsed with, via
+the same libxml2 URI-resolution helium uses elsewhere) and passed to the resolver;
+the resolved octets are then run through the Reference's transform pipeline before
+digesting:
+
+- an empty transform chain, or a base64 decode transform, digests the resolved
+  octets directly (after base64 decoding when present);
+- a chain with a canonicalization or XPath filter transform needs a node-set, so
+  the octets are first parsed into XML by `Verifier.ReferenceParser` — a
+  **locked-down parser by default** (`helium.NewParser()`: XXE blocked, no
+  filesystem, no network) — then filtered and canonicalized;
+- an **enveloped-signature transform on an external reference is rejected**
+  fail-closed (`ErrUnsupportedTransform`): removing the Signature's own subtree is
+  meaningless on a resource that does not contain the Signature.
+
+A Reference satisfied through the resolver is marked `External` in the result. An
+external reference covers bytes outside the document, not an element, so
+`VerifyResult.Covers` and `VerifyResult.SignedElement` never attribute
+in-document coverage to it — confirming a specific `*Element` was signed still
+requires a same-document reference.
+
+helium ships one resolver, `FSReferenceResolver(fsys fs.FS)`, which serves the
+(base-joined) URI as a slash path inside `fsys` with **no network access**. It is
+fail-closed on anything that is not a plain in-tree path: a URI carrying a scheme
+(`http:`, `https:`, `file:`, `urn:`, any `scheme:` per RFC 3986, or a Windows
+drive letter) is refused; a path escaping the root (absolute, or `..` past the
+root) is refused; a leftover fragment is refused. Reads are bounded — a resource
+larger than 64 MiB fails with `ErrReferenceTooLarge` rather than being buffered in
+full.
+
+**No HTTP resolver is provided.** The interface is public so callers can
+dereference over any transport, but anyone implementing network dereferencing
+owns the resulting SSRF and availability risk (an attacker who controls a
+Reference URI could otherwise steer requests at internal hosts or stall
+verification), so that decision is left explicitly to the caller.
+
+`Signer.ReferenceResolver` / `Signer.ReferenceParser` are the symmetric signing
+side, letting a detached signature cover external content. The sign and verify
+paths funnel through the same octet-to-digest logic, so the signed digest is
+byte-identical to what verification recomputes for the same input.
+
 ## Security: SHA-1 rejected by default
 
 SHA-1-based algorithms (`rsa-sha1`, `ecdsa-sha1`, `hmac-sha1`, and the `sha1`

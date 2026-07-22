@@ -16,6 +16,7 @@ testdata/**            -text
 test/**                -text
 relaxng/testdata/**    -text
 xslt3/testdata/**      -text
+xmldsig1/testdata/**   -text
 
 # Belt-and-suspenders: pin the known golden/expected-output extensions byte-exact
 # regardless of where they live, in case a future fixture lands outside the trees

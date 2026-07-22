@@ -62,6 +62,19 @@ type signerConfig struct {
 	keyInfoBuilder     KeyInfoBuilder
 	signatureID        string
 	allowSHA1          bool
+	referenceResolver  ReferenceResolver
+	referenceParser    *helium.Parser
+}
+
+// parser returns the parser used for external reference octets on the signing
+// side: the configured ReferenceParser, or the locked-down default. Symmetric
+// with verifierConfig.parser so sign and verify parse identical external content
+// identically.
+func (cfg *signerConfig) parser() helium.Parser {
+	if cfg.referenceParser != nil {
+		return *cfg.referenceParser
+	}
+	return helium.NewParser()
 }
 
 // Signer creates XML Digital Signatures. It uses clone-on-write semantics:
@@ -144,6 +157,32 @@ func (s Signer) AllowSHA1(allow bool) Signer {
 	return s
 }
 
+// ReferenceResolver configures a [ReferenceResolver] that dereferences external
+// Reference URIs during signing, so a detached signature can cover content
+// outside the document. It is opt-in and symmetric with
+// [Verifier.ReferenceResolver]: the default is nil, leaving an external Reference
+// URI fail-closed with [ErrReferenceNotFound]. When set, an external Reference
+// URI is joined against the document's base URI, passed to r, and the resolved
+// octets are run through the same transform pipeline the verifier applies, so
+// the signed digest is byte-identical to what verification recomputes for the
+// same input.
+func (s Signer) ReferenceResolver(r ReferenceResolver) Signer {
+	s = s.clone()
+	s.cfg.referenceResolver = r
+	return s
+}
+
+// ReferenceParser configures the [helium.Parser] used to parse an external
+// reference's resolved octets into XML when the Reference's transform chain needs
+// a node-set. It is symmetric with [Verifier.ReferenceParser] and defaults to the
+// same locked-down parser, so sign and verify parse the same external content the
+// same way.
+func (s Signer) ReferenceParser(p helium.Parser) Signer {
+	s = s.clone()
+	s.cfg.referenceParser = &p
+	return s
+}
+
 // SignEnveloped creates an enveloped signature inside the given parent
 // element of the document. The key is a concrete *rsa.PrivateKey,
 // *ecdsa.PrivateKey, or ed25519.PrivateKey, any crypto.Signer whose public key
@@ -213,8 +252,25 @@ func (s Signer) SignDetached(ctx context.Context, doc *helium.Document, key any)
 
 // verifierConfig holds the configuration for a Verifier.
 type verifierConfig struct {
-	keySource KeySource
-	allowSHA1 bool
+	keySource         KeySource
+	allowSHA1         bool
+	referenceResolver ReferenceResolver
+	// referenceParser is the parser used to parse an external reference's octets
+	// into XML for a c14n/XPath transform chain. nil selects the locked-down
+	// default (see parser).
+	referenceParser *helium.Parser
+}
+
+// parser returns the parser used for external reference octets: the configured
+// ReferenceParser, or a locked-down default (helium.NewParser(): XXE blocked, no
+// filesystem, no network) when none was set. The default fails closed on
+// external-entity, DTD, and network access so parsing attacker-supplied external
+// content cannot reach the host.
+func (cfg *verifierConfig) parser() helium.Parser {
+	if cfg.referenceParser != nil {
+		return *cfg.referenceParser
+	}
+	return helium.NewParser()
 }
 
 // Verifier verifies XML Digital Signatures. It uses clone-on-write semantics:
@@ -245,6 +301,37 @@ func (v Verifier) clone() Verifier {
 func (v Verifier) AllowSHA1(allow bool) Verifier {
 	v = v.clone()
 	v.cfg.allowSHA1 = allow
+	return v
+}
+
+// ReferenceResolver configures a [ReferenceResolver] that dereferences external
+// Reference URIs (those that are not one of the four supported same-document
+// forms). It is opt-in: the default is nil, which keeps external references
+// fail-closed with [ErrReferenceNotFound], byte-identical to a Verifier without
+// a resolver. When set, an external Reference URI is joined against the
+// document's base URI and passed to r; the resolved octets are then run through
+// the Reference's transform pipeline before digesting.
+//
+// A Reference satisfied via the resolver is marked External in the result (see
+// [VerifiedReference]); [VerifyResult.Covers] and [VerifyResult.SignedElement]
+// never report an external reference as covering in-document content, since it
+// resolves to bytes outside the document rather than an element.
+func (v Verifier) ReferenceResolver(r ReferenceResolver) Verifier {
+	v = v.clone()
+	v.cfg.referenceResolver = r
+	return v
+}
+
+// ReferenceParser configures the [helium.Parser] used to parse an external
+// reference's resolved octets into XML when the Reference's transform chain needs
+// a node-set (a canonicalization or XPath filter transform). The default is a
+// locked-down parser (helium.NewParser(): XXE blocked, no filesystem access, no
+// network), so parsing attacker-supplied external content cannot reach the host.
+// Override it only to relax those defaults deliberately. It has no effect on a
+// reference whose octets are digested directly (an empty or base64-only chain).
+func (v Verifier) ReferenceParser(p helium.Parser) Verifier {
+	v = v.clone()
+	v.cfg.referenceParser = &p
 	return v
 }
 

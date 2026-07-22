@@ -34,7 +34,17 @@ var (
 	ErrNoReferences = errors.New("xmldsig1: no references configured")
 
 	// ErrReferenceNotFound is returned when a Reference URI cannot be resolved.
+	// It also covers an external Reference that no ReferenceResolver is
+	// configured to dereference (the fail-closed default), and every
+	// FSReferenceResolver rejection short of the size cap (scheme URI, escaping
+	// path, leftover fragment, missing file).
 	ErrReferenceNotFound = errors.New("xmldsig1: reference URI not resolved")
+
+	// ErrReferenceTooLarge is returned when an external Reference resource
+	// exceeds the resolver's size cap (FSReferenceResolver bounds a single
+	// resource at 64 MiB) so a large or attacker-supplied file cannot exhaust
+	// memory during verification.
+	ErrReferenceTooLarge = errors.New("xmldsig1: external reference exceeds size cap")
 
 	// ErrAmbiguousReference is returned when a Reference URI resolves to more
 	// than one element. This is the primary defense against XML Signature
