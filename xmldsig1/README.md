@@ -118,7 +118,12 @@ each with an optional `#WithComments` variant), the XPath filter transform
 `ds:Transform/XPath` expression once per input node — with that node as the
 context node, under the `XPath` element's in-scope namespace bindings — and keeps
 each node whose result converts to boolean true (XPath 1.0 semantics: no default
-element namespace). The base64 transform (**verify only**) takes the resolved
+element namespace). The XMLDSig `here()` function (core §6.6.3.1) is available
+inside an XPath filter expression: it returns the `ds:XPath` element that bears
+the expression, which is what the standard "enveloped signature via `here()`"
+filter uses to omit the enclosing `ds:Signature`. Evaluation runs on a bounded
+XPath 1.0 evaluator (an operation-count cap on top of the recursion and node-set
+caps), so an attacker-supplied expression cannot stall verification. The base64 transform (**verify only**) takes the resolved
 node-set's XPath 1.0 string-value — the referenced element's concatenated
 descendant text, tags and comments stripped — base64-decodes it (whitespace in
 the base64 text is ignored), and digests the decoded octets directly with no
@@ -160,6 +165,26 @@ with the reference's pre-XSLT canonical octets; `t`'s output becomes the digest
 input. The implementer **owns all resource and XXE policy** — compute/time/memory
 limits and disabling `document()`/external access — because both inputs are
 attacker-controlled. helium ships no transformer.
+
+### General XPointer references (opt-in)
+
+By default a `Reference` URI is resolved fail-closed to the four same-document
+forms above. `Verifier.AllowXPointer(true)` additionally resolves a general
+XPointer framework URI — zero or more `xmlns(prefix=uri)` scheme parts followed
+by one `xpointer(<expr>)` part, for example
+`#xmlns(a=urn:x)xpointer(//a:Target)`. It stays fail-closed by default: with
+`AllowXPointer` off, a general XPointer URI is treated as an external reference
+and, without a `ReferenceResolver`, rejected with `ErrReferenceNotFound`, so
+default verification is unchanged.
+
+When enabled, the `xpointer()` expression is evaluated on the same bounded XPath
+1.0 evaluator (the document element's in-scope namespaces overlaid with the
+`xmlns()` bindings), and its result **must identify a single element** — the XML
+Signature Wrapping defense. An empty node-set is `ErrReferenceNotFound`; a
+node-set selecting more than one element, or a non-element node, is
+`ErrAmbiguousReference`. A literal `xpointer(id('X'))` keeps the same
+duplicate-detecting id resolution the `#id` form uses (never a last-one-wins id
+table). The `here()` function is not available inside a URI-borne XPointer.
 
 ### External references (opt-in)
 
