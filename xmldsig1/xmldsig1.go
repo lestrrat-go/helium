@@ -254,6 +254,7 @@ func (s Signer) SignDetached(ctx context.Context, doc *helium.Document, key any)
 type verifierConfig struct {
 	keySource         KeySource
 	allowSHA1         bool
+	validateManifests bool
 	referenceResolver ReferenceResolver
 	// referenceParser is the parser used to parse an external reference's octets
 	// into XML for a c14n/XPath transform chain. nil selects the locked-down
@@ -319,6 +320,34 @@ func (v Verifier) AllowSHA1(allow bool) Verifier {
 func (v Verifier) ReferenceResolver(r ReferenceResolver) Verifier {
 	v = v.clone()
 	v.cfg.referenceResolver = r
+	return v
+}
+
+// ValidateManifests controls whether the inner ds:Reference children of a
+// Manifest-typed Reference are digested and reported (XMLDSig core §5.1). It is
+// opt-in: the default is false, which leaves [VerifyResult.Manifests] nil and
+// walks no inner references, byte-identical to a Verifier without it.
+//
+// When enabled, after a top-level Reference whose Type is [TypeManifest] has
+// itself verified (its own digest over the ds:Manifest subtree is checked
+// exactly as any other Reference), that Manifest's inner references are each
+// resolved, transformed, and digested through the same fail-closed pipeline,
+// with the per-reference outcome recorded in [ManifestResult].
+//
+// Inner-reference results are ADVISORY: per §5.1 the application decides how to
+// treat a Manifest, so an inner-reference digest mismatch or an unresolved or
+// unsupported inner reference does NOT fail Verify — the top-level Manifest
+// Reference's own digest is what the signature commits to. Inner references
+// never contribute to [VerifyResult.Covers] or [VerifyResult.SignedElement], so
+// coverage is never attributed through a Manifest. Only one level is walked: a
+// Manifest nested inside a Manifest is digested but not recursively expanded.
+//
+// It is off by default because inner references may pull in transforms or
+// external URIs the top-level policy did not intend, so evaluating them is left
+// to callers who want the report.
+func (v Verifier) ValidateManifests(validate bool) Verifier {
+	v = v.clone()
+	v.cfg.validateManifests = validate
 	return v
 }
 
