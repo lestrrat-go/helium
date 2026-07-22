@@ -5,14 +5,14 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 - Generated: 2026-07-22
 - Upstream suite: https://www.w3.org/TR/2008/NOTE-xmldsig2ed-tests-20080610/
-- helium: `d771b2ff`
-- helium-w3c-tests (harness): `a169776`
+- helium: `725bef91`
+- helium-w3c-tests (harness): `b68911a`
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 34 |
+| Pass | 35 |
 | Skip | 0 |
-| XFail (documented gap) | 3 |
+| XFail (documented gap) | 2 |
 | Fail | 0 |
 | **Total** | **37** |
 
@@ -23,4 +23,3 @@ Documented known gaps: the harness expects these to fail and treats an unexpecte
 | Reason | Count |
 |--------|------:|
 | the Reference chains an XSLT transform (REC-xslt-19991116) after canonicalization, which xmldsig1 deliberately does not support (ErrUnsupportedTransform: unsupported Transform parameter stylesheet) | 2 |
-| the Reference URI is an EXTERNAL document reference (c14n11/xml-base-input.xml); xmldsig1 is fail-closed and does not dereference external references (ErrReferenceNotFound: unsupported reference URI) | 1 |
