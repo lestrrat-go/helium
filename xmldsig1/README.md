@@ -169,3 +169,35 @@ source: [examples/xmldsig1_sha1_optin_example_test.go](https://github.com/lestrr
 > SHA-1 signatures must now call `Verifier.AllowSHA1(true)`; code that produced
 > SHA-1 signatures must call `Signer.AllowSHA1(true)`. SHA-256 and stronger
 > algorithms are unaffected.
+
+## Legacy and interop KeyInfo (verification)
+
+For interoperating with older producers, verification-side `KeyInfo` parsing
+recognizes several legacy constructs and surfaces them through `KeyInfoData` so
+a `KeySource` can build the verification key. Parsing is namespace-strict and
+fails closed (`ErrInvalidKeyInfo`) on unknown or partial key material.
+
+- **RFC 4050 `ECDSAKeyValue`** (namespace `http://www.w3.org/2001/04/xmldsig-more#`):
+  `DomainParameters/NamedCurve@URN` selects the curve (P-256/P-384/P-521) and
+  `PublicKey/X`,`/Y` carry the point as decimal integer `Value` attributes. It is
+  surfaced through the same `KeyInfoData.ECKeyValue` as a 1.1 `ECKeyValue`, so a
+  `KeySource` builds an `*ecdsa.PublicKey` from `ECKeyValue.Curve`/`X`/`Y`.
+  Emitting RFC 4050 on the signing side is not supported.
+- **`X509IssuerSerial` and `X509SubjectName`** inside `X509Data`: the issuer DN +
+  serial number (`KeyInfoData.X509IssuerSerials`) and subject DN
+  (`KeyInfoData.X509SubjectNames`) are extracted verbatim — the library does no
+  DName canonicalization or matching — so a `KeySource` can select the right
+  certificate out of band.
+- **`DSAKeyValue`**: `P`/`Q`/`G`/`Y` are parsed into `KeyInfoData.DSAKeyValue`;
+  a `KeySource` builds a `*dsa.PublicKey` from them.
+
+### DSA-SHA1 (verify-only)
+
+DSA-SHA1 (`xmldsig#dsa-sha1`) is supported for **verification only**, as legacy
+interop. It sits behind the same SHA-1 weak gate as `rsa-sha1`: verification
+requires `Verifier.AllowSHA1(true)`, otherwise it fails with `ErrWeakAlgorithm`.
+The `SignatureValue` is the XML-DSig fixed-width `r||s` concatenation. A DSA key
+may come from a parsed `DSAKeyValue` or from an X.509 certificate (which
+`crypto/x509` parses into a `*dsa.PublicKey`). **Signing with DSA is not
+supported** — a signing attempt with the DSA URI fails with a clear
+`ErrUnsupportedAlgorithm` ("DSA signing is not supported").
