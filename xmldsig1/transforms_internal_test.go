@@ -503,18 +503,18 @@ func TestVerifyReferenceRejectsTransform(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><data>hello</data></root>`))
 		require.NoError(t, err)
 
-		// A whole-document reference whose only transform is an unsupported URI
-		// (the XPath transform). digestValue is irrelevant: rejection must happen
-		// before the digest is even computed.
+		// A whole-document reference whose only transform is an unsupported URI.
+		// digestValue is irrelevant: rejection must happen before the digest is
+		// even computed.
 		ref := parsedReference{
 			uri:             "",
 			digestAlgorithm: DigestSHA256,
 			transforms: []parsedTransform{
-				{algorithm: TransformXPath},
+				{algorithm: "urn:bogus:transform"},
 			},
 		}
 
-		_, err = verifyReference(doc, nil, ref, false)
+		_, err = verifyReference(t.Context(), doc, nil, ref, false)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 	})
 
@@ -539,7 +539,7 @@ func TestVerifyReferenceRejectsTransform(t *testing.T) {
 			},
 		}
 
-		_, err = verifyReference(doc, sigElem, ref, false)
+		_, err = verifyReference(t.Context(), doc, sigElem, ref, false)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 
 		// The Signature element must have been reattached, not left detached.

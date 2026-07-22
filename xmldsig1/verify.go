@@ -50,7 +50,9 @@ type parsedReference struct {
 
 type parsedTransform struct {
 	algorithm string
-	prefixes  []string // for Exclusive C14N InclusiveNamespaces
+	prefixes  []string          // for Exclusive C14N InclusiveNamespaces
+	xpathExpr string            // for the XPath filter transform (ds:Transform/XPath text)
+	xpathNS   map[string]string // in-scope namespace bindings on the ds:Transform/XPath element
 }
 
 func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
@@ -125,7 +127,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		target, err := verifyReference(doc, sigElem, ref, cfg.allowSHA1)
+		target, err := verifyReference(ctx, doc, sigElem, ref, cfg.allowSHA1)
 		if err != nil {
 			return nil, &VerificationError{Reference: i, URI: ref.uri, Err: err}
 		}
@@ -139,42 +141,8 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	return result, nil
 }
 
-func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference, allowSHA1 bool) (*helium.Element, error) {
-	target, err := resolveReference(doc, ref.uri)
-	if err != nil {
-		return nil, err
-	}
-
-	// Interpret the transforms as an ordered pipeline. Fail closed: any
-	// transform whose URI we cannot apply, or one ordered after an
-	// octet-producing c14n transform, is rejected before digesting — otherwise a
-	// Reference could declare an unsupported or mis-ordered transform and still
-	// verify against the untransformed canonical bytes. When no c14n transform is
-	// declared the default node-set->octet conversion is inclusive Canonical
-	// XML 1.0.
-	steps := make([]transformStep, len(ref.transforms))
-	for i, t := range ref.transforms {
-		steps[i] = transformStep(t)
-	}
-	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(steps)
-	if err != nil {
-		return nil, err
-	}
-
-	// For enveloped signatures the Signature element and its descendants must
-	// be omitted from the canonical input. canonicalizeEnveloped does this on a
-	// deep copy of the document, never mutating the caller's live DOM (which
-	// would race with concurrent readers and risk leaving the tree corrupted if
-	// a restore failed).
-	var canonical []byte
-	switch {
-	case hasEnveloped:
-		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, ref.uri == "", prefixes)
-	case ref.uri == "":
-		canonical, err = canonicalize(c14nMethod, doc, prefixes)
-	default:
-		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
-	}
+func verifyReference(ctx context.Context, doc *helium.Document, sigElem *helium.Element, ref parsedReference, allowSHA1 bool) (*helium.Element, error) {
+	target, canonical, err := canonicalizeReference(ctx, doc, sigElem, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +159,99 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 	}
 
 	return target, nil
+}
+
+// canonicalizeReference resolves a Reference URI and applies its transform
+// pipeline, returning the resolved target element and the canonical octet
+// stream that the DigestValue is computed over. It is the shared reference
+// node-set → octet path for the verify digest check.
+func canonicalizeReference(ctx context.Context, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, error) {
+	target, err := resolveReference(doc, ref.uri)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Interpret the transforms as an ordered pipeline. Fail closed: any
+	// transform whose URI we cannot apply, or one ordered after an
+	// octet-producing c14n transform, is rejected before digesting — otherwise a
+	// Reference could declare an unsupported or mis-ordered transform and still
+	// verify against the untransformed canonical bytes. When no c14n transform is
+	// declared the default node-set->octet conversion is inclusive Canonical
+	// XML 1.0.
+	steps := make([]transformStep, len(ref.transforms))
+	for i, t := range ref.transforms {
+		steps[i] = transformStep(t)
+	}
+	pipe, err := resolveTransformPipeline(steps)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Classify the URI's node-set form (§4.3.3.2-3). wholeDoc selects the
+	// document root; includeComments governs whether comment nodes are part of
+	// the selected node-set. A C14N WithComments method only emits comment nodes
+	// present in the set, so when the form excludes comments the method is
+	// downgraded to its plain variant — keeping "#id"/"" free of comments even
+	// under a WithComments c14n, and reserving comments for the #xpointer forms.
+	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
+	c14nMethod := effectiveC14NMethod(pipe.c14nMethod, includeComments)
+
+	// When one or more XPath filter transforms are present the reference is
+	// processed as an explicit node-set: build the initial node-set, apply the
+	// enveloped-signature removal and each XPath filter in order, then
+	// canonicalize the surviving node-set. This node-set path runs only for a
+	// declared XPath transform; the plain paths below stay byte-identical.
+	if len(pipe.xpathFilters) > 0 {
+		canonical, err := canonicalizeWithXPathFilters(ctx, doc, target, sigElem, wholeDoc, c14nMethod, pipe)
+		if err != nil {
+			return nil, nil, err
+		}
+		return target, canonical, nil
+	}
+
+	// For enveloped signatures the Signature element and its descendants must
+	// be omitted from the canonical input. canonicalizeEnveloped does this on a
+	// deep copy of the document, never mutating the caller's live DOM (which
+	// would race with concurrent readers and risk leaving the tree corrupted if
+	// a restore failed).
+	var canonical []byte
+	switch {
+	case pipe.hasEnveloped:
+		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, wholeDoc, pipe.prefixes)
+	case wholeDoc:
+		canonical, err = canonicalize(c14nMethod, doc, pipe.prefixes)
+	default:
+		canonical, err = canonicalizeSubtree(c14nMethod, target, pipe.prefixes)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return target, canonical, nil
+}
+
+// canonicalizeWithXPathFilters processes a Reference that carries one or more
+// XPath filter transforms. It materializes the initial node-set for the
+// reference form, drops the enveloped Signature's own subtree when the
+// enveloped-signature transform is present, applies each XPath filter in
+// declared order, and canonicalizes the surviving node-set.
+func canonicalizeWithXPathFilters(ctx context.Context, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, c14nMethod string, pipe transformPipeline) ([]byte, error) {
+	var nodes []helium.Node
+	if wholeDoc {
+		nodes = collectDocumentNodes(doc)
+	} else {
+		nodes = collectSubtreeNodes(target)
+	}
+	if pipe.hasEnveloped {
+		nodes = removeSignatureNodes(nodes, sigElem)
+	}
+	for _, f := range pipe.xpathFilters {
+		filtered, err := applyXPathFilter(ctx, nodes, f)
+		if err != nil {
+			return nil, err
+		}
+		nodes = filtered
+	}
+	return canonicalizeNodeSet(c14nMethod, nodes, doc, pipe.prefixes)
 }
 
 func digestEqual(a, b []byte) bool {
@@ -400,6 +461,18 @@ func parseReferenceElement(elem *helium.Element) (parsedReference, error) {
 					continue
 				}
 				alg, _ := te.GetAttribute("Algorithm")
+				// The XPath filter transform carries its expression in a
+				// ds:Transform/XPath child element (not an ec:InclusiveNamespaces
+				// parameter), so parse it separately; every other transform is
+				// validated by the InclusiveNamespaces gate below.
+				if alg == TransformXPath {
+					expr, nsBindings, err := parseXPathTransform(te)
+					if err != nil {
+						return ref, err
+					}
+					ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, xpathExpr: expr, xpathNS: nsBindings})
+					continue
+				}
 				// Validate the Transform's child elements by algorithm. For a
 				// supported transform those children are algorithm parameters;
 				// accepting an unknown one while digesting as if it were absent
@@ -531,6 +604,48 @@ func gateInclusiveNamespaces(alg string) error {
 		return fmt.Errorf("%w: ec:InclusiveNamespaces is only valid for exclusive c14n, not %s", ErrUnsupportedTransform, alg)
 	}
 	return nil
+}
+
+// parseXPathTransform extracts the XPath filter transform's expression and the
+// in-scope namespace bindings it must be evaluated under, from a ds:Transform
+// element whose Algorithm is TransformXPath. The expression is the text of the
+// single mandatory ds:XPath child; the namespace bindings are that element's
+// in-scope prefix declarations (the XPath transform is evaluated with the
+// XPath element's namespace context per XMLDSig core §6.6.3). It fails closed on
+// a missing, duplicate, or foreign child so a malformed XPath transform never
+// digests an unfiltered node-set. The default (empty-prefix) namespace is not
+// forwarded: XPath 1.0 has no default element namespace, so an unprefixed name
+// test matches only no-namespace nodes.
+func parseXPathTransform(te *helium.Element) (string, map[string]string, error) {
+	var xpathElem *helium.Element
+	for c := te.FirstChild(); c != nil; c = c.NextSibling() {
+		ce, ok := helium.AsNode[*helium.Element](c)
+		if !ok {
+			continue
+		}
+		if !isDSigCoreNS(ce) || domutil.LocalName(ce) != "XPath" {
+			return "", nil, fmt.Errorf("%w: unsupported XPath transform child %s", ErrUnsupportedTransform, domutil.LocalName(ce))
+		}
+		if xpathElem != nil {
+			return "", nil, fmt.Errorf("%w: multiple XPath elements in XPath transform", ErrUnsupportedTransform)
+		}
+		xpathElem = ce
+	}
+	if xpathElem == nil {
+		return "", nil, fmt.Errorf("%w: XPath transform missing XPath element", ErrUnsupportedTransform)
+	}
+	expr := strings.TrimSpace(domutil.TextContent(xpathElem))
+	if expr == "" {
+		return "", nil, fmt.Errorf("%w: XPath transform has empty expression", ErrUnsupportedTransform)
+	}
+	nsBindings := make(map[string]string)
+	for prefix, ns := range domutil.InScopeNamespaces(xpathElem, true) {
+		if prefix == "" {
+			continue
+		}
+		nsBindings[prefix] = ns.URI()
+	}
+	return expr, nsBindings, nil
 }
 
 // rejectSignatureMethodParameters fails closed on any child element of

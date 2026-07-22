@@ -84,6 +84,45 @@ func Example_xmldsig1_sign_verify() {
 source: [examples/xmldsig1_sign_verify_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmldsig1_sign_verify_example_test.go)
 <!-- END INCLUDE -->
 
+## Reference processing
+
+### Same-document URI forms
+
+A `Reference` URI is dereferenced to a node-set fail-closed: only same-document
+forms are supported, and every other URI (an external reference, or an
+unrecognized XPointer scheme) is rejected with `ErrReferenceNotFound`. The
+supported forms and their comment-node semantics (XMLDSig core §4.3.3.2-3) are:
+
+| URI | Node-set | Comment nodes |
+|-----|----------|---------------|
+| `""` | whole document | **excluded** |
+| `"#id"` | element with that id | **excluded** |
+| `"#xpointer(/)"` | whole document | **included** |
+| `"#xpointer(id('id'))"` | element with that id | **included** |
+
+Comment membership is a property of the reference form, not of the
+canonicalization method. A C14N `#WithComments` method only emits comment nodes
+that are part of the node-set, so a bare `"#id"` or `""` reference never emits
+comments even under a `#WithComments` canonicalization — the two `#xpointer`
+forms are the only ones that carry comments through. An `"#id"` that matches more
+than one element (across the document and any enveloping `Object` content) is
+rejected with `ErrAmbiguousReference`, defending against XML Signature Wrapping.
+
+### Transforms
+
+The supported transforms are the enveloped-signature transform, the
+canonicalization transforms (Canonical XML 1.0 / 1.1 and Exclusive C14N 1.0,
+each with an optional `#WithComments` variant), and the XPath filter transform
+(`http://www.w3.org/TR/1999/REC-xpath-19991116`). The XPath filter evaluates its
+`ds:Transform/XPath` expression once per input node — with that node as the
+context node, under the `XPath` element's in-scope namespace bindings — and keeps
+each node whose result converts to boolean true (XPath 1.0 semantics: no default
+element namespace). A node-set transform (enveloped-signature or XPath) may
+precede the canonicalization transform; any transform ordered **after** the
+octet-producing canonicalization — including an octet-consuming transform such as
+XSLT or base64 — is rejected fail-closed with `ErrUnsupportedTransform`, as is
+any transform URI the package does not implement.
+
 ## Security: SHA-1 rejected by default
 
 SHA-1-based algorithms (`rsa-sha1`, `ecdsa-sha1`, `hmac-sha1`, and the `sha1`

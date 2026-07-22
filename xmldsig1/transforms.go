@@ -1,6 +1,7 @@
 package xmldsig1
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/xpath1"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -63,6 +65,30 @@ func ExcC14NTransform(prefixes ...string) Transform {
 type transformStep struct {
 	algorithm string
 	prefixes  []string
+	// xpathExpr and xpathNS carry an XPath filter transform's expression and its
+	// in-scope namespace bindings (from the ds:Transform/XPath element). They are
+	// populated only when algorithm == TransformXPath.
+	xpathExpr string
+	xpathNS   map[string]string
+}
+
+// xpathFilter is a resolved XPath filter transform: an XPath 1.0 boolean
+// expression plus the namespace bindings it is evaluated under.
+type xpathFilter struct {
+	expr string
+	ns   map[string]string
+}
+
+// transformPipeline is the resolved, algorithm-agnostic result of interpreting a
+// Reference transform list: the effective canonicalization method and its
+// inclusive-namespace prefixes, whether an enveloped-signature transform is
+// present, and any XPath filter transforms (in declared order) that run on the
+// node-set before canonicalization.
+type transformPipeline struct {
+	c14nMethod   string
+	prefixes     []string
+	hasEnveloped bool
+	xpathFilters []xpathFilter
 }
 
 // transformSteps converts a ReferenceConfig's typed Transform list into the
@@ -89,7 +115,7 @@ func transformSteps(ref ReferenceConfig) []transformStep {
 // the input tree.
 func preflightSignerTransforms(cfg *signerConfig) error {
 	for i, ref := range cfg.references {
-		if _, _, _, err := resolveTransformPipeline(transformSteps(ref)); err != nil {
+		if _, err := resolveTransformPipeline(transformSteps(ref)); err != nil {
 			// Carry the failing reference's index and URI so a caller signing
 			// over a multi-reference configuration can pinpoint the offending
 			// Reference, symmetric with the per-reference digest loop. The
@@ -115,30 +141,35 @@ func preflightSignerTransforms(cfg *signerConfig) error {
 //
 // When no c14n transform is declared, the XMLDSig default node-set->octet
 // conversion applies, which is inclusive Canonical XML 1.0 (NOT Exclusive C14N).
-func resolveTransformPipeline(steps []transformStep) (string, []string, bool, error) {
-	c14nMethod := ""
-	var prefixes []string
-	hasEnveloped := false
+//
+// The XPath filter transform (TransformXPath) maps a node-set to a node-set and
+// so may appear before the c14n transform; each is recorded in order. helium
+// supports no octet-stream-consuming transform (e.g. XSLT, base64), so a
+// transform of any kind ordered after the c14n transform is rejected.
+func resolveTransformPipeline(steps []transformStep) (transformPipeline, error) {
+	var p transformPipeline
 	producedOctets := false
 	for _, t := range steps {
 		if producedOctets {
-			return "", nil, false, fmt.Errorf("%w: transform %s ordered after canonicalization", ErrUnsupportedTransform, t.algorithm)
+			return transformPipeline{}, fmt.Errorf("%w: transform %s ordered after canonicalization", ErrUnsupportedTransform, t.algorithm)
 		}
 		switch t.algorithm {
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
-			c14nMethod = t.algorithm
-			prefixes = t.prefixes
+			p.c14nMethod = t.algorithm
+			p.prefixes = t.prefixes
 			producedOctets = true
 		case TransformEnvelopedSignature:
-			hasEnveloped = true
+			p.hasEnveloped = true
+		case TransformXPath:
+			p.xpathFilters = append(p.xpathFilters, xpathFilter{expr: t.xpathExpr, ns: t.xpathNS})
 		default:
-			return "", nil, false, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
+			return transformPipeline{}, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
 		}
 	}
-	if c14nMethod == "" {
-		c14nMethod = C14N10
+	if p.c14nMethod == "" {
+		p.c14nMethod = C14N10
 	}
-	return c14nMethod, prefixes, hasEnveloped, nil
+	return p, nil
 }
 
 // canonicalize applies the appropriate c14n mode for the given method URI
@@ -158,21 +189,97 @@ func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byt
 	return canon.CanonicalizeTo(doc)
 }
 
-// canonicalizeSubtree canonicalizes a single element subtree. It creates
-// a temporary document containing just the subtree for canonicalization.
+// canonicalizeSubtree canonicalizes a single element subtree by canonicalizing
+// the node-set of that subtree against its owning document.
 func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string) ([]byte, error) {
+	return canonicalizeNodeSet(method, collectSubtreeNodes(elem), elem.OwnerDocument(), prefixes)
+}
+
+// canonicalizeNodeSet canonicalizes an explicit node-set against doc using the
+// given method. It is the shared node-set -> octet stage for a plain subtree
+// reference and for a reference whose XPath filter transforms have narrowed the
+// node-set. A comment node is emitted only when it is BOTH in the node-set and
+// the method is a WithComments variant (see effectiveC14NMethod), so a
+// comment-excluding reference form never emits comments regardless of the c14n
+// method.
+func canonicalizeNodeSet(method string, nodes []helium.Node, doc *helium.Document, prefixes []string) ([]byte, error) {
 	mode, comments, err := resolveC14NMode(method)
 	if err != nil {
 		return nil, err
 	}
-	canon := c14n.NewCanonicalizer(mode).NodeSet(collectSubtreeNodes(elem))
+	canon := c14n.NewCanonicalizer(mode).NodeSet(nodes)
 	if comments {
 		canon = canon.Comments()
 	}
 	if mode == c14n.ExclusiveC14N10 && len(prefixes) > 0 {
 		canon = canon.InclusiveNamespaces(prefixes)
 	}
-	return canon.CanonicalizeTo(elem.OwnerDocument())
+	return canon.CanonicalizeTo(doc)
+}
+
+// collectDocumentNodes returns the whole-document node-set: every top-level
+// comment and processing-instruction plus the document element's full subtree
+// (elements, their in-scope namespace nodes, attributes, and descendants). It is
+// the initial node-set for a whole-document reference (URI="" or "#xpointer(/)")
+// when an XPath filter transform must run on it. A comment-excluding form still
+// drops comments at the c14n stage via effectiveC14NMethod.
+func collectDocumentNodes(doc *helium.Document) []helium.Node {
+	var nodes []helium.Node
+	for c := range helium.Children(doc) {
+		switch c.Type() {
+		case helium.ElementNode:
+			nodes = append(nodes, collectSubtreeNodes(c)...)
+		case helium.CommentNode, helium.ProcessingInstructionNode:
+			nodes = append(nodes, c)
+		}
+	}
+	return nodes
+}
+
+// applyXPathFilter implements the XMLDSig XPath filter transform
+// (http://www.w3.org/TR/1999/REC-xpath-19991116, core §6.6.3): the expression is
+// evaluated once per input node with that node as the context node, under the
+// transform's in-scope namespace bindings, and the node is kept when the result
+// converts to boolean true. The expression is wrapped in fn:boolean so the XPath
+// data-model boolean conversion (a non-empty node-set, a non-zero number, a
+// non-empty string) governs membership. A malformed expression or an evaluation
+// error is fail-closed as ErrUnsupportedTransform so a reference never digests
+// an unfiltered node-set.
+func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) ([]helium.Node, error) {
+	expr, err := xpath1.Compile("boolean(" + f.expr + ")")
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, f.expr, err)
+	}
+	eval := xpath1.NewEvaluator()
+	if len(f.ns) > 0 {
+		eval = eval.Namespaces(f.ns)
+	}
+	kept := make([]helium.Node, 0, len(nodes))
+	for _, n := range nodes {
+		r, err := eval.Evaluate(ctx, expr, n)
+		if err != nil {
+			return nil, fmt.Errorf("%w: XPath transform evaluation failed: %v", ErrUnsupportedTransform, err)
+		}
+		if r.Bool {
+			kept = append(kept, n)
+		}
+	}
+	return kept, nil
+}
+
+// removeSignatureNodes drops every node in the enveloped Signature's own subtree
+// from a node-set, implementing the enveloped-signature transform on the
+// explicit node-set used by the XPath-filter path (the non-XPath path omits the
+// Signature via canonicalizeEnveloped's document clone instead).
+func removeSignatureNodes(nodes []helium.Node, sigElem *helium.Element) []helium.Node {
+	kept := make([]helium.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if isDescendantOrSelf(n, sigElem) {
+			continue
+		}
+		kept = append(kept, n)
+	}
+	return kept
 }
 
 // canonicalizeDetachedSubtree canonicalizes target, an element that lives inside
@@ -533,41 +640,142 @@ func inScopeNamespaces(elem *helium.Element) []*helium.Namespace {
 	return result
 }
 
-// resolveReference resolves a Reference URI to the target node.
-// For URI="" (enveloped), returns the document element.
-// For URI="#id", returns the unique element with that ID, searched across the
-// document tree and any extraRoots. An enveloping signature passes its own
-// (detached) Signature element as an extra root so a reference into its own
-// <Object> content resolves before the Signature is placed in a document.
-// If more than one element matches the ID — in either tree, or one in each —
-// returns ErrAmbiguousReference. This is the primary defense against XML
-// Signature Wrapping (XSW) attacks where an attacker injects a duplicate-ID
-// element containing malicious content, and it also rejects an id that
-// collides between the document and the Signature's own Object content.
-func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
+// referenceURIForm classifies a same-document Reference URI into the node-set
+// forms XMLDSig core supports (§4.3.3.2-3), fail-closed. It reports:
+//
+//   - id: the bare id to resolve (empty for whole-document forms);
+//   - wholeDoc: the reference selects the whole document root;
+//   - includeComments: comment nodes are part of the selected node-set;
+//   - ok: the URI is one we support at all (false → the caller fails closed).
+//
+// The supported same-document forms and their comment semantics are:
+//
+//   - URI=""                     → whole document, comments EXCLUDED.
+//   - URI="#id"                  → the element with that id, comments EXCLUDED.
+//   - URI="#xpointer(/)"         → whole document, comments INCLUDED.
+//   - URI="#xpointer(id('id'))"  → the element with that id, comments INCLUDED.
+//
+// The bare-name ("#id") and empty ("") forms produce a node-set WITHOUT comment
+// nodes; the two full-XPointer forms (the bare-names SHOULD-support set) produce
+// a node-set WITH comment nodes. Every other URI — an external reference, or any
+// other #xpointer(...) scheme — is unsupported and stays fail-closed so a
+// verifier never silently digests bytes the signer did not intend.
+func referenceURIForm(uri string) (string, bool, bool, bool) {
 	if uri == "" {
+		return "", true, false, true
+	}
+	if !strings.HasPrefix(uri, "#") {
+		// External reference: not supported.
+		return "", false, false, false
+	}
+	frag := uri[1:]
+	if !strings.HasPrefix(frag, "xpointer(") {
+		// Bare-name "#id" (no XPointer scheme). Any "#name" without a "(" is a
+		// bare id; comments are excluded.
+		if strings.ContainsAny(frag, "()") {
+			return "", false, false, false
+		}
+		return frag, false, false, true
+	}
+	// Full XPointer form: #xpointer(<expr>). Only the two bare-names
+	// SHOULD-support schemes are honored; both include comment nodes.
+	if !strings.HasSuffix(frag, ")") {
+		return "", false, false, false
+	}
+	expr := strings.TrimSpace(frag[len("xpointer(") : len(frag)-1])
+	if expr == "/" {
+		return "", true, true, true
+	}
+	if id, ok := parseXPointerID(expr); ok {
+		return id, false, true, true
+	}
+	return "", false, false, false
+}
+
+// parseXPointerID matches the XPointer id() form id('X') or id("X") and returns
+// the quoted id. Anything else (a bare argument, a nested call, an unbalanced or
+// mismatched quote) is rejected so only the two SHOULD-support schemes resolve.
+func parseXPointerID(expr string) (string, bool) {
+	if !strings.HasPrefix(expr, "id(") || !strings.HasSuffix(expr, ")") {
+		return "", false
+	}
+	arg := strings.TrimSpace(expr[len("id(") : len(expr)-1])
+	if len(arg) < 2 {
+		return "", false
+	}
+	q := arg[0]
+	if (q != '\'' && q != '"') || arg[len(arg)-1] != q {
+		return "", false
+	}
+	inner := arg[1 : len(arg)-1]
+	// The id itself must not contain the quote character (no embedded quote /
+	// second argument), keeping this a strict single-id match.
+	if strings.IndexByte(inner, q) >= 0 {
+		return "", false
+	}
+	return inner, true
+}
+
+// effectiveC14NMethod adjusts a canonicalization method for the comment
+// membership of the reference's node-set. A C14N WithComments algorithm only
+// emits comment nodes that are present in the node-set, so when the reference
+// form excludes comments (URI="" or a bare "#id") a WithComments method is
+// downgraded to its plain variant — equivalently, no comment node is in the set
+// to emit. When the reference form includes comments the method is unchanged (a
+// plain method still emits none, which is correct). This is the single point
+// where reference-form comment semantics meet the c14n stage.
+func effectiveC14NMethod(method string, includeComments bool) string {
+	if includeComments {
+		return method
+	}
+	switch method {
+	case C14N10Comments:
+		return C14N10
+	case ExcC14N10Comments:
+		return ExcC14N10
+	case C14N11Comments:
+		return C14N11URI
+	}
+	return method
+}
+
+// resolveReference resolves a Reference URI to the target node.
+// For a whole-document form (URI="" or "#xpointer(/)"), returns the document
+// element. For an element form ("#id" or "#xpointer(id('id'))"), returns the
+// unique element with that id, searched across the document tree and any
+// extraRoots. An enveloping signature passes its own (detached) Signature
+// element as an extra root so a reference into its own <Object> content resolves
+// before the Signature is placed in a document. If more than one element matches
+// the id — in either tree, or one in each — returns ErrAmbiguousReference. This
+// is the primary defense against XML Signature Wrapping (XSW) attacks where an
+// attacker injects a duplicate-ID element containing malicious content, and it
+// also rejects an id that collides between the document and the Signature's own
+// Object content. Any unsupported URI (an external reference, or an unrecognized
+// #xpointer(...) scheme) stays fail-closed as ErrReferenceNotFound.
+func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
+	id, wholeDoc, _, ok := referenceURIForm(uri)
+	if !ok {
+		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, uri)
+	}
+	if wholeDoc {
 		return doc.DocumentElement(), nil
 	}
-	if strings.HasPrefix(uri, "#") {
-		id := uri[1:]
-		// Walk each tree once and collect every candidate. We accept matches
-		// from any of: a DTD/schema-declared ID-typed attribute, xml:id, or
-		// the "id" attribute token in the casings "Id", "ID", or "id". We
-		// refuse to resolve the reference if more than one element matches.
-		matches := findElementsByIDUnder(doc.DocumentElement(), id)
-		for _, root := range extraRoots {
-			matches = append(matches, findElementsByIDUnder(root, id)...)
-		}
-		switch len(matches) {
-		case 0:
-			return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
-		case 1:
-			return matches[0], nil
-		default:
-			return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
-		}
+	// Walk each tree once and collect every candidate. We accept matches from
+	// any of: a DTD/schema-declared ID-typed attribute, xml:id, or the "id"
+	// attribute token in the casings "Id", "ID", or "id". We refuse to resolve
+	// the reference if more than one element matches.
+	matches := findElementsByIDUnder(doc.DocumentElement(), id)
+	for _, root := range extraRoots {
+		matches = append(matches, findElementsByIDUnder(root, id)...)
 	}
-	return nil, fmt.Errorf("%w: external references not supported: %s", ErrReferenceNotFound, uri)
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
+	case 1:
+		return matches[0], nil
+	default:
+		return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
+	}
 }
 
 // findElementsByIDUnder walks the subtree rooted at root (root included) and
