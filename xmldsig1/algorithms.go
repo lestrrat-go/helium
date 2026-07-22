@@ -20,16 +20,26 @@ type algorithm struct {
 
 var signatureAlgorithms = map[string]algorithm{
 	AlgRSASHA1:     {hash: crypto.SHA1, weak: true},
+	AlgRSASHA224:   {hash: crypto.SHA224},
 	AlgRSASHA256:   {hash: crypto.SHA256},
+	AlgRSASHA384:   {hash: crypto.SHA384},
+	AlgRSASHA512:   {hash: crypto.SHA512},
+	AlgECDSASHA1:   {hash: crypto.SHA1, weak: true},
+	AlgECDSASHA224: {hash: crypto.SHA224},
 	AlgECDSASHA256: {hash: crypto.SHA256},
 	AlgECDSASHA384: {hash: crypto.SHA384},
+	AlgECDSASHA512: {hash: crypto.SHA512},
 	AlgHMACSHA1:    {hash: crypto.SHA1, weak: true},
+	AlgHMACSHA224:  {hash: crypto.SHA224},
 	AlgHMACSHA256:  {hash: crypto.SHA256},
+	AlgHMACSHA384:  {hash: crypto.SHA384},
+	AlgHMACSHA512:  {hash: crypto.SHA512},
 	AlgEd25519:     {hash: 0},
 }
 
 var digestAlgorithms = map[string]algorithm{
 	DigestSHA1:   {hash: crypto.SHA1, weak: true},
+	DigestSHA224: {hash: crypto.SHA224},
 	DigestSHA256: {hash: crypto.SHA256},
 	DigestSHA384: {hash: crypto.SHA384},
 	DigestSHA512: {hash: crypto.SHA512},
@@ -78,9 +88,9 @@ func signBytes(algURI string, key any, data []byte, allowSHA1 bool) ([]byte, err
 	switch algURI {
 	case AlgEd25519:
 		return signEd25519(key, data)
-	case AlgHMACSHA1, AlgHMACSHA256:
+	case AlgHMACSHA1, AlgHMACSHA224, AlgHMACSHA256, AlgHMACSHA384, AlgHMACSHA512:
 		return signHMAC(hash, key, data)
-	case AlgECDSASHA256, AlgECDSASHA384:
+	case AlgECDSASHA1, AlgECDSASHA224, AlgECDSASHA256, AlgECDSASHA384, AlgECDSASHA512:
 		return signECDSA(hash, key, data)
 	default:
 		return signRSA(hash, key, data)
@@ -99,9 +109,9 @@ func verifyBytes(algURI string, key any, data, sig []byte, allowSHA1 bool) error
 	switch algURI {
 	case AlgEd25519:
 		return verifyEd25519(key, data, sig)
-	case AlgHMACSHA1, AlgHMACSHA256:
+	case AlgHMACSHA1, AlgHMACSHA224, AlgHMACSHA256, AlgHMACSHA384, AlgHMACSHA512:
 		return verifyHMAC(hash, key, data, sig)
-	case AlgECDSASHA256, AlgECDSASHA384:
+	case AlgECDSASHA1, AlgECDSASHA224, AlgECDSASHA256, AlgECDSASHA384, AlgECDSASHA512:
 		return verifyECDSA(hash, key, data, sig)
 	default:
 		return verifyRSA(hash, key, data, sig)

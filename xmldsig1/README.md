@@ -86,8 +86,8 @@ source: [examples/xmldsig1_sign_verify_example_test.go](https://github.com/lestr
 
 ## Security: SHA-1 rejected by default
 
-SHA-1-based algorithms (`rsa-sha1`, `hmac-sha1`, and the `sha1` digest) are
-**rejected by default** for both signing and verification. SHA-1 is
+SHA-1-based algorithms (`rsa-sha1`, `ecdsa-sha1`, `hmac-sha1`, and the `sha1`
+digest) are **rejected by default** for both signing and verification. SHA-1 is
 cryptographically weak; accepting it silently exposes callers to algorithm
 downgrade and collision attacks. When a SHA-1 algorithm is encountered without
 an explicit opt-in, the operation fails with `ErrWeakAlgorithm`.

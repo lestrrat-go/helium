@@ -259,6 +259,156 @@ func TestVerificationFailedSentinel(t *testing.T) {
 	}
 }
 
+// Key kinds used by makeKeyPair to build a (private, public/secret) pair for the
+// algorithm-coverage round-trip table.
+const (
+	keyRSA      = "rsa"
+	keyECP256   = "ec-p256"
+	keyECP384   = "ec-p384"
+	keyECP521   = "ec-p521"
+	keyHMACKind = "hmac"
+)
+
+// makeKeyPair returns a signing key and its matching verification key for the
+// named key kind. HMAC uses the same secret for both.
+func makeKeyPair(t *testing.T, kind string) (any, any) {
+	t.Helper()
+	switch kind {
+	case keyRSA:
+		k := generateRSAKey(t)
+		return k, &k.PublicKey
+	case keyECP256:
+		k := generateECDSAKey(t, elliptic.P256())
+		return k, &k.PublicKey
+	case keyECP384:
+		k := generateECDSAKey(t, elliptic.P384())
+		return k, &k.PublicKey
+	case keyECP521:
+		k := generateECDSAKey(t, elliptic.P521())
+		return k, &k.PublicKey
+	case keyHMACKind:
+		secret := mustHMAC(t)
+		return secret, secret
+	default:
+		t.Fatalf("unknown key kind: %s", kind)
+		return nil, nil
+	}
+}
+
+// TestSignVerifyRoundTripAlgorithms round-trips (sign then verify) every
+// signature URI added for XML Signature 1.1 interop coverage, each paired with a
+// digest of matching strength. ecdsa-sha1 is SHA-1-based, so it requires the
+// AllowSHA1 opt-in on both the Signer and Verifier.
+func TestSignVerifyRoundTripAlgorithms(t *testing.T) {
+	tests := []struct {
+		name      string
+		alg       string
+		digest    string
+		kind      string
+		allowSHA1 bool
+	}{
+		{"rsa-sha224", xmldsig1.AlgRSASHA224, xmldsig1.DigestSHA224, keyRSA, false},
+		{"rsa-sha384", xmldsig1.AlgRSASHA384, xmldsig1.DigestSHA384, keyRSA, false},
+		{"rsa-sha512", xmldsig1.AlgRSASHA512, xmldsig1.DigestSHA512, keyRSA, false},
+		{"hmac-sha224", xmldsig1.AlgHMACSHA224, xmldsig1.DigestSHA224, keyHMACKind, false},
+		{"hmac-sha384", xmldsig1.AlgHMACSHA384, xmldsig1.DigestSHA384, keyHMACKind, false},
+		{"hmac-sha512", xmldsig1.AlgHMACSHA512, xmldsig1.DigestSHA512, keyHMACKind, false},
+		{"ecdsa-sha224", xmldsig1.AlgECDSASHA224, xmldsig1.DigestSHA224, keyECP256, false},
+		{"ecdsa-sha512", xmldsig1.AlgECDSASHA512, xmldsig1.DigestSHA512, keyECP521, false},
+		{"ecdsa-sha1", xmldsig1.AlgECDSASHA1, xmldsig1.DigestSHA256, keyECP256, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			signKey, verifyKey := makeKeyPair(t, tt.kind)
+			doc := mustParseXML(t, samlAssertion)
+
+			signer := xmldsig1.NewSigner().
+				SignatureAlgorithm(tt.alg).
+				Reference(xmldsig1.ReferenceConfig{
+					URI:             "",
+					DigestAlgorithm: tt.digest,
+					Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+				})
+			if tt.allowSHA1 {
+				signer = signer.AllowSHA1(true)
+			}
+			require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), signKey))
+
+			verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(verifyKey))
+			if tt.allowSHA1 {
+				verifier = verifier.AllowSHA1(true)
+			}
+			_, err := verifier.Verify(t.Context(), doc)
+			require.NoError(t, err)
+		})
+	}
+}
+
+// signECDSASHA1Doc signs samlAssertion with ecdsa-sha1 (SHA-1 opted in), using a
+// SHA-256 reference digest, and returns the signed document.
+func signECDSASHA1Doc(t *testing.T, key *ecdsa.PrivateKey) *helium.Document {
+	t.Helper()
+	doc := mustParseXML(t, samlAssertion)
+	signer := xmldsig1.NewSigner().
+		AllowSHA1(true).
+		SignatureAlgorithm(xmldsig1.AlgECDSASHA1).
+		Reference(xmldsig1.NewEnvelopedReference())
+	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+	return doc
+}
+
+// TestECDSASHA1WeakGate confirms ecdsa-sha1 goes through the same weak-algorithm
+// gate as rsa-sha1/hmac-sha1: rejected by default on both sign and verify,
+// accepted only with the AllowSHA1 opt-in.
+func TestECDSASHA1WeakGate(t *testing.T) {
+	t.Run("sign rejected by default", func(t *testing.T) {
+		key := generateECDSAKey(t, elliptic.P256())
+		doc := mustParseXML(t, samlAssertion)
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgECDSASHA1).
+			Reference(xmldsig1.NewEnvelopedReference())
+		err := signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+		require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+	})
+
+	t.Run("verify rejected by default", func(t *testing.T) {
+		key := generateECDSAKey(t, elliptic.P256())
+		doc := signECDSASHA1Doc(t, key)
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err := verifier.Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+	})
+
+	t.Run("accepted with opt-in", func(t *testing.T) {
+		key := generateECDSAKey(t, elliptic.P256())
+		doc := signECDSASHA1Doc(t, key)
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).AllowSHA1(true)
+		_, err := verifier.Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+}
+
+// TestSHA224DigestReference round-trips a signature whose Reference uses the
+// SHA-224 digest, isolating the digest algorithm from the signature algorithm.
+func TestSHA224DigestReference(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "",
+			DigestAlgorithm: xmldsig1.DigestSHA224,
+			Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+		})
+	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	_, err := verifier.Verify(t.Context(), doc)
+	require.NoError(t, err)
+}
+
 func mustRSA(t *testing.T) *rsa.PrivateKey  { t.Helper(); return generateRSAKey(t) }
 func mustEC(t *testing.T) *ecdsa.PrivateKey { t.Helper(); return generateECDSAKey(t, elliptic.P256()) }
 func mustEd(t *testing.T) ed25519.PrivateKey {

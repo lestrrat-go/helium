@@ -100,6 +100,7 @@ func TestParseECKeyValue(t *testing.T) {
 	}{
 		{"p256", elliptic.P256(), "urn:oid:1.2.840.10045.3.1.7", xmldsig1.AlgECDSASHA256},
 		{"p384", elliptic.P384(), "urn:oid:1.3.132.0.34", xmldsig1.AlgECDSASHA384},
+		{"p521", elliptic.P521(), "urn:oid:1.3.132.0.35", xmldsig1.AlgECDSASHA512},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			key := generateECDSAKey(t, tc.curve)
@@ -131,10 +132,14 @@ func TestParseECKeyValue(t *testing.T) {
 }
 
 func dsigDigestFor(alg string) string {
-	if alg == xmldsig1.AlgECDSASHA384 {
+	switch alg {
+	case xmldsig1.AlgECDSASHA384:
 		return xmldsig1.DigestSHA384
+	case xmldsig1.AlgECDSASHA512:
+		return xmldsig1.DigestSHA512
+	default:
+		return xmldsig1.DigestSHA256
 	}
-	return xmldsig1.DigestSHA256
 }
 
 // injectECKeyInfo appends a <ds:KeyInfo><ds:KeyValue><dsig11:ECKeyValue> ...
