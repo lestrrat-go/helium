@@ -240,3 +240,22 @@ may come from a parsed `DSAKeyValue` or from an X.509 certificate (which
 `crypto/x509` parses into a `*dsa.PublicKey`). **Signing with DSA is not
 supported** — a signing attempt with the DSA URI fails with a clear
 `ErrUnsupportedAlgorithm` ("DSA signing is not supported").
+
+## W3C interop conformance
+
+The package is measured against two W3C XML Signature interop suites through
+the [helium-w3c-tests](https://github.com/lestrrat-go/helium-w3c-tests)
+harness (`xmldsig2ed` and `xmldsig11` suites). Committed point-in-time
+evidence:
+
+- [Test Cases for C14N 1.1 and XMLDSig Interoperability](summary-xmldsig2ed.md)
+  (W3C Note, 2008) — canonicalization node-set cases plus signature
+  verification (C14N 1.1, XPointer references, X.509 Distinguished Name
+  KeyInfo).
+- [XML Signature 1.1 interop vectors](summary-xmldsig11.md) — enveloping
+  signatures covering ECDSA P-256/P-384/P-521, RSA and HMAC with the SHA-2
+  family, and RFC 4050 ECDSAKeyValue KeyInfo.
+
+The remaining expected failures are deliberate fail-closed design choices
+(no external-reference dereferencing, no XSLT transform), each documented
+with its reason in the harness expectations.

@@ -259,6 +259,8 @@ expected-failure (documented known gap) breakdowns where applicable.
 | XSLT 3.0 | [`xslt3`](xslt3/README.md) | [summary](xslt3/summary-xslt30.md), [conformance declaration](xslt3/CONFORMANCE.md) |
 | XSD 1.0 (default) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
 | XSD 1.1 (opt-in) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd11.md) |
+| C14N 1.1 + XMLDSig interop (xmldsig2ed-tests) | [`xmldsig1`](xmldsig1/README.md) | [summary](xmldsig1/summary-xmldsig2ed.md) |
+| XML Signature 1.1 interop | [`xmldsig1`](xmldsig1/README.md) | [summary](xmldsig1/summary-xmldsig11.md) |
 
 ## libxml2 compatibility (golden tests)
 
