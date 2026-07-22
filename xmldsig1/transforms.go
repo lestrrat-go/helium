@@ -533,41 +533,142 @@ func inScopeNamespaces(elem *helium.Element) []*helium.Namespace {
 	return result
 }
 
-// resolveReference resolves a Reference URI to the target node.
-// For URI="" (enveloped), returns the document element.
-// For URI="#id", returns the unique element with that ID, searched across the
-// document tree and any extraRoots. An enveloping signature passes its own
-// (detached) Signature element as an extra root so a reference into its own
-// <Object> content resolves before the Signature is placed in a document.
-// If more than one element matches the ID — in either tree, or one in each —
-// returns ErrAmbiguousReference. This is the primary defense against XML
-// Signature Wrapping (XSW) attacks where an attacker injects a duplicate-ID
-// element containing malicious content, and it also rejects an id that
-// collides between the document and the Signature's own Object content.
-func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
+// referenceURIForm classifies a same-document Reference URI into the node-set
+// forms XMLDSig core supports (§4.3.3.2-3), fail-closed. It reports:
+//
+//   - id: the bare id to resolve (empty for whole-document forms);
+//   - wholeDoc: the reference selects the whole document root;
+//   - includeComments: comment nodes are part of the selected node-set;
+//   - ok: the URI is one we support at all (false → the caller fails closed).
+//
+// The supported same-document forms and their comment semantics are:
+//
+//   - URI=""                     → whole document, comments EXCLUDED.
+//   - URI="#id"                  → the element with that id, comments EXCLUDED.
+//   - URI="#xpointer(/)"         → whole document, comments INCLUDED.
+//   - URI="#xpointer(id('id'))"  → the element with that id, comments INCLUDED.
+//
+// The bare-name ("#id") and empty ("") forms produce a node-set WITHOUT comment
+// nodes; the two full-XPointer forms (the bare-names SHOULD-support set) produce
+// a node-set WITH comment nodes. Every other URI — an external reference, or any
+// other #xpointer(...) scheme — is unsupported and stays fail-closed so a
+// verifier never silently digests bytes the signer did not intend.
+func referenceURIForm(uri string) (string, bool, bool, bool) {
 	if uri == "" {
+		return "", true, false, true
+	}
+	if !strings.HasPrefix(uri, "#") {
+		// External reference: not supported.
+		return "", false, false, false
+	}
+	frag := uri[1:]
+	if !strings.HasPrefix(frag, "xpointer(") {
+		// Bare-name "#id" (no XPointer scheme). Any "#name" without a "(" is a
+		// bare id; comments are excluded.
+		if strings.ContainsAny(frag, "()") {
+			return "", false, false, false
+		}
+		return frag, false, false, true
+	}
+	// Full XPointer form: #xpointer(<expr>). Only the two bare-names
+	// SHOULD-support schemes are honored; both include comment nodes.
+	if !strings.HasSuffix(frag, ")") {
+		return "", false, false, false
+	}
+	expr := strings.TrimSpace(frag[len("xpointer(") : len(frag)-1])
+	if expr == "/" {
+		return "", true, true, true
+	}
+	if id, ok := parseXPointerID(expr); ok {
+		return id, false, true, true
+	}
+	return "", false, false, false
+}
+
+// parseXPointerID matches the XPointer id() form id('X') or id("X") and returns
+// the quoted id. Anything else (a bare argument, a nested call, an unbalanced or
+// mismatched quote) is rejected so only the two SHOULD-support schemes resolve.
+func parseXPointerID(expr string) (string, bool) {
+	if !strings.HasPrefix(expr, "id(") || !strings.HasSuffix(expr, ")") {
+		return "", false
+	}
+	arg := strings.TrimSpace(expr[len("id(") : len(expr)-1])
+	if len(arg) < 2 {
+		return "", false
+	}
+	q := arg[0]
+	if (q != '\'' && q != '"') || arg[len(arg)-1] != q {
+		return "", false
+	}
+	inner := arg[1 : len(arg)-1]
+	// The id itself must not contain the quote character (no embedded quote /
+	// second argument), keeping this a strict single-id match.
+	if strings.IndexByte(inner, q) >= 0 {
+		return "", false
+	}
+	return inner, true
+}
+
+// effectiveC14NMethod adjusts a canonicalization method for the comment
+// membership of the reference's node-set. A C14N WithComments algorithm only
+// emits comment nodes that are present in the node-set, so when the reference
+// form excludes comments (URI="" or a bare "#id") a WithComments method is
+// downgraded to its plain variant — equivalently, no comment node is in the set
+// to emit. When the reference form includes comments the method is unchanged (a
+// plain method still emits none, which is correct). This is the single point
+// where reference-form comment semantics meet the c14n stage.
+func effectiveC14NMethod(method string, includeComments bool) string {
+	if includeComments {
+		return method
+	}
+	switch method {
+	case C14N10Comments:
+		return C14N10
+	case ExcC14N10Comments:
+		return ExcC14N10
+	case C14N11Comments:
+		return C14N11URI
+	}
+	return method
+}
+
+// resolveReference resolves a Reference URI to the target node.
+// For a whole-document form (URI="" or "#xpointer(/)"), returns the document
+// element. For an element form ("#id" or "#xpointer(id('id'))"), returns the
+// unique element with that id, searched across the document tree and any
+// extraRoots. An enveloping signature passes its own (detached) Signature
+// element as an extra root so a reference into its own <Object> content resolves
+// before the Signature is placed in a document. If more than one element matches
+// the id — in either tree, or one in each — returns ErrAmbiguousReference. This
+// is the primary defense against XML Signature Wrapping (XSW) attacks where an
+// attacker injects a duplicate-ID element containing malicious content, and it
+// also rejects an id that collides between the document and the Signature's own
+// Object content. Any unsupported URI (an external reference, or an unrecognized
+// #xpointer(...) scheme) stays fail-closed as ErrReferenceNotFound.
+func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
+	id, wholeDoc, _, ok := referenceURIForm(uri)
+	if !ok {
+		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, uri)
+	}
+	if wholeDoc {
 		return doc.DocumentElement(), nil
 	}
-	if strings.HasPrefix(uri, "#") {
-		id := uri[1:]
-		// Walk each tree once and collect every candidate. We accept matches
-		// from any of: a DTD/schema-declared ID-typed attribute, xml:id, or
-		// the "id" attribute token in the casings "Id", "ID", or "id". We
-		// refuse to resolve the reference if more than one element matches.
-		matches := findElementsByIDUnder(doc.DocumentElement(), id)
-		for _, root := range extraRoots {
-			matches = append(matches, findElementsByIDUnder(root, id)...)
-		}
-		switch len(matches) {
-		case 0:
-			return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
-		case 1:
-			return matches[0], nil
-		default:
-			return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
-		}
+	// Walk each tree once and collect every candidate. We accept matches from
+	// any of: a DTD/schema-declared ID-typed attribute, xml:id, or the "id"
+	// attribute token in the casings "Id", "ID", or "id". We refuse to resolve
+	// the reference if more than one element matches.
+	matches := findElementsByIDUnder(doc.DocumentElement(), id)
+	for _, root := range extraRoots {
+		matches = append(matches, findElementsByIDUnder(root, id)...)
 	}
-	return nil, fmt.Errorf("%w: external references not supported: %s", ErrReferenceNotFound, uri)
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
+	case 1:
+		return matches[0], nil
+	default:
+		return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
+	}
 }
 
 // findElementsByIDUnder walks the subtree rooted at root (root included) and

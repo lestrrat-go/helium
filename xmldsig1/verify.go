@@ -140,41 +140,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 }
 
 func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference, allowSHA1 bool) (*helium.Element, error) {
-	target, err := resolveReference(doc, ref.uri)
-	if err != nil {
-		return nil, err
-	}
-
-	// Interpret the transforms as an ordered pipeline. Fail closed: any
-	// transform whose URI we cannot apply, or one ordered after an
-	// octet-producing c14n transform, is rejected before digesting — otherwise a
-	// Reference could declare an unsupported or mis-ordered transform and still
-	// verify against the untransformed canonical bytes. When no c14n transform is
-	// declared the default node-set->octet conversion is inclusive Canonical
-	// XML 1.0.
-	steps := make([]transformStep, len(ref.transforms))
-	for i, t := range ref.transforms {
-		steps[i] = transformStep(t)
-	}
-	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(steps)
-	if err != nil {
-		return nil, err
-	}
-
-	// For enveloped signatures the Signature element and its descendants must
-	// be omitted from the canonical input. canonicalizeEnveloped does this on a
-	// deep copy of the document, never mutating the caller's live DOM (which
-	// would race with concurrent readers and risk leaving the tree corrupted if
-	// a restore failed).
-	var canonical []byte
-	switch {
-	case hasEnveloped:
-		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, ref.uri == "", prefixes)
-	case ref.uri == "":
-		canonical, err = canonicalize(c14nMethod, doc, prefixes)
-	default:
-		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
-	}
+	target, canonical, err := canonicalizeReference(doc, sigElem, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +157,61 @@ func verifyReference(doc *helium.Document, sigElem *helium.Element, ref parsedRe
 	}
 
 	return target, nil
+}
+
+// canonicalizeReference resolves a Reference URI and applies its transform
+// pipeline, returning the resolved target element and the canonical octet
+// stream that the DigestValue is computed over. It is the shared reference
+// node-set → octet path for the verify digest check.
+func canonicalizeReference(doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, error) {
+	target, err := resolveReference(doc, ref.uri)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Interpret the transforms as an ordered pipeline. Fail closed: any
+	// transform whose URI we cannot apply, or one ordered after an
+	// octet-producing c14n transform, is rejected before digesting — otherwise a
+	// Reference could declare an unsupported or mis-ordered transform and still
+	// verify against the untransformed canonical bytes. When no c14n transform is
+	// declared the default node-set->octet conversion is inclusive Canonical
+	// XML 1.0.
+	steps := make([]transformStep, len(ref.transforms))
+	for i, t := range ref.transforms {
+		steps[i] = transformStep(t)
+	}
+	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(steps)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Classify the URI's node-set form (§4.3.3.2-3). wholeDoc selects the
+	// document root; includeComments governs whether comment nodes are part of
+	// the selected node-set. A C14N WithComments method only emits comment nodes
+	// present in the set, so when the form excludes comments the method is
+	// downgraded to its plain variant — keeping "#id"/"" free of comments even
+	// under a WithComments c14n, and reserving comments for the #xpointer forms.
+	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
+	c14nMethod = effectiveC14NMethod(c14nMethod, includeComments)
+
+	// For enveloped signatures the Signature element and its descendants must
+	// be omitted from the canonical input. canonicalizeEnveloped does this on a
+	// deep copy of the document, never mutating the caller's live DOM (which
+	// would race with concurrent readers and risk leaving the tree corrupted if
+	// a restore failed).
+	var canonical []byte
+	switch {
+	case hasEnveloped:
+		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, wholeDoc, prefixes)
+	case wholeDoc:
+		canonical, err = canonicalize(c14nMethod, doc, prefixes)
+	default:
+		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return target, canonical, nil
 }
 
 func digestEqual(a, b []byte) bool {

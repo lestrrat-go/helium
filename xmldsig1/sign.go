@@ -534,6 +534,14 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 		return err
 	}
 
+	// Classify the URI's node-set form (§4.3.3.2-3) so the digest is computed
+	// exactly as a verifier reading these same elements would. wholeDoc selects
+	// the document root; includeComments governs comment membership, and a
+	// WithComments c14n is downgraded to its plain variant when the form excludes
+	// comments so sign and verify stay symmetric on comment handling.
+	_, wholeDoc, includeComments, _ := referenceURIForm(ref.URI)
+	c14nMethod = effectiveC14NMethod(c14nMethod, includeComments)
+
 	// For enveloped signatures the Signature element and its descendants must
 	// be omitted from the canonical input. canonicalizeEnveloped does this on a
 	// deep copy of the document, never mutating the caller's live DOM (which
@@ -542,8 +550,8 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	var canonical []byte
 	switch {
 	case hasEnveloped:
-		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, ref.URI == "", prefixes)
-	case ref.URI == "":
+		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, wholeDoc, prefixes)
+	case wholeDoc:
 		canonical, err = canonicalize(c14nMethod, doc, prefixes)
 	case internalRoot != nil && isDescendantOrSelf(target, internalRoot):
 		// The target lives inside the enveloping Signature's own detached
