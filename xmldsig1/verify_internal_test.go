@@ -15,6 +15,12 @@ import (
 
 const dsigNS = NamespaceDSig
 
+// testVerifyBudget builds a verifyBudget with the default parse-time caps, for
+// internal tests that drive the parse helpers directly.
+func testVerifyBudget() *verifyBudget {
+	return newVerifyBudget(&verifierConfig{})
+}
+
 // findChild returns the first child element of parent with the given local
 // name, failing the test if none is found.
 func findChild(t *testing.T, parent *helium.Element, name string) *helium.Element {
@@ -102,7 +108,7 @@ func TestDigestEqual(t *testing.T) {
 func TestParseSignatureElement(t *testing.T) {
 	t.Run("missing SignedInfo", func(t *testing.T) {
 		doc := mustParse(t, `<ds:Signature xmlns:ds="`+dsigNS+`"><ds:SignatureValue xmlns:ds="`+dsigNS+`">AA==</ds:SignatureValue></ds:Signature>`)
-		_, err := parseSignatureElement(doc.DocumentElement())
+		_, err := parseSignatureElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "missing SignedInfo")
 	})
@@ -116,7 +122,7 @@ func TestParseSignatureElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 			`</ds:Reference></ds:SignedInfo>`
 		doc := mustParse(t, `<ds:Signature xmlns:ds="`+dsigNS+`">`+si+`</ds:Signature>`)
-		_, err := parseSignatureElement(doc.DocumentElement())
+		_, err := parseSignatureElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "missing SignatureValue")
 	})
@@ -131,7 +137,7 @@ func TestParseSignatureElement(t *testing.T) {
 			`</ds:Reference></ds:SignedInfo>`
 		doc := mustParse(t, `<ds:Signature xmlns:ds="`+dsigNS+`">`+si+
 			`<ds:SignatureValue xmlns:ds="`+dsigNS+`">!!!bad</ds:SignatureValue></ds:Signature>`)
-		_, err := parseSignatureElement(doc.DocumentElement())
+		_, err := parseSignatureElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 	})
 }
@@ -143,7 +149,7 @@ func TestParseSignedInfo(t *testing.T) {
 			`</ds:SignedInfo>`
 		doc := mustParse(t, si)
 		var parsed parsedSignature
-		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "CanonicalizationMethod missing Algorithm")
 	})
@@ -154,7 +160,7 @@ func TestParseSignedInfo(t *testing.T) {
 			`</ds:SignedInfo>`
 		doc := mustParse(t, si)
 		var parsed parsedSignature
-		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "SignatureMethod missing Algorithm")
 	})
@@ -171,7 +177,7 @@ func TestParseSignedInfo(t *testing.T) {
 			`</ds:Reference></ds:SignedInfo>`
 		doc := mustParse(t, si)
 		var parsed parsedSignature
-		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "missing CanonicalizationMethod")
 	})
@@ -188,7 +194,7 @@ func TestParseSignedInfo(t *testing.T) {
 			`</ds:Reference></ds:SignedInfo>`
 		doc := mustParse(t, si)
 		var parsed parsedSignature
-		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "missing SignatureMethod")
 	})
@@ -200,7 +206,7 @@ func TestParseSignedInfo(t *testing.T) {
 			`</ds:SignedInfo>`
 		doc := mustParse(t, si)
 		var parsed parsedSignature
-		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "no Reference")
 	})
@@ -219,7 +225,7 @@ func TestParseSignedInfo(t *testing.T) {
 			`</ds:Reference></ds:SignedInfo>`
 		doc := mustParse(t, si)
 		var parsed parsedSignature
-		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "multiple CanonicalizationMethod")
 	})
@@ -236,7 +242,7 @@ func TestParseSignedInfo(t *testing.T) {
 			`</ds:Reference></ds:SignedInfo>`
 		doc := mustParse(t, si)
 		var parsed parsedSignature
-		err := parseSignedInfo(doc.DocumentElement(), &parsed)
+		err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "multiple SignatureMethod")
 	})
@@ -248,7 +254,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestMethod xmlns:ds="` + dsigNS + `"/>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "DigestMethod missing Algorithm")
 	})
@@ -259,7 +265,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">!!!bad</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 	})
 
@@ -271,7 +277,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "missing DigestMethod")
 	})
@@ -284,7 +290,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "missing DigestValue")
 	})
@@ -300,7 +306,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		ref, err := parseReferenceElement(doc.DocumentElement())
+		ref, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.NoError(t, err)
 		require.Len(t, ref.transforms, 1)
 		require.Equal(t, []string{"a", "b"}, ref.transforms[0].prefixes)
@@ -322,7 +328,7 @@ func TestParseReferenceElement(t *testing.T) {
 					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 					`</ds:Reference>`
 				doc := mustParse(t, r)
-				_, err := parseReferenceElement(doc.DocumentElement())
+				_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 				require.ErrorIs(t, err, ErrUnsupportedTransform)
 				require.Contains(t, err.Error(), "ec:InclusiveNamespaces")
 			})
@@ -342,7 +348,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 	})
 
@@ -360,7 +366,7 @@ func TestParseReferenceElement(t *testing.T) {
 					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 					`</ds:Reference>`
 				doc := mustParse(t, r)
-				ref, err := parseReferenceElement(doc.DocumentElement())
+				ref, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 				require.NoError(t, err)
 				require.Len(t, ref.transforms, 1)
 				require.Equal(t, []string{"a", "b"}, ref.transforms[0].prefixes)
@@ -385,7 +391,7 @@ func TestParseReferenceElement(t *testing.T) {
 					`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 					`</ds:Reference>`
 				doc := mustParse(t, r)
-				_, err := parseReferenceElement(doc.DocumentElement())
+				_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 				require.ErrorIs(t, err, ErrUnsupportedTransform)
 				require.Contains(t, err.Error(), "Transform parameter")
 			})
@@ -405,7 +411,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 		require.Contains(t, err.Error(), "multiple ec:InclusiveNamespaces")
 	})
@@ -418,7 +424,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "multiple DigestMethod")
 	})
@@ -433,7 +439,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">BB==</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "multiple DigestValue")
 	})
@@ -452,7 +458,7 @@ func TestParseReferenceElement(t *testing.T) {
 			`<ds:DigestValue xmlns:ds="` + dsigNS + `">AA==</ds:DigestValue>` +
 			`</ds:Reference>`
 		doc := mustParse(t, r)
-		_, err := parseReferenceElement(doc.DocumentElement())
+		_, err := parseReferenceElement(context.Background(), testVerifyBudget(), doc.DocumentElement())
 		require.ErrorIs(t, err, ErrInvalidSignature)
 		require.Contains(t, err.Error(), "multiple Transforms")
 	})
@@ -984,7 +990,7 @@ func TestVerifyRejectsSignatureMethodParameter(t *testing.T) {
 		`</ds:SignedInfo>`
 	doc := mustParse(t, si)
 	var parsed parsedSignature
-	err := parseSignedInfo(doc.DocumentElement(), &parsed)
+	err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 	require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
 	require.Contains(t, err.Error(), "SignatureMethod parameter")
 }
@@ -1005,7 +1011,7 @@ func TestVerifyRejectsCanonicalizationMethodParameter(t *testing.T) {
 		`</ds:SignedInfo>`
 	doc := mustParse(t, si)
 	var parsed parsedSignature
-	err := parseSignedInfo(doc.DocumentElement(), &parsed)
+	err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 	require.Contains(t, err.Error(), "CanonicalizationMethod parameter")
 }
@@ -1031,7 +1037,7 @@ func TestVerifyRejectsInclusiveNamespacesOnNonExclusiveC14N(t *testing.T) {
 				`</ds:SignedInfo>`
 			doc := mustParse(t, si)
 			var parsed parsedSignature
-			err := parseSignedInfo(doc.DocumentElement(), &parsed)
+			err := parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed)
 			require.ErrorIs(t, err, ErrUnsupportedTransform)
 			require.Contains(t, err.Error(), "ec:InclusiveNamespaces")
 		})
@@ -1056,7 +1062,7 @@ func TestVerifyAcceptsInclusiveNamespacesOnExclusiveC14N(t *testing.T) {
 				`</ds:SignedInfo>`
 			doc := mustParse(t, si)
 			var parsed parsedSignature
-			require.NoError(t, parseSignedInfo(doc.DocumentElement(), &parsed))
+			require.NoError(t, parseSignedInfo(context.Background(), testVerifyBudget(), doc.DocumentElement(), &parsed))
 			require.Equal(t, []string{"extra", "ns2"}, parsed.c14nPrefixes)
 		})
 	}

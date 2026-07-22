@@ -75,7 +75,7 @@ func TestXSLTTransformDigestOverStylesheetOutput(t *testing.T) {
 
 	refElem := findLocal(parsedDoc.DocumentElement(), "Reference")
 	require.NotNil(t, refElem)
-	ref, err := parseReferenceElement(refElem)
+	ref, err := parseReferenceElement(t.Context(), testVerifyBudget(), refElem)
 	require.NoError(t, err)
 	require.Len(t, ref.transforms, 1)
 	require.Equal(t, TransformXSLT, ref.transforms[0].algorithm)

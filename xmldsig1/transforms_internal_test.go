@@ -150,7 +150,7 @@ func TestInclusiveNamespaces(t *testing.T) {
 
 		ref := buildExcC14NReference(t, doc, "evil", "urn:example:evil", "a b c")
 
-		_, err = parseReferenceElement(ref)
+		_, err = parseReferenceElement(context.Background(), testVerifyBudget(), ref)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 		require.Contains(t, err.Error(), "Transform parameter")
 	})
@@ -163,7 +163,7 @@ func TestInclusiveNamespaces(t *testing.T) {
 
 		ref := buildExcC14NReference(t, doc, "ec", ExcC14N10, "a b c")
 
-		parsed, err := parseReferenceElement(ref)
+		parsed, err := parseReferenceElement(context.Background(), testVerifyBudget(), ref)
 		require.NoError(t, err)
 		require.Len(t, parsed.transforms, 1)
 		require.Equal(t, []string{"a", "b", "c"}, parsed.transforms[0].prefixes,

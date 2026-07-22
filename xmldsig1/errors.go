@@ -46,6 +46,17 @@ var (
 	// memory during verification.
 	ErrReferenceTooLarge = errors.New("xmldsig1: external reference exceeds size cap")
 
+	// ErrResourceLimitExceeded is returned when an attacker-controlled Signature
+	// element exceeds one of the Verifier's parse-time resource caps before the
+	// SignatureValue is checked: too many ds:Reference elements
+	// ([Verifier.MaxReferences]), too many KeyInfo entries
+	// ([Verifier.MaxKeyInfoEntries]), or too many total base64-decoded bytes
+	// across DigestValue/SignatureValue/X509Certificate
+	// ([Verifier.MaxDecodedBytes]). The caps have conservative defaults and bound
+	// the decode/parse work an unsigned document can force before verification
+	// rejects it.
+	ErrResourceLimitExceeded = errors.New("xmldsig1: verification resource limit exceeded")
+
 	// ErrAmbiguousReference is returned when a Reference URI resolves to more
 	// than one element. This is the primary defense against XML Signature
 	// Wrapping (XSW) attacks where an attacker injects a duplicate-ID element

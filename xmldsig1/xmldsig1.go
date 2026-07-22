@@ -225,6 +225,18 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // reference into the Object verifies under inclusive Canonical XML 1.0 or 1.1.
 // Exclusive Canonical XML inherits no xml:*, so its digests are unaffected.
 //
+// Placement (inclusive C14N only): the same proxy canonicalizes SignedInfo, and
+// an in-Object Reference is digested under the context of the signing document
+// element. When SignedInfo's CanonicalizationMethod or an in-Object Reference
+// uses inclusive Canonical XML (C14N10 / C14N11), the caller MUST place the
+// returned Signature directly under the document element, or under an element
+// with the same in-scope namespaces and inherited xml:* attributes. Placing it
+// under an element that contributes extra in-scope namespace declarations or
+// xml:* attributes changes the inclusively-canonicalized bytes, so verification
+// recomputes a different canonical form and fails. Exclusive Canonical XML (the
+// [NewSigner] default, [ExcC14NTransform]) inherits no such context and is
+// unaffected by placement.
+//
 // Every content entry must be a movable node (helium.MutableNode); an ordinary
 // DOM element qualifies. A nil, typed-nil, or read-only content entry (e.g. a
 // namespace-node wrapper) is rejected with an indexed error wrapping
@@ -249,6 +261,18 @@ func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, conten
 // SignDetached creates a detached Signature element referencing URIs
 // specified in the configured References. Returns the Signature element.
 //
+// Placement (inclusive C14N only): SignedInfo is canonicalized under a proxy
+// carrying the signing document element's inherited canonicalization context. If
+// SignedInfo is canonicalized with inclusive Canonical XML (C14N10 / C14N11) —
+// the SignedInfo CanonicalizationMethod, not the Reference transforms — the
+// caller MUST place the returned Signature directly under the document element,
+// or under an element with the same in-scope namespaces and inherited xml:*
+// attributes. Placing it under an element that contributes extra in-scope
+// namespace declarations or xml:* attributes changes the bytes inclusive C14N
+// canonicalizes for SignedInfo, so verification recomputes a different canonical
+// form and fails. Exclusive Canonical XML (the [NewSigner] default,
+// [ExcC14NTransform]) inherits no such context and is unaffected by placement.
+//
 // Lifetime: the returned Signature is allocated from doc's slab storage (its
 // nodes are created via doc.CreateElement) and is owned by doc, but a successful
 // sign leaves it safe to keep after doc.Free(). Canonicalizing SignedInfo grafts
@@ -260,6 +284,17 @@ func (s Signer) SignEnveloping(ctx context.Context, doc *helium.Document, conten
 func (s Signer) SignDetached(ctx context.Context, doc *helium.Document, key any) (*helium.Element, error) {
 	return signDetached(ctx, s.config(), doc, key)
 }
+
+// Conservative default parse-time resource caps for verification. They bound
+// the decode/parse work an unsigned, attacker-controlled Signature element can
+// force BEFORE the SignatureValue is checked, while sitting comfortably above
+// any legitimate signature so existing documents verify unchanged. A zero
+// config field selects the matching default; a negative field disables that cap.
+const (
+	defaultMaxReferences     = 1024
+	defaultMaxKeyInfoEntries = 256
+	defaultMaxDecodedBytes   = 10 << 20 // 10 MiB
+)
 
 // verifierConfig holds the configuration for a Verifier.
 type verifierConfig struct {
@@ -274,6 +309,40 @@ type verifierConfig struct {
 	// xsltTransformer applies the XSLT transform. nil (the default) keeps the XSLT
 	// transform fail-closed with ErrUnsupportedTransform.
 	xsltTransformer XSLTTransformer
+	// Parse-time resource caps (see the default* constants). Zero selects the
+	// default; negative disables the cap.
+	maxReferences     int
+	maxKeyInfoEntries int
+	maxDecodedBytes   int
+}
+
+// maxReferencesLimit returns the effective cap on the number of ds:Reference
+// elements: the configured value, or the default when unset (zero). A negative
+// value is returned as-is, disabling the cap at the enforcement site (which
+// gates on limit > 0).
+func (cfg *verifierConfig) maxReferencesLimit() int {
+	if cfg.maxReferences == 0 {
+		return defaultMaxReferences
+	}
+	return cfg.maxReferences
+}
+
+// maxKeyInfoEntriesLimit returns the effective cap on the number of KeyInfo
+// entries (X509Data children plus KeyInfo children), defaulting when unset.
+func (cfg *verifierConfig) maxKeyInfoEntriesLimit() int {
+	if cfg.maxKeyInfoEntries == 0 {
+		return defaultMaxKeyInfoEntries
+	}
+	return cfg.maxKeyInfoEntries
+}
+
+// maxDecodedBytesLimit returns the effective cap on total base64-decoded bytes
+// across DigestValue/SignatureValue/X509Certificate, defaulting when unset.
+func (cfg *verifierConfig) maxDecodedBytesLimit() int {
+	if cfg.maxDecodedBytes == 0 {
+		return defaultMaxDecodedBytes
+	}
+	return cfg.maxDecodedBytes
 }
 
 // parser returns the parser used for external reference octets: the configured
@@ -392,6 +461,44 @@ func (v Verifier) ReferenceParser(p helium.Parser) Verifier {
 func (v Verifier) XSLTTransformer(t XSLTTransformer) Verifier {
 	v = v.clone()
 	v.cfg.xsltTransformer = t
+	return v
+}
+
+// MaxReferences caps the number of ds:Reference elements the verifier parses
+// out of SignedInfo. A document whose Signature declares more References than
+// the cap is rejected with [ErrResourceLimitExceeded] before any Reference is
+// digested, bounding the per-Reference canonicalization work an unsigned,
+// attacker-controlled document can force. n <= 0 has special meaning: 0 (the
+// default) selects the conservative built-in cap, and a negative n disables the
+// cap entirely. The default sits well above any legitimate signature.
+func (v Verifier) MaxReferences(n int) Verifier {
+	v = v.clone()
+	v.cfg.maxReferences = n
+	return v
+}
+
+// MaxKeyInfoEntries caps the number of KeyInfo entries the verifier parses: the
+// KeyInfo element's own children plus every X509Data child (each
+// X509Certificate is parsed with x509.ParseCertificate, which is not free). A
+// KeyInfo carrying more entries than the cap is rejected with
+// [ErrResourceLimitExceeded]. n <= 0 has special meaning: 0 (the default)
+// selects the conservative built-in cap, and a negative n disables the cap.
+func (v Verifier) MaxKeyInfoEntries(n int) Verifier {
+	v = v.clone()
+	v.cfg.maxKeyInfoEntries = n
+	return v
+}
+
+// MaxDecodedBytes caps the running total of base64-decoded bytes the verifier
+// produces while parsing the Signature element before the SignatureValue check
+// — across DigestValue, SignatureValue, and X509Certificate content. Exceeding
+// the cap is rejected with [ErrResourceLimitExceeded], bounding the decode
+// allocation an attacker-controlled document can force. n <= 0 has special
+// meaning: 0 (the default) selects the conservative built-in cap, and a
+// negative n disables the cap.
+func (v Verifier) MaxDecodedBytes(n int) Verifier {
+	v = v.clone()
+	v.cfg.maxDecodedBytes = n
 	return v
 }
 

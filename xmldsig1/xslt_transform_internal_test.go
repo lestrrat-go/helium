@@ -17,7 +17,7 @@ func parseReferenceFragment(t *testing.T, frag string) (parsedReference, error) 
 	require.NoError(t, err)
 	ref := findLocal(doc.DocumentElement(), "Reference")
 	require.NotNil(t, ref, "fragment must contain a ds:Reference")
-	return parseReferenceElement(ref)
+	return parseReferenceElement(context.Background(), testVerifyBudget(), ref)
 }
 
 // TestParseXSLTTransform locks the parse-side handling of the XSLT transform: a
