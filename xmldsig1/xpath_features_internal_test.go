@@ -321,6 +321,14 @@ func TestParseGeneralXPointer(t *testing.T) {
 		require.Equal(t, "//a[contains(.,'(x)')]", expr)
 	})
 
+	t.Run("xmlns after xpointer does not match", func(t *testing.T) {
+		// The XPointer framework grammar requires every xmlns() part to precede
+		// the xpointer() part. A trailing xmlns() must NOT be bound out of order;
+		// the URI fails to match and stays fail-closed.
+		_, _, ok := parseGeneralXPointer("#xpointer(//a:foo)xmlns(a=urn:x)")
+		require.False(t, ok)
+	})
+
 	t.Run("unsupported scheme does not match", func(t *testing.T) {
 		_, _, ok := parseGeneralXPointer("#element(/1/2)")
 		require.False(t, ok)

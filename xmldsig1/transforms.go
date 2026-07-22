@@ -920,14 +920,15 @@ func parseXPointerID(expr string) (string, bool) {
 
 // parseGeneralXPointer recognizes a general XPointer URI of the XPointer
 // framework form: a "#" followed by zero or more xmlns(prefix=uri) scheme parts
-// and exactly one xpointer(<expr>) scheme part, in any order. It returns the
-// prefix->URI overrides declared by the xmlns() parts, the (paren-unescaped)
-// XPath expression from the xpointer() part, and whether the URI matched this
-// shape at all. A URI that is not "#"-prefixed, carries an unsupported scheme
-// (element(), xpath1(), ...), is malformed (unbalanced parens, an xmlns part
-// without "="), or lacks an xpointer part does NOT match — the caller then keeps
-// its existing fail-closed handling. The four fast-path forms handled by
-// referenceURIForm never reach here, so they stay byte-identical.
+// and then exactly one xpointer(<expr>) scheme part. It returns the prefix->URI
+// overrides declared by the xmlns() parts, the (paren-unescaped) XPath expression
+// from the xpointer() part, and whether the URI matched this shape at all. A URI
+// that is not "#"-prefixed, carries an unsupported scheme (element(), xpath1(),
+// ...), is malformed (unbalanced parens, an xmlns part without "="), places an
+// xmlns() part after the xpointer() part (the framework grammar requires every
+// xmlns() to precede xpointer()), or lacks an xpointer part does NOT match — the
+// caller then keeps its existing fail-closed handling. The four fast-path forms
+// handled by referenceURIForm never reach here, so they stay byte-identical.
 func parseGeneralXPointer(uri string) (map[string]string, string, bool) {
 	if !strings.HasPrefix(uri, "#") {
 		return nil, "", false
@@ -946,6 +947,14 @@ func parseGeneralXPointer(uri string) (map[string]string, string, bool) {
 		}
 		switch scheme {
 		case "xmlns":
+			// The XPointer framework grammar requires every xmlns() scheme part to
+			// PRECEDE the xpointer() part. Reject an xmlns() that appears after
+			// xpointer() rather than binding it out of order; the URI then stays
+			// fail-closed (an external reference) exactly as any other unmatched
+			// shape.
+			if haveXPointer {
+				return nil, "", false
+			}
 			prefix, ns, ok := parseXmlnsPart(data)
 			if !ok {
 				return nil, "", false
