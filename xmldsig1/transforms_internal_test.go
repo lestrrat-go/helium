@@ -514,7 +514,7 @@ func TestVerifyReferenceRejectsTransform(t *testing.T) {
 			},
 		}
 
-		_, err = verifyReference(t.Context(), doc, nil, ref, false)
+		_, _, err = verifyReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 	})
 
@@ -539,7 +539,7 @@ func TestVerifyReferenceRejectsTransform(t *testing.T) {
 			},
 		}
 
-		_, err = verifyReference(t.Context(), doc, sigElem, ref, false)
+		_, _, err = verifyReference(t.Context(), &verifierConfig{}, doc, sigElem, ref)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 
 		// The Signature element must have been reattached, not left detached.
