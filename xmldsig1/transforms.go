@@ -10,6 +10,7 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlbase64"
 	"github.com/lestrrat-go/helium/xpath1"
 
 	helium "github.com/lestrrat-go/helium"
@@ -82,13 +83,19 @@ type xpathFilter struct {
 // transformPipeline is the resolved, algorithm-agnostic result of interpreting a
 // Reference transform list: the effective canonicalization method and its
 // inclusive-namespace prefixes, whether an enveloped-signature transform is
-// present, and any XPath filter transforms (in declared order) that run on the
-// node-set before canonicalization.
+// present, any XPath filter transforms (in declared order) that run on the
+// node-set before canonicalization, and whether the octet-producing step is the
+// base64 decode transform rather than a canonicalization.
+//
+// base64 and c14nMethod are mutually exclusive: base64 ends the pipeline by
+// decoding its input node-set's string-value to octets, so no canonicalization
+// runs and c14nMethod stays empty in that case.
 type transformPipeline struct {
 	c14nMethod   string
 	prefixes     []string
 	hasEnveloped bool
 	xpathFilters []xpathFilter
+	base64       bool
 }
 
 // transformSteps converts a ReferenceConfig's typed Transform list into the
@@ -115,13 +122,24 @@ func transformSteps(ref ReferenceConfig) []transformStep {
 // the input tree.
 func preflightSignerTransforms(cfg *signerConfig) error {
 	for i, ref := range cfg.references {
-		if _, err := resolveTransformPipeline(transformSteps(ref)); err != nil {
+		pipe, err := resolveTransformPipeline(transformSteps(ref))
+		if err != nil {
 			// Carry the failing reference's index and URI so a caller signing
 			// over a multi-reference configuration can pinpoint the offending
 			// Reference, symmetric with the per-reference digest loop. The
 			// underlying sentinel (e.g. ErrUnsupportedTransform) stays matchable
 			// via errors.Is through ReferenceError.Unwrap.
 			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
+		}
+		// The base64 decode transform is verify-only: the signing digest path
+		// (processReference) canonicalizes its reference node-set and has no
+		// base64 branch, so honoring a base64 transform here would silently digest
+		// the canonicalized subtree instead of the decoded octets — a fail-open
+		// signature. Reject it fail-closed before any DOM mutation. There is no
+		// typed Transform constructor for it, but a caller can implement the
+		// exported Transform interface with this URI, so the guard is required.
+		if pipe.base64 {
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: base64 transform is not supported for signing", ErrUnsupportedTransform)}
 		}
 	}
 	return nil
@@ -134,29 +152,35 @@ func preflightSignerTransforms(cfg *signerConfig) error {
 //
 // A Reference's transform output begins as a node-set. The enveloped-signature
 // transform maps a node-set to a node-set; a canonicalization (c14n) transform
-// converts the node-set to an octet stream. helium supports no
-// octet-stream-consuming transform, so once a c14n transform has produced octets
-// no further transform — including a second c14n — may run; such a list is
-// rejected fail-closed rather than silently honoring only the last c14n.
+// and the base64 decode transform each convert the node-set to an octet stream.
+// helium supports no octet-stream-consuming transform, so once any transform has
+// produced octets no further transform — a second c14n, a base64 after a c14n,
+// or anything after a base64 — may run; such a list is rejected fail-closed
+// rather than silently honoring only the last octet-producing transform.
 //
-// When no c14n transform is declared, the XMLDSig default node-set->octet
-// conversion applies, which is inclusive Canonical XML 1.0 (NOT Exclusive C14N).
+// When no octet-producing transform is declared, the XMLDSig default
+// node-set->octet conversion applies, which is inclusive Canonical XML 1.0 (NOT
+// Exclusive C14N). The base64 transform ends the pipeline with decoded octets
+// that are digested directly, so no default c14n is applied when it is present.
 //
 // The XPath filter transform (TransformXPath) maps a node-set to a node-set and
-// so may appear before the c14n transform; each is recorded in order. helium
-// supports no octet-stream-consuming transform (e.g. XSLT, base64), so a
-// transform of any kind ordered after the c14n transform is rejected.
+// so may appear before the octet-producing transform; each is recorded in order.
+// helium supports no octet-stream-consuming transform (e.g. XSLT), so a
+// transform of any kind ordered after an octet-producing transform is rejected.
 func resolveTransformPipeline(steps []transformStep) (transformPipeline, error) {
 	var p transformPipeline
 	producedOctets := false
 	for _, t := range steps {
 		if producedOctets {
-			return transformPipeline{}, fmt.Errorf("%w: transform %s ordered after canonicalization", ErrUnsupportedTransform, t.algorithm)
+			return transformPipeline{}, fmt.Errorf("%w: transform %s ordered after an octet-producing transform", ErrUnsupportedTransform, t.algorithm)
 		}
 		switch t.algorithm {
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
 			p.c14nMethod = t.algorithm
 			p.prefixes = t.prefixes
+			producedOctets = true
+		case TransformBase64:
+			p.base64 = true
 			producedOctets = true
 		case TransformEnvelopedSignature:
 			p.hasEnveloped = true
@@ -166,7 +190,10 @@ func resolveTransformPipeline(steps []transformStep) (transformPipeline, error) 
 			return transformPipeline{}, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
 		}
 	}
-	if p.c14nMethod == "" {
+	// The base64 transform digests its decoded octets directly, so a Reference
+	// carrying it needs no canonicalization; only a Reference with no
+	// octet-producing transform falls back to the inclusive C14N 1.0 default.
+	if p.c14nMethod == "" && !p.base64 {
 		p.c14nMethod = C14N10
 	}
 	return p, nil
@@ -193,6 +220,27 @@ func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byt
 // the node-set of that subtree against its owning document.
 func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string) ([]byte, error) {
 	return canonicalizeNodeSet(method, collectSubtreeNodes(elem), elem.OwnerDocument(), prefixes)
+}
+
+// base64TransformOctets implements the base64 decode transform (XMLDSig core
+// §6.6.2) for a same-document node-set input. The transform's input is the
+// resolved element's node-set; the spec converts a node-set input to octets by
+// taking its XPath 1.0 string-value (equivalently, applying self::text() and
+// concatenating), which is the element's concatenated descendant text with all
+// element start/end tags, comments, and processing instructions stripped — so
+// domutil.TextContent(target) is exactly that value. The concatenated text is
+// base64-decoded (XML whitespace within the base64 is ignored by the decoder)
+// and the decoded octets are digested directly, with no canonicalization after.
+//
+// Invalid base64 in the input is fail-closed as ErrInvalidSignature, matching how
+// a malformed DigestValue/SignatureValue base64 is reported, so a Reference whose
+// base64 content cannot be decoded never digests partial or unintended bytes.
+func base64TransformOctets(target *helium.Element) ([]byte, error) {
+	decoded, err := xmlbase64.DecodeString(domutil.TextContent(target))
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid base64 transform input: %v", ErrInvalidSignature, err)
+	}
+	return decoded, nil
 }
 
 // canonicalizeNodeSet canonicalizes an explicit node-set against doc using the

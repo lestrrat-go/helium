@@ -61,6 +61,12 @@ const (
 const (
 	TransformEnvelopedSignature = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
 	TransformXPath              = "http://www.w3.org/TR/1999/REC-xpath-19991116"
+	// TransformBase64 is the base64 decode transform (XMLDSig core §6.6.2). Its
+	// input node-set's XPath 1.0 string-value is base64-decoded and the decoded
+	// octets are digested directly, with no canonicalization applied afterward.
+	// It is verify-only: signing has no typed Transform for it and the sign
+	// preflight rejects it fail-closed.
+	TransformBase64 = "http://www.w3.org/2000/09/xmldsig#base64"
 )
 
 // Namespace prefix used when constructing signature elements.

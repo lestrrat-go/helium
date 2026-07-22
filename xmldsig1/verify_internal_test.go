@@ -887,7 +887,7 @@ func TestVerifyTransformAfterCanonicalization(t *testing.T) {
 
 	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
-	require.Contains(t, err.Error(), "ordered after canonicalization")
+	require.Contains(t, err.Error(), "ordered after an octet-producing transform")
 }
 
 // TestVerifyOmittedTransformDefaultsToC14N10 guards DSIG-001's default: a
