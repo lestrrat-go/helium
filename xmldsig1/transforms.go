@@ -51,13 +51,43 @@ type excC14NTransform struct {
 
 func (excC14NTransform) URI() string { return ExcC14N10 }
 
-// Prefixes returns the inclusive namespace prefixes for this transform.
-func (t excC14NTransform) Prefixes() []string { return t.prefixes }
+// Prefixes returns the inclusive namespace prefixes for this transform. The
+// returned slice is a copy, so a caller cannot mutate the transform's internal
+// prefix list through it.
+func (t excC14NTransform) Prefixes() []string { return slices.Clone(t.prefixes) }
 
 // ExcC14NTransform returns an Exclusive C14N transform with optional
-// inclusive namespace prefixes.
+// inclusive namespace prefixes. The prefixes are copied, so a later mutation of
+// the caller's slice cannot alter the returned transform.
 func ExcC14NTransform(prefixes ...string) Transform {
-	return excC14NTransform{prefixes: prefixes}
+	return excC14NTransform{prefixes: slices.Clone(prefixes)}
+}
+
+// cloneReferenceTransforms returns a deep copy of a Reference's transform slice:
+// a fresh backing array plus a copy of each mutable transform's internal state.
+// Signer.clone uses it so a later caller mutation of the original Transforms
+// slice (or of a prefix slice a transform holds) cannot alter an
+// already-configured Signer or race with an in-flight signing operation.
+func cloneReferenceTransforms(transforms []Transform) []Transform {
+	if transforms == nil {
+		return nil
+	}
+	out := make([]Transform, len(transforms))
+	for i, t := range transforms {
+		out[i] = cloneTransform(t)
+	}
+	return out
+}
+
+// cloneTransform returns a copy of t that shares no mutable state with t. Only
+// excC14NTransform carries mutable state (its prefix slice); every other
+// Transform is an immutable value and is returned unchanged.
+func cloneTransform(t Transform) Transform {
+	exc, ok := t.(excC14NTransform)
+	if !ok {
+		return t
+	}
+	return excC14NTransform{prefixes: slices.Clone(exc.prefixes)}
 }
 
 // transformStep is the algorithm-agnostic view of a single Reference transform,

@@ -133,6 +133,36 @@ func TestWeakAlgorithmPreflight(t *testing.T) {
 		require.Equal(t, "#second", refErr.URI)
 	})
 
+	// verify weak digest error carries index and uri asserts that a per-reference
+	// weak-digest rejection in the VERIFY preflight identifies WHICH reference
+	// failed, symmetric with the sign side. The signature uses a strong signature
+	// algorithm (RSA-SHA256) but a SHA-1 digest, so the digest preflight — not the
+	// signature-algorithm check — is what rejects it, and the returned error must
+	// both match ErrWeakAlgorithm and expose the failing reference's index (0) and
+	// URI ("") through a *VerificationError.
+	t.Run("verify weak digest error carries index and uri", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+		signer := xmldsig1.NewSigner().
+			AllowSHA1(true).
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "",
+				DigestAlgorithm: xmldsig1.DigestSHA1,
+				Transforms:      []xmldsig1.Transform{xmldsig1.Enveloped(), xmldsig1.ExcC14NTransform()},
+			})
+		require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+
+		verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+		_, err := verifier.Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrWeakAlgorithm)
+
+		var verErr *xmldsig1.VerificationError
+		require.True(t, errors.As(err, &verErr))
+		require.Equal(t, 0, verErr.Reference)
+		require.Equal(t, "", verErr.URI)
+	})
+
 	// verify sha1 rejected before key resolution asserts that verifying a SHA-1
 	// signature returns ErrWeakAlgorithm WITHOUT invoking KeySource.
 	t.Run("verify sha1 rejected before key resolution", func(t *testing.T) {
