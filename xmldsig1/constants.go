@@ -96,3 +96,13 @@ const (
 	TypeManifest  = "http://www.w3.org/2000/09/xmldsig#Manifest"
 	TypeSignProps = "http://www.w3.org/2000/09/xmldsig#SignatureProperties"
 )
+
+// Type URIs for the ds:RetrievalMethod Type attribute, identifying the kind of
+// key material the referenced resource holds.
+const (
+	// TypeRawX509Certificate identifies a resource that is a single raw (DER)
+	// X.509 certificate.
+	TypeRawX509Certificate = "http://www.w3.org/2000/09/xmldsig#rawX509Certificate"
+	// TypeX509Data identifies a resource that is a ds:X509Data element.
+	TypeX509Data = "http://www.w3.org/2000/09/xmldsig#X509Data"
+)
