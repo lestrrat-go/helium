@@ -31,7 +31,6 @@ const maxRetrievalMethodDepth = 5
 // certificate never trusts it, so the caller's KeySource and out-of-band trust
 // decision still governs an obtained cert exactly as it does an inline one.
 func resolveRetrievalMethods(ctx context.Context, cfg *verifierConfig, doc *helium.Document, keyInfoElem *helium.Element, data *KeyInfoData) error {
-	visited := make(map[string]struct{})
 	for child := keyInfoElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -42,6 +41,12 @@ func resolveRetrievalMethods(ctx context.Context, cfg *verifierConfig, doc *heli
 		if !isDSigCoreNS(elem) || domutil.LocalName(elem) != "RetrievalMethod" {
 			continue
 		}
+		// The visited-URI set breaks a cyclic/unbounded RetrievalMethod chain, so
+		// it is scoped to each top-level chain: two independent sibling
+		// RetrievalMethods may legitimately target the same URI, and sharing one
+		// set across siblings would misreport the second as a loop. It flows only
+		// through the recursive processRetrievalMethod calls that follow a chain.
+		visited := make(map[string]struct{})
 		if err := processRetrievalMethod(ctx, cfg, doc, elem, data, visited, 0); err != nil {
 			return err
 		}

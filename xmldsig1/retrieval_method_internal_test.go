@@ -186,6 +186,29 @@ func TestRetrievalMethodResolvesObjectInsideVerifiedSignature(t *testing.T) {
 	require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
 }
 
+// TestReviewSiblingRetrievalMethodsSharingURI proves two independent top-level
+// ds:RetrievalMethod siblings may target the same same-document URI without the
+// second being misreported as a loop: the visited-URI set is scoped per
+// top-level chain, so each sibling resolves its shared #cert target and both
+// certificates are collected.
+func TestReviewSiblingRetrievalMethodsSharingURI(t *testing.T) {
+	cert, der := selfSignedCert(t)
+	certB64 := base64.StdEncoding.EncodeToString(der)
+	doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`">`+
+		`<ds:RetrievalMethod URI="#cert" Type="`+TypeX509Data+`"/>`+
+		`<ds:RetrievalMethod URI="#cert" Type="`+TypeX509Data+`"/>`+
+		`<ds:X509Data Id="cert"><ds:X509Certificate>`+certB64+
+		`</ds:X509Certificate></ds:X509Data></ds:KeyInfo>`)
+	cfg := &verifierConfig{}
+	data := &KeyInfoData{}
+
+	err := resolveRetrievalMethods(t.Context(), cfg, doc, doc.DocumentElement(), data)
+	require.NoError(t, err)
+	require.Len(t, data.X509Certificates, 2)
+	require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	require.Equal(t, cert.Raw, data.X509Certificates[1].Raw)
+}
+
 // TestRetrievalMethodRejectsUnsupportedTransform proves a RetrievalMethod's
 // ds:Transforms are inspected and applied, not ignored: an unsupported transform
 // fails closed with ErrUnsupportedTransform for both external and same-document
