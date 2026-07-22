@@ -529,10 +529,13 @@ func processReference(_ context.Context, doc *helium.Document, sigElem, signedIn
 	// would. The output begins as a node-set; an octet-producing c14n transform
 	// ends the pipeline, and when no c14n transform is configured the default
 	// node-set->octet conversion is inclusive Canonical XML 1.0.
-	c14nMethod, prefixes, hasEnveloped, err := resolveTransformPipeline(transformSteps(ref))
+	pipe, err := resolveTransformPipeline(transformSteps(ref))
 	if err != nil {
 		return err
 	}
+	c14nMethod := pipe.c14nMethod
+	prefixes := pipe.prefixes
+	hasEnveloped := pipe.hasEnveloped
 
 	// Classify the URI's node-set form (§4.3.3.2-3) so the digest is computed
 	// exactly as a verifier reading these same elements would. wholeDoc selects

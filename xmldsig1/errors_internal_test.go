@@ -36,11 +36,11 @@ func TestUnsupportedTransformErrorWrapping(t *testing.T) {
 		uri:             "",
 		digestAlgorithm: DigestSHA256,
 		transforms: []parsedTransform{
-			{algorithm: TransformXPath},
+			{algorithm: "urn:bogus:transform"},
 		},
 	}
 
-	_, refErr := verifyReference(doc, nil, ref, false)
+	_, refErr := verifyReference(t.Context(), doc, nil, ref, false)
 	require.Error(t, refErr)
 
 	// Wrap in the actual type callers receive and confirm errors.Is still

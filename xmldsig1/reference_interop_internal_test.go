@@ -85,7 +85,7 @@ func TestXPointerReferenceDigests(t *testing.T) {
 			doc, parsed := parseVectorSignature(t, name)
 			require.NotEmpty(t, parsed.references)
 			for i, ref := range parsed.references {
-				_, canonical, err := canonicalizeReference(doc, findSig(doc.DocumentElement()), ref)
+				_, canonical, err := canonicalizeReference(t.Context(), doc, findSig(doc.DocumentElement()), ref)
 				require.NoErrorf(t, err, "reference %d (%q) canonicalization", i, ref.uri)
 				// allowSHA1 is true here: these interop vectors predate the
 				// SHA-1 deprecation, and the test asserts the digest bytes, not

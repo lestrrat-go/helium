@@ -18,7 +18,7 @@ relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, in
 schematron     → helium, xpath1, internal/xpath, internal/xpath1/number
 xpointer       → helium, xpath1, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil
-xmldsig1       → helium, c14n, internal/lexicon, internal/domutil
+xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil
 xmlenc1        → helium, internal/domutil
 html           → helium, sax, push, internal/xmlchar
 catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, internal/xmlchar
@@ -55,7 +55,7 @@ helium (root) → sax, enum, internal/*
 c14n, xpath1, xpath3, html, catalog, relaxng, stream, xmlenc1
 
 ## Security layer (depends on processing)
-xmldsig1 (root + c14n + internal/lexicon)
+xmldsig1 (root + c14n + xpath1 + internal/lexicon; xpath1 backs the XPath filter transform)
 
 ## Composition layer (depends on processing)
 xsd (root + xpath1 + xpath3 + internal/lexicon), xpointer (root + xpath1 + internal/xmlchar), schematron (root + xpath1 + internal/xpath + internal/xpath1/number), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)
