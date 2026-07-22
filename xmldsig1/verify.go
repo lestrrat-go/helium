@@ -11,20 +11,23 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
-// isNilKeySource reports whether a KeySource is effectively nil. A plain
-// `cfg.keySource == nil` only catches an untyped-nil interface; a typed-nil
-// pointer (e.g. `var ks *myKeySource; NewVerifier(ks)`) yields a non-nil
-// interface whose underlying value is nil, so calling ResolveKey on it would
-// panic on the nil-receiver dereference. Detect that case reflectively for any
-// nil-capable underlying kind.
-func isNilKeySource(ks KeySource) bool {
-	if ks == nil {
+// isNilInterface reports whether v is effectively nil. A plain `v == nil` only
+// catches an untyped-nil interface; a typed-nil pointer (e.g.
+// `var ks *myKeySource; NewVerifier(ks)`, or `Verifier.XSLTTransformer((*t)(nil))`)
+// yields a non-nil interface whose underlying value is nil, so calling a
+// pointer-receiver method on it would panic on the nil-receiver dereference.
+// Detect that case reflectively for any nil-capable underlying kind. It backs
+// both the KeySource and XSLTTransformer nil guards so a typed-nil value the
+// builder stored verbatim fails closed (ErrNoKeySource / ErrUnsupportedTransform)
+// instead of panicking.
+func isNilInterface(v any) bool {
+	if v == nil {
 		return true
 	}
-	v := reflect.ValueOf(ks)
-	switch v.Kind() {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
 	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice, reflect.Interface:
-		return v.IsNil()
+		return rv.IsNil()
 	default:
 		return false
 	}
@@ -71,11 +74,11 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 
 	// A zero-value Verifier{} constructed directly (bypassing NewVerifier) has
 	// a nil cfg, and a nil KeySource (e.g. NewVerifier(nil)) cannot resolve a
-	// key. isNilKeySource also catches a typed-nil pointer KeySource, whose
+	// key. isNilInterface also catches a typed-nil pointer KeySource, whose
 	// non-nil interface would otherwise slip past a plain == nil check and panic
 	// inside ResolveKey below. Reject all of these up front so config-controlled
 	// cases return a typed error instead of panicking on a nil dereference.
-	if cfg == nil || isNilKeySource(cfg.keySource) {
+	if cfg == nil || isNilInterface(cfg.keySource) {
 		return nil, ErrNoKeySource
 	}
 
@@ -291,7 +294,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	// when no transformer is configured, mirroring the "no HTTP resolver shipped"
 	// stance — helium never runs attacker-controlled XSLT on its own.
 	if pipe.xslt != nil {
-		if cfg.xsltTransformer == nil {
+		if isNilInterface(cfg.xsltTransformer) {
 			return nil, nil, false, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
 		}
 		canonical, err = cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, canonical)
@@ -331,7 +334,27 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	if err != nil {
 		return nil, err
 	}
-	return externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
+	preXSLT, err := externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply the XSLT transform (verify-only, opt-in) exactly as the same-document
+	// path does: preXSLT is the pre-XSLT octet stream, so fail closed with
+	// ErrUnsupportedTransform when no transformer is configured (or a typed-nil one
+	// was stored), otherwise hand the stylesheet plus those octets to the injected
+	// transformer and digest its output. externalReferenceDigestInput does not
+	// consult pipe.xslt, so without this an external Reference declaring an XSLT
+	// transform would silently digest the untransformed octets, bypassing the
+	// fail-closed invariant. The sign path never reaches here with an XSLT step:
+	// preflightSignerTransforms rejects it fail-closed before dereferencing.
+	if pipe.xslt != nil {
+		if isNilInterface(cfg.xsltTransformer) {
+			return nil, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
+		}
+		return cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, preXSLT)
+	}
+	return preXSLT, nil
 }
 
 // canonicalizeWithXPathFilters processes a Reference that carries one or more

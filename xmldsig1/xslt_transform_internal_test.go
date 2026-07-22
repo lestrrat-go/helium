@@ -1,6 +1,7 @@
 package xmldsig1
 
 import (
+	"context"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -169,3 +170,90 @@ type customTransform struct {
 }
 
 func (c customTransform) URI() string { return c.uri }
+
+// markerXSLTTransformer is a POINTER-receiver XSLTTransformer whose method
+// dereferences its receiver (reading p.marker). A typed-nil
+// (*markerXSLTTransformer)(nil) yields a non-nil interface wrapping a nil
+// pointer, so a plain cfg.xsltTransformer == nil check misses it and the call
+// would panic on the nil-receiver dereference. The XSLT gate must instead treat
+// a typed-nil value as absent and fail closed with ErrUnsupportedTransform. When
+// non-nil it prefixes its marker to the input so a test can prove the
+// transformer's output — not the pre-XSLT octets — became the digest input.
+type markerXSLTTransformer struct{ marker string }
+
+func (p *markerXSLTTransformer) TransformXSLT(_ context.Context, _, input []byte) ([]byte, error) {
+	return append([]byte(p.marker), input...), nil
+}
+
+// TestXSLTTypedNilTransformerFailsClosed covers the same-document XSLT gate: a
+// typed-nil pointer XSLTTransformer must be treated as absent and fail closed
+// with ErrUnsupportedTransform rather than panic on the nil-receiver call.
+func TestXSLTTypedNilTransformerFailsClosed(t *testing.T) {
+	const xml = `<doc><content Id="c1"><g>hi</g></content></doc>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	ref := parsedReference{
+		uri:             "#c1",
+		digestAlgorithm: DigestSHA256,
+		transforms: []parsedTransform{
+			{algorithm: TransformXSLT, stylesheet: []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>`)},
+		},
+	}
+
+	var tr *markerXSLTTransformer // typed-nil pointer: non-nil interface, nil value
+	cfg := &verifierConfig{xsltTransformer: tr}
+
+	require.NotPanics(t, func() {
+		_, octets, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Nil(t, octets)
+	})
+}
+
+// TestExternalXSLTTransform covers the external-reference XSLT path: a bare XSLT
+// transform on an external Reference must fail closed when no (or a typed-nil)
+// transformer is configured, and must digest the CONFIGURED transformer's output
+// when one is present — never the untransformed resolved octets.
+func TestExternalXSLTTransform(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	octets := []byte(`<ext>payload</ext>`)
+	res := staticResolver(octets)
+
+	xsltRef := parsedReference{
+		uri: "http://example.com/x",
+		transforms: []parsedTransform{
+			{algorithm: TransformXSLT, stylesheet: []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>`)},
+		},
+	}
+
+	t.Run("absent transformer fails closed", func(t *testing.T) {
+		cfg := &verifierConfig{referenceResolver: res}
+		out, err := resolveExternalReference(t.Context(), cfg, doc, xsltRef)
+		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		require.Nil(t, out)
+	})
+
+	t.Run("typed-nil transformer fails closed", func(t *testing.T) {
+		var tr *markerXSLTTransformer
+		cfg := &verifierConfig{referenceResolver: res, xsltTransformer: tr}
+		require.NotPanics(t, func() {
+			out, err := resolveExternalReference(t.Context(), cfg, doc, xsltRef)
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.Nil(t, out)
+		})
+	})
+
+	t.Run("configured transformer output is digested", func(t *testing.T) {
+		tr := &markerXSLTTransformer{marker: "XSLT:"}
+		cfg := &verifierConfig{referenceResolver: res, xsltTransformer: tr}
+		out, err := resolveExternalReference(t.Context(), cfg, doc, xsltRef)
+		require.NoError(t, err)
+		// A bare XSLT external reference hands the raw resolved octets to the
+		// transformer as its pre-XSLT input; the transformer's output (marker +
+		// octets) is the digest input, proving the XSLT transform ran.
+		require.Equal(t, append([]byte("XSLT:"), octets...), out)
+	})
+}

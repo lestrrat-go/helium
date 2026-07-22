@@ -191,7 +191,11 @@ digesting:
   filesystem, no network) — then filtered and canonicalized;
 - an **enveloped-signature transform on an external reference is rejected**
   fail-closed (`ErrUnsupportedTransform`): removing the Signature's own subtree is
-  meaningless on a resource that does not contain the Signature.
+  meaningless on a resource that does not contain the Signature;
+- an **XSLT transform on an external reference** applies the same off-by-default,
+  verify-only rule as a same-document reference: its pre-XSLT octets are handed to
+  the injected `XSLTTransformer` and its output digested, and with no (or a
+  typed-nil) transformer configured it fails closed with `ErrUnsupportedTransform`.
 
 A Reference satisfied through the resolver is marked `External` in the result. An
 external reference covers bytes outside the document, not an element, so

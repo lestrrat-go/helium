@@ -483,8 +483,8 @@ type pointerKeySource struct{}
 
 func (*pointerKeySource) ResolveKey(_ context.Context, _ *xmldsig1.KeyInfoData, _ string) (any, error) {
 	// Must be unreachable in TestTypedNilPointerKeySource: a typed-nil
-	// *pointerKeySource is detected by isNilKeySource before ResolveKey is ever
-	// called. Panic here so the test fails loudly if the isNilKeySource guard is
+	// *pointerKeySource is detected by isNilInterface before ResolveKey is ever
+	// called. Panic here so the test fails loudly if the isNilInterface guard is
 	// removed and ResolveKey is invoked on the nil receiver.
 	panic("typed-nil *pointerKeySource ResolveKey should not be called")
 }
@@ -553,7 +553,7 @@ func TestVerifyNilKeySource(t *testing.T) {
 	// *pointerKeySource; NewVerifier(ks)) yields a non-nil interface whose
 	// underlying value is nil, so a plain cfg.keySource == nil check misses it and
 	// ResolveKey would panic on the nil receiver. verifySignature must detect this
-	// via isNilKeySource and return a typed error instead.
+	// via isNilInterface and return a typed error instead.
 	t.Run("typed nil pointer", func(t *testing.T) {
 		doc := mustParseXML(t, nilKeySourceSigDoc)
 
