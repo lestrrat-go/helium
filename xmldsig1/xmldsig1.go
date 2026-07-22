@@ -97,6 +97,14 @@ func (s Signer) clone() Signer {
 	}
 	cp := *s.cfg
 	cp.references = append([]ReferenceConfig(nil), s.cfg.references...)
+	// Deep-copy each Reference's Transforms slice (and each transform's internal
+	// prefix slice). Copying the outer references slice alone still shares the
+	// per-Reference Transforms backing array, so a caller that mutates a
+	// Transforms slice it passed to Reference could otherwise alter this Signer
+	// or race with an in-flight sign.
+	for i := range cp.references {
+		cp.references[i].Transforms = cloneReferenceTransforms(cp.references[i].Transforms)
+	}
 	return Signer{cfg: &cp}
 }
 
@@ -126,9 +134,12 @@ func (s Signer) CanonicalizationMethod(method string) Signer {
 	return s
 }
 
-// Reference adds a Reference to be signed.
+// Reference adds a Reference to be signed. The Reference's Transforms slice is
+// copied at ingress, so a later mutation of the slice the caller passed cannot
+// alter this Signer or race with an in-flight signing operation.
 func (s Signer) Reference(ref ReferenceConfig) Signer {
 	s = s.clone()
+	ref.Transforms = cloneReferenceTransforms(ref.Transforms)
 	s.cfg.references = append(s.cfg.references, ref)
 	return s
 }

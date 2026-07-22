@@ -238,7 +238,7 @@ func ecdsaDERToRaw(der []byte, keySize int) ([]byte, error) {
 // ecdsaRawToDER converts an XML DSig r||s concatenation to ASN.1 DER.
 func ecdsaRawToDER(raw []byte, keySize int) ([]byte, error) {
 	if len(raw) != keySize*2 {
-		return nil, fmt.Errorf("xmldsig1: invalid ECDSA signature length: got %d, expected %d", len(raw), keySize*2)
+		return nil, fmt.Errorf("%w: ECDSA signature length %d is not the expected r||s width %d", ErrVerificationFailed, len(raw), keySize*2)
 	}
 	var sig struct {
 		R, S *big.Int
@@ -262,14 +262,21 @@ func verifyDSA(hash crypto.Hash, key any, data, sig []byte) error {
 	}
 	// XML-DSig encodes a DSA signature as the fixed-width r||s concatenation,
 	// each integer left-padded to the byte length of the subgroup order Q (20
-	// bytes for a 160-bit Q). Split at the midpoint: both halves share Q's
-	// width, so an odd total length cannot be a valid encoding.
-	if len(sig) == 0 || len(sig)%2 != 0 {
-		return fmt.Errorf("%w: DSA signature length %d is not a valid r||s encoding", ErrVerificationFailed, len(sig))
+	// bytes for a 160-bit Q). The total length is therefore EXACTLY twice Q's
+	// byte width. Any other length — including an even length that happens to be
+	// splittable at a midpoint — is not a valid encoding; enforcing the exact
+	// width (rather than accepting any even length and splitting in half) closes
+	// a signature-malleability gap where a mis-padded r||s would otherwise be
+	// silently reinterpreted as a different (r, s) pair.
+	if pub.Q == nil || pub.Q.Sign() <= 0 {
+		return fmt.Errorf("%w: DSA public key has no subgroup order Q", ErrVerificationFailed)
 	}
-	half := len(sig) / 2
-	r := new(big.Int).SetBytes(sig[:half])
-	s := new(big.Int).SetBytes(sig[half:])
+	qLen := (pub.Q.BitLen() + 7) / 8
+	if len(sig) != 2*qLen {
+		return fmt.Errorf("%w: DSA signature length %d is not the expected r||s width %d", ErrVerificationFailed, len(sig), 2*qLen)
+	}
+	r := new(big.Int).SetBytes(sig[:qLen])
+	s := new(big.Int).SetBytes(sig[qLen:])
 	if !dsa.Verify(pub, hashData(hash, data), r, s) {
 		return ErrVerificationFailed
 	}

@@ -2,6 +2,7 @@ package xmldsig1
 
 import (
 	"context"
+	"crypto"
 	"crypto/dsa" // verify-only legacy interop; see verifyDSA
 	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // DSA-SHA1 legacy interop digest, gated behind AllowSHA1
@@ -113,4 +114,38 @@ func TestDSASHA1VerifyEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Len(t, res.References, 1)
+}
+
+// TestVerifyDSAFixedWidth confirms verifyDSA enforces the exact fixed-width
+// r||s encoding: a correctly padded signature verifies, while a mis-padded one
+// that is still even-length and splittable at its midpoint is rejected. This
+// guards against the signature-malleability gap that accepting any even length
+// and splitting in half would leave open.
+func TestVerifyDSAFixedWidth(t *testing.T) {
+	var params dsa.Parameters
+	require.NoError(t, dsa.GenerateParameters(&params, rand.Reader, dsa.L1024N160))
+	priv := &dsa.PrivateKey{PublicKey: dsa.PublicKey{Parameters: params}}
+	require.NoError(t, dsa.GenerateKey(priv, rand.Reader))
+
+	msg := []byte("payload to sign")
+	digest := sha1.Sum(msg)
+	r, s, err := dsa.Sign(rand.Reader, priv, digest[:])
+	require.NoError(t, err)
+
+	qLen := (priv.Q.BitLen() + 7) / 8
+
+	// Correctly padded fixed-width r||s (exactly 2*qLen bytes) verifies.
+	good := append(leftPad(r.Bytes(), qLen), leftPad(s.Bytes(), qLen)...)
+	require.Len(t, good, 2*qLen)
+	require.NoError(t, verifyDSA(crypto.SHA1, &priv.PublicKey, msg, good))
+
+	// A mis-padded encoding: each half widened by one byte. It is even-length and
+	// splittable at its midpoint, so the old midpoint-split logic would have
+	// accepted it, but it is not the fixed-width 2*qLen encoding and must be
+	// rejected.
+	misPadded := append(leftPad(r.Bytes(), qLen+1), leftPad(s.Bytes(), qLen+1)...)
+	require.Len(t, misPadded, 2*(qLen+1))
+	require.Zero(t, len(misPadded)%2)
+	err = verifyDSA(crypto.SHA1, &priv.PublicKey, msg, misPadded)
+	require.ErrorIs(t, err, ErrVerificationFailed)
 }

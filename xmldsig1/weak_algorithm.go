@@ -62,9 +62,13 @@ func preflightParsedWeakAlgorithms(parsed *parsedSignature, allowSHA1 bool) erro
 	if err := rejectWeakSignatureAlgorithm(parsed.signatureAlg, allowSHA1); err != nil {
 		return err
 	}
-	for _, ref := range parsed.references {
+	for i, ref := range parsed.references {
 		if err := rejectWeakDigestAlgorithm(ref.digestAlgorithm, allowSHA1); err != nil {
-			return err
+			// Carry the failing reference's index and URI so a caller verifying a
+			// multi-reference signature can pinpoint the offending Reference,
+			// symmetric with the per-reference digest loop. The ErrWeakAlgorithm
+			// sentinel stays matchable via errors.Is through VerificationError.Unwrap.
+			return &VerificationError{Reference: i, URI: ref.uri, Err: err}
 		}
 	}
 	return nil
