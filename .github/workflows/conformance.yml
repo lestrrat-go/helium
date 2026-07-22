@@ -17,6 +17,9 @@ on:
           - qt3
           - xsd11
           - xsd10
+          - xml
+          - xmldsig2ed
+          - xmldsig11
       slow:
         description: Run performance-gated slow tests (sets HELIUM_SLOW_TESTS=1)
         type: boolean

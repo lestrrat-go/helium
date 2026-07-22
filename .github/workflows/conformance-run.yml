@@ -12,7 +12,7 @@ on:
   workflow_call:
     inputs:
       suite:
-        description: Conformance suite to run (xslt30, qt3, xsd11, xsd10)
+        description: Conformance suite to run (xslt30, qt3, xsd11, xsd10, xml, xmldsig2ed, xmldsig11)
         type: string
         default: xslt30
       slow:
@@ -68,8 +68,8 @@ jobs:
           go-version-file: helium/go.mod
           cache-dependency-path: helium-w3c-tests/go.sum
 
-      # The xsd10 run reuses the xsd11 upstream source checkout; only qt3,
-      # xslt30 and xsd11 are fetchable suite names.
+      # The xsd10 run reuses the xsd11 upstream source checkout; every other
+      # suite name is passed to `w3cgen fetch` as-is.
       - name: Resolve fetch suite
         working-directory: helium-w3c-tests
         run: |
