@@ -160,6 +160,13 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 		if err != nil {
 			return nil, err
 		}
+		// A second, resolution-aware pass dereferences any ds:RetrievalMethod and
+		// merges the retrieved certificate material into keyInfoData before key
+		// resolution. It inherits the external-Reference fail-closed posture
+		// (opt-in resolver, size cap, base-URI join).
+		if err := resolveRetrievalMethods(ctx, budget, cfg, doc, parsed.keyInfoElem, keyInfoData); err != nil {
+			return nil, err
+		}
 	}
 
 	key, err := cfg.keySource.ResolveKey(ctx, keyInfoData, parsed.signatureAlg)
@@ -388,7 +395,7 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	if err != nil {
 		return nil, err
 	}
-	octets, err := cfg.referenceResolver.ResolveReference(ctx, joined)
+	octets, err := resolveReferenceOctets(ctx, cfg.referenceResolver, joined)
 	if err != nil {
 		return nil, err
 	}
@@ -614,6 +621,74 @@ func parseSignedInfo(ctx context.Context, budget *verifyBudget, elem *helium.Ele
 	return nil
 }
 
+// parseTransformList parses the ds:Transform children of a ds:Transforms element
+// into the ordered parsedTransform list, shared by Reference and RetrievalMethod
+// parsing so both interpret a transform list identically. A Transform must be in
+// the core XML-Signature namespace; a foreign-namespace look-alike (e.g.
+// <evil:Transform Algorithm="...">) is ignored, and the 1.1 xmldsig11# namespace
+// does not satisfy the check. Each Transform's Algorithm and its validated
+// parameters (the XPath expression, or an ec:InclusiveNamespaces prefix list) are
+// recorded; an unrecognized parameter child is rejected fail-closed rather than
+// digested as if absent.
+func parseTransformList(transformsElem *helium.Element) ([]parsedTransform, error) {
+	var transforms []parsedTransform
+	for tc := transformsElem.FirstChild(); tc != nil; tc = tc.NextSibling() {
+		te, ok := helium.AsNode[*helium.Element](tc)
+		if !ok {
+			continue
+		}
+		// A Transform element must be in the core XML-Signature namespace; its
+		// InclusiveNamespaces child lives in the xml-exc-c14n namespace and is
+		// handled separately below.
+		if !isDSigCoreNS(te) {
+			continue
+		}
+		if domutil.LocalName(te) != "Transform" {
+			continue
+		}
+		alg, _ := te.GetAttribute("Algorithm")
+		// The XPath filter transform carries its expression in a
+		// ds:Transform/XPath child element (not an ec:InclusiveNamespaces
+		// parameter), so parse it separately; every other transform is validated
+		// by the InclusiveNamespaces gate below.
+		if alg == TransformXPath {
+			expr, nsBindings, err := parseXPathTransform(te)
+			if err != nil {
+				return nil, err
+			}
+			transforms = append(transforms, parsedTransform{algorithm: alg, xpathExpr: expr, xpathNS: nsBindings})
+			continue
+		}
+		// The XSLT transform carries its stylesheet in a
+		// ds:Transform/xsl:stylesheet child element (not an
+		// ec:InclusiveNamespaces parameter), so capture that subtree
+		// separately. Whether the XSLT transform can actually run is decided
+		// later (fail-closed unless a Verifier.XSLTTransformer is configured);
+		// parsing it here does not accept an unsupported transform, it only
+		// records the stylesheet the pipeline will hand to the transformer.
+		if alg == TransformXSLT {
+			stylesheet, err := parseXSLTTransform(te)
+			if err != nil {
+				return nil, err
+			}
+			transforms = append(transforms, parsedTransform{algorithm: alg, stylesheet: stylesheet})
+			continue
+		}
+		// Validate the Transform's child elements by algorithm. For a supported
+		// transform those children are algorithm parameters; accepting an unknown
+		// one while processing as if it were absent would be fail-open. The only
+		// parameter helium honors is ec:InclusiveNamespaces under the exclusive
+		// c14n transforms; every other child — and ec:InclusiveNamespaces under a
+		// non-exclusive algorithm — is rejected fail-closed.
+		prefixes, err := parseInclusiveNamespaceParameters(te, alg, "Transform")
+		if err != nil {
+			return nil, err
+		}
+		transforms = append(transforms, parsedTransform{algorithm: alg, prefixes: prefixes})
+	}
+	return transforms, nil
+}
+
 func parseReferenceElement(ctx context.Context, budget *verifyBudget, elem *helium.Element) (parsedReference, error) {
 	ref := parsedReference{}
 	ref.uri, _ = elem.GetAttribute("URI")
@@ -651,69 +726,11 @@ func parseReferenceElement(ctx context.Context, budget *verifyBudget, elem *heli
 				return ref, fmt.Errorf("%w: multiple Transforms elements", ErrInvalidSignature)
 			}
 			transformsSeen = true
-			for tc := e.FirstChild(); tc != nil; tc = tc.NextSibling() {
-				if err := ctx.Err(); err != nil {
-					return ref, err
-				}
-				te, ok := helium.AsNode[*helium.Element](tc)
-				if !ok {
-					continue
-				}
-				// A Transform element must be in the core XML-Signature
-				// namespace; do not honor foreign-namespace look-alikes (e.g.
-				// <evil:Transform Algorithm="...">), and the 1.1 xmldsig11#
-				// namespace must not satisfy this check. Its InclusiveNamespaces
-				// child lives in the xml-exc-c14n namespace and is handled
-				// separately below.
-				if !isDSigCoreNS(te) {
-					continue
-				}
-				if domutil.LocalName(te) != "Transform" {
-					continue
-				}
-				alg, _ := te.GetAttribute("Algorithm")
-				// The XPath filter transform carries its expression in a
-				// ds:Transform/XPath child element (not an ec:InclusiveNamespaces
-				// parameter), so parse it separately; every other transform is
-				// validated by the InclusiveNamespaces gate below.
-				if alg == TransformXPath {
-					expr, nsBindings, err := parseXPathTransform(te)
-					if err != nil {
-						return ref, err
-					}
-					ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, xpathExpr: expr, xpathNS: nsBindings})
-					continue
-				}
-				// The XSLT transform carries its stylesheet in a
-				// ds:Transform/xsl:stylesheet child element (not an
-				// ec:InclusiveNamespaces parameter), so capture that subtree
-				// separately. Whether the XSLT transform can actually run is decided
-				// later (fail-closed unless a Verifier.XSLTTransformer is configured);
-				// parsing it here does not accept an unsupported transform, it only
-				// records the stylesheet the pipeline will hand to the transformer.
-				if alg == TransformXSLT {
-					stylesheet, err := parseXSLTTransform(te)
-					if err != nil {
-						return ref, err
-					}
-					ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, stylesheet: stylesheet})
-					continue
-				}
-				// Validate the Transform's child elements by algorithm. For a
-				// supported transform those children are algorithm parameters;
-				// accepting an unknown one while digesting as if it were absent
-				// would be fail-open. The only parameter helium honors is
-				// ec:InclusiveNamespaces under the exclusive c14n transforms;
-				// every other child — and ec:InclusiveNamespaces under a
-				// non-exclusive algorithm (enveloped-signature/C14N10/C14N11/...)
-				// — is rejected fail-closed, mirroring the SignedInfo
-				// CanonicalizationMethod handling.
-				prefixes, err := parseInclusiveNamespaceParameters(te, alg, "Transform")
-				if err != nil {
-					return ref, err
-				}
-				ref.transforms = append(ref.transforms, parsedTransform{algorithm: alg, prefixes: prefixes})
+			transforms, err := parseTransformList(e)
+			if err != nil {
+				return ref, err
 			}
+			ref.transforms = transforms
 		case "DigestMethod":
 			if digestMethodSeen {
 				return ref, fmt.Errorf("%w: multiple DigestMethod elements", ErrInvalidSignature)

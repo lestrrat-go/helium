@@ -573,7 +573,7 @@ func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Doc
 		if err != nil {
 			return nil, err
 		}
-		octets, err := cfg.referenceResolver.ResolveReference(ctx, joined)
+		octets, err := resolveReferenceOctets(ctx, cfg.referenceResolver, joined)
 		if err != nil {
 			return nil, err
 		}

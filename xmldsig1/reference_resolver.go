@@ -44,6 +44,25 @@ type ReferenceResolver interface {
 // [ErrReferenceTooLarge].
 const maxReferenceBytes = 64 << 20
 
+// resolveReferenceOctets dereferences uri through resolver and enforces the
+// maxReferenceBytes cap on the result. Every package-internal resolver call site
+// — the external Reference digest paths (sign and verify) and RetrievalMethod
+// resolution — goes through here so a caller-supplied ReferenceResolver, which
+// owns its own read policy, still cannot force the package to buffer or parse a
+// resource larger than 64 MiB. The shipped FSReferenceResolver already bounds its
+// own read; this cap additionally guards a custom resolver. A result over the cap
+// fails with ErrReferenceTooLarge before any parse or transform processing.
+func resolveReferenceOctets(ctx context.Context, resolver ReferenceResolver, uri string) ([]byte, error) {
+	octets, err := resolver.ResolveReference(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+	if len(octets) > maxReferenceBytes {
+		return nil, fmt.Errorf("%w: external reference %q exceeds %d bytes", ErrReferenceTooLarge, uri, maxReferenceBytes)
+	}
+	return octets, nil
+}
+
 // fsReferenceResolver resolves external Reference URIs as slash-separated paths
 // inside a fs.FS.
 type fsReferenceResolver struct {
