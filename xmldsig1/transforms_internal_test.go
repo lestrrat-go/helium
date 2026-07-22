@@ -612,3 +612,32 @@ func TestFindElementsByID(t *testing.T) {
 		})
 	}
 }
+
+// xpathTransformStub is a Transform whose URI is the XPath filter transform.
+// There is no exported constructor for it (the transform is verify-only), so a
+// test that drives the sign-side preflight builds one directly to prove the
+// preflight rejects it fail-closed.
+type xpathTransformStub struct{}
+
+func (xpathTransformStub) URI() string { return TransformXPath }
+
+// TestXPathSignPreflightRejected proves the sign-side preflight rejects the
+// XPath filter transform. The signing digest path reads only
+// c14nMethod/prefixes/hasEnveloped from the resolved pipeline and never applies
+// pipe.xpathFilters, and processReference writes no <XPath> child, so accepting
+// it would emit a fail-open signature no verifier reproduces. The preflight
+// fails closed before any DOM mutation.
+func TestXPathSignPreflightRejected(t *testing.T) {
+	cfg := &signerConfig{
+		references: []ReferenceConfig{{
+			URI:             objectFragment,
+			DigestAlgorithm: DigestSHA1,
+			Transforms:      []Transform{xpathTransformStub{}},
+		}},
+	}
+	err := preflightSignerTransforms(cfg)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	var refErr *ReferenceError
+	require.ErrorAs(t, err, &refErr, "the failure must name the offending Reference")
+	require.Equal(t, 0, refErr.Reference)
+}

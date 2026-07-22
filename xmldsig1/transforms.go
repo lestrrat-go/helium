@@ -141,6 +141,18 @@ func preflightSignerTransforms(cfg *signerConfig) error {
 		if pipe.base64 {
 			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: base64 transform is not supported for signing", ErrUnsupportedTransform)}
 		}
+		// The XPath filter transform is verify-only: the signing digest path
+		// (signReferenceOctets) reads only c14nMethod/prefixes/hasEnveloped from the
+		// pipeline and never applies pipe.xpathFilters, and processReference writes
+		// no <XPath> child, so honoring it would silently digest the unfiltered
+		// node-set under a <Transform Algorithm="...xpath..."> with no expression — a
+		// fail-open signature that no verifier reproduces. There is no typed
+		// Transform constructor for it, but a caller can implement the exported
+		// Transform interface with the TransformXPath URI, so reject it fail-closed
+		// before any DOM mutation.
+		if len(pipe.xpathFilters) > 0 {
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: XPath filter transform is not supported for signing", ErrUnsupportedTransform)}
+		}
 	}
 	return nil
 }

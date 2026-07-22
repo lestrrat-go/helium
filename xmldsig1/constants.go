@@ -60,7 +60,12 @@ const (
 // Transform URIs.
 const (
 	TransformEnvelopedSignature = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
-	TransformXPath              = "http://www.w3.org/TR/1999/REC-xpath-19991116"
+	// TransformXPath is the XPath filter transform (XMLDSig core §6.6.3). It is
+	// verify-only: verification evaluates the ds:Transform/XPath expression to
+	// filter the reference node-set, but signing has no typed Transform for it and
+	// the sign preflight rejects it fail-closed (there is no way to author the
+	// required <XPath> child from the signing API).
+	TransformXPath = "http://www.w3.org/TR/1999/REC-xpath-19991116"
 	// TransformBase64 is the base64 decode transform (XMLDSig core §6.6.2). Its
 	// input node-set's XPath 1.0 string-value is base64-decoded and the decoded
 	// octets are digested directly, with no canonicalization applied afterward.

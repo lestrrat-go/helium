@@ -220,3 +220,46 @@ func cut(s, sep string) (before, after string, found bool) {
 func base64StdEncode(b []byte) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
+
+// TestX509DataKeyInfoRejectsNilCert proves a nil *x509.Certificate entry in the
+// varargs is rejected with a typed ErrInvalidKeyInfo rather than panicking on
+// cert.Raw, both when BuildKeyInfo is invoked directly and when it is reached
+// through a signing entry point. SignEnveloping rejects it in its preflight,
+// before any caller content is moved into the <Object>.
+func TestX509DataKeyInfoRejectsNilCert(t *testing.T) {
+	key := generateRSAKey(t)
+	cert := generateSelfSignedCert(t, key)
+
+	t.Run("BuildKeyInfo", func(t *testing.T) {
+		doc := mustParseXML(t, `<root><data Id="mydata">x</data></root>`)
+		_, err := xmldsig1.X509DataKeyInfo(cert, nil).BuildKeyInfo(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+	})
+
+	t.Run("SignDetached", func(t *testing.T) {
+		doc := mustParseXML(t, `<root><data Id="mydata">x</data></root>`)
+		_, err := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{URI: refURIMyData, DigestAlgorithm: xmldsig1.DigestSHA256}).
+			KeyInfo(xmldsig1.X509DataKeyInfo(cert, nil)).
+			SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+	})
+
+	t.Run("SignEnveloping leaves content unmoved", func(t *testing.T) {
+		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
+		root := doc.DocumentElement()
+		payload, err := doc.CreateElement("payload")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(payload))
+
+		sig, err := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{URI: refURID1, DigestAlgorithm: xmldsig1.DigestSHA256}).
+			KeyInfo(xmldsig1.X509DataKeyInfo(nil)).
+			SignEnveloping(t.Context(), doc, []helium.Node{payload}, key)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+		require.Nil(t, sig)
+		require.Equal(t, root, payload.Parent(), "preflight must reject before moving content")
+	})
+}
