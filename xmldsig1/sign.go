@@ -11,6 +11,14 @@ import (
 )
 
 func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document, parent *helium.Element, key any) error {
+	// Honor an already-cancelled or already-expired context before any work. The
+	// steps below — skeleton build, per-Reference canonicalization/digest, and the
+	// final SignedInfo canonicalization + crypto sign — are bounded but non-trivial,
+	// so a context the caller cancelled before calling must short-circuit here. The
+	// per-Reference loop repeats this check each iteration, mirroring verifySignature.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if len(cfg.references) == 0 {
 		return ErrNoReferences
 	}
@@ -42,6 +50,13 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 
 	// Process references: compute digests and add Reference elements.
 	for i, ref := range cfg.references {
+		// Honor context cancellation between references: a signature with very many
+		// References must not be canonicalized and digested to completion once the
+		// caller's context is cancelled or its deadline has passed.
+		if err := ctx.Err(); err != nil {
+			helium.UnlinkNode(sigElem)
+			return err
+		}
 		if err := processReference(ctx, cfg, doc, sigElem, signedInfo, ref, nil); err != nil {
 			// Detach the signature on failure.
 			helium.UnlinkNode(sigElem)
@@ -72,6 +87,12 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 }
 
 func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document, content []helium.Node, key any) (*helium.Element, error) {
+	// Honor an already-cancelled or already-expired context before any work — in
+	// particular before moving any caller content into the <Object>. The
+	// per-Reference loop repeats this check each iteration, mirroring verifySignature.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if len(cfg.references) == 0 {
 		return nil, ErrNoReferences
 	}
@@ -194,6 +215,11 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 	// caller's document, so a reference to a document element (URI="#root") sees
 	// an unchanged subtree and produces byte-identical output.
 	for i, ref := range cfg.references {
+		// Honor context cancellation between references. On return the deferred
+		// rollback restores every moved content node to its original position.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err := processReference(ctx, cfg, doc, sigElem, signedInfo, ref, sigElem); err != nil {
 			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
@@ -388,6 +414,11 @@ func restoreOneContent(m movedContent, pending map[helium.Node]struct{}) bool {
 }
 
 func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, key any) (*helium.Element, error) {
+	// Honor an already-cancelled or already-expired context before any work. The
+	// per-Reference loop repeats this check each iteration, mirroring verifySignature.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if len(cfg.references) == 0 {
 		return nil, ErrNoReferences
 	}
@@ -411,6 +442,12 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 	}
 
 	for i, ref := range cfg.references {
+		// Honor context cancellation between references: a signature with very many
+		// References must not be canonicalized and digested to completion once the
+		// caller's context is cancelled or its deadline has passed.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err := processReference(ctx, cfg, doc, sigElem, signedInfo, ref, nil); err != nil {
 			return nil, &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
 		}
