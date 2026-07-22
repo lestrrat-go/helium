@@ -56,7 +56,7 @@ func TestGeneralXPointerVerifyRoundTrip(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	parsed, err := parseSignatureElement(sig)
+	parsed, err := parseSignatureElement(t.Context(), newVerifyBudget(&verifierConfig{}), sig)
 	require.NoError(t, err)
 	require.Len(t, parsed.references, 1)
 
@@ -129,7 +129,7 @@ func TestHereFunctionEnvelopedViaHere(t *testing.T) {
 	sig := findSig(doc.DocumentElement())
 	require.NotNil(t, sig)
 
-	parsed, err := parseSignatureElement(sig)
+	parsed, err := parseSignatureElement(t.Context(), newVerifyBudget(&verifierConfig{}), sig)
 	require.NoError(t, err)
 	require.Len(t, parsed.references, 1)
 
@@ -241,6 +241,50 @@ func TestGeneralXPointerResolution(t *testing.T) {
 		cfg := &verifierConfig{allowXPointer: true}
 		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
 		require.ErrorIs(t, err, ErrAmbiguousReference)
+	})
+
+	// A whitespace-spelled id() selector (id ('dup')) that the literal fast path
+	// does NOT match must still route through the duplicate-detecting
+	// findElementsByIDUnder, NOT xpath1's built-in id(). Under duplicate xml:id,
+	// the built-in's Document.GetElementByID returns the LAST duplicate (a silent
+	// XSW resolution to the wrong element); the resolver must instead surface
+	// ErrAmbiguousReference.
+	t.Run("whitespace id() selector keeps duplicate detection", func(t *testing.T) {
+		const xml = `<root><a xml:id="dup">A</a><b xml:id="dup">B</b></root>`
+		doc := mustParse(t, xml)
+		ref := xpointerRef("#xpointer(id ('dup'))")
+		cfg := &verifierConfig{allowXPointer: true}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.ErrorIs(t, err, ErrAmbiguousReference)
+	})
+
+	// Any id() use that is not the whole-expression selector (a wrapping paren, a
+	// predicate) cannot be routed through findElementsByIDUnder, so it is rejected
+	// fail-closed rather than handed to the built-in id() — under duplicate xml:id
+	// the built-in would otherwise silently resolve to the last such element.
+	for _, expr := range []string{"(id('dup'))", "//a[id('dup')]"} {
+		t.Run("non-selector id() use is fail-closed: "+expr, func(t *testing.T) {
+			const xml = `<root><a xml:id="dup">A</a><b xml:id="dup">B</b></root>`
+			doc := mustParse(t, xml)
+			ref := xpointerRef("#xpointer(" + expr + ")")
+			cfg := &verifierConfig{allowXPointer: true}
+			target, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+			require.ErrorIs(t, err, ErrReferenceNotFound)
+			require.Nil(t, target)
+		})
+	}
+
+	t.Run("here() via general XPointer fails closed", func(t *testing.T) {
+		const xml = `<root><a Id="x"/></root>`
+		doc := mustParse(t, xml)
+		// A URI-borne XPointer has no ds:XPath bearing node, so here() is
+		// unavailable. The sentinel must survive the general-XPointer error path
+		// as a matchable ErrHereUnavailable, not be flattened into
+		// ErrReferenceNotFound.
+		ref := xpointerRef("#xpointer(here())")
+		cfg := &verifierConfig{allowXPointer: true}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.ErrorIs(t, err, ErrHereUnavailable)
 	})
 
 	t.Run("disabled by default", func(t *testing.T) {

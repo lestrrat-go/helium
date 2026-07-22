@@ -1093,13 +1093,24 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 }
 
 // resolveGeneralXPointerTarget resolves a general XPointer expression to its
-// single element apex. A literal id('X') keeps the duplicate-detecting fast path
-// (findElementsByIDUnder, never Document.GetElementByID which overwrites on a
-// duplicate id — the XSW defense); every other expression is evaluated on the
-// shared bounded evaluator with the merged namespace context, here() disabled
-// (nil bearing node), and the single-apex constraint enforced on the result.
+// single element apex.
+//
+// An id() selector NEVER reaches xpath1's built-in id(): the built-in resolves
+// through Document.GetElementByID, whose ID table overwrites on collision so a
+// duplicate id silently resolves to a single element (an XML Signature Wrapping
+// bypass). Instead, an expression whose whole value is an id('X') selector — in
+// ANY whitespace spelling (id('X'), id ('X'), id( "X" )) — resolves through the
+// duplicate-detecting findElementsByIDUnder, and ANY other use of id() (a
+// parenthesized or embedded id() call the selector parser cannot reduce to a
+// single literal id) is rejected fail-closed rather than handed to the built-in.
+// Every remaining expression is evaluated on the shared bounded evaluator with
+// the merged namespace context, here() disabled (nil bearing node), and the
+// single-apex constraint enforced on the result.
 func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, overrides map[string]string, expr string) (*helium.Element, error) {
-	if id, ok := parseXPointerID(expr); ok {
+	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
+		if !ok {
+			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q", ErrReferenceNotFound, expr)
+		}
 		matches := findElementsByIDUnder(doc.DocumentElement(), id)
 		switch len(matches) {
 		case 0:
@@ -1110,6 +1121,12 @@ func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, ove
 			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, id, len(matches))
 		}
 	}
+	if expressionReferencesID(expr) {
+		// id() appears somewhere other than as the whole-expression selector
+		// handled above (a wrapping paren, a predicate, a path step). xpath1's
+		// built-in id() cannot be trusted under duplicate ids, so fail closed.
+		return nil, fmt.Errorf("%w: unsupported XPointer id() use %q", ErrReferenceNotFound, expr)
+	}
 
 	compiled, err := xpath1.Compile(expr)
 	if err != nil {
@@ -1118,9 +1135,107 @@ func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, ove
 	eval := newDSigXPathEvaluator(xpointerNamespaces(doc, overrides), nil, defaultXPathOpLimit)
 	nodes, err := eval.Find(ctx, compiled, doc.DocumentElement())
 	if err != nil {
+		// Preserve the here()-unavailable sentinel (a URI-borne XPointer has no
+		// ds:XPath bearing node) as a matchable typed error rather than flattening
+		// it into ErrReferenceNotFound. Both remain fail-closed.
+		if errors.Is(err, ErrHereUnavailable) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: XPointer evaluation failed: %v", ErrReferenceNotFound, err)
 	}
 	return singleElementApex(nodes)
+}
+
+// parseXPointerIDSelector recognizes a whole-expression id() selector in any
+// whitespace spelling — id('X'), id ("X"), id( 'X' ), with optional surrounding
+// whitespace. isIDCall reports that the trimmed expression IS a top-level
+// id(...) call; ok additionally reports that it cleanly reduces to a single
+// quoted id literal, returned in the first result. A general-XPointer id()
+// selector is ALWAYS routed through the duplicate-detecting findElementsByIDUnder
+// (never xpath1's built-in id()), so an id() call that is not a clean single
+// literal is reported as isIDCall && !ok for the caller to reject fail-closed.
+func parseXPointerIDSelector(expr string) (string, bool, bool) {
+	s := strings.TrimSpace(expr)
+	if !strings.HasPrefix(s, "id") {
+		return "", false, false
+	}
+	rest := strings.TrimLeft(s[len("id"):], " \t\r\n")
+	if !strings.HasPrefix(rest, "(") {
+		// "id" is a name prefix of something else (idref, identity(), ...), not an
+		// id() call.
+		return "", false, false
+	}
+	if !strings.HasSuffix(rest, ")") {
+		// An id() call that does not close the whole expression: id('x')/foo,
+		// id('x')[1]. It IS an id() call, but not a clean selector.
+		return "", true, false
+	}
+	arg := strings.TrimSpace(rest[1 : len(rest)-1])
+	if len(arg) < 2 {
+		return "", true, false
+	}
+	q := arg[0]
+	if (q != '\'' && q != '"') || arg[len(arg)-1] != q {
+		return "", true, false
+	}
+	inner := arg[1 : len(arg)-1]
+	// The id must not contain the quote character (no embedded quote / second
+	// argument), keeping this a strict single-id match.
+	if strings.IndexByte(inner, q) >= 0 {
+		return "", true, false
+	}
+	return inner, true, true
+}
+
+// expressionReferencesID reports whether an XPath expression invokes the id()
+// function anywhere outside a string literal — an id name token immediately
+// followed (modulo whitespace) by "(". The general-XPointer resolver uses it to
+// fail closed on any id() use it does not itself resolve through the
+// duplicate-detecting findElementsByIDUnder, since xpath1's built-in id()
+// (Document.GetElementByID) resolves a duplicate id to a single element.
+func expressionReferencesID(expr string) bool {
+	var quote byte
+	for i := range len(expr) {
+		c := expr[i]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if c == '\'' || c == '"' {
+			quote = c
+			continue
+		}
+		if c != 'i' || i+1 >= len(expr) || expr[i+1] != 'd' {
+			continue
+		}
+		if i > 0 && isXPathNameByte(expr[i-1]) {
+			continue // tail of a longer name (grid, uuid, ...)
+		}
+		j := i + len("id")
+		for j < len(expr) && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\r' || expr[j] == '\n') {
+			j++
+		}
+		if j < len(expr) && expr[j] == '(' {
+			return true
+		}
+	}
+	return false
+}
+
+// isXPathNameByte reports whether b can appear within an XPath name (NCName plus
+// the ":" prefix separator), used to reject a false "id" match that is the tail
+// of a longer name.
+func isXPathNameByte(b byte) bool {
+	switch {
+	case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9':
+		return true
+	case b == '_' || b == '-' || b == '.' || b == ':':
+		return true
+	default:
+		return false
+	}
 }
 
 // effectiveC14NMethod adjusts a canonicalization method for the comment
