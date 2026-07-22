@@ -71,6 +71,10 @@ type transformStep struct {
 	// populated only when algorithm == TransformXPath.
 	xpathExpr string
 	xpathNS   map[string]string
+	// stylesheet carries the XSLT transform's serialized xsl:stylesheet subtree
+	// (from the ds:Transform element). It is populated only when
+	// algorithm == TransformXSLT.
+	stylesheet []byte
 }
 
 // xpathFilter is a resolved XPath filter transform: an XPath 1.0 boolean
@@ -96,6 +100,11 @@ type transformPipeline struct {
 	hasEnveloped bool
 	xpathFilters []xpathFilter
 	base64       bool
+	// xslt, when non-nil, is the serialized xsl:stylesheet subtree of an XSLT
+	// transform. The XSLT transform is octet-in -> octet-out: it consumes the
+	// pre-XSLT octet stream (the canonicalized node-set) and its output is
+	// digested. It ends the pipeline, so no transform may follow it.
+	xslt []byte
 }
 
 // transformSteps converts a ReferenceConfig's typed Transform list into the
@@ -153,6 +162,16 @@ func preflightSignerTransforms(cfg *signerConfig) error {
 		if len(pipe.xpathFilters) > 0 {
 			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: XPath filter transform is not supported for signing", ErrUnsupportedTransform)}
 		}
+		// The XSLT transform is verify-only, exactly like base64: the signing digest
+		// path has no XSLT branch, so honoring an XSLT transform here would silently
+		// digest the pre-XSLT octets instead of the transformed output — a fail-open
+		// signature. There is no typed Transform constructor for it, but a caller can
+		// implement the exported Transform interface with this URI, so the guard is
+		// required. resolveTransformPipeline marks XSLT presence with a non-nil
+		// pipe.xslt even when no stylesheet was captured.
+		if pipe.xslt != nil {
+			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: XSLT transform is not supported for signing", ErrUnsupportedTransform)}
+		}
 	}
 	return nil
 }
@@ -177,34 +196,62 @@ func preflightSignerTransforms(cfg *signerConfig) error {
 //
 // The XPath filter transform (TransformXPath) maps a node-set to a node-set and
 // so may appear before the octet-producing transform; each is recorded in order.
-// helium supports no octet-stream-consuming transform (e.g. XSLT), so a
-// transform of any kind ordered after an octet-producing transform is rejected.
+//
+// The XSLT transform (TransformXSLT) is the one octet-in -> octet-out transform
+// helium interprets: it consumes the pre-XSLT octet stream (the canonicalized
+// node-set, filled in with inclusive C14N 1.0 when no c14n transform precedes it)
+// and its output is digested. It ends the pipeline like an octet-producing
+// transform, so nothing may follow it, and it may not itself follow one (an
+// XSLT after a c14n/base64, or a second XSLT, is rejected). Any OTHER transform
+// ordered after an octet-producing or octet-ending transform is likewise
+// rejected.
+//
+// pipelineClosed records that an octet-ENDING transform (c14n, base64, or XSLT)
+// has run, after which no further transform may appear. Whether octets already
+// exist is recovered from p (a non-empty c14nMethod, base64, or xslt), so the
+// C14N 1.0 fill-in below covers the "no octet-producing transform" case without a
+// separate flag.
 func resolveTransformPipeline(steps []transformStep) (transformPipeline, error) {
 	var p transformPipeline
-	producedOctets := false
+	pipelineClosed := false
 	for _, t := range steps {
-		if producedOctets {
+		if pipelineClosed {
 			return transformPipeline{}, fmt.Errorf("%w: transform %s ordered after an octet-producing transform", ErrUnsupportedTransform, t.algorithm)
 		}
 		switch t.algorithm {
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
 			p.c14nMethod = t.algorithm
 			p.prefixes = t.prefixes
-			producedOctets = true
+			pipelineClosed = true
 		case TransformBase64:
 			p.base64 = true
-			producedOctets = true
+			pipelineClosed = true
 		case TransformEnvelopedSignature:
 			p.hasEnveloped = true
 		case TransformXPath:
 			p.xpathFilters = append(p.xpathFilters, xpathFilter{expr: t.xpathExpr, ns: t.xpathNS})
+		case TransformXSLT:
+			// XSLT consumes octets and produces octets; the pre-XSLT octets are the
+			// canonicalized node-set (the default C14N 1.0 fill-in below supplies
+			// them for a bare XSLT). It ends the pipeline. p.xslt marks XSLT presence
+			// even when no stylesheet was captured (a sign-side caller-implemented
+			// Transform with this URI has no stylesheet), so the sign preflight and
+			// the verify path both detect it via a non-nil p.xslt; the empty marker
+			// is never reached on the verify path, where parseXSLTTransform always
+			// captures a non-empty stylesheet.
+			p.xslt = t.stylesheet
+			if p.xslt == nil {
+				p.xslt = []byte{}
+			}
+			pipelineClosed = true
 		default:
 			return transformPipeline{}, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
 		}
 	}
 	// The base64 transform digests its decoded octets directly, so a Reference
 	// carrying it needs no canonicalization; only a Reference with no
-	// octet-producing transform falls back to the inclusive C14N 1.0 default.
+	// octet-producing transform falls back to the inclusive C14N 1.0 default. An
+	// XSLT transform still needs its pre-XSLT octets, so it takes this fill-in too.
 	if p.c14nMethod == "" && !p.base64 {
 		p.c14nMethod = C14N10
 	}

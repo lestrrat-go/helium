@@ -107,13 +107,22 @@ func TestXPathTransformFailClosed(t *testing.T) {
 		require.Nil(t, canon)
 	})
 
-	t.Run("defCan-2 XSLT chain rejected", func(t *testing.T) {
-		_, err := parseSignatureFromInterop(t, "defCan-2-signature.xml")
+	// defCan-2/3 carry an XSLT transform. The stylesheet subtree now parses (the
+	// XSLT transform is captured, not rejected at parse), but both vectors order
+	// the XSLT transform AFTER a C14N11 that already produced octets, so resolving
+	// the transform pipeline rejects the mis-ordered chain fail-closed — regardless
+	// of whether an XSLTTransformer is configured.
+	t.Run("defCan-2 XSLT-after-c14n chain rejected at resolve", func(t *testing.T) {
+		_, parsed := parseVectorSignature(t, "defCan-2-signature.xml")
+		require.Len(t, parsed.references, 1)
+		_, err := resolveTransformPipeline(stepsFromParsed(parsed.references[0]))
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 	})
 
-	t.Run("defCan-3 XSLT chain rejected", func(t *testing.T) {
-		_, err := parseSignatureFromInterop(t, "defCan-3-signature.xml")
+	t.Run("defCan-3 XSLT-after-c14n chain rejected at resolve", func(t *testing.T) {
+		_, parsed := parseVectorSignature(t, "defCan-3-signature.xml")
+		require.Len(t, parsed.references, 1)
+		_, err := resolveTransformPipeline(stepsFromParsed(parsed.references[0]))
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 	})
 }
@@ -150,12 +159,4 @@ func mustParseInteropFile(t *testing.T, name string) *helium.Document {
 	doc, err := helium.NewParser().Parse(t.Context(), data)
 	require.NoError(t, err)
 	return doc
-}
-
-func parseSignatureFromInterop(t *testing.T, name string) (*parsedSignature, error) {
-	t.Helper()
-	doc := mustParseInteropFile(t, name)
-	sig := findSig(doc.DocumentElement())
-	require.NotNil(t, sig)
-	return parseSignatureElement(sig)
 }

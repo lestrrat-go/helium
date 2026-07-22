@@ -13,6 +13,11 @@ const (
 	// children) in this namespace, distinct from both the core xmldsig#
 	// namespace and the XML-Signature 1.1 xmldsig11# namespace.
 	NamespaceDSigMore = "http://www.w3.org/2001/04/xmldsig-more#"
+
+	// namespaceXSLT is the XSLT namespace. The XSLT transform's stylesheet root is
+	// an xsl:stylesheet or xsl:transform element in this namespace; a
+	// foreign-namespace look-alike must not be accepted as the stylesheet.
+	namespaceXSLT = "http://www.w3.org/1999/XSL/Transform"
 )
 
 // Signature algorithm URIs.
@@ -66,6 +71,14 @@ const (
 	// the sign preflight rejects it fail-closed (there is no way to author the
 	// required <XPath> child from the signing API).
 	TransformXPath = "http://www.w3.org/TR/1999/REC-xpath-19991116"
+	// TransformXSLT is the XSLT transform (XMLDSig core §6.6.5). Its
+	// ds:Transform/xsl:stylesheet child is applied to the pre-XSLT octet stream and
+	// the result is digested. XSLT is powerful (document(), unbounded compute), so
+	// it is verify-only and OFF by default: it runs only through an injected
+	// [XSLTTransformer] and fails closed with [ErrUnsupportedTransform] when none is
+	// configured. Signing has no typed Transform for it and the sign preflight
+	// rejects it fail-closed.
+	TransformXSLT = "http://www.w3.org/TR/1999/REC-xslt-19991116"
 	// TransformBase64 is the base64 decode transform (XMLDSig core §6.6.2). Its
 	// input node-set's XPath 1.0 string-value is base64-decoded and the decoded
 	// octets are digested directly, with no canonicalization applied afterward.
