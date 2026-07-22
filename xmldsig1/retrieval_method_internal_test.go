@@ -8,6 +8,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"math/big"
+	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -113,6 +115,68 @@ func TestResolveRetrievalMethodNoResolverFailsClosed(t *testing.T) {
 	err := resolveRetrievalMethods(t.Context(), cfg, doc, doc.DocumentElement(), data)
 	require.ErrorIs(t, err, ErrReferenceNotFound)
 	require.Empty(t, data.X509Certificates)
+}
+
+// retrievalChainKeyInfo builds a ds:KeyInfo whose top-level ds:RetrievalMethod
+// starts a chain of n RetrievalMethods, each pointing at the next by same-document
+// id, with the final link resolving a terminal ds:X509Data certificate. The first
+// link is a top-level KeyInfo child; the remaining links and the terminal
+// X509Data live inside a ds:Object so only one RetrievalMethod is a direct KeyInfo
+// child, matching the verify-time layout. n counts the RetrievalMethod links: the
+// top-level RetrievalMethod is processed at depth 0, so a chain of n links reaches
+// depth n-1.
+func retrievalChainKeyInfo(n int, certB64 string) string {
+	var b strings.Builder
+	b.WriteString(`<ds:KeyInfo xmlns:ds="` + NamespaceDSig + `">`)
+	firstTarget := "#cert"
+	if n > 1 {
+		firstTarget = "#rm2"
+	}
+	b.WriteString(`<ds:RetrievalMethod URI="` + firstTarget + `" Type="` + TypeX509Data + `"/>`)
+	b.WriteString(`<ds:Object>`)
+	for i := 2; i <= n; i++ {
+		target := "#cert"
+		if i < n {
+			target = "#rm" + strconv.Itoa(i+1)
+		}
+		b.WriteString(`<ds:RetrievalMethod Id="rm` + strconv.Itoa(i) + `" URI="` + target + `" Type="` + TypeX509Data + `"/>`)
+	}
+	b.WriteString(`<ds:X509Data Id="cert"><ds:X509Certificate>` + certB64 + `</ds:X509Certificate></ds:X509Data>`)
+	b.WriteString(`</ds:Object></ds:KeyInfo>`)
+	return b.String()
+}
+
+// TestRetrievalMethodChainDepthCap pins the ds:RetrievalMethod chain depth cap at
+// exactly maxRetrievalMethodDepth (5) links: a chain of five RetrievalMethods
+// resolves its terminal certificate, while a chain of six fails closed with
+// ErrRetrievalMethodLoop before the sixth link is dereferenced. The top-level
+// RetrievalMethod enters at depth 0 and link N is processed at depth N-1, so the
+// depth >= maxRetrievalMethodDepth guard must reject the sixth link (depth 5) and
+// admit the fifth (depth 4).
+func TestRetrievalMethodChainDepthCap(t *testing.T) {
+	cert, der := selfSignedCert(t)
+	certB64 := base64.StdEncoding.EncodeToString(der)
+
+	t.Run("five links succeed", func(t *testing.T) {
+		doc := mustParse(t, retrievalChainKeyInfo(5, certB64))
+		cfg := &verifierConfig{}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), cfg, doc, doc.DocumentElement(), data)
+		require.NoError(t, err)
+		require.Len(t, data.X509Certificates, 1)
+		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	})
+
+	t.Run("six links fail", func(t *testing.T) {
+		doc := mustParse(t, retrievalChainKeyInfo(6, certB64))
+		cfg := &verifierConfig{}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrRetrievalMethodLoop)
+		require.Empty(t, data.X509Certificates)
+	})
 }
 
 func TestResolveRetrievalMethodLoopRejected(t *testing.T) {

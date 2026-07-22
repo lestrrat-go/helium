@@ -60,7 +60,12 @@ func resolveRetrievalMethods(ctx context.Context, cfg *verifierConfig, doc *heli
 // visited-URI set so a cyclic or unbounded chain fails closed with
 // ErrRetrievalMethodLoop.
 func processRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *helium.Document, rm *helium.Element, data *KeyInfoData, visited map[string]struct{}, depth int) error {
-	if depth > maxRetrievalMethodDepth {
+	// depth counts links already followed: the top-level RetrievalMethod enters at
+	// depth 0, so link N is processed at depth N-1. Rejecting depth >=
+	// maxRetrievalMethodDepth lets exactly maxRetrievalMethodDepth links (depths
+	// 0..maxRetrievalMethodDepth-1) succeed and fails the next one closed, matching
+	// the maxRetrievalMethodDepth-link cap named in the const and the error string.
+	if depth >= maxRetrievalMethodDepth {
 		return fmt.Errorf("%w: chain exceeds %d links", ErrRetrievalMethodLoop, maxRetrievalMethodDepth)
 	}
 	uri, _ := rm.GetAttribute("URI")
