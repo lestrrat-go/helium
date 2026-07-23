@@ -49,12 +49,12 @@ type XSLT struct{}
 var _ xmldsig1.XSLTTransformer = XSLT{}
 
 // TransformXSLT compiles stylesheet and applies it to input, returning the
-// transform output to the ordered Reference pipeline. xslt3 removes
-// helium.Writer's document terminator on the writer path that creates it, so
-// every trailing newline reaching this adapter is result content and is
+// transform output to the ordered Reference pipeline. xslt3 disables
+// helium.Writer's per-document-child terminators on its direct XML path, so
+// top-level text newlines reaching this adapter are result content and are
 // preserved. Both arguments are the current pipeline octets xmldsig1 hands to
-// the seam; neither is trusted, so ctx should carry a deadline. One Reference may
-// invoke this method multiple times.
+// the seam; neither is trusted, so ctx should carry a deadline. One Reference
+// may invoke this method multiple times.
 func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte, error) {
 	ssDoc, err := helium.NewParser().Parse(ctx, stylesheet)
 	if err != nil {

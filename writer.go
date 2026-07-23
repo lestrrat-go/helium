@@ -50,6 +50,10 @@ type Writer struct {
 	noEscapeNonASCII    bool
 	allowPrefixUndecl   bool // emit xmlns:prefix="" undeclarations (XML 1.1)
 	replaceInvalidChars bool // replace an XML-invalid char with U+FFFD instead of failing (SERE0006); the zero value rejects
+	// omitDocChildTerminators suppresses the newline normally emitted after each
+	// Document child. It is an internal mode used by xslt3, where top-level text
+	// newlines are result content and writer-added boundary bytes are forbidden.
+	omitDocChildTerminators bool
 	// charMap substitutes a mapped rune in text and attribute-value content
 	// with its literal replacement string (XSLT/XQuery Serialization 3.1 §7
 	// character maps). Empty/nil disables the feature.
@@ -808,8 +812,17 @@ func (w Writer) declarationOnlyEncoding() Writer {
 	return w
 }
 
+// withoutDocumentChildTerminators returns a copy of the writer that does not
+// append a newline after each Document child. It has no public setter; xslt3
+// reaches it through the internal/writerctl hook registered below.
+func (w Writer) withoutDocumentChildTerminators() Writer {
+	w.omitDocChildTerminators = true
+	return w
+}
+
 func init() {
 	writerctl.EnableDeclarationOnlyEncoding = writerDeclarationOnlyEncoding
+	writerctl.OmitDocumentChildTerminators = writerOmitDocumentChildTerminators
 }
 
 // writerDeclarationOnlyEncoding adapts declarationOnlyEncoding to the untyped
@@ -821,6 +834,16 @@ func writerDeclarationOnlyEncoding(w any) any {
 		return w
 	}
 	return ww.declarationOnlyEncoding()
+}
+
+// writerOmitDocumentChildTerminators adapts withoutDocumentChildTerminators to
+// the untyped internal/writerctl hook.
+func writerOmitDocumentChildTerminators(w any) any {
+	ww, ok := w.(Writer)
+	if !ok {
+		return w
+	}
+	return ww.withoutDocumentChildTerminators()
 }
 
 // InheritedNamespaces seeds the serializer's namespace scope with bindings
@@ -1117,7 +1140,9 @@ func (d Writer) writeDoc(out io.Writer, doc *Document) error {
 				return err
 			}
 		}
-		s.writeString(out, "\n")
+		if !s.omitDocChildTerminators {
+			s.writeString(out, "\n")
+		}
 	}
 	return s.err
 }

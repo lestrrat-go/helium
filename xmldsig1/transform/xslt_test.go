@@ -21,7 +21,7 @@ func TestXSLTAppliesStylesheet(t *testing.T) {
 	require.Equal(t, "seen:hi", string(out))
 }
 
-func TestXSLTTreeOutputDropsWriterTerminator(t *testing.T) {
+func TestXSLTTreeOutputOmitsWriterTerminators(t *testing.T) {
 	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
 		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
 		`<xsl:template match="/"><out><xsl:value-of select="/a/b"/></out></xsl:template>` +
@@ -32,13 +32,18 @@ func TestXSLTTreeOutputDropsWriterTerminator(t *testing.T) {
 	require.Equal(t, "<out>hi</out>", string(out))
 }
 
-func TestXSLTStreamSerializationPreservesTrailingContentNewline(t *testing.T) {
+func TestXSLTSerializationPreservesTrailingContentNewline(t *testing.T) {
 	cases := map[string]struct {
 		declarations string
 		outputAttrs  string
 		result       string
 		want         string
 	}{
+		"UTF-8 direct writer": {
+			outputAttrs: ` encoding="UTF-8"`,
+			result:      `<out/>`,
+			want:        "<out/>\n",
+		},
 		"single-byte encoding": {
 			outputAttrs: ` encoding="iso-8859-1"`,
 			result:      `<out/>`,

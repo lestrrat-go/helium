@@ -96,7 +96,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	if err != nil {
 		return err
 	}
-	_, _, includeComments, sameDocument := referenceURIForm(uri)
+	_, wholeDoc, includeComments, sameDocument := referenceURIForm(uri)
 	runtime := transformRuntime{
 		parser:          cfg.parser(),
 		xsltTransformer: cfg.xsltTransformer,
@@ -162,7 +162,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	}
 	// With transforms, the target node-set is run through the pipeline to octets,
 	// then interpreted by Type exactly as an externally retrieved octet stream.
-	initial := newReferenceNodeSetValue(doc, target, nil, false, includeComments, nil)
+	initial := newReferenceNodeSetValue(doc, target, nil, wholeDoc, includeComments, nil)
 	octets, err := executeTransformPipeline(ctx, runtime, initial, steps)
 	if err != nil {
 		return err

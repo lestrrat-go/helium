@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/writerctl"
 	"github.com/lestrrat-go/helium/stream"
 )
 
@@ -68,17 +69,19 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.OmitDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}
-	// helium.Writer appends a newline after each document child. This direct path
-	// owns that behavior, so buffer it and remove the final document terminator
-	// here. Stream-serializer paths never reach this block, leaving their final
-	// byte untouched because it may be result content.
+	// XSLT serialization must not add bytes between top-level result nodes.
+	// Disable helium.Writer's per-document-child terminators at their source so
+	// an explicit top-level text newline remains distinguishable result content.
+	if configured, ok := writerctl.OmitDocumentChildTerminators(writer).(helium.Writer); ok {
+		writer = configured
+	}
 	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo)
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
 	var buf strings.Builder
 	if err := writer.WriteTo(&buf, doc); err != nil {
 		return xmlInvalidCharError(err)
 	}
-	out := strings.TrimSuffix(buf.String(), "\n")
+	out := buf.String()
 	if needStandalone {
 		out = injectStandalone(out, outDef.Standalone)
 	}

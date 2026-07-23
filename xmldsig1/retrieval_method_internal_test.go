@@ -371,6 +371,32 @@ func TestRetrievalMethodAppliesSupportedTransform(t *testing.T) {
 	})
 }
 
+func TestRetrievalMethodWholeDocumentTransformKeepsTopLevelNodes(t *testing.T) {
+	cert, der := selfSignedCert(t)
+	x509Data := `<ds:X509Data xmlns:ds="` + NamespaceDSig + `"><ds:X509Certificate>` +
+		base64.StdEncoding.EncodeToString(der) + `</ds:X509Certificate></ds:X509Data>`
+	transforms := `<ds:Transforms>` +
+		`<ds:Transform Algorithm="` + C14N10Comments + `"/>` +
+		`<ds:Transform Algorithm="` + TransformXSLT + `">` +
+		`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>` +
+		`</ds:Transform></ds:Transforms>`
+	doc := mustParse(t, `<?audit before?><!--audit-before--><ds:KeyInfo xmlns:ds="`+NamespaceDSig+`">`+
+		`<ds:RetrievalMethod URI="#xpointer(/)" Type="`+TypeX509Data+`">`+transforms+
+		`</ds:RetrievalMethod></ds:KeyInfo>`)
+	transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte(x509Data)}}
+	cfg := &verifierConfig{xsltTransformer: transformer}
+	data := &KeyInfoData{}
+
+	err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+	require.NoError(t, err)
+	require.Len(t, data.X509Certificates, 1)
+	require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	calls := transformer.snapshot()
+	require.Len(t, calls, 1)
+	require.Contains(t, string(calls[0].input), "<?audit before?>")
+	require.Contains(t, string(calls[0].input), "<!--audit-before-->")
+}
+
 // xsltTransformElem is a ds:Transforms carrying a single XSLT transform whose
 // xsl:stylesheet is an identity transform. It is well-formed and parses, so the
 // RetrievalMethod path must decide whether to apply or reject it — never ignore

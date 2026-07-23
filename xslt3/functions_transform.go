@@ -1140,9 +1140,9 @@ func documentHasChildren(doc *helium.Document) bool {
 }
 
 // serializeDeliveredResult serializes doc to a string for the fn:transform
-// "serialized" delivery format. SerializeResult removes helium.Writer's
-// document terminator on the path that creates it, so every trailing newline
-// returned here is result content and is preserved.
+// "serialized" delivery format. SerializeResult disables helium.Writer's
+// per-document-child terminators on the direct XML path, so top-level text
+// newlines returned here are result content and are preserved.
 func serializeDeliveredResult(doc *helium.Document, outDef *OutputDef) (string, error) {
 	var buf bytes.Buffer
 	if err := SerializeResult(&buf, doc, outDef); err != nil {
