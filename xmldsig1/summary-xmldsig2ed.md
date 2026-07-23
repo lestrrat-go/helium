@@ -5,21 +5,12 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 - Generated: 2026-07-23
 - Upstream suite: https://www.w3.org/TR/2008/NOTE-xmldsig2ed-tests-20080610/
-- helium: `11fcd208`
-- helium-w3c-tests (harness): `5949891`
+- helium: `1799b78f`
+- helium-w3c-tests (harness): `6c987d8`
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 35 |
+| Pass | 37 |
 | Skip | 0 |
-| XFail (documented gap) | 2 |
 | Fail | 0 |
 | **Total** | **37** |
-
-## Expected failures by reason
-
-Documented known gaps: the harness expects these to fail and treats an unexpected pass as an error.
-
-| Reason | Count |
-|--------|------:|
-| the Reference chains a multi-phase transform pipeline (XPath filter -> c14n -> XSLT -> XPath filter -> c14n) that oscillates between node-set and octet representations, re-parsing the XSLT octet output back into a node-set for the following XPath filter; helium models a single node-set phase followed by a single octet phase and cannot represent this multi-round-trip chain (a full transform-pipeline redesign, not just XSLT support) | 2 |
