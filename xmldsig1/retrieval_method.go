@@ -96,7 +96,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	if err != nil {
 		return err
 	}
-	_, _, _, sameDocument := referenceURIForm(uri)
+	_, _, includeComments, sameDocument := referenceURIForm(uri)
 	runtime := transformRuntime{
 		parser:          cfg.parser(),
 		xsltTransformer: cfg.xsltTransformer,
@@ -114,7 +114,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	// only through a configured ReferenceResolver, fail-closed otherwise. The
 	// resolved octets run through the same transform pipeline the external
 	// Reference digest path uses before Type interpretation.
-	if _, _, _, ok := referenceURIForm(uri); !ok {
+	if !sameDocument {
 		octets, err := resolveRetrievalOctets(ctx, cfg, doc, uri)
 		if err != nil {
 			return err
@@ -162,7 +162,6 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	}
 	// With transforms, the target node-set is run through the pipeline to octets,
 	// then interpreted by Type exactly as an externally retrieved octet stream.
-	_, _, includeComments, _ := referenceURIForm(uri)
 	initial := newReferenceNodeSetValue(doc, target, nil, false, includeComments, nil)
 	octets, err := executeTransformPipeline(ctx, runtime, initial, steps)
 	if err != nil {

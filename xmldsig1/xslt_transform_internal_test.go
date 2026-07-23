@@ -121,7 +121,7 @@ func TestValidateXSLTSequences(t *testing.T) {
 	}
 	cases := map[string][]transformStep{
 		"bare XSLT":            {xslt},
-		"node-set before XSLT": {{algorithm: TransformEnvelopedSignature}, {algorithm: TransformXPath, xpathExpr: "true()"}, xslt},
+		"node-set before XSLT": {{algorithm: TransformEnvelopedSignature}, {algorithm: TransformXPath, xpathExpr: xpathTrueExpr}, xslt},
 		"XSLT after XSLT":      {xslt, xslt},
 		"XSLT after c14n":      {{algorithm: C14N11URI}, xslt},
 		"c14n after XSLT":      {xslt, {algorithm: C14N11URI}},

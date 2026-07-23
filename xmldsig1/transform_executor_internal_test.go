@@ -15,6 +15,8 @@ type transformCall struct {
 	input      []byte
 }
 
+const xpathTrueExpr = "true()"
+
 type pipelineRecordingTransformer struct {
 	mu      sync.Mutex
 	outputs [][]byte
@@ -105,7 +107,7 @@ func TestExecuteTransformPipelineReparse(t *testing.T) {
 		runtime := transformRuntime{parser: helium.NewParser(), external: true}
 		steps := []transformStep{
 			{algorithm: TransformBase64},
-			{algorithm: TransformXPath, xpathExpr: "true()"},
+			{algorithm: TransformXPath, xpathExpr: xpathTrueExpr},
 		}
 		out, err := externalReferenceDigestInput(t.Context(), []byte("PHJvb3Q+PHY+eDwvdj48L3Jvb3Q+"), steps, runtime)
 		require.NoError(t, err)
@@ -145,7 +147,7 @@ func TestExecuteTransformPipelineParseErrors(t *testing.T) {
 	t.Run("initial external parse keeps ErrReferenceNotFound", func(t *testing.T) {
 		runtime := transformRuntime{parser: helium.NewParser(), external: true}
 		_, err := externalReferenceDigestInput(t.Context(), []byte("not XML"), []transformStep{
-			{algorithm: TransformXPath, xpathExpr: "true()"},
+			{algorithm: TransformXPath, xpathExpr: xpathTrueExpr},
 		}, runtime)
 		require.ErrorIs(t, err, ErrReferenceNotFound)
 	})
@@ -159,7 +161,7 @@ func TestExecuteTransformPipelineParseErrors(t *testing.T) {
 		}
 		_, err := externalReferenceDigestInput(t.Context(), []byte("raw"), []transformStep{
 			{algorithm: TransformXSLT, stylesheet: []byte("style")},
-			{algorithm: TransformXPath, xpathExpr: "true()"},
+			{algorithm: TransformXPath, xpathExpr: xpathTrueExpr},
 		}, runtime)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 		require.Contains(t, err.Error(), "transform 0")
@@ -188,13 +190,13 @@ func TestExecuteTransformPipelineEnvelopedOrder(t *testing.T) {
 	const input = `<root xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><data>keep</data><ds:Signature><ds:Object>remove</ds:Object></ds:Signature></root>`
 	for name, steps := range map[string][]transformStep{
 		"XPath then enveloped": {
-			{algorithm: TransformXPath, xpathExpr: "true()"},
+			{algorithm: TransformXPath, xpathExpr: xpathTrueExpr},
 			{algorithm: TransformEnvelopedSignature},
 			{algorithm: C14N10},
 		},
 		"enveloped then XPath": {
 			{algorithm: TransformEnvelopedSignature},
-			{algorithm: TransformXPath, xpathExpr: "true()"},
+			{algorithm: TransformXPath, xpathExpr: xpathTrueExpr},
 			{algorithm: C14N10},
 		},
 	} {

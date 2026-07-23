@@ -12,16 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// stepsFromParsed converts a parsedReference's transforms into pipeline steps,
-// mirroring canonicalizeReference so a test drives the real resolution.
-func stepsFromParsed(ref parsedReference) []transformStep {
-	steps := make([]transformStep, len(ref.transforms))
-	for i, t := range ref.transforms {
-		steps[i] = transformStep(t)
-	}
-	return steps
-}
-
 // TestXPathTransformDefCanDigest validates the ordered external-reference path
 // against the W3C defCan-1 XPath + C14N 1.1 interop vector.
 func TestXPathTransformDefCanDigest(t *testing.T) {
