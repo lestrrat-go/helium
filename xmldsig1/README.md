@@ -506,12 +506,10 @@ point-in-time evidence:
   transform, the truncated-HMAC must-reject case, and the X.509 KeyInfo
   variants.
 
-The merlin and xmldsig11 suites pass in full. The only remaining expected
-failures are two `xmldsig2ed` cases (`defCan-2/3`) whose Reference chains an
-XSLT transform between two canonicalization steps
-(XPath → c14n → XSLT → XPath → c14n) — a multi-phase pipeline that oscillates
-between node-set and octet representations. helium's transform pipeline models a
-single node-set phase followed by a single octet phase and cannot represent that
-chain; the blocker is the pipeline shape, not the transformer (a ready
-`xslt3`-backed `XSLTTransformer` ships as the [`xmldsig1/transform`](transform)
-package). Each is documented with its reason in the harness expectations.
+The merlin and xmldsig11 suites pass in full. The committed xmldsig2ed harness
+snapshot records 35 passes and two expected failures (`defCan-2/3`) because its
+runner does not inject an XSLT transformer. Package coverage runs both vectors
+through the ordered multi-phase pipeline
+(XPath → c14n → XSLT → XPath → c14n), including full `Verifier` execution with
+the [`xmldsig1/transform`](transform) package's `xslt3`-backed
+`XSLTTransformer`.

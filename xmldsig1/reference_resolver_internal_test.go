@@ -123,6 +123,28 @@ func TestResolveExternalReferenceValidatesTransformsBeforeResolver(t *testing.T)
 	}
 }
 
+func TestResolveExternalReferenceRejectsHereAfterReparseBeforeSideEffects(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	resolver := &countingResolver{}
+	transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte(`<out/>`)}}
+	cfg := &verifierConfig{
+		referenceResolver: resolver,
+		xsltTransformer:   transformer,
+	}
+	_, err = resolveExternalReference(t.Context(), cfg, doc, parsedReference{
+		uri: "external.xml",
+		transforms: []parsedTransform{
+			{algorithm: TransformXSLT, stylesheet: []byte("style")},
+			{algorithm: TransformXPath, xpathExpr: "here()", xpathHere: doc.DocumentElement()},
+		},
+	})
+	require.ErrorIs(t, err, ErrHereUnavailable)
+	require.Zero(t, resolver.calls, "here() must be rejected before external resolution")
+	require.Empty(t, transformer.snapshot(), "here() must be rejected before an injected transform callback runs")
+}
+
 func TestURIHasScheme(t *testing.T) {
 	cases := map[string]bool{
 		"http://host/p":             true,

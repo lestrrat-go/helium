@@ -173,6 +173,7 @@ func validateTransformSteps(runtime transformRuntime, initialKind transformValue
 	contracts := make([]transformContract, len(steps))
 	kind := initialKind
 	hasSignatureIdentity := runtime.allowEnveloped && kind == transformValueNodeSet
+	bearingNodeAvailable := kind == transformValueNodeSet
 	for i, step := range steps {
 		if runtime.signing {
 			switch step.algorithm {
@@ -192,6 +193,9 @@ func validateTransformSteps(runtime transformRuntime, initialKind transformValue
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
+			if expressionReferencesHere(step.xpathExpr) && (!bearingNodeAvailable || step.xpathHere == nil) {
+				return nil, fmt.Errorf("transform %d (%s): %w: here() is unavailable for octet input or after an octet boundary", i, step.algorithm, ErrHereUnavailable)
+			}
 		}
 		if step.algorithm == TransformXSLT && isNilInterface(runtime.xsltTransformer) {
 			return nil, fmt.Errorf("transform %d (%s): %w: XSLT transform requires a configured XSLTTransformer", i, step.algorithm, ErrUnsupportedTransform)
@@ -210,18 +214,56 @@ func validateTransformSteps(runtime transformRuntime, initialKind transformValue
 		if step.algorithm == TransformBase64 && kind == transformValueNodeSet {
 			kind = transformValueOctets
 			hasSignatureIdentity = false
+			bearingNodeAvailable = false
 		} else {
 			if kind != contract.input {
 				hasSignatureIdentity = false
+				bearingNodeAvailable = false
 			}
 			kind = contract.output
 			if kind == transformValueOctets {
 				hasSignatureIdentity = false
+				bearingNodeAvailable = false
 			}
 		}
 		contracts[i] = contract
 	}
 	return contracts, nil
+}
+
+// expressionReferencesHere reports whether an XPath expression invokes the
+// unqualified here() function outside a string literal. The expression has
+// already passed XPath parsing and static validation before this check.
+func expressionReferencesHere(expr string) bool {
+	const name = "here"
+	var quote byte
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if c == '\'' || c == '"' {
+			quote = c
+			continue
+		}
+		if !strings.HasPrefix(expr[i:], name) {
+			continue
+		}
+		if i > 0 && isXPathNameByte(expr[i-1]) {
+			continue
+		}
+		j := i + len(name)
+		for j < len(expr) && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\r' || expr[j] == '\n') {
+			j++
+		}
+		if j < len(expr) && expr[j] == '(' {
+			return true
+		}
+	}
+	return false
 }
 
 // executeTransformPipeline applies every transform in document order, inserting

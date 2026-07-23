@@ -236,20 +236,59 @@ func TestExecuteTransformPipelineParseErrors(t *testing.T) {
 }
 
 func TestExecuteTransformPipelineHereAfterReparse(t *testing.T) {
-	hereDoc := parseTransformTestDoc(t, `<XPath/>`)
-	transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte(`<out/>`)}}
-	runtime := transformRuntime{
-		parser:          helium.NewParser(),
-		xsltTransformer: transformer,
-		external:        true,
-	}
-	steps := []transformStep{
-		{algorithm: TransformXSLT, stylesheet: []byte("style")},
-		{algorithm: TransformXPath, xpathExpr: "here()", xpathHere: hereDoc.DocumentElement()},
-	}
+	t.Run("initial octets", func(t *testing.T) {
+		hereDoc := parseTransformTestDoc(t, `<XPath/>`)
+		transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte(`<out/>`)}}
+		runtime := transformRuntime{
+			parser:          helium.NewParser(),
+			xsltTransformer: transformer,
+			external:        true,
+		}
+		steps := []transformStep{
+			{algorithm: TransformXSLT, stylesheet: []byte("style")},
+			{algorithm: TransformXPath, xpathExpr: "here()", xpathHere: hereDoc.DocumentElement()},
+		}
 
-	_, err := externalReferenceDigestInput(t.Context(), []byte("raw"), steps, runtime)
-	require.ErrorIs(t, err, ErrHereUnavailable)
+		_, err := externalReferenceDigestInput(t.Context(), []byte("raw"), steps, runtime)
+		require.ErrorIs(t, err, ErrHereUnavailable)
+		require.Empty(t, transformer.snapshot(), "here() must be rejected before an earlier transform callback runs")
+	})
+
+	t.Run("earlier octet boundary", func(t *testing.T) {
+		doc := parseTransformTestDoc(t, `<root><XPath/></root>`)
+		hereNode := findLocal(doc.DocumentElement(), "XPath")
+		require.NotNil(t, hereNode)
+		transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte(`<out/>`)}}
+		runtime := transformRuntime{
+			parser:          helium.NewParser(),
+			xsltTransformer: transformer,
+		}
+		initial := newReferenceNodeSetValue(doc, doc.DocumentElement(), nil, false, false, nil)
+		steps := []transformStep{
+			{algorithm: TransformXSLT, stylesheet: []byte("style")},
+			{algorithm: TransformXPath, xpathExpr: "here()", xpathHere: hereNode},
+		}
+
+		_, err := executeTransformPipeline(t.Context(), runtime, initial, steps)
+		require.ErrorIs(t, err, ErrHereUnavailable)
+		require.Empty(t, transformer.snapshot(), "here() must be rejected before the octet-producing callback runs")
+	})
+}
+
+func TestExpressionReferencesHere(t *testing.T) {
+	cases := map[string]bool{
+		"here()":                         true,
+		"here \n\t()":                    true,
+		"boolean(here()/parent::node())": true,
+		`contains("here()", "here")`:     false,
+		"somehere()":                     false,
+		"ext:here()":                     false,
+	}
+	for expr, want := range cases {
+		t.Run(expr, func(t *testing.T) {
+			require.Equal(t, want, expressionReferencesHere(expr))
+		})
+	}
 }
 
 func TestExecuteTransformPipelineEnvelopedOrder(t *testing.T) {

@@ -314,14 +314,14 @@ func TestGeneralXPointerValidatesBeforeXSLT(t *testing.T) {
 	require.NoError(t, err)
 
 	doc := mustParse(t, `<root/>`)
-	transformer := &countingXSLTTransformer{}
+	transformer := &pipelineRecordingTransformer{}
 	_, octets, _, err := canonicalizeReference(t.Context(), &verifierConfig{
 		allowXPointer:   true,
 		xsltTransformer: transformer,
 	}, doc, nil, ref)
 	require.ErrorIs(t, err, ErrReferenceNotFound)
 	require.Nil(t, octets)
-	require.Zero(t, transformer.calls.Load(), "XSLT must not run after a statically invalid XPointer")
+	require.Empty(t, transformer.snapshot(), "XSLT must not run after a statically invalid XPointer")
 }
 
 // TestParseGeneralXPointer covers the XPointer framework URI recognition: which
