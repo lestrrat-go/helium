@@ -5,7 +5,7 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 - Generated: 2026-07-23
 - Upstream suite: https://www.w3.org/TR/2008/NOTE-xmldsig2ed-tests-20080610/
-- helium: `1799b78f`
+- helium: `0da8408b`
 - helium-w3c-tests (harness): `6c987d8`
 
 | Outcome | Count |
