@@ -1,13 +1,24 @@
 package xmldsig1
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
+
+type countingXSLTTransformer struct {
+	calls atomic.Int32
+}
+
+func (t *countingXSLTTransformer) TransformXSLT(_ context.Context, _, input []byte) ([]byte, error) {
+	t.calls.Add(1)
+	return input, nil
+}
 
 // stepsFromParsed converts a parsedReference's transforms into pipeline steps,
 // mirroring canonicalizeReference so a test drives the real resolution.
@@ -40,6 +51,7 @@ func TestXPathTransformDefCanDigest(t *testing.T) {
 	require.Len(t, pipe.xpathFilters, 1, "one XPath filter transform")
 	require.Equal(t, "http://www.ietf.org", pipe.xpathFilters[0].ns["ietf"],
 		"the XPath element's ietf: namespace binding must be captured")
+	require.NotNil(t, pipe.xpathFilters[0].prepared, "pipeline resolution must prepare the filter for execution")
 	require.Equal(t, C14N11URI, pipe.c14nMethod)
 
 	// The external reference document.
@@ -88,6 +100,39 @@ func TestXPathTransformThroughPipeline(t *testing.T) {
 	require.Contains(t, string(canonical), "KEEPVAL", "kept subtree must survive the XPath filter")
 	require.NotContains(t, string(canonical), "DROPVAL", "dropped subtree must be filtered out")
 	require.NotContains(t, string(canonical), "t:drop", "dropped element must be filtered out")
+}
+
+func TestXPathFilterValidatesEmptyNodeSet(t *testing.T) {
+	filtered, err := applyXPathFilter(t.Context(), nil, xpathFilter{expr: "$missing"})
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.Nil(t, filtered)
+}
+
+func TestXPathTransformPreflightsAllFiltersBeforeXSLT(t *testing.T) {
+	const reference = `<Reference xmlns="http://www.w3.org/2000/09/xmldsig#" URI="#c1">
+		<Transforms>
+			<Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116"><XPath>false()</XPath></Transform>
+			<Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116"><XPath>$missing</XPath></Transform>
+			<Transform Algorithm="http://www.w3.org/TR/1999/REC-xslt-19991116">
+				<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
+					<xsl:template match="/"><out/></xsl:template>
+				</xsl:stylesheet>
+			</Transform>
+		</Transforms>
+		<DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+		<DigestValue>AA==</DigestValue>
+	</Reference>`
+	ref, err := parseReferenceFragment(t, reference)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<doc><content Id="c1">payload</content></doc>`))
+	require.NoError(t, err)
+
+	transformer := &countingXSLTTransformer{}
+	_, octets, _, err := canonicalizeReference(t.Context(), &verifierConfig{xsltTransformer: transformer}, doc, nil, ref)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.Nil(t, octets)
+	require.Zero(t, transformer.calls.Load(), "XSLT must not run after a statically invalid XPath filter")
 }
 
 // TestXPathTransformFailClosed locks the fail-closed edges of the XPath filter

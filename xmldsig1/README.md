@@ -118,7 +118,10 @@ each with an optional `#WithComments` variant), the XPath filter transform
 `ds:Transform/XPath` expression once per input node — with that node as the
 context node, under the `XPath` element's in-scope namespace bindings — and keeps
 each node whose result converts to boolean true (XPath 1.0 semantics: no default
-element namespace). The XMLDSig `here()` function (core §6.6.3.1) is available
+element namespace). Every XPath filter in a resolved transform chain is compiled
+and statically validated before any transform runs, so an invalid expression
+fails even when an earlier filter produces an empty node-set. The XMLDSig
+`here()` function (core §6.6.3.1) is available
 inside an XPath filter expression: it returns the `ds:XPath` element that bears
 the expression, which is what the standard "enveloped signature via `here()`"
 filter uses to omit the enclosing `ds:Signature`. Evaluation runs on a bounded
