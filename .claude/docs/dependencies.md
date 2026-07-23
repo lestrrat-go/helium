@@ -19,6 +19,7 @@ schematron     → helium, xpath1, internal/xpath, internal/xpath1/number
 xpointer       → helium, xpath1, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil
 xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil
+xmldsig1/transform → helium, xmldsig1, xslt3  (opt-in xslt3-backed XSLTTransformer; kept out of xmldsig1 so the core never imports xslt3)
 xmlenc1        → helium, internal/domutil
 html           → helium, sax, push, internal/xmlchar
 catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, internal/xmlchar
