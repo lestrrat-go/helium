@@ -187,7 +187,8 @@ func validateTransformSteps(runtime transformRuntime, initialKind transformValue
 			return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 		}
 		if step.algorithm == TransformXPath {
-			contract.xpath, err = compileXPathFilterExpression(step.xpathExpr)
+			eval := newDSigXPathEvaluator(step.xpathNS, step.xpathHere, defaultXPathOpLimit)
+			contract.xpath, err = compileXPathFilterExpression(step.xpathExpr, eval)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}

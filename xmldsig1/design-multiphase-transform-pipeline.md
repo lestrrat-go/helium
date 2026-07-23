@@ -112,7 +112,8 @@ original Reference or Signature identity.
 `validateTransformSteps` scans the complete list before execution. It checks:
 
 - supported algorithm URI;
-- required XPath expression and successful XPath compilation;
+- required XPath expression, successful compilation, resolvable QName prefixes,
+  and registered function names;
 - required XSLT stylesheet;
 - usable non-nil/non-typed-nil XSLT transformer;
 - sign-side XPath/XSLT capability;
@@ -243,7 +244,7 @@ Internal tests cover:
 - node-set/octet conversions in both directions;
 - XSLT → XPath and Base64 → XPath reparsing;
 - final implicit C14N;
-- complete-list algorithm, parameter, and XPath compilation validation before
+- complete-list algorithm, parameter, and XPath static validation before
   transformer invocation;
 - external transform validation before resolver invocation;
 - external versus intermediate parse error classes;

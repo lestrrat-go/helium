@@ -157,7 +157,49 @@ func TestExecuteTransformPipelineMalformedXPathValidationRunsFirst(t *testing.T)
 
 	_, err := externalReferenceDigestInput(t.Context(), []byte("input"), steps, runtime)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
-	require.Empty(t, transformer.snapshot(), "an earlier injected transform must not run before every XPath expression compiles")
+	require.Empty(t, transformer.snapshot(), "an earlier injected transform must not run before every XPath expression is validated")
+}
+
+func TestExecuteTransformPipelineXPathStaticValidationRunsFirst(t *testing.T) {
+	tests := []struct {
+		name string
+		step transformStep
+	}{
+		{
+			name: "bound prefix with unknown function",
+			step: transformStep{
+				algorithm: TransformXPath,
+				xpathExpr: "ext:missing()",
+				xpathNS:   map[string]string{"ext": "urn:ext"},
+			},
+		},
+		{
+			name: "unbound name test prefix",
+			step: transformStep{
+				algorithm: TransformXPath,
+				xpathExpr: "not(self::missing:secret)",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte("unused")}}
+			runtime := transformRuntime{
+				parser:          helium.NewParser(),
+				xsltTransformer: transformer,
+				external:        true,
+			}
+			steps := []transformStep{
+				{algorithm: TransformXSLT, stylesheet: []byte("style")},
+				test.step,
+			}
+
+			out, err := externalReferenceDigestInput(t.Context(), []byte(`<root xmlns:missing="urn:missing"/>`), steps, runtime)
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.Nil(t, out)
+			require.Empty(t, transformer.snapshot(), "an earlier injected transform must not run before XPath static validation finishes")
+		})
+	}
 }
 
 func TestExecuteTransformPipelineParseErrors(t *testing.T) {

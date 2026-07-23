@@ -237,12 +237,16 @@ func newDSigXPathEvaluator(ns map[string]string, hereNode helium.Node, opLimit i
 	return eval.Function("here", hereFunction{node: hereNode})
 }
 
-// compileXPathFilterExpression compiles the transform expression during the
-// complete-list validation pass. Wrapping it in fn:boolean makes this compiled
-// form identical to the one evaluated for each input node.
-func compileXPathFilterExpression(expr string) (*xpath1.Expression, error) {
+// compileXPathFilterExpression compiles and statically validates the transform
+// expression during the complete-list validation pass. Wrapping it in
+// fn:boolean makes this compiled form identical to the one evaluated for each
+// input node.
+func compileXPathFilterExpression(expr string, eval xpath1.Evaluator) (*xpath1.Expression, error) {
 	compiled, err := xpath1.Compile("boolean(" + expr + ")")
 	if err != nil {
+		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, expr, err)
+	}
+	if err := eval.Validate(compiled); err != nil {
 		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, expr, err)
 	}
 	return compiled, nil
@@ -256,9 +260,9 @@ func compileXPathFilterExpression(expr string) (*xpath1.Expression, error) {
 // data-model boolean conversion (a non-empty node-set, a non-zero number, a
 // non-empty string) governs membership. Evaluation runs on the shared bounded
 // evaluator (namespaces, here(), and the OpLimit security bound). Expressions are
-// compiled during complete-list validation, before execution starts. An
-// evaluation error is fail-closed as ErrUnsupportedTransform so a reference
-// never digests an unfiltered node-set.
+// compiled and statically validated during complete-list validation, before
+// execution starts. An evaluation error is fail-closed as
+// ErrUnsupportedTransform so a reference never digests an unfiltered node-set.
 func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) ([]helium.Node, error) {
 	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
 	kept := make([]helium.Node, 0, len(nodes))
