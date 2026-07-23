@@ -10,9 +10,9 @@ import (
 
 // XSLTTransformer applies the XMLDSig XSLT transform (XMLDSig core §6.6.5):
 // stylesheet is the serialized xsl:stylesheet/xsl:transform subtree taken from the
-// ds:Transform element, and input is the pre-XSLT octet stream (the reference's
-// canonicalized node-set). The result is the octet stream the DigestValue is
-// computed over.
+// ds:Transform element, and input is the current pipeline octet stream. It may be
+// raw resolver bytes or output from canonicalization, Base64, or an earlier XSLT
+// step. The result feeds the next declared transform or the DigestValue.
 //
 // It is the opt-in seam for the XSLT transform, mirroring [ReferenceResolver]:
 // the XSLT transform is OFF by default and runs only when a transformer is
@@ -25,12 +25,12 @@ import (
 // subtree, and input derives from the signed document). XSLT is a powerful
 // language — document(), unbounded recursion, and other unbounded computation —
 // so the implementer owns ALL resource and XXE policy (compute/time/memory
-// limits, disabling document()/external access). helium ships no transformer for
-// exactly this reason, matching the "no HTTP resolver shipped" stance for
-// external references.
+// limits, disabling document()/external access). The core package runs no XSLT
+// automatically; callers may explicitly import the separate
+// xmldsig1/transform adapter.
 //
-// TransformXSLT must be safe to call from multiple goroutines and should honor
-// ctx cancellation.
+// One Reference may invoke TransformXSLT multiple times. TransformXSLT must be
+// safe to call from multiple goroutines and should honor ctx cancellation.
 type XSLTTransformer interface {
 	TransformXSLT(ctx context.Context, stylesheet []byte, input []byte) ([]byte, error)
 }

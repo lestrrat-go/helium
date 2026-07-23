@@ -111,53 +111,29 @@ func TestParseXSLTTransformEntityHidden(t *testing.T) {
 	})
 }
 
-// TestResolveXSLTPipeline locks the pipeline placement of the XSLT transform: a
-// bare XSLT resolves with the default inclusive C14N 1.0 fill-in and pipe.xslt
-// set, a preceding node-set transform is allowed, and any octet-ender before or
-// after the XSLT (or a second XSLT) is rejected fail-closed.
-func TestResolveXSLTPipeline(t *testing.T) {
+// TestValidateXSLTSequences proves capability validation accepts XSLT anywhere
+// an ordered node-set/octet conversion can satisfy its octet input.
+func TestValidateXSLTSequences(t *testing.T) {
 	xslt := transformStep{algorithm: TransformXSLT, stylesheet: []byte("<xsl/>")}
-
-	t.Run("bare XSLT resolves with c14n fill-in", func(t *testing.T) {
-		pipe, err := resolveTransformPipeline([]transformStep{xslt})
-		require.NoError(t, err)
-		require.NotNil(t, pipe.xslt, "pipe.xslt must mark the XSLT transform")
-		require.Equal(t, C14N10, pipe.c14nMethod, "a bare XSLT uses the inclusive C14N 1.0 fill-in for its pre-XSLT octets")
-	})
-
-	t.Run("node-set transform may precede XSLT", func(t *testing.T) {
-		pipe, err := resolveTransformPipeline([]transformStep{
-			{algorithm: TransformEnvelopedSignature},
-			{algorithm: TransformXPath, xpathExpr: "true()"},
-			xslt,
+	runtime := transformRuntime{
+		xsltTransformer: &markerXSLTTransformer{marker: "x"},
+		allowEnveloped:  true,
+	}
+	cases := map[string][]transformStep{
+		"bare XSLT":            {xslt},
+		"node-set before XSLT": {{algorithm: TransformEnvelopedSignature}, {algorithm: TransformXPath, xpathExpr: xpathTrueExpr}, xslt},
+		"XSLT after XSLT":      {xslt, xslt},
+		"XSLT after c14n":      {{algorithm: C14N11URI}, xslt},
+		"c14n after XSLT":      {xslt, {algorithm: C14N11URI}},
+		"base64 before XSLT":   {{algorithm: TransformBase64}, xslt},
+		"base64 after XSLT":    {xslt, {algorithm: TransformBase64}},
+	}
+	for name, steps := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := validateTransformSteps(runtime, transformValueNodeSet, steps)
+			require.NoError(t, err)
 		})
-		require.NoError(t, err)
-		require.NotNil(t, pipe.xslt)
-		require.True(t, pipe.hasEnveloped)
-		require.Len(t, pipe.xpathFilters, 1)
-	})
-
-	t.Run("XSLT after XSLT rejected", func(t *testing.T) {
-		_, err := resolveTransformPipeline([]transformStep{xslt, xslt})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-	})
-
-	t.Run("XSLT after c14n rejected", func(t *testing.T) {
-		_, err := resolveTransformPipeline([]transformStep{{algorithm: C14N11URI}, xslt})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-	})
-
-	t.Run("c14n after XSLT rejected", func(t *testing.T) {
-		_, err := resolveTransformPipeline([]transformStep{xslt, {algorithm: C14N11URI}})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-	})
-
-	t.Run("XSLT with base64 rejected either order", func(t *testing.T) {
-		_, err := resolveTransformPipeline([]transformStep{{algorithm: TransformBase64}, xslt})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-		_, err = resolveTransformPipeline([]transformStep{xslt, {algorithm: TransformBase64}})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-	})
+	}
 }
 
 // TestXSLTFailClosedWithoutTransformer confirms a Reference carrying an XSLT

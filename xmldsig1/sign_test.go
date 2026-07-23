@@ -327,10 +327,9 @@ func TestSign(t *testing.T) {
 		require.Equal(t, "#does-not-exist", refErr.URI)
 	})
 
-	// invalid transform pipeline on enveloping is preflighted: a transform list
-	// rejected by resolveTransformPipeline (here Enveloped ordered after a c14n
-	// transform) must return ErrUnsupportedTransform WITHOUT moving the caller's
-	// content into an <Object> or otherwise mutating the input document.
+	// Invalid transform capabilities are preflighted: an Enveloped transform
+	// after a c14n boundary has lost the original Signature identity and must
+	// return ErrUnsupportedTransform without moving caller content.
 	t.Run("invalid transform pipeline leaves caller DOM unchanged", func(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, `<root><data Id="d1">covered</data></root>`)
