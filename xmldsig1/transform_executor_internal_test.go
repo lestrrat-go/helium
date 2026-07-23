@@ -15,7 +15,10 @@ type transformCall struct {
 	input      []byte
 }
 
-const xpathTrueExpr = "true()"
+const (
+	xpathHereExpr = "here()"
+	xpathTrueExpr = "true()"
+)
 
 type pipelineRecordingTransformer struct {
 	mu      sync.Mutex
@@ -246,7 +249,7 @@ func TestExecuteTransformPipelineHereAfterReparse(t *testing.T) {
 		}
 		steps := []transformStep{
 			{algorithm: TransformXSLT, stylesheet: []byte("style")},
-			{algorithm: TransformXPath, xpathExpr: "here()", xpathHere: hereDoc.DocumentElement()},
+			{algorithm: TransformXPath, xpathExpr: xpathHereExpr, xpathHere: hereDoc.DocumentElement()},
 		}
 
 		_, err := externalReferenceDigestInput(t.Context(), []byte("raw"), steps, runtime)
@@ -266,7 +269,7 @@ func TestExecuteTransformPipelineHereAfterReparse(t *testing.T) {
 		initial := newReferenceNodeSetValue(doc, doc.DocumentElement(), nil, false, false, nil)
 		steps := []transformStep{
 			{algorithm: TransformXSLT, stylesheet: []byte("style")},
-			{algorithm: TransformXPath, xpathExpr: "here()", xpathHere: hereNode},
+			{algorithm: TransformXPath, xpathExpr: xpathHereExpr, xpathHere: hereNode},
 		}
 
 		_, err := executeTransformPipeline(t.Context(), runtime, initial, steps)
@@ -277,7 +280,7 @@ func TestExecuteTransformPipelineHereAfterReparse(t *testing.T) {
 
 func TestExpressionReferencesHere(t *testing.T) {
 	cases := map[string]bool{
-		"here()":                         true,
+		xpathHereExpr:                    true,
 		"here \n\t()":                    true,
 		"boolean(here()/parent::node())": true,
 		`contains("here()", "here")`:     false,

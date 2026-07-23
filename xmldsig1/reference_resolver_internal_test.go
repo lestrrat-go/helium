@@ -137,7 +137,7 @@ func TestResolveExternalReferenceRejectsHereAfterReparseBeforeSideEffects(t *tes
 		uri: "external.xml",
 		transforms: []parsedTransform{
 			{algorithm: TransformXSLT, stylesheet: []byte("style")},
-			{algorithm: TransformXPath, xpathExpr: "here()", xpathHere: doc.DocumentElement()},
+			{algorithm: TransformXPath, xpathExpr: xpathHereExpr, xpathHere: doc.DocumentElement()},
 		},
 	})
 	require.ErrorIs(t, err, ErrHereUnavailable)

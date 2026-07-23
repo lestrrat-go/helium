@@ -237,7 +237,7 @@ func validateTransformSteps(runtime transformRuntime, initialKind transformValue
 func expressionReferencesHere(expr string) bool {
 	const name = "here"
 	var quote byte
-	for i := 0; i < len(expr); i++ {
+	for i := range len(expr) {
 		c := expr[i]
 		if quote != 0 {
 			if c == quote {

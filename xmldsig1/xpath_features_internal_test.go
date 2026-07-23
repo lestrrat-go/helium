@@ -155,7 +155,7 @@ func TestHereFunctionFailsClosed(t *testing.T) {
 			digestAlgorithm: DigestSHA256,
 			transforms: []parsedTransform{
 				// xpathHere left nil: here() has no bearing node and must fail closed.
-				{algorithm: TransformXPath, xpathExpr: "here()", xpathNS: map[string]string{"t": "urn:t"}},
+				{algorithm: TransformXPath, xpathExpr: xpathHereExpr, xpathNS: map[string]string{"t": "urn:t"}},
 				{algorithm: C14N11URI},
 			},
 		}
