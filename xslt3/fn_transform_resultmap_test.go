@@ -290,14 +290,23 @@ func TestFnTransformSameAbsoluteURITwiceRaisesXTDE1490(t *testing.T) {
 }
 
 // TestFnTransformSerializedTextPreservesTrailingNewline guards that method="text"
-// serialized delivery keeps a legitimate trailing newline (only the xml-family
-// serializer's document-terminating newline artifact is trimmed).
+// serialized delivery keeps a legitimate trailing newline.
 func TestFnTransformSerializedTextPreservesTrailingNewline(t *testing.T) {
 	xsl := "<xsl:stylesheet version=\"3.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\">" +
 		"<xsl:output method=\"text\"/>" +
 		"<xsl:template name='main'>a\nb\n</xsl:template></xsl:stylesheet>"
 	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"delivery-format":"serialized"})?output
 	return $r = concat("a", codepoints-to-string(10), "b", codepoints-to-string(10))`
+	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
+}
+
+func TestFnTransformSerializedXMLPreservesTrailingContentNewline(t *testing.T) {
+	xsl := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+		`<xsl:output method="xml" encoding="iso-8859-1" omit-xml-declaration="yes"/>` +
+		`<xsl:template name="main"><out/><xsl:text>&#10;</xsl:text></xsl:template>` +
+		`</xsl:stylesheet>`
+	expr := `let $r := fn:transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"delivery-format":"serialized"})?output
+	return $r = concat("<out/>", codepoints-to-string(10))`
 	require.Equal(t, wantTrue, transformBool(t, expr, xslXMLVars(xsl, "")))
 }
 

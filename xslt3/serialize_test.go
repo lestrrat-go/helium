@@ -41,6 +41,38 @@ func TestSerializeResultXML(t *testing.T) {
 	require.Contains(t, buf.String(), "<root>hello</root>")
 }
 
+func TestSerializeResultXMLOmitsWriterTerminators(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" omit-xml-declaration="yes"/>
+  <xsl:template match="/"><root>hello</root></xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
+	require.NoError(t, err)
+	require.Equal(t, "<root>hello</root>", buf.String())
+}
+
+func TestSerializeResultXMLPreservesExplicitTrailingTextNewline(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" encoding="UTF-8" omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out/><xsl:text>&#10;</xsl:text></xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
+	require.NoError(t, err)
+	require.Equal(t, "<out/>\n", buf.String())
+}
+
 func TestSerializeResultNilOutputDef(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -140,7 +172,7 @@ func TestPrimaryAdaptiveMarkupThenElementKeepsDeferredSeparators(t *testing.T) {
 	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
 	require.NoError(t, err)
 	require.Contains(t, out, `<?xml version="1.0"`)
-	require.Contains(t, out, "<!--first-->\n | \n<?target data?>\n | \n<result/>")
+	require.Contains(t, out, "<!--first--> | <?target data?> | <result/>")
 }
 
 func TestPrimaryAdaptiveMarkupSeparatorAppliesCharacterMapAndNormalization(t *testing.T) {

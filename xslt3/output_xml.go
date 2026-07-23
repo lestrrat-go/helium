@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/writerctl"
 	"github.com/lestrrat-go/helium/stream"
 )
 
@@ -68,28 +69,29 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.OmitDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}
-	// When standalone is "yes" or "no", or when indent="no" and
-	// the declaration is not omitted, buffer and post-process.
+	// XSLT serialization must not add bytes between top-level result nodes.
+	// Disable helium.Writer's per-document-child terminators at their source so
+	// an explicit top-level text newline remains distinguishable result content.
+	if configured, ok := writerctl.OmitDocumentChildTerminators(writer).(helium.Writer); ok {
+		writer = configured
+	}
 	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo)
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
-	if needStandalone || needStripNewline {
-		var buf strings.Builder
-		if err := writer.WriteTo(&buf, doc); err != nil {
-			return xmlInvalidCharError(err)
-		}
-		out := buf.String()
-		if needStandalone {
-			out = injectStandalone(out, outDef.Standalone)
-		}
-		if needStripNewline {
-			if idx := strings.Index(out, "?>\n"); idx >= 0 {
-				out = out[:idx+2] + out[idx+3:]
-			}
-		}
-		_, err := io.WriteString(w, out)
-		return err
+	var buf strings.Builder
+	if err := writer.WriteTo(&buf, doc); err != nil {
+		return xmlInvalidCharError(err)
 	}
-	return xmlInvalidCharError(writer.WriteTo(w, doc))
+	out := buf.String()
+	if needStandalone {
+		out = injectStandalone(out, outDef.Standalone)
+	}
+	if needStripNewline {
+		if idx := strings.Index(out, "?>\n"); idx >= 0 {
+			out = out[:idx+2] + out[idx+3:]
+		}
+	}
+	_, err := io.WriteString(w, out)
+	return err
 }
 
 // xmlInvalidCharError maps the writer's ErrInvalidXMLChar sentinel to the
