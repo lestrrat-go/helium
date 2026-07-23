@@ -414,9 +414,6 @@ func base64TransformNodeSetOctets(value *nodeSetValue) ([]byte, error) {
 	if value == nil {
 		return nil, fmt.Errorf("%w: transform node-set is nil", ErrUnsupportedTransform)
 	}
-	if value.origin != nil && !value.materialized && !value.origin.envelopedPending {
-		return base64TransformOctets(value.origin.target)
-	}
 	materialized, err := materializeNodeSet(value)
 	if err != nil {
 		return nil, err

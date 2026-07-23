@@ -43,8 +43,9 @@ rule](https://www.w3.org/TR/2008/REC-xmldsig-core-20080610/#sec-Transforms).
 Base64 has one algorithm-specific input rule from XMLDSig §6.6.2. When its
 current value is a node-set, it concatenates the remaining text-node
 string-values in document order and decodes those bytes. It never applies the
-generic node-set → C14N conversion. An untouched initial subtree uses
-`base64TransformOctets` to preserve its established descendant-text behavior.
+generic node-set → C14N conversion. Untouched initial subtrees and node-sets
+materialized by an earlier transform use the same text-node selection, excluding
+comments and processing instructions.
 
 ## Entry adapters
 

@@ -131,6 +131,51 @@ func TestBase64ReferenceNodeSetTransforms(t *testing.T) {
 	})
 }
 
+// TestBase64ReferenceNodeSetIgnoresNonTextNodes confirms an untouched lazy
+// node-set and a materialized node-set use the same XMLDSig text-node rule.
+func TestBase64ReferenceNodeSetIgnoresNonTextNodes(t *testing.T) {
+	cases := []struct {
+		name string
+		xml  string
+	}{
+		{
+			name: "comment",
+			xml:  `<root><Object Id="object">c29t<!-- ignored -->ZSB0ZXh0</Object></root>`,
+		},
+		{
+			name: "processing instruction",
+			xml:  `<root><Object Id="object">c29t<?ignored value?>ZSB0ZXh0</Object></root>`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.xml))
+			require.NoError(t, err)
+
+			direct := parsedReference{
+				uri:             objectFragment,
+				digestAlgorithm: DigestSHA1,
+				transforms:      []parsedTransform{{algorithm: TransformBase64}},
+			}
+			_, directOctets, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, direct)
+			require.NoError(t, err)
+			require.Equal(t, "some text", string(directOctets))
+
+			afterXPath := parsedReference{
+				uri:             objectFragment,
+				digestAlgorithm: DigestSHA1,
+				transforms: []parsedTransform{
+					{algorithm: TransformXPath, xpathExpr: "true()"},
+					{algorithm: TransformBase64},
+				},
+			}
+			_, materializedOctets, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, afterXPath)
+			require.NoError(t, err)
+			require.Equal(t, directOctets, materializedOctets)
+		})
+	}
+}
+
 // TestBase64SignPreflightAccepted proves signing and execution share Base64
 // support for a caller-supplied Transform implementation.
 func TestBase64SignPreflightAccepted(t *testing.T) {

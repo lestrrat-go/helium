@@ -125,9 +125,9 @@ filter uses to omit the enclosing `ds:Signature`. Evaluation runs on a bounded
 XPath 1.0 evaluator (an operation-count cap on top of the recursion and node-set
 caps), so an attacker-supplied expression cannot stall verification. The Base64
 transform decodes octet input directly. For node-set input it concatenates the
-remaining text-node string-values, with tags and comments stripped, before
-decoding. Signing supports Base64 through the `Transform` interface, although no
-typed constructor is provided.
+remaining text-node string-values, with element markup, comments, and processing
+instructions stripped, before decoding. Signing supports Base64 through the
+`Transform` interface, although no typed constructor is provided.
 
 Transforms run in declared order over either a node-set or octets. The executor
 parses octets when the next transform requires a node-set and applies inclusive
@@ -489,12 +489,9 @@ point-in-time evidence:
   transform, the truncated-HMAC must-reject case, and the X.509 KeyInfo
   variants.
 
-The merlin and xmldsig11 suites pass in full. The only remaining expected
-failures are two `xmldsig2ed` cases (`defCan-2/3`) whose Reference chains an
-XSLT transform between two canonicalization steps
-(XPath → c14n → XSLT → XPath → c14n) — a multi-phase pipeline that oscillates
-between node-set and octet representations. helium's transform pipeline models a
-single node-set phase followed by a single octet phase and cannot represent that
-chain; the blocker is the pipeline shape, not the transformer (a ready
-`xslt3`-backed `XSLTTransformer` ships as the [`xmldsig1/transform`](transform)
-package). Each is documented with its reason in the harness expectations.
+The merlin, xmldsig2ed, and xmldsig11 suites pass in full. The `xmldsig2ed`
+`defCan-2/3` cases exercise a multi-phase
+XPath → c14n → XSLT → XPath → c14n chain. The ordered transform pipeline
+executes its repeated node-set/octet transitions when the Verifier has an
+`XSLTTransformer` configured, such as the ready `xslt3`-backed
+[`xmldsig1/transform.XSLT`](transform) adapter.

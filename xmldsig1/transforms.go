@@ -147,23 +147,6 @@ func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string)
 	return canonicalizeNodeSet(method, collectSubtreeNodes(elem), elem.OwnerDocument(), prefixes)
 }
 
-// base64TransformOctets implements the base64 decode transform (XMLDSig core
-// §6.6.2) for a same-document node-set input. The transform's input is the
-// resolved element's node-set; the spec converts a node-set input to octets by
-// taking its XPath 1.0 string-value (equivalently, applying self::text() and
-// concatenating), which is the element's concatenated descendant text with all
-// element start/end tags, comments, and processing instructions stripped — so
-// domutil.TextContent(target) is exactly that value. The concatenated text is
-// base64-decoded (XML whitespace within the base64 is ignored by the decoder)
-// and returned as the transform's octet output.
-//
-// Invalid base64 in the input is fail-closed as ErrInvalidSignature, matching how
-// a malformed DigestValue/SignatureValue base64 is reported, so a Reference whose
-// base64 content cannot be decoded never digests partial or unintended bytes.
-func base64TransformOctets(target *helium.Element) ([]byte, error) {
-	return decodeBase64TransformOctets([]byte(domutil.TextContent(target)))
-}
-
 // canonicalizeNodeSet canonicalizes an explicit node-set against doc using the
 // given method. It is the shared node-set -> octet stage for a plain subtree
 // reference and for a reference whose XPath filter transforms have narrowed the
