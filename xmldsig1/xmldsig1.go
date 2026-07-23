@@ -524,14 +524,15 @@ func (v Verifier) MaxDecodedBytes(n int) Verifier {
 // and, without a [ReferenceResolver], rejected with [ErrReferenceNotFound], so
 // default verification is byte-identical.
 //
-// When enabled, the xpointer() expression is evaluated on a bounded XPath 1.0
-// evaluator under the document element's in-scope namespaces overlaid with the
-// xmlns() bindings, and its result MUST identify a single element apex — the XML
-// Signature Wrapping defense: an empty node-set is [ErrReferenceNotFound], and a
-// multi-element or non-element node-set is [ErrAmbiguousReference]. A literal
-// xpointer(id('X')) keeps the duplicate-detecting id resolution (never a
-// last-one-wins id table). The XMLDSig here() function is not available inside a
-// URI-borne XPointer.
+// When enabled, the xpointer() expression is statically validated, then evaluated
+// on a bounded XPath 1.0 evaluator under the document element's in-scope
+// namespaces overlaid with the xmlns() bindings. An unresolved variable,
+// function, or prefix fails with [ErrReferenceNotFound] before evaluation. The
+// result MUST identify a single element apex — the XML Signature Wrapping
+// defense: an empty node-set is [ErrReferenceNotFound], and a multi-element or
+// non-element node-set is [ErrAmbiguousReference]. A literal xpointer(id('X'))
+// keeps the duplicate-detecting id resolution (never a last-one-wins id table).
+// The XMLDSig here() function is not available inside a URI-borne XPointer.
 func (v Verifier) AllowXPointer(allow bool) Verifier {
 	v = v.clone()
 	v.cfg.allowXPointer = allow

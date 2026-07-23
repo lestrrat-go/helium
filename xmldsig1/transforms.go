@@ -1146,9 +1146,9 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // duplicate-detecting findElementsByIDUnder, and ANY other use of id() (a
 // parenthesized or embedded id() call the selector parser cannot reduce to a
 // single literal id) is rejected fail-closed rather than handed to the built-in.
-// Every remaining expression is evaluated on the shared bounded evaluator with
-// the merged namespace context, here() disabled (nil bearing node), and the
-// single-apex constraint enforced on the result.
+// Every remaining expression is statically validated, then evaluated on the
+// shared bounded evaluator with the merged namespace context, here() disabled
+// (nil bearing node), and the single-apex constraint enforced on the result.
 func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, overrides map[string]string, expr string) (*helium.Element, error) {
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {
@@ -1176,6 +1176,9 @@ func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, ove
 		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
 	}
 	eval := newDSigXPathEvaluator(xpointerNamespaces(doc, overrides), nil, defaultXPathOpLimit)
+	if err := eval.Validate(compiled); err != nil {
+		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
+	}
 	nodes, err := eval.Find(ctx, compiled, doc.DocumentElement())
 	if err != nil {
 		// Preserve the here()-unavailable sentinel (a URI-borne XPointer has no

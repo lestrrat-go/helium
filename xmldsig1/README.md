@@ -180,14 +180,16 @@ by one `xpointer(<expr>)` part, for example
 and, without a `ReferenceResolver`, rejected with `ErrReferenceNotFound`, so
 default verification is unchanged.
 
-When enabled, the `xpointer()` expression is evaluated on the same bounded XPath
-1.0 evaluator (the document element's in-scope namespaces overlaid with the
-`xmlns()` bindings), and its result **must identify a single element** — the XML
-Signature Wrapping defense. An empty node-set is `ErrReferenceNotFound`; a
-node-set selecting more than one element, or a non-element node, is
-`ErrAmbiguousReference`. A literal `xpointer(id('X'))` keeps the same
-duplicate-detecting id resolution the `#id` form uses (never a last-one-wins id
-table). The `here()` function is not available inside a URI-borne XPointer.
+When enabled, the `xpointer()` expression is statically validated, then evaluated
+on the same bounded XPath 1.0 evaluator (the document element's in-scope
+namespaces overlaid with the `xmlns()` bindings). An unresolved variable,
+function, or prefix fails with `ErrReferenceNotFound` before evaluation. The
+result **must identify a single element** — the XML Signature Wrapping defense.
+An empty node-set is `ErrReferenceNotFound`; a node-set selecting more than one
+element, or a non-element node, is `ErrAmbiguousReference`. A literal
+`xpointer(id('X'))` keeps the same duplicate-detecting id resolution the `#id`
+form uses (never a last-one-wins id table). The `here()` function is not available
+inside a URI-borne XPointer.
 
 ### External references (opt-in)
 
