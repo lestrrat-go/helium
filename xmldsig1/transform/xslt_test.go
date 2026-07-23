@@ -32,6 +32,47 @@ func TestXSLTTreeOutputDropsWriterTerminator(t *testing.T) {
 	require.Equal(t, "<out>hi</out>", string(out))
 }
 
+func TestXSLTStreamSerializationPreservesTrailingContentNewline(t *testing.T) {
+	cases := map[string]struct {
+		declarations string
+		outputAttrs  string
+		result       string
+		want         string
+	}{
+		"single-byte encoding": {
+			outputAttrs: ` encoding="iso-8859-1"`,
+			result:      `<out/>`,
+			want:        "<out/>\n",
+		},
+		"XML 1.1": {
+			outputAttrs: ` version="1.1"`,
+			result:      `<out/>`,
+			want:        "<out/>\n",
+		},
+		"character map": {
+			declarations: `<xsl:character-map name="m">` +
+				`<xsl:output-character character="x" string="y"/>` +
+				`</xsl:character-map>`,
+			outputAttrs: ` use-character-maps="m"`,
+			result:      `<out>x</out>`,
+			want:        "<out>y</out>\n",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">` +
+				tc.declarations +
+				`<xsl:output method="xml" omit-xml-declaration="yes"` + tc.outputAttrs + `/>` +
+				`<xsl:template match="/">` + tc.result + `<xsl:text>&#10;</xsl:text></xsl:template>` +
+				`</xsl:stylesheet>`)
+
+			out, err := transform.XSLT{}.TransformXSLT(t.Context(), stylesheet, []byte(`<a/>`))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, string(out))
+		})
+	}
+}
+
 func TestXSLTXMLTextOnlyOutputPreservesTrailingNewline(t *testing.T) {
 	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
 		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +

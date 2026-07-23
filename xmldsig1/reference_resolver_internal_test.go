@@ -15,6 +15,15 @@ func (s staticResolver) ResolveReference(_ context.Context, _ string) ([]byte, e
 	return []byte(s), nil
 }
 
+type countingResolver struct {
+	calls int
+}
+
+func (r *countingResolver) ResolveReference(_ context.Context, _ string) ([]byte, error) {
+	r.calls++
+	return []byte("<external/>"), nil
+}
+
 // TestExternalOctetSymmetry proves the binding invariant that the sign side
 // digests exactly what the verify side digests for the same external input.
 // Both the sign path (signReferenceOctets) and the verify path
@@ -83,6 +92,35 @@ func TestExternalReferenceDigestInputEmptyIsRaw(t *testing.T) {
 	out, err := externalReferenceDigestInput(t.Context(), octets, nil, runtime)
 	require.NoError(t, err)
 	require.Equal(t, octets, out)
+}
+
+func TestResolveExternalReferenceValidatesTransformsBeforeResolver(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	cases := map[string][]parsedTransform{
+		"unsupported algorithm": {
+			{algorithm: "urn:example:unsupported"},
+		},
+		"unavailable XSLT transformer": {
+			{
+				algorithm:  TransformXSLT,
+				stylesheet: []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>`),
+			},
+		},
+	}
+	for name, transforms := range cases {
+		t.Run(name, func(t *testing.T) {
+			resolver := &countingResolver{}
+			cfg := &verifierConfig{referenceResolver: resolver}
+			_, err := resolveExternalReference(t.Context(), cfg, doc, parsedReference{
+				uri:        "external.xml",
+				transforms: transforms,
+			})
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.Zero(t, resolver.calls, "invalid transforms must fail before external resolution")
+		})
+	}
 }
 
 func TestURIHasScheme(t *testing.T) {

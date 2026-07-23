@@ -51,12 +51,12 @@ func TestCopyOfAttributeValuesNotReparsed(t *testing.T) {
 			// xsl:copy-of of the element: the previously-broken path.
 			out, err := xslt3.TransformString(t.Context(), src, copyOfSheet)
 			require.NoError(t, err, "xsl:copy-of must not re-parse the resolved value")
-			require.Equal(t, "<out>"+wantElem+"</out>\n", out)
+			require.Equal(t, "<out>"+wantElem+"</out>", out)
 
 			// xsl:copy of the element plus xsl:copy-of of its attributes.
 			out2, err := xslt3.TransformString(t.Context(), src, copySheet)
 			require.NoError(t, err, "xsl:copy must not re-parse the resolved value")
-			require.Equal(t, wantElem+"\n", out2)
+			require.Equal(t, wantElem, out2)
 		})
 	}
 }
@@ -73,7 +73,7 @@ func TestCopyOfNamespacedAttributeNotReparsed(t *testing.T) {
 	ss := compileSheet(t, `<out><xsl:copy-of select="."/></out>`)
 	out, err := xslt3.TransformString(t.Context(), src, ss)
 	require.NoError(t, err)
-	require.Equal(t, `<out><e xmlns:p="urn:p" p:a="x&amp;y&lt;z"/></out>`+"\n", out)
+	require.Equal(t, `<out><e xmlns:p="urn:p" p:a="x&amp;y&lt;z"/></out>`, out)
 }
 
 // compileSheet compiles a minimal stylesheet whose single template body (matched

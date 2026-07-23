@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath1"
 )
 
 type transformValueKind uint8
@@ -56,6 +57,7 @@ type referenceNodeSetOrigin struct {
 type transformContract struct {
 	input  transformValueKind
 	output transformValueKind
+	xpath  *xpath1.Expression
 }
 
 // transformRuntime contains the immutable policy and dependencies for one
@@ -184,6 +186,12 @@ func validateTransformSteps(runtime transformRuntime, initialKind transformValue
 		if err != nil {
 			return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 		}
+		if step.algorithm == TransformXPath {
+			contract.xpath, err = compileXPathFilterExpression(step.xpathExpr)
+			if err != nil {
+				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
+			}
+		}
 		if step.algorithm == TransformXSLT && isNilInterface(runtime.xsltTransformer) {
 			return nil, fmt.Errorf("transform %d (%s): %w: XSLT transform requires a configured XSLTTransformer", i, step.algorithm, ErrUnsupportedTransform)
 		}
@@ -274,7 +282,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 			if hereNode != nil && hereNode.OwnerDocument() != nodes.doc {
 				hereNode = nil
 			}
-			filtered, err := applyXPathFilter(ctx, nodes.nodes, xpathFilter{expr: step.xpathExpr, ns: step.xpathNS, hereNode: hereNode})
+			filtered, err := applyXPathFilter(ctx, nodes.nodes, xpathFilter{expr: contract.xpath, ns: step.xpathNS, hereNode: hereNode})
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}

@@ -358,7 +358,8 @@ func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *
 // computed over. Without a resolver it stays fail-closed with the same
 // ErrReferenceNotFound the same-document resolver returns, so a nil-resolver
 // Verifier is byte-identical to before. The URI is joined against the document's
-// base URI before resolution; the resolved octets then run through the
+// base URI before resolution. The complete transform list is validated before
+// URI joining or resolver invocation; the resolved octets then run through the
 // Reference's transform pipeline (see externalReferenceDigestInput).
 func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, ref parsedReference) ([]byte, error) {
 	if cfg.referenceResolver == nil {
@@ -369,6 +370,14 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	for i, t := range ref.transforms {
 		steps[i] = transformStep(t)
 	}
+	runtime := transformRuntime{
+		parser:          cfg.parser(),
+		xsltTransformer: cfg.xsltTransformer,
+		external:        true,
+	}
+	if _, err := validateTransformSteps(runtime, transformValueOctets, steps); err != nil {
+		return nil, err
+	}
 
 	joined, err := joinReferenceURI(doc.URL(), ref.uri)
 	if err != nil {
@@ -377,11 +386,6 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	octets, err := resolveReferenceOctets(ctx, cfg.referenceResolver, joined)
 	if err != nil {
 		return nil, err
-	}
-	runtime := transformRuntime{
-		parser:          cfg.parser(),
-		xsltTransformer: cfg.xsltTransformer,
-		external:        true,
 	}
 	return externalReferenceDigestInput(ctx, octets, steps, runtime)
 }

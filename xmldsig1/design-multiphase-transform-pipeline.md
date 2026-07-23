@@ -112,7 +112,7 @@ original Reference or Signature identity.
 `validateTransformSteps` scans the complete list before execution. It checks:
 
 - supported algorithm URI;
-- required XPath expression;
+- required XPath expression and successful XPath compilation;
 - required XSLT stylesheet;
 - usable non-nil/non-typed-nil XSLT transformer;
 - sign-side XPath/XSLT capability;
@@ -123,10 +123,11 @@ is lost. It never rejects a list merely because it changes kinds repeatedly.
 This guarantees a later static error is reported before an earlier injected XSLT
 transform runs.
 
-Signing and execution share this validator. Base64 is supported for signing
-through the exported `Transform` interface. XPath and XSLT remain rejected on
-signing because `ReferenceConfig` cannot carry or emit their required child
-content.
+Signing and execution share this validator. External verification also runs it
+against octet input before URI joining or resolver invocation. Base64 is
+supported for signing through the exported `Transform` interface. XPath and XSLT
+remain rejected on signing because `ReferenceConfig` cannot carry or emit their
+required child content.
 
 ## Execution
 
@@ -242,7 +243,9 @@ Internal tests cover:
 - node-set/octet conversions in both directions;
 - XSLT → XPath and Base64 → XPath reparsing;
 - final implicit C14N;
-- complete-list validation before transformer invocation;
+- complete-list algorithm, parameter, and XPath compilation validation before
+  transformer invocation;
+- external transform validation before resolver invocation;
 - external versus intermediate parse error classes;
 - `here()` after reparse;
 - both XPath/enveloped declaration orders;

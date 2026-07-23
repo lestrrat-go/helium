@@ -1,7 +1,6 @@
 package xmldsig1
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"slices"
@@ -103,10 +102,7 @@ func (r *recordingXSLT3Transformer) TransformXSLT(ctx context.Context, styleshee
 	if err != nil {
 		return nil, err
 	}
-	// The W3C XSLT 1.0 identity-transform vectors serialize the document element
-	// without an added trailing newline. The test adapter normalizes xslt3's
-	// convenience-string newline to those specified output octets.
-	return bytes.TrimSuffix(out, []byte("\n")), nil
+	return out, nil
 }
 
 func (r *recordingXSLT3Transformer) snapshot() []recordedXSLTCall {

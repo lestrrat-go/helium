@@ -41,6 +41,22 @@ func TestSerializeResultXML(t *testing.T) {
 	require.Contains(t, buf.String(), "<root>hello</root>")
 }
 
+func TestSerializeResultXMLDropsWriterTerminator(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" omit-xml-declaration="yes"/>
+  <xsl:template match="/"><root>hello</root></xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
+	require.NoError(t, err)
+	require.Equal(t, "<root>hello</root>", buf.String())
+}
+
 func TestSerializeResultNilOutputDef(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

@@ -68,28 +68,27 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.OmitDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}
-	// When standalone is "yes" or "no", or when indent="no" and
-	// the declaration is not omitted, buffer and post-process.
+	// helium.Writer appends a newline after each document child. This direct path
+	// owns that behavior, so buffer it and remove the final document terminator
+	// here. Stream-serializer paths never reach this block, leaving their final
+	// byte untouched because it may be result content.
 	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo)
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
-	if needStandalone || needStripNewline {
-		var buf strings.Builder
-		if err := writer.WriteTo(&buf, doc); err != nil {
-			return xmlInvalidCharError(err)
-		}
-		out := buf.String()
-		if needStandalone {
-			out = injectStandalone(out, outDef.Standalone)
-		}
-		if needStripNewline {
-			if idx := strings.Index(out, "?>\n"); idx >= 0 {
-				out = out[:idx+2] + out[idx+3:]
-			}
-		}
-		_, err := io.WriteString(w, out)
-		return err
+	var buf strings.Builder
+	if err := writer.WriteTo(&buf, doc); err != nil {
+		return xmlInvalidCharError(err)
 	}
-	return xmlInvalidCharError(writer.WriteTo(w, doc))
+	out := strings.TrimSuffix(buf.String(), "\n")
+	if needStandalone {
+		out = injectStandalone(out, outDef.Standalone)
+	}
+	if needStripNewline {
+		if idx := strings.Index(out, "?>\n"); idx >= 0 {
+			out = out[:idx+2] + out[idx+3:]
+		}
+	}
+	_, err := io.WriteString(w, out)
+	return err
 }
 
 // xmlInvalidCharError maps the writer's ErrInvalidXMLChar sentinel to the

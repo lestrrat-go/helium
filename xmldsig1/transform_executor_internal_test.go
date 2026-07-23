@@ -143,6 +143,23 @@ func TestExecuteTransformPipelineStaticValidationRunsFirst(t *testing.T) {
 	require.Empty(t, transformer.snapshot(), "an earlier injected transform must not run before static validation finishes")
 }
 
+func TestExecuteTransformPipelineMalformedXPathValidationRunsFirst(t *testing.T) {
+	transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte("unused")}}
+	runtime := transformRuntime{
+		parser:          helium.NewParser(),
+		xsltTransformer: transformer,
+		external:        true,
+	}
+	steps := []transformStep{
+		{algorithm: TransformXSLT, stylesheet: []byte("style")},
+		{algorithm: TransformXPath, xpathExpr: "["},
+	}
+
+	_, err := externalReferenceDigestInput(t.Context(), []byte("input"), steps, runtime)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.Empty(t, transformer.snapshot(), "an earlier injected transform must not run before every XPath expression compiles")
+}
+
 func TestExecuteTransformPipelineParseErrors(t *testing.T) {
 	t.Run("initial external parse keeps ErrReferenceNotFound", func(t *testing.T) {
 		runtime := transformRuntime{parser: helium.NewParser(), external: true}

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"path"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -1141,35 +1140,15 @@ func documentHasChildren(doc *helium.Document) bool {
 }
 
 // serializeDeliveredResult serializes doc to a string for the fn:transform
-// "serialized" delivery format. For the element-tree methods (xml/html/xhtml)
-// the helium document serializer appends a single trailing newline that is a
-// serialization artifact, not result content, so it is trimmed. For the
-// text/json/adaptive methods the output is the value itself — a trailing newline
-// there is legitimate content and is preserved.
+// "serialized" delivery format. SerializeResult removes helium.Writer's
+// document terminator on the path that creates it, so every trailing newline
+// returned here is result content and is preserved.
 func serializeDeliveredResult(doc *helium.Document, outDef *OutputDef) (string, error) {
 	var buf bytes.Buffer
 	if err := SerializeResult(&buf, doc, outDef); err != nil {
 		return "", err
 	}
-	s := buf.String()
-	if !preservesTrailingNewline(outDef) {
-		s = strings.TrimSuffix(s, "\n")
-	}
-	return s, nil
-}
-
-// preservesTrailingNewline reports whether the serialization method treats a
-// trailing newline as significant output content (text/json/adaptive) rather
-// than as the element-tree serializer's document-terminating artifact.
-func preservesTrailingNewline(outDef *OutputDef) bool {
-	if outDef == nil {
-		return false // default (xml) method
-	}
-	switch outDef.Method {
-	case methodText, methodJSON, methodAdaptive:
-		return true
-	}
-	return false
+	return buf.String(), nil
 }
 
 // owningDocument walks up from n to the helium document that contains it,
