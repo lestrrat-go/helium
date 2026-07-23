@@ -94,6 +94,10 @@ XPath 1.0 expression parsing and evaluation.
 
 - **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
+- **NewEvaluator() → Evaluator** — create clone-on-write evaluation configuration
+  - `Namespaces`, `Variables`, `Function`, `FunctionNS`, `OpLimit` — configure namespace, variable, extension-function, and operation-limit state
+  - `Validate(*Expression) → error` — statically require every variable, function name, and QName prefix to resolve against the evaluator configuration without evaluating the expression
+  - `Evaluate(ctx, *Expression, Node) → (*Result, error)` — evaluate with the configured state
 - **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
 - **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
 - **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath evaluation settings to `context.Context`
