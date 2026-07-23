@@ -69,16 +69,13 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.OmitDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}
-	// XSLT serialization must not add bytes between top-level result nodes.
-	// Disable helium.Writer's per-document-child terminators at their source so
-	// an explicit top-level text newline remains distinguishable result content.
-	if configured, ok := writerctl.OmitDocumentChildTerminators(writer).(helium.Writer); ok {
-		writer = configured
-	}
 	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo)
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
+	if !needStandalone && !needStripNewline {
+		return xmlInvalidCharError(writeExactXMLNode(w, writer, doc))
+	}
 	var buf strings.Builder
-	if err := writer.WriteTo(&buf, doc); err != nil {
+	if err := writeExactXMLNode(&buf, writer, doc); err != nil {
 		return xmlInvalidCharError(err)
 	}
 	out := buf.String()
@@ -90,8 +87,30 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 			out = out[:idx+2] + out[idx+3:]
 		}
 	}
-	_, err := io.WriteString(w, out)
-	return err
+	return writeFullString(w, out)
+}
+
+// writeExactXMLNode writes an XML node without adding bytes that are not part
+// of the XSLT result. helium.Writer normally appends a newline after each
+// Document child, so document nodes use its internal exact-document mode.
+func writeExactXMLNode(w io.Writer, writer helium.Writer, node helium.Node) error {
+	if _, ok := node.(*helium.Document); ok {
+		if configured, ok := writerctl.OmitDocumentChildTerminators(writer).(helium.Writer); ok {
+			writer = configured
+		}
+	}
+	return writer.WriteTo(w, node)
+}
+
+func writeFullString(w io.Writer, s string) error {
+	n, err := io.WriteString(w, s)
+	if err != nil {
+		return err
+	}
+	if n != len(s) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 // xmlInvalidCharError maps the writer's ErrInvalidXMLChar sentinel to the
@@ -135,8 +154,7 @@ func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDe
 				out = out[:idx+2] + out[idx+3:]
 			}
 		}
-		_, err := io.WriteString(w, out)
-		return err
+		return writeFullString(w, out)
 	}
 	return serializeXMLWithCharMapInner(w, doc, outDef, charMap)
 }

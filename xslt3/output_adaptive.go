@@ -202,7 +202,7 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm strin
 				OutputVersion(adaptiveXMLVersion(xmlVersion)).
 				CharacterMap(charMap).
 				Normalization(writerNormalizationForm)
-			if err := writer.WriteTo(&buf, v.Node); err != nil {
+			if err := writeExactXMLNode(&buf, writer, v.Node); err != nil {
 				return "", xmlInvalidCharError(err)
 			}
 			return buf.String(), nil

@@ -2,6 +2,7 @@ package xslt3_test
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -12,6 +13,17 @@ import (
 )
 
 const adaptiveMethod = "adaptive"
+
+type oneByteWriter struct {
+	buf bytes.Buffer
+}
+
+func (w *oneByteWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return w.buf.Write(p[:1])
+}
 
 type adaptiveResultDocSerializer struct {
 	serialized string
@@ -55,6 +67,41 @@ func TestSerializeResultXMLOmitsWriterTerminators(t *testing.T) {
 	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
 	require.NoError(t, err)
 	require.Equal(t, "<root>hello</root>", buf.String())
+}
+
+func TestSerializeResultReportsShortWrite(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>content</root>`))
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name   string
+		outDef *xslt3.OutputDef
+	}{
+		{
+			name:   "DirectWriter",
+			outDef: &xslt3.OutputDef{Method: "xml", OmitDeclaration: true},
+		},
+		{
+			name:   "PostProcessedDeclaration",
+			outDef: &xslt3.OutputDef{Method: "xml", Standalone: "yes"},
+		},
+		{
+			name: "PostProcessedCharacterMap",
+			outDef: &xslt3.OutputDef{
+				Method:          "xml",
+				Standalone:      "yes",
+				ResolvedCharMap: map[rune]string{'c': "C"},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var dst oneByteWriter
+			err := xslt3.SerializeResult(&dst, doc, tc.outDef)
+			require.ErrorIs(t, err, io.ErrShortWrite)
+			require.NotEmpty(t, dst.buf.String())
+			require.True(t, strings.HasPrefix(`<root>content</root>`, dst.buf.String()))
+		})
+	}
 }
 
 func TestSerializeResultXMLPreservesExplicitTrailingTextNewline(t *testing.T) {
@@ -296,6 +343,43 @@ func TestSerializeItemsWithDocument(t *testing.T) {
 	require.Contains(t, buf.String(), "content")
 }
 
+func TestSerializeDocumentItemsOmitWriterTerminators(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<source/>`))
+	require.NoError(t, err)
+	items := xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}
+
+	for _, tc := range []struct {
+		name   string
+		outDef *xslt3.OutputDef
+		want   string
+	}{
+		{
+			name:   "Adaptive",
+			outDef: &xslt3.OutputDef{Method: adaptiveMethod},
+			want:   `<source/>`,
+		},
+		{
+			name:   "XMLSequence",
+			outDef: &xslt3.OutputDef{Method: outMethodXML},
+			want:   `<source/>`,
+		},
+		{
+			name: "JSONNodeXML",
+			outDef: &xslt3.OutputDef{
+				Method:               "json",
+				JSONNodeOutputMethod: outMethodXML,
+			},
+			want: `"<source\/>"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var dst strings.Builder
+			require.NoError(t, xslt3.SerializeItems(&dst, items, doc, tc.outDef))
+			require.Equal(t, tc.want, dst.String())
+		})
+	}
+}
+
 func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
 	decomposed := "e\u0301"
 	composed := "é"
@@ -449,7 +533,7 @@ func TestSerializeItemsAdaptiveFullyNormalizedNodeCharacterMap(t *testing.T) {
 		{
 			name:  "Document",
 			items: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-			want:  "<out>" + mappedNFC + "</out>\n",
+			want:  "<out>" + mappedNFC + "</out>",
 		},
 		{
 			name: "MultiItemElement",

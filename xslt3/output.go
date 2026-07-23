@@ -178,7 +178,7 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 						writer = writer.OutputVersion(ver)
 					}
 				}
-				if err := writer.WriteTo(&buf, v.Node); err != nil {
+				if err := writeExactXMLNode(&buf, writer, v.Node); err != nil {
 					return xmlInvalidCharError(err)
 				}
 			default:
@@ -422,7 +422,7 @@ func serializeNodeWithMethod(node helium.Node, method, htmlVersion string) (stri
 	default: // "xml" or empty
 		switch node.(type) {
 		case *helium.Element, *helium.Document:
-			if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, node); err != nil {
+			if err := writeExactXMLNode(&buf, helium.NewWriter().XMLDeclaration(false), node); err != nil {
 				return "", xmlInvalidCharError(err)
 			}
 		default:
