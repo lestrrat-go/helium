@@ -175,7 +175,11 @@ with the current pipeline octets. Its output feeds the next transform or the
 digest, and one Reference may invoke `t` multiple times. The implementer **owns
 all resource and XXE policy** — compute/time/memory limits and disabling
 `document()`/external access — because both inputs are attacker-controlled.
-The core package ships no transformer.
+The core package runs no XSLT automatically; the separate
+`xmldsig1/transform.XSLT` adapter is an explicit opt-in. The xslt3 direct XML
+serializer disables helium.Writer's per-document-child terminators. The adapter
+preserves top-level text newlines as result content, including non-UTF-8 XML
+output.
 
 ### General XPointer references (opt-in)
 
@@ -508,10 +512,9 @@ point-in-time evidence:
   transform, the truncated-HMAC must-reject case, and the X.509 KeyInfo
   variants.
 
-The merlin and xmldsig11 suites pass in full. The committed xmldsig2ed harness
-snapshot records 35 passes and two expected failures (`defCan-2/3`) because its
-runner does not inject an XSLT transformer. Package coverage runs both vectors
-through the ordered multi-phase pipeline
-(XPath → c14n → XSLT → XPath → c14n), including full `Verifier` execution with
-the [`xmldsig1/transform`](transform) package's `xslt3`-backed
-`XSLTTransformer`.
+The merlin, xmldsig2ed, and xmldsig11 suites pass in full. The `xmldsig2ed`
+`defCan-2/3` cases exercise a multi-phase
+XPath → c14n → XSLT → XPath → c14n chain. The ordered transform pipeline
+executes its repeated node-set/octet transitions when the Verifier has an
+`XSLTTransformer` configured, such as the ready `xslt3`-backed
+[`xmldsig1/transform.XSLT`](transform) adapter.

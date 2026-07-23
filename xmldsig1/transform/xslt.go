@@ -28,6 +28,7 @@
 package transform
 
 import (
+	"bytes"
 	"context"
 
 	helium "github.com/lestrrat-go/helium"
@@ -48,9 +49,12 @@ type XSLT struct{}
 var _ xmldsig1.XSLTTransformer = XSLT{}
 
 // TransformXSLT compiles stylesheet and applies it to input, returning the
-// transform output whose bytes become the reference's digest input. Both
-// arguments are the pre-XSLT octets xmldsig1 hands to the seam; neither is
-// trusted, so ctx should carry a deadline.
+// transform output to the ordered Reference pipeline. xslt3 disables
+// helium.Writer's per-document-child terminators on its direct XML path, so
+// top-level text newlines reaching this adapter are result content and are
+// preserved. Both arguments are the current pipeline octets xmldsig1 hands to
+// the seam; neither is trusted, so ctx should carry a deadline. One Reference
+// may invoke this method multiple times.
 func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte, error) {
 	ssDoc, err := helium.NewParser().Parse(ctx, stylesheet)
 	if err != nil {
@@ -64,9 +68,14 @@ func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	out, err := xslt3.TransformString(ctx, srcDoc, ss)
+	invocation := ss.Transform(srcDoc)
+	resultDoc, err := invocation.Do(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return []byte(out), nil
+	var buf bytes.Buffer
+	if err := xslt3.SerializeResult(&buf, resultDoc, invocation.ResolvedOutputDef()); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
