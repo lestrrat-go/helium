@@ -13,8 +13,9 @@ import (
 // ErrNotNodeSet is returned when an expression result is not a node-set.
 var ErrNotNodeSet = errors.New("xpath: result is not a node-set")
 
-// ErrRecursionLimit is returned when expression evaluation exceeds the
-// maximum recursion depth (5000), matching libxml2's XPATH_MAX_RECURSION_DEPTH.
+// ErrRecursionLimit is returned when expression evaluation or static validation
+// exceeds the maximum recursion depth (5000), matching libxml2's
+// XPATH_MAX_RECURSION_DEPTH.
 var ErrRecursionLimit = errors.New("xpath: recursion limit exceeded")
 
 // ErrOpLimit is returned when the operation counter exceeds the limit
@@ -292,7 +293,7 @@ func (e Evaluator) Validate(expr *Expression) error {
 	if expr == nil || expr.ast == nil {
 		return ErrNilExpression
 	}
-	return validateStaticExpr(expr.ast, e.cfg)
+	return validateStaticExpr(expr.ast, e.cfg, 0)
 }
 
 // Find evaluates a compiled expression and returns the resulting node-set.

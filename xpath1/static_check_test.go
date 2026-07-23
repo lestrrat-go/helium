@@ -2,6 +2,7 @@ package xpath1_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath1"
@@ -62,5 +63,10 @@ func TestEvaluatorValidate(t *testing.T) {
 
 	t.Run("nil expression", func(t *testing.T) {
 		require.ErrorIs(t, eval.Validate(nil), xpath1.ErrNilExpression)
+	})
+
+	t.Run("recursion limit", func(t *testing.T) {
+		expr := xpath1.MustCompile(strings.Repeat("-", 5100) + "1")
+		require.ErrorIs(t, eval.Validate(expr), xpath1.ErrRecursionLimit)
 	})
 }

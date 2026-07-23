@@ -6,17 +6,22 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-func validateStaticExpr(expr Expr, cfg *evalConfig) error {
+func validateStaticExpr(expr Expr, cfg *evalConfig, depth int) error {
+	depth++
+	if depth > maxRecursionDepth {
+		return ErrRecursionLimit
+	}
+
 	switch e := expr.(type) {
 	case *LocationPath:
-		return validateStaticLocationPath(e, cfg)
+		return validateStaticLocationPath(e, cfg, depth)
 	case BinaryExpr:
-		if err := validateStaticExpr(e.Left, cfg); err != nil {
+		if err := validateStaticExpr(e.Left, cfg, depth); err != nil {
 			return err
 		}
-		return validateStaticExpr(e.Right, cfg)
+		return validateStaticExpr(e.Right, cfg, depth)
 	case UnaryExpr:
-		return validateStaticExpr(e.Operand, cfg)
+		return validateStaticExpr(e.Operand, cfg, depth)
 	case LiteralExpr, NumberExpr:
 		return nil
 	case VariableExpr:
@@ -31,32 +36,32 @@ func validateStaticExpr(expr Expr, cfg *evalConfig) error {
 			return err
 		}
 		for _, arg := range e.Args {
-			if err := validateStaticExpr(arg, cfg); err != nil {
+			if err := validateStaticExpr(arg, cfg, depth); err != nil {
 				return err
 			}
 		}
 		return nil
 	case FilterExpr:
-		if err := validateStaticExpr(e.Expr, cfg); err != nil {
+		if err := validateStaticExpr(e.Expr, cfg, depth); err != nil {
 			return err
 		}
-		return validateStaticPredicates(e.Predicates, cfg)
+		return validateStaticPredicates(e.Predicates, cfg, depth)
 	case UnionExpr:
-		if err := validateStaticExpr(e.Left, cfg); err != nil {
+		if err := validateStaticExpr(e.Left, cfg, depth); err != nil {
 			return err
 		}
-		return validateStaticExpr(e.Right, cfg)
+		return validateStaticExpr(e.Right, cfg, depth)
 	case PathExpr:
-		if err := validateStaticExpr(e.Filter, cfg); err != nil {
+		if err := validateStaticExpr(e.Filter, cfg, depth); err != nil {
 			return err
 		}
-		return validateStaticLocationPath(e.Path, cfg)
+		return validateStaticLocationPath(e.Path, cfg, depth)
 	default:
 		return fmt.Errorf("%w: %T", ErrUnsupportedExpr, expr)
 	}
 }
 
-func validateStaticLocationPath(path *LocationPath, cfg *evalConfig) error {
+func validateStaticLocationPath(path *LocationPath, cfg *evalConfig, depth int) error {
 	if path == nil {
 		return nil
 	}
@@ -66,16 +71,16 @@ func validateStaticLocationPath(path *LocationPath, cfg *evalConfig) error {
 				return fmt.Errorf("%w: %s", ErrUnknownNamespacePrefix, test.Prefix)
 			}
 		}
-		if err := validateStaticPredicates(step.Predicates, cfg); err != nil {
+		if err := validateStaticPredicates(step.Predicates, cfg, depth); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateStaticPredicates(predicates []Expr, cfg *evalConfig) error {
+func validateStaticPredicates(predicates []Expr, cfg *evalConfig, depth int) error {
 	for _, predicate := range predicates {
-		if err := validateStaticExpr(predicate, cfg); err != nil {
+		if err := validateStaticExpr(predicate, cfg, depth); err != nil {
 			return err
 		}
 	}
