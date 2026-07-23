@@ -468,10 +468,10 @@ supported** — a signing attempt with the DSA URI fails with a clear
 
 ## W3C interop conformance
 
-The package is measured against two W3C XML Signature interop suites through
+The package is measured against three W3C XML Signature interop suites through
 the [helium-w3c-tests](https://github.com/lestrrat-go/helium-w3c-tests)
-harness (`xmldsig2ed` and `xmldsig11` suites). Committed point-in-time
-evidence:
+harness (`merlinxmldsig`, `xmldsig2ed`, and `xmldsig11` suites). Committed
+point-in-time evidence:
 
 - [Test Cases for C14N 1.1 and XMLDSig Interoperability](summary-xmldsig2ed.md)
   (W3C Note, 2008) — canonicalization node-set cases plus signature
@@ -485,7 +485,12 @@ evidence:
   transform, the truncated-HMAC must-reject case, and the X.509 KeyInfo
   variants.
 
-The remaining expected failures are deliberate fail-closed design choices
-(no external-reference dereferencing without a resolver, no XSLT transform
-without an injected transformer), each documented with its reason in the harness
-expectations.
+The merlin and xmldsig11 suites pass in full. The only remaining expected
+failures are two `xmldsig2ed` cases (`defCan-2/3`) whose Reference chains an
+XSLT transform between two canonicalization steps
+(XPath → c14n → XSLT → XPath → c14n) — a multi-phase pipeline that oscillates
+between node-set and octet representations. helium's transform pipeline models a
+single node-set phase followed by a single octet phase and cannot represent that
+chain; the blocker is the pipeline shape, not the transformer (a ready
+`xslt3`-backed `XSLTTransformer` ships as the [`xmldsig1/transform`](transform)
+package). Each is documented with its reason in the harness expectations.
