@@ -11,12 +11,15 @@ import (
 // wantTrue is the string value of an XPath expression that evaluates to true().
 const wantTrue = "true"
 
+// transformSourceVar is the map key for the $xml source-document variable.
+const transformSourceVar = "xml"
+
 // xslXMLVars binds the $xsl (stylesheet) and $xml (source) let-variables read by
 // the fn:transform result-map test expressions.
 func xslXMLVars(xsl, xml string) map[string]xpath3.Sequence {
 	return map[string]xpath3.Sequence{
-		"xsl": xpath3.SingleString(xsl),
-		"xml": xpath3.SingleString(xml),
+		"xsl":              xpath3.SingleString(xsl),
+		transformSourceVar: xpath3.SingleString(xml),
 	}
 }
 

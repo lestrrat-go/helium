@@ -79,16 +79,16 @@ func TestSerializeResultReportsShortWrite(t *testing.T) {
 	}{
 		{
 			name:   "DirectWriter",
-			outDef: &xslt3.OutputDef{Method: "xml", OmitDeclaration: true},
+			outDef: &xslt3.OutputDef{Method: outMethodXML, OmitDeclaration: true},
 		},
 		{
 			name:   "PostProcessedDeclaration",
-			outDef: &xslt3.OutputDef{Method: "xml", Standalone: "yes"},
+			outDef: &xslt3.OutputDef{Method: outMethodXML, Standalone: "yes"},
 		},
 		{
 			name: "PostProcessedCharacterMap",
 			outDef: &xslt3.OutputDef{
-				Method:          "xml",
+				Method:          outMethodXML,
 				Standalone:      "yes",
 				ResolvedCharMap: map[rune]string{'c': "C"},
 			},
@@ -366,7 +366,7 @@ func TestSerializeDocumentItemsOmitWriterTerminators(t *testing.T) {
 		{
 			name: "JSONNodeXML",
 			outDef: &xslt3.OutputDef{
-				Method:               "json",
+				Method:               outMethodJSON,
 				JSONNodeOutputMethod: outMethodXML,
 			},
 			want: `"<source\/>"`,
@@ -399,19 +399,19 @@ func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
 	}{
 		{
 			name:   "JSONAtomic",
-			method: "json",
+			method: outMethodJSON,
 			item:   value,
 			want:   `"` + replacement + composed + `"`,
 		},
 		{
 			name:   "JSONMap",
-			method: "json",
+			method: outMethodJSON,
 			item:   mapItem,
 			want:   `{"key":"` + replacement + composed + `"}`,
 		},
 		{
 			name:   "JSONArray",
-			method: "json",
+			method: outMethodJSON,
 			item:   arrayItem,
 			want:   `["` + replacement + composed + `"]`,
 		},
@@ -724,9 +724,11 @@ func TestDefaultOutputDefNilStylesheet(t *testing.T) {
 	require.Nil(t, outDef)
 }
 
-// outMethodXML is the "xml" output method, held as a const so these invalid-char
-// tests do not add repeated string literals (goconst).
-const outMethodXML = "xml"
+// Output methods shared by serialization tests.
+const (
+	outMethodJSON = "json"
+	outMethodXML  = "xml"
+)
 
 // outMethodXHTML is the XHTML output method. Its version parameter uses an XML
 // VersionNum, just like the XML output method's version parameter.
@@ -830,7 +832,7 @@ func TestSerializeItemsJSONNodeXMLInvalidChar(t *testing.T) {
 	root := newBadCharElement(t)
 	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}}
 	var buf bytes.Buffer
-	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "json", JSONNodeOutputMethod: outMethodXML})
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodJSON, JSONNodeOutputMethod: outMethodXML})
 	requireSERE0006(t, err)
 }
 

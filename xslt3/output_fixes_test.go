@@ -24,14 +24,14 @@ func TestSerializeResultDoesNotMutateOutputDef(t *testing.T) {
 		return doc
 	}
 
-	outDef := &xslt3.OutputDef{Method: "xml"}
+	outDef := &xslt3.OutputDef{Method: outMethodXML}
 
 	htmlDoc := parse(`<html><body><br/></body></html>`)
 	var htmlBuf strings.Builder
 	require.NoError(t, xslt3.SerializeResult(&htmlBuf, htmlDoc, outDef))
 
 	// outDef must still be xml-method after auto-detecting HTML.
-	require.Equal(t, "xml", outDef.Method, "outDef.Method must not be mutated")
+	require.Equal(t, outMethodXML, outDef.Method, "outDef.Method must not be mutated")
 	require.False(t, outDef.OmitDeclaration, "outDef.OmitDeclaration must not be mutated")
 
 	xmlDoc := parse(`<root><br/></root>`)
@@ -74,7 +74,7 @@ func TestDefaultOutputDefReturnsClone(t *testing.T) {
 	*d1.BuildTree = false
 
 	d3 := ss.DefaultOutputDef()
-	require.Equal(t, "xml", d3.Method, "mutating a returned def must not corrupt internal state")
+	require.Equal(t, outMethodXML, d3.Method, "mutating a returned def must not corrupt internal state")
 	require.NotNil(t, d3.ItemSeparator)
 	require.Equal(t, "|", *d3.ItemSeparator, "mutating clone *ItemSeparator must not corrupt internal state")
 	require.NotNil(t, d3.BuildTree)
@@ -104,7 +104,7 @@ func TestResolvedOutputDefIsSnapshot(t *testing.T) {
 
 	r2 := inv.ResolvedOutputDef()
 	require.NotNil(t, r2)
-	require.Equal(t, "xml", r2.Method, "ResolvedOutputDef must return an independent snapshot")
+	require.Equal(t, outMethodXML, r2.Method, "ResolvedOutputDef must return an independent snapshot")
 	require.NotNil(t, r2.ItemSeparator)
 	require.Equal(t, "|", *r2.ItemSeparator, "mutating snapshot *ItemSeparator must not affect a later read")
 }
