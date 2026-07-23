@@ -307,89 +307,22 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	return target, canonical, false, nil
 }
 
-// applyReferenceTransforms interprets a Reference's transform list as an ordered
-// pipeline and returns the canonical octet stream its DigestValue is computed
-// over, given the already-resolved target element and the reference form's
-// wholeDoc / includeComments classification. It is shared by the four same-document
-// forms and the general XPointer resolver so both interpret a transform list
-// identically.
-//
-// Fail closed: any transform whose URI cannot be applied, or one ordered after an
-// octet-producing c14n transform, is rejected before digesting — otherwise a
-// Reference could declare an unsupported or mis-ordered transform and still verify
-// against the untransformed canonical bytes. When no c14n transform is declared
-// the default node-set->octet conversion is inclusive Canonical XML 1.0.
+// applyReferenceTransforms starts the shared ordered executor with the lazy
+// node-set selected by a same-document Reference. It is shared by the four core
+// URI forms and the general XPointer resolver.
 func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, transforms []parsedTransform) ([]byte, error) {
 	steps := make([]transformStep, len(transforms))
 	for i, t := range transforms {
 		steps[i] = transformStep(t)
 	}
-	pipe, err := resolveTransformPipeline(steps)
-	if err != nil {
-		return nil, err
+	runtime := transformRuntime{
+		parser:          cfg.parser(),
+		xsltTransformer: cfg.xsltTransformer,
+		signature:       sigElem,
+		allowEnveloped:  true,
 	}
-
-	// The base64 decode transform ends the pipeline with decoded octets that are
-	// digested directly (XMLDSig core §6.6.2): the resolved node-set's XPath 1.0
-	// string-value is base64-decoded and no canonicalization runs afterward.
-	// resolveTransformPipeline already fails closed on any transform ordered
-	// after base64; combining it with a preceding node-set transform
-	// (enveloped-signature or XPath filter) is not supported and is rejected
-	// fail-closed here rather than digesting an unintended string-value.
-	if pipe.base64 {
-		if pipe.hasEnveloped || len(pipe.xpathFilters) > 0 {
-			return nil, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
-		}
-		return base64TransformOctets(target)
-	}
-
-	// A C14N WithComments method only emits comment nodes present in the set, so
-	// when the form excludes comments the method is downgraded to its plain
-	// variant — keeping "#id"/"" free of comments even under a WithComments c14n,
-	// and reserving comments for the #xpointer forms.
-	c14nMethod := effectiveC14NMethod(pipe.c14nMethod, includeComments)
-
-	// Compute the pre-XSLT octets. When one or more XPath filter transforms are
-	// present the reference is processed as an explicit node-set: build the
-	// initial node-set, apply the enveloped-signature removal and each XPath
-	// filter in order, then canonicalize the surviving node-set. Otherwise the
-	// enveloped/whole-document/subtree canonicalization applies. For enveloped
-	// signatures the Signature element and its descendants must be omitted from
-	// the canonical input; canonicalizeEnveloped does this on a deep copy of the
-	// document, never mutating the caller's live DOM (which would race with
-	// concurrent readers and risk leaving the tree corrupted if a restore failed).
-	// None of these paths change when no XSLT transform is present, so a Reference
-	// without XSLT canonicalizes byte-identically.
-	var canonical []byte
-	switch {
-	case len(pipe.xpathFilters) > 0:
-		canonical, err = canonicalizeWithXPathFilters(ctx, doc, target, sigElem, wholeDoc, c14nMethod, pipe)
-	case pipe.hasEnveloped:
-		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, wholeDoc, pipe.prefixes)
-	case wholeDoc:
-		canonical, err = canonicalize(c14nMethod, doc, pipe.prefixes)
-	default:
-		canonical, err = canonicalizeSubtree(c14nMethod, target, pipe.prefixes)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// XSLT transform (verify-only, opt-in): octet-in -> octet-out. The octets
-	// above are the pre-XSLT input; hand them plus the stylesheet to the injected
-	// transformer and digest its output. Fail closed with ErrUnsupportedTransform
-	// when no transformer is configured, mirroring the "no HTTP resolver shipped"
-	// stance — helium never runs attacker-controlled XSLT on its own.
-	if pipe.xslt != nil {
-		if isNilInterface(cfg.xsltTransformer) {
-			return nil, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
-		}
-		canonical, err = cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, canonical)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return canonical, nil
+	initial := newReferenceNodeSetValue(doc, target, sigElem, wholeDoc, includeComments, nil)
+	return executeTransformPipeline(ctx, runtime, initial, steps)
 }
 
 // canonicalizeGeneralXPointer resolves a general XPointer Reference URI (opt-in,
@@ -436,10 +369,6 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	for i, t := range ref.transforms {
 		steps[i] = transformStep(t)
 	}
-	pipe, err := resolveTransformPipeline(steps)
-	if err != nil {
-		return nil, err
-	}
 
 	joined, err := joinReferenceURI(doc.URL(), ref.uri)
 	if err != nil {
@@ -449,52 +378,12 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	if err != nil {
 		return nil, err
 	}
-	preXSLT, err := externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
-	if err != nil {
-		return nil, err
+	runtime := transformRuntime{
+		parser:          cfg.parser(),
+		xsltTransformer: cfg.xsltTransformer,
+		external:        true,
 	}
-
-	// Apply the XSLT transform (verify-only, opt-in) exactly as the same-document
-	// path does: preXSLT is the pre-XSLT octet stream, so fail closed with
-	// ErrUnsupportedTransform when no transformer is configured (or a typed-nil one
-	// was stored), otherwise hand the stylesheet plus those octets to the injected
-	// transformer and digest its output. externalReferenceDigestInput does not
-	// consult pipe.xslt, so without this an external Reference declaring an XSLT
-	// transform would silently digest the untransformed octets, bypassing the
-	// fail-closed invariant. The sign path never reaches here with an XSLT step:
-	// preflightSignerTransforms rejects it fail-closed before dereferencing.
-	if pipe.xslt != nil {
-		if isNilInterface(cfg.xsltTransformer) {
-			return nil, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
-		}
-		return cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, preXSLT)
-	}
-	return preXSLT, nil
-}
-
-// canonicalizeWithXPathFilters processes a Reference that carries one or more
-// XPath filter transforms. It materializes the initial node-set for the
-// reference form, drops the enveloped Signature's own subtree when the
-// enveloped-signature transform is present, applies each XPath filter in
-// declared order, and canonicalizes the surviving node-set.
-func canonicalizeWithXPathFilters(ctx context.Context, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, c14nMethod string, pipe transformPipeline) ([]byte, error) {
-	var nodes []helium.Node
-	if wholeDoc {
-		nodes = collectDocumentNodes(doc)
-	} else {
-		nodes = collectSubtreeNodes(target)
-	}
-	if pipe.hasEnveloped {
-		nodes = removeSignatureNodes(nodes, sigElem)
-	}
-	for _, f := range pipe.xpathFilters {
-		filtered, err := applyXPathFilter(ctx, nodes, f)
-		if err != nil {
-			return nil, err
-		}
-		nodes = filtered
-	}
-	return canonicalizeNodeSet(c14nMethod, nodes, doc, pipe.prefixes)
+	return externalReferenceDigestInput(ctx, octets, steps, runtime)
 }
 
 func digestEqual(a, b []byte) bool {

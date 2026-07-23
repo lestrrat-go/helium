@@ -1,7 +1,6 @@
 package transform_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xmldsig1/transform"
@@ -19,7 +18,29 @@ func TestXSLTAppliesStylesheet(t *testing.T) {
 
 	out, err := transform.XSLT{}.TransformXSLT(t.Context(), stylesheet, input)
 	require.NoError(t, err)
-	require.Equal(t, "seen:hi", strings.TrimSpace(string(out)))
+	require.Equal(t, "seen:hi", string(out))
+}
+
+func TestXSLTTreeOutputDropsWriterTerminator(t *testing.T) {
+	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
+		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
+		`<xsl:template match="/"><out><xsl:value-of select="/a/b"/></out></xsl:template>` +
+		`</xsl:stylesheet>`)
+
+	out, err := transform.XSLT{}.TransformXSLT(t.Context(), stylesheet, []byte(`<a><b>hi</b></a>`))
+	require.NoError(t, err)
+	require.Equal(t, "<out>hi</out>", string(out))
+}
+
+func TestXSLTTextOutputPreservesTrailingNewline(t *testing.T) {
+	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
+		`<xsl:output method="text"/>` +
+		`<xsl:template match="/">seen:<xsl:value-of select="/a/b"/><xsl:text>&#10;</xsl:text></xsl:template>` +
+		`</xsl:stylesheet>`)
+
+	out, err := transform.XSLT{}.TransformXSLT(t.Context(), stylesheet, []byte(`<a><b>hi</b></a>`))
+	require.NoError(t, err)
+	require.Equal(t, "seen:hi\n", string(out))
 }
 
 // TestXSLTRejectsMalformedStylesheet proves a non-well-formed stylesheet is an

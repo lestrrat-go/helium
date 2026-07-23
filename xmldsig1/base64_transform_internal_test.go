@@ -8,9 +8,8 @@ import (
 )
 
 // base64TransformStub is a Transform whose URI is the base64 decode transform.
-// There is no exported constructor for it (the transform is verify-only), so a
-// test that drives the sign-side preflight builds one directly to prove the
-// preflight rejects it fail-closed.
+// There is no exported constructor, so sign-side tests supply the URI through
+// the public Transform interface.
 type base64TransformStub struct{}
 
 func (base64TransformStub) URI() string { return TransformBase64 }
@@ -19,54 +18,35 @@ func (base64TransformStub) URI() string { return TransformBase64 }
 // tests to point at the ds:Object element carrying Id="object".
 const objectFragment = "#object"
 
-// TestBase64PipelineResolution locks how resolveTransformPipeline treats the
-// base64 decode transform: alone it ends the pipeline as an octet-producing step
-// (base64 set, no default c14n), and it participates in the same fail-closed
-// ordering guard as canonicalization — a base64 after a c14n, a transform after
-// a base64, and a second base64 are all rejected.
-func TestBase64PipelineResolution(t *testing.T) {
-	t.Run("base64 alone ends the pipeline without a default c14n", func(t *testing.T) {
-		pipe, err := resolveTransformPipeline([]transformStep{{algorithm: TransformBase64}})
-		require.NoError(t, err)
-		require.True(t, pipe.base64, "base64 must be marked as the octet-producing step")
-		require.Empty(t, pipe.c14nMethod, "no canonicalization runs after base64")
-	})
+// TestBase64PipelineTransitions covers Base64 on both value kinds and proves it
+// no longer closes the transform list.
+func TestBase64PipelineTransitions(t *testing.T) {
+	runtime := transformRuntime{parser: helium.NewParser(), external: true}
 
-	t.Run("enveloped then base64 is allowed at resolution", func(t *testing.T) {
-		// A node-set transform may precede the octet-producing base64 step at the
-		// pipeline level; canonicalizeReference is where the unsupported
-		// combination is fail-closed (see TestBase64ReferenceFailClosed).
-		pipe, err := resolveTransformPipeline([]transformStep{
-			{algorithm: TransformEnvelopedSignature},
-			{algorithm: TransformBase64},
-		})
-		require.NoError(t, err)
-		require.True(t, pipe.base64)
-		require.True(t, pipe.hasEnveloped)
-	})
-
-	t.Run("base64 after c14n is rejected", func(t *testing.T) {
-		_, err := resolveTransformPipeline([]transformStep{
-			{algorithm: C14N10},
-			{algorithm: TransformBase64},
-		})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-	})
-
-	t.Run("transform after base64 is rejected", func(t *testing.T) {
-		_, err := resolveTransformPipeline([]transformStep{
+	t.Run("base64 then c14n reparses decoded XML", func(t *testing.T) {
+		out, err := externalReferenceDigestInput(t.Context(), []byte("PHgvPg=="), []transformStep{
 			{algorithm: TransformBase64},
 			{algorithm: C14N10},
-		})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		}, runtime)
+		require.NoError(t, err)
+		require.Equal(t, `<x></x>`, string(out))
 	})
 
-	t.Run("second base64 is rejected", func(t *testing.T) {
-		_, err := resolveTransformPipeline([]transformStep{
+	t.Run("second base64 decodes the first result", func(t *testing.T) {
+		out, err := externalReferenceDigestInput(t.Context(), []byte("YzI5dFpTQjBaWGgw"), []transformStep{
 			{algorithm: TransformBase64},
 			{algorithm: TransformBase64},
-		})
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
+		}, runtime)
+		require.NoError(t, err)
+		require.Equal(t, "some text", string(out))
+	})
+
+	t.Run("c14n then base64 runs and rejects non-base64 canonical XML", func(t *testing.T) {
+		_, err := externalReferenceDigestInput(t.Context(), []byte(`<x/>`), []transformStep{
+			{algorithm: C14N10},
+			{algorithm: TransformBase64},
+		}, runtime)
+		require.ErrorIs(t, err, ErrInvalidSignature)
 	})
 }
 
@@ -115,13 +95,10 @@ func TestBase64ReferenceInvalidInput(t *testing.T) {
 	require.Nil(t, canon)
 }
 
-// TestBase64ReferenceFailClosed locks the unsupported combinations of the base64
-// transform with a preceding node-set transform. The base64 transform digests a
-// node-set's string-value directly, so pairing it with an enveloped-signature or
-// XPath filter transform is rejected fail-closed rather than digesting an
-// unintended value.
-func TestBase64ReferenceFailClosed(t *testing.T) {
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><Object Id="object">c29tZSB0ZXh0</Object></root>`))
+// TestBase64ReferenceNodeSetTransforms proves Base64 consumes the text nodes
+// remaining after earlier node-set transforms.
+func TestBase64ReferenceNodeSetTransforms(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><Object Id="object"><keep>c29tZSB0ZXh0</keep><drop>not-base64!</drop></Object></root>`))
 	require.NoError(t, err)
 	sig := findSig(doc.DocumentElement()) // nil: the doc carries no Signature
 
@@ -135,8 +112,8 @@ func TestBase64ReferenceFailClosed(t *testing.T) {
 			},
 		}
 		_, canon, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, sig, ref)
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-		require.Nil(t, canon)
+		require.ErrorIs(t, err, ErrInvalidSignature)
+		require.Nil(t, canon, "the unremoved non-base64 text remains part of the node-set")
 	})
 
 	t.Run("xpath filter before base64", func(t *testing.T) {
@@ -144,22 +121,19 @@ func TestBase64ReferenceFailClosed(t *testing.T) {
 			uri:             objectFragment,
 			digestAlgorithm: DigestSHA1,
 			transforms: []parsedTransform{
-				{algorithm: TransformXPath, xpathExpr: "true()"},
+				{algorithm: TransformXPath, xpathExpr: "not(ancestor-or-self::drop)"},
 				{algorithm: TransformBase64},
 			},
 		}
 		_, canon, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, sig, ref)
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-		require.Nil(t, canon)
+		require.NoError(t, err)
+		require.Equal(t, "some text", string(canon))
 	})
 }
 
-// TestBase64SignPreflightRejected proves the sign-side preflight rejects the
-// base64 transform. The signing digest path canonicalizes its reference node-set
-// and has no base64 branch, so accepting a base64 transform would silently digest
-// the canonicalized subtree instead of the decoded octets — a fail-open
-// signature. The preflight fails closed before any DOM mutation.
-func TestBase64SignPreflightRejected(t *testing.T) {
+// TestBase64SignPreflightAccepted proves signing and execution share Base64
+// support for a caller-supplied Transform implementation.
+func TestBase64SignPreflightAccepted(t *testing.T) {
 	cfg := &signerConfig{
 		references: []ReferenceConfig{{
 			URI:             objectFragment,
@@ -168,8 +142,26 @@ func TestBase64SignPreflightRejected(t *testing.T) {
 		}},
 	}
 	err := preflightSignerTransforms(cfg)
-	require.ErrorIs(t, err, ErrUnsupportedTransform)
-	var refErr *ReferenceError
-	require.ErrorAs(t, err, &refErr, "the failure must name the offending Reference")
-	require.Equal(t, 0, refErr.Reference)
+	require.NoError(t, err)
+}
+
+func TestBase64SignVerifyRoundTrip(t *testing.T) {
+	key := []byte("base64-transform-test-key")
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><Object Id="object">c29tZSB0ZXh0</Object></root>`))
+	require.NoError(t, err)
+
+	sig, err := NewSigner().
+		SignatureAlgorithm(AlgHMACSHA256).
+		Reference(ReferenceConfig{
+			URI:             objectFragment,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{base64TransformStub{}},
+		}).
+		SignDetached(t.Context(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sig))
+
+	result, err := NewVerifier(StaticKey(key)).Verify(t.Context(), doc)
+	require.NoError(t, err)
+	require.Len(t, result.References, 1)
 }

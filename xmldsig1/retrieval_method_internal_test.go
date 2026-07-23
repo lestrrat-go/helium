@@ -347,6 +347,28 @@ func TestRetrievalMethodAppliesSupportedTransform(t *testing.T) {
 		require.Len(t, data.X509Certificates, 1)
 		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
 	})
+
+	t.Run("same-document multiphase", func(t *testing.T) {
+		cert, der := selfSignedCert(t)
+		certB64 := base64.StdEncoding.EncodeToString(der)
+		transforms := `<ds:Transforms>` +
+			`<ds:Transform Algorithm="` + C14N10 + `"/>` +
+			`<ds:Transform Algorithm="` + TransformXSLT + `"><xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/></ds:Transform>` +
+			`<ds:Transform Algorithm="` + TransformXPath + `"><ds:XPath>true()</ds:XPath></ds:Transform>` +
+			`<ds:Transform Algorithm="` + C14N10 + `"/>` +
+			`</ds:Transforms>`
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="#x509" Type="`+TypeX509Data+`">`+
+			transforms+`</ds:RetrievalMethod><ds:X509Data Id="x509"><ds:X509Certificate>`+certB64+`</ds:X509Certificate></ds:X509Data></ds:KeyInfo>`)
+		transformer := &pipelineRecordingTransformer{}
+		cfg := &verifierConfig{xsltTransformer: transformer}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.NoError(t, err)
+		require.Len(t, transformer.snapshot(), 1)
+		require.Len(t, data.X509Certificates, 1)
+		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	})
 }
 
 // xsltTransformElem is a ds:Transforms carrying a single XSLT transform whose

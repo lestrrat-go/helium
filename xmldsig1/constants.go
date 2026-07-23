@@ -72,18 +72,19 @@ const (
 	// required <XPath> child from the signing API).
 	TransformXPath = "http://www.w3.org/TR/1999/REC-xpath-19991116"
 	// TransformXSLT is the XSLT transform (XMLDSig core §6.6.5). Its
-	// ds:Transform/xsl:stylesheet child is applied to the pre-XSLT octet stream and
-	// the result is digested. XSLT is powerful (document(), unbounded compute), so
+	// ds:Transform/xsl:stylesheet child is applied to the current pipeline octets;
+	// the result feeds the next transform or digest. XSLT is powerful
+	// (document(), unbounded compute), so
 	// it is verify-only and OFF by default: it runs only through an injected
 	// [XSLTTransformer] and fails closed with [ErrUnsupportedTransform] when none is
 	// configured. Signing has no typed Transform for it and the sign preflight
 	// rejects it fail-closed.
 	TransformXSLT = "http://www.w3.org/TR/1999/REC-xslt-19991116"
 	// TransformBase64 is the base64 decode transform (XMLDSig core §6.6.2). Its
-	// input node-set's XPath 1.0 string-value is base64-decoded and the decoded
-	// octets are digested directly, with no canonicalization applied afterward.
-	// It is verify-only: signing has no typed Transform for it and the sign
-	// preflight rejects it fail-closed.
+	// node-set input is converted from the remaining text-node string-values, while
+	// an octet input is decoded directly. The decoded octets feed the next declared
+	// transform or the digest. Signing supports it through the Transform interface;
+	// there is no typed constructor.
 	TransformBase64 = "http://www.w3.org/2000/09/xmldsig#base64"
 )
 

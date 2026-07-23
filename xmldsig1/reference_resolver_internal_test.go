@@ -70,8 +70,8 @@ func TestExternalOctetSymmetry(t *testing.T) {
 // TestExternalReferenceDigestInputEnveloped locks the fail-closed rejection of an
 // enveloped-signature transform on an external reference.
 func TestExternalReferenceDigestInputEnveloped(t *testing.T) {
-	pipe := transformPipeline{hasEnveloped: true, c14nMethod: C14N10}
-	_, err := externalReferenceDigestInput(t.Context(), []byte(`<x/>`), pipe, false, helium.NewParser())
+	runtime := transformRuntime{parser: helium.NewParser(), external: true}
+	_, err := externalReferenceDigestInput(t.Context(), []byte(`<x/>`), []transformStep{{algorithm: TransformEnvelopedSignature}}, runtime)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 }
 
@@ -79,7 +79,8 @@ func TestExternalReferenceDigestInputEnveloped(t *testing.T) {
 // resolved octets verbatim (no canonicalization of an external octet stream).
 func TestExternalReferenceDigestInputEmptyIsRaw(t *testing.T) {
 	octets := []byte("not even xml \x00 bytes")
-	out, err := externalReferenceDigestInput(t.Context(), octets, transformPipeline{}, false, helium.NewParser())
+	runtime := transformRuntime{parser: helium.NewParser(), external: true}
+	out, err := externalReferenceDigestInput(t.Context(), octets, nil, runtime)
 	require.NoError(t, err)
 	require.Equal(t, octets, out)
 }
@@ -104,12 +105,4 @@ func TestURIHasScheme(t *testing.T) {
 			require.Equal(t, want, uriHasScheme(uri))
 		})
 	}
-}
-
-func TestStepsHaveC14N(t *testing.T) {
-	require.False(t, stepsHaveC14N(nil))
-	require.False(t, stepsHaveC14N([]transformStep{{algorithm: TransformEnvelopedSignature}}))
-	require.False(t, stepsHaveC14N([]transformStep{{algorithm: TransformBase64}}))
-	require.True(t, stepsHaveC14N([]transformStep{{algorithm: C14N10}}))
-	require.True(t, stepsHaveC14N([]transformStep{{algorithm: TransformXPath}, {algorithm: C14N11URI}}))
 }

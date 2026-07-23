@@ -1,8 +1,11 @@
 package xmldsig1
 
 import (
+	"bytes"
+	"context"
 	"os"
-	"path/filepath"
+	"slices"
+	"sync"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -19,37 +22,23 @@ func stepsFromParsed(ref parsedReference) []transformStep {
 	return steps
 }
 
-// TestXPathTransformDefCanDigest validates the XPath filter transform against
-// the W3C "defCan-1" interop vector. That vector's Reference targets an EXTERNAL
-// document (URI="c14n11/xml-base-input.xml"), which resolveReference rejects
-// fail-closed, so the reference cannot be dereferenced through the public API.
-// The transform pipeline itself — parsing the ds:Transform/XPath expression and
-// its namespace context, evaluating the filter once per node, and canonicalizing
-// the surviving node-set — is exercised directly against the external document
-// and must reproduce the exact DigestValue the W3C signer recorded.
+// TestXPathTransformDefCanDigest validates the ordered external-reference path
+// against the W3C defCan-1 XPath + C14N 1.1 interop vector.
 func TestXPathTransformDefCanDigest(t *testing.T) {
 	// The parsed XPath transform comes from the real signature file.
-	_, parsed := parseVectorSignature(t, "defCan-1-signature.xml")
+	doc, parsed := parseVectorSignature(t, "defCan-1-signature.xml")
 	require.Len(t, parsed.references, 1)
 	ref := parsed.references[0]
 	require.Equal(t, "c14n11/xml-base-input.xml", ref.uri,
 		"defCan-1 references an external document, resolved by the harness, not the public API")
 
-	pipe, err := resolveTransformPipeline(stepsFromParsed(ref))
-	require.NoError(t, err)
-	require.Len(t, pipe.xpathFilters, 1, "one XPath filter transform")
-	require.Equal(t, "http://www.ietf.org", pipe.xpathFilters[0].ns["ietf"],
+	require.Len(t, ref.transforms, 2)
+	require.Equal(t, "http://www.ietf.org", ref.transforms[0].xpathNS["ietf"],
 		"the XPath element's ietf: namespace binding must be captured")
-	require.Equal(t, C14N11URI, pipe.c14nMethod)
+	require.Equal(t, C14N11URI, ref.transforms[1].algorithm)
 
-	// The external reference document.
-	extDoc := mustParseInteropFile(t, "xml-base-input.xml")
-	nodes := collectDocumentNodes(extDoc)
-	for _, f := range pipe.xpathFilters {
-		nodes, err = applyXPathFilter(t.Context(), nodes, f)
-		require.NoError(t, err)
-	}
-	canonical, err := canonicalizeNodeSet(pipe.c14nMethod, nodes, extDoc, pipe.prefixes)
+	cfg := &verifierConfig{referenceResolver: FSReferenceResolver(os.DirFS("testdata/interop"))}
+	canonical, err := resolveExternalReference(t.Context(), cfg, doc, ref)
 	require.NoError(t, err)
 
 	computed, err := computeDigest(ref.digestAlgorithm, canonical, true)
@@ -90,9 +79,7 @@ func TestXPathTransformThroughPipeline(t *testing.T) {
 	require.NotContains(t, string(canonical), "t:drop", "dropped element must be filtered out")
 }
 
-// TestXPathTransformFailClosed locks the fail-closed edges of the XPath filter
-// transform: an empty/absent expression, and the whole-document unsupported
-// XSLT-transform chain from the defCan-2/3 vectors.
+// TestXPathTransformFailClosed locks the empty-expression validation edge.
 func TestXPathTransformFailClosed(t *testing.T) {
 	t.Run("empty expression", func(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><d>x</d></root>`))
@@ -106,25 +93,75 @@ func TestXPathTransformFailClosed(t *testing.T) {
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 		require.Nil(t, canon)
 	})
+}
 
-	// defCan-2/3 carry an XSLT transform. The stylesheet subtree now parses (the
-	// XSLT transform is captured, not rejected at parse), but both vectors order
-	// the XSLT transform AFTER a C14N11 that already produced octets, so resolving
-	// the transform pipeline rejects the mis-ordered chain fail-closed — regardless
-	// of whether an XSLTTransformer is configured.
-	t.Run("defCan-2 XSLT-after-c14n chain rejected at resolve", func(t *testing.T) {
-		_, parsed := parseVectorSignature(t, "defCan-2-signature.xml")
-		require.Len(t, parsed.references, 1)
-		_, err := resolveTransformPipeline(stepsFromParsed(parsed.references[0]))
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-	})
+type recordedXSLTCall struct {
+	stylesheet []byte
+	input      []byte
+}
 
-	t.Run("defCan-3 XSLT-after-c14n chain rejected at resolve", func(t *testing.T) {
-		_, parsed := parseVectorSignature(t, "defCan-3-signature.xml")
-		require.Len(t, parsed.references, 1)
-		_, err := resolveTransformPipeline(stepsFromParsed(parsed.references[0]))
-		require.ErrorIs(t, err, ErrUnsupportedTransform)
-	})
+type recordingXSLT3Transformer struct {
+	mu    sync.Mutex
+	calls []recordedXSLTCall
+}
+
+func (r *recordingXSLT3Transformer) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte, error) {
+	r.mu.Lock()
+	r.calls = append(r.calls, recordedXSLTCall{stylesheet: slices.Clone(stylesheet), input: slices.Clone(input)})
+	r.mu.Unlock()
+	out, err := xslt3Transformer{}.TransformXSLT(ctx, stylesheet, input)
+	if err != nil {
+		return nil, err
+	}
+	// The W3C XSLT 1.0 identity-transform vectors serialize the document element
+	// without an added trailing newline. The test adapter normalizes xslt3's
+	// convenience-string newline to those specified output octets.
+	return bytes.TrimSuffix(out, []byte("\n")), nil
+}
+
+func (r *recordingXSLT3Transformer) snapshot() []recordedXSLTCall {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.calls)
+}
+
+// TestXPathTransformDefCanMultiphase verifies the W3C defCan-2/3 vectors whose
+// ordered transforms cross between node sets and octets more than once.
+func TestXPathTransformDefCanMultiphase(t *testing.T) {
+	cases := map[string]int{
+		"defCan-2-signature.xml": 1,
+		"defCan-3-signature.xml": 2,
+	}
+	for name, wantXSLTCalls := range cases {
+		t.Run(name, func(t *testing.T) {
+			doc, parsed := parseVectorSignature(t, name)
+			require.Len(t, parsed.references, 1)
+			ref := parsed.references[0]
+
+			recorder := &recordingXSLT3Transformer{}
+			cfg := &verifierConfig{
+				allowSHA1:         true,
+				referenceResolver: FSReferenceResolver(os.DirFS("testdata/interop")),
+				xsltTransformer:   recorder,
+			}
+			_, canonical, external, err := canonicalizeReference(t.Context(), cfg, doc, findSig(doc.DocumentElement()), ref)
+			require.NoError(t, err)
+			require.True(t, external)
+			computed, err := computeDigest(ref.digestAlgorithm, canonical, true)
+			require.NoError(t, err)
+			require.True(t, digestEqual(computed, ref.digestValue))
+			require.Len(t, recorder.snapshot(), wantXSLTCalls)
+
+			verifyTransformer := &recordingXSLT3Transformer{}
+			verifier := NewVerifier(StaticKey([]byte("secret"))).
+				AllowSHA1(true).
+				ReferenceResolver(FSReferenceResolver(os.DirFS("testdata/interop"))).
+				XSLTTransformer(verifyTransformer)
+			result, err := verifier.Verify(t.Context(), doc)
+			require.NoError(t, err)
+			require.Len(t, result.References, 1)
+		})
+	}
 }
 
 // TestXPathTransformNamespaceContextIsolated confirms an unprefixed name test in
@@ -150,13 +187,4 @@ func TestXPathTransformNamespaceContextIsolated(t *testing.T) {
 	_, canonical, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 	require.NoError(t, err)
 	require.Contains(t, string(canonical), "V")
-}
-
-func mustParseInteropFile(t *testing.T, name string) *helium.Document {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", "interop", name))
-	require.NoError(t, err)
-	doc, err := helium.NewParser().Parse(t.Context(), data)
-	require.NoError(t, err)
-	return doc
 }

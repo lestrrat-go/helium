@@ -48,9 +48,12 @@ type XSLT struct{}
 var _ xmldsig1.XSLTTransformer = XSLT{}
 
 // TransformXSLT compiles stylesheet and applies it to input, returning the
-// transform output whose bytes become the reference's digest input. Both
-// arguments are the pre-XSLT octets xmldsig1 hands to the seam; neither is
-// trusted, so ctx should carry a deadline.
+// transform output to the ordered Reference pipeline. XML-family serialization
+// drops helium.Writer's document-terminating newline artifact; text, JSON, and
+// adaptive output preserve trailing newlines because they are result content.
+// Both arguments are the current pipeline octets xmldsig1 hands to the seam;
+// neither is trusted, so ctx should carry a deadline. One Reference may invoke
+// this method multiple times.
 func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte, error) {
 	ssDoc, err := helium.NewParser().Parse(ctx, stylesheet)
 	if err != nil {
@@ -64,9 +67,31 @@ func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	out, err := xslt3.TransformString(ctx, srcDoc, ss)
+	invocation := ss.Transform(srcDoc)
+	out, err := invocation.Serialize(ctx)
 	if err != nil {
 		return nil, err
 	}
+	out = trimTreeSerializationTerminator(out, invocation.ResolvedOutputDef())
 	return []byte(out), nil
+}
+
+// trimTreeSerializationTerminator removes the one UTF-8 newline helium.Writer
+// appends after an XML-family result document. Non-tree methods own every output
+// byte, and a NUL before LF identifies a multibyte encoding whose serializer
+// path does not add this UTF-8 artifact.
+func trimTreeSerializationTerminator(out string, output *xslt3.OutputDef) string {
+	if output != nil {
+		switch output.Method {
+		case "text", "json", "adaptive":
+			return out
+		}
+	}
+	if len(out) == 0 || out[len(out)-1] != '\n' {
+		return out
+	}
+	if len(out) > 1 && out[len(out)-2] == 0 {
+		return out
+	}
+	return out[:len(out)-1]
 }

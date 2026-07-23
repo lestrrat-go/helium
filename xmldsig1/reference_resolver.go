@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
 // ReferenceResolver supplies the octet stream for a Reference whose URI is NOT
@@ -31,8 +30,8 @@ import (
 //
 // ResolveReference must be safe to call from multiple goroutines, and should
 // honor ctx cancellation. The returned octets are the resource's raw bytes; the
-// package then applies the Reference's transform pipeline to them (base64 decode,
-// or parse-to-XML plus canonicalization for a c14n/XPath chain).
+// package then applies every declared transform in order, parsing or
+// canonicalizing only when the next transform requires the other value kind.
 type ReferenceResolver interface {
 	ResolveReference(ctx context.Context, uri string) ([]byte, error)
 }
@@ -171,80 +170,11 @@ func joinReferenceURI(base, uri string) (string, error) {
 	return joined, nil
 }
 
-// stepsHaveC14N reports whether any transform step is an explicit
-// canonicalization transform. It distinguishes a Reference that declares a c14n
-// transform (which needs its octets parsed into a node-set) from one with an
-// empty or octet-only (base64) chain (whose octets are digested directly). The
-// transformPipeline's c14nMethod alone cannot tell these apart because it
-// defaults to inclusive C14N 1.0 when no c14n transform is declared.
-func stepsHaveC14N(steps []transformStep) bool {
-	for _, s := range steps {
-		switch s.algorithm {
-		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
-			return true
-		}
-	}
-	return false
-}
-
-// externalReferenceDigestInput converts an external reference's resolved octets
-// into the byte stream the DigestValue is computed over, applying the transform
-// pipeline. It is shared by verify and sign so both digest byte-identical input
-// for the same resource and transform list.
-//
-// The rules mirror XMLDSig reference processing for an octet-stream input:
-//
-//   - The enveloped-signature transform removes the Signature's own subtree from
-//     a same-document node-set; it is meaningless on an external resource, which
-//     does not contain the Signature. It is rejected fail-closed.
-//   - The base64 decode transform decodes the octets and they are digested
-//     directly, with no canonicalization.
-//   - An empty chain (no explicit c14n, no XPath filter) digests the octets
-//     directly — an external octet stream is not canonicalized by default.
-//   - A chain with an XPath filter or an explicit c14n transform requires a
-//     node-set, so the octets are first parsed into XML with parser (a
-//     locked-down parser by default), then any XPath filters run and the result
-//     is canonicalized.
-func externalReferenceDigestInput(ctx context.Context, octets []byte, pipe transformPipeline, hasExplicitC14N bool, parser helium.Parser) ([]byte, error) {
-	if pipe.hasEnveloped {
-		return nil, fmt.Errorf("%w: enveloped-signature transform is not valid on an external reference", ErrUnsupportedTransform)
-	}
-
-	if pipe.base64 {
-		if len(pipe.xpathFilters) > 0 {
-			return nil, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
-		}
-		decoded, err := xmlbase64.DecodeString(string(octets))
-		if err != nil {
-			return nil, fmt.Errorf("%w: invalid base64 transform input: %v", ErrInvalidSignature, err)
-		}
-		return decoded, nil
-	}
-
-	// No node-set-requiring transform: the reference is an octet stream, digested
-	// as-is.
-	if len(pipe.xpathFilters) == 0 && !hasExplicitC14N {
-		return octets, nil
-	}
-
-	// A c14n or XPath filter transform needs XML. Parse the octets with the
-	// locked-down reference parser (XXE blocked, no filesystem, no network by
-	// default).
-	extDoc, err := parser.Parse(ctx, octets)
-	if err != nil {
-		return nil, fmt.Errorf("%w: cannot parse external reference as XML: %v", ErrReferenceNotFound, err)
-	}
-
-	if len(pipe.xpathFilters) > 0 {
-		nodes := collectDocumentNodes(extDoc)
-		for _, f := range pipe.xpathFilters {
-			filtered, err := applyXPathFilter(ctx, nodes, f)
-			if err != nil {
-				return nil, err
-			}
-			nodes = filtered
-		}
-		return canonicalizeNodeSet(pipe.c14nMethod, nodes, extDoc, pipe.prefixes)
-	}
-	return canonicalize(pipe.c14nMethod, extDoc, pipe.prefixes)
+// externalReferenceDigestInput is the octet-valued entry adapter shared by
+// signing, verification, Manifest validation, and RetrievalMethod processing.
+// The ordered executor decides every later parse or canonicalization from the
+// current value kind and the next transform's contract.
+func externalReferenceDigestInput(ctx context.Context, octets []byte, steps []transformStep, runtime transformRuntime) ([]byte, error) {
+	runtime.external = true
+	return executeTransformPipeline(ctx, runtime, newOctetTransformValue(octets), steps)
 }
