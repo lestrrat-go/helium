@@ -17,6 +17,10 @@ import (
 // dereferenced without limit.
 const maxRetrievalMethodDepth = 5
 
+// maxRetrievalTransformSteps caps the repeated parse/canonicalize work a
+// ds:RetrievalMethod can force before the SignatureValue is authenticated.
+const maxRetrievalTransformSteps = 16
+
 // resolveRetrievalMethods dereferences every ds:RetrievalMethod child of a
 // ds:KeyInfo element and merges the retrieved certificate material into data
 // before key resolution. It runs as a second, resolution-aware pass after
@@ -172,8 +176,8 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 
 // parseRetrievalTransforms parses the optional single ds:Transforms child of a
 // RetrievalMethod into transform steps, enforcing at most one core-namespace
-// Transforms element. A foreign-namespace look-alike is ignored so it cannot
-// steer processing.
+// Transforms element and the fixed pre-verification transform-step cap. A
+// foreign-namespace look-alike is ignored so it cannot steer processing.
 func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
 	var transforms []parsedTransform
 	seen := false
@@ -189,7 +193,7 @@ func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
 			return nil, fmt.Errorf("%w: multiple Transforms elements in RetrievalMethod", ErrInvalidKeyInfo)
 		}
 		seen = true
-		list, err := parseTransformList(e)
+		list, err := parseTransformList(e, maxRetrievalTransformSteps)
 		if err != nil {
 			return nil, err
 		}

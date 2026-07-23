@@ -205,7 +205,8 @@ Existing bounds remain active:
 - parser limits apply independently to every reparse;
 - `defaultXPathOpLimit` applies to every XPath step;
 - `verifyBudget` still caps Reference/KeyInfo work;
-- RetrievalMethod depth, visited-URI, entry, and decoded-byte limits remain;
+- RetrievalMethod depth, visited-URI, transform-step, entry, and decoded-byte
+  limits remain;
 - XSLT output policy remains the injected transformer's responsibility.
 
 No default intermediate-octet cap is imposed.

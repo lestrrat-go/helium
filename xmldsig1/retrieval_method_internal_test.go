@@ -14,6 +14,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
@@ -361,6 +362,45 @@ func TestRetrievalMethodRejectsUnsupportedTransform(t *testing.T) {
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
 		require.Empty(t, data.X509Certificates)
 	})
+}
+
+func TestRetrievalMethodTransformStepCap(t *testing.T) {
+	transform := `<ds:Transform Algorithm="` + C14N10 + `"/>`
+	build := func(n int) *helium.Document {
+		return mustParse(t, `<ds:RetrievalMethod xmlns:ds="`+NamespaceDSig+`" URI="#target" Type="`+TypeX509Data+`">`+
+			`<ds:Transforms>`+strings.Repeat(transform, n)+`</ds:Transforms></ds:RetrievalMethod>`)
+	}
+
+	steps, err := parseRetrievalTransforms(build(maxRetrievalTransformSteps).DocumentElement())
+	require.NoError(t, err)
+	require.Len(t, steps, maxRetrievalTransformSteps)
+
+	steps, err = parseRetrievalTransforms(build(maxRetrievalTransformSteps + 1).DocumentElement())
+	require.ErrorIs(t, err, ErrResourceLimitExceeded)
+	require.Nil(t, steps)
+}
+
+func TestVerifyRejectsRetrievalTransformOverflowBeforeKeyResolution(t *testing.T) {
+	transform := `<ds:Transform Algorithm="` + C14N10 + `"/>`
+	digestValue := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	doc := mustParse(t, `<root xmlns:ds="`+NamespaceDSig+`" Id="target"><ds:Signature>`+
+		`<ds:SignedInfo><ds:CanonicalizationMethod Algorithm="`+ExcC14N10+`"/>`+
+		`<ds:SignatureMethod Algorithm="`+AlgHMACSHA256+`"/>`+
+		`<ds:Reference URI=""><ds:DigestMethod Algorithm="`+DigestSHA256+`"/>`+
+		`<ds:DigestValue>`+digestValue+`</ds:DigestValue></ds:Reference></ds:SignedInfo>`+
+		`<ds:SignatureValue>AA==</ds:SignatureValue><ds:KeyInfo>`+
+		`<ds:RetrievalMethod URI="#target" Type="`+TypeX509Data+`"><ds:Transforms>`+
+		strings.Repeat(transform, maxRetrievalTransformSteps+1)+
+		`</ds:Transforms></ds:RetrievalMethod></ds:KeyInfo></ds:Signature></root>`)
+	keyResolved := false
+	keySource := KeySourceFunc(func(context.Context, *KeyInfoData, string) (any, error) {
+		keyResolved = true
+		return []byte("secret"), nil
+	})
+
+	_, err := NewVerifier(keySource).Verify(t.Context(), doc)
+	require.ErrorIs(t, err, ErrResourceLimitExceeded)
+	require.False(t, keyResolved)
 }
 
 // TestRetrievalMethodAppliesSupportedTransform proves a supported transform

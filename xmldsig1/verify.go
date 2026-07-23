@@ -572,8 +572,10 @@ func parseSignedInfo(ctx context.Context, budget *verifyBudget, elem *helium.Ele
 // does not satisfy the check. Each Transform's Algorithm and its validated
 // parameters (the XPath expression, or an ec:InclusiveNamespaces prefix list) are
 // recorded; an unrecognized parameter child is rejected fail-closed rather than
-// digested as if absent.
-func parseTransformList(transformsElem *helium.Element) ([]parsedTransform, error) {
+// digested as if absent. A positive maxSteps rejects the first core Transform
+// past that limit before its parameters are parsed; zero leaves the list
+// unlimited.
+func parseTransformList(transformsElem *helium.Element, maxSteps int) ([]parsedTransform, error) {
 	var transforms []parsedTransform
 	for tc := transformsElem.FirstChild(); tc != nil; tc = tc.NextSibling() {
 		te, ok := helium.AsNode[*helium.Element](tc)
@@ -588,6 +590,9 @@ func parseTransformList(transformsElem *helium.Element) ([]parsedTransform, erro
 		}
 		if domutil.LocalName(te) != "Transform" {
 			continue
+		}
+		if maxSteps > 0 && len(transforms) >= maxSteps {
+			return nil, fmt.Errorf("%w: too many transforms (limit %d)", ErrResourceLimitExceeded, maxSteps)
 		}
 		alg, _ := te.GetAttribute("Algorithm")
 		// The XPath filter transform carries its expression in a
@@ -669,7 +674,7 @@ func parseReferenceElement(ctx context.Context, budget *verifyBudget, elem *heli
 				return ref, fmt.Errorf("%w: multiple Transforms elements", ErrInvalidSignature)
 			}
 			transformsSeen = true
-			transforms, err := parseTransformList(e)
+			transforms, err := parseTransformList(e, 0)
 			if err != nil {
 				return ref, err
 			}

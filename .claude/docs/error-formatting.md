@@ -178,6 +178,8 @@ External-reference resolution sentinels (`errors.go`, `reference_resolver.go`): 
 
 Ordered-transform diagnostics (`transform_pipeline.go` `executeTransformPipeline`) identify the zero-based transform index + algorithm. Static algorithm/parameter/capability failures wrap `ErrUnsupportedTransform` before execution. A first required parse of resolver-supplied octets wraps `ErrReferenceNotFound`; a parse of intermediate transform output wraps `ErrUnsupportedTransform` and names both producer + consumer steps. Invalid Base64 wraps `ErrInvalidSignature`. Context and injected-XSLT errors return unchanged.
 
+A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI dereference, transform execution, or key resolution.
+
 ## Error Accumulation Pattern
 
 ### XSD

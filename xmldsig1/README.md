@@ -146,6 +146,8 @@ runs. An enveloped transform is limited to the original same-document node-set;
 it fails after an octet boundary because the containing Signature's node identity
 cannot be reconstructed from serialized markup. XPath and XSLT remain
 verify-only because the signing API cannot emit their required child content.
+RetrievalMethod pipelines have a pre-authentication step cap; see
+[Verification resource limits](#verification-resource-limits).
 
 ### XSLT transform (opt-in, verify-only)
 
@@ -418,6 +420,10 @@ context inside the KeyInfo and Reference parse loops, so a cancelled context or
 passed deadline stops the work promptly rather than only at loop boundaries —
 pass a `ctx` with a deadline to bound the per-Reference canonicalization of a
 SignedInfo that declares many References.
+
+RetrievalMethod transforms have a separate fixed `maxRetrievalTransformSteps`
+cap because they execute before the SignatureValue check. It is not affected by
+the builder limits above.
 
 ## Detached signature placement (inclusive C14N)
 
