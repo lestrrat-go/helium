@@ -32,6 +32,17 @@ func TestXSLTTreeOutputDropsWriterTerminator(t *testing.T) {
 	require.Equal(t, "<out>hi</out>", string(out))
 }
 
+func TestXSLTXMLTextOnlyOutputPreservesTrailingNewline(t *testing.T) {
+	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
+		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
+		`<xsl:template match="/">seen<xsl:text>&#10;</xsl:text></xsl:template>` +
+		`</xsl:stylesheet>`)
+
+	out, err := transform.XSLT{}.TransformXSLT(t.Context(), stylesheet, []byte(`<a/>`))
+	require.NoError(t, err)
+	require.Equal(t, "seen\n", string(out))
+}
+
 func TestXSLTTextOutputPreservesTrailingNewline(t *testing.T) {
 	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
 		`<xsl:output method="text"/>` +

@@ -28,6 +28,7 @@
 package transform
 
 import (
+	"bytes"
 	"context"
 
 	helium "github.com/lestrrat-go/helium"
@@ -48,12 +49,12 @@ type XSLT struct{}
 var _ xmldsig1.XSLTTransformer = XSLT{}
 
 // TransformXSLT compiles stylesheet and applies it to input, returning the
-// transform output to the ordered Reference pipeline. XML-family serialization
-// drops helium.Writer's document-terminating newline artifact; text, JSON, and
-// adaptive output preserve trailing newlines because they are result content.
-// Both arguments are the current pipeline octets xmldsig1 hands to the seam;
-// neither is trusted, so ctx should carry a deadline. One Reference may invoke
-// this method multiple times.
+// transform output to the ordered Reference pipeline. Element-bearing XML-family
+// serialization drops helium.Writer's document-terminating newline artifact;
+// text-only XML-family, text, JSON, and adaptive output preserve trailing
+// newlines because they are result content. Both arguments are the current
+// pipeline octets xmldsig1 hands to the seam; neither is trusted, so ctx should
+// carry a deadline. One Reference may invoke this method multiple times.
 func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte, error) {
 	ssDoc, err := helium.NewParser().Parse(ctx, stylesheet)
 	if err != nil {
@@ -68,18 +69,25 @@ func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte
 		return nil, err
 	}
 	invocation := ss.Transform(srcDoc)
-	out, err := invocation.Serialize(ctx)
+	resultDoc, err := invocation.Do(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out = trimTreeSerializationTerminator(out, invocation.ResolvedOutputDef())
+	var buf bytes.Buffer
+	if err := xslt3.SerializeResult(&buf, resultDoc, invocation.ResolvedOutputDef()); err != nil {
+		return nil, err
+	}
+	out := buf.String()
+	if resultDoc.DocumentElement() != nil {
+		out = trimTreeSerializationTerminator(out, invocation.ResolvedOutputDef())
+	}
 	return []byte(out), nil
 }
 
 // trimTreeSerializationTerminator removes the one UTF-8 newline helium.Writer
-// appends after an XML-family result document. Non-tree methods own every output
-// byte, and a NUL before LF identifies a multibyte encoding whose serializer
-// path does not add this UTF-8 artifact.
+// appends after an element-bearing XML-family result document. Non-tree methods
+// own every output byte, and a NUL before LF identifies a multibyte encoding
+// whose serializer path does not add this UTF-8 artifact.
 func trimTreeSerializationTerminator(out string, output *xslt3.OutputDef) string {
 	if output != nil {
 		switch output.Method {

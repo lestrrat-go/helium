@@ -168,8 +168,9 @@ all resource and XXE policy** — compute/time/memory
 limits and disabling `document()`/external access — because both inputs are
 attacker-controlled. The core package runs no XSLT automatically; the separate
 `xmldsig1/transform.XSLT` adapter is an explicit opt-in.
-The adapter removes the XML-family writer's final newline artifact while
-preserving meaningful trailing newlines from text, JSON, and adaptive output.
+The adapter removes the element-bearing XML-family writer's final newline
+artifact while preserving meaningful trailing newlines from text-only XML,
+text, JSON, and adaptive output.
 
 ### General XPointer references (opt-in)
 
