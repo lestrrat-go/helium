@@ -1154,8 +1154,8 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 	return apex, nil
 }
 
-// resolveGeneralXPointerTarget resolves a general XPointer expression to its
-// single element apex.
+// prepareGeneralXPointer validates and compiles a general XPointer expression
+// for later resolution to a single element apex.
 //
 // An id() selector NEVER reaches xpath1's built-in id(): the built-in resolves
 // through Document.GetElementByID, whose ID table overwrites on collision so a
@@ -1165,17 +1165,8 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // duplicate-detecting findElementsByIDUnder, and ANY other use of id() (a
 // parenthesized or embedded id() call the selector parser cannot reduce to a
 // single literal id) is rejected fail-closed rather than handed to the built-in.
-// Every remaining expression is statically validated, then evaluated on the
-// shared bounded evaluator with the merged namespace context, here() disabled
-// (nil bearing node), and the single-apex constraint enforced on the result.
-func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, overrides map[string]string, expr string) (*helium.Element, error) {
-	prepared, err := prepareGeneralXPointer(doc, overrides, expr)
-	if err != nil {
-		return nil, err
-	}
-	return resolvePreparedGeneralXPointerTarget(ctx, doc, prepared)
-}
-
+// Every remaining expression is statically validated with the merged namespace
+// context, the shared operation limit, and here() disabled (nil bearing node).
 func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {

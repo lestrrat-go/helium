@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const referenceURIC1 = "#c1"
+
 type countingXSLTTransformer struct {
 	calls atomic.Int32
 }
@@ -185,7 +187,7 @@ func TestVerifyPreflightsAllReferencesBeforeXSLT(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<doc><content Id="c1">payload</content></doc>`))
 			require.NoError(t, err)
 			ref := ReferenceConfig{
-				URI:             "#c1",
+				URI:             referenceURIC1,
 				DigestAlgorithm: DigestSHA256,
 				Transforms:      []Transform{C14NTransform(C14N10)},
 			}
@@ -246,7 +248,7 @@ func TestVerifyPreflightsAllReferencesBeforeResolver(t *testing.T) {
 		ReferenceResolver(resolver).
 		Reference(ReferenceConfig{URI: "external.xml", DigestAlgorithm: DigestSHA256}).
 		Reference(ReferenceConfig{
-			URI:             "#c1",
+			URI:             referenceURIC1,
 			DigestAlgorithm: DigestSHA256,
 			Transforms:      []Transform{C14NTransform(C14N10)},
 		}).
