@@ -271,11 +271,20 @@ owns the resulting SSRF and availability risk (an attacker who controls a
 Reference URI could otherwise steer requests at internal hosts or stall
 verification), so that decision is left explicitly to the caller.
 
-For detached-signature services, use a smaller per-resource cap with
-`FSReferenceResolverWithMaxBytes`, set a low `Verifier.MaxReferences` value, and
-pass a deadline-bearing context. The verifier enforces a cap for each resolved
-resource, but it does not combine resolver work across References; a custom
-resolver must enforce its own aggregate byte, connection, and transport budget.
+For detached-signature services, compose a smaller per-resource cap around the
+filesystem resolver, set a low `Verifier.MaxReferences` value, and pass a
+deadline-bearing context:
+
+```go
+resolver := xmldsig1.LimitReferenceResolver(
+    xmldsig1.FSReferenceResolver(fsys),
+    1<<20, // 1 MiB per resource
+)
+```
+
+The built-in filesystem resolver applies this cap while reading. A custom
+resolver receives a post-return size check, so it must enforce its own
+aggregate byte, connection, and transport budget.
 
 `Signer.ReferenceResolver` / `Signer.ReferenceParser` are the symmetric signing
 side, letting a detached signature cover external content. The sign and verify

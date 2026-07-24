@@ -221,10 +221,26 @@ func TestFSReferenceResolverRejections(t *testing.T) {
 	})
 
 	t.Run("caller-selected smaller cap", func(t *testing.T) {
-		_, err := xmldsig1.FSReferenceResolverWithMaxBytes(oversizeFS{}, 32).
+		_, err := xmldsig1.LimitReferenceResolver(
+			xmldsig1.FSReferenceResolver(oversizeFS{}), 32,
+		).
 			ResolveReference(t.Context(), "big.bin")
 		require.ErrorIs(t, err, xmldsig1.ErrReferenceTooLarge)
 		require.Contains(t, err.Error(), "32 bytes")
+	})
+
+	t.Run("generic resolver cap", func(t *testing.T) {
+		resolver := xmldsig1.LimitReferenceResolver(
+			mapReferenceResolver{"big.bin": make([]byte, 33)},
+			32,
+		)
+		_, err := resolver.ResolveReference(t.Context(), "big.bin")
+		require.ErrorIs(t, err, xmldsig1.ErrReferenceTooLarge)
+		require.Contains(t, err.Error(), "32 bytes")
+	})
+
+	t.Run("nil resolver stays nil", func(t *testing.T) {
+		require.Nil(t, xmldsig1.LimitReferenceResolver(nil, 32))
 	})
 }
 
