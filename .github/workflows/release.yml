@@ -12,7 +12,7 @@ name: Release
 # step pauses for a human even though anyone with write access can dispatch.
 #
 # See RELEASING.md for the full runbook (how to dispatch, how to bump the pinned
-# harness_ref, and recovery if goreleaser fails after tagging).
+# harness commit, and recovery if goreleaser fails after tagging).
 on:
   workflow_dispatch:
     inputs:
@@ -20,16 +20,6 @@ on:
         description: Release version tag to create (e.g. v0.5.2)
         type: string
         required: true
-      harness_ref:
-        # Pinned to a known-good helium-w3c-tests commit so the release gate is
-        # reproducible and cannot be red-blocked by unrelated harness@main churn.
-        # Bump this to the harness SHA from the latest green nightly conformance
-        # run when certifying a release against newer upstream tests.
-        # See RELEASING.md.
-        description: helium-w3c-tests (harness) commit/tag to gate against
-        type: string
-        default: 6c987d8fe551efb4a9171fdb5657a922cff442d3
-
 permissions:
   contents: read
 
@@ -87,7 +77,9 @@ jobs:
     with:
       suite: ${{ matrix.suite }}
       slow: ${{ matrix.suite == 'xslt30' }}
-      harness_ref: ${{ inputs.harness_ref }}
+      # Pin the release gate to the certified harness commit. Update this SHA
+      # only after a newer harness commit passes the manual Conformance run.
+      harness_ref: 6c987d8fe551efb4a9171fdb5657a922cff442d3
 
   release:
     needs: conformance-gate

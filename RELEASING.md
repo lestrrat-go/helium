@@ -27,13 +27,13 @@ so a failed conformance run never leaves a public tag or partial release behind.
    re-measures it at the real tag and supersedes the candidate row cleanly.
 3. Run the Release workflow from `main`:
    - GitHub UI: **Actions → Release → Run workflow**, branch `main`, fill in
-     `version` (e.g. `v0.5.2`). Leave `harness_ref` at its pinned default.
+     `version` (e.g. `v0.5.2`).
    - or: `gh workflow run release.yml --ref main -f version=v0.5.2`
 4. The `timeline-presence` job checks in seconds that `version` has a row in the
    committed timeline (from step 2). If it does not, the run stops here — fix step
    2 and re-dispatch.
 5. The `conformance-gate` job runs the `xslt30`, `xmldsig2ed`, `xmldsig11`, and
-   `merlinxmldsig` suites against the pinned `harness_ref`; only `xslt30`
+   `merlinxmldsig` suites against the pinned harness commit; only `xslt30`
    enables slow tests. If any suite fails, the run stops here — **no tag, no
    release.**
 6. On green, the `release` job waits for **environment approval** (the `release`
@@ -106,16 +106,17 @@ release-tag measurements. Release-tag results belong in `CONFORMANCE.md` and
 35/37, while `xmldsig1/summary-xmldsig2ed.md` records 37/37 for its later
 feature-evidence commit because the transform behavior was completed there.
 
-## The pinned harness_ref
+## The pinned release harness
 
-`release.yml` pins `harness_ref` to a known-good `helium-w3c-tests` commit so the
-release gate is **reproducible** and cannot be red-blocked by unrelated churn on
-`helium-w3c-tests@main`. Each release records exactly which harness certified it.
+`release.yml` passes a known-good `helium-w3c-tests` commit to the reusable
+conformance workflow, so the release gate is **reproducible** and cannot be
+red-blocked by unrelated churn on `helium-w3c-tests@main`. Each release records
+exactly which harness certified it.
 
 **Bumping the pin:** the nightly `Conformance` run tracks `helium-w3c-tests@main`
 (unpinned) — a green nightly means that harness commit passes against helium
-`main`. To certify releases against newer upstream tests, set the `harness_ref`
-default in `release.yml` to the harness SHA from the latest green nightly:
+`main`. To certify releases against newer upstream tests, update the pinned
+harness SHA in `release.yml` to the commit from the latest green nightly:
 
 ```
 gh api repos/lestrrat-go/helium-w3c-tests/commits/main --jq .sha

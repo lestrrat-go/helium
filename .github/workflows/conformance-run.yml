@@ -21,7 +21,7 @@ on:
         type: boolean
         default: false
       harness_ref:
-        description: helium-w3c-tests (harness) git ref to check out (commit/tag/branch). Defaults to main so a caller that does not pin (the nightly/manual conformance.yml) tracks the harness tip; the release gate passes a pinned harness_ref.
+        description: helium-w3c-tests (harness) git ref to check out (commit/tag/branch). Defaults to main so a caller that does not pin (the nightly/manual conformance.yml) tracks the harness tip; the release gate supplies its pinned harness commit through this input.
         type: string
         default: main
 
