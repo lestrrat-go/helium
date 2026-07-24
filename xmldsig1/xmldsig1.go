@@ -430,6 +430,11 @@ func (v Verifier) ReferenceResolver(r ReferenceResolver) Verifier {
 // resolved, transformed, and digested through the same fail-closed pipeline,
 // with the per-reference outcome recorded in [ManifestResult].
 //
+// Every direct inner Reference is parsed and statically prepared before any
+// resolver or transformer callback runs. If one fails preparation, none are
+// executed: the failing [ManifestReference] reports that error, and each
+// otherwise prepared peer reports an advisory error wrapping the same cause.
+//
 // Inner-reference results are ADVISORY: per §5.1 the application decides how to
 // treat a Manifest, so an inner-reference digest mismatch or an unresolved or
 // unsupported inner reference does NOT fail Verify — the top-level Manifest

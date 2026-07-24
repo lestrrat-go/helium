@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sync/atomic"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -17,6 +18,24 @@ import (
 // digestValueRE extracts the base64 text of every ds:DigestValue in a signed
 // document, in document order.
 var digestValueRE = regexp.MustCompile(`<ds:DigestValue[^>]*>([^<]*)</ds:DigestValue>`)
+
+type manifestCountingResolver struct {
+	calls atomic.Int32
+}
+
+func (r *manifestCountingResolver) ResolveReference(_ context.Context, _ string) ([]byte, error) {
+	r.calls.Add(1)
+	return []byte("external payload"), nil
+}
+
+type manifestCountingTransformer struct {
+	calls atomic.Int32
+}
+
+func (t *manifestCountingTransformer) TransformXSLT(_ context.Context, _, input []byte) ([]byte, error) {
+	t.calls.Add(1)
+	return input, nil
+}
 
 // innerDigests signs a data-only document with one ExcC14N/SHA-256 reference per
 // target id and returns the resulting DigestValue strings, in order. Exclusive
@@ -179,6 +198,41 @@ func TestManifestValidation(t *testing.T) {
 		require.Nil(t, res.Manifests, "default (toggle off) must not walk inner references")
 		require.Equal(t, xmldsig1.TypeManifest, res.References[0].Type, "Type is reported even with the toggle off")
 	})
+}
+
+func TestManifestValidationPreflightsAllReferencesBeforeResolver(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	inner := `<ds:Reference URI="external.xml"><ds:Transforms>` +
+		`<ds:Transform Algorithm="` + xmldsig1.TransformXSLT + `">` +
+		`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>` +
+		`</ds:Transform></ds:Transforms>` +
+		`<ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>` +
+		`<ds:DigestValue>AA==</ds:DigestValue></ds:Reference>` +
+		`<ds:Reference URI="#d1"><ds:Transforms>` +
+		`<ds:Transform Algorithm="` + xmldsig1.TransformXPath + `">` +
+		`<ds:XPath>$missing</ds:XPath></ds:Transform></ds:Transforms>` +
+		`<ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>` +
+		`<ds:DigestValue>AA==</ds:DigestValue></ds:Reference>`
+	doc := buildManifestSignedDoc(t, key, inner)
+	resolver := &manifestCountingResolver{}
+	transformer := &manifestCountingTransformer{}
+
+	result, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		ReferenceResolver(resolver).
+		XSLTTransformer(transformer).
+		ValidateManifests(true).
+		Verify(t.Context(), doc)
+	require.NoError(t, err, "Manifest reference failures remain advisory")
+	require.Zero(t, resolver.calls.Load(), "resolver must not run before every Manifest reference passes static validation")
+	require.Zero(t, transformer.calls.Load(), "transformer must not run before every Manifest reference passes static validation")
+	require.Len(t, result.Manifests, 1)
+	require.Len(t, result.Manifests[0].References, 2)
+	require.False(t, result.Manifests[0].References[0].Valid)
+	require.ErrorIs(t, result.Manifests[0].References[0].Err, xmldsig1.ErrUnsupportedTransform)
+	require.Contains(t, result.Manifests[0].References[0].Err.Error(), "was not executed")
+	require.ErrorIs(t, result.Manifests[0].References[1].Err, xmldsig1.ErrUnsupportedTransform)
 }
 
 // TestManifestValidationContextCancel confirms a cancelled context stops the

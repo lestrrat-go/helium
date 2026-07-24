@@ -79,6 +79,57 @@ func TestResolveRetrievalMethodNoResolverFailsClosed(t *testing.T) {
 	require.Empty(t, data.X509Certificates)
 }
 
+func TestResolveRetrievalMethodsPreflightsBeforeResolver(t *testing.T) {
+	_, der := selfSignedCert(t)
+
+	tests := []struct {
+		name    string
+		keyInfo string
+	}{
+		{
+			name: "direct sibling",
+			keyInfo: `<ds:KeyInfo xmlns:ds="` + NamespaceDSig + `">` +
+				`<ds:RetrievalMethod URI="certs/signer.der" Type="` + TypeRawX509Certificate + `">` +
+				`<ds:Transforms><ds:Transform Algorithm="` + TransformXSLT + `">` +
+				`<xsl:stylesheet xmlns:xsl="` + namespaceXSLT + `" version="1.0"/>` +
+				`</ds:Transform></ds:Transforms></ds:RetrievalMethod>` +
+				`<ds:RetrievalMethod URI="#cert" Type="` + TypeX509Data + `">` +
+				`<ds:Transforms><ds:Transform Algorithm="` + TransformXPath + `">` +
+				`<ds:XPath>$missing</ds:XPath></ds:Transform></ds:Transforms>` +
+				`</ds:RetrievalMethod><ds:Object><ds:X509Data Id="cert"/></ds:Object></ds:KeyInfo>`,
+		},
+		{
+			name: "reachable same-document chain",
+			keyInfo: `<ds:KeyInfo xmlns:ds="` + NamespaceDSig + `">` +
+				`<ds:RetrievalMethod URI="certs/signer.der" Type="` + TypeRawX509Certificate + `">` +
+				`<ds:Transforms><ds:Transform Algorithm="` + TransformXSLT + `">` +
+				`<xsl:stylesheet xmlns:xsl="` + namespaceXSLT + `" version="1.0"/>` +
+				`</ds:Transform></ds:Transforms></ds:RetrievalMethod>` +
+				`<ds:RetrievalMethod URI="#next" Type="` + TypeX509Data + `"/>` +
+				`<ds:Object><ds:RetrievalMethod Id="next" URI="#cert" Type="` + TypeX509Data + `">` +
+				`<ds:Transforms><ds:Transform Algorithm="` + TransformXPath + `">` +
+				`<ds:XPath>$missing</ds:XPath></ds:Transform></ds:Transforms>` +
+				`</ds:RetrievalMethod><ds:X509Data Id="cert"/></ds:Object></ds:KeyInfo>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := mustParse(t, tt.keyInfo)
+			resolver := &countingReferenceResolver{octets: der}
+			transformer := &countingXSLTTransformer{}
+			cfg := &verifierConfig{referenceResolver: resolver, xsltTransformer: transformer}
+			data := &KeyInfoData{}
+
+			err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.Zero(t, resolver.calls.Load(), "resolver must not run before every reachable RetrievalMethod passes static validation")
+			require.Zero(t, transformer.calls.Load(), "transformer must not run before every reachable RetrievalMethod passes static validation")
+			require.Empty(t, data.X509Certificates)
+		})
+	}
+}
+
 // retrievalChainKeyInfo builds a ds:KeyInfo whose top-level ds:RetrievalMethod
 // starts a chain of n RetrievalMethods, each pointing at the next by same-document
 // id, with the final link resolving a terminal ds:X509Data certificate. The first

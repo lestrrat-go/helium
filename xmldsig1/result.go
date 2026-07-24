@@ -60,10 +60,11 @@ type ManifestResult struct {
 	// Element is the ds:Manifest element that Reference resolved to.
 	Element *helium.Element
 
-	// References lists the result of digesting each inner ds:Reference child of
-	// the Manifest, in document order. Only one level is walked: a Manifest
-	// Reference nested inside this Manifest is digested but not recursively
-	// expanded.
+	// References lists the validation result for each inner ds:Reference child
+	// of the Manifest, in document order. If one child fails static preparation,
+	// none are executed and otherwise prepared peers carry an error wrapping the
+	// same cause. Only one level is walked: a Manifest Reference nested inside
+	// this Manifest is digested but not recursively expanded.
 	References []ManifestReference
 }
 
@@ -89,8 +90,9 @@ type ManifestReference struct {
 	// declared DigestValue.
 	Valid bool
 
-	// Err is the reason the inner Reference could not be validated, or nil when
-	// Valid is true.
+	// Err is the reason the inner Reference could not be validated, including a
+	// sibling static-preparation failure that prevented execution. It is nil
+	// only when Valid is true.
 	Err error
 }
 

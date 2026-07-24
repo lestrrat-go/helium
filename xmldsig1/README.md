@@ -269,9 +269,14 @@ match their targets. Per §5.1 that is left to the application.
 
 `Verifier.ValidateManifests(true)` opts in to walking those inner references.
 When enabled, after a top-level Manifest-typed reference has itself verified,
-each inner `ds:Reference` is resolved, run through its transform pipeline, and
-digested through the **same fail-closed path** as a top-level reference, and the
-per-reference outcome is reported in `VerifyResult.Manifests`:
+every direct inner `ds:Reference` is parsed and statically prepared before any
+is executed. If preparation succeeds for all of them, each is resolved, run
+through its transform pipeline, and digested through the **same fail-closed
+path** as a top-level reference. If one fails preparation, resolver and
+transformer callbacks do not run for that Manifest; the failing result reports
+the error, and each otherwise prepared peer reports an advisory error wrapping
+the same cause. Per-reference outcomes are reported in
+`VerifyResult.Manifests`:
 
 ```go
 type ManifestResult struct {
