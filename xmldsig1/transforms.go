@@ -132,6 +132,18 @@ type preparedXPathFilter struct {
 	eval xpath1.Evaluator
 }
 
+// preparedReference is the side-effect-free state a verifier derives for one
+// Reference before executing any Reference. The transform pipeline owns the
+// compiled XPath filters; generalXPointer owns a compiled URI-borne XPointer
+// when that opt-in form matched. hasExplicitC14N preserves the distinction
+// external-reference processing needs between an explicit c14n step and the
+// pipeline's default C14N 1.0 fill-in.
+type preparedReference struct {
+	pipeline        transformPipeline
+	generalXPointer *preparedGeneralXPointer
+	hasExplicitC14N bool
+}
+
 // transformPipeline is the resolved, algorithm-agnostic result of interpreting a
 // Reference transform list: the effective canonicalization method and its
 // inclusive-namespace prefixes, whether an enveloped-signature transform is
@@ -1107,6 +1119,13 @@ func xpointerNamespaces(doc *helium.Document, overrides map[string]string) map[s
 	return ns
 }
 
+type preparedGeneralXPointer struct {
+	id         string
+	idSelector bool
+	compiled   *xpath1.Expression
+	eval       xpath1.Evaluator
+}
+
 // singleElementApex enforces the XML Signature Wrapping defense for a general
 // XPointer node-set: it must identify a SINGLE element apex. An empty node-set is
 // ErrReferenceNotFound; a node-set carrying a non-element principal node, or more
@@ -1150,19 +1169,19 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // shared bounded evaluator with the merged namespace context, here() disabled
 // (nil bearing node), and the single-apex constraint enforced on the result.
 func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, overrides map[string]string, expr string) (*helium.Element, error) {
+	prepared, err := prepareGeneralXPointer(doc, overrides, expr)
+	if err != nil {
+		return nil, err
+	}
+	return resolvePreparedGeneralXPointerTarget(ctx, doc, prepared)
+}
+
+func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {
 			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q", ErrReferenceNotFound, expr)
 		}
-		matches := findElementsByIDUnder(doc.DocumentElement(), id)
-		switch len(matches) {
-		case 0:
-			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, id)
-		case 1:
-			return matches[0], nil
-		default:
-			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, id, len(matches))
-		}
+		return &preparedGeneralXPointer{id: id, idSelector: true}, nil
 	}
 	if expressionReferencesID(expr) {
 		// id() appears somewhere other than as the whole-expression selector
@@ -1179,7 +1198,23 @@ func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, ove
 	if err := eval.Validate(compiled); err != nil {
 		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
 	}
-	nodes, err := eval.Find(ctx, compiled, doc.DocumentElement())
+	return &preparedGeneralXPointer{compiled: compiled, eval: eval}, nil
+}
+
+func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Document, prepared *preparedGeneralXPointer) (*helium.Element, error) {
+	if prepared.idSelector {
+		matches := findElementsByIDUnder(doc.DocumentElement(), prepared.id)
+		switch len(matches) {
+		case 0:
+			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, prepared.id)
+		case 1:
+			return matches[0], nil
+		default:
+			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, prepared.id, len(matches))
+		}
+	}
+
+	nodes, err := prepared.eval.Find(ctx, prepared.compiled, doc.DocumentElement())
 	if err != nil {
 		// Preserve the here()-unavailable sentinel (a URI-borne XPointer has no
 		// ds:XPath bearing node) as a matchable typed error rather than flattening

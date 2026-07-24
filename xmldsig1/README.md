@@ -118,9 +118,11 @@ each with an optional `#WithComments` variant), the XPath filter transform
 `ds:Transform/XPath` expression once per input node — with that node as the
 context node, under the `XPath` element's in-scope namespace bindings — and keeps
 each node whose result converts to boolean true (XPath 1.0 semantics: no default
-element namespace). Every XPath filter in a resolved transform chain is compiled
-and statically validated before any transform runs, so an invalid expression
-fails even when an earlier filter produces an empty node-set. The XMLDSig
+element namespace). During `Verify`, every XPath filter across all top-level
+`Reference` chains is compiled and statically validated before any Reference
+resolver or transformer runs, and the prepared state is reused during digest
+execution. An invalid expression therefore fails even when an earlier filter
+produces an empty node-set or an earlier Reference carries XSLT. The XMLDSig
 `here()` function (core §6.6.3.1) is available
 inside an XPath filter expression: it returns the `ds:XPath` element that bears
 the expression, which is what the standard "enveloped signature via `here()`"
@@ -180,10 +182,12 @@ by one `xpointer(<expr>)` part, for example
 and, without a `ReferenceResolver`, rejected with `ErrReferenceNotFound`, so
 default verification is unchanged.
 
-When enabled, the `xpointer()` expression is statically validated, then evaluated
-on the same bounded XPath 1.0 evaluator (the document element's in-scope
-namespaces overlaid with the `xmlns()` bindings). An unresolved variable,
-function, or prefix fails with `ErrReferenceNotFound` before evaluation. The
+When enabled, every top-level `xpointer()` expression joins the verification-wide
+static preflight before any Reference resolver or transformer runs, and its
+prepared evaluator is reused during digest execution. It uses the same bounded
+XPath 1.0 evaluator (the document element's in-scope namespaces overlaid with the
+`xmlns()` bindings). An unresolved variable, function, or prefix fails with
+`ErrReferenceNotFound` before evaluation. The
 result **must identify a single element** — the XML Signature Wrapping defense.
 An empty node-set is `ErrReferenceNotFound`; a node-set selecting more than one
 element, or a non-element node, is `ErrAmbiguousReference`. A literal
