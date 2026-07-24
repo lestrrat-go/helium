@@ -65,7 +65,8 @@ func resolveReferenceOctets(ctx context.Context, resolver ReferenceResolver, uri
 // fsReferenceResolver resolves external Reference URIs as slash-separated paths
 // inside a fs.FS.
 type fsReferenceResolver struct {
-	fsys fs.FS
+	fsys     fs.FS
+	maxBytes int
 }
 
 // FSReferenceResolver returns a [ReferenceResolver] that serves external
@@ -87,7 +88,20 @@ type fsReferenceResolver struct {
 // wraps [ErrReferenceNotFound] (or [ErrReferenceTooLarge]) so callers can match
 // it with errors.Is.
 func FSReferenceResolver(fsys fs.FS) ReferenceResolver {
-	return fsReferenceResolver{fsys: fsys}
+	return FSReferenceResolverWithMaxBytes(fsys, maxReferenceBytes)
+}
+
+// FSReferenceResolverWithMaxBytes returns a filesystem resolver with a lower
+// per-resource cap. It is useful for detached-signature services that allow
+// several external References: the default cap is 64 MiB per resource, while
+// this helper lets the caller choose a smaller positive cap. A non-positive
+// value or a value above the package maximum selects the 64 MiB default; the
+// cap cannot be disabled through this helper.
+func FSReferenceResolverWithMaxBytes(fsys fs.FS, maxBytes int) ReferenceResolver {
+	if maxBytes <= 0 || maxBytes > maxReferenceBytes {
+		maxBytes = maxReferenceBytes
+	}
+	return fsReferenceResolver{fsys: fsys, maxBytes: maxBytes}
 }
 
 func (r fsReferenceResolver) ResolveReference(ctx context.Context, uri string) ([]byte, error) {
@@ -104,14 +118,14 @@ func (r fsReferenceResolver) ResolveReference(ctx context.Context, uri string) (
 	}
 	defer f.Close()
 
-	// Read at most maxReferenceBytes+1 so an over-cap file is detected by the
+	// Read at most r.maxBytes+1 so an over-cap file is detected by the
 	// extra byte without buffering the whole resource.
-	data, err := io.ReadAll(io.LimitReader(f, maxReferenceBytes+1))
+	data, err := io.ReadAll(io.LimitReader(f, int64(r.maxBytes)+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading external reference %q: %v", ErrReferenceNotFound, uri, err)
 	}
-	if len(data) > maxReferenceBytes {
-		return nil, fmt.Errorf("%w: external reference %q exceeds %d bytes", ErrReferenceTooLarge, uri, maxReferenceBytes)
+	if len(data) > r.maxBytes {
+		return nil, fmt.Errorf("%w: external reference %q exceeds %d bytes", ErrReferenceTooLarge, uri, r.maxBytes)
 	}
 	return data, nil
 }

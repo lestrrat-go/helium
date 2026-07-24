@@ -43,6 +43,10 @@ import (
 // The zero value is ready to use. It parses the stylesheet and input with
 // helium's default (locked-down) parser and applies the stylesheet with xslt3's
 // hardened defaults, relying on the caller's context deadline for a time bound.
+// It returns the complete output as []byte and does not impose an output-size
+// cap or transform-step budget. Use it for interoperability testing or a
+// controlled profile; a production boundary accepting attacker-controlled
+// stylesheets should inject a transformer that adds those limits.
 // See the package documentation for the security responsibilities this carries.
 type XSLT struct{}
 

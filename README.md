@@ -80,7 +80,7 @@ an embedded example.
 | [`sink`](sink/README.md) | Generic async event sink. | Also satisfies `helium.ErrorHandler` when `T` is `error`. |
 | [`stream`](stream/README.md) | Streaming XML writer. | Writes XML directly without building a DOM. |
 | [`xinclude`](xinclude/README.md) | XInclude processing for helium documents. | Supports recursive inclusion and custom resolvers. |
-| [`xmldsig1`](xmldsig1/README.md) | W3C XML Digital Signatures 1.1 over helium documents. | **Experimental**; API may change. |
+| [`xmldsig1`](xmldsig1/README.md) | W3C XML Digital Signatures 1.1 over helium documents. | Scoped production support for explicit same-document profiles; external references and XSLT are opt-in advanced features. |
 | [`xmlenc1`](xmlenc1/README.md) | W3C XML Encryption 1.1 over helium documents. | **Experimental**; API may change. |
 | [`xpath1`](xpath1/README.md) | XPath 1.0 compilation and evaluation. | Includes convenience helpers like `Find` and `Evaluate`. |
 | [`xpath3`](xpath3/README.md) | XPath 3.1 compilation and evaluation. | Includes a compiler, evaluator, maps, arrays, and HOFs. |
@@ -182,9 +182,12 @@ of its root. For symlink-safe confinement, prefer `os.Root.FS` (`os.OpenRoot`,
 Go 1.24+), which refuses any open that escapes the root through a symlink. A
 network-scheme name is refused before it reaches the `FS`.
 
-The `xmldsig1` (signatures) and `xmlenc1` (encryption) packages are
-**experimental** and should not be relied on inside a security or compliance
-boundary yet.
+The `xmldsig1` package supports narrow, explicit same-document verification
+profiles when the application pins its trusted key or certificate source and
+checks `VerifyResult.Covers` before consuming a signed element. External
+references and XSLT remain opt-in advanced features with caller-owned resource
+and execution policy. The `xmlenc1` package remains **experimental** and should
+not be relied on inside a security or compliance boundary.
 
 # `encoding/xml` compatibility
 
@@ -240,7 +243,8 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 # Current status
 
 * **Implemented:** XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
-* **Experimental:** W3C XML Digital Signatures 1.1 (`xmldsig1`) and XML Encryption 1.1 (`xmlenc1`) — these APIs may change and may move to a separate repository.
+* **Scoped production support:** W3C XML Digital Signatures 1.1 (`xmldsig1`) for explicit same-document verification profiles. External references and XSLT are opt-in advanced features with caller-owned resource and execution policy.
+* **Experimental:** XML Encryption 1.1 (`xmlenc1`) — its API may change and may move to a separate repository.
 * **CLI:** the `helium` command provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
 
 Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.

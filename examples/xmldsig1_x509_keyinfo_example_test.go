@@ -50,11 +50,12 @@ func Example_xmldsig1_x509_keyinfo() {
 	// X509DataKeyInfo embeds the certificate in the signature so the
 	// verifier can extract it. The verifier still needs a trusted copy
 	// of the certificate to prevent key substitution attacks.
+	expectedElement := doc.DocumentElement()
 	err = xmldsig1.NewSigner().
 		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
 		Reference(xmldsig1.NewEnvelopedReference()).
 		KeyInfo(xmldsig1.X509DataKeyInfo(cert)).
-		SignEnveloped(context.Background(), doc, doc.DocumentElement(), key)
+		SignEnveloped(context.Background(), doc, expectedElement, key)
 	if err != nil {
 		fmt.Printf("sign error: %s\n", err)
 		return
@@ -64,14 +65,18 @@ func Example_xmldsig1_x509_keyinfo() {
 	fmt.Println(strings.Contains(out, "ds:X509Certificate"))
 
 	// Verify using the trusted certificate.
-	_, err = xmldsig1.NewVerifier(xmldsig1.X509CertKeySource(cert)).
+	result, err := xmldsig1.NewVerifier(xmldsig1.X509CertKeySource(cert)).
 		Verify(context.Background(), doc)
 	if err != nil {
 		fmt.Printf("verify error: %s\n", err)
 		return
 	}
-	fmt.Println("signature valid")
+	if !result.Covers(expectedElement) {
+		fmt.Println("verify error: signature does not cover the expected assertion")
+		return
+	}
+	fmt.Println("signature valid and assertion covered")
 	// Output:
 	// true
-	// signature valid
+	// signature valid and assertion covered
 }

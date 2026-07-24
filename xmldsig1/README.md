@@ -1,6 +1,10 @@
 # xmldsig1
 
-> **EXPERIMENTAL** — This package is under active development. Its API may change without notice, and it may be moved to a separate repository in the future.
+> **Scoped production support** — The same-document XMLDSig 1.1 verification
+> profile is supported when the application supplies an explicit trusted key or
+> certificate source and checks which element the verified signature covers.
+> External references and XSLT are opt-in advanced features with
+> caller-owned transport, resource, and execution policy.
 
 The `xmldsig1` package implements W3C XML Digital Signatures 1.1 for helium documents.
 
@@ -181,6 +185,12 @@ serializer disables helium.Writer's per-document-child terminators. The adapter
 preserves top-level text newlines as result content, including non-UTF-8 XML
 output.
 
+The shipped adapter returns `[]byte` and does not expose an output-size cap or
+transform-step budget. Use it for interoperability testing or a controlled
+profile with a deadline-bearing context. A production boundary that accepts
+attacker-controlled stylesheets should inject a transformer with explicit CPU,
+memory, output, URI, and step limits instead.
+
 ### General XPointer references (opt-in)
 
 By default a `Reference` URI is resolved fail-closed to the four same-document
@@ -260,6 +270,12 @@ dereference over any transport, but anyone implementing network dereferencing
 owns the resulting SSRF and availability risk (an attacker who controls a
 Reference URI could otherwise steer requests at internal hosts or stall
 verification), so that decision is left explicitly to the caller.
+
+For detached-signature services, use a smaller per-resource cap with
+`FSReferenceResolverWithMaxBytes`, set a low `Verifier.MaxReferences` value, and
+pass a deadline-bearing context. The verifier enforces a cap for each resolved
+resource, but it does not combine resolver work across References; a custom
+resolver must enforce its own aggregate byte, connection, and transport budget.
 
 `Signer.ReferenceResolver` / `Signer.ReferenceParser` are the symmetric signing
 side, letting a detached signature cover external content. The sign and verify
