@@ -32,8 +32,10 @@ so a failed conformance run never leaves a public tag or partial release behind.
 4. The `timeline-presence` job checks in seconds that `version` has a row in the
    committed timeline (from step 2). If it does not, the run stops here — fix step
    2 and re-dispatch.
-5. The `conformance-gate` job runs the slow XSLT 3.0 suite against the pinned
-   `harness_ref`. If it fails, the run stops here — **no tag, no release.**
+5. The `conformance-gate` job runs the `xslt30`, `xmldsig2ed`, `xmldsig11`, and
+   `merlinxmldsig` suites against the pinned `harness_ref`; only `xslt30`
+   enables slow tests. If any suite fails, the run stops here — **no tag, no
+   release.**
 6. On green, the `release` job waits for **environment approval** (the `release`
    environment: maintainer reviewer, restricted to `main`). Approve it in the run.
 7. After approval it creates and pushes the `version` tag, then runs goreleaser

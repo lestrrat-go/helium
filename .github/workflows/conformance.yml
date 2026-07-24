@@ -4,7 +4,8 @@ name: Conformance
 # These are not run on ordinary pushes/PRs because they clone large upstream
 # fixture sets and, with the performance-gated slow tests enabled, can take many
 # minutes. The actual checkout/fetch/run logic lives in the reusable
-# conformance-run.yml, shared with the release-gating slow xslt30 run.
+# conformance-run.yml, shared with the release-gating xslt30, xmldsig2ed,
+# xmldsig11, and merlinxmldsig runs; only xslt30 enables slow tests.
 on:
   workflow_dispatch:
     inputs:
