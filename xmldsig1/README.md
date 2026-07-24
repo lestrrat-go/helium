@@ -146,7 +146,9 @@ runs. An enveloped transform is limited to the original same-document node-set;
 it fails after an octet boundary because the containing Signature's node identity
 cannot be reconstructed from serialized markup. XPath and XSLT remain
 verify-only because the signing API cannot emit their required child content.
-RetrievalMethod pipelines have a pre-authentication step cap; see
+RetrievalMethod pipelines are all statically validated, including reachable
+transform-free same-document chains, before any resolver or transformer
+callback runs. They also have a pre-authentication step cap; see
 [Verification resource limits](#verification-resource-limits).
 
 ### XSLT transform (opt-in, verify-only)

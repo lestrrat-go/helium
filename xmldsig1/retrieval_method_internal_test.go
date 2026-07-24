@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -21,6 +22,25 @@ import (
 // certSignerDERPath is the fs path a test FSReferenceResolver serves and the
 // matching ds:RetrievalMethod URI references.
 const certSignerDERPath = "certs/signer.der"
+
+type countingXSLTTransformer struct {
+	calls atomic.Int32
+}
+
+func (t *countingXSLTTransformer) TransformXSLT(_ context.Context, _, input []byte) ([]byte, error) {
+	t.calls.Add(1)
+	return input, nil
+}
+
+type countingReferenceResolver struct {
+	calls  atomic.Int32
+	octets []byte
+}
+
+func (r *countingReferenceResolver) ResolveReference(_ context.Context, _ string) ([]byte, error) {
+	r.calls.Add(1)
+	return r.octets, nil
+}
 
 // selfSignedCert returns a throwaway self-signed certificate and its DER bytes.
 func selfSignedCert(t *testing.T) (*x509.Certificate, []byte) {
