@@ -277,6 +277,25 @@ func TestTransformFunctionStandalone(t *testing.T) {
 		require.Contains(t, out, "<out>named-template</out>")
 	})
 
+	t.Run("SecondarySerializationError", func(t *testing.T) {
+		const stylesheet = `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template name="go">
+    <xsl:result-document href="secondary">
+      <xsl:value-of select="codepoints-to-string(1)"/>
+    </xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`
+		_, err := evalTransform(t,
+			`transform(map{'stylesheet-text': $ss, 'initial-template': QName('','go'), 'delivery-format': 'serialized'})?*`,
+			sourceDoc,
+			map[string]xpath3.Sequence{"ss": xpath3.SingleString(stylesheet)},
+			transformFns(),
+		)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "FOXT0003")
+	})
+
 	t.Run("DocumentDelivery", func(t *testing.T) {
 		out, err := evalTransform(t,
 			`transform(map{'stylesheet-text': $ss, 'source-node': ., 'delivery-format': 'document'})?output`,

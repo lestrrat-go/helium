@@ -2,6 +2,7 @@ package xslt3_test
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -12,6 +13,17 @@ import (
 )
 
 const adaptiveMethod = "adaptive"
+
+type oneByteWriter struct {
+	buf bytes.Buffer
+}
+
+func (w *oneByteWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return w.buf.Write(p[:1])
+}
 
 type adaptiveResultDocSerializer struct {
 	serialized string
@@ -39,6 +51,116 @@ func TestSerializeResultXML(t *testing.T) {
 	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "<root>hello</root>")
+}
+
+func TestSerializeResultXMLOmitsWriterTerminators(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" omit-xml-declaration="yes"/>
+  <xsl:template match="/"><root>hello</root></xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
+	require.NoError(t, err)
+	require.Equal(t, "<root>hello</root>", buf.String())
+}
+
+func TestSerializeResultReportsShortWrite(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>content</root>`))
+	require.NoError(t, err)
+	nonASCIIDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>あ</root>`))
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name   string
+		doc    *helium.Document
+		outDef *xslt3.OutputDef
+	}{
+		{
+			name:   "DirectWriter",
+			outDef: &xslt3.OutputDef{Method: outMethodXML, OmitDeclaration: true},
+		},
+		{
+			name:   "PostProcessedDeclaration",
+			outDef: &xslt3.OutputDef{Method: outMethodXML, Standalone: "yes"},
+		},
+		{
+			name: "PostProcessedCharacterMap",
+			outDef: &xslt3.OutputDef{
+				Method:          outMethodXML,
+				Standalone:      "yes",
+				ResolvedCharMap: map[rune]string{'c': "C"},
+			},
+		},
+		{
+			name: "Normalized",
+			outDef: &xslt3.OutputDef{
+				Method:            outMethodXML,
+				OmitDeclaration:   true,
+				NormalizationForm: "NFC",
+			},
+		},
+		{
+			name: "UTF16",
+			outDef: &xslt3.OutputDef{
+				Method:          outMethodXML,
+				OmitDeclaration: true,
+				Encoding:        "UTF-16",
+			},
+		},
+		{
+			name: "EncodedBytes",
+			doc:  nonASCIIDoc,
+			outDef: &xslt3.OutputDef{
+				Method:          outMethodXML,
+				OmitDeclaration: true,
+				Encoding:        "Shift_JIS",
+			},
+		},
+		{
+			name: "EncodedCharacterReference",
+			doc:  nonASCIIDoc,
+			outDef: &xslt3.OutputDef{
+				Method:          outMethodXML,
+				OmitDeclaration: true,
+				Encoding:        "US-ASCII",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testDoc := doc
+			if tc.doc != nil {
+				testDoc = tc.doc
+			}
+			var dst oneByteWriter
+			err := xslt3.SerializeResult(&dst, testDoc, tc.outDef)
+			require.ErrorIs(t, err, io.ErrShortWrite)
+			require.NotEmpty(t, dst.buf.String())
+			if tc.outDef.Encoding == "" {
+				require.True(t, strings.HasPrefix(`<root>content</root>`, dst.buf.String()))
+			}
+		})
+	}
+}
+
+func TestSerializeResultXMLPreservesExplicitTrailingTextNewline(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" encoding="UTF-8" omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out/><xsl:text>&#10;</xsl:text></xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
+	require.NoError(t, err)
+	require.Equal(t, "<out/>\n", buf.String())
 }
 
 func TestSerializeResultNilOutputDef(t *testing.T) {
@@ -140,7 +262,7 @@ func TestPrimaryAdaptiveMarkupThenElementKeepsDeferredSeparators(t *testing.T) {
 	out, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
 	require.NoError(t, err)
 	require.Contains(t, out, `<?xml version="1.0"`)
-	require.Contains(t, out, "<!--first-->\n | \n<?target data?>\n | \n<result/>")
+	require.Contains(t, out, "<!--first--> | <?target data?> | <result/>")
 }
 
 func TestPrimaryAdaptiveMarkupSeparatorAppliesCharacterMapAndNormalization(t *testing.T) {
@@ -264,6 +386,43 @@ func TestSerializeItemsWithDocument(t *testing.T) {
 	require.Contains(t, buf.String(), "content")
 }
 
+func TestSerializeDocumentItemsOmitWriterTerminators(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<source/>`))
+	require.NoError(t, err)
+	items := xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}
+
+	for _, tc := range []struct {
+		name   string
+		outDef *xslt3.OutputDef
+		want   string
+	}{
+		{
+			name:   "Adaptive",
+			outDef: &xslt3.OutputDef{Method: adaptiveMethod},
+			want:   `<source/>`,
+		},
+		{
+			name:   "XMLSequence",
+			outDef: &xslt3.OutputDef{Method: outMethodXML},
+			want:   `<source/>`,
+		},
+		{
+			name: "JSONNodeXML",
+			outDef: &xslt3.OutputDef{
+				Method:               outMethodJSON,
+				JSONNodeOutputMethod: outMethodXML,
+			},
+			want: `"<source\/>"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var dst strings.Builder
+			require.NoError(t, xslt3.SerializeItems(&dst, items, doc, tc.outDef))
+			require.Equal(t, tc.want, dst.String())
+		})
+	}
+}
+
 func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
 	decomposed := "e\u0301"
 	composed := "é"
@@ -283,19 +442,19 @@ func TestSerializeItemsNormalizationWithCharacterMap(t *testing.T) {
 	}{
 		{
 			name:   "JSONAtomic",
-			method: "json",
+			method: outMethodJSON,
 			item:   value,
 			want:   `"` + replacement + composed + `"`,
 		},
 		{
 			name:   "JSONMap",
-			method: "json",
+			method: outMethodJSON,
 			item:   mapItem,
 			want:   `{"key":"` + replacement + composed + `"}`,
 		},
 		{
 			name:   "JSONArray",
-			method: "json",
+			method: outMethodJSON,
 			item:   arrayItem,
 			want:   `["` + replacement + composed + `"]`,
 		},
@@ -417,7 +576,7 @@ func TestSerializeItemsAdaptiveFullyNormalizedNodeCharacterMap(t *testing.T) {
 		{
 			name:  "Document",
 			items: xpath3.ItemSlice{xpath3.NodeItem{Node: doc}},
-			want:  "<out>" + mappedNFC + "</out>\n",
+			want:  "<out>" + mappedNFC + "</out>",
 		},
 		{
 			name: "MultiItemElement",
@@ -608,9 +767,11 @@ func TestDefaultOutputDefNilStylesheet(t *testing.T) {
 	require.Nil(t, outDef)
 }
 
-// outMethodXML is the "xml" output method, held as a const so these invalid-char
-// tests do not add repeated string literals (goconst).
-const outMethodXML = "xml"
+// Output methods shared by serialization tests.
+const (
+	outMethodJSON = "json"
+	outMethodXML  = "xml"
+)
 
 // outMethodXHTML is the XHTML output method. Its version parameter uses an XML
 // VersionNum, just like the XML output method's version parameter.
@@ -714,7 +875,7 @@ func TestSerializeItemsJSONNodeXMLInvalidChar(t *testing.T) {
 	root := newBadCharElement(t)
 	items := xpath3.ItemSlice{xpath3.NodeItem{Node: root}}
 	var buf bytes.Buffer
-	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: "json", JSONNodeOutputMethod: outMethodXML})
+	err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodJSON, JSONNodeOutputMethod: outMethodXML})
 	requireSERE0006(t, err)
 }
 
@@ -744,6 +905,24 @@ func TestMessageInvalidCharSERE0006(t *testing.T) {
 	_, err := ss.Transform(root.OwnerDocument()).MessageHandler(handler).Do(t.Context())
 	requireSERE0006(t, err)
 	require.Empty(t, handler.messages)
+}
+
+func TestMessageDocumentPreservesTopLevelWhitespace(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="message" as="document-node()">
+      <xsl:document><xsl:text>&#10;</xsl:text><out/><xsl:text>&#10;</xsl:text></xsl:document>
+    </xsl:variable>
+    <xsl:message select="$message"/>
+    <result/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	handler := &messageRecordingHandler{}
+	_, err := ss.Transform(parseTransformSource(t)).MessageHandler(handler).Do(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []string{"\n<out/>\n"}, handler.messages)
 }
 
 // SerializeItems with method="adaptive" over a multi-item sequence containing a

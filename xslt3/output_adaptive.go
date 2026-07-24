@@ -43,7 +43,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 	adaptIdx := 0
 	for item := range sequence.Items(items) {
 		if adaptIdx > 0 && sep != "" {
-			if _, err := io.WriteString(w, sep); err != nil {
+			if err := writeFullString(w, sep); err != nil {
 				return err
 			}
 		}
@@ -70,7 +70,7 @@ func serializeAdaptiveItems(w io.Writer, items xpath3.Sequence, doc *helium.Docu
 		if err != nil {
 			return err
 		}
-		if _, err := io.WriteString(w, s); err != nil {
+		if err := writeFullString(w, s); err != nil {
 			return err
 		}
 		adaptIdx++
@@ -202,7 +202,7 @@ func serializeItemAdaptive(item xpath3.Item, xmlVersion, normalizationForm strin
 				OutputVersion(adaptiveXMLVersion(xmlVersion)).
 				CharacterMap(charMap).
 				Normalization(writerNormalizationForm)
-			if err := writer.WriteTo(&buf, v.Node); err != nil {
+			if err := writeExactXMLNode(&buf, writer, v.Node); err != nil {
 				return "", xmlInvalidCharError(err)
 			}
 			return buf.String(), nil

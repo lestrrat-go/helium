@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"path"
-	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -1062,7 +1061,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			}
 			s, serErr := serializeDeliveredResult(doc, outDef)
 			if serErr != nil {
-				s = ""
+				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", serErr)
 			}
 			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.SingleString(s))
 		}
@@ -1141,35 +1140,15 @@ func documentHasChildren(doc *helium.Document) bool {
 }
 
 // serializeDeliveredResult serializes doc to a string for the fn:transform
-// "serialized" delivery format. For the element-tree methods (xml/html/xhtml)
-// the helium document serializer appends a single trailing newline that is a
-// serialization artifact, not result content, so it is trimmed. For the
-// text/json/adaptive methods the output is the value itself — a trailing newline
-// there is legitimate content and is preserved.
+// "serialized" delivery format. SerializeResult disables helium.Writer's
+// per-document-child terminators on the direct XML path, so top-level text
+// newlines returned here are result content and are preserved.
 func serializeDeliveredResult(doc *helium.Document, outDef *OutputDef) (string, error) {
 	var buf bytes.Buffer
 	if err := SerializeResult(&buf, doc, outDef); err != nil {
 		return "", err
 	}
-	s := buf.String()
-	if !preservesTrailingNewline(outDef) {
-		s = strings.TrimSuffix(s, "\n")
-	}
-	return s, nil
-}
-
-// preservesTrailingNewline reports whether the serialization method treats a
-// trailing newline as significant output content (text/json/adaptive) rather
-// than as the element-tree serializer's document-terminating artifact.
-func preservesTrailingNewline(outDef *OutputDef) bool {
-	if outDef == nil {
-		return false // default (xml) method
-	}
-	switch outDef.Method {
-	case methodText, methodJSON, methodAdaptive:
-		return true
-	}
-	return false
+	return buf.String(), nil
 }
 
 // owningDocument walks up from n to the helium document that contains it,

@@ -26,8 +26,7 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 		if err != nil {
 			return err
 		}
-		_, err = io.WriteString(w, s)
-		return err
+		return writeFullString(w, s)
 	}
 	// Multiple items: serialize as JSON array
 	members := make([]xpath3.Sequence, itemsLen)
@@ -38,8 +37,7 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(w, s)
-	return err
+	return writeFullString(w, s)
 }
 
 // serializeItemJSON serializes a single XDM item as JSON. The json-node-output

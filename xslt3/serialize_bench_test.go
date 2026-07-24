@@ -27,7 +27,7 @@ func BenchmarkSerializeResultXML(b *testing.B) {
 	if err != nil {
 		b.Fatalf("parse: %v", err)
 	}
-	outDef := &xslt3.OutputDef{Method: "xml"}
+	outDef := &xslt3.OutputDef{Method: outMethodXML}
 
 	b.ReportAllocs()
 	b.ResetTimer()

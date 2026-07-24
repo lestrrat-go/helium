@@ -135,7 +135,7 @@ func serializeMessageSequence(seq xpath3.Sequence) (string, error) {
 		var buf bytes.Buffer
 		switch n := ni.Node.(type) {
 		case *helium.Document:
-			if err := helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, n); err != nil {
+			if err := writeExactXMLNode(&buf, helium.NewWriter().XMLDeclaration(false), n); err != nil {
 				return "", err
 			}
 		case *helium.Element:
@@ -160,7 +160,7 @@ func serializeMessageSequence(seq xpath3.Sequence) (string, error) {
 			sb.Write(ni.Node.Content())
 			continue
 		}
-		sb.WriteString(strings.TrimSpace(buf.String()))
+		sb.WriteString(buf.String())
 	}
 	return sb.String(), nil
 }

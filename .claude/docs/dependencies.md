@@ -12,7 +12,7 @@ xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/
                   (helium.Parser.XInclude injects an xinclude.Processor through the helium.XIncludeProcessor interface — dependency inversion keeps this edge one-way; helium does NOT import xinclude)
 xpath1         → helium, internal/lexicon, internal/domutil
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil, internal/writerctl
-xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, xslt3/internal/elements
+xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, internal/writerctl, xslt3/internal/elements
 xsd            → helium, xpath1, xpath3, internal/lexicon, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1, internal/xpath, internal/xpath1/number
@@ -26,7 +26,7 @@ catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, in
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
 helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs, internal/writerctl
-                  (helium installs a hook in internal/writerctl in init so xpath3 fn:serialize can enable the writer's declaration-only encoding mode without a public method; the writerctl package imports nothing, so the edge is one-way)
+                  (helium installs hooks in internal/writerctl in init so xpath3 fn:serialize can enable declaration-only encoding and xslt3 can omit document-child terminators without public methods; the writerctl package imports nothing, so the edge is one-way)
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)

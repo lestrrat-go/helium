@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/writerctl"
 	"github.com/lestrrat-go/helium/stream"
 )
 
@@ -68,28 +69,71 @@ func serializeXML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap 
 	if outDef.OmitDeclaration {
 		writer = writer.XMLDeclaration(false)
 	}
-	// When standalone is "yes" or "no", or when indent="no" and
-	// the declaration is not omitted, buffer and post-process.
 	needStandalone := !outDef.OmitDeclaration && (outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo)
 	needStripNewline := !outDef.Indent && !outDef.OmitDeclaration
-	if needStandalone || needStripNewline {
-		var buf strings.Builder
-		if err := writer.WriteTo(&buf, doc); err != nil {
-			return xmlInvalidCharError(err)
+	if !needStandalone && !needStripNewline {
+		return xmlInvalidCharError(writeExactXMLNode(w, writer, doc))
+	}
+	var buf strings.Builder
+	if err := writeExactXMLNode(&buf, writer, doc); err != nil {
+		return xmlInvalidCharError(err)
+	}
+	out := buf.String()
+	if needStandalone {
+		out = injectStandalone(out, outDef.Standalone)
+	}
+	if needStripNewline {
+		if idx := strings.Index(out, "?>\n"); idx >= 0 {
+			out = out[:idx+2] + out[idx+3:]
 		}
-		out := buf.String()
-		if needStandalone {
-			out = injectStandalone(out, outDef.Standalone)
+	}
+	return writeFullString(w, out)
+}
+
+// writeExactXMLNode writes an XML node without adding bytes that are not part
+// of the XSLT result. helium.Writer normally appends a newline after each
+// Document child, so document nodes use its internal exact-document mode.
+func writeExactXMLNode(w io.Writer, writer helium.Writer, node helium.Node) error {
+	if _, ok := node.(*helium.Document); ok {
+		if configured, ok := writerctl.OmitDocumentChildTerminators(writer).(helium.Writer); ok {
+			writer = configured
 		}
-		if needStripNewline {
-			if idx := strings.Index(out, "?>\n"); idx >= 0 {
-				out = out[:idx+2] + out[idx+3:]
-			}
-		}
-		_, err := io.WriteString(w, out)
+	}
+	return writer.WriteTo(w, node)
+}
+
+func writeFullString(w io.Writer, s string) error {
+	n, err := io.WriteString(w, s)
+	if err != nil {
 		return err
 	}
-	return xmlInvalidCharError(writer.WriteTo(w, doc))
+	if n != len(s) {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
+func writeFullBytes(w io.Writer, data []byte) error {
+	n, err := w.Write(data)
+	if err != nil {
+		return err
+	}
+	if n != len(data) {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
+type shortWriteCheckingWriter struct {
+	dst io.Writer
+}
+
+func (w shortWriteCheckingWriter) Write(data []byte) (int, error) {
+	n, err := w.dst.Write(data)
+	if err == nil && n != len(data) {
+		return n, io.ErrShortWrite
+	}
+	return n, err
 }
 
 // xmlInvalidCharError maps the writer's ErrInvalidXMLChar sentinel to the
@@ -133,14 +177,13 @@ func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDe
 				out = out[:idx+2] + out[idx+3:]
 			}
 		}
-		_, err := io.WriteString(w, out)
-		return err
+		return writeFullString(w, out)
 	}
 	return serializeXMLWithCharMapInner(w, doc, outDef, charMap)
 }
 
 func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
-	sw := stream.NewWriter(w)
+	sw := stream.NewWriter(shortWriteCheckingWriter{dst: w})
 	// XML 1.1 output serializes restricted control characters as decimal
 	// character references. Set this up front so it applies even when the XML
 	// declaration is omitted (StartDocument, when written, sets it too).

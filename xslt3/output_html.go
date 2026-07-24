@@ -176,8 +176,7 @@ func serializeXHTML(w io.Writer, doc *helium.Document, outDef *OutputDef, charMa
 	// 4. Non-void elements: expand self-closing to open+close
 	result = fixXHTMLSelfClosing(result)
 
-	_, err := io.WriteString(w, result)
-	return err
+	return writeFullString(w, result)
 }
 
 // normalizeXHTMLNamespace walks the document and converts prefixed XHTML
