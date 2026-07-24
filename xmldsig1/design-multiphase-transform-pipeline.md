@@ -256,6 +256,7 @@ Internal tests cover:
 - Base64 sign/verify symmetry;
 - transformed RetrievalMethod multi-phase execution;
 - nil and typed-nil XSLT handling;
+- W3C `defCan-1`, `defCan-2`, and `defCan-3` digest/signature verification;
 - all existing xmldsig1 interop and regression vectors.
 
 ## Future policy
