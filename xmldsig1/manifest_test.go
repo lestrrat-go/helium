@@ -37,6 +37,17 @@ func (t *manifestCountingTransformer) TransformXSLT(_ context.Context, _, input 
 	return input, nil
 }
 
+type manifestCancellingResolver struct {
+	cancel context.CancelFunc
+	calls  atomic.Int32
+}
+
+func (r *manifestCancellingResolver) ResolveReference(ctx context.Context, _ string) ([]byte, error) {
+	r.calls.Add(1)
+	r.cancel()
+	return nil, ctx.Err()
+}
+
 // innerDigests signs a data-only document with one ExcC14N/SHA-256 reference per
 // target id and returns the resulting DigestValue strings, in order. Exclusive
 // C14N of a leaf subtree is independent of its siblings and namespace context,
@@ -106,6 +117,12 @@ func buildManifestSignedDoc(t *testing.T, key *rsa.PrivateKey, innerReferencesXM
 func innerRefXML(uri, digest string) string {
 	return fmt.Sprintf(`<ds:Reference URI=%q>`+
 		`<ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms>`+
+		`<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>`+
+		`<ds:DigestValue>%s</ds:DigestValue></ds:Reference>`, uri, digest)
+}
+
+func externalRefXML(uri, digest string) string {
+	return fmt.Sprintf(`<ds:Reference URI=%q>`+
 		`<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>`+
 		`<ds:DigestValue>%s</ds:DigestValue></ds:Reference>`, uri, digest)
 }
@@ -233,6 +250,33 @@ func TestManifestValidationPreflightsAllReferencesBeforeResolver(t *testing.T) {
 	require.ErrorIs(t, result.Manifests[0].References[0].Err, xmldsig1.ErrUnsupportedTransform)
 	require.Contains(t, result.Manifests[0].References[0].Err.Error(), "was not executed")
 	require.ErrorIs(t, result.Manifests[0].References[1].Err, xmldsig1.ErrUnsupportedTransform)
+}
+
+// TestManifestValidationContextCancelDuringInnerWalk confirms cancellation
+// from an inner resolver stops the walk after the current advisory result.
+func TestManifestValidationContextCancelDuringInnerWalk(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	digests := innerDigests(t, key, "d1")
+	inner := externalRefXML("cancel.xml", "AA==") + innerRefXML("#d1", digests[0])
+	doc := buildManifestSignedDoc(t, key, inner)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	resolver := &manifestCancellingResolver{cancel: cancel}
+	result, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		ReferenceResolver(resolver).
+		ValidateManifests(true).
+		Verify(ctx, doc)
+	require.NoError(t, err, "cancellation during advisory Manifest validation must not fail core verification")
+
+	require.Equal(t, int32(1), resolver.calls.Load(), "resolver must run for the first inner reference")
+	require.Len(t, result.Manifests, 1)
+	require.Len(t, result.Manifests[0].References, 1, "cancellation must stop before the next inner reference")
+	ref := result.Manifests[0].References[0]
+	require.Equal(t, "cancel.xml", ref.URI)
+	require.False(t, ref.Valid)
+	require.ErrorIs(t, ref.Err, context.Canceled)
 }
 
 // TestManifestValidationContextCancel confirms a cancelled context stops the
