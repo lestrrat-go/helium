@@ -2,6 +2,8 @@ package xmldsig1
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"os"
 	"slices"
 	"sync"
@@ -10,6 +12,8 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
+
+const referenceURIC1 = "#c1"
 
 // TestXPathTransformDefCanDigest validates the ordered external-reference path
 // against the W3C defCan-1 XPath + C14N 1.1 interop vector.
@@ -66,6 +70,142 @@ func TestXPathTransformThroughPipeline(t *testing.T) {
 	require.Contains(t, string(canonical), "KEEPVAL", "kept subtree must survive the XPath filter")
 	require.NotContains(t, string(canonical), "DROPVAL", "dropped subtree must be filtered out")
 	require.NotContains(t, string(canonical), "t:drop", "dropped element must be filtered out")
+}
+
+func TestVerifyPreflightsAllReferencesBeforeXSLT(t *testing.T) {
+	tests := []struct {
+		name          string
+		allowXPointer bool
+		wantErr       error
+		mutateSecond  func(*testing.T, *helium.Document, *helium.Element)
+	}{
+		{
+			name:    "XPath filter",
+			wantErr: ErrUnsupportedTransform,
+			mutateSecond: func(t *testing.T, doc *helium.Document, ref *helium.Element) {
+				transform := findChild(t, findChild(t, ref, "Transforms"), "Transform")
+				require.NoError(t, transform.SetAttribute("Algorithm", TransformXPath))
+				xpathElem, err := doc.CreateElement("XPath")
+				require.NoError(t, err)
+				require.NoError(t, xpathElem.SetActiveNamespace(nsPrefix, NamespaceDSig))
+				require.NoError(t, xpathElem.AddChild(doc.CreateText([]byte("$missing"))))
+				require.NoError(t, transform.AddChild(xpathElem))
+			},
+		},
+		{
+			name:          "general XPointer",
+			allowXPointer: true,
+			wantErr:       ErrReferenceNotFound,
+			mutateSecond: func(t *testing.T, _ *helium.Document, ref *helium.Element) {
+				require.NoError(t, ref.SetAttribute("URI", "#xpointer(/doc[true() or $missing])"))
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			key, err := rsa.GenerateKey(rand.Reader, 2048)
+			require.NoError(t, err)
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<doc><content Id="c1">payload</content></doc>`))
+			require.NoError(t, err)
+			ref := ReferenceConfig{
+				URI:             referenceURIC1,
+				DigestAlgorithm: DigestSHA256,
+				Transforms:      []Transform{C14NTransform(C14N10)},
+			}
+			sigElem, err := NewSigner().
+				SignatureAlgorithm(AlgRSASHA256).
+				Reference(ref).
+				Reference(ref).
+				SignDetached(t.Context(), doc, key)
+			require.NoError(t, err)
+			require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+			signedInfo := findChild(t, sigElem, "SignedInfo")
+			var refs []*helium.Element
+			for child := signedInfo.FirstChild(); child != nil; child = child.NextSibling() {
+				elem, ok := helium.AsNode[*helium.Element](child)
+				if ok && elem.LocalName() == "Reference" {
+					refs = append(refs, elem)
+				}
+			}
+			require.Len(t, refs, 2)
+
+			firstTransform := findChild(t, findChild(t, refs[0], "Transforms"), "Transform")
+			require.NoError(t, firstTransform.SetAttribute("Algorithm", TransformXSLT))
+			stylesheet, err := doc.CreateElement("stylesheet")
+			require.NoError(t, err)
+			require.NoError(t, stylesheet.DeclareNamespace("xsl", namespaceXSLT))
+			require.NoError(t, stylesheet.SetActiveNamespace("xsl", namespaceXSLT))
+			require.NoError(t, stylesheet.SetAttribute("version", "1.0"))
+			require.NoError(t, firstTransform.AddChild(stylesheet))
+
+			test.mutateSecond(t, doc, refs[1])
+			reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+			transformer := &pipelineRecordingTransformer{}
+			verifier := NewVerifier(StaticKey(&key.PublicKey)).XSLTTransformer(transformer)
+			if test.allowXPointer {
+				verifier = verifier.AllowXPointer(true)
+			}
+			_, err = verifier.Verify(t.Context(), doc)
+			require.ErrorIs(t, err, test.wantErr)
+			var verifyErr *VerificationError
+			require.ErrorAs(t, err, &verifyErr)
+			require.Equal(t, 1, verifyErr.Reference)
+			require.Empty(t, transformer.snapshot(), "an earlier XSLT transform must not run before all References pass static validation")
+		})
+	}
+}
+
+func TestVerifyPreflightsAllReferencesBeforeResolver(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<doc><content Id="c1">payload</content></doc>`))
+	require.NoError(t, err)
+	resolver := &countingResolver{}
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		ReferenceResolver(resolver).
+		Reference(ReferenceConfig{URI: "external.xml", DigestAlgorithm: DigestSHA256}).
+		Reference(ReferenceConfig{
+			URI:             referenceURIC1,
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{C14NTransform(C14N10)},
+		}).
+		SignDetached(t.Context(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+	resolver.calls = 0
+
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	var refs []*helium.Element
+	for child := signedInfo.FirstChild(); child != nil; child = child.NextSibling() {
+		elem, ok := helium.AsNode[*helium.Element](child)
+		if ok && elem.LocalName() == "Reference" {
+			refs = append(refs, elem)
+		}
+	}
+	require.Len(t, refs, 2)
+	transform := findChild(t, findChild(t, refs[1], "Transforms"), "Transform")
+	require.NoError(t, transform.SetAttribute("Algorithm", TransformXPath))
+	xpathElem, err := doc.CreateElement("XPath")
+	require.NoError(t, err)
+	require.NoError(t, xpathElem.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, xpathElem.AddChild(doc.CreateText([]byte("$missing"))))
+	require.NoError(t, transform.AddChild(xpathElem))
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).
+		ReferenceResolver(resolver).
+		Verify(t.Context(), doc)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	var verifyErr *VerificationError
+	require.ErrorAs(t, err, &verifyErr)
+	require.Equal(t, 1, verifyErr.Reference)
+	require.Zero(t, resolver.calls, "an earlier Reference resolver must not run before all References pass static validation")
 }
 
 // TestXPathTransformFailClosed locks the empty-expression validation edge.

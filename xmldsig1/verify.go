@@ -50,6 +50,14 @@ type parsedReference struct {
 	digestAlgorithm string
 	digestValue     []byte
 	transforms      []parsedTransform
+	prepared        *preparedReference
+}
+
+// preparedReference is the side-effect-free state derived for one Reference
+// before any Reference resolver or transform callback runs.
+type preparedReference struct {
+	steps           []transformStep
+	generalXPointer *preparedGeneralXPointer
 }
 
 type parsedTransform struct {
@@ -151,6 +159,13 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	// without triggering key resolution or surfacing unrelated key/signature
 	// errors.
 	if err := preflightParsedWeakAlgorithms(parsed, cfg.allowSHA1); err != nil {
+		return nil, err
+	}
+
+	// Compile and statically validate every Reference before resolving KeyInfo
+	// resources or invoking any callback-driven work. An invalid later Reference
+	// must prevent an earlier resolver or XSLT transformer from running.
+	if err := preflightVerifierReferences(ctx, cfg, doc, parsed); err != nil {
 		return nil, err
 	}
 
@@ -262,12 +277,82 @@ func verifyReference(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	return target, external, nil
 }
 
+// preflightVerifierReferences validates every top-level Reference before the
+// digest loop starts. The pass performs no resolver or transformer calls.
+func preflightVerifierReferences(ctx context.Context, cfg *verifierConfig, doc *helium.Document, parsed *parsedSignature) error {
+	for i := range parsed.references {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		ref := &parsed.references[i]
+		prepared, err := prepareReferenceForVerification(cfg, doc, *ref)
+		if err != nil {
+			return &VerificationError{Reference: i, URI: ref.uri, Err: err}
+		}
+		ref.prepared = prepared
+	}
+	return nil
+}
+
+func prepareReferenceForVerification(cfg *verifierConfig, doc *helium.Document, ref parsedReference) (*preparedReference, error) {
+	steps := make([]transformStep, len(ref.transforms))
+	for i, transform := range ref.transforms {
+		steps[i] = transformStep(transform)
+	}
+	prepared := &preparedReference{steps: steps}
+
+	initialKind := transformValueOctets
+	allowEnveloped := false
+	var (
+		xpointerOverrides map[string]string
+		xpointerExpr      string
+		xpointerMatched   bool
+	)
+	if _, _, _, sameDocument := referenceURIForm(ref.uri); sameDocument {
+		initialKind = transformValueNodeSet
+		allowEnveloped = true
+	} else if cfg.allowXPointer {
+		xpointerOverrides, xpointerExpr, xpointerMatched = parseGeneralXPointer(ref.uri)
+		if xpointerMatched {
+			initialKind = transformValueNodeSet
+			allowEnveloped = true
+		}
+	}
+
+	runtime := transformRuntime{
+		parser:          cfg.parser(),
+		xsltTransformer: cfg.xsltTransformer,
+		allowEnveloped:  allowEnveloped,
+		external:        initialKind == transformValueOctets,
+	}
+	if _, err := validateTransformSteps(runtime, initialKind, steps); err != nil {
+		return nil, err
+	}
+	if xpointerMatched {
+		generalXPointer, err := prepareGeneralXPointer(doc, xpointerOverrides, xpointerExpr)
+		if err != nil {
+			return nil, err
+		}
+		prepared.generalXPointer = generalXPointer
+	}
+	return prepared, nil
+}
+
 // canonicalizeReference resolves a Reference URI and applies its transform
 // pipeline, returning the resolved target element (nil for an external
 // reference), the canonical octet stream that the DigestValue is computed over,
 // and whether the reference was satisfied externally. It is the shared reference
 // node-set → octet path for the verify digest check.
 func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
+	prepared := ref.prepared
+	if prepared == nil {
+		var err error
+		prepared, err = prepareReferenceForVerification(cfg, doc, ref)
+		if err != nil {
+			return nil, nil, false, err
+		}
+	}
+
 	// A URI that is not one of the four same-document forms is either a general
 	// XPointer (opt-in) or an external reference.
 	if _, _, _, ok := referenceURIForm(ref.uri); !ok {
@@ -275,7 +360,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 		// opted in; otherwise it stays fail-closed as an external reference, so the
 		// default four-form behavior is byte-identical.
 		if cfg.allowXPointer {
-			target, canonical, handled, err := canonicalizeGeneralXPointer(ctx, cfg, doc, sigElem, ref)
+			target, canonical, handled, err := canonicalizeGeneralXPointer(ctx, cfg, doc, sigElem, prepared)
 			if handled {
 				if err != nil {
 					return nil, nil, false, err
@@ -283,6 +368,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 				return target, canonical, false, nil
 			}
 		}
+		ref.prepared = prepared
 		octets, err := resolveExternalReference(ctx, cfg, doc, ref)
 		if err != nil {
 			return nil, nil, false, err
@@ -300,7 +386,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	// the selected node-set.
 	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
 
-	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, wholeDoc, includeComments, ref.transforms)
+	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, wholeDoc, includeComments, prepared.steps)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -310,11 +396,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 // applyReferenceTransforms starts the shared ordered executor with the lazy
 // node-set selected by a same-document Reference. It is shared by the four core
 // URI forms and the general XPointer resolver.
-func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, transforms []parsedTransform) ([]byte, error) {
-	steps := make([]transformStep, len(transforms))
-	for i, t := range transforms {
-		steps[i] = transformStep(t)
-	}
+func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, steps []transformStep) ([]byte, error) {
 	runtime := transformRuntime{
 		parser:          cfg.parser(),
 		xsltTransformer: cfg.xsltTransformer,
@@ -337,16 +419,15 @@ func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *hel
 // non-element node-set is ErrAmbiguousReference. The full-XPointer forms include
 // comment nodes, so includeComments is true. here() is NOT registered for a
 // URI-borne XPointer, so an xpointer(here()...) fails closed.
-func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
-	overrides, expr, matched := parseGeneralXPointer(ref.uri)
-	if !matched {
+func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, prepared *preparedReference) (*helium.Element, []byte, bool, error) {
+	if prepared.generalXPointer == nil {
 		return nil, nil, false, nil
 	}
-	target, err := resolveGeneralXPointerTarget(ctx, doc, overrides, expr)
+	target, err := resolvePreparedGeneralXPointerTarget(ctx, doc, prepared.generalXPointer)
 	if err != nil {
 		return nil, nil, true, err
 	}
-	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, false, true, ref.transforms)
+	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, false, true, prepared.steps)
 	if err != nil {
 		return nil, nil, true, err
 	}
@@ -366,17 +447,18 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, ref.uri)
 	}
 
-	steps := make([]transformStep, len(ref.transforms))
-	for i, t := range ref.transforms {
-		steps[i] = transformStep(t)
+	prepared := ref.prepared
+	if prepared == nil {
+		var err error
+		prepared, err = prepareReferenceForVerification(cfg, doc, ref)
+		if err != nil {
+			return nil, err
+		}
 	}
 	runtime := transformRuntime{
 		parser:          cfg.parser(),
 		xsltTransformer: cfg.xsltTransformer,
 		external:        true,
-	}
-	if _, err := validateTransformSteps(runtime, transformValueOctets, steps); err != nil {
-		return nil, err
 	}
 
 	joined, err := joinReferenceURI(doc.URL(), ref.uri)
@@ -387,7 +469,7 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	if err != nil {
 		return nil, err
 	}
-	return externalReferenceDigestInput(ctx, octets, steps, runtime)
+	return externalReferenceDigestInput(ctx, octets, prepared.steps, runtime)
 }
 
 func digestEqual(a, b []byte) bool {

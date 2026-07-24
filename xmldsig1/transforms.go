@@ -889,6 +889,13 @@ func xpointerNamespaces(doc *helium.Document, overrides map[string]string) map[s
 	return ns
 }
 
+type preparedGeneralXPointer struct {
+	id         string
+	idSelector bool
+	compiled   *xpath1.Expression
+	eval       xpath1.Evaluator
+}
+
 // singleElementApex enforces the XML Signature Wrapping defense for a general
 // XPointer node-set: it must identify a SINGLE element apex. An empty node-set is
 // ErrReferenceNotFound; a node-set carrying a non-element principal node, or more
@@ -917,8 +924,8 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 	return apex, nil
 }
 
-// resolveGeneralXPointerTarget resolves a general XPointer expression to its
-// single element apex.
+// prepareGeneralXPointer validates and compiles a general XPointer expression
+// for later resolution to a single element apex.
 //
 // An id() selector NEVER reaches xpath1's built-in id(): the built-in resolves
 // through Document.GetElementByID, whose ID table overwrites on collision so a
@@ -928,23 +935,14 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // duplicate-detecting findElementsByIDUnder, and ANY other use of id() (a
 // parenthesized or embedded id() call the selector parser cannot reduce to a
 // single literal id) is rejected fail-closed rather than handed to the built-in.
-// Every remaining expression is statically validated, then evaluated on the
-// shared bounded evaluator with the merged namespace context, here() disabled
-// (nil bearing node), and the single-apex constraint enforced on the result.
-func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, overrides map[string]string, expr string) (*helium.Element, error) {
+// Every remaining expression is statically validated with the merged namespace
+// context, the shared operation limit, and here() disabled (nil bearing node).
+func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {
 			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q", ErrReferenceNotFound, expr)
 		}
-		matches := findElementsByIDUnder(doc.DocumentElement(), id)
-		switch len(matches) {
-		case 0:
-			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, id)
-		case 1:
-			return matches[0], nil
-		default:
-			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, id, len(matches))
-		}
+		return &preparedGeneralXPointer{id: id, idSelector: true}, nil
 	}
 	if expressionReferencesID(expr) {
 		// id() appears somewhere other than as the whole-expression selector
@@ -961,7 +959,23 @@ func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, ove
 	if err := eval.Validate(compiled); err != nil {
 		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
 	}
-	nodes, err := eval.Find(ctx, compiled, doc.DocumentElement())
+	return &preparedGeneralXPointer{compiled: compiled, eval: eval}, nil
+}
+
+func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Document, prepared *preparedGeneralXPointer) (*helium.Element, error) {
+	if prepared.idSelector {
+		matches := findElementsByIDUnder(doc.DocumentElement(), prepared.id)
+		switch len(matches) {
+		case 0:
+			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, prepared.id)
+		case 1:
+			return matches[0], nil
+		default:
+			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, prepared.id, len(matches))
+		}
+	}
+
+	nodes, err := prepared.eval.Find(ctx, prepared.compiled, doc.DocumentElement())
 	if err != nil {
 		// Preserve the here()-unavailable sentinel (a URI-borne XPointer has no
 		// ds:XPath bearing node) as a matchable typed error rather than flattening
