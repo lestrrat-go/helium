@@ -64,6 +64,16 @@ func ExcC14NTransform(prefixes ...string) Transform {
 	return excC14NTransform{prefixes: slices.Clone(prefixes)}
 }
 
+// transformSnapshot is the immutable representation of a caller-defined
+// transform. Signing observes only the transform URI, so retaining the
+// caller's implementation would let later mutations change a configured
+// Signer.
+type transformSnapshot struct {
+	uri string
+}
+
+func (t transformSnapshot) URI() string { return t.uri }
+
 // cloneReferenceTransforms returns a deep copy of a Reference's transform slice:
 // a fresh backing array plus a copy of each mutable transform's internal state.
 // Signer.clone uses it so a later caller mutation of the original Transforms
@@ -80,15 +90,18 @@ func cloneReferenceTransforms(transforms []Transform) []Transform {
 	return out
 }
 
-// cloneTransform returns a copy of t that shares no mutable state with t. Only
-// excC14NTransform carries mutable state (its prefix slice); every other
-// Transform is an immutable value and is returned unchanged.
+// cloneTransform returns a copy of t that shares no mutable state with t.
 func cloneTransform(t Transform) Transform {
-	exc, ok := t.(excC14NTransform)
-	if !ok {
+	switch t := t.(type) {
+	case nil:
+		return nil
+	case excC14NTransform:
+		return excC14NTransform{prefixes: slices.Clone(t.prefixes)}
+	case envelopedTransform, c14nTransform:
 		return t
+	default:
+		return transformSnapshot{uri: t.URI()}
 	}
-	return excC14NTransform{prefixes: slices.Clone(exc.prefixes)}
 }
 
 // transformStep is the algorithm-agnostic view of a single Reference transform,

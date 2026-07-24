@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,4 +66,30 @@ func TestSignerCloneDeepCopiesTransforms(t *testing.T) {
 	exc, ok := stored[1].(excC14NTransform)
 	require.True(t, ok)
 	require.Equal(t, []string{"p1"}, exc.Prefixes())
+}
+
+type mutableTransform struct {
+	uri string
+}
+
+func (t *mutableTransform) URI() string { return t.uri }
+
+// TestSignerReferenceSnapshotsCallerTransform proves a caller-owned Transform
+// cannot change a Signer's transform pipeline after Reference returns.
+func TestSignerReferenceSnapshotsCallerTransform(t *testing.T) {
+	transform := &mutableTransform{uri: ExcC14N10}
+	signer := NewSigner().
+		SignatureAlgorithm(AlgHMACSHA256).
+		Reference(ReferenceConfig{
+			URI:             "#target",
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{Enveloped(), transform},
+		})
+
+	transform.uri = "urn:unsupported-after-ingress"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><target Id="target">payload</target></root>`))
+	require.NoError(t, err)
+	_, err = signer.SignDetached(t.Context(), doc, []byte("signing-key"))
+	require.NoError(t, err)
 }
