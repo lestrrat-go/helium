@@ -176,6 +176,10 @@ Per-reference failures use parallel wrapper types so sign and verify report the 
 
 External-reference resolution sentinels (`errors.go`, `reference_resolver.go`): `ErrReferenceNotFound` is the fail-closed default for an external Reference with no configured `ReferenceResolver`, AND every `FSReferenceResolver` rejection short of the size cap — a scheme URI, a path escaping the root, a leftover fragment, a missing file, and an unparseable external XML resource. `ErrReferenceTooLarge` is returned when an external resource exceeds the resolver's 64 MiB cap. Both wrap via `%w` and are matchable with `errors.Is`. A per-reference external failure still surfaces through `VerificationError` (verify) / `ReferenceError` (sign) with the sentinel reachable via `Unwrap`.
 
+Ordered-transform diagnostics (`transform_pipeline.go` `executeTransformPipeline`) identify the zero-based transform index + algorithm. Static algorithm/parameter/capability failures wrap `ErrUnsupportedTransform` before execution. A first required parse of resolver-supplied octets wraps `ErrReferenceNotFound`; a parse of intermediate transform output wraps `ErrUnsupportedTransform` and names both producer + consumer steps. Invalid Base64 wraps `ErrInvalidSignature`. Context and injected-XSLT errors return unchanged.
+
+A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI dereference, transform execution, or key resolution.
+
 ## Error Accumulation Pattern
 
 ### XSD

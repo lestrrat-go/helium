@@ -66,10 +66,8 @@ type signerConfig struct {
 	referenceParser    *helium.Parser
 }
 
-// parser returns the parser used for external reference octets on the signing
-// side: the configured ReferenceParser, or the locked-down default. Symmetric
-// with verifierConfig.parser so sign and verify parse identical external content
-// identically.
+// parser returns the parser used for every octets-to-node-set conversion on the
+// signing side: the configured ReferenceParser, or the locked-down default.
 func (cfg *signerConfig) parser() helium.Parser {
 	if cfg.referenceParser != nil {
 		return *cfg.referenceParser
@@ -183,11 +181,10 @@ func (s Signer) ReferenceResolver(r ReferenceResolver) Signer {
 	return s
 }
 
-// ReferenceParser configures the [helium.Parser] used to parse an external
-// reference's resolved octets into XML when the Reference's transform chain needs
-// a node-set. It is symmetric with [Verifier.ReferenceParser] and defaults to the
-// same locked-down parser, so sign and verify parse the same external content the
-// same way.
+// ReferenceParser configures the [helium.Parser] used whenever a Reference
+// transform converts octets to a node-set. This includes external resolver bytes
+// and intermediate Base64 or canonicalization output. It is symmetric with
+// [Verifier.ReferenceParser] and defaults to the same locked-down parser.
 func (s Signer) ReferenceParser(p helium.Parser) Signer {
 	s = s.clone()
 	s.cfg.referenceParser = &p
@@ -302,9 +299,8 @@ type verifierConfig struct {
 	allowSHA1         bool
 	validateManifests bool
 	referenceResolver ReferenceResolver
-	// referenceParser is the parser used to parse an external reference's octets
-	// into XML for a c14n/XPath transform chain. nil selects the locked-down
-	// default (see parser).
+	// referenceParser parses every octets-to-node-set transform transition. nil
+	// selects the locked-down default (see parser).
 	referenceParser *helium.Parser
 	// xsltTransformer applies the XSLT transform. nil (the default) keeps the XSLT
 	// transform fail-closed with ErrUnsupportedTransform.
@@ -358,11 +354,9 @@ func (cfg *verifierConfig) maxDecodedBytesLimit() int {
 	return cfg.maxDecodedBytes
 }
 
-// parser returns the parser used for external reference octets: the configured
-// ReferenceParser, or a locked-down default (helium.NewParser(): XXE blocked, no
-// filesystem, no network) when none was set. The default fails closed on
-// external-entity, DTD, and network access so parsing attacker-supplied external
-// content cannot reach the host.
+// parser returns the parser used for every octets-to-node-set transform
+// transition: the configured ReferenceParser, or a locked-down default
+// (helium.NewParser(): XXE blocked, no filesystem, no network).
 func (cfg *verifierConfig) parser() helium.Parser {
 	if cfg.referenceParser != nil {
 		return *cfg.referenceParser
@@ -452,13 +446,12 @@ func (v Verifier) ValidateManifests(validate bool) Verifier {
 	return v
 }
 
-// ReferenceParser configures the [helium.Parser] used to parse an external
-// reference's resolved octets into XML when the Reference's transform chain needs
-// a node-set (a canonicalization or XPath filter transform). The default is a
-// locked-down parser (helium.NewParser(): XXE blocked, no filesystem access, no
-// network), so parsing attacker-supplied external content cannot reach the host.
-// Override it only to relax those defaults deliberately. It has no effect on a
-// reference whose octets are digested directly (an empty or base64-only chain).
+// ReferenceParser configures the [helium.Parser] used whenever the ordered
+// transform pipeline converts octets to a node-set. It applies to external
+// resolver bytes and to intermediate Base64, canonicalization, or XSLT output
+// consumed by a later node-set transform. The default is a locked-down parser
+// (helium.NewParser(): XXE blocked, no filesystem access, no network). Override
+// it only to relax those defaults deliberately.
 func (v Verifier) ReferenceParser(p helium.Parser) Verifier {
 	v = v.clone()
 	v.cfg.referenceParser = &p
@@ -470,12 +463,14 @@ func (v Verifier) ReferenceParser(p helium.Parser) Verifier {
 // carries one. It is opt-in: the default is nil, which keeps the XSLT transform
 // fail-closed with [ErrUnsupportedTransform], byte-identical to a Verifier
 // without one. When set, a Reference's ds:Transform/xsl:stylesheet subtree is
-// serialized and passed to t together with the pre-XSLT octet stream, and t's
-// output becomes the digest input.
+// serialized and passed to t together with the current pipeline octets. One
+// Reference may invoke t multiple times, and a later node-set transform reparses
+// its output through [Verifier.ReferenceParser].
 //
 // XSLT is a powerful language and both the stylesheet and its input are
 // attacker-controlled on verify, so the transformer owns all resource and XXE
-// policy (see [XSLTTransformer]). helium ships no transformer.
+// policy (see [XSLTTransformer]). The core package runs no XSLT automatically;
+// the separate xmldsig1/transform package provides an explicit opt-in adapter.
 func (v Verifier) XSLTTransformer(t XSLTTransformer) Verifier {
 	v = v.clone()
 	v.cfg.xsltTransformer = t

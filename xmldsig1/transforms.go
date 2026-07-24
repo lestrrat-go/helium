@@ -12,7 +12,6 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
-	"github.com/lestrrat-go/helium/internal/xmlbase64"
 	"github.com/lestrrat-go/helium/xpath1"
 
 	helium "github.com/lestrrat-go/helium"
@@ -116,217 +115,13 @@ type transformStep struct {
 }
 
 // xpathFilter is a resolved XPath filter transform: an XPath 1.0 boolean
-// expression, the namespace bindings it is evaluated under, the bearing
+// expression, the namespace bindings it is evaluated under, and the bearing
 // ds:XPath element that the here() function resolves to (nil when here() has no
-// bearing node, e.g. the signing path), and its statically validated evaluation
-// state.
+// bearing node, e.g. the signing path).
 type xpathFilter struct {
-	expr     string
+	expr     *xpath1.Expression
 	ns       map[string]string
 	hereNode helium.Node
-	prepared *preparedXPathFilter
-}
-
-type preparedXPathFilter struct {
-	expr *xpath1.Expression
-	eval xpath1.Evaluator
-}
-
-// preparedReference is the side-effect-free state a verifier derives for one
-// Reference before executing any Reference. The transform pipeline owns the
-// compiled XPath filters; generalXPointer owns a compiled URI-borne XPointer
-// when that opt-in form matched. hasExplicitC14N preserves the distinction
-// external-reference processing needs between an explicit c14n step and the
-// pipeline's default C14N 1.0 fill-in.
-type preparedReference struct {
-	pipeline        transformPipeline
-	generalXPointer *preparedGeneralXPointer
-	hasExplicitC14N bool
-}
-
-// transformPipeline is the resolved, algorithm-agnostic result of interpreting a
-// Reference transform list: the effective canonicalization method and its
-// inclusive-namespace prefixes, whether an enveloped-signature transform is
-// present, any XPath filter transforms (in declared order) that run on the
-// node-set before canonicalization, and whether the octet-producing step is the
-// base64 decode transform rather than a canonicalization.
-//
-// base64 and c14nMethod are mutually exclusive: base64 ends the pipeline by
-// decoding its input node-set's string-value to octets, so no canonicalization
-// runs and c14nMethod stays empty in that case.
-type transformPipeline struct {
-	c14nMethod   string
-	prefixes     []string
-	hasEnveloped bool
-	xpathFilters []xpathFilter
-	base64       bool
-	// xslt, when non-nil, is the serialized xsl:stylesheet subtree of an XSLT
-	// transform. The XSLT transform is octet-in -> octet-out: it consumes the
-	// pre-XSLT octet stream (the canonicalized node-set) and its output is
-	// digested. It ends the pipeline, so no transform may follow it.
-	xslt []byte
-}
-
-// transformSteps converts a ReferenceConfig's typed Transform list into the
-// algorithm-agnostic steps consumed by resolveTransformPipeline, so the signing
-// preflight and the per-reference digest path interpret a transform list
-// identically.
-func transformSteps(ref ReferenceConfig) []transformStep {
-	steps := make([]transformStep, len(ref.Transforms))
-	for i, t := range ref.Transforms {
-		step := transformStep{algorithm: t.URI()}
-		if exc, ok := t.(excC14NTransform); ok {
-			step.prefixes = exc.prefixes
-		}
-		steps[i] = step
-	}
-	return steps
-}
-
-// preflightSignerTransforms validates every Reference's transform pipeline
-// BEFORE any DOM mutation or node moves. Every sign entry point calls this
-// first so that a rejected pipeline (an unsupported transform, or a transform
-// ordered after canonicalization) returns its error without moving caller
-// content into an <Object>, adding a Signature element, or otherwise mutating
-// the input tree.
-func preflightSignerTransforms(cfg *signerConfig) error {
-	for i, ref := range cfg.references {
-		pipe, err := resolveTransformPipeline(transformSteps(ref))
-		if err != nil {
-			// Carry the failing reference's index and URI so a caller signing
-			// over a multi-reference configuration can pinpoint the offending
-			// Reference, symmetric with the per-reference digest loop. The
-			// underlying sentinel (e.g. ErrUnsupportedTransform) stays matchable
-			// via errors.Is through ReferenceError.Unwrap.
-			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: err}
-		}
-		// The base64 decode transform is verify-only: the signing digest path
-		// (processReference) canonicalizes its reference node-set and has no
-		// base64 branch, so honoring a base64 transform here would silently digest
-		// the canonicalized subtree instead of the decoded octets — a fail-open
-		// signature. Reject it fail-closed before any DOM mutation. There is no
-		// typed Transform constructor for it, but a caller can implement the
-		// exported Transform interface with this URI, so the guard is required.
-		if pipe.base64 {
-			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: base64 transform is not supported for signing", ErrUnsupportedTransform)}
-		}
-		// The XPath filter transform is verify-only: the signing digest path
-		// (signReferenceOctets) reads only c14nMethod/prefixes/hasEnveloped from the
-		// pipeline and never applies pipe.xpathFilters, and processReference writes
-		// no <XPath> child, so honoring it would silently digest the unfiltered
-		// node-set under a <Transform Algorithm="...xpath..."> with no expression — a
-		// fail-open signature that no verifier reproduces. There is no typed
-		// Transform constructor for it, but a caller can implement the exported
-		// Transform interface with the TransformXPath URI, so reject it fail-closed
-		// before any DOM mutation.
-		if len(pipe.xpathFilters) > 0 {
-			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: XPath filter transform is not supported for signing", ErrUnsupportedTransform)}
-		}
-		// The XSLT transform is verify-only, exactly like base64: the signing digest
-		// path has no XSLT branch, so honoring an XSLT transform here would silently
-		// digest the pre-XSLT octets instead of the transformed output — a fail-open
-		// signature. There is no typed Transform constructor for it, but a caller can
-		// implement the exported Transform interface with this URI, so the guard is
-		// required. resolveTransformPipeline marks XSLT presence with a non-nil
-		// pipe.xslt even when no stylesheet was captured.
-		if pipe.xslt != nil {
-			return &ReferenceError{Op: opSign, Reference: i, URI: ref.URI, Err: fmt.Errorf("%w: XSLT transform is not supported for signing", ErrUnsupportedTransform)}
-		}
-	}
-	return nil
-}
-
-// resolveTransformPipeline interprets an ordered XMLDSig Reference transform
-// list and returns the effective canonicalization method, its
-// inclusive-namespace prefixes, and whether an enveloped-signature transform is
-// present.
-//
-// A Reference's transform output begins as a node-set. The enveloped-signature
-// transform maps a node-set to a node-set; a canonicalization (c14n) transform
-// and the base64 decode transform each convert the node-set to an octet stream.
-// helium supports no octet-stream-consuming transform, so once any transform has
-// produced octets no further transform — a second c14n, a base64 after a c14n,
-// or anything after a base64 — may run; such a list is rejected fail-closed
-// rather than silently honoring only the last octet-producing transform.
-//
-// When no octet-producing transform is declared, the XMLDSig default
-// node-set->octet conversion applies, which is inclusive Canonical XML 1.0 (NOT
-// Exclusive C14N). The base64 transform ends the pipeline with decoded octets
-// that are digested directly, so no default c14n is applied when it is present.
-//
-// The XPath filter transform (TransformXPath) maps a node-set to a node-set and
-// so may appear before the octet-producing transform; each is recorded in order.
-// Once the complete pipeline's ordering is accepted, every XPath filter is
-// compiled and statically validated before the pipeline is returned, so no
-// earlier node-set transform can hide an invalid later filter by producing an
-// empty node-set.
-//
-// The XSLT transform (TransformXSLT) is the one octet-in -> octet-out transform
-// helium interprets: it consumes the pre-XSLT octet stream (the canonicalized
-// node-set, filled in with inclusive C14N 1.0 when no c14n transform precedes it)
-// and its output is digested. It ends the pipeline like an octet-producing
-// transform, so nothing may follow it, and it may not itself follow one (an
-// XSLT after a c14n/base64, or a second XSLT, is rejected). Any OTHER transform
-// ordered after an octet-producing or octet-ending transform is likewise
-// rejected.
-//
-// pipelineClosed records that an octet-ENDING transform (c14n, base64, or XSLT)
-// has run, after which no further transform may appear. Whether octets already
-// exist is recovered from p (a non-empty c14nMethod, base64, or xslt), so the
-// C14N 1.0 fill-in below covers the "no octet-producing transform" case without a
-// separate flag.
-func resolveTransformPipeline(steps []transformStep) (transformPipeline, error) {
-	var p transformPipeline
-	pipelineClosed := false
-	for _, t := range steps {
-		if pipelineClosed {
-			return transformPipeline{}, fmt.Errorf("%w: transform %s ordered after an octet-producing transform", ErrUnsupportedTransform, t.algorithm)
-		}
-		switch t.algorithm {
-		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
-			p.c14nMethod = t.algorithm
-			p.prefixes = t.prefixes
-			pipelineClosed = true
-		case TransformBase64:
-			p.base64 = true
-			pipelineClosed = true
-		case TransformEnvelopedSignature:
-			p.hasEnveloped = true
-		case TransformXPath:
-			p.xpathFilters = append(p.xpathFilters, xpathFilter{expr: t.xpathExpr, ns: t.xpathNS, hereNode: t.xpathHere})
-		case TransformXSLT:
-			// XSLT consumes octets and produces octets; the pre-XSLT octets are the
-			// canonicalized node-set (the default C14N 1.0 fill-in below supplies
-			// them for a bare XSLT). It ends the pipeline. p.xslt marks XSLT presence
-			// even when no stylesheet was captured (a sign-side caller-implemented
-			// Transform with this URI has no stylesheet), so the sign preflight and
-			// the verify path both detect it via a non-nil p.xslt; the empty marker
-			// is never reached on the verify path, where parseXSLTTransform always
-			// captures a non-empty stylesheet.
-			p.xslt = t.stylesheet
-			if p.xslt == nil {
-				p.xslt = []byte{}
-			}
-			pipelineClosed = true
-		default:
-			return transformPipeline{}, fmt.Errorf("%w: %s", ErrUnsupportedTransform, t.algorithm)
-		}
-	}
-	// The base64 transform digests its decoded octets directly, so a Reference
-	// carrying it needs no canonicalization; only a Reference with no
-	// octet-producing transform falls back to the inclusive C14N 1.0 default. An
-	// XSLT transform still needs its pre-XSLT octets, so it takes this fill-in too.
-	if p.c14nMethod == "" && !p.base64 {
-		p.c14nMethod = C14N10
-	}
-	for i, f := range p.xpathFilters {
-		prepared, err := prepareXPathFilter(f)
-		if err != nil {
-			return transformPipeline{}, err
-		}
-		p.xpathFilters[i] = prepared
-	}
-	return p, nil
 }
 
 // canonicalize applies the appropriate c14n mode for the given method URI
@@ -350,27 +145,6 @@ func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byt
 // the node-set of that subtree against its owning document.
 func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string) ([]byte, error) {
 	return canonicalizeNodeSet(method, collectSubtreeNodes(elem), elem.OwnerDocument(), prefixes)
-}
-
-// base64TransformOctets implements the base64 decode transform (XMLDSig core
-// §6.6.2) for a same-document node-set input. The transform's input is the
-// resolved element's node-set; the spec converts a node-set input to octets by
-// taking its XPath 1.0 string-value (equivalently, applying self::text() and
-// concatenating), which is the element's concatenated descendant text with all
-// element start/end tags, comments, and processing instructions stripped — so
-// domutil.TextContent(target) is exactly that value. The concatenated text is
-// base64-decoded (XML whitespace within the base64 is ignored by the decoder)
-// and the decoded octets are digested directly, with no canonicalization after.
-//
-// Invalid base64 in the input is fail-closed as ErrInvalidSignature, matching how
-// a malformed DigestValue/SignatureValue base64 is reported, so a Reference whose
-// base64 content cannot be decoded never digests partial or unintended bytes.
-func base64TransformOctets(target *helium.Element) ([]byte, error) {
-	decoded, err := xmlbase64.DecodeString(domutil.TextContent(target))
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid base64 transform input: %v", ErrInvalidSignature, err)
-	}
-	return decoded, nil
 }
 
 // canonicalizeNodeSet canonicalizes an explicit node-set against doc using the
@@ -399,8 +173,8 @@ func canonicalizeNodeSet(method string, nodes []helium.Node, doc *helium.Documen
 // comment and processing-instruction plus the document element's full subtree
 // (elements, their in-scope namespace nodes, attributes, and descendants). It is
 // the initial node-set for a whole-document reference (URI="" or "#xpointer(/)")
-// when an XPath filter transform must run on it. A comment-excluding form still
-// drops comments at the c14n stage via effectiveC14NMethod.
+// when a transform needs explicit node membership. The materializer removes
+// comments for a comment-excluding Reference form before applying that transform.
 func collectDocumentNodes(doc *helium.Document) []helium.Node {
 	var nodes []helium.Node
 	for c := range helium.Children(doc) {
@@ -463,17 +237,19 @@ func newDSigXPathEvaluator(ns map[string]string, hereNode helium.Node, opLimit i
 	return eval.Function("here", hereFunction{node: hereNode})
 }
 
-func prepareXPathFilter(f xpathFilter) (xpathFilter, error) {
-	expr, err := xpath1.Compile("boolean(" + f.expr + ")")
+// compileXPathFilterExpression compiles and statically validates the transform
+// expression during the complete-list validation pass. Wrapping it in
+// fn:boolean makes this compiled form identical to the one evaluated for each
+// input node.
+func compileXPathFilterExpression(expr string, eval xpath1.Evaluator) (*xpath1.Expression, error) {
+	compiled, err := xpath1.Compile("boolean(" + expr + ")")
 	if err != nil {
-		return xpathFilter{}, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, f.expr, err)
+		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, expr, err)
 	}
-	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
-	if err := eval.Validate(expr); err != nil {
-		return xpathFilter{}, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, f.expr, err)
+	if err := eval.Validate(compiled); err != nil {
+		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, expr, err)
 	}
-	f.prepared = &preparedXPathFilter{expr: expr, eval: eval}
-	return f, nil
+	return compiled, nil
 }
 
 // applyXPathFilter implements the XMLDSig XPath filter transform
@@ -482,22 +258,16 @@ func prepareXPathFilter(f xpathFilter) (xpathFilter, error) {
 // transform's in-scope namespace bindings, and the node is kept when the result
 // converts to boolean true. The expression is wrapped in fn:boolean so the XPath
 // data-model boolean conversion (a non-empty node-set, a non-zero number, a
-// non-empty string) governs membership. Pipeline resolution compiles and
-// statically validates every filter before any transform runs, then stores its
-// bounded evaluator (namespaces, here(), and the OpLimit security bound) for
-// execution. A malformed expression or an evaluation error is fail-closed as
+// non-empty string) governs membership. Evaluation runs on the shared bounded
+// evaluator (namespaces, here(), and the OpLimit security bound). Expressions are
+// compiled and statically validated during complete-list validation, before
+// execution starts. An evaluation error is fail-closed as
 // ErrUnsupportedTransform so a reference never digests an unfiltered node-set.
 func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) ([]helium.Node, error) {
-	if f.prepared == nil {
-		var err error
-		f, err = prepareXPathFilter(f)
-		if err != nil {
-			return nil, err
-		}
-	}
+	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
 	kept := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		r, err := f.prepared.eval.Evaluate(ctx, f.prepared.expr, n)
+		r, err := eval.Evaluate(ctx, f.expr, n)
 		if err != nil {
 			// Preserve the here()-unavailable sentinel as a matchable typed error
 			// rather than flattening it into an ErrUnsupportedTransform string, so a

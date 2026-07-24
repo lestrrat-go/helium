@@ -10,16 +10,37 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
 
 // certSignerDERPath is the fs path a test FSReferenceResolver serves and the
 // matching ds:RetrievalMethod URI references.
 const certSignerDERPath = "certs/signer.der"
+
+type countingXSLTTransformer struct {
+	calls atomic.Int32
+}
+
+func (t *countingXSLTTransformer) TransformXSLT(_ context.Context, _, input []byte) ([]byte, error) {
+	t.calls.Add(1)
+	return input, nil
+}
+
+type countingReferenceResolver struct {
+	calls  atomic.Int32
+	octets []byte
+}
+
+func (r *countingReferenceResolver) ResolveReference(_ context.Context, _ string) ([]byte, error) {
+	r.calls.Add(1)
+	return r.octets, nil
+}
 
 // selfSignedCert returns a throwaway self-signed certificate and its DER bytes.
 func selfSignedCert(t *testing.T) (*x509.Certificate, []byte) {
@@ -363,6 +384,45 @@ func TestRetrievalMethodRejectsUnsupportedTransform(t *testing.T) {
 	})
 }
 
+func TestRetrievalMethodTransformStepCap(t *testing.T) {
+	transform := `<ds:Transform Algorithm="` + C14N10 + `"/>`
+	build := func(n int) *helium.Document {
+		return mustParse(t, `<ds:RetrievalMethod xmlns:ds="`+NamespaceDSig+`" URI="#target" Type="`+TypeX509Data+`">`+
+			`<ds:Transforms>`+strings.Repeat(transform, n)+`</ds:Transforms></ds:RetrievalMethod>`)
+	}
+
+	steps, err := parseRetrievalTransforms(build(maxRetrievalTransformSteps).DocumentElement())
+	require.NoError(t, err)
+	require.Len(t, steps, maxRetrievalTransformSteps)
+
+	steps, err = parseRetrievalTransforms(build(maxRetrievalTransformSteps + 1).DocumentElement())
+	require.ErrorIs(t, err, ErrResourceLimitExceeded)
+	require.Nil(t, steps)
+}
+
+func TestVerifyRejectsRetrievalTransformOverflowBeforeKeyResolution(t *testing.T) {
+	transform := `<ds:Transform Algorithm="` + C14N10 + `"/>`
+	digestValue := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	doc := mustParse(t, `<root xmlns:ds="`+NamespaceDSig+`" Id="target"><ds:Signature>`+
+		`<ds:SignedInfo><ds:CanonicalizationMethod Algorithm="`+ExcC14N10+`"/>`+
+		`<ds:SignatureMethod Algorithm="`+AlgHMACSHA256+`"/>`+
+		`<ds:Reference URI=""><ds:DigestMethod Algorithm="`+DigestSHA256+`"/>`+
+		`<ds:DigestValue>`+digestValue+`</ds:DigestValue></ds:Reference></ds:SignedInfo>`+
+		`<ds:SignatureValue>AA==</ds:SignatureValue><ds:KeyInfo>`+
+		`<ds:RetrievalMethod URI="#target" Type="`+TypeX509Data+`"><ds:Transforms>`+
+		strings.Repeat(transform, maxRetrievalTransformSteps+1)+
+		`</ds:Transforms></ds:RetrievalMethod></ds:KeyInfo></ds:Signature></root>`)
+	keyResolved := false
+	keySource := KeySourceFunc(func(context.Context, *KeyInfoData, string) (any, error) {
+		keyResolved = true
+		return []byte("secret"), nil
+	})
+
+	_, err := NewVerifier(keySource).Verify(t.Context(), doc)
+	require.ErrorIs(t, err, ErrResourceLimitExceeded)
+	require.False(t, keyResolved)
+}
+
 // TestRetrievalMethodAppliesSupportedTransform proves a supported transform
 // pipeline is applied before Type interpretation: a same-document c14n transform
 // canonicalizes the target X509Data subtree before it is reparsed, and an
@@ -398,6 +458,54 @@ func TestRetrievalMethodAppliesSupportedTransform(t *testing.T) {
 		require.Len(t, data.X509Certificates, 1)
 		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
 	})
+
+	t.Run("same-document multiphase", func(t *testing.T) {
+		cert, der := selfSignedCert(t)
+		certB64 := base64.StdEncoding.EncodeToString(der)
+		transforms := `<ds:Transforms>` +
+			`<ds:Transform Algorithm="` + C14N10 + `"/>` +
+			`<ds:Transform Algorithm="` + TransformXSLT + `"><xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/></ds:Transform>` +
+			`<ds:Transform Algorithm="` + TransformXPath + `"><ds:XPath>true()</ds:XPath></ds:Transform>` +
+			`<ds:Transform Algorithm="` + C14N10 + `"/>` +
+			`</ds:Transforms>`
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="#x509" Type="`+TypeX509Data+`">`+
+			transforms+`</ds:RetrievalMethod><ds:X509Data Id="x509"><ds:X509Certificate>`+certB64+`</ds:X509Certificate></ds:X509Data></ds:KeyInfo>`)
+		transformer := &pipelineRecordingTransformer{}
+		cfg := &verifierConfig{xsltTransformer: transformer}
+		data := &KeyInfoData{}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.NoError(t, err)
+		require.Len(t, transformer.snapshot(), 1)
+		require.Len(t, data.X509Certificates, 1)
+		require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	})
+}
+
+func TestRetrievalMethodWholeDocumentTransformKeepsTopLevelNodes(t *testing.T) {
+	cert, der := selfSignedCert(t)
+	x509Data := `<ds:X509Data xmlns:ds="` + NamespaceDSig + `"><ds:X509Certificate>` +
+		base64.StdEncoding.EncodeToString(der) + `</ds:X509Certificate></ds:X509Data>`
+	transforms := `<ds:Transforms>` +
+		`<ds:Transform Algorithm="` + C14N10Comments + `"/>` +
+		`<ds:Transform Algorithm="` + TransformXSLT + `">` +
+		`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>` +
+		`</ds:Transform></ds:Transforms>`
+	doc := mustParse(t, `<?audit before?><!--audit-before--><ds:KeyInfo xmlns:ds="`+NamespaceDSig+`">`+
+		`<ds:RetrievalMethod URI="#xpointer(/)" Type="`+TypeX509Data+`">`+transforms+
+		`</ds:RetrievalMethod></ds:KeyInfo>`)
+	transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte(x509Data)}}
+	cfg := &verifierConfig{xsltTransformer: transformer}
+	data := &KeyInfoData{}
+
+	err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+	require.NoError(t, err)
+	require.Len(t, data.X509Certificates, 1)
+	require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+	calls := transformer.snapshot()
+	require.Len(t, calls, 1)
+	require.Contains(t, string(calls[0].input), "<?audit before?>")
+	require.Contains(t, string(calls[0].input), "<!--audit-before-->")
 }
 
 // xsltTransformElem is a ds:Transforms carrying a single XSLT transform whose

@@ -17,9 +17,12 @@ import (
 // dereferenced without limit.
 const maxRetrievalMethodDepth = 5
 
+// maxRetrievalTransformSteps caps the repeated parse/canonicalize work a
+// ds:RetrievalMethod can force before the SignatureValue is authenticated.
+const maxRetrievalTransformSteps = 16
+
 type preparedRetrievalMethod struct {
-	steps    []transformStep
-	pipeline transformPipeline
+	steps []transformStep
 }
 
 // resolveRetrievalMethods dereferences every ds:RetrievalMethod child of a
@@ -28,11 +31,10 @@ type preparedRetrievalMethod struct {
 // parseKeyInfo (which is value-only): parseKeyInfo cannot dereference because it
 // lacks the document, config, and Signature context.
 //
-// It first prepares every direct RetrievalMethod pipeline and every
-// transform-free same-document RetrievalMethod chain, then executes the cached
-// pipelines only after the complete preparation pass succeeds. Resolver and
-// transformer callbacks therefore never run before all reachable
-// document-resident XPath expressions pass static validation.
+// Every direct RetrievalMethod and every reachable transform-free same-document
+// chain is prepared before execution starts. Resolver and transformer callbacks
+// therefore do not run until all reachable transform lists pass static
+// validation.
 //
 // A RetrievalMethod inherits the same fail-closed / opt-in-resolver / size-cap /
 // base-join posture as an external Reference: a same-document "#id" target is
@@ -59,7 +61,7 @@ func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *ver
 			return err
 		}
 		visited := make(map[string]struct{})
-		err := prepareRetrievalMethod(ctx, doc, elem, prepared, visited, 0)
+		err := prepareRetrievalMethod(ctx, cfg, doc, elem, prepared, visited, 0)
 		if err != nil {
 			if cfg.lenientKeyInfo && errors.Is(err, ErrReferenceNotFound) {
 				continue
@@ -99,11 +101,11 @@ func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *ver
 	return nil
 }
 
-// prepareRetrievalMethod compiles and statically validates one RetrievalMethod's
-// transform pipeline without invoking a resolver or transformer callback.
-// Transform-free same-document chains are followed so every reachable
-// document-resident RetrievalMethod is prepared before execution starts.
-func prepareRetrievalMethod(ctx context.Context, doc *helium.Document, rm *helium.Element, prepared map[*helium.Element]*preparedRetrievalMethod, visited map[string]struct{}, depth int) error {
+// prepareRetrievalMethod parses and statically validates one RetrievalMethod
+// without invoking a resolver or transformer. Transform-free same-document
+// chains are followed so every reachable document-resident RetrievalMethod is
+// prepared before execution starts.
+func prepareRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *helium.Document, rm *helium.Element, prepared map[*helium.Element]*preparedRetrievalMethod, visited map[string]struct{}, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -124,14 +126,20 @@ func prepareRetrievalMethod(ctx context.Context, doc *helium.Document, rm *heliu
 		if err != nil {
 			return err
 		}
-		pipe, err := resolveTransformPipeline(steps)
-		if err != nil {
+		_, _, _, sameDocument := referenceURIForm(uri)
+		runtime := transformRuntime{
+			parser:          cfg.parser(),
+			xsltTransformer: cfg.xsltTransformer,
+			external:        !sameDocument,
+		}
+		initialKind := transformValueOctets
+		if sameDocument {
+			initialKind = transformValueNodeSet
+		}
+		if _, err := validateTransformSteps(runtime, initialKind, steps); err != nil {
 			return err
 		}
-		if pipe.hasEnveloped {
-			return fmt.Errorf("%w: enveloped-signature transform is not valid on a RetrievalMethod", ErrUnsupportedTransform)
-		}
-		state = &preparedRetrievalMethod{steps: steps, pipeline: pipe}
+		state = &preparedRetrievalMethod{steps: steps}
 		prepared[rm] = state
 	}
 
@@ -151,7 +159,7 @@ func prepareRetrievalMethod(ctx context.Context, doc *helium.Document, rm *heliu
 	if typ != "" && typ != TypeRawX509Certificate && typ != TypeX509Data {
 		return fmt.Errorf("%w: unsupported RetrievalMethod Type %q", ErrInvalidKeyInfo, typ)
 	}
-	return prepareRetrievalMethod(ctx, doc, target, prepared, visited, depth+1)
+	return prepareRetrievalMethod(ctx, cfg, doc, target, prepared, visited, depth+1)
 }
 
 // processRetrievalMethod dereferences a single ds:RetrievalMethod element and
@@ -181,22 +189,23 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 		return fmt.Errorf("%w: RetrievalMethod pipeline was not prepared", ErrInvalidKeyInfo)
 	}
 	steps := state.steps
-	pipe := state.pipeline
+	_, wholeDoc, includeComments, sameDocument := referenceURIForm(uri)
+	runtime := transformRuntime{
+		parser:          cfg.parser(),
+		xsltTransformer: cfg.xsltTransformer,
+		external:        !sameDocument,
+	}
 
 	// An external URI (not one of the four same-document forms) is dereferenced
 	// only through a configured ReferenceResolver, fail-closed otherwise. The
 	// resolved octets run through the same transform pipeline the external
 	// Reference digest path uses before Type interpretation.
-	if _, _, _, ok := referenceURIForm(uri); !ok {
+	if !sameDocument {
 		octets, err := resolveRetrievalOctets(ctx, cfg, doc, uri)
 		if err != nil {
 			return err
 		}
-		transformed, err := externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
-		if err != nil {
-			return err
-		}
-		transformed, err = applyRetrievalXSLT(ctx, cfg, pipe, transformed)
+		transformed, err := externalReferenceDigestInput(ctx, octets, steps, runtime)
 		if err != nil {
 			return err
 		}
@@ -239,41 +248,18 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	}
 	// With transforms, the target node-set is run through the pipeline to octets,
 	// then interpreted by Type exactly as an externally retrieved octet stream.
-	octets, err := retrievalTransformOctets(ctx, target, pipe)
-	if err != nil {
-		return err
-	}
-	octets, err = applyRetrievalXSLT(ctx, cfg, pipe, octets)
+	initial := newReferenceNodeSetValue(doc, target, nil, wholeDoc, includeComments, nil)
+	octets, err := executeTransformPipeline(ctx, runtime, initial, steps)
 	if err != nil {
 		return err
 	}
 	return interpretRetrievalOctets(ctx, budget, cfg, octets, typ, data)
 }
 
-// applyRetrievalXSLT applies a RetrievalMethod's XSLT transform to the pre-XSLT
-// octets, or fails closed when the pipeline carries an XSLT step but no usable
-// XSLTTransformer is configured. It mirrors the Reference paths
-// (resolveExternalReference / the same-document canonicalizeReference XSLT step):
-// externalReferenceDigestInput and retrievalTransformOctets do NOT consult
-// pipe.xslt, so without this an attacker-supplied XSLT transform on a
-// RetrievalMethod would be silently dropped while the resolved certificate
-// material is still merged (fail-open). helium never runs attacker-controlled
-// XSLT itself — a nil or typed-nil transformer rejects with
-// ErrUnsupportedTransform, the same stance as the Reference path.
-func applyRetrievalXSLT(ctx context.Context, cfg *verifierConfig, pipe transformPipeline, octets []byte) ([]byte, error) {
-	if pipe.xslt == nil {
-		return octets, nil
-	}
-	if isNilInterface(cfg.xsltTransformer) {
-		return nil, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
-	}
-	return cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, octets)
-}
-
 // parseRetrievalTransforms parses the optional single ds:Transforms child of a
 // RetrievalMethod into transform steps, enforcing at most one core-namespace
-// Transforms element. A foreign-namespace look-alike is ignored so it cannot
-// steer processing.
+// Transforms element and the fixed pre-verification transform-step cap. A
+// foreign-namespace look-alike is ignored so it cannot steer processing.
 func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
 	var transforms []parsedTransform
 	seen := false
@@ -289,7 +275,7 @@ func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
 			return nil, fmt.Errorf("%w: multiple Transforms elements in RetrievalMethod", ErrInvalidKeyInfo)
 		}
 		seen = true
-		list, err := parseTransformList(e)
+		list, err := parseTransformList(e, maxRetrievalTransformSteps)
 		if err != nil {
 			return nil, err
 		}
@@ -300,33 +286,6 @@ func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
 		steps[i] = transformStep(t)
 	}
 	return steps, nil
-}
-
-// retrievalTransformOctets applies a same-document RetrievalMethod's transform
-// pipeline to the resolved target element's node-set, producing the octet stream
-// that is then interpreted by Type. It mirrors the Reference node-set → octet
-// path: a base64 transform decodes the target's string-value, one or more XPath
-// filters narrow the subtree node-set before canonicalization, and otherwise the
-// subtree is canonicalized with the pipeline's effective c14n method.
-func retrievalTransformOctets(ctx context.Context, target *helium.Element, pipe transformPipeline) ([]byte, error) {
-	if pipe.base64 {
-		if len(pipe.xpathFilters) > 0 {
-			return nil, fmt.Errorf("%w: base64 transform combined with a node-set transform", ErrUnsupportedTransform)
-		}
-		return base64TransformOctets(target)
-	}
-	if len(pipe.xpathFilters) > 0 {
-		nodes := collectSubtreeNodes(target)
-		for _, f := range pipe.xpathFilters {
-			filtered, err := applyXPathFilter(ctx, nodes, f)
-			if err != nil {
-				return nil, err
-			}
-			nodes = filtered
-		}
-		return canonicalizeNodeSet(pipe.c14nMethod, nodes, target.OwnerDocument(), pipe.prefixes)
-	}
-	return canonicalizeSubtree(pipe.c14nMethod, target, pipe.prefixes)
 }
 
 // resolveRetrievalOctets dereferences an external RetrievalMethod URI through the

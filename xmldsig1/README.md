@@ -128,23 +128,28 @@ inside an XPath filter expression: it returns the `ds:XPath` element that bears
 the expression, which is what the standard "enveloped signature via `here()`"
 filter uses to omit the enclosing `ds:Signature`. Evaluation runs on a bounded
 XPath 1.0 evaluator (an operation-count cap on top of the recursion and node-set
-caps), so an attacker-supplied expression cannot stall verification. The base64 transform (**verify only**) takes the resolved
-node-set's XPath 1.0 string-value — the referenced element's concatenated
-descendant text, tags and comments stripped — base64-decodes it (whitespace in
-the base64 text is ignored), and digests the decoded octets directly with no
-canonicalization afterward; combining it with a preceding node-set transform is
-not supported.
+caps), so an attacker-supplied expression cannot stall verification. The Base64
+transform decodes octet input directly. For node-set input it concatenates the
+remaining text-node string-values, with element markup, comments, and processing
+instructions stripped, before decoding. Signing supports Base64 through the
+`Transform` interface, although no typed constructor is provided.
 
-A node-set transform (enveloped-signature or XPath) may precede an octet-producing
-transform (canonicalization or base64) or the octet-in→octet-out XSLT transform
-(`http://www.w3.org/TR/1999/REC-xslt-19991116`), each of which ends the pipeline;
-any transform ordered **after** an octet-ending transform — a second
-canonicalization, a base64 after a canonicalization, an XSLT after a
-canonicalization/base64, a second XSLT, or a canonicalization/base64 after an
-XSLT — is rejected fail-closed with `ErrUnsupportedTransform`, as is any transform
-URI the package does not implement. Signing does not support the base64 or XSLT
-transforms: neither has a typed `Transform` constructor and the sign preflight
-rejects both fail-closed.
+Transforms run in declared order over either a node-set or octets. The executor
+parses octets when the next transform requires a node-set and applies inclusive
+Canonical XML 1.0 when the next transform requires octets. A final node-set gets
+the same default canonicalization. This permits repeated transitions such as
+XPath → C14N 1.1 → XSLT → XPath → C14N 1.1, multiple XSLT steps, and a second
+canonicalization. Base64's node-set text conversion is its one algorithm-specific
+exception to the generic C14N conversion. Unknown algorithms and unusable
+parameters fail with `ErrUnsupportedTransform` before any injected transformer
+runs. An enveloped transform is limited to the original same-document node-set;
+it fails after an octet boundary because the containing Signature's node identity
+cannot be reconstructed from serialized markup. XPath and XSLT remain
+verify-only because the signing API cannot emit their required child content.
+RetrievalMethod pipelines are all statically validated, including reachable
+transform-free same-document chains, before any resolver or transformer
+callback runs. They also have a pre-authentication step cap; see
+[Verification resource limits](#verification-resource-limits).
 
 ### XSLT transform (opt-in, verify-only)
 
@@ -166,10 +171,11 @@ type XSLTTransformer interface {
 
 `Verifier.XSLTTransformer(t)` opts in. The single `ds:Transform/xsl:stylesheet`
 (or `xsl:transform`) child is captured and serialized, and passed to `t` together
-with the reference's pre-XSLT canonical octets; `t`'s output becomes the digest
-input. The implementer **owns all resource and XXE policy** — compute/time/memory
-limits and disabling `document()`/external access — because both inputs are
-attacker-controlled. helium ships no transformer.
+with the current pipeline octets. Its output feeds the next transform or the
+digest, and one Reference may invoke `t` multiple times. The implementer **owns
+all resource and XXE policy** — compute/time/memory limits and disabling
+`document()`/external access — because both inputs are attacker-controlled.
+The core package ships no transformer.
 
 ### General XPointer references (opt-in)
 
@@ -217,19 +223,18 @@ the same libxml2 URI-resolution helium uses elsewhere) and passed to the resolve
 the resolved octets are then run through the Reference's transform pipeline before
 digesting:
 
-- an empty transform chain, or a base64 decode transform, digests the resolved
-  octets directly (after base64 decoding when present);
-- a chain with a canonicalization or XPath filter transform needs a node-set, so
-  the octets are first parsed into XML by `Verifier.ReferenceParser` — a
-  **locked-down parser by default** (`helium.NewParser()`: XXE blocked, no
-  filesystem, no network) — then filtered and canonicalized;
+- an empty transform chain digests the resolved octets directly;
+- any transform that requires a node-set parses the current octets through
+  `Verifier.ReferenceParser`, including octets produced by an earlier Base64,
+  canonicalization, or XSLT step. The parser is **locked down by default**
+  (`helium.NewParser()`: XXE blocked, no filesystem, no network);
 - an **enveloped-signature transform on an external reference is rejected**
   fail-closed (`ErrUnsupportedTransform`): removing the Signature's own subtree is
   meaningless on a resource that does not contain the Signature;
 - an **XSLT transform on an external reference** applies the same off-by-default,
-  verify-only rule as a same-document reference: its pre-XSLT octets are handed to
-  the injected `XSLTTransformer` and its output digested, and with no (or a
-  typed-nil) transformer configured it fails closed with `ErrUnsupportedTransform`.
+  verify-only rule as a same-document reference: the current octets are handed to
+  the injected `XSLTTransformer`, and with no (or a typed-nil) transformer it
+  fails closed with `ErrUnsupportedTransform`.
 
 A Reference satisfied through the resolver is marked `External` in the result. An
 external reference covers bytes outside the document, not an element, so
@@ -418,6 +423,10 @@ passed deadline stops the work promptly rather than only at loop boundaries —
 pass a `ctx` with a deadline to bound the per-Reference canonicalization of a
 SignedInfo that declares many References.
 
+RetrievalMethod transforms have a separate fixed `maxRetrievalTransformSteps`
+cap because they execute before the SignatureValue check. It is not affected by
+the builder limits above.
+
 ## Detached signature placement (inclusive C14N)
 
 `SignDetached` and `SignEnveloping` return a detached `ds:Signature` for the
@@ -499,12 +508,10 @@ point-in-time evidence:
   transform, the truncated-HMAC must-reject case, and the X.509 KeyInfo
   variants.
 
-The merlin and xmldsig11 suites pass in full. The only remaining expected
-failures are two `xmldsig2ed` cases (`defCan-2/3`) whose Reference chains an
-XSLT transform between two canonicalization steps
-(XPath → c14n → XSLT → XPath → c14n) — a multi-phase pipeline that oscillates
-between node-set and octet representations. helium's transform pipeline models a
-single node-set phase followed by a single octet phase and cannot represent that
-chain; the blocker is the pipeline shape, not the transformer (a ready
-`xslt3`-backed `XSLTTransformer` ships as the [`xmldsig1/transform`](transform)
-package). Each is documented with its reason in the harness expectations.
+The merlin and xmldsig11 suites pass in full. The committed xmldsig2ed harness
+snapshot records 35 passes and two expected failures (`defCan-2/3`) because its
+runner does not inject an XSLT transformer. Package coverage runs both vectors
+through the ordered multi-phase pipeline
+(XPath → c14n → XSLT → XPath → c14n), including full `Verifier` execution with
+the [`xmldsig1/transform`](transform) package's `xslt3`-backed
+`XSLTTransformer`.

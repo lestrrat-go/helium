@@ -15,6 +15,15 @@ func (s staticResolver) ResolveReference(_ context.Context, _ string) ([]byte, e
 	return []byte(s), nil
 }
 
+type countingResolver struct {
+	calls int
+}
+
+func (r *countingResolver) ResolveReference(_ context.Context, _ string) ([]byte, error) {
+	r.calls++
+	return []byte("<external/>"), nil
+}
+
 // TestExternalOctetSymmetry proves the binding invariant that the sign side
 // digests exactly what the verify side digests for the same external input.
 // Both the sign path (signReferenceOctets) and the verify path
@@ -70,8 +79,8 @@ func TestExternalOctetSymmetry(t *testing.T) {
 // TestExternalReferenceDigestInputEnveloped locks the fail-closed rejection of an
 // enveloped-signature transform on an external reference.
 func TestExternalReferenceDigestInputEnveloped(t *testing.T) {
-	pipe := transformPipeline{hasEnveloped: true, c14nMethod: C14N10}
-	_, err := externalReferenceDigestInput(t.Context(), []byte(`<x/>`), pipe, false, helium.NewParser())
+	runtime := transformRuntime{parser: helium.NewParser(), external: true}
+	_, err := externalReferenceDigestInput(t.Context(), []byte(`<x/>`), []transformStep{{algorithm: TransformEnvelopedSignature}}, runtime)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 }
 
@@ -79,9 +88,61 @@ func TestExternalReferenceDigestInputEnveloped(t *testing.T) {
 // resolved octets verbatim (no canonicalization of an external octet stream).
 func TestExternalReferenceDigestInputEmptyIsRaw(t *testing.T) {
 	octets := []byte("not even xml \x00 bytes")
-	out, err := externalReferenceDigestInput(t.Context(), octets, transformPipeline{}, false, helium.NewParser())
+	runtime := transformRuntime{parser: helium.NewParser(), external: true}
+	out, err := externalReferenceDigestInput(t.Context(), octets, nil, runtime)
 	require.NoError(t, err)
 	require.Equal(t, octets, out)
+}
+
+func TestResolveExternalReferenceValidatesTransformsBeforeResolver(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	cases := map[string][]parsedTransform{
+		"unsupported algorithm": {
+			{algorithm: "urn:example:unsupported"},
+		},
+		"unavailable XSLT transformer": {
+			{
+				algorithm:  TransformXSLT,
+				stylesheet: []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>`),
+			},
+		},
+	}
+	for name, transforms := range cases {
+		t.Run(name, func(t *testing.T) {
+			resolver := &countingResolver{}
+			cfg := &verifierConfig{referenceResolver: resolver}
+			_, err := resolveExternalReference(t.Context(), cfg, doc, parsedReference{
+				uri:        "external.xml",
+				transforms: transforms,
+			})
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.Zero(t, resolver.calls, "invalid transforms must fail before external resolution")
+		})
+	}
+}
+
+func TestResolveExternalReferenceRejectsHereAfterReparseBeforeSideEffects(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+	require.NoError(t, err)
+
+	resolver := &countingResolver{}
+	transformer := &pipelineRecordingTransformer{outputs: [][]byte{[]byte(`<out/>`)}}
+	cfg := &verifierConfig{
+		referenceResolver: resolver,
+		xsltTransformer:   transformer,
+	}
+	_, err = resolveExternalReference(t.Context(), cfg, doc, parsedReference{
+		uri: "external.xml",
+		transforms: []parsedTransform{
+			{algorithm: TransformXSLT, stylesheet: []byte("style")},
+			{algorithm: TransformXPath, xpathExpr: xpathHereExpr, xpathHere: doc.DocumentElement()},
+		},
+	})
+	require.ErrorIs(t, err, ErrHereUnavailable)
+	require.Zero(t, resolver.calls, "here() must be rejected before external resolution")
+	require.Empty(t, transformer.snapshot(), "here() must be rejected before an injected transform callback runs")
 }
 
 func TestURIHasScheme(t *testing.T) {
@@ -104,12 +165,4 @@ func TestURIHasScheme(t *testing.T) {
 			require.Equal(t, want, uriHasScheme(uri))
 		})
 	}
-}
-
-func TestStepsHaveC14N(t *testing.T) {
-	require.False(t, stepsHaveC14N(nil))
-	require.False(t, stepsHaveC14N([]transformStep{{algorithm: TransformEnvelopedSignature}}))
-	require.False(t, stepsHaveC14N([]transformStep{{algorithm: TransformBase64}}))
-	require.True(t, stepsHaveC14N([]transformStep{{algorithm: C14N10}}))
-	require.True(t, stepsHaveC14N([]transformStep{{algorithm: TransformXPath}, {algorithm: C14N11URI}}))
 }

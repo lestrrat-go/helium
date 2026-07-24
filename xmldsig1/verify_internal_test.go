@@ -857,10 +857,8 @@ func TestVerifyUnsupportedTransform(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 }
 
-// TestVerifyTransformAfterCanonicalization guards DSIG-001's ordered-pipeline
-// rule: an octet-producing c14n transform ends the pipeline, so any transform
-// ordered after it (here a second, enveloped transform) cannot be applied and
-// the Reference must be rejected fail-closed.
+// TestVerifyTransformAfterCanonicalization proves an enveloped transform cannot
+// recover the original containing-Signature identity after an octet boundary.
 func TestVerifyTransformAfterCanonicalization(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -893,7 +891,7 @@ func TestVerifyTransformAfterCanonicalization(t *testing.T) {
 
 	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(context.Background(), doc)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
-	require.Contains(t, err.Error(), "ordered after an octet-producing transform")
+	require.Contains(t, err.Error(), "cannot follow an octet boundary")
 }
 
 // TestVerifyOmittedTransformDefaultsToC14N10 guards DSIG-001's default: a

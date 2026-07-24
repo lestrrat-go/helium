@@ -565,10 +565,6 @@ func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Doc
 			return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, ref.URI)
 		}
 		steps := transformSteps(ref)
-		pipe, err := resolveTransformPipeline(steps)
-		if err != nil {
-			return nil, err
-		}
 		joined, err := joinReferenceURI(doc.URL(), ref.URI)
 		if err != nil {
 			return nil, err
@@ -577,7 +573,8 @@ func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Doc
 		if err != nil {
 			return nil, err
 		}
-		return externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
+		runtime := transformRuntime{parser: cfg.parser(), signing: true, external: true}
+		return externalReferenceDigestInput(ctx, octets, steps, runtime)
 	}
 
 	// Resolve the reference target. For an enveloping signature the target may
@@ -593,50 +590,20 @@ func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Doc
 		return nil, err
 	}
 
-	// Interpret the configured transforms as an ordered pipeline so the digest
-	// is computed exactly as a verifier reading these same Transform elements
-	// would. The output begins as a node-set; an octet-producing c14n transform
-	// ends the pipeline, and when no c14n transform is configured the default
-	// node-set->octet conversion is inclusive Canonical XML 1.0.
-	pipe, err := resolveTransformPipeline(transformSteps(ref))
-	if err != nil {
-		return nil, err
-	}
-	c14nMethod := pipe.c14nMethod
-	prefixes := pipe.prefixes
-	hasEnveloped := pipe.hasEnveloped
-
 	// Classify the URI's node-set form (§4.3.3.2-3) so the digest is computed
 	// exactly as a verifier reading these same elements would. wholeDoc selects
 	// the document root; includeComments governs comment membership, and a
 	// WithComments c14n is downgraded to its plain variant when the form excludes
 	// comments so sign and verify stay symmetric on comment handling.
 	_, wholeDoc, includeComments, _ := referenceURIForm(ref.URI)
-	c14nMethod = effectiveC14NMethod(c14nMethod, includeComments)
-
-	// For enveloped signatures the Signature element and its descendants must
-	// be omitted from the canonical input. canonicalizeEnveloped does this on a
-	// deep copy of the document, never mutating the caller's live DOM (which
-	// would race with concurrent readers and risk leaving the tree corrupted if
-	// a restore failed).
-	var canonical []byte
-	switch {
-	case hasEnveloped:
-		canonical, err = canonicalizeEnveloped(c14nMethod, doc, target, sigElem, wholeDoc, prefixes)
-	case wholeDoc:
-		canonical, err = canonicalize(c14nMethod, doc, prefixes)
-	case internalRoot != nil && isDescendantOrSelf(target, internalRoot):
-		// The target lives inside the enveloping Signature's own detached
-		// <Object> content; canonicalize it without inserting the Signature
-		// into the caller's document.
-		canonical, err = canonicalizeDetachedSubtree(c14nMethod, internalRoot, target, prefixes)
-	default:
-		canonical, err = canonicalizeSubtree(c14nMethod, target, prefixes)
+	runtime := transformRuntime{
+		parser:         cfg.parser(),
+		signature:      sigElem,
+		allowEnveloped: true,
+		signing:        true,
 	}
-	if err != nil {
-		return nil, err
-	}
-	return canonical, nil
+	initial := newReferenceNodeSetValue(doc, target, sigElem, wholeDoc, includeComments, internalRoot)
+	return executeTransformPipeline(ctx, runtime, initial, transformSteps(ref))
 }
 
 func processReference(ctx context.Context, cfg *signerConfig, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, internalRoot *helium.Element) error {
