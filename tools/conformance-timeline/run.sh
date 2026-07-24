@@ -169,7 +169,7 @@ for tag in $TAGS; do
     # rather than hardcoding a tag. Releases from the cutoff on are measured WITH the slow
     # cases; earlier releases never ran them, and aggregate.py counts them as failures there.
     slowenv=()
-    if git -C "$MAIN_ROOT" cat-file -e "$tag:xslt3/results-xslt30-slow.xml" 2>/dev/null; then
+    if git -C "$MAIN_ROOT" cat-file -e "$checkout:xslt3/results-xslt30-slow.xml" 2>/dev/null; then
       slowenv=(HELIUM_SLOW_TESTS=1)
       echo "[$tag/$suite] slow tests enabled (release ships a slow-run record)"
     fi
