@@ -34,10 +34,15 @@ The following are **not** treated as vulnerabilities:
   `os.Root.FS` for symlink-safe confinement, or the deny-all default to load
   nothing. `PermissiveFS` is an explicit opt-out of confinement.
 
-The `xmldsig1` (XML Digital Signatures) and `xmlenc1` (XML Encryption) packages are
-**experimental** and fall outside the security-support boundary until they
-stabilize. Reports are welcome, but these packages should not be relied on inside a
-security or compliance boundary yet.
+The `xmldsig1` package has scoped production support for explicit same-document
+verification profiles when the application supplies an explicit trusted key or
+certificate source and checks which element the verified signature covers. External
+references and XSLT are opt-in advanced features with caller-owned transport,
+resource, and execution policy.
+
+The `xmlenc1` (XML Encryption) package is **experimental** and falls outside the
+security-support boundary until it stabilizes. Reports are welcome, but `xmlenc1`
+should not be relied on inside a security or compliance boundary yet.
 
 ## Reporting a Vulnerability
 
