@@ -182,9 +182,11 @@ all resource and XXE policy** — compute/time/memory limits and disabling
 The core package runs no XSLT automatically; the separate
 `xmldsig1/transform.XSLT` adapter is an explicit opt-in. The xslt3 direct XML
 serializer disables helium.Writer's per-document-child terminators. The adapter
-retains explicit top-level text content as result content, including for
-non-UTF-8 XML output, but does not promise byte-for-byte preservation of
-serializer-added document-child terminators.
+retains explicit top-level text content as result content, including
+non-indented newline cases and non-UTF-8 XML output, except when serializer
+indentation intentionally discards whitespace-only text because indentation is
+enabled and the result has an element child. It does not promise byte-for-byte
+preservation of serializer-added document-child terminators.
 
 The shipped adapter returns `[]byte` and does not expose an output-size cap or
 transform-step budget. It uses `ctx` during parsing, compilation, and

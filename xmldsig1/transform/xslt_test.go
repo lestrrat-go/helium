@@ -78,6 +78,17 @@ func TestXSLTSerializationPreservesTrailingContentNewline(t *testing.T) {
 	}
 }
 
+func TestXSLTSerializationIndentationDiscardsWhitespaceOnlyTopLevelText(t *testing.T) {
+	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">` +
+		`<xsl:output method="xml" encoding="iso-8859-1" indent="yes" omit-xml-declaration="yes"/>` +
+		`<xsl:template match="/"><out/><xsl:text>&#10;</xsl:text></xsl:template>` +
+		`</xsl:stylesheet>`)
+
+	out, err := transform.XSLT{}.TransformXSLT(t.Context(), stylesheet, []byte(`<a/>`))
+	require.NoError(t, err)
+	require.Equal(t, "\n<out/>", string(out))
+}
+
 func TestXSLTXMLTextOnlyOutputPreservesTrailingNewline(t *testing.T) {
 	stylesheet := []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">` +
 		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +

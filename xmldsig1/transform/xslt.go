@@ -60,11 +60,14 @@ var _ xmldsig1.XSLTTransformer = XSLT{}
 // transform output to the ordered Reference pipeline. xslt3 disables
 // helium.Writer's per-document-child terminators on its direct XML path.
 // Explicit top-level text content reaching this adapter is retained as result
-// content, but the adapter does not promise byte-for-byte preservation of
-// serializer-added document-child terminators. Both arguments are the current
-// pipeline octets xmldsig1 hands to the seam; neither is trusted. ctx bounds
-// parsing, compilation, and invocation, but not final serialization into the
-// returned byte buffer. One Reference may invoke this method multiple times.
+// content, including non-indented newline cases and non-UTF-8 XML output,
+// except when serializer indentation intentionally discards whitespace-only
+// text because indentation is enabled and the result has an element child. The
+// adapter does not promise byte-for-byte preservation of serializer-added
+// document-child terminators. Both arguments are the current pipeline octets
+// xmldsig1 hands to the seam; neither is trusted. ctx bounds parsing,
+// compilation, and invocation, but not final serialization into the returned
+// byte buffer. One Reference may invoke this method multiple times.
 func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte, error) {
 	ssDoc, err := helium.NewParser().Parse(ctx, stylesheet)
 	if err != nil {
