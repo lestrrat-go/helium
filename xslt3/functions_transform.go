@@ -1061,7 +1061,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			}
 			s, serErr := serializeDeliveredResult(doc, outDef)
 			if serErr != nil {
-				s = ""
+				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", serErr)
 			}
 			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.SingleString(s))
 		}

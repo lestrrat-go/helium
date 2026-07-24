@@ -160,7 +160,7 @@ func serializeMessageSequence(seq xpath3.Sequence) (string, error) {
 			sb.Write(ni.Node.Content())
 			continue
 		}
-		sb.WriteString(strings.TrimSpace(buf.String()))
+		sb.WriteString(buf.String())
 	}
 	return sb.String(), nil
 }

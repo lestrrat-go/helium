@@ -379,8 +379,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		if needsEncodingConversion {
 			return transcodeToEncoding(w, data, enc)
 		}
-		_, err = w.Write(data)
-		return err
+		return writeFullBytes(w, data)
 	}
 	return nil
 }

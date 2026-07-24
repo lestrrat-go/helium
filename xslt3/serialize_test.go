@@ -72,9 +72,12 @@ func TestSerializeResultXMLOmitsWriterTerminators(t *testing.T) {
 func TestSerializeResultReportsShortWrite(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>content</root>`))
 	require.NoError(t, err)
+	nonASCIIDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>あ</root>`))
+	require.NoError(t, err)
 
 	for _, tc := range []struct {
 		name   string
+		doc    *helium.Document
 		outDef *xslt3.OutputDef
 	}{
 		{
@@ -93,13 +96,53 @@ func TestSerializeResultReportsShortWrite(t *testing.T) {
 				ResolvedCharMap: map[rune]string{'c': "C"},
 			},
 		},
+		{
+			name: "Normalized",
+			outDef: &xslt3.OutputDef{
+				Method:            outMethodXML,
+				OmitDeclaration:   true,
+				NormalizationForm: "NFC",
+			},
+		},
+		{
+			name: "UTF16",
+			outDef: &xslt3.OutputDef{
+				Method:          outMethodXML,
+				OmitDeclaration: true,
+				Encoding:        "UTF-16",
+			},
+		},
+		{
+			name: "EncodedBytes",
+			doc:  nonASCIIDoc,
+			outDef: &xslt3.OutputDef{
+				Method:          outMethodXML,
+				OmitDeclaration: true,
+				Encoding:        "Shift_JIS",
+			},
+		},
+		{
+			name: "EncodedCharacterReference",
+			doc:  nonASCIIDoc,
+			outDef: &xslt3.OutputDef{
+				Method:          outMethodXML,
+				OmitDeclaration: true,
+				Encoding:        "US-ASCII",
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			testDoc := doc
+			if tc.doc != nil {
+				testDoc = tc.doc
+			}
 			var dst oneByteWriter
-			err := xslt3.SerializeResult(&dst, doc, tc.outDef)
+			err := xslt3.SerializeResult(&dst, testDoc, tc.outDef)
 			require.ErrorIs(t, err, io.ErrShortWrite)
 			require.NotEmpty(t, dst.buf.String())
-			require.True(t, strings.HasPrefix(`<root>content</root>`, dst.buf.String()))
+			if tc.outDef.Encoding == "" {
+				require.True(t, strings.HasPrefix(`<root>content</root>`, dst.buf.String()))
+			}
 		})
 	}
 }
@@ -862,6 +905,24 @@ func TestMessageInvalidCharSERE0006(t *testing.T) {
 	_, err := ss.Transform(root.OwnerDocument()).MessageHandler(handler).Do(t.Context())
 	requireSERE0006(t, err)
 	require.Empty(t, handler.messages)
+}
+
+func TestMessageDocumentPreservesTopLevelWhitespace(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="message" as="document-node()">
+      <xsl:document><xsl:text>&#10;</xsl:text><out/><xsl:text>&#10;</xsl:text></xsl:document>
+    </xsl:variable>
+    <xsl:message select="$message"/>
+    <result/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+	handler := &messageRecordingHandler{}
+	_, err := ss.Transform(parseTransformSource(t)).MessageHandler(handler).Do(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []string{"\n<out/>\n"}, handler.messages)
 }
 
 // SerializeItems with method="adaptive" over a multi-item sequence containing a

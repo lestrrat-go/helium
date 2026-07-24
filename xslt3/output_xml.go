@@ -113,6 +113,17 @@ func writeFullString(w io.Writer, s string) error {
 	return nil
 }
 
+func writeFullBytes(w io.Writer, data []byte) error {
+	n, err := w.Write(data)
+	if err != nil {
+		return err
+	}
+	if n != len(data) {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
 // xmlInvalidCharError maps the writer's ErrInvalidXMLChar sentinel to the
 // XSLT serialization error SERE0006, passing every other error (and nil)
 // through unchanged.

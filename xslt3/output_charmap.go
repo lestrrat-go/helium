@@ -172,11 +172,9 @@ func transcodeToUTF16(w io.Writer, utf8Data []byte) error {
 	enc := xtunicode.UTF16(xtunicode.BigEndian, xtunicode.IgnoreBOM)
 	encoded, err := enc.NewEncoder().Bytes(utf8Data)
 	if err != nil {
-		_, werr := w.Write(utf8Data)
-		return werr
+		return writeFullBytes(w, utf8Data)
 	}
-	_, werr := w.Write(encoded)
-	return werr
+	return writeFullBytes(w, encoded)
 }
 
 // transcodeToEncoding converts UTF-8 bytes to the target encoding,
@@ -185,8 +183,7 @@ func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
 	codec, err := htmlindex.Get(encName)
 	if err != nil {
 		// Unknown encoding — fall back to writing UTF-8
-		_, werr := w.Write(utf8Data)
-		return werr
+		return writeFullBytes(w, utf8Data)
 	}
 
 	encoder := codec.NewEncoder()
@@ -205,13 +202,13 @@ func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
 		if err != nil {
 			// Character cannot be encoded — use character reference
 			ref := fmt.Sprintf("&#x%X;", r)
-			if _, werr := io.WriteString(w, ref); werr != nil {
+			if werr := writeFullString(w, ref); werr != nil {
 				return werr
 			}
 			// Reset encoder state after error
 			encoder = codec.NewEncoder()
 		} else {
-			if _, werr := w.Write(encoded); werr != nil {
+			if werr := writeFullBytes(w, encoded); werr != nil {
 				return werr
 			}
 		}
