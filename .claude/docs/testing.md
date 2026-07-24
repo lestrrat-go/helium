@@ -146,7 +146,7 @@ Run specific test subsets via env vars:
 ## Fuzzing
 
 - Public-package fuzz coverage lives in package-local `fuzz_test.go` files.
-- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`, `xsd`, `xslt3`.
+- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xslt3`.
 - `shim` intentionally excluded from repo fuzz matrix.
 - `enum` + `sax` intentionally excluded from direct fuzzing → constants/interface-only surface.
 - Bound fuzz input sizes early. Return on oversize inputs.
