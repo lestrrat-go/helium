@@ -124,6 +124,18 @@ func writeFullBytes(w io.Writer, data []byte) error {
 	return nil
 }
 
+type shortWriteCheckingWriter struct {
+	dst io.Writer
+}
+
+func (w shortWriteCheckingWriter) Write(data []byte) (int, error) {
+	n, err := w.dst.Write(data)
+	if err == nil && n != len(data) {
+		return n, io.ErrShortWrite
+	}
+	return n, err
+}
+
 // xmlInvalidCharError maps the writer's ErrInvalidXMLChar sentinel to the
 // XSLT serialization error SERE0006, passing every other error (and nil)
 // through unchanged.
@@ -171,7 +183,7 @@ func serializeXMLWithCharMap(w io.Writer, doc *helium.Document, outDef *OutputDe
 }
 
 func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *OutputDef, charMap map[rune]string) error {
-	sw := stream.NewWriter(w)
+	sw := stream.NewWriter(shortWriteCheckingWriter{dst: w})
 	// XML 1.1 output serializes restricted control characters as decimal
 	// character references. Set this up front so it applies even when the XML
 	// declaration is omitted (StartDocument, when written, sets it too).

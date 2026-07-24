@@ -158,7 +158,7 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 	idx := 0
 	for item := range sequence.Items(items) {
 		if idx > 0 && sep != "" {
-			if _, err := io.WriteString(w, sep); err != nil {
+			if err := writeFullString(w, sep); err != nil {
 				return err
 			}
 		}
@@ -198,17 +198,17 @@ func serializeItemsWithSeparator(w io.Writer, items xpath3.Sequence, _ *helium.D
 					buf.Write(v.Node.Content())
 				}
 			}
-			if _, err := w.Write(buf.Bytes()); err != nil {
+			if err := writeFullBytes(w, buf.Bytes()); err != nil {
 				return err
 			}
 		case xpath3.AtomicValue:
 			s, _ := xpath3.AtomicToString(v)
-			if _, err := io.WriteString(w, s); err != nil {
+			if err := writeFullString(w, s); err != nil {
 				return err
 			}
 		default:
 			s := fmt.Sprintf("%v", item)
-			if _, err := io.WriteString(w, s); err != nil {
+			if err := writeFullString(w, s); err != nil {
 				return err
 			}
 		}
@@ -317,12 +317,12 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 	if outDef.ByteOrderMark || isUTF16 {
 		if isUTF16 {
 			// UTF-16 BE BOM
-			if _, werr := w.Write([]byte{0xFE, 0xFF}); werr != nil {
+			if werr := writeFullBytes(w, []byte{0xFE, 0xFF}); werr != nil {
 				return werr
 			}
 		} else {
 			// UTF-8 BOM
-			if _, werr := w.Write([]byte{0xEF, 0xBB, 0xBF}); werr != nil {
+			if werr := writeFullBytes(w, []byte{0xEF, 0xBB, 0xBF}); werr != nil {
 				return werr
 			}
 		}
