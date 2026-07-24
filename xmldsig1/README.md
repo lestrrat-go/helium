@@ -1,6 +1,10 @@
 # xmldsig1
 
-> **EXPERIMENTAL** — This package is under active development. Its API may change without notice, and it may be moved to a separate repository in the future.
+> **Scoped production support** — The same-document XMLDSig 1.1 verification
+> profile is supported when the application supplies an explicit trusted key or
+> certificate source and checks which element the verified signature covers.
+> External references and XSLT are opt-in advanced features with
+> caller-owned transport, resource, and execution policy.
 
 The `xmldsig1` package implements W3C XML Digital Signatures 1.1 for helium documents.
 
@@ -181,6 +185,14 @@ serializer disables helium.Writer's per-document-child terminators. The adapter
 preserves top-level text newlines as result content, including non-UTF-8 XML
 output.
 
+The shipped adapter returns `[]byte` and does not expose an output-size cap or
+transform-step budget. It uses `ctx` during parsing, compilation, and
+invocation, but final serialization into its in-memory buffer remains unbounded
+and does not consult `ctx`. Use it only for interoperability testing or a
+controlled profile. A production boundary that accepts attacker-controlled
+stylesheets must inject a caller-supplied transformer with cancellation-aware,
+bounded serialization and explicit CPU, memory, output, URI, and step limits.
+
 ### General XPointer references (opt-in)
 
 By default a `Reference` URI is resolved fail-closed to the four same-document
@@ -260,6 +272,21 @@ dereference over any transport, but anyone implementing network dereferencing
 owns the resulting SSRF and availability risk (an attacker who controls a
 Reference URI could otherwise steer requests at internal hosts or stall
 verification), so that decision is left explicitly to the caller.
+
+For detached-signature services, compose a smaller per-resource cap around the
+filesystem resolver, set a low `Verifier.MaxReferences` value, and pass a
+deadline-bearing context:
+
+```go
+resolver := xmldsig1.LimitReferenceResolver(
+    xmldsig1.FSReferenceResolver(fsys),
+    1<<20, // 1 MiB per resource
+)
+```
+
+The built-in filesystem resolver applies this cap while reading. A custom
+resolver receives a post-return size check, so it must enforce its own
+aggregate byte, connection, and transport budget.
 
 `Signer.ReferenceResolver` / `Signer.ReferenceParser` are the symmetric signing
 side, letting a detached signature cover external content. The sign and verify

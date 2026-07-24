@@ -36,6 +36,14 @@ type ReferenceResolver interface {
 	ResolveReference(ctx context.Context, uri string) ([]byte, error)
 }
 
+// boundedReferenceResolver is the internal capability used by resolvers that
+// can apply a caller-selected limit while reading. Custom ReferenceResolver
+// implementations do not need to know about it; LimitReferenceResolver falls
+// back to checking their returned octets.
+type boundedReferenceResolver interface {
+	resolveReferenceWithLimit(context.Context, string, int) ([]byte, error)
+}
+
 // maxReferenceBytes bounds the octets [FSReferenceResolver] reads for a single
 // external Reference, so a large or attacker-supplied file cannot exhaust memory
 // during verification. 64 MiB is far above any realistic signed external
@@ -90,7 +98,47 @@ func FSReferenceResolver(fsys fs.FS) ReferenceResolver {
 	return fsReferenceResolver{fsys: fsys}
 }
 
+// LimitReferenceResolver composes a per-resource byte limit around a resolver.
+// A non-positive value or a value above the package maximum selects the 64 MiB
+// default; the cap cannot be disabled through this helper. The built-in
+// FSReferenceResolver applies the limit while reading. Other resolvers are
+// checked after they return their octets, so those implementations must enforce
+// their own transport and aggregate-work limits.
+func LimitReferenceResolver(resolver ReferenceResolver, maxBytes int) ReferenceResolver {
+	if resolver == nil {
+		return nil
+	}
+	if maxBytes <= 0 || maxBytes > maxReferenceBytes {
+		maxBytes = maxReferenceBytes
+	}
+	return limitedReferenceResolver{resolver: resolver, maxBytes: maxBytes}
+}
+
+type limitedReferenceResolver struct {
+	resolver ReferenceResolver
+	maxBytes int
+}
+
+func (r limitedReferenceResolver) ResolveReference(ctx context.Context, uri string) ([]byte, error) {
+	if bounded, ok := r.resolver.(boundedReferenceResolver); ok {
+		return bounded.resolveReferenceWithLimit(ctx, uri, r.maxBytes)
+	}
+
+	data, err := r.resolver.ResolveReference(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > r.maxBytes {
+		return nil, fmt.Errorf("%w: external reference %q exceeds %d bytes", ErrReferenceTooLarge, uri, r.maxBytes)
+	}
+	return data, nil
+}
+
 func (r fsReferenceResolver) ResolveReference(ctx context.Context, uri string) ([]byte, error) {
+	return r.resolveReferenceWithLimit(ctx, uri, maxReferenceBytes)
+}
+
+func (r fsReferenceResolver) resolveReferenceWithLimit(ctx context.Context, uri string, maxBytes int) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -104,14 +152,14 @@ func (r fsReferenceResolver) ResolveReference(ctx context.Context, uri string) (
 	}
 	defer f.Close()
 
-	// Read at most maxReferenceBytes+1 so an over-cap file is detected by the
+	// Read at most maxBytes+1 so an over-cap file is detected by the
 	// extra byte without buffering the whole resource.
-	data, err := io.ReadAll(io.LimitReader(f, maxReferenceBytes+1))
+	data, err := io.ReadAll(io.LimitReader(f, int64(maxBytes)+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading external reference %q: %v", ErrReferenceNotFound, uri, err)
 	}
-	if len(data) > maxReferenceBytes {
-		return nil, fmt.Errorf("%w: external reference %q exceeds %d bytes", ErrReferenceTooLarge, uri, maxReferenceBytes)
+	if len(data) > maxBytes {
+		return nil, fmt.Errorf("%w: external reference %q exceeds %d bytes", ErrReferenceTooLarge, uri, maxBytes)
 	}
 	return data, nil
 }

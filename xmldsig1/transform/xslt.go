@@ -22,9 +22,11 @@
 // Enabling XSLT means accepting that risk: a malicious signature can carry a
 // stylesheet that consumes unbounded CPU/memory or produces enormous output.
 // [XSLT] parses with helium's locked-down parser (external entities/DTD/network
-// blocked) and honors context cancellation, so bound the context with a deadline
-// and treat wiring it in as the explicit point where you accept running
-// attacker-controlled XSLT.
+// blocked) and uses ctx during parsing, compilation, and invocation. Final
+// serialization into the returned byte buffer does not consult ctx and has no
+// output cap. A production boundary accepting attacker-controlled stylesheets
+// must supply a transformer with cancellation-aware, bounded serialization and
+// explicit resource limits.
 package transform
 
 import (
@@ -42,7 +44,13 @@ import (
 //
 // The zero value is ready to use. It parses the stylesheet and input with
 // helium's default (locked-down) parser and applies the stylesheet with xslt3's
-// hardened defaults, relying on the caller's context deadline for a time bound.
+// hardened defaults. Parsing, compilation, and invocation use ctx, but final
+// serialization into the returned byte buffer remains unbounded and does not
+// consult ctx. It returns the complete output as []byte and does not impose an
+// output-size cap or transform-step budget. Use it for interoperability testing
+// or a controlled profile; a production boundary accepting attacker-controlled
+// stylesheets must inject a caller-supplied transformer with cancellation-aware,
+// bounded serialization and explicit resource limits.
 // See the package documentation for the security responsibilities this carries.
 type XSLT struct{}
 
@@ -53,8 +61,9 @@ var _ xmldsig1.XSLTTransformer = XSLT{}
 // helium.Writer's per-document-child terminators on its direct XML path, so
 // top-level text newlines reaching this adapter are result content and are
 // preserved. Both arguments are the current pipeline octets xmldsig1 hands to
-// the seam; neither is trusted, so ctx should carry a deadline. One Reference
-// may invoke this method multiple times.
+// the seam; neither is trusted. ctx bounds parsing, compilation, and invocation,
+// but not final serialization into the returned byte buffer. One Reference may
+// invoke this method multiple times.
 func (XSLT) TransformXSLT(ctx context.Context, stylesheet, input []byte) ([]byte, error) {
 	ssDoc, err := helium.NewParser().Parse(ctx, stylesheet)
 	if err != nil {
