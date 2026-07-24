@@ -163,6 +163,22 @@ func TestSerializeResultXMLPreservesExplicitTrailingTextNewline(t *testing.T) {
 	require.Equal(t, "<out/>\n", buf.String())
 }
 
+func TestSerializeResultXMLIndentationDiscardsWhitespaceOnlyTopLevelText(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="xml" encoding="iso-8859-1" indent="yes" omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out/><xsl:text>&#10;</xsl:text></xsl:template>
+</xsl:stylesheet>`)
+
+	doc, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	err = xslt3.SerializeResult(&buf, doc, ss.DefaultOutputDef())
+	require.NoError(t, err)
+	require.Equal(t, "\n<out/>", buf.String())
+}
+
 func TestSerializeResultNilOutputDef(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
