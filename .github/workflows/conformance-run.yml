@@ -7,13 +7,14 @@ name: Conformance run
 #
 # Invoked by conformance.yml (nightly/manual entrypoint) and by release.yml
 # (the release-gating xslt30, xmldsig2ed, xmldsig11, and merlinxmldsig runs;
+# xmlenc11 is currently manual because its expectation ledger has known gaps;
 # only xslt30 enables slow tests). Kept as a single source of truth so the
 # checkout/fetch/run logic is not duplicated.
 on:
   workflow_call:
     inputs:
       suite:
-        description: Conformance suite to run (xslt30, qt3, xsd11, xsd10, xml, xmldsig2ed, xmldsig11, merlinxmldsig)
+        description: Conformance suite to run (xslt30, qt3, xsd11, xsd10, xml, xmldsig2ed, xmldsig11, xmlenc11, merlinxmldsig)
         type: string
         default: xslt30
       slow:

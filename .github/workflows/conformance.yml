@@ -5,7 +5,8 @@ name: Conformance
 # fixture sets and, with the performance-gated slow tests enabled, can take many
 # minutes. The actual checkout/fetch/run logic lives in the reusable
 # conformance-run.yml, shared with the release-gating xslt30, xmldsig2ed,
-# xmldsig11, and merlinxmldsig runs; only xslt30 enables slow tests.
+# xmldsig11, and merlinxmldsig runs plus the manual xmlenc11 run; only xslt30
+# enables slow tests.
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +22,7 @@ on:
           - xml
           - xmldsig2ed
           - xmldsig11
+          - xmlenc11
           - merlinxmldsig
       slow:
         description: Run performance-gated slow tests (sets HELIUM_SLOW_TESTS=1)
