@@ -13,8 +13,9 @@ import (
 // ErrNotNodeSet is returned when an expression result is not a node-set.
 var ErrNotNodeSet = errors.New("xpath: result is not a node-set")
 
-// ErrRecursionLimit is returned when expression evaluation exceeds the
-// maximum recursion depth (5000), matching libxml2's XPATH_MAX_RECURSION_DEPTH.
+// ErrRecursionLimit is returned when expression evaluation or static validation
+// exceeds the maximum recursion depth (5000), matching libxml2's
+// XPATH_MAX_RECURSION_DEPTH.
 var ErrRecursionLimit = errors.New("xpath: recursion limit exceeded")
 
 // ErrOpLimit is returned when the operation counter exceeds the limit
@@ -34,6 +35,10 @@ var ErrUnknownFunction = errors.New("xpath: unknown function")
 // ErrUnknownFunctionNamespace is returned when a namespaced function call
 // uses a prefix that cannot be resolved to a namespace URI.
 var ErrUnknownFunctionNamespace = errors.New("xpath: unknown function namespace prefix")
+
+// ErrUnknownNamespacePrefix is returned when a QName name test uses a prefix
+// that cannot be resolved to a namespace URI.
+var ErrUnknownNamespacePrefix = errors.New("xpath: unknown namespace prefix")
 
 // ErrUnsupportedExpr is returned when an unsupported expression type is encountered.
 var ErrUnsupportedExpr = errors.New("xpath: unsupported expression type")
@@ -279,6 +284,16 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 	}
 	ectx := newEvalContextWithConfig(ctx, node, e.cfg)
 	return eval(ctx, ectx, expr.ast)
+}
+
+// Validate checks that every variable, function name, and QName namespace
+// prefix in expr resolves against the Evaluator configuration without
+// evaluating expr.
+func (e Evaluator) Validate(expr *Expression) error {
+	if expr == nil || expr.ast == nil {
+		return ErrNilExpression
+	}
+	return validateStaticExpr(expr.ast, e.cfg, 0)
 }
 
 // Find evaluates a compiled expression and returns the resulting node-set.

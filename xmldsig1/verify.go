@@ -50,6 +50,7 @@ type parsedReference struct {
 	digestAlgorithm string
 	digestValue     []byte
 	transforms      []parsedTransform
+	prepared        *preparedReference
 }
 
 type parsedTransform struct {
@@ -151,6 +152,16 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	// without triggering key resolution or surfacing unrelated key/signature
 	// errors.
 	if err := preflightParsedWeakAlgorithms(parsed, cfg.allowSHA1); err != nil {
+		return nil, err
+	}
+
+	// Compile and statically validate every Reference's XPath-bearing state
+	// before resolving KeyInfo resources or doing any other callback-driven
+	// work. Besides making the prepared state reusable in the digest loop, this
+	// prevents any Reference resolver or XSLT transformer from running when a
+	// later Reference carries an invalid XPath filter or general XPointer
+	// expression.
+	if err := preflightVerifierReferences(ctx, cfg, doc, parsed); err != nil {
 		return nil, err
 	}
 
@@ -262,12 +273,72 @@ func verifyReference(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	return target, external, nil
 }
 
+// preflightVerifierReferences prepares every top-level Reference before the
+// digest loop starts. The pass is deliberately side-effect free: it only
+// interprets transform lists and compiles/validates XPath filter and general
+// XPointer expressions. Resolver and transformer calls remain in the execution
+// path after the complete pass succeeds.
+func preflightVerifierReferences(ctx context.Context, cfg *verifierConfig, doc *helium.Document, parsed *parsedSignature) error {
+	for i := range parsed.references {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		ref := &parsed.references[i]
+		prepared, err := prepareReferenceForVerification(cfg, doc, *ref)
+		if err != nil {
+			return &VerificationError{Reference: i, URI: ref.uri, Err: err}
+		}
+		ref.prepared = prepared
+	}
+	return nil
+}
+
+func prepareReferenceForVerification(cfg *verifierConfig, doc *helium.Document, ref parsedReference) (*preparedReference, error) {
+	steps := make([]transformStep, len(ref.transforms))
+	for i, t := range ref.transforms {
+		steps[i] = transformStep(t)
+	}
+	pipe, err := resolveTransformPipeline(steps)
+	if err != nil {
+		return nil, err
+	}
+
+	prepared := &preparedReference{
+		pipeline:        pipe,
+		hasExplicitC14N: stepsHaveC14N(steps),
+	}
+	if !cfg.allowXPointer {
+		return prepared, nil
+	}
+	if _, _, _, ok := referenceURIForm(ref.uri); ok {
+		return prepared, nil
+	}
+	overrides, expr, matched := parseGeneralXPointer(ref.uri)
+	if !matched {
+		return prepared, nil
+	}
+	prepared.generalXPointer, err = prepareGeneralXPointer(doc, overrides, expr)
+	if err != nil {
+		return nil, err
+	}
+	return prepared, nil
+}
+
 // canonicalizeReference resolves a Reference URI and applies its transform
 // pipeline, returning the resolved target element (nil for an external
 // reference), the canonical octet stream that the DigestValue is computed over,
 // and whether the reference was satisfied externally. It is the shared reference
 // node-set → octet path for the verify digest check.
 func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
+	prepared := ref.prepared
+	if prepared == nil {
+		var err error
+		prepared, err = prepareReferenceForVerification(cfg, doc, ref)
+		if err != nil {
+			return nil, nil, false, err
+		}
+	}
+
 	// A URI that is not one of the four same-document forms is either a general
 	// XPointer (opt-in) or an external reference.
 	if _, _, _, ok := referenceURIForm(ref.uri); !ok {
@@ -275,7 +346,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 		// opted in; otherwise it stays fail-closed as an external reference, so the
 		// default four-form behavior is byte-identical.
 		if cfg.allowXPointer {
-			target, canonical, handled, err := canonicalizeGeneralXPointer(ctx, cfg, doc, sigElem, ref)
+			target, canonical, handled, err := canonicalizeGeneralXPointer(ctx, cfg, doc, sigElem, prepared)
 			if handled {
 				if err != nil {
 					return nil, nil, false, err
@@ -283,6 +354,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 				return target, canonical, false, nil
 			}
 		}
+		ref.prepared = prepared
 		octets, err := resolveExternalReference(ctx, cfg, doc, ref)
 		if err != nil {
 			return nil, nil, false, err
@@ -300,7 +372,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	// the selected node-set.
 	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
 
-	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, wholeDoc, includeComments, ref.transforms)
+	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, wholeDoc, includeComments, prepared.pipeline)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -319,16 +391,7 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 // Reference could declare an unsupported or mis-ordered transform and still verify
 // against the untransformed canonical bytes. When no c14n transform is declared
 // the default node-set->octet conversion is inclusive Canonical XML 1.0.
-func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, transforms []parsedTransform) ([]byte, error) {
-	steps := make([]transformStep, len(transforms))
-	for i, t := range transforms {
-		steps[i] = transformStep(t)
-	}
-	pipe, err := resolveTransformPipeline(steps)
-	if err != nil {
-		return nil, err
-	}
-
+func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, pipe transformPipeline) ([]byte, error) {
 	// The base64 decode transform ends the pipeline with decoded octets that are
 	// digested directly (XMLDSig core §6.6.2): the resolved node-set's XPath 1.0
 	// string-value is base64-decoded and no canonicalization runs afterward.
@@ -360,7 +423,10 @@ func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *hel
 	// concurrent readers and risk leaving the tree corrupted if a restore failed).
 	// None of these paths change when no XSLT transform is present, so a Reference
 	// without XSLT canonicalizes byte-identically.
-	var canonical []byte
+	var (
+		canonical []byte
+		err       error
+	)
 	switch {
 	case len(pipe.xpathFilters) > 0:
 		canonical, err = canonicalizeWithXPathFilters(ctx, doc, target, sigElem, wholeDoc, c14nMethod, pipe)
@@ -395,25 +461,25 @@ func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *hel
 // canonicalizeGeneralXPointer resolves a general XPointer Reference URI (opt-in,
 // XPointer framework: zero+ xmlns() parts then one xpointer(<expr>)) to its
 // single element apex and applies the Reference's transform pipeline over that
-// subtree. handled reports whether ref.uri matched the general XPointer shape at
-// all: when it did not, the caller falls through to external-reference handling;
-// when it did, the returned err (if any) is the fail-closed resolution result.
+// subtree. handled reports whether the prepared state matched the general
+// XPointer shape at all: when it did not, the caller falls through to
+// external-reference handling; when it did, the returned err (if any) is the
+// fail-closed resolution result.
 //
 // The apex is enforced to a SINGLE element (the XSW defense, singleElementApex):
 // an empty node-set is ErrReferenceNotFound and a scattered/multi-element or
 // non-element node-set is ErrAmbiguousReference. The full-XPointer forms include
 // comment nodes, so includeComments is true. here() is NOT registered for a
 // URI-borne XPointer, so an xpointer(here()...) fails closed.
-func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
-	overrides, expr, matched := parseGeneralXPointer(ref.uri)
-	if !matched {
+func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, prepared *preparedReference) (*helium.Element, []byte, bool, error) {
+	if prepared.generalXPointer == nil {
 		return nil, nil, false, nil
 	}
-	target, err := resolveGeneralXPointerTarget(ctx, doc, overrides, expr)
+	target, err := resolvePreparedGeneralXPointerTarget(ctx, doc, prepared.generalXPointer)
 	if err != nil {
 		return nil, nil, true, err
 	}
-	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, false, true, ref.transforms)
+	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, false, true, prepared.pipeline)
 	if err != nil {
 		return nil, nil, true, err
 	}
@@ -432,13 +498,13 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, ref.uri)
 	}
 
-	steps := make([]transformStep, len(ref.transforms))
-	for i, t := range ref.transforms {
-		steps[i] = transformStep(t)
-	}
-	pipe, err := resolveTransformPipeline(steps)
-	if err != nil {
-		return nil, err
+	prepared := ref.prepared
+	if prepared == nil {
+		var err error
+		prepared, err = prepareReferenceForVerification(cfg, doc, ref)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	joined, err := joinReferenceURI(doc.URL(), ref.uri)
@@ -449,7 +515,7 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	if err != nil {
 		return nil, err
 	}
-	preXSLT, err := externalReferenceDigestInput(ctx, octets, pipe, stepsHaveC14N(steps), cfg.parser())
+	preXSLT, err := externalReferenceDigestInput(ctx, octets, prepared.pipeline, prepared.hasExplicitC14N, cfg.parser())
 	if err != nil {
 		return nil, err
 	}
@@ -463,11 +529,11 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 	// transform would silently digest the untransformed octets, bypassing the
 	// fail-closed invariant. The sign path never reaches here with an XSLT step:
 	// preflightSignerTransforms rejects it fail-closed before dereferencing.
-	if pipe.xslt != nil {
+	if prepared.pipeline.xslt != nil {
 		if isNilInterface(cfg.xsltTransformer) {
 			return nil, fmt.Errorf("%w: XSLT transform requires a configured XSLTTransformer", ErrUnsupportedTransform)
 		}
-		return cfg.xsltTransformer.TransformXSLT(ctx, pipe.xslt, preXSLT)
+		return cfg.xsltTransformer.TransformXSLT(ctx, prepared.pipeline.xslt, preXSLT)
 	}
 	return preXSLT, nil
 }

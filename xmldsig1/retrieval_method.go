@@ -17,11 +17,22 @@ import (
 // dereferenced without limit.
 const maxRetrievalMethodDepth = 5
 
+type preparedRetrievalMethod struct {
+	steps    []transformStep
+	pipeline transformPipeline
+}
+
 // resolveRetrievalMethods dereferences every ds:RetrievalMethod child of a
 // ds:KeyInfo element and merges the retrieved certificate material into data
 // before key resolution. It runs as a second, resolution-aware pass after
 // parseKeyInfo (which is value-only): parseKeyInfo cannot dereference because it
 // lacks the document, config, and Signature context.
+//
+// It first prepares every direct RetrievalMethod pipeline and every
+// transform-free same-document RetrievalMethod chain, then executes the cached
+// pipelines only after the complete preparation pass succeeds. Resolver and
+// transformer callbacks therefore never run before all reachable
+// document-resident XPath expressions pass static validation.
 //
 // A RetrievalMethod inherits the same fail-closed / opt-in-resolver / size-cap /
 // base-join posture as an external Reference: a same-document "#id" target is
@@ -32,6 +43,8 @@ const maxRetrievalMethodDepth = 5
 // certificate never trusts it, so the caller's KeySource and out-of-band trust
 // decision still governs an obtained cert exactly as it does an inline one.
 func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *verifierConfig, doc *helium.Document, keyInfoElem *helium.Element, data *KeyInfoData) error {
+	var methods []*helium.Element
+	prepared := make(map[*helium.Element]*preparedRetrievalMethod)
 	for child := keyInfoElem.FirstChild(); child != nil; child = child.NextSibling() {
 		elem, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
@@ -42,13 +55,31 @@ func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *ver
 		if !isDSigCoreNS(elem) || domutil.LocalName(elem) != "RetrievalMethod" {
 			continue
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		visited := make(map[string]struct{})
+		err := prepareRetrievalMethod(ctx, doc, elem, prepared, visited, 0)
+		if err != nil {
+			if cfg.lenientKeyInfo && errors.Is(err, ErrReferenceNotFound) {
+				continue
+			}
+			return err
+		}
+		methods = append(methods, elem)
+	}
+
+	for _, elem := range methods {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// The visited-URI set breaks a cyclic/unbounded RetrievalMethod chain, so
 		// it is scoped to each top-level chain: two independent sibling
 		// RetrievalMethods may legitimately target the same URI, and sharing one
 		// set across siblings would misreport the second as a loop. It flows only
 		// through the recursive processRetrievalMethod calls that follow a chain.
 		visited := make(map[string]struct{})
-		err := processRetrievalMethod(ctx, budget, cfg, doc, elem, data, visited, 0)
+		err := processRetrievalMethod(ctx, budget, cfg, doc, elem, data, prepared, visited, 0)
 		if err == nil {
 			continue
 		}
@@ -68,12 +99,67 @@ func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *ver
 	return nil
 }
 
+// prepareRetrievalMethod compiles and statically validates one RetrievalMethod's
+// transform pipeline without invoking a resolver or transformer callback.
+// Transform-free same-document chains are followed so every reachable
+// document-resident RetrievalMethod is prepared before execution starts.
+func prepareRetrievalMethod(ctx context.Context, doc *helium.Document, rm *helium.Element, prepared map[*helium.Element]*preparedRetrievalMethod, visited map[string]struct{}, depth int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if depth >= maxRetrievalMethodDepth {
+		return fmt.Errorf("%w: chain exceeds %d links", ErrRetrievalMethodLoop, maxRetrievalMethodDepth)
+	}
+	uri, _ := rm.GetAttribute("URI")
+	typ, _ := rm.GetAttribute("Type")
+
+	if _, seen := visited[uri]; seen {
+		return fmt.Errorf("%w: %q revisited", ErrRetrievalMethodLoop, uri)
+	}
+	visited[uri] = struct{}{}
+
+	state, ok := prepared[rm]
+	if !ok {
+		steps, err := parseRetrievalTransforms(rm)
+		if err != nil {
+			return err
+		}
+		pipe, err := resolveTransformPipeline(steps)
+		if err != nil {
+			return err
+		}
+		if pipe.hasEnveloped {
+			return fmt.Errorf("%w: enveloped-signature transform is not valid on a RetrievalMethod", ErrUnsupportedTransform)
+		}
+		state = &preparedRetrievalMethod{steps: steps, pipeline: pipe}
+		prepared[rm] = state
+	}
+
+	if len(state.steps) != 0 {
+		return nil
+	}
+	if _, _, _, sameDocument := referenceURIForm(uri); !sameDocument {
+		return nil
+	}
+	target, err := resolveReference(doc, uri)
+	if err != nil {
+		return err
+	}
+	if !isDSigCoreNS(target) || domutil.LocalName(target) != "RetrievalMethod" {
+		return nil
+	}
+	if typ != "" && typ != TypeRawX509Certificate && typ != TypeX509Data {
+		return fmt.Errorf("%w: unsupported RetrievalMethod Type %q", ErrInvalidKeyInfo, typ)
+	}
+	return prepareRetrievalMethod(ctx, doc, target, prepared, visited, depth+1)
+}
+
 // processRetrievalMethod dereferences a single ds:RetrievalMethod element and
 // merges the obtained certificate material into data. When the target is itself
 // a RetrievalMethod the chain is followed, guarded by a depth cap and a
 // visited-URI set so a cyclic or unbounded chain fails closed with
 // ErrRetrievalMethodLoop.
-func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *verifierConfig, doc *helium.Document, rm *helium.Element, data *KeyInfoData, visited map[string]struct{}, depth int) error {
+func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *verifierConfig, doc *helium.Document, rm *helium.Element, data *KeyInfoData, prepared map[*helium.Element]*preparedRetrievalMethod, visited map[string]struct{}, depth int) error {
 	// depth counts links already followed: the top-level RetrievalMethod enters at
 	// depth 0, so link N is processed at depth N-1. Rejecting depth >=
 	// maxRetrievalMethodDepth lets exactly maxRetrievalMethodDepth links (depths
@@ -90,24 +176,12 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	}
 	visited[uri] = struct{}{}
 
-	// A RetrievalMethod may carry a ds:Transforms just like a Reference; parse and
-	// resolve it as an ordered pipeline so an unsupported or mis-ordered transform
-	// fails closed rather than being silently ignored while the resolved material
-	// is accepted anyway.
-	steps, err := parseRetrievalTransforms(rm)
-	if err != nil {
-		return err
+	state, ok := prepared[rm]
+	if !ok {
+		return fmt.Errorf("%w: RetrievalMethod pipeline was not prepared", ErrInvalidKeyInfo)
 	}
-	pipe, err := resolveTransformPipeline(steps)
-	if err != nil {
-		return err
-	}
-	// The enveloped-signature transform removes the Signature's own subtree from a
-	// node-set; it is meaningless on a RetrievalMethod (which retrieves key
-	// material, not the signed content), so reject it fail-closed.
-	if pipe.hasEnveloped {
-		return fmt.Errorf("%w: enveloped-signature transform is not valid on a RetrievalMethod", ErrUnsupportedTransform)
-	}
+	steps := state.steps
+	pipe := state.pipeline
 
 	// An external URI (not one of the four same-document forms) is dereferenced
 	// only through a configured ReferenceResolver, fail-closed otherwise. The
@@ -156,7 +230,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 		if typ != "" && typ != TypeRawX509Certificate && typ != TypeX509Data {
 			return fmt.Errorf("%w: unsupported RetrievalMethod Type %q", ErrInvalidKeyInfo, typ)
 		}
-		return processRetrievalMethod(ctx, budget, cfg, doc, target, data, visited, depth+1)
+		return processRetrievalMethod(ctx, budget, cfg, doc, target, data, prepared, visited, depth+1)
 	}
 	// Without transforms the resolved element is interpreted directly, keeping the
 	// no-transform behavior byte-identical.

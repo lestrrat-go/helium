@@ -298,6 +298,32 @@ func TestGeneralXPointerResolution(t *testing.T) {
 	})
 }
 
+func TestGeneralXPointerValidatesBeforeXSLT(t *testing.T) {
+	const reference = `<Reference xmlns="http://www.w3.org/2000/09/xmldsig#" URI="#xpointer(/root[true() or $missing])">
+		<Transforms>
+			<Transform Algorithm="http://www.w3.org/TR/1999/REC-xslt-19991116">
+				<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
+					<xsl:template match="/"><out/></xsl:template>
+				</xsl:stylesheet>
+			</Transform>
+		</Transforms>
+		<DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+		<DigestValue>AA==</DigestValue>
+	</Reference>`
+	ref, err := parseReferenceFragment(t, reference)
+	require.NoError(t, err)
+
+	doc := mustParse(t, `<root/>`)
+	transformer := &countingXSLTTransformer{}
+	_, octets, _, err := canonicalizeReference(t.Context(), &verifierConfig{
+		allowXPointer:   true,
+		xsltTransformer: transformer,
+	}, doc, nil, ref)
+	require.ErrorIs(t, err, ErrReferenceNotFound)
+	require.Nil(t, octets)
+	require.Zero(t, transformer.calls.Load(), "XSLT must not run after a statically invalid XPointer")
+}
+
 // TestParseGeneralXPointer covers the XPointer framework URI recognition: which
 // shapes match, the xmlns() overrides, and the circumflex-escape unescaping.
 func TestParseGeneralXPointer(t *testing.T) {

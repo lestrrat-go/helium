@@ -116,13 +116,32 @@ type transformStep struct {
 }
 
 // xpathFilter is a resolved XPath filter transform: an XPath 1.0 boolean
-// expression, the namespace bindings it is evaluated under, and the bearing
+// expression, the namespace bindings it is evaluated under, the bearing
 // ds:XPath element that the here() function resolves to (nil when here() has no
-// bearing node, e.g. the signing path).
+// bearing node, e.g. the signing path), and its statically validated evaluation
+// state.
 type xpathFilter struct {
 	expr     string
 	ns       map[string]string
 	hereNode helium.Node
+	prepared *preparedXPathFilter
+}
+
+type preparedXPathFilter struct {
+	expr *xpath1.Expression
+	eval xpath1.Evaluator
+}
+
+// preparedReference is the side-effect-free state a verifier derives for one
+// Reference before executing any Reference. The transform pipeline owns the
+// compiled XPath filters; generalXPointer owns a compiled URI-borne XPointer
+// when that opt-in form matched. hasExplicitC14N preserves the distinction
+// external-reference processing needs between an explicit c14n step and the
+// pipeline's default C14N 1.0 fill-in.
+type preparedReference struct {
+	pipeline        transformPipeline
+	generalXPointer *preparedGeneralXPointer
+	hasExplicitC14N bool
 }
 
 // transformPipeline is the resolved, algorithm-agnostic result of interpreting a
@@ -237,6 +256,10 @@ func preflightSignerTransforms(cfg *signerConfig) error {
 //
 // The XPath filter transform (TransformXPath) maps a node-set to a node-set and
 // so may appear before the octet-producing transform; each is recorded in order.
+// Once the complete pipeline's ordering is accepted, every XPath filter is
+// compiled and statically validated before the pipeline is returned, so no
+// earlier node-set transform can hide an invalid later filter by producing an
+// empty node-set.
 //
 // The XSLT transform (TransformXSLT) is the one octet-in -> octet-out transform
 // helium interprets: it consumes the pre-XSLT octet stream (the canonicalized
@@ -295,6 +318,13 @@ func resolveTransformPipeline(steps []transformStep) (transformPipeline, error) 
 	// XSLT transform still needs its pre-XSLT octets, so it takes this fill-in too.
 	if p.c14nMethod == "" && !p.base64 {
 		p.c14nMethod = C14N10
+	}
+	for i, f := range p.xpathFilters {
+		prepared, err := prepareXPathFilter(f)
+		if err != nil {
+			return transformPipeline{}, err
+		}
+		p.xpathFilters[i] = prepared
 	}
 	return p, nil
 }
@@ -433,25 +463,41 @@ func newDSigXPathEvaluator(ns map[string]string, hereNode helium.Node, opLimit i
 	return eval.Function("here", hereFunction{node: hereNode})
 }
 
+func prepareXPathFilter(f xpathFilter) (xpathFilter, error) {
+	expr, err := xpath1.Compile("boolean(" + f.expr + ")")
+	if err != nil {
+		return xpathFilter{}, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, f.expr, err)
+	}
+	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
+	if err := eval.Validate(expr); err != nil {
+		return xpathFilter{}, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, f.expr, err)
+	}
+	f.prepared = &preparedXPathFilter{expr: expr, eval: eval}
+	return f, nil
+}
+
 // applyXPathFilter implements the XMLDSig XPath filter transform
 // (http://www.w3.org/TR/1999/REC-xpath-19991116, core §6.6.3): the expression is
 // evaluated once per input node with that node as the context node, under the
 // transform's in-scope namespace bindings, and the node is kept when the result
 // converts to boolean true. The expression is wrapped in fn:boolean so the XPath
 // data-model boolean conversion (a non-empty node-set, a non-zero number, a
-// non-empty string) governs membership. Evaluation runs on the shared bounded
-// evaluator (namespaces, here(), and the OpLimit security bound). A malformed
-// expression or an evaluation error is fail-closed as ErrUnsupportedTransform so
-// a reference never digests an unfiltered node-set.
+// non-empty string) governs membership. Pipeline resolution compiles and
+// statically validates every filter before any transform runs, then stores its
+// bounded evaluator (namespaces, here(), and the OpLimit security bound) for
+// execution. A malformed expression or an evaluation error is fail-closed as
+// ErrUnsupportedTransform so a reference never digests an unfiltered node-set.
 func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) ([]helium.Node, error) {
-	expr, err := xpath1.Compile("boolean(" + f.expr + ")")
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, f.expr, err)
+	if f.prepared == nil {
+		var err error
+		f, err = prepareXPathFilter(f)
+		if err != nil {
+			return nil, err
+		}
 	}
-	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
 	kept := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
-		r, err := eval.Evaluate(ctx, expr, n)
+		r, err := f.prepared.eval.Evaluate(ctx, f.prepared.expr, n)
 		if err != nil {
 			// Preserve the here()-unavailable sentinel as a matchable typed error
 			// rather than flattening it into an ErrUnsupportedTransform string, so a
@@ -1073,6 +1119,13 @@ func xpointerNamespaces(doc *helium.Document, overrides map[string]string) map[s
 	return ns
 }
 
+type preparedGeneralXPointer struct {
+	id         string
+	idSelector bool
+	compiled   *xpath1.Expression
+	eval       xpath1.Evaluator
+}
+
 // singleElementApex enforces the XML Signature Wrapping defense for a general
 // XPointer node-set: it must identify a SINGLE element apex. An empty node-set is
 // ErrReferenceNotFound; a node-set carrying a non-element principal node, or more
@@ -1101,8 +1154,8 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 	return apex, nil
 }
 
-// resolveGeneralXPointerTarget resolves a general XPointer expression to its
-// single element apex.
+// prepareGeneralXPointer validates and compiles a general XPointer expression
+// for later resolution to a single element apex.
 //
 // An id() selector NEVER reaches xpath1's built-in id(): the built-in resolves
 // through Document.GetElementByID, whose ID table overwrites on collision so a
@@ -1112,23 +1165,14 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // duplicate-detecting findElementsByIDUnder, and ANY other use of id() (a
 // parenthesized or embedded id() call the selector parser cannot reduce to a
 // single literal id) is rejected fail-closed rather than handed to the built-in.
-// Every remaining expression is evaluated on the shared bounded evaluator with
-// the merged namespace context, here() disabled (nil bearing node), and the
-// single-apex constraint enforced on the result.
-func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, overrides map[string]string, expr string) (*helium.Element, error) {
+// Every remaining expression is statically validated with the merged namespace
+// context, the shared operation limit, and here() disabled (nil bearing node).
+func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {
 			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q", ErrReferenceNotFound, expr)
 		}
-		matches := findElementsByIDUnder(doc.DocumentElement(), id)
-		switch len(matches) {
-		case 0:
-			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, id)
-		case 1:
-			return matches[0], nil
-		default:
-			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, id, len(matches))
-		}
+		return &preparedGeneralXPointer{id: id, idSelector: true}, nil
 	}
 	if expressionReferencesID(expr) {
 		// id() appears somewhere other than as the whole-expression selector
@@ -1142,7 +1186,26 @@ func resolveGeneralXPointerTarget(ctx context.Context, doc *helium.Document, ove
 		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
 	}
 	eval := newDSigXPathEvaluator(xpointerNamespaces(doc, overrides), nil, defaultXPathOpLimit)
-	nodes, err := eval.Find(ctx, compiled, doc.DocumentElement())
+	if err := eval.Validate(compiled); err != nil {
+		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
+	}
+	return &preparedGeneralXPointer{compiled: compiled, eval: eval}, nil
+}
+
+func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Document, prepared *preparedGeneralXPointer) (*helium.Element, error) {
+	if prepared.idSelector {
+		matches := findElementsByIDUnder(doc.DocumentElement(), prepared.id)
+		switch len(matches) {
+		case 0:
+			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, prepared.id)
+		case 1:
+			return matches[0], nil
+		default:
+			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, prepared.id, len(matches))
+		}
+	}
+
+	nodes, err := prepared.eval.Find(ctx, prepared.compiled, doc.DocumentElement())
 	if err != nil {
 		// Preserve the here()-unavailable sentinel (a URI-borne XPointer has no
 		// ds:XPath bearing node) as a matchable typed error rather than flattening

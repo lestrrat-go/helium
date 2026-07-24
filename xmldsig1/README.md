@@ -118,7 +118,12 @@ each with an optional `#WithComments` variant), the XPath filter transform
 `ds:Transform/XPath` expression once per input node — with that node as the
 context node, under the `XPath` element's in-scope namespace bindings — and keeps
 each node whose result converts to boolean true (XPath 1.0 semantics: no default
-element namespace). The XMLDSig `here()` function (core §6.6.3.1) is available
+element namespace). During `Verify`, every XPath filter across all top-level
+`Reference` chains is compiled and statically validated before any Reference
+resolver or transformer runs, and the prepared state is reused during digest
+execution. An invalid expression therefore fails even when an earlier filter
+produces an empty node-set or an earlier Reference carries XSLT. The XMLDSig
+`here()` function (core §6.6.3.1) is available
 inside an XPath filter expression: it returns the `ds:XPath` element that bears
 the expression, which is what the standard "enveloped signature via `here()`"
 filter uses to omit the enclosing `ds:Signature`. Evaluation runs on a bounded
@@ -177,14 +182,18 @@ by one `xpointer(<expr>)` part, for example
 and, without a `ReferenceResolver`, rejected with `ErrReferenceNotFound`, so
 default verification is unchanged.
 
-When enabled, the `xpointer()` expression is evaluated on the same bounded XPath
-1.0 evaluator (the document element's in-scope namespaces overlaid with the
-`xmlns()` bindings), and its result **must identify a single element** — the XML
-Signature Wrapping defense. An empty node-set is `ErrReferenceNotFound`; a
-node-set selecting more than one element, or a non-element node, is
-`ErrAmbiguousReference`. A literal `xpointer(id('X'))` keeps the same
-duplicate-detecting id resolution the `#id` form uses (never a last-one-wins id
-table). The `here()` function is not available inside a URI-borne XPointer.
+When enabled, every top-level `xpointer()` expression joins the verification-wide
+static preflight before any Reference resolver or transformer runs, and its
+prepared evaluator is reused during digest execution. It uses the same bounded
+XPath 1.0 evaluator (the document element's in-scope namespaces overlaid with the
+`xmlns()` bindings). An unresolved variable, function, or prefix fails with
+`ErrReferenceNotFound` before evaluation. The
+result **must identify a single element** — the XML Signature Wrapping defense.
+An empty node-set is `ErrReferenceNotFound`; a node-set selecting more than one
+element, or a non-element node, is `ErrAmbiguousReference`. A literal
+`xpointer(id('X'))` keeps the same duplicate-detecting id resolution the `#id`
+form uses (never a last-one-wins id table). The `here()` function is not available
+inside a URI-borne XPointer.
 
 ### External references (opt-in)
 
@@ -260,9 +269,14 @@ match their targets. Per §5.1 that is left to the application.
 
 `Verifier.ValidateManifests(true)` opts in to walking those inner references.
 When enabled, after a top-level Manifest-typed reference has itself verified,
-each inner `ds:Reference` is resolved, run through its transform pipeline, and
-digested through the **same fail-closed path** as a top-level reference, and the
-per-reference outcome is reported in `VerifyResult.Manifests`:
+every direct inner `ds:Reference` is parsed and statically prepared before any
+is executed. If preparation succeeds for all of them, each is resolved, run
+through its transform pipeline, and digested through the **same fail-closed
+path** as a top-level reference. If one fails preparation, resolver and
+transformer callbacks do not run for that Manifest; the failing result reports
+the error, and each otherwise prepared peer reports an advisory error wrapping
+the same cause. Per-reference outcomes are reported in
+`VerifyResult.Manifests`:
 
 ```go
 type ManifestResult struct {

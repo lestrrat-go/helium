@@ -169,7 +169,7 @@ func TestXSLTFailClosedWithoutTransformer(t *testing.T) {
 	require.NoError(t, err)
 
 	ref := parsedReference{
-		uri:             "#c1",
+		uri:             referenceURIC1,
 		digestAlgorithm: DigestSHA256,
 		transforms: []parsedTransform{
 			{algorithm: TransformXSLT, stylesheet: []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>`)},
@@ -188,7 +188,7 @@ func TestXSLTFailClosedWithoutTransformer(t *testing.T) {
 func TestXSLTSignPreflightRejected(t *testing.T) {
 	cfg := &signerConfig{
 		references: []ReferenceConfig{
-			{URI: "#c1", DigestAlgorithm: DigestSHA256, Transforms: []Transform{customTransform{uri: TransformXSLT}}},
+			{URI: referenceURIC1, DigestAlgorithm: DigestSHA256, Transforms: []Transform{customTransform{uri: TransformXSLT}}},
 		},
 	}
 	err := preflightSignerTransforms(cfg)
@@ -232,7 +232,7 @@ func TestXSLTTypedNilTransformerFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	ref := parsedReference{
-		uri:             "#c1",
+		uri:             referenceURIC1,
 		digestAlgorithm: DigestSHA256,
 		transforms: []parsedTransform{
 			{algorithm: TransformXSLT, stylesheet: []byte(`<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"/>`)},

@@ -3,7 +3,7 @@ package xpath
 import "errors"
 
 const (
-	// DefaultMaxRecursionDepth is the maximum expression evaluation depth,
+	// DefaultMaxRecursionDepth is the maximum expression processing depth,
 	// matching libxml2's XPATH_MAX_RECURSION_DEPTH.
 	DefaultMaxRecursionDepth = 5000
 

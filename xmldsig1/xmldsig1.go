@@ -430,6 +430,11 @@ func (v Verifier) ReferenceResolver(r ReferenceResolver) Verifier {
 // resolved, transformed, and digested through the same fail-closed pipeline,
 // with the per-reference outcome recorded in [ManifestResult].
 //
+// Every direct inner Reference is parsed and statically prepared before any
+// resolver or transformer callback runs. If one fails preparation, none are
+// executed: the failing [ManifestReference] reports that error, and each
+// otherwise prepared peer reports an advisory error wrapping the same cause.
+//
 // Inner-reference results are ADVISORY: per §5.1 the application decides how to
 // treat a Manifest, so an inner-reference digest mismatch or an unresolved or
 // unsupported inner reference does NOT fail Verify — the top-level Manifest
@@ -524,14 +529,17 @@ func (v Verifier) MaxDecodedBytes(n int) Verifier {
 // and, without a [ReferenceResolver], rejected with [ErrReferenceNotFound], so
 // default verification is byte-identical.
 //
-// When enabled, the xpointer() expression is evaluated on a bounded XPath 1.0
-// evaluator under the document element's in-scope namespaces overlaid with the
-// xmlns() bindings, and its result MUST identify a single element apex — the XML
-// Signature Wrapping defense: an empty node-set is [ErrReferenceNotFound], and a
-// multi-element or non-element node-set is [ErrAmbiguousReference]. A literal
-// xpointer(id('X')) keeps the duplicate-detecting id resolution (never a
-// last-one-wins id table). The XMLDSig here() function is not available inside a
-// URI-borne XPointer.
+// When enabled, every top-level xpointer() expression is compiled and statically
+// validated during the all-Reference preflight before any Reference resolver or
+// transformer runs. Its prepared bounded XPath 1.0 evaluator is reused during
+// digest execution under the document element's in-scope namespaces overlaid
+// with the xmlns() bindings. An unresolved variable, function, or prefix fails
+// with [ErrReferenceNotFound] before evaluation. The result MUST identify a
+// single element apex — the XML Signature Wrapping
+// defense: an empty node-set is [ErrReferenceNotFound], and a multi-element or
+// non-element node-set is [ErrAmbiguousReference]. A literal xpointer(id('X'))
+// keeps the duplicate-detecting id resolution (never a last-one-wins id table).
+// The XMLDSig here() function is not available inside a URI-borne XPointer.
 func (v Verifier) AllowXPointer(allow bool) Verifier {
 	v = v.clone()
 	v.cfg.allowXPointer = allow
