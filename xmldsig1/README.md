@@ -186,10 +186,12 @@ preserves top-level text newlines as result content, including non-UTF-8 XML
 output.
 
 The shipped adapter returns `[]byte` and does not expose an output-size cap or
-transform-step budget. Use it for interoperability testing or a controlled
-profile with a deadline-bearing context. A production boundary that accepts
-attacker-controlled stylesheets should inject a transformer with explicit CPU,
-memory, output, URI, and step limits instead.
+transform-step budget. It uses `ctx` during parsing, compilation, and
+invocation, but final serialization into its in-memory buffer remains unbounded
+and does not consult `ctx`. Use it only for interoperability testing or a
+controlled profile. A production boundary that accepts attacker-controlled
+stylesheets must inject a caller-supplied transformer with cancellation-aware,
+bounded serialization and explicit CPU, memory, output, URI, and step limits.
 
 ### General XPointer references (opt-in)
 
