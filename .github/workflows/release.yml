@@ -28,7 +28,7 @@ on:
         # See RELEASING.md.
         description: helium-w3c-tests (harness) commit/tag to gate against
         type: string
-        default: 594989196668369ed21bac1f8026ef83f5429a1d
+        default: 6c987d8fe551efb4a9171fdb5657a922cff442d3
 
 permissions:
   contents: read
