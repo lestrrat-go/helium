@@ -8,6 +8,13 @@ This is a point-in-time snapshot; regenerate to refresh.
 - helium: `5af7d185`
 - helium-w3c-tests (harness): `6c987d8`
 
+This is current feature evidence for helium commit `5af7d185`, not a
+measurement of the `v0.7.0` release tag. The release tag was measured
+separately in the root [conformance timeline](../CONFORMANCE.md) at 35/37;
+the two expected failures reflect transform behavior that was completed in
+the later feature-evidence commit. The 37/37 result below describes that later
+commit.
+
 | Outcome | Count |
 |---------|------:|
 | Pass | 37 |

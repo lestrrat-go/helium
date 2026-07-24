@@ -66,8 +66,9 @@ candidate and superseded by a real-tag re-measure afterwards. See
 
 ## Conformance gate
 
-A release cannot be tagged/published unless the slow XSLT 3.0 conformance suite
-passes with **0 failures**. The full slow suite is **release-gating, not
+A release cannot be tagged/published unless the XSLT 3.0, XMLDSig2Ed, XMLDSig
+1.1, and Merlin XMLDSig conformance suites pass with **0 failures**. The full
+XSLT suite is **release-gating, not
 PR-gating**: the heavyweight W3C conformance suites are never run on ordinary
 pushes or pull requests (they clone large upstream fixture sets and, with the
 performance-gated slow tests enabled, take many minutes), so they must not block
@@ -75,12 +76,12 @@ day-to-day PR CI.
 
 ### How it is enforced
 
-`.github/workflows/release.yml`'s `conformance-gate` job runs the reusable
-`.github/workflows/conformance-run.yml` with `suite: xslt30` and `slow: true`
-(which sets `HELIUM_SLOW_TESTS=1`). The `release` job declares
-`needs: conformance-gate` and runs *after* the gate, so the tag is created and
-goreleaser runs **only** on a green suite — a red gate stops the workflow before
-any tag exists.
+`.github/workflows/release.yml`'s `conformance-gate` matrix runs the reusable
+`.github/workflows/conformance-run.yml` for `xslt30`, `xmldsig2ed`, `xmldsig11`,
+and `merlinxmldsig`. Only the XSLT entry sets `slow: true`, which enables
+`HELIUM_SLOW_TESTS=1`. The `release` job declares `needs: conformance-gate` and
+runs *after* every matrix entry, so the tag is created and goreleaser runs only
+on a green set of suites.
 
 The reusable run gates on the reported failure **count**: after running the
 suite it reads `<testsuites failures="N">` from the JUnit report and fails the
