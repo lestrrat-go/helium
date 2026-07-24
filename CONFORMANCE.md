@@ -19,11 +19,9 @@ Every tagged release measured **unmodified** against *today's* W3C suites (refer
 | `v0.5.0` | 2026-07-10 | 99.6% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | 99.97% | 99.98% ⚠4 | 54.0% ⚠3 | 27.3% | 18.8% ⚠10 |
 | `v0.5.1` | 2026-07-11 | 99.6% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | 54.0% ⚠3 | 27.3% | 18.8% ⚠10 |
 | `v0.6.0` | 2026-07-20 | 99.5% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | 54.0% ⚠3 | 27.3% | 18.8% ⚠10 |
-| `v0.7.0` ⚑ | 2026-07-24 | 99.5% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | 94.6% ⚠2 | **100%** | **100%** |
+| `v0.7.0` | 2026-07-24 | 99.5% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | 94.6% ⚠2 | **100%** | **100%** |
 
 ✗ hang/OOM crasher · ⊘ in-scope case never run · ⚠ documented expected failure — **all three count as not-passing**.
-
-⚑ measured at an **untagged release candidate** (before its tag existed, e.g. by the release gate); a re-measure at the real tag supersedes it.
 
 ## How a score is computed
 
