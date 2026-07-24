@@ -129,8 +129,7 @@ func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, ou
 			if err := serializeJSONItems(&buf, items, doc, outDef); err != nil {
 				return err
 			}
-			_, err := io.WriteString(w, applyCharMapJSON(buf.String(), outDef.ResolvedCharMap, outDef.NormalizationForm))
-			return err
+			return writeFullString(w, applyCharMapJSON(buf.String(), outDef.ResolvedCharMap, outDef.NormalizationForm))
 		}
 		return serializeJSONItems(w, items, doc, outDef)
 	case methodAdaptive:
@@ -342,7 +341,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		if len(charMap) > 0 {
 			result = applyCharMapToHTMLText(result, charMap, outDef.NormalizationForm)
 		}
-		_, err = io.WriteString(target, escapeC1ControlsInString(result))
+		err = writeFullString(target, escapeC1ControlsInString(result))
 	case methodXHTML:
 		err = serializeXHTML(target, doc, outDef, charMap)
 	case methodJSON:
@@ -355,7 +354,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 		if err != nil {
 			break
 		}
-		_, err = io.WriteString(target, applyCharMapJSON(jsonBuf.String(), charMap, outDef.NormalizationForm))
+		err = writeFullString(target, applyCharMapJSON(jsonBuf.String(), charMap, outDef.NormalizationForm))
 	case methodAdaptive:
 		err = serializeAdaptiveItems(target, nil, doc, outDef.ItemSeparator, validOutputXMLVersion(outDef.Version), outDef.NormalizationForm, charMap)
 	default:
@@ -515,7 +514,7 @@ func nodeStringValue(n helium.Node) string {
 
 func serializeText(w io.Writer, doc *helium.Document, charMap map[rune]string, normalizationForm string) error {
 	// Text output: just write the text content of the document
-	sw := stream.NewWriter(w)
+	sw := stream.NewWriter(shortWriteCheckingWriter{dst: w})
 	var unmapped strings.Builder
 	flushUnmapped := func() error {
 		if unmapped.Len() == 0 {

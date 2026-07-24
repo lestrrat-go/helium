@@ -215,3 +215,89 @@ func TestSerializeItemsJSONReportsShortWrite(t *testing.T) {
 		})
 	}
 }
+
+func TestSerializeItemsJSONPostProcessingReportsShortWrite(t *testing.T) {
+	item := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "alpha"}
+	outDef := &xslt3.OutputDef{
+		Method:          outMethodJSON,
+		ResolvedCharMap: map[rune]string{'a': "A"},
+	}
+
+	requireExactOutputAndShortWrite(t, []byte(`"AlphA"`), 1, func(w io.Writer) error {
+		return xslt3.SerializeItems(w, xpath3.ItemSlice{item}, nil, outDef)
+	})
+}
+
+func TestSerializeResultHTMLCharacterMapReportsShortWrite(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>alpha</root>`))
+	require.NoError(t, err)
+	includeContentType := false
+	outDef := &xslt3.OutputDef{
+		Method:             "html",
+		IncludeContentType: &includeContentType,
+		ResolvedCharMap:    map[rune]string{'a': "A"},
+	}
+
+	requireExactOutputAndShortWrite(t, []byte(`<root>AlphA</root>`), 1, func(w io.Writer) error {
+		return xslt3.SerializeResult(w, doc, outDef)
+	})
+}
+
+func TestSerializeResultJSONCharacterMapReportsShortWrite(t *testing.T) {
+	doc := parseShortWriteDocument(t)
+	outDef := &xslt3.OutputDef{
+		Method:               outMethodJSON,
+		JSONNodeOutputMethod: outMethodXML,
+		ResolvedCharMap:      map[rune]string{'r': "R"},
+	}
+
+	requireExactOutputAndShortWrite(t, []byte(`<?xml veRsion="1.0" encoding="UTF-8"?><Root/>`), 1, func(w io.Writer) error {
+		return xslt3.SerializeResult(w, doc, outDef)
+	})
+}
+
+func TestSerializeResultXHTMLReportsShortWrite(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>alpha</root>`))
+	require.NoError(t, err)
+	includeContentType := false
+	outDef := &xslt3.OutputDef{
+		Method:             outMethodXHTML,
+		OmitDeclaration:    true,
+		IncludeContentType: &includeContentType,
+	}
+
+	requireExactOutputAndShortWrite(t, []byte(`<root>alpha</root>`), 1, func(w io.Writer) error {
+		return xslt3.SerializeResult(w, doc, outDef)
+	})
+}
+
+func TestSerializeResultTextReportsShortWrite(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>alpha</root>`))
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name    string
+		want    string
+		charMap map[rune]string
+	}{
+		{
+			name: "Content",
+			want: "alpha",
+		},
+		{
+			name:    "CharacterMap",
+			want:    "[a]lph[a]",
+			charMap: map[rune]string{'a': "[a]"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			outDef := &xslt3.OutputDef{
+				Method:          "text",
+				ResolvedCharMap: tc.charMap,
+			}
+			requireExactOutputAndShortWrite(t, []byte(tc.want), 1, func(w io.Writer) error {
+				return xslt3.SerializeResult(w, doc, outDef)
+			})
+		})
+	}
+}
