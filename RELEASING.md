@@ -102,9 +102,7 @@ tests on.
 The committed suite summaries under `xmldsig1/` are generated feature evidence
 for the helium and harness commits recorded in each file. They do not represent
 release-tag measurements. Release-tag results belong in `CONFORMANCE.md` and
-`tools/conformance-timeline/`; for example, the `v0.7.0` XMLDSig2Ed row is
-35/37, while `xmldsig1/summary-xmldsig2ed.md` records 37/37 for its later
-feature-evidence commit because the transform behavior was completed there.
+`tools/conformance-timeline/`.
 
 ## The pinned release harness
 
