@@ -52,7 +52,9 @@ const (
 	DigestSHA1   = NamespaceDSig + "sha1"
 	DigestSHA256 = NamespaceXMLEnc + "sha256"
 	DigestSHA384 = NamespaceXMLEnc + "sha384"
-	DigestSHA512 = NamespaceXMLEnc + "sha512"
+	// DigestSHA384DSigMore is the XMLDSig-more SHA-384 URI.
+	DigestSHA384DSigMore = NamespaceDSigMore + "sha384"
+	DigestSHA512         = NamespaceXMLEnc + "sha512"
 )
 
 // MGF algorithm URIs.

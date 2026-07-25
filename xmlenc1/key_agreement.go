@@ -32,6 +32,11 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 	if ek.EncryptionMethod == nil {
 		return nil, fmt.Errorf("%w: EncryptedKey missing EncryptionMethod", ErrMalformedEncrypted)
 	}
+	switch ek.EncryptionMethod.Algorithm {
+	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
+	default:
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: ek.EncryptionMethod.Algorithm})
+	}
 	kekSize, err := keySizeForAlgorithm(ek.EncryptionMethod.Algorithm)
 	if err != nil {
 		return nil, err
@@ -130,7 +135,7 @@ func concatKDFHash(uri string) (func() hash.Hash, error) {
 		return sha1.New, nil
 	case DigestSHA256:
 		return sha256.New, nil
-	case DigestSHA384:
+	case DigestSHA384, DigestSHA384DSigMore:
 		return sha512.New384, nil
 	case DigestSHA512:
 		return sha512.New, nil
