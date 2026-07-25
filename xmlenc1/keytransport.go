@@ -8,6 +8,7 @@ import (
 
 	_ "crypto/sha1"   // register SHA-1 for crypto.Hash.New (OAEP digest/MGF)
 	_ "crypto/sha256" // register SHA-256 for crypto.Hash.New (OAEP digest/MGF)
+	_ "crypto/sha512" // register SHA-384/SHA-512 for crypto.Hash.New (OAEP digest/MGF)
 )
 
 func encryptSessionKey(algorithm string, pub *rsa.PublicKey, sessionKey []byte, oaepDigest, oaepMGF string, oaepParams []byte) ([]byte, error) {
@@ -85,6 +86,10 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 		digestHash = crypto.SHA1
 	case DigestSHA256:
 		digestHash = crypto.SHA256
+	case DigestSHA384:
+		digestHash = crypto.SHA384
+	case DigestSHA512:
+		digestHash = crypto.SHA512
 	default:
 		return 0, 0, &UnsupportedAlgorithmError{Algorithm: digest}
 	}
@@ -115,6 +120,10 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 			mgfHash = crypto.SHA1
 		case MGFSHA256:
 			mgfHash = crypto.SHA256
+		case MGFSHA384:
+			mgfHash = crypto.SHA384
+		case MGFSHA512:
+			mgfHash = crypto.SHA512
 		default:
 			return 0, 0, &UnsupportedAlgorithmError{Algorithm: mgf}
 		}

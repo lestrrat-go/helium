@@ -18,6 +18,8 @@ func TestKeySize(t *testing.T) {
 		}{
 			{"aes256-gcm with 16-byte key", xmlenc1.AES256GCM, 16, false},
 			{"aes128-gcm with 32-byte key", xmlenc1.AES128GCM, 32, false},
+			{"aes192-gcm with 16-byte key", xmlenc1.AES192GCM11, 16, false},
+			{"aes128-gcm 1.1 with 32-byte key", xmlenc1.AES128GCM11, 32, false},
 			{"aes256-cbc with 16-byte key", xmlenc1.AES256CBC, 16, true},
 			{"aes128-cbc with 24-byte key", xmlenc1.AES128CBC, 24, true},
 		} {
@@ -100,7 +102,10 @@ func TestKeySize(t *testing.T) {
 			cbc  bool
 		}{
 			{"aes128-gcm", xmlenc1.AES128GCM, 16, false},
+			{"aes128-gcm 1.1", xmlenc1.AES128GCM11, 16, false},
+			{"aes192-gcm 1.1", xmlenc1.AES192GCM11, 24, false},
 			{"aes256-gcm", xmlenc1.AES256GCM, 32, false},
+			{"aes256-gcm 1.1", xmlenc1.AES256GCM11, 32, false},
 			{"aes128-cbc", xmlenc1.AES128CBC, 16, true},
 			{"aes256-cbc", xmlenc1.AES256CBC, 32, true},
 		} {

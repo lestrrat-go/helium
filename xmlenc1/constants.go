@@ -10,6 +10,10 @@ const (
 
 	// NamespaceDSig is the XML Digital Signatures namespace (for KeyInfo).
 	NamespaceDSig = "http://www.w3.org/2000/09/xmldsig#"
+
+	// NamespaceDSigMore contains the additional XML Digital Signature
+	// algorithm identifiers used by XML Encryption.
+	NamespaceDSigMore = "http://www.w3.org/2001/04/xmldsig-more#"
 )
 
 // Block encryption algorithm URIs.
@@ -18,6 +22,12 @@ const (
 	AES256CBC = NamespaceXMLEnc + "aes256-cbc"
 	AES128GCM = NamespaceXMLEnc + "aes128-gcm"
 	AES256GCM = NamespaceXMLEnc + "aes256-gcm"
+
+	// XML Encryption 1.1 GCM identifiers. The 1.1 identifiers are distinct
+	// from the legacy XML Encryption namespace identifiers above.
+	AES128GCM11 = NamespaceXMLEnc11 + "aes128-gcm"
+	AES192GCM11 = NamespaceXMLEnc11 + "aes192-gcm"
+	AES256GCM11 = NamespaceXMLEnc11 + "aes256-gcm"
 )
 
 // Key transport algorithm URIs.
@@ -36,12 +46,16 @@ const (
 const (
 	DigestSHA1   = NamespaceDSig + "sha1"
 	DigestSHA256 = NamespaceXMLEnc + "sha256"
+	DigestSHA384 = NamespaceDSigMore + "sha384"
+	DigestSHA512 = NamespaceXMLEnc + "sha512"
 )
 
 // MGF algorithm URIs.
 const (
 	MGFSHA1   = NamespaceXMLEnc11 + "mgf1sha1"
 	MGFSHA256 = NamespaceXMLEnc11 + "mgf1sha256"
+	MGFSHA384 = NamespaceXMLEnc11 + "mgf1sha384"
+	MGFSHA512 = NamespaceXMLEnc11 + "mgf1sha512"
 )
 
 // Encryption type URIs.

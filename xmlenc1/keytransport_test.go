@@ -39,20 +39,33 @@ func TestRSAOAEP(t *testing.T) {
 		require.Contains(t, s, "user@example.com")
 	})
 
-	t.Run("encrypt unsupported digest errors", func(t *testing.T) {
-		key := generateRSAKey(t)
-		doc := mustParseXML(t, samlAssertion)
+	t.Run("oaep11 sha384 and sha512 round-trip", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			digest string
+		}{
+			{name: "sha384", digest: xmlenc1.DigestSHA384},
+			{name: "sha512", digest: xmlenc1.DigestSHA512},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				key := generateRSAKey(t)
+				doc := mustParseXML(t, samlAssertion)
 
-		encryptor := xmlenc1.NewEncryptor().
-			BlockAlgorithm(xmlenc1.AES256GCM).
-			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
-			OAEPDigest("http://www.w3.org/2001/04/xmlenc#sha512").
-			RecipientPublicKey(&key.PublicKey)
+				encryptor := xmlenc1.NewEncryptor().
+					BlockAlgorithm(xmlenc1.AES256GCM11).
+					KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+					OAEPDigest(tc.digest).
+					OAEPMGF(xmlenc1.MGFSHA1).
+					RecipientPublicKey(&key.PublicKey)
 
-		_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
-		require.Error(t, err)
-		var unsupp *xmlenc1.UnsupportedAlgorithmError
-		require.ErrorAs(t, err, &unsupp)
+				edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+				require.NoError(t, err)
+
+				nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+				require.NoError(t, err)
+				require.Len(t, nodes, 1)
+			})
+		}
 	})
 
 	t.Run("oaep11 distinct digest and MGF hash round-trip", func(t *testing.T) {
@@ -175,7 +188,7 @@ func TestRSAOAEP(t *testing.T) {
 		// re-parse and attempt to decrypt: it must error, not fall back.
 		xml, err := helium.WriteString(doc)
 		require.NoError(t, err)
-		tampered := strings.Replace(xml, xmlenc1.DigestSHA256, "http://www.w3.org/2001/04/xmlenc#sha512", 1)
+		tampered := strings.Replace(xml, xmlenc1.DigestSHA256, "urn:example:unsupported-digest", 1)
 		require.NotEqual(t, xml, tampered)
 
 		_ = edElem
