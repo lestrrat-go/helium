@@ -114,7 +114,7 @@ func concatKDFOtherInfo(params *ConcatKDFParams) ([]byte, error) {
 	bitOffset := 0
 	for _, field := range fields {
 		bitCount := len(field.value)*8 - int(field.unusedBits)
-		for i := 0; i < bitCount; i++ {
+		for i := range bitCount {
 			if field.value[i/8]&(1<<uint(7-i%8)) != 0 {
 				otherInfo[bitOffset/8] |= 1 << uint(7-bitOffset%8)
 			}
