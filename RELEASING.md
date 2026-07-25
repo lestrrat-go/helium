@@ -53,14 +53,6 @@ Every release must appear in the committed cross-release conformance timeline
 of *today's* W3C suites each tagged release passes. The `timeline-presence` job in
 `release.yml` fails the release unless `version` already has a row in `data.json`.
 
-This gate exists because **v0.6.0 was released without a timeline row** — the tag
-was cut after the timeline's last regeneration, so the release shipped absent from
-its own conformance history and the gap was only noticed later. Requiring the row
-up front (measured against the exact release commit, step 2 above) keeps the
-timeline complete by construction: a release cannot be published until it has been
-measured. The check is a fast metadata read, so it runs before the multi-minute
-slow suite and fails in seconds when the row is missing.
-
 The row is seeded from an *untagged* measurement (`run.sh --ref <sha> --as vX.Y.Z`)
 because the tag does not exist at dispatch time; it is marked as a release
 candidate and superseded by a real-tag re-measure afterwards. See
