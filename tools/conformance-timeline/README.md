@@ -97,9 +97,8 @@ The harness skips 481 slow XSLT cases (streaming, heavy source docs) unless
 `HELIUM_SLOW_TESTS=1`. These are **not** inapplicable — they are simply not run — so
 they must not vanish from the denominator.
 
-helium started actually running them in **v0.4.0** (PR #1015, 2026-07-03), the first
-release to ship `xslt3/results-xslt30-slow.xml`. Both scripts detect that cutoff from
-the release's own content rather than hardcoding a tag:
+Both scripts detect that cutoff from the release's own content rather than
+hardcoding a tag:
 
 - **v0.4.0 and later** are measured *with* `HELIUM_SLOW_TESTS=1`, so the 481 cases get
   real verdicts (all pass: 12,827 / 0 fail / 300 skip, matching `xslt3/CONFORMANCE.md`).
