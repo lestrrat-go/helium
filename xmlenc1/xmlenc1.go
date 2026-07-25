@@ -2,6 +2,7 @@ package xmlenc1
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
@@ -314,6 +315,7 @@ const DefaultMaxEncryptedKeys = 100
 // decryptConfig holds the configuration for a Decryptor.
 type decryptConfig struct {
 	privateKey              *rsa.PrivateKey
+	ecPrivateKey            *ecdsa.PrivateKey
 	keyEncryptionKey        []byte
 	sessionKey              []byte
 	allowUnauthenticatedCBC bool
@@ -343,6 +345,14 @@ func (d Decryptor) clone() Decryptor {
 func (d Decryptor) PrivateKey(key *rsa.PrivateKey) Decryptor {
 	d = d.clone()
 	d.cfg.privateKey = key
+	return d
+}
+
+// ECPrivateKey sets the elliptic-curve private key used for XML Encryption
+// 1.1 ECDH-ES key agreement.
+func (d Decryptor) ECPrivateKey(key *ecdsa.PrivateKey) Decryptor {
+	d = d.clone()
+	d.cfg.ecPrivateKey = key
 	return d
 }
 
@@ -395,6 +405,64 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 // Decrypt decrypts an EncryptedData element and returns the decrypted nodes.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
 	return decryptElement(ctx, d.cfg, elem)
+}
+
+// DecryptBytes decrypts an EncryptedData element and returns its plaintext
+// octets without parsing them as XML. It is used for EncryptedData values whose
+// Type is an application-defined binary payload.
+func (d Decryptor) DecryptBytes(ctx context.Context, elem *helium.Element) ([]byte, error) {
+	return decryptBytes(ctx, d.cfg, elem)
+}
+
+func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]byte, error) {
+	ed, err := parseEncryptedData(elem)
+	if err != nil {
+		return nil, err
+	}
+	if ed.EncryptionMethod == nil {
+		return nil, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted)
+	}
+	alg := ed.EncryptionMethod.Algorithm
+	switch alg {
+	case AES128CBC, AES256CBC:
+		if !cfg.allowUnauthenticatedCBC {
+			return nil, ErrCBCRequiresOptIn
+		}
+	}
+
+	if len(cfg.sessionKey) > 0 {
+		return decryptCipherValue(ed, alg, cfg.sessionKey)
+	}
+	keys := ed.effectiveEncryptedKeys()
+	if len(keys) == 0 {
+		return nil, ErrMissingKey
+	}
+	maxKeys := cfg.maxEncryptedKeys
+	if maxKeys == 0 {
+		maxKeys = DefaultMaxEncryptedKeys
+	}
+	if maxKeys >= 0 && len(keys) > maxKeys {
+		return nil, ErrTooManyEncryptedKeys
+	}
+
+	var lastErr error
+	for _, ek := range keys {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek)
+		if err != nil {
+			lastErr = preferInformativeErr(lastErr, err)
+			continue
+		}
+		plaintext, err := decryptCipherValue(ed, alg, sessionKey)
+		if err != nil {
+			lastErr = preferInformativeErr(lastErr, err)
+			continue
+		}
+		return plaintext, nil
+	}
+	return nil, lastErr
 }
 
 func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
@@ -508,16 +576,8 @@ func preferInformativeErr(existing, candidate error) error {
 // pipeline succeeds, so a caller iterating session-key candidates can
 // safely fall through to the next candidate on any error.
 func finishDecrypt(ctx context.Context, ed *EncryptedData, elem *helium.Element, alg string, isContent bool, sessionKey []byte) ([]helium.Node, error) {
-	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue)
+	plaintext, err := decryptCipherValue(ed, alg, sessionKey)
 	if err != nil {
-		// Squash all decryption errors to the same sentinel — and
-		// crucially, the same string — so callers cannot distinguish
-		// "bad padding" from "bad cipher" from "downstream parse"
-		// when CBC is in use. GCM authenticates so this collapse is
-		// safe there too.
-		if errors.Is(err, ErrDecryptionFailed) || errors.Is(err, ErrInvalidPadding) {
-			return nil, ErrDecryptionFailed
-		}
 		return nil, err
 	}
 
@@ -589,6 +649,21 @@ func finishDecrypt(ctx context.Context, ed *EncryptedData, elem *helium.Element,
 	return nodes, nil
 }
 
+func decryptCipherValue(ed *EncryptedData, alg string, sessionKey []byte) ([]byte, error) {
+	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue)
+	if err == nil {
+		return plaintext, nil
+	}
+	// Squash all decryption errors to the same sentinel — and crucially, the
+	// same string — so callers cannot distinguish "bad padding" from "bad
+	// cipher" from "downstream parse" when CBC is in use. GCM authenticates
+	// so this collapse is safe there too.
+	if errors.Is(err, ErrDecryptionFailed) || errors.Is(err, ErrInvalidPadding) {
+		return nil, ErrDecryptionFailed
+	}
+	return nil, err
+}
+
 // newHardenedInnerParser returns the helium parser used to parse the
 // decrypted plaintext of an EncryptedData element. Decrypted bytes are
 // attacker-controlled (an attacker who can submit ciphertexts to a
@@ -607,6 +682,12 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]
 	}
 
 	alg := ek.EncryptionMethod.Algorithm
+	if ek.AgreementMethod != nil {
+		if cfg.ecPrivateKey == nil {
+			return nil, ErrMissingKey
+		}
+		return decryptECDHSessionKey(cfg.ecPrivateKey, ek)
+	}
 	switch alg {
 	case RSAOAEP, RSAOAEP11:
 		if cfg.privateKey == nil {
