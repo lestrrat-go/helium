@@ -23,8 +23,9 @@ const (
 	AES128GCM = NamespaceXMLEnc + "aes128-gcm"
 	AES256GCM = NamespaceXMLEnc + "aes256-gcm"
 
-	// XML Encryption 1.1 GCM identifiers. The 1.1 identifiers are distinct
-	// from the legacy XML Encryption namespace identifiers above.
+	// AES128GCM11 and related constants are XML Encryption 1.1 GCM
+	// identifiers. The 1.1 identifiers are distinct from the legacy XML
+	// Encryption namespace identifiers above.
 	AES128GCM11 = NamespaceXMLEnc11 + "aes128-gcm"
 	AES192GCM11 = NamespaceXMLEnc11 + "aes192-gcm"
 	AES256GCM11 = NamespaceXMLEnc11 + "aes256-gcm"
