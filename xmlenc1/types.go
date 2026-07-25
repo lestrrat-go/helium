@@ -71,7 +71,8 @@ type KeyDerivationMethod struct {
 }
 
 // ConcatKDFParams contains the XML Encryption 1.1 ConcatKDF parameters.
-// The parameter attributes are decoded from their hexBinary representation.
+// The parameter attributes are decoded from their hexBinary representation;
+// their unused-bit counts are retained internally for KDF bit-string packing.
 type ConcatKDFParams struct {
 	AlgorithmID  []byte
 	PartyUInfo   []byte
@@ -79,6 +80,12 @@ type ConcatKDFParams struct {
 	SuppPubInfo  []byte
 	SuppPrivInfo []byte
 	DigestMethod string
+
+	algorithmIDUnusedBits  uint8
+	partyUInfoUnusedBits   uint8
+	partyVInfoUnusedBits   uint8
+	suppPubInfoUnusedBits  uint8
+	suppPrivInfoUnusedBits uint8
 }
 
 // ECKeyValue contains an XML Signature 1.1 elliptic-curve public key.

@@ -69,14 +69,10 @@ func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) 
 	if err != nil {
 		return nil, err
 	}
-	otherInfo := make([]byte, 0,
-		len(params.AlgorithmID)+len(params.PartyUInfo)+len(params.PartyVInfo)+
-			len(params.SuppPubInfo)+len(params.SuppPrivInfo))
-	otherInfo = append(otherInfo, params.AlgorithmID...)
-	otherInfo = append(otherInfo, params.PartyUInfo...)
-	otherInfo = append(otherInfo, params.PartyVInfo...)
-	otherInfo = append(otherInfo, params.SuppPubInfo...)
-	otherInfo = append(otherInfo, params.SuppPrivInfo...)
+	otherInfo, err := concatKDFOtherInfo(params)
+	if err != nil {
+		return nil, err
+	}
 
 	result := make([]byte, 0, keySize)
 	for counter := uint32(1); len(result) < keySize; counter++ {
@@ -92,6 +88,40 @@ func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) 
 		}
 	}
 	return result[:keySize], nil
+}
+
+func concatKDFOtherInfo(params *ConcatKDFParams) ([]byte, error) {
+	fields := []struct {
+		value      []byte
+		unusedBits uint8
+	}{
+		{value: params.AlgorithmID, unusedBits: params.algorithmIDUnusedBits},
+		{value: params.PartyUInfo, unusedBits: params.partyUInfoUnusedBits},
+		{value: params.PartyVInfo, unusedBits: params.partyVInfoUnusedBits},
+		{value: params.SuppPubInfo, unusedBits: params.suppPubInfoUnusedBits},
+		{value: params.SuppPrivInfo, unusedBits: params.suppPrivInfoUnusedBits},
+	}
+
+	totalBits := 0
+	for _, field := range fields {
+		if int(field.unusedBits) > len(field.value)*8 {
+			return nil, fmt.Errorf("%w: invalid ConcatKDF bitstring", ErrMalformedEncrypted)
+		}
+		totalBits += len(field.value)*8 - int(field.unusedBits)
+	}
+
+	otherInfo := make([]byte, (totalBits+7)/8)
+	bitOffset := 0
+	for _, field := range fields {
+		bitCount := len(field.value)*8 - int(field.unusedBits)
+		for i := 0; i < bitCount; i++ {
+			if field.value[i/8]&(1<<uint(7-i%8)) != 0 {
+				otherInfo[bitOffset/8] |= 1 << uint(7-bitOffset%8)
+			}
+			bitOffset++
+		}
+	}
+	return otherInfo, nil
 }
 
 func concatKDFHash(uri string) (func() hash.Hash, error) {

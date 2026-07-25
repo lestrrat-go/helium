@@ -695,7 +695,7 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]
 		}
 		return decryptSessionKey(alg, cfg.privateKey, ek.CipherValue,
 			ek.EncryptionMethod.DigestMethod, ek.EncryptionMethod.MGFAlgorithm, ek.EncryptionMethod.OAEPParams)
-	case AES128KeyWrap, AES256KeyWrap:
+	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
 		if len(cfg.keyEncryptionKey) == 0 {
 			return nil, ErrMissingKey
 		}

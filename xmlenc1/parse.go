@@ -227,16 +227,17 @@ func parseConcatKDFParams(elem *helium.Element) (*ConcatKDFParams, error) {
 	params := &ConcatKDFParams{}
 	var err error
 	for _, field := range []struct {
-		name string
-		dest *[]byte
+		name       string
+		dest       *[]byte
+		unusedBits *uint8
 	}{
-		{name: "AlgorithmID", dest: &params.AlgorithmID},
-		{name: "PartyUInfo", dest: &params.PartyUInfo},
-		{name: "PartyVInfo", dest: &params.PartyVInfo},
-		{name: "SuppPubInfo", dest: &params.SuppPubInfo},
-		{name: "SuppPrivInfo", dest: &params.SuppPrivInfo},
+		{name: "AlgorithmID", dest: &params.AlgorithmID, unusedBits: &params.algorithmIDUnusedBits},
+		{name: "PartyUInfo", dest: &params.PartyUInfo, unusedBits: &params.partyUInfoUnusedBits},
+		{name: "PartyVInfo", dest: &params.PartyVInfo, unusedBits: &params.partyVInfoUnusedBits},
+		{name: "SuppPubInfo", dest: &params.SuppPubInfo, unusedBits: &params.suppPubInfoUnusedBits},
+		{name: "SuppPrivInfo", dest: &params.SuppPrivInfo, unusedBits: &params.suppPrivInfoUnusedBits},
 	} {
-		*field.dest, err = parseConcatKDFHexAttribute(elem, field.name)
+		*field.dest, *field.unusedBits, err = parseConcatKDFHexAttribute(elem, field.name)
 		if err != nil {
 			return nil, err
 		}
@@ -260,20 +261,20 @@ func parseConcatKDFParams(elem *helium.Element) (*ConcatKDFParams, error) {
 	return params, nil
 }
 
-func parseConcatKDFHexAttribute(elem *helium.Element, name string) ([]byte, error) {
+func parseConcatKDFHexAttribute(elem *helium.Element, name string) ([]byte, uint8, error) {
 	value, ok := elem.GetAttribute(name)
 	if !ok || strings.TrimSpace(value) == "" {
-		return nil, nil
+		return nil, 0, nil
 	}
 	value = strings.TrimSpace(value)
 	decoded, err := hex.DecodeString(value)
 	if err != nil || len(decoded) == 0 {
-		return nil, fmt.Errorf("%w: invalid ConcatKDF %s", ErrMalformedEncrypted, name)
+		return nil, 0, fmt.Errorf("%w: invalid ConcatKDF %s", ErrMalformedEncrypted, name)
 	}
-	if decoded[0] != 0 {
-		return nil, fmt.Errorf("%w: non-byte-aligned ConcatKDF %s is not supported", ErrMalformedEncrypted, name)
+	if decoded[0] > 7 || (len(decoded) == 1 && decoded[0] != 0) {
+		return nil, 0, fmt.Errorf("%w: invalid ConcatKDF %s", ErrMalformedEncrypted, name)
 	}
-	return decoded[1:], nil
+	return decoded[1:], decoded[0], nil
 }
 
 func parseOriginatorKeyInfo(elem *helium.Element) (*ECKeyValue, error) {
