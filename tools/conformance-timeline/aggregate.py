@@ -38,10 +38,11 @@ def git_out(*args):
 RESULTS = os.path.join(HERE, "results")
 CRASHERS = os.path.join(HERE, "crashers")
 SUITES = ["xml", "xsd10", "xsd11", "xslt30", "qt3",
-          "xmldsig2ed", "xmldsig11", "merlinxmldsig"]
+          "xmldsig2ed", "xmldsig11", "xmlenc11", "merlinxmldsig"]
 SUITE_LABEL = {"xml": "XML 1.0/1.1", "xsd10": "XSD 1.0", "xsd11": "XSD 1.1",
                "xslt30": "XSLT 3.0", "qt3": "XPath/XQuery (QT3)",
                "xmldsig2ed": "XMLDSig 2ed interop", "xmldsig11": "XMLDSig 1.1 interop",
+               "xmlenc11": "XML Encryption 1.1 interop",
                "merlinxmldsig": "XMLDSig merlin baseline"}
 REFERENCE_TAG = "v4"  # placeholder; resolved to the newest tag below
 

@@ -23,14 +23,14 @@
 # Prereqs
 # -------
 #   * sibling ../helium-w3c-tests checkout, clean, with fixtures fetched:
-#       (cd ../helium-w3c-tests && go run ./cmd/w3cgen fetch qt3 xslt30 xsd11 xml)
+#       (cd ../helium-w3c-tests && go run ./cmd/w3cgen fetch qt3 xslt30 xsd11 xml xmlenc11)
 #   * python3 (for aggregate.py)
 #
 # Usage: tools/conformance-timeline/run.sh [--force] [--suites "a b"] [tag ...]
 #        tools/conformance-timeline/run.sh --ref <committish> --as vX.Y.Z [--suites ...]
 #   --force          re-run even if a cached summary exists
 #   --suites "..."   subset of: xml xsd10 xsd11 xslt30 qt3 xmldsig2ed xmldsig11
-#                    merlinxmldsig  (default: all)
+#                    xmlenc11 merlinxmldsig  (default: all)
 #   tag ...          restrict to specific tags (default: all v* tags)
 #   --ref <c> --as vX.Y.Z
 #                    measure an UNTAGGED committish (e.g. a release candidate)
@@ -44,14 +44,14 @@ set -euo pipefail
 
 HELIUM_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 MAIN_ROOT="$(cd "$(git -C "$HELIUM_ROOT" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
-HARNESS="$(cd "$MAIN_ROOT/.." && pwd)/helium-w3c-tests"
+HARNESS="${HELIUM_W3C_TESTS_ROOT:-$(cd "$MAIN_ROOT/.." && pwd)/helium-w3c-tests}"
 OUTDIR="$HELIUM_ROOT/tools/conformance-timeline"
 RESULTS="$OUTDIR/results"
 ADAPTERS="$OUTDIR/harness-adapters"
 WTROOT="$MAIN_ROOT/.worktrees"
 HWTROOT="$HARNESS/.worktrees"
 
-FORCE=0; SUITES="xml xsd10 xsd11 xslt30 qt3 xmldsig2ed xmldsig11 merlinxmldsig"; ONLY_TAGS=""
+FORCE=0; SUITES="xml xsd10 xsd11 xslt30 qt3 xmldsig2ed xmldsig11 xmlenc11 merlinxmldsig"; ONLY_TAGS=""
 REF=""; ASLABEL=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -105,15 +105,20 @@ for tag in $TAGS; do
   fi
 
   # Harness worktree: unmodified when no adapter patch exists for this tag,
-  # patched otherwise. The reference tag is NOT special-cased: the xmldsig
+  # patched otherwise. XML Encryption-only runs select the suite-specific
+  # adapter so unrelated historical API adapters cannot block the measurement.
+  # The reference tag is NOT special-cased: the xmldsig
   # harness API postdates every tagged release, so even the newest tag carries
   # an xmldsig-only adapter (it degrades the missing key-resolution so those
   # cases fail honestly). A patch touches only the suites a tag needs adapting.
   patch="$ADAPTERS/$tag.patch"
+  if [ "$SUITES" = "xmlenc11" ]; then
+    patch="$ADAPTERS/$tag-xmlenc11.patch"
+  fi
   if [ ! -f "$patch" ]; then
     hbase="$HARNESS"
   else
-    hbase="$HWTROOT/adapt-$tag"
+    hbase="$HWTROOT/adapt-$tag-${SUITES// /-}"
     if [ ! -d "$hbase" ]; then
       git -C "$HARNESS" worktree add -q --detach "$hbase" HEAD
       git -C "$hbase" apply "$patch"
@@ -123,7 +128,7 @@ for tag in $TAGS; do
   fi
 
   work="$RESULTS/$tag.work"
-  printf 'go %s\nuse %s\nreplace github.com/lestrrat-go/helium => %s\n' "$GO_MINOR" "$hbase" "$hwt" > "$work"
+  printf 'go %s\nuse %s\nreplace github.com/lestrrat-go/helium v0.0.0 => %s\n' "$GO_MINOR" "$hbase" "$hwt" > "$work"
 
   for suite in $SUITES; do
     case "$suite" in
@@ -134,6 +139,7 @@ for tag in $TAGS; do
       xml)           ROOTNAME=TestXMLW3C ;;
       xmldsig2ed)    ROOTNAME=TestXMLDSig2EdW3C ;;
       xmldsig11)     ROOTNAME=TestXMLDSig11W3C ;;
+      xmlenc11)      ROOTNAME=TestXMLEnc11W3C ;;
       merlinxmldsig) ROOTNAME=TestMerlinXMLDSigW3C ;;
       *) echo "unknown suite $suite" >&2; continue ;;
     esac

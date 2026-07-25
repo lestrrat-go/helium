@@ -21,12 +21,14 @@ COLORS = {
     "qt3":           "#1baf7a",
     "xmldsig2ed":    "#d1342f",
     "xmldsig11":     "#6d4bd8",
+    "xmlenc11":      "#0b7a75",
     "merlinxmldsig": "#a06a30",
 }
 
 SHORT = {"xml": "XML", "xsd10": "XSD 1.0", "xsd11": "XSD 1.1",
          "xslt30": "XSLT 3.0", "qt3": "QT3 (XPath/XQuery)",
          "xmldsig2ed": "XMLDSig 2ed", "xmldsig11": "XMLDSig 1.1",
+         "xmlenc11": "XML Encryption 1.1",
          "merlinxmldsig": "XMLDSig merlin"}
 
 W, H = 900, 720
