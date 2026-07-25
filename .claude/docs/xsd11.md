@@ -6,7 +6,8 @@ Version-resolution rules and the `SkipDatatypeIntegrityChecks` contract that gat
 
 Convention across all sub-docs: **version-INDEPENDENT** rules run in both 1.0 and 1.1; all others are `Version11`-gated with the 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the governing rule and its conformance evidence.
 
-XSD 1.1 is fully implemented (967/0 on the W3C suite). Sub-docs by area:
+XSD 1.1 is fully implemented. The committed W3C conformance snapshot reports
+**1,049 pass / 0 skip / 0 fail** in `xsd/summary-xsd11.md`. Sub-docs by area:
 
 | Sub-doc | Covers |
 |---------|--------|

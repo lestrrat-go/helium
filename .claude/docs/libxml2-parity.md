@@ -41,17 +41,16 @@ current-state only and regenerate to confirm.
 ### W3C XSD 1.1 tests
 
 The heavyweight XSD 1.1 conformance harness lives in the sibling module
-`../helium-w3c-tests` on branch `migrate-xsd11`; run it against this module with
-a local `go.work` pointing at the Helium worktree. Treat checked-in counts as
-current-state only: regenerate them from the current `migrate-xsd11` branch and
-the Helium branch under test. Do not preserve old branch/SHA counts in this
-section unless the heading explicitly marks them as historical. Persistent skips
-are tracked in `helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance
-gaps.
+`../helium-w3c-tests`; run it against this module with a local `go.work`
+pointing at the Helium worktree. Treat checked-in counts as current-state only:
+regenerate them from the current harness and the Helium branch under test. Do
+not preserve old branch/SHA counts in this section unless the heading explicitly
+marks them as historical. Persistent skips are tracked in
+`helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance gaps.
 
 Current state (snapshot, regenerate to confirm): the `xsd11.json` skip list is
-**empty** — the Basic XSD 1.1 W3C suite passes **967 / 0 failures / 0 skipped**
-against `feat-xsd11` with `helium-w3c-tests` `migrate-xsd11`.
+**empty** — the committed Basic XSD 1.1 W3C evidence reports **1,049 pass / 0
+failures / 0 skipped** in `xsd/summary-xsd11.md`.
 
 ## Parser Limitations
 
