@@ -13,7 +13,7 @@ func keySizeForAlgorithm(algorithm string) (int, error) {
 	switch algorithm {
 	case AES128CBC, AES128GCM, AES128GCM11, AES128KeyWrap:
 		return 16, nil
-	case AES192GCM11:
+	case AES192GCM11, AES192KeyWrap:
 		return 24, nil
 	case AES256CBC, AES256GCM, AES256GCM11, AES256KeyWrap:
 		return 32, nil

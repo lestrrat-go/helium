@@ -41,6 +41,21 @@ func TestAESKeyWrapRFC3394(t *testing.T) {
 }
 
 func TestKeyWrapSize(t *testing.T) {
+	t.Run("AES-192 KEK round-trip", func(t *testing.T) {
+		kek := randKey(t, 24)
+		doc := mustParseXML(t, `<root><a>hi</a></root>`)
+		enc := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES128GCM11).
+			KeyWrapAlgorithm(xmlenc1.AES192KeyWrap).
+			KeyEncryptionKey(kek)
+		edElem, err := enc.EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
 	t.Run("correct size round-trip", func(t *testing.T) {
 		kek := randKey(t, 32)
 		doc := mustParseXML(t, samlAssertion)

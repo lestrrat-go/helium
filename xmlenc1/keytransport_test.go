@@ -86,7 +86,7 @@ func TestRSAOAEP(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, xml, xmlenc1.DigestSHA384)
 
-		compatDigest := xmlenc1.NamespaceDSigMore + "sha384"
+		compatDigest := xmlenc1.DigestSHA384DSigMore
 		tampered := strings.Replace(xml, xmlenc1.DigestSHA384, compatDigest, 1)
 		require.NotEqual(t, xml, tampered)
 

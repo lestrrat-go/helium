@@ -14,6 +14,9 @@ const (
 	// NamespaceDSigMore contains the additional XML Digital Signature
 	// algorithm identifiers used by XML Encryption.
 	NamespaceDSigMore = "http://www.w3.org/2001/04/xmldsig-more#"
+
+	// NamespaceDSig11 is the XML Digital Signature 1.1 namespace.
+	NamespaceDSig11 = "http://www.w3.org/2009/xmldsig11#"
 )
 
 // Block encryption algorithm URIs.
@@ -40,6 +43,7 @@ const (
 // Key wrapping algorithm URIs.
 const (
 	AES128KeyWrap = NamespaceXMLEnc + "kw-aes128"
+	AES192KeyWrap = NamespaceXMLEnc + "kw-aes192"
 	AES256KeyWrap = NamespaceXMLEnc + "kw-aes256"
 )
 
@@ -48,7 +52,9 @@ const (
 	DigestSHA1   = NamespaceDSig + "sha1"
 	DigestSHA256 = NamespaceXMLEnc + "sha256"
 	DigestSHA384 = NamespaceXMLEnc + "sha384"
-	DigestSHA512 = NamespaceXMLEnc + "sha512"
+	// DigestSHA384DSigMore is the XMLDSig-more SHA-384 URI.
+	DigestSHA384DSigMore = NamespaceDSigMore + "sha384"
+	DigestSHA512         = NamespaceXMLEnc + "sha512"
 )
 
 // MGF algorithm URIs.
@@ -57,6 +63,12 @@ const (
 	MGFSHA256 = NamespaceXMLEnc11 + "mgf1sha256"
 	MGFSHA384 = NamespaceXMLEnc11 + "mgf1sha384"
 	MGFSHA512 = NamespaceXMLEnc11 + "mgf1sha512"
+)
+
+// Key agreement and key derivation algorithm URIs.
+const (
+	ECDHES    = NamespaceXMLEnc11 + "ECDH-ES"
+	ConcatKDF = NamespaceXMLEnc11 + "ConcatKDF"
 )
 
 // Encryption type URIs.

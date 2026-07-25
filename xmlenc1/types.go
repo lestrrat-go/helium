@@ -1,5 +1,7 @@
 package xmlenc1
 
+import "crypto/ecdh"
+
 // EncryptionMethod represents the <EncryptionMethod> element.
 type EncryptionMethod struct {
 	Algorithm    string
@@ -49,4 +51,45 @@ type EncryptedKey struct {
 	EncryptionMethod *EncryptionMethod
 	CipherValue      []byte // base64-decoded cipher bytes
 	CarriedKeyName   string
+	AgreementMethod  *AgreementMethod
+}
+
+// AgreementMethod describes a key agreement used to derive the key that
+// protects an EncryptedKey. XML Encryption 1.1 places this element inside a
+// ds:KeyInfo child of the EncryptedKey.
+type AgreementMethod struct {
+	Algorithm           string
+	KeyDerivationMethod *KeyDerivationMethod
+	OriginatorKey       *ECKeyValue
+}
+
+// KeyDerivationMethod describes the explicit KDF parameters carried by an
+// AgreementMethod.
+type KeyDerivationMethod struct {
+	Algorithm string
+	ConcatKDF *ConcatKDFParams
+}
+
+// ConcatKDFParams contains the XML Encryption 1.1 ConcatKDF parameters.
+// The parameter attributes are decoded from their hexBinary representation;
+// their unused-bit counts are retained internally for KDF bit-string packing.
+type ConcatKDFParams struct {
+	AlgorithmID  []byte
+	PartyUInfo   []byte
+	PartyVInfo   []byte
+	SuppPubInfo  []byte
+	SuppPrivInfo []byte
+	DigestMethod string
+
+	algorithmIDUnusedBits  uint8
+	partyUInfoUnusedBits   uint8
+	partyVInfoUnusedBits   uint8
+	suppPubInfoUnusedBits  uint8
+	suppPrivInfoUnusedBits uint8
+}
+
+// ECKeyValue contains an XML Signature 1.1 elliptic-curve public key.
+type ECKeyValue struct {
+	Curve     ecdh.Curve
+	PublicKey []byte
 }

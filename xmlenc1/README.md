@@ -11,8 +11,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 - Secure by default. `Encryptor` defaults to authenticated AES-256-GCM
   (`DefaultBlockAlgorithm`) when no `BlockAlgorithm` is set. The package
   binds the `EncryptionMethod/@Algorithm` URI into the AEAD
-  additional-authenticated-data so an attacker cannot substitute a
-  different algorithm URI on the wire.
+  additional-authenticated-data for the legacy XML Encryption GCM
+  identifiers. XML Encryption 1.1 GCM uses its standard IV, ciphertext, and
+  authentication-tag encoding without additional authenticated data.
 - AES-CBC is unauthenticated and vulnerable to padding-oracle attacks
   (Jager/Somorovsky 2011).
   - **Encryption:** selecting a CBC `BlockAlgorithm` requires
@@ -28,6 +29,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   external entity resolution, and network access all disabled. Decrypted
   bytes are attacker-controlled, so a relaxed parser would constitute an
   XXE oracle.
+- `Decryptor.ECPrivateKey` enables XML Encryption 1.1 ECDH-ES with P-256,
+  P-384, or P-521 and ConcatKDF. `Decryptor.DecryptBytes` returns binary
+  plaintext without parsing it as XML.
 
 <!-- INCLUDE(examples/xmlenc1_encrypt_decrypt_example_test.go) -->
 ```go
@@ -112,11 +116,10 @@ source: [examples/xmlenc1_encrypt_decrypt_example_test.go](https://github.com/le
 
 The sibling [`helium-w3c-tests`](https://github.com/lestrrat-go/helium-w3c-tests)
 module runs the XML Encryption 1.1 core vectors with the `xmlenc11` suite. The
-current [conformance summary](summary-xmlenc11.md) records ten vectors: six
-ECDH-ES cases skipped because key agreement is outside the current API, and
-four RSA cases recorded as expected gaps for XML Encryption 1.1 algorithm
-support. The suite is available through the manual Conformance workflow and is
-not part of the release gate until those gaps are removed.
+current [conformance summary](summary-xmlenc11.md) records all ten vectors as
+passing, including the six ECDH-ES cases and four RSA cases. The suite is
+available through the manual Conformance workflow and is not part of the
+release gate.
 
 Run it from `../helium-w3c-tests`:
 

@@ -8,13 +8,7 @@ This is a point-in-time snapshot; regenerate to refresh.
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 4 |
-| Skip | 6 |
+| Pass | 10 |
+| Skip | 0 |
 | Fail | 0 |
 | **Total** | **10** |
-
-## Skipped by reason
-
-| Reason | Count |
-|--------|------:|
-| XML Encryption 1.1 ECDH-ES key agreement is not implemented by xmlenc1 | 6 |
