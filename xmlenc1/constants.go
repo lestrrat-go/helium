@@ -47,7 +47,7 @@ const (
 const (
 	DigestSHA1   = NamespaceDSig + "sha1"
 	DigestSHA256 = NamespaceXMLEnc + "sha256"
-	DigestSHA384 = NamespaceDSigMore + "sha384"
+	DigestSHA384 = NamespaceXMLEnc + "sha384"
 	DigestSHA512 = NamespaceXMLEnc + "sha512"
 )
 

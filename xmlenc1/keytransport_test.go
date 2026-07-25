@@ -68,6 +68,37 @@ func TestRSAOAEP(t *testing.T) {
 		}
 	})
 
+	t.Run("oaep11 sha384 XMLDSig-more compatibility URI after parse", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+
+		encryptor := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM11).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+			OAEPDigest(xmlenc1.DigestSHA384).
+			OAEPMGF(xmlenc1.MGFSHA1).
+			RecipientPublicKey(&key.PublicKey)
+
+		_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		xml, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, xml, xmlenc1.DigestSHA384)
+
+		compatDigest := xmlenc1.NamespaceDSigMore + "sha384"
+		tampered := strings.Replace(xml, xmlenc1.DigestSHA384, compatDigest, 1)
+		require.NotEqual(t, xml, tampered)
+
+		tdoc := mustParseXML(t, tampered)
+		edNode := findEncryptedData(t, tdoc.DocumentElement())
+		require.NotNil(t, edNode)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edNode)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
 	t.Run("oaep11 distinct digest and MGF hash round-trip", func(t *testing.T) {
 		// XML Encryption 1.1 permits an RSA-OAEP DigestMethod that differs
 		// from the MGF1 hash. crypto/rsa's option-bearing OAEP API can
