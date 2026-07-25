@@ -34,9 +34,12 @@
 <line x1="62" y1="52" x2="84" y2="52" stroke="#6d4bd8" stroke-width="3" stroke-linecap="round"/>
 <circle cx="73" cy="52" r="3.4" fill="#6d4bd8"/>
 <text class="leg" x="91" y="56">XMLDSig 1.1</text>
-<line x1="197.2" y1="52" x2="219.2" y2="52" stroke="#a06a30" stroke-width="3" stroke-linecap="round"/>
-<circle cx="208.2" cy="52" r="3.4" fill="#a06a30"/>
-<text class="leg" x="226.2" y="56">XMLDSig merlin</text>
+<line x1="197.2" y1="52" x2="219.2" y2="52" stroke="#0b7a75" stroke-width="3" stroke-linecap="round"/>
+<circle cx="208.2" cy="52" r="3.4" fill="#0b7a75"/>
+<text class="leg" x="226.2" y="56">XML Encryption 1.1</text>
+<line x1="382.79999999999995" y1="52" x2="404.79999999999995" y2="52" stroke="#a06a30" stroke-width="3" stroke-linecap="round"/>
+<circle cx="393.79999999999995" cy="52" r="3.4" fill="#a06a30"/>
+<text class="leg" x="411.79999999999995" y="56">XMLDSig merlin</text>
 <text class="pt" x="62" y="70">Full range</text>
 <line class="grid" x1="62" y1="382.0" x2="852" y2="382.0"/>
 <text class="tick" x="54" y="386.0" text-anchor="end">0%</text>
@@ -168,6 +171,17 @@
 <circle cx="676.4" cy="300.2" r="3.4" fill="#6d4bd8" stroke="#6d4bd8" stroke-width="2"/>
 <circle cx="764.2" cy="300.2" r="3.4" fill="#6d4bd8" stroke="#6d4bd8" stroke-width="2"/>
 <circle cx="852.0" cy="82.0" r="3.4" fill="#6d4bd8" stroke="#6d4bd8" stroke-width="2"/>
+<path d="M62.0,382.0 L149.8,382.0 L237.6,382.0 L325.3,382.0 L413.1,382.0 L500.9,382.0 L588.7,382.0 L676.4,382.0 L764.2,382.0 L852.0,382.0" fill="none" stroke="#0b7a75" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="62.0" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="149.8" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="237.6" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="325.3" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="413.1" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="500.9" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="588.7" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="676.4" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="764.2" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
+<circle cx="852.0" cy="382.0" r="3.4" fill="#0b7a75" stroke="#0b7a75" stroke-width="2"/>
 <path d="M62.0,382.0 L149.8,382.0 L237.6,382.0 L325.3,344.5 L413.1,344.5 L500.9,325.8 L588.7,325.8 L676.4,325.8 L764.2,325.8 L852.0,82.0" fill="none" stroke="#a06a30" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="62.0" cy="382.0" r="3.4" fill="#a06a30" stroke="#a06a30" stroke-width="2"/>
 <circle cx="149.8" cy="382.0" r="3.4" fill="#a06a30" stroke="#a06a30" stroke-width="2"/>

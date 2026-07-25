@@ -5,9 +5,9 @@ renders a timeline graph of how much of *today's* conformance suites each
 release passes.
 
 Suites: **XML 1.0/1.1**, **XSD 1.0**, **XSD 1.1**, **XSLT 3.0**, **XPath/XQuery (QT3)**,
-and three XML-Signature interop suites — **XMLDSig 2ed interop** (`xmldsig2ed`),
+three XML-Signature interop suites — **XMLDSig 2ed interop** (`xmldsig2ed`),
 **XMLDSig 1.1 interop** (`xmldsig11`), and **XMLDSig merlin baseline**
-(`merlinxmldsig`).
+(`merlinxmldsig`) — and **XML Encryption 1.1 interop** (`xmlenc11`).
 
 ## Output
 
@@ -65,6 +65,7 @@ they test something helium deliberately does not implement:
 | XSLT 3.0 | 781 | harness dependency gates (optional features out of scope) |
 | QT3 | 141 | harness dependency gates |
 | XSD 1.0 / 1.1 | 0 | — |
+| XML Encryption 1.1 | 6 | ECDH-ES key agreement is not implemented by `xmlenc1` |
 
 Counting them against a release is as dishonest as counting them as passes: it
 silently records "not applicable" as "failed". With them in the denominator the
@@ -82,7 +83,8 @@ lands in the JUnit **pass bucket** with the marker only in `system-out`. It is n
 passing conformance result — helium does not produce what the case asks for — so it is
 counted as **not-passing** and shown as `⚠` rather than rounded into a perfect score.
 
-Reference (v0.5.1) xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0.
+Reference xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0,
+XML Encryption 1.1 4.
 
 Note the committed summaries are inconsistent about these: `summary-xml.md` breaks
 XFail out as its own row (Pass 1993 + XFail 8), while `xsd/summary-xsd10.md`,
@@ -156,15 +158,31 @@ some adapting; each tag's patch degrades honestly, never fabricating a pass:
   stub (every signature case fails honestly), while the pure Canonical XML 1.1
   node-set cases still run for real against `c14n` + `xpath1`.
 
+## XML Encryption 1.1
+
+The XML Encryption suite (`xmlenc11`) runs ten Apache Santuario vectors from the
+W3C XML Encryption 1.1 test-case collection. Six ECDH-ES key-agreement vectors are
+excluded as inapplicable because `xmlenc1` has no key-agreement API. The four RSA
+vectors remain applicable and are currently documented XFAILs for XML Encryption
+1.1 AES-GCM URIs, AES-192-GCM, RSA-OAEP SHA-384, and RSA-OAEP SHA-512 support.
+
+The v0.0.1 adapter replaces the XML Encryption runner with an honest failure because
+that release predates the `xmlenc1` package. Later tags use the shared runner without
+an XML Encryption-specific adapter.
+
 ## Regenerate
 
 ```sh
 # one-time: fetch upstream fixtures into the sibling harness
 (cd ../helium-w3c-tests && go run ./cmd/w3cgen fetch qt3 xslt30 xsd11 xml \
-    xmldsig2ed xmldsig11 merlinxmldsig)
+    xmldsig2ed xmldsig11 xmlenc11 merlinxmldsig)
 
 # run all tags × all suites, then aggregate + render
 tools/conformance-timeline/run.sh
+
+# When the sibling checkout is dirty or a paired worktree is in use:
+HELIUM_W3C_TESTS_ROOT=../helium-w3c-tests/.worktrees/<branch> \
+  tools/conformance-timeline/run.sh --suites xmlenc11
 
 # re-render only (after editing template.html or data.json)
 python3 tools/conformance-timeline/aggregate.py
@@ -204,7 +222,7 @@ ref's commit date, and marks it as an **untagged** release candidate (shown with
 
 After tagging, run `tools/conformance-timeline/run.sh <newtag>`; it becomes the
 new reference (newest tag) automatically and the graph extends. Existing tags
-stay cached. A new release needs no adapter patch for the XML/XSD/XSLT/QT3 suites,
+stay cached. A new release needs no adapter patch for the XML/XSD/XSLT/QT3/XML Encryption suites,
 but until a tag ships the post-v0.6.0 `xmldsig1` key-resolution API it still needs
 the xmldsig-only adapter (copy the newest tag's patch, which touches only
 `xmldsig/`).
