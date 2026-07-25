@@ -65,7 +65,7 @@ they test something helium deliberately does not implement:
 | XSLT 3.0 | 781 | harness dependency gates (optional features out of scope) |
 | QT3 | 141 | harness dependency gates |
 | XSD 1.0 / 1.1 | 0 | — |
-| XML Encryption 1.1 | 6 | ECDH-ES key agreement is not implemented by `xmlenc1` |
+| XML Encryption 1.1 | 0 | — |
 
 Counting them against a release is as dishonest as counting them as passes: it
 silently records "not applicable" as "failed". With them in the denominator the
@@ -83,8 +83,7 @@ lands in the JUnit **pass bucket** with the marker only in `system-out`. It is n
 passing conformance result — helium does not produce what the case asks for — so it is
 counted as **not-passing** and shown as `⚠` rather than rounded into a perfect score.
 
-Reference xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0,
-XML Encryption 1.1 4.
+Reference xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0.
 
 Note the committed summaries are inconsistent about these: `summary-xml.md` breaks
 XFail out as its own row (Pass 1993 + XFail 8), while `xsd/summary-xsd10.md`,
@@ -161,10 +160,8 @@ some adapting; each tag's patch degrades honestly, never fabricating a pass:
 ## XML Encryption 1.1
 
 The XML Encryption suite (`xmlenc11`) runs ten Apache Santuario vectors from the
-W3C XML Encryption 1.1 test-case collection. Six ECDH-ES key-agreement vectors are
-excluded as inapplicable because `xmlenc1` has no key-agreement API. The four RSA
-vectors remain applicable and are currently documented XFAILs for XML Encryption
-1.1 AES-GCM URIs, AES-192-GCM, RSA-OAEP SHA-384, and RSA-OAEP SHA-512 support.
+W3C XML Encryption 1.1 test-case collection. All ten vectors are applicable to
+`xmlenc1`, and the current reference run passes all ten.
 
 The v0.0.1 adapter replaces the XML Encryption runner with an honest failure because
 that release predates the `xmlenc1` package. Later tags use the shared runner without
