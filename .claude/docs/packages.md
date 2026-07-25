@@ -395,9 +395,9 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   - `PrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)`, `AllowUnauthenticatedCBC(bool)`, `MaxEncryptedKeys(n)` — builder methods
   - `Decrypt(ctx, elem)` — terminal method
 - `Decryptor.MaxEncryptedKeys(n)` caps trial-decrypted `<EncryptedKey>` candidates (DoS guard): zero → `DefaultMaxEncryptedKeys` (100), negative → unlimited; over-cap fails with `ErrTooManyEncryptedKeys` before any RSA op. The candidate loop also polls `ctx.Err()` between candidates
-- Block encryption: AES-128/256-CBC, AES-128/256-GCM
+- Block encryption: AES-128/256-CBC, legacy AES-128/256-GCM, and XML Encryption 1.1 AES-128/192/256-GCM. The 1.1 GCM form uses the standard IV || ciphertext || authentication-tag encoding without additional authenticated data.
 - Secure by default: unset `BlockAlgorithm` → `DefaultBlockAlgorithm` (AES-256-GCM). Selecting a CBC block algorithm for **encryption** requires `Encryptor.AllowLegacyCBC(true)`, else `ErrCBCEncryptionRequiresOptIn`. **Decryption** of CBC requires `Decryptor.AllowUnauthenticatedCBC(true)`, else `ErrCBCRequiresOptIn`
-- Key transport: RSA-OAEP (1.0 + 1.1 with configurable digest/MGF; the OAEP label digest and the MGF1 hash may differ, via `rsa.EncryptOAEPWithOptions`/`OAEPOptions` — requires Go ≥ 1.26)
+- Key transport: RSA-OAEP (1.0 + 1.1 with configurable SHA-1/256/384/512 digest and MGF; the OAEP label digest and the MGF1 hash may differ, via `rsa.EncryptOAEPWithOptions`/`OAEPOptions` — requires Go ≥ 1.26)
 - Key wrapping: AES-128/256-KeyWrap (RFC 3394)
 - Key sizes are bound to the declared algorithm URI on encrypt and decrypt (incl. after unwrap/key transport); mismatch → `KeySizeError`
 - Multi-recipient: `EncryptedData.EncryptedKeys []*EncryptedKey` holds one EncryptedKey per recipient; decrypt tries each candidate through full block decryption + plaintext validation (a bogus prepended key cannot mask the real one). `EncryptedData.EncryptedKey` is the **deprecated** single-key field — `EncryptedKeys` wins when non-empty, else the single field is treated as a one-element list; parse populates both

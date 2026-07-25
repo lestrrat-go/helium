@@ -11,9 +11,11 @@ import (
 
 func keySizeForAlgorithm(algorithm string) (int, error) {
 	switch algorithm {
-	case AES128CBC, AES128GCM, AES128KeyWrap:
+	case AES128CBC, AES128GCM, AES128GCM11, AES128KeyWrap:
 		return 16, nil
-	case AES256CBC, AES256GCM, AES256KeyWrap:
+	case AES192GCM11:
+		return 24, nil
+	case AES256CBC, AES256GCM, AES256GCM11, AES256KeyWrap:
 		return 32, nil
 	default:
 		return 0, &UnsupportedAlgorithmError{Algorithm: algorithm}
@@ -50,6 +52,11 @@ func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 		return encryptCBC(key, plaintext)
 	case AES128GCM, AES256GCM:
 		return encryptGCM(key, plaintext, []byte(algorithm))
+	case AES128GCM11, AES192GCM11, AES256GCM11:
+		// XML Encryption 1.1 defines the GCM input as IV || ciphertext ||
+		// authentication tag and does not define additional authenticated
+		// data. Keep the legacy namespace behavior above for compatibility.
+		return encryptGCM(key, plaintext, nil)
 	default:
 		return nil, &UnsupportedAlgorithmError{Algorithm: algorithm}
 	}
@@ -73,6 +80,8 @@ func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 		return decryptCBC(key, ciphertext)
 	case AES128GCM, AES256GCM:
 		return decryptGCM(key, ciphertext, []byte(algorithm))
+	case AES128GCM11, AES192GCM11, AES256GCM11:
+		return decryptGCM(key, ciphertext, nil)
 	default:
 		return nil, &UnsupportedAlgorithmError{Algorithm: algorithm}
 	}
