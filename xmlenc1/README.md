@@ -107,3 +107,20 @@ func Example_xmlenc1_encrypt_decrypt() {
 ```
 source: [examples/xmlenc1_encrypt_decrypt_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmlenc1_encrypt_decrypt_example_test.go)
 <!-- END INCLUDE -->
+
+## W3C interop conformance
+
+The sibling [`helium-w3c-tests`](https://github.com/lestrrat-go/helium-w3c-tests)
+module runs the XML Encryption 1.1 core vectors with the `xmlenc11` suite. The
+current [conformance summary](summary-xmlenc11.md) records ten vectors: six
+ECDH-ES cases skipped because key agreement is outside the current API, and
+four RSA cases recorded as expected gaps for XML Encryption 1.1 algorithm
+support. The suite is available through the manual Conformance workflow and is
+not part of the release gate until those gaps are removed.
+
+Run it from `../helium-w3c-tests`:
+
+```sh
+go run ./cmd/w3cgen fetch xmlenc11
+go run ./cmd/w3ctest xmlenc11
+```
