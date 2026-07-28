@@ -33,8 +33,10 @@ type EncryptedData struct {
 	ID string
 	// Type is the @Type attribute: TypeElement when the plaintext is one
 	// element, TypeContent when it is the children of an element. An empty
-	// Type means arbitrary octets, which Decryptor.Decrypt treats as
-	// TypeElement and Decryptor.DecryptBytes returns unparsed.
+	// Type means arbitrary octets — xmlenc-core1 §4.2 says an unknown or
+	// empty Type signals that the cleartext is an opaque octet-stream —
+	// which Decryptor.Decrypt treats as TypeElement and
+	// Decryptor.DecryptBytes returns unparsed.
 	Type string
 	// EncryptionMethod describes how the content itself is encrypted: a
 	// block encryption URI (AES-CBC or AES-GCM). Decryption needs it, so
