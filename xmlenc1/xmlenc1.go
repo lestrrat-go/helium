@@ -150,7 +150,64 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 	return encrypt(ctx, e.cfg, elem, TypeContent)
 }
 
-func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
+// EncryptBytes encrypts arbitrary octets and returns a detached
+// EncryptedData element owned by doc. It is the counterpart of
+// Decryptor.DecryptBytes: together they cover the payloads that are not an
+// XML element or element content, which W3C xmlenc-core1 §3.1 admits by
+// leaving @Type absent. The returned element carries no Type attribute for
+// exactly that reason, and no tree is modified — the caller decides where
+// to insert it.
+func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plaintext []byte) (*helium.Element, error) {
+	if doc == nil {
+		return nil, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", ErrMissingConfig)
+	}
+	return encryptPlaintext(ctx, e.cfg, doc, plaintext, "")
+}
+
+func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
+	// Serialize the plaintext. Element encrypts the element itself;
+	// Content encrypts its children.
+	var plaintext string
+	var err error
+	if encType == TypeElement {
+		plaintext, err = helium.WriteString(elem)
+	} else {
+		plaintext, err = serializeChildren(elem)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
+	}
+
+	edElem, err := encryptPlaintext(ctx, cfg, elem.OwnerDocument(), []byte(plaintext), encType)
+	if err != nil {
+		return nil, err
+	}
+
+	// Replace in tree.
+	if encType == TypeElement {
+		// Replace the element with EncryptedData in place, preserving the
+		// original element's position among its siblings.
+		if err := elem.Replace(edElem); err != nil {
+			return nil, err
+		}
+		return edElem, nil
+	}
+
+	// Replace children with EncryptedData.
+	removeChildren(elem)
+	if err := elem.AddChild(edElem); err != nil {
+		return nil, err
+	}
+	return edElem, nil
+}
+
+// encryptPlaintext performs the whole encryption pipeline over already
+// serialized plaintext: it resolves the block algorithm, enforces the CBC
+// opt-in, obtains and binds the session key, block-encrypts, protects the
+// session key, and marshals the EncryptedData element into doc. It never
+// touches the tree, so both the element/content and the raw-octet entry
+// points share identical crypto and configuration handling.
+func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
 	// Secure by default: an unset block algorithm uses authenticated
 	// AES-256-GCM rather than refusing or falling back to CBC.
 	blockAlgorithm := cfg.blockAlgorithm
@@ -196,19 +253,8 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 		return nil, err
 	}
 
-	// Serialize the plaintext.
-	var plaintext string
-	if encType == TypeElement {
-		plaintext, err = helium.WriteString(elem)
-	} else {
-		plaintext, err = serializeChildren(elem)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
-	}
-
 	// Block encrypt.
-	cipherValue, err := blockEncrypt(blockAlgorithm, sessionKey, []byte(plaintext))
+	cipherValue, err := blockEncrypt(blockAlgorithm, sessionKey, plaintext)
 	if err != nil {
 		return nil, err
 	}
@@ -258,28 +304,7 @@ func encrypt(_ context.Context, cfg *encryptConfig, elem *helium.Element, encTyp
 		CipherValue:      cipherValue,
 	}
 
-	doc := elem.OwnerDocument()
-	edElem, err := marshalEncryptedData(doc, ed)
-	if err != nil {
-		return nil, err
-	}
-
-	// Replace in tree.
-	if encType == TypeElement {
-		// Replace the element with EncryptedData in place, preserving the
-		// original element's position among its siblings.
-		if err := elem.Replace(edElem); err != nil {
-			return nil, err
-		}
-	} else {
-		// Replace children with EncryptedData.
-		removeChildren(elem)
-		if err := elem.AddChild(edElem); err != nil {
-			return nil, err
-		}
-	}
-
-	return edElem, nil
+	return marshalEncryptedData(doc, ed)
 }
 
 func serializeChildren(elem *helium.Element) (string, error) {

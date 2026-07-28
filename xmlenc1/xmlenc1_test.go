@@ -475,3 +475,108 @@ func TestEncryptorImmutability(t *testing.T) {
 	_, err = e2.EncryptElement(t.Context(), doc2.DocumentElement())
 	require.NoError(t, err)
 }
+
+// EncryptBytes is the counterpart of DecryptBytes: the package could consume
+// arbitrary-octet EncryptedData but had no way to produce it, so the only
+// bytes-in path was a test-only export.
+func TestEncryptBytes(t *testing.T) {
+	payload := []byte{0x00, 0x01, 0xff, 0xfe, 'n', 'o', 't', ' ', 'x', 'm', 'l'}
+
+	t.Run("round trip under RSA key transport", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, `<root/>`)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptBytes(t.Context(), doc, payload)
+		require.NoError(t, err)
+
+		got, err := xmlenc1.NewDecryptor().PrivateKey(key).DecryptBytes(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Equal(t, payload, got)
+	})
+
+	t.Run("round trip under AES key wrap", func(t *testing.T) {
+		kek := randKey(t, 32)
+		doc := mustParseXML(t, `<root/>`)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			KeyEncryptionKey(kek).
+			EncryptBytes(t.Context(), doc, payload)
+		require.NoError(t, err)
+
+		got, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).DecryptBytes(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Equal(t, payload, got)
+	})
+
+	t.Run("round trip under a pre-shared session key", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		doc := mustParseXML(t, `<root/>`)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM11).
+			SessionKey(sessionKey).
+			EncryptBytes(t.Context(), doc, payload)
+		require.NoError(t, err)
+
+		got, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Equal(t, payload, got)
+	})
+
+	// W3C xmlenc-core1 §3.1: @Type is absent when the plaintext is neither an
+	// element nor element content.
+	t.Run("emits no Type attribute", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		edElem, err := xmlenc1.NewEncryptor().
+			SessionKey(randKey(t, 32)).
+			EncryptBytes(t.Context(), doc, payload)
+		require.NoError(t, err)
+
+		s, err := helium.WriteString(edElem)
+		require.NoError(t, err)
+		require.NotContains(t, s, "Type=")
+	})
+
+	// The returned element is detached: unlike EncryptElement, nothing is
+	// spliced into the document.
+	t.Run("leaves the document untouched", func(t *testing.T) {
+		doc := mustParseXML(t, `<root><keep/></root>`)
+		before, err := helium.WriteString(doc)
+		require.NoError(t, err)
+
+		_, err = xmlenc1.NewEncryptor().
+			SessionKey(randKey(t, 32)).
+			EncryptBytes(t.Context(), doc, payload)
+		require.NoError(t, err)
+
+		after, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, before, after)
+	})
+
+	t.Run("reports a missing document", func(t *testing.T) {
+		_, err := xmlenc1.NewEncryptor().
+			SessionKey(randKey(t, 32)).
+			EncryptBytes(t.Context(), nil, payload)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+	})
+
+	t.Run("applies the same key-source checks", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := xmlenc1.NewEncryptor().EncryptBytes(t.Context(), doc, payload)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+	})
+
+	t.Run("applies the CBC opt-in gate", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		_, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256CBC).
+			SessionKey(randKey(t, 32)).
+			EncryptBytes(t.Context(), doc, payload)
+		require.ErrorIs(t, err, xmlenc1.ErrCBCEncryptionRequiresOptIn)
+	})
+}

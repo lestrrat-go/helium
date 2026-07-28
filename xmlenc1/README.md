@@ -30,8 +30,12 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   bytes are attacker-controlled, so a relaxed parser would constitute an
   XXE oracle.
 - `Decryptor.ECPrivateKey` enables XML Encryption 1.1 ECDH-ES with P-256,
-  P-384, or P-521 and ConcatKDF. `Decryptor.DecryptBytes` returns binary
-  plaintext without parsing it as XML.
+  P-384, or P-521 and ConcatKDF.
+- `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
+  are neither an element nor element content. `EncryptBytes` returns a
+  detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
+  and does not modify the tree; `DecryptBytes` returns the plaintext octets
+  without parsing them as XML.
 
 <!-- INCLUDE(examples/xmlenc1_encrypt_decrypt_example_test.go) -->
 ```go
