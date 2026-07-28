@@ -18,9 +18,9 @@ relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, in
 schematron     → helium, xpath1, internal/xpath, internal/xpath1/number
 xpointer       → helium, xpath1, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil
-xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil
+xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil, internal/xmlbase64
 xmldsig1/transform → helium, xmldsig1, xslt3  (opt-in xslt3-backed XSLTTransformer; kept out of xmldsig1 so the core never imports xslt3)
-xmlenc1        → helium, internal/domutil
+xmlenc1        → helium, internal/domutil, internal/xmlbase64
 html           → helium, sax, push, internal/xmlchar
 catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
@@ -39,6 +39,7 @@ internal/unparsedtext → internal/xmlchar, internal/uripath, internal/iofs
 internal/catalog → internal/uripath
 internal/uripath → (none)
 internal/xsdregex → (none)
+internal/xmlbase64 → (none)
 internal/writerctl → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar
@@ -47,7 +48,7 @@ test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/xsdregex, internal/uripath
+sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/xsdregex, internal/uripath, internal/xmlbase64
 
 ## Core layer
 helium (root) → sax, enum, internal/*

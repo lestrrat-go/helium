@@ -2,6 +2,9 @@ package xmlenc1_test
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -67,12 +70,13 @@ func manyKeySessionKeyEncryptedData(t *testing.T, n, size int, sessionKey []byte
 	return elem
 }
 
-// malformedKeyCipherValueEncryptedData builds an EncryptedData whose single
+// rawKeyCipherValueEncryptedData builds an EncryptedData whose single
 // EncryptedKey carries cipherValue as raw CipherValue text. The text is
 // written straight into the document rather than marshalled from an
-// EncryptedKey, which is the only way to put base64 the decoder rejects in
-// front of the byte budget.
-func malformedKeyCipherValueEncryptedData(t *testing.T, cipherValue string) *helium.Element {
+// EncryptedKey, which is the only way to put a chosen lexical form — base64
+// the decoder rejects, interspersed whitespace, or CDATA sections — in front
+// of the byte budget.
+func rawKeyCipherValueEncryptedData(t *testing.T, cipherValue string) *helium.Element {
 	t.Helper()
 	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`">`+
 		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
@@ -377,7 +381,7 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 			{name: "padding in every quantum", cipherValue: strings.Repeat("AA==", chars/4)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				elem := malformedKeyCipherValueEncryptedData(t, tc.cipherValue)
+				elem := rawKeyCipherValueEncryptedData(t, tc.cipherValue)
 				_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
 				require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
 			})
@@ -398,7 +402,7 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 			{name: "junk body line-wrapped", cipherValue: "! \t!\r\n=="},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				elem := malformedKeyCipherValueEncryptedData(t, tc.cipherValue)
+				elem := rawKeyCipherValueEncryptedData(t, tc.cipherValue)
 				_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(1).Decrypt(t.Context(), elem)
 				require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
 			})
@@ -408,7 +412,7 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 	// A malformed CipherValue that fits the budget is still the decoder's to
 	// reject, so the guard above does not turn small junk into a budget error.
 	t.Run("malformed CipherValue within budget is rejected by the decode", func(t *testing.T) {
-		elem := malformedKeyCipherValueEncryptedData(t, strings.Repeat("=", 64))
+		elem := rawKeyCipherValueEncryptedData(t, strings.Repeat("=", 64))
 		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
 		require.Error(t, err)
 		require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
@@ -424,4 +428,194 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 	})
+}
+
+// TestEncryptedKeyCipherValueSplitAcrossNodes covers a CipherValue whose
+// characters arrive as several text and CDATA children, which is a shape the
+// document author chooses freely. The charge is defined on the whole value, so
+// counting each child on its own and adding the results is not an
+// approximation of it but a way around it: three characters are not a whole
+// base64 quantum, so every "AAA" child counts zero however many there are.
+func TestEncryptedKeyCipherValueSplitAcrossNodes(t *testing.T) {
+	// 1000 children of "AAA" are 3000 characters, which decode to 2250 bytes.
+	const (
+		splitNodes   = 1000
+		splitDecoded = splitNodes * 3 / 4 * 3
+	)
+	splitValue := strings.Repeat(`<![CDATA[AAA]]>`, splitNodes)
+
+	t.Run("sub-quantum children are charged their concatenation", func(t *testing.T) {
+		elem := rawKeyCipherValueEncryptedData(t, splitValue)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(splitDecoded-1).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	// The same value one byte of budget higher is not over budget, so the
+	// charge is the exact count and not a conservative over-charge.
+	t.Run("the charge is exact", func(t *testing.T) {
+		elem := rawKeyCipherValueEncryptedData(t, splitValue)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(splitDecoded).Decrypt(t.Context(), elem)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	// And the value the split children spell still decrypts: a quantum, and
+	// the padding that ends it, may be cut anywhere.
+	t.Run("split value decrypts", func(t *testing.T) {
+		kek := randKey(t, 32)
+		sessionKey := randKey(t, 32)
+		wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
+		require.NoError(t, err)
+
+		for _, tc := range []struct {
+			name  string
+			chunk int
+		}{
+			// One character per child cuts every quantum three times.
+			{name: "one character per child", chunk: 1},
+			// Two characters per child cuts the trailing padding in half.
+			{name: "two characters per child", chunk: 2},
+			{name: "three characters per child", chunk: 3},
+			{name: "five characters per child", chunk: 5},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				elem := splitKeyCipherValueEncryptedData(t, splitIntoNodes(base64.StdEncoding.EncodeToString(wrapped), tc.chunk), sessionKey, `<x>secret</x>`)
+				nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+				require.NoError(t, err)
+				require.Len(t, nodes, 1)
+			})
+		}
+	})
+}
+
+// TestEncryptedKeyBytesAllocation pins what an EncryptedKey CipherValue may
+// ALLOCATE, which the error assertions above cannot see. The budget governs
+// decoded bytes, but the lexical text an attacker wraps around them is
+// unbounded: xs:base64Binary permits XML whitespace between characters, and
+// the value may be spread over as many text and CDATA children as the document
+// likes. Joining that text into one string before the budget is charged makes
+// the budget an accounting formality — the memory is allocated by the time the
+// error is returned — and for a value the budget ACCEPTS it is never refused
+// at all, so a test that only checks for the rejection would miss half of it.
+//
+// Each case reads the process-wide TotalAlloc delta across Decrypt, so these
+// subtests must NOT run in parallel: a concurrent test's allocations would
+// pollute the delta.
+func TestEncryptedKeyBytesAllocation(t *testing.T) {
+	// no t.Parallel(): isolated so each delta reflects only its own Decrypt.
+
+	// whitespace is the padding the attacker writes around the value, and
+	// every bound below is a multiple of it, because the defect being pinned
+	// is exactly a cost that follows the lexical length. Only space and tab
+	// are used: an XML parser folds CRLF to LF, which would make the text the
+	// DOM holds shorter than the text written here and every multiple below
+	// harder to read.
+	const whitespace = 4 << 20
+	padding := strings.Repeat(" \t", whitespace/2)
+
+	// Reading each child's content is the floor a bound has to clear: a DOM
+	// hands out a copy per node, and no value can be counted without looking
+	// at it. A rejected value is looked at once, and an accepted one twice —
+	// once to count it and once to build the characters the count approved.
+	const (
+		countOnly     = whitespace * 3 / 2
+		countAndBuild = whitespace * 5 / 2
+	)
+
+	// overBudget decodes to one byte more than the default budget allows, so
+	// the value is refused however much whitespace surrounds it.
+	overBudget := base64.StdEncoding.EncodeToString(make([]byte, xmlenc1.DefaultMaxEncryptedKeyBytes+1))
+
+	for _, tc := range []struct {
+		name        string
+		cipherValue string
+		rejected    bool
+		maxAlloc    uint64
+	}{
+		{
+			name:        "whitespace in one text node",
+			cipherValue: overBudget + padding,
+			rejected:    true,
+			maxAlloc:    countOnly,
+		},
+		{
+			// CDATA is how the whitespace evades a per-node content cap: the
+			// cap bounds one indivisible run, and every section is its own.
+			name:        "whitespace split across CDATA sections",
+			cipherValue: overBudget + splitIntoCDATA(padding, 16),
+			rejected:    true,
+			maxAlloc:    countOnly,
+		},
+		{
+			// Nothing here is ever refused: one quantum of payload is far
+			// under budget, and the whitespace after it is not charged at
+			// all. Allocating for it would be unbounded amplification with no
+			// error anywhere to notice it, which a rejection-only test would
+			// never see.
+			name:        "under-budget value with trailing whitespace",
+			cipherValue: "AA==" + padding,
+			rejected:    false,
+			maxAlloc:    countAndBuild,
+		},
+		{
+			// The same accepted value spread over CDATA sections, where
+			// joining the children costs the most.
+			name:        "under-budget value with whitespace split across CDATA sections",
+			cipherValue: "AA==" + splitIntoCDATA(padding, 16),
+			rejected:    false,
+			maxAlloc:    countAndBuild,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			elem := rawKeyCipherValueEncryptedData(t, tc.cipherValue)
+			decryptor := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t))
+
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+			_, err := decryptor.Decrypt(t.Context(), elem)
+			runtime.ReadMemStats(&after)
+
+			require.Error(t, err)
+			require.Equal(t, tc.rejected, errors.Is(err, xmlenc1.ErrEncryptedKeyBytesExceeded), "err=%v", err)
+
+			allocated := after.TotalAlloc - before.TotalAlloc
+			require.Less(t, allocated, tc.maxAlloc, "decrypting %d lexical bytes allocated %d bytes", len(tc.cipherValue), allocated)
+		})
+	}
+}
+
+// splitIntoNodes lays out s as CDATA sections of chunk characters each, so the
+// value reaches the parser as that many separate children.
+func splitIntoNodes(s string, chunk int) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i += chunk {
+		b.WriteString(`<![CDATA[` + s[i:min(i+chunk, len(s))] + `]]>`)
+	}
+	return b.String()
+}
+
+// splitIntoCDATA lays out s as parts CDATA sections of roughly equal size.
+func splitIntoCDATA(s string, parts int) string {
+	return splitIntoNodes(s, (len(s)+parts-1)/parts)
+}
+
+// splitKeyCipherValueEncryptedData builds an EncryptedData whose EncryptedKey
+// carries keyCipherValue as raw CipherValue markup — text, CDATA sections, or
+// any mix — over sessionKey wrapped with AES-256 key wrap and a real
+// AES-256-GCM payload. A decrypt that returns plaintext therefore proves the
+// split value was assembled into the wrapped key byte for byte.
+func splitKeyCipherValueEncryptedData(t *testing.T, keyCipherValue string, sessionKey []byte, plaintext string) *helium.Element {
+	t.Helper()
+	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte(plaintext))
+	require.NoError(t, err)
+	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`" Type="`+xmlenc1.TypeElement+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+		`<ds:KeyInfo><xenc:EncryptedKey>`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
+		`<xenc:CipherData><xenc:CipherValue>`+keyCipherValue+`</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedKey></ds:KeyInfo>`+
+		`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipher)+`</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
 }

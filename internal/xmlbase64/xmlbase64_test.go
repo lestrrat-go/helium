@@ -2,7 +2,9 @@ package xmlbase64_test
 
 import (
 	"encoding/base64"
+	"math/rand"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,6 +20,24 @@ func decoderBufferBytes(chars int) int {
 	return chars / 4 * 3
 }
 
+// decodedLen counts a whole value handed over in one piece, which is the shape
+// most cases below use.
+func decodedLen(s string) int {
+	var c xmlbase64.Counter
+	c.Add([]byte(s))
+	return c.DecodedLen()
+}
+
+// countPieces counts a value that arrives split, which is the shape a
+// CipherValue spread over several text and CDATA nodes arrives in.
+func countPieces(pieces []string) xmlbase64.Counter {
+	var c xmlbase64.Counter
+	for _, piece := range pieces {
+		c.Add([]byte(piece))
+	}
+	return c
+}
+
 func TestDecodeString(t *testing.T) {
 	t.Run("accepts XML whitespace between characters", func(t *testing.T) {
 		decoded, err := xmlbase64.DecodeString(" QUJD\n\tREVG ")
@@ -30,9 +50,9 @@ func TestDecodeString(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	// A budget charges DecodedLen, which counts base64 characters and ignores
-	// whitespace. If the decode sized its scratch buffer on the lexical length
-	// instead, whitespace an attacker appends would allocate memory the budget
+	// A budget charges Counter.DecodedLen, which counts base64 characters and
+	// ignores whitespace. If the decode sized its scratch buffer on the lexical
+	// length instead, whitespace an attacker appends would allocate memory the budget
 	// never charged, and the gap would grow with every byte of input. Checking
 	// the decoded bytes alone cannot catch that, so this pins the allocation.
 	//
@@ -46,7 +66,7 @@ func TestDecodeString(t *testing.T) {
 		// xs:base64Binary permits between characters.
 		value := "AA==" + strings.Repeat(" \t\r\n", (lexical-4)/4)
 		require.Greater(t, len(value), lexical-4)
-		require.Equal(t, 1, xmlbase64.DecodedLen(value))
+		require.Equal(t, 1, decodedLen(value))
 
 		var before, after runtime.MemStats
 		runtime.GC()
@@ -68,12 +88,12 @@ func TestDecodeString(t *testing.T) {
 	})
 }
 
-// TestDecodedLen covers the two halves of DecodedLen's contract: an exact
-// count for input DecodeString accepts, and — for input it rejects — a count
-// that never falls below the buffer the rejected decode allocates. The second
-// half is what lets a caller weigh a value against a byte budget: a count that
-// trusted a lexical form the decoder refuses would report less than the decode
-// costs.
+// TestDecodedLen covers the two halves of Counter.DecodedLen's contract on
+// whole values: an exact count for input DecodeString accepts, and — for input
+// it rejects — a count that never falls below the buffer the rejected decode
+// allocates. The second half is what lets a caller weigh a value against a
+// byte budget: a count that trusted a lexical form the decoder refuses would
+// report less than the decode costs.
 func TestDecodedLen(t *testing.T) {
 	t.Run("exact for accepted input", func(t *testing.T) {
 		for n := range 512 {
@@ -82,7 +102,7 @@ func TestDecodedLen(t *testing.T) {
 				data[i] = byte(i)
 			}
 			encoded := base64.StdEncoding.EncodeToString(data)
-			require.Equal(t, n, xmlbase64.DecodedLen(encoded), "plain, n=%d", n)
+			require.Equal(t, n, decodedLen(encoded), "plain, n=%d", n)
 
 			// The same value line-wrapped and indented, as real XML
 			// Signature/Encryption producers emit it.
@@ -90,7 +110,7 @@ func TestDecodedLen(t *testing.T) {
 			decoded, err := xmlbase64.DecodeString(wrapped)
 			require.NoError(t, err, "wrapped, n=%d", n)
 			require.Len(t, decoded, n, "wrapped, n=%d", n)
-			require.Equal(t, n, xmlbase64.DecodedLen(wrapped), "wrapped, n=%d", n)
+			require.Equal(t, n, decodedLen(wrapped), "wrapped, n=%d", n)
 		}
 	})
 
@@ -101,7 +121,7 @@ func TestDecodedLen(t *testing.T) {
 		decoded, err := xmlbase64.DecodeString(s)
 		require.NoError(t, err)
 		require.Equal(t, []byte("ABC"), decoded)
-		require.Equal(t, 3, xmlbase64.DecodedLen(s))
+		require.Equal(t, 3, decodedLen(s))
 	})
 
 	// Every value here is rejected by DecodeString, so there is no decoded
@@ -148,32 +168,32 @@ func TestDecodedLen(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				_, err := xmlbase64.DecodeString(tc.value)
 				require.Error(t, err, "value must be rejected for this case to mean anything")
-				require.GreaterOrEqual(t, xmlbase64.DecodedLen(tc.value), decoderBufferBytes(tc.chars))
+				require.GreaterOrEqual(t, decodedLen(tc.value), decoderBufferBytes(tc.chars))
 			})
 		}
 	})
 
 	t.Run("empty value counts zero", func(t *testing.T) {
-		require.Equal(t, 0, xmlbase64.DecodedLen(""))
-		require.Equal(t, 0, xmlbase64.DecodedLen(" \t\r\n"))
+		require.Equal(t, 0, decodedLen(""))
+		require.Equal(t, 0, decodedLen(" \t\r\n"))
 	})
 
 	t.Run("never negative", func(t *testing.T) {
 		for _, s := range []string{"=", "==", "===", "====", "A=", "==="} {
-			require.GreaterOrEqual(t, xmlbase64.DecodedLen(s), 0, "value=%q", s)
+			require.GreaterOrEqual(t, decodedLen(s), 0, "value=%q", s)
 		}
 	})
 
 	// Both halves of the contract at once, over every string the alphabet
 	// below can build. The alphabet carries one character of each kind that
-	// steers DecodedLen — two alphabet characters, padding, two whitespace
+	// steers the count — two alphabet characters, padding, two whitespace
 	// forms, and two characters outside the alphabet — so the enumeration
 	// reaches every lexical shape the counter distinguishes rather than the
 	// shapes anyone thought to name.
 	t.Run("exhaustive over short values", func(t *testing.T) {
 		const alphabet = "AB= \n!@"
 		for _, s := range enumerate(alphabet, 6) {
-			count := xmlbase64.DecodedLen(s)
+			count := decodedLen(s)
 			decoded, err := xmlbase64.DecodeString(s)
 			if err != nil {
 				require.GreaterOrEqual(t, count, decoderBufferBytes(strippedLen(s)), "rejected value=%q", s)
@@ -182,6 +202,130 @@ func TestDecodedLen(t *testing.T) {
 			require.Equal(t, len(decoded), count, "accepted value=%q", s)
 		}
 	})
+}
+
+// TestCounter covers the property the split makes possible: a value fed in
+// pieces counts exactly as its concatenation does. A caller that instead
+// counted each piece alone and summed would not approximate that count, it
+// would under-report it without limit — every piece shorter than a quantum
+// counts 0 — and a budget charged that sum is no budget at all.
+func TestCounter(t *testing.T) {
+	// Each case is a value cut at a place where a piece-by-piece count differs
+	// from the count of the whole: inside a quantum, inside the padding, and
+	// around the junk that decides the shape.
+	t.Run("split value counts as its concatenation", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			pieces []string
+		}{
+			// No piece is a whole quantum, so summing per piece reports 0.
+			{name: "sub-quantum pieces", pieces: []string{"AAA", "AAA", "AAA", "AAA"}},
+			// A thousand of the same, the shape the counter's doc names.
+			{name: "many sub-quantum pieces", pieces: repeated("AAA", 1000)},
+			// One quantum cut in four.
+			{name: "quantum split character by character", pieces: []string{"A", "A", "B", "B"}},
+			// Padding severed from the body it terminates: per piece the "=="
+			// looks like a whole value of nothing but padding.
+			{name: "padding split from body", pieces: []string{"QQ", "=="}},
+			// The two padding characters split from each other.
+			{name: "padding split in half", pieces: []string{"QQ=", "="}},
+			// Whitespace-only pieces, as line-wrapped XML produces.
+			{name: "whitespace-only pieces", pieces: []string{"QUJ", "\n\t  ", "D", "\n"}},
+			// Junk in an earlier piece must still poison the padding
+			// deduction claimed by a later one.
+			{name: "junk ahead of well-formed padding", pieces: []string{"!!", "=="}},
+			// Data after padding is only visible across the boundary.
+			{name: "data after padding", pieces: []string{"QQ==", "QQQQ"}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				joined := strings.Join(tc.pieces, "")
+				counter := countPieces(tc.pieces)
+				require.Equal(t, decodedLen(joined), counter.DecodedLen())
+				require.Equal(t, strippedLen(joined), counter.Chars())
+
+				// And the count still covers the decode, whichever way the
+				// decoder rules on the value.
+				decoded, err := xmlbase64.DecodeString(joined)
+				if err != nil {
+					require.GreaterOrEqual(t, counter.DecodedLen(), decoderBufferBytes(strippedLen(joined)))
+					return
+				}
+				require.Equal(t, len(decoded), counter.DecodedLen())
+			})
+		}
+	})
+
+	// The named cases above are the splits someone thought of. This one takes
+	// values over an alphabet carrying every character kind that steers the
+	// count and cuts each at random, so the carried state is exercised at
+	// boundaries nobody chose.
+	t.Run("randomized splits count as their concatenation", func(t *testing.T) {
+		const alphabet = "AB=+/ \t\r\n!@"
+		rng := rand.New(rand.NewSource(1))
+		for range 20000 {
+			value := randomValue(rng, alphabet, 24)
+			pieces := randomSplit(rng, value)
+			counter := countPieces(pieces)
+			require.Equal(t, decodedLen(value), counter.DecodedLen(), "value=%q pieces=%q", value, pieces)
+			require.Equal(t, strippedLen(value), counter.Chars(), "value=%q pieces=%q", value, pieces)
+
+			// AppendStripped assembles the same pieces the counter sized, so
+			// what a caller builds decodes to exactly what the whole value
+			// does.
+			var chars []byte
+			for _, piece := range pieces {
+				chars = xmlbase64.AppendStripped(chars, []byte(piece))
+			}
+			require.Len(t, chars, counter.Chars(), "value=%q pieces=%q", value, pieces)
+			assembled, assembledErr := xmlbase64.DecodeString(string(chars))
+			whole, wholeErr := xmlbase64.DecodeString(value)
+			require.Equal(t, wholeErr == nil, assembledErr == nil, "value=%q pieces=%q", value, pieces)
+			require.Equal(t, whole, assembled, "value=%q pieces=%q", value, pieces)
+		}
+	})
+
+	t.Run("zero counter counts nothing", func(t *testing.T) {
+		var c xmlbase64.Counter
+		require.Equal(t, 0, c.DecodedLen())
+		require.Equal(t, 0, c.Chars())
+		c.Add(nil)
+		c.Add([]byte(" \t\r\n"))
+		require.Equal(t, 0, c.DecodedLen())
+		require.Equal(t, 0, c.Chars())
+	})
+}
+
+// repeated returns n copies of s as separate pieces.
+func repeated(s string, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = s
+	}
+	return out
+}
+
+// randomValue builds a value of up to maxLen characters drawn from alphabet.
+func randomValue(rng *rand.Rand, alphabet string, maxLen int) string {
+	var b strings.Builder
+	for range rng.Intn(maxLen + 1) {
+		b.WriteByte(alphabet[rng.Intn(len(alphabet))])
+	}
+	return b.String()
+}
+
+// randomSplit cuts s into pieces at random positions, empty pieces included:
+// a DOM hands out whatever the document's node boundaries happen to be.
+func randomSplit(rng *rand.Rand, s string) []string {
+	cuts := []int{0, len(s)}
+	for range rng.Intn(5) {
+		cuts = append(cuts, rng.Intn(len(s)+1))
+	}
+	slices.Sort(cuts)
+	pieces := make([]string, 0, len(cuts)-1)
+	for i := 1; i < len(cuts); i++ {
+		pieces = append(pieces, s[cuts[i-1]:cuts[i]])
+	}
+	return pieces
 }
 
 // enumerate returns every string of length 0 through maxLen over alphabet.

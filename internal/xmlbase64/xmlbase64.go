@@ -16,10 +16,10 @@ import (
 //
 // Its transient allocation tracks the base64 characters, never the lexical
 // length: whitespace costs nothing beyond the scan. A caller weighing a value
-// against a byte budget charges DecodedLen, which counts those same characters
-// and so never under-states what the decode allocates. Sizing the buffer on
-// len(s) would let whitespace an attacker appends allocate memory no budget
-// ever charged, growing without bound as the input grows.
+// against a byte budget charges [Counter.DecodedLen], which counts those same
+// characters and so never under-states what the decode allocates. Sizing the
+// buffer on len(s) would let whitespace an attacker appends allocate memory no
+// budget ever charged, growing without bound as the input grows.
 func DecodeString(s string) ([]byte, error) {
 	chars := charCount(s)
 	if chars == len(s) {
@@ -38,6 +38,25 @@ func DecodeString(s string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(b.String())
 }
 
+// AppendStripped appends to dst the bytes of src that DecodeString keeps,
+// which is every byte that is not one of the four XML whitespace characters.
+//
+// A caller assembling a value that arrives in pieces builds only those
+// characters, so what it holds tracks the base64 the decoder will see rather
+// than the lexical length. Sizing dst with [Counter.Chars] makes the assembly
+// a single allocation.
+func AppendStripped(dst, src []byte) []byte {
+	for _, c := range src {
+		switch c {
+		case ' ', '\t', '\r', '\n':
+			// drop XML whitespace, as DecodeString does
+		default:
+			dst = append(dst, c)
+		}
+	}
+	return dst
+}
+
 // charCount counts the bytes of s that are not XML whitespace, which is
 // exactly the run of characters DecodeString hands to the decoder. It
 // allocates nothing.
@@ -54,13 +73,71 @@ func charCount(s string) int {
 	return n
 }
 
-// DecodedLen counts the bytes a DecodeString of s would need, skipping the
-// same XML whitespace DecodeString strips. It allocates nothing, so a caller
-// can weigh a base64 value against a byte budget before paying for the decode.
+// Counter counts what decoding a base64 value would need while the value
+// arrives in pieces, so a caller holding it in fragments never has to
+// concatenate them to weigh it against a byte budget. In XML a single
+// xs:base64Binary value may be spread over any number of text and CDATA
+// children, and the lexical text an attacker can attach to it is unrelated to
+// the bytes it decodes to, so materializing the whole text first would
+// allocate memory no budget has yet approved.
 //
-// The count is exact for input DecodeString accepts.
+// The zero Counter is ready to use and allocates nothing. Feeding it the
+// pieces in order gives exactly the counts of their concatenation.
 //
-// For input it rejects the count never falls below what the rejected decode
+// Counting each piece on its own and summing the results would not merely
+// approximate that: it can report far less, because none of the padding,
+// quantum, or alphabet rules distribute over a split. A thousand sibling "AAA"
+// pieces each count 0 (three characters is not a whole quantum) against the
+// 2250 of their concatenation. Carrying the running character count, the
+// running padding count, and whether the shape can still decode across every
+// piece is what makes the streaming count exact.
+type Counter struct {
+	chars int
+	pad   int
+	// undecodable records that the value can no longer be one the decoder
+	// accepts, so the padding deduction in DecodedLen must not be applied.
+	// It is stated negatively to keep the zero Counter usable.
+	undecodable bool
+}
+
+// Add folds the next piece of the value into the counts. Pieces must be added
+// in the order they appear in the value: padding is only padding at the end,
+// and that is a property of the concatenation, not of any one piece.
+//
+// The piece is bytes because that is how a DOM hands out node content;
+// converting it to a string first would copy the lexical length this counter
+// exists to keep out of memory.
+func (c *Counter) Add(piece []byte) {
+	for _, ch := range piece {
+		switch ch {
+		case ' ', '\t', '\r', '\n':
+			// drop XML whitespace, as DecodeString does
+		case '=':
+			c.pad++
+			c.chars++
+		default:
+			// Padding may only end a value, and every other character must be
+			// in the alphabet, so either way this one cannot decode.
+			if c.pad > 0 || !isAlphabet(ch) {
+				c.undecodable = true
+			}
+			c.chars++
+		}
+	}
+}
+
+// Chars reports the base64 characters added so far, which is exactly the run
+// of bytes [AppendStripped] would produce for the same pieces and the run
+// DecodeString hands the decoder.
+func (c *Counter) Chars() int {
+	return c.chars
+}
+
+// DecodedLen counts the bytes a DecodeString of the added pieces would need.
+//
+// The count is exact for a value DecodeString accepts.
+//
+// For one it rejects the count never falls below what the rejected decode
 // costs: encoding/base64 sizes its output buffer from the character count
 // alone and allocates it BEFORE validating a single character, so a count that
 // trusted a lexical form the decoder will refuse would let an arbitrarily
@@ -70,34 +147,14 @@ func charCount(s string) int {
 // the end, and every other character inside the base64 alphabet. A value
 // failing any of those is charged the full quantum count, which is exactly
 // what the decoder allocates for it.
-func DecodedLen(s string) int {
-	var chars, pad int
-	// decodableShape stays true only while s could still be a value the
-	// decoder accepts, so the padding deduction below is safe to apply.
-	decodableShape := true
-	for i := range len(s) {
-		switch c := s[i]; c {
-		case ' ', '\t', '\r', '\n':
-			// drop XML whitespace, as DecodeString does
-		case '=':
-			pad++
-			chars++
-		default:
-			// Padding may only end a value, and every other character must be
-			// in the alphabet, so either way this one cannot decode.
-			if pad > 0 || !isAlphabet(c) {
-				decodableShape = false
-			}
-			chars++
-		}
-	}
-	// quanta is the buffer encoding/base64 allocates for chars characters.
-	quanta := chars / 4 * 3
-	if !decodableShape || pad > 2 || chars%4 != 0 {
+func (c *Counter) DecodedLen() int {
+	// quanta is the buffer encoding/base64 allocates for c.chars characters.
+	quanta := c.chars / 4 * 3
+	if c.undecodable || c.pad > 2 || c.chars%4 != 0 {
 		return quanta
 	}
 	// chars is 0 (so pad is 0) or at least 4, hence quanta >= 3 >= pad.
-	return quanta - pad
+	return quanta - c.pad
 }
 
 // isAlphabet reports whether c is one of the 64 characters
