@@ -34,7 +34,8 @@ func TestDecodeString(t *testing.T) {
 // count for input DecodeString accepts, and — for input it rejects — a count
 // that never falls below the buffer the rejected decode allocates. The second
 // half is what lets a caller weigh a value against a byte budget: a count that
-// trusted malformed padding would report far less than the decode costs.
+// trusted a lexical form the decoder refuses would report less than the decode
+// costs.
 func TestDecodedLen(t *testing.T) {
 	t.Run("exact for accepted input", func(t *testing.T) {
 		for n := range 512 {
@@ -89,6 +90,22 @@ func TestDecodedLen(t *testing.T) {
 			// Padding split by whitespace is still padding, and still not
 			// at the end.
 			{name: "whitespace between padding", value: "Q U = \n = B A = =", chars: 8},
+			// Well-formed trailing padding on a body that is NOT base64.
+			// The shape alone says two bytes may be deducted; the body
+			// says the decoder will refuse the value and allocate the
+			// whole quantum anyway.
+			{name: "junk body with trailing padding", value: "!!==", chars: 4},
+			// The same, with one alphabet character ahead of the junk.
+			{name: "part-alphabet body with trailing padding", value: "A!==", chars: 4},
+			// And the same value line-wrapped, the way an XML producer
+			// would emit it.
+			{name: "junk body with padding and whitespace", value: "! \t!\r\n==", chars: 4},
+			// One '=' rather than two, so the deduction is smaller but
+			// just as wrong.
+			{name: "junk body with single trailing padding", value: "!!!=", chars: 4},
+			// More than one quantum, so the shape check is not a
+			// length-four special case.
+			{name: "junk body with trailing padding, many quanta", value: strings.Repeat("!", 4094) + "==", chars: 4096},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				_, err := xmlbase64.DecodeString(tc.value)
@@ -108,6 +125,56 @@ func TestDecodedLen(t *testing.T) {
 			require.GreaterOrEqual(t, xmlbase64.DecodedLen(s), 0, "value=%q", s)
 		}
 	})
+
+	// Both halves of the contract at once, over every string the alphabet
+	// below can build. The alphabet carries one character of each kind that
+	// steers DecodedLen — two alphabet characters, padding, two whitespace
+	// forms, and two characters outside the alphabet — so the enumeration
+	// reaches every lexical shape the counter distinguishes rather than the
+	// shapes anyone thought to name.
+	t.Run("exhaustive over short values", func(t *testing.T) {
+		const alphabet = "AB= \n!@"
+		for _, s := range enumerate(alphabet, 6) {
+			count := xmlbase64.DecodedLen(s)
+			decoded, err := xmlbase64.DecodeString(s)
+			if err != nil {
+				require.GreaterOrEqual(t, count, decoderBufferBytes(strippedLen(s)), "rejected value=%q", s)
+				continue
+			}
+			require.Equal(t, len(decoded), count, "accepted value=%q", s)
+		}
+	})
+}
+
+// enumerate returns every string of length 0 through maxLen over alphabet.
+func enumerate(alphabet string, maxLen int) []string {
+	out := []string{""}
+	prev := []string{""}
+	for range maxLen {
+		next := make([]string, 0, len(prev)*len(alphabet))
+		for _, s := range prev {
+			for i := range len(alphabet) {
+				next = append(next, s+string(alphabet[i]))
+			}
+		}
+		out = append(out, next...)
+		prev = next
+	}
+	return out
+}
+
+// strippedLen counts the characters left after DecodeString strips XML
+// whitespace, which is what encoding/base64 sizes its output buffer from.
+func strippedLen(s string) int {
+	var n int
+	for i := range len(s) {
+		switch s[i] {
+		case ' ', '\t', '\r', '\n':
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 // wrapWithWhitespace line-wraps s at 16 characters and indents each line,

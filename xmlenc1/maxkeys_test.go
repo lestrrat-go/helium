@@ -384,6 +384,27 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 		}
 	})
 
+	// Well-formed trailing padding on a body outside the base64 alphabet: the
+	// padding alone says two bytes may be deducted, but the decoder refuses the
+	// value and allocates the whole quantum, so the charge is the quantum. The
+	// budget here is one byte, which the padding-adjusted count would fit.
+	t.Run("junk CipherValue with well-formed padding is charged the quantum", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			cipherValue string
+		}{
+			{name: "junk body", cipherValue: `!!==`},
+			{name: "part-alphabet body", cipherValue: `A!==`},
+			{name: "junk body line-wrapped", cipherValue: "! \t!\r\n=="},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				elem := malformedKeyCipherValueEncryptedData(t, tc.cipherValue)
+				_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(1).Decrypt(t.Context(), elem)
+				require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+			})
+		}
+	})
+
 	// A malformed CipherValue that fits the budget is still the decoder's to
 	// reject, so the guard above does not turn small junk into a budget error.
 	t.Run("malformed CipherValue within budget is rejected by the decode", func(t *testing.T) {
