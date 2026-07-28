@@ -2,6 +2,7 @@ package xmlenc1_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -9,29 +10,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// rsaWrappedKeyBytes is the CipherValue length of a real RSA-2048 wrapped
+// key, the size a test uses when the candidate's size is beside the point.
+const rsaWrappedKeyBytes = 256
+
 // junkRSAEncryptedKeys builds n syntactically valid RSA-OAEP EncryptedKey
-// candidates whose CipherValue is junk, so a test can pack a candidate list
-// without any of them resolving to a session key.
-func junkRSAEncryptedKeys(n int) []*xmlenc1.EncryptedKey {
+// candidates of size bytes each, whose CipherValue is junk, so a test can
+// pack a candidate list without any of them resolving to a session key.
+// rsaWrappedKeyBytes is the size of a real one.
+func junkRSAEncryptedKeys(n, size int) []*xmlenc1.EncryptedKey {
 	keys := make([]*xmlenc1.EncryptedKey, 0, n)
 	for range n {
 		keys = append(keys, &xmlenc1.EncryptedKey{
 			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
-			CipherValue:      make([]byte, 256),
+			CipherValue:      make([]byte, size),
 		})
 	}
 	return keys
 }
 
 // manyKeyEncryptedData builds an EncryptedData element carrying n junk RSA
-// EncryptedKey candidates, used to exercise the trial-decrypt cap.
-func manyKeyEncryptedData(t *testing.T, n int) *helium.Element {
+// EncryptedKey candidates of size bytes each, so a test can aim a document at
+// either the candidate cap or the byte budget.
+func manyKeyEncryptedData(t *testing.T, n, size int) *helium.Element {
 	t.Helper()
 	doc := mustParseXML(t, `<root/>`)
 	ed := &xmlenc1.EncryptedData{
 		Type:             xmlenc1.TypeElement,
 		EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
-		EncryptedKeys:    junkRSAEncryptedKeys(n),
+		EncryptedKeys:    junkRSAEncryptedKeys(n, size),
 		CipherValue:      make([]byte, 48),
 	}
 	elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
@@ -44,7 +51,7 @@ func manyKeyEncryptedData(t *testing.T, n int) *helium.Element {
 // candidates. None of the candidates can resolve to a key, so a decrypt that
 // succeeds here proves the session key was used without candidate selection,
 // and a decrypt that fails on the cap proves the cap ran before that.
-func manyKeySessionKeyEncryptedData(t *testing.T, n int, sessionKey []byte, plaintext string) *helium.Element {
+func manyKeySessionKeyEncryptedData(t *testing.T, n, size int, sessionKey []byte, plaintext string) *helium.Element {
 	t.Helper()
 	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte(plaintext))
 	require.NoError(t, err)
@@ -52,7 +59,7 @@ func manyKeySessionKeyEncryptedData(t *testing.T, n int, sessionKey []byte, plai
 	ed := &xmlenc1.EncryptedData{
 		Type:             xmlenc1.TypeElement,
 		EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
-		EncryptedKeys:    junkRSAEncryptedKeys(n),
+		EncryptedKeys:    junkRSAEncryptedKeys(n, size),
 		CipherValue:      cipher,
 	}
 	elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
@@ -62,26 +69,26 @@ func manyKeySessionKeyEncryptedData(t *testing.T, n int, sessionKey []byte, plai
 
 func TestMaxEncryptedKeys(t *testing.T) {
 	t.Run("over default cap fails fast", func(t *testing.T) {
-		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1)
+		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1, rsaWrappedKeyBytes)
 		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
 	t.Run("at default cap is not rejected by the cap", func(t *testing.T) {
-		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys)
+		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys, rsaWrappedKeyBytes)
 		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
 		require.Error(t, err)
 		require.NotErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
 	t.Run("explicit cap rejects above it", func(t *testing.T) {
-		elem := manyKeyEncryptedData(t, 3)
+		elem := manyKeyEncryptedData(t, 3, rsaWrappedKeyBytes)
 		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeys(2).Decrypt(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
 	t.Run("negative cap removes the limit", func(t *testing.T) {
-		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+5)
+		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+5, rsaWrappedKeyBytes)
 		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeys(-1).Decrypt(t.Context(), elem)
 		require.Error(t, err)
 		require.NotErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
@@ -127,7 +134,7 @@ func TestMaxEncryptedKeys(t *testing.T) {
 		t.Run("unconfigured key yields ErrMissingKey", func(t *testing.T) {
 			// RSA-OAEP candidates only; the Decryptor carries a KEK, which
 			// no candidate declares, so none reaches a crypto operation.
-			elem := manyKeyEncryptedData(t, 2)
+			elem := manyKeyEncryptedData(t, 2, rsaWrappedKeyBytes)
 			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(randKey(t, 32)).Decrypt(t.Context(), elem)
 			require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
 		})
@@ -139,21 +146,21 @@ func TestMaxEncryptedKeys(t *testing.T) {
 	t.Run("cap applies with a pre-shared session key", func(t *testing.T) {
 		t.Run("over default cap fails", func(t *testing.T) {
 			sessionKey := randKey(t, 32)
-			elem := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1, sessionKey, `<x>secret</x>`)
+			elem := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1, rsaWrappedKeyBytes, sessionKey, `<x>secret</x>`)
 			_, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
 			require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 		})
 
 		t.Run("explicit cap rejects above it", func(t *testing.T) {
 			sessionKey := randKey(t, 32)
-			elem := manyKeySessionKeyEncryptedData(t, 2, sessionKey, `<x>secret</x>`)
+			elem := manyKeySessionKeyEncryptedData(t, 2, rsaWrappedKeyBytes, sessionKey, `<x>secret</x>`)
 			_, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).MaxEncryptedKeys(1).Decrypt(t.Context(), elem)
 			require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 		})
 
 		t.Run("at default cap decrypts through the session key", func(t *testing.T) {
 			sessionKey := randKey(t, 32)
-			elem := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys, sessionKey, `<x>secret</x>`)
+			elem := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys, rsaWrappedKeyBytes, sessionKey, `<x>secret</x>`)
 			// The Decryptor holds no RSA key, and every candidate declares
 			// RSA-OAEP with a junk CipherValue, so success means no candidate
 			// was selected or resolved.
@@ -167,7 +174,7 @@ func TestMaxEncryptedKeys(t *testing.T) {
 
 		t.Run("negative cap removes the limit", func(t *testing.T) {
 			sessionKey := randKey(t, 32)
-			elem := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+5, sessionKey, `<x>secret</x>`)
+			elem := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+5, rsaWrappedKeyBytes, sessionKey, `<x>secret</x>`)
 			nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).MaxEncryptedKeys(-1).Decrypt(t.Context(), elem)
 			require.NoError(t, err)
 			require.Len(t, nodes, 1)
@@ -175,15 +182,24 @@ func TestMaxEncryptedKeys(t *testing.T) {
 
 		t.Run("DecryptBytes applies the same cap", func(t *testing.T) {
 			sessionKey := randKey(t, 32)
-			over := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1, sessionKey, `payload`)
+			over := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1, rsaWrappedKeyBytes, sessionKey, `payload`)
 			_, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), over)
 			require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 
-			within := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys, sessionKey, `payload`)
+			within := manyKeySessionKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys, rsaWrappedKeyBytes, sessionKey, `payload`)
 			plaintext, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), within)
 			require.NoError(t, err)
 			require.Equal(t, []byte(`payload`), plaintext)
 		})
+	})
+
+	// The two caps are independent: a document within the candidate count can
+	// still blow the byte budget, and vice versa.
+	t.Run("byte budget is not the candidate cap", func(t *testing.T) {
+		elem := manyKeyEncryptedData(t, 2, xmlenc1.DefaultMaxEncryptedKeyBytes)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+		require.NotErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
 	t.Run("cancelled context aborts the candidate loop", func(t *testing.T) {
@@ -202,5 +218,134 @@ func TestMaxEncryptedKeys(t *testing.T) {
 		cancel()
 		_, err = xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(ctx, edElem)
 		require.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+// TestMaxEncryptedKeyBytes covers the cumulative EncryptedKey ciphertext
+// budget: it is charged while the document is read, so it holds ahead of the
+// candidate loop and the pre-shared session-key early return alike.
+func TestMaxEncryptedKeyBytes(t *testing.T) {
+	t.Run("over default budget fails", func(t *testing.T) {
+		elem := manyKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes+1)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	t.Run("at default budget is not rejected by the budget", func(t *testing.T) {
+		elem := manyKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	// The budget is the total across the document, so candidates that each
+	// fit still fail together.
+	t.Run("budget is cumulative across candidates", func(t *testing.T) {
+		half := xmlenc1.DefaultMaxEncryptedKeyBytes/2 + 1
+		elem := manyKeyEncryptedData(t, 2, half)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	t.Run("explicit budget rejects above it", func(t *testing.T) {
+		elem := manyKeyEncryptedData(t, 2, 512)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(1023).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	t.Run("explicit budget accepts at it", func(t *testing.T) {
+		elem := manyKeyEncryptedData(t, 2, 512)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(1024).Decrypt(t.Context(), elem)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	t.Run("negative budget removes the limit", func(t *testing.T) {
+		elem := manyKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes+1)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(-1).Decrypt(t.Context(), elem)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+	})
+
+	t.Run("zero is the default", func(t *testing.T) {
+		// An explicit DefaultMaxEncryptedKeyBytes and an unset budget accept
+		// and reject the same documents.
+		within := manyKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes)
+		over := manyKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes+1)
+		for _, dec := range []xmlenc1.Decryptor{
+			xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)),
+			xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(0),
+			xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeyBytes(xmlenc1.DefaultMaxEncryptedKeyBytes),
+		} {
+			_, err := dec.Decrypt(t.Context(), within)
+			require.Error(t, err)
+			require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+
+			_, err = dec.Decrypt(t.Context(), over)
+			require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+		}
+	})
+
+	t.Run("normal document still decrypts", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+			OAEPDigest(xmlenc1.DigestSHA256).
+			OAEPMGF(xmlenc1.MGFSHA256).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	// The budget is spent while the document is read, so it applies whatever
+	// key the caller configured — including a pre-shared session key, which
+	// returns before any candidate is selected.
+	t.Run("budget applies with a pre-shared session key", func(t *testing.T) {
+		t.Run("over default budget fails", func(t *testing.T) {
+			sessionKey := randKey(t, 32)
+			elem := manyKeySessionKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes+1, sessionKey, `<x>secret</x>`)
+			_, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+		})
+
+		t.Run("within budget decrypts", func(t *testing.T) {
+			sessionKey := randKey(t, 32)
+			elem := manyKeySessionKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes, sessionKey, `<x>secret</x>`)
+			nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+			require.NoError(t, err)
+			require.Len(t, nodes, 1)
+			s, err := helium.WriteString(nodes[0])
+			require.NoError(t, err)
+			require.Contains(t, s, "secret")
+		})
+	})
+
+	t.Run("DecryptBytes applies the same budget", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		over := manyKeySessionKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes+1, sessionKey, `payload`)
+		_, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), over)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+
+		within := manyKeySessionKeyEncryptedData(t, 1, xmlenc1.DefaultMaxEncryptedKeyBytes, sessionKey, `payload`)
+		plaintext, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), within)
+		require.NoError(t, err)
+		require.Equal(t, []byte(`payload`), plaintext)
+	})
+
+	// The EncryptedData's own CipherValue is the payload, not EncryptedKey
+	// ciphertext, so a large one decrypts under a small budget.
+	t.Run("payload ciphertext is not charged", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		plaintext := `<x>` + strings.Repeat("secret", 40000) + `</x>`
+		elem := manyKeySessionKeyEncryptedData(t, 1, rsaWrappedKeyBytes, sessionKey, plaintext)
+		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).MaxEncryptedKeyBytes(rsaWrappedKeyBytes).Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
 	})
 }

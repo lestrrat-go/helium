@@ -61,7 +61,8 @@ func TestDecryptECDHSessionKeyAllowsOnlyAESKeyWrap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			priv, encryptedKey, want := newECDHEncryptedKey(t, tt.algorithm)
-			got, err := decryptECDHSessionKey(priv, encryptedKey)
+			// newECDHEncryptedKey wraps a 16-byte session key.
+			got, err := decryptECDHSessionKey(priv, encryptedKey, 16)
 			if tt.wantError {
 				require.ErrorIs(t, err, ErrDecryptionFailed)
 				var unsupported *UnsupportedAlgorithmError

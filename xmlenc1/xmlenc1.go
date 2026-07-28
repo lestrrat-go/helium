@@ -515,6 +515,16 @@ func removeChildren(elem *helium.Element) {
 // amplification.
 const DefaultMaxEncryptedKeys = 100
 
+// DefaultMaxEncryptedKeyBytes bounds the total decoded <EncryptedKey>
+// ciphertext of one EncryptedData when [Decryptor.MaxEncryptedKeyBytes] is
+// not set, which owns what the budget covers and when it is charged.
+//
+// 64 KiB fits [DefaultMaxEncryptedKeys] recipients at 512 bytes each — an
+// RSA-4096 wrapped key, the largest in ordinary use — and still leaves 14 KiB
+// spare. Real wrapped keys are usually far smaller: 24 to 40 bytes for AES
+// key wrap, 256 bytes for RSA-2048.
+const DefaultMaxEncryptedKeyBytes = 64 << 10
+
 // decryptConfig holds the configuration for a Decryptor.
 type decryptConfig struct {
 	privateKey              *rsa.PrivateKey
@@ -523,6 +533,7 @@ type decryptConfig struct {
 	sessionKey              []byte
 	allowUnauthenticatedCBC bool
 	maxEncryptedKeys        int
+	maxEncryptedKeyBytes    int
 }
 
 // Decryptor decrypts XML EncryptedData elements. It uses clone-on-write
@@ -654,6 +665,27 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 	return d
 }
 
+// MaxEncryptedKeyBytes caps the total decoded <EncryptedKey> ciphertext, in
+// bytes, that decrypting one EncryptedData will hold. [Decryptor.MaxEncryptedKeys]
+// bounds how many candidates a document may carry; this bounds how large they
+// may be together, which that count alone does not.
+//
+// The budget is charged while the document is read, as each candidate's
+// CipherValue is decoded, and the decode is skipped once the running total
+// would exceed it. Only <EncryptedKey> ciphertext counts — the EncryptedData's
+// own CipherValue is the payload the caller asked for and is not charged.
+//
+// Zero (the default) uses [DefaultMaxEncryptedKeyBytes]; a negative value
+// removes the limit (matching helium's MaxDepth convention). A document over
+// the effective budget fails with [ErrEncryptedKeyBytesExceeded], in every key
+// configuration: the budget is charged during parsing, so it holds ahead of
+// both the candidate loop and the [Decryptor.SessionKey] early return.
+func (d Decryptor) MaxEncryptedKeyBytes(n int) Decryptor {
+	d = d.clone()
+	d.cfg.maxEncryptedKeyBytes = n
+	return d
+}
+
 // Decrypt decrypts an EncryptedData element and returns the decrypted nodes.
 //
 // Unlike Encryptor.EncryptElement and Encryptor.EncryptContent, which splice
@@ -703,8 +735,44 @@ func checkEncryptedKeyCap(cfg *decryptConfig, candidates int) error {
 	return nil
 }
 
+// encryptedKeyBudget is the running state of the cumulative EncryptedKey
+// ciphertext allowance while one EncryptedData is parsed. Decryptor.MaxEncryptedKeyBytes
+// documents the budget; this type only spends it.
+type encryptedKeyBudget struct {
+	// limit is the effective allowance in bytes. Negative means unlimited.
+	limit     int
+	remaining int
+}
+
+// newEncryptedKeyBudget resolves a Decryptor's configured budget (zero => the
+// default, negative => unlimited) into the state the parse path spends.
+func newEncryptedKeyBudget(cfg *decryptConfig) *encryptedKeyBudget {
+	limit := cfg.maxEncryptedKeyBytes
+	if limit == 0 {
+		limit = DefaultMaxEncryptedKeyBytes
+	}
+	return &encryptedKeyBudget{limit: limit, remaining: limit}
+}
+
+// charge deducts n bytes from the remaining allowance, failing closed when
+// they do not fit. Callers charge the decoded length BEFORE decoding, so an
+// oversized CipherValue is rejected without being decoded.
+//
+// A nil budget is unlimited, which is how the parse path expresses "this
+// CipherValue is not EncryptedKey ciphertext".
+func (b *encryptedKeyBudget) charge(n int) error {
+	if b == nil || b.limit < 0 {
+		return nil
+	}
+	if n > b.remaining {
+		return fmt.Errorf("%w: EncryptedKey ciphertext exceeds the total of %d bytes; raise or remove it with Decryptor.MaxEncryptedKeyBytes", ErrEncryptedKeyBytesExceeded, b.limit)
+	}
+	b.remaining -= n
+	return nil
+}
+
 func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]byte, error) {
-	ed, err := parseEncryptedData(elem)
+	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -731,12 +799,17 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
 	}
 
+	sessionKeySize, err := keySizeForAlgorithm(paramBlockAlgorithm, alg)
+	if err != nil {
+		return nil, err
+	}
+
 	var lastErr error
 	for _, ek := range keys {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek)
+		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek, sessionKeySize)
 		if err != nil {
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
@@ -752,7 +825,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 }
 
 func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
-	ed, err := parseEncryptedData(elem)
+	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -801,6 +874,14 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
 	}
 
+	// The declared block algorithm fixes the session-key length, and with it
+	// the exact length of a valid AES key-wrap ciphertext. Resolve it once,
+	// before the loop, so every candidate's unwrap is length-bound.
+	sessionKeySize, err := keySizeForAlgorithm(paramBlockAlgorithm, alg)
+	if err != nil {
+		return nil, err
+	}
+
 	// A document may carry several EncryptedKey candidates (one per
 	// recipient), and an attacker can prepend a junk EncryptedKey that
 	// unwraps cleanly under the recipient's key while wrapping the WRONG
@@ -817,7 +898,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek)
+		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek, sessionKeySize)
 		if err != nil {
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
@@ -955,7 +1036,11 @@ func newHardenedInnerParser() helium.Parser {
 		AllowNetwork(false)
 }
 
-func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]byte, error) {
+// resolveSessionKeyFromEncryptedKey recovers the session key one EncryptedKey
+// candidate protects. sessionKeySize is the length the EncryptedData's
+// declared block algorithm requires; the key-wrap branches pass it to
+// aesKeyUnwrap, which owns what it binds.
+func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey, sessionKeySize int) ([]byte, error) {
 	if ek.EncryptionMethod == nil {
 		return nil, fmt.Errorf("%w: EncryptedKey missing EncryptionMethod", ErrMalformedEncrypted)
 	}
@@ -971,7 +1056,7 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]
 		if cfg.ecPrivateKey == nil {
 			return nil, fmt.Errorf("%w: EncryptedKey uses key agreement %q; set Decryptor.ECPrivateKey", ErrMissingKey, ek.AgreementMethod.Algorithm)
 		}
-		return decryptECDHSessionKey(cfg.ecPrivateKey, ek)
+		return decryptECDHSessionKey(cfg.ecPrivateKey, ek, sessionKeySize)
 	}
 	switch alg {
 	case RSAOAEP, RSAOAEP11:
@@ -991,7 +1076,7 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]
 		if err := validateKeySize(paramKeyWrap, alg, paramKEK, cfg.keyEncryptionKey); err != nil {
 			return nil, err
 		}
-		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue)
+		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue, sessionKeySize)
 	default:
 		// Classify under the decrypt path while preserving the typed
 		// error in the chain for errors.As, consistent with the

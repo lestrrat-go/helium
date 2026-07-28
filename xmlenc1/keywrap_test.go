@@ -75,6 +75,66 @@ func TestKeyWrapSize(t *testing.T) {
 		require.Contains(t, s, "user@example.com")
 	})
 
+	// RFC 3394 wraps a K-byte key into exactly K+8 bytes, and the declared
+	// block algorithm fixes K, so every other ciphertext length is rejected
+	// before the unwrap rounds run.
+	t.Run("wrapped key length must match the block algorithm", func(t *testing.T) {
+		const dataAlgorithm = xmlenc1.AES256GCM // a 32-byte session key
+		kek := randKey(t, 32)
+		sessionKey := randKey(t, 32)
+
+		newElem := func(t *testing.T, wrapped []byte) *helium.Element {
+			t.Helper()
+			cipher, err := xmlenc1.EncryptBytesForTest(dataAlgorithm, sessionKey, []byte("<x>secret</x>"))
+			require.NoError(t, err)
+			doc := mustParseXML(t, `<root/>`)
+			elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, &xmlenc1.EncryptedData{
+				Type:             xmlenc1.TypeElement,
+				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: dataAlgorithm},
+				EncryptedKeys: []*xmlenc1.EncryptedKey{{
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
+					CipherValue:      wrapped,
+				}},
+				CipherValue: cipher,
+			})
+			require.NoError(t, err)
+			return elem
+		}
+
+		t.Run("short wrap of a 16-byte key", func(t *testing.T) {
+			// 24 bytes: a multiple of 8 and a real RFC 3394 wrap, but of a
+			// key half the length the declared algorithm needs.
+			wrapped, err := xmlenc1.AESKeyWrapForTest(kek, randKey(t, 16))
+			require.NoError(t, err)
+			require.Len(t, wrapped, 24)
+
+			_, err = xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), newElem(t, wrapped))
+			require.ErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
+			require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+		})
+
+		t.Run("oversized wrap", func(t *testing.T) {
+			// 64 KiB, a multiple of 8: accepted by a length check that only
+			// asks for "a multiple of 8, at least 24 bytes".
+			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), newElem(t, make([]byte, 64<<10)))
+			require.ErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
+			require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+		})
+
+		t.Run("matching wrap round-trips", func(t *testing.T) {
+			wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
+			require.NoError(t, err)
+			require.Len(t, wrapped, 40)
+
+			nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), newElem(t, wrapped))
+			require.NoError(t, err)
+			require.Len(t, nodes, 1)
+			s, err := helium.WriteString(nodes[0])
+			require.NoError(t, err)
+			require.Contains(t, s, "secret")
+		})
+	})
+
 	t.Run("encrypt KEK size mismatch", func(t *testing.T) {
 		doc := mustParseXML(t, `<root><a>hi</a></root>`)
 		enc := xmlenc1.NewEncryptor().

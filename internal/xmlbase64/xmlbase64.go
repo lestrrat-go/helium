@@ -29,3 +29,30 @@ func DecodeString(s string) ([]byte, error) {
 	}
 	return base64.StdEncoding.DecodeString(b.String())
 }
+
+// DecodedLen returns the number of bytes DecodeString produces for s,
+// skipping the same XML whitespace DecodeString strips. It allocates
+// nothing, so a caller can weigh a base64 value against a byte budget
+// before paying for the decode.
+//
+// The count is exact for input DecodeString accepts. For input it rejects
+// the result is meaningless — the caller learns that from the decode.
+func DecodedLen(s string) int {
+	var chars, pad int
+	for i := range len(s) {
+		switch c := s[i]; c {
+		case ' ', '\t', '\r', '\n':
+			// drop XML whitespace, as DecodeString does
+		case '=':
+			pad++
+			chars++
+		default:
+			chars++
+		}
+	}
+	n := chars/4*3 - pad
+	if n < 0 {
+		return 0
+	}
+	return n
+}

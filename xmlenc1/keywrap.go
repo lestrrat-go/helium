@@ -65,10 +65,22 @@ func aesKeyWrap(kek, plaintext []byte) ([]byte, error) {
 	return out, nil
 }
 
-// aesKeyUnwrap unwraps a key using the AES Key Wrap algorithm (RFC 3394).
-func aesKeyUnwrap(kek, ciphertext []byte) ([]byte, error) {
-	if len(ciphertext)%8 != 0 || len(ciphertext) < 24 {
-		return nil, fmt.Errorf("%w: %w: ciphertext must be at least 24 bytes and a multiple of 8", ErrDecryptionFailed, ErrKeyUnwrapFailed)
+// aesKeyUnwrap unwraps keySize bytes of key material using the AES Key Wrap
+// algorithm (RFC 3394). keySize is the length the recipient requires — the
+// session-key length fixed by the EncryptedData's declared block algorithm,
+// which every caller resolves through keySizeForAlgorithm.
+//
+// RFC 3394 §2.2.2 wraps a keySize-byte key into exactly keySize+8 bytes, so
+// any other length is provably not a wrap of the key being unwrapped. It is
+// rejected here, before the six unwrap rounds, which run AES over every
+// 8-byte block: accepting merely "a multiple of 8" would let a document
+// declaring a 32-byte session key spend those rounds on a multi-megabyte
+// CipherValue. The unwrapped key still passes the key-size binding in
+// blockDecrypt, which is what catches a wrong-length key that arrived by RSA
+// key transport instead.
+func aesKeyUnwrap(kek, ciphertext []byte, keySize int) ([]byte, error) {
+	if len(ciphertext) != keySize+8 {
+		return nil, fmt.Errorf("%w: %w: ciphertext must be exactly %d bytes to unwrap a %d-byte key, got %d", ErrDecryptionFailed, ErrKeyUnwrapFailed, keySize+8, keySize, len(ciphertext))
 	}
 
 	block, err := aes.NewCipher(kek)
