@@ -6,6 +6,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
+	mrand "math/rand"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -114,4 +116,171 @@ func newECDHEncryptedKey(t *testing.T, algorithm string) (*ecdsa.PrivateKey, *En
 			},
 		},
 	}, want
+}
+
+// concatKDFOtherInfoPerBit is the bit-at-a-time reference packing, kept here
+// verbatim so the production octet-oriented path can be pinned against it.
+// The derived KEK is what two implementations have to agree on, so any change
+// to the packing that is not byte-identical is an interoperability break.
+func concatKDFOtherInfoPerBit(params *ConcatKDFParams) ([]byte, error) {
+	fields := []struct {
+		value      []byte
+		unusedBits uint8
+	}{
+		{value: params.AlgorithmID, unusedBits: params.algorithmIDUnusedBits},
+		{value: params.PartyUInfo, unusedBits: params.partyUInfoUnusedBits},
+		{value: params.PartyVInfo, unusedBits: params.partyVInfoUnusedBits},
+		{value: params.SuppPubInfo, unusedBits: params.suppPubInfoUnusedBits},
+		{value: params.SuppPrivInfo, unusedBits: params.suppPrivInfoUnusedBits},
+	}
+
+	totalBits := 0
+	for _, field := range fields {
+		if int(field.unusedBits) > len(field.value)*8 {
+			return nil, fmt.Errorf("%w: invalid ConcatKDF bitstring", ErrMalformedEncrypted)
+		}
+		totalBits += len(field.value)*8 - int(field.unusedBits)
+	}
+
+	otherInfo := make([]byte, (totalBits+7)/8)
+	bitOffset := 0
+	for _, field := range fields {
+		bitCount := len(field.value)*8 - int(field.unusedBits)
+		for i := range bitCount {
+			if field.value[i/8]&(1<<uint(7-i%8)) != 0 {
+				otherInfo[bitOffset/8] |= 1 << uint(7-bitOffset%8)
+			}
+			bitOffset++
+		}
+	}
+	return otherInfo, nil
+}
+
+func TestConcatKDFOtherInfoMatchesPerBitPacking(t *testing.T) {
+	// Hand-picked shapes first: every unused-bit count, empty fields in
+	// leading/trailing/interior position, a field long enough for an
+	// unused-bit count past a whole octet, and the all-empty case.
+	fixed := []*ConcatKDFParams{
+		{},
+		{PartyUInfo: []byte{0xb9, 0xe1, 0x3a, 0x70}},
+		{AlgorithmID: []byte{0xff}, algorithmIDUnusedBits: 7},
+		{AlgorithmID: []byte{0xd8}, algorithmIDUnusedBits: 3, PartyUInfo: []byte{0x80}, partyUInfoUnusedBits: 7},
+		{PartyUInfo: []byte{0xaa, 0x55}, partyUInfoUnusedBits: 1, PartyVInfo: []byte{0x0f, 0xf0, 0x3c}, partyVInfoUnusedBits: 5, SuppPubInfo: []byte{0x01}},
+		{AlgorithmID: []byte{0x12, 0x34}, PartyVInfo: []byte{0x56}, partyVInfoUnusedBits: 2, SuppPrivInfo: []byte{0x78, 0x9a}},
+		{SuppPrivInfo: []byte{0xff, 0xff, 0xff}, suppPrivInfoUnusedBits: 10},
+		{AlgorithmID: []byte{0xc3}, algorithmIDUnusedBits: 8},
+		{PartyUInfo: []byte{}, PartyVInfo: nil, SuppPubInfo: []byte{0x00}},
+	}
+	for _, unused := range []uint8{0, 1, 2, 3, 4, 5, 6, 7} {
+		fixed = append(fixed, &ConcatKDFParams{
+			AlgorithmID:            []byte{0x9c, 0x3f, 0xa1},
+			algorithmIDUnusedBits:  unused,
+			PartyUInfo:             []byte{0x5a, 0xa5},
+			partyUInfoUnusedBits:   unused,
+			PartyVInfo:             []byte{0x0f},
+			partyVInfoUnusedBits:   unused,
+			SuppPubInfo:            []byte{0xde, 0xad, 0xbe, 0xef},
+			suppPubInfoUnusedBits:  unused,
+			SuppPrivInfo:           []byte{0x01, 0x80},
+			suppPrivInfoUnusedBits: unused,
+		})
+	}
+
+	for i, params := range fixed {
+		want, wantErr := concatKDFOtherInfoPerBit(params)
+		got, gotErr := concatKDFOtherInfo(params)
+		require.Equal(t, wantErr == nil, gotErr == nil, "case %d error disagreement: %v vs %v", i, wantErr, gotErr)
+		require.Equal(t, want, got, "case %d packing differs", i)
+	}
+
+	// Then a randomized spread, deterministic so a failure is reproducible.
+	rng := mrand.New(mrand.NewSource(20260728))
+	for iter := range 20000 {
+		params := &ConcatKDFParams{}
+		dests := []struct {
+			value  *[]byte
+			unused *uint8
+		}{
+			{&params.AlgorithmID, &params.algorithmIDUnusedBits},
+			{&params.PartyUInfo, &params.partyUInfoUnusedBits},
+			{&params.PartyVInfo, &params.partyVInfoUnusedBits},
+			{&params.SuppPubInfo, &params.suppPubInfoUnusedBits},
+			{&params.SuppPrivInfo, &params.suppPrivInfoUnusedBits},
+		}
+		for _, d := range dests {
+			n := rng.Intn(9)
+			if n > 0 {
+				buf := make([]byte, n)
+				_, err := rng.Read(buf)
+				require.NoError(t, err)
+				*d.value = buf
+				// Mostly a legal 0-7, occasionally a whole-octet-or-more
+				// count so the general path sees bitCount < len(value)*8-7.
+				*d.unused = uint8(rng.Intn(8))
+				if rng.Intn(8) == 0 {
+					*d.unused = uint8(rng.Intn(n*8 + 1))
+				}
+			}
+		}
+		want, wantErr := concatKDFOtherInfoPerBit(params)
+		got, gotErr := concatKDFOtherInfo(params)
+		require.Equal(t, wantErr == nil, gotErr == nil, "iteration %d error disagreement: %v vs %v", iter, wantErr, gotErr)
+		require.Equal(t, want, got, "iteration %d packing differs for %+v", iter, params)
+	}
+}
+
+func TestConcatKDFOtherInfoBudget(t *testing.T) {
+	// The budget is cumulative: five fields each comfortably under it still
+	// add up to a rejection, and one byte under the limit is accepted.
+	overflowing := &ConcatKDFParams{
+		DigestMethod: DigestSHA256,
+		AlgorithmID:  make([]byte, maxConcatKDFOtherInfoBytes/4),
+		PartyUInfo:   make([]byte, maxConcatKDFOtherInfoBytes/4),
+		PartyVInfo:   make([]byte, maxConcatKDFOtherInfoBytes/4),
+		SuppPubInfo:  make([]byte, maxConcatKDFOtherInfoBytes/4),
+		SuppPrivInfo: []byte{0x01},
+	}
+	_, err := concatKDFOtherInfo(overflowing)
+	require.ErrorIs(t, err, ErrMalformedEncrypted)
+
+	atLimit := &ConcatKDFParams{
+		DigestMethod: DigestSHA256,
+		AlgorithmID:  make([]byte, maxConcatKDFOtherInfoBytes-1),
+		PartyUInfo:   []byte{0x01},
+	}
+	packed, err := concatKDFOtherInfo(atLimit)
+	require.NoError(t, err)
+	require.Len(t, packed, maxConcatKDFOtherInfoBytes)
+}
+
+func benchmarkParams() *ConcatKDFParams {
+	const per = maxConcatKDFOtherInfoBytes / 5
+	return &ConcatKDFParams{
+		DigestMethod: DigestSHA256,
+		AlgorithmID:  make([]byte, per),
+		PartyUInfo:   make([]byte, per),
+		PartyVInfo:   make([]byte, per),
+		SuppPubInfo:  make([]byte, per),
+		SuppPrivInfo: make([]byte, per),
+	}
+}
+
+// BenchmarkConcatKDFOtherInfo contrasts the octet-oriented packing with the
+// bit-at-a-time reference on the same byte-aligned input.
+func BenchmarkConcatKDFOtherInfo(b *testing.B) {
+	params := benchmarkParams()
+	b.Run("octets", func(b *testing.B) {
+		for range b.N {
+			if _, err := concatKDFOtherInfo(params); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("per-bit", func(b *testing.B) {
+		for range b.N {
+			if _, err := concatKDFOtherInfoPerBit(params); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }

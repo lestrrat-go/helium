@@ -249,6 +249,13 @@ func parseConcatKDFParams(elem *helium.Element) (*ConcatKDFParams, error) {
 			return nil, err
 		}
 	}
+	// The five fields are only bounded as a set, and this is the first point
+	// that holds all of them. Rejecting here keeps an oversized document out
+	// of the candidate list entirely, so no ECDH exchange, key unwrap, or
+	// OtherInfo packing is ever attempted for it.
+	if err := checkConcatKDFOtherInfoBudget(params); err != nil {
+		return nil, err
+	}
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok || !isDSigElem(e, "DigestMethod") {
@@ -274,6 +281,15 @@ func parseConcatKDFHexAttribute(elem *helium.Element, name string) ([]byte, uint
 		return nil, 0, nil
 	}
 	value = strings.TrimSpace(value)
+	// A single field can never be larger than the whole set, so the same
+	// budget rules this attribute out from its hex length alone — before
+	// hex.DecodeString allocates half of it. The set-wide check in
+	// parseConcatKDFParams still decides the cumulative case. The encoded
+	// form is two characters per octet and carries a leading unused-bit
+	// octet on top of the field's own bytes.
+	if len(value) > 2*(maxConcatKDFOtherInfoBytes+1) {
+		return nil, 0, fmt.Errorf("%w: ConcatKDF %s alone is over the %d byte OtherInfo limit", ErrMalformedEncrypted, name, maxConcatKDFOtherInfoBytes)
+	}
 	decoded, err := hex.DecodeString(value)
 	if err != nil || len(decoded) == 0 {
 		return nil, 0, fmt.Errorf("%w: invalid ConcatKDF %s", ErrMalformedEncrypted, name)

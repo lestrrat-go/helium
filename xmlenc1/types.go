@@ -135,6 +135,13 @@ type ConcatKDFParams struct {
 	// are the NIST SP 800-56A OtherInfo fields, decoded from the hexBinary
 	// attributes of the same names. They are concatenated, in this order,
 	// into the KDF input, so both parties must agree on them exactly.
+	//
+	// The five fields TOGETHER are limited to 4096 bytes, since the document
+	// under decryption is attacker-supplied and the concatenation costs work
+	// proportional to its size. Real OtherInfo is identifiers and nonces —
+	// tens of bytes — so the limit is far above any interoperable value.
+	// Exceeding it is an error wrapping [ErrMalformedEncrypted], raised both
+	// when parsing a document and when deriving from these parameters.
 	AlgorithmID  []byte
 	PartyUInfo   []byte
 	PartyVInfo   []byte

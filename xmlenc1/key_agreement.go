@@ -215,7 +215,50 @@ func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) 
 	return result[:keySize], nil
 }
 
+// maxConcatKDFOtherInfoBytes bounds the five xenc11:ConcatKDFParams OtherInfo
+// fields — AlgorithmID, PartyUInfo, PartyVInfo, SuppPubInfo, SuppPrivInfo —
+// taken TOGETHER, as the sum of their decoded octet lengths. It is the single
+// statement of that limit; checkConcatKDFOtherInfoBudget applies it.
+//
+// The fields are NIST SP 800-56A OtherInfo: identifiers, party names, and
+// nonces. The W3C xmlenc-core1 examples use a 16-octet PartyUInfo and leave
+// the rest empty, and the largest value a real deployment carries is on the
+// order of an algorithm URI or a certificate digest — tens of octets. 4 KiB
+// is two orders of magnitude above that, so no interoperable document is
+// rejected, while a hostile one can no longer hand the KDF an input sized
+// only by what the XML parser happened to accept: without this ceiling the
+// packing below runs one iteration per input BIT, and five fields at the
+// parser's own 10 MiB attribute cap are ~210 million of them for a single
+// EncryptedKey.
+const maxConcatKDFOtherInfoBytes = 4096
+
+// checkConcatKDFOtherInfoBudget rejects a ConcatKDFParams whose OtherInfo
+// fields exceed maxConcatKDFOtherInfoBytes in total.
+//
+// It runs at both ends of the parameters' life: parseConcatKDFParams applies
+// it to wire data at the point the whole set is first known, so an oversized
+// document is refused before any ECDH or KDF work, and concatKDFOtherInfo
+// applies it again immediately before the packing loop, which is what makes
+// it hold for a caller that hands xmlenc1 a DOM or a ConcatKDFParams it built
+// itself rather than one this package parsed.
+func checkConcatKDFOtherInfoBudget(params *ConcatKDFParams) error {
+	total := len(params.AlgorithmID) + len(params.PartyUInfo) + len(params.PartyVInfo) +
+		len(params.SuppPubInfo) + len(params.SuppPrivInfo)
+	if total > maxConcatKDFOtherInfoBytes {
+		return fmt.Errorf("%w: ConcatKDF OtherInfo is %d bytes, over the %d byte limit", ErrMalformedEncrypted, total, maxConcatKDFOtherInfoBytes)
+	}
+	return nil
+}
+
+// concatKDFOtherInfo packs the five OtherInfo fields into the single bit
+// string ConcatKDF hashes. Each field is a bit string carrying an unused-bit
+// count, so a field whose bit length is not a multiple of eight leaves every
+// field after it straddling octet boundaries.
 func concatKDFOtherInfo(params *ConcatKDFParams) ([]byte, error) {
+	if err := checkConcatKDFOtherInfoBudget(params); err != nil {
+		return nil, err
+	}
+
 	fields := []struct {
 		value      []byte
 		unusedBits uint8
@@ -239,6 +282,22 @@ func concatKDFOtherInfo(params *ConcatKDFParams) ([]byte, error) {
 	bitOffset := 0
 	for _, field := range fields {
 		bitCount := len(field.value)*8 - int(field.unusedBits)
+		// A field landing on an octet boundary keeps its own alignment: its
+		// whole octets go across unshifted and only a trailing partial octet
+		// needs masking. Every preceding field has a bit length that is a
+		// multiple of eight in that case, which is what every W3C example and
+		// every hexBinary-with-zero-unused-bits document looks like.
+		if bitOffset%8 == 0 {
+			fullBytes := bitCount / 8
+			copy(otherInfo[bitOffset/8:], field.value[:fullBytes])
+			if rem := bitCount % 8; rem != 0 {
+				otherInfo[bitOffset/8+fullBytes] |= field.value[fullBytes] & (^byte(0) << (8 - rem))
+			}
+			bitOffset += bitCount
+			continue
+		}
+		// Straddling the boundary: fall back to moving one bit at a time.
+		// maxConcatKDFOtherInfoBytes bounds how long that can run.
 		for i := range bitCount {
 			if field.value[i/8]&(1<<uint(7-i%8)) != 0 {
 				otherInfo[bitOffset/8] |= 1 << uint(7-bitOffset%8)
