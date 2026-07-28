@@ -1,11 +1,14 @@
 package xmlenc1
 
 import (
+	"crypto/ecdh"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash"
 )
@@ -57,9 +60,122 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 
 	kek, err := deriveConcatKDF(sharedSecret, method.ConcatKDF, kekSize)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
 	}
 	return aesKeyUnwrap(kek, ek.CipherValue)
+}
+
+// ecdhRecipientKey converts a recipient's ECDSA public key into the
+// crypto/ecdh form ECDH-ES needs, and rejects any recipient key the package
+// cannot see an encryption through. Three distinct failures live here: the
+// key may carry no point at all (an ecdsa.PublicKey with unset coordinates,
+// which crypto/ecdsa dereferences rather than reporting), crypto/ecdh refuses
+// some curves outright (P-224 has no ECDH form at all), and a curve it does
+// accept may still have no dsig11:NamedCurve URI, which would yield an
+// EncryptedKey no recipient can parse.
+//
+// It is the single gate for all three, and resolveEncryptConfig calls it
+// before any entry point serializes plaintext, generates a session key, or
+// block encrypts, so an unusable recipient key is reported as an error and
+// costs nothing proportional to the payload.
+func ecdhRecipientKey(recipient *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
+	// crypto/ecdsa reads the affine coordinates before validating them, so a
+	// public key whose X or Y was never set panics inside (*PublicKey).ECDH
+	// instead of erroring. This gate exists to decide whether the recipient
+	// key is usable at all, and "carries no point" is the most basic way it
+	// can be unusable; the caller's contract is an error, not a panic.
+	if recipient.X == nil || recipient.Y == nil {
+		return nil, fmt.Errorf("%w: invalid recipient EC public key: missing curve point", ErrEncryptionFailed)
+	}
+
+	recipientKey, err := recipient.ECDH()
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid recipient EC public key: %v", ErrEncryptionFailed, err)
+	}
+	if _, err := ecdhURIForCurve(recipientKey.Curve()); err != nil {
+		return nil, err
+	}
+	return recipientKey, nil
+}
+
+// encryptECDHSessionKey performs the originator side of XML Encryption 1.1
+// ECDH-ES. It generates an ephemeral key pair on the recipient's own curve,
+// agrees a shared secret with the recipient's static public key, derives a
+// key-encryption key from it with ConcatKDF, and wraps the session key under
+// that KEK with AES Key Wrap.
+//
+// The ephemeral key is generated per call and never retained, which is what
+// makes the scheme forward-secret; the resulting EncryptedKey carries the
+// ephemeral PUBLIC key so the recipient can reach the same shared secret.
+//
+// It takes the recipient key already resolved by ecdhRecipientKey, so the
+// curve is known to be usable and nameable before the caller does any
+// payload-proportional work.
+func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string, params *ConcatKDFParams, sessionKey []byte) (*EncryptedKey, error) {
+	switch keyWrapAlgorithm {
+	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
+	default:
+		// ECDH-ES derives a KEK, so the EncryptedKey algorithm must be a
+		// key wrap. Anything else would declare a mechanism we are not
+		// performing.
+		return nil, fmt.Errorf("%w: %w", ErrEncryptionFailed, &UnsupportedAlgorithmError{Algorithm: keyWrapAlgorithm})
+	}
+	kekSize, err := keySizeForAlgorithm(keyWrapAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	curve := recipientKey.Curve()
+	ephemeral, err := curve.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
+	}
+	sharedSecret, err := ephemeral.ECDH(recipientKey)
+	if err != nil {
+		return nil, fmt.Errorf("%w: ECDH exchange failed: %v", ErrEncryptionFailed, err)
+	}
+
+	kek, err := deriveConcatKDF(sharedSecret, params, kekSize)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrEncryptionFailed, err)
+	}
+	wrapped, err := aesKeyWrap(kek, sessionKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &EncryptedKey{
+		EncryptionMethod: &EncryptionMethod{Algorithm: keyWrapAlgorithm},
+		CipherValue:      wrapped,
+		AgreementMethod: &AgreementMethod{
+			Algorithm: ECDHES,
+			KeyDerivationMethod: &KeyDerivationMethod{
+				Algorithm: ConcatKDF,
+				ConcatKDF: params,
+			},
+			OriginatorKey: &ECKeyValue{
+				Curve:     curve,
+				PublicKey: ephemeral.PublicKey().Bytes(),
+			},
+		},
+	}, nil
+}
+
+// effectiveKDFParams fills in the ConcatKDF defaults for an Encryptor that
+// selected ECDH-ES without spelling the derivation out. Empty OtherInfo with
+// SHA-256 is the neutral choice: it commits to no application-specific
+// AlgorithmID/PartyInfo the recipient would have to guess, and the emitted
+// xenc11:ConcatKDFParams states it explicitly on the wire either way.
+//
+// The default is all-or-nothing: params that omit DigestMethod are treated as
+// unspecified in full, so any OtherInfo they carry is DISCARDED rather than
+// silently combined with a digest the caller never chose. Caller OtherInfo is
+// honored only alongside a digest the caller did supply.
+func effectiveKDFParams(params *ConcatKDFParams) *ConcatKDFParams {
+	if params == nil || params.DigestMethod == "" {
+		return &ConcatKDFParams{DigestMethod: DigestSHA256}
+	}
+	return params
 }
 
 func agreementAlgorithm(agreement *AgreementMethod) string {
@@ -69,6 +185,10 @@ func agreementAlgorithm(agreement *AgreementMethod) string {
 	return agreement.Algorithm
 }
 
+// deriveConcatKDF runs the NIST SP 800-56A concatenation KDF over the agreed
+// shared secret. Its errors are UNWRAPPED so the caller classifies them:
+// decryptECDHSessionKey wraps them with ErrDecryptionFailed and
+// encryptECDHSessionKey with ErrEncryptionFailed, mirroring oaepHashes.
 func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) ([]byte, error) {
 	newHash, err := concatKDFHash(params.DigestMethod)
 	if err != nil {
@@ -89,7 +209,7 @@ func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) 
 		_, _ = h.Write(otherInfo)
 		result = append(result, h.Sum(nil)...)
 		if counter == ^uint32(0) && len(result) < keySize {
-			return nil, fmt.Errorf("%w: ConcatKDF output is too large", ErrDecryptionFailed)
+			return nil, errors.New("xmlenc1: ConcatKDF output is too large")
 		}
 	}
 	return result[:keySize], nil
@@ -140,6 +260,6 @@ func concatKDFHash(uri string) (func() hash.Hash, error) {
 	case DigestSHA512:
 		return sha512.New, nil
 	default:
-		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: uri})
+		return nil, &UnsupportedAlgorithmError{Algorithm: uri}
 	}
 }

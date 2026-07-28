@@ -2,6 +2,7 @@ package xmlenc1
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -24,6 +25,8 @@ type encryptConfig struct {
 	oaepParams       []byte
 	keyWrapAlgorithm string
 	keyEncryptionKey []byte
+	recipientECPub   *ecdsa.PublicKey
+	kdfParams        *ConcatKDFParams
 	allowLegacyCBC   bool
 }
 
@@ -151,6 +154,46 @@ func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 	return e
 }
 
+// RecipientECPublicKey sets the recipient's elliptic-curve public key and
+// selects XML Encryption 1.1 ECDH-ES key agreement. It is the encrypt-side
+// counterpart of Decryptor.ECPrivateKey, and supports P-256, P-384, and
+// P-521.
+//
+// ECDH-ES derives the key-encryption key rather than taking one, so
+// KeyWrapAlgorithm still selects the AES Key Wrap variant applied to the
+// session key, but KeyEncryptionKey is not used. Each encryption generates a
+// fresh ephemeral key pair, and the EncryptedKey carries its public half in
+// an xenc:AgreementMethod.
+//
+// Key agreement is mutually exclusive with RSA key transport
+// (KeyTransportAlgorithm + RecipientPublicKey): only one EncryptedKey is
+// emitted, so configuring both fails with [ErrMissingConfig] rather than
+// silently discarding one of them.
+//
+// The key derivation defaults to ConcatKDF with SHA-256 and empty OtherInfo;
+// use KeyDerivationParams to control it.
+func (e Encryptor) RecipientECPublicKey(key *ecdsa.PublicKey) Encryptor {
+	e = e.clone()
+	e.cfg.recipientECPub = key
+	return e
+}
+
+// KeyDerivationParams sets the ConcatKDF parameters used by ECDH-ES key
+// agreement. It has no effect without RecipientECPublicKey.
+//
+// The five OtherInfo fields are concatenated into the KDF input exactly as
+// given, so the recipient must derive with identical values; they travel on
+// the wire in the emitted xenc11:ConcatKDFParams. A nil params, or one with
+// an empty DigestMethod, falls back to SHA-256 with empty OtherInfo.
+//
+// The parameters are copied, byte slices included, so mutating the caller's
+// arrays afterwards cannot change what a later encryption derives or emits.
+func (e Encryptor) KeyDerivationParams(params *ConcatKDFParams) Encryptor {
+	e = e.clone()
+	e.cfg.kdfParams = params.clone()
+	return e
+}
+
 // EncryptElement encrypts an entire element, replacing it in the tree
 // with an EncryptedData element. Returns the EncryptedData element.
 func (e Encryptor) EncryptElement(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
@@ -174,14 +217,27 @@ func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plain
 	if doc == nil {
 		return nil, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", ErrMissingConfig)
 	}
-	return encryptPlaintext(ctx, e.config(), doc, plaintext, "")
+	cfg := e.config()
+	resolved, err := resolveEncryptConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return encryptPlaintext(ctx, cfg, resolved, doc, plaintext, "")
 }
 
 func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
+	// Decide everything about the key protection before touching the
+	// payload: no payload can make a misconfigured or unusable recipient key
+	// work, so those errors must not cost anything proportional to the
+	// plaintext, nor be masked by a plaintext that also fails to serialize.
+	resolved, err := resolveEncryptConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// Serialize the plaintext. Element encrypts the element itself;
 	// Content encrypts its children.
 	var plaintext string
-	var err error
 	if encType == TypeElement {
 		plaintext, err = helium.WriteString(elem)
 	} else {
@@ -191,7 +247,7 @@ func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encT
 		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
 	}
 
-	edElem, err := encryptPlaintext(ctx, cfg, elem.OwnerDocument(), []byte(plaintext), encType)
+	edElem, err := encryptPlaintext(ctx, cfg, resolved, elem.OwnerDocument(), []byte(plaintext), encType)
 	if err != nil {
 		return nil, err
 	}
@@ -214,13 +270,59 @@ func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encT
 	return edElem, nil
 }
 
+// resolvedEncryptConfig is what resolveEncryptConfig decides: which of the
+// mutually exclusive mechanisms protects the session key, plus the recipient
+// ECDH key when key agreement is the one selected.
+type resolvedEncryptConfig struct {
+	hasKeyTransport bool
+	hasKeyAgreement bool
+	recipientECDH   *ecdh.PublicKey
+}
+
+// resolveEncryptConfig validates everything about an Encryptor's key
+// protection that can be decided without a payload: it rejects two
+// conflicting mechanisms and resolves the ECDH-ES recipient key. Every entry
+// point calls it before any payload work, so a configuration error is never
+// paid for in plaintext serialization or block encryption first.
+func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
+	hasKeyTransport := cfg.recipientPubKey != nil && cfg.keyTransport != ""
+	hasKeyAgreement := cfg.recipientECPub != nil && cfg.keyWrapAlgorithm != ""
+
+	// RSA key transport and ECDH-ES key agreement are alternative ways to
+	// protect the same session key, and only one EncryptedKey is emitted.
+	// Fail rather than silently preferring transport: a recipient holding
+	// only the EC private key would otherwise fail to decrypt with an error
+	// pointing nowhere near the real mistake.
+	if hasKeyTransport && hasKeyAgreement {
+		return resolvedEncryptConfig{}, fmt.Errorf("%w: key transport (%q) and ECDH-ES key agreement (%q) are both configured; configure exactly one", ErrMissingConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
+	}
+
+	resolved := resolvedEncryptConfig{
+		hasKeyTransport: hasKeyTransport,
+		hasKeyAgreement: hasKeyAgreement,
+	}
+	// Resolve the recipient key only when key agreement is the mechanism
+	// actually in use, so an unusable curve cannot fail an encryption that
+	// would never have touched that key.
+	if !hasKeyAgreement {
+		return resolved, nil
+	}
+	recipientECDH, err := ecdhRecipientKey(cfg.recipientECPub)
+	if err != nil {
+		return resolvedEncryptConfig{}, err
+	}
+	resolved.recipientECDH = recipientECDH
+	return resolved, nil
+}
+
 // encryptPlaintext performs the whole encryption pipeline over already
-// serialized plaintext: it resolves the block algorithm, enforces the CBC
-// opt-in, obtains and binds the session key, block-encrypts, protects the
-// session key, and marshals the EncryptedData element into doc. It never
-// touches the tree, so both the element/content and the raw-octet entry
-// points share identical crypto and configuration handling.
-func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
+// serialized plaintext and an already resolved key protection: it resolves
+// the block algorithm, enforces the CBC opt-in, obtains and binds the session
+// key, block-encrypts, protects the session key, and marshals the
+// EncryptedData element into doc. It never touches the tree, so both the
+// element/content and the raw-octet entry points share identical crypto and
+// configuration handling.
+func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEncryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
 	// Secure by default: an unset block algorithm uses authenticated
 	// AES-256-GCM rather than refusing or falling back to CBC.
 	blockAlgorithm := cfg.blockAlgorithm
@@ -237,12 +339,11 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Documen
 		}
 	}
 
-	hasKeyTransport := cfg.recipientPubKey != nil && cfg.keyTransport != ""
 	hasKeyWrap := len(cfg.keyEncryptionKey) > 0 && cfg.keyWrapAlgorithm != ""
 	hasSessionKey := len(cfg.sessionKey) > 0
 
-	if !hasKeyTransport && !hasKeyWrap && !hasSessionKey {
-		return nil, fmt.Errorf("%w: no key transport, key wrap, or session key configured", ErrMissingConfig)
+	if !resolved.hasKeyTransport && !resolved.hasKeyAgreement && !hasKeyWrap && !hasSessionKey {
+		return nil, fmt.Errorf("%w: no key transport, key agreement, key wrap, or session key configured", ErrMissingConfig)
 	}
 
 	// Get or generate session key.
@@ -274,7 +375,7 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Documen
 
 	// Encrypt session key.
 	var encKey *EncryptedKey
-	if hasKeyTransport {
+	if resolved.hasKeyTransport {
 		encKeyBytes, err := encryptSessionKey(cfg.keyTransport, cfg.recipientPubKey, sessionKey, cfg.oaepDigest, cfg.oaepMGF, cfg.oaepParams)
 		if err != nil {
 			return nil, err
@@ -287,6 +388,13 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Documen
 				OAEPParams:   cfg.oaepParams,
 			},
 			CipherValue: encKeyBytes,
+		}
+	} else if resolved.hasKeyAgreement {
+		// ECDH-ES derives the KEK from an ephemeral exchange, so it takes
+		// priority over a statically supplied KEK on the same key wrap URI.
+		encKey, err = encryptECDHSessionKey(resolved.recipientECDH, cfg.keyWrapAlgorithm, effectiveKDFParams(cfg.kdfParams), sessionKey)
+		if err != nil {
+			return nil, err
 		}
 	} else if hasKeyWrap {
 		// Bind the declared key-wrap URI to the KEK length so a 16-byte

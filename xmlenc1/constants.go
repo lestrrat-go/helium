@@ -77,8 +77,18 @@ const (
 	TypeContent = NamespaceXMLEnc + "Content"
 )
 
+// Named-curve URIs carried by the XML Signature 1.1 dsig11:NamedCurve
+// element. They are the OID URNs for the three NIST curves ECDH-ES supports.
+const (
+	curveURIP256 = "urn:oid:1.2.840.10045.3.1.7"
+	curveURIP384 = "urn:oid:1.3.132.0.34"
+	curveURIP521 = "urn:oid:1.3.132.0.35"
+)
+
 // Namespace prefixes used when constructing elements.
 const (
-	nsPrefixEnc  = "xenc"
-	nsPrefixDSig = "ds"
+	nsPrefixEnc    = "xenc"
+	nsPrefixEnc11  = "xenc11"
+	nsPrefixDSig   = "ds"
+	nsPrefixDSig11 = "dsig11"
 )

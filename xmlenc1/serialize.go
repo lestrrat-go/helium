@@ -2,6 +2,7 @@ package xmlenc1
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 
 	helium "github.com/lestrrat-go/helium"
 )
@@ -102,6 +103,18 @@ func marshalEncryptedKey(doc *helium.Document, ek *EncryptedKey) (*helium.Elemen
 		}
 	}
 
+	// XML Encryption 1.1 carries the key agreement in a ds:KeyInfo child,
+	// between EncryptionMethod and CipherData.
+	if ek.AgreementMethod != nil {
+		keyInfo, err := marshalAgreementKeyInfo(doc, ek.AgreementMethod)
+		if err != nil {
+			return nil, err
+		}
+		if err := root.AddChild(keyInfo); err != nil {
+			return nil, err
+		}
+	}
+
 	cd, err := marshalCipherData(doc, ek.CipherValue)
 	if err != nil {
 		return nil, err
@@ -196,4 +209,202 @@ func marshalCipherData(doc *helium.Document, cipherValue []byte) (*helium.Elemen
 	}
 
 	return cd, cd.AddChild(cv)
+}
+
+// marshalAgreementKeyInfo builds the ds:KeyInfo subtree that carries an
+// XML Encryption 1.1 key agreement inside an EncryptedKey:
+//
+//	<ds:KeyInfo>
+//	  <xenc:AgreementMethod Algorithm="...ECDH-ES">
+//	    <xenc11:KeyDerivationMethod Algorithm="...ConcatKDF">
+//	      <xenc11:ConcatKDFParams ...><ds:DigestMethod Algorithm="..."/></xenc11:ConcatKDFParams>
+//	    </xenc11:KeyDerivationMethod>
+//	    <xenc:OriginatorKeyInfo>
+//	      <ds:KeyValue><dsig11:ECKeyValue>...</dsig11:ECKeyValue></ds:KeyValue>
+//	    </xenc:OriginatorKeyInfo>
+//	  </xenc:AgreementMethod>
+//	</ds:KeyInfo>
+func marshalAgreementKeyInfo(doc *helium.Document, agreement *AgreementMethod) (*helium.Element, error) {
+	keyInfo, err := doc.CreateElement("KeyInfo")
+	if err != nil {
+		return nil, err
+	}
+	if err := keyInfo.DeclareNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
+		return nil, err
+	}
+	if err := keyInfo.SetActiveNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
+		return nil, err
+	}
+
+	am, err := doc.CreateElement("AgreementMethod")
+	if err != nil {
+		return nil, err
+	}
+	if err := am.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
+		return nil, err
+	}
+	if err := am.SetAttribute("Algorithm", agreement.Algorithm); err != nil {
+		return nil, err
+	}
+
+	if agreement.KeyDerivationMethod != nil {
+		kdm, err := marshalKeyDerivationMethod(doc, agreement.KeyDerivationMethod)
+		if err != nil {
+			return nil, err
+		}
+		if err := am.AddChild(kdm); err != nil {
+			return nil, err
+		}
+	}
+
+	if agreement.OriginatorKey != nil {
+		oki, err := marshalOriginatorKeyInfo(doc, agreement.OriginatorKey)
+		if err != nil {
+			return nil, err
+		}
+		if err := am.AddChild(oki); err != nil {
+			return nil, err
+		}
+	}
+
+	return keyInfo, keyInfo.AddChild(am)
+}
+
+func marshalKeyDerivationMethod(doc *helium.Document, method *KeyDerivationMethod) (*helium.Element, error) {
+	kdm, err := doc.CreateElement("KeyDerivationMethod")
+	if err != nil {
+		return nil, err
+	}
+	if err := kdm.DeclareNamespace(nsPrefixEnc11, NamespaceXMLEnc11); err != nil {
+		return nil, err
+	}
+	if err := kdm.SetActiveNamespace(nsPrefixEnc11, NamespaceXMLEnc11); err != nil {
+		return nil, err
+	}
+	if err := kdm.SetAttribute("Algorithm", method.Algorithm); err != nil {
+		return nil, err
+	}
+	if method.ConcatKDF == nil {
+		return kdm, nil
+	}
+
+	params, err := marshalConcatKDFParams(doc, method.ConcatKDF)
+	if err != nil {
+		return nil, err
+	}
+	return kdm, kdm.AddChild(params)
+}
+
+func marshalConcatKDFParams(doc *helium.Document, params *ConcatKDFParams) (*helium.Element, error) {
+	elem, err := doc.CreateElement("ConcatKDFParams")
+	if err != nil {
+		return nil, err
+	}
+	if err := elem.SetActiveNamespace(nsPrefixEnc11, NamespaceXMLEnc11); err != nil {
+		return nil, err
+	}
+
+	// The OtherInfo fields are hexBinary bit strings: the first octet is the
+	// count of unused trailing bits, so the parser can reconstruct a value
+	// that is not a whole number of octets. An absent field is omitted
+	// entirely rather than written as an empty attribute.
+	for _, field := range []struct {
+		name       string
+		value      []byte
+		unusedBits uint8
+	}{
+		{name: "AlgorithmID", value: params.AlgorithmID, unusedBits: params.algorithmIDUnusedBits},
+		{name: "PartyUInfo", value: params.PartyUInfo, unusedBits: params.partyUInfoUnusedBits},
+		{name: "PartyVInfo", value: params.PartyVInfo, unusedBits: params.partyVInfoUnusedBits},
+		{name: "SuppPubInfo", value: params.SuppPubInfo, unusedBits: params.suppPubInfoUnusedBits},
+		{name: "SuppPrivInfo", value: params.SuppPrivInfo, unusedBits: params.suppPrivInfoUnusedBits},
+	} {
+		if len(field.value) == 0 {
+			continue
+		}
+		encoded := hex.EncodeToString(append([]byte{field.unusedBits}, field.value...))
+		if err := elem.SetAttribute(field.name, encoded); err != nil {
+			return nil, err
+		}
+	}
+
+	dm, err := doc.CreateElement("DigestMethod")
+	if err != nil {
+		return nil, err
+	}
+	if err := dm.SetActiveNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
+		return nil, err
+	}
+	if err := dm.SetAttribute("Algorithm", params.DigestMethod); err != nil {
+		return nil, err
+	}
+	return elem, elem.AddChild(dm)
+}
+
+func marshalOriginatorKeyInfo(doc *helium.Document, key *ECKeyValue) (*helium.Element, error) {
+	curveURI, err := ecdhURIForCurve(key.Curve)
+	if err != nil {
+		return nil, err
+	}
+
+	oki, err := doc.CreateElement("OriginatorKeyInfo")
+	if err != nil {
+		return nil, err
+	}
+	if err := oki.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
+		return nil, err
+	}
+
+	keyValue, err := doc.CreateElement("KeyValue")
+	if err != nil {
+		return nil, err
+	}
+	if err := keyValue.SetActiveNamespace(nsPrefixDSig, NamespaceDSig); err != nil {
+		return nil, err
+	}
+
+	ecKeyValue, err := doc.CreateElement("ECKeyValue")
+	if err != nil {
+		return nil, err
+	}
+	if err := ecKeyValue.DeclareNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
+		return nil, err
+	}
+	if err := ecKeyValue.SetActiveNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
+		return nil, err
+	}
+
+	namedCurve, err := doc.CreateElement("NamedCurve")
+	if err != nil {
+		return nil, err
+	}
+	if err := namedCurve.SetActiveNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
+		return nil, err
+	}
+	if err := namedCurve.SetAttribute("URI", curveURI); err != nil {
+		return nil, err
+	}
+	if err := ecKeyValue.AddChild(namedCurve); err != nil {
+		return nil, err
+	}
+
+	publicKey, err := doc.CreateElement("PublicKey")
+	if err != nil {
+		return nil, err
+	}
+	if err := publicKey.SetActiveNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
+		return nil, err
+	}
+	encoded := base64.StdEncoding.EncodeToString(key.PublicKey)
+	if err := publicKey.AddChild(doc.CreateText([]byte(encoded))); err != nil {
+		return nil, err
+	}
+	if err := ecKeyValue.AddChild(publicKey); err != nil {
+		return nil, err
+	}
+
+	if err := keyValue.AddChild(ecKeyValue); err != nil {
+		return nil, err
+	}
+	return oki, oki.AddChild(keyValue)
 }
