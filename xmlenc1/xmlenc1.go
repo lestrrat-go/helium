@@ -588,16 +588,6 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 //     missing EncryptionMethod, an unsupported algorithm URI, an algorithm
 //     whose key the caller never configured — does not fail the decrypt.
 //
-// What still runs before the early return is parsing, plus the checks on the
-// EncryptedData element itself: its EncryptionMethod, the
-// AllowUnauthenticatedCBC opt-in, and — in Decrypt only — its Type. The
-// EncryptedData subtree is parsed in
-// full, including every EncryptedKey element, so an EncryptedKey the PARSER
-// rejects — no CipherData/CipherValue, a duplicate EncryptionMethod or
-// CipherData, an unreadable EncryptionMethod or AgreementMethod — still
-// fails the decrypt with [ErrMalformedEncrypted] even though its contents
-// are never used.
-//
 // Set it only when the session key is known out of band.
 func (d Decryptor) SessionKey(key []byte) Decryptor {
 	d = d.clone()
