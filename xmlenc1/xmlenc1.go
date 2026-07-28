@@ -578,7 +578,7 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 // Decrypt and DecryptBytes take it as the session key and return before the
 // whole EncryptedKey stage: the MaxEncryptedKeys cap, candidate selection,
 // per-candidate validation, and per-candidate key resolution all live in
-// that stage, and none of them runs. No EncryptedKey is examined at all.
+// that stage, and none of them runs.
 // Every consequence follows from that one fact:
 //
 //   - PrivateKey, ECPrivateKey, and KeyEncryptionKey have no effect.

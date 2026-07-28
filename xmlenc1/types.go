@@ -51,7 +51,7 @@ type EncryptedData struct {
 	// (one per recipient). Decryption tries each in turn, so a
 	// multi-recipient document, or one with a bogus EncryptedKey
 	// prepended to a legitimate one, still resolves. A Decryptor with a
-	// non-empty SessionKey examines none of them — see
+	// non-empty SessionKey uses none of them — see
 	// [Decryptor.SessionKey].
 	EncryptedKeys []*EncryptedKey
 	// CipherValue is the encrypted content, base64-decoded. Its internal
