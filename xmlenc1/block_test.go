@@ -159,5 +159,8 @@ func TestKeySizeErrorMessage(t *testing.T) {
 	require.Equal(t, xmlenc1.AES256GCM, kse.Algorithm)
 	require.Equal(t, 32, kse.Want)
 	require.Equal(t, 16, kse.Got)
-	require.Contains(t, kse.Error(), "requires a 32-byte key, got 16 bytes")
+	// The message names which key was the wrong length, so a caller
+	// configuring both a session key and a KEK knows which one to fix.
+	require.Equal(t, "session key", kse.Key)
+	require.Contains(t, kse.Error(), "requires a 32-byte session key, got 16 bytes")
 }

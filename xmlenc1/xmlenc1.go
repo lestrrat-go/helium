@@ -347,7 +347,7 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 	}
 
 	// Get or generate session key.
-	keySize, err := keySizeForAlgorithm(blockAlgorithm)
+	keySize, err := keySizeForAlgorithm(paramBlockAlgorithm, blockAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 	// Bind the declared block-algorithm URI to the session-key length so
 	// a user-supplied SessionKey cannot make us emit, e.g., an AES-256
 	// URI while actually encrypting with AES-128.
-	if err := validateKeySize(blockAlgorithm, sessionKey); err != nil {
+	if err := validateKeySize(paramBlockAlgorithm, blockAlgorithm, paramSessionKey, sessionKey); err != nil {
 		return nil, err
 	}
 
@@ -400,7 +400,7 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 		// Bind the declared key-wrap URI to the KEK length so a 16-byte
 		// KEK cannot make us emit a kw-aes256 URI while wrapping with
 		// AES-128.
-		if err := validateKeySize(cfg.keyWrapAlgorithm, cfg.keyEncryptionKey); err != nil {
+		if err := validateKeySize(paramKeyWrap, cfg.keyWrapAlgorithm, paramKEK, cfg.keyEncryptionKey); err != nil {
 			return nil, err
 		}
 		wrappedKey, err := aesKeyWrap(cfg.keyEncryptionKey, sessionKey)
@@ -594,14 +594,14 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 	}
 	keys := ed.effectiveEncryptedKeys()
 	if len(keys) == 0 {
-		return nil, ErrMissingKey
+		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
 	}
 	maxKeys := cfg.maxEncryptedKeys
 	if maxKeys == 0 {
 		maxKeys = DefaultMaxEncryptedKeys
 	}
 	if maxKeys >= 0 && len(keys) > maxKeys {
-		return nil, ErrTooManyEncryptedKeys
+		return nil, fmt.Errorf("%w: %d candidates exceed the limit of %d; raise or remove it with Decryptor.MaxEncryptedKeys", ErrTooManyEncryptedKeys, len(keys), maxKeys)
 	}
 
 	var lastErr error
@@ -665,7 +665,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 
 	keys := ed.effectiveEncryptedKeys()
 	if len(keys) == 0 {
-		return nil, ErrMissingKey
+		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
 	}
 
 	// Bound the trial-decrypt work before any RSA operation runs. Each
@@ -678,7 +678,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		maxKeys = DefaultMaxEncryptedKeys
 	}
 	if maxKeys >= 0 && len(keys) > maxKeys {
-		return nil, ErrTooManyEncryptedKeys
+		return nil, fmt.Errorf("%w: %d candidates exceed the limit of %d; raise or remove it with Decryptor.MaxEncryptedKeys", ErrTooManyEncryptedKeys, len(keys), maxKeys)
 	}
 
 	// A document may carry several EncryptedKey candidates (one per
@@ -840,29 +840,35 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]
 		return nil, fmt.Errorf("%w: EncryptedKey missing EncryptionMethod", ErrMalformedEncrypted)
 	}
 
+	// Every "no key" path below names the key kind the candidate needs and
+	// the setter that supplies it. The information is derived from the
+	// document's own declared algorithm, which the caller can already read,
+	// so it leaks nothing an attacker does not have — and without it every
+	// key kind fails with the same unactionable "no decryption key
+	// available".
 	alg := ek.EncryptionMethod.Algorithm
 	if ek.AgreementMethod != nil {
 		if cfg.ecPrivateKey == nil {
-			return nil, ErrMissingKey
+			return nil, fmt.Errorf("%w: EncryptedKey uses key agreement %q; set Decryptor.ECPrivateKey", ErrMissingKey, ek.AgreementMethod.Algorithm)
 		}
 		return decryptECDHSessionKey(cfg.ecPrivateKey, ek)
 	}
 	switch alg {
 	case RSAOAEP, RSAOAEP11:
 		if cfg.privateKey == nil {
-			return nil, ErrMissingKey
+			return nil, fmt.Errorf("%w: EncryptedKey uses RSA key transport %q; set Decryptor.PrivateKey", ErrMissingKey, alg)
 		}
 		return decryptSessionKey(alg, cfg.privateKey, ek.CipherValue,
 			ek.EncryptionMethod.DigestMethod, ek.EncryptionMethod.MGFAlgorithm, ek.EncryptionMethod.OAEPParams)
 	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
 		if len(cfg.keyEncryptionKey) == 0 {
-			return nil, ErrMissingKey
+			return nil, fmt.Errorf("%w: EncryptedKey uses AES key wrap %q; set Decryptor.KeyEncryptionKey", ErrMissingKey, alg)
 		}
 		// Bind the declared key-wrap URI to the KEK length so a 16-byte
 		// KEK is not silently accepted as AES-128 against a kw-aes256
 		// declaration. The unwrapped session key is in turn validated
 		// against the data-encryption algorithm in blockDecrypt.
-		if err := validateKeySize(alg, cfg.keyEncryptionKey); err != nil {
+		if err := validateKeySize(paramKeyWrap, alg, paramKEK, cfg.keyEncryptionKey); err != nil {
 			return nil, err
 		}
 		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue)
@@ -870,6 +876,6 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]
 		// Classify under the decrypt path while preserving the typed
 		// error in the chain for errors.As, consistent with the
 		// decryptSessionKey wrapping above.
-		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: alg})
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyTransport, Algorithm: alg})
 	}
 }

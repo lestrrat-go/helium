@@ -68,12 +68,12 @@ func aesKeyWrap(kek, plaintext []byte) ([]byte, error) {
 // aesKeyUnwrap unwraps a key using the AES Key Wrap algorithm (RFC 3394).
 func aesKeyUnwrap(kek, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext)%8 != 0 || len(ciphertext) < 24 {
-		return nil, fmt.Errorf("%w: ciphertext must be at least 24 bytes and a multiple of 8", ErrKeyUnwrapFailed)
+		return nil, fmt.Errorf("%w: %w: ciphertext must be at least 24 bytes and a multiple of 8", ErrDecryptionFailed, ErrKeyUnwrapFailed)
 	}
 
 	block, err := aes.NewCipher(kek)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrKeyUnwrapFailed, err)
+		return nil, fmt.Errorf("%w: %w: %v", ErrDecryptionFailed, ErrKeyUnwrapFailed, err)
 	}
 
 	n := len(ciphertext)/8 - 1
@@ -111,7 +111,10 @@ func aesKeyUnwrap(kek, ciphertext []byte) ([]byte, error) {
 
 	// Check integrity
 	if a != defaultIV {
-		return nil, ErrKeyUnwrapFailed
+		// Wrap in ErrDecryptionFailed so a caller testing only that
+		// sentinel catches a failed key unwrap the same way it catches a
+		// failed RSA key transport, which decryptSessionKey wraps.
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, ErrKeyUnwrapFailed)
 	}
 
 	out := make([]byte, n*8)

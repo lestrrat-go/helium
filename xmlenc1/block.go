@@ -9,7 +9,10 @@ import (
 	"io"
 )
 
-func keySizeForAlgorithm(algorithm string) (int, error) {
+// keySizeForAlgorithm returns the exact key length the algorithm URI
+// requires. algParam names the slot the URI came from (paramBlockAlgorithm,
+// paramKeyWrap, ...) so a rejected URI reports which setter to fix.
+func keySizeForAlgorithm(algParam, algorithm string) (int, error) {
 	switch algorithm {
 	case AES128CBC, AES128GCM, AES128GCM11, AES128KeyWrap:
 		return 16, nil
@@ -18,7 +21,7 @@ func keySizeForAlgorithm(algorithm string) (int, error) {
 	case AES256CBC, AES256GCM, AES256GCM11, AES256KeyWrap:
 		return 32, nil
 	default:
-		return 0, &UnsupportedAlgorithmError{Algorithm: algorithm}
+		return 0, &UnsupportedAlgorithmError{Parameter: algParam, Algorithm: algorithm}
 	}
 }
 
@@ -28,13 +31,16 @@ func keySizeForAlgorithm(algorithm string) (int, error) {
 // key (which crypto/aes silently accepts as AES-128) is rejected instead
 // of producing data that DECLARES AES-256 but uses AES-128. Enforced on
 // both encrypt and decrypt, including after key unwrap / key transport.
-func validateKeySize(algorithm string, key []byte) error {
-	want, err := keySizeForAlgorithm(algorithm)
+//
+// algParam and keyParam name the algorithm slot and the key the caller is
+// binding together, so the resulting error says which one to fix.
+func validateKeySize(algParam, algorithm, keyParam string, key []byte) error {
+	want, err := keySizeForAlgorithm(algParam, algorithm)
 	if err != nil {
 		return err
 	}
 	if len(key) != want {
-		return &KeySizeError{Algorithm: algorithm, Want: want, Got: len(key)}
+		return &KeySizeError{Key: keyParam, Algorithm: algorithm, Want: want, Got: len(key)}
 	}
 	return nil
 }
@@ -44,7 +50,7 @@ func validateKeySize(algorithm string, key []byte) error {
 // authenticated data so that an attacker cannot substitute a different
 // EncryptionMethod/@Algorithm on the wire.
 func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
-	if err := validateKeySize(algorithm, key); err != nil {
+	if err := validateKeySize(paramBlockAlgorithm, algorithm, paramSessionKey, key); err != nil {
 		return nil, err
 	}
 	switch algorithm {
@@ -58,7 +64,7 @@ func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 		// data. Keep the legacy namespace behavior above for compatibility.
 		return encryptGCM(key, plaintext, nil)
 	default:
-		return nil, &UnsupportedAlgorithmError{Algorithm: algorithm}
+		return nil, &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm}
 	}
 }
 
@@ -72,7 +78,7 @@ func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 	// touching the ciphertext. The key length is not attacker-controlled
 	// (it is the recipient's configured / unwrapped key), so reporting a
 	// distinguishable KeySizeError here is not a padding-oracle signal.
-	if err := validateKeySize(algorithm, key); err != nil {
+	if err := validateKeySize(paramBlockAlgorithm, algorithm, paramSessionKey, key); err != nil {
 		return nil, err
 	}
 	switch algorithm {
@@ -83,7 +89,7 @@ func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 	case AES128GCM11, AES192GCM11, AES256GCM11:
 		return decryptGCM(key, ciphertext, nil)
 	default:
-		return nil, &UnsupportedAlgorithmError{Algorithm: algorithm}
+		return nil, &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm}
 	}
 }
 

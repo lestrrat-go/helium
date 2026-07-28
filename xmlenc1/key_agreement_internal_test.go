@@ -86,7 +86,7 @@ func newECDHEncryptedKey(t *testing.T, algorithm string) (*ecdsa.PrivateKey, *En
 	sharedSecret, err := recipientECDH.ECDH(originatorKey.PublicKey())
 	require.NoError(t, err)
 
-	kekSize, err := keySizeForAlgorithm(algorithm)
+	kekSize, err := keySizeForAlgorithm(paramKeyWrap, algorithm)
 	require.NoError(t, err)
 	params := &ConcatKDFParams{DigestMethod: DigestSHA256}
 	kek, err := deriveConcatKDF(sharedSecret, params, kekSize)

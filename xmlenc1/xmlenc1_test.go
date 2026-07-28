@@ -1,6 +1,7 @@
 package xmlenc1_test
 
 import (
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"strings"
@@ -650,4 +651,133 @@ func TestZeroValueBuilders(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 	})
+}
+
+// Decryption errors must say which key is missing and which setter supplies
+// it. Every key kind previously failed with the same bare "no decryption key
+// available", which does not tell a caller whether to set PrivateKey,
+// KeyEncryptionKey, or ECPrivateKey.
+func TestMissingKeyNamesTheSetter(t *testing.T) {
+	t.Run("RSA key transport", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		require.Contains(t, err.Error(), "Decryptor.PrivateKey")
+	})
+
+	t.Run("AES key wrap", func(t *testing.T) {
+		kek := randKey(t, 32)
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			KeyEncryptionKey(kek).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		require.Contains(t, err.Error(), "Decryptor.KeyEncryptionKey")
+	})
+
+	t.Run("ECDH-ES key agreement", func(t *testing.T) {
+		key := generateECKey(t, elliptic.P256())
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		// The message must name the agreement algorithm the document
+		// declared, exactly as the RSA and AES branches name theirs.
+		require.Contains(t, err.Error(), xmlenc1.ECDHES)
+		require.Contains(t, err.Error(), "Decryptor.ECPrivateKey")
+	})
+
+	t.Run("no EncryptedKey at all", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		ed := &xmlenc1.EncryptedData{
+			Type:             xmlenc1.TypeElement,
+			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+			CipherValue:      make([]byte, 64),
+		}
+		edElem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+		require.NoError(t, err)
+
+		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		require.Contains(t, err.Error(), "Decryptor.SessionKey")
+	})
+}
+
+// A failed AES key unwrap is a decryption failure and must satisfy
+// errors.Is(err, ErrDecryptionFailed), exactly as a failed RSA key transport
+// does. Only ErrKeyUnwrapFailed matched before, so a caller testing the
+// general sentinel silently missed the key-wrap path.
+func TestKeyUnwrapFailureIsDecryptionFailure(t *testing.T) {
+	doc := mustParseXML(t, samlAssertion)
+	edElem, err := xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		KeyEncryptionKey(randKey(t, 32)).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	_, err = xmlenc1.NewDecryptor().KeyEncryptionKey(randKey(t, 32)).Decrypt(t.Context(), edElem)
+	require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+	require.ErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
+}
+
+// ErrTooManyEncryptedKeys must report the counts involved and the setter that
+// controls the cap, not just that some unnamed limit was hit.
+func TestTooManyEncryptedKeysReportsCounts(t *testing.T) {
+	doc := mustParseXML(t, `<root/>`)
+	keys := make([]*xmlenc1.EncryptedKey, 3)
+	for i := range keys {
+		keys[i] = &xmlenc1.EncryptedKey{
+			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+			CipherValue:      make([]byte, 256),
+		}
+	}
+	ed := &xmlenc1.EncryptedData{
+		Type:             xmlenc1.TypeElement,
+		EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+		EncryptedKeys:    keys,
+		CipherValue:      make([]byte, 64),
+	}
+	edElem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+	require.NoError(t, err)
+
+	_, err = xmlenc1.NewDecryptor().MaxEncryptedKeys(2).Decrypt(t.Context(), edElem)
+	require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+	require.Contains(t, err.Error(), "3 candidates exceed the limit of 2")
+	require.Contains(t, err.Error(), "Decryptor.MaxEncryptedKeys")
+}
+
+// UnsupportedAlgorithmError must name the configuration slot that rejected the
+// URI. A digest URI mistakenly passed to OAEPMGF otherwise reports only
+// "unsupported algorithm", which does not say which setter is wrong.
+func TestUnsupportedAlgorithmNamesTheParameter(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	_, err := xmlenc1.NewEncryptor().
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		RecipientPublicKey(&key.PublicKey).
+		OAEPMGF(xmlenc1.DigestSHA256). // a digest URI in the MGF slot
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.Error(t, err)
+
+	var uae *xmlenc1.UnsupportedAlgorithmError
+	require.ErrorAs(t, err, &uae)
+	require.Equal(t, "MGF algorithm", uae.Parameter)
+	require.Contains(t, uae.Error(), "unsupported MGF algorithm")
 }

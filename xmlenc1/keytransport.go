@@ -74,7 +74,7 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 	switch algorithm {
 	case RSAOAEP, RSAOAEP11:
 	default:
-		return 0, 0, &UnsupportedAlgorithmError{Algorithm: algorithm}
+		return 0, 0, &UnsupportedAlgorithmError{Parameter: paramKeyTransport, Algorithm: algorithm}
 	}
 
 	// Resolve the label digest. An empty digest defaults to SHA-1, which
@@ -91,7 +91,7 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 	case DigestSHA512:
 		digestHash = crypto.SHA512
 	default:
-		return 0, 0, &UnsupportedAlgorithmError{Algorithm: digest}
+		return 0, 0, &UnsupportedAlgorithmError{Parameter: paramOAEPDigest, Algorithm: digest}
 	}
 
 	// Resolve the MGF1 hash. The legacy RSAOAEP (rsa-oaep-mgf1p) URI fixes
@@ -105,7 +105,7 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 		// XML-Enc 1.1: an xenc11:MGF element MUST NOT be provided for
 		// rsa-oaep-mgf1p; its MGF1-SHA-1 is implicit. Reject any MGF.
 		if mgf != "" {
-			return 0, 0, &UnsupportedAlgorithmError{Algorithm: mgf}
+			return 0, 0, &UnsupportedAlgorithmError{Parameter: paramMGF, Algorithm: mgf}
 		}
 		mgfHash = crypto.SHA1
 	default: // RSAOAEP11, which carries an explicit MGF.
@@ -125,7 +125,7 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 		case MGFSHA512:
 			mgfHash = crypto.SHA512
 		default:
-			return 0, 0, &UnsupportedAlgorithmError{Algorithm: mgf}
+			return 0, 0, &UnsupportedAlgorithmError{Parameter: paramMGF, Algorithm: mgf}
 		}
 	}
 

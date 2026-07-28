@@ -22,10 +22,22 @@ var (
 	// amplification (DoS) vector; the cap is enforced before any crypto runs.
 	ErrTooManyEncryptedKeys = errors.New("xmlenc1: too many EncryptedKey candidates")
 
-	// ErrInvalidPadding is returned when PKCS#7 padding is invalid.
+	// ErrInvalidPadding names invalid PKCS#7 padding. Decryption never
+	// returns it: distinguishing a padding failure from any other CBC
+	// failure is exactly what a padding oracle needs, so decryptCBC
+	// collapses every cause to ErrDecryptionFailed. It remains exported so
+	// that decryptCipherValue can defensively squash it should any future
+	// code path start returning it, and so tests can assert it never
+	// escapes.
+	//
+	// Deprecated: matching on this sentinel never succeeds. Test for
+	// ErrDecryptionFailed instead.
 	ErrInvalidPadding = errors.New("xmlenc1: invalid PKCS#7 padding")
 
-	// ErrKeyUnwrapFailed is returned when AES key unwrap integrity check fails.
+	// ErrKeyUnwrapFailed is returned when AES key unwrap integrity check
+	// fails. It is always wrapped in ErrDecryptionFailed, so a caller that
+	// tests only for ErrDecryptionFailed catches a failed key unwrap the
+	// same way it catches a failed RSA key transport.
 	ErrKeyUnwrapFailed = errors.New("xmlenc1: AES key unwrap integrity check failed")
 
 	// ErrMalformedEncrypted is returned when an EncryptedData element is malformed.
@@ -59,13 +71,45 @@ var (
 	ErrCBCEncryptionRequiresOptIn = errors.New("xmlenc1: AES-CBC encryption requires AllowLegacyCBC(true)")
 )
 
+// Parameter roles reported by UnsupportedAlgorithmError and KeySizeError.
+// They name the configuration knob (or the wire attribute it maps to) that
+// the rejected value came from, so an error identifies which setter to fix
+// rather than only which URI was refused. They are diagnostic text: match
+// on the error type and its Algorithm field, not on these strings.
+const (
+	paramBlockAlgorithm = "block algorithm"
+	paramKeyTransport   = "key transport algorithm"
+	paramKeyWrap        = "key wrap algorithm"
+	paramOAEPDigest     = "OAEP digest algorithm"
+	paramMGF            = "MGF algorithm"
+	paramKeyAgreement   = "key agreement algorithm"
+	paramKeyDerivation  = "key derivation algorithm"
+	paramConcatKDF      = "ConcatKDF digest algorithm"
+	paramSessionKey     = "session key"
+	paramKEK            = "key-encryption key"
+)
+
 // UnsupportedAlgorithmError is returned for unrecognized algorithm URIs.
+//
+// Construct it with keyed fields only, as in
+// &UnsupportedAlgorithmError{Algorithm: uri}. The field set grows as the
+// diagnostics improve, and every such addition stops an unkeyed composite
+// literal from compiling. That break is accepted under this package's
+// EXPERIMENTAL, pre-1.0 API posture; keyed literals are unaffected and are
+// the supported form.
 type UnsupportedAlgorithmError struct {
+	// Parameter names the algorithm slot that rejected the URI, e.g.
+	// "block algorithm" or "MGF algorithm". It is diagnostic text and may
+	// be empty when the slot is not known at the point of failure.
+	Parameter string
 	Algorithm string
 }
 
 func (e *UnsupportedAlgorithmError) Error() string {
-	return fmt.Sprintf("xmlenc1: unsupported algorithm %q", e.Algorithm)
+	if e.Parameter == "" {
+		return fmt.Sprintf("xmlenc1: unsupported algorithm %q", e.Algorithm)
+	}
+	return fmt.Sprintf("xmlenc1: unsupported %s %q", e.Parameter, e.Algorithm)
 }
 
 // KeySizeError is returned when a key (session key or key-encryption key)
@@ -73,12 +117,24 @@ func (e *UnsupportedAlgorithmError) Error() string {
 // It guards against algorithm/key-size confusion, e.g. declaring AES-256
 // on the wire while supplying a 16-byte key that crypto/aes would silently
 // treat as AES-128.
+//
+// Construct it with keyed fields only, as in
+// &KeySizeError{Algorithm: uri, Want: want, Got: got}; see
+// UnsupportedAlgorithmError for why unkeyed literals are unsupported here.
 type KeySizeError struct {
+	// Key names the key that was the wrong length, e.g. "session key" or
+	// "key-encryption key". It is diagnostic text and may be empty when
+	// the role is not known at the point of failure.
+	Key       string
 	Algorithm string
 	Want      int
 	Got       int
 }
 
 func (e *KeySizeError) Error() string {
-	return fmt.Sprintf("xmlenc1: algorithm %q requires a %d-byte key, got %d bytes", e.Algorithm, e.Want, e.Got)
+	key := e.Key
+	if key == "" {
+		key = "key"
+	}
+	return fmt.Sprintf("xmlenc1: algorithm %q requires a %d-byte %s, got %d bytes", e.Algorithm, e.Want, key, e.Got)
 }
