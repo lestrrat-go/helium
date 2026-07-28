@@ -439,10 +439,11 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 // explicitly; ignoring it would both lose data and defeat the
 // exactly-one-choice rule.
 //
-// budget, when non-nil, is charged the decoded length of the CipherValue
-// before it is decoded, so an over-budget value never reaches the decoder. A
-// nil budget means the value is not EncryptedKey ciphertext and is unbounded
-// here.
+// budget, when non-nil, is charged what decoding the CipherValue would cost —
+// xmlbase64.DecodedLen owns that count, including what it charges base64 the
+// decoder will reject — before it is decoded, so an over-budget value never
+// reaches the decoder. A nil budget means the value is not EncryptedKey
+// ciphertext and is unbounded here.
 func parseCipherData(elem *helium.Element, budget *encryptedKeyBudget) ([]byte, error) {
 	var decoded []byte
 	var seenChoice bool

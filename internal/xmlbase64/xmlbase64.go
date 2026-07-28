@@ -30,15 +30,23 @@ func DecodeString(s string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(b.String())
 }
 
-// DecodedLen returns the number of bytes DecodeString produces for s,
-// skipping the same XML whitespace DecodeString strips. It allocates
-// nothing, so a caller can weigh a base64 value against a byte budget
-// before paying for the decode.
+// DecodedLen counts the bytes a DecodeString of s would need, skipping the
+// same XML whitespace DecodeString strips. It allocates nothing, so a caller
+// can weigh a base64 value against a byte budget before paying for the decode.
 //
-// The count is exact for input DecodeString accepts. For input it rejects
-// the result is meaningless — the caller learns that from the decode.
+// The count is exact for input DecodeString accepts.
+//
+// For input it rejects the count never falls below what the rejected decode
+// costs: encoding/base64 sizes its output buffer from the character count
+// alone and allocates it BEFORE validating a single character, so a count that
+// trusted malformed padding would let an arbitrarily large value slip past a
+// budget and still be allocated. Padding is therefore only deducted when it is
+// well formed — at most two '=' ending a value whose character count is a
+// multiple of four. Any other shape is charged the full quantum count, which
+// is exactly what the decoder allocates for it.
 func DecodedLen(s string) int {
 	var chars, pad int
+	padTrails := true
 	for i := range len(s) {
 		switch c := s[i]; c {
 		case ' ', '\t', '\r', '\n':
@@ -47,12 +55,18 @@ func DecodedLen(s string) int {
 			pad++
 			chars++
 		default:
+			if pad > 0 {
+				// Padding may only end a value, so this one cannot decode.
+				padTrails = false
+			}
 			chars++
 		}
 	}
-	n := chars/4*3 - pad
-	if n < 0 {
-		return 0
+	// quanta is the buffer encoding/base64 allocates for chars characters.
+	quanta := chars / 4 * 3
+	if !padTrails || pad > 2 || chars%4 != 0 {
+		return quanta
 	}
-	return n
+	// chars is 0 (so pad is 0) or at least 4, hence quanta >= 3 >= pad.
+	return quanta - pad
 }

@@ -672,8 +672,11 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 //
 // The budget is charged while the document is read, as each candidate's
 // CipherValue is decoded, and the decode is skipped once the running total
-// would exceed it. Only <EncryptedKey> ciphertext counts — the EncryptedData's
-// own CipherValue is the payload the caller asked for and is not charged.
+// would exceed it. A CipherValue the base64 decoder would reject is charged
+// what that rejected decode costs, so malformed ciphertext cannot buy work the
+// budget was set to deny. Only <EncryptedKey> ciphertext counts — the
+// EncryptedData's own CipherValue is the payload the caller asked for and is
+// not charged.
 //
 // Zero (the default) uses [DefaultMaxEncryptedKeyBytes]; a negative value
 // removes the limit (matching helium's MaxDepth convention). A document over
@@ -755,8 +758,8 @@ func newEncryptedKeyBudget(cfg *decryptConfig) *encryptedKeyBudget {
 }
 
 // charge deducts n bytes from the remaining allowance, failing closed when
-// they do not fit. Callers charge the decoded length BEFORE decoding, so an
-// oversized CipherValue is rejected without being decoded.
+// they do not fit. Callers charge what the decode would cost BEFORE decoding,
+// so an oversized CipherValue is rejected without being decoded.
 //
 // A nil budget is unlimited, which is how the parse path expresses "this
 // CipherValue is not EncryptedKey ciphertext".

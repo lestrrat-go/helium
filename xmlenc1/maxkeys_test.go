@@ -67,6 +67,24 @@ func manyKeySessionKeyEncryptedData(t *testing.T, n, size int, sessionKey []byte
 	return elem
 }
 
+// malformedKeyCipherValueEncryptedData builds an EncryptedData whose single
+// EncryptedKey carries cipherValue as raw CipherValue text. The text is
+// written straight into the document rather than marshalled from an
+// EncryptedKey, which is the only way to put base64 the decoder rejects in
+// front of the byte budget.
+func malformedKeyCipherValueEncryptedData(t *testing.T, cipherValue string) *helium.Element {
+	t.Helper()
+	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+		`<ds:KeyInfo><xenc:EncryptedKey>`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`"/>`+
+		`<xenc:CipherData><xenc:CipherValue>`+cipherValue+`</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedKey></ds:KeyInfo>`+
+		`<xenc:CipherData><xenc:CipherValue>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
 func TestMaxEncryptedKeys(t *testing.T) {
 	t.Run("over default cap fails fast", func(t *testing.T) {
 		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1, rsaWrappedKeyBytes)
@@ -336,6 +354,43 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 		plaintext, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), within)
 		require.NoError(t, err)
 		require.Equal(t, []byte(`payload`), plaintext)
+	})
+
+	// The budget must hold for malformed base64 too. The decoder sizes its
+	// output buffer from the character count and allocates it before
+	// validating anything, so a CipherValue whose padding cannot be trusted
+	// has to be charged the full quantum count; charging a padding-adjusted
+	// length would let an oversized value pass the budget and be allocated
+	// anyway, only to fail as invalid base64.
+	t.Run("malformed CipherValue is charged before the decode", func(t *testing.T) {
+		// Each value is 128 KiB of characters, so the decoder would allocate
+		// 96 KiB for it — over the 64 KiB default budget.
+		const chars = 128 << 10
+		for _, tc := range []struct {
+			name        string
+			cipherValue string
+		}{
+			// Deducting one byte per '=' would charge this 0.
+			{name: "all padding", cipherValue: strings.Repeat("=", chars)},
+			// Two of every four characters are padding, so deducting per '='
+			// would charge 32 KiB — under budget, yet 96 KiB is allocated.
+			{name: "padding in every quantum", cipherValue: strings.Repeat("AA==", chars/4)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				elem := malformedKeyCipherValueEncryptedData(t, tc.cipherValue)
+				_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
+				require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+			})
+		}
+	})
+
+	// A malformed CipherValue that fits the budget is still the decoder's to
+	// reject, so the guard above does not turn small junk into a budget error.
+	t.Run("malformed CipherValue within budget is rejected by the decode", func(t *testing.T) {
+		elem := malformedKeyCipherValueEncryptedData(t, strings.Repeat("=", 64))
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).Decrypt(t.Context(), elem)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
 	})
 
 	// The EncryptedData's own CipherValue is the payload, not EncryptedKey
