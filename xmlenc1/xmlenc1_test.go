@@ -781,3 +781,151 @@ func TestUnsupportedAlgorithmNamesTheParameter(t *testing.T) {
 	require.Equal(t, "MGF algorithm", uae.Parameter)
 	require.Contains(t, uae.Error(), "unsupported MGF algorithm")
 }
+
+// Key transport and key wrapping both protect the same session key, and only
+// one EncryptedKey is emitted. Configuring both used to silently prefer key
+// transport and drop the KEK, so a recipient holding only the KEK failed to
+// decrypt with an error that pointed nowhere near the real mistake.
+func TestConflictingKeyProtection(t *testing.T) {
+	key := generateRSAKey(t)
+	kek := randKey(t, 32)
+
+	newEncryptor := func() xmlenc1.Encryptor {
+		return xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&key.PublicKey).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			KeyEncryptionKey(kek)
+	}
+
+	t.Run("EncryptElement", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := newEncryptor().EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
+		require.Contains(t, err.Error(), xmlenc1.RSAOAEP)
+		require.Contains(t, err.Error(), xmlenc1.AES256KeyWrap)
+	})
+
+	t.Run("EncryptContent", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := newEncryptor().EncryptContent(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
+	})
+
+	// A session key alongside one protection mechanism is not a conflict: it
+	// supplies the key that the mechanism then protects.
+	t.Run("session key with key transport is allowed", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			SessionKey(randKey(t, 32)).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	t.Run("session key with key wrap is allowed", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			SessionKey(randKey(t, 32)).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			KeyEncryptionKey(kek).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+}
+
+// unserializableElement returns an element that cannot be serialized:
+// Document.CreateElement only rejects a colon in the name, while the writer
+// rejects the whole name at emit time.
+func unserializableElement(t *testing.T) *helium.Element {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	elem, err := doc.CreateElement(`root injected="1"`)
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(elem))
+	return elem
+}
+
+// unserializableContent returns a well-named element whose only child cannot
+// be serialized, so encrypting its content fails where encrypting the element
+// name alone would not.
+func unserializableContent(t *testing.T) *helium.Element {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(root))
+	child, err := doc.CreateElement(`child injected="1"`)
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(child))
+	return root
+}
+
+// The configuration errors decided before serialization — the conflicting key
+// protection, missing key source, and CBC opt-in checks below — must reach the
+// caller even when the payload cannot be serialized. No payload can make the
+// configuration usable, so returning ErrEncryptionFailed here would point the
+// caller away from the real mistake.
+func TestConfigErrorPrecedesSerializationFailure(t *testing.T) {
+	key := generateRSAKey(t)
+	kek := randKey(t, 32)
+
+	for _, tc := range []struct {
+		name string
+		enc  xmlenc1.Encryptor
+		want error
+	}{
+		{
+			name: "conflicting key protection",
+			enc: xmlenc1.NewEncryptor().
+				KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+				RecipientPublicKey(&key.PublicKey).
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				KeyEncryptionKey(kek),
+			want: xmlenc1.ErrConflictingKeyConfig,
+		},
+		{
+			name: "no key source",
+			enc:  xmlenc1.NewEncryptor(),
+			want: xmlenc1.ErrMissingConfig,
+		},
+		{
+			name: "CBC without opt-in",
+			enc: xmlenc1.NewEncryptor().
+				BlockAlgorithm(xmlenc1.AES256CBC).
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				KeyEncryptionKey(kek),
+			want: xmlenc1.ErrCBCEncryptionRequiresOptIn,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("EncryptElement", func(t *testing.T) {
+				_, err := tc.enc.EncryptElement(t.Context(), unserializableElement(t))
+				require.ErrorIs(t, err, tc.want)
+				require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+			})
+
+			t.Run("EncryptContent", func(t *testing.T) {
+				_, err := tc.enc.EncryptContent(t.Context(), unserializableContent(t))
+				require.ErrorIs(t, err, tc.want)
+				require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+			})
+
+			t.Run("EncryptBytes", func(t *testing.T) {
+				_, err := tc.enc.EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
+				require.ErrorIs(t, err, tc.want)
+			})
+		})
+	}
+}
