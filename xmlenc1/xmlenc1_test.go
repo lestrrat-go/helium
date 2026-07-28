@@ -597,6 +597,10 @@ func TestZeroValueBuilders(t *testing.T) {
 		doc = mustParseXML(t, samlAssertion)
 		_, err = e.EncryptContent(t.Context(), doc.DocumentElement())
 		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+
+		doc = mustParseXML(t, samlAssertion)
+		_, err = e.EncryptBytes(t.Context(), doc, []byte("payload"))
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
 	})
 
 	t.Run("Encryptor builds on from the zero value", func(t *testing.T) {

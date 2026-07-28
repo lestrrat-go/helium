@@ -174,7 +174,7 @@ func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plain
 	if doc == nil {
 		return nil, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", ErrMissingConfig)
 	}
-	return encryptPlaintext(ctx, e.cfg, doc, plaintext, "")
+	return encryptPlaintext(ctx, e.config(), doc, plaintext, "")
 }
 
 func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
