@@ -1,6 +1,7 @@
 package xmlenc1
 
 import (
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha1"
@@ -64,6 +65,27 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 	return aesKeyUnwrap(kek, ek.CipherValue)
 }
 
+// ecdhRecipientKey converts a recipient's ECDSA public key into the
+// crypto/ecdh form ECDH-ES needs, and rejects a curve the package cannot see
+// an encryption through. Two distinct failures live here: crypto/ecdh refuses
+// some curves outright (P-224 has no ECDH form at all), and a curve it does
+// accept may still have no dsig11:NamedCurve URI, which would yield an
+// EncryptedKey no recipient can parse.
+//
+// It is the single gate for both, and encrypt calls it before generating a
+// session key, serializing plaintext, or block encrypting, so an unusable
+// recipient key costs nothing proportional to the payload.
+func ecdhRecipientKey(recipient *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
+	recipientKey, err := recipient.ECDH()
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid recipient EC public key: %v", ErrEncryptionFailed, err)
+	}
+	if _, err := ecdhURIForCurve(recipientKey.Curve()); err != nil {
+		return nil, err
+	}
+	return recipientKey, nil
+}
+
 // encryptECDHSessionKey performs the originator side of XML Encryption 1.1
 // ECDH-ES. It generates an ephemeral key pair on the recipient's own curve,
 // agrees a shared secret with the recipient's static public key, derives a
@@ -73,7 +95,11 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 // The ephemeral key is generated per call and never retained, which is what
 // makes the scheme forward-secret; the resulting EncryptedKey carries the
 // ephemeral PUBLIC key so the recipient can reach the same shared secret.
-func encryptECDHSessionKey(recipient *ecdsa.PublicKey, keyWrapAlgorithm string, params *ConcatKDFParams, sessionKey []byte) (*EncryptedKey, error) {
+//
+// It takes the recipient key already resolved by ecdhRecipientKey, so the
+// curve is known to be usable and nameable before the caller does any
+// payload-proportional work.
+func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string, params *ConcatKDFParams, sessionKey []byte) (*EncryptedKey, error) {
 	switch keyWrapAlgorithm {
 	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
 	default:
@@ -87,17 +113,7 @@ func encryptECDHSessionKey(recipient *ecdsa.PublicKey, keyWrapAlgorithm string, 
 		return nil, err
 	}
 
-	recipientKey, err := recipient.ECDH()
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid recipient EC public key: %v", ErrEncryptionFailed, err)
-	}
-	// Reject an unserializable curve before doing any crypto: the resulting
-	// EncryptedKey would need a dsig11:NamedCurve URI we cannot emit.
 	curve := recipientKey.Curve()
-	if _, err := ecdhURIForCurve(curve); err != nil {
-		return nil, err
-	}
-
 	ephemeral, err := curve.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
@@ -138,14 +154,14 @@ func encryptECDHSessionKey(recipient *ecdsa.PublicKey, keyWrapAlgorithm string, 
 // SHA-256 is the neutral choice: it commits to no application-specific
 // AlgorithmID/PartyInfo the recipient would have to guess, and the emitted
 // xenc11:ConcatKDFParams states it explicitly on the wire either way.
+//
+// The default is all-or-nothing: params that omit DigestMethod are treated as
+// unspecified in full, so any OtherInfo they carry is DISCARDED rather than
+// silently combined with a digest the caller never chose. Caller OtherInfo is
+// honored only alongside a digest the caller did supply.
 func effectiveKDFParams(params *ConcatKDFParams) *ConcatKDFParams {
-	if params == nil {
+	if params == nil || params.DigestMethod == "" {
 		return &ConcatKDFParams{DigestMethod: DigestSHA256}
-	}
-	if params.DigestMethod == "" {
-		cp := *params
-		cp.DigestMethod = DigestSHA256
-		return &cp
 	}
 	return params
 }

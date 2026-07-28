@@ -88,6 +88,25 @@ type ConcatKDFParams struct {
 	suppPrivInfoUnusedBits uint8
 }
 
+// clone returns a deep copy, detaching every OtherInfo byte slice from the
+// caller's arrays. A shallow struct copy would leave them aliased, and these
+// values feed both the derived KEK and the emitted xenc11:ConcatKDFParams, so
+// a later mutation of the caller's array would change what gets encrypted.
+// It is nil-safe, and an empty field stays empty rather than becoming a
+// zero-length non-nil slice.
+func (p *ConcatKDFParams) clone() *ConcatKDFParams {
+	if p == nil {
+		return nil
+	}
+	cp := *p
+	cp.AlgorithmID = append([]byte(nil), p.AlgorithmID...)
+	cp.PartyUInfo = append([]byte(nil), p.PartyUInfo...)
+	cp.PartyVInfo = append([]byte(nil), p.PartyVInfo...)
+	cp.SuppPubInfo = append([]byte(nil), p.SuppPubInfo...)
+	cp.SuppPrivInfo = append([]byte(nil), p.SuppPrivInfo...)
+	return &cp
+}
+
 // ECKeyValue contains an XML Signature 1.1 elliptic-curve public key.
 type ECKeyValue struct {
 	Curve     ecdh.Curve

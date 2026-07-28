@@ -2,6 +2,7 @@ package xmlenc1
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -179,14 +180,12 @@ func (e Encryptor) RecipientECPublicKey(key *ecdsa.PublicKey) Encryptor {
 // given, so the recipient must derive with identical values; they travel on
 // the wire in the emitted xenc11:ConcatKDFParams. A nil params, or one with
 // an empty DigestMethod, falls back to SHA-256 with empty OtherInfo.
+//
+// The parameters are copied, byte slices included, so mutating the caller's
+// arrays afterwards cannot change what a later encryption derives or emits.
 func (e Encryptor) KeyDerivationParams(params *ConcatKDFParams) Encryptor {
 	e = e.clone()
-	if params == nil {
-		e.cfg.kdfParams = nil
-		return e
-	}
-	cp := *params
-	e.cfg.kdfParams = &cp
+	e.cfg.kdfParams = params.clone()
 	return e
 }
 
@@ -285,6 +284,20 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Documen
 		return nil, fmt.Errorf("%w: no key transport, key agreement, key wrap, or session key configured", ErrMissingConfig)
 	}
 
+	// Resolve the ECDH-ES recipient key up front. Everything below —
+	// session-key generation, plaintext serialization, block encryption —
+	// scales with the payload, and a recipient curve that can never produce
+	// an EncryptedKey must be rejected before any of it runs rather than
+	// after megabytes of AES-GCM.
+	var recipientECDH *ecdh.PublicKey
+	if hasKeyAgreement {
+		var err error
+		recipientECDH, err = ecdhRecipientKey(cfg.recipientECPub)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Get or generate session key.
 	keySize, err := keySizeForAlgorithm(blockAlgorithm)
 	if err != nil {
@@ -331,7 +344,7 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Documen
 	} else if hasKeyAgreement {
 		// ECDH-ES derives the KEK from an ephemeral exchange, so it takes
 		// priority over a statically supplied KEK on the same key wrap URI.
-		encKey, err = encryptECDHSessionKey(cfg.recipientECPub, cfg.keyWrapAlgorithm, effectiveKDFParams(cfg.kdfParams), sessionKey)
+		encKey, err = encryptECDHSessionKey(recipientECDH, cfg.keyWrapAlgorithm, effectiveKDFParams(cfg.kdfParams), sessionKey)
 		if err != nil {
 			return nil, err
 		}

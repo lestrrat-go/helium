@@ -124,6 +124,76 @@ func TestEncryptECDHESWireForm(t *testing.T) {
 	require.Len(t, nodes, 1)
 }
 
+// Params that omit DigestMethod are unspecified in full: the SHA-256 fallback
+// must come with empty OtherInfo, not with the caller's OtherInfo attached to
+// a digest the caller never chose.
+func TestEncryptECDHESEmptyDigestDropsOtherInfo(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+	doc := mustParseXML(t, samlAssertion)
+
+	edElem, err := xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(&key.PublicKey).
+		KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+			AlgorithmID:  []byte{0x00, 0xaa, 0xbb},
+			PartyUInfo:   []byte{0x01},
+			PartyVInfo:   []byte{0x02},
+			SuppPubInfo:  []byte{0x03},
+			SuppPrivInfo: []byte{0x04},
+		}).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	// Nothing application-specific may reach the wire.
+	encoded, err := helium.WriteString(edElem)
+	require.NoError(t, err)
+	require.NotContains(t, encoded, "AlgorithmID=")
+	require.NotContains(t, encoded, "PartyUInfo=")
+	require.NotContains(t, encoded, "PartyVInfo=")
+	require.NotContains(t, encoded, "SuppPubInfo=")
+	require.NotContains(t, encoded, "SuppPrivInfo=")
+
+	ed, err := xmlenc1.ParseEncryptedDataForTest(edElem)
+	require.NoError(t, err)
+	kdf := ed.EncryptedKeys[0].AgreementMethod.KeyDerivationMethod.ConcatKDF
+	require.Equal(t, xmlenc1.DigestSHA256, kdf.DigestMethod)
+	require.Empty(t, kdf.AlgorithmID)
+	require.Empty(t, kdf.PartyUInfo)
+	require.Empty(t, kdf.PartyVInfo)
+	require.Empty(t, kdf.SuppPubInfo)
+	require.Empty(t, kdf.SuppPrivInfo)
+
+	nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+}
+
+// The Encryptor documents clone-on-write, so the OtherInfo arrays a caller
+// hands over must be copied: they feed both the derived KEK and the emitted
+// ConcatKDFParams, and a later mutation must not reach either.
+func TestEncryptECDHESCopiesKDFParams(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+	doc := mustParseXML(t, samlAssertion)
+
+	algID := []byte{0x01, 0x02, 0x03}
+	encryptor := xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(&key.PublicKey).
+		KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+			DigestMethod: xmlenc1.DigestSHA256,
+			AlgorithmID:  algID,
+		})
+	algID[0] = 0xff
+
+	edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	ed, err := xmlenc1.ParseEncryptedDataForTest(edElem)
+	require.NoError(t, err)
+	kdf := ed.EncryptedKeys[0].AgreementMethod.KeyDerivationMethod.ConcatKDF
+	require.Equal(t, []byte{0x01, 0x02, 0x03}, kdf.AlgorithmID)
+}
+
 // Each encryption must use a fresh ephemeral key; reuse would destroy the
 // forward secrecy that makes ECDH-ES worth choosing.
 func TestEncryptECDHESUsesFreshEphemeralKey(t *testing.T) {
@@ -175,6 +245,28 @@ func TestEncryptECDHESErrors(t *testing.T) {
 			KeyDerivationParams(&xmlenc1.ConcatKDFParams{DigestMethod: "urn:example:nope"}).
 			EncryptElement(t.Context(), doc.DocumentElement())
 		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+	})
+
+	// P-224 has no crypto/ecdh form at all, so the recipient key is unusable
+	// however much work is done first. Pairing it with a session key of the
+	// wrong length pins WHERE the rejection happens: the session-key check
+	// sits immediately before plaintext serialization and block encryption,
+	// so a KeySizeError here would mean the curve was only noticed after all
+	// that payload-proportional work had already run.
+	t.Run("rejects an unusable curve before any payload work", func(t *testing.T) {
+		p224 := generateECKey(t, elliptic.P224())
+		doc := mustParseXML(t, samlAssertion)
+
+		_, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES128GCM).
+			SessionKey(make([]byte, 32)).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&p224.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+
+		var keySize *xmlenc1.KeySizeError
+		require.NotErrorAs(t, err, &keySize)
 	})
 
 	t.Run("a wrong EC key does not decrypt", func(t *testing.T) {
