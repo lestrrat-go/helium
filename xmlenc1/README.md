@@ -73,8 +73,8 @@ hits the length check.
 
 A non-empty `Decryptor.SessionKey` is not a preference among keys; it is an
 early return. `Decrypt` and `DecryptBytes` take it as the session key and
-return before the whole `<EncryptedKey>` stage. Its godoc owns the full
-account of what that stage skips and what still runs ahead of the return.
+return before the whole `<EncryptedKey>` stage. Its godoc owns the account of
+what that stage skips.
 
 ## Decryption does not modify the tree
 
