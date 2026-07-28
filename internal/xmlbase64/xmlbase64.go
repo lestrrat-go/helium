@@ -147,6 +147,16 @@ func (c *Counter) Chars() int {
 // the end, and every other character inside the base64 alphabet. A value
 // failing any of those is charged the full quantum count, which is exactly
 // what the decoder allocates for it.
+//
+// This method is the only entry point to that count; there is deliberately no
+// package-level DecodedLen(string). A CipherValue's characters arrive as
+// separate child nodes and are never joined into one string before the budget
+// is charged, so no caller holds a whole value to pass. The single-value form
+// is a zero-allocation two lines — var c Counter; c.Add(b) — and a package
+// function would be an exported symbol in an internal package with no callers.
+// Both claims are checkable: grep the tree for DecodedLen (xmlenc1/parse.go's
+// charge of this method is the only production call), and measure c.Add with
+// testing.AllocsPerRun.
 func (c *Counter) DecodedLen() int {
 	// quanta is the buffer encoding/base64 allocates for c.chars characters.
 	quanta := c.chars / 4 * 3
