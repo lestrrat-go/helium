@@ -38,6 +38,15 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   `xenc:AgreementMethod`. `KeyDerivationParams` sets the ConcatKDF parameters,
   which are written to the wire because both sides must derive with identical
   values.
+- The five ConcatKDF OtherInfo fields are limited to 4096 bytes together,
+  because they arrive in an attacker-supplied document and drive work
+  proportional to their size. Real OtherInfo is identifiers and nonces, so
+  the limit is far above any interoperable value; over it fails with
+  `ErrMalformedEncrypted`, when parsing a document and when deriving from
+  parameters a caller built directly. Parameters with an empty
+  `DigestMethod` are the one set that is never measured: they fall back to
+  SHA-256 with empty OtherInfo, which discards the caller's fields before
+  any derivation. `ConcatKDFParams`' godoc owns this rule.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)

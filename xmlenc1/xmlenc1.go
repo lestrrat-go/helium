@@ -207,6 +207,12 @@ func (e Encryptor) RecipientECPublicKey(key *ecdsa.PublicKey) Encryptor {
 // given, so the recipient must derive with identical values; they travel on
 // the wire in the emitted xenc11:ConcatKDFParams. A nil params, or one with
 // an empty DigestMethod, falls back to SHA-256 with empty OtherInfo.
+// [ConcatKDFParams] states the size limit the five OtherInfo fields share.
+// An encryption whose params name a DigestMethod and exceed that limit fails
+// rather than emitting a document no hardened recipient would accept. Params
+// with an empty DigestMethod take the fallback above instead: their OtherInfo
+// is discarded before any derivation, so it is never measured against the
+// limit and never reaches the wire.
 //
 // The parameters are copied, byte slices included, so mutating the caller's
 // arrays afterwards cannot change what a later encryption derives or emits.

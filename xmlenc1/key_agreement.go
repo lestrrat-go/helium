@@ -170,7 +170,9 @@ func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string
 // to no application-specific AlgorithmID/PartyInfo the recipient would have
 // to guess, and the emitted xenc11:ConcatKDFParams states it explicitly on
 // the wire either way. The fallback is all-or-nothing so that caller
-// OtherInfo is never silently paired with a digest the caller never chose.
+// OtherInfo is never silently paired with a digest the caller never chose;
+// a discarded field is therefore never checked against
+// maxConcatKDFOtherInfoBytes, since nothing downstream ever sees it.
 func effectiveKDFParams(params *ConcatKDFParams) *ConcatKDFParams {
 	if params == nil || params.DigestMethod == "" {
 		return &ConcatKDFParams{DigestMethod: DigestSHA256}
@@ -190,6 +192,13 @@ func agreementAlgorithm(agreement *AgreementMethod) string {
 // decryptECDHSessionKey wraps them with ErrDecryptionFailed and
 // encryptECDHSessionKey with ErrEncryptionFailed, mirroring oaepHashes.
 func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) ([]byte, error) {
+	// Ahead of the digest lookup: a parameter set can be over budget AND name
+	// a digest this package does not implement, and the size is the failure
+	// worth reporting — the caller's set is refused for being oversized in
+	// every case, not only when the digest happens to resolve.
+	if err := checkConcatKDFOtherInfoBudget(params); err != nil {
+		return nil, err
+	}
 	newHash, err := concatKDFHash(params.DigestMethod)
 	if err != nil {
 		return nil, err
@@ -215,7 +224,68 @@ func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) 
 	return result[:keySize], nil
 }
 
+// maxConcatKDFOtherInfoBytes bounds the five xenc11:ConcatKDFParams OtherInfo
+// fields — AlgorithmID, PartyUInfo, PartyVInfo, SuppPubInfo, SuppPrivInfo —
+// taken TOGETHER, as the sum of their decoded octet lengths. It is the single
+// statement of that limit; checkConcatKDFOtherInfoBudget applies it.
+//
+// The fields are NIST SP 800-56A OtherInfo: identifiers, party names, and
+// nonces. The W3C xmlenc-core1 examples use a 16-octet PartyUInfo and leave
+// the rest empty, and the largest value a real deployment carries is on the
+// order of an algorithm URI or a certificate digest — tens of octets. 4 KiB
+// is two orders of magnitude above that, so no interoperable document is
+// rejected, while a hostile one can no longer hand the KDF an input sized
+// only by what the XML parser happened to accept: without this ceiling the
+// packing below runs one iteration per input BIT, and five fields at the
+// parser's own 10 MiB attribute cap are ~210 million of them for a single
+// EncryptedKey.
+const maxConcatKDFOtherInfoBytes = 4096
+
+// checkConcatKDFOtherInfoBudget rejects a ConcatKDFParams whose OtherInfo
+// fields exceed maxConcatKDFOtherInfoBytes in total.
+//
+// It runs at three points in the parameters' life, all of them before any
+// work sized by the fields: parseConcatKDFParams applies it to wire data at
+// the point the whole set is first known, so an oversized document is refused
+// before any ECDH or KDF work; deriveConcatKDF applies it before resolving
+// the digest, so a caller-built set that is BOTH over budget and names an
+// unsupported digest still fails on the size; and concatKDFOtherInfo applies
+// it immediately before the packing loop, which is what keeps the guard ahead
+// of the packing arithmetic whichever caller got there — including one that
+// hands xmlenc1 a DOM or a ConcatKDFParams it built itself.
+//
+// The set effectiveKDFParams replaces reaches none of those points: its
+// OtherInfo is dropped rather than measured, and the SHA-256 default that
+// takes its place carries none. ConcatKDFParams' godoc states that carve-out
+// for callers.
+//
+// It measures every field against the budget REMAINING instead of summing the
+// five. The fields are caller-supplied and may all alias one slice, so their
+// sum can exceed what an int holds on a 32-bit build and wrap to a small or
+// negative value that a "sum > limit" test accepts. A running total that
+// never exceeds maxConcatKDFOtherInfoBytes cannot wrap. The size arithmetic
+// downstream — len(value)*8 and totalBits in concatKDFOtherInfo — is
+// wrap-free only because this ran first and bounded every length.
+func checkConcatKDFOtherInfoBudget(params *ConcatKDFParams) error {
+	remaining := maxConcatKDFOtherInfoBytes
+	for _, field := range [][]byte{params.AlgorithmID, params.PartyUInfo, params.PartyVInfo, params.SuppPubInfo, params.SuppPrivInfo} {
+		if len(field) > remaining {
+			return fmt.Errorf("%w: ConcatKDF OtherInfo is over the %d byte limit", ErrMalformedEncrypted, maxConcatKDFOtherInfoBytes)
+		}
+		remaining -= len(field)
+	}
+	return nil
+}
+
+// concatKDFOtherInfo packs the five OtherInfo fields into the single bit
+// string ConcatKDF hashes. Each field is a bit string carrying an unused-bit
+// count, so a field whose bit length is not a multiple of eight leaves every
+// field after it straddling octet boundaries.
 func concatKDFOtherInfo(params *ConcatKDFParams) ([]byte, error) {
+	if err := checkConcatKDFOtherInfoBudget(params); err != nil {
+		return nil, err
+	}
+
 	fields := []struct {
 		value      []byte
 		unusedBits uint8
@@ -239,6 +309,22 @@ func concatKDFOtherInfo(params *ConcatKDFParams) ([]byte, error) {
 	bitOffset := 0
 	for _, field := range fields {
 		bitCount := len(field.value)*8 - int(field.unusedBits)
+		// A field landing on an octet boundary keeps its own alignment: its
+		// whole octets go across unshifted and only a trailing partial octet
+		// needs masking. Every preceding field has a bit length that is a
+		// multiple of eight in that case, which is what every W3C example and
+		// every hexBinary-with-zero-unused-bits document looks like.
+		if bitOffset%8 == 0 {
+			fullBytes := bitCount / 8
+			copy(otherInfo[bitOffset/8:], field.value[:fullBytes])
+			if rem := bitCount % 8; rem != 0 {
+				otherInfo[bitOffset/8+fullBytes] |= field.value[fullBytes] & (^byte(0) << (8 - rem))
+			}
+			bitOffset += bitCount
+			continue
+		}
+		// Straddling the boundary: fall back to moving one bit at a time.
+		// maxConcatKDFOtherInfoBytes bounds how long that can run.
 		for i := range bitCount {
 			if field.value[i/8]&(1<<uint(7-i%8)) != 0 {
 				otherInfo[bitOffset/8] |= 1 << uint(7-bitOffset%8)
