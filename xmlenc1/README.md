@@ -64,19 +64,10 @@ is how the recipient obtains that key:
 | non-empty `SessionKey` alone | no `<EncryptedKey>`; the recipient must already hold the key |
 | none of the above | `ErrMissingConfig` — nothing can protect the session key |
 
-Configuring two of these mechanisms at once is an error rather than a
-preference; the `Encryptor` setters' godoc says which combination fails and
-with which error.
-
-`SessionKey` may accompany any of these mechanisms — it supplies the key that
-the mechanism then protects, instead of generating a random one. A non-empty
-`SessionKey` must match the block algorithm's key length exactly, else
-`KeySizeError`.
-
-An empty or nil `SessionKey` counts as not set: encryption generates a random
-key of the right length instead, so it never hits the length check. That is
-why an empty `SessionKey` with no key transport, key agreement, or key wrap
-gives `ErrMissingConfig` rather than encrypting to a key the recipient holds.
+A non-empty `SessionKey` must match the block algorithm's key length exactly,
+else `KeySizeError`. An empty or nil `SessionKey` counts as not set:
+encryption generates a random key of the right length instead, so it never
+hits the length check.
 
 ## Decrypting with a pre-shared session key
 
