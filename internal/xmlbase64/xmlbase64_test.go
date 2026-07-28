@@ -2,12 +2,14 @@ package xmlbase64_test
 
 import (
 	"encoding/base64"
+	"errors"
 	"math/rand"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
 	"github.com/stretchr/testify/require"
 )
@@ -370,4 +372,106 @@ func wrapWithWhitespace(s string) string {
 	}
 	b.WriteString("\n  ")
 	return b.String()
+}
+
+// parseValueElement parses markup as a document and returns its element, so a
+// DecodeElement case gets a value laid out over exactly the text and CDATA
+// children the markup describes.
+func parseValueElement(t *testing.T, markup string) *helium.Element {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte("<v>"+markup+"</v>"))
+	require.NoError(t, err)
+	return doc.DocumentElement()
+}
+
+// errCharge is what a caller's budget refusal looks like: DecodeElement must
+// hand it back untouched so the caller can recognize its own error.
+var errCharge = errors.New("charged too much")
+
+// chargeAtMost returns a charge function that refuses anything over limit and
+// records what it was asked for, so a case can assert the charge happened
+// before any decode and for the right count.
+func chargeAtMost(limit int, charged *int) func(int) error {
+	return func(n int) error {
+		*charged = n
+		if n > limit {
+			return errCharge
+		}
+		return nil
+	}
+}
+
+func TestDecodeElement(t *testing.T) {
+	t.Run("charges and decodes a value split across children", func(t *testing.T) {
+		// The quantum boundaries fall inside children and inside CDATA
+		// sections, so nothing here decodes correctly piece by piece.
+		elem := parseValueElement(t, "QUJ<![CDATA[DR]]>\n\t EVG<![CDATA[R0hJ]]>")
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABCDEFGHI"), decoded)
+		require.Equal(t, 9, charged)
+	})
+
+	t.Run("charges nothing for an empty element", func(t *testing.T) {
+		elem := parseValueElement(t, "")
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Empty(t, decoded)
+		require.Equal(t, 0, charged)
+	})
+
+	t.Run("whitespace is not charged", func(t *testing.T) {
+		// The value decodes to three bytes however much whitespace an attacker
+		// wraps around it, so that is all the charge may be.
+		elem := parseValueElement(t, "  QUJD<![CDATA[                    ]]>\n\n\n")
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABC"), decoded)
+		require.Equal(t, 3, charged)
+	})
+
+	t.Run("returns the charge error unchanged", func(t *testing.T) {
+		elem := parseValueElement(t, "QUJDREVG")
+		var charged int
+		_, err := xmlbase64.DecodeElement(elem, chargeAtMost(2, &charged))
+		require.ErrorIs(t, err, errCharge)
+		require.Equal(t, 6, charged)
+	})
+
+	t.Run("reports the charge error for an over-budget invalid value", func(t *testing.T) {
+		// The charge precedes the decode, so a value that is both over budget
+		// and undecodable reports the budget rather than the base64 error. The
+		// count is the decoder's own buffer size for those characters, which is
+		// what a rejected decode would still allocate.
+		elem := parseValueElement(t, "!!!!!!!!")
+		var charged int
+		_, err := xmlbase64.DecodeElement(elem, chargeAtMost(2, &charged))
+		require.ErrorIs(t, err, errCharge)
+		require.Equal(t, 6, charged)
+	})
+
+	t.Run("reports the base64 error for an in-budget invalid value", func(t *testing.T) {
+		elem := parseValueElement(t, "QUJ<![CDATA[!]]>REVG")
+		var charged int
+		_, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errCharge)
+		var corrupt base64.CorruptInputError
+		require.ErrorAs(t, err, &corrupt)
+	})
+
+	t.Run("matches DecodeString on the joined children", func(t *testing.T) {
+		// One text child, so the markup and the joined content are the same
+		// string and DecodeString can be handed it directly.
+		const value = "\n  QUJD\tREVG  R0hJSkxN\n"
+		elem := parseValueElement(t, value)
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, new(int)))
+		require.NoError(t, err)
+		want, err := xmlbase64.DecodeString(value)
+		require.NoError(t, err)
+		require.Equal(t, want, decoded)
+	})
 }

@@ -1,6 +1,9 @@
 package xmldsig1_test
 
 import (
+	"crypto/rsa"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -93,4 +96,168 @@ func TestVerifyResourceLimits(t *testing.T) {
 			Verify(t.Context(), doc)
 		require.NoError(t, err)
 	})
+}
+
+// splitIntoNodes lays out s as CDATA sections of chunk characters each, so the
+// value reaches the parser as that many separate children. A per-node content
+// cap bounds one indivisible run, and every section is its own run, so this is
+// how lexical text evades that cap.
+func splitIntoNodes(s string, chunk int) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i += chunk {
+		b.WriteString(`<![CDATA[` + s[i:min(i+chunk, len(s))] + `]]>`)
+	}
+	return b.String()
+}
+
+// splitIntoCDATA lays s out as parts CDATA sections.
+func splitIntoCDATA(s string, parts int) string {
+	return splitIntoNodes(s, (len(s)+parts-1)/parts)
+}
+
+// signedDocPaddedValue builds a detached signature over the #x subtree, then
+// appends markup directly after the text of the named ds: element and reparses,
+// so that element's value arrives as however many children the markup produces.
+//
+// The reference covers only the #x subtree, so no transform ever canonicalizes
+// or copies the Signature itself: what the padding costs is then the base64
+// handling alone, which is what these bounds are about. (A whole-document
+// enveloped signature would additionally deep-copy the padding for the
+// enveloped-signature transform, a document-sized cost unrelated to base64.)
+//
+// Padding ds:SignatureValue leaves a VALID signature: XML whitespace is part of
+// the xs:base64Binary lexical space, so the value still decodes to the same
+// octets, and SignatureValue sits outside both ds:SignedInfo and the referenced
+// subtree, so nothing that is digested changes. Padding ds:DigestValue breaks
+// the signature, which is why only over-budget (rejected) cases use it.
+func signedDocPaddedValue(t *testing.T, key *rsa.PrivateKey, local, markup string) *helium.Document {
+	t.Helper()
+	doc := mustParseXML(t, `<doc><target Id="x"><v>signed content</v></target></doc>`)
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#x",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		})
+	sigElem, err := signer.SignDetached(t.Context(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	serialized, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	end := strings.Index(serialized, "</ds:"+local+">")
+	require.Positive(t, end, "signed document has no ds:%s", local)
+	return mustParseXML(t, serialized[:end]+markup+serialized[end:])
+}
+
+// TestVerifyDecodedBytesAllocation pins what a base64 value inside a Signature
+// may ALLOCATE, which the MaxDecodedBytes error assertions above cannot see.
+// The cap governs decoded bytes, but the lexical text an attacker wraps around
+// them is unbounded: xs:base64Binary permits XML whitespace between characters,
+// and the value may be spread over as many text and CDATA children as the
+// document likes. Joining that text into one string before the cap is charged
+// makes the cap an accounting formality — the memory is allocated by the time
+// the error is returned — and for a value the cap ACCEPTS it is never refused at
+// all, so a test that only checks for the rejection would miss half of it.
+//
+// Each case reads the process-wide TotalAlloc delta across Verify, so these
+// subtests must NOT run in parallel: a concurrent test's allocations would
+// pollute the delta.
+func TestVerifyDecodedBytesAllocation(t *testing.T) {
+	// no t.Parallel(): isolated so each delta reflects only its own Verify.
+
+	// whitespace is the padding the attacker writes around the value, and every
+	// bound below is a multiple of it, because the defect being pinned is
+	// exactly a cost that follows the lexical length. Only space and tab are
+	// used: an XML parser folds CRLF to LF, which would make the text the DOM
+	// holds shorter than the text written here and every multiple below harder
+	// to read.
+	const whitespace = 4 << 20
+	padding := strings.Repeat(" \t", whitespace/2)
+
+	// Reading each child's content is the floor a bound has to clear: a DOM
+	// hands out a copy per node, and no value can be counted without looking at
+	// it. A rejected value is looked at once, and an accepted one twice — once
+	// to count it and once to build the characters the count approved.
+	const (
+		countOnly     = whitespace * 3 / 2
+		countAndBuild = whitespace * 5 / 2
+	)
+
+	key := generateRSAKey(t)
+
+	for _, tc := range []struct {
+		name string
+		// local names the ds: element whose value carries the padding.
+		local string
+		// markup is appended after that element's text.
+		markup string
+		// maxDecoded is the MaxDecodedBytes cap; 0 leaves the default.
+		maxDecoded int
+		rejected   bool
+		maxAlloc   uint64
+	}{
+		{
+			// A one-byte cap refuses the very first DigestValue, so the
+			// whitespace after it is never legitimately needed.
+			name:       "over-budget DigestValue with whitespace in one text node",
+			local:      "DigestValue",
+			markup:     padding,
+			maxDecoded: 1,
+			rejected:   true,
+			maxAlloc:   countOnly,
+		},
+		{
+			// CDATA is how the whitespace evades the parser's per-node content
+			// cap: the cap bounds one indivisible run, and every section is its
+			// own.
+			name:       "over-budget DigestValue with whitespace split across CDATA sections",
+			local:      "DigestValue",
+			markup:     splitIntoCDATA(padding, 16),
+			maxDecoded: 1,
+			rejected:   true,
+			maxAlloc:   countOnly,
+		},
+		{
+			// Nothing here is ever refused: the signature is valid and its
+			// decoded size is far under the default cap, while the whitespace
+			// after it is not charged at all. Allocating for it would be
+			// unbounded amplification with no error anywhere to notice it,
+			// which a rejection-only test would never see.
+			name:     "accepted SignatureValue with whitespace split across CDATA sections",
+			local:    "SignatureValue",
+			markup:   splitIntoCDATA(padding, 16),
+			rejected: false,
+			maxAlloc: countAndBuild,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := signedDocPaddedValue(t, key, tc.local, tc.markup)
+			verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+			if tc.maxDecoded != 0 {
+				verifier = verifier.MaxDecodedBytes(tc.maxDecoded)
+			}
+
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+			result, err := verifier.Verify(t.Context(), doc)
+			runtime.ReadMemStats(&after)
+
+			if tc.rejected {
+				require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+			}
+			if !tc.rejected {
+				// The padded value still verifies byte for byte, so the
+				// whitespace is genuinely part of a legal signature and the
+				// bound below is not measuring an early rejection.
+				require.NoError(t, err)
+				require.Len(t, result.References, 1)
+			}
+
+			allocated := after.TotalAlloc - before.TotalAlloc
+			require.Less(t, allocated, tc.maxAlloc, "verifying %d lexical bytes of padding allocated %d bytes", len(tc.markup), allocated)
+		})
+	}
 }

@@ -39,7 +39,7 @@ internal/unparsedtext → internal/xmlchar, internal/uripath, internal/iofs
 internal/catalog → internal/uripath
 internal/uripath → (none)
 internal/xsdregex → (none)
-internal/xmlbase64 → (none)
+internal/xmlbase64 → helium (DecodeElement counts/charges/decodes a base64 value straight off its DOM children; the root never imports it back)
 internal/writerctl → (none)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, internal/lexicon, internal/xmlchar
@@ -48,7 +48,7 @@ test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/xsdregex, internal/uripath, internal/xmlbase64
+sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/encoding, internal/lexicon, internal/icu, internal/sequence, internal/strcursor, internal/xsdregex, internal/uripath
 
 ## Core layer
 helium (root) → sax, enum, internal/*

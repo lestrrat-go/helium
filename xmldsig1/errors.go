@@ -55,7 +55,10 @@ var (
 	// ([Verifier.MaxDecodedBytes]). It also covers a ds:RetrievalMethod transform
 	// list that exceeds its fixed pre-verification step cap. The caps have
 	// conservative defaults and bound the decode/parse/transform work an unsigned
-	// document can force before verification rejects it.
+	// document can force before verification rejects it. A base64 value is
+	// charged against [Verifier.MaxDecodedBytes] before it is decoded, so a value
+	// that is both over the cap and invalid base64 reports this error rather than
+	// the base64 one.
 	ErrResourceLimitExceeded = errors.New("xmldsig1: verification resource limit exceeded")
 
 	// ErrAmbiguousReference is returned when a Reference URI resolves to more

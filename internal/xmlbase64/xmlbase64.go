@@ -3,12 +3,69 @@
 // space permits such whitespace, and real-world XML Signature/Encryption
 // producers routinely line-wrap and indent base64. Go's encoding/base64
 // tolerates CR/LF but rejects space and tab, so all four are stripped first.
+//
+// A value in a document may also be spread over any number of text and CDATA
+// children, so [DecodeElement] and [Counter] work straight off those children:
+// a caller with a byte budget can weigh a value and charge for it before
+// anything the size of its lexical text is ever built.
 package xmlbase64
 
 import (
 	"encoding/base64"
 	"strings"
+
+	"github.com/lestrrat-go/helium"
 )
+
+// DecodeElement charges charge for the base64 content of e's children and then
+// decodes it. It never builds the value's lexical text.
+//
+// That distinction is the whole point of taking an element rather than a
+// string. xs:base64Binary permits XML whitespace between characters, and a
+// value's text may arrive as any number of text and CDATA children, so the
+// lexical length an attacker controls has no relation to the decoded bytes a
+// budget charges. Joining the children into one string first would allocate
+// that lexical length before the budget could refuse it, and would keep
+// allocating it for every value the budget accepts, which leaves the accepted
+// case unbounded as well.
+//
+// So one pass counts the value with a [Counter], which carries the counting
+// state across each child boundary — a base64 quantum, and padding itself, may
+// be split between children — and only then is the charge made. The second pass
+// builds just the characters the decoder will see.
+//
+// What is held is therefore bounded by what charge approved: the stripped
+// characters at most four thirds of it, the decoded bytes at most it, and
+// nothing at all scaling with the lexical length. The copy [helium.Text.Content]
+// returns per child is the floor, so the peak is the largest single child rather
+// than the whole value.
+//
+// charge's error is returned unchanged so a caller can pass its own
+// resource-limit error straight through; every other error returned is the
+// encoding/base64 decode failure, for the caller to wrap with what it was
+// decoding. Because the charge precedes the decode, a value that is both over
+// budget and invalid base64 reports the charge error.
+func DecodeElement(e *helium.Element, charge func(int) error) ([]byte, error) {
+	var counter Counter
+	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+		counter.Add(child.Content())
+	}
+	if err := charge(counter.DecodedLen()); err != nil {
+		return nil, err
+	}
+	chars := make([]byte, 0, counter.Chars())
+	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+		chars = AppendStripped(chars, child.Content())
+	}
+	// The same decode DecodeString performs, minus the copy converting the
+	// already-stripped characters to a string.
+	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(chars)))
+	n, err := base64.StdEncoding.Decode(decoded, chars)
+	if err != nil {
+		return nil, err
+	}
+	return decoded[:n], nil
+}
 
 // DecodeString strips the four XML whitespace characters from s and
 // base64-decodes the result with StdEncoding. No other characters are
@@ -151,14 +208,15 @@ func (c *Counter) Chars() int {
 //
 // This method is the only entry point to that count; there is deliberately no
 // package-level DecodedLen(string). The characters of a value weighed this way
-// — a CipherValue against a byte budget, an OAEPparams label against a fixed
-// limit — arrive as separate child nodes and are never joined into one string
-// before it is weighed, so no caller holds a whole value to pass. The
-// single-value form is a zero-allocation two lines — var c Counter; c.Add(b) —
-// and a package function would be an exported symbol in an internal package
-// with no callers. Both claims are checkable: grep the tree for DecodedLen
-// (every production call is in xmlenc1/parse.go), and measure c.Add with
-// testing.AllocsPerRun.
+// — a SignatureValue or DigestValue against a byte budget, a CipherValue
+// against one, an OAEPparams label against a fixed limit — arrive as separate
+// child nodes and are never joined into one string before it is weighed, so no
+// caller holds a whole value to pass. The single-value form is a
+// zero-allocation two lines — var c Counter; c.Add(b) — and a package function
+// would be an exported symbol in an internal package with no callers. Both
+// claims are checkable: grep the tree for DecodedLen (the charges in
+// [DecodeElement] and xmlenc1/parse.go are the only production calls), and
+// measure c.Add with testing.AllocsPerRun.
 func (c *Counter) DecodedLen() int {
 	// quanta is the buffer encoding/base64 allocates for c.chars characters.
 	quanta := c.chars / 4 * 3

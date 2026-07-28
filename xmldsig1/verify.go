@@ -2,6 +2,7 @@ package xmldsig1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -119,6 +120,28 @@ func (b *verifyBudget) consume(n int) error {
 		return fmt.Errorf("%w: decoded byte budget exceeded (limit %d)", ErrResourceLimitExceeded, b.maxDecoded)
 	}
 	return nil
+}
+
+// decodeBudgeted decodes elem's base64 content, charging the decoded byte
+// budget BEFORE the value is materialized. It is the only way a Signature's
+// base64 values are decoded, because charging after the decode bounds what is
+// KEPT rather than what is BUILT: xs:base64Binary permits XML whitespace
+// between characters and a value may be spread over any number of text and
+// CDATA children, so joining that text first allocates a lexical length no cap
+// ever approved — and goes on allocating it for every value the cap accepts.
+//
+// A cap failure passes through as ErrResourceLimitExceeded; a decode failure is
+// wrapped as an invalid `what` under sentinel. Since the charge now precedes
+// the decode, a value that is both over cap and invalid base64 reports the cap.
+func decodeBudgeted(elem *helium.Element, budget *verifyBudget, sentinel error, what string) ([]byte, error) {
+	decoded, err := xmlbase64.DecodeElement(elem, budget.consume)
+	if errors.Is(err, ErrResourceLimitExceeded) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid %s base64: %v", sentinel, what, err)
+	}
+	return decoded, nil
 }
 
 func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element) (*VerifyResult, error) {
@@ -528,11 +551,8 @@ func parseSignatureElement(ctx context.Context, budget *verifyBudget, sigElem *h
 				return nil, fmt.Errorf("%w: multiple SignatureValue elements", ErrInvalidSignature)
 			}
 			signatureValueSeen = true
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(elem))
+			decoded, err := decodeBudgeted(elem, budget, ErrInvalidSignature, "SignatureValue")
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid SignatureValue base64: %v", ErrInvalidSignature, err)
-			}
-			if err := budget.consume(len(decoded)); err != nil {
 				return nil, err
 			}
 			parsed.signatureValue = decoded
@@ -776,11 +796,8 @@ func parseReferenceElement(ctx context.Context, budget *verifyBudget, elem *heli
 				return ref, fmt.Errorf("%w: multiple DigestValue elements", ErrInvalidSignature)
 			}
 			digestValueSeen = true
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			decoded, err := decodeBudgeted(e, budget, ErrInvalidSignature, "DigestValue")
 			if err != nil {
-				return ref, fmt.Errorf("%w: invalid DigestValue base64: %v", ErrInvalidSignature, err)
-			}
-			if err := budget.consume(len(decoded)); err != nil {
 				return ref, err
 			}
 			ref.digestValue = decoded

@@ -509,6 +509,14 @@ func (v Verifier) MaxKeyInfoEntries(n int) Verifier {
 // allocation an attacker-controlled document can force. n <= 0 has special
 // meaning: 0 (the default) selects the conservative built-in cap, and a
 // negative n disables the cap.
+//
+// Each value is charged BEFORE it is materialized, so the cap bounds what
+// verification BUILDS and not merely what it keeps. That matters because
+// xs:base64Binary permits XML whitespace between characters and a value may be
+// spread over any number of text and CDATA children: the lexical text an
+// attacker wraps around a value is unbounded and unrelated to the bytes it
+// decodes to, so counting it first is what keeps the memory under the cap for a
+// value the cap refuses AND for every value it accepts.
 func (v Verifier) MaxDecodedBytes(n int) Verifier {
 	v = v.clone()
 	v.cfg.maxDecodedBytes = n

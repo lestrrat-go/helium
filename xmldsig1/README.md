@@ -451,7 +451,17 @@ documents verify unchanged:
 
 Exceeding a cap fails with `ErrResourceLimitExceeded` before any Reference is
 digested or the signature is checked. For each builder, `n == 0` selects the
-default and a negative `n` disables that cap. Verification also polls the
+default and a negative `n` disables that cap.
+
+`MaxDecodedBytes` is charged against each value *before* that value is
+materialized, so it bounds what verification builds rather than only what it
+keeps. `xs:base64Binary` permits XML whitespace between characters and a value
+may be spread over any number of text and CDATA children, so the lexical text
+wrapped around a value is unbounded and unrelated to the bytes it decodes to;
+counting it first is what keeps the memory under the cap both for a value the
+cap refuses and for every value it accepts.
+
+Verification also polls the
 context inside the KeyInfo and Reference parse loops, so a cancelled context or
 passed deadline stops the work promptly rather than only at loop boundaries —
 pass a `ctx` with a deadline to bound the per-Reference canonicalization of a
