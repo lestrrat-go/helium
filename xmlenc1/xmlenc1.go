@@ -232,10 +232,10 @@ func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plain
 }
 
 func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
-	// Decide everything about the configuration before touching the payload:
-	// no payload can make a misconfigured Encryptor or an unusable recipient
-	// key work, so those errors must not cost anything proportional to the
-	// plaintext, nor be masked by a plaintext that also fails to serialize.
+	// Resolve the configuration before touching the payload: no payload can
+	// make a misconfigured Encryptor or an unusable recipient key work, so the
+	// errors resolveEncryptConfig decides must be what the caller sees even
+	// when the plaintext also fails to serialize.
 	resolved, err := resolveEncryptConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -289,13 +289,13 @@ type resolvedEncryptConfig struct {
 	recipientECDH   *ecdh.PublicKey
 }
 
-// resolveEncryptConfig validates everything about an Encryptor's configuration
-// that can be decided without a payload: it defaults the block algorithm,
-// enforces the CBC opt-in, requires a key source, rejects two conflicting
-// key-protection mechanisms, and resolves the ECDH-ES recipient key. Every
-// entry point calls it before any payload work, so a configuration error or an
-// unusable recipient key is never paid for in plaintext serialization or block
-// encryption first, nor masked by a plaintext that also fails to serialize.
+// resolveEncryptConfig decides five parts of an Encryptor's configuration: it
+// defaults the block algorithm, enforces the CBC opt-in, requires a key
+// source, rejects two conflicting key-protection mechanisms, and resolves the
+// ECDH-ES recipient key. Every entry point calls it before any payload work,
+// so none of those five is masked by a later failure to serialize or encrypt
+// the plaintext. Session-key length is not one of them: it is bound to the
+// block algorithm in encryptPlaintext, once the session key exists.
 func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	// Secure by default: an unset block algorithm uses authenticated
 	// AES-256-GCM rather than refusing or falling back to CBC.
@@ -359,11 +359,11 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 }
 
 // encryptPlaintext performs the whole encryption pipeline over already
-// serialized plaintext and an already validated configuration: it obtains and
-// binds the session key, block-encrypts, protects the session key, and
-// marshals the EncryptedData element into doc. It never touches the tree, so
-// both the element/content and the raw-octet entry points share identical
-// crypto handling.
+// serialized plaintext and an already resolved configuration: it obtains the
+// session key, binds its length to the block algorithm, block-encrypts,
+// protects the session key, and marshals the EncryptedData element into doc.
+// It never touches the tree, so both the element/content and the raw-octet
+// entry points share identical crypto handling.
 func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEncryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
 	blockAlgorithm := resolved.blockAlgorithm
 
