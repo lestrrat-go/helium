@@ -342,10 +342,9 @@ func TestEncryptECDHESRejectsCurveBeforeSerialization(t *testing.T) {
 }
 
 // RSA key transport and ECDH-ES key agreement both protect the same session
-// key, and only one EncryptedKey is emitted. Configuring both used to
-// silently prefer key transport and drop the EC recipient entirely, so a
-// recipient holding only the EC private key failed to decrypt with an error
-// that pointed nowhere near the real mistake.
+// key, and only one EncryptedKey is emitted. Accepting both would drop the EC
+// recipient, so a recipient holding only the EC private key would fail to
+// decrypt with an error that points nowhere near the real mistake.
 func TestEncryptConflictingTransportAndAgreement(t *testing.T) {
 	rsaKey := generateRSAKey(t)
 	ecKey := generateECKey(t, elliptic.P256())
@@ -361,7 +360,7 @@ func TestEncryptConflictingTransportAndAgreement(t *testing.T) {
 	t.Run("EncryptElement", func(t *testing.T) {
 		doc := mustParseXML(t, samlAssertion)
 		_, err := newEncryptor().EncryptElement(t.Context(), doc.DocumentElement())
-		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
 		require.Contains(t, err.Error(), xmlenc1.RSAOAEP)
 		require.Contains(t, err.Error(), xmlenc1.AES256KeyWrap)
 	})
@@ -369,12 +368,12 @@ func TestEncryptConflictingTransportAndAgreement(t *testing.T) {
 	t.Run("EncryptContent", func(t *testing.T) {
 		doc := mustParseXML(t, samlAssertion)
 		_, err := newEncryptor().EncryptContent(t.Context(), doc.DocumentElement())
-		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
 	})
 
 	t.Run("EncryptBytes", func(t *testing.T) {
 		_, err := newEncryptor().EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
-		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
 	})
 
 	t.Run("key transport alone round-trips", func(t *testing.T) {
@@ -419,6 +418,83 @@ func TestEncryptConflictingTransportAndAgreement(t *testing.T) {
 		require.NoError(t, err)
 
 		nodes, err := xmlenc1.NewDecryptor().PrivateKey(rsaKey).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+}
+
+// agreementAndKeyWrapEncryptor configures the two mechanisms that share one
+// KeyWrapAlgorithm URI: ECDH-ES key agreement, which derives the
+// key-encryption key, and AES key wrap, which takes the supplied one.
+func agreementAndKeyWrapEncryptor(ecPub *ecdsa.PublicKey, kek []byte) xmlenc1.Encryptor {
+	return xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(ecPub).
+		KeyEncryptionKey(kek)
+}
+
+// ECDH-ES key agreement and AES key wrap protect the same session key under
+// the same KeyWrapAlgorithm URI, and only one EncryptedKey is emitted.
+// Accepting both would derive a key-encryption key and discard the configured
+// one, so a recipient holding only the KEK would fail to decrypt with an
+// error that points nowhere near the real mistake.
+func TestEncryptConflictingAgreementAndKeyWrap(t *testing.T) {
+	ecKey := generateECKey(t, elliptic.P256())
+	kek := randKey(t, 32)
+
+	t.Run("EncryptElement", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := agreementAndKeyWrapEncryptor(&ecKey.PublicKey, kek).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
+
+		// Both mechanisms declare the same key wrap URI, so the message must
+		// name the two setters: naming algorithms would not say which two
+		// things to choose between.
+		require.Contains(t, err.Error(), "RecipientECPublicKey")
+		require.Contains(t, err.Error(), "KeyEncryptionKey")
+		require.Contains(t, err.Error(), xmlenc1.AES256KeyWrap)
+	})
+
+	t.Run("EncryptContent", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := agreementAndKeyWrapEncryptor(&ecKey.PublicKey, kek).
+			EncryptContent(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
+	})
+
+	t.Run("EncryptBytes", func(t *testing.T) {
+		_, err := agreementAndKeyWrapEncryptor(&ecKey.PublicKey, kek).
+			EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
+		require.ErrorIs(t, err, xmlenc1.ErrConflictingKeyConfig)
+	})
+
+	t.Run("key wrap alone round-trips", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			KeyEncryptionKey(kek).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	// A session key alongside key agreement is not a conflict: it supplies
+	// the key that the agreed key-encryption key then wraps.
+	t.Run("session key with key agreement is allowed", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			SessionKey(randKey(t, 32)).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&ecKey.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(ecKey).Decrypt(t.Context(), edElem)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 	})
