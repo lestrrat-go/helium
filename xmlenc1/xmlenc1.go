@@ -444,8 +444,10 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 			CipherValue: encKeyBytes,
 		}
 	} else if resolved.hasKeyAgreement {
-		// ECDH-ES derives the KEK from an ephemeral exchange, so it takes
-		// priority over a statically supplied KEK on the same key wrap URI.
+		// resolveEncryptConfig has already rejected any other mechanism
+		// alongside key agreement, so this branch derives the key-encryption
+		// key from an ephemeral exchange and wraps the session key under
+		// cfg.keyWrapAlgorithm.
 		encKey, err = encryptECDHSessionKey(resolved.recipientECDH, cfg.keyWrapAlgorithm, effectiveKDFParams(cfg.kdfParams), sessionKey)
 		if err != nil {
 			return nil, err
