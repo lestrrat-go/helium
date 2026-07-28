@@ -14,9 +14,12 @@ type EncryptionMethod struct {
 	// RSA-OAEP key transport only.
 	DigestMethod string
 	// MGFAlgorithm is the mask generation function URI from the xenc11:MGF
-	// child. It is permitted only with RSAOAEP11; RSAOAEP fixes MGF1-SHA-1
-	// implicitly and rejects an explicit value. Empty defaults to MGF1
-	// with SHA-1, independent of DigestMethod.
+	// child. Parsing accepts and stores it on any EncryptionMethod; it is
+	// resolved only on the RSA-OAEP key transport paths, where RSAOAEP11
+	// takes an explicit value and RSAOAEP rejects one because its
+	// MGF1-SHA-1 is implicit. Empty resolves to MGF1 with SHA-1,
+	// independent of DigestMethod. On any other algorithm the value is
+	// carried and never read.
 	MGFAlgorithm string
 	// OAEPParams is the decoded OAEP label from the xenc:OAEPparams child.
 	// Empty means no label. Applies to RSA-OAEP key transport only.
@@ -136,8 +139,11 @@ type ConcatKDFParams struct {
 	SuppPubInfo  []byte
 	SuppPrivInfo []byte
 	// DigestMethod is the hash driving the KDF, taken from the @Algorithm
-	// of the ds:DigestMethod child. It is required: ConcatKDFParams
-	// without one is rejected as malformed.
+	// of the ds:DigestMethod child. Parsed wire parameters must carry one:
+	// a xenc11:ConcatKDFParams without it is rejected as malformed. On an
+	// Encryptor these parameters are configuration rather than wire data,
+	// and [Encryptor.KeyDerivationParams] states what an empty DigestMethod
+	// means there.
 	DigestMethod string
 
 	algorithmIDUnusedBits  uint8

@@ -190,8 +190,8 @@ func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 // emitted, so configuring both fails with [ErrMissingConfig] rather than
 // silently discarding one of them.
 //
-// The key derivation defaults to ConcatKDF with SHA-256 and empty OtherInfo;
-// use KeyDerivationParams to control it.
+// The key derivation is ConcatKDF; [Encryptor.KeyDerivationParams] controls
+// it.
 func (e Encryptor) RecipientECPublicKey(key *ecdsa.PublicKey) Encryptor {
 	e = e.clone()
 	e.cfg.recipientECPub = key
@@ -545,11 +545,10 @@ func (d Decryptor) config() *decryptConfig {
 
 // PrivateKey sets the RSA private key for key transport decryption.
 //
-// PrivateKey, ECPrivateKey, and KeyEncryptionKey may all be set at once:
-// each EncryptedKey candidate selects the one its declared algorithm needs,
-// so a single Decryptor handles documents protected different ways. A
-// non-empty [Decryptor.SessionKey] makes all three inert, because it returns
-// before the EncryptedKey stage they belong to.
+// PrivateKey, ECPrivateKey, and KeyEncryptionKey may all be set at once, so a
+// single Decryptor handles documents protected different ways.
+// [Decryptor.MaxEncryptedKeys] states which of the three an EncryptedKey
+// candidate uses. A non-empty [Decryptor.SessionKey] makes all three inert.
 func (d Decryptor) PrivateKey(key *rsa.PrivateKey) Decryptor {
 	d = d.clone()
 	d.cfg.privateKey = key
@@ -628,15 +627,19 @@ func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 // with junk EncryptedKey elements is a CPU amplification (DoS) vector, so
 // the cap is enforced before any candidate crypto runs.
 //
-// A candidate's cost is dispatched on its AgreementMethod first and on its
-// declared algorithm second. An EncryptedKey carrying an AgreementMethod is
-// ECDH-ES, and it costs an ECDH key agreement, then a ConcatKDF derivation,
-// then an AES key unwrap of the session key — its declared algorithm is the
-// AES key-wrap URI and does not choose the branch. Without an
-// AgreementMethod the declared algorithm decides: an RSA-OAEP URI costs a
-// private-key decrypt, an AES key-wrap URI costs a plain key unwrap. A
-// candidate whose branch needs a key the caller never configured costs no
-// crypto at all and yields [ErrMissingKey].
+// A candidate's branch — which key it uses and what it costs — is dispatched
+// on its AgreementMethod first and on its declared algorithm second. An
+// EncryptedKey carrying an AgreementMethod takes the key-agreement branch and
+// uses [Decryptor.ECPrivateKey]; its declared algorithm is the AES key-wrap
+// URI applied to the agreed key and does not choose the branch. Only a
+// supported ECDH-ES agreement URI then reaches the full cost of a key
+// agreement, a ConcatKDF derivation, and an AES key unwrap; any other
+// agreement URI is rejected before all three. Without an AgreementMethod the
+// declared algorithm decides: an RSA-OAEP URI uses [Decryptor.PrivateKey] and
+// costs a private-key decrypt, an AES key-wrap URI uses
+// [Decryptor.KeyEncryptionKey] and costs a plain key unwrap. A candidate
+// whose branch needs a key the caller never configured costs no crypto at all
+// and yields [ErrMissingKey].
 //
 // Zero (the default) uses [DefaultMaxEncryptedKeys]; a negative value
 // removes the limit (matching helium's MaxDepth convention). A document

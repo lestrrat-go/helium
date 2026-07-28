@@ -161,16 +161,13 @@ func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string
 	}, nil
 }
 
-// effectiveKDFParams fills in the ConcatKDF defaults for an Encryptor that
-// selected ECDH-ES without spelling the derivation out. Empty OtherInfo with
-// SHA-256 is the neutral choice: it commits to no application-specific
-// AlgorithmID/PartyInfo the recipient would have to guess, and the emitted
-// xenc11:ConcatKDFParams states it explicitly on the wire either way.
-//
-// The default is all-or-nothing: params that omit DigestMethod are treated as
-// unspecified in full, so any OtherInfo they carry is DISCARDED rather than
-// silently combined with a digest the caller never chose. Caller OtherInfo is
-// honored only alongside a digest the caller did supply.
+// effectiveKDFParams applies the fallback [Encryptor.KeyDerivationParams]
+// documents, for an Encryptor that selected ECDH-ES without spelling the
+// derivation out. SHA-256 with no OtherInfo is the neutral choice: it commits
+// to no application-specific AlgorithmID/PartyInfo the recipient would have
+// to guess, and the emitted xenc11:ConcatKDFParams states it explicitly on
+// the wire either way. The fallback is all-or-nothing so that caller
+// OtherInfo is never silently paired with a digest the caller never chose.
 func effectiveKDFParams(params *ConcatKDFParams) *ConcatKDFParams {
 	if params == nil || params.DigestMethod == "" {
 		return &ConcatKDFParams{DigestMethod: DigestSHA256}

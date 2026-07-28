@@ -35,11 +35,8 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   key-encryption key is derived, not supplied, so `KeyEncryptionKey` plays no
   part; a fresh ephemeral key pair is generated per encryption and only its
   public half travels, in the `xenc:AgreementMethod`. `KeyDerivationParams`
-  sets the ConcatKDF parameters (default: SHA-256, empty OtherInfo) — both
-  sides must derive with identical values, which is why they are written to
-  the wire. Key agreement and RSA key transport are mutually exclusive: only
-  one `EncryptedKey` is emitted, so configuring both fails with
-  `ErrMissingConfig` rather than silently dropping the EC recipient.
+  sets the ConcatKDF parameters, which are written to the wire because both
+  sides must derive with identical values.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
@@ -48,15 +45,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 - `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
   trial-decrypted (default 100, negative for unlimited), because an unbounded
   count is a CPU amplification vector; over the cap fails with
-  `ErrTooManyEncryptedKeys` before any candidate crypto runs. A candidate's
-  cost is dispatched on its `AgreementMethod` first and on its declared
-  algorithm second. An `AgreementMethod` means ECDH-ES, which costs a key
-  agreement, then ConcatKDF, then an AES key unwrap — its declared algorithm
-  is the AES key-wrap URI and does not choose the branch. Without one, the
-  declared algorithm decides: an RSA-OAEP private-key decrypt, or a plain AES
-  key unwrap. A candidate whose branch needs a key the caller never configured
-  fails with `ErrMissingKey` without doing any crypto. Every statement in this
-  bullet describes the `<EncryptedKey>` stage, which a non-empty
+  `ErrTooManyEncryptedKeys` before any candidate crypto runs. Its godoc owns
+  the per-candidate branch dispatch: which key a candidate uses and what it
+  costs. The cap belongs to the `<EncryptedKey>` stage, which a non-empty
   `Decryptor.SessionKey` returns before — see
   [Decrypting with a pre-shared session key](#decrypting-with-a-pre-shared-session-key).
 
@@ -68,52 +59,31 @@ is how the recipient obtains that key:
 | Configuration | Wire result |
 |---|---|
 | `KeyTransportAlgorithm` + `RecipientPublicKey` | `<EncryptedKey>` holding the session key under RSA-OAEP |
+| `KeyWrapAlgorithm` + `RecipientECPublicKey` | `<EncryptedKey>` holding the session key under AES Key Wrap, with the wrapping key derived by ECDH-ES; a `KeyEncryptionKey` set alongside is unused |
 | `KeyWrapAlgorithm` + `KeyEncryptionKey` | `<EncryptedKey>` holding the session key under AES Key Wrap (RFC 3394) |
 | non-empty `SessionKey` alone | no `<EncryptedKey>`; the recipient must already hold the key |
 | none of the above | `ErrMissingConfig` — nothing can protect the session key |
 
-`SessionKey` may accompany either mechanism — it supplies the key that the
-mechanism then protects, instead of generating a random one. A non-empty
+Configuring two of these mechanisms at once is an error rather than a
+preference; the `Encryptor` setters' godoc says which combination fails and
+with which error.
+
+`SessionKey` may accompany any of these mechanisms — it supplies the key that
+the mechanism then protects, instead of generating a random one. A non-empty
 `SessionKey` must match the block algorithm's key length exactly, else
 `KeySizeError`.
 
 An empty or nil `SessionKey` counts as not set: encryption generates a random
 key of the right length instead, so it never hits the length check. That is
-why an empty `SessionKey` with no key transport and no key wrap gives
-`ErrMissingConfig` rather than encrypting to a key the recipient holds.
-
-On the decrypting side, `PrivateKey`, `ECPrivateKey`, and `KeyEncryptionKey`
-may all be set together: each `<EncryptedKey>` candidate selects the one its
-declared algorithm needs. Here too an empty or nil `SessionKey` counts as not
-set, and the `<EncryptedKey>` candidates are used.
+why an empty `SessionKey` with no key transport, key agreement, or key wrap
+gives `ErrMissingConfig` rather than encrypting to a key the recipient holds.
 
 ## Decrypting with a pre-shared session key
 
 A non-empty `Decryptor.SessionKey` is not a preference among keys; it is an
 early return. `Decrypt` and `DecryptBytes` take it as the session key and
-return before the whole `<EncryptedKey>` stage. The `MaxEncryptedKeys` cap,
-candidate selection, per-candidate validation, and per-candidate key
-resolution all live in that stage, and none of them runs. No `<EncryptedKey>`
-is examined at all.
-
-Everything else on this page about `<EncryptedKey>` handling is a consequence
-of that one fact, not a separate rule. Under a non-empty `SessionKey`:
-
-- `PrivateKey`, `ECPrivateKey`, and `KeyEncryptionKey` have no effect.
-- A document over the `MaxEncryptedKeys` cap does not fail with
-  `ErrTooManyEncryptedKeys`.
-- An `<EncryptedKey>` that only the `<EncryptedKey>` stage would reject — a
-  missing `EncryptionMethod`, an unsupported algorithm URI, an algorithm whose
-  key was never configured — does not fail the decrypt.
-
-What still runs before the early return is parsing, plus the checks on the
-`<EncryptedData>` element itself: its `EncryptionMethod`, the
-`AllowUnauthenticatedCBC` opt-in, and — in `Decrypt` only — its `Type`. The
-subtree is parsed in full, including
-every `<EncryptedKey>` element, so an `<EncryptedKey>` the **parser** rejects —
-no `CipherData`/`CipherValue`, a duplicate `EncryptionMethod` or `CipherData`,
-an unreadable `EncryptionMethod` or `AgreementMethod` — still fails the decrypt
-with `ErrMalformedEncrypted` even though its contents are never used.
+return before the whole `<EncryptedKey>` stage. Its godoc owns the full
+account of what that stage skips and what still runs ahead of the return.
 
 ## Decryption does not modify the tree
 
