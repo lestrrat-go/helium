@@ -66,16 +66,28 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 }
 
 // ecdhRecipientKey converts a recipient's ECDSA public key into the
-// crypto/ecdh form ECDH-ES needs, and rejects a curve the package cannot see
-// an encryption through. Two distinct failures live here: crypto/ecdh refuses
+// crypto/ecdh form ECDH-ES needs, and rejects any recipient key the package
+// cannot see an encryption through. Three distinct failures live here: the
+// key may carry no point at all (an ecdsa.PublicKey with unset coordinates,
+// which crypto/ecdsa dereferences rather than reporting), crypto/ecdh refuses
 // some curves outright (P-224 has no ECDH form at all), and a curve it does
 // accept may still have no dsig11:NamedCurve URI, which would yield an
 // EncryptedKey no recipient can parse.
 //
-// It is the single gate for both, and encrypt calls it before generating a
-// session key, serializing plaintext, or block encrypting, so an unusable
-// recipient key costs nothing proportional to the payload.
+// It is the single gate for all three, and resolveEncryptConfig calls it
+// before any entry point serializes plaintext, generates a session key, or
+// block encrypts, so an unusable recipient key is reported as an error and
+// costs nothing proportional to the payload.
 func ecdhRecipientKey(recipient *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
+	// crypto/ecdsa reads the affine coordinates before validating them, so a
+	// public key whose X or Y was never set panics inside (*PublicKey).ECDH
+	// instead of erroring. This gate exists to decide whether the recipient
+	// key is usable at all, and "carries no point" is the most basic way it
+	// can be unusable; the caller's contract is an error, not a panic.
+	if recipient.X == nil || recipient.Y == nil {
+		return nil, fmt.Errorf("%w: invalid recipient EC public key: missing curve point", ErrEncryptionFailed)
+	}
+
 	recipientKey, err := recipient.ECDH()
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid recipient EC public key: %v", ErrEncryptionFailed, err)

@@ -269,6 +269,34 @@ func TestEncryptECDHESErrors(t *testing.T) {
 		require.NotErrorAs(t, err, &keySize)
 	})
 
+	// A recipient key with unset coordinates is caller-constructed garbage,
+	// but ecdhRecipientKey is the one gate that decides whether a recipient
+	// key is usable at all, and crypto/ecdsa reads the coordinates before it
+	// validates them. Without the gate the public API panics where its
+	// documented contract is an error.
+	t.Run("rejects a recipient key with no curve point", func(t *testing.T) {
+		p256 := generateECKey(t, elliptic.P256())
+
+		for _, tc := range []struct {
+			name string
+			pub  *ecdsa.PublicKey
+		}{
+			{name: "no coordinates", pub: &ecdsa.PublicKey{Curve: elliptic.P256()}},
+			{name: "no Y", pub: &ecdsa.PublicKey{Curve: elliptic.P256(), X: p256.X}},
+			{name: "no X", pub: &ecdsa.PublicKey{Curve: elliptic.P256(), Y: p256.Y}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				doc := mustParseXML(t, samlAssertion)
+				_, err := xmlenc1.NewEncryptor().
+					KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+					RecipientECPublicKey(tc.pub).
+					EncryptElement(t.Context(), doc.DocumentElement())
+				require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+				require.Contains(t, err.Error(), "recipient EC public key")
+			})
+		}
+	})
+
 	t.Run("a wrong EC key does not decrypt", func(t *testing.T) {
 		doc := mustParseXML(t, samlAssertion)
 		edElem, err := xmlenc1.NewEncryptor().
@@ -280,5 +308,118 @@ func TestEncryptECDHESErrors(t *testing.T) {
 		other := generateECKey(t, elliptic.P256())
 		_, err = xmlenc1.NewDecryptor().ECPrivateKey(other).Decrypt(t.Context(), edElem)
 		require.Error(t, err)
+	})
+}
+
+// ecElementRejectedBeforeSerialization returns an element that cannot be
+// serialized: Document.CreateElement only rejects a colon in the name, while
+// the writer rejects the whole name at emit time. Serializing it is the first
+// payload-proportional step of EncryptElement, so its failure marks where
+// serialization happened.
+func ecElementRejectedBeforeSerialization(t *testing.T) *helium.Element {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	elem, err := doc.CreateElement(`root injected="1"`)
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(elem))
+	return elem
+}
+
+// An unusable recipient curve must be noticed before the plaintext is
+// serialized, not after. Pinning it on an element that itself fails to
+// serialize says WHERE the rejection happens without timing anything: a
+// serialization error would mean the curve was noticed too late.
+func TestEncryptECDHESRejectsCurveBeforeSerialization(t *testing.T) {
+	p224 := generateECKey(t, elliptic.P224())
+
+	_, err := xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(&p224.PublicKey).
+		EncryptElement(t.Context(), ecElementRejectedBeforeSerialization(t))
+	require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+	require.Contains(t, err.Error(), "recipient EC public key")
+	require.NotContains(t, err.Error(), "invalid element name")
+}
+
+// RSA key transport and ECDH-ES key agreement both protect the same session
+// key, and only one EncryptedKey is emitted. Configuring both used to
+// silently prefer key transport and drop the EC recipient entirely, so a
+// recipient holding only the EC private key failed to decrypt with an error
+// that pointed nowhere near the real mistake.
+func TestEncryptConflictingTransportAndAgreement(t *testing.T) {
+	rsaKey := generateRSAKey(t)
+	ecKey := generateECKey(t, elliptic.P256())
+
+	newEncryptor := func() xmlenc1.Encryptor {
+		return xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&rsaKey.PublicKey).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&ecKey.PublicKey)
+	}
+
+	t.Run("EncryptElement", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := newEncryptor().EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+		require.Contains(t, err.Error(), xmlenc1.RSAOAEP)
+		require.Contains(t, err.Error(), xmlenc1.AES256KeyWrap)
+	})
+
+	t.Run("EncryptContent", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := newEncryptor().EncryptContent(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+	})
+
+	t.Run("EncryptBytes", func(t *testing.T) {
+		_, err := newEncryptor().EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+	})
+
+	t.Run("key transport alone round-trips", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&rsaKey.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(rsaKey).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	t.Run("key agreement alone round-trips", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&ecKey.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(ecKey).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	// An EC public key with no KeyWrapAlgorithm does not select key
+	// agreement, so it is not a conflict and its curve is never resolved: an
+	// unusable curve must not fail an encryption that would not have touched
+	// that key.
+	t.Run("unused EC key does not block key transport", func(t *testing.T) {
+		p224 := generateECKey(t, elliptic.P224())
+		doc := mustParseXML(t, samlAssertion)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&rsaKey.PublicKey).
+			RecipientECPublicKey(&p224.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(rsaKey).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
 	})
 }

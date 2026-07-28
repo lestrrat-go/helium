@@ -37,7 +37,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   public half travels, in the `xenc:AgreementMethod`. `KeyDerivationParams`
   sets the ConcatKDF parameters (default: SHA-256, empty OtherInfo) — both
   sides must derive with identical values, which is why they are written to
-  the wire.
+  the wire. Key agreement and RSA key transport are mutually exclusive: only
+  one `EncryptedKey` is emitted, so configuring both fails with
+  `ErrMissingConfig` rather than silently dropping the EC recipient.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
