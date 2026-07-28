@@ -390,7 +390,7 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
 
 - **NewEncryptor() → Encryptor** — create fluent builder for encryption (clone-on-write value type)
   - `BlockAlgorithm(uri)`, `AllowLegacyCBC(bool)`, `KeyTransportAlgorithm(uri)`, `RecipientPublicKey(key)`, `SessionKey(key)`, `KeyWrapAlgorithm(uri)`, `KeyEncryptionKey(kek)`, `OAEPDigest(uri)`, `OAEPMGF(uri)`, `OAEPParams(params)` — builder methods
-  - `EncryptElement(ctx, elem)`, `EncryptContent(ctx, elem)` — terminal methods
+  - `EncryptElement(ctx, elem)`, `EncryptContent(ctx, elem)`, `EncryptBytes(ctx, doc, plaintext)` — terminal methods; the last encrypts arbitrary octets, emits no `@Type` (W3C xmlenc-core1 §3.1 leaves it absent for non-element payloads), and returns a **detached** element without touching the tree
 - **NewDecryptor() → Decryptor** — create fluent builder for decryption
   - `PrivateKey(key)`, `ECPrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)`, `AllowUnauthenticatedCBC(bool)`, `MaxEncryptedKeys(n)` — builder methods
   - `Decrypt(ctx, elem)`, `DecryptBytes(ctx, elem)` — terminal methods; the latter returns binary plaintext without XML parsing
