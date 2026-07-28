@@ -16,12 +16,11 @@ var (
 	ErrMissingKey = errors.New("xmlenc1: no decryption key available")
 
 	// ErrTooManyEncryptedKeys is returned when an EncryptedData carries more
-	// EncryptedKey candidates than the Decryptor's effective limit (see
-	// Decryptor.MaxEncryptedKeys and DefaultMaxEncryptedKeys). Each candidate
-	// would cost whatever its declared algorithm requires — an RSA-OAEP
-	// private-key decrypt, an AES key unwrap, or an ECDH derivation — so an
-	// unbounded count is a CPU amplification (DoS) vector; the cap is
-	// enforced before any crypto runs.
+	// EncryptedKey candidates than the Decryptor's effective limit, which
+	// guards against CPU amplification (DoS). Decryptor.MaxEncryptedKeys owns
+	// the cap: the per-candidate cost it bounds, the effective-limit rules,
+	// and the one configuration in which this error cannot be returned at
+	// all. See also DefaultMaxEncryptedKeys.
 	ErrTooManyEncryptedKeys = errors.New("xmlenc1: too many EncryptedKey candidates")
 
 	// ErrInvalidPadding names invalid PKCS#7 padding. Decryption never

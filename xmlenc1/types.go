@@ -47,7 +47,9 @@ type EncryptedData struct {
 	// EncryptedKeys holds every EncryptedKey candidate found in KeyInfo
 	// (one per recipient). Decryption tries each in turn, so a
 	// multi-recipient document, or one with a bogus EncryptedKey
-	// prepended to a legitimate one, still resolves.
+	// prepended to a legitimate one, still resolves. A Decryptor with a
+	// non-empty SessionKey examines none of them — see
+	// [Decryptor.SessionKey].
 	EncryptedKeys []*EncryptedKey
 	// CipherValue is the encrypted content, base64-decoded. Its internal
 	// layout belongs to the block algorithm: the AES modes used here all

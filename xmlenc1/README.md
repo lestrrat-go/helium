@@ -46,12 +46,19 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   and does not modify the tree; `DecryptBytes` returns the plaintext octets
   without parsing them as XML.
 - `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
-  trial-decrypted (default 100, negative for unlimited). Each candidate costs
-  whatever its declared algorithm requires — an RSA-OAEP private-key decrypt,
-  an AES key unwrap, or an ECDH derivation — so an unbounded count is a CPU
-  amplification vector; over the cap fails with `ErrTooManyEncryptedKeys`
-  before any crypto runs. A candidate whose algorithm needs a key the caller
-  never configured fails with `ErrMissingKey` without doing any crypto.
+  trial-decrypted (default 100, negative for unlimited), because an unbounded
+  count is a CPU amplification vector; over the cap fails with
+  `ErrTooManyEncryptedKeys` before any candidate crypto runs. A candidate's
+  cost is dispatched on its `AgreementMethod` first and on its declared
+  algorithm second. An `AgreementMethod` means ECDH-ES, which costs a key
+  agreement, then ConcatKDF, then an AES key unwrap — its declared algorithm
+  is the AES key-wrap URI and does not choose the branch. Without one, the
+  declared algorithm decides: an RSA-OAEP private-key decrypt, or a plain AES
+  key unwrap. A candidate whose branch needs a key the caller never configured
+  fails with `ErrMissingKey` without doing any crypto. Every statement in this
+  bullet describes the `<EncryptedKey>` stage, which a non-empty
+  `Decryptor.SessionKey` returns before — see
+  [Decrypting with a pre-shared session key](#decrypting-with-a-pre-shared-session-key).
 
 ## Choosing how the session key is protected
 
@@ -77,11 +84,36 @@ why an empty `SessionKey` with no key transport and no key wrap gives
 
 On the decrypting side, `PrivateKey`, `ECPrivateKey`, and `KeyEncryptionKey`
 may all be set together: each `<EncryptedKey>` candidate selects the one its
-declared algorithm needs. A non-empty `SessionKey` overrides all of them: it
-becomes the sole candidate, so no `<EncryptedKey>` is selected or decrypted.
-The elements are still parsed first, so a malformed `<EncryptedKey>` fails the
-decrypt even though its contents are never used. Here too an empty or nil
-`SessionKey` counts as not set, and the `<EncryptedKey>` candidates are used.
+declared algorithm needs. Here too an empty or nil `SessionKey` counts as not
+set, and the `<EncryptedKey>` candidates are used.
+
+## Decrypting with a pre-shared session key
+
+A non-empty `Decryptor.SessionKey` is not a preference among keys; it is an
+early return. `Decrypt` and `DecryptBytes` take it as the session key and
+return before the whole `<EncryptedKey>` stage. The `MaxEncryptedKeys` cap,
+candidate selection, per-candidate validation, and per-candidate key
+resolution all live in that stage, and none of them runs. No `<EncryptedKey>`
+is examined at all.
+
+Everything else on this page about `<EncryptedKey>` handling is a consequence
+of that one fact, not a separate rule. Under a non-empty `SessionKey`:
+
+- `PrivateKey`, `ECPrivateKey`, and `KeyEncryptionKey` have no effect.
+- A document over the `MaxEncryptedKeys` cap does not fail with
+  `ErrTooManyEncryptedKeys`.
+- An `<EncryptedKey>` that only the `<EncryptedKey>` stage would reject — a
+  missing `EncryptionMethod`, an unsupported algorithm URI, an algorithm whose
+  key was never configured — does not fail the decrypt.
+
+What still runs before the early return is parsing, plus the checks on the
+`<EncryptedData>` element itself: its `EncryptionMethod`, the
+`AllowUnauthenticatedCBC` opt-in, and — in `Decrypt` only — its `Type`. The
+subtree is parsed in full, including
+every `<EncryptedKey>` element, so an `<EncryptedKey>` the **parser** rejects —
+no `CipherData`/`CipherValue`, a duplicate `EncryptionMethod` or `CipherData`,
+an unreadable `EncryptionMethod` or `AgreementMethod` — still fails the decrypt
+with `ErrMalformedEncrypted` even though its contents are never used.
 
 ## Decryption does not modify the tree
 
