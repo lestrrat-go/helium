@@ -380,6 +380,11 @@ func ecdhURIForCurve(curve ecdh.Curve) (string, error) {
 	}
 }
 
+// parseEncryptionMethod parses an EncryptionMethod element. Both call sites —
+// the EncryptedData's own method and each EncryptedKey's — are reached while
+// the document is read, so everything here runs before any key is resolved and
+// before anything the document says has been authenticated. The only child it
+// decodes is OAEPparams, and decodeOAEPParams owns what bounds that.
 func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	em := &EncryptionMethod{}
 	alg, ok := elem.GetAttribute("Algorithm")
@@ -434,15 +439,73 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 				return nil, fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
 			}
 			seenOAEPParams = true
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			decoded, err := decodeOAEPParams(e)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
+				return nil, err
 			}
 			em.OAEPParams = decoded
 		}
 	}
 
 	return em, nil
+}
+
+// maxOAEPParamsBytes bounds the decoded octet length of one xenc:OAEPparams
+// element. It is the single statement of that limit; decodeOAEPParams applies
+// it.
+//
+// OAEPparams carries the RSA-OAEP label — the "L" of RFC 8017 — which sender
+// and recipient agree on out of band. RFC 8017 hashes the label down to the
+// digest length before it is used, so nothing downstream is sized by it and a
+// real one is a handful of octets: an application tag or a short identifier,
+// twelve in this package's own round-trip test. 1 KiB is two orders of
+// magnitude above that, so no interoperable document is rejected, while a
+// hostile one can no longer make the parser hold a label sized only by what
+// the XML parser happened to accept. That parser's own per-node content cap
+// does not stand in for this one: it bounds a single indivisible run of
+// characters, and a value spread over CDATA sections is as many runs as the
+// document likes.
+const maxOAEPParamsBytes = 1024
+
+// decodeOAEPParams decodes elem's base64 content into the OAEP label, refusing
+// a value over maxOAEPParamsBytes before anything is built from it.
+//
+// It is the two-pass shape decodeCipherValue documents, and for the same
+// reason: xs:base64Binary permits XML whitespace between characters and the
+// value may arrive as any number of text and CDATA children, so the lexical
+// length an attacker controls has no relation to the octets the limit
+// measures. Joining the children into one string first would allocate that
+// lexical length before the limit could refuse it, and would keep allocating
+// it for every value the limit accepts, which leaves the accepted case
+// unbounded as well.
+//
+// So one xmlbase64.Counter pass weighs the value, carrying the counting state
+// across each child boundary — a base64 quantum, and padding itself, may be
+// split between children — and only a value within the limit gets a second
+// pass, which builds just the characters the decoder will see.
+//
+// What is held is therefore bounded by the limit: the stripped characters at
+// most four thirds of it, the decoded bytes at most it, and nothing at all
+// scaling with the lexical length. The copy [helium.Text.Content] returns per
+// child is the floor, so the peak is the largest single child rather than the
+// whole value.
+func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
+	var counter xmlbase64.Counter
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		counter.Add(child.Content())
+	}
+	if counter.DecodedLen() > maxOAEPParamsBytes {
+		return nil, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes)
+	}
+	chars := make([]byte, 0, counter.Chars())
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		chars = xmlbase64.AppendStripped(chars, child.Content())
+	}
+	decoded, err := xmlbase64.DecodeString(string(chars))
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
+	}
+	return decoded, nil
 }
 
 // parseCipherData parses a CipherData element. Per the XML-Enc schema,

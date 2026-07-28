@@ -22,7 +22,10 @@ type EncryptionMethod struct {
 	// carried and never read.
 	MGFAlgorithm string
 	// OAEPParams is the decoded OAEP label from the xenc:OAEPparams child.
-	// Empty means no label. Applies to RSA-OAEP key transport only.
+	// Empty means no label. Applies to RSA-OAEP key transport only. Parsing
+	// refuses a label over 1 KiB decoded with [ErrMalformedEncrypted]: the
+	// label is hashed before it is used, so a real one is a handful of octets
+	// and the limit is far above any interoperable value.
 	OAEPParams []byte
 }
 

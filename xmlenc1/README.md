@@ -47,6 +47,15 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   `DigestMethod` are the one set that is never measured: they fall back to
   SHA-256 with empty OtherInfo, which discards the caller's fields before
   any derivation. `ConcatKDFParams`' godoc owns this rule.
+- An `xenc:OAEPparams` element is limited to 1 KiB decoded, on the
+  `EncryptedData`'s own `EncryptionMethod` and on every `EncryptedKey`'s
+  alike, because both are read before any key is resolved and before anything
+  the document says has been authenticated. The element carries the RSA-OAEP
+  label, which is hashed before use and is a handful of octets in practice, so
+  the limit is far above any interoperable value; over it fails with
+  `ErrMalformedEncrypted`. The value is weighed before it is assembled, so a
+  label spread over many CDATA sections costs no more than reading the
+  document once.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
