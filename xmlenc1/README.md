@@ -35,16 +35,55 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   key-encryption key is derived, not supplied, so `KeyEncryptionKey` plays no
   part; a fresh ephemeral key pair is generated per encryption and only its
   public half travels, in the `xenc:AgreementMethod`. `KeyDerivationParams`
-  sets the ConcatKDF parameters (default: SHA-256, empty OtherInfo) — both
-  sides must derive with identical values, which is why they are written to
-  the wire. Key agreement and RSA key transport are mutually exclusive: only
-  one `EncryptedKey` is emitted, so configuring both fails with
-  `ErrMissingConfig` rather than silently dropping the EC recipient.
+  sets the ConcatKDF parameters, which are written to the wire because both
+  sides must derive with identical values.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
   and does not modify the tree; `DecryptBytes` returns the plaintext octets
   without parsing them as XML.
+- `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
+  trial-decrypted (default 100, negative for unlimited), because an unbounded
+  count is a CPU amplification vector; over the cap fails with
+  `ErrTooManyEncryptedKeys` before any candidate crypto runs. Its godoc owns
+  the per-candidate branch dispatch: which key a candidate uses and what it
+  costs. The cap belongs to the `<EncryptedKey>` stage, which a non-empty
+  `Decryptor.SessionKey` returns before — see
+  [Decrypting with a pre-shared session key](#decrypting-with-a-pre-shared-session-key).
+
+## Choosing how the session key is protected
+
+The content is always encrypted under a symmetric session key. What differs
+is how the recipient obtains that key:
+
+| Configuration | Wire result |
+|---|---|
+| `KeyTransportAlgorithm` + `RecipientPublicKey` | `<EncryptedKey>` holding the session key under RSA-OAEP |
+| `KeyWrapAlgorithm` + `RecipientECPublicKey` | `<EncryptedKey>` holding the session key under AES Key Wrap, with the wrapping key derived by ECDH-ES; a `KeyEncryptionKey` set alongside is unused |
+| `KeyWrapAlgorithm` + `KeyEncryptionKey` | `<EncryptedKey>` holding the session key under AES Key Wrap (RFC 3394) |
+| non-empty `SessionKey` alone | no `<EncryptedKey>`; the recipient must already hold the key |
+| none of the above | `ErrMissingConfig` — nothing can protect the session key |
+
+A non-empty `SessionKey` must match the block algorithm's key length exactly,
+else `KeySizeError`. An empty or nil `SessionKey` counts as not set:
+encryption generates a random key of the right length instead, so it never
+hits the length check.
+
+## Decrypting with a pre-shared session key
+
+A non-empty `Decryptor.SessionKey` is not a preference among keys; it is an
+early return. `Decrypt` and `DecryptBytes` take it as the session key and
+return before the whole `<EncryptedKey>` stage. Its godoc owns the account of
+what that stage skips.
+
+## Decryption does not modify the tree
+
+`EncryptElement` and `EncryptContent` splice `<EncryptedData>` into the
+document. `Decrypt` is deliberately not their mirror image: it leaves
+`<EncryptedData>` where it is and returns the decrypted nodes detached, so
+the caller decides whether to restore them, inspect them, or discard the
+document. Reinsert with `elem.Replace(nodes[0])` for a `Type="...#Element"`
+payload.
 
 <!-- INCLUDE(examples/xmlenc1_encrypt_decrypt_example_test.go) -->
 ```go

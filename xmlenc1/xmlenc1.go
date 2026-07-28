@@ -114,8 +114,22 @@ func (e Encryptor) RecipientPublicKey(key *rsa.PublicKey) Encryptor {
 	return e
 }
 
-// SessionKey sets a pre-existing session key. If not set, a random key
-// is generated.
+// SessionKey sets a pre-existing session key. An empty or nil key counts as
+// not set: a random key of the length the block algorithm requires is
+// generated per encryption, and that is also what an Encryptor that never
+// calls SessionKey does.
+//
+// The key is still protected by whichever mechanism is configured (key
+// transport or key wrapping); supplying it does not skip that step. A
+// non-empty key's length must match the block algorithm exactly, or
+// encryption fails with a [KeySizeError] rather than silently encrypting at
+// a weaker strength than the emitted @Algorithm claims. An empty or nil key
+// never reaches that check, because the generated key is used instead.
+//
+// A non-empty key with no protection mechanism configured emits no
+// EncryptedKey, and the recipient must already hold this key. An empty or
+// nil key with no protection mechanism configured leaves nothing configured
+// at all, so encryption fails with [ErrMissingConfig].
 func (e Encryptor) SessionKey(key []byte) Encryptor {
 	e = e.clone()
 	e.cfg.sessionKey = append([]byte(nil), key...)
@@ -176,8 +190,8 @@ func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 // emitted, so configuring both fails with [ErrMissingConfig] rather than
 // silently discarding one of them.
 //
-// The key derivation defaults to ConcatKDF with SHA-256 and empty OtherInfo;
-// use KeyDerivationParams to control it.
+// The key derivation is ConcatKDF; [Encryptor.KeyDerivationParams] controls
+// it.
 func (e Encryptor) RecipientECPublicKey(key *ecdsa.PublicKey) Encryptor {
 	e = e.clone()
 	e.cfg.recipientECPub = key
@@ -202,12 +216,19 @@ func (e Encryptor) KeyDerivationParams(params *ConcatKDFParams) Encryptor {
 
 // EncryptElement encrypts an entire element, replacing it in the tree
 // with an EncryptedData element. Returns the EncryptedData element.
+//
+// This mutates the document: elem is unlinked from its position and the
+// EncryptedData takes its place among the siblings. Decryptor.Decrypt is
+// not the mirror image — it leaves the tree alone and returns the nodes.
 func (e Encryptor) EncryptElement(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
 	return encrypt(ctx, e.config(), elem, TypeElement)
 }
 
 // EncryptContent encrypts the content of an element, replacing the
 // children with an EncryptedData element. Returns the EncryptedData element.
+//
+// This mutates the document: every child of elem is unlinked and the
+// EncryptedData becomes its only child. elem itself stays in place.
 func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
 	return encrypt(ctx, e.config(), elem, TypeContent)
 }
@@ -473,10 +494,11 @@ func removeChildren(elem *helium.Element) {
 
 // DefaultMaxEncryptedKeys bounds how many <EncryptedKey> candidates a
 // Decryptor will trial-decrypt for a single EncryptedData when
-// MaxEncryptedKeys is not set. Each candidate forces a full RSA
-// private-key operation, so an unbounded count is a CPU amplification
-// (DoS) vector. The default mirrors jwx's WithMaxRecipients (100), which
-// is generous for real multi-recipient documents yet caps amplification.
+// MaxEncryptedKeys is not set. An unbounded count is a CPU amplification
+// (DoS) vector. [Decryptor.MaxEncryptedKeys] documents the per-candidate
+// cost this bounds and the one configuration in which the bound is never
+// reached. The default mirrors jwx's WithMaxRecipients (100), which is
+// generous for real multi-recipient documents yet caps amplification.
 const DefaultMaxEncryptedKeys = 100
 
 // decryptConfig holds the configuration for a Decryptor.
@@ -522,6 +544,11 @@ func (d Decryptor) config() *decryptConfig {
 }
 
 // PrivateKey sets the RSA private key for key transport decryption.
+//
+// PrivateKey, ECPrivateKey, and KeyEncryptionKey may all be set at once, so a
+// single Decryptor handles documents protected different ways.
+// [Decryptor.MaxEncryptedKeys] states which of the three an EncryptedKey
+// candidate uses. A non-empty [Decryptor.SessionKey] makes all three inert.
 func (d Decryptor) PrivateKey(key *rsa.PrivateKey) Decryptor {
 	d = d.clone()
 	d.cfg.privateKey = key
@@ -543,7 +570,25 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 	return d
 }
 
-// SessionKey sets a pre-shared session key directly.
+// SessionKey sets a pre-shared session key directly. As on the Encryptor, an
+// empty or nil key counts as not set, and decryption falls back to the
+// EncryptedKey candidates.
+//
+// A non-empty key is not a preference among keys; it is an early return.
+// Decrypt and DecryptBytes take it as the session key and return before the
+// whole EncryptedKey stage: the MaxEncryptedKeys cap, candidate selection,
+// per-candidate validation, and per-candidate key resolution all live in
+// that stage, and none of them runs.
+// Every consequence follows from that one fact:
+//
+//   - PrivateKey, ECPrivateKey, and KeyEncryptionKey have no effect.
+//   - A document over the effective MaxEncryptedKeys cap does not fail with
+//     [ErrTooManyEncryptedKeys].
+//   - An EncryptedKey that only the EncryptedKey stage would reject — a
+//     missing EncryptionMethod, an unsupported algorithm URI, an algorithm
+//     whose key the caller never configured — does not fail the decrypt.
+//
+// Set it only when the session key is known out of band.
 func (d Decryptor) SessionKey(key []byte) Decryptor {
 	d = d.clone()
 	d.cfg.sessionKey = append([]byte(nil), key...)
@@ -568,14 +613,29 @@ func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 }
 
 // MaxEncryptedKeys caps the number of <EncryptedKey> candidates the
-// Decryptor will trial-decrypt for a single EncryptedData. Each candidate
-// forces a full RSA private-key operation, so a document packed with junk
-// EncryptedKey elements is a CPU amplification (DoS) vector; the cap is
-// enforced before any crypto runs.
+// Decryptor will trial-decrypt for a single EncryptedData. A document packed
+// with junk EncryptedKey elements is a CPU amplification (DoS) vector, so
+// the cap is enforced before any candidate crypto runs.
+//
+// A candidate's branch — which key it uses and what it costs — is dispatched
+// on its AgreementMethod first and on its declared algorithm second. An
+// EncryptedKey carrying an AgreementMethod takes the key-agreement branch and
+// uses [Decryptor.ECPrivateKey]; its declared algorithm is the AES key-wrap
+// URI applied to the agreed key and does not choose the branch. Only a
+// supported ECDH-ES agreement URI then reaches the full cost of a key
+// agreement, a ConcatKDF derivation, and an AES key unwrap; any other
+// agreement URI is rejected before all three. Without an AgreementMethod the
+// declared algorithm decides: an RSA-OAEP URI uses [Decryptor.PrivateKey] and
+// costs a private-key decrypt, an AES key-wrap URI uses
+// [Decryptor.KeyEncryptionKey] and costs a plain key unwrap. A candidate
+// whose branch needs a key the caller never configured costs no crypto at all
+// and yields [ErrMissingKey].
 //
 // Zero (the default) uses [DefaultMaxEncryptedKeys]; a negative value
 // removes the limit (matching helium's MaxDepth convention). A document
-// exceeding the effective cap fails with [ErrTooManyEncryptedKeys].
+// exceeding the effective cap fails with [ErrTooManyEncryptedKeys] — unless
+// a non-empty [Decryptor.SessionKey] is set, which returns before the cap
+// and the rest of the EncryptedKey stage.
 func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 	d = d.clone()
 	d.cfg.maxEncryptedKeys = n
@@ -583,6 +643,22 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 }
 
 // Decrypt decrypts an EncryptedData element and returns the decrypted nodes.
+//
+// Unlike Encryptor.EncryptElement and Encryptor.EncryptContent, which splice
+// EncryptedData into the tree, Decrypt does NOT modify the document: elem
+// stays exactly where it is and the returned nodes are detached. Restoring
+// the original document is the caller's decision — call elem.Replace with
+// the single node for a TypeElement payload, or remove elem and insert the
+// nodes at its position for TypeContent.
+//
+// The plaintext is parsed with DTD loading, external entity resolution, and
+// network access disabled, in the in-scope-namespace context of elem's
+// parent, so prefixes declared only on an ancestor resolve correctly.
+//
+// A TypeContent payload yields its children; a TypeElement payload (the
+// default when @Type is absent) must yield exactly one element node. An
+// unrecognized @Type is rejected as malformed — use DecryptBytes for a
+// payload that is not XML.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
 	return decryptElement(ctx, d.config(), elem)
 }
@@ -679,7 +755,9 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		}
 	}
 
-	// A pre-shared session key, when configured, is the sole candidate.
+	// A pre-shared session key, when configured, returns here — before the
+	// entire EncryptedKey stage below (cap, selection, validation, key
+	// resolution). Decryptor.SessionKey documents what that skips.
 	if len(cfg.sessionKey) > 0 {
 		return finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey)
 	}
@@ -689,11 +767,11 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
 	}
 
-	// Bound the trial-decrypt work before any RSA operation runs. Each
-	// candidate forces a full RSA private-key op, so an attacker who can
-	// pack a document with junk <EncryptedKey> elements gets CPU
-	// amplification. Fail closed when the count exceeds the effective cap
-	// (zero => default, negative => unlimited).
+	// Bound the trial-decrypt work before any candidate crypto runs: an
+	// attacker who can pack a document with junk <EncryptedKey> elements
+	// gets CPU amplification. Decryptor.MaxEncryptedKeys documents the
+	// per-candidate cost this bounds. Fail closed when the count exceeds the
+	// effective cap (zero => default, negative => unlimited).
 	maxKeys := cfg.maxEncryptedKeys
 	if maxKeys == 0 {
 		maxKeys = DefaultMaxEncryptedKeys
@@ -713,8 +791,8 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	var lastErr error
 	for _, ek := range keys {
 		// Poll the caller's deadline between candidates so a cancellation
-		// interrupts the per-candidate RSA work rather than running to
-		// completion over every EncryptedKey.
+		// interrupts the per-candidate key-resolution work rather than
+		// running to completion over every EncryptedKey.
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
