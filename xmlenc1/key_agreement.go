@@ -118,9 +118,9 @@ func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string
 		// ECDH-ES derives a KEK, so the EncryptedKey algorithm must be a
 		// key wrap. Anything else would declare a mechanism we are not
 		// performing.
-		return nil, fmt.Errorf("%w: %w", ErrEncryptionFailed, &UnsupportedAlgorithmError{Algorithm: keyWrapAlgorithm})
+		return nil, fmt.Errorf("%w: %w", ErrEncryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyWrap, Algorithm: keyWrapAlgorithm})
 	}
-	kekSize, err := keySizeForAlgorithm(keyWrapAlgorithm)
+	kekSize, err := keySizeForAlgorithm(paramKeyWrap, keyWrapAlgorithm)
 	if err != nil {
 		return nil, err
 	}

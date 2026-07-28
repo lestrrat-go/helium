@@ -90,6 +90,13 @@ const (
 )
 
 // UnsupportedAlgorithmError is returned for unrecognized algorithm URIs.
+//
+// Construct it with keyed fields only, as in
+// &UnsupportedAlgorithmError{Algorithm: uri}. The field set grows as the
+// diagnostics improve, and every such addition stops an unkeyed composite
+// literal from compiling. That break is accepted under this package's
+// EXPERIMENTAL, pre-1.0 API posture; keyed literals are unaffected and are
+// the supported form.
 type UnsupportedAlgorithmError struct {
 	// Parameter names the algorithm slot that rejected the URI, e.g.
 	// "block algorithm" or "MGF algorithm". It is diagnostic text and may
@@ -110,6 +117,10 @@ func (e *UnsupportedAlgorithmError) Error() string {
 // It guards against algorithm/key-size confusion, e.g. declaring AES-256
 // on the wire while supplying a 16-byte key that crypto/aes would silently
 // treat as AES-128.
+//
+// Construct it with keyed fields only, as in
+// &KeySizeError{Algorithm: uri, Want: want, Got: got}; see
+// UnsupportedAlgorithmError for why unkeyed literals are unsupported here.
 type KeySizeError struct {
 	// Key names the key that was the wrong length, e.g. "session key" or
 	// "key-encryption key". It is diagnostic text and may be empty when
