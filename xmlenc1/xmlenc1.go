@@ -24,6 +24,8 @@ type encryptConfig struct {
 	oaepParams       []byte
 	keyWrapAlgorithm string
 	keyEncryptionKey []byte
+	recipientECPub   *ecdsa.PublicKey
+	kdfParams        *ConcatKDFParams
 	allowLegacyCBC   bool
 }
 
@@ -151,6 +153,43 @@ func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 	return e
 }
 
+// RecipientECPublicKey sets the recipient's elliptic-curve public key and
+// selects XML Encryption 1.1 ECDH-ES key agreement. It is the encrypt-side
+// counterpart of Decryptor.ECPrivateKey, and supports P-256, P-384, and
+// P-521.
+//
+// ECDH-ES derives the key-encryption key rather than taking one, so
+// KeyWrapAlgorithm still selects the AES Key Wrap variant applied to the
+// session key, but KeyEncryptionKey is not used. Each encryption generates a
+// fresh ephemeral key pair, and the EncryptedKey carries its public half in
+// an xenc:AgreementMethod.
+//
+// The key derivation defaults to ConcatKDF with SHA-256 and empty OtherInfo;
+// use KeyDerivationParams to control it.
+func (e Encryptor) RecipientECPublicKey(key *ecdsa.PublicKey) Encryptor {
+	e = e.clone()
+	e.cfg.recipientECPub = key
+	return e
+}
+
+// KeyDerivationParams sets the ConcatKDF parameters used by ECDH-ES key
+// agreement. It has no effect without RecipientECPublicKey.
+//
+// The five OtherInfo fields are concatenated into the KDF input exactly as
+// given, so the recipient must derive with identical values; they travel on
+// the wire in the emitted xenc11:ConcatKDFParams. A nil params, or one with
+// an empty DigestMethod, falls back to SHA-256 with empty OtherInfo.
+func (e Encryptor) KeyDerivationParams(params *ConcatKDFParams) Encryptor {
+	e = e.clone()
+	if params == nil {
+		e.cfg.kdfParams = nil
+		return e
+	}
+	cp := *params
+	e.cfg.kdfParams = &cp
+	return e
+}
+
 // EncryptElement encrypts an entire element, replacing it in the tree
 // with an EncryptedData element. Returns the EncryptedData element.
 func (e Encryptor) EncryptElement(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
@@ -238,11 +277,12 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Documen
 	}
 
 	hasKeyTransport := cfg.recipientPubKey != nil && cfg.keyTransport != ""
+	hasKeyAgreement := cfg.recipientECPub != nil && cfg.keyWrapAlgorithm != ""
 	hasKeyWrap := len(cfg.keyEncryptionKey) > 0 && cfg.keyWrapAlgorithm != ""
 	hasSessionKey := len(cfg.sessionKey) > 0
 
-	if !hasKeyTransport && !hasKeyWrap && !hasSessionKey {
-		return nil, fmt.Errorf("%w: no key transport, key wrap, or session key configured", ErrMissingConfig)
+	if !hasKeyTransport && !hasKeyAgreement && !hasKeyWrap && !hasSessionKey {
+		return nil, fmt.Errorf("%w: no key transport, key agreement, key wrap, or session key configured", ErrMissingConfig)
 	}
 
 	// Get or generate session key.
@@ -287,6 +327,13 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, doc *helium.Documen
 				OAEPParams:   cfg.oaepParams,
 			},
 			CipherValue: encKeyBytes,
+		}
+	} else if hasKeyAgreement {
+		// ECDH-ES derives the KEK from an ephemeral exchange, so it takes
+		// priority over a statically supplied KEK on the same key wrap URI.
+		encKey, err = encryptECDHSessionKey(cfg.recipientECPub, cfg.keyWrapAlgorithm, effectiveKDFParams(cfg.kdfParams), sessionKey)
+		if err != nil {
+			return nil, err
 		}
 	} else if hasKeyWrap {
 		// Bind the declared key-wrap URI to the KEK length so a 16-byte

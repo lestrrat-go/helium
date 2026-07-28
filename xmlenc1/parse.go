@@ -329,14 +329,31 @@ func parseECKeyValue(elem *helium.Element) (*ECKeyValue, error) {
 
 func ecdhCurveForURI(uri string) (ecdh.Curve, error) {
 	switch uri {
-	case "urn:oid:1.2.840.10045.3.1.7":
+	case curveURIP256:
 		return ecdh.P256(), nil
-	case "urn:oid:1.3.132.0.34":
+	case curveURIP384:
 		return ecdh.P384(), nil
-	case "urn:oid:1.3.132.0.35":
+	case curveURIP521:
 		return ecdh.P521(), nil
 	default:
 		return nil, fmt.Errorf("%w: unsupported EC curve %q", ErrMalformedEncrypted, uri)
+	}
+}
+
+// ecdhURIForCurve is the inverse of ecdhCurveForURI, used when serializing
+// an originator key. A curve outside the supported three is rejected rather
+// than emitted without a NamedCurve, which would produce an EncryptedKey no
+// recipient can parse.
+func ecdhURIForCurve(curve ecdh.Curve) (string, error) {
+	switch curve {
+	case ecdh.P256():
+		return curveURIP256, nil
+	case ecdh.P384():
+		return curveURIP384, nil
+	case ecdh.P521():
+		return curveURIP521, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported EC curve for ECDH-ES", ErrEncryptionFailed)
 	}
 }
 

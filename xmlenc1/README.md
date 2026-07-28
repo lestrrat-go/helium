@@ -29,8 +29,15 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   external entity resolution, and network access all disabled. Decrypted
   bytes are attacker-controlled, so a relaxed parser would constitute an
   XXE oracle.
-- `Decryptor.ECPrivateKey` enables XML Encryption 1.1 ECDH-ES with P-256,
-  P-384, or P-521 and ConcatKDF.
+- XML Encryption 1.1 ECDH-ES works in both directions with P-256, P-384, or
+  P-521 and ConcatKDF. `Decryptor.ECPrivateKey` decrypts;
+  `Encryptor.RecipientECPublicKey` with a `KeyWrapAlgorithm` encrypts. The
+  key-encryption key is derived, not supplied, so `KeyEncryptionKey` plays no
+  part; a fresh ephemeral key pair is generated per encryption and only its
+  public half travels, in the `xenc:AgreementMethod`. `KeyDerivationParams`
+  sets the ConcatKDF parameters (default: SHA-256, empty OtherInfo) — both
+  sides must derive with identical values, which is why they are written to
+  the wire.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
