@@ -580,3 +580,70 @@ func TestEncryptBytes(t *testing.T) {
 		require.ErrorIs(t, err, xmlenc1.ErrCBCEncryptionRequiresOptIn)
 	})
 }
+
+// A zero-value Encryptor/Decryptor is a usable value, not a panic: it behaves
+// as a default one built by NewEncryptor/NewDecryptor with nothing configured,
+// matching xmldsig1's zero-value Signer. Callers reach the zero value through
+// an embedded struct field or a var declaration, and a nil-map-style panic is
+// a poor diagnostic for "you forgot to configure a key".
+func TestZeroValueBuilders(t *testing.T) {
+	t.Run("Encryptor reports missing config", func(t *testing.T) {
+		var e xmlenc1.Encryptor
+
+		doc := mustParseXML(t, samlAssertion)
+		_, err := e.EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+
+		doc = mustParseXML(t, samlAssertion)
+		_, err = e.EncryptContent(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+	})
+
+	t.Run("Encryptor builds on from the zero value", func(t *testing.T) {
+		var e xmlenc1.Encryptor
+		key := generateRSAKey(t)
+
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := e.
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	t.Run("Decryptor reports missing key", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		var d xmlenc1.Decryptor
+		_, err = d.Decrypt(t.Context(), edElem)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+
+		_, err = d.DecryptBytes(t.Context(), edElem)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+	})
+
+	t.Run("Decryptor builds on from the zero value", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		var d xmlenc1.Decryptor
+		nodes, err := d.PrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+}

@@ -51,6 +51,19 @@ func (e Encryptor) clone() Encryptor {
 	return Encryptor{cfg: &cp}
 }
 
+// config returns the Encryptor's configuration, substituting NewEncryptor
+// defaults when the Encryptor was constructed directly (a zero-value
+// Encryptor{} whose cfg is nil). This mirrors clone's nil handling so the
+// encrypt terminals never dereference a nil cfg: a zero-value Encryptor
+// encrypts as a default Encryptor with no key source, returning
+// ErrMissingConfig rather than panicking.
+func (e Encryptor) config() *encryptConfig {
+	if e.cfg == nil {
+		return &encryptConfig{}
+	}
+	return e.cfg
+}
+
 // BlockAlgorithm sets the block encryption algorithm URI. If never set,
 // the Encryptor defaults to [DefaultBlockAlgorithm] (authenticated
 // AES-256-GCM).
@@ -141,13 +154,13 @@ func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 // EncryptElement encrypts an entire element, replacing it in the tree
 // with an EncryptedData element. Returns the EncryptedData element.
 func (e Encryptor) EncryptElement(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
-	return encrypt(ctx, e.cfg, elem, TypeElement)
+	return encrypt(ctx, e.config(), elem, TypeElement)
 }
 
 // EncryptContent encrypts the content of an element, replacing the
 // children with an EncryptedData element. Returns the EncryptedData element.
 func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
-	return encrypt(ctx, e.cfg, elem, TypeContent)
+	return encrypt(ctx, e.config(), elem, TypeContent)
 }
 
 // EncryptBytes encrypts arbitrary octets and returns a detached
@@ -366,6 +379,19 @@ func (d Decryptor) clone() Decryptor {
 	return Decryptor{cfg: &cp}
 }
 
+// config returns the Decryptor's configuration, substituting NewDecryptor
+// defaults when the Decryptor was constructed directly (a zero-value
+// Decryptor{} whose cfg is nil). This mirrors clone's nil handling so the
+// decrypt terminals never dereference a nil cfg: a zero-value Decryptor
+// decrypts as a default Decryptor with no key, returning ErrMissingKey
+// rather than panicking.
+func (d Decryptor) config() *decryptConfig {
+	if d.cfg == nil {
+		return &decryptConfig{}
+	}
+	return d.cfg
+}
+
 // PrivateKey sets the RSA private key for key transport decryption.
 func (d Decryptor) PrivateKey(key *rsa.PrivateKey) Decryptor {
 	d = d.clone()
@@ -429,14 +455,14 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 
 // Decrypt decrypts an EncryptedData element and returns the decrypted nodes.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
-	return decryptElement(ctx, d.cfg, elem)
+	return decryptElement(ctx, d.config(), elem)
 }
 
 // DecryptBytes decrypts an EncryptedData element and returns its plaintext
 // octets without parsing them as XML. It is used for EncryptedData values whose
 // Type is an application-defined binary payload.
 func (d Decryptor) DecryptBytes(ctx context.Context, elem *helium.Element) ([]byte, error) {
-	return decryptBytes(ctx, d.cfg, elem)
+	return decryptBytes(ctx, d.config(), elem)
 }
 
 func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]byte, error) {
