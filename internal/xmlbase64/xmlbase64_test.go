@@ -2,6 +2,7 @@ package xmlbase64_test
 
 import (
 	"encoding/base64"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,6 +28,43 @@ func TestDecodeString(t *testing.T) {
 	t.Run("rejects non-whitespace junk", func(t *testing.T) {
 		_, err := xmlbase64.DecodeString("!!!not-base64!!!")
 		require.Error(t, err)
+	})
+
+	// A budget charges DecodedLen, which counts base64 characters and ignores
+	// whitespace. If the decode sized its scratch buffer on the lexical length
+	// instead, whitespace an attacker appends would allocate memory the budget
+	// never charged, and the gap would grow with every byte of input. Checking
+	// the decoded bytes alone cannot catch that, so this pins the allocation.
+	//
+	// The bound is checked via runtime.MemStats TotalAlloc, so this subtest
+	// must NOT run in parallel (TotalAlloc is process-wide and a concurrent
+	// test's allocations would pollute the delta).
+	t.Run("allocates for base64 characters, not lexical length", func(t *testing.T) {
+		// no t.Parallel(): isolated so the delta reflects only this decode.
+		const lexical = 4 << 20
+		// One quantum of payload; the rest is the whitespace
+		// xs:base64Binary permits between characters.
+		value := "AA==" + strings.Repeat(" \t\r\n", (lexical-4)/4)
+		require.Greater(t, len(value), lexical-4)
+		require.Equal(t, 1, xmlbase64.DecodedLen(value))
+
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		decoded, err := xmlbase64.DecodeString(value)
+		runtime.ReadMemStats(&after)
+		runtime.KeepAlive(decoded)
+
+		require.NoError(t, err)
+		require.Equal(t, []byte{0}, decoded)
+
+		// Sizing on the base64 characters costs a few dozen bytes here;
+		// sizing on the lexical length costs about len(value). The bound is
+		// far above the former and far below the latter, so it is immune to
+		// allocator rounding and stray runtime allocations while still
+		// failing outright on a lexical-length buffer.
+		allocated := after.TotalAlloc - before.TotalAlloc
+		require.Less(t, allocated, uint64(64<<10), "decoding %d lexical bytes allocated %d bytes", len(value), allocated)
 	})
 }
 

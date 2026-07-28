@@ -13,12 +13,20 @@ import (
 // DecodeString strips the four XML whitespace characters from s and
 // base64-decodes the result with StdEncoding. No other characters are
 // removed, so invalid base64 still fails.
+//
+// Its transient allocation tracks the base64 characters, never the lexical
+// length: whitespace costs nothing beyond the scan. A caller weighing a value
+// against a byte budget charges DecodedLen, which counts those same characters
+// and so never under-states what the decode allocates. Sizing the buffer on
+// len(s) would let whitespace an attacker appends allocate memory no budget
+// ever charged, growing without bound as the input grows.
 func DecodeString(s string) ([]byte, error) {
-	if !strings.ContainsAny(s, " \t\r\n") {
+	chars := charCount(s)
+	if chars == len(s) {
 		return base64.StdEncoding.DecodeString(s)
 	}
 	var b strings.Builder
-	b.Grow(len(s))
+	b.Grow(chars)
 	for i := range len(s) {
 		switch c := s[i]; c {
 		case ' ', '\t', '\r', '\n':
@@ -28,6 +36,22 @@ func DecodeString(s string) ([]byte, error) {
 		}
 	}
 	return base64.StdEncoding.DecodeString(b.String())
+}
+
+// charCount counts the bytes of s that are not XML whitespace, which is
+// exactly the run of characters DecodeString hands to the decoder. It
+// allocates nothing.
+func charCount(s string) int {
+	var n int
+	for i := range len(s) {
+		switch s[i] {
+		case ' ', '\t', '\r', '\n':
+			// drop XML whitespace, as DecodeString does
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 // DecodedLen counts the bytes a DecodeString of s would need, skipping the
