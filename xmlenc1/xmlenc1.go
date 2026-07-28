@@ -114,15 +114,22 @@ func (e Encryptor) RecipientPublicKey(key *rsa.PublicKey) Encryptor {
 	return e
 }
 
-// SessionKey sets a pre-existing session key. If not set, a random key of
-// the length the block algorithm requires is generated per encryption.
+// SessionKey sets a pre-existing session key. An empty or nil key counts as
+// not set: a random key of the length the block algorithm requires is
+// generated per encryption, and that is also what an Encryptor that never
+// calls SessionKey does.
 //
 // The key is still protected by whichever mechanism is configured (key
-// transport or key wrapping); supplying it does not skip that step. Its
-// length must match the block algorithm exactly, or encryption fails with a
-// [KeySizeError] rather than silently encrypting at a weaker strength than
-// the emitted @Algorithm claims. With no protection mechanism configured,
-// no EncryptedKey is emitted and the recipient must already hold this key.
+// transport or key wrapping); supplying it does not skip that step. A
+// non-empty key's length must match the block algorithm exactly, or
+// encryption fails with a [KeySizeError] rather than silently encrypting at
+// a weaker strength than the emitted @Algorithm claims. An empty or nil key
+// never reaches that check, because the generated key is used instead.
+//
+// A non-empty key with no protection mechanism configured emits no
+// EncryptedKey, and the recipient must already hold this key. An empty or
+// nil key with no protection mechanism configured leaves nothing configured
+// at all, so encryption fails with [ErrMissingConfig].
 func (e Encryptor) SessionKey(key []byte) Encryptor {
 	e = e.clone()
 	e.cfg.sessionKey = append([]byte(nil), key...)
@@ -541,7 +548,7 @@ func (d Decryptor) config() *decryptConfig {
 // PrivateKey, ECPrivateKey, and KeyEncryptionKey may all be set at once:
 // each EncryptedKey candidate selects the one its declared algorithm needs,
 // so a single Decryptor handles documents protected different ways. A
-// SessionKey, if set, overrides all of them.
+// non-empty SessionKey overrides all of them.
 func (d Decryptor) PrivateKey(key *rsa.PrivateKey) Decryptor {
 	d = d.clone()
 	d.cfg.privateKey = key
@@ -563,10 +570,12 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 	return d
 }
 
-// SessionKey sets a pre-shared session key directly.
+// SessionKey sets a pre-shared session key directly. As on the Encryptor, an
+// empty or nil key counts as not set, and decryption falls back to the
+// EncryptedKey candidates.
 //
-// It takes precedence over every other key: when set, the session key is the
-// sole candidate, so PrivateKey, ECPrivateKey, and KeyEncryptionKey have no
+// A non-empty key takes precedence over every other key: it is the sole
+// candidate, so PrivateKey, ECPrivateKey, and KeyEncryptionKey have no
 // effect. What it bypasses is candidate selection and EncryptedKey
 // decryption, not parsing — the document's EncryptedKey elements are still
 // parsed before the key is used, so a malformed one fails the decrypt with

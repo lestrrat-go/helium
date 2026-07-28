@@ -62,18 +62,26 @@ is how the recipient obtains that key:
 |---|---|
 | `KeyTransportAlgorithm` + `RecipientPublicKey` | `<EncryptedKey>` holding the session key under RSA-OAEP |
 | `KeyWrapAlgorithm` + `KeyEncryptionKey` | `<EncryptedKey>` holding the session key under AES Key Wrap (RFC 3394) |
-| `SessionKey` alone | no `<EncryptedKey>`; the recipient must already hold the key |
+| non-empty `SessionKey` alone | no `<EncryptedKey>`; the recipient must already hold the key |
+| none of the above | `ErrMissingConfig` — nothing can protect the session key |
 
 `SessionKey` may accompany either mechanism — it supplies the key that the
-mechanism then protects, instead of generating a random one. Its length must
-match the block algorithm exactly, else `KeySizeError`.
+mechanism then protects, instead of generating a random one. A non-empty
+`SessionKey` must match the block algorithm's key length exactly, else
+`KeySizeError`.
+
+An empty or nil `SessionKey` counts as not set: encryption generates a random
+key of the right length instead, so it never hits the length check. That is
+why an empty `SessionKey` with no key transport and no key wrap gives
+`ErrMissingConfig` rather than encrypting to a key the recipient holds.
 
 On the decrypting side, `PrivateKey`, `ECPrivateKey`, and `KeyEncryptionKey`
 may all be set together: each `<EncryptedKey>` candidate selects the one its
-declared algorithm needs. `SessionKey` overrides all of them: it becomes the
-sole candidate, so no `<EncryptedKey>` is selected or decrypted. The elements
-are still parsed first, so a malformed `<EncryptedKey>` fails the decrypt even
-though its contents are never used.
+declared algorithm needs. A non-empty `SessionKey` overrides all of them: it
+becomes the sole candidate, so no `<EncryptedKey>` is selected or decrypted.
+The elements are still parsed first, so a malformed `<EncryptedKey>` fails the
+decrypt even though its contents are never used. Here too an empty or nil
+`SessionKey` counts as not set, and the `<EncryptedKey>` candidates are used.
 
 ## Decryption does not modify the tree
 

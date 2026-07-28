@@ -32,7 +32,10 @@ type EncryptedData struct {
 	// element, TypeContent when it is the children of an element. An empty
 	// Type means arbitrary octets, which Decryptor.Decrypt treats as
 	// TypeElement and Decryptor.DecryptBytes returns unparsed.
-	Type             string
+	Type string
+	// EncryptionMethod describes how the content itself is encrypted: a
+	// block encryption URI (AES-CBC or AES-GCM). Decryption needs it, so
+	// an EncryptedData without one fails with [ErrMalformedEncrypted].
 	EncryptionMethod *EncryptionMethod
 	// EncryptedKey is the first EncryptedKey candidate, kept for backward
 	// compatibility with callers written against the old single-key field.
@@ -46,7 +49,11 @@ type EncryptedData struct {
 	// multi-recipient document, or one with a bogus EncryptedKey
 	// prepended to a legitimate one, still resolves.
 	EncryptedKeys []*EncryptedKey
-	CipherValue   []byte // base64-decoded cipher bytes
+	// CipherValue is the encrypted content, base64-decoded. Its internal
+	// layout belongs to the block algorithm: the AES modes used here all
+	// prefix the ciphertext with the IV, and GCM appends the
+	// authentication tag.
+	CipherValue []byte
 }
 
 // effectiveEncryptedKeys returns the EncryptedKey candidates to use,
