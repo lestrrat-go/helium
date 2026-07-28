@@ -1,6 +1,7 @@
 package xmlenc1_test
 
 import (
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"strings"
@@ -683,6 +684,23 @@ func TestMissingKeyNamesTheSetter(t *testing.T) {
 		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
 		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
 		require.Contains(t, err.Error(), "Decryptor.KeyEncryptionKey")
+	})
+
+	t.Run("ECDH-ES key agreement", func(t *testing.T) {
+		key := generateECKey(t, elliptic.P256())
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
+		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		// The message must name the agreement algorithm the document
+		// declared, exactly as the RSA and AES branches name theirs.
+		require.Contains(t, err.Error(), xmlenc1.ECDHES)
+		require.Contains(t, err.Error(), "Decryptor.ECPrivateKey")
 	})
 
 	t.Run("no EncryptedKey at all", func(t *testing.T) {

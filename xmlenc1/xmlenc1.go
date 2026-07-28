@@ -849,7 +849,7 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey) ([]
 	alg := ek.EncryptionMethod.Algorithm
 	if ek.AgreementMethod != nil {
 		if cfg.ecPrivateKey == nil {
-			return nil, fmt.Errorf("%w: EncryptedKey uses %s key agreement; set Decryptor.ECPrivateKey", ErrMissingKey, paramKeyAgreement)
+			return nil, fmt.Errorf("%w: EncryptedKey uses key agreement %q; set Decryptor.ECPrivateKey", ErrMissingKey, ek.AgreementMethod.Algorithm)
 		}
 		return decryptECDHSessionKey(cfg.ecPrivateKey, ek)
 	}
