@@ -18,9 +18,8 @@ var (
 	// ErrTooManyEncryptedKeys is returned when an EncryptedData carries more
 	// EncryptedKey candidates than the Decryptor's effective limit, which
 	// guards against CPU amplification (DoS). Decryptor.MaxEncryptedKeys owns
-	// the cap: the per-candidate cost it bounds, the effective-limit rules,
-	// and the one configuration in which this error cannot be returned at
-	// all. See also DefaultMaxEncryptedKeys.
+	// the cap: the per-candidate cost it bounds and the effective-limit
+	// rules. See also DefaultMaxEncryptedKeys.
 	ErrTooManyEncryptedKeys = errors.New("xmlenc1: too many EncryptedKey candidates")
 
 	// ErrInvalidPadding names invalid PKCS#7 padding. Decryption never

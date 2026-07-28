@@ -496,9 +496,9 @@ func removeChildren(elem *helium.Element) {
 // Decryptor will trial-decrypt for a single EncryptedData when
 // MaxEncryptedKeys is not set. An unbounded count is a CPU amplification
 // (DoS) vector. [Decryptor.MaxEncryptedKeys] documents the per-candidate
-// cost this bounds and the one configuration in which the bound is never
-// reached. The default mirrors jwx's WithMaxRecipients (100), which is
-// generous for real multi-recipient documents yet caps amplification.
+// cost this bounds. The default mirrors jwx's WithMaxRecipients (100),
+// which is generous for real multi-recipient documents yet caps
+// amplification.
 const DefaultMaxEncryptedKeys = 100
 
 // decryptConfig holds the configuration for a Decryptor.
@@ -575,16 +575,14 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 // EncryptedKey candidates.
 //
 // A non-empty key is not a preference among keys; it is an early return.
-// Decrypt and DecryptBytes take it as the session key and return before the
-// whole EncryptedKey stage: the MaxEncryptedKeys cap, candidate selection,
-// per-candidate validation, and per-candidate key resolution all live in
-// that stage, and none of them runs.
-// Every consequence follows from that one fact:
+// Decrypt and DecryptBytes take it as the session key and return before
+// candidate selection, per-candidate validation, and per-candidate key
+// resolution, none of which runs. The [Decryptor.MaxEncryptedKeys] cap is
+// applied ahead of that return and still holds. Every consequence follows
+// from that one fact:
 //
 //   - PrivateKey, ECPrivateKey, and KeyEncryptionKey have no effect.
-//   - A document over the effective MaxEncryptedKeys cap does not fail with
-//     [ErrTooManyEncryptedKeys].
-//   - An EncryptedKey that only the EncryptedKey stage would reject — a
+//   - An EncryptedKey that only candidate selection would reject — a
 //     missing EncryptionMethod, an unsupported algorithm URI, an algorithm
 //     whose key the caller never configured — does not fail the decrypt.
 //
@@ -633,9 +631,9 @@ func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 //
 // Zero (the default) uses [DefaultMaxEncryptedKeys]; a negative value
 // removes the limit (matching helium's MaxDepth convention). A document
-// exceeding the effective cap fails with [ErrTooManyEncryptedKeys] — unless
-// a non-empty [Decryptor.SessionKey] is set, which returns before the cap
-// and the rest of the EncryptedKey stage.
+// exceeding the effective cap fails with [ErrTooManyEncryptedKeys], in every
+// key configuration: the cap is applied to the parsed candidate list before
+// the [Decryptor.SessionKey] early return.
 func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 	d = d.clone()
 	d.cfg.maxEncryptedKeys = n
@@ -670,6 +668,27 @@ func (d Decryptor) DecryptBytes(ctx context.Context, elem *helium.Element) ([]by
 	return decryptBytes(ctx, d.config(), elem)
 }
 
+// checkEncryptedKeyCap fails closed when an EncryptedData carries more
+// EncryptedKey candidates than the Decryptor's effective limit (zero => the
+// default, negative => unlimited), before any candidate crypto runs: an
+// attacker who can pack a document with junk <EncryptedKey> elements gets CPU
+// amplification. Decryptor.MaxEncryptedKeys documents the per-candidate cost
+// this bounds.
+//
+// Both decrypt entry points apply it to the parsed candidate list before they
+// consult the configured keys, so the bound holds however the caller supplies
+// the session key.
+func checkEncryptedKeyCap(cfg *decryptConfig, candidates int) error {
+	maxKeys := cfg.maxEncryptedKeys
+	if maxKeys == 0 {
+		maxKeys = DefaultMaxEncryptedKeys
+	}
+	if maxKeys >= 0 && candidates > maxKeys {
+		return fmt.Errorf("%w: %d candidates exceed the limit of %d; raise or remove it with Decryptor.MaxEncryptedKeys", ErrTooManyEncryptedKeys, candidates, maxKeys)
+	}
+	return nil
+}
+
 func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]byte, error) {
 	ed, err := parseEncryptedData(elem)
 	if err != nil {
@@ -686,19 +705,16 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		}
 	}
 
+	keys := ed.effectiveEncryptedKeys()
+	if err := checkEncryptedKeyCap(cfg, len(keys)); err != nil {
+		return nil, err
+	}
+
 	if len(cfg.sessionKey) > 0 {
 		return decryptCipherValue(ed, alg, cfg.sessionKey)
 	}
-	keys := ed.effectiveEncryptedKeys()
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
-	}
-	maxKeys := cfg.maxEncryptedKeys
-	if maxKeys == 0 {
-		maxKeys = DefaultMaxEncryptedKeys
-	}
-	if maxKeys >= 0 && len(keys) > maxKeys {
-		return nil, fmt.Errorf("%w: %d candidates exceed the limit of %d; raise or remove it with Decryptor.MaxEncryptedKeys", ErrTooManyEncryptedKeys, len(keys), maxKeys)
 	}
 
 	var lastErr error
@@ -755,29 +771,20 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		}
 	}
 
-	// A pre-shared session key, when configured, returns here — before the
-	// entire EncryptedKey stage below (cap, selection, validation, key
-	// resolution). Decryptor.SessionKey documents what that skips.
+	keys := ed.effectiveEncryptedKeys()
+	if err := checkEncryptedKeyCap(cfg, len(keys)); err != nil {
+		return nil, err
+	}
+
+	// A pre-shared session key, when configured, returns here — before
+	// candidate selection, per-candidate validation, and per-candidate key
+	// resolution. Decryptor.SessionKey documents what that skips.
 	if len(cfg.sessionKey) > 0 {
 		return finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey)
 	}
 
-	keys := ed.effectiveEncryptedKeys()
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
-	}
-
-	// Bound the trial-decrypt work before any candidate crypto runs: an
-	// attacker who can pack a document with junk <EncryptedKey> elements
-	// gets CPU amplification. Decryptor.MaxEncryptedKeys documents the
-	// per-candidate cost this bounds. Fail closed when the count exceeds the
-	// effective cap (zero => default, negative => unlimited).
-	maxKeys := cfg.maxEncryptedKeys
-	if maxKeys == 0 {
-		maxKeys = DefaultMaxEncryptedKeys
-	}
-	if maxKeys >= 0 && len(keys) > maxKeys {
-		return nil, fmt.Errorf("%w: %d candidates exceed the limit of %d; raise or remove it with Decryptor.MaxEncryptedKeys", ErrTooManyEncryptedKeys, len(keys), maxKeys)
 	}
 
 	// A document may carry several EncryptedKey candidates (one per
