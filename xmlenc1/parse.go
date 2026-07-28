@@ -12,8 +12,11 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
-// parseEncryptedData parses an EncryptedData element.
-func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
+// parseEncryptedData parses an EncryptedData element. budget carries the
+// cumulative EncryptedKey ciphertext allowance across the whole element; this
+// is the earliest point that sees every candidate, so it is where the
+// allowance is spent. [Decryptor.MaxEncryptedKeyBytes] documents it.
+func parseEncryptedData(elem *helium.Element, budget *encryptedKeyBudget) (*EncryptedData, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedData") {
 		return nil, fmt.Errorf("%w: expected xenc:EncryptedData", ErrMalformedEncrypted)
 	}
@@ -42,7 +45,7 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 			}
 			ed.EncryptionMethod = em
 		case isDSigElem(e, "KeyInfo"):
-			if err := parseKeyInfoForEncryption(e, ed); err != nil {
+			if err := parseKeyInfoForEncryption(e, ed, budget); err != nil {
 				return nil, err
 			}
 		case isXMLEncElem(e, "CipherData"):
@@ -50,7 +53,10 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(e)
+			// The EncryptedData's own CipherValue is the payload the caller
+			// asked to decrypt, not EncryptedKey ciphertext, so it is not
+			// charged to the budget.
+			cv, err := parseCipherData(e, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -71,14 +77,14 @@ func parseEncryptedData(elem *helium.Element) (*EncryptedData, error) {
 	return ed, nil
 }
 
-func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData) error {
+func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData, budget *encryptedKeyBudget) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		e, ok := helium.AsNode[*helium.Element](child)
 		if !ok {
 			continue
 		}
 		if isXMLEncElem(e, "EncryptedKey") {
-			ek, err := parseEncryptedKey(e)
+			ek, err := parseEncryptedKey(e, budget)
 			if err != nil {
 				return err
 			}
@@ -88,8 +94,9 @@ func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData) error {
 	return nil
 }
 
-// parseEncryptedKey parses an EncryptedKey element.
-func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
+// parseEncryptedKey parses an EncryptedKey element, charging its CipherValue
+// to budget.
+func parseEncryptedKey(elem *helium.Element, budget *encryptedKeyBudget) (*EncryptedKey, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedKey") {
 		return nil, fmt.Errorf("%w: expected xenc:EncryptedKey", ErrMalformedEncrypted)
 	}
@@ -120,7 +127,7 @@ func parseEncryptedKey(elem *helium.Element) (*EncryptedKey, error) {
 				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(e)
+			cv, err := parseCipherData(e, budget)
 			if err != nil {
 				return nil, err
 			}
@@ -431,7 +438,14 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 // via a URI plus transforms) is not supported by helium and is rejected
 // explicitly; ignoring it would both lose data and defeat the
 // exactly-one-choice rule.
-func parseCipherData(elem *helium.Element) ([]byte, error) {
+//
+// budget, when non-nil, is charged what decoding the CipherValue would cost —
+// xmlbase64.Counter owns that count, including what it charges base64 the
+// decoder will reject — before anything is built from it, so an over-budget
+// value never reaches the decoder. decodeCipherValue owns how that charge is
+// kept ahead of the work. A nil budget means the value is not EncryptedKey
+// ciphertext and is unbounded here.
+func parseCipherData(elem *helium.Element, budget *encryptedKeyBudget) ([]byte, error) {
 	var decoded []byte
 	var seenChoice bool
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -445,9 +459,9 @@ func parseCipherData(elem *helium.Element) ([]byte, error) {
 				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
 			}
 			seenChoice = true
-			d, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			d, err := decodeCipherValue(e, budget)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
+				return nil, err
 			}
 			decoded = d
 		case isXMLEncElem(e, "CipherReference"):
@@ -459,6 +473,46 @@ func parseCipherData(elem *helium.Element) ([]byte, error) {
 	}
 	if !seenChoice {
 		return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+	}
+	return decoded, nil
+}
+
+// decodeCipherValue charges budget for elem's base64 content and then decodes
+// it. It never builds the value's lexical text.
+//
+// That distinction is the whole point. xs:base64Binary permits XML whitespace
+// between characters, and a CipherValue's text may arrive as any number of
+// text and CDATA children, so the lexical length an attacker controls has no
+// relation to the decoded bytes the budget charges. Joining the children into
+// one string first would allocate that lexical length before the budget could
+// refuse it, and would keep allocating it for every value the budget accepts,
+// which leaves the accepted case unbounded as well.
+//
+// So one pass counts the value with an xmlbase64.Counter, which carries the
+// counting state across each child boundary — a base64 quantum, and padding
+// itself, may be split between children — and only then is the charge made.
+// The second pass builds just the characters the decoder will see.
+//
+// What is held is therefore bounded by the budget: the stripped characters at
+// most four thirds of it, the decoded bytes at most it, and nothing at all
+// scaling with the lexical length. The copy [helium.Text.Content] returns per
+// child is the floor, so the peak is the largest single child rather than the
+// whole value.
+func decodeCipherValue(elem *helium.Element, budget *encryptedKeyBudget) ([]byte, error) {
+	var counter xmlbase64.Counter
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		counter.Add(child.Content())
+	}
+	if err := budget.charge(counter.DecodedLen()); err != nil {
+		return nil, err
+	}
+	chars := make([]byte, 0, counter.Chars())
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		chars = xmlbase64.AppendStripped(chars, child.Content())
+	}
+	decoded, err := xmlbase64.DecodeString(string(chars))
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
 	}
 	return decoded, nil
 }

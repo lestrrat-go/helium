@@ -52,6 +52,17 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   configuration is consulted, so it also bounds a decrypt driven by a
   pre-shared
   [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key).
+- `Decryptor.MaxEncryptedKeyBytes` caps the total `<EncryptedKey>` ciphertext
+  those candidates may carry together (default 64 KiB, negative for
+  unlimited), because a count alone does not bound their size; over the budget
+  fails with `ErrEncryptedKeyBytesExceeded`. Its godoc owns what the budget
+  covers and when it is charged. The budget is charged while the document is
+  read, so it too bounds a decrypt driven by a pre-shared `SessionKey`.
+- An AES key-wrap `<EncryptedKey>` must carry exactly the session-key length
+  the declared block algorithm requires, plus RFC 3394's 8-byte integrity
+  block. Any other length fails with `ErrKeyUnwrapFailed` before the unwrap
+  rounds run, so a document cannot spend AES work on a ciphertext that is
+  provably not a wrap of the key it declares.
 
 ## Choosing how the session key is protected
 
@@ -81,9 +92,10 @@ hits the length check.
 A non-empty `Decryptor.SessionKey` is not a preference among keys; it is an
 early return. `Decrypt` and `DecryptBytes` take it as the session key and
 return before candidate selection, per-candidate validation, and per-candidate
-key resolution. Its godoc owns the account of what that skips. The
-`MaxEncryptedKeys` cap is applied ahead of the early return, so it applies
-here too.
+key resolution. Its godoc owns the account of what that skips. Both
+`<EncryptedKey>` bounds — the `MaxEncryptedKeys` count and the
+`MaxEncryptedKeyBytes` budget — are applied ahead of the early return, so they
+apply here too.
 
 ## Decryption does not modify the tree
 

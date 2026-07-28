@@ -1,12 +1,34 @@
 package xmlenc1_test
 
 import (
+	"crypto/rsa"
 	"errors"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xmlenc1"
 	"github.com/stretchr/testify/require"
 )
+
+// rsaTransportedKey returns the RSA-OAEP CipherValue this package itself
+// emits for sessionKey, so a test can present a correctly transported key
+// under a declared block algorithm that disagrees with its length.
+// sessionKey must be 16 bytes, the length the wrapper encryption declares.
+func rsaTransportedKey(t *testing.T, key *rsa.PrivateKey, sessionKey []byte) []byte {
+	t.Helper()
+	doc := mustParseXML(t, `<root/>`)
+	elem, err := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES128GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
+		RecipientPublicKey(&key.PublicKey).
+		SessionKey(sessionKey).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	ed, err := xmlenc1.ParseEncryptedDataForTest(elem)
+	require.NoError(t, err)
+	require.Len(t, ed.EncryptedKeys, 1)
+	return ed.EncryptedKeys[0].CipherValue
+}
 
 func TestKeySize(t *testing.T) {
 	t.Run("encrypt block key mismatch", func(t *testing.T) {
@@ -59,17 +81,16 @@ func TestKeySize(t *testing.T) {
 		require.ErrorAs(t, err, &kse)
 	})
 
-	t.Run("decrypt post-unwrap session key mismatch", func(t *testing.T) {
-		kek := randKey(t, 16) // valid AES-128 KEK
-		// Wrap a 16-byte session key (valid for AES-128 algorithms) but
-		// declare the data algorithm as AES-256-GCM.
+	t.Run("decrypt post-transport session key mismatch", func(t *testing.T) {
+		// RSA key transport delivers a 16-byte session key while the data
+		// algorithm declares AES-256-GCM. Nothing about the transported
+		// length is visible before the private-key decrypt, so this is the
+		// path where the post-recovery key-size binding does the work.
+		key := generateRSAKey(t)
 		shortSessionKey := randKey(t, 16)
 
-		wrapped, err := xmlenc1.AESKeyWrapForTest(kek, shortSessionKey)
-		require.NoError(t, err)
-
 		doc := mustParseXML(t, `<root/>`)
-		// Plaintext bytes encrypted under the short key as AES-128-GCM.
+		transported := rsaTransportedKey(t, key, shortSessionKey)
 		cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES128GCM, shortSessionKey, []byte("<x>secret</x>"))
 		require.NoError(t, err)
 
@@ -78,8 +99,8 @@ func TestKeySize(t *testing.T) {
 			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM}, // declares 256
 			EncryptedKeys: []*xmlenc1.EncryptedKey{
 				{
-					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES128KeyWrap},
-					CipherValue:      wrapped,
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+					CipherValue:      transported,
 				},
 			},
 			CipherValue: cipher,
@@ -87,8 +108,7 @@ func TestKeySize(t *testing.T) {
 		edElem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
 		require.NoError(t, err)
 
-		dec := xmlenc1.NewDecryptor().KeyEncryptionKey(kek)
-		_, err = dec.Decrypt(t.Context(), edElem)
+		_, err = xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
 		require.Error(t, err)
 		var kse *xmlenc1.KeySizeError
 		require.ErrorAs(t, err, &kse)

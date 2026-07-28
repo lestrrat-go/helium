@@ -22,6 +22,19 @@ var (
 	// rules. See also DefaultMaxEncryptedKeys.
 	ErrTooManyEncryptedKeys = errors.New("xmlenc1: too many EncryptedKey candidates")
 
+	// ErrEncryptedKeyBytesExceeded is returned when the EncryptedKey
+	// candidates of one EncryptedData carry more ciphertext together than
+	// the Decryptor's effective byte budget, which guards against memory
+	// amplification (DoS). Decryptor.MaxEncryptedKeyBytes owns the budget:
+	// what it covers, when it is charged, and the effective-limit rules.
+	// See also DefaultMaxEncryptedKeyBytes.
+	//
+	// It is distinct from ErrTooManyEncryptedKeys because the two bound
+	// different things and are raised or lifted by different setters: too
+	// many candidates is a count, too much ciphertext is a size, and a
+	// caller handling one must be able to tell which limit to raise.
+	ErrEncryptedKeyBytesExceeded = errors.New("xmlenc1: EncryptedKey ciphertext exceeds the byte budget")
+
 	// ErrInvalidPadding names invalid PKCS#7 padding. Decryption never
 	// returns it: distinguishing a padding failure from any other CBC
 	// failure is exactly what a padding oracle needs, so decryptCBC

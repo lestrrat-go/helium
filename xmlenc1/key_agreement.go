@@ -13,7 +13,10 @@ import (
 	"hash"
 )
 
-func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, error) {
+// decryptECDHSessionKey derives the KEK from the agreement and unwraps the
+// session key with it. sessionKeySize is the length the EncryptedData's block
+// algorithm requires; aesKeyUnwrap owns what it binds.
+func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey, sessionKeySize int) ([]byte, error) {
 	agreement := ek.AgreementMethod
 	if agreement == nil || agreement.Algorithm != ECDHES {
 		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyAgreement, Algorithm: agreementAlgorithm(agreement)})
@@ -62,7 +65,7 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
 	}
-	return aesKeyUnwrap(kek, ek.CipherValue)
+	return aesKeyUnwrap(kek, ek.CipherValue, sessionKeySize)
 }
 
 // ecdhRecipientKey converts a recipient's ECDSA public key into the
