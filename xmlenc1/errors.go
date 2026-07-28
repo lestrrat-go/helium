@@ -46,6 +46,17 @@ var (
 	// ErrMissingConfig is returned when required encryption config is missing.
 	ErrMissingConfig = errors.New("xmlenc1: missing required configuration")
 
+	// ErrConflictingKeyConfig is returned when an Encryptor is configured
+	// with more than one way to protect the session key: both RSA key
+	// transport (KeyTransportAlgorithm + RecipientPublicKey) and AES key
+	// wrapping (KeyWrapAlgorithm + KeyEncryptionKey).
+	//
+	// An EncryptedData carries a single EncryptedKey here, so honoring one
+	// configuration means silently discarding the other — and a recipient
+	// holding only the discarded key then fails to decrypt with an error
+	// that points nowhere near the real mistake. The caller must pick one.
+	ErrConflictingKeyConfig = errors.New("xmlenc1: conflicting key protection configured")
+
 	// ErrCBCRequiresOptIn is returned when a Decryptor is asked to
 	// decrypt an AES-CBC ciphertext but the caller has not opted in
 	// to unauthenticated CBC via Decryptor.AllowUnauthenticatedCBC(true).

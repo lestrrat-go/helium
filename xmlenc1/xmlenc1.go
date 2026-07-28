@@ -97,7 +97,10 @@ func (e Encryptor) AllowLegacyCBC(v bool) Encryptor {
 	return e
 }
 
-// KeyTransportAlgorithm sets the key transport algorithm URI.
+// KeyTransportAlgorithm sets the key transport algorithm URI. Together with
+// RecipientPublicKey it selects RSA key transport, which is mutually
+// exclusive with AES key wrapping (KeyWrapAlgorithm + KeyEncryptionKey):
+// configuring both fails with [ErrConflictingKeyConfig].
 func (e Encryptor) KeyTransportAlgorithm(uri string) Encryptor {
 	e = e.clone()
 	e.cfg.keyTransport = uri
@@ -140,7 +143,10 @@ func (e Encryptor) OAEPParams(params []byte) Encryptor {
 	return e
 }
 
-// KeyWrapAlgorithm sets the key wrapping algorithm URI.
+// KeyWrapAlgorithm sets the key wrapping algorithm URI. Together with
+// KeyEncryptionKey it selects AES key wrapping, which is mutually exclusive
+// with RSA key transport (KeyTransportAlgorithm + RecipientPublicKey):
+// configuring both fails with [ErrConflictingKeyConfig].
 func (e Encryptor) KeyWrapAlgorithm(uri string) Encryptor {
 	e = e.clone()
 	e.cfg.keyWrapAlgorithm = uri
@@ -226,10 +232,10 @@ func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plain
 }
 
 func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
-	// Decide everything about the key protection before touching the
-	// payload: no payload can make a misconfigured or unusable recipient key
-	// work, so those errors must not cost anything proportional to the
-	// plaintext, nor be masked by a plaintext that also fails to serialize.
+	// Resolve the configuration before touching the payload: no payload can
+	// make a misconfigured Encryptor or an unusable recipient key work, so the
+	// errors resolveEncryptConfig decides must be what the caller sees even
+	// when the plaintext also fails to serialize.
 	resolved, err := resolveEncryptConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -270,36 +276,73 @@ func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encT
 	return edElem, nil
 }
 
-// resolvedEncryptConfig is what resolveEncryptConfig decides: which of the
-// mutually exclusive mechanisms protects the session key, plus the recipient
-// ECDH key when key agreement is the one selected.
+// resolvedEncryptConfig is what resolveEncryptConfig decides: the effective
+// block algorithm, which of the three mutually exclusive mechanisms protects
+// the session key, and the recipient ECDH key when key agreement is the one
+// selected. No mechanism being selected means the caller supplied the session
+// key directly.
 type resolvedEncryptConfig struct {
+	blockAlgorithm  string
 	hasKeyTransport bool
 	hasKeyAgreement bool
+	hasKeyWrap      bool
 	recipientECDH   *ecdh.PublicKey
 }
 
-// resolveEncryptConfig validates everything about an Encryptor's key
-// protection that can be decided without a payload: it rejects two
-// conflicting mechanisms and resolves the ECDH-ES recipient key. Every entry
-// point calls it before any payload work, so a configuration error is never
-// paid for in plaintext serialization or block encryption first.
+// resolveEncryptConfig decides five parts of an Encryptor's configuration: it
+// defaults the block algorithm, enforces the CBC opt-in, requires a key
+// source, rejects two conflicting key-protection mechanisms, and resolves the
+// ECDH-ES recipient key. Every entry point calls it before any payload work,
+// so none of those five is masked by a later failure to serialize or encrypt
+// the plaintext. Session-key length is not one of them: it is bound to the
+// block algorithm in encryptPlaintext, once the session key exists.
 func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
+	// Secure by default: an unset block algorithm uses authenticated
+	// AES-256-GCM rather than refusing or falling back to CBC.
+	blockAlgorithm := cfg.blockAlgorithm
+	if blockAlgorithm == "" {
+		blockAlgorithm = DefaultBlockAlgorithm
+	}
+
+	// Emitting new unauthenticated CBC ciphertext requires an explicit
+	// opt-in. Decryption of existing CBC ciphertext is unaffected.
+	switch blockAlgorithm {
+	case AES128CBC, AES256CBC:
+		if !cfg.allowLegacyCBC {
+			return resolvedEncryptConfig{}, ErrCBCEncryptionRequiresOptIn
+		}
+	}
+
 	hasKeyTransport := cfg.recipientPubKey != nil && cfg.keyTransport != ""
 	hasKeyAgreement := cfg.recipientECPub != nil && cfg.keyWrapAlgorithm != ""
+	hasKeyWrap := len(cfg.keyEncryptionKey) > 0 && cfg.keyWrapAlgorithm != ""
+	hasSessionKey := len(cfg.sessionKey) > 0
 
-	// RSA key transport and ECDH-ES key agreement are alternative ways to
-	// protect the same session key, and only one EncryptedKey is emitted.
-	// Fail rather than silently preferring transport: a recipient holding
-	// only the EC private key would otherwise fail to decrypt with an error
-	// pointing nowhere near the real mistake.
+	if !hasKeyTransport && !hasKeyAgreement && !hasKeyWrap && !hasSessionKey {
+		return resolvedEncryptConfig{}, fmt.Errorf("%w: no key transport, key agreement, key wrap, or session key configured", ErrMissingConfig)
+	}
+
+	// Key transport and key wrapping are two alternative ways to protect the
+	// same session key, and only one EncryptedKey is emitted. Fail rather
+	// than silently preferring one: a recipient holding only the discarded
+	// key would otherwise fail to decrypt, far from the real mistake. A
+	// SessionKey alongside either is NOT a conflict — it supplies the key
+	// that the chosen mechanism then protects.
+	if hasKeyTransport && hasKeyWrap {
+		return resolvedEncryptConfig{}, fmt.Errorf("%w: key transport (%q) and key wrap (%q) are both configured; configure exactly one", ErrConflictingKeyConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
+	}
+
+	// RSA key transport and ECDH-ES key agreement are likewise alternatives
+	// for the same session key, and only one EncryptedKey is emitted.
 	if hasKeyTransport && hasKeyAgreement {
 		return resolvedEncryptConfig{}, fmt.Errorf("%w: key transport (%q) and ECDH-ES key agreement (%q) are both configured; configure exactly one", ErrMissingConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
 	}
 
 	resolved := resolvedEncryptConfig{
+		blockAlgorithm:  blockAlgorithm,
 		hasKeyTransport: hasKeyTransport,
 		hasKeyAgreement: hasKeyAgreement,
+		hasKeyWrap:      hasKeyWrap,
 	}
 	// Resolve the recipient key only when key agreement is the mechanism
 	// actually in use, so an unusable curve cannot fail an encryption that
@@ -316,35 +359,13 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 }
 
 // encryptPlaintext performs the whole encryption pipeline over already
-// serialized plaintext and an already resolved key protection: it resolves
-// the block algorithm, enforces the CBC opt-in, obtains and binds the session
-// key, block-encrypts, protects the session key, and marshals the
-// EncryptedData element into doc. It never touches the tree, so both the
-// element/content and the raw-octet entry points share identical crypto and
-// configuration handling.
+// serialized plaintext and an already resolved configuration: it obtains the
+// session key, binds its length to the block algorithm, block-encrypts,
+// protects the session key, and marshals the EncryptedData element into doc.
+// It never touches the tree, so both the element/content and the raw-octet
+// entry points share identical crypto handling.
 func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEncryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
-	// Secure by default: an unset block algorithm uses authenticated
-	// AES-256-GCM rather than refusing or falling back to CBC.
-	blockAlgorithm := cfg.blockAlgorithm
-	if blockAlgorithm == "" {
-		blockAlgorithm = DefaultBlockAlgorithm
-	}
-
-	// Emitting new unauthenticated CBC ciphertext requires an explicit
-	// opt-in. Decryption of existing CBC ciphertext is unaffected.
-	switch blockAlgorithm {
-	case AES128CBC, AES256CBC:
-		if !cfg.allowLegacyCBC {
-			return nil, ErrCBCEncryptionRequiresOptIn
-		}
-	}
-
-	hasKeyWrap := len(cfg.keyEncryptionKey) > 0 && cfg.keyWrapAlgorithm != ""
-	hasSessionKey := len(cfg.sessionKey) > 0
-
-	if !resolved.hasKeyTransport && !resolved.hasKeyAgreement && !hasKeyWrap && !hasSessionKey {
-		return nil, fmt.Errorf("%w: no key transport, key agreement, key wrap, or session key configured", ErrMissingConfig)
-	}
+	blockAlgorithm := resolved.blockAlgorithm
 
 	// Get or generate session key.
 	keySize, err := keySizeForAlgorithm(paramBlockAlgorithm, blockAlgorithm)
@@ -396,7 +417,7 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 		if err != nil {
 			return nil, err
 		}
-	} else if hasKeyWrap {
+	} else if resolved.hasKeyWrap {
 		// Bind the declared key-wrap URI to the KEK length so a 16-byte
 		// KEK cannot make us emit a kw-aes256 URI while wrapping with
 		// AES-128.
