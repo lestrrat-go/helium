@@ -45,6 +45,40 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
   and does not modify the tree; `DecryptBytes` returns the plaintext octets
   without parsing them as XML.
+- `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
+  trial-decrypted (default 100, negative for unlimited). Each candidate costs
+  a full RSA private-key operation, so an unbounded count is a CPU
+  amplification vector; over the cap fails with `ErrTooManyEncryptedKeys`
+  before any crypto runs.
+
+## Choosing how the session key is protected
+
+The content is always encrypted under a symmetric session key. What differs
+is how the recipient obtains that key:
+
+| Configuration | Wire result |
+|---|---|
+| `KeyTransportAlgorithm` + `RecipientPublicKey` | `<EncryptedKey>` holding the session key under RSA-OAEP |
+| `KeyWrapAlgorithm` + `KeyEncryptionKey` | `<EncryptedKey>` holding the session key under AES Key Wrap (RFC 3394) |
+| `SessionKey` alone | no `<EncryptedKey>`; the recipient must already hold the key |
+
+`SessionKey` may accompany either mechanism — it supplies the key that the
+mechanism then protects, instead of generating a random one. Its length must
+match the block algorithm exactly, else `KeySizeError`.
+
+On the decrypting side, `PrivateKey`, `ECPrivateKey`, and `KeyEncryptionKey`
+may all be set together: each `<EncryptedKey>` candidate selects the one its
+declared algorithm needs. `SessionKey` overrides all of them and skips the
+`<EncryptedKey>` elements entirely.
+
+## Decryption does not modify the tree
+
+`EncryptElement` and `EncryptContent` splice `<EncryptedData>` into the
+document. `Decrypt` is deliberately not their mirror image: it leaves
+`<EncryptedData>` where it is and returns the decrypted nodes detached, so
+the caller decides whether to restore them, inspect them, or discard the
+document. Reinsert with `elem.Replace(nodes[0])` for a `Type="...#Element"`
+payload.
 
 <!-- INCLUDE(examples/xmlenc1_encrypt_decrypt_example_test.go) -->
 ```go

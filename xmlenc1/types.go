@@ -4,16 +4,35 @@ import "crypto/ecdh"
 
 // EncryptionMethod represents the <EncryptionMethod> element.
 type EncryptionMethod struct {
-	Algorithm    string
-	DigestMethod string // optional (for RSA-OAEP 1.1)
-	MGFAlgorithm string // optional (for RSA-OAEP 1.1)
-	OAEPParams   []byte // optional
+	// Algorithm is the algorithm URI carried by @Algorithm. Its meaning
+	// depends on where the EncryptionMethod sits: a block encryption URI
+	// on an EncryptedData, a key transport or key wrap URI on an
+	// EncryptedKey.
+	Algorithm string
+	// DigestMethod is the RSA-OAEP label digest URI from the ds:DigestMethod
+	// child. Empty means the XML Encryption default, SHA-1. Applies to
+	// RSA-OAEP key transport only.
+	DigestMethod string
+	// MGFAlgorithm is the mask generation function URI from the xenc11:MGF
+	// child. It is permitted only with RSAOAEP11; RSAOAEP fixes MGF1-SHA-1
+	// implicitly and rejects an explicit value. Empty defaults to MGF1
+	// with SHA-1, independent of DigestMethod.
+	MGFAlgorithm string
+	// OAEPParams is the decoded OAEP label from the xenc:OAEPparams child.
+	// Empty means no label. Applies to RSA-OAEP key transport only.
+	OAEPParams []byte
 }
 
 // EncryptedData represents the <EncryptedData> element.
 type EncryptedData struct {
-	ID               string
-	Type             string // TypeElement or TypeContent
+	// ID is the @Id attribute, used to reference this EncryptedData from
+	// elsewhere in the document.
+	ID string
+	// Type is the @Type attribute: TypeElement when the plaintext is one
+	// element, TypeContent when it is the children of an element. An empty
+	// Type means arbitrary octets, which Decryptor.Decrypt treats as
+	// TypeElement and Decryptor.DecryptBytes returns unparsed.
+	Type             string
 	EncryptionMethod *EncryptionMethod
 	// EncryptedKey is the first EncryptedKey candidate, kept for backward
 	// compatibility with callers written against the old single-key field.
@@ -44,29 +63,53 @@ func (ed *EncryptedData) effectiveEncryptedKeys() []*EncryptedKey {
 	return nil
 }
 
-// EncryptedKey represents the <EncryptedKey> element.
+// EncryptedKey represents the <EncryptedKey> element: the session key of an
+// EncryptedData, protected for one recipient.
 type EncryptedKey struct {
-	ID               string
-	Recipient        string
+	// ID is the @Id attribute.
+	ID string
+	// Recipient is the @Recipient hint naming who the key is intended for.
+	// It is populated when parsing and carried for inspection only —
+	// encryption does not serialize it.
+	Recipient string
+	// EncryptionMethod describes how the session key is protected: an
+	// RSA-OAEP key transport URI, an AES key wrap URI, or (with
+	// AgreementMethod set) the key wrap applied to the agreed key.
 	EncryptionMethod *EncryptionMethod
-	CipherValue      []byte // base64-decoded cipher bytes
-	CarriedKeyName   string
-	AgreementMethod  *AgreementMethod
+	// CipherValue is the protected session key, base64-decoded.
+	CipherValue []byte
+	// CarriedKeyName is the xenc:CarriedKeyName text, a name for the key
+	// this element carries. It is populated when parsing and carried for
+	// inspection only — encryption does not serialize it.
+	CarriedKeyName string
+	// AgreementMethod, when set, means the key that protects CipherValue is
+	// derived by key agreement rather than supplied directly.
+	AgreementMethod *AgreementMethod
 }
 
 // AgreementMethod describes a key agreement used to derive the key that
 // protects an EncryptedKey. XML Encryption 1.1 places this element inside a
 // ds:KeyInfo child of the EncryptedKey.
 type AgreementMethod struct {
-	Algorithm           string
+	// Algorithm is the @Algorithm URI of the agreement. ECDHES is the
+	// supported value.
+	Algorithm string
+	// KeyDerivationMethod turns the agreed shared secret into a key of the
+	// length the EncryptionMethod requires.
 	KeyDerivationMethod *KeyDerivationMethod
-	OriginatorKey       *ECKeyValue
+	// OriginatorKey is the sender's ephemeral public key, from
+	// xenc:OriginatorKeyInfo. The recipient combines it with its own
+	// private key to reach the shared secret.
+	OriginatorKey *ECKeyValue
 }
 
 // KeyDerivationMethod describes the explicit KDF parameters carried by an
 // AgreementMethod.
 type KeyDerivationMethod struct {
+	// Algorithm is the @Algorithm URI of the derivation function.
+	// ConcatKDF is the supported value.
 	Algorithm string
+	// ConcatKDF holds the parameters when Algorithm is ConcatKDF.
 	ConcatKDF *ConcatKDFParams
 }
 
@@ -74,11 +117,18 @@ type KeyDerivationMethod struct {
 // The parameter attributes are decoded from their hexBinary representation;
 // their unused-bit counts are retained internally for KDF bit-string packing.
 type ConcatKDFParams struct {
+	// AlgorithmID, PartyUInfo, PartyVInfo, SuppPubInfo, and SuppPrivInfo
+	// are the NIST SP 800-56A OtherInfo fields, decoded from the hexBinary
+	// attributes of the same names. They are concatenated, in this order,
+	// into the KDF input, so both parties must agree on them exactly.
 	AlgorithmID  []byte
 	PartyUInfo   []byte
 	PartyVInfo   []byte
 	SuppPubInfo  []byte
 	SuppPrivInfo []byte
+	// DigestMethod is the hash driving the KDF, taken from the @Algorithm
+	// of the ds:DigestMethod child. It is required: ConcatKDFParams
+	// without one is rejected as malformed.
 	DigestMethod string
 
 	algorithmIDUnusedBits  uint8
@@ -109,6 +159,11 @@ func (p *ConcatKDFParams) clone() *ConcatKDFParams {
 
 // ECKeyValue contains an XML Signature 1.1 elliptic-curve public key.
 type ECKeyValue struct {
-	Curve     ecdh.Curve
+	// Curve is the named curve resolved from dsig11:NamedCurve/@URI:
+	// P-256, P-384, or P-521.
+	Curve ecdh.Curve
+	// PublicKey is the base64-decoded dsig11:PublicKey point, in the
+	// uncompressed SEC 1 form (0x04 || X || Y) that
+	// ecdh.Curve.NewPublicKey accepts. Parsing validates it against Curve.
 	PublicKey []byte
 }

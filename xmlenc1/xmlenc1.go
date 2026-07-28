@@ -114,8 +114,15 @@ func (e Encryptor) RecipientPublicKey(key *rsa.PublicKey) Encryptor {
 	return e
 }
 
-// SessionKey sets a pre-existing session key. If not set, a random key
-// is generated.
+// SessionKey sets a pre-existing session key. If not set, a random key of
+// the length the block algorithm requires is generated per encryption.
+//
+// The key is still protected by whichever mechanism is configured (key
+// transport or key wrapping); supplying it does not skip that step. Its
+// length must match the block algorithm exactly, or encryption fails with a
+// [KeySizeError] rather than silently encrypting at a weaker strength than
+// the emitted @Algorithm claims. With no protection mechanism configured,
+// no EncryptedKey is emitted and the recipient must already hold this key.
 func (e Encryptor) SessionKey(key []byte) Encryptor {
 	e = e.clone()
 	e.cfg.sessionKey = append([]byte(nil), key...)
@@ -202,12 +209,19 @@ func (e Encryptor) KeyDerivationParams(params *ConcatKDFParams) Encryptor {
 
 // EncryptElement encrypts an entire element, replacing it in the tree
 // with an EncryptedData element. Returns the EncryptedData element.
+//
+// This mutates the document: elem is unlinked from its position and the
+// EncryptedData takes its place among the siblings. Decryptor.Decrypt is
+// not the mirror image — it leaves the tree alone and returns the nodes.
 func (e Encryptor) EncryptElement(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
 	return encrypt(ctx, e.config(), elem, TypeElement)
 }
 
 // EncryptContent encrypts the content of an element, replacing the
 // children with an EncryptedData element. Returns the EncryptedData element.
+//
+// This mutates the document: every child of elem is unlinked and the
+// EncryptedData becomes its only child. elem itself stays in place.
 func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*helium.Element, error) {
 	return encrypt(ctx, e.config(), elem, TypeContent)
 }
@@ -522,6 +536,11 @@ func (d Decryptor) config() *decryptConfig {
 }
 
 // PrivateKey sets the RSA private key for key transport decryption.
+//
+// PrivateKey, ECPrivateKey, and KeyEncryptionKey may all be set at once:
+// each EncryptedKey candidate selects the one its declared algorithm needs,
+// so a single Decryptor handles documents protected different ways. A
+// SessionKey, if set, overrides all of them.
 func (d Decryptor) PrivateKey(key *rsa.PrivateKey) Decryptor {
 	d = d.clone()
 	d.cfg.privateKey = key
@@ -544,6 +563,11 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 }
 
 // SessionKey sets a pre-shared session key directly.
+//
+// It takes precedence over every other key: when set, the session key is the
+// sole candidate and the document's EncryptedKey elements are not examined
+// at all, so PrivateKey, ECPrivateKey, and KeyEncryptionKey have no effect.
+// Set it only when the session key is known out of band.
 func (d Decryptor) SessionKey(key []byte) Decryptor {
 	d = d.clone()
 	d.cfg.sessionKey = append([]byte(nil), key...)
@@ -583,6 +607,22 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 }
 
 // Decrypt decrypts an EncryptedData element and returns the decrypted nodes.
+//
+// Unlike Encryptor.EncryptElement and Encryptor.EncryptContent, which splice
+// EncryptedData into the tree, Decrypt does NOT modify the document: elem
+// stays exactly where it is and the returned nodes are detached. Restoring
+// the original document is the caller's decision — call elem.Replace with
+// the single node for a TypeElement payload, or remove elem and insert the
+// nodes at its position for TypeContent.
+//
+// The plaintext is parsed with DTD loading, external entity resolution, and
+// network access disabled, in the in-scope-namespace context of elem's
+// parent, so prefixes declared only on an ancestor resolve correctly.
+//
+// A TypeContent payload yields its children; a TypeElement payload (the
+// default when @Type is absent) must yield exactly one element node. An
+// unrecognized @Type is rejected as malformed — use DecryptBytes for a
+// payload that is not XML.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
 	return decryptElement(ctx, d.config(), elem)
 }
