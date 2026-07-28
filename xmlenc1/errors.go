@@ -46,13 +46,17 @@ var (
 	// ErrMissingConfig is returned when required encryption config is missing.
 	ErrMissingConfig = errors.New("xmlenc1: missing required configuration")
 
-	// ErrConflictingKeyConfig is returned when an Encryptor is configured
-	// with more than one way to protect the session key: both RSA key
-	// transport (KeyTransportAlgorithm + RecipientPublicKey) and AES key
-	// wrapping (KeyWrapAlgorithm + KeyEncryptionKey).
+	// ErrConflictingKeyConfig is returned when an Encryptor configures two of
+	// the three ways to protect the session key: RSA key transport
+	// (KeyTransportAlgorithm + RecipientPublicKey), ECDH-ES key agreement
+	// (KeyWrapAlgorithm + RecipientECPublicKey), and AES key wrapping
+	// (KeyWrapAlgorithm + KeyEncryptionKey). Any pair of them fails with this
+	// error, naming both of the configured things so the caller knows which
+	// two to choose between. A SessionKey alongside a single mechanism is
+	// not a pair: it supplies the key that mechanism protects.
 	//
 	// An EncryptedData carries a single EncryptedKey here, so honoring one
-	// configuration means silently discarding the other — and a recipient
+	// mechanism means silently discarding the other — and a recipient
 	// holding only the discarded key then fails to decrypt with an error
 	// that points nowhere near the real mistake. The caller must pick one.
 	ErrConflictingKeyConfig = errors.New("xmlenc1: conflicting key protection configured")

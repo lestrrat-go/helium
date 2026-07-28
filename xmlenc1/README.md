@@ -32,11 +32,12 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 - XML Encryption 1.1 ECDH-ES works in both directions with P-256, P-384, or
   P-521 and ConcatKDF. `Decryptor.ECPrivateKey` decrypts;
   `Encryptor.RecipientECPublicKey` with a `KeyWrapAlgorithm` encrypts. The
-  key-encryption key is derived, not supplied, so `KeyEncryptionKey` plays no
-  part; a fresh ephemeral key pair is generated per encryption and only its
-  public half travels, in the `xenc:AgreementMethod`. `KeyDerivationParams`
-  sets the ConcatKDF parameters, which are written to the wire because both
-  sides must derive with identical values.
+  key-encryption key is derived, not supplied, so `KeyEncryptionKey` belongs
+  to the separate AES key wrapping mechanism; a fresh ephemeral key pair is
+  generated per encryption and only its public half travels, in the
+  `xenc:AgreementMethod`. `KeyDerivationParams` sets the ConcatKDF parameters,
+  which are written to the wire because both sides must derive with identical
+  values.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
@@ -60,10 +61,15 @@ is how the recipient obtains that key:
 | Configuration | Wire result |
 |---|---|
 | `KeyTransportAlgorithm` + `RecipientPublicKey` | `<EncryptedKey>` holding the session key under RSA-OAEP |
-| `KeyWrapAlgorithm` + `RecipientECPublicKey` | `<EncryptedKey>` holding the session key under AES Key Wrap, with the wrapping key derived by ECDH-ES; a `KeyEncryptionKey` set alongside is unused |
+| `KeyWrapAlgorithm` + `RecipientECPublicKey` | `<EncryptedKey>` holding the session key under AES Key Wrap, with the wrapping key derived by ECDH-ES |
 | `KeyWrapAlgorithm` + `KeyEncryptionKey` | `<EncryptedKey>` holding the session key under AES Key Wrap (RFC 3394) |
 | non-empty `SessionKey` alone | no `<EncryptedKey>`; the recipient must already hold the key |
 | none of the above | `ErrMissingConfig` — nothing can protect the session key |
+
+The first three rows are mechanisms, and configuring two of them fails with
+`ErrConflictingKeyConfig`; its godoc owns that rule and why a single
+`<EncryptedKey>` makes it necessary. A `SessionKey` alongside one mechanism is
+allowed — it is the key that mechanism protects.
 
 A non-empty `SessionKey` must match the block algorithm's key length exactly,
 else `KeySizeError`. An empty or nil `SessionKey` counts as not set:

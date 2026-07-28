@@ -98,9 +98,9 @@ func (e Encryptor) AllowLegacyCBC(v bool) Encryptor {
 }
 
 // KeyTransportAlgorithm sets the key transport algorithm URI. Together with
-// RecipientPublicKey it selects RSA key transport, which is mutually
-// exclusive with AES key wrapping (KeyWrapAlgorithm + KeyEncryptionKey):
-// configuring both fails with [ErrConflictingKeyConfig].
+// RecipientPublicKey it selects RSA key transport, one of the mechanisms
+// that protect the session key; [ErrConflictingKeyConfig] states how many of
+// them an Encryptor may configure.
 func (e Encryptor) KeyTransportAlgorithm(uri string) Encryptor {
 	e = e.clone()
 	e.cfg.keyTransport = uri
@@ -157,10 +157,12 @@ func (e Encryptor) OAEPParams(params []byte) Encryptor {
 	return e
 }
 
-// KeyWrapAlgorithm sets the key wrapping algorithm URI. Together with
-// KeyEncryptionKey it selects AES key wrapping, which is mutually exclusive
-// with RSA key transport (KeyTransportAlgorithm + RecipientPublicKey):
-// configuring both fails with [ErrConflictingKeyConfig].
+// KeyWrapAlgorithm sets the AES Key Wrap algorithm URI. It names the wrap
+// itself, not which mechanism performs it: with KeyEncryptionKey it selects
+// AES key wrapping under the supplied key, and with RecipientECPublicKey it
+// is the wrap applied to the key ECDH-ES derives. Those are two different
+// mechanisms, and [ErrConflictingKeyConfig] states how many of them an
+// Encryptor may configure.
 func (e Encryptor) KeyWrapAlgorithm(uri string) Encryptor {
 	e = e.clone()
 	e.cfg.keyWrapAlgorithm = uri
@@ -168,6 +170,9 @@ func (e Encryptor) KeyWrapAlgorithm(uri string) Encryptor {
 }
 
 // KeyEncryptionKey sets the key encryption key for AES key wrapping.
+// Together with KeyWrapAlgorithm it selects that mechanism, one of the
+// mechanisms that protect the session key; [ErrConflictingKeyConfig] states
+// how many of them an Encryptor may configure.
 func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 	e = e.clone()
 	e.cfg.keyEncryptionKey = append([]byte(nil), kek...)
@@ -181,14 +186,11 @@ func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 //
 // ECDH-ES derives the key-encryption key rather than taking one, so
 // KeyWrapAlgorithm still selects the AES Key Wrap variant applied to the
-// session key, but KeyEncryptionKey is not used. Each encryption generates a
-// fresh ephemeral key pair, and the EncryptedKey carries its public half in
-// an xenc:AgreementMethod.
-//
-// Key agreement is mutually exclusive with RSA key transport
-// (KeyTransportAlgorithm + RecipientPublicKey): only one EncryptedKey is
-// emitted, so configuring both fails with [ErrMissingConfig] rather than
-// silently discarding one of them.
+// session key, while KeyEncryptionKey belongs to the separate AES key
+// wrapping mechanism; [ErrConflictingKeyConfig] states how many mechanisms an
+// Encryptor may configure. Each encryption generates a fresh ephemeral key
+// pair, and the EncryptedKey carries its public half in an
+// xenc:AgreementMethod.
 //
 // The key derivation is ConcatKDF; [Encryptor.KeyDerivationParams] controls
 // it.
@@ -312,7 +314,7 @@ type resolvedEncryptConfig struct {
 
 // resolveEncryptConfig decides five parts of an Encryptor's configuration: it
 // defaults the block algorithm, enforces the CBC opt-in, requires a key
-// source, rejects two conflicting key-protection mechanisms, and resolves the
+// source, rejects a second key-protection mechanism, and resolves the
 // ECDH-ES recipient key. Every entry point calls it before any payload work,
 // so none of those five is masked by a later failure to serialize or encrypt
 // the plaintext. Session-key length is not one of them: it is bound to the
@@ -343,20 +345,8 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 		return resolvedEncryptConfig{}, fmt.Errorf("%w: no key transport, key agreement, key wrap, or session key configured", ErrMissingConfig)
 	}
 
-	// Key transport and key wrapping are two alternative ways to protect the
-	// same session key, and only one EncryptedKey is emitted. Fail rather
-	// than silently preferring one: a recipient holding only the discarded
-	// key would otherwise fail to decrypt, far from the real mistake. A
-	// SessionKey alongside either is NOT a conflict — it supplies the key
-	// that the chosen mechanism then protects.
-	if hasKeyTransport && hasKeyWrap {
-		return resolvedEncryptConfig{}, fmt.Errorf("%w: key transport (%q) and key wrap (%q) are both configured; configure exactly one", ErrConflictingKeyConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
-	}
-
-	// RSA key transport and ECDH-ES key agreement are likewise alternatives
-	// for the same session key, and only one EncryptedKey is emitted.
-	if hasKeyTransport && hasKeyAgreement {
-		return resolvedEncryptConfig{}, fmt.Errorf("%w: key transport (%q) and ECDH-ES key agreement (%q) are both configured; configure exactly one", ErrMissingConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
+	if err := conflictingKeyProtection(cfg, hasKeyTransport, hasKeyAgreement, hasKeyWrap); err != nil {
+		return resolvedEncryptConfig{}, err
 	}
 
 	resolved := resolvedEncryptConfig{
@@ -377,6 +367,28 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	}
 	resolved.recipientECDH = recipientECDH
 	return resolved, nil
+}
+
+// conflictingKeyProtection returns an error naming both mechanisms when two
+// of the three ways to protect the session key are configured at once, and
+// nil otherwise. encryptPlaintext emits a single EncryptedKey and dispatches
+// transport, then agreement, then wrap, so accepting a pair would silently
+// discard the loser: a recipient holding only the discarded key then fails to
+// decrypt far from the real mistake. A SessionKey alongside a single
+// mechanism is not a pair — it supplies the key that mechanism protects.
+//
+// Agreement and wrap share the same KeyWrapAlgorithm URI, so that message
+// names the two setters rather than two algorithms.
+func conflictingKeyProtection(cfg *encryptConfig, hasKeyTransport, hasKeyAgreement, hasKeyWrap bool) error {
+	switch {
+	case hasKeyTransport && hasKeyAgreement:
+		return fmt.Errorf("%w: key transport (%q) and ECDH-ES key agreement (%q) are both configured; configure exactly one", ErrConflictingKeyConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
+	case hasKeyTransport && hasKeyWrap:
+		return fmt.Errorf("%w: key transport (%q) and key wrap (%q) are both configured; configure exactly one", ErrConflictingKeyConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
+	case hasKeyAgreement && hasKeyWrap:
+		return fmt.Errorf("%w: ECDH-ES key agreement (RecipientECPublicKey derives the key-encryption key) and key wrap (KeyEncryptionKey supplies one) are both configured for key wrap %q; configure exactly one", ErrConflictingKeyConfig, cfg.keyWrapAlgorithm)
+	}
+	return nil
 }
 
 // encryptPlaintext performs the whole encryption pipeline over already
