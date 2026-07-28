@@ -232,9 +232,9 @@ func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plain
 }
 
 func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
-	// Decide everything about the key protection before touching the
-	// payload: no payload can make a misconfigured or unusable recipient key
-	// work, so those errors must not cost anything proportional to the
+	// Decide everything about the configuration before touching the payload:
+	// no payload can make a misconfigured Encryptor or an unusable recipient
+	// key work, so those errors must not cost anything proportional to the
 	// plaintext, nor be masked by a plaintext that also fails to serialize.
 	resolved, err := resolveEncryptConfig(cfg)
 	if err != nil {
@@ -276,9 +276,11 @@ func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encT
 	return edElem, nil
 }
 
-// resolvedEncryptConfig is what resolveEncryptConfig decides: which of the
-// mutually exclusive mechanisms protects the session key, plus the recipient
-// ECDH key when key agreement is the one selected.
+// resolvedEncryptConfig is what resolveEncryptConfig decides: the effective
+// block algorithm, which of the three mutually exclusive mechanisms protects
+// the session key, and the recipient ECDH key when key agreement is the one
+// selected. No mechanism being selected means the caller supplied the session
+// key directly.
 type resolvedEncryptConfig struct {
 	blockAlgorithm  string
 	hasKeyTransport bool
@@ -287,11 +289,13 @@ type resolvedEncryptConfig struct {
 	recipientECDH   *ecdh.PublicKey
 }
 
-// resolveEncryptConfig validates everything about an Encryptor's key
-// protection that can be decided without a payload: it rejects two
-// conflicting mechanisms and resolves the ECDH-ES recipient key. Every entry
-// point calls it before any payload work, so a configuration error is never
-// paid for in plaintext serialization or block encryption first.
+// resolveEncryptConfig validates everything about an Encryptor's configuration
+// that can be decided without a payload: it defaults the block algorithm,
+// enforces the CBC opt-in, requires a key source, rejects two conflicting
+// key-protection mechanisms, and resolves the ECDH-ES recipient key. Every
+// entry point calls it before any payload work, so a configuration error or an
+// unusable recipient key is never paid for in plaintext serialization or block
+// encryption first, nor masked by a plaintext that also fails to serialize.
 func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	// Secure by default: an unset block algorithm uses authenticated
 	// AES-256-GCM rather than refusing or falling back to CBC.
@@ -328,11 +332,8 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 		return resolvedEncryptConfig{}, fmt.Errorf("%w: key transport (%q) and key wrap (%q) are both configured; configure exactly one", ErrConflictingKeyConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
 	}
 
-	// RSA key transport and ECDH-ES key agreement are alternative ways to
-	// protect the same session key, and only one EncryptedKey is emitted.
-	// Fail rather than silently preferring transport: a recipient holding
-	// only the EC private key would otherwise fail to decrypt with an error
-	// pointing nowhere near the real mistake.
+	// RSA key transport and ECDH-ES key agreement are likewise alternatives
+	// for the same session key, and only one EncryptedKey is emitted.
 	if hasKeyTransport && hasKeyAgreement {
 		return resolvedEncryptConfig{}, fmt.Errorf("%w: key transport (%q) and ECDH-ES key agreement (%q) are both configured; configure exactly one", ErrMissingConfig, cfg.keyTransport, cfg.keyWrapAlgorithm)
 	}
@@ -358,12 +359,11 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 }
 
 // encryptPlaintext performs the whole encryption pipeline over already
-// serialized plaintext and an already resolved key protection: it resolves
-// the block algorithm, enforces the CBC opt-in, obtains and binds the session
-// key, block-encrypts, protects the session key, and marshals the
-// EncryptedData element into doc. It never touches the tree, so both the
-// element/content and the raw-octet entry points share identical crypto and
-// configuration handling.
+// serialized plaintext and an already validated configuration: it obtains and
+// binds the session key, block-encrypts, protects the session key, and
+// marshals the EncryptedData element into doc. It never touches the tree, so
+// both the element/content and the raw-octet entry points share identical
+// crypto handling.
 func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEncryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
 	blockAlgorithm := resolved.blockAlgorithm
 

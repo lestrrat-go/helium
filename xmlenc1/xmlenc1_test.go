@@ -872,11 +872,10 @@ func unserializableContent(t *testing.T) *helium.Element {
 	return root
 }
 
-// The configuration errors decided before serialization — the conflicting key
-// protection, missing key source, and CBC opt-in checks below — must reach the
-// caller even when the payload cannot be serialized. No payload can make the
-// configuration usable, so returning ErrEncryptionFailed here would point the
-// caller away from the real mistake.
+// A misconfigured Encryptor must report the configuration error even when the
+// payload cannot be serialized. No payload can make the configuration usable,
+// so returning ErrEncryptionFailed here would point the caller away from the
+// real mistake.
 func TestConfigErrorPrecedesSerializationFailure(t *testing.T) {
 	key := generateRSAKey(t)
 	kek := randKey(t, 32)
