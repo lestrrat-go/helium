@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	mrand "math/rand"
+	"strconv"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -231,7 +232,8 @@ func TestConcatKDFOtherInfoMatchesPerBitPacking(t *testing.T) {
 
 func TestConcatKDFOtherInfoBudget(t *testing.T) {
 	// The budget is cumulative: five fields each comfortably under it still
-	// add up to a rejection, and one byte under the limit is accepted.
+	// add up to a rejection, and a set landing exactly on the limit is
+	// accepted.
 	overflowing := &ConcatKDFParams{
 		DigestMethod: DigestSHA256,
 		AlgorithmID:  make([]byte, maxConcatKDFOtherInfoBytes/4),
@@ -251,6 +253,42 @@ func TestConcatKDFOtherInfoBudget(t *testing.T) {
 	packed, err := concatKDFOtherInfo(atLimit)
 	require.NoError(t, err)
 	require.Len(t, packed, maxConcatKDFOtherInfoBytes)
+
+	// One byte past the limit is the first set that must be refused, and it
+	// is the case an off-by-one in the comparison would let through.
+	overLimit := &ConcatKDFParams{
+		DigestMethod: DigestSHA256,
+		AlgorithmID:  make([]byte, maxConcatKDFOtherInfoBytes-1),
+		PartyUInfo:   []byte{0x01, 0x02},
+	}
+	_, err = concatKDFOtherInfo(overLimit)
+	require.ErrorIs(t, err, ErrMalformedEncrypted)
+}
+
+// A 32-bit int overflows far below the address space a caller can fill,
+// because the five OtherInfo fields are caller-supplied and may all point at
+// ONE slice. Five aliases of a 512 MiB slice total 2.5 GiB, which wraps
+// negative in a 32-bit int, so a check that adds the five lengths together
+// accepts the set. The packing arithmetic wraps the same way — len(value)*8
+// comes out 0 — and the KDF would derive from an EMPTY OtherInfo that no
+// 64-bit peer agrees with, instead of failing.
+func TestConcatKDFOtherInfoBudgetIsOverflowSafe(t *testing.T) {
+	if strconv.IntSize != 32 {
+		t.Skip("int is wider than 32 bits here; run with GOARCH=386 or GOARCH=arm to exercise the wrap")
+	}
+
+	const per = 512 << 20
+	aliased := make([]byte, per)
+	params := &ConcatKDFParams{
+		DigestMethod: DigestSHA256,
+		AlgorithmID:  aliased,
+		PartyUInfo:   aliased,
+		PartyVInfo:   aliased,
+		SuppPubInfo:  aliased,
+		SuppPrivInfo: aliased,
+	}
+	_, err := concatKDFOtherInfo(params)
+	require.ErrorIs(t, err, ErrMalformedEncrypted)
 }
 
 func benchmarkParams() *ConcatKDFParams {

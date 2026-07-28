@@ -190,6 +190,13 @@ func agreementAlgorithm(agreement *AgreementMethod) string {
 // decryptECDHSessionKey wraps them with ErrDecryptionFailed and
 // encryptECDHSessionKey with ErrEncryptionFailed, mirroring oaepHashes.
 func deriveConcatKDF(sharedSecret []byte, params *ConcatKDFParams, keySize int) ([]byte, error) {
+	// Ahead of the digest lookup: a parameter set can be over budget AND name
+	// a digest this package does not implement, and the size is the failure
+	// worth reporting — the caller's set is refused for being oversized in
+	// every case, not only when the digest happens to resolve.
+	if err := checkConcatKDFOtherInfoBudget(params); err != nil {
+		return nil, err
+	}
 	newHash, err := concatKDFHash(params.DigestMethod)
 	if err != nil {
 		return nil, err
@@ -235,17 +242,30 @@ const maxConcatKDFOtherInfoBytes = 4096
 // checkConcatKDFOtherInfoBudget rejects a ConcatKDFParams whose OtherInfo
 // fields exceed maxConcatKDFOtherInfoBytes in total.
 //
-// It runs at both ends of the parameters' life: parseConcatKDFParams applies
-// it to wire data at the point the whole set is first known, so an oversized
-// document is refused before any ECDH or KDF work, and concatKDFOtherInfo
-// applies it again immediately before the packing loop, which is what makes
-// it hold for a caller that hands xmlenc1 a DOM or a ConcatKDFParams it built
-// itself rather than one this package parsed.
+// It runs at three points in the parameters' life, all of them before any
+// work sized by the fields: parseConcatKDFParams applies it to wire data at
+// the point the whole set is first known, so an oversized document is refused
+// before any ECDH or KDF work; deriveConcatKDF applies it before resolving
+// the digest, so a caller-built set that is BOTH over budget and names an
+// unsupported digest still fails on the size; and concatKDFOtherInfo applies
+// it immediately before the packing loop, which is what keeps the guard ahead
+// of the packing arithmetic whichever caller got there — including one that
+// hands xmlenc1 a DOM or a ConcatKDFParams it built itself.
+//
+// It measures every field against the budget REMAINING instead of summing the
+// five. The fields are caller-supplied and may all alias one slice, so their
+// sum can exceed what an int holds on a 32-bit build and wrap to a small or
+// negative value that a "sum > limit" test accepts. A running total that
+// never exceeds maxConcatKDFOtherInfoBytes cannot wrap. The size arithmetic
+// downstream — len(value)*8 and totalBits in concatKDFOtherInfo — is
+// wrap-free only because this ran first and bounded every length.
 func checkConcatKDFOtherInfoBudget(params *ConcatKDFParams) error {
-	total := len(params.AlgorithmID) + len(params.PartyUInfo) + len(params.PartyVInfo) +
-		len(params.SuppPubInfo) + len(params.SuppPrivInfo)
-	if total > maxConcatKDFOtherInfoBytes {
-		return fmt.Errorf("%w: ConcatKDF OtherInfo is %d bytes, over the %d byte limit", ErrMalformedEncrypted, total, maxConcatKDFOtherInfoBytes)
+	remaining := maxConcatKDFOtherInfoBytes
+	for _, field := range [][]byte{params.AlgorithmID, params.PartyUInfo, params.PartyVInfo, params.SuppPubInfo, params.SuppPrivInfo} {
+		if len(field) > remaining {
+			return fmt.Errorf("%w: ConcatKDF OtherInfo is over the %d byte limit", ErrMalformedEncrypted, maxConcatKDFOtherInfoBytes)
+		}
+		remaining -= len(field)
 	}
 	return nil
 }

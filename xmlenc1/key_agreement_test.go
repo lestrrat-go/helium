@@ -80,6 +80,17 @@ func hexOtherInfoField(n int) string {
 	return hex.EncodeToString(make([]byte, n+1))
 }
 
+// boundaryOtherInfo builds the two-attribute shape the budget-boundary cases
+// share: an AlgorithmID and a PartyUInfo whose decoded lengths add up to the
+// total under test, each short enough that only the cumulative check can
+// refuse the set.
+func boundaryOtherInfo(algorithmID, partyUInfo int) map[string]string {
+	return map[string]string{
+		"AlgorithmID": hexOtherInfoField(algorithmID),
+		"PartyUInfo":  hexOtherInfoField(partyUInfo),
+	}
+}
+
 // A remote peer supplies the EncryptedData, and nothing else in xmlenc1 bounds
 // the ConcatKDF OtherInfo fields: the only ceiling is whatever the XML parser
 // happened to allow for an attribute value, which a caller can raise, disable,
@@ -119,19 +130,65 @@ func TestDecryptRejectsOversizedConcatKDFOtherInfo(t *testing.T) {
 		})
 	}
 
-	// A document whose OtherInfo sits just under the budget is still parsed
+	// A document whose OtherInfo lands exactly on the budget is still parsed
 	// and still reaches the key agreement; it fails on the junk wrapped key,
-	// not on the budget.
-	t.Run("just under budget", func(t *testing.T) {
-		doc := mustParseXML(t, ecdhESDocument(map[string]string{
-			"AlgorithmID": hexOtherInfoField(4095),
-			"PartyUInfo":  hexOtherInfoField(1),
-		}))
+	// not on the budget. 4095 + 1 is the largest legal total, so this pins
+	// the accept side of the boundary at its strongest point.
+	t.Run("at budget", func(t *testing.T) {
+		doc := mustParseXML(t, ecdhESDocument(boundaryOtherInfo(4095, 1)))
 		_, err := xmlenc1.NewDecryptor().ECPrivateKey(priv).Decrypt(t.Context(), doc.DocumentElement())
 		require.Error(t, err)
 		require.NotErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 		require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
 	})
+
+	// One byte past the budget is the reject side of the same boundary, and
+	// it has to be the CUMULATIVE check that refuses it: neither attribute is
+	// long enough for the per-attribute hex-length precheck to fire (4095
+	// value octets plus the unused-bit octet encode to 8192 hex characters,
+	// under that gate), so a budget that only rejected a single huge field
+	// would accept this set.
+	// Only the per-attribute gate says a field is over the limit "alone", so
+	// its absence from the message is what shows the cumulative check fired.
+	t.Run("one byte over budget", func(t *testing.T) {
+		doc := mustParseXML(t, ecdhESDocument(boundaryOtherInfo(4095, 2)))
+		_, err := xmlenc1.NewDecryptor().ECPrivateKey(priv).Decrypt(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "OtherInfo")
+		require.NotContains(t, err.Error(), "alone")
+	})
+}
+
+// An over-budget parameter set has to be refused for its size even when the
+// same set names a digest this package does not implement. The size is the
+// reason the set is unusable at all, and a caller that fixes the digest would
+// otherwise meet the budget error only on the next attempt.
+func TestEncryptRejectsOversizedOtherInfoWhateverTheDigest(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+
+	tests := []struct {
+		name   string
+		digest string
+	}{
+		{name: "supported digest", digest: xmlenc1.DigestSHA256},
+		{name: "unsupported digest", digest: "http://example.com/bogus-digest"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := mustParseXML(t, samlAssertion)
+			_, err := xmlenc1.NewEncryptor().
+				BlockAlgorithm(xmlenc1.AES256GCM11).
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				RecipientECPublicKey(&key.PublicKey).
+				KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+					DigestMethod: tt.digest,
+					AlgorithmID:  make([]byte, 5000),
+				}).
+				EncryptElement(t.Context(), doc.DocumentElement())
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		})
+	}
 }
 
 // The OtherInfo budget and the octet-oriented packing must leave an ordinary
