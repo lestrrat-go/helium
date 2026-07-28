@@ -47,9 +47,10 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   count is a CPU amplification vector; over the cap fails with
   `ErrTooManyEncryptedKeys` before any candidate crypto runs. Its godoc owns
   the per-candidate branch dispatch: which key a candidate uses and what it
-  costs. The cap belongs to the `<EncryptedKey>` stage, which a non-empty
-  `Decryptor.SessionKey` returns before — see
-  [Decrypting with a pre-shared session key](#decrypting-with-a-pre-shared-session-key).
+  costs. The cap is applied to the candidate list before the key
+  configuration is consulted, so it also bounds a decrypt driven by a
+  pre-shared
+  [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key).
 
 ## Choosing how the session key is protected
 
@@ -73,8 +74,10 @@ hits the length check.
 
 A non-empty `Decryptor.SessionKey` is not a preference among keys; it is an
 early return. `Decrypt` and `DecryptBytes` take it as the session key and
-return before the whole `<EncryptedKey>` stage. Its godoc owns the account of
-what that stage skips.
+return before candidate selection, per-candidate validation, and per-candidate
+key resolution. Its godoc owns the account of what that skips. The
+`MaxEncryptedKeys` cap is applied ahead of the early return, so it applies
+here too.
 
 ## Decryption does not modify the tree
 

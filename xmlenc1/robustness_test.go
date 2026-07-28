@@ -370,7 +370,8 @@ func encryptedDataWithRawEncryptedKey(t *testing.T, sessionKey []byte, plaintext
 // Decryptor.SessionKey: it is the sole key-resolution candidate, so no
 // EncryptedKey is ever selected or decrypted, but decryptElement parses the
 // whole EncryptedData first — including every EncryptedKey under ds:KeyInfo —
-// so a malformed candidate still aborts the decrypt.
+// so a malformed candidate still aborts the decrypt. The MaxEncryptedKeys cap
+// is applied on the parsed candidate list too; TestMaxEncryptedKeys covers it.
 func TestSessionKeyBypassesSelectionNotParsing(t *testing.T) {
 	t.Run("malformed EncryptedKey fails the decrypt", func(t *testing.T) {
 		sessionKey := randKey(t, 32)
