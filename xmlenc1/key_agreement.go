@@ -16,7 +16,7 @@ import (
 func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, error) {
 	agreement := ek.AgreementMethod
 	if agreement == nil || agreement.Algorithm != ECDHES {
-		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: agreementAlgorithm(agreement)})
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyAgreement, Algorithm: agreementAlgorithm(agreement)})
 	}
 	if agreement.OriginatorKey == nil {
 		return nil, fmt.Errorf("%w: ECDH-ES missing OriginatorKeyInfo", ErrMalformedEncrypted)
@@ -26,7 +26,7 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 	}
 	method := agreement.KeyDerivationMethod
 	if method.Algorithm != ConcatKDF {
-		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: method.Algorithm})
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyDerivation, Algorithm: method.Algorithm})
 	}
 	if method.ConcatKDF == nil {
 		return nil, fmt.Errorf("%w: ConcatKDF missing parameters", ErrMalformedEncrypted)
@@ -38,9 +38,9 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey) ([]byte, er
 	switch ek.EncryptionMethod.Algorithm {
 	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
 	default:
-		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Algorithm: ek.EncryptionMethod.Algorithm})
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyWrap, Algorithm: ek.EncryptionMethod.Algorithm})
 	}
-	kekSize, err := keySizeForAlgorithm(ek.EncryptionMethod.Algorithm)
+	kekSize, err := keySizeForAlgorithm(paramKeyWrap, ek.EncryptionMethod.Algorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +260,6 @@ func concatKDFHash(uri string) (func() hash.Hash, error) {
 	case DigestSHA512:
 		return sha512.New, nil
 	default:
-		return nil, &UnsupportedAlgorithmError{Algorithm: uri}
+		return nil, &UnsupportedAlgorithmError{Parameter: paramConcatKDF, Algorithm: uri}
 	}
 }
