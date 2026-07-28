@@ -487,8 +487,9 @@ func removeChildren(elem *helium.Element) {
 
 // DefaultMaxEncryptedKeys bounds how many <EncryptedKey> candidates a
 // Decryptor will trial-decrypt for a single EncryptedData when
-// MaxEncryptedKeys is not set. Each candidate forces a full RSA
-// private-key operation, so an unbounded count is a CPU amplification
+// MaxEncryptedKeys is not set. Each candidate costs whatever its declared
+// algorithm requires — an RSA-OAEP private-key decrypt, an AES key unwrap,
+// or an ECDH derivation — so an unbounded count is a CPU amplification
 // (DoS) vector. The default mirrors jwx's WithMaxRecipients (100), which
 // is generous for real multi-recipient documents yet caps amplification.
 const DefaultMaxEncryptedKeys = 100
@@ -565,8 +566,11 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 // SessionKey sets a pre-shared session key directly.
 //
 // It takes precedence over every other key: when set, the session key is the
-// sole candidate and the document's EncryptedKey elements are not examined
-// at all, so PrivateKey, ECPrivateKey, and KeyEncryptionKey have no effect.
+// sole candidate, so PrivateKey, ECPrivateKey, and KeyEncryptionKey have no
+// effect. What it bypasses is candidate selection and EncryptedKey
+// decryption, not parsing — the document's EncryptedKey elements are still
+// parsed before the key is used, so a malformed one fails the decrypt with
+// [ErrMalformedEncrypted] even though its contents are never used.
 // Set it only when the session key is known out of band.
 func (d Decryptor) SessionKey(key []byte) Decryptor {
 	d = d.clone()
@@ -593,9 +597,10 @@ func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 
 // MaxEncryptedKeys caps the number of <EncryptedKey> candidates the
 // Decryptor will trial-decrypt for a single EncryptedData. Each candidate
-// forces a full RSA private-key operation, so a document packed with junk
-// EncryptedKey elements is a CPU amplification (DoS) vector; the cap is
-// enforced before any crypto runs.
+// costs whatever its declared algorithm requires — an RSA-OAEP private-key
+// decrypt, an AES key unwrap, or an ECDH derivation — so a document packed
+// with junk EncryptedKey elements is a CPU amplification (DoS) vector; the
+// cap is enforced before any crypto runs.
 //
 // Zero (the default) uses [DefaultMaxEncryptedKeys]; a negative value
 // removes the limit (matching helium's MaxDepth convention). A document
@@ -729,11 +734,12 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
 	}
 
-	// Bound the trial-decrypt work before any RSA operation runs. Each
-	// candidate forces a full RSA private-key op, so an attacker who can
-	// pack a document with junk <EncryptedKey> elements gets CPU
-	// amplification. Fail closed when the count exceeds the effective cap
-	// (zero => default, negative => unlimited).
+	// Bound the trial-decrypt work before any crypto runs. Each candidate
+	// costs whatever its declared algorithm requires — an RSA-OAEP
+	// private-key decrypt, an AES key unwrap, or an ECDH derivation — so an
+	// attacker who can pack a document with junk <EncryptedKey> elements
+	// gets CPU amplification. Fail closed when the count exceeds the
+	// effective cap (zero => default, negative => unlimited).
 	maxKeys := cfg.maxEncryptedKeys
 	if maxKeys == 0 {
 		maxKeys = DefaultMaxEncryptedKeys
@@ -753,8 +759,8 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	var lastErr error
 	for _, ek := range keys {
 		// Poll the caller's deadline between candidates so a cancellation
-		// interrupts the per-candidate RSA work rather than running to
-		// completion over every EncryptedKey.
+		// interrupts the per-candidate key-resolution work rather than
+		// running to completion over every EncryptedKey.
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

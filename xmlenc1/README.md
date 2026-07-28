@@ -47,9 +47,11 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   without parsing them as XML.
 - `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
   trial-decrypted (default 100, negative for unlimited). Each candidate costs
-  a full RSA private-key operation, so an unbounded count is a CPU
+  whatever its declared algorithm requires — an RSA-OAEP private-key decrypt,
+  an AES key unwrap, or an ECDH derivation — so an unbounded count is a CPU
   amplification vector; over the cap fails with `ErrTooManyEncryptedKeys`
-  before any crypto runs.
+  before any crypto runs. A candidate whose algorithm needs a key the caller
+  never configured fails with `ErrMissingKey` without doing any crypto.
 
 ## Choosing how the session key is protected
 
@@ -68,8 +70,10 @@ match the block algorithm exactly, else `KeySizeError`.
 
 On the decrypting side, `PrivateKey`, `ECPrivateKey`, and `KeyEncryptionKey`
 may all be set together: each `<EncryptedKey>` candidate selects the one its
-declared algorithm needs. `SessionKey` overrides all of them and skips the
-`<EncryptedKey>` elements entirely.
+declared algorithm needs. `SessionKey` overrides all of them: it becomes the
+sole candidate, so no `<EncryptedKey>` is selected or decrypted. The elements
+are still parsed first, so a malformed `<EncryptedKey>` fails the decrypt even
+though its contents are never used.
 
 ## Decryption does not modify the tree
 

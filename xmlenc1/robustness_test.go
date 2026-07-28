@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
+	"encoding/base64"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -343,5 +344,65 @@ func TestDeprecatedEncryptedKeyField(t *testing.T) {
 		require.NotNil(t, ed.EncryptedKey)
 		require.Len(t, ed.EncryptedKeys, 1)
 		require.Same(t, ed.EncryptedKeys[0], ed.EncryptedKey)
+	})
+}
+
+// encryptedDataWithRawEncryptedKey builds an EncryptedData carrying real
+// AES-256-GCM ciphertext plus one EncryptedKey spliced in verbatim, so a test
+// can present an EncryptedKey the public marshaler would never emit.
+func encryptedDataWithRawEncryptedKey(t *testing.T, sessionKey []byte, plaintext, rawEncryptedKey string) *helium.Element {
+	t.Helper()
+	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte(plaintext))
+	require.NoError(t, err)
+
+	const xenc = `xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"`
+	const ds = `xmlns:ds="http://www.w3.org/2000/09/xmldsig#"`
+	xml := `<xenc:EncryptedData ` + xenc + ` ` + ds + ` Type="` + xmlenc1.TypeElement + `">` +
+		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+		`<ds:KeyInfo>` + rawEncryptedKey + `</ds:KeyInfo>` +
+		`<xenc:CipherData><xenc:CipherValue>` + base64.StdEncoding.EncodeToString(cipher) +
+		`</xenc:CipherValue></xenc:CipherData>` +
+		`</xenc:EncryptedData>`
+	return mustParseXML(t, xml).DocumentElement()
+}
+
+// TestSessionKeyBypassesSelectionNotParsing pins the documented scope of
+// Decryptor.SessionKey: it is the sole key-resolution candidate, so no
+// EncryptedKey is ever selected or decrypted, but decryptElement parses the
+// whole EncryptedData first — including every EncryptedKey under ds:KeyInfo —
+// so a malformed candidate still aborts the decrypt.
+func TestSessionKeyBypassesSelectionNotParsing(t *testing.T) {
+	t.Run("malformed EncryptedKey fails the decrypt", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		// No CipherData child: parseEncryptedKey rejects it before the
+		// session-key branch is ever reached.
+		raw := `<xenc:EncryptedKey>` +
+			`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP + `"/>` +
+			`</xenc:EncryptedKey>`
+		elem := encryptedDataWithRawEncryptedKey(t, sessionKey, `<x>secret</x>`, raw)
+
+		_, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		// Pin the failing element: the EncryptedKey, not the EncryptedData.
+		require.ErrorContains(t, err, "EncryptedKey missing CipherData/CipherValue")
+	})
+
+	t.Run("well-formed EncryptedKey is parsed but never selected", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		// A syntactically valid RSA-OAEP candidate whose CipherValue is
+		// junk. Selection never runs, so the absent RSA private key and
+		// the undecryptable candidate are both irrelevant.
+		raw := `<xenc:EncryptedKey>` +
+			`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP + `"/>` +
+			`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+			`</xenc:EncryptedKey>`
+		elem := encryptedDataWithRawEncryptedKey(t, sessionKey, `<x>secret</x>`, raw)
+
+		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		s, err := helium.WriteString(nodes[0])
+		require.NoError(t, err)
+		require.Contains(t, s, "secret")
 	})
 }

@@ -18,8 +18,10 @@ var (
 	// ErrTooManyEncryptedKeys is returned when an EncryptedData carries more
 	// EncryptedKey candidates than the Decryptor's effective limit (see
 	// Decryptor.MaxEncryptedKeys and DefaultMaxEncryptedKeys). Each candidate
-	// would force a full RSA trial-decrypt, so an unbounded count is a CPU
-	// amplification (DoS) vector; the cap is enforced before any crypto runs.
+	// would cost whatever its declared algorithm requires — an RSA-OAEP
+	// private-key decrypt, an AES key unwrap, or an ECDH derivation — so an
+	// unbounded count is a CPU amplification (DoS) vector; the cap is
+	// enforced before any crypto runs.
 	ErrTooManyEncryptedKeys = errors.New("xmlenc1: too many EncryptedKey candidates")
 
 	// ErrInvalidPadding names invalid PKCS#7 padding. Decryption never

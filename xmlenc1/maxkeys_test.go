@@ -76,6 +76,35 @@ func TestMaxEncryptedKeys(t *testing.T) {
 		require.Len(t, nodes, 1)
 	})
 
+	// The cap's cost model is per-mechanism, not RSA-only: an AES key-wrap
+	// candidate resolves through aesKeyUnwrap with no RSA key configured at
+	// all, and a candidate whose algorithm needs a key the caller never
+	// supplied stops at ErrMissingKey before doing any crypto.
+	t.Run("candidate cost follows the declared algorithm", func(t *testing.T) {
+		t.Run("AES key wrap needs no RSA key", func(t *testing.T) {
+			kek := randKey(t, 32)
+			doc := mustParseXML(t, `<root><a>secret</a></root>`)
+			edElem, err := xmlenc1.NewEncryptor().
+				BlockAlgorithm(xmlenc1.AES256GCM).
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				KeyEncryptionKey(kek).
+				EncryptElement(t.Context(), doc.DocumentElement())
+			require.NoError(t, err)
+
+			nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), edElem)
+			require.NoError(t, err)
+			require.Len(t, nodes, 1)
+		})
+
+		t.Run("unconfigured key yields ErrMissingKey", func(t *testing.T) {
+			// RSA-OAEP candidates only; the Decryptor carries a KEK, which
+			// no candidate declares, so none reaches a crypto operation.
+			elem := manyKeyEncryptedData(t, 2)
+			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(randKey(t, 32)).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		})
+	})
+
 	t.Run("cancelled context aborts the candidate loop", func(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, samlAssertion)
