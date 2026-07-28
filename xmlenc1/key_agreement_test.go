@@ -191,6 +191,63 @@ func TestEncryptRejectsOversizedOtherInfoWhateverTheDigest(t *testing.T) {
 	}
 }
 
+// oversizedKDFParams returns a fresh parameter set whose single OtherInfo
+// field is past the cumulative budget on its own, with no DigestMethod set.
+func oversizedKDFParams() *xmlenc1.ConcatKDFParams {
+	return &xmlenc1.ConcatKDFParams{AlgorithmID: make([]byte, 5000)}
+}
+
+// Params with an empty DigestMethod are replaced wholesale by the SHA-256
+// default with empty OtherInfo before any derivation runs, so their OtherInfo
+// is discarded rather than measured against the budget. This pins that
+// documented fallback in both directions — an oversized field is inert when
+// the digest is absent and fatal when it is present — so ConcatKDFParams'
+// godoc cannot drift back into promising a check the empty-digest path does
+// not perform.
+func TestEncryptOversizedOtherInfoWithEmptyDigestTakesFallback(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+
+	t.Run("empty digest discards it", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM11).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&key.PublicKey).
+			KeyDerivationParams(oversizedKDFParams()).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		// The discarded field reaches neither the wire nor the derived KEK.
+		encoded, err := helium.WriteString(edElem)
+		require.NoError(t, err)
+		require.NotContains(t, encoded, "AlgorithmID=")
+
+		parsed, err := xmlenc1.ParseEncryptedDataForTest(edElem)
+		require.NoError(t, err)
+		kdf := parsed.EncryptedKeys[0].AgreementMethod.KeyDerivationMethod.ConcatKDF
+		require.Equal(t, xmlenc1.DigestSHA256, kdf.DigestMethod)
+		require.Empty(t, kdf.AlgorithmID)
+
+		nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	t.Run("explicit digest measures it", func(t *testing.T) {
+		params := oversizedKDFParams()
+		params.DigestMethod = xmlenc1.DigestSHA256
+
+		doc := mustParseXML(t, samlAssertion)
+		_, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM11).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&key.PublicKey).
+			KeyDerivationParams(params).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+}
+
 // The OtherInfo budget and the octet-oriented packing must leave an ordinary
 // ECDH-ES exchange exactly as it was, including one carrying the kind of
 // AlgorithmID/PartyInfo values a real deployment sets.

@@ -170,7 +170,9 @@ func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string
 // to no application-specific AlgorithmID/PartyInfo the recipient would have
 // to guess, and the emitted xenc11:ConcatKDFParams states it explicitly on
 // the wire either way. The fallback is all-or-nothing so that caller
-// OtherInfo is never silently paired with a digest the caller never chose.
+// OtherInfo is never silently paired with a digest the caller never chose;
+// a discarded field is therefore never checked against
+// maxConcatKDFOtherInfoBytes, since nothing downstream ever sees it.
 func effectiveKDFParams(params *ConcatKDFParams) *ConcatKDFParams {
 	if params == nil || params.DigestMethod == "" {
 		return &ConcatKDFParams{DigestMethod: DigestSHA256}
@@ -251,6 +253,11 @@ const maxConcatKDFOtherInfoBytes = 4096
 // it immediately before the packing loop, which is what keeps the guard ahead
 // of the packing arithmetic whichever caller got there — including one that
 // hands xmlenc1 a DOM or a ConcatKDFParams it built itself.
+//
+// The set effectiveKDFParams replaces reaches none of those points: its
+// OtherInfo is dropped rather than measured, and the SHA-256 default that
+// takes its place carries none. ConcatKDFParams' godoc states that carve-out
+// for callers.
 //
 // It measures every field against the budget REMAINING instead of summing the
 // five. The fields are caller-supplied and may all alias one slice, so their

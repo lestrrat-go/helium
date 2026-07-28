@@ -140,8 +140,15 @@ type ConcatKDFParams struct {
 	// under decryption is attacker-supplied and the concatenation costs work
 	// proportional to its size. Real OtherInfo is identifiers and nonces —
 	// tens of bytes — so the limit is far above any interoperable value.
-	// Exceeding it is an error wrapping [ErrMalformedEncrypted], raised both
-	// when parsing a document and when deriving from these parameters.
+	// Exceeding it is an error wrapping [ErrMalformedEncrypted], raised when
+	// parsing a document and when deriving from these parameters.
+	//
+	// One parameter set never reaches a derivation and so is never measured:
+	// the fallback [Encryptor.KeyDerivationParams] documents replaces a set
+	// whose DigestMethod is empty, wholesale, with the SHA-256 default
+	// carrying empty OtherInfo. These five fields are discarded there rather
+	// than checked, so an oversized set paired with an empty DigestMethod
+	// encrypts successfully and emits no OtherInfo attributes at all.
 	AlgorithmID  []byte
 	PartyUInfo   []byte
 	PartyVInfo   []byte
