@@ -531,6 +531,12 @@ const DefaultMaxEncryptedKeys = 100
 // key wrap, 256 bytes for RSA-2048.
 const DefaultMaxEncryptedKeyBytes = 64 << 10
 
+// DefaultMaxCipherValueBytes bounds the decoded EncryptedData CipherValue
+// payload when Decryptor.MaxCipherValueBytes is not set. It matches helium's
+// default maximum size for an individual XML content node and prevents a
+// payload split across CDATA nodes from bypassing that parser-level limit.
+const DefaultMaxCipherValueBytes = 10 << 20
+
 // decryptConfig holds the configuration for a Decryptor.
 type decryptConfig struct {
 	privateKey              *rsa.PrivateKey
@@ -540,6 +546,7 @@ type decryptConfig struct {
 	allowUnauthenticatedCBC bool
 	maxEncryptedKeys        int
 	maxEncryptedKeyBytes    int
+	maxCipherValueBytes     int
 }
 
 // Decryptor decrypts XML EncryptedData elements. It uses clone-on-write
@@ -680,9 +687,8 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 // CipherValue is assembled or decoded, and both are skipped once the running
 // total would exceed it. A CipherValue the base64 decoder would reject is
 // charged what that rejected decode costs, so malformed ciphertext cannot buy
-// work the budget was set to deny. Only <EncryptedKey> ciphertext counts — the
-// EncryptedData's own CipherValue is the payload the caller asked for and is
-// not charged.
+// work the budget was set to deny. Only <EncryptedKey> ciphertext counts. The
+// EncryptedData payload is charged separately by MaxCipherValueBytes.
 //
 // What the budget bounds is memory held for a candidate, not the length of the
 // text it was written as. A CipherValue may carry XML whitespace between its
@@ -699,6 +705,23 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 func (d Decryptor) MaxEncryptedKeyBytes(n int) Decryptor {
 	d = d.clone()
 	d.cfg.maxEncryptedKeyBytes = n
+	return d
+}
+
+// MaxCipherValueBytes caps the decoded EncryptedData CipherValue payload, in
+// bytes, that decrypting one EncryptedData will hold. This is independent of
+// MaxEncryptedKeyBytes, which bounds only the wrapped session-key candidates.
+//
+// The budget is charged while the document is read, before the payload
+// CipherValue is assembled or decoded. It measures decoded octets, so XML
+// whitespace and splitting across text or CDATA nodes cannot bypass it.
+//
+// Zero (the default) uses DefaultMaxCipherValueBytes; a negative value removes
+// the limit. A document over the effective budget fails with
+// ErrCipherValueBytesExceeded before block decryption or plaintext parsing.
+func (d Decryptor) MaxCipherValueBytes(n int) Decryptor {
+	d = d.clone()
+	d.cfg.maxCipherValueBytes = n
 	return d
 }
 
@@ -760,6 +783,16 @@ type encryptedKeyBudget struct {
 	remaining int
 }
 
+// payloadCipherValueBudget is the per-EncryptedData allowance for the
+// ciphertext payload. Unlike encryptedKeyBudget, it is spent once.
+type payloadCipherValueBudget struct {
+	limit int
+}
+
+type cipherValueBudget interface {
+	charge(int) error
+}
+
 // newEncryptedKeyBudget resolves a Decryptor's configured budget (zero => the
 // default, negative => unlimited) into the state the parse path spends.
 func newEncryptedKeyBudget(cfg *decryptConfig) *encryptedKeyBudget {
@@ -770,13 +803,20 @@ func newEncryptedKeyBudget(cfg *decryptConfig) *encryptedKeyBudget {
 	return &encryptedKeyBudget{limit: limit, remaining: limit}
 }
 
+func newPayloadCipherValueBudget(cfg *decryptConfig) *payloadCipherValueBudget {
+	limit := cfg.maxCipherValueBytes
+	if limit == 0 {
+		limit = DefaultMaxCipherValueBytes
+	}
+	return &payloadCipherValueBudget{limit: limit}
+}
+
 // charge deducts n bytes from the remaining allowance, failing closed when
 // they do not fit. Callers charge what the decode would cost BEFORE building
 // anything from the value, so an oversized CipherValue is rejected without
 // being assembled or decoded.
 //
-// A nil budget is unlimited, which is how the parse path expresses "this
-// CipherValue is not EncryptedKey ciphertext".
+// A nil budget is unlimited for parser-only test helpers.
 func (b *encryptedKeyBudget) charge(n int) error {
 	if b == nil || b.limit < 0 {
 		return nil
@@ -788,8 +828,18 @@ func (b *encryptedKeyBudget) charge(n int) error {
 	return nil
 }
 
+func (b *payloadCipherValueBudget) charge(n int) error {
+	if b == nil || b.limit < 0 {
+		return nil
+	}
+	if n > b.limit {
+		return fmt.Errorf("%w: payload ciphertext exceeds the limit of %d bytes; raise or remove it with Decryptor.MaxCipherValueBytes", ErrCipherValueBytesExceeded, b.limit)
+	}
+	return nil
+}
+
 func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]byte, error) {
-	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg))
+	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -842,7 +892,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 }
 
 func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
-	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg))
+	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg))
 	if err != nil {
 		return nil, err
 	}

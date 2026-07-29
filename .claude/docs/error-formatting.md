@@ -180,6 +180,10 @@ Ordered-transform diagnostics (`transform_pipeline.go` `executeTransformPipeline
 
 A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI dereference, transform execution, or key resolution.
 
+### XML Encryption (`xmlenc1/errors.go`)
+
+`ErrCipherValueBytesExceeded` is returned when an EncryptedData payload exceeds `Decryptor.MaxCipherValueBytes` (default `DefaultMaxCipherValueBytes`, 10 MiB). The parser charges decoded payload bytes before base64 assembly or block decryption, so text or CDATA splitting cannot bypass the limit. Match it with `errors.Is`.
+
 ## Error Accumulation Pattern
 
 ### XSD

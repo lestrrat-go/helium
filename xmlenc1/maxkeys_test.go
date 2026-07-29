@@ -89,6 +89,17 @@ func rawKeyCipherValueEncryptedData(t *testing.T, cipherValue string) *helium.El
 	return doc.DocumentElement()
 }
 
+// rawPayloadCipherValueEncryptedData builds an EncryptedData whose payload
+// CipherValue has caller-controlled base64 text. It reaches the payload budget
+// before block-algorithm validation, key resolution, or block decryption.
+func rawPayloadCipherValueEncryptedData(t *testing.T, cipherValue string) *helium.Element {
+	t.Helper()
+	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
+		`<xenc:CipherData><xenc:CipherValue>`+cipherValue+`</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
 func TestMaxEncryptedKeys(t *testing.T) {
 	t.Run("over default cap fails fast", func(t *testing.T) {
 		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+1, rsaWrappedKeyBytes)
@@ -418,9 +429,9 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 		require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
 	})
 
-	// The EncryptedData's own CipherValue is the payload, not EncryptedKey
-	// ciphertext, so a large one decrypts under a small budget.
-	t.Run("payload ciphertext is not charged", func(t *testing.T) {
+	// The EncryptedData payload uses its own budget, so it decrypts under a
+	// small EncryptedKey budget while remaining below the payload default.
+	t.Run("payload ciphertext is not charged to the EncryptedKey budget", func(t *testing.T) {
 		sessionKey := randKey(t, 32)
 		plaintext := `<x>` + strings.Repeat("secret", 40000) + `</x>`
 		elem := manyKeySessionKeyEncryptedData(t, 1, rsaWrappedKeyBytes, sessionKey, plaintext)
@@ -428,6 +439,70 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 	})
+}
+
+// TestMaxCipherValueBytes covers the EncryptedData payload budget, which is
+// independent from the cumulative budget for EncryptedKey ciphertext.
+func TestMaxCipherValueBytes(t *testing.T) {
+	t.Run("over default budget fails", func(t *testing.T) {
+		payload := base64.StdEncoding.EncodeToString(make([]byte, xmlenc1.DefaultMaxCipherValueBytes+1))
+		elem := rawPayloadCipherValueEncryptedData(t, splitIntoNodes(payload, 2))
+		_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).DecryptBytes(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+	})
+
+	t.Run("explicit budget applies to both terminals", func(t *testing.T) {
+		for _, decrypt := range []func(*helium.Element) error{
+			func(elem *helium.Element) error {
+				_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(2).Decrypt(t.Context(), elem)
+				return err
+			},
+			func(elem *helium.Element) error {
+				_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(2).DecryptBytes(t.Context(), elem)
+				return err
+			},
+		} {
+			err := decrypt(rawPayloadCipherValueEncryptedData(t, `AAAA`))
+			require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+		}
+	})
+
+	t.Run("exact budget decrypts", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		elem := manyKeySessionKeyEncryptedData(t, 0, 0, sessionKey, `payload`)
+		ed, err := xmlenc1.ParseEncryptedDataForTest(elem)
+		require.NoError(t, err)
+
+		plaintext, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).MaxCipherValueBytes(len(ed.CipherValue)).DecryptBytes(t.Context(), elem)
+		require.NoError(t, err)
+		require.Equal(t, []byte(`payload`), plaintext)
+	})
+
+	t.Run("negative budget removes the limit", func(t *testing.T) {
+		elem := rawPayloadCipherValueEncryptedData(t, `AAAA`)
+		_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(-1).DecryptBytes(t.Context(), elem)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+	})
+
+	t.Run("zero is the default", func(t *testing.T) {
+		elem := rawPayloadCipherValueEncryptedData(t, `AAAA`)
+		_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(0).DecryptBytes(t.Context(), elem)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+	})
+}
+
+func TestPayloadCipherValueSplitAcrossNodes(t *testing.T) {
+	const (
+		splitNodes   = 1000
+		splitDecoded = splitNodes * 3 / 4 * 3
+	)
+
+	payload := strings.Repeat(`<![CDATA[AAA]]>`, splitNodes)
+	elem := rawPayloadCipherValueEncryptedData(t, payload)
+	_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(splitDecoded-1).Decrypt(t.Context(), elem)
+	require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
 }
 
 // TestEncryptedKeyCipherValueSplitAcrossNodes covers a CipherValue whose

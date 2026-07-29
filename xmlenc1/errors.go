@@ -35,6 +35,14 @@ var (
 	// caller handling one must be able to tell which limit to raise.
 	ErrEncryptedKeyBytesExceeded = errors.New("xmlenc1: EncryptedKey ciphertext exceeds the byte budget")
 
+	// ErrCipherValueBytesExceeded is returned when an EncryptedData payload
+	// CipherValue exceeds the Decryptor's effective byte budget. The payload
+	// may arrive as many text or CDATA nodes, so this limit is separate from
+	// the parser's per-node content limit. Decryptor.MaxCipherValueBytes owns
+	// the budget, including its effective-limit rules. See also
+	// DefaultMaxCipherValueBytes.
+	ErrCipherValueBytesExceeded = errors.New("xmlenc1: EncryptedData CipherValue exceeds the byte budget")
+
 	// ErrInvalidPadding names invalid PKCS#7 padding. Decryption never
 	// returns it: distinguishing a padding failure from any other CBC
 	// failure is exactly what a padding oracle needs, so decryptCBC
