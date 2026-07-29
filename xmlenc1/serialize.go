@@ -134,6 +134,31 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 		return nil, err
 	}
 
+	// Child order follows the xenc-schema EncryptionMethodType content model:
+	// a sequence of xenc:KeySize?, then xenc:OAEPparams?, then
+	// <any namespace="##other" maxOccurs="unbounded">. ds:DigestMethod and
+	// xenc11:MGF are foreign-namespace children reachable only through that
+	// trailing wildcard, so they come after xenc:OAEPparams; the wildcard does
+	// not make the order lax, since ##other excludes the xenc namespace and can
+	// never match xenc:OAEPparams. This package emits no xenc:KeySize, so the
+	// sequence is OAEPparams first and the two foreign children after it.
+	if len(em.OAEPParams) > 0 {
+		params, err := doc.CreateElement("OAEPparams")
+		if err != nil {
+			return nil, err
+		}
+		if err := params.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
+			return nil, err
+		}
+		encoded := base64.StdEncoding.EncodeToString(em.OAEPParams)
+		if err := params.AddChild(doc.CreateText([]byte(encoded))); err != nil {
+			return nil, err
+		}
+		if err := elem.AddChild(params); err != nil {
+			return nil, err
+		}
+	}
+
 	if em.DigestMethod != "" {
 		dm, err := doc.CreateElement("DigestMethod")
 		if err != nil {
@@ -162,23 +187,6 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 			return nil, err
 		}
 		if err := elem.AddChild(mgf); err != nil {
-			return nil, err
-		}
-	}
-
-	if len(em.OAEPParams) > 0 {
-		params, err := doc.CreateElement("OAEPparams")
-		if err != nil {
-			return nil, err
-		}
-		if err := params.SetActiveNamespace(nsPrefixEnc, NamespaceXMLEnc); err != nil {
-			return nil, err
-		}
-		encoded := base64.StdEncoding.EncodeToString(em.OAEPParams)
-		if err := params.AddChild(doc.CreateText([]byte(encoded))); err != nil {
-			return nil, err
-		}
-		if err := elem.AddChild(params); err != nil {
 			return nil, err
 		}
 	}
