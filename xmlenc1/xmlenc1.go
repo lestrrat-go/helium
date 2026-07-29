@@ -953,11 +953,13 @@ func resolveDecryptBlockAlgorithm(cfg *decryptConfig, ed *EncryptedData) (string
 		}
 		return cfg.blockAlgorithm, nil
 	}
-	// A present EncryptionMethod speaks for the document even when its
-	// Algorithm attribute is empty, which the xenc schema does not allow: the
-	// caller's URI must not stand in for a malformed declaration, so an empty
-	// declared algorithm conflicts like any other mismatch and an unsupported
-	// URI is reported where it always was.
+	// A present EncryptionMethod always carries a non-empty Algorithm:
+	// parseEncryptionMethod refuses an empty one as ErrMalformedEncrypted while
+	// the document is read, as the xenc schema requires it too. The caller's URI
+	// is therefore only ever compared against a real declaration and never
+	// stands in for a missing one. The match below relies on nothing more than
+	// that: an algorithm the caller did not state is taken from the document,
+	// and anything else must equal what the document declares.
 	declared := ed.EncryptionMethod.Algorithm
 	if cfg.blockAlgorithm == "" || cfg.blockAlgorithm == declared {
 		return declared, nil
