@@ -1,6 +1,8 @@
 package xmlenc1_test
 
 import (
+	"crypto/ecdh"
+	"crypto/rand"
 	"encoding/base64"
 	"runtime"
 	"strings"
@@ -1148,4 +1150,296 @@ func oaepParamsDecryptAlloc(t *testing.T, params string) uint64 {
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), oaepParamsOverLimit, "err=%v", err)
 	return after.TotalAlloc - before.TotalAlloc
+}
+
+// ecPublicKeyOverLimit is the fragment the dsig11:PublicKey size limit puts in
+// its error. Every parse failure in this package wraps ErrMalformedEncrypted,
+// so the sentinel alone cannot tell a value refused by the limit from one
+// crypto/ecdh or a later check refused.
+const ecPublicKeyOverLimit = "ECKeyValue PublicKey is over the"
+
+// ecPublicKeyNotCharacterData is the fragment the child-kind rule puts in its
+// error, and it is a DIFFERENT refusal from the size limit: an element child is
+// refused for what it is, before its size is ever weighed.
+const ecPublicKeyNotCharacterData = "which is not character data"
+
+// The dsig11:NamedCurve URIs of the three curves this package supports. A
+// curve is named by the OID URN of its named-curve object identifier.
+const (
+	ecCurveURIP256 = "urn:oid:1.2.840.10045.3.1.7"
+	ecCurveURIP384 = "urn:oid:1.3.132.0.34"
+	ecCurveURIP521 = "urn:oid:1.3.132.0.35"
+)
+
+// ecKeyValueEncryptedData builds an EncryptedData whose EncryptedKey protects
+// its session key by ECDH-ES, with children written verbatim as the child
+// markup of the dsig11:ECKeyValue. Writing that markup straight into the
+// document is the only way to put a chosen child ORDER, and a chosen lexical
+// form of the point, in front of the parse.
+//
+// The wrapped key and the payload ciphertext are junk: every case below is
+// decided while the document is read, so none of them reaches any crypto.
+func ecKeyValueEncryptedData(t *testing.T, children string) *helium.Element {
+	t.Helper()
+	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`" xmlns:dsig11="`+xmlenc1.NamespaceDSig11+`" xmlns:xenc11="`+xmlenc1.NamespaceXMLEnc11+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES128GCM11+`"/>`+
+		`<ds:KeyInfo><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="`+xmlenc1.AES128KeyWrap+`"/>`+
+		`<ds:KeyInfo><xenc:AgreementMethod Algorithm="`+xmlenc1.ECDHES+`">`+
+		`<xenc11:KeyDerivationMethod Algorithm="`+xmlenc1.ConcatKDF+`"><xenc11:ConcatKDFParams><ds:DigestMethod Algorithm="`+xmlenc1.DigestSHA256+`"/></xenc11:ConcatKDFParams></xenc11:KeyDerivationMethod>`+
+		`<xenc:OriginatorKeyInfo><ds:KeyValue><dsig11:ECKeyValue>`+children+`</dsig11:ECKeyValue></ds:KeyValue></xenc:OriginatorKeyInfo>`+
+		`</xenc:AgreementMethod></ds:KeyInfo>`+
+		`<xenc:CipherData><xenc:CipherValue>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedKey></ds:KeyInfo>`+
+		`<xenc:CipherData><xenc:CipherValue>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
+// ecKeyValueChildren renders the two children of a dsig11:ECKeyValue with the
+// NamedCurve either before or after the PublicKey. The schema puts no order on
+// them, so both orders are documents the parse has to read, and which one the
+// document chose must not decide what the PublicKey walk may spend.
+func ecKeyValueChildren(curveURI, publicKey string, namedCurveFirst bool) string {
+	curve := `<dsig11:NamedCurve URI="` + curveURI + `"/>`
+	key := `<dsig11:PublicKey>` + publicKey + `</dsig11:PublicKey>`
+	if namedCurveFirst {
+		return curve + key
+	}
+	return key + curve
+}
+
+// ecPublicKeyPoint returns the SEC1 uncompressed encoding of a freshly
+// generated public key on curve, which is the octet string a conforming
+// dsig11:PublicKey carries.
+func ecPublicKeyPoint(t *testing.T, curve ecdh.Curve) []byte {
+	t.Helper()
+	key, err := curve.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	return key.PublicKey().Bytes()
+}
+
+// parseECPublicKey parses an ECDH-ES EncryptedData built from children and
+// returns the originator public key the parse kept.
+func parseECPublicKey(t *testing.T, children string) []byte {
+	t.Helper()
+	ed, err := xmlenc1.ParseEncryptedDataForTest(ecKeyValueEncryptedData(t, children))
+	require.NoError(t, err)
+	require.Len(t, ed.EncryptedKeys, 1)
+	require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod)
+	require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod.OriginatorKey)
+	return ed.EncryptedKeys[0].AgreementMethod.OriginatorKey.PublicKey
+}
+
+// TestECPublicKeyBound covers the decoded-size limit on the dsig11:PublicKey of
+// an ECDH-ES originator key. The element is read while the document is parsed,
+// so it is reached before any key is resolved and before anything the document
+// says has been authenticated.
+//
+// The limit is the largest encoding across ALL THREE supported curves and not
+// the selected curve's own size, because the document decides the child order:
+// NamedCurve may legally follow PublicKey, and a document carrying no
+// NamedCurve at all still has its PublicKey read before the missing-curve error
+// is raised. So at the moment the value is weighed there may be no curve to
+// size it by.
+func TestECPublicKeyBound(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		curve ecdh.Curve
+		uri   string
+	}{
+		{name: "P-256", curve: ecdh.P256(), uri: ecCurveURIP256},
+		{name: "P-384", curve: ecdh.P384(), uri: ecCurveURIP384},
+		// P-521's 133-octet encoding is the boundary the limit is set at, so
+		// this case is what proves the limit admits every conforming key.
+		{name: "P-521", curve: ecdh.P521(), uri: ecCurveURIP521},
+	} {
+		t.Run("a "+tc.name+" key parses", func(t *testing.T) {
+			point := ecPublicKeyPoint(t, tc.curve)
+			require.LessOrEqual(t, len(point), xmlenc1.MaxECPublicKeyBytesForTest)
+			encoded := base64.StdEncoding.EncodeToString(point)
+
+			// Both child orders, because the value is weighed against the
+			// all-curves limit either way.
+			for _, namedCurveFirst := range []bool{true, false} {
+				require.Equal(t, point, parseECPublicKey(t, ecKeyValueChildren(tc.uri, encoded, namedCurveFirst)),
+					"namedCurveFirst=%v", namedCurveFirst)
+			}
+		})
+	}
+
+	// A genuine key whose NamedCurve follows it is the ordering that makes the
+	// all-curves limit necessary, and it must still parse to the same point.
+	t.Run("a NamedCurve after the PublicKey parses", func(t *testing.T) {
+		point := ecPublicKeyPoint(t, ecdh.P256())
+		children := ecKeyValueChildren(ecCurveURIP256, base64.StdEncoding.EncodeToString(point), false)
+		require.Equal(t, point, parseECPublicKey(t, children))
+	})
+
+	// Splitting the value into CDATA sections is what defeats the XML parser's
+	// per-node content cap, which bounds one indivisible run of characters and
+	// not their concatenation. The limit is charged on the whole value, so the
+	// split buys nothing.
+	t.Run("an over-limit value split across CDATA sections is rejected", func(t *testing.T) {
+		oversized := splitIntoNodes(strings.Repeat("A", 64<<10), 64)
+		for _, namedCurveFirst := range []bool{true, false} {
+			_, err := xmlenc1.ParseEncryptedDataForTest(ecKeyValueEncryptedData(t, ecKeyValueChildren(ecCurveURIP256, oversized, namedCurveFirst)))
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+			require.Contains(t, err.Error(), ecPublicKeyOverLimit, "namedCurveFirst=%v", namedCurveFirst)
+		}
+	})
+
+	// Sub-quantum children are the sharper form of the same trick: counting
+	// each child alone would report zero for every three-character piece.
+	t.Run("an over-limit value split into sub-quantum children is rejected", func(t *testing.T) {
+		oversized := splitIntoNodes(strings.Repeat("A", 64<<10), 3)
+		_, err := xmlenc1.ParseEncryptedDataForTest(ecKeyValueEncryptedData(t, ecKeyValueChildren(ecCurveURIP256, oversized, true)))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), ecPublicKeyOverLimit)
+	})
+
+	// With no NamedCurve at all there is no curve to size the value by, and the
+	// missing-curve error is only raised once the whole child list has been
+	// read — so the limit is what has to refuse this document.
+	t.Run("an over-limit value with no NamedCurve is refused by the limit", func(t *testing.T) {
+		oversized := splitIntoNodes(strings.Repeat("A", 64<<10), 64)
+		_, err := xmlenc1.ParseEncryptedDataForTest(ecKeyValueEncryptedData(t, `<dsig11:PublicKey>`+oversized+`</dsig11:PublicKey>`))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), ecPublicKeyOverLimit)
+	})
+
+	// The limit measures decoded octets, so the XML whitespace
+	// xs:base64Binary permits between characters neither counts against a legal
+	// key nor lets an oversized value through.
+	t.Run("a whitespace-wrapped key parses", func(t *testing.T) {
+		point := ecPublicKeyPoint(t, ecdh.P521())
+		encoded := base64.StdEncoding.EncodeToString(point)
+		wrapped := " \t\n" + strings.Join(strings.Split(encoded, ""), " ") + "\n\t "
+		require.Equal(t, point, parseECPublicKey(t, ecKeyValueChildren(ecCurveURIP521, wrapped, true)))
+	})
+
+	// The same value spread over CDATA sections, including sub-quantum ones
+	// where a quantum and even padding straddle a child boundary.
+	t.Run("a CDATA-split key parses", func(t *testing.T) {
+		point := ecPublicKeyPoint(t, ecdh.P521())
+		encoded := base64.StdEncoding.EncodeToString(point)
+		for _, chunk := range []int{1, 2, 3, 5, 64} {
+			require.Equal(t, point, parseECPublicKey(t, ecKeyValueChildren(ecCurveURIP521, splitIntoNodes(encoded, chunk), true)),
+				"chunk=%d", chunk)
+		}
+	})
+
+	// A comment carries no character information item, so it is skipped rather
+	// than spliced into the base64 stream — which is what would decode a point
+	// the document never wrote. A processing instruction is skipped for the
+	// same reason.
+	t.Run("comments and processing instructions are ignored", func(t *testing.T) {
+		point := ecPublicKeyPoint(t, ecdh.P256())
+		encoded := base64.StdEncoding.EncodeToString(point)
+		for _, value := range []string{
+			encoded[:8] + `<!-- a comment -->` + encoded[8:],
+			encoded[:8] + `<?target data?>` + encoded[8:],
+			`<!--c-->` + encoded + `<?t?>`,
+		} {
+			require.Equal(t, point, parseECPublicKey(t, ecKeyValueChildren(ecCurveURIP256, value, true)), "value=%s", value)
+		}
+	})
+
+	// An element child is refused for what it is, before its size is weighed.
+	// dsig11:PublicKey is xs:base64Binary, a simple type, so one makes the
+	// content invalid — and reading it would cost its whole subtree, since
+	// helium builds an element's Content from every descendant.
+	t.Run("an element child is rejected", func(t *testing.T) {
+		point := base64.StdEncoding.EncodeToString(ecPublicKeyPoint(t, ecdh.P256()))
+		for _, value := range []string{
+			`<junk>` + point + `</junk>`,
+			point + `<junk>   \t   </junk>`,
+		} {
+			_, err := xmlenc1.ParseEncryptedDataForTest(ecKeyValueEncryptedData(t, ecKeyValueChildren(ecCurveURIP256, value, true)))
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted, "value=%s", value)
+			require.Contains(t, err.Error(), ecPublicKeyNotCharacterData, "value=%s", value)
+		}
+	})
+}
+
+// TestECPublicKeyAllocation pins what a dsig11:PublicKey may ALLOCATE, which
+// the error assertions above cannot see. The limit governs decoded octets, but
+// the lexical text an attacker wraps around them is unbounded: xs:base64Binary
+// permits XML whitespace between characters and the value may be spread over as
+// many text and CDATA children as the document likes. Joining that text into
+// one string before the limit is applied makes the limit an accounting
+// formality — the memory is allocated by the time the error is returned — and
+// for a value the limit ACCEPTS it is never refused at all, so a test that only
+// checked for the rejection would miss half of it.
+//
+// The bounds are one copy of the lexical text plus a fixed slack. One copy is
+// the floor and cannot be removed here: a DOM hands out a copy per node and
+// offers no read-only view, so weighing a value costs one copy of its text.
+// Everything above that floor is what this test refuses.
+//
+// Each case reads the process-wide TotalAlloc delta across a parse, so these
+// subtests must NOT run in parallel: a concurrent test's allocations would
+// pollute the delta.
+func TestECPublicKeyAllocation(t *testing.T) {
+	// no t.Parallel(): isolated so each delta reflects only its own parse.
+
+	// oaepAllocLexical and oaepAllocSlack describe the lexical envelope an
+	// attacker writes around any xs:base64Binary value, so the same figures
+	// apply here. The text is split into CDATA sections so no single child comes
+	// near the XML parser's own per-node content cap, which is not the limit
+	// under test here.
+	const (
+		chunk   = oaepAllocLexical / 16
+		oneRead = oaepAllocLexical + oaepAllocSlack
+	)
+
+	// Only space and tab are used as whitespace: an XML parser folds CRLF to
+	// LF, which would make the text the DOM holds shorter than the text written
+	// here and the bounds above harder to read.
+	padding := strings.Repeat(" \t", oaepAllocLexical/2)
+	oversized := strings.Repeat("A", oaepAllocLexical)
+	accepted := base64.StdEncoding.EncodeToString(ecPublicKeyPoint(t, ecdh.P256()))
+
+	for _, tc := range []struct {
+		name string
+		// value is the raw PublicKey markup, and rejected says whether the
+		// limit must refuse it — a value it accepts still leaves the parse
+		// succeeding, since the point is a real one.
+		value    string
+		rejected bool
+	}{
+		{
+			name:     "over-limit value split across CDATA sections",
+			value:    splitIntoNodes(oversized, chunk),
+			rejected: true,
+		},
+		{
+			// Nothing here is ever refused: the point is a conforming one and
+			// the whitespace after it is not counted at all. Allocating twice
+			// for it would be amplification with no error anywhere to notice
+			// it, which a rejection-only test would miss.
+			name:  "accepted key with whitespace split across CDATA sections",
+			value: accepted + splitIntoNodes(padding, chunk),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			elem := ecKeyValueEncryptedData(t, ecKeyValueChildren(ecCurveURIP256, tc.value, true))
+
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+			_, err := xmlenc1.ParseEncryptedDataForTest(elem)
+			runtime.ReadMemStats(&after)
+
+			if tc.rejected {
+				require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+				require.Contains(t, err.Error(), ecPublicKeyOverLimit, "err=%v", err)
+			}
+			if !tc.rejected {
+				require.NoError(t, err)
+			}
+
+			allocated := after.TotalAlloc - before.TotalAlloc
+			require.Less(t, allocated, uint64(oneRead), "parsing %d lexical bytes allocated %d bytes", len(tc.value), allocated)
+		})
+	}
 }

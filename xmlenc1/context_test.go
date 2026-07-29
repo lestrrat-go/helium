@@ -508,10 +508,18 @@ func TestDecryptObservesContextPerCarriedKeyNameChild(t *testing.T) {
 }
 
 // TestDecryptObservesContextPerPublicKeyChild pins the interior of the walk
-// that collects a dsig11:PublicKey point out of an ECDH-ES originator key.
-// Like CarriedKeyName it is joined from every child, at every depth the join
-// reaches, and charged against no budget, so the document alone decides how
-// long that walk runs.
+// that collects a dsig11:PublicKey point out of an ECDH-ES originator key. The
+// children that carry no characters at all are charged against no budget, so
+// how many of them a document puts in the element is the document's choice
+// alone, and a walk that observed the context only at its ends would read every
+// one of them after the caller cancelled.
+//
+// Only the flat shape is exercised, because the value is xs:base64Binary and
+// the walk therefore reads the element's OWN character-data children and goes
+// no deeper: an element child is refused outright, so there is no descendant
+// list to observe. The comments below it are the cheapest children the walk can
+// be handed — they carry no characters, so the point is the same however many of
+// them the document repeats.
 func TestDecryptObservesContextPerPublicKeyChild(t *testing.T) {
 	sessionKey := randKey(t, 32)
 	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte("payload"))
@@ -527,67 +535,65 @@ func TestDecryptObservesContextPerPublicKeyChild(t *testing.T) {
 	// dsig11:NamedCurve names its curve by OID URN; this is P-256's.
 	const namedCurveP256 = "urn:oid:1.2.840.10045.3.1.7"
 
-	for _, shape := range childShapes() {
-		t.Run(shape.name, func(t *testing.T) {
-			// The EncryptedKey's own ciphertext is never unwrapped: the Decryptor
-			// below is given the session key directly, which returns before candidate
-			// key resolution, so the whole document is still parsed and no ECDH
-			// private key is needed.
-			encryptedData := func(t *testing.T, comments int) *helium.Element {
-				t.Helper()
-				doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`" xmlns:dsig11="`+xmlenc1.NamespaceDSig11+`">`+
-					`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
-					`<ds:KeyInfo><xenc:EncryptedKey>`+
-					`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
-					`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(make([]byte, 40))+`</xenc:CipherValue></xenc:CipherData>`+
-					`<ds:KeyInfo><xenc:AgreementMethod Algorithm="`+xmlenc1.ECDHES+`">`+
-					`<xenc:OriginatorKeyInfo><ds:KeyValue><dsig11:ECKeyValue>`+
-					`<dsig11:NamedCurve URI="`+namedCurveP256+`"/>`+
-					`<dsig11:PublicKey>`+base64.StdEncoding.EncodeToString(point)+shape.children(comments)+`</dsig11:PublicKey>`+
-					`</dsig11:ECKeyValue></ds:KeyValue></xenc:OriginatorKeyInfo>`+
-					`</xenc:AgreementMethod></ds:KeyInfo>`+
-					`</xenc:EncryptedKey></ds:KeyInfo>`+
-					`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipher)+`</xenc:CipherValue></xenc:CipherData>`+
-					`</xenc:EncryptedData>`)
-				return doc.DocumentElement()
-			}
-
-			const (
-				few  = 4
-				many = 4096
-			)
-
-			publicKey := func(t *testing.T, comments int) []byte {
-				t.Helper()
-				ed, err := xmlenc1.ParseEncryptedDataForTest(encryptedData(t, comments))
-				require.NoError(t, err)
-				require.Len(t, ed.EncryptedKeys, 1)
-				require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod)
-				require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod.OriginatorKey)
-				return ed.EncryptedKeys[0].AgreementMethod.OriginatorKey.PublicKey
-			}
-			require.Equal(t, point, publicKey(t, few))
-			require.Equal(t, point, publicKey(t, many))
-
-			decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
-			pollsFor := func(t *testing.T, comments int) int {
-				t.Helper()
-				counter := newPollCounter()
-				plaintext, err := decryptor.DecryptBytes(counter, encryptedData(t, comments))
-				require.NoError(t, err)
-				require.Equal(t, []byte("payload"), plaintext)
-				return counter.calls()
-			}
-
-			fewPolls := pollsFor(t, few)
-			require.GreaterOrEqual(t, pollsFor(t, many)-fewPolls, many-few,
-				"the PublicKey walk must observe the context once per child, at every depth it reads")
-
-			ctx := newCancelAfterErrCalls(fewPolls)
-			_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
-			require.ErrorIs(t, err, context.Canceled)
-		})
+	// The EncryptedKey's own ciphertext is never unwrapped: the Decryptor below
+	// is given the session key directly, which returns before candidate key
+	// resolution, so the whole document is still parsed and no ECDH private key
+	// is needed.
+	encryptedData := func(t *testing.T, comments int) *helium.Element {
+		t.Helper()
+		doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`" xmlns:dsig11="`+xmlenc1.NamespaceDSig11+`">`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+			`<ds:KeyInfo><xenc:EncryptedKey>`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
+			`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(make([]byte, 40))+`</xenc:CipherValue></xenc:CipherData>`+
+			`<ds:KeyInfo><xenc:AgreementMethod Algorithm="`+xmlenc1.ECDHES+`">`+
+			`<xenc:OriginatorKeyInfo><ds:KeyValue><dsig11:ECKeyValue>`+
+			`<dsig11:NamedCurve URI="`+namedCurveP256+`"/>`+
+			`<dsig11:PublicKey>`+base64.StdEncoding.EncodeToString(point)+flatChildren(comments)+`</dsig11:PublicKey>`+
+			`</dsig11:ECKeyValue></ds:KeyValue></xenc:OriginatorKeyInfo>`+
+			`</xenc:AgreementMethod></ds:KeyInfo>`+
+			`</xenc:EncryptedKey></ds:KeyInfo>`+
+			`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipher)+`</xenc:CipherValue></xenc:CipherData>`+
+			`</xenc:EncryptedData>`)
+		return doc.DocumentElement()
 	}
+
+	const (
+		few  = 4
+		many = 4096
+	)
+
+	// The two documents must differ only in how long the walk runs, never in
+	// what it collects, so the point is read back from both.
+	publicKey := func(t *testing.T, comments int) []byte {
+		t.Helper()
+		ed, err := xmlenc1.ParseEncryptedDataForTest(encryptedData(t, comments))
+		require.NoError(t, err)
+		require.Len(t, ed.EncryptedKeys, 1)
+		require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod)
+		require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod.OriginatorKey)
+		return ed.EncryptedKeys[0].AgreementMethod.OriginatorKey.PublicKey
+	}
+	require.Equal(t, point, publicKey(t, few))
+	require.Equal(t, point, publicKey(t, many))
+
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+	pollsFor := func(t *testing.T, comments int) int {
+		t.Helper()
+		counter := newPollCounter()
+		plaintext, err := decryptor.DecryptBytes(counter, encryptedData(t, comments))
+		require.NoError(t, err)
+		require.Equal(t, []byte("payload"), plaintext)
+		return counter.calls()
+	}
+
+	fewPolls := pollsFor(t, few)
+	require.GreaterOrEqual(t, pollsFor(t, many)-fewPolls, many-few,
+		"the PublicKey walk must observe the context once per child")
+
+	ctx := newCancelAfterErrCalls(fewPolls)
+	_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 // TestCollectedValueMatchesSharedTextContent pins that reading a value under a

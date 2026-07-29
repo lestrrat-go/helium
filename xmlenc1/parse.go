@@ -360,13 +360,9 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 			}
 			curve = named
 		case "PublicKey":
-			value, err := textContent(ctx, e)
+			decoded, err := decodeECPublicKey(ctx, e)
 			if err != nil {
 				return err
-			}
-			decoded, err := xmlbase64.DecodeString(value)
-			if err != nil {
-				return fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrMalformedEncrypted, err)
 			}
 			publicKey = decoded
 		}
@@ -381,6 +377,87 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 		return nil, abort(ctx, fmt.Errorf("%w: invalid EC public key: %v", ErrMalformedEncrypted, err))
 	}
 	return &ECKeyValue{Curve: curve, PublicKey: publicKey}, nil
+}
+
+// maxECPublicKeyBytes bounds the decoded octet length of one dsig11:PublicKey
+// element inside a dsig11:ECKeyValue. It is the single statement of that limit;
+// decodeECPublicKey applies it.
+//
+// Unlike this package's other ceilings, it is not a policy choice: it is the
+// largest public key the three supported curves can encode. dsig11:PublicKey
+// carries a SEC1 uncompressed point, one 0x04 tag octet followed by the two
+// field elements, so it is 65 octets on P-256, 97 on P-384 and 133 on P-521 —
+// and [crypto/ecdh] accepts nothing else, refusing the compressed form and every
+// over-length input on all three. A value over 133 octets is therefore rejected
+// by the curve whatever it holds, and refusing it before it is built only moves
+// the same verdict earlier.
+//
+// It is the maximum across ALL THREE curves rather than the selected curve's own
+// size, because at the moment the value is weighed there may be no selected
+// curve to weigh it by. dsig11:ECKeyValue puts no order on its children, so
+// dsig11:NamedCurve may follow dsig11:PublicKey, and a document carrying no
+// NamedCurve at all still has its PublicKey read before the missing-curve error
+// is raised. A per-curve bound would hold only for the one child order.
+const maxECPublicKeyBytes = 133
+
+// maxECPublicKeyChars is the most base64 characters a value within
+// maxECPublicKeyBytes can hold: ceil(n/3) quanta of four characters each. It
+// sizes the buffer decodeECPublicKey assembles and tells that walk when to stop,
+// so what is being built is sized by the limit and never by the document.
+//
+// Stopping there is only ever early, never a different verdict, for the reason
+// maxOAEPParamsChars states: past this count a value the decoder would accept
+// has at least one more whole quantum and so is over the limit, and a value the
+// decoder would reject is charged its full quantum count, which is over it too.
+const maxECPublicKeyChars = (maxECPublicKeyBytes + 2) / 3 * 4
+
+// decodeECPublicKey decodes elem's character data into an originator public
+// key, refusing a value over maxECPublicKeyBytes before anything is built from
+// it.
+//
+// The element is read while the document is parsed, so it is reached before any
+// key is resolved and before anything the document says has been authenticated,
+// and the curve is the only thing that would otherwise refuse an oversized
+// value — after the whole of it has been materialized twice, once as the joined
+// lexical text and once as its decoded form.
+//
+// The walk is decodeOAEPParams': it reads each child exactly once, folds the
+// child into an xmlbase64.Counter, which carries the counting state across every
+// child boundary — a base64 quantum, and padding itself, may be split between
+// children — and appends only the base64 characters. It stops the moment those
+// characters pass maxECPublicKeyChars, and the exact decoded-length test runs on
+// the counter afterwards. So what the parse RETAINS is bounded by the limit and
+// nothing else, however much whitespace or however many CDATA sections a point
+// is spread over, and the one remaining cost is the copy
+// [helium.Text.Content] hands out per child — the floor a DOM imposes, paid
+// exactly once. base64CharacterData decides which children may be read at all,
+// and the walk is over EVERY child kind rather than only elements, so it goes
+// through eachSibling directly.
+func decodeECPublicKey(ctx context.Context, elem *helium.Element) ([]byte, error) {
+	var counter xmlbase64.Counter
+	chars := make([]byte, 0, maxECPublicKeyChars)
+	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
+		text, err := base64CharacterData(child, "ECKeyValue PublicKey")
+		if err != nil {
+			return err
+		}
+		counter.Add(text)
+		if counter.Chars() > maxECPublicKeyChars {
+			return fmt.Errorf("%w: ECKeyValue PublicKey is over the %d byte limit", ErrMalformedEncrypted, maxECPublicKeyBytes)
+		}
+		chars = xmlbase64.AppendStripped(chars, text)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if counter.DecodedLen() > maxECPublicKeyBytes {
+		return nil, abort(ctx, fmt.Errorf("%w: ECKeyValue PublicKey is over the %d byte limit", ErrMalformedEncrypted, maxECPublicKeyBytes))
+	}
+	decoded, err := xmlbase64.DecodeString(string(chars))
+	if err != nil {
+		return nil, abort(ctx, fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrMalformedEncrypted, err))
+	}
+	return decoded, nil
 }
 
 func ecdhCurveForURI(uri string) (ecdh.Curve, error) {
