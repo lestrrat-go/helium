@@ -479,11 +479,8 @@ func parseX509Data(ctx context.Context, budget *verifyBudget, elem *helium.Eleme
 		}
 		switch domutil.LocalName(e) {
 		case "X509Certificate":
-			derBytes, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			derBytes, err := decodeBudgeted(e, budget, ErrInvalidKeyInfo, "X509Certificate")
 			if err != nil {
-				return fmt.Errorf("%w: invalid X509Certificate base64: %v", ErrInvalidKeyInfo, err)
-			}
-			if err := budget.consume(len(derBytes)); err != nil {
 				return err
 			}
 			cert, err := x509.ParseCertificate(derBytes)

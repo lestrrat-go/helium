@@ -8,7 +8,6 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
-	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
 // maxRetrievalMethodDepth caps how many ds:RetrievalMethod links are followed
@@ -369,17 +368,14 @@ func interpretRetrievalElement(ctx context.Context, budget *verifyBudget, target
 		}
 		return parseX509Data(ctx, budget, target, data)
 	case TypeRawX509Certificate:
-		der, err := xmlbase64.DecodeString(domutil.TextContent(target))
-		if err != nil {
-			return fmt.Errorf("%w: invalid rawX509Certificate base64: %v", ErrInvalidKeyInfo, err)
-		}
 		// Count the retrieved certificate against the same per-Verify budget as an
 		// inline ds:X509Certificate, so a same-document RetrievalMethod cannot
 		// decode and parse certificate octets that escape the caps.
-		if err := budget.addKeyInfoEntry(); err != nil {
+		der, err := decodeBudgeted(target, budget, ErrInvalidKeyInfo, "rawX509Certificate")
+		if err != nil {
 			return err
 		}
-		if err := budget.consume(len(der)); err != nil {
+		if err := budget.addKeyInfoEntry(); err != nil {
 			return err
 		}
 		cert, err := x509.ParseCertificate(der)

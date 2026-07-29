@@ -3,12 +3,178 @@
 // space permits such whitespace, and real-world XML Signature/Encryption
 // producers routinely line-wrap and indent base64. Go's encoding/base64
 // tolerates CR/LF but rejects space and tab, so all four are stripped first.
+//
+// A value in a document may also be spread over any number of text and CDATA
+// children, so [DecodeElement] and [Counter] work straight off those children:
+// a caller with a byte budget can weigh a value and charge for it before
+// anything the size of its lexical text is ever built.
 package xmlbase64
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
+
+	"github.com/lestrrat-go/helium"
 )
+
+// DecodeElement charges charge for the base64 content of e's character-data
+// children and then decodes it. It never builds the value's lexical text.
+//
+// That distinction is the whole point of taking an element rather than a
+// string. xs:base64Binary permits XML whitespace between characters, and a
+// value's text may arrive as any number of text and CDATA children, so the
+// lexical length an attacker controls has no relation to the decoded bytes a
+// budget charges. Joining the children into one string first would allocate
+// that lexical length before the budget could refuse it, and would keep
+// allocating it for every value the budget accepts, which leaves the accepted
+// case unbounded as well.
+//
+// So one pass counts the value with a [Counter], which carries the counting
+// state across each child boundary — a base64 quantum, and padding itself, may
+// be split between children — and only then is the charge made. The second pass
+// builds just the characters the decoder will see.
+//
+// Text, CDATA, and entity-reference children are read, and nothing else is.
+// That is a bound rather than mere tidiness: an element child's Content is the
+// concatenation of that child's WHOLE subtree, aggregated into one buffer, so
+// reading a single element child would materialize an arbitrarily large tree
+// before any charge — exactly what counting first exists to prevent.
+//
+// An element child is refused with an error rather than skipped, because
+// xs:base64Binary is a simple type and a simple content type admits only
+// character information items. Neither ds:DigestValue (a restriction of
+// xs:base64Binary) nor ds:SignatureValue (a simpleContent extension of it) may
+// legally contain one, so refusing it is the more correct reading of the value
+// as well as the bound. Every child kind not named here is refused with it.
+//
+// An entity reference IS read, because it stands for character data and a
+// conforming document may write any part of a value as one. It is read through
+// [entityReplacementText], which takes one bounded step to the declared
+// replacement literal and no further, so admitting it reintroduces no
+// aggregation. A replacement that is not base64 — a nested reference, which
+// stays the unexpanded literal "&inner;", or markup — simply leaves the value
+// undecodable, exactly as the same characters written inline would. A reference
+// the parser linked no declaration to contributes nothing, which is what
+// canonicalization makes of it too; see [entityReplacementText].
+//
+// Comment and processing-instruction children ARE skipped instead: per the XML
+// infoset neither contributes a character information item, so splicing their
+// text into the base64 stream would corrupt a legitimately commented value.
+//
+// What is held is therefore bounded by what charge approved: the stripped
+// characters at most four thirds of it, the decoded bytes exactly it, and
+// nothing at all scaling with the lexical length. The copy
+// [helium.Text.Content] returns per child is the floor, so the peak is the
+// largest single child rather than the whole value.
+//
+// charge's error is returned unchanged so a caller can pass its own
+// resource-limit error straight through; every other error returned is a
+// refused child or the encoding/base64 decode failure, for the caller to wrap
+// with what it was decoding. A refused child is reported before the charge
+// runs, and the charge precedes the decode, so a value that is both over budget
+// and invalid base64 reports the charge error.
+func DecodeElement(e *helium.Element, charge func(int) error) ([]byte, error) {
+	var counter Counter
+	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+		content, err := characterData(child)
+		if err != nil {
+			return nil, err
+		}
+		counter.Add(content)
+	}
+	if err := charge(counter.DecodedLen()); err != nil {
+		return nil, err
+	}
+	chars := make([]byte, 0, counter.Chars())
+	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
+		// Every child was accepted by the counting pass above, so the only
+		// error characterData can report here is one that pass already refused.
+		content, err := characterData(child)
+		if err != nil {
+			return nil, err
+		}
+		chars = AppendStripped(chars, content)
+	}
+	// The same decode DecodeString performs, minus the copy converting the
+	// already-stripped characters to a string, and sized at the count the
+	// charge approved rather than at encoding/base64's own padding-blind
+	// DecodedLen — see [Counter.DecodedLen].
+	decoded := make([]byte, counter.DecodedLen())
+	n, err := base64.StdEncoding.Decode(decoded, chars)
+	if err != nil {
+		return nil, err
+	}
+	return decoded[:n], nil
+}
+
+// characterData returns the character data n contributes to an xs:base64Binary
+// value: its content for a text or CDATA child, the referenced entity's
+// declared replacement text for an entity reference that has one, nil for a
+// child that contributes none — a comment, a processing instruction, or a
+// reference to an entity nothing declared — and an error for a child a simple
+// content type does not admit at all. [DecodeElement] documents why each kind
+// lands where it does.
+func characterData(n helium.Node) ([]byte, error) {
+	if t, ok := helium.AsNode[*helium.Text](n); ok {
+		return t.Content(), nil
+	}
+	if c, ok := helium.AsNode[*helium.CDATASection](n); ok {
+		return c.Content(), nil
+	}
+	if r, ok := helium.AsNode[*helium.EntityRef](n); ok {
+		return entityReplacementText(r)
+	}
+	if _, ok := helium.AsNode[*helium.Comment](n); ok {
+		return nil, nil
+	}
+	if _, ok := helium.AsNode[*helium.ProcessingInstruction](n); ok {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("xs:base64Binary value has a non-character child (%s %q)", n.Type(), n.Name())
+}
+
+// entityReplacementText returns the declared replacement text of the entity r
+// refers to, which is the character data r contributes to the value.
+//
+// Exactly one child is read — r's first, which the parser links to the declared
+// [helium.Entity] — and that shape is what keeps the read bounded.
+// [helium.Entity.Content] is a leaf accessor returning the raw replacement
+// literal: it expands no nested reference and recurses into no subtree, so the
+// cost is one copy of that literal, the same one-copy floor a text child
+// already has. Reading r.Content() instead would aggregate r's children, which
+// is bounded for a parser-built reference but not for a hand-built one carrying
+// an element. Walking past the first child would leave the value altogether:
+// the Entity's siblings are the remaining entity declarations of the DTD, not
+// more of this value.
+//
+// A reference with NO child contributes no characters and is not an error. That
+// is ordinary parser output, not a malformed tree: per XML 1.0 "Entity
+// Declared", a general entity that nothing declares is a VALIDITY error rather
+// than a well-formedness one once the document has an external subset the
+// processor did not read, or a parameter-entity reference, and is not
+// standalone="yes". A non-validating processor keeps going, so helium builds the
+// reference with no declaration linked to it. [helium.EntityRef.Content] is
+// likewise empty for it, and c14n canonicalizes such a reference by walking the
+// children it does not have, so reading it as no characters is what agrees with
+// the rest of the tree — a value whose base64 reader and canonicalizer disagreed
+// about the same document would reject signatures the canonical form accepts.
+//
+// A NON-NIL first child that is not an [helium.Entity] is refused. The parser
+// links a reference to its declared Entity or to nothing at all, so that shape
+// is reachable only from a caller-assembled DOM, and refusing it is what holds
+// the bound for one.
+func entityReplacementText(r *helium.EntityRef) ([]byte, error) {
+	first := r.FirstChild()
+	if first == nil {
+		return nil, nil
+	}
+	entity, ok := helium.AsNode[*helium.Entity](first)
+	if !ok {
+		return nil, fmt.Errorf("xs:base64Binary value has an entity reference with no entity declaration (%s %q)", r.Type(), r.Name())
+	}
+	return entity.Content(), nil
+}
 
 // DecodeString strips the four XML whitespace characters from s and
 // base64-decodes the result with StdEncoding. No other characters are
@@ -134,14 +300,19 @@ func (c *Counter) Chars() int {
 	return c.chars
 }
 
-// DecodedLen counts the bytes a DecodeString of the added pieces would need.
+// DecodedLen counts the decoded bytes of the added pieces.
 //
-// The count is exact for a value DecodeString accepts.
+// For a value the decoder accepts the count is exactly the decode's output
+// length, so a buffer sized from it holds the whole decode with nothing to
+// spare — which is what lets [DecodeElement] allocate precisely what it
+// charged. It is NOT the buffer encoding/base64 itself would allocate for the
+// same value: base64.DecodeString sizes from the character count alone and so
+// over-allocates by the padding count, up to 2 bytes.
 //
-// For one it rejects the count never falls below what the rejected decode
-// costs: encoding/base64 sizes its output buffer from the character count
-// alone and allocates it BEFORE validating a single character, so a count that
-// trusted a lexical form the decoder will refuse would let an arbitrarily
+// For a value the decoder rejects the count never falls below what the rejected
+// decode costs: encoding/base64 sizes its output buffer from the character
+// count alone and allocates it BEFORE validating a single character, so a count
+// that trusted a lexical form the decoder will refuse would let an arbitrarily
 // large value slip past a budget and still be allocated. Padding is therefore
 // only deducted from a value whose whole lexical shape is otherwise decodable:
 // a character count that is a multiple of four, at most two '=' and only at
@@ -151,14 +322,15 @@ func (c *Counter) Chars() int {
 //
 // This method is the only entry point to that count; there is deliberately no
 // package-level DecodedLen(string). The characters of a value weighed this way
-// — a CipherValue against a byte budget, an OAEPparams label against a fixed
-// limit — arrive as separate child nodes and are never joined into one string
-// before it is weighed, so no caller holds a whole value to pass. The
-// single-value form is a zero-allocation two lines — var c Counter; c.Add(b) —
-// and a package function would be an exported symbol in an internal package
-// with no callers. Both claims are checkable: grep the tree for DecodedLen
-// (every production call is in xmlenc1/parse.go), and measure c.Add with
-// testing.AllocsPerRun.
+// — a SignatureValue or DigestValue against a byte budget, a CipherValue
+// against one, an OAEPparams label against a fixed limit — arrive as separate
+// child nodes and are never joined into one string before it is weighed, so no
+// caller holds a whole value to pass. The single-value form is a
+// zero-allocation two lines — var c Counter; c.Add(b) — and a package function
+// would be an exported symbol in an internal package with no callers. Both
+// claims are checkable: grep the tree for DecodedLen (the charges in
+// [DecodeElement] and xmlenc1/parse.go are the only production calls), and
+// measure c.Add with testing.AllocsPerRun.
 func (c *Counter) DecodedLen() int {
 	// quanta is the buffer encoding/base64 allocates for c.chars characters.
 	quanta := c.chars / 4 * 3

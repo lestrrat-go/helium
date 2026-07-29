@@ -50,12 +50,16 @@ var (
 	// element exceeds one of the Verifier's parse-time resource caps before the
 	// SignatureValue is checked: too many ds:Reference elements
 	// ([Verifier.MaxReferences]), too many KeyInfo entries
-	// ([Verifier.MaxKeyInfoEntries]), or too many total base64-decoded bytes
-	// across DigestValue/SignatureValue/X509Certificate
+	// ([Verifier.MaxKeyInfoEntries]), or too many total certificate and signature
+	// octets — the DigestValue/SignatureValue/X509Certificate values plus
+	// whatever a ds:RetrievalMethod in KeyInfo pulls in
 	// ([Verifier.MaxDecodedBytes]). It also covers a ds:RetrievalMethod transform
 	// list that exceeds its fixed pre-verification step cap. The caps have
 	// conservative defaults and bound the decode/parse/transform work an unsigned
-	// document can force before verification rejects it.
+	// document can force before verification rejects it. A base64 value decoded
+	// off the document is charged against [Verifier.MaxDecodedBytes] before it is
+	// decoded, so a value that is both over the cap and invalid base64 reports
+	// this error rather than the base64 one.
 	ErrResourceLimitExceeded = errors.New("xmldsig1: verification resource limit exceeded")
 
 	// ErrAmbiguousReference is returned when a Reference URI resolves to more
