@@ -540,15 +540,19 @@ func TestEncryptorOAEPParamsBound(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
 	})
+}
 
 // TestOAEPEncryptionMethodWireOrder pins the child order the serializer writes
 // inside an RSA-OAEP xenc:EncryptionMethod. The xenc-schema EncryptionMethodType
 // content model is a sequence of xenc:KeySize?, then xenc:OAEPparams?, then
-// <any namespace="##other" maxOccurs="unbounded">. ds:DigestMethod and
-// xenc11:MGF are reachable only through that trailing wildcard, so both must
-// follow xenc:OAEPparams or the document is not schema valid. The wildcard does
-// not make the order lax: ##other excludes the xenc target namespace, so it can
-// never match xenc:OAEPparams.
+// <any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>.
+// ds:DigestMethod and xenc11:MGF are reachable only through that trailing
+// wildcard, so both must follow xenc:OAEPparams or the document is not schema
+// valid. The wildcard does not make the order lax, for two reasons: ##other
+// excludes the xenc target namespace, so it can never match xenc:OAEPparams;
+// and the laxly schema valid output xmlenc-core1 §3.1 asks for is bounded by
+// its own note to what xsd:ANY admits, so it excuses what those foreign
+// children contain rather than where the declared sequence puts them.
 //
 // The assertions are on byte offsets rather than on a golden document so the
 // test states the ordering rule instead of a snapshot of one serialization.

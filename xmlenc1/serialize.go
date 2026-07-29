@@ -136,12 +136,16 @@ func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*heliu
 
 	// Child order follows the xenc-schema EncryptionMethodType content model:
 	// a sequence of xenc:KeySize?, then xenc:OAEPparams?, then
-	// <any namespace="##other" maxOccurs="unbounded">. ds:DigestMethod and
-	// xenc11:MGF are foreign-namespace children reachable only through that
-	// trailing wildcard, so they come after xenc:OAEPparams; the wildcard does
-	// not make the order lax, since ##other excludes the xenc namespace and can
-	// never match xenc:OAEPparams. This package emits no xenc:KeySize, so the
-	// sequence is OAEPparams first and the two foreign children after it.
+	// <any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>.
+	// ds:DigestMethod and xenc11:MGF are foreign-namespace children reachable
+	// only through that trailing wildcard, so they come after xenc:OAEPparams.
+	// The wildcard does not make the order lax, for two reasons: ##other
+	// excludes the xenc namespace, so it can never match xenc:OAEPparams; and
+	// while xmlenc-core1 §3.1 asks only for laxly schema valid output, its own
+	// note bounds that allowance to what xsd:ANY admits, so it excuses what
+	// those foreign children contain rather than where the declared sequence
+	// puts them. This package emits no xenc:KeySize, so the sequence is
+	// OAEPparams first and the two foreign children after it.
 	if len(em.OAEPParams) > 0 {
 		params, err := doc.CreateElement("OAEPparams")
 		if err != nil {
