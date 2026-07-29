@@ -353,10 +353,22 @@ func TestEncryptionMethodCardinality(t *testing.T) {
 // decoder or a later check refused.
 const oaepParamsOverLimit = "OAEPparams is over the"
 
-// oaepParamsNotCharacterData is the fragment the leaf-only child rule puts in
-// its error, and it is a DIFFERENT refusal from the size limit: an element
-// child is refused for what it is, before its size is ever weighed.
+// oaepParamsNotCharacterData is the fragment the child-kind rule puts in its
+// error, and it is a DIFFERENT refusal from the size limit: an element child is
+// refused for what it is, before its size is ever weighed.
 const oaepParamsNotCharacterData = "which is not character data"
+
+// oaepParamsInvalid is the fragment the base64 decoder's refusal carries. An
+// entity reference contributes its DECLARED replacement text and nothing below
+// it, so an entity holding another reference or markup lands here rather than
+// being expanded into something decodable.
+const oaepParamsInvalid = "invalid OAEPparams"
+
+// oaepParamsNoEntityDecl is the fragment an entity reference with no resolved
+// entity carries. A parsed document cannot produce one — the parser rejects an
+// undeclared reference itself — so this is the caller-built shape, refused
+// rather than read some other way.
+const oaepParamsNoEntityDecl = "entity reference with no entity declaration"
 
 // oaepParamsEncryptedData builds an EncryptedData whose own EncryptionMethod
 // carries params as raw OAEPparams markup — text, CDATA sections, elements, or
@@ -388,6 +400,36 @@ func oaepParamsKeyEncryptedData(t *testing.T, params string) *helium.Element {
 		`<xenc:CipherData><xenc:CipherValue>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</xenc:CipherValue></xenc:CipherData>`+
 		`</xenc:EncryptedData>`)
 	return doc.DocumentElement()
+}
+
+// oaepParamsEntityEncryptedData is oaepParamsEncryptedData with an internal DTD
+// in front of it: decls declares the entities params may reference. The parser
+// this package's tests use does not substitute entities, so a reference in
+// params survives into the DOM as an EntityRefNode whose first child is the
+// declared Entity, which is the shape the parse path has to read through.
+func oaepParamsEntityEncryptedData(t *testing.T, decls, params string) *helium.Element {
+	t.Helper()
+	doc := mustParseXML(t, `<?xml version="1.0"?>`+"\n"+
+		`<!DOCTYPE xenc:EncryptedData [`+"\n"+decls+"\n"+`]>`+"\n"+
+		`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+		`<xenc:OAEPparams>`+params+`</xenc:OAEPparams>`+
+		`</xenc:EncryptionMethod>`+
+		`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
+// oaepParamsElement returns the OAEPparams element of an EncryptedData built by
+// the helpers above, so a test can attach a child no XML document can produce.
+func oaepParamsElement(t *testing.T, encryptedData *helium.Element) *helium.Element {
+	t.Helper()
+	method, ok := helium.AsNode[*helium.Element](encryptedData.FirstChild())
+	require.True(t, ok)
+	params, ok := helium.AsNode[*helium.Element](method.FirstChild())
+	require.True(t, ok)
+	require.Equal(t, "OAEPparams", params.LocalName())
+	return params
 }
 
 // TestOAEPParamsBound covers the decoded-size limit on xenc:OAEPparams. The
@@ -513,6 +555,117 @@ func TestOAEPParamsBound(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
 		}
+	})
+}
+
+// TestOAEPParamsEntityReference covers the entity-reference child, which a
+// conforming document may write anywhere character data is allowed and which
+// the parse path therefore has to read rather than refuse.
+//
+// Reading it is bounded because it goes exactly one hop: the EntityRef's first
+// child is the declared Entity, and helium.Entity.Content is a leaf accessor
+// that returns the declared replacement literal without recursing. So the cost
+// is one copy of that literal — the same floor a text child already costs — and
+// the value is whatever the DTD literally declares, never what it would expand
+// to. Every case below distinguishes those two: an entity whose replacement is
+// another reference or markup contributes that text verbatim and fails the
+// decode, exactly as it must.
+func TestOAEPParamsEntityReference(t *testing.T) {
+	label := []byte("label-params")
+	encodedLabel := base64.StdEncoding.EncodeToString(label)
+
+	// A label written as an entity reference decodes to the same bytes as the
+	// same label written literally. This is the shape a conforming document is
+	// free to use and the one refusing entity references would break.
+	t.Run("an entity reference contributes its replacement text", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEntityEncryptedData(t,
+			`<!ENTITY label "`+encodedLabel+`">`, `&label;`))
+		require.NoError(t, err)
+		require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
+	})
+
+	// The counting state carries across child boundaries, so a quantum split
+	// between text and an entity reference decodes like the joined value.
+	t.Run("an entity reference beside text decodes as one value", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEntityEncryptedData(t,
+			`<!ENTITY half "A">`, `A&half;==`))
+		require.NoError(t, err)
+		require.Equal(t, []byte{0x00}, ed.EncryptionMethod.OAEPParams)
+	})
+
+	// The limit governs the value however it arrives, and an entity reference
+	// is charged the declared replacement text like any other child.
+	t.Run("an over-limit entity reference is rejected", func(t *testing.T) {
+		over := base64.StdEncoding.EncodeToString(make([]byte, xmlenc1.MaxOAEPParamsBytesForTest+1))
+		_, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEntityEncryptedData(t,
+			`<!ENTITY big "`+over+`">`, `&big;`))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsOverLimit)
+	})
+
+	// A nested entity is where the one-hop bound shows: the value is the
+	// literal "&inner;", not what inner would expand to, so it is not base64
+	// and the decode refuses it.
+	t.Run("a nested entity is not expanded", func(t *testing.T) {
+		_, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEntityEncryptedData(t,
+			`<!ENTITY inner "QUJD">`+"\n"+`<!ENTITY nested "&inner;">`, `&nested;`))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsInvalid)
+	})
+
+	// An entity holding markup is the same story: the replacement text is read
+	// as text, never built into nodes and never walked.
+	t.Run("an entity holding markup is not expanded", func(t *testing.T) {
+		_, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEntityEncryptedData(t,
+			`<!ENTITY markup "<x/>">`, `&markup;`))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsInvalid)
+	})
+
+	// Only the Entity is read. Its NextSibling is the next declaration in the
+	// DTD — unrelated to this value — so a walk that followed siblings would
+	// splice the other declarations' text into the label. Two more entities are
+	// declared after the referenced one purely to make that visible.
+	t.Run("the entity's DTD siblings are not read", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEntityEncryptedData(t,
+			`<!ENTITY label "`+encodedLabel+`">`+"\n"+
+				`<!ENTITY after1 "QUJD">`+"\n"+
+				`<!ENTITY after2 "REVG">`, `&label;`))
+		require.NoError(t, err)
+		require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
+	})
+
+	// A reference with no entity behind it is only reachable in a tree a caller
+	// built: the parser rejects an undeclared reference itself. Refusing it
+	// keeps the bound — there is no second way into an EntityRef's content.
+	t.Run("an entity reference with no entity is rejected", func(t *testing.T) {
+		encryptedData := oaepParamsEncryptedData(t, `AA==`)
+		ref, err := encryptedData.OwnerDocument().CreateReference("undeclared")
+		require.NoError(t, err)
+		require.NoError(t, oaepParamsElement(t, encryptedData).AddChild(ref))
+
+		_, err = xmlenc1.ParseEncryptedDataForTest(encryptedData)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsNoEntityDecl)
+	})
+
+	// The same refusal covers the hazardous caller-built shape: an EntityRef
+	// carrying an element child. Asking such a node for its content aggregates
+	// that subtree, which is the cost the bound exists to refuse.
+	t.Run("an entity reference holding an element is rejected", func(t *testing.T) {
+		encryptedData := oaepParamsEncryptedData(t, `AA==`)
+		doc := encryptedData.OwnerDocument()
+		ref, err := doc.CreateReference("undeclared")
+		require.NoError(t, err)
+		junk, err := doc.CreateElement("junk")
+		require.NoError(t, err)
+		require.NoError(t, junk.AddChild(doc.CreateText([]byte("QUJD"))))
+		require.NoError(t, ref.AddChild(junk))
+		require.NoError(t, oaepParamsElement(t, encryptedData).AddChild(ref))
+
+		_, err = xmlenc1.ParseEncryptedDataForTest(encryptedData)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsNoEntityDecl)
 	})
 }
 

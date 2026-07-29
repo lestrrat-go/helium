@@ -459,12 +459,19 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 // digest length before it is used, so nothing downstream is sized by it and a
 // real one is a handful of octets: an application tag or a short identifier,
 // twelve in this package's own round-trip test. 1 KiB is two orders of
-// magnitude above that, so no interoperable document is rejected, while a
-// hostile one can no longer make the parser hold a label sized only by what
-// the XML parser happened to accept. That parser's own per-node content cap
-// does not stand in for this one: it bounds a single indivisible run of
-// characters, and a value spread over CDATA sections is as many runs as the
-// document likes.
+// magnitude above that, so a hostile document can no longer make the parser
+// hold a label sized only by what the XML parser happened to accept. That
+// parser's own per-node content cap does not stand in for this one: it bounds a
+// single indivisible run of characters, and a value spread over CDATA sections
+// is as many runs as the document likes.
+//
+// The limit is a deliberate POLICY ceiling, not a conformance boundary. W3C
+// xmlenc-core1 types OAEPparams as xs:base64Binary with no length facet, and
+// RFC 8017 bounds the label only at its hash function's input limit, so a
+// larger label is conforming and this parser rejects it anyway. The asymmetry
+// is one-sided by design: Encryptor.OAEPParams and the serialize path apply no
+// cap, so a label over the limit can be written by this package and not read
+// back by it.
 const maxOAEPParamsBytes = 1024
 
 // maxOAEPParamsChars is the most base64 characters a value within
@@ -505,7 +512,8 @@ const maxOAEPParamsChars = (maxOAEPParamsBytes + 2) / 3 * 4
 // text. That copy is the floor, this walk pays it exactly once, and it is the
 // whole remaining cost — a label padded with a megabyte of whitespace makes the
 // parse allocate that megabyte once, not once per pass and not per subtree.
-// Keeping it to once is what oaepParamsCharacterData's leaf-only rule protects.
+// Keeping it to once is what oaepParamsCharacterData's rule on which children
+// may be read, and how far into one of them the walk goes, protects.
 func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
 	var counter xmlbase64.Counter
 	chars := make([]byte, 0, maxOAEPParamsChars)
@@ -533,15 +541,27 @@ func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
 // oaepParamsCharacterData returns the character data child contributes to an
 // xs:base64Binary value, which is none at all for a child that carries none.
 //
-// Only text and CDATA children carry it, and reading nothing else is what keeps
-// decodeOAEPParams' walk leaf-only. That is not a detail: [helium.Element] and
-// [helium.EntityRef] answer Content by aggregating their whole subtree into one
-// buffer, so asking such a child for its content spends the entire subtree's
-// text before a limit measured in DECODED OCTETS can look at it — and since a
-// subtree of whitespace decodes to nothing, the limit would not fire at all.
-// Both kinds are therefore refused rather than skipped: their presence makes the
-// content invalid xs:base64Binary, and quietly dropping them would decode a
-// value the document did not write.
+// Text and CDATA children carry it directly. An entity reference carries it
+// through exactly one hop: a parsed [helium.EntityRef]'s first child is the
+// [helium.Entity] it resolves to, and [helium.Entity.Content] is a leaf
+// accessor returning the DECLARED replacement literal without recursing, so
+// reading it costs one copy of that literal — the same one-copy floor a Text
+// child already costs. Nothing below the Entity is read: an entity whose
+// replacement is itself a reference or markup contributes that literal text
+// (&inner;, <x/>), which is not base64, so the Counter marks the value
+// undecodable and the decode fails, which is the right verdict for it. The
+// Entity's NextSibling is deliberately not followed either — it is the next
+// declaration in the DTD, not part of this value. An EntityRef whose first
+// child is not an Entity is reachable only in a caller-built tree and is
+// refused, so the one-hop bound holds for every tree.
+//
+// [helium.Element] is refused: it answers Content by aggregating its whole
+// subtree into one buffer, so asking such a child for its content spends the
+// entire subtree's text before a limit measured in DECODED OCTETS can look at
+// it — and since a subtree of whitespace decodes to nothing, the limit would
+// not fire at all. Refusing rather than skipping is what the value says too: an
+// element child makes the content invalid xs:base64Binary, and quietly dropping
+// it would decode a value the document did not write.
 //
 // Comments and processing instructions may appear inside any element and are
 // not character data, so they are skipped, exactly as XSD ignores them when it
@@ -553,6 +573,13 @@ func oaepParamsCharacterData(child helium.Node) ([]byte, error) {
 	}
 	if c, ok := helium.AsNode[*helium.CDATASection](child); ok {
 		return c.Content(), nil
+	}
+	if ref, ok := helium.AsNode[*helium.EntityRef](child); ok {
+		entity, ok := helium.AsNode[*helium.Entity](ref.FirstChild())
+		if !ok {
+			return nil, fmt.Errorf("%w: OAEPparams holds an entity reference with no entity declaration", ErrMalformedEncrypted)
+		}
+		return entity.Content(), nil
 	}
 	if _, ok := helium.AsNode[*helium.Comment](child); ok {
 		return nil, nil
