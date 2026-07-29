@@ -129,6 +129,32 @@ func TestParse(t *testing.T) {
 		})
 	})
 
+	t.Run("CipherValue character data", func(t *testing.T) {
+		parse := func(t *testing.T, value string) (*xmlenc1.EncryptedData, error) {
+			t.Helper()
+			doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"><xenc:CipherData><xenc:CipherValue>`+value+`</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`)
+			return xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		}
+
+		t.Run("comments and processing instructions are ignored", func(t *testing.T) {
+			for _, value := range []string{
+				`AA<!-- a comment -->==`,
+				`AA<?target data?>==`,
+				`<!--c-->AA<?t?>==<!--c-->`,
+			} {
+				ed, err := parse(t, value)
+				require.NoError(t, err, "value=%s", value)
+				require.Equal(t, []byte{0x00}, ed.CipherValue, "value=%s", value)
+			}
+		})
+
+		t.Run("element children are rejected", func(t *testing.T) {
+			_, err := parse(t, `AA==<junk>   </junk>`)
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+			require.Contains(t, err.Error(), "CipherValue holds a child")
+		})
+	})
+
 	t.Run("missing encryption method on decrypt", func(t *testing.T) {
 		doc := mustParseXML(t, `<root/>`)
 		ed := &xmlenc1.EncryptedData{

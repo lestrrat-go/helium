@@ -512,13 +512,13 @@ const maxOAEPParamsChars = (maxOAEPParamsBytes + 2) / 3 * 4
 // text. That copy is the floor, this walk pays it exactly once, and it is the
 // whole remaining cost — a label padded with a megabyte of whitespace makes the
 // parse allocate that megabyte once, not once per pass and not per subtree.
-// Keeping it to once is what oaepParamsCharacterData's rule on which children
+// Keeping it to once is what base64CharacterData's rule on which children
 // may be read, and how far into one of them the walk goes, protects.
 func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
 	var counter xmlbase64.Counter
 	chars := make([]byte, 0, maxOAEPParamsChars)
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		text, err := oaepParamsCharacterData(child)
+		text, err := base64CharacterData(child, "OAEPparams")
 		if err != nil {
 			return nil, err
 		}
@@ -538,7 +538,7 @@ func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
 	return decoded, nil
 }
 
-// oaepParamsCharacterData returns the character data child contributes to an
+// base64CharacterData returns the character data child contributes to an
 // xs:base64Binary value, which is none at all for a child that carries none.
 //
 // Text and CDATA children carry it directly. An entity reference carries it
@@ -578,7 +578,7 @@ func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
 // not character data, so they are skipped, exactly as XSD ignores them when it
 // builds a simple type's value. Reading them instead would splice comment text
 // straight into the base64 stream.
-func oaepParamsCharacterData(child helium.Node) ([]byte, error) {
+func base64CharacterData(child helium.Node, valueName string) ([]byte, error) {
 	if t, ok := helium.AsNode[*helium.Text](child); ok {
 		return t.Content(), nil
 	}
@@ -592,7 +592,7 @@ func oaepParamsCharacterData(child helium.Node) ([]byte, error) {
 		}
 		entity, ok := helium.AsNode[*helium.Entity](first)
 		if !ok {
-			return nil, fmt.Errorf("%w: OAEPparams holds an entity reference with no entity declaration", ErrMalformedEncrypted)
+			return nil, fmt.Errorf("%w: %s holds an entity reference with no entity declaration", ErrMalformedEncrypted, valueName)
 		}
 		return entity.Content(), nil
 	}
@@ -602,7 +602,7 @@ func oaepParamsCharacterData(child helium.Node) ([]byte, error) {
 	if _, ok := helium.AsNode[*helium.ProcessingInstruction](child); ok {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("%w: OAEPparams holds a child of type %s, which is not character data", ErrMalformedEncrypted, child.Type())
+	return nil, fmt.Errorf("%w: %s holds a child of type %s, which is not character data", ErrMalformedEncrypted, valueName, child.Type())
 }
 
 // parseCipherData parses a CipherData element. Per the XML-Enc schema,
@@ -677,14 +677,22 @@ func parseCipherData(elem *helium.Element, budget *encryptedKeyBudget) ([]byte, 
 func decodeCipherValue(elem *helium.Element, budget *encryptedKeyBudget) ([]byte, error) {
 	var counter xmlbase64.Counter
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		counter.Add(child.Content())
+		content, err := base64CharacterData(child, "CipherValue")
+		if err != nil {
+			return nil, err
+		}
+		counter.Add(content)
 	}
 	if err := budget.charge(counter.DecodedLen()); err != nil {
 		return nil, err
 	}
 	chars := make([]byte, 0, counter.Chars())
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		chars = xmlbase64.AppendStripped(chars, child.Content())
+		content, err := base64CharacterData(child, "CipherValue")
+		if err != nil {
+			return nil, err
+		}
+		chars = xmlbase64.AppendStripped(chars, content)
 	}
 	decoded, err := xmlbase64.DecodeString(string(chars))
 	if err != nil {
