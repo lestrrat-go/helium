@@ -54,7 +54,9 @@ import (
 // replacement literal and no further, so admitting it reintroduces no
 // aggregation. A replacement that is not base64 — a nested reference, which
 // stays the unexpanded literal "&inner;", or markup — simply leaves the value
-// undecodable, exactly as the same characters written inline would.
+// undecodable, exactly as the same characters written inline would. A reference
+// the parser linked no declaration to contributes nothing, which is what
+// canonicalization makes of it too; see [entityReplacementText].
 //
 // Comment and processing-instruction children ARE skipped instead: per the XML
 // infoset neither contributes a character information item, so splicing their
@@ -108,9 +110,11 @@ func DecodeElement(e *helium.Element, charge func(int) error) ([]byte, error) {
 
 // characterData returns the character data n contributes to an xs:base64Binary
 // value: its content for a text or CDATA child, the referenced entity's
-// declared replacement text for an entity reference, nil for a child that
-// contributes none, and an error for a child a simple content type does not
-// admit at all. [DecodeElement] documents why each kind lands where it does.
+// declared replacement text for an entity reference that has one, nil for a
+// child that contributes none — a comment, a processing instruction, or a
+// reference to an entity nothing declared — and an error for a child a simple
+// content type does not admit at all. [DecodeElement] documents why each kind
+// lands where it does.
 func characterData(n helium.Node) ([]byte, error) {
 	if t, ok := helium.AsNode[*helium.Text](n); ok {
 		return t.Content(), nil
@@ -144,11 +148,28 @@ func characterData(n helium.Node) ([]byte, error) {
 // the Entity's siblings are the remaining entity declarations of the DTD, not
 // more of this value.
 //
-// A first child that is not an [helium.Entity] is refused. The parser never
-// builds that shape, so it is reachable only from a caller-assembled DOM, and
-// refusing it is what holds the bound for one.
+// A reference with NO child contributes no characters and is not an error. That
+// is ordinary parser output, not a malformed tree: per XML 1.0 "Entity
+// Declared", a general entity that nothing declares is a VALIDITY error rather
+// than a well-formedness one once the document has an external subset the
+// processor did not read, or a parameter-entity reference, and is not
+// standalone="yes". A non-validating processor keeps going, so helium builds the
+// reference with no declaration linked to it. [helium.EntityRef.Content] is
+// likewise empty for it, and c14n canonicalizes such a reference by walking the
+// children it does not have, so reading it as no characters is what agrees with
+// the rest of the tree — a value whose base64 reader and canonicalizer disagreed
+// about the same document would reject signatures the canonical form accepts.
+//
+// A NON-NIL first child that is not an [helium.Entity] is refused. The parser
+// links a reference to its declared Entity or to nothing at all, so that shape
+// is reachable only from a caller-assembled DOM, and refusing it is what holds
+// the bound for one.
 func entityReplacementText(r *helium.EntityRef) ([]byte, error) {
-	entity, ok := helium.AsNode[*helium.Entity](r.FirstChild())
+	first := r.FirstChild()
+	if first == nil {
+		return nil, nil
+	}
+	entity, ok := helium.AsNode[*helium.Entity](first)
 	if !ok {
 		return nil, fmt.Errorf("xs:base64Binary value has an entity reference with no entity declaration (%s %q)", r.Type(), r.Name())
 	}

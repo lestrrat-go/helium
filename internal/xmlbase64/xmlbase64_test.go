@@ -397,6 +397,16 @@ func parseEntityValueElement(t *testing.T, decls, markup string) *helium.Element
 	return doc.DocumentElement()
 }
 
+// parseWholeDocumentValueElement parses doc whole and returns its document
+// element, for a case whose trigger lives in the prolog rather than in the
+// value.
+func parseWholeDocumentValueElement(t *testing.T, doc string) *helium.Element {
+	t.Helper()
+	parsed, err := helium.NewParser().Parse(t.Context(), []byte(doc))
+	require.NoError(t, err)
+	return parsed.DocumentElement()
+}
+
 // errCharge is what a caller's budget refusal looks like: DecodeElement must
 // hand it back untouched so the caller can recognize its own error.
 var errCharge = errors.New("charged too much")
@@ -567,11 +577,54 @@ func TestDecodeElement(t *testing.T) {
 		require.ErrorAs(t, err, &corrupt)
 	})
 
-	// The parser always links a reference to its declared Entity, so an
-	// EntityRef whose first child is something else is reachable only from a
-	// caller-assembled DOM. Reading that child would be the unbounded subtree
-	// read the first-child-plus-Entity shape exists to rule out, so it is
-	// refused before the charge.
+	// An undeclared general entity is a VALIDITY error, not a well-formedness
+	// one, once the document has an external subset it did not read: a
+	// non-validating processor keeps going and builds the reference with no
+	// Entity linked to it. helium does exactly that, so a childless EntityRef is
+	// ordinary parser output for a document any peer can send. It stands for no
+	// character data — EntityRef.Content() is empty for it and c14n
+	// canonicalizes it to nothing — so the value around it must decode as if the
+	// reference were not there.
+	t.Run("reads an undeclared entity reference under an external subset as no characters", func(t *testing.T) {
+		elem := parseWholeDocumentValueElement(t, `<!DOCTYPE v SYSTEM "no-such.dtd"><v>QUJD&undeclared;REVG</v>`)
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABCDEF"), decoded)
+		require.Equal(t, 6, charged)
+	})
+
+	// An external subset is not the only way in. A parameter-entity reference in
+	// the internal subset means the parser may not have seen every declaration
+	// either, which lifts the same fatal check, so an entirely internal DTD
+	// reaches the childless shape too.
+	t.Run("reads an undeclared entity reference under a parameter-entity reference as no characters", func(t *testing.T) {
+		elem := parseWholeDocumentValueElement(t, `<!DOCTYPE v [<!ENTITY % pe "<!ENTITY ignored 'x'>"> %pe;]><v>QUJD&undeclared;REVG</v>`)
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABCDEF"), decoded)
+		require.Equal(t, 6, charged)
+	})
+
+	// Contributing nothing is specific to the reference with no declaration. A
+	// declared entity in the very same document still contributes its
+	// replacement text, so the childless case cannot be read as entity
+	// references having been dropped wholesale.
+	t.Run("a declared entity still decodes beside an undeclared one", func(t *testing.T) {
+		elem := parseWholeDocumentValueElement(t, `<!DOCTYPE v SYSTEM "no-such.dtd" [<!ENTITY dv "DR">]><v>QUJ&undeclared;&dv;EVG</v>`)
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABCDEF"), decoded)
+		require.Equal(t, 6, charged)
+	})
+
+	// The parser links a reference either to its declared Entity or to nothing
+	// at all, so an EntityRef whose first child is some OTHER node is reachable
+	// only from a caller-assembled DOM. Reading that child would be the
+	// unbounded subtree read the first-child-plus-Entity shape exists to rule
+	// out, so it is refused before the charge.
 	t.Run("refuses an entity reference whose first child is not an entity", func(t *testing.T) {
 		elem := parseValueElement(t, "QUJD")
 		doc := elem.OwnerDocument()

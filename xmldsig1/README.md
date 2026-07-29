@@ -473,7 +473,12 @@ rather than read. An entity reference is read as the declared replacement text
 of the entity it names, taken in one step and not expanded further, so a
 document that writes a value as an entity reference verifies while the read
 stays bounded; a replacement that is not base64 fails the decode just as the
-same characters written inline would.
+same characters written inline would. A reference to an entity *nothing*
+declares contributes no characters. The parser keeps such a reference rather
+than refusing the document — with an external subset it did not read, or a
+parameter-entity reference, an undeclared general entity is a validity error and
+not a well-formedness one — and canonicalization renders it as nothing, so
+reading it as nothing is what keeps the two agreeing about the same document.
 
 The fifth site is the exception to both halves of that. An *external*
 `ds:RetrievalMethod` is dereferenced through the configured

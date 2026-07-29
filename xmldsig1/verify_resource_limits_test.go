@@ -170,6 +170,63 @@ func TestVerifyBase64ValueChildren(t *testing.T) {
 		require.ErrorIs(t, err, xmldsig1.ErrInvalidSignature)
 		require.ErrorContains(t, err, "SignatureValue")
 	})
+
+	// A reference to an UNDECLARED entity is not a hand-built shape: with an
+	// external subset the parser did not read, an undeclared general entity is a
+	// validity error rather than a well-formedness one, so a non-validating
+	// parser keeps the reference and links no declaration to it. Any peer can
+	// send that document, before anything about it is authenticated.
+	//
+	// It carries no characters, and canonicalization agrees — c14n walks an
+	// entity reference's children, of which there are none. The value must
+	// therefore decode to exactly what it does without the reference, or the
+	// base64 reader and the canonicalizer disagree about the same document.
+	//
+	// Both charged sites in the Signature are covered: DigestValue sits inside
+	// ds:SignedInfo and is itself signed, SignatureValue is not, so neither the
+	// signed nor the unsigned position is left to chance.
+	t.Run("undeclared entity reference in DigestValue contributes nothing", func(t *testing.T) {
+		doc := signedDocUndeclaredEntityValue(t, key, "DigestValue")
+		result, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.NoError(t, err)
+		require.Len(t, result.References, 1)
+	})
+
+	t.Run("undeclared entity reference in SignatureValue contributes nothing", func(t *testing.T) {
+		doc := signedDocUndeclaredEntityValue(t, key, "SignatureValue")
+		result, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.NoError(t, err)
+		require.Len(t, result.References, 1)
+	})
+}
+
+// signedDocUndeclaredEntityValue builds the same detached signature
+// signedDocPaddedValue does, appends a reference to an entity NOTHING declares
+// to the named ds: element, and gives the document an external-subset DOCTYPE so
+// the parser keeps that reference instead of refusing the document. The value
+// then reaches verification with a childless EntityRefNode child.
+//
+// The signature stays valid at either site. ds:SignatureValue is neither
+// digested nor inside ds:SignedInfo. ds:DigestValue is inside it, but the
+// reference canonicalizes to nothing, so the ds:SignedInfo octets that were
+// signed do not change either.
+func signedDocUndeclaredEntityValue(t *testing.T, key *rsa.PrivateKey, local string) *helium.Document {
+	t.Helper()
+	// The DOCTYPE has to go in at the same time as the reference: without it the
+	// undeclared entity is fatal and the document does not parse at all, which
+	// is the point of the external subset here.
+	serialized, err := helium.WriteString(signedDocPaddedValue(t, key, local, ""))
+	require.NoError(t, err)
+
+	rootAt := strings.Index(serialized, "<doc>")
+	require.Positive(t, rootAt, "signed document has no doc element")
+	end := strings.Index(serialized, "</ds:"+local+">")
+	require.Positive(t, end, "signed document has no ds:%s", local)
+	return mustParseXML(t, serialized[:rootAt]+
+		`<!DOCTYPE doc SYSTEM "no-such.dtd">`+
+		serialized[rootAt:end]+"&undeclared;"+serialized[end:])
 }
 
 // signedDocEntityValue builds the same detached signature signedDocPaddedValue
