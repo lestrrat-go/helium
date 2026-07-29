@@ -236,10 +236,10 @@ func TestParse(t *testing.T) {
 	})
 }
 
-// TestMarshalParseRoundTrip exercises the serialize and parse paths
-// for every optional field: EncryptedData ID/Type, an EncryptedKey carrying
-// its own ID/Recipient/CarriedKeyName and an EncryptionMethod with
-// DigestMethod, MGFAlgorithm and OAEPParams. The marshaled element is
+// TestMarshalParseRoundTrip exercises the serialize and parse paths for the
+// optional fields both directions carry: the EncryptedData's ID and Type, its
+// EncryptionMethod's DigestMethod, MGFAlgorithm and OAEPParams, and an
+// EncryptedKey with its own ID and EncryptionMethod. The marshaled element is
 // serialized to bytes, reparsed through the public XML parser, and the
 // resulting DOM is fed back through the internal EncryptedData parser so
 // both directions are covered honestly via a real round-trip.
@@ -1442,4 +1442,126 @@ func TestECPublicKeyAllocation(t *testing.T) {
 			require.Less(t, allocated, uint64(oneRead), "parsing %d lexical bytes allocated %d bytes", len(tc.value), allocated)
 		})
 	}
+}
+
+// carriedKeyNameLexical is the lexical text a document writes as one
+// xenc:CarriedKeyName below, and carriedKeyNameSlack is what the bound allows
+// on top of a decrypt of the same document without that element.
+//
+// The slack is a CONSTANT for the same reason the OAEPparams slack is: a bound
+// stated as a multiple of the attacker's own text could never fail on a cost
+// that follows that text, and that cost is the only thing being pinned. It
+// covers the rest of the document, the block decryption, and the runtime's own
+// bookkeeping, all of which are fixed. Both figures stay far under the memory
+// guard this package's tests run within.
+const (
+	carriedKeyNameLexical = 4 << 20
+	carriedKeyNameSlack   = 1 << 20
+)
+
+// carriedKeyNamePayload is the plaintext every fixture below decrypts to, so a
+// measurement that lost its success is caught rather than measured.
+const carriedKeyNamePayload = "payload"
+
+// TestCarriedKeyNameIsNotRead pins that the decrypt parse never materializes an
+// EncryptedKey's xenc:CarriedKeyName.
+//
+// That name is metadata no decrypt path consults, nothing serializes, and no
+// budget charges — neither the cumulative EncryptedKey ciphertext allowance nor
+// the payload allowance covers it. It is also a value joined from every child at
+// every depth the join reaches, so a document may spread one across as many CDATA
+// sections as it likes and the XML parser's per-node content cap, which bounds
+// one indivisible run of characters, says nothing about the total. Reading it
+// would therefore cost one unbounded copy of attacker-supplied text on the
+// SUCCESS path, and ahead of the SessionKey early return that makes the whole
+// EncryptedKey irrelevant to the decrypt.
+//
+// The allocation case reads the process-wide TotalAlloc delta across
+// DecryptBytes, so these subtests must NOT run in parallel: a concurrent test's
+// allocations would pollute the delta.
+func TestCarriedKeyNameIsNotRead(t *testing.T) {
+	// no t.Parallel(): the deltas below must reflect only their own DecryptBytes.
+	sessionKey := randKey(t, 32)
+
+	t.Run("a document carrying one still decrypts", func(t *testing.T) {
+		elem := carriedKeyNameEncryptedData(t, sessionKey, "session-key-1")
+
+		plaintext, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), elem)
+		require.NoError(t, err)
+		require.Equal(t, []byte(carriedKeyNamePayload), plaintext)
+
+		// The element is SKIPPED, not refused: the EncryptedKey around it is
+		// still a candidate the parse returns, and the field it would have
+		// filled stays at its zero value.
+		ed, err := xmlenc1.ParseEncryptedDataForTest(elem)
+		require.NoError(t, err)
+		require.Len(t, ed.EncryptedKeys, 1)
+		require.Empty(t, ed.EncryptedKeys[0].CarriedKeyName)
+	})
+
+	t.Run("a large one costs the decrypt nothing", func(t *testing.T) {
+		// Sixteen CDATA sections, which is how the name evades the parser's
+		// per-node content cap: the cap bounds one run and every section is its
+		// own run.
+		name := splitIntoNodes(strings.Repeat("n", carriedKeyNameLexical), carriedKeyNameLexical/16)
+		large := carriedKeyNameEncryptedData(t, sessionKey, name)
+		absent := carriedKeyNameEncryptedData(t, sessionKey, "")
+
+		largeAlloc := carriedKeyNameDecryptAlloc(t, sessionKey, large)
+		absentAlloc := carriedKeyNameDecryptAlloc(t, sessionKey, absent)
+
+		require.Less(t, largeAlloc, absentAlloc+carriedKeyNameSlack,
+			"a %d byte CarriedKeyName cost the decrypt %d bytes against %d for the same document without one",
+			carriedKeyNameLexical, largeAlloc, absentAlloc)
+	})
+}
+
+// carriedKeyNameEncryptedData builds an EncryptedData that decrypts to
+// carriedKeyNamePayload under sessionKey and whose single EncryptedKey candidate
+// carries name as its raw xenc:CarriedKeyName markup. The markup is written
+// straight into the document because the lexical form the parse is handed is the
+// whole point; an empty name leaves the element out, which is the baseline the
+// large case is measured against.
+//
+// The EncryptedKey's own ciphertext is never unwrapped: the decryptor is given
+// the session key directly and returns before candidate key resolution, so the
+// document is still parsed in full and no key-encryption key is needed.
+func carriedKeyNameEncryptedData(t *testing.T, sessionKey []byte, name string) *helium.Element {
+	t.Helper()
+	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte(carriedKeyNamePayload))
+	require.NoError(t, err)
+
+	var carried string
+	if name != "" {
+		carried = `<xenc:CarriedKeyName>` + name + `</xenc:CarriedKeyName>`
+	}
+
+	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+		`<ds:KeyInfo><xenc:EncryptedKey>`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
+		`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(make([]byte, 40))+`</xenc:CipherValue></xenc:CipherData>`+
+		carried+
+		`</xenc:EncryptedKey></ds:KeyInfo>`+
+		`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipher)+`</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
+// carriedKeyNameDecryptAlloc reports the TotalAlloc delta across one successful
+// DecryptBytes of elem. The document and the decryptor are built outside the
+// measurement, so the delta is the decrypt alone.
+func carriedKeyNameDecryptAlloc(t *testing.T, sessionKey []byte, elem *helium.Element) uint64 {
+	t.Helper()
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	plaintext, err := decryptor.DecryptBytes(t.Context(), elem)
+	runtime.ReadMemStats(&after)
+
+	require.NoError(t, err)
+	require.Equal(t, []byte(carriedKeyNamePayload), plaintext)
+	return after.TotalAlloc - before.TotalAlloc
 }
