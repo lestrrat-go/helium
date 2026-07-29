@@ -21,7 +21,7 @@ func TestConcatKDFNonByteAlignedOtherInfo(t *testing.T) {
 	))
 	require.NoError(t, err)
 
-	params, err := parseConcatKDFParams(doc.DocumentElement())
+	params, err := parseConcatKDFParams(t.Context(), doc.DocumentElement())
 	require.NoError(t, err)
 	require.Equal(t, []byte{0xd8}, params.PartyUInfo)
 	require.Equal(t, uint8(3), params.partyUInfoUnusedBits)

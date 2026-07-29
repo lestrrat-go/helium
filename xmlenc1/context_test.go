@@ -2,6 +2,7 @@ package xmlenc1_test
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"sync"
 	"testing"
@@ -346,6 +347,60 @@ func TestDecryptObservesContextPerContentNode(t *testing.T) {
 	nodes, err = decryptor.Decrypt(ctx, elem)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, nodes)
+}
+
+// TestDecryptObservesContextPerCipherValueChild pins the interior of the PARSE
+// stage's walks. The number of children a CipherValue carries is the document's
+// to choose, and the ones that carry no character data are charged against
+// neither MaxEncryptedKeyBytes nor MaxCipherValueBytes, so no budget bounds how
+// long that stage runs. A parse that observed the context only at its ends
+// would therefore read a document of any size after the caller cancelled.
+func TestDecryptObservesContextPerCipherValueChild(t *testing.T) {
+	sessionKey := randKey(t, 32)
+	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte("payload"))
+	require.NoError(t, err)
+	encoded := base64.StdEncoding.EncodeToString(cipher)
+
+	// Comments are the cheapest such child: base64CharacterData skips them, so
+	// the document below decrypts to exactly the same plaintext however many of
+	// them it carries.
+	encryptedData := func(t *testing.T, comments int) *helium.Element {
+		t.Helper()
+		doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+			`<xenc:CipherData><xenc:CipherValue>`+encoded+strings.Repeat(`<!--x-->`, comments)+
+			`</xenc:CipherValue></xenc:CipherData>`+
+			`</xenc:EncryptedData>`)
+		return doc.DocumentElement()
+	}
+
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+	pollsFor := func(t *testing.T, comments int) int {
+		t.Helper()
+		counter := newPollCounter()
+		plaintext, err := decryptor.DecryptBytes(counter, encryptedData(t, comments))
+		require.NoError(t, err)
+		require.Equal(t, []byte("payload"), plaintext)
+		return counter.calls()
+	}
+
+	const (
+		few  = 4
+		many = 4096
+	)
+	fewPolls := pollsFor(t, few)
+	require.GreaterOrEqual(t, pollsFor(t, many)-fewPolls, many-few,
+		"the CipherValue walk must observe the context once per child")
+
+	// A context that stays live for exactly as many polls as the WHOLE decrypt
+	// of the small document takes, against the large one. The two documents
+	// differ only in children no budget charges, so a parse that did not
+	// observe them would poll the same number of times for both and never reach
+	// this cancellation at all. The threshold is measured rather than written
+	// down, so it follows the parse instead of pinning its internals.
+	ctx := newCancelAfterErrCalls(fewPolls)
+	_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 // TestEncryptContentObservesContextPerChild pins the interior of the walk that

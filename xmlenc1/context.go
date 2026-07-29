@@ -44,11 +44,12 @@ func abort(ctx context.Context, err error) error {
 // goes, and hands each node to fn. It stops at the first error, which is
 // abort's verdict on fn's own error.
 //
-// Every sibling walk in a ctx-carrying function runs over a caller- or
-// attacker-chosen number of nodes: the children of the subtree an Encryptor
-// serializes, and the nodes a decrypted plaintext parses to. A walk that
-// polled only at its ends would run to the end of that input after the caller
-// cancelled, and the window scales with the node count.
+// Every sibling walk in this package runs over a caller- or attacker-chosen
+// number of nodes: the children of the subtree an Encryptor serializes, the
+// nodes a decrypted plaintext parses to, and every child list the parse reads
+// on the way to a value. A walk that polled only at its ends would run to the
+// end of that input after the caller cancelled, and the window scales with the
+// node count.
 //
 // The poll runs per node rather than every Nth node. Nothing here measured a
 // cost worth trading exactness for: a poll is one mutex-guarded read against
@@ -64,4 +65,25 @@ func eachSibling(ctx context.Context, first helium.Node, fn func(helium.Node) er
 		}
 	}
 	return nil
+}
+
+// eachChildElement hands each ELEMENT child of elem to fn and skips every other
+// child kind, walking through eachSibling so the context is still observed once
+// per child.
+//
+// Every walk in the parse path is over one element's children, whose number the
+// document chooses, and each of them begins by skipping the children that are
+// not elements — a comment or a processing instruction may appear anywhere and
+// says nothing about the value being read. Layering that skip on eachSibling
+// keeps the poll where eachSibling puts it, ahead of looking at the child, so a
+// document that is nothing but skipped children is observed at the same rate as
+// one the parse reads in full and no walk decides for itself when to poll.
+func eachChildElement(ctx context.Context, elem *helium.Element, fn func(*helium.Element) error) error {
+	return eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
+		e, ok := helium.AsNode[*helium.Element](child)
+		if !ok {
+			return nil
+		}
+		return fn(e)
+	})
 }
