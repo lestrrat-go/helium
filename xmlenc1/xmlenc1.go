@@ -923,11 +923,25 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		}
 		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek, sessionKeySize)
 		if err != nil {
+			// Key resolution cannot be interrupted once entered, so a
+			// cancellation that lands while it runs is only observable
+			// here. Let it win over the candidate's own error: the caller
+			// asked to stop, and the candidate error would otherwise be
+			// reported as the reason decryption failed.
+			if cerr := contextErr(ctx); cerr != nil {
+				return nil, cerr
+			}
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
+		if err := contextErr(ctx); err != nil {
+			return nil, err
+		}
 		plaintext, err := decryptCipherValue(ed, alg, sessionKey)
 		if err != nil {
+			if cerr := contextErr(ctx); cerr != nil {
+				return nil, cerr
+			}
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
@@ -1021,6 +1035,13 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		}
 		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek, sessionKeySize)
 		if err != nil {
+			// Key resolution cannot be interrupted once entered, so a
+			// cancellation that lands while it runs is only observable
+			// here. It must win over the candidate's own error, exactly as
+			// the finishDecrypt branch below lets a cancellation win.
+			if cerr := contextErr(ctx); cerr != nil {
+				return nil, cerr
+			}
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}

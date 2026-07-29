@@ -94,6 +94,75 @@ func TestDecryptReturnsPlaintextParserCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+// TestDecryptorCancellationWinsOverCandidateError pins the rule that a
+// cancellation landing while a candidate's key resolution runs is reported as
+// the cancellation, not as the candidate's own failure. Key resolution and
+// block decryption cannot be interrupted once entered, so each candidate stage
+// is followed by a context poll; without it the stage's error is retained in
+// lastErr and surfaces as ErrDecryptionFailed after the loop.
+func TestDecryptorCancellationWinsOverCandidateError(t *testing.T) {
+	newEncryptedData := func(t *testing.T, edType string, key *xmlenc1.EncryptedKey, cipher []byte) *helium.Element {
+		t.Helper()
+		doc := mustParseXML(t, `<root/>`)
+		elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, &xmlenc1.EncryptedData{
+			Type:             edType,
+			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+			EncryptedKeys:    []*xmlenc1.EncryptedKey{key},
+			CipherValue:      cipher,
+		})
+		require.NoError(t, err)
+		return elem
+	}
+
+	wrap := func(t *testing.T, kek, sessionKey []byte) *xmlenc1.EncryptedKey {
+		t.Helper()
+		wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
+		require.NoError(t, err)
+		return &xmlenc1.EncryptedKey{
+			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
+			CipherValue:      wrapped,
+		}
+	}
+
+	// Three polls run before the candidate loop reaches key resolution
+	// (terminal entry, post-parse, loop top), so cancelling after the third
+	// puts the cancellation inside the resolution stage.
+	const cancelDuringKeyResolution = 3
+
+	t.Run("DecryptBytes after a successful key resolution", func(t *testing.T) {
+		kek := randKey(t, 32)
+		sessionKey := randKey(t, 32)
+		cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte("payload"))
+		require.NoError(t, err)
+		// Corrupt the payload ciphertext so block decryption fails: the key
+		// unwraps cleanly, so only the poll after resolution can report the
+		// cancellation.
+		cipher[len(cipher)-1] ^= 0xff
+
+		elem := newEncryptedData(t, "", wrap(t, kek, sessionKey), cipher)
+
+		ctx := newCancelAfterErrCalls(cancelDuringKeyResolution)
+		_, err = xmlenc1.NewDecryptor().KeyEncryptionKey(kek).DecryptBytes(ctx, elem)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("Decrypt after a failed key resolution", func(t *testing.T) {
+		kek := randKey(t, 32)
+		wrongKEK := randKey(t, 32)
+		sessionKey := randKey(t, 32)
+		cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte(`<x>secret</x>`))
+		require.NoError(t, err)
+
+		// The KEK does not match, so the candidate's AES key unwrap fails its
+		// integrity check and the loop would otherwise retain that error.
+		elem := newEncryptedData(t, xmlenc1.TypeElement, wrap(t, kek, sessionKey), cipher)
+
+		ctx := newCancelAfterErrCalls(cancelDuringKeyResolution)
+		_, err = xmlenc1.NewDecryptor().KeyEncryptionKey(wrongKEK).Decrypt(ctx, elem)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+}
+
 // cancelAfterErrCalls reports a cancelled error from Err() only after Err has
 // been consulted cancelAfter times, simulating a context that is live when
 // Decrypt is entered and becomes cancelled partway through decryption — while
