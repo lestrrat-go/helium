@@ -345,8 +345,8 @@ func (cfg *verifierConfig) maxKeyInfoEntriesLimit() int {
 	return cfg.maxKeyInfoEntries
 }
 
-// maxDecodedBytesLimit returns the effective cap on total base64-decoded bytes
-// across DigestValue/SignatureValue/X509Certificate, defaulting when unset.
+// maxDecodedBytesLimit returns the effective cap on the total certificate and
+// signature octets [Verifier.MaxDecodedBytes] governs, defaulting when unset.
 func (cfg *verifierConfig) maxDecodedBytesLimit() int {
 	if cfg.maxDecodedBytes == 0 {
 		return defaultMaxDecodedBytes
@@ -502,21 +502,38 @@ func (v Verifier) MaxKeyInfoEntries(n int) Verifier {
 	return v
 }
 
-// MaxDecodedBytes caps the running total of base64-decoded bytes the verifier
-// produces while parsing the Signature element before the SignatureValue check
-// — across DigestValue, SignatureValue, and X509Certificate content. Exceeding
-// the cap is rejected with [ErrResourceLimitExceeded], bounding the decode
-// allocation an attacker-controlled document can force. n <= 0 has special
-// meaning: 0 (the default) selects the conservative built-in cap, and a
-// negative n disables the cap.
+// MaxDecodedBytes caps the running total of certificate and signature octets
+// the verifier produces before the SignatureValue check. Exceeding the cap is
+// rejected with [ErrResourceLimitExceeded], bounding the decode allocation an
+// attacker-controlled document can force. n <= 0 has special meaning: 0 (the
+// default) selects the conservative built-in cap, and a negative n disables the
+// cap.
 //
-// Each value is charged BEFORE it is materialized, so the cap bounds what
-// verification BUILDS and not merely what it keeps. That matters because
-// xs:base64Binary permits XML whitespace between characters and a value may be
-// spread over any number of text and CDATA children: the lexical text an
+// Four of the charged sites are base64 values decoded straight off the
+// document: the Signature's own DigestValue, SignatureValue, and
+// X509Certificate content, plus the rawX509Certificate a same-document
+// ds:RetrievalMethod points at. That last one is not confined to the Signature.
+// A RetrievalMethod URI names any element in the document by ID — any local
+// name, any namespace, inside ds:Signature or outside it — and both the
+// rawX509Certificate branch and the ds:X509Data branch charge whatever element
+// it resolves to.
+//
+// Each of those four is charged BEFORE it is materialized, so for them the cap
+// bounds what verification BUILDS and not merely what it keeps. That matters
+// because xs:base64Binary permits XML whitespace between characters and a value
+// may be spread over any number of text and CDATA children: the lexical text an
 // attacker wraps around a value is unbounded and unrelated to the bytes it
 // decodes to, so counting it first is what keeps the memory under the cap for a
 // value the cap refuses AND for every value it accepts.
+//
+// The fifth site is the exception to both halves of that. An EXTERNAL
+// ds:RetrievalMethod is dereferenced through the configured
+// [Verifier.ReferenceResolver], which materializes the whole resource under its
+// OWN size cap ([FSReferenceResolver] bounds one resource at 64 MiB) and runs it
+// through the RetrievalMethod's transforms; only then is the result charged. So
+// those octets are charged AFTER they are materialized, they are bounded by the
+// resolver's cap rather than by this one on the way in, and they are raw
+// certificate bytes that were never base64-decoded at all.
 func (v Verifier) MaxDecodedBytes(n int) Verifier {
 	v = v.clone()
 	v.cfg.maxDecodedBytes = n

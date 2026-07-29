@@ -53,9 +53,10 @@ func TestVerifyResourceLimits(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	// MaxDecodedBytes: a running total of base64-decoded bytes (DigestValue,
-	// SignatureValue, X509Certificate) over the cap is rejected. A one-byte cap
-	// trips on the first DigestValue decode; the default cap is unaffected.
+	// MaxDecodedBytes: a running total of certificate and signature octets over
+	// the cap is rejected. A one-byte cap trips on the first DigestValue decode;
+	// the default cap is unaffected. The RetrievalMethod charge sites the same
+	// cap covers are exercised in retrieval_method_internal_test.go.
 	t.Run("max decoded bytes", func(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, samlAssertion)
@@ -95,6 +96,37 @@ func TestVerifyResourceLimits(t *testing.T) {
 		_, err = xmldsig1.NewVerifier(xmldsig1.X509CertKeySource(cert)).
 			Verify(t.Context(), doc)
 		require.NoError(t, err)
+	})
+}
+
+// TestVerifyBase64ValueChildren pins which children of a ds: base64 value carry
+// its characters. xs:base64Binary is a simple type, so only character
+// information items — text and CDATA — belong to the value; a comment or
+// processing instruction contributes none, and an element child is not
+// permitted there at all.
+func TestVerifyBase64ValueChildren(t *testing.T) {
+	key := generateRSAKey(t)
+
+	// A comment inside a signature value must leave the value it wraps
+	// untouched. Splicing the comment's own text into the base64 stream would
+	// reject a legitimately commented signature.
+	t.Run("comment child leaves the value intact", func(t *testing.T) {
+		doc := signedDocPaddedValue(t, key, "SignatureValue", "<!--QUJDREVG-->")
+		result, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.NoError(t, err)
+		require.Len(t, result.References, 1)
+	})
+
+	// An empty element child adds no characters, so a value that silently
+	// accepted it would verify exactly as the unmodified one does. The value
+	// must be refused for its shape instead.
+	t.Run("element child is refused", func(t *testing.T) {
+		doc := signedDocPaddedValue(t, key, "SignatureValue", "<x/>")
+		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidSignature)
+		require.ErrorContains(t, err, "SignatureValue")
 	})
 }
 
@@ -180,9 +212,15 @@ func TestVerifyDecodedBytesAllocation(t *testing.T) {
 	// hands out a copy per node, and no value can be counted without looking at
 	// it. A rejected value is looked at once, and an accepted one twice — once
 	// to count it and once to build the characters the count approved.
+	//
+	// A child that contributes no character data — a comment, or the element
+	// child xs:base64Binary does not admit at all — is never read, so nothing
+	// scaling with its text is allocated. That bound is a small fraction of the
+	// padding rather than a multiple of it.
 	const (
 		countOnly     = whitespace * 3 / 2
 		countAndBuild = whitespace * 5 / 2
+		neverRead     = whitespace / 4
 	)
 
 	key := generateRSAKey(t)
@@ -195,8 +233,10 @@ func TestVerifyDecodedBytesAllocation(t *testing.T) {
 		markup string
 		// maxDecoded is the MaxDecodedBytes cap; 0 leaves the default.
 		maxDecoded int
-		rejected   bool
-		maxAlloc   uint64
+		// wantErr is the sentinel Verify must report; nil means the padded
+		// document must still verify.
+		wantErr  error
+		maxAlloc uint64
 	}{
 		{
 			// A one-byte cap refuses the very first DigestValue, so the
@@ -205,7 +245,7 @@ func TestVerifyDecodedBytesAllocation(t *testing.T) {
 			local:      "DigestValue",
 			markup:     padding,
 			maxDecoded: 1,
-			rejected:   true,
+			wantErr:    xmldsig1.ErrResourceLimitExceeded,
 			maxAlloc:   countOnly,
 		},
 		{
@@ -216,7 +256,7 @@ func TestVerifyDecodedBytesAllocation(t *testing.T) {
 			local:      "DigestValue",
 			markup:     splitIntoCDATA(padding, 16),
 			maxDecoded: 1,
-			rejected:   true,
+			wantErr:    xmldsig1.ErrResourceLimitExceeded,
 			maxAlloc:   countOnly,
 		},
 		{
@@ -228,8 +268,37 @@ func TestVerifyDecodedBytesAllocation(t *testing.T) {
 			name:     "accepted SignatureValue with whitespace split across CDATA sections",
 			local:    "SignatureValue",
 			markup:   splitIntoCDATA(padding, 16),
-			rejected: false,
 			maxAlloc: countAndBuild,
+		},
+		{
+			// An element child is where the lexical length stops being the
+			// attacker's only lever: one element's content is the concatenation
+			// of its whole subtree, so reading it aggregates that subtree into a
+			// single buffer. It contributes no character data to an
+			// xs:base64Binary value, so the value is refused without ever being
+			// read and the padding costs nothing.
+			name:     "SignatureValue with whitespace in an element child",
+			local:    "SignatureValue",
+			markup:   "<pad>" + padding + "</pad>",
+			wantErr:  xmldsig1.ErrInvalidSignature,
+			maxAlloc: neverRead,
+		},
+		{
+			// The same aggregation reached through the DigestValue parse, which
+			// is a different call site inside SignedInfo.
+			name:     "DigestValue with whitespace in an element child",
+			local:    "DigestValue",
+			markup:   "<pad>" + padding + "</pad>",
+			wantErr:  xmldsig1.ErrInvalidSignature,
+			maxAlloc: neverRead,
+		},
+		{
+			// A comment contributes no character data either, so the signature
+			// stays valid and the comment's text is never read.
+			name:     "accepted SignatureValue with whitespace in a comment child",
+			local:    "SignatureValue",
+			markup:   "<!--" + padding + "-->",
+			maxAlloc: neverRead,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -245,10 +314,10 @@ func TestVerifyDecodedBytesAllocation(t *testing.T) {
 			result, err := verifier.Verify(t.Context(), doc)
 			runtime.ReadMemStats(&after)
 
-			if tc.rejected {
-				require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
 			}
-			if !tc.rejected {
+			if tc.wantErr == nil {
 				// The padded value still verifies byte for byte, so the
 				// whitespace is genuinely part of a legal signature and the
 				// bound below is not measuring an early rejection.

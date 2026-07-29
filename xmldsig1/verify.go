@@ -123,16 +123,23 @@ func (b *verifyBudget) consume(n int) error {
 }
 
 // decodeBudgeted decodes elem's base64 content, charging the decoded byte
-// budget BEFORE the value is materialized. It is the only way a Signature's
-// base64 values are decoded, because charging after the decode bounds what is
-// KEPT rather than what is BUILT: xs:base64Binary permits XML whitespace
-// between characters and a value may be spread over any number of text and
-// CDATA children, so joining that text first allocates a lexical length no cap
-// ever approved — and goes on allocating it for every value the cap accepts.
+// budget BEFORE the value is materialized. It is the only way a base64 value in
+// the document is decoded on the verify path, because charging after the decode
+// bounds what is KEPT rather than what is BUILT: xs:base64Binary permits XML
+// whitespace between characters and a value may be spread over any number of
+// text and CDATA children, so joining that text first allocates a lexical
+// length no cap ever approved — and goes on allocating it for every value the
+// cap accepts. elem is not always inside the Signature: a same-document
+// ds:RetrievalMethod URI resolves to any element in the document by ID.
 //
-// A cap failure passes through as ErrResourceLimitExceeded; a decode failure is
-// wrapped as an invalid `what` under sentinel. Since the charge now precedes
-// the decode, a value that is both over cap and invalid base64 reports the cap.
+// Octets an EXTERNAL ds:RetrievalMethod fetches do not come through here at
+// all. retrieval_method.go charges those after the resolver has materialized
+// them under its own size cap, and they are not base64-decoded bytes.
+//
+// A cap failure passes through as ErrResourceLimitExceeded; every other failure
+// — a child xs:base64Binary does not admit, or a base64 decode error — is
+// wrapped as an invalid `what` under sentinel. The charge precedes the decode,
+// so a value that is both over cap and invalid base64 reports the cap.
 func decodeBudgeted(elem *helium.Element, budget *verifyBudget, sentinel error, what string) ([]byte, error) {
 	decoded, err := xmlbase64.DecodeElement(elem, budget.consume)
 	if errors.Is(err, ErrResourceLimitExceeded) {

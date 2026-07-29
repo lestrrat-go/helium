@@ -463,6 +463,55 @@ func TestDecodeElement(t *testing.T) {
 		require.ErrorAs(t, err, &corrupt)
 	})
 
+	// A comment contributes no character information item to its parent, so a
+	// commented value must decode to exactly what the uncommented one does.
+	// Reading the comment's text instead splices it into the base64 stream and
+	// turns a legitimate value into a corrupt one.
+	t.Run("comment and processing-instruction children contribute nothing", func(t *testing.T) {
+		elem := parseValueElement(t, "QUJ<!--QUJD-->D<?pi QUJD?>REVG")
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABCDEF"), decoded)
+		require.Equal(t, 6, charged)
+	})
+
+	// xs:base64Binary is a simple type, so a ds:DigestValue/ds:SignatureValue
+	// admits only character information items. An element child is therefore
+	// invalid, and reading it would aggregate its whole subtree into one buffer
+	// before anything is charged.
+	t.Run("rejects an element child before charging", func(t *testing.T) {
+		elem := parseValueElement(t, "QUJD<e>REVG</e>")
+		charged := -1
+		_, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errCharge)
+		require.ErrorContains(t, err, "ElementNode")
+		require.Equal(t, -1, charged, "the charge must not run once a child is refused")
+	})
+
+	// The decode buffer is sized from the same count the charge approved, so a
+	// padded value never allocates the padding bytes encoding/base64 would size
+	// from the character count alone. Sizing a decode buffer below what
+	// encoding/base64 asks for is only safe if the count is exact for every
+	// value it accepts, so this walks every payload length through all three
+	// padding shapes rather than naming one.
+	t.Run("sizes the decode buffer at the charged count", func(t *testing.T) {
+		for n := range 256 {
+			data := make([]byte, n)
+			for i := range data {
+				data[i] = byte(i)
+			}
+			elem := parseValueElement(t, wrapWithWhitespace(base64.StdEncoding.EncodeToString(data)))
+			var charged int
+			decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+			require.NoError(t, err, "n=%d", n)
+			require.Equal(t, data, decoded, "n=%d", n)
+			require.Equal(t, n, charged, "n=%d", n)
+			require.Equal(t, charged, cap(decoded), "n=%d", n)
+		}
+	})
+
 	t.Run("matches DecodeString on the joined children", func(t *testing.T) {
 		// One text child, so the markup and the joined content are the same
 		// string and DecodeString can be handed it directly.

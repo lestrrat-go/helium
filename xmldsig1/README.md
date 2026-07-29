@@ -447,19 +447,37 @@ documents verify unchanged:
 |---------|--------|---------|
 | `Verifier.MaxReferences(n)` | number of `ds:Reference` elements | 1024 |
 | `Verifier.MaxKeyInfoEntries(n)` | `KeyInfo` children + `X509Data` children | 256 |
-| `Verifier.MaxDecodedBytes(n)` | running total of base64-decoded bytes | 10 MiB |
+| `Verifier.MaxDecodedBytes(n)` | running total of certificate and signature octets | 10 MiB |
 
 Exceeding a cap fails with `ErrResourceLimitExceeded` before any Reference is
 digested or the signature is checked. For each builder, `n == 0` selects the
 default and a negative `n` disables that cap.
 
-`MaxDecodedBytes` is charged against each value *before* that value is
-materialized, so it bounds what verification builds rather than only what it
-keeps. `xs:base64Binary` permits XML whitespace between characters and a value
-may be spread over any number of text and CDATA children, so the lexical text
-wrapped around a value is unbounded and unrelated to the bytes it decodes to;
-counting it first is what keeps the memory under the cap both for a value the
-cap refuses and for every value it accepts.
+`MaxDecodedBytes` charges five sites. Four are base64 values decoded straight
+off the document — the Signature's own `DigestValue`, `SignatureValue`, and
+`X509Certificate` content, plus the `rawX509Certificate` a same-document
+`ds:RetrievalMethod` points at. That last one is not confined to the Signature:
+a RetrievalMethod URI names any element in the document by ID, of any local name
+and any namespace, inside `ds:Signature` or outside it.
+
+Each of those four is charged *before* the value is materialized, so for them
+the cap bounds what verification builds rather than only what it keeps.
+`xs:base64Binary` permits XML whitespace between characters and a value may be
+spread over any number of text and CDATA children, so the lexical text wrapped
+around a value is unbounded and unrelated to the bytes it decodes to; counting
+it first is what keeps the memory under the cap both for a value the cap refuses
+and for every value it accepts. Only text and CDATA children carry a value's
+characters — a comment or processing instruction contributes none, and an
+element child, which `xs:base64Binary` does not admit at all, is rejected rather
+than read.
+
+The fifth site is the exception to both halves of that. An *external*
+`ds:RetrievalMethod` is dereferenced through the configured
+`ReferenceResolver`, which materializes the whole resource under its own size
+cap (`FSReferenceResolver` bounds one resource at 64 MiB) and runs it through
+the RetrievalMethod's transforms; only the result is charged. Those octets are
+therefore charged *after* they are materialized, and they are raw certificate
+bytes that were never base64-decoded.
 
 Verification also polls the
 context inside the KeyInfo and Reference parse loops, so a cancelled context or

@@ -12,13 +12,14 @@ package xmlbase64
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
 )
 
-// DecodeElement charges charge for the base64 content of e's children and then
-// decodes it. It never builds the value's lexical text.
+// DecodeElement charges charge for the base64 content of e's character-data
+// children and then decodes it. It never builds the value's lexical text.
 //
 // That distinction is the whole point of taking an element rather than a
 // string. xs:base64Binary permits XML whitespace between characters, and a
@@ -34,37 +35,89 @@ import (
 // be split between children — and only then is the charge made. The second pass
 // builds just the characters the decoder will see.
 //
+// Only text and CDATA children are read, and this too is a bound rather than
+// mere tidiness: an element child's Content is the concatenation of that
+// child's WHOLE subtree, aggregated into one buffer, so reading a single
+// element child would materialize an arbitrarily large tree before any charge —
+// exactly what counting first exists to prevent.
+//
+// An element child is refused with an error rather than skipped, because
+// xs:base64Binary is a simple type and a simple content type admits only
+// character information items. Neither ds:DigestValue (a restriction of
+// xs:base64Binary) nor ds:SignatureValue (a simpleContent extension of it) may
+// legally contain one, so refusing it is the more correct reading of the value
+// as well as the bound. Every other child kind is refused with it — an entity
+// reference among them, whose content aggregates the referenced entity's
+// replacement subtree the same unbounded way.
+//
+// Comment and processing-instruction children ARE skipped instead: per the XML
+// infoset neither contributes a character information item, so splicing their
+// text into the base64 stream would corrupt a legitimately commented value.
+//
 // What is held is therefore bounded by what charge approved: the stripped
-// characters at most four thirds of it, the decoded bytes at most it, and
-// nothing at all scaling with the lexical length. The copy [helium.Text.Content]
-// returns per child is the floor, so the peak is the largest single child rather
-// than the whole value.
+// characters at most four thirds of it, the decoded bytes exactly it, and
+// nothing at all scaling with the lexical length. The copy
+// [helium.Text.Content] returns per child is the floor, so the peak is the
+// largest single child rather than the whole value.
 //
 // charge's error is returned unchanged so a caller can pass its own
-// resource-limit error straight through; every other error returned is the
-// encoding/base64 decode failure, for the caller to wrap with what it was
-// decoding. Because the charge precedes the decode, a value that is both over
-// budget and invalid base64 reports the charge error.
+// resource-limit error straight through; every other error returned is a
+// refused child or the encoding/base64 decode failure, for the caller to wrap
+// with what it was decoding. A refused child is reported before the charge
+// runs, and the charge precedes the decode, so a value that is both over budget
+// and invalid base64 reports the charge error.
 func DecodeElement(e *helium.Element, charge func(int) error) ([]byte, error) {
 	var counter Counter
 	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
-		counter.Add(child.Content())
+		content, err := characterData(child)
+		if err != nil {
+			return nil, err
+		}
+		counter.Add(content)
 	}
 	if err := charge(counter.DecodedLen()); err != nil {
 		return nil, err
 	}
 	chars := make([]byte, 0, counter.Chars())
 	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
-		chars = AppendStripped(chars, child.Content())
+		// Every child was accepted by the counting pass above, so the only
+		// error characterData can report here is one that pass already refused.
+		content, err := characterData(child)
+		if err != nil {
+			return nil, err
+		}
+		chars = AppendStripped(chars, content)
 	}
 	// The same decode DecodeString performs, minus the copy converting the
-	// already-stripped characters to a string.
-	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(chars)))
+	// already-stripped characters to a string, and sized at the count the
+	// charge approved rather than at encoding/base64's own padding-blind
+	// DecodedLen — see [Counter.DecodedLen].
+	decoded := make([]byte, counter.DecodedLen())
 	n, err := base64.StdEncoding.Decode(decoded, chars)
 	if err != nil {
 		return nil, err
 	}
 	return decoded[:n], nil
+}
+
+// characterData returns the character data n contributes to an xs:base64Binary
+// value: its content for a text or CDATA child, nil for a child that
+// contributes none, and an error for a child a simple content type does not
+// admit at all. [DecodeElement] documents why each kind lands where it does.
+func characterData(n helium.Node) ([]byte, error) {
+	if t, ok := helium.AsNode[*helium.Text](n); ok {
+		return t.Content(), nil
+	}
+	if c, ok := helium.AsNode[*helium.CDATASection](n); ok {
+		return c.Content(), nil
+	}
+	if _, ok := helium.AsNode[*helium.Comment](n); ok {
+		return nil, nil
+	}
+	if _, ok := helium.AsNode[*helium.ProcessingInstruction](n); ok {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("xs:base64Binary value has a non-character child (%s %q)", n.Type(), n.Name())
 }
 
 // DecodeString strips the four XML whitespace characters from s and
@@ -191,14 +244,19 @@ func (c *Counter) Chars() int {
 	return c.chars
 }
 
-// DecodedLen counts the bytes a DecodeString of the added pieces would need.
+// DecodedLen counts the decoded bytes of the added pieces.
 //
-// The count is exact for a value DecodeString accepts.
+// For a value the decoder accepts the count is exactly the decode's output
+// length, so a buffer sized from it holds the whole decode with nothing to
+// spare — which is what lets [DecodeElement] allocate precisely what it
+// charged. It is NOT the buffer encoding/base64 itself would allocate for the
+// same value: base64.DecodeString sizes from the character count alone and so
+// over-allocates by the padding count, up to 2 bytes.
 //
-// For one it rejects the count never falls below what the rejected decode
-// costs: encoding/base64 sizes its output buffer from the character count
-// alone and allocates it BEFORE validating a single character, so a count that
-// trusted a lexical form the decoder will refuse would let an arbitrarily
+// For a value the decoder rejects the count never falls below what the rejected
+// decode costs: encoding/base64 sizes its output buffer from the character
+// count alone and allocates it BEFORE validating a single character, so a count
+// that trusted a lexical form the decoder will refuse would let an arbitrarily
 // large value slip past a budget and still be allocated. Padding is therefore
 // only deducted from a value whose whole lexical shape is otherwise decodable:
 // a character count that is a multiple of four, at most two '=' and only at
