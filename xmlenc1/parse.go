@@ -1,6 +1,7 @@
 package xmlenc1
 
 import (
+	"context"
 	"crypto/ecdh"
 	"encoding/hex"
 	"fmt"
@@ -16,9 +17,18 @@ import (
 // carries the cumulative EncryptedKey ciphertext allowance across the whole
 // element, and payloadBudget caps the EncryptedData CipherValue. Both are
 // charged at the earliest point that sees their values.
-func parseEncryptedData(elem *helium.Element, encryptedKeyBudget *encryptedKeyBudget, payloadBudget *payloadCipherValueBudget) (*EncryptedData, error) {
+//
+// ctx is observed throughout the parse, which is why every function below takes
+// it. The document decides how many children each element it describes carries,
+// and children the parse skips — a comment inside a CipherValue is the cheapest
+// of them — are charged against no budget at all, so the trip count of these
+// walks is bounded by nothing but the document's size. Every one of them
+// therefore runs through eachSibling, and every error return runs through abort,
+// so a caller that cancels is answered while the parse is still reading rather
+// than after it finishes. A live context leaves both untouched.
+func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyBudget *encryptedKeyBudget, payloadBudget *payloadCipherValueBudget) (*EncryptedData, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedData") {
-		return nil, fmt.Errorf("%w: expected xenc:EncryptedData", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedData", ErrMalformedEncrypted))
 	}
 
 	ed := &EncryptedData{}
@@ -29,40 +39,37 @@ func parseEncryptedData(elem *helium.Element, encryptedKeyBudget *encryptedKeyBu
 	// empty slice, so a boolean is the reliable duplicate sentinel.
 	var seenCipherData bool
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "EncryptionMethod"):
 			if ed.EncryptionMethod != nil {
-				return nil, fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
 			}
-			em, err := parseEncryptionMethod(e)
+			em, err := parseEncryptionMethod(ctx, e)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			ed.EncryptionMethod = em
 		case isDSigElem(e, "KeyInfo"):
-			if err := parseKeyInfoForEncryption(e, ed, encryptedKeyBudget); err != nil {
-				return nil, err
-			}
+			return parseKeyInfoForEncryption(ctx, e, ed, encryptedKeyBudget)
 		case isXMLEncElem(e, "CipherData"):
 			if seenCipherData {
-				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(e, payloadBudget)
+			cv, err := parseCipherData(ctx, e, payloadBudget)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			ed.CipherValue = cv
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	if ed.CipherValue == nil {
-		return nil, fmt.Errorf("%w: missing CipherData/CipherValue", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: missing CipherData/CipherValue", ErrMalformedEncrypted))
 	}
 
 	// Populate the deprecated single EncryptedKey field with the first
@@ -74,28 +81,25 @@ func parseEncryptedData(elem *helium.Element, encryptedKeyBudget *encryptedKeyBu
 	return ed, nil
 }
 
-func parseKeyInfoForEncryption(elem *helium.Element, ed *EncryptedData, budget *encryptedKeyBudget) error {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
+func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *EncryptedData, budget *encryptedKeyBudget) error {
+	return eachChildElement(ctx, elem, func(e *helium.Element) error {
+		if !isXMLEncElem(e, "EncryptedKey") {
+			return nil
 		}
-		if isXMLEncElem(e, "EncryptedKey") {
-			ek, err := parseEncryptedKey(e, budget)
-			if err != nil {
-				return err
-			}
-			ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
+		ek, err := parseEncryptedKey(ctx, e, budget)
+		if err != nil {
+			return err
 		}
-	}
-	return nil
+		ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
+		return nil
+	})
 }
 
 // parseEncryptedKey parses an EncryptedKey element, charging its CipherValue
 // to budget.
-func parseEncryptedKey(elem *helium.Element, budget *encryptedKeyBudget) (*EncryptedKey, error) {
+func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryptedKeyBudget) (*EncryptedKey, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedKey") {
-		return nil, fmt.Errorf("%w: expected xenc:EncryptedKey", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedKey", ErrMalformedEncrypted))
 	}
 
 	ek := &EncryptedKey{}
@@ -104,132 +108,141 @@ func parseEncryptedKey(elem *helium.Element, budget *encryptedKeyBudget) (*Encry
 
 	var seenCipherData bool
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "EncryptionMethod"):
 			if ek.EncryptionMethod != nil {
-				return nil, fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate EncryptionMethod", ErrMalformedEncrypted)
 			}
-			em, err := parseEncryptionMethod(e)
+			em, err := parseEncryptionMethod(ctx, e)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			ek.EncryptionMethod = em
 		case isXMLEncElem(e, "CipherData"):
 			if seenCipherData {
-				return nil, fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(e, budget)
+			cv, err := parseCipherData(ctx, e, budget)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			ek.CipherValue = cv
 		case isXMLEncElem(e, "CarriedKeyName"):
-			ek.CarriedKeyName = domutil.TextContent(e)
-		case isDSigElem(e, "KeyInfo"):
-			agreement, err := parseAgreementMethodForKeyInfo(e)
+			name, err := textContent(ctx, e)
 			if err != nil {
-				return nil, err
+				return err
+			}
+			ek.CarriedKeyName = name
+		case isDSigElem(e, "KeyInfo"):
+			agreement, err := parseAgreementMethodForKeyInfo(ctx, e)
+			if err != nil {
+				return err
 			}
 			ek.AgreementMethod = agreement
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	if ek.CipherValue == nil {
-		return nil, fmt.Errorf("%w: EncryptedKey missing CipherData/CipherValue", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: EncryptedKey missing CipherData/CipherValue", ErrMalformedEncrypted))
 	}
 
 	return ek, nil
 }
 
-func parseAgreementMethodForKeyInfo(elem *helium.Element) (*AgreementMethod, error) {
+func parseAgreementMethodForKeyInfo(ctx context.Context, elem *helium.Element) (*AgreementMethod, error) {
 	var agreement *AgreementMethod
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok || !isXMLEncElem(e, "AgreementMethod") {
-			continue
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
+		if !isXMLEncElem(e, "AgreementMethod") {
+			return nil
 		}
 		if agreement != nil {
-			return nil, fmt.Errorf("%w: duplicate AgreementMethod", ErrMalformedEncrypted)
+			return fmt.Errorf("%w: duplicate AgreementMethod", ErrMalformedEncrypted)
 		}
-		var err error
-		agreement, err = parseAgreementMethod(e)
+		parsed, err := parseAgreementMethod(ctx, e)
 		if err != nil {
-			return nil, err
+			return err
 		}
+		agreement = parsed
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return agreement, nil
 }
 
-func parseAgreementMethod(elem *helium.Element) (*AgreementMethod, error) {
+func parseAgreementMethod(ctx context.Context, elem *helium.Element) (*AgreementMethod, error) {
 	algorithm, ok := elem.GetAttribute("Algorithm")
 	if !ok || algorithm == "" {
-		return nil, fmt.Errorf("%w: AgreementMethod missing/empty Algorithm", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: AgreementMethod missing/empty Algorithm", ErrMalformedEncrypted))
 	}
 	agreement := &AgreementMethod{Algorithm: algorithm}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "OriginatorKeyInfo"):
 			if agreement.OriginatorKey != nil {
-				return nil, fmt.Errorf("%w: duplicate OriginatorKeyInfo", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate OriginatorKeyInfo", ErrMalformedEncrypted)
 			}
-			key, err := parseOriginatorKeyInfo(e)
+			key, err := parseOriginatorKeyInfo(ctx, e)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			agreement.OriginatorKey = key
 		case isXMLEnc11Elem(e, "KeyDerivationMethod"):
 			if agreement.KeyDerivationMethod != nil {
-				return nil, fmt.Errorf("%w: duplicate KeyDerivationMethod", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate KeyDerivationMethod", ErrMalformedEncrypted)
 			}
-			method, err := parseKeyDerivationMethod(e)
+			method, err := parseKeyDerivationMethod(ctx, e)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			agreement.KeyDerivationMethod = method
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return agreement, nil
 }
 
-func parseKeyDerivationMethod(elem *helium.Element) (*KeyDerivationMethod, error) {
+func parseKeyDerivationMethod(ctx context.Context, elem *helium.Element) (*KeyDerivationMethod, error) {
 	algorithm, ok := elem.GetAttribute("Algorithm")
 	if !ok || algorithm == "" {
-		return nil, fmt.Errorf("%w: KeyDerivationMethod missing/empty Algorithm", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: KeyDerivationMethod missing/empty Algorithm", ErrMalformedEncrypted))
 	}
 	method := &KeyDerivationMethod{Algorithm: algorithm}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok || !isXMLEnc11Elem(e, "ConcatKDFParams") {
-			continue
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
+		if !isXMLEnc11Elem(e, "ConcatKDFParams") {
+			return nil
 		}
 		if method.ConcatKDF != nil {
-			return nil, fmt.Errorf("%w: duplicate ConcatKDFParams", ErrMalformedEncrypted)
+			return fmt.Errorf("%w: duplicate ConcatKDFParams", ErrMalformedEncrypted)
 		}
-		params, err := parseConcatKDFParams(e)
+		params, err := parseConcatKDFParams(ctx, e)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		method.ConcatKDF = params
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if method.Algorithm == ConcatKDF && method.ConcatKDF == nil {
-		return nil, fmt.Errorf("%w: ConcatKDF missing ConcatKDFParams", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: ConcatKDF missing ConcatKDFParams", ErrMalformedEncrypted))
 	}
 	return method, nil
 }
 
-func parseConcatKDFParams(elem *helium.Element) (*ConcatKDFParams, error) {
+func parseConcatKDFParams(ctx context.Context, elem *helium.Element) (*ConcatKDFParams, error) {
 	params := &ConcatKDFParams{}
 	var err error
+	// This loop is over a fixed five-element table, not over anything the
+	// document sizes, so it is not an eachSibling site: its trip count is five
+	// whatever the input says. Its error returns still run through abort.
 	for _, field := range []struct {
 		name       string
 		dest       *[]byte
@@ -243,7 +256,7 @@ func parseConcatKDFParams(elem *helium.Element) (*ConcatKDFParams, error) {
 	} {
 		*field.dest, *field.unusedBits, err = parseConcatKDFHexAttribute(elem, field.name)
 		if err != nil {
-			return nil, err
+			return nil, abort(ctx, err)
 		}
 	}
 	// The five fields are only bounded as a set, and this is the first point
@@ -251,23 +264,25 @@ func parseConcatKDFParams(elem *helium.Element) (*ConcatKDFParams, error) {
 	// of the candidate list entirely, so no ECDH exchange, key unwrap, or
 	// OtherInfo packing is ever attempted for it.
 	if err := checkConcatKDFOtherInfoBudget(params); err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok || !isDSigElem(e, "DigestMethod") {
-			continue
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
+		if !isDSigElem(e, "DigestMethod") {
+			return nil
 		}
 		if params.DigestMethod != "" {
-			return nil, fmt.Errorf("%w: duplicate ConcatKDF DigestMethod", ErrMalformedEncrypted)
+			return fmt.Errorf("%w: duplicate ConcatKDF DigestMethod", ErrMalformedEncrypted)
 		}
 		params.DigestMethod, _ = e.GetAttribute("Algorithm")
 		if params.DigestMethod == "" {
-			return nil, fmt.Errorf("%w: ConcatKDF DigestMethod missing/empty Algorithm", ErrMalformedEncrypted)
+			return fmt.Errorf("%w: ConcatKDF DigestMethod missing/empty Algorithm", ErrMalformedEncrypted)
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if params.DigestMethod == "" {
-		return nil, fmt.Errorf("%w: ConcatKDF missing DigestMethod", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: ConcatKDF missing DigestMethod", ErrMalformedEncrypted))
 	}
 	return params, nil
 }
@@ -297,52 +312,73 @@ func parseConcatKDFHexAttribute(elem *helium.Element, name string) ([]byte, uint
 	return decoded[1:], decoded[0], nil
 }
 
-func parseOriginatorKeyInfo(elem *helium.Element) (*ECKeyValue, error) {
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		keyValue, ok := helium.AsNode[*helium.Element](child)
-		if !ok || !isDSigElem(keyValue, "KeyValue") {
-			continue
+// parseOriginatorKeyInfo returns the FIRST dsig11:ECKeyValue under the first
+// ds:KeyValue that carries one. Both walks run to the end of their sibling
+// chain once it is found rather than returning from inside, so the whole child
+// list is observed against ctx at one rate; every child past the first match is
+// only stepped over, never parsed, so the key the document supplies is the same
+// one either way.
+func parseOriginatorKeyInfo(ctx context.Context, elem *helium.Element) (*ECKeyValue, error) {
+	var found *ECKeyValue
+	if err := eachChildElement(ctx, elem, func(keyValue *helium.Element) error {
+		if found != nil || !isDSigElem(keyValue, "KeyValue") {
+			return nil
 		}
-		for nested := keyValue.FirstChild(); nested != nil; nested = nested.NextSibling() {
-			ecValue, ok := helium.AsNode[*helium.Element](nested)
-			if !ok || !isDSig11Elem(ecValue, "ECKeyValue") {
-				continue
+		return eachChildElement(ctx, keyValue, func(ecValue *helium.Element) error {
+			if found != nil || !isDSig11Elem(ecValue, "ECKeyValue") {
+				return nil
 			}
-			return parseECKeyValue(ecValue)
-		}
+			parsed, err := parseECKeyValue(ctx, ecValue)
+			if err != nil {
+				return err
+			}
+			found = parsed
+			return nil
+		})
+	}); err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("%w: OriginatorKeyInfo missing dsig11:ECKeyValue", ErrMalformedEncrypted)
+	if found == nil {
+		return nil, abort(ctx, fmt.Errorf("%w: OriginatorKeyInfo missing dsig11:ECKeyValue", ErrMalformedEncrypted))
+	}
+	return found, nil
 }
 
-func parseECKeyValue(elem *helium.Element) (*ECKeyValue, error) {
+func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, error) {
 	var curve ecdh.Curve
 	var publicKey []byte
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok || e.URI() != NamespaceDSig11 {
-			continue
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
+		if e.URI() != NamespaceDSig11 {
+			return nil
 		}
 		switch domutil.LocalName(e) {
 		case "NamedCurve":
 			uri, _ := e.GetAttribute("URI")
-			var err error
-			curve, err = ecdhCurveForURI(uri)
+			named, err := ecdhCurveForURI(uri)
 			if err != nil {
-				return nil, err
+				return err
 			}
+			curve = named
 		case "PublicKey":
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			value, err := textContent(ctx, e)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrMalformedEncrypted, err)
+				return err
+			}
+			decoded, err := xmlbase64.DecodeString(value)
+			if err != nil {
+				return fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrMalformedEncrypted, err)
 			}
 			publicKey = decoded
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if curve == nil || len(publicKey) == 0 {
-		return nil, fmt.Errorf("%w: ECKeyValue requires NamedCurve and PublicKey", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: ECKeyValue requires NamedCurve and PublicKey", ErrMalformedEncrypted))
 	}
 	if _, err := curve.NewPublicKey(publicKey); err != nil {
-		return nil, fmt.Errorf("%w: invalid EC public key: %v", ErrMalformedEncrypted, err)
+		return nil, abort(ctx, fmt.Errorf("%w: invalid EC public key: %v", ErrMalformedEncrypted, err))
 	}
 	return &ECKeyValue{Curve: curve, PublicKey: publicKey}, nil
 }
@@ -382,11 +418,11 @@ func ecdhURIForCurve(curve ecdh.Curve) (string, error) {
 // the document is read, so everything here runs before any key is resolved and
 // before anything the document says has been authenticated. The only child it
 // decodes is OAEPparams, and decodeOAEPParams owns what bounds that.
-func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
+func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*EncryptionMethod, error) {
 	em := &EncryptionMethod{}
 	alg, ok := elem.GetAttribute("Algorithm")
 	if !ok || alg == "" {
-		return nil, fmt.Errorf("%w: EncryptionMethod missing/empty Algorithm", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: EncryptionMethod missing/empty Algorithm", ErrMalformedEncrypted))
 	}
 	em.Algorithm = alg
 
@@ -396,30 +432,26 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	// attribute/text value is otherwise ambiguous.
 	var seenDigestMethod, seenMGF, seenOAEPParams, seenKeySize bool
 
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isDSigElem(e, "DigestMethod"):
 			if seenDigestMethod {
-				return nil, fmt.Errorf("%w: duplicate DigestMethod", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate DigestMethod", ErrMalformedEncrypted)
 			}
 			seenDigestMethod = true
 			alg, ok := e.GetAttribute("Algorithm")
 			if !ok || alg == "" {
-				return nil, fmt.Errorf("%w: DigestMethod missing/empty Algorithm", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: DigestMethod missing/empty Algorithm", ErrMalformedEncrypted)
 			}
 			em.DigestMethod = alg
 		case isMGFElem(e):
 			if seenMGF {
-				return nil, fmt.Errorf("%w: duplicate MGF", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate MGF", ErrMalformedEncrypted)
 			}
 			seenMGF = true
 			alg, ok := e.GetAttribute("Algorithm")
 			if !ok || alg == "" {
-				return nil, fmt.Errorf("%w: MGF missing/empty Algorithm", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: MGF missing/empty Algorithm", ErrMalformedEncrypted)
 			}
 			em.MGFAlgorithm = alg
 		case isXMLEncElem(e, "KeySize"):
@@ -428,20 +460,23 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 			// KeySize, so enforce at-most-one cardinality to stay consistent
 			// with the other sub-element guards.
 			if seenKeySize {
-				return nil, fmt.Errorf("%w: duplicate KeySize", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate KeySize", ErrMalformedEncrypted)
 			}
 			seenKeySize = true
 		case isXMLEncElem(e, "OAEPparams"):
 			if seenOAEPParams {
-				return nil, fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
 			}
 			seenOAEPParams = true
-			decoded, err := decodeOAEPParams(e)
+			decoded, err := decodeOAEPParams(ctx, e)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			em.OAEPParams = decoded
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return em, nil
@@ -511,26 +546,33 @@ const maxOAEPParamsChars = (maxOAEPParamsBytes + 2) / 3 * 4
 // parse allocate that megabyte once, not once per pass and not per subtree.
 // Keeping it to once is what base64CharacterData's rule on which children
 // may be read, and how far into one of them the walk goes, protects.
-func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
+// The walk is over EVERY child kind, not just elements, so it goes through
+// eachSibling directly: the children a value is spread across are text, CDATA,
+// entity references, comments and processing instructions, and the ones that
+// carry no characters at all cost the least to write.
+func decodeOAEPParams(ctx context.Context, elem *helium.Element) ([]byte, error) {
 	var counter xmlbase64.Counter
 	chars := make([]byte, 0, maxOAEPParamsChars)
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
 		text, err := base64CharacterData(child, "OAEPparams")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		counter.Add(text)
 		if counter.Chars() > maxOAEPParamsChars {
-			return nil, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes)
+			return fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes)
 		}
 		chars = xmlbase64.AppendStripped(chars, text)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if counter.DecodedLen() > maxOAEPParamsBytes {
-		return nil, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes)
+		return nil, abort(ctx, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes))
 	}
 	decoded, err := xmlbase64.DecodeString(string(chars))
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
+		return nil, abort(ctx, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err))
 	}
 	return decoded, nil
 }
@@ -618,34 +660,33 @@ func base64CharacterData(child helium.Node, valueName string) ([]byte, error) {
 // value never reaches the decoder. decodeCipherValue owns how that charge is
 // kept ahead of the work. A nil budget leaves the value unbounded, which is
 // only used by parser-only test helpers.
-func parseCipherData(elem *helium.Element, budget cipherValueBudget) ([]byte, error) {
+func parseCipherData(ctx context.Context, elem *helium.Element, budget cipherValueBudget) ([]byte, error) {
 	var decoded []byte
 	var seenChoice bool
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		e, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
+	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "CipherValue"):
 			if seenChoice {
-				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
 			}
 			seenChoice = true
-			d, err := decodeCipherValue(e, budget)
+			d, err := decodeCipherValue(ctx, e, budget)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			decoded = d
 		case isXMLEncElem(e, "CipherReference"):
 			if seenChoice {
-				return nil, fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+				return fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
 			}
-			return nil, fmt.Errorf("%w: CipherReference is not supported", ErrMalformedEncrypted)
+			return fmt.Errorf("%w: CipherReference is not supported", ErrMalformedEncrypted)
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if !seenChoice {
-		return nil, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted))
 	}
 	return decoded, nil
 }
@@ -671,31 +712,42 @@ func parseCipherData(elem *helium.Element, budget cipherValueBudget) ([]byte, er
 // scaling with the lexical length. The copy [helium.Text.Content] returns per
 // child is the floor, so the peak is the largest single child rather than the
 // whole value.
-func decodeCipherValue(elem *helium.Element, budget cipherValueBudget) ([]byte, error) {
+// Both passes walk EVERY child kind, so they go through eachSibling directly
+// rather than eachChildElement. The children that contribute nothing to the
+// value — a comment, a processing instruction — are charged against no budget,
+// which makes their number the one thing here the document sets for free; the
+// per-child poll is what bounds the time a cancelled caller waits for them.
+func decodeCipherValue(ctx context.Context, elem *helium.Element, budget cipherValueBudget) ([]byte, error) {
 	var counter xmlbase64.Counter
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
 		content, err := base64CharacterData(child, "CipherValue")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		counter.Add(content)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if budget != nil {
 		if err := budget.charge(counter.DecodedLen()); err != nil {
-			return nil, err
+			return nil, abort(ctx, err)
 		}
 	}
 	chars := make([]byte, 0, counter.Chars())
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
 		content, err := base64CharacterData(child, "CipherValue")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		chars = xmlbase64.AppendStripped(chars, content)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	decoded, err := xmlbase64.DecodeString(string(chars))
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err)
+		return nil, abort(ctx, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err))
 	}
 	return decoded, nil
 }

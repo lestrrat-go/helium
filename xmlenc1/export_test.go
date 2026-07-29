@@ -1,6 +1,8 @@
 package xmlenc1
 
 import (
+	"context"
+
 	helium "github.com/lestrrat-go/helium"
 )
 
@@ -31,9 +33,12 @@ func HardenedParserForTest() helium.Parser {
 // ParseEncryptedDataForTest is a test-only re-export of the package
 // internal EncryptedData parser so tests can assert namespace-aware
 // element matching directly against a parsed DOM. It parses under a
-// default Decryptor's CipherValue budgets, as Decrypt does.
+// default Decryptor's CipherValue budgets, as Decrypt does, and under an
+// uncancelled context, so what these callers see is the parse's own verdict
+// rather than a cancellation. Cancellation of the parse is covered through the
+// public terminals instead.
 func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
-	return parseEncryptedData(elem, newEncryptedKeyBudget(&decryptConfig{}), newPayloadCipherValueBudget(&decryptConfig{}))
+	return parseEncryptedData(context.Background(), elem, newEncryptedKeyBudget(&decryptConfig{}), newPayloadCipherValueBudget(&decryptConfig{}))
 }
 
 // MaxOAEPParamsBytesForTest re-exports the xenc:OAEPparams decoded-size limit
