@@ -444,9 +444,19 @@ func TestMaxEncryptedKeyBytes(t *testing.T) {
 // TestMaxCipherValueBytes covers the EncryptedData payload budget, which is
 // independent from the cumulative budget for EncryptedKey ciphertext.
 func TestMaxCipherValueBytes(t *testing.T) {
+	// overDefault decodes to one byte more than DefaultMaxCipherValueBytes, so
+	// the default budget refuses it and only an unlimited budget gets past it.
+	// It is laid out as TWO CDATA sections, which is what makes the fixture
+	// affordable: splitIntoCDATA takes a NODE COUNT, while splitIntoNodes takes
+	// a character CHUNK SIZE, and a chunk of two characters would turn this
+	// value into nearly seven million nodes. The many-node shape is covered by
+	// TestPayloadCipherValueSplitAcrossNodes instead. Two sections still split
+	// the value across children, and each is under the parser's 10 MiB per-node
+	// content cap.
+	overDefault := splitIntoCDATA(base64.StdEncoding.EncodeToString(make([]byte, xmlenc1.DefaultMaxCipherValueBytes+1)), 2)
+
 	t.Run("over default budget fails", func(t *testing.T) {
-		payload := base64.StdEncoding.EncodeToString(make([]byte, xmlenc1.DefaultMaxCipherValueBytes+1))
-		elem := rawPayloadCipherValueEncryptedData(t, splitIntoNodes(payload, 2))
+		elem := rawPayloadCipherValueEncryptedData(t, overDefault)
 		_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).DecryptBytes(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
 	})
@@ -478,18 +488,23 @@ func TestMaxCipherValueBytes(t *testing.T) {
 		require.Equal(t, []byte(`payload`), plaintext)
 	})
 
+	// The two subtests below both assert on a value OVER the default budget,
+	// which is what separates them. A value under it would be accepted by every
+	// configuration, so zero and a negative value would be indistinguishable and
+	// neither subtest could fail.
 	t.Run("negative budget removes the limit", func(t *testing.T) {
-		elem := rawPayloadCipherValueEncryptedData(t, `AAAA`)
+		elem := rawPayloadCipherValueEncryptedData(t, overDefault)
 		_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(-1).DecryptBytes(t.Context(), elem)
-		require.Error(t, err)
+		// The value gets past the budget and fails afterwards for an unrelated
+		// reason: this fixture declares no EncryptionMethod.
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 		require.NotErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
 	})
 
 	t.Run("zero is the default", func(t *testing.T) {
-		elem := rawPayloadCipherValueEncryptedData(t, `AAAA`)
+		elem := rawPayloadCipherValueEncryptedData(t, overDefault)
 		_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(0).DecryptBytes(t.Context(), elem)
-		require.Error(t, err)
-		require.NotErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+		require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
 	})
 }
 
@@ -503,6 +518,53 @@ func TestPayloadCipherValueSplitAcrossNodes(t *testing.T) {
 	elem := rawPayloadCipherValueEncryptedData(t, payload)
 	_, err := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(splitDecoded-1).Decrypt(t.Context(), elem)
 	require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+}
+
+// TestPayloadCipherValueElementChild pins that an element child of the PAYLOAD
+// CipherValue is refused before the payload budget is charged, and before
+// anything underneath it is read.
+//
+// [helium.Element] answers Content by concatenating its whole descendant
+// subtree into a fresh buffer, so a counting loop that asked every child for
+// its content would spend the entire subtree before a budget measured in
+// DECODED octets could refuse it — and since a subtree of whitespace decodes to
+// nothing, the budget would not fire on it at all. The lexical size of that
+// subtree is the document author's to choose, so the cost would follow the
+// markup rather than the budget.
+//
+// The error assertions alone cannot see this: the value is refused either way,
+// and only what was allocated getting there tells the two apart. This reads the
+// process-wide TotalAlloc delta across DecryptBytes, so it must NOT run in
+// parallel with anything — a concurrent test's allocations would pollute it.
+func TestPayloadCipherValueElementChild(t *testing.T) {
+	// no t.Parallel(): isolated so the delta reflects only its own DecryptBytes.
+
+	// The element wraps 800,000 characters of otherwise valid base64. Reading
+	// it would cost at least one copy of that, so a bound an order of magnitude
+	// below it separates "refused the element" from "read the subtree first".
+	const (
+		leaves   = 200000
+		maxAlloc = 64 << 10
+	)
+
+	elem := rawPayloadCipherValueEncryptedData(t, `<junk>`+strings.Repeat(`<![CDATA[AAAA]]>`, leaves)+`</junk>`)
+	decryptor := xmlenc1.NewDecryptor().SessionKey(randKey(t, 32)).MaxCipherValueBytes(1)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := decryptor.DecryptBytes(t.Context(), elem)
+	runtime.ReadMemStats(&after)
+
+	// The classifier's refusal, not the budget's: an element child makes the
+	// content invalid xs:base64Binary whatever the budget is, and the budget
+	// never got the chance to speak.
+	require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	require.ErrorContains(t, err, "CipherValue holds a child of type")
+	require.NotErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+
+	allocated := after.TotalAlloc - before.TotalAlloc
+	require.Less(t, allocated, uint64(maxAlloc), "refusing an element child of a %d-leaf subtree allocated %d bytes", leaves, allocated)
 }
 
 // TestEncryptedKeyCipherValueSplitAcrossNodes covers a CipherValue whose
