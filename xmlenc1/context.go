@@ -100,12 +100,12 @@ func eachChildElement(ctx context.Context, elem *helium.Element, fn func(*helium
 // the shared one because that one is used by packages with no context to
 // observe, and widening its signature would reach well past this package.
 //
-// The parse reaches it for values whose child count the document alone decides:
-// an EncryptedKey's CarriedKeyName and an ECKeyValue's PublicKey. Neither is
-// charged against MaxEncryptedKeyBytes or MaxCipherValueBytes, and a child that
-// carries no characters at all — a comment is the cheapest of them — costs the
-// document nothing to repeat at any depth, so those polls are the only thing
-// bounding how long a cancelled caller waits for these two walks.
+// The parse reaches it for one value whose child count the document alone
+// decides: an EncryptedKey's CarriedKeyName. It is charged against neither
+// MaxEncryptedKeyBytes nor MaxCipherValueBytes, and a child that carries no
+// characters at all — a comment is the cheapest of them — costs the document
+// nothing to repeat at any depth, so those polls are the only thing bounding
+// how long a cancelled caller waits for that walk.
 func textContent(ctx context.Context, elem *helium.Element) (string, error) {
 	var sb []byte
 	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {

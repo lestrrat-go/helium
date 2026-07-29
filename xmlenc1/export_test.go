@@ -46,6 +46,11 @@ func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
 // copy of its value, which would drift from it.
 const MaxOAEPParamsBytesForTest = maxOAEPParamsBytes
 
+// MaxECPublicKeyBytesForTest re-exports the dsig11:PublicKey decoded-size limit
+// so a test can pin the boundary against the constant itself rather than a copy
+// of its value, which would drift from it.
+const MaxECPublicKeyBytesForTest = maxECPublicKeyBytes
+
 // AESKeyWrapForTest wraps key material under a KEK using RFC 3394 AES Key
 // Wrap. It exists so security tests can assemble an EncryptedKey whose
 // wrapped session-key length does not match the declared block algorithm,

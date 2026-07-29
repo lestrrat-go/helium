@@ -70,6 +70,21 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   instruction is ignored rather than spliced into the base64. The one cost that
   still follows the document is the copy the DOM hands out per child, which the
   walk pays exactly once.
+- A `dsig11:PublicKey` inside an ECDH-ES originator key is limited to 133 bytes
+  decoded, because it is read while the document is parsed and the curve is
+  otherwise the only thing that would refuse an oversized value — after the
+  whole of it has been materialized. 133 is not a policy choice: it is the
+  largest SEC1 uncompressed point the three supported curves encode (65 on
+  P-256, 97 on P-384, 133 on P-521), and `crypto/ecdh` accepts nothing else, so
+  a longer value is rejected either way. The limit is the maximum across all
+  three rather than the selected curve's own size, because `dsig11:NamedCurve`
+  may follow the `dsig11:PublicKey` or be absent altogether, so there may be no
+  curve to size the value by when it is weighed. Over the limit fails with
+  `ErrMalformedEncrypted`. The value is weighed as it is read and never joined
+  into one string, so what the parse keeps is sized by the limit no matter how
+  much whitespace or how many CDATA sections a point is spread over, and the
+  same child rules as `xenc:OAEPparams` apply: only character data is read, an
+  element child is refused, and a comment or processing instruction is ignored.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
