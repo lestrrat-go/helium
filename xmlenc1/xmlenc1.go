@@ -249,25 +249,32 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 // exactly that reason, and no tree is modified — the caller decides where
 // to insert it.
 func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plaintext []byte) (*helium.Element, error) {
+	if err := contextErr(ctx); err != nil {
+		return nil, err
+	}
 	if doc == nil {
-		return nil, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", ErrMissingConfig)
+		return nil, abort(ctx, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", ErrMissingConfig))
 	}
 	cfg := e.config()
 	resolved, err := resolveEncryptConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
 	return encryptPlaintext(ctx, cfg, resolved, doc, plaintext, "")
 }
 
 func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encType string) (*helium.Element, error) {
+	if err := contextErr(ctx); err != nil {
+		return nil, err
+	}
+
 	// Resolve the configuration before touching the payload: no payload can
 	// make a misconfigured Encryptor or an unusable recipient key work, so the
 	// errors resolveEncryptConfig decides must be what the caller sees even
 	// when the plaintext also fails to serialize.
 	resolved, err := resolveEncryptConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
 
 	// Serialize the plaintext. Element encrypts the element itself;
@@ -276,18 +283,29 @@ func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encT
 	if encType == TypeElement {
 		plaintext, err = helium.WriteString(elem)
 	} else {
-		plaintext, err = serializeChildren(elem)
+		plaintext, err = serializeChildren(ctx, elem)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
+		return nil, abort(ctx, fmt.Errorf("%w: %v", ErrEncryptionFailed, err))
+	}
+	if err := contextErr(ctx); err != nil {
+		return nil, err
 	}
 
 	edElem, err := encryptPlaintext(ctx, cfg, resolved, elem.OwnerDocument(), []byte(plaintext), encType)
 	if err != nil {
+		return nil, abort(ctx, err)
+	}
+	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
 
-	// Replace in tree.
+	// Replace in tree. This is the commit point, and deliberately neither
+	// polls the context nor routes its failures through abort: past here the
+	// caller's tree is being rewritten, and reporting a cancellation instead
+	// of what the rewrite actually did would tell the caller nothing happened
+	// when children have already been unlinked. removeChildren's own walk is
+	// part of that rewrite and is not an eachSibling site for the same reason.
 	if encType == TypeElement {
 		// Replace the element with EncryptedData in place, preserving the
 		// original element's position among its siblings.
@@ -403,20 +421,23 @@ func conflictingKeyProtection(cfg *encryptConfig, hasKeyTransport, hasKeyAgreeme
 // protects the session key, and marshals the EncryptedData element into doc.
 // It never touches the tree, so both the element/content and the raw-octet
 // entry points share identical crypto handling.
-func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEncryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
+func encryptPlaintext(ctx context.Context, cfg *encryptConfig, resolved resolvedEncryptConfig, doc *helium.Document, plaintext []byte, encType string) (*helium.Element, error) {
+	if err := contextErr(ctx); err != nil {
+		return nil, err
+	}
 	blockAlgorithm := resolved.blockAlgorithm
 
 	// Get or generate session key.
 	keySize, err := keySizeForAlgorithm(paramBlockAlgorithm, blockAlgorithm)
 	if err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
 
 	sessionKey := cfg.sessionKey
 	if len(sessionKey) == 0 {
 		sessionKey = make([]byte, keySize)
 		if _, err := io.ReadFull(rand.Reader, sessionKey); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
+			return nil, abort(ctx, fmt.Errorf("%w: %v", ErrEncryptionFailed, err))
 		}
 	}
 
@@ -424,12 +445,18 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 	// a user-supplied SessionKey cannot make us emit, e.g., an AES-256
 	// URI while actually encrypting with AES-128.
 	if err := validateKeySize(paramBlockAlgorithm, blockAlgorithm, paramSessionKey, sessionKey); err != nil {
+		return nil, abort(ctx, err)
+	}
+	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
 
 	// Block encrypt.
 	cipherValue, err := blockEncrypt(blockAlgorithm, sessionKey, plaintext)
 	if err != nil {
+		return nil, abort(ctx, err)
+	}
+	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
 
@@ -438,7 +465,7 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 	if resolved.hasKeyTransport {
 		encKeyBytes, err := encryptSessionKey(cfg.keyTransport, cfg.recipientPubKey, sessionKey, cfg.oaepDigest, cfg.oaepMGF, cfg.oaepParams)
 		if err != nil {
-			return nil, err
+			return nil, abort(ctx, err)
 		}
 		encKey = &EncryptedKey{
 			EncryptionMethod: &EncryptionMethod{
@@ -456,23 +483,26 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 		// cfg.keyWrapAlgorithm.
 		encKey, err = encryptECDHSessionKey(resolved.recipientECDH, cfg.keyWrapAlgorithm, effectiveKDFParams(cfg.kdfParams), sessionKey)
 		if err != nil {
-			return nil, err
+			return nil, abort(ctx, err)
 		}
 	} else if resolved.hasKeyWrap {
 		// Bind the declared key-wrap URI to the KEK length so a 16-byte
 		// KEK cannot make us emit a kw-aes256 URI while wrapping with
 		// AES-128.
 		if err := validateKeySize(paramKeyWrap, cfg.keyWrapAlgorithm, paramKEK, cfg.keyEncryptionKey); err != nil {
-			return nil, err
+			return nil, abort(ctx, err)
 		}
 		wrappedKey, err := aesKeyWrap(cfg.keyEncryptionKey, sessionKey)
 		if err != nil {
-			return nil, err
+			return nil, abort(ctx, err)
 		}
 		encKey = &EncryptedKey{
 			EncryptionMethod: &EncryptionMethod{Algorithm: cfg.keyWrapAlgorithm},
 			CipherValue:      wrappedKey,
 		}
+	}
+	if err := contextErr(ctx); err != nil {
+		return nil, err
 	}
 
 	// Build EncryptedData.
@@ -487,19 +517,39 @@ func encryptPlaintext(_ context.Context, cfg *encryptConfig, resolved resolvedEn
 		CipherValue:      cipherValue,
 	}
 
-	return marshalEncryptedData(doc, ed)
+	edElem, err := marshalEncryptedData(doc, ed)
+	if err != nil {
+		return nil, abort(ctx, err)
+	}
+	if err := contextErr(ctx); err != nil {
+		return nil, err
+	}
+	return edElem, nil
 }
 
-func serializeChildren(elem *helium.Element) (string, error) {
-	var sb strings.Builder
-	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-		s, err := helium.WriteString(child)
-		if err != nil {
-			return "", err
-		}
-		sb.WriteString(s)
+// childSerializer accumulates the serialized form of each node handed to it,
+// so serializeChildren can walk the caller's subtree through eachSibling and
+// observe the context per child rather than only at the ends of a walk whose
+// length the caller chooses.
+type childSerializer struct {
+	sb strings.Builder
+}
+
+func (s *childSerializer) appendNode(child helium.Node) error {
+	text, err := helium.WriteString(child)
+	if err != nil {
+		return err
 	}
-	return sb.String(), nil
+	s.sb.WriteString(text)
+	return nil
+}
+
+func serializeChildren(ctx context.Context, elem *helium.Element) (string, error) {
+	var s childSerializer
+	if err := eachSibling(ctx, elem.FirstChild(), s.appendNode); err != nil {
+		return "", err
+	}
+	return s.sb.String(), nil
 }
 
 func removeChildren(elem *helium.Element) {
@@ -839,61 +889,99 @@ func (b *payloadCipherValueBudget) charge(n int) error {
 }
 
 func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]byte, error) {
+	if err := contextErr(ctx); err != nil {
+		return nil, err
+	}
 	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg))
 	if err != nil {
+		return nil, abort(ctx, err)
+	}
+	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
 	if ed.EncryptionMethod == nil {
-		return nil, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted))
 	}
 	alg := ed.EncryptionMethod.Algorithm
 	switch alg {
 	case AES128CBC, AES256CBC:
 		if !cfg.allowUnauthenticatedCBC {
-			return nil, ErrCBCRequiresOptIn
+			return nil, abort(ctx, ErrCBCRequiresOptIn)
 		}
 	}
 
 	keys := ed.effectiveEncryptedKeys()
 	if err := checkEncryptedKeyCap(cfg, len(keys)); err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
 
 	if len(cfg.sessionKey) > 0 {
-		return decryptCipherValue(ed, alg, cfg.sessionKey)
+		plaintext, err := decryptCipherValue(ed, alg, cfg.sessionKey)
+		if err != nil {
+			return nil, abort(ctx, err)
+		}
+		if err := contextErr(ctx); err != nil {
+			return nil, err
+		}
+		return plaintext, nil
 	}
 	if len(keys) == 0 {
-		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
+		return nil, abort(ctx, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey))
 	}
 
 	sessionKeySize, err := keySizeForAlgorithm(paramBlockAlgorithm, alg)
 	if err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
 
 	var lastErr error
 	for _, ek := range keys {
-		if err := ctx.Err(); err != nil {
+		if err := contextErr(ctx); err != nil {
 			return nil, err
 		}
 		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek, sessionKeySize)
 		if err != nil {
+			// Key resolution cannot be interrupted once entered, so a
+			// cancellation that lands while it runs is only observable
+			// here. abort lets it win over the candidate's own error: the
+			// caller asked to stop, and the candidate error would otherwise
+			// be reported as the reason decryption failed.
+			err = abort(ctx, err)
+			if isContextErr(err) {
+				return nil, err
+			}
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
+		}
+		if err := contextErr(ctx); err != nil {
+			return nil, err
 		}
 		plaintext, err := decryptCipherValue(ed, alg, sessionKey)
 		if err != nil {
+			err = abort(ctx, err)
+			if isContextErr(err) {
+				return nil, err
+			}
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
+		if err := contextErr(ctx); err != nil {
+			return nil, err
+		}
 		return plaintext, nil
 	}
-	return nil, lastErr
+	return nil, abort(ctx, lastErr)
 }
 
 func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
+	if err := contextErr(ctx); err != nil {
+		return nil, err
+	}
 	ed, err := parseEncryptedData(elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg))
 	if err != nil {
+		return nil, abort(ctx, err)
+	}
+	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
 
@@ -908,37 +996,41 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	case TypeContent:
 		isContent = true
 	default:
-		return nil, fmt.Errorf("%w: unsupported EncryptedData Type %q", ErrMalformedEncrypted, ed.Type)
+		return nil, abort(ctx, fmt.Errorf("%w: unsupported EncryptedData Type %q", ErrMalformedEncrypted, ed.Type))
 	}
 
 	// Validate the EncryptionMethod and CBC opt-in once, up front: these
 	// describe the block cipher and are independent of which session-key
 	// candidate ultimately succeeds.
 	if ed.EncryptionMethod == nil {
-		return nil, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted)
+		return nil, abort(ctx, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted))
 	}
 	alg := ed.EncryptionMethod.Algorithm
 	switch alg {
 	case AES128CBC, AES256CBC:
 		if !cfg.allowUnauthenticatedCBC {
-			return nil, ErrCBCRequiresOptIn
+			return nil, abort(ctx, ErrCBCRequiresOptIn)
 		}
 	}
 
 	keys := ed.effectiveEncryptedKeys()
 	if err := checkEncryptedKeyCap(cfg, len(keys)); err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
 
 	// A pre-shared session key, when configured, returns here — before
 	// candidate selection, per-candidate validation, and per-candidate key
 	// resolution. Decryptor.SessionKey documents what that skips.
 	if len(cfg.sessionKey) > 0 {
-		return finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey)
+		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey)
+		if err != nil {
+			return nil, abort(ctx, err)
+		}
+		return nodes, nil
 	}
 
 	if len(keys) == 0 {
-		return nil, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
+		return nil, abort(ctx, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey))
 	}
 
 	// The declared block algorithm fixes the session-key length, and with it
@@ -946,7 +1038,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	// before the loop, so every candidate's unwrap is length-bound.
 	sessionKeySize, err := keySizeForAlgorithm(paramBlockAlgorithm, alg)
 	if err != nil {
-		return nil, err
+		return nil, abort(ctx, err)
 	}
 
 	// A document may carry several EncryptedKey candidates (one per
@@ -962,22 +1054,34 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		// Poll the caller's deadline between candidates so a cancellation
 		// interrupts the per-candidate key-resolution work rather than
 		// running to completion over every EncryptedKey.
-		if err := ctx.Err(); err != nil {
+		if err := contextErr(ctx); err != nil {
 			return nil, err
 		}
 		sessionKey, err := resolveSessionKeyFromEncryptedKey(cfg, ek, sessionKeySize)
 		if err != nil {
+			// Key resolution cannot be interrupted once entered, so a
+			// cancellation that lands while it runs is only observable
+			// here. abort lets it win over the candidate's own error, the
+			// same decision the decryptBytes loop makes at the same point.
+			err = abort(ctx, err)
+			if isContextErr(err) {
+				return nil, err
+			}
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
 		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, sessionKey)
 		if err != nil {
+			err = abort(ctx, err)
+			if isContextErr(err) {
+				return nil, err
+			}
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
 		return nodes, nil
 	}
-	return nil, lastErr
+	return nil, abort(ctx, lastErr)
 }
 
 // preferInformativeErr keeps the most informative error across EncryptedKey
@@ -1003,8 +1107,14 @@ func preferInformativeErr(existing, candidate error) error {
 // pipeline succeeds, so a caller iterating session-key candidates can
 // safely fall through to the next candidate on any error.
 func finishDecrypt(ctx context.Context, ed *EncryptedData, elem *helium.Element, alg string, isContent bool, sessionKey []byte) ([]helium.Node, error) {
+	if err := contextErr(ctx); err != nil {
+		return nil, err
+	}
 	plaintext, err := decryptCipherValue(ed, alg, sessionKey)
 	if err != nil {
+		return nil, abort(ctx, err)
+	}
+	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1045,35 +1155,61 @@ func finishDecrypt(ctx context.Context, ed *EncryptedData, elem *helium.Element,
 
 	first, err := parser.ParseInNodeContext(ctx, contextNode, plaintext)
 	if err != nil {
-		return nil, ErrDecryptionFailed
+		if isContextErr(err) {
+			return nil, err
+		}
+		return nil, abort(ctx, ErrDecryptionFailed)
+	}
+	if err := contextErr(ctx); err != nil {
+		return nil, err
 	}
 
-	var nodes []helium.Node
+	// The plaintext is attacker-controlled, so the number of nodes it parses
+	// to is attacker-chosen. Both shape walks below go through eachSibling,
+	// which observes ctx per node.
+	var collected nodeCollector
 	if isContent {
 		// Content may be multiple children.
-		for child := first; child != nil; child = child.NextSibling() {
-			nodes = append(nodes, child)
+		if err := eachSibling(ctx, first, collected.appendNode); err != nil {
+			return nil, err
 		}
-		return nodes, nil
+		return collected.nodes, nil
 	}
 
 	// Element must yield exactly one element node.
-	var elemNode helium.Node
-	for child := first; child != nil; child = child.NextSibling() {
-		if child.Type() != helium.ElementNode {
-			return nil, ErrDecryptionFailed
-		}
-		if elemNode != nil {
-			return nil, ErrDecryptionFailed
-		}
-		elemNode = child
+	if err := eachSibling(ctx, first, collected.appendElementNode); err != nil {
+		return nil, err
 	}
-	if elemNode == nil {
-		return nil, ErrDecryptionFailed
+	if len(collected.nodes) == 0 {
+		return nil, abort(ctx, ErrDecryptionFailed)
 	}
-	nodes = append(nodes, elemNode)
+	return collected.nodes, nil
+}
 
-	return nodes, nil
+// nodeCollector gathers the nodes eachSibling walks, so finishDecrypt's two
+// shape walks over the parsed plaintext observe the context per node.
+type nodeCollector struct {
+	nodes []helium.Node
+}
+
+// appendNode keeps every node, which is what a TypeContent payload yields.
+func (c *nodeCollector) appendNode(node helium.Node) error {
+	c.nodes = append(c.nodes, node)
+	return nil
+}
+
+// appendElementNode keeps one element node and rejects anything else, which is
+// what a TypeElement payload must yield. A non-element node, or a second node
+// of any kind, is not a valid fragment.
+func (c *nodeCollector) appendElementNode(node helium.Node) error {
+	if node.Type() != helium.ElementNode {
+		return ErrDecryptionFailed
+	}
+	if len(c.nodes) > 0 {
+		return ErrDecryptionFailed
+	}
+	c.nodes = append(c.nodes, node)
+	return nil
 }
 
 func decryptCipherValue(ed *EncryptedData, alg string, sessionKey []byte) ([]byte, error) {
