@@ -126,8 +126,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 Coverage of W3C xmlenc-core1 is a subset. Three constructs the specification
 marks REQUIRED are absent:
 
-- **`xenc:CipherReference`** (§3.3.1, §4.4). `CipherData` must carry a
-  `CipherValue`. Cipher text named by a URI is rejected with
+- **`xenc:CipherReference`** (§3.3.1, §4.4). xmlenc-core1 lets `CipherData`
+  carry either a `CipherValue` or a `CipherReference`; this package accepts
+  only the `CipherValue`. Cipher text named by a URI is rejected with
   `ErrMalformedEncrypted`, including the same-document form that needs no
   I/O, on an `EncryptedData` payload and on every `EncryptedKey` alike, and
   `Encryptor` writes no such form. §3.3.1 requires the URI dereferencing; the
@@ -142,9 +143,8 @@ marks REQUIRED are absent:
   (§5.7.1, REQUIRED). Block encryption and key wrapping are AES only, and
   either URI fails with `*UnsupportedAlgorithmError`. The omission is
   deliberate: Triple DES is a 64-bit block cipher, so Sweet32
-  (CVE-2016-2183) applies, NIST SP 800-131A Rev. 2 disallows TDEA encryption
-  after 2023, and Go's own `crypto/des` documentation calls the cipher
-  broken.
+  (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
+  encryption after 2023.
 
 ## Choosing how the session key is protected
 
