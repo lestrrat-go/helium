@@ -2,6 +2,8 @@ package xmlenc1_test
 
 import (
 	"context"
+	"crypto/ecdh"
+	"crypto/rand"
 	"encoding/base64"
 	"strings"
 	"sync"
@@ -398,6 +400,155 @@ func TestDecryptObservesContextPerCipherValueChild(t *testing.T) {
 	// observe them would poll the same number of times for both and never reach
 	// this cancellation at all. The threshold is measured rather than written
 	// down, so it follows the parse instead of pinning its internals.
+	ctx := newCancelAfterErrCalls(fewPolls)
+	_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// TestDecryptObservesContextPerCarriedKeyNameChild pins the interior of the
+// walk that collects an EncryptedKey's xenc:CarriedKeyName. That element's
+// children are joined into a name and charged against no budget, so how many
+// of them a document carries is the document's choice alone, and a walk that
+// observed the context only at its ends would read every one of them after the
+// caller cancelled.
+func TestDecryptObservesContextPerCarriedKeyNameChild(t *testing.T) {
+	kek := randKey(t, 32)
+	sessionKey := randKey(t, 32)
+	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte("payload"))
+	require.NoError(t, err)
+	wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
+	require.NoError(t, err)
+
+	// Empty comments are the cheapest child this walk can be handed: they
+	// carry no characters, so the name the parse collects is the same string
+	// however many of them the document repeats.
+	encryptedData := func(t *testing.T, comments int) *helium.Element {
+		t.Helper()
+		doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`">`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+			`<ds:KeyInfo><xenc:EncryptedKey>`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
+			`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(wrapped)+`</xenc:CipherValue></xenc:CipherData>`+
+			`<xenc:CarriedKeyName>session`+strings.Repeat(`<!---->`, comments)+`</xenc:CarriedKeyName>`+
+			`</xenc:EncryptedKey></ds:KeyInfo>`+
+			`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipher)+`</xenc:CipherValue></xenc:CipherData>`+
+			`</xenc:EncryptedData>`)
+		return doc.DocumentElement()
+	}
+
+	const (
+		few  = 4
+		many = 4096
+	)
+
+	// The two documents must differ only in how long the walk runs, never in
+	// what it collects, so the name is read back from both.
+	carriedKeyName := func(t *testing.T, comments int) string {
+		t.Helper()
+		ed, err := xmlenc1.ParseEncryptedDataForTest(encryptedData(t, comments))
+		require.NoError(t, err)
+		require.Len(t, ed.EncryptedKeys, 1)
+		return ed.EncryptedKeys[0].CarriedKeyName
+	}
+	require.Equal(t, "session", carriedKeyName(t, few))
+	require.Equal(t, "session", carriedKeyName(t, many))
+
+	decryptor := xmlenc1.NewDecryptor().KeyEncryptionKey(kek)
+	pollsFor := func(t *testing.T, comments int) int {
+		t.Helper()
+		counter := newPollCounter()
+		plaintext, err := decryptor.DecryptBytes(counter, encryptedData(t, comments))
+		require.NoError(t, err)
+		require.Equal(t, []byte("payload"), plaintext)
+		return counter.calls()
+	}
+
+	fewPolls := pollsFor(t, few)
+	require.GreaterOrEqual(t, pollsFor(t, many)-fewPolls, many-few,
+		"the CarriedKeyName walk must observe the context once per child")
+
+	// A context that stays live for exactly as many polls as the WHOLE decrypt
+	// of the small document takes, against the large one. The threshold is
+	// measured from the fixture rather than written down, so it follows the
+	// parse instead of pinning its internals.
+	ctx := newCancelAfterErrCalls(fewPolls)
+	_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// TestDecryptObservesContextPerPublicKeyChild pins the interior of the walk
+// that collects a dsig11:PublicKey point out of an ECDH-ES originator key.
+// Like CarriedKeyName it is joined from every direct child and charged against
+// no budget, so the document alone decides how long that walk runs.
+func TestDecryptObservesContextPerPublicKeyChild(t *testing.T) {
+	sessionKey := randKey(t, 32)
+	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte("payload"))
+	require.NoError(t, err)
+
+	// A real P-256 point, so the parse accepts the ECKeyValue and the walk is
+	// reached on the way to a value the document supplies rather than on the
+	// way to a rejection.
+	originator, err := ecdh.P256().GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	point := originator.PublicKey().Bytes()
+
+	// dsig11:NamedCurve names its curve by OID URN; this is P-256's.
+	const namedCurveP256 = "urn:oid:1.2.840.10045.3.1.7"
+
+	// The EncryptedKey's own ciphertext is never unwrapped: the Decryptor
+	// below is given the session key directly, which returns before candidate
+	// key resolution, so the whole document is still parsed and no ECDH
+	// private key is needed.
+	encryptedData := func(t *testing.T, comments int) *helium.Element {
+		t.Helper()
+		doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`" xmlns:dsig11="`+xmlenc1.NamespaceDSig11+`">`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+			`<ds:KeyInfo><xenc:EncryptedKey>`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
+			`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(make([]byte, 40))+`</xenc:CipherValue></xenc:CipherData>`+
+			`<ds:KeyInfo><xenc:AgreementMethod Algorithm="`+xmlenc1.ECDHES+`">`+
+			`<xenc:OriginatorKeyInfo><ds:KeyValue><dsig11:ECKeyValue>`+
+			`<dsig11:NamedCurve URI="`+namedCurveP256+`"/>`+
+			`<dsig11:PublicKey>`+base64.StdEncoding.EncodeToString(point)+strings.Repeat(`<!---->`, comments)+`</dsig11:PublicKey>`+
+			`</dsig11:ECKeyValue></ds:KeyValue></xenc:OriginatorKeyInfo>`+
+			`</xenc:AgreementMethod></ds:KeyInfo>`+
+			`</xenc:EncryptedKey></ds:KeyInfo>`+
+			`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipher)+`</xenc:CipherValue></xenc:CipherData>`+
+			`</xenc:EncryptedData>`)
+		return doc.DocumentElement()
+	}
+
+	const (
+		few  = 4
+		many = 4096
+	)
+
+	publicKey := func(t *testing.T, comments int) []byte {
+		t.Helper()
+		ed, err := xmlenc1.ParseEncryptedDataForTest(encryptedData(t, comments))
+		require.NoError(t, err)
+		require.Len(t, ed.EncryptedKeys, 1)
+		require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod)
+		require.NotNil(t, ed.EncryptedKeys[0].AgreementMethod.OriginatorKey)
+		return ed.EncryptedKeys[0].AgreementMethod.OriginatorKey.PublicKey
+	}
+	require.Equal(t, point, publicKey(t, few))
+	require.Equal(t, point, publicKey(t, many))
+
+	decryptor := xmlenc1.NewDecryptor().SessionKey(sessionKey)
+	pollsFor := func(t *testing.T, comments int) int {
+		t.Helper()
+		counter := newPollCounter()
+		plaintext, err := decryptor.DecryptBytes(counter, encryptedData(t, comments))
+		require.NoError(t, err)
+		require.Equal(t, []byte("payload"), plaintext)
+		return counter.calls()
+	}
+
+	fewPolls := pollsFor(t, few)
+	require.GreaterOrEqual(t, pollsFor(t, many)-fewPolls, many-few,
+		"the PublicKey walk must observe the context once per child")
+
 	ctx := newCancelAfterErrCalls(fewPolls)
 	_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
 	require.ErrorIs(t, err, context.Canceled)

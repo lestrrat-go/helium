@@ -130,7 +130,11 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryp
 			}
 			ek.CipherValue = cv
 		case isXMLEncElem(e, "CarriedKeyName"):
-			ek.CarriedKeyName = domutil.TextContent(e)
+			name, err := textContent(ctx, e)
+			if err != nil {
+				return err
+			}
+			ek.CarriedKeyName = name
 		case isDSigElem(e, "KeyInfo"):
 			agreement, err := parseAgreementMethodForKeyInfo(ctx, e)
 			if err != nil {
@@ -356,7 +360,11 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 			}
 			curve = named
 		case "PublicKey":
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			value, err := textContent(ctx, e)
+			if err != nil {
+				return err
+			}
+			decoded, err := xmlbase64.DecodeString(value)
 			if err != nil {
 				return fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrMalformedEncrypted, err)
 			}

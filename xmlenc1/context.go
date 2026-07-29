@@ -87,3 +87,31 @@ func eachChildElement(ctx context.Context, elem *helium.Element, fn func(*helium
 		return fn(e)
 	})
 }
+
+// textContent joins the Content() of elem's DIRECT children into one string,
+// walking through eachSibling so the context is observed once per child.
+//
+// It collects exactly what [internal/domutil.TextContent] collects — every
+// direct child kind, the content each node reports for itself, in document
+// order, and no descent past that first level — so a value it reads for a live
+// context is byte-for-byte the value that shared helper reads. The parse keeps
+// its own copy rather than calling the shared one because that one is used by
+// packages with no context to observe, and widening its signature would reach
+// well past this package.
+//
+// The parse reaches it for values whose child count the document alone decides:
+// an EncryptedKey's CarriedKeyName and an ECKeyValue's PublicKey. Neither is
+// charged against MaxEncryptedKeyBytes or MaxCipherValueBytes, and a child that
+// carries no characters at all — a comment is the cheapest of them — costs the
+// document nothing to repeat, so the per-child poll is the only thing bounding
+// how long a cancelled caller waits for those two walks.
+func textContent(ctx context.Context, elem *helium.Element) (string, error) {
+	var sb []byte
+	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
+		sb = append(sb, child.Content()...)
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return string(sb), nil
+}
