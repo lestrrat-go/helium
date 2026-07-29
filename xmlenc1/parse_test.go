@@ -812,6 +812,171 @@ func TestOAEPParamsUndeclaredEntityReference(t *testing.T) {
 	})
 }
 
+// cipherValueNoEntityDecl is the whole refusal an entity reference whose first
+// child is present but is not an Entity carries on the CipherValue path. It
+// names the value, so asserting the entire fragment — not just its tail — is
+// what pins that base64CharacterData reports the call site it was reached from
+// rather than the OAEPparams one it shares its implementation with.
+const cipherValueNoEntityDecl = "CipherValue holds an entity reference with no entity declaration"
+
+// cipherValueEncryptedData builds an EncryptedData whose payload CipherValue
+// carries value as raw markup — text, CDATA sections, elements, or any mix.
+// Writing the markup straight into the document is the only way to put a
+// chosen lexical form in front of the CipherValue walk.
+func cipherValueEncryptedData(t *testing.T, value string) *helium.Element {
+	t.Helper()
+	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+		`<xenc:CipherData><xenc:CipherValue>`+value+`</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
+// cipherValueDoctypeEncryptedData is cipherValueEncryptedData with the WHOLE
+// doctype declaration chosen by the caller. Which DTD shape a document carries
+// decides both whether an entity reference in the value resolves to a declared
+// Entity and whether the parser keeps an undeclared reference in the DOM at
+// all, so a test of either has to write the declaration itself.
+func cipherValueDoctypeEncryptedData(t *testing.T, doctype, value string) *helium.Element {
+	t.Helper()
+	doc := mustParseXML(t, `<?xml version="1.0"?>`+"\n"+doctype+"\n"+
+		`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+		`<xenc:CipherData><xenc:CipherValue>`+value+`</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
+// cipherValueElement returns the payload CipherValue element of an
+// EncryptedData built by the helpers above, so a test can attach a child no XML
+// document can produce.
+func cipherValueElement(t *testing.T, encryptedData *helium.Element) *helium.Element {
+	t.Helper()
+	data, ok := helium.AsNode[*helium.Element](encryptedData.FirstChild().NextSibling())
+	require.True(t, ok)
+	require.Equal(t, "CipherData", data.LocalName())
+	value, ok := helium.AsNode[*helium.Element](data.FirstChild())
+	require.True(t, ok)
+	require.Equal(t, "CipherValue", value.LocalName())
+	return value
+}
+
+// TestCipherValueEntityReference covers the entity-reference child on the
+// CipherValue path.
+//
+// base64CharacterData is shared by xenc:OAEPparams and xenc:CipherValue, and
+// its entity branch is otherwise reached only through the OAEPparams tests.
+// The two call sites differ in what they hand it and in what its refusals must
+// say, so pinning the branch at one of them leaves the other inferred: the
+// value name travels into every error message, and the CipherValue walk reads
+// each child TWICE — once to count and once to build — where the OAEPparams
+// walk reads it once. An entity contributing on the counting pass but not on
+// the building pass, or the reverse, would corrupt the value on this path
+// while leaving the OAEPparams cases green.
+//
+// The bound is the same one hop the OAEPparams cases pin: the EntityRef's
+// first child is the declared Entity and helium.Entity.Content returns the
+// declared replacement literal without recursing.
+func TestCipherValueEntityReference(t *testing.T) {
+	payload := []byte("cipher-payload")
+	encoded := base64.StdEncoding.EncodeToString(payload)
+	require.Len(t, encoded, 20)
+
+	// A ciphertext written as an entity reference decodes to the same bytes as
+	// the same ciphertext written literally, which is the shape a conforming
+	// document is free to use.
+	t.Run("a declared entity reference contributes its replacement text", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(cipherValueDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData [<!ENTITY payload "`+encoded+`">]>`, `&payload;`))
+		require.NoError(t, err)
+		require.Equal(t, payload, ed.CipherValue)
+	})
+
+	// The entity supplies the MIDDLE of the value, with text on both sides and
+	// both cuts away from a quantum boundary. So the entity's characters have
+	// to be concatenated with the siblings' in order, not substituted for them
+	// and not appended after them: any other arrangement changes the decoded
+	// bytes rather than merely failing.
+	t.Run("an entity reference between text siblings decodes as one value", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(cipherValueDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData [<!ENTITY middle "`+encoded[2:9]+`">]>`,
+			encoded[:2]+`&middle;`+encoded[9:]))
+		require.NoError(t, err)
+		require.Equal(t, payload, ed.CipherValue)
+	})
+
+	// The same split with CDATA siblings instead of text, since the walk
+	// classifies the two child kinds separately.
+	t.Run("an entity reference between CDATA siblings decodes as one value", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(cipherValueDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData [<!ENTITY middle "`+encoded[2:9]+`">]>`,
+			`<![CDATA[`+encoded[:2]+`]]>&middle;<![CDATA[`+encoded[9:]+`]]>`))
+		require.NoError(t, err)
+		require.Equal(t, payload, ed.CipherValue)
+	})
+
+	// A reference with no entity behind it carries no character data, so it
+	// contributes none and the rest of the value decodes untouched. This is a
+	// PARSER-produced shape, not a caller-built one: an external subset with no
+	// standalone="yes" downgrades XML 1.0's "Entity Declared" constraint to a
+	// validity error, so helium's non-validating parse keeps the reference in
+	// the DOM with no child at all. The system identifier is never dereferenced
+	// — the default parser blocks external entities and denies filesystem
+	// access — so its mere presence is what counts. The reference sits between
+	// two halves of one value, so contributing even one character for it would
+	// shift the quantum boundary and change the decoded bytes.
+	t.Run("an entity reference with no entity contributes nothing", func(t *testing.T) {
+		split := encoded[:8] + `&undeclared;` + encoded[8:]
+		encryptedData := cipherValueDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData SYSTEM "no-such.dtd">`, split)
+
+		// The shape itself, asserted on the DOM rather than inferred from the
+		// decode: the parser really does hand this walk a childless EntityRef.
+		var seen int
+		for child := cipherValueElement(t, encryptedData).FirstChild(); child != nil; child = child.NextSibling() {
+			ref, ok := helium.AsNode[*helium.EntityRef](child)
+			if !ok {
+				continue
+			}
+			seen++
+			require.Equal(t, "undeclared", ref.Name())
+			require.Nil(t, ref.FirstChild())
+		}
+		require.Equal(t, 1, seen)
+
+		ed, err := xmlenc1.ParseEncryptedDataForTest(encryptedData)
+		require.NoError(t, err)
+		require.Equal(t, payload, ed.CipherValue)
+	})
+
+	// The refusal covers the hazardous shape: an EntityRef whose first child is
+	// present and is not an Entity. Asking such a node for its content
+	// aggregates that subtree, which is the cost the one-hop bound exists to
+	// refuse. No XML document produces this, so the tree is BUILT BY HAND here
+	// — Document.CreateReference plus an attached element — exactly as the
+	// OAEPparams counterpart does.
+	//
+	// The message must name CipherValue: base64CharacterData takes the value
+	// name from its caller, and nothing else pins that this call site passes
+	// its own rather than the OAEPparams one.
+	t.Run("an entity reference holding an element is rejected", func(t *testing.T) {
+		encryptedData := cipherValueEncryptedData(t, `AA==`)
+		doc := encryptedData.OwnerDocument()
+		ref, err := doc.CreateReference("undeclared")
+		require.NoError(t, err)
+		junk, err := doc.CreateElement("junk")
+		require.NoError(t, err)
+		require.NoError(t, junk.AddChild(doc.CreateText([]byte("QUJD"))))
+		require.NoError(t, ref.AddChild(junk))
+		require.NoError(t, cipherValueElement(t, encryptedData).AddChild(ref))
+
+		_, err = xmlenc1.ParseEncryptedDataForTest(encryptedData)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), cipherValueNoEntityDecl)
+		require.NotContains(t, err.Error(), "OAEPparams")
+	})
+}
+
 // oaepAllocLexical is the lexical text an attacker writes around an
 // xs:base64Binary value in the allocation cases below, and oaepAllocSlack is
 // what those cases allow on top of reading it.
