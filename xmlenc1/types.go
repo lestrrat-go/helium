@@ -22,7 +22,17 @@ type EncryptionMethod struct {
 	// carried and never read.
 	MGFAlgorithm string
 	// OAEPParams is the decoded OAEP label from the xenc:OAEPparams child.
-	// Empty means no label. Applies to RSA-OAEP key transport only.
+	// Empty means no label. Applies to RSA-OAEP key transport only. Parsing
+	// refuses a label over 1 KiB decoded with [ErrMalformedEncrypted]. That
+	// limit is a policy ceiling, not a conformance boundary: the label is
+	// hashed before it is used, so a real one is a handful of octets, but a
+	// larger one is still valid per the xenc schema, and this package writes
+	// a label of any size while refusing to parse one over the limit back.
+	// Parsing reads only character data: a text or CDATA child, or an entity
+	// reference, whose declared replacement text is taken as written and not
+	// expanded further. An xenc:OAEPparams holding an element child is refused
+	// with the same sentinel, while a comment or processing instruction is
+	// ignored.
 	OAEPParams []byte
 }
 

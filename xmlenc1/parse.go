@@ -380,6 +380,11 @@ func ecdhURIForCurve(curve ecdh.Curve) (string, error) {
 	}
 }
 
+// parseEncryptionMethod parses an EncryptionMethod element. Both call sites —
+// the EncryptedData's own method and each EncryptedKey's — are reached while
+// the document is read, so everything here runs before any key is resolved and
+// before anything the document says has been authenticated. The only child it
+// decodes is OAEPparams, and decodeOAEPParams owns what bounds that.
 func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 	em := &EncryptionMethod{}
 	alg, ok := elem.GetAttribute("Algorithm")
@@ -434,15 +439,155 @@ func parseEncryptionMethod(elem *helium.Element) (*EncryptionMethod, error) {
 				return nil, fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
 			}
 			seenOAEPParams = true
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			decoded, err := decodeOAEPParams(e)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
+				return nil, err
 			}
 			em.OAEPParams = decoded
 		}
 	}
 
 	return em, nil
+}
+
+// maxOAEPParamsBytes bounds the decoded octet length of one xenc:OAEPparams
+// element. It is the single statement of that limit; decodeOAEPParams applies
+// it.
+//
+// OAEPparams carries the RSA-OAEP label — the "L" of RFC 8017 — which sender
+// and recipient agree on out of band. RFC 8017 hashes the label down to the
+// digest length before it is used, so nothing downstream is sized by it and a
+// real one is a handful of octets: an application tag or a short identifier,
+// twelve in this package's own round-trip test. 1 KiB is two orders of
+// magnitude above that, so a hostile document can no longer make the parser
+// hold a label sized only by what the XML parser happened to accept. That
+// parser's own per-node content cap does not stand in for this one: it bounds a
+// single indivisible run of characters, and a value spread over CDATA sections
+// is as many runs as the document likes.
+//
+// The limit is a deliberate POLICY ceiling, not a conformance boundary. W3C
+// xmlenc-core1 types OAEPparams as xs:base64Binary with no length facet, and
+// RFC 8017 bounds the label only at its hash function's input limit, so a
+// larger label is conforming and this parser rejects it anyway. The asymmetry
+// is one-sided by design: Encryptor.OAEPParams and the serialize path apply no
+// cap, so a label over the limit can be written by this package and not read
+// back by it.
+const maxOAEPParamsBytes = 1024
+
+// maxOAEPParamsChars is the most base64 characters a value within
+// maxOAEPParamsBytes can hold: ceil(n/3) quanta of four characters each. It
+// sizes the buffer decodeOAEPParams assembles and tells that walk when to stop,
+// so what is being built is sized by the limit and never by the document.
+//
+// Stopping there is only ever early, never a different verdict. Past this count
+// a value the decoder would accept has at least one more whole quantum, which
+// is three more octets less at most two of padding, so it is over the limit;
+// and a value the decoder would reject is charged its full quantum count, which
+// is over it too. Either way the exact [xmlbase64.Counter.DecodedLen] test that
+// follows the walk would refuse the same value.
+const maxOAEPParamsChars = (maxOAEPParamsBytes + 2) / 3 * 4
+
+// decodeOAEPParams decodes elem's character data into the OAEP label, refusing
+// a value over maxOAEPParamsBytes before anything is built from it.
+//
+// xs:base64Binary permits XML whitespace between characters and the value may
+// arrive as any number of text and CDATA children, so the lexical length an
+// attacker controls has no relation to the octets the limit measures. Joining
+// the children into one string first would allocate that lexical length before
+// the limit could refuse it, and would keep allocating it for every value the
+// limit accepts, which leaves the accepted case unbounded as well.
+//
+// So the walk reads each child exactly once: it folds the child into an
+// xmlbase64.Counter, which carries the counting state across every child
+// boundary — a base64 quantum, and padding itself, may be split between
+// children — and appends only the base64 characters. It stops the moment those
+// characters pass maxOAEPParamsChars, and the exact decoded-length test runs on
+// the counter afterwards.
+//
+// What the parse RETAINS is therefore bounded by the limit and nothing else:
+// the kept characters at most maxOAEPParamsChars, the decoded bytes at most
+// maxOAEPParamsBytes. What is not bounded, and cannot be bounded here, is the
+// copy [helium.Text.Content] hands out per child: a DOM offers no read-only
+// view of a node's bytes, so weighing a value costs one copy of its lexical
+// text. That copy is the floor, this walk pays it exactly once, and it is the
+// whole remaining cost — a label padded with a megabyte of whitespace makes the
+// parse allocate that megabyte once, not once per pass and not per subtree.
+// Keeping it to once is what oaepParamsCharacterData's rule on which children
+// may be read, and how far into one of them the walk goes, protects.
+func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
+	var counter xmlbase64.Counter
+	chars := make([]byte, 0, maxOAEPParamsChars)
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		text, err := oaepParamsCharacterData(child)
+		if err != nil {
+			return nil, err
+		}
+		counter.Add(text)
+		if counter.Chars() > maxOAEPParamsChars {
+			return nil, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes)
+		}
+		chars = xmlbase64.AppendStripped(chars, text)
+	}
+	if counter.DecodedLen() > maxOAEPParamsBytes {
+		return nil, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes)
+	}
+	decoded, err := xmlbase64.DecodeString(string(chars))
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err)
+	}
+	return decoded, nil
+}
+
+// oaepParamsCharacterData returns the character data child contributes to an
+// xs:base64Binary value, which is none at all for a child that carries none.
+//
+// Text and CDATA children carry it directly. An entity reference carries it
+// through exactly one hop: a parsed [helium.EntityRef]'s first child is the
+// [helium.Entity] it resolves to, and [helium.Entity.Content] is a leaf
+// accessor returning the DECLARED replacement literal without recursing, so
+// reading it costs one copy of that literal — the same one-copy floor a Text
+// child already costs. Nothing below the Entity is read: an entity whose
+// replacement is itself a reference or markup contributes that literal text
+// (&inner;, <x/>), which is not base64, so the Counter marks the value
+// undecodable and the decode fails, which is the right verdict for it. The
+// Entity's NextSibling is deliberately not followed either — it is the next
+// declaration in the DTD, not part of this value. An EntityRef whose first
+// child is not an Entity is reachable only in a caller-built tree and is
+// refused, so the one-hop bound holds for every tree.
+//
+// [helium.Element] is refused: it answers Content by aggregating its whole
+// subtree into one buffer, so asking such a child for its content spends the
+// entire subtree's text before a limit measured in DECODED OCTETS can look at
+// it — and since a subtree of whitespace decodes to nothing, the limit would
+// not fire at all. Refusing rather than skipping is what the value says too: an
+// element child makes the content invalid xs:base64Binary, and quietly dropping
+// it would decode a value the document did not write.
+//
+// Comments and processing instructions may appear inside any element and are
+// not character data, so they are skipped, exactly as XSD ignores them when it
+// builds a simple type's value. Reading them instead would splice comment text
+// straight into the base64 stream.
+func oaepParamsCharacterData(child helium.Node) ([]byte, error) {
+	if t, ok := helium.AsNode[*helium.Text](child); ok {
+		return t.Content(), nil
+	}
+	if c, ok := helium.AsNode[*helium.CDATASection](child); ok {
+		return c.Content(), nil
+	}
+	if ref, ok := helium.AsNode[*helium.EntityRef](child); ok {
+		entity, ok := helium.AsNode[*helium.Entity](ref.FirstChild())
+		if !ok {
+			return nil, fmt.Errorf("%w: OAEPparams holds an entity reference with no entity declaration", ErrMalformedEncrypted)
+		}
+		return entity.Content(), nil
+	}
+	if _, ok := helium.AsNode[*helium.Comment](child); ok {
+		return nil, nil
+	}
+	if _, ok := helium.AsNode[*helium.ProcessingInstruction](child); ok {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("%w: OAEPparams holds a child of type %s, which is not character data", ErrMalformedEncrypted, child.Type())
 }
 
 // parseCipherData parses a CipherData element. Per the XML-Enc schema,
