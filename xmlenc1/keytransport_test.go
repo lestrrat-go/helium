@@ -1,6 +1,7 @@
 package xmlenc1_test
 
 import (
+	"crypto/elliptic"
 	"strings"
 	"testing"
 
@@ -470,4 +471,73 @@ func TestEncryptorOAEPParamsRoundTrip(t *testing.T) {
 	nodes, err := decryptor.Decrypt(t.Context(), elem)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
+}
+
+// TestEncryptorOAEPParamsBound covers the decoded-size limit the encrypt side
+// applies to Encryptor.OAEPParams. It is the same limit the parser applies to an
+// xenc:OAEPparams it reads, so a label this package writes is a label it reads
+// back, and the boundary is pinned against the constant rather than a copy of
+// its value.
+func TestEncryptorOAEPParamsBound(t *testing.T) {
+	t.Run("at the limit round-trips", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+			OAEPDigest(xmlenc1.DigestSHA256).
+			OAEPMGF(xmlenc1.MGFSHA256).
+			OAEPParams(make([]byte, xmlenc1.MaxOAEPParamsBytesForTest)).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	// One octet over, the label is refused by the encrypt call itself, not by a
+	// later attempt to read the ciphertext back.
+	t.Run("over the limit fails at the encrypt call", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+
+		_, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+			OAEPDigest(xmlenc1.DigestSHA256).
+			OAEPMGF(xmlenc1.MGFSHA256).
+			OAEPParams(make([]byte, xmlenc1.MaxOAEPParamsBytesForTest+1)).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+
+		// The configuration is resolved before any payload work, so the
+		// caller's tree still holds the plaintext.
+		xml, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, xml, "user@example.com")
+	})
+
+	// The label is written on the key-transport branch alone, so an Encryptor
+	// that protects the session key by key agreement never touches it and must
+	// not be failed for its size.
+	t.Run("over the limit does not fail key agreement", func(t *testing.T) {
+		key := generateECKey(t, elliptic.P256())
+		doc := mustParseXML(t, samlAssertion)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM11).
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&key.PublicKey).
+			OAEPParams(make([]byte, xmlenc1.MaxOAEPParamsBytesForTest+1)).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
 }

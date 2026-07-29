@@ -52,11 +52,15 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   alike, because both are read before any key is resolved and before anything
   the document says has been authenticated. The element carries the RSA-OAEP
   label, which is hashed before use and is a handful of octets in practice;
-  over the limit fails with `ErrMalformedEncrypted`. The limit is a policy
+  over the limit fails with `ErrMalformedEncrypted`. The same limit applies to
+  `Encryptor.OAEPParams`, where a larger label fails the encryption with
+  `ErrEncryptionFailed` before any payload work — and only when key transport is
+  the mechanism in use, since that is the only one that writes a label — so a
+  label this package writes is a label it reads back. The limit is a policy
   ceiling rather than a conformance boundary: the xenc schema puts no length
-  facet on the element, so a larger label is valid and is rejected anyway, and
-  the encrypt side applies no cap — this package will write a label it will not
-  read back. The value is weighed as it is read and never joined into one
+  facet on the element, so a larger label is valid, and this package
+  intentionally refuses one in both directions, neither writing nor reading it.
+  The value is weighed as it is read and never joined into one
   string, so what the parse keeps is sized by the limit no matter how much
   whitespace or how many CDATA sections a label is spread over. Only character
   data is read: a text or CDATA child, or an entity reference, which

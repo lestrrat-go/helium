@@ -150,7 +150,10 @@ func (e Encryptor) OAEPMGF(uri string) Encryptor {
 	return e
 }
 
-// OAEPParams sets the OAEP parameters.
+// OAEPParams sets the RSA-OAEP label. A label over the 1 KiB limit
+// [EncryptionMethod.OAEPParams] documents fails the encryption with
+// [ErrEncryptionFailed], and only when key transport is the mechanism in use,
+// since that is the only one that writes a label.
 func (e Encryptor) OAEPParams(params []byte) Encryptor {
 	e = e.clone()
 	e.cfg.oaepParams = append([]byte(nil), params...)
@@ -336,13 +339,14 @@ type resolvedEncryptConfig struct {
 	recipientECDH   *ecdh.PublicKey
 }
 
-// resolveEncryptConfig decides five parts of an Encryptor's configuration: it
+// resolveEncryptConfig decides six parts of an Encryptor's configuration: it
 // defaults the block algorithm, enforces the CBC opt-in, requires a key
-// source, rejects a second key-protection mechanism, and resolves the
-// ECDH-ES recipient key. Every entry point calls it before any payload work,
-// so none of those five is masked by a later failure to serialize or encrypt
-// the plaintext. Session-key length is not one of them: it is bound to the
-// block algorithm in encryptPlaintext, once the session key exists.
+// source, rejects a second key-protection mechanism, bounds the RSA-OAEP
+// label, and resolves the ECDH-ES recipient key. Every entry point calls it
+// before any payload work, so none of those six is masked by a later failure
+// to serialize or encrypt the plaintext. Session-key length is not one of
+// them: it is bound to the block algorithm in encryptPlaintext, once the
+// session key exists.
 func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	// Secure by default: an unset block algorithm uses authenticated
 	// AES-256-GCM rather than refusing or falling back to CBC.
@@ -371,6 +375,18 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 
 	if err := conflictingKeyProtection(cfg, hasKeyTransport, hasKeyAgreement, hasKeyWrap); err != nil {
 		return resolvedEncryptConfig{}, err
+	}
+
+	// The OAEP label is held to the same maxOAEPParamsBytes the parse side
+	// applies, so a label written here is one this package reads back: over the
+	// limit the serialized xenc:OAEPparams would be refused by
+	// decodeOAEPParams, leaving ciphertext this package cannot decrypt.
+	//
+	// Only key transport writes the label, so only key transport is charged for
+	// it — mirroring the recipient-key rule below, a label a mechanism never
+	// touches cannot fail an encryption.
+	if hasKeyTransport && len(cfg.oaepParams) > maxOAEPParamsBytes {
+		return resolvedEncryptConfig{}, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrEncryptionFailed, maxOAEPParamsBytes)
 	}
 
 	resolved := resolvedEncryptConfig{

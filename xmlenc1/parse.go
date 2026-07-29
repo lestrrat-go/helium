@@ -500,10 +500,10 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 // The limit is a deliberate POLICY ceiling, not a conformance boundary. W3C
 // xmlenc-core1 types OAEPparams as xs:base64Binary with no length facet, and
 // RFC 8017 bounds the label only at its hash function's input limit, so a
-// larger label is conforming and this parser rejects it anyway. The asymmetry
-// is one-sided by design: Encryptor.OAEPParams and the serialize path apply no
-// cap, so a label over the limit can be written by this package and not read
-// back by it.
+// larger label is conforming and this package refuses it in both directions:
+// resolveEncryptConfig holds Encryptor.OAEPParams to this same limit, so what
+// this package writes is what it reads back and no label of its own making
+// yields ciphertext it cannot decrypt.
 const maxOAEPParamsBytes = 1024
 
 // maxOAEPParamsChars is the most base64 characters a value within
