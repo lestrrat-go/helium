@@ -25,7 +25,10 @@ type EncryptionMethod struct {
 	// Empty means no label. Applies to RSA-OAEP key transport only. Parsing
 	// refuses a label over 1 KiB decoded with [ErrMalformedEncrypted]: the
 	// label is hashed before it is used, so a real one is a handful of octets
-	// and the limit is far above any interoperable value.
+	// and the limit is far above any interoperable value. Parsing reads only
+	// the element's character data, so an xenc:OAEPparams holding an element
+	// or entity-reference child is refused with the same sentinel, while a
+	// comment or processing instruction is ignored.
 	OAEPParams []byte
 }
 

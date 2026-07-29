@@ -353,10 +353,15 @@ func TestEncryptionMethodCardinality(t *testing.T) {
 // decoder or a later check refused.
 const oaepParamsOverLimit = "OAEPparams is over the"
 
+// oaepParamsNotCharacterData is the fragment the leaf-only child rule puts in
+// its error, and it is a DIFFERENT refusal from the size limit: an element
+// child is refused for what it is, before its size is ever weighed.
+const oaepParamsNotCharacterData = "which is not character data"
+
 // oaepParamsEncryptedData builds an EncryptedData whose own EncryptionMethod
-// carries params as raw OAEPparams markup — text, CDATA sections, or any mix.
-// Writing the markup straight into the document is the only way to put a
-// chosen lexical form in front of the size limit.
+// carries params as raw OAEPparams markup — text, CDATA sections, elements, or
+// any mix. Writing the markup straight into the document is the only way to
+// put a chosen lexical form in front of the size limit.
 func oaepParamsEncryptedData(t *testing.T, params string) *helium.Element {
 	t.Helper()
 	doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
@@ -447,6 +452,52 @@ func TestOAEPParamsBound(t *testing.T) {
 		require.Len(t, ed.EncryptedKeys[0].EncryptionMethod.OAEPParams, xmlenc1.MaxOAEPParamsBytesForTest)
 	})
 
+	// An element child is refused for what it is, before its size is weighed.
+	// It makes the content invalid xs:base64Binary, and reading it would cost
+	// its whole subtree: helium aggregates an element's Content from every
+	// descendant, so the text of an arbitrarily deep subtree would be spent
+	// against a limit that counts decoded octets.
+	t.Run("an element child is rejected", func(t *testing.T) {
+		_, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEncryptedData(t, `<junk>AAAA</junk>`))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsNotCharacterData)
+	})
+
+	// The shape the size limit alone can never catch: one legal quantum, then
+	// an element holding whitespace. Whitespace decodes to nothing, so the
+	// value weighs one byte and the limit has no reason to fire — a walk that
+	// read the element would return no error at all, having already spent the
+	// subtree. TestOAEPParamsAllocation pins that cost; this pins the verdict.
+	t.Run("an element child beside a legal value is rejected", func(t *testing.T) {
+		_, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEncryptedData(t, "AA==<junk>   \t   </junk>"))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsNotCharacterData)
+	})
+
+	// And an EncryptedKey's OAEPparams refuses it the same way.
+	t.Run("an element child in an EncryptedKey OAEPparams is rejected", func(t *testing.T) {
+		_, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsKeyEncryptedData(t, "AA==<junk>   \t   </junk>"))
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), oaepParamsNotCharacterData)
+	})
+
+	// Comments and processing instructions are not character data either, but
+	// unlike an element they may appear inside any element and say nothing
+	// about its value, so they are ignored rather than refused. Reading one
+	// would splice its text into the base64 and decode a label the document
+	// never wrote.
+	t.Run("comments and processing instructions are ignored", func(t *testing.T) {
+		for _, params := range []string{
+			`AA<!-- a comment -->==`,
+			`AA<?target data?>==`,
+			`<!--c-->AA<?t?>==<!--c-->`,
+		} {
+			ed, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsEncryptedData(t, params))
+			require.NoError(t, err, "params=%s", params)
+			require.Equal(t, []byte{0x00}, ed.EncryptionMethod.OAEPParams, "params=%s", params)
+		}
+	})
+
 	// A real label is a handful of octets, and it must survive the round trip
 	// byte for byte: it is hashed into the RSA-OAEP encoding, so a label that
 	// changed shape would make every decrypt fail.
@@ -465,15 +516,37 @@ func TestOAEPParamsBound(t *testing.T) {
 	})
 }
 
+// oaepAllocLexical is the lexical text an attacker writes around an
+// xs:base64Binary value in the allocation cases below, and oaepAllocSlack is
+// what those cases allow on top of reading it.
+//
+// The slack is a CONSTANT, deliberately: a bound stated as a multiple of the
+// attacker's own text can never fail on a cost that follows that text, which is
+// the only cost being pinned. It covers the rest of the document, the failed
+// decrypt, and the runtime's own bookkeeping, all of which are fixed.
+const (
+	oaepAllocLexical = 4 << 20
+	oaepAllocSlack   = 1 << 20
+)
+
 // TestOAEPParamsAllocation pins what an xenc:OAEPparams element may ALLOCATE,
 // which the error assertions above cannot see. The limit governs decoded
 // octets, but the lexical text an attacker wraps around them is unbounded:
-// xs:base64Binary permits XML whitespace between characters, and the value may
-// be spread over as many text and CDATA children as the document likes.
-// Joining that text into one string before the limit is applied makes the
-// limit an accounting formality — the memory is allocated by the time the
-// error is returned — and for a value the limit ACCEPTS it is never refused at
-// all, so a test that only checks for the rejection would miss half of it.
+// xs:base64Binary permits XML whitespace between characters, the value may be
+// spread over as many text and CDATA children as the document likes, and an
+// element child can hide a whole subtree of it behind a value that decodes to
+// a single byte. Joining that text into one string before the limit is applied
+// makes the limit an accounting formality — the memory is allocated by the time
+// the error is returned — and for a value the limit ACCEPTS it is never refused
+// at all, so a test that only checks for the rejection would miss half of it.
+//
+// The bounds are one copy of the lexical text plus a fixed slack, or the slack
+// alone. One copy is the floor and cannot be removed here: a DOM hands out a
+// copy per node and offers no read-only view, so weighing a value costs one
+// copy of its text. Everything above that floor is what this test refuses —
+// a second pass over the value, or reading a subtree an element child hides,
+// each cost another whole copy and blow the bound. The element cases carry no
+// lexical term at all, because the child is refused before it is read.
 //
 // Each case reads the process-wide TotalAlloc delta across Decrypt, so these
 // subtests must NOT run in parallel: a concurrent test's allocations would
@@ -481,68 +554,78 @@ func TestOAEPParamsBound(t *testing.T) {
 func TestOAEPParamsAllocation(t *testing.T) {
 	// no t.Parallel(): isolated so each delta reflects only its own Decrypt.
 
-	// lexical is the text the attacker writes, and every bound below is a
-	// multiple of it, because the defect being pinned is exactly a cost that
-	// follows the lexical length.
-	// cdataChunk cuts that text into sixteen CDATA sections.
+	// cdataChunk cuts the attacker's text into sixteen CDATA sections.
 	const (
-		lexical    = 4 << 20
-		cdataChunk = lexical / 16
-	)
-
-	// Reading each child's content is the floor a bound has to clear: a DOM
-	// hands out a copy per node, and no value can be weighed without looking at
-	// it. A rejected value is looked at once, and an accepted one twice — once
-	// to weigh it and once to build the characters the limit approved.
-	const (
-		countOnly     = lexical * 3 / 2
-		countAndBuild = lexical * 5 / 2
+		cdataChunk = oaepAllocLexical / 16
+		oneRead    = oaepAllocLexical + oaepAllocSlack
 	)
 
 	// Only space and tab are used as whitespace: an XML parser folds CRLF to
 	// LF, which would make the text the DOM holds shorter than the text written
-	// here and every multiple above harder to read.
-	padding := strings.Repeat(" \t", lexical/2)
+	// here and the bounds above harder to read.
+	padding := strings.Repeat(" \t", oaepAllocLexical/2)
 	// oversized decodes to 3 MiB, far over the limit however it is laid out.
-	oversized := strings.Repeat("A", lexical)
+	oversized := strings.Repeat("A", oaepAllocLexical)
 
 	for _, tc := range []struct {
-		name     string
-		params   string
-		rejected bool
-		maxAlloc uint64
+		name string
+		// params is the raw OAEPparams markup, and errFragment is what the
+		// OAEPparams path must say about it — empty for a value that path
+		// accepts, where Decrypt still fails later for want of a usable key.
+		params      string
+		errFragment string
+		maxAlloc    uint64
 	}{
 		{
-			name:     "over-limit value in one text node",
-			params:   oversized,
-			rejected: true,
-			maxAlloc: countOnly,
+			name:        "over-limit value in one text node",
+			params:      oversized,
+			errFragment: oaepParamsOverLimit,
+			maxAlloc:    oneRead,
 		},
 		{
 			// CDATA is how the value evades the parser's per-node content cap:
 			// the cap bounds one indivisible run, and every section is its own.
-			name:     "over-limit value split across CDATA sections",
-			params:   splitIntoNodes(oversized, cdataChunk),
-			rejected: true,
-			maxAlloc: countOnly,
+			name:        "over-limit value split across CDATA sections",
+			params:      splitIntoNodes(oversized, cdataChunk),
+			errFragment: oaepParamsOverLimit,
+			maxAlloc:    oneRead,
 		},
 		{
 			// Nothing here is ever refused: one quantum of label is far under
 			// the limit, and the whitespace after it is not counted at all.
-			// Allocating for it would be unbounded amplification with no error
+			// Allocating twice for it would be amplification with no error
 			// anywhere to notice it, which a rejection-only test would miss.
 			name:     "under-limit value with trailing whitespace",
 			params:   "AA==" + padding,
-			rejected: false,
-			maxAlloc: countAndBuild,
+			maxAlloc: oneRead,
 		},
 		{
 			// The same accepted value spread over CDATA sections, where joining
 			// the children costs the most.
 			name:     "under-limit value with whitespace split across CDATA sections",
 			params:   "AA==" + splitIntoNodes(padding, cdataChunk),
-			rejected: false,
-			maxAlloc: countAndBuild,
+			maxAlloc: oneRead,
+		},
+		{
+			// The sharpest shape: a legal one-byte value, then an element
+			// holding the attacker's text. The text decodes to nothing, so no
+			// size limit has any reason to fire — but helium builds an
+			// element's Content from its whole subtree, so a walk that read the
+			// child would spend every byte of it and return no error at all.
+			// The bound carries no lexical term: the child is refused for what
+			// it is, before anything asks it how big it is.
+			name:        "element child hiding whitespace",
+			params:      "AA==<junk>" + padding + "</junk>",
+			errFragment: oaepParamsNotCharacterData,
+			maxAlloc:    oaepAllocSlack,
+		},
+		{
+			// The same subtree built from many small CDATA leaves, so no single
+			// node is large and only the aggregate is.
+			name:        "element child hiding CDATA leaves",
+			params:      "AA==<junk>" + splitIntoNodes(padding, 1024) + "</junk>",
+			errFragment: oaepParamsNotCharacterData,
+			maxAlloc:    oaepAllocSlack,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -556,10 +639,52 @@ func TestOAEPParamsAllocation(t *testing.T) {
 			runtime.ReadMemStats(&after)
 
 			require.Error(t, err)
-			require.Equal(t, tc.rejected, strings.Contains(err.Error(), oaepParamsOverLimit), "err=%v", err)
+			// Both refusals are checked every time, so a case that expects one
+			// also proves the other did not fire and a case that expects
+			// neither proves the value really was accepted.
+			for _, fragment := range []string{oaepParamsOverLimit, oaepParamsNotCharacterData} {
+				if fragment == tc.errFragment {
+					require.Contains(t, err.Error(), fragment, "err=%v", err)
+					continue
+				}
+				require.NotContains(t, err.Error(), fragment, "err=%v", err)
+			}
 
 			allocated := after.TotalAlloc - before.TotalAlloc
 			require.Less(t, allocated, tc.maxAlloc, "decrypting %d lexical bytes allocated %d bytes", len(tc.params), allocated)
 		})
 	}
+}
+
+// TestOAEPParamsAllocationSlope pins the MARGINAL cost of the attacker's text:
+// doubling it must cost at most one more copy of what was added. The bounds in
+// TestOAEPParamsAllocation carry a lexical term because one copy is the floor,
+// so a slope of two would satisfy them if the slack were ever loosened; this
+// measures the slope directly and no amount of slack hides it.
+func TestOAEPParamsAllocationSlope(t *testing.T) {
+	// no t.Parallel(): both measurements read the process-wide TotalAlloc.
+	single := oaepParamsDecryptAlloc(t, "AA=="+strings.Repeat(" \t", oaepAllocLexical/2))
+	double := oaepParamsDecryptAlloc(t, "AA=="+strings.Repeat(" \t", oaepAllocLexical))
+
+	require.Less(t, double-single, uint64(oaepAllocLexical+oaepAllocSlack),
+		"doubling the lexical text cost %d bytes on top of %d", double-single, single)
+}
+
+// oaepParamsDecryptAlloc reports the TotalAlloc delta across one Decrypt of an
+// EncryptedData carrying params as its OAEPparams markup. The document and the
+// key are built outside the measurement, so the delta is the decrypt alone.
+func oaepParamsDecryptAlloc(t *testing.T, params string) uint64 {
+	t.Helper()
+	elem := oaepParamsEncryptedData(t, params)
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t))
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := decryptor.Decrypt(t.Context(), elem)
+	runtime.ReadMemStats(&after)
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), oaepParamsOverLimit, "err=%v", err)
+	return after.TotalAlloc - before.TotalAlloc
 }

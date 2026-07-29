@@ -53,9 +53,14 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   the document says has been authenticated. The element carries the RSA-OAEP
   label, which is hashed before use and is a handful of octets in practice, so
   the limit is far above any interoperable value; over it fails with
-  `ErrMalformedEncrypted`. The value is weighed before it is assembled, so a
-  label spread over many CDATA sections costs no more than reading the
-  document once.
+  `ErrMalformedEncrypted`. The value is weighed as it is read and never joined
+  into one string, so what the parse keeps is sized by the limit no matter how
+  much whitespace or how many CDATA sections a label is spread over. Only
+  character data is read: an element or entity-reference child is refused with
+  the same error, because asking one for its content would pull in its whole
+  subtree, and a comment or processing instruction is ignored rather than
+  spliced into the base64. The one cost that still follows the document is the
+  copy the DOM hands out per child, which the walk pays exactly once.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)

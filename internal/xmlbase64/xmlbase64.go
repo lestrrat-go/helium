@@ -43,8 +43,9 @@ func DecodeString(s string) ([]byte, error) {
 //
 // A caller assembling a value that arrives in pieces builds only those
 // characters, so what it holds tracks the base64 the decoder will see rather
-// than the lexical length. Sizing dst with [Counter.Chars] makes the assembly
-// a single allocation.
+// than the lexical length. Sizing dst with [Counter.Chars] — or, for a caller
+// that stops as soon as its own limit is passed, with whatever ceiling that
+// limit puts on the count — makes the assembly a single allocation.
 func AppendStripped(dst, src []byte) []byte {
 	for _, c := range src {
 		switch c {
