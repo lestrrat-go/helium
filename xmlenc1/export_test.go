@@ -31,9 +31,9 @@ func HardenedParserForTest() helium.Parser {
 // ParseEncryptedDataForTest is a test-only re-export of the package
 // internal EncryptedData parser so tests can assert namespace-aware
 // element matching directly against a parsed DOM. It parses under a
-// default Decryptor's EncryptedKey byte budget, as Decrypt does.
+// default Decryptor's CipherValue budgets, as Decrypt does.
 func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
-	return parseEncryptedData(elem, newEncryptedKeyBudget(&decryptConfig{}))
+	return parseEncryptedData(elem, newEncryptedKeyBudget(&decryptConfig{}), newPayloadCipherValueBudget(&decryptConfig{}))
 }
 
 // MaxOAEPParamsBytesForTest re-exports the xenc:OAEPparams decoded-size limit
