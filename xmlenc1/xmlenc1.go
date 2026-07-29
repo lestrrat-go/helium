@@ -31,8 +31,12 @@ type encryptConfig struct {
 }
 
 // DefaultBlockAlgorithm is the block encryption algorithm an Encryptor
-// uses when no BlockAlgorithm is set. It is authenticated AES-256-GCM.
-const DefaultBlockAlgorithm = AES256GCM
+// uses when no BlockAlgorithm is set. It is authenticated AES-256-GCM
+// under the XML Encryption 1.1 identifier [AES256GCM11], the only
+// namespace in which a W3C XML Security specification defines AES-GCM
+// (xmlenc-core1 §5.2), so the default output is what a conforming peer
+// recognizes.
+const DefaultBlockAlgorithm = AES256GCM11
 
 // Encryptor encrypts XML elements or content. It uses clone-on-write
 // semantics: each builder method returns a new Encryptor and the original

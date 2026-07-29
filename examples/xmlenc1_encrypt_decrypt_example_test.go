@@ -42,7 +42,7 @@ func Example_xmlenc1_encrypt_decrypt() {
 	}
 
 	edElem, err := xmlenc1.NewEncryptor().
-		BlockAlgorithm(xmlenc1.AES128GCM).
+		BlockAlgorithm(xmlenc1.AES128GCM11).
 		KeyTransportAlgorithm(xmlenc1.RSAOAEP).
 		RecipientPublicKey(&key.PublicKey).
 		EncryptElement(context.Background(), assertion)

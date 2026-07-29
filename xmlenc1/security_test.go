@@ -262,7 +262,7 @@ func TestGCM(t *testing.T) {
 
 		xml, err := helium.WriteString(doc)
 		require.NoError(t, err)
-		require.Contains(t, xml, xmlenc1.AES256GCM, "default block algorithm must be AES-256-GCM")
+		require.Contains(t, xml, xmlenc1.AES256GCM11, "default block algorithm must be AES-256-GCM")
 		// The serialized XML embeds a random base64 CipherValue whose alphabet
 		// (A-Za-z0-9+/=) can by chance spell "cbc"; assert against the actual CBC
 		// algorithm URIs instead, which contain a hyphen base64 never produces.
