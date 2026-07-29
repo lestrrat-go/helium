@@ -466,10 +466,14 @@ the cap bounds what verification builds rather than only what it keeps.
 spread over any number of text and CDATA children, so the lexical text wrapped
 around a value is unbounded and unrelated to the bytes it decodes to; counting
 it first is what keeps the memory under the cap both for a value the cap refuses
-and for every value it accepts. Only text and CDATA children carry a value's
-characters — a comment or processing instruction contributes none, and an
-element child, which `xs:base64Binary` does not admit at all, is rejected rather
-than read.
+and for every value it accepts. Text, CDATA, and entity-reference children carry
+a value's characters — a comment or processing instruction contributes none, and
+an element child, which `xs:base64Binary` does not admit at all, is rejected
+rather than read. An entity reference is read as the declared replacement text
+of the entity it names, taken in one step and not expanded further, so a
+document that writes a value as an entity reference verifies while the read
+stays bounded; a replacement that is not base64 fails the decode just as the
+same characters written inline would.
 
 The fifth site is the exception to both halves of that. An *external*
 `ds:RetrievalMethod` is dereferenced through the configured

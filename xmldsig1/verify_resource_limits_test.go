@@ -101,9 +101,10 @@ func TestVerifyResourceLimits(t *testing.T) {
 
 // TestVerifyBase64ValueChildren pins which children of a ds: base64 value carry
 // its characters. xs:base64Binary is a simple type, so only character
-// information items — text and CDATA — belong to the value; a comment or
-// processing instruction contributes none, and an element child is not
-// permitted there at all.
+// information items belong to the value: text and CDATA children, and an entity
+// reference, which stands for character data. A comment or processing
+// instruction contributes none, and an element child is not permitted there at
+// all.
 func TestVerifyBase64ValueChildren(t *testing.T) {
 	key := generateRSAKey(t)
 
@@ -128,6 +129,83 @@ func TestVerifyBase64ValueChildren(t *testing.T) {
 		require.ErrorIs(t, err, xmldsig1.ErrInvalidSignature)
 		require.ErrorContains(t, err, "SignatureValue")
 	})
+
+	// A conforming document may write a base64 value as an entity reference,
+	// and both of these values are unchanged by it: the entity carries exactly
+	// the characters the element held. Verification must therefore succeed
+	// exactly as it does without the entity, at the DigestValue site (inside
+	// ds:SignedInfo, so it is itself signed) and at the SignatureValue site.
+	t.Run("entity-reference DigestValue verifies", func(t *testing.T) {
+		doc := signedDocEntityValue(t, key, "DigestValue", "")
+		result, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.NoError(t, err)
+		require.Len(t, result.References, 1)
+	})
+
+	t.Run("entity-reference SignatureValue verifies", func(t *testing.T) {
+		doc := signedDocEntityValue(t, key, "SignatureValue", "")
+		result, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.NoError(t, err)
+		require.Len(t, result.References, 1)
+	})
+
+	// The referenced entity's replacement text is read raw and one step deep.
+	// A nested reference inside it stays the literal "&inner;" and markup stays
+	// the literal "<x/>", so neither is expanded into the value and neither
+	// decodes — the read never leaves the declared literal.
+	t.Run("nested entity reference does not decode", func(t *testing.T) {
+		doc := signedDocEntityValue(t, key, "SignatureValue", "&inner;")
+		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidSignature)
+		require.ErrorContains(t, err, "SignatureValue")
+	})
+
+	t.Run("entity holding markup does not decode", func(t *testing.T) {
+		doc := signedDocEntityValue(t, key, "SignatureValue", "<x/>")
+		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidSignature)
+		require.ErrorContains(t, err, "SignatureValue")
+	})
+}
+
+// signedDocEntityValue builds the same detached signature signedDocPaddedValue
+// does, then rewrites the named ds: element's whole content into a single
+// reference to an internal-subset entity and reparses. helium's parser does not
+// substitute entities, so the value reaches verification as one EntityRefNode
+// child — the shape a document that writes its base64 through an entity
+// actually arrives in.
+//
+// declared is what that entity declares. Empty means the element's own text
+// verbatim, which is the conforming case: the value's characters do not change,
+// so the signature is still the same signature. A non-empty declared
+// substitutes other replacement text, for the shapes that must not decode.
+func signedDocEntityValue(t *testing.T, key *rsa.PrivateKey, local, declared string) *helium.Document {
+	t.Helper()
+	serialized, err := helium.WriteString(signedDocPaddedValue(t, key, local, ""))
+	require.NoError(t, err)
+
+	open := "<ds:" + local + ">"
+	openAt := strings.Index(serialized, open)
+	require.Positive(t, openAt, "signed document has no ds:%s", local)
+	start := openAt + len(open)
+	end := strings.Index(serialized, "</ds:"+local+">")
+	require.Greater(t, end, start, "ds:%s has no text", local)
+	if declared == "" {
+		declared = serialized[start:end]
+	}
+
+	// The internal subset goes before the document element, and "inner" is
+	// declared so a declared value of "&inner;" is a reference to a real entity
+	// rather than a parse error — what must not happen is its EXPANSION.
+	rootAt := strings.Index(serialized, "<doc>")
+	require.Positive(t, rootAt, "signed document has no doc element")
+	return mustParseXML(t, serialized[:rootAt]+
+		`<!DOCTYPE doc [<!ENTITY inner "QUJD"><!ENTITY dv "`+declared+`">]>`+
+		serialized[rootAt:start]+"&dv;"+serialized[end:])
 }
 
 // splitIntoNodes lays out s as CDATA sections of chunk characters each, so the

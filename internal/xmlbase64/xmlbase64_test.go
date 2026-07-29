@@ -384,6 +384,19 @@ func parseValueElement(t *testing.T, markup string) *helium.Element {
 	return doc.DocumentElement()
 }
 
+// parseEntityValueElement parses markup as the value element's content with
+// decls as the document's internal DTD subset, so a reference in markup has an
+// entity to name. helium's parser does not substitute entities, so the
+// reference stays an EntityRefNode child of the element — the shape a
+// conforming document that writes part of a base64 value as an entity
+// reference actually hands DecodeElement.
+func parseEntityValueElement(t *testing.T, decls, markup string) *helium.Element {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte("<!DOCTYPE v ["+decls+"]><v>"+markup+"</v>"))
+	require.NoError(t, err)
+	return doc.DocumentElement()
+}
+
 // errCharge is what a caller's budget refusal looks like: DecodeElement must
 // hand it back untouched so the caller can recognize its own error.
 var errCharge = errors.New("charged too much")
@@ -487,6 +500,94 @@ func TestDecodeElement(t *testing.T) {
 		require.Error(t, err)
 		require.NotErrorIs(t, err, errCharge)
 		require.ErrorContains(t, err, "ElementNode")
+		require.Equal(t, -1, charged, "the charge must not run once a child is refused")
+	})
+
+	// An entity reference stands for character data, so a document that writes
+	// a value as one is conforming and must decode to what the same characters
+	// written inline decode to.
+	t.Run("reads an entity reference as its replacement text", func(t *testing.T) {
+		elem := parseEntityValueElement(t, `<!ENTITY dv "QUJDREVG">`, "&dv;")
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABCDEF"), decoded)
+		require.Equal(t, 6, charged)
+	})
+
+	// The reference is one child among several and its characters do not fill a
+	// quantum on their own, so this also pins that the counting state carries
+	// across an entity-reference boundary the way it does across a CDATA one.
+	t.Run("counts an entity reference across a child boundary", func(t *testing.T) {
+		elem := parseEntityValueElement(t, `<!ENTITY dv "DR">`, "QUJ<![CDATA[]]>&dv;EVG")
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABCDEF"), decoded)
+		require.Equal(t, 6, charged)
+	})
+
+	// The Entity node hanging off an EntityRef is the declaration itself, and
+	// its NextSibling is the NEXT declaration in the DTD's entity list rather
+	// than more of this value. Only the first child may be read, so the two
+	// unrelated declarations here must contribute nothing. Reading them would
+	// splice "!!" into the stream and fail the decode.
+	t.Run("reads only the referenced entity, not its declaration siblings", func(t *testing.T) {
+		elem := parseEntityValueElement(t, `<!ENTITY a "QUJD"><!ENTITY b "!!"><!ENTITY c "!!">`, "&a;")
+		var charged int
+		decoded, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.NoError(t, err)
+		require.Equal(t, []byte("ABC"), decoded)
+		require.Equal(t, 3, charged)
+	})
+
+	// An entity's replacement text is taken raw: a nested reference inside it
+	// stays the literal "&inner;" and is never expanded, so the value simply
+	// does not decode. That is what keeps the read to one bounded step.
+	t.Run("does not expand a nested entity reference", func(t *testing.T) {
+		elem := parseEntityValueElement(t, `<!ENTITY inner "QUJD"><!ENTITY outer "&inner;">`, "&outer;")
+		var charged int
+		_, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errCharge)
+		var corrupt base64.CorruptInputError
+		require.ErrorAs(t, err, &corrupt)
+	})
+
+	// Markup in the replacement text is likewise raw characters, which are not
+	// in the base64 alphabet, so the value fails the decode rather than being
+	// read as a subtree.
+	t.Run("does not read markup in an entity replacement as a subtree", func(t *testing.T) {
+		elem := parseEntityValueElement(t, `<!ENTITY m "<x/>">`, "&m;")
+		var charged int
+		_, err := xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errCharge)
+		var corrupt base64.CorruptInputError
+		require.ErrorAs(t, err, &corrupt)
+	})
+
+	// The parser always links a reference to its declared Entity, so an
+	// EntityRef whose first child is something else is reachable only from a
+	// caller-assembled DOM. Reading that child would be the unbounded subtree
+	// read the first-child-plus-Entity shape exists to rule out, so it is
+	// refused before the charge.
+	t.Run("refuses an entity reference whose first child is not an entity", func(t *testing.T) {
+		elem := parseValueElement(t, "QUJD")
+		doc := elem.OwnerDocument()
+		ref, err := doc.CreateReference("undeclared")
+		require.NoError(t, err)
+		payload, err := doc.CreateElement("payload")
+		require.NoError(t, err)
+		require.NoError(t, payload.AppendText([]byte("REVG")))
+		require.NoError(t, ref.AddChild(payload))
+		require.NoError(t, elem.AddChild(ref))
+
+		charged := -1
+		_, err = xmlbase64.DecodeElement(elem, chargeAtMost(1<<20, &charged))
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errCharge)
+		require.ErrorContains(t, err, "EntityRefNode")
 		require.Equal(t, -1, charged, "the charge must not run once a child is refused")
 	})
 

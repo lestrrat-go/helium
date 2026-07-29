@@ -35,20 +35,26 @@ import (
 // be split between children — and only then is the charge made. The second pass
 // builds just the characters the decoder will see.
 //
-// Only text and CDATA children are read, and this too is a bound rather than
-// mere tidiness: an element child's Content is the concatenation of that
-// child's WHOLE subtree, aggregated into one buffer, so reading a single
-// element child would materialize an arbitrarily large tree before any charge —
-// exactly what counting first exists to prevent.
+// Text, CDATA, and entity-reference children are read, and nothing else is.
+// That is a bound rather than mere tidiness: an element child's Content is the
+// concatenation of that child's WHOLE subtree, aggregated into one buffer, so
+// reading a single element child would materialize an arbitrarily large tree
+// before any charge — exactly what counting first exists to prevent.
 //
 // An element child is refused with an error rather than skipped, because
 // xs:base64Binary is a simple type and a simple content type admits only
 // character information items. Neither ds:DigestValue (a restriction of
 // xs:base64Binary) nor ds:SignatureValue (a simpleContent extension of it) may
 // legally contain one, so refusing it is the more correct reading of the value
-// as well as the bound. Every other child kind is refused with it — an entity
-// reference among them, whose content aggregates the referenced entity's
-// replacement subtree the same unbounded way.
+// as well as the bound. Every child kind not named here is refused with it.
+//
+// An entity reference IS read, because it stands for character data and a
+// conforming document may write any part of a value as one. It is read through
+// [entityReplacementText], which takes one bounded step to the declared
+// replacement literal and no further, so admitting it reintroduces no
+// aggregation. A replacement that is not base64 — a nested reference, which
+// stays the unexpanded literal "&inner;", or markup — simply leaves the value
+// undecodable, exactly as the same characters written inline would.
 //
 // Comment and processing-instruction children ARE skipped instead: per the XML
 // infoset neither contributes a character information item, so splicing their
@@ -101,7 +107,8 @@ func DecodeElement(e *helium.Element, charge func(int) error) ([]byte, error) {
 }
 
 // characterData returns the character data n contributes to an xs:base64Binary
-// value: its content for a text or CDATA child, nil for a child that
+// value: its content for a text or CDATA child, the referenced entity's
+// declared replacement text for an entity reference, nil for a child that
 // contributes none, and an error for a child a simple content type does not
 // admit at all. [DecodeElement] documents why each kind lands where it does.
 func characterData(n helium.Node) ([]byte, error) {
@@ -111,6 +118,9 @@ func characterData(n helium.Node) ([]byte, error) {
 	if c, ok := helium.AsNode[*helium.CDATASection](n); ok {
 		return c.Content(), nil
 	}
+	if r, ok := helium.AsNode[*helium.EntityRef](n); ok {
+		return entityReplacementText(r)
+	}
 	if _, ok := helium.AsNode[*helium.Comment](n); ok {
 		return nil, nil
 	}
@@ -118,6 +128,31 @@ func characterData(n helium.Node) ([]byte, error) {
 		return nil, nil
 	}
 	return nil, fmt.Errorf("xs:base64Binary value has a non-character child (%s %q)", n.Type(), n.Name())
+}
+
+// entityReplacementText returns the declared replacement text of the entity r
+// refers to, which is the character data r contributes to the value.
+//
+// Exactly one child is read — r's first, which the parser links to the declared
+// [helium.Entity] — and that shape is what keeps the read bounded.
+// [helium.Entity.Content] is a leaf accessor returning the raw replacement
+// literal: it expands no nested reference and recurses into no subtree, so the
+// cost is one copy of that literal, the same one-copy floor a text child
+// already has. Reading r.Content() instead would aggregate r's children, which
+// is bounded for a parser-built reference but not for a hand-built one carrying
+// an element. Walking past the first child would leave the value altogether:
+// the Entity's siblings are the remaining entity declarations of the DTD, not
+// more of this value.
+//
+// A first child that is not an [helium.Entity] is refused. The parser never
+// builds that shape, so it is reachable only from a caller-assembled DOM, and
+// refusing it is what holds the bound for one.
+func entityReplacementText(r *helium.EntityRef) ([]byte, error) {
+	entity, ok := helium.AsNode[*helium.Entity](r.FirstChild())
+	if !ok {
+		return nil, fmt.Errorf("xs:base64Binary value has an entity reference with no entity declaration (%s %q)", r.Type(), r.Name())
+	}
+	return entity.Content(), nil
 }
 
 // DecodeString strips the four XML whitespace characters from s and
