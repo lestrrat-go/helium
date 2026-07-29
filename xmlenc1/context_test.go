@@ -2,7 +2,9 @@ package xmlenc1_test
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xmlenc1"
@@ -87,27 +89,48 @@ func TestDecryptReturnsPlaintextParserCancellation(t *testing.T) {
 	edElem, err := xmlenc1.NewEncryptor().SessionKey(sessionKey).EncryptElement(t.Context(), doc.DocumentElement())
 	require.NoError(t, err)
 
-	ctx := newCancelAfterErrCalls(t, 5)
+	ctx := newCancelAfterErrCalls(4)
 	_, err = xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(ctx, edElem)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+// cancelAfterErrCalls reports a cancelled error from Err() only after Err has
+// been consulted cancelAfter times, simulating a context that is live when
+// Decrypt is entered and becomes cancelled partway through decryption — while
+// finishDecrypt, and the ParseInNodeContext call inside it, are running. It
+// implements context.Context directly (no embedding) to satisfy the
+// containedctx linter; it needs no parent context, because the test drives the
+// cancellation itself and decryption reads no context values. Closing done on
+// cancellation keeps Done() consistent with Err() for any derived context that
+// waits on it, and the mutex keeps that transition safe for the concurrent use
+// a context.Context must support.
 type cancelAfterErrCalls struct {
-	context.Context
-	cancel    context.CancelFunc
-	remaining int
+	mu          sync.Mutex
+	done        chan struct{}
+	cancelAfter int
+	calls       int
+	err         error
 }
 
-func newCancelAfterErrCalls(t *testing.T, remaining int) *cancelAfterErrCalls {
-	t.Helper()
-	ctx, cancel := context.WithCancel(t.Context())
-	return &cancelAfterErrCalls{Context: ctx, cancel: cancel, remaining: remaining}
+func newCancelAfterErrCalls(cancelAfter int) *cancelAfterErrCalls {
+	return &cancelAfterErrCalls{done: make(chan struct{}), cancelAfter: cancelAfter}
 }
 
-func (ctx *cancelAfterErrCalls) Err() error {
-	ctx.remaining--
-	if ctx.remaining == 0 {
-		ctx.cancel()
+func (c *cancelAfterErrCalls) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (c *cancelAfterErrCalls) Done() <-chan struct{}       { return c.done }
+func (c *cancelAfterErrCalls) Value(any) any               { return nil }
+
+func (c *cancelAfterErrCalls) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err != nil {
+		return c.err
 	}
-	return ctx.Context.Err()
+	c.calls++
+	if c.calls <= c.cancelAfter {
+		return nil
+	}
+	c.err = context.Canceled
+	close(c.done)
+	return c.err
 }
