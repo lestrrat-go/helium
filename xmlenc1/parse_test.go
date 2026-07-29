@@ -239,10 +239,11 @@ func TestParse(t *testing.T) {
 // TestMarshalParseRoundTrip exercises the serialize and parse paths for the
 // optional fields both directions carry: the EncryptedData's ID and Type, its
 // EncryptionMethod's DigestMethod, MGFAlgorithm and OAEPParams, and an
-// EncryptedKey with its own ID and EncryptionMethod. The marshaled element is
-// serialized to bytes, reparsed through the public XML parser, and the
-// resulting DOM is fed back through the internal EncryptedData parser so
-// both directions are covered honestly via a real round-trip.
+// EncryptedKey with its own ID and EncryptionMethod. The marshaler's own
+// in-memory DOM is fed straight back to the internal EncryptedData parser, with
+// no serialization to bytes and no reparse through the public XML parser in
+// between, so what is pinned is that the two internal directions agree on the
+// same tree, not a byte-level round trip.
 func TestMarshalParseRoundTrip(t *testing.T) {
 	doc := mustParseXML(t, `<root/>`)
 
