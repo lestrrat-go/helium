@@ -551,9 +551,20 @@ func decodeOAEPParams(elem *helium.Element) ([]byte, error) {
 // (&inner;, <x/>), which is not base64, so the Counter marks the value
 // undecodable and the decode fails, which is the right verdict for it. The
 // Entity's NextSibling is deliberately not followed either — it is the next
-// declaration in the DTD, not part of this value. An EntityRef whose first
-// child is not an Entity is reachable only in a caller-built tree and is
-// refused, so the one-hop bound holds for every tree.
+// declaration in the DTD, not part of this value.
+//
+// A CHILDLESS EntityRef is a normal parser output, not a caller-built shape:
+// per XML 1.0's "Entity Declared" constraint, an undeclared general entity is
+// only a fatal well-formedness error when the document is standalone="yes" or
+// has neither an external subset nor a parameter-entity reference. Otherwise it
+// is a validity error, so a non-validating parse keeps the reference as an
+// EntityRef with no Entity under it. Such a reference carries no character data
+// and contributes none, which is what [c14n] does with it too — it
+// canonicalizes an EntityRef by walking its children, so a childless one
+// contributes nothing there either. Refusing it here would reject documents the
+// parser accepts and the canonicalizer reads as empty. An EntityRef with a
+// NON-NIL first child that is not an Entity is reachable only in a caller-built
+// tree and is refused, so the one-hop bound holds for every tree.
 //
 // [helium.Element] is refused: it answers Content by aggregating its whole
 // subtree into one buffer, so asking such a child for its content spends the
@@ -575,7 +586,11 @@ func oaepParamsCharacterData(child helium.Node) ([]byte, error) {
 		return c.Content(), nil
 	}
 	if ref, ok := helium.AsNode[*helium.EntityRef](child); ok {
-		entity, ok := helium.AsNode[*helium.Entity](ref.FirstChild())
+		first := ref.FirstChild()
+		if first == nil {
+			return nil, nil
+		}
+		entity, ok := helium.AsNode[*helium.Entity](first)
 		if !ok {
 			return nil, fmt.Errorf("%w: OAEPparams holds an entity reference with no entity declaration", ErrMalformedEncrypted)
 		}

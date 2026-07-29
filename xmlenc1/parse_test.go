@@ -364,10 +364,10 @@ const oaepParamsNotCharacterData = "which is not character data"
 // being expanded into something decodable.
 const oaepParamsInvalid = "invalid OAEPparams"
 
-// oaepParamsNoEntityDecl is the fragment an entity reference with no resolved
-// entity carries. A parsed document cannot produce one — the parser rejects an
-// undeclared reference itself — so this is the caller-built shape, refused
-// rather than read some other way.
+// oaepParamsNoEntityDecl is the fragment an entity reference whose first child
+// is present but is not an Entity carries. Only a caller-built tree holds that
+// shape; a CHILDLESS entity reference is an ordinary parser output and is not
+// refused at all.
 const oaepParamsNoEntityDecl = "entity reference with no entity declaration"
 
 // oaepParamsEncryptedData builds an EncryptedData whose own EncryptionMethod
@@ -411,6 +411,23 @@ func oaepParamsEntityEncryptedData(t *testing.T, decls, params string) *helium.E
 	t.Helper()
 	doc := mustParseXML(t, `<?xml version="1.0"?>`+"\n"+
 		`<!DOCTYPE xenc:EncryptedData [`+"\n"+decls+"\n"+`]>`+"\n"+
+		`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
+		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+		`<xenc:OAEPparams>`+params+`</xenc:OAEPparams>`+
+		`</xenc:EncryptionMethod>`+
+		`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>`+
+		`</xenc:EncryptedData>`)
+	return doc.DocumentElement()
+}
+
+// oaepParamsDoctypeEncryptedData is oaepParamsEntityEncryptedData with the
+// WHOLE doctype declaration chosen by the caller rather than just its internal
+// subset. Which DTD shape a document carries is what decides whether the parser
+// refuses an undeclared general entity reference outright or keeps it in the
+// DOM, so a test of that behaviour has to write the declaration itself.
+func oaepParamsDoctypeEncryptedData(t *testing.T, doctype, params string) *helium.Element {
+	t.Helper()
+	doc := mustParseXML(t, `<?xml version="1.0"?>`+"\n"+doctype+"\n"+
 		`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
 		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
 		`<xenc:OAEPparams>`+params+`</xenc:OAEPparams>`+
@@ -635,21 +652,21 @@ func TestOAEPParamsEntityReference(t *testing.T) {
 		require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
 	})
 
-	// A reference with no entity behind it is only reachable in a tree a caller
-	// built: the parser rejects an undeclared reference itself. Refusing it
-	// keeps the bound — there is no second way into an EntityRef's content.
-	t.Run("an entity reference with no entity is rejected", func(t *testing.T) {
+	// A reference with no entity behind it carries no character data at all, so
+	// it contributes none and the rest of the value decodes untouched. Nothing
+	// is read through it, so the bound is not at stake either.
+	t.Run("an entity reference with no entity contributes nothing", func(t *testing.T) {
 		encryptedData := oaepParamsEncryptedData(t, `AA==`)
 		ref, err := encryptedData.OwnerDocument().CreateReference("undeclared")
 		require.NoError(t, err)
 		require.NoError(t, oaepParamsElement(t, encryptedData).AddChild(ref))
 
-		_, err = xmlenc1.ParseEncryptedDataForTest(encryptedData)
-		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
-		require.Contains(t, err.Error(), oaepParamsNoEntityDecl)
+		ed, err := xmlenc1.ParseEncryptedDataForTest(encryptedData)
+		require.NoError(t, err)
+		require.Equal(t, []byte{0x00}, ed.EncryptionMethod.OAEPParams)
 	})
 
-	// The same refusal covers the hazardous caller-built shape: an EntityRef
+	// The refusal that remains covers the hazardous caller-built shape: an EntityRef
 	// carrying an element child. Asking such a node for its content aggregates
 	// that subtree, which is the cost the bound exists to refuse.
 	t.Run("an entity reference holding an element is rejected", func(t *testing.T) {
@@ -666,6 +683,106 @@ func TestOAEPParamsEntityReference(t *testing.T) {
 		_, err = xmlenc1.ParseEncryptedDataForTest(encryptedData)
 		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 		require.Contains(t, err.Error(), oaepParamsNoEntityDecl)
+	})
+}
+
+// TestOAEPParamsUndeclaredEntityReference covers the entity reference the
+// PARSER leaves with no Entity under it, which is where the one-hop walk meets
+// a real document rather than a tree a test built by hand.
+//
+// XML 1.0's "Entity Declared" constraint makes an undeclared general entity a
+// fatal well-formedness error only when the document is standalone="yes", or
+// when it has neither an external subset nor a parameter-entity reference.
+// Given either of those two DTD shapes and no standalone="yes", it is a
+// VALIDITY error instead, so helium's non-validating parse keeps the reference
+// in the DOM as an EntityRefNode with no child at all. Every case below drives
+// helium.NewParser over such a document, which is the only way to reach that
+// shape — hand-attaching a child through Document.CreateReference produces a
+// DIFFERENT one and would not exercise this at all.
+//
+// Such a reference carries no character data, so it contributes none: the rest
+// of the value decodes exactly as if it were written on its own. Refusing it
+// would reject documents the parser accepts and the c14n canonicalizer already
+// reads as empty, since c14n canonicalizes an EntityRef by walking its
+// children.
+func TestOAEPParamsUndeclaredEntityReference(t *testing.T) {
+	label := []byte("label-params")
+	encodedLabel := base64.StdEncoding.EncodeToString(label)
+	require.Len(t, encodedLabel, 16)
+	// The reference sits BETWEEN two halves of one base64 value, so a walk that
+	// contributed anything for it — even a single character — would corrupt the
+	// quantum boundary and change the decoded bytes rather than merely fail.
+	split := encodedLabel[:8] + `&undeclared;` + encodedLabel[8:]
+
+	// An external subset is one of the two DTD shapes that downgrade the
+	// undeclared entity to a validity error. The system identifier is never
+	// dereferenced — the default parser blocks external entities and denies
+	// filesystem access — so its mere presence is what counts.
+	t.Run("an external subset keeps an undeclared reference in the tree", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData SYSTEM "no-such.dtd">`, split))
+		require.NoError(t, err)
+		require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
+	})
+
+	// A parameter-entity reference is the other shape, and it needs NO external
+	// subset: a wholly internal DTD that references one parameter entity is
+	// enough for the parser to keep going.
+	t.Run("a parameter entity reference keeps an undeclared reference in the tree", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData [<!ENTITY % pe "<!ENTITY unused 'x'>"> %pe;]>`, split))
+		require.NoError(t, err)
+		require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
+	})
+
+	// And the shape itself, asserted on the DOM rather than inferred from the
+	// decode: the parser really does hand the walk an EntityRef with a nil
+	// first child, so the guard on that case is load-bearing for parsed input.
+	t.Run("the parser produces an entity reference with no child", func(t *testing.T) {
+		encryptedData := oaepParamsDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData SYSTEM "no-such.dtd">`, split)
+		var seen int
+		for child := oaepParamsElement(t, encryptedData).FirstChild(); child != nil; child = child.NextSibling() {
+			ref, ok := helium.AsNode[*helium.EntityRef](child)
+			if !ok {
+				continue
+			}
+			seen++
+			require.Equal(t, "undeclared", ref.Name())
+			require.Nil(t, ref.FirstChild())
+		}
+		require.Equal(t, 1, seen)
+	})
+
+	// The guard must not swallow the declared path it sits in front of: with
+	// the same external subset present, a DECLARED entity still contributes its
+	// replacement text.
+	t.Run("a declared entity still decodes beside the external subset", func(t *testing.T) {
+		ed, err := xmlenc1.ParseEncryptedDataForTest(oaepParamsDoctypeEncryptedData(t,
+			`<!DOCTYPE xenc:EncryptedData SYSTEM "no-such.dtd" [<!ENTITY label "`+encodedLabel+`">]>`,
+			`&label;`))
+		require.NoError(t, err)
+		require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
+	})
+
+	// Neither DTD shape means the parser refuses the document outright, so the
+	// reference never reaches this package at all. Pinning that keeps the cases
+	// above honest about WHY they need their doctype.
+	t.Run("without either shape the parser rejects the document", func(t *testing.T) {
+		for name, head := range map[string]string{
+			"no doctype":                      `<?xml version="1.0"?>`,
+			"internal subset, no PE":          `<?xml version="1.0"?>` + "\n" + `<!DOCTYPE xenc:EncryptedData [<!ENTITY unused "x">]>`,
+			"standalone yes, external subset": `<?xml version="1.0" standalone="yes"?>` + "\n" + `<!DOCTYPE xenc:EncryptedData SYSTEM "no-such.dtd">`,
+		} {
+			_, err := helium.NewParser().Parse(t.Context(), []byte(head+"\n"+
+				`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`">`+
+				`<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+				`<xenc:OAEPparams>`+split+`</xenc:OAEPparams>`+
+				`</xenc:EncryptionMethod>`+
+				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>`+
+				`</xenc:EncryptedData>`))
+			require.Error(t, err, "doctype=%s", name)
+		}
 	})
 }
 
