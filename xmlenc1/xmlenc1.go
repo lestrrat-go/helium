@@ -613,6 +613,7 @@ type decryptConfig struct {
 	ecPrivateKey            *ecdsa.PrivateKey
 	keyEncryptionKey        []byte
 	sessionKey              []byte
+	blockAlgorithm          string
 	allowUnauthenticatedCBC bool
 	maxEncryptedKeys        int
 	maxEncryptedKeyBytes    int
@@ -698,6 +699,36 @@ func (d Decryptor) KeyEncryptionKey(kek []byte) Decryptor {
 func (d Decryptor) SessionKey(key []byte) Decryptor {
 	d = d.clone()
 	d.cfg.sessionKey = append([]byte(nil), key...)
+	return d
+}
+
+// BlockAlgorithm supplies the block encryption algorithm URI out of band, for
+// an EncryptedData that carries no EncryptionMethod. W3C xmlenc-core1 §3.1 and
+// §3.2 leave that element optional and state that the recipient must then
+// already know the algorithm, and §4.4 step 1 admits obtaining the algorithm
+// information out of band. Support for such a document is therefore opt-in:
+// without this setter one fails with [ErrMalformedEncrypted], because nothing
+// says what to decrypt it with.
+//
+// An empty URI counts as not set. The match against the document is STRICT, so
+// setting this can only narrow what a decrypt accepts, never widen it:
+//
+//   - EncryptionMethod absent and this unset: [ErrMalformedEncrypted], naming
+//     this setter.
+//   - EncryptionMethod absent and this set: the URI set here is used.
+//   - EncryptionMethod present and this unset: the document's URI is used.
+//   - Both present and different: [ErrConflictingBlockAlgorithm], naming both.
+//
+// A document can never override a caller who stated the algorithm out of band;
+// that sentinel's godoc owns why. Whichever of the two the resolution returns
+// is the algorithm every later step is bound to, exactly as a wire-declared one
+// is: the AES-CBC opt-in gate (see [Decryptor.AllowUnauthenticatedCBC]), the
+// additional authenticated data of the legacy XML Encryption GCM identifiers,
+// the session-key length ([KeySizeError]), and the length a valid AES key-wrap
+// ciphertext must have.
+func (d Decryptor) BlockAlgorithm(uri string) Decryptor {
+	d = d.clone()
+	d.cfg.blockAlgorithm = uri
 	return d
 }
 
@@ -908,6 +939,32 @@ func (b *payloadCipherValueBudget) charge(n int) error {
 	return nil
 }
 
+// resolveDecryptBlockAlgorithm decides the block algorithm one EncryptedData is
+// decrypted under, from the document's own EncryptionMethod and the URI the
+// caller states out of band with Decryptor.BlockAlgorithm, which owns the four
+// cases and the strict-match rule. Both decrypt entry points resolve through it
+// before anything else looks at the algorithm, so the CBC opt-in gate, the AEAD
+// additional data of the legacy GCM identifiers, and every key-length binding
+// all act on the one URI it returns.
+func resolveDecryptBlockAlgorithm(cfg *decryptConfig, ed *EncryptedData) (string, error) {
+	if ed.EncryptionMethod == nil {
+		if cfg.blockAlgorithm == "" {
+			return "", fmt.Errorf("%w: missing EncryptionMethod; set Decryptor.BlockAlgorithm to supply the block algorithm out of band", ErrMalformedEncrypted)
+		}
+		return cfg.blockAlgorithm, nil
+	}
+	// A present EncryptionMethod speaks for the document even when its
+	// Algorithm attribute is empty, which the xenc schema does not allow: the
+	// caller's URI must not stand in for a malformed declaration, so an empty
+	// declared algorithm conflicts like any other mismatch and an unsupported
+	// URI is reported where it always was.
+	declared := ed.EncryptionMethod.Algorithm
+	if cfg.blockAlgorithm == "" || cfg.blockAlgorithm == declared {
+		return declared, nil
+	}
+	return "", fmt.Errorf("%w: EncryptedData declares block algorithm %q and Decryptor.BlockAlgorithm is %q; they must match", ErrConflictingBlockAlgorithm, declared, cfg.blockAlgorithm)
+}
+
 func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]byte, error) {
 	if err := contextErr(ctx); err != nil {
 		return nil, err
@@ -919,10 +976,10 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
-	if ed.EncryptionMethod == nil {
-		return nil, abort(ctx, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted))
+	alg, err := resolveDecryptBlockAlgorithm(cfg, ed)
+	if err != nil {
+		return nil, abort(ctx, err)
 	}
-	alg := ed.EncryptionMethod.Algorithm
 	switch alg {
 	case AES128CBC, AES256CBC:
 		if !cfg.allowUnauthenticatedCBC {
@@ -1019,13 +1076,13 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, abort(ctx, fmt.Errorf("%w: unsupported EncryptedData Type %q", ErrMalformedEncrypted, ed.Type))
 	}
 
-	// Validate the EncryptionMethod and CBC opt-in once, up front: these
-	// describe the block cipher and are independent of which session-key
+	// Resolve the block algorithm and apply the CBC opt-in once, up front:
+	// these describe the block cipher and are independent of which session-key
 	// candidate ultimately succeeds.
-	if ed.EncryptionMethod == nil {
-		return nil, abort(ctx, fmt.Errorf("%w: missing EncryptionMethod", ErrMalformedEncrypted))
+	alg, err := resolveDecryptBlockAlgorithm(cfg, ed)
+	if err != nil {
+		return nil, abort(ctx, err)
 	}
-	alg := ed.EncryptionMethod.Algorithm
 	switch alg {
 	case AES128CBC, AES256CBC:
 		if !cfg.allowUnauthenticatedCBC {

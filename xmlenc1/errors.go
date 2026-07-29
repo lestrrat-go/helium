@@ -82,6 +82,20 @@ var (
 	// that points nowhere near the real mistake. The caller must pick one.
 	ErrConflictingKeyConfig = errors.New("xmlenc1: conflicting key protection configured")
 
+	// ErrConflictingBlockAlgorithm is returned when an EncryptedData declares a
+	// block algorithm in its EncryptionMethod and the Decryptor was given a
+	// different one through Decryptor.BlockAlgorithm. The message names both
+	// URIs so the caller knows which of the two to change.
+	//
+	// The two are matched rather than ordered on purpose. Decryptor.BlockAlgorithm
+	// exists for an EncryptedData that carries no EncryptionMethod at all, where
+	// the algorithm is known out of band (W3C xmlenc-core1 §3.1, §4.4); letting a
+	// document's declaration win over a caller who stated the algorithm would let
+	// the document choose the cipher the recipient runs, which is exactly the
+	// algorithm confusion the setter must not introduce. Under a strict match,
+	// setting it can only narrow what a decrypt accepts.
+	ErrConflictingBlockAlgorithm = errors.New("xmlenc1: conflicting block algorithm")
+
 	// ErrCBCRequiresOptIn is returned when a Decryptor is asked to
 	// decrypt an AES-CBC ciphertext but the caller has not opted in
 	// to unauthenticated CBC via Decryptor.AllowUnauthenticatedCBC(true).
