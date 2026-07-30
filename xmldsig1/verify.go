@@ -906,6 +906,33 @@ func gateInclusiveNamespaces(alg string) error {
 	return nil
 }
 
+// maxXPathFilterExpressionBytes bounds the length of one ds:Transform/XPath
+// filter expression. parseXPathTransform applies it, so an over-length
+// expression is refused where it is read off the document and never reaches the
+// XPath compiler or the transform pipeline. That placement is the point of the
+// limit: every XPath filter in a Signature is compiled during Reference
+// preflight, before the SignatureValue is checked, so the expression is
+// attacker-controlled work done pre-authentication.
+//
+// The bound is on LENGTH because compiling an expression costs far more than
+// linearly in its length — a flat chain of predicates allocates around a hundred
+// times the expression's own size. The XPath parser's own nesting-depth bound
+// does not stand in for this one: it bounds how deeply an expression nests, and
+// a flat chain stays shallow at any length.
+//
+// Real filter expressions are tens to hundreds of bytes: the W3C defCan-1
+// interop vector is 75 characters, and the longest expression in any interop
+// vector this package verifies is 421. 8 KiB is more than an order of magnitude
+// above that and about two above a typical filter, so the ceiling refuses a
+// megabyte of hostile expression without coming near anything interoperable.
+//
+// The limit is a deliberate POLICY ceiling, not a conformance boundary. XMLDSig
+// core types ds:XPath as a string with no length facet, so a longer expression
+// is conforming and this package refuses it anyway. Signing cannot emit an XPath
+// filter transform at all, so nothing this package writes can meet the ceiling
+// from the other side.
+const maxXPathFilterExpressionBytes = 8192
+
 // parseXPathTransform extracts the XPath filter transform's expression and the
 // in-scope namespace bindings it must be evaluated under, from a ds:Transform
 // element whose Algorithm is TransformXPath. The expression is the text of the
@@ -913,7 +940,9 @@ func gateInclusiveNamespaces(alg string) error {
 // in-scope prefix declarations (the XPath transform is evaluated with the
 // XPath element's namespace context per XMLDSig core §6.6.3). It fails closed on
 // a missing, duplicate, or foreign child so a malformed XPath transform never
-// digests an unfiltered node-set. The default (empty-prefix) namespace is not
+// digests an unfiltered node-set, and on an expression longer than
+// maxXPathFilterExpressionBytes with ErrResourceLimitExceeded, so no over-length
+// expression is compiled. The default (empty-prefix) namespace is not
 // forwarded: XPath 1.0 has no default element namespace, so an unprefixed name
 // test matches only no-namespace nodes. The ds:XPath element itself is returned
 // as the bearing node so the here() function (core §6.6.3.1) resolves to it.
@@ -938,6 +967,9 @@ func parseXPathTransform(te *helium.Element) (string, map[string]string, *helium
 	expr := strings.TrimSpace(domutil.TextContent(xpathElem))
 	if expr == "" {
 		return "", nil, nil, fmt.Errorf("%w: XPath transform has empty expression", ErrUnsupportedTransform)
+	}
+	if len(expr) > maxXPathFilterExpressionBytes {
+		return "", nil, nil, fmt.Errorf("%w: XPath transform expression is %d bytes (limit %d)", ErrResourceLimitExceeded, len(expr), maxXPathFilterExpressionBytes)
 	}
 	nsBindings := make(map[string]string)
 	for prefix, ns := range domutil.InScopeNamespaces(xpathElem, true) {

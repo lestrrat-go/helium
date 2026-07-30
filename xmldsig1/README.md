@@ -516,6 +516,16 @@ to either ceiling — RFC 5280 §4.1.2.2 caps a certificate serial at 20 octets,
 which is at most 49 decimal digits, and a P-521 field element needs at most 157
 — so there is no legitimate value for a knob to admit.
 
+An XPath filter expression has a fixed 8 KiB length ceiling for the same reason:
+every `ds:Transform/XPath` expression is compiled during Reference preflight,
+before the SignatureValue is checked, and compiling one costs far more than its
+own length. The expression is refused with `ErrResourceLimitExceeded` where it is
+read off the document, so no over-length expression is compiled. Real filter
+expressions are tens to hundreds of bytes — the W3C `defCan-1` interop vector is
+75 characters — so the ceiling sits orders of magnitude above anything
+interoperable. It is a policy limit rather than a conformance boundary, and like
+the RetrievalMethod cap it is not affected by the builder limits above.
+
 ## Detached signature placement (inclusive C14N)
 
 `SignDetached` and `SignEnveloping` return a detached `ds:Signature` for the
