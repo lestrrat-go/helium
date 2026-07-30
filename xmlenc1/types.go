@@ -113,6 +113,14 @@ type EncryptedKey struct {
 	// decrypt path consults — the name is joined from every child of the
 	// element at every depth that join reaches, and no budget charges it, so a
 	// document may spread one over as many CDATA sections as it likes.
+	//
+	// That join belongs to the DOM, not to this package: helium's
+	// aggregateOwnedContent (node.go) answers a container's Content() by
+	// recursing through its whole descendant subtree, and
+	// internal/domutil.TextContent concatenates Content() over every direct
+	// child. xmlenc1 implements neither, so the cost above is what reading the
+	// field through them would take rather than work any xmlenc1 code path
+	// performs.
 	CarriedKeyName string
 	// AgreementMethod, when set, means the key that protects CipherValue is
 	// derived by key agreement rather than supplied directly.
