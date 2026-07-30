@@ -8,12 +8,22 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 
 ## Security
 
-- Secure by default. `Encryptor` defaults to authenticated AES-256-GCM
-  (`DefaultBlockAlgorithm`) when no `BlockAlgorithm` is set. The package
-  binds the `EncryptionMethod/@Algorithm` URI into the AEAD
-  additional-authenticated-data for the legacy XML Encryption GCM
-  identifiers. XML Encryption 1.1 GCM uses its standard IV, ciphertext, and
-  authentication-tag encoding without additional authenticated data.
+- Secure by default. `Encryptor` defaults to authenticated AES-256-GCM under
+  the XML Encryption 1.1 identifier `AES256GCM11` (`DefaultBlockAlgorithm`)
+  when no `BlockAlgorithm` is set. W3C xmlenc-core1 §5.2 defines AES-GCM only
+  in the XML Encryption 1.1 namespace `http://www.w3.org/2009/xmlenc11#`, so
+  that is the identifier a conforming peer recognizes; 1.1 GCM uses the
+  specified IV, ciphertext, and authentication-tag encoding without additional
+  authenticated data.
+- The `AES128GCM` and `AES256GCM` identifiers, which put GCM in the 2001 XML
+  Encryption namespace, are defined by no XML Security specification.
+  `Encryptor.BlockAlgorithm` accepts them and `Decryptor` decrypts them, so
+  every document this package has emitted keeps decrypting, but a conforming
+  peer will not accept one. For those two identifiers the package binds the
+  `EncryptionMethod/@Algorithm` URI into the AEAD additional authenticated
+  data — this package's own measure against an on-the-wire algorithm
+  substitution, not conformance with any specification, and a second reason a
+  document carrying them does not interoperate.
 - AES-CBC is unauthenticated and vulnerable to padding-oracle attacks
   (Jager/Somorovsky 2011).
   - **Encryption:** selecting a CBC `BlockAlgorithm` requires
@@ -199,7 +209,7 @@ func Example_xmlenc1_encrypt_decrypt() {
   }
 
   edElem, err := xmlenc1.NewEncryptor().
-    BlockAlgorithm(xmlenc1.AES128GCM).
+    BlockAlgorithm(xmlenc1.AES128GCM11).
     KeyTransportAlgorithm(xmlenc1.RSAOAEP).
     RecipientPublicKey(&key.PublicKey).
     EncryptElement(context.Background(), assertion)

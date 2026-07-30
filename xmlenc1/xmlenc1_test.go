@@ -241,6 +241,60 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 	})
 }
 
+// The default block algorithm is what a caller who configures nothing puts on
+// the wire, so it must be an identifier a standards-conforming peer
+// recognizes. W3C xmlenc-core1 §5.2 defines AES-GCM only in the XML
+// Encryption 1.1 namespace, and the identifiers in the 2001 namespace this
+// package also decrypts are defined by no specification.
+func TestDefaultBlockAlgorithm(t *testing.T) {
+	t.Run("emits the XML Encryption 1.1 GCM identifier", func(t *testing.T) {
+		require.Equal(t, xmlenc1.AES256GCM11, xmlenc1.DefaultBlockAlgorithm)
+
+		sessionKey := randKey(t, 32)
+		doc := mustParseXML(t, samlAssertion)
+
+		// No BlockAlgorithm set.
+		edElem, err := xmlenc1.NewEncryptor().
+			SessionKey(sessionKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		ed, err := xmlenc1.ParseEncryptedDataForTest(edElem)
+		require.NoError(t, err)
+		require.NotNil(t, ed.EncryptionMethod)
+		require.Equal(t, xmlenc1.AES256GCM11, ed.EncryptionMethod.Algorithm)
+	})
+
+	// A caller may still select a 2001-namespace GCM identifier explicitly,
+	// and this package decrypts one whatever wrote it, so every document it
+	// has ever emitted keeps decrypting.
+	t.Run("explicitly selected AES256GCM round-trips", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		doc := mustParseXML(t, samlAssertion)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			SessionKey(sessionKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		ed, err := xmlenc1.ParseEncryptedDataForTest(edElem)
+		require.NoError(t, err)
+		require.NotNil(t, ed.EncryptionMethod)
+		require.Equal(t, xmlenc1.AES256GCM, ed.EncryptionMethod.Algorithm)
+
+		nodes, err := xmlenc1.NewDecryptor().
+			SessionKey(sessionKey).
+			Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+
+		s, err := helium.WriteString(nodes[0])
+		require.NoError(t, err)
+		require.Contains(t, s, "user@example.com")
+	})
+}
+
 func TestEncryptErrors(t *testing.T) {
 	t.Run("no config", func(t *testing.T) {
 		doc := mustParseXML(t, samlAssertion)
