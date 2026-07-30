@@ -3,6 +3,7 @@ package xmlenc1
 import (
 	"context"
 	"crypto/ecdh"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"slices"
@@ -357,7 +358,7 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 			}
 			curve = named
 		case "PublicKey":
-			decoded, err := decodeECPublicKey(ctx, e)
+			decoded, err := decodeBoundedBase64(ctx, e, "ECKeyValue PublicKey", maxECPublicKeyBytes, "invalid ECKeyValue base64")
 			if err != nil {
 				return err
 			}
@@ -378,7 +379,7 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 
 // maxECPublicKeyBytes bounds the decoded octet length of one dsig11:PublicKey
 // element inside a dsig11:ECKeyValue. It is the single statement of that limit;
-// decodeECPublicKey applies it.
+// decodeBoundedBase64 applies it.
 //
 // Unlike this package's other ceilings, it is not a policy choice: it is the
 // largest public key the three supported curves can encode. dsig11:PublicKey
@@ -396,66 +397,6 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 // NamedCurve at all still has its PublicKey read before the missing-curve error
 // is raised. A per-curve bound would hold only for the one child order.
 const maxECPublicKeyBytes = 133
-
-// maxECPublicKeyChars is the most base64 characters a value within
-// maxECPublicKeyBytes can hold: ceil(n/3) quanta of four characters each. It
-// sizes the buffer decodeECPublicKey assembles and tells that walk when to stop,
-// so what is being built is sized by the limit and never by the document.
-//
-// Stopping there is only ever early, never a different verdict, for the reason
-// maxOAEPParamsChars states: past this count a value the decoder would accept
-// has at least one more whole quantum and so is over the limit, and a value the
-// decoder would reject is charged its full quantum count, which is over it too.
-const maxECPublicKeyChars = (maxECPublicKeyBytes + 2) / 3 * 4
-
-// decodeECPublicKey decodes elem's character data into an originator public
-// key, refusing a value over maxECPublicKeyBytes before anything is built from
-// it.
-//
-// The element is read while the document is parsed, so it is reached before any
-// key is resolved and before anything the document says has been authenticated,
-// and the curve is the only thing that would otherwise refuse an oversized
-// value — after the whole of it has been materialized twice, once as the joined
-// lexical text and once as its decoded form.
-//
-// The walk is decodeOAEPParams': it reads each child exactly once, folds the
-// child into an xmlbase64.Counter, which carries the counting state across every
-// child boundary — a base64 quantum, and padding itself, may be split between
-// children — and appends only the base64 characters. It stops the moment those
-// characters pass maxECPublicKeyChars, and the exact decoded-length test runs on
-// the counter afterwards. So what the parse RETAINS is bounded by the limit and
-// nothing else, however much whitespace or however many CDATA sections a point
-// is spread over, and the one remaining cost is the copy
-// [helium.Text.Content] hands out per child — the floor a DOM imposes, paid
-// exactly once. base64CharacterData decides which children may be read at all,
-// and the walk is over EVERY child kind rather than only elements, so it goes
-// through eachSibling directly.
-func decodeECPublicKey(ctx context.Context, elem *helium.Element) ([]byte, error) {
-	var counter xmlbase64.Counter
-	chars := make([]byte, 0, maxECPublicKeyChars)
-	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
-		text, err := base64CharacterData(child, "ECKeyValue PublicKey")
-		if err != nil {
-			return err
-		}
-		counter.Add(text)
-		if counter.Chars() > maxECPublicKeyChars {
-			return fmt.Errorf("%w: ECKeyValue PublicKey is over the %d byte limit", ErrMalformedEncrypted, maxECPublicKeyBytes)
-		}
-		chars = xmlbase64.AppendStripped(chars, text)
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	if counter.DecodedLen() > maxECPublicKeyBytes {
-		return nil, abort(ctx, fmt.Errorf("%w: ECKeyValue PublicKey is over the %d byte limit", ErrMalformedEncrypted, maxECPublicKeyBytes))
-	}
-	decoded, err := xmlbase64.DecodeString(string(chars))
-	if err != nil {
-		return nil, abort(ctx, fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrMalformedEncrypted, err))
-	}
-	return decoded, nil
-}
 
 func ecdhCurveForURI(uri string) (ecdh.Curve, error) {
 	switch uri {
@@ -491,7 +432,7 @@ func ecdhURIForCurve(curve ecdh.Curve) (string, error) {
 // the EncryptedData's own method and each EncryptedKey's — are reached while
 // the document is read, so everything here runs before any key is resolved and
 // before anything the document says has been authenticated. The only child it
-// decodes is OAEPparams, and decodeOAEPParams owns what bounds that.
+// decodes is OAEPparams, and maxOAEPParamsBytes owns what bounds that.
 func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*EncryptionMethod, error) {
 	em := &EncryptionMethod{}
 	alg, ok := elem.GetAttribute("Algorithm")
@@ -542,7 +483,7 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 				return fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
 			}
 			seenOAEPParams = true
-			decoded, err := decodeOAEPParams(ctx, e)
+			decoded, err := decodeBoundedBase64(ctx, e, "OAEPparams", maxOAEPParamsBytes, "invalid OAEPparams")
 			if err != nil {
 				return err
 			}
@@ -557,8 +498,8 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 }
 
 // maxOAEPParamsBytes bounds the decoded octet length of one xenc:OAEPparams
-// element. It is the single statement of that limit; decodeOAEPParams applies
-// it.
+// element. It is the single statement of that limit; decodeBoundedBase64
+// applies it.
 //
 // OAEPparams carries the RSA-OAEP label — the "L" of RFC 8017 — which sender
 // and recipient agree on out of band. RFC 8017 hashes the label down to the
@@ -580,21 +521,20 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 // yields ciphertext it cannot decrypt.
 const maxOAEPParamsBytes = 1024
 
-// maxOAEPParamsChars is the most base64 characters a value within
-// maxOAEPParamsBytes can hold: ceil(n/3) quanta of four characters each. It
-// sizes the buffer decodeOAEPParams assembles and tells that walk when to stop,
-// so what is being built is sized by the limit and never by the document.
+// decodeBoundedBase64 decodes elem's character data into the octets of one
+// xs:base64Binary value held to a FIXED ceiling, refusing a value over maxBytes
+// before anything is built from it. It reads the two values this package bounds
+// that way — an xenc:OAEPparams label against maxOAEPParamsBytes and an ECDH-ES
+// dsig11:PublicKey against maxECPublicKeyBytes — and both are read while the
+// document is parsed, so each is reached before any key is resolved and before
+// anything the document says has been authenticated.
 //
-// Stopping there is only ever early, never a different verdict. Past this count
-// a value the decoder would accept has at least one more whole quantum, which
-// is three more octets less at most two of padding, so it is over the limit;
-// and a value the decoder would reject is charged its full quantum count, which
-// is over it too. Either way the exact [xmlbase64.Counter.DecodedLen] test that
-// follows the walk would refuse the same value.
-const maxOAEPParamsChars = (maxOAEPParamsBytes + 2) / 3 * 4
-
-// decodeOAEPParams decodes elem's character data into the OAEP label, refusing
-// a value over maxOAEPParamsBytes before anything is built from it.
+// valueName names the value in every refusal, including the child-kind refusals
+// base64CharacterData raises, and invalidPhrase is how the decoder's own refusal
+// is reported. Those two strings are the only thing in an error that says which
+// value a document got wrong — every refusal here wraps ErrMalformedEncrypted —
+// so each caller passes its own, and TestBoundedBase64ErrorsNameTheirOwnValue
+// pins that they stay distinct.
 //
 // xs:base64Binary permits XML whitespace between characters and the value may
 // arrive as any number of text and CDATA children, so the lexical length an
@@ -607,48 +547,71 @@ const maxOAEPParamsChars = (maxOAEPParamsBytes + 2) / 3 * 4
 // xmlbase64.Counter, which carries the counting state across every child
 // boundary — a base64 quantum, and padding itself, may be split between
 // children — and appends only the base64 characters. It stops the moment those
-// characters pass maxOAEPParamsChars, and the exact decoded-length test runs on
-// the counter afterwards.
+// characters pass maxChars, and the exact decoded-length test runs on the
+// counter afterwards.
 //
 // What the parse RETAINS is therefore bounded by the limit and nothing else:
-// the kept characters at most maxOAEPParamsChars, the decoded bytes at most
-// maxOAEPParamsBytes. What is not bounded, and cannot be bounded here, is the
-// copy [helium.Text.Content] hands out per child: a DOM offers no read-only
-// view of a node's bytes, so weighing a value costs one copy of its lexical
-// text. That copy is the floor, this walk pays it exactly once, and it is the
-// whole remaining cost — a label padded with a megabyte of whitespace makes the
-// parse allocate that megabyte once, not once per pass and not per subtree.
-// Keeping it to once is what base64CharacterData's rule on which children
-// may be read, and how far into one of them the walk goes, protects.
+// the kept characters at most maxChars, the decoded bytes at most maxBytes. What
+// is not bounded, and cannot be bounded here, is the copy [helium.Text.Content]
+// hands out per child: a DOM offers no read-only view of a node's bytes, so
+// weighing a value costs one copy of its lexical text. That copy is the floor,
+// this walk pays it exactly once, and it is the whole remaining cost — a value
+// padded with a megabyte of whitespace makes the parse allocate that megabyte
+// once, not once per pass and not per subtree. Keeping it to once is what
+// base64CharacterData's rule on which children may be read, and how far into one
+// of them the walk goes, protects.
+//
 // The walk is over EVERY child kind, not just elements, so it goes through
 // eachSibling directly: the children a value is spread across are text, CDATA,
 // entity references, comments and processing instructions, and the ones that
-// carry no characters at all cost the least to write.
-func decodeOAEPParams(ctx context.Context, elem *helium.Element) ([]byte, error) {
+// carry no characters at all cost the least to write. [xmlbase64.DecodeElement]
+// counts and builds the same way but takes no context.Context, so routing this
+// walk through it would drop the per-child cancellation poll eachSibling makes.
+func decodeBoundedBase64(ctx context.Context, elem *helium.Element, valueName string, maxBytes int, invalidPhrase string) ([]byte, error) {
+	// maxChars is the most base64 characters a value within maxBytes can hold:
+	// ceil(maxBytes/3) quanta of four characters each. It sizes the buffer the
+	// walk assembles and tells the walk when to stop, so what is being built is
+	// sized by the limit and never by the document.
+	//
+	// Stopping there is only ever early, never a different verdict. Past this
+	// count a value the decoder would accept has at least one more whole
+	// quantum, which is three more octets less at most two of padding, so it is
+	// over the limit; and a value the decoder would reject is charged its full
+	// quantum count, which is over it too. Either way the exact
+	// [xmlbase64.Counter.DecodedLen] test that follows the walk would refuse the
+	// same value.
+	maxChars := (maxBytes + 2) / 3 * 4
 	var counter xmlbase64.Counter
-	chars := make([]byte, 0, maxOAEPParamsChars)
+	chars := make([]byte, 0, maxChars)
 	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
-		text, err := base64CharacterData(child, "OAEPparams")
+		text, err := base64CharacterData(child, valueName)
 		if err != nil {
 			return err
 		}
 		counter.Add(text)
-		if counter.Chars() > maxOAEPParamsChars {
-			return fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes)
+		if counter.Chars() > maxChars {
+			return fmt.Errorf("%w: %s is over the %d byte limit", ErrMalformedEncrypted, valueName, maxBytes)
 		}
 		chars = xmlbase64.AppendStripped(chars, text)
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	if counter.DecodedLen() > maxOAEPParamsBytes {
-		return nil, abort(ctx, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrMalformedEncrypted, maxOAEPParamsBytes))
+	if counter.DecodedLen() > maxBytes {
+		return nil, abort(ctx, fmt.Errorf("%w: %s is over the %d byte limit", ErrMalformedEncrypted, valueName, maxBytes))
 	}
-	decoded, err := xmlbase64.DecodeString(string(chars))
+	// The characters are already stripped, so this is the decode
+	// xmlbase64.DecodeString performs minus the copy that would convert them to
+	// a string, sized at the counted decoded length rather than at
+	// encoding/base64's own padding-blind DecodedLen — see
+	// [xmlbase64.Counter.DecodedLen], which is exact for a value the decoder
+	// accepts and never below what a rejected decode writes.
+	decoded := make([]byte, counter.DecodedLen())
+	n, err := base64.StdEncoding.Decode(decoded, chars)
 	if err != nil {
-		return nil, abort(ctx, fmt.Errorf("%w: invalid OAEPparams: %v", ErrMalformedEncrypted, err))
+		return nil, abort(ctx, fmt.Errorf("%w: %s: %v", ErrMalformedEncrypted, invalidPhrase, err))
 	}
-	return decoded, nil
+	return decoded[:n], nil
 }
 
 // base64CharacterData returns the character data child contributes to an
@@ -819,11 +782,17 @@ func decodeCipherValue(ctx context.Context, elem *helium.Element, budget cipherV
 	}); err != nil {
 		return nil, err
 	}
-	decoded, err := xmlbase64.DecodeString(string(chars))
+	// The characters are already stripped, so this is the decode
+	// xmlbase64.DecodeString performs minus the copy that would convert them to
+	// a string, sized at the count the budget charged rather than at
+	// encoding/base64's own padding-blind DecodedLen — see
+	// [xmlbase64.Counter.DecodedLen].
+	decoded := make([]byte, counter.DecodedLen())
+	n, err := base64.StdEncoding.Decode(decoded, chars)
 	if err != nil {
 		return nil, abort(ctx, fmt.Errorf("%w: invalid CipherValue: %v", ErrMalformedEncrypted, err))
 	}
-	return decoded, nil
+	return decoded[:n], nil
 }
 
 // isElemNS reports whether e has the given local name and one of the

@@ -393,6 +393,12 @@ const oaepParamsNotCharacterData = "which is not character data"
 // being expanded into something decodable.
 const oaepParamsInvalid = "invalid OAEPparams"
 
+// oaepParamsChildOfType is the fragment a child-kind refusal puts in front of
+// oaepParamsNotCharacterData: the NAME of the value being read. The tail is
+// shared with every other bounded base64 value, so the name is the only part of
+// the message that says which value the document got wrong.
+const oaepParamsChildOfType = "OAEPparams holds a child of type"
+
 // oaepParamsBadEntityChild is the fragment an entity reference whose first child
 // is present but is not an Entity carries. Only a caller-built tree holds that
 // shape; a CHILDLESS entity reference is an ordinary parser output and is not
@@ -1165,6 +1171,16 @@ const ecPublicKeyOverLimit = "ECKeyValue PublicKey is over the"
 // refused for what it is, before its size is ever weighed.
 const ecPublicKeyNotCharacterData = "which is not character data"
 
+// ecPublicKeyChildOfType is oaepParamsChildOfType for the other value: the name
+// a child-kind refusal puts in front of the shared tail.
+const ecPublicKeyChildOfType = "ECKeyValue PublicKey holds a child of type"
+
+// ecPublicKeyInvalid is the fragment the base64 decoder's refusal carries for a
+// dsig11:PublicKey. It is deliberately not the phrase OAEPparams uses: one walk
+// decodes both values, so the phrase is the only thing in the error that says
+// which of them the document got wrong.
+const ecPublicKeyInvalid = "invalid ECKeyValue base64"
+
 // The dsig11:NamedCurve URIs of the three curves this package supports. A
 // curve is named by the OID URN of its named-curve object identifier.
 const (
@@ -1442,6 +1458,88 @@ func TestECPublicKeyAllocation(t *testing.T) {
 
 			allocated := after.TotalAlloc - before.TotalAlloc
 			require.Less(t, allocated, uint64(oneRead), "parsing %d lexical bytes allocated %d bytes", len(tc.value), allocated)
+		})
+	}
+}
+
+// TestBoundedBase64ErrorsNameTheirOwnValue pins that xenc:OAEPparams and an
+// ECDH-ES dsig11:PublicKey each name THEMSELVES in all three refusals the
+// bounded base64 walk they share can produce: the size limit, the child-kind
+// rule, and the decoder.
+//
+// One walk reads both values and is told them apart only by the value name, the
+// byte ceiling, and the decode-error phrase it is given. Nothing else in the
+// error says which value a document got wrong — every parse failure here wraps
+// ErrMalformedEncrypted — so the wording is all a caller diagnosing a rejected
+// document has. Each case therefore asserts the OTHER value's wording is absent
+// too: a walk handed one value's wording for the other would refuse exactly the
+// same documents, so every size, child-kind and decoder assertion elsewhere
+// would still pass.
+func TestBoundedBase64ErrorsNameTheirOwnValue(t *testing.T) {
+	// One octet over either ceiling encodes to a whole number of quanta, which
+	// is never past the character ceiling, so both values are refused by the
+	// exact decoded-length test that follows the walk.
+	overLimitLabel := base64.StdEncoding.EncodeToString(make([]byte, xmlenc1.MaxOAEPParamsBytesForTest+1))
+	overLimitPoint := base64.StdEncoding.EncodeToString(make([]byte, xmlenc1.MaxECPublicKeyBytesForTest+1))
+
+	// notBase64 is one quantum of characters outside the base64 alphabet, so it
+	// is far inside both ceilings and reaches the decoder, which refuses it.
+	const notBase64 = "!!!!"
+
+	// elementChild is a legal value followed by an element, which the child-kind
+	// rule refuses for what it is, before its size is weighed.
+	const elementChild = "AA==<junk>AAAA</junk>"
+
+	for _, tc := range []struct {
+		name string
+		elem *helium.Element
+		// want is the fragment naming the value the document got wrong, and
+		// notWant is the same fragment for the OTHER value.
+		want    string
+		notWant string
+	}{
+		{
+			name:    "an over-limit OAEPparams",
+			elem:    oaepParamsEncryptedData(t, overLimitLabel),
+			want:    oaepParamsOverLimit,
+			notWant: ecPublicKeyOverLimit,
+		},
+		{
+			name:    "an over-limit PublicKey",
+			elem:    ecKeyValueEncryptedData(t, ecKeyValueChildren(ecCurveURIP256, overLimitPoint, true)),
+			want:    ecPublicKeyOverLimit,
+			notWant: oaepParamsOverLimit,
+		},
+		{
+			name:    "an undecodable OAEPparams",
+			elem:    oaepParamsEncryptedData(t, notBase64),
+			want:    oaepParamsInvalid,
+			notWant: ecPublicKeyInvalid,
+		},
+		{
+			name:    "an undecodable PublicKey",
+			elem:    ecKeyValueEncryptedData(t, ecKeyValueChildren(ecCurveURIP256, notBase64, true)),
+			want:    ecPublicKeyInvalid,
+			notWant: oaepParamsInvalid,
+		},
+		{
+			name:    "an element child of OAEPparams",
+			elem:    oaepParamsEncryptedData(t, elementChild),
+			want:    oaepParamsChildOfType,
+			notWant: ecPublicKeyChildOfType,
+		},
+		{
+			name:    "an element child of PublicKey",
+			elem:    ecKeyValueEncryptedData(t, ecKeyValueChildren(ecCurveURIP256, elementChild, true)),
+			want:    ecPublicKeyChildOfType,
+			notWant: oaepParamsChildOfType,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xmlenc1.ParseEncryptedDataForTest(tc.elem)
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+			require.Contains(t, err.Error(), tc.want, "err=%v", err)
+			require.NotContains(t, err.Error(), tc.notWant, "err=%v", err)
 		})
 	}
 }

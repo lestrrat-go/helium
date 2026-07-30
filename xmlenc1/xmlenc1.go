@@ -389,7 +389,7 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	// The OAEP label is held to the same maxOAEPParamsBytes the parse side
 	// applies, so a label written here is one this package reads back: over the
 	// limit the serialized xenc:OAEPparams would be refused by
-	// decodeOAEPParams, leaving ciphertext this package cannot decrypt.
+	// decodeBoundedBase64, leaving ciphertext this package cannot decrypt.
 	//
 	// Only key transport writes the label, so only key transport is charged for
 	// it — mirroring the recipient-key rule below, a label a mechanism never
