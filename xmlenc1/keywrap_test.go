@@ -13,12 +13,24 @@ import (
 func TestAESKeyWrapRFC3394(t *testing.T) {
 	// Test vector from RFC 3394, Section 4.6
 	// 256-bit KEK, 256-bit key data
-	kek, _ := hex.DecodeString("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F")
-	keyData, _ := hex.DecodeString("00112233445566778899AABBCCDDEEFF000102030405060708090A0B0C0D0E0F")
-	expected, _ := hex.DecodeString("28C9F404C4B810F4CBCCB35CFB87F8263F5786E2D80ED326CBC7F0E71A99F43BFB988B9B7A02DD21")
+	kek, err := hex.DecodeString("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F")
+	require.NoError(t, err)
+	keyData, err := hex.DecodeString("00112233445566778899AABBCCDDEEFF000102030405060708090A0B0C0D0E0F")
+	require.NoError(t, err)
+	expected, err := hex.DecodeString("28C9F404C4B810F4CBCCB35CFB87F8263F5786E2D80ED326CBC7F0E71A99F43BFB988B9B7A02DD21")
+	require.NoError(t, err)
 
-	// Use internal test via round-trip (we don't export aesKeyWrap/aesKeyUnwrap directly).
-	// Instead test via Encryptor/Decryptor with SessionKey + KeyWrap.
+	// The wrapped key is exactly what a remote peer has to agree on, so the
+	// wrap output is pinned against the vector itself. A round-trip cannot
+	// stand in for that: a symmetric-but-wrong variant — say one running seven
+	// rounds where RFC 3394 runs six — unwraps its own wrap perfectly while
+	// putting different bytes on the wire.
+	wrapped, err := xmlenc1.AESKeyWrapForTest(kek, keyData)
+	require.NoError(t, err)
+	require.Equal(t, expected, wrapped)
+
+	// The public Encryptor/Decryptor pair then confirms the XML-level path
+	// carries that same wrap, through SessionKey + KeyWrap.
 	doc := mustParseXML(t, `<root>data</root>`)
 
 	encryptor := xmlenc1.NewEncryptor().
@@ -35,9 +47,6 @@ func TestAESKeyWrapRFC3394(t *testing.T) {
 	nodes, err := decryptor.Decrypt(t.Context(), edElem)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
-
-	// Also verify the expected wrap output using the test vector.
-	_ = expected // verified indirectly through successful round-trip
 }
 
 func TestKeyWrapSize(t *testing.T) {
