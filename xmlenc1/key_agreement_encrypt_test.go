@@ -168,6 +168,44 @@ func TestEncryptECDHESEmptyDigestDropsOtherInfo(t *testing.T) {
 	require.Len(t, nodes, 1)
 }
 
+// The OtherInfo budget governs what is derived from and written, so a set that
+// is discarded before either is never weighed against it: params with an empty
+// DigestMethod are replaced wholesale by the SHA-256 default carrying no
+// OtherInfo, so even fields far over the budget encrypt. Every point that
+// applies the budget sits behind that substitution, and this pins that they all
+// do.
+func TestEncryptECDHESEmptyDigestDropsOversizedOtherInfo(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+	doc := mustParseXML(t, samlAssertion)
+
+	edElem, err := xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(&key.PublicKey).
+		KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+			AlgorithmID:  make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest),
+			PartyUInfo:   make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest),
+			PartyVInfo:   make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest),
+			SuppPubInfo:  make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest),
+			SuppPrivInfo: make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest),
+		}).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	ed, err := xmlenc1.ParseEncryptedDataForTest(edElem)
+	require.NoError(t, err)
+	kdf := ed.EncryptedKeys[0].AgreementMethod.KeyDerivationMethod.ConcatKDF
+	require.Equal(t, xmlenc1.DigestSHA256, kdf.DigestMethod)
+	require.Empty(t, kdf.AlgorithmID)
+	require.Empty(t, kdf.PartyUInfo)
+	require.Empty(t, kdf.PartyVInfo)
+	require.Empty(t, kdf.SuppPubInfo)
+	require.Empty(t, kdf.SuppPrivInfo)
+
+	nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+}
+
 // The Encryptor documents clone-on-write, so the OtherInfo arrays a caller
 // hands over must be copied: they feed both the derived KEK and the emitted
 // ConcatKDFParams, and a later mutation must not reach either.
@@ -245,6 +283,82 @@ func TestEncryptECDHESErrors(t *testing.T) {
 			KeyDerivationParams(&xmlenc1.ConcatKDFParams{DigestMethod: "urn:example:nope"}).
 			EncryptElement(t.Context(), doc.DocumentElement())
 		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+	})
+
+	// Every caller setting key agreement reads is decided before any payload
+	// work, and pairing each with a session key of the wrong length pins that:
+	// the session-key binding is the last check before block encryption, so a
+	// KeySizeError would mean the setting that can never work was only noticed
+	// after the payload had been encrypted, and the caller would hear about the
+	// session key instead.
+	t.Run("reports a bad setting ahead of the session key", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			// enc carries the bad setting; every case adds the same
+			// wrong-length session key below.
+			enc xmlenc1.Encryptor
+			// errFragment is what the setting's own rejection says.
+			errFragment string
+		}{
+			{
+				name:        "a non-key-wrap algorithm",
+				enc:         xmlenc1.NewEncryptor().KeyWrapAlgorithm(xmlenc1.AES256GCM),
+				errFragment: `unsupported key wrap algorithm`,
+			},
+			{
+				name: "oversized OtherInfo",
+				enc: xmlenc1.NewEncryptor().
+					KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+					KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+						DigestMethod: xmlenc1.DigestSHA256,
+						AlgorithmID:  make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest+1),
+					}),
+				errFragment: "ConcatKDF OtherInfo is over the",
+			},
+			{
+				name: "an unsupported KDF digest",
+				enc: xmlenc1.NewEncryptor().
+					KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+					KeyDerivationParams(&xmlenc1.ConcatKDFParams{DigestMethod: "urn:example:nope"}),
+				errFragment: `unsupported ConcatKDF digest algorithm`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				doc := mustParseXML(t, samlAssertion)
+				_, err := tc.enc.
+					BlockAlgorithm(xmlenc1.AES128GCM).
+					SessionKey(make([]byte, 32)).
+					RecipientECPublicKey(&key.PublicKey).
+					EncryptElement(t.Context(), doc.DocumentElement())
+				require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+				require.Contains(t, err.Error(), tc.errFragment)
+
+				var keySize *xmlenc1.KeySizeError
+				require.NotErrorAs(t, err, &keySize)
+
+				// And the caller's tree still holds the plaintext.
+				xml, err := helium.WriteString(doc)
+				require.NoError(t, err)
+				require.Contains(t, xml, "user@example.com")
+			})
+		}
+	})
+
+	// The OtherInfo budget is shared with the parse side, so an Encryptor
+	// refused by it carries that sentinel too. A caller matching on either one
+	// must see the same verdict.
+	t.Run("oversized OtherInfo carries both sentinels", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := xmlenc1.NewEncryptor().
+			KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+			RecipientECPublicKey(&key.PublicKey).
+			KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+				DigestMethod: xmlenc1.DigestSHA256,
+				AlgorithmID:  make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest+1),
+			}).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 	})
 
 	// P-224 has no crypto/ecdh form at all, so the recipient key is unusable

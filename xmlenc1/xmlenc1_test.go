@@ -4,6 +4,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -989,6 +990,119 @@ func TestConfigErrorPrecedesSerializationFailure(t *testing.T) {
 				_, err := tc.enc.EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
 				require.ErrorIs(t, err, tc.want)
 			})
+		})
+	}
+}
+
+// encryptAllocPayload is the plaintext the allocation cases below hand to
+// EncryptBytes, and encryptAllocSlack is what a rejected configuration may
+// allocate on top of nothing.
+//
+// The slack is a CONSTANT, deliberately: a bound stated as a fraction of the
+// payload can never fail on a cost proportional to that payload, which is the
+// only cost being pinned. It covers resolving the configuration, building the
+// error, and the runtime's own bookkeeping, all of which are fixed.
+const (
+	encryptAllocPayload = 4 << 20
+	encryptAllocSlack   = 1 << 20
+)
+
+// encryptBytesAlloc reports the TotalAlloc delta across one EncryptBytes of
+// plaintext, together with its verdict. The owning document and the plaintext
+// are built outside the measurement, so the delta is the call alone.
+func encryptBytesAlloc(t *testing.T, enc xmlenc1.Encryptor, plaintext []byte) (uint64, error) {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := enc.EncryptBytes(t.Context(), doc, plaintext)
+	runtime.ReadMemStats(&after)
+
+	return after.TotalAlloc - before.TotalAlloc, err
+}
+
+// TestEncryptConfigRejectionAllocatesNoPayload pins what a configuration
+// resolveEncryptConfig refuses may ALLOCATE, which the error assertions
+// elsewhere cannot see. A setting that can never produce a readable document is
+// worth nothing proportional to the plaintext, and each accepted case measured
+// beside it shows the payload work the rejected ones must not reach: the
+// accepted bound is the floor a single copy of the plaintext already exceeds.
+//
+// Each case reads the process-wide TotalAlloc delta across EncryptBytes, so
+// these subtests must NOT run in parallel: a concurrent test's allocations
+// would pollute the delta.
+func TestEncryptConfigRejectionAllocatesNoPayload(t *testing.T) {
+	// no t.Parallel(): isolated so each delta reflects only its own call.
+	ecKey := generateECKey(t, elliptic.P256())
+	kek := randKey(t, 32)
+	plaintext := make([]byte, encryptAllocPayload)
+
+	for _, tc := range []struct {
+		name string
+		enc  xmlenc1.Encryptor
+		// accepted marks the baselines: they encrypt the payload, so they cost
+		// at least one copy of it.
+		accepted bool
+	}{
+		{
+			name: "key agreement with a non-key-wrap algorithm",
+			enc: xmlenc1.NewEncryptor().
+				KeyWrapAlgorithm(xmlenc1.AES256GCM).
+				RecipientECPublicKey(&ecKey.PublicKey),
+		},
+		{
+			name: "key agreement with oversized OtherInfo",
+			enc: xmlenc1.NewEncryptor().
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				RecipientECPublicKey(&ecKey.PublicKey).
+				KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+					DigestMethod: xmlenc1.DigestSHA256,
+					AlgorithmID:  make([]byte, xmlenc1.MaxConcatKDFOtherInfoBytesForTest+1),
+				}),
+		},
+		{
+			name: "key agreement with an unsupported KDF digest",
+			enc: xmlenc1.NewEncryptor().
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				RecipientECPublicKey(&ecKey.PublicKey).
+				KeyDerivationParams(&xmlenc1.ConcatKDFParams{DigestMethod: "urn:example:nope"}),
+		},
+		{
+			name: "key wrap with a non-key-wrap algorithm",
+			enc: xmlenc1.NewEncryptor().
+				KeyWrapAlgorithm(xmlenc1.AES256GCM).
+				KeyEncryptionKey(kek),
+		},
+		{
+			name: "key agreement",
+			enc: xmlenc1.NewEncryptor().
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				RecipientECPublicKey(&ecKey.PublicKey),
+			accepted: true,
+		},
+		{
+			name: "key wrap",
+			enc: xmlenc1.NewEncryptor().
+				KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+				KeyEncryptionKey(kek),
+			accepted: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			allocated, err := encryptBytesAlloc(t, tc.enc, plaintext)
+
+			if tc.accepted {
+				require.NoError(t, err)
+				require.Greater(t, allocated, uint64(encryptAllocPayload),
+					"encrypting %d bytes allocated only %d bytes", len(plaintext), allocated)
+				return
+			}
+
+			require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+			require.Less(t, allocated, uint64(encryptAllocSlack),
+				"a rejected configuration allocated %d bytes for a %d byte payload", allocated, len(plaintext))
 		})
 	}
 }

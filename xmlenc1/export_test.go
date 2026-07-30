@@ -51,6 +51,11 @@ const MaxOAEPParamsBytesForTest = maxOAEPParamsBytes
 // of its value, which would drift from it.
 const MaxECPublicKeyBytesForTest = maxECPublicKeyBytes
 
+// MaxConcatKDFOtherInfoBytesForTest re-exports the cumulative ConcatKDF
+// OtherInfo budget so a test can size a parameter set against the constant
+// itself rather than a copy of its value, which would drift from it.
+const MaxConcatKDFOtherInfoBytesForTest = maxConcatKDFOtherInfoBytes
+
 // AESKeyWrapForTest wraps key material under a KEK using RFC 3394 AES Key
 // Wrap. It exists so security tests can assemble an EncryptedKey whose
 // wrapped session-key length does not match the declared block algorithm,
