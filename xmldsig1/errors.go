@@ -53,8 +53,9 @@ var (
 	// ([Verifier.MaxKeyInfoEntries]), or too many total certificate and signature
 	// octets — the DigestValue/SignatureValue/X509Certificate values plus
 	// whatever a ds:RetrievalMethod in KeyInfo pulls in
-	// ([Verifier.MaxDecodedBytes]). It also covers a ds:RetrievalMethod transform
-	// list that exceeds its fixed pre-verification step cap. The caps have
+	// ([Verifier.MaxDecodedBytes]). It also covers two fixed pre-verification
+	// caps: a ds:RetrievalMethod transform list past its step cap, and a
+	// ds:Transform/XPath filter expression past its length ceiling. The caps have
 	// conservative defaults and bound the decode/parse/transform work an unsigned
 	// document can force before verification rejects it. A base64 value decoded
 	// off the document is charged against [Verifier.MaxDecodedBytes] before it is

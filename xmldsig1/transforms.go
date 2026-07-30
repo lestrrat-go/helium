@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/enum"
@@ -250,6 +251,30 @@ func newDSigXPathEvaluator(ns map[string]string, hereNode helium.Node, opLimit i
 	return eval.Function("here", hereFunction{node: hereNode})
 }
 
+// maxErrorExpressionBytes bounds how much of an XPath filter expression an error
+// message names. The expression is attacker-controlled and bounded only by
+// maxXPathFilterExpressionBytes, so quoting a whole one would make the error
+// string as large as the expression for whatever a caller logs. 128 bytes names
+// every realistic filter in full — the W3C defCan-1 interop vector is 75
+// characters — and identifies a longer one by its opening.
+const maxErrorExpressionBytes = 128
+
+// truncatedExpression returns as much of expr as an error message may name,
+// marking a shortened one so a reader can tell a prefix from a whole
+// expression.
+func truncatedExpression(expr string) string {
+	if len(expr) <= maxErrorExpressionBytes {
+		return expr
+	}
+	// Cut on a rune boundary so a multi-byte character in a name test or a string
+	// literal is not split into escaped bytes when the prefix is quoted.
+	cut := maxErrorExpressionBytes
+	for cut > 0 && !utf8.RuneStart(expr[cut]) {
+		cut--
+	}
+	return expr[:cut] + "..."
+}
+
 // compileXPathFilterExpression compiles and statically validates the transform
 // expression during the complete-list validation pass. Wrapping it in
 // fn:boolean makes this compiled form identical to the one evaluated for each
@@ -257,10 +282,10 @@ func newDSigXPathEvaluator(ns map[string]string, hereNode helium.Node, opLimit i
 func compileXPathFilterExpression(expr string, eval xpath1.Evaluator) (*xpath1.Expression, error) {
 	compiled, err := xpath1.Compile("boolean(" + expr + ")")
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, expr, err)
+		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, truncatedExpression(expr), err)
 	}
 	if err := eval.Validate(compiled); err != nil {
-		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, expr, err)
+		return nil, fmt.Errorf("%w: invalid XPath transform expression %q: %v", ErrUnsupportedTransform, truncatedExpression(expr), err)
 	}
 	return compiled, nil
 }
