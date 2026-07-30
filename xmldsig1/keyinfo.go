@@ -588,9 +588,34 @@ func parseX509Data(ctx context.Context, budget *verifyBudget, elem *helium.Eleme
 	return nil
 }
 
+// maxX509SerialNumberDigits bounds the lexical length of one
+// ds:X509SerialNumber before it is converted to a [big.Int]. An optional leading
+// sign counts as one of the characters, which only makes the bound one character
+// tighter than the digit count it is named for.
+//
+// A bound is needed here even though the value's own size is harmless, because
+// converting decimal text to a [big.Int] is QUADRATIC in the number of digits:
+// each digit is folded into a running value whose word count grows with the text
+// consumed. Reading a megabyte of digits therefore costs about a second and
+// gigabytes of scratch, orders of magnitude more than parsing the document that
+// carried them, and ds:KeyInfo is parsed BEFORE the SignatureValue is checked, so
+// any peer can spend it unauthenticated. The cost curve is the reason this is a
+// digit ceiling and not a share of the [Verifier.MaxDecodedBytes] octet budget:
+// a byte budget generous enough for real certificates still admits a conversion
+// that runs for minutes, so its value space is the wrong shape for this cost.
+//
+// The ceiling sits far above anything conforming. RFC 5280 §4.1.2.2 caps a
+// certificate serial at 20 octets, which is at most 49 decimal digits, so 1024
+// leaves twenty times the room a conforming issuer needs while refusing the
+// attack by four orders of magnitude. It is a fixed internal constant with no
+// builder knob: no caller has a legitimate serial anywhere near it, so there is
+// nothing for a knob to express.
+const maxX509SerialNumberDigits = 1024
+
 // parseX509IssuerSerial extracts the issuer distinguished name and serial number
 // from a ds:X509IssuerSerial. The values are extracted verbatim (no DName
-// canonicalization) for out-of-band certificate selection by a KeySource.
+// canonicalization) for out-of-band certificate selection by a KeySource. The
+// serial is refused past maxX509SerialNumberDigits before it is converted.
 func parseX509IssuerSerial(elem *helium.Element) (*X509IssuerSerial, error) {
 	is := &X509IssuerSerial{}
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -607,7 +632,14 @@ func parseX509IssuerSerial(elem *helium.Element) (*X509IssuerSerial, error) {
 		case "X509IssuerName":
 			is.IssuerName = domutil.TextContent(e)
 		case "X509SerialNumber":
-			serial, ok := new(big.Int).SetString(strings.TrimSpace(domutil.TextContent(e)), 10)
+			// The ceiling is weighed BEFORE the conversion: past it the
+			// conversion is the whole cost, so checking afterwards would return
+			// this same error having already paid it.
+			text := strings.TrimSpace(domutil.TextContent(e))
+			if len(text) > maxX509SerialNumberDigits {
+				return nil, fmt.Errorf("%w: X509SerialNumber is over the %d digit limit", ErrInvalidKeyInfo, maxX509SerialNumberDigits)
+			}
+			serial, ok := new(big.Int).SetString(text, 10)
 			if !ok {
 				return nil, fmt.Errorf("%w: X509SerialNumber is not a decimal integer", ErrInvalidKeyInfo)
 			}
@@ -833,8 +865,24 @@ func parseRFC4050NamedCurve(elem *helium.Element) (elliptic.Curve, error) {
 	return nil, fmt.Errorf("%w: RFC 4050 DomainParameters missing NamedCurve", ErrInvalidKeyInfo)
 }
 
+// maxRFC4050CoordinateDigits bounds the lexical length of one RFC 4050
+// PublicKey X or Y Value attribute before it is converted to a [big.Int], for
+// the same reason maxX509SerialNumberDigits bounds a serial: the conversion is
+// quadratic in the digit count and runs before the SignatureValue is checked.
+// This site is the sharper of the two, because an ECDSAKeyValue carries two such
+// attributes and pays the cost twice per key.
+//
+// The conforming size is bounded by the curve rather than by a profile: X and Y
+// are field elements, so the largest supported curve, P-521, needs at most 157
+// decimal digits, and a value the ceiling admits is still weighed by
+// [elliptic.Curve.IsOnCurve] and refused unless it is a real point. 1024 leaves
+// six times the room the largest curve needs. Like the serial ceiling it is a
+// fixed internal constant with no builder knob.
+const maxRFC4050CoordinateDigits = 1024
+
 // parseRFC4050PublicKey reads the decimal X and Y Value attributes from an RFC
-// 4050 PublicKey element.
+// 4050 PublicKey element. Either one is refused past
+// maxRFC4050CoordinateDigits before it is converted.
 func parseRFC4050PublicKey(elem *helium.Element) (*big.Int, *big.Int, error) {
 	var x, y *big.Int
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
@@ -850,7 +898,14 @@ func parseRFC4050PublicKey(elem *helium.Element) (*big.Int, *big.Int, error) {
 			continue
 		}
 		val, _ := e.GetAttribute("Value")
-		n, ok := new(big.Int).SetString(strings.TrimSpace(val), 10)
+		// Both coordinates are weighed against the ceiling, and each before its
+		// own conversion. Bounding only the first would leave the second reached
+		// by any document whose first is conforming.
+		text := strings.TrimSpace(val)
+		if len(text) > maxRFC4050CoordinateDigits {
+			return nil, nil, fmt.Errorf("%w: RFC 4050 PublicKey %s Value is over the %d digit limit", ErrInvalidKeyInfo, name, maxRFC4050CoordinateDigits)
+		}
+		n, ok := new(big.Int).SetString(text, 10)
 		if !ok {
 			return nil, nil, fmt.Errorf("%w: RFC 4050 PublicKey %s Value is not a decimal integer", ErrInvalidKeyInfo, name)
 		}
