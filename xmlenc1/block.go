@@ -61,7 +61,12 @@ func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 	case AES128GCM11, AES192GCM11, AES256GCM11:
 		// XML Encryption 1.1 defines the GCM input as IV || ciphertext ||
 		// authentication tag and does not define additional authenticated
-		// data. Keep the legacy namespace behavior above for compatibility.
+		// data, so these three bind none. The two 2001-namespace identifiers
+		// above bind the algorithm URI instead: no XML Security specification
+		// defines AES-GCM in that namespace, so the binding is this package's
+		// own measure against an algorithm substitution on the wire, kept so
+		// documents it has already emitted still decrypt — not specification
+		// compatibility.
 		return encryptGCM(key, plaintext, nil)
 	default:
 		return nil, &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm}
