@@ -10,6 +10,31 @@ import (
 
 var defaultIV = [8]byte{0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6}
 
+// validateKeyWrapAlgorithm requires algorithm to name one of the three RFC 3394
+// AES Key Wrap URIs, and reports an error wrapping ErrEncryptionFailed
+// otherwise. It is the encrypt-side gate for Encryptor.KeyWrapAlgorithm, which
+// both mechanisms that read it — ECDH-ES key agreement, which derives the KEK,
+// and AES key wrap, which is handed one — declare on the EncryptedKey they emit
+// while protecting the session key with aesKeyWrap.
+//
+// A URI naming anything else, a block cipher above all, would therefore declare
+// an algorithm that did not produce the CipherValue: the document says AES-GCM
+// over what is really an RFC 3394 wrap, and no recipient reads it back, this
+// package included. keySizeForAlgorithm answers a length for the block-cipher
+// URIs too, so the KEK-length binding cannot stand in for this check.
+//
+// resolveEncryptConfig applies it before any entry point serializes plaintext,
+// generates a session key, or block encrypts, so a URI that can never be
+// written costs nothing proportional to the payload.
+func validateKeyWrapAlgorithm(algorithm string) error {
+	switch algorithm {
+	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
+		return nil
+	default:
+		return fmt.Errorf("%w: %w", ErrEncryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyWrap, Algorithm: algorithm})
+	}
+}
+
 // aesKeyWrap wraps a key encryption key (KEK) around plaintext key material
 // using the AES Key Wrap algorithm (RFC 3394).
 func aesKeyWrap(kek, plaintext []byte) ([]byte, error) {

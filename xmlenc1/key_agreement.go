@@ -115,13 +115,12 @@ func ecdhRecipientKey(recipient *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
 // curve is known to be usable and nameable before the caller does any
 // payload-proportional work.
 func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string, params *ConcatKDFParams, sessionKey []byte) (*EncryptedKey, error) {
-	switch keyWrapAlgorithm {
-	case AES128KeyWrap, AES192KeyWrap, AES256KeyWrap:
-	default:
-		// ECDH-ES derives a KEK, so the EncryptedKey algorithm must be a
-		// key wrap. Anything else would declare a mechanism we are not
-		// performing.
-		return nil, fmt.Errorf("%w: %w", ErrEncryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyWrap, Algorithm: keyWrapAlgorithm})
+	// ECDH-ES derives a KEK, so the EncryptedKey algorithm must be a key wrap:
+	// anything else would declare a mechanism we are not performing.
+	// resolveEncryptConfig has already held the caller's configuration to this,
+	// ahead of any payload work.
+	if err := validateKeyWrapAlgorithm(keyWrapAlgorithm); err != nil {
+		return nil, err
 	}
 	kekSize, err := keySizeForAlgorithm(paramKeyWrap, keyWrapAlgorithm)
 	if err != nil {
@@ -178,6 +177,35 @@ func effectiveKDFParams(params *ConcatKDFParams) *ConcatKDFParams {
 		return &ConcatKDFParams{DigestMethod: DigestSHA256}
 	}
 	return params
+}
+
+// validateEncryptConcatKDFParams reaches, on an Encryptor's EFFECTIVE
+// derivation parameters, the two verdicts deriveConcatKDF would otherwise only
+// reach after the ephemeral key generation and the ECDH exchange — both of them
+// downstream of the block encryption: the OtherInfo budget and the digest URI.
+// resolveEncryptConfig applies it before any entry point serializes plaintext,
+// generates a session key, or block encrypts, so parameters that can never
+// derive a KEK cost nothing proportional to the payload and are not masked by a
+// payload that fails first. Its errors carry the same sentinels the derivation's
+// do, since both checks are the shared ones.
+//
+// The order is deriveConcatKDF's: a set that is over budget AND names a digest
+// this package does not implement is refused for its size, which is the verdict
+// worth reporting.
+//
+// The caller passes the set effectiveKDFParams returns, so params with an empty
+// DigestMethod are weighed as the SHA-256 default carrying no OtherInfo that
+// stands in for them — the caller's fields are discarded rather than measured,
+// exactly as the derivation discards them, so an oversized set paired with an
+// empty DigestMethod still encrypts.
+func validateEncryptConcatKDFParams(params *ConcatKDFParams) error {
+	if err := checkConcatKDFOtherInfoBudget(params); err != nil {
+		return fmt.Errorf("%w: %w", ErrEncryptionFailed, err)
+	}
+	if _, err := concatKDFHash(params.DigestMethod); err != nil {
+		return fmt.Errorf("%w: %w", ErrEncryptionFailed, err)
+	}
+	return nil
 }
 
 func agreementAlgorithm(agreement *AgreementMethod) string {
@@ -244,15 +272,18 @@ const maxConcatKDFOtherInfoBytes = 4096
 // checkConcatKDFOtherInfoBudget rejects a ConcatKDFParams whose OtherInfo
 // fields exceed maxConcatKDFOtherInfoBytes in total.
 //
-// It runs at three points in the parameters' life, all of them before any
+// It runs at four points in the parameters' life, all of them before any
 // work sized by the fields: parseConcatKDFParams applies it to wire data at
 // the point the whole set is first known, so an oversized document is refused
-// before any ECDH or KDF work; deriveConcatKDF applies it before resolving
-// the digest, so a caller-built set that is BOTH over budget and names an
-// unsupported digest still fails on the size; and concatKDFOtherInfo applies
-// it immediately before the packing loop, which is what keeps the guard ahead
-// of the packing arithmetic whichever caller got there — including one that
-// hands xmlenc1 a DOM or a ConcatKDFParams it built itself.
+// before any ECDH or KDF work; resolveEncryptConfig applies it through
+// validateEncryptConcatKDFParams to an Encryptor's effective set, so an
+// oversized set is refused before the plaintext is serialized or encrypted;
+// deriveConcatKDF applies it before resolving the digest, so a caller-built set
+// that is BOTH over budget and names an unsupported digest still fails on the
+// size; and concatKDFOtherInfo applies it immediately before the packing loop,
+// which is what keeps the guard ahead of the packing arithmetic whichever
+// caller got there — including one that hands xmlenc1 a DOM or a
+// ConcatKDFParams it built itself.
 //
 // The set effectiveKDFParams replaces reaches none of those points: its
 // OtherInfo is dropped rather than measured, and the SHA-256 default that

@@ -156,6 +156,93 @@ func TestKeyWrapSize(t *testing.T) {
 		require.ErrorAs(t, err, &kse)
 	})
 
+	t.Run("encrypt URI must name a key wrap", func(t *testing.T) {
+		// Wrapping is RFC 3394 AES Key Wrap whatever the URI says, so a URI
+		// naming a block cipher would declare on the wire an algorithm that did
+		// not produce the CipherValue — the document would say AES-GCM over a
+		// 40-octet RFC 3394 wrap, and nothing, this package included, reads that
+		// back. keySizeForAlgorithm answers a length for the block-cipher URIs
+		// too, so the KEK-length binding cannot stand in for the check: every
+		// case below carries the KEK length that binding asks for.
+		for _, tc := range []struct {
+			uri     string
+			kekSize int
+		}{
+			{uri: xmlenc1.AES128CBC, kekSize: 16},
+			{uri: xmlenc1.AES256CBC, kekSize: 32},
+			{uri: xmlenc1.AES128GCM, kekSize: 16},
+			{uri: xmlenc1.AES256GCM, kekSize: 32},
+			{uri: xmlenc1.AES128GCM11, kekSize: 16},
+			{uri: xmlenc1.AES192GCM11, kekSize: 24},
+			{uri: xmlenc1.AES256GCM11, kekSize: 32},
+		} {
+			t.Run(tc.uri, func(t *testing.T) {
+				doc := mustParseXML(t, samlAssertion)
+				_, err := xmlenc1.NewEncryptor().
+					BlockAlgorithm(xmlenc1.AES256GCM11).
+					KeyWrapAlgorithm(tc.uri).
+					KeyEncryptionKey(randKey(t, tc.kekSize)).
+					EncryptElement(t.Context(), doc.DocumentElement())
+				require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+
+				var uae *xmlenc1.UnsupportedAlgorithmError
+				require.ErrorAs(t, err, &uae)
+				require.Equal(t, tc.uri, uae.Algorithm)
+
+				// Nothing was emitted and the caller's tree still holds the
+				// plaintext, so no mis-declared document exists at all.
+				xml, err := helium.WriteString(doc)
+				require.NoError(t, err)
+				require.Contains(t, xml, "user@example.com")
+				require.NotContains(t, xml, "EncryptedData")
+			})
+		}
+	})
+
+	// Each genuine key wrap URI still round-trips, so the check above narrows
+	// nothing a recipient can read.
+	t.Run("every key wrap URI round-trips", func(t *testing.T) {
+		for _, tc := range []struct {
+			uri     string
+			kekSize int
+		}{
+			{uri: xmlenc1.AES128KeyWrap, kekSize: 16},
+			{uri: xmlenc1.AES192KeyWrap, kekSize: 24},
+			{uri: xmlenc1.AES256KeyWrap, kekSize: 32},
+		} {
+			t.Run(tc.uri, func(t *testing.T) {
+				kek := randKey(t, tc.kekSize)
+				doc := mustParseXML(t, samlAssertion)
+				edElem, err := xmlenc1.NewEncryptor().
+					BlockAlgorithm(xmlenc1.AES256GCM11).
+					KeyWrapAlgorithm(tc.uri).
+					KeyEncryptionKey(kek).
+					EncryptElement(t.Context(), doc.DocumentElement())
+				require.NoError(t, err)
+
+				nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), edElem)
+				require.NoError(t, err)
+				require.Len(t, nodes, 1)
+			})
+		}
+	})
+
+	// The URI is decided before any payload work, while the KEK length is bound
+	// after the block encryption, so a caller who got both wrong hears about the
+	// setting that can never work rather than about the key.
+	t.Run("encrypt reports the URI ahead of the KEK length", func(t *testing.T) {
+		doc := mustParseXML(t, samlAssertion)
+		_, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM11).
+			KeyWrapAlgorithm(xmlenc1.AES256GCM).
+			KeyEncryptionKey(randKey(t, 16)).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+
+		var kse *xmlenc1.KeySizeError
+		require.NotErrorAs(t, err, &kse)
+	})
+
 	t.Run("decrypt KEK size mismatch", func(t *testing.T) {
 		kek := randKey(t, 32)
 		doc := mustParseXML(t, samlAssertion)

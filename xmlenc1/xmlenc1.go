@@ -347,14 +347,15 @@ type resolvedEncryptConfig struct {
 	recipientECDH   *ecdh.PublicKey
 }
 
-// resolveEncryptConfig decides six parts of an Encryptor's configuration: it
+// resolveEncryptConfig decides eight parts of an Encryptor's configuration: it
 // defaults the block algorithm, enforces the CBC opt-in, requires a key
 // source, rejects a second key-protection mechanism, bounds the RSA-OAEP
-// label, and resolves the ECDH-ES recipient key. Every entry point calls it
-// before any payload work, so none of those six is masked by a later failure
-// to serialize or encrypt the plaintext. Session-key length is not one of
-// them: it is bound to the block algorithm in encryptPlaintext, once the
-// session key exists.
+// label, requires the key-wrap URI to name a key wrap, holds the ECDH-ES
+// derivation parameters to their budget and digest, and resolves the ECDH-ES
+// recipient key. Every entry point calls it before any payload work, so none of
+// those eight is masked by a later failure to serialize or encrypt the
+// plaintext. Session-key length is not one of them: it is bound to the block
+// algorithm in encryptPlaintext, once the session key exists.
 func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	// Secure by default: an unset block algorithm uses authenticated
 	// AES-256-GCM rather than refusing or falling back to CBC.
@@ -397,17 +398,32 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 		return resolvedEncryptConfig{}, fmt.Errorf("%w: OAEPparams is over the %d byte limit", ErrEncryptionFailed, maxOAEPParamsBytes)
 	}
 
+	// Key agreement and key wrap both wrap the session key with AES Key Wrap
+	// and declare cfg.keyWrapAlgorithm on the EncryptedKey, so the URI is
+	// charged to whichever of the two is in use and to neither otherwise;
+	// validateKeyWrapAlgorithm owns why a URI naming anything else can never be
+	// written.
+	if hasKeyAgreement || hasKeyWrap {
+		if err := validateKeyWrapAlgorithm(cfg.keyWrapAlgorithm); err != nil {
+			return resolvedEncryptConfig{}, err
+		}
+	}
+
 	resolved := resolvedEncryptConfig{
 		blockAlgorithm:  blockAlgorithm,
 		hasKeyTransport: hasKeyTransport,
 		hasKeyAgreement: hasKeyAgreement,
 		hasKeyWrap:      hasKeyWrap,
 	}
-	// Resolve the recipient key only when key agreement is the mechanism
-	// actually in use, so an unusable curve cannot fail an encryption that
-	// would never have touched that key.
+	// The derivation parameters and the recipient key belong to key agreement
+	// alone, so they are decided only when it is the mechanism actually in use:
+	// parameters no derivation reads and an unusable curve no exchange touches
+	// cannot fail an encryption that never reaches them.
 	if !hasKeyAgreement {
 		return resolved, nil
+	}
+	if err := validateEncryptConcatKDFParams(effectiveKDFParams(cfg.kdfParams)); err != nil {
+		return resolvedEncryptConfig{}, err
 	}
 	recipientECDH, err := ecdhRecipientKey(cfg.recipientECPub)
 	if err != nil {
