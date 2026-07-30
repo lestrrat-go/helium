@@ -1,7 +1,10 @@
 package xmldsig1
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -125,6 +128,77 @@ func TestParseECKeyValueErrors(t *testing.T) {
 		var data KeyInfoData
 		err := parseECKeyValue(elem, &data)
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+	})
+}
+
+// namedCurveXML and publicKeyXML build the two dsig11:ECKeyValue children ecElem
+// wraps, so a case states only the curve URI and the base64 point.
+func namedCurveXML(uri string) string {
+	return `<dsig11:NamedCurve xmlns:dsig11="` + NamespaceDSig11 + `" URI="` + uri + `"/>`
+}
+
+func publicKeyXML(value string) string {
+	return `<dsig11:PublicKey xmlns:dsig11="` + NamespaceDSig11 + `">` + value + `</dsig11:PublicKey>`
+}
+
+// TestParseECKeyValuePublicKeySize covers the dsig11:PublicKey size bound. A
+// point any supported curve can encode is accepted, including the P-521 maximum
+// that sets maxECPublicKeyBytes, and one octet more is refused — with or without
+// a NamedCurve to size it by, since dsig11:ECKeyValue puts no order on its
+// children.
+func TestParseECKeyValuePublicKeySize(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		uri   string
+		curve elliptic.Curve
+	}{
+		{"p256", "urn:oid:1.2.840.10045.3.1.7", elliptic.P256()},
+		{"p384", "urn:oid:1.3.132.0.34", elliptic.P384()},
+		{"p521", "urn:oid:1.3.132.0.35", elliptic.P521()},
+	} {
+		t.Run(tc.name+" point parses", func(t *testing.T) {
+			key, err := ecdsa.GenerateKey(tc.curve, rand.Reader)
+			require.NoError(t, err)
+			point := elliptic.Marshal(tc.curve, key.X, key.Y)
+			require.LessOrEqual(t, len(point), maxECPublicKeyBytes,
+				"the bound must admit every point a supported curve encodes")
+
+			elem := ecElem(t, namedCurveXML(tc.uri)+publicKeyXML(base64.StdEncoding.EncodeToString(point)))
+			var data KeyInfoData
+			require.NoError(t, parseECKeyValue(elem, &data))
+			require.NotNil(t, data.ECKeyValue)
+		})
+	}
+
+	// P-521 sets the bound: its SEC1 uncompressed point is exactly
+	// maxECPublicKeyBytes octets, so nothing the three curves can produce is
+	// refused by it.
+	t.Run("p521 point is the bound", func(t *testing.T) {
+		key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+		require.NoError(t, err)
+		require.Len(t, elliptic.Marshal(elliptic.P521(), key.X, key.Y), maxECPublicKeyBytes)
+	})
+
+	oversized := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{4}, maxECPublicKeyBytes+1))
+
+	t.Run("over the bound", func(t *testing.T) {
+		elem := ecElem(t, namedCurveXML("urn:oid:1.3.132.0.35")+publicKeyXML(oversized))
+		var data KeyInfoData
+		err := parseECKeyValue(elem, &data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.Contains(t, err.Error(), fmt.Sprintf("over the %d byte limit", maxECPublicKeyBytes))
+		require.Nil(t, data.ECKeyValue)
+	})
+
+	// A PublicKey preceding its NamedCurve is weighed with no curve selected, so
+	// the bound has to hold on its own there too.
+	t.Run("over the bound without a curve", func(t *testing.T) {
+		elem := ecElem(t, publicKeyXML(oversized)+namedCurveXML("urn:oid:1.3.132.0.35"))
+		var data KeyInfoData
+		err := parseECKeyValue(elem, &data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.Contains(t, err.Error(), fmt.Sprintf("over the %d byte limit", maxECPublicKeyBytes))
+		require.Nil(t, data.ECKeyValue)
 	})
 }
 
