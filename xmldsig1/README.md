@@ -498,6 +498,24 @@ RetrievalMethod transforms have a separate fixed `maxRetrievalTransformSteps`
 cap because they execute before the SignatureValue check. It is not affected by
 the builder limits above.
 
+The two `KeyInfo` values written as decimal text rather than base64 have their
+own fixed digit ceilings, also unaffected by the builder limits above: **1024
+digits** for a `ds:X509SerialNumber`, and **1024 digits** for each of the RFC
+4050 `ECDSAKeyValue` `PublicKey` `X` and `Y` `Value` attributes. Both are read
+before the SignatureValue is checked, and both are converted to a `big.Int` —
+a conversion that is quadratic in the number of digits, so a megabyte of digits
+costs about a second and gigabytes of scratch, hundreds of times what parsing
+the document carrying them cost. Each value is refused past its ceiling
+*before* it is converted, so that cost is never paid.
+
+Both are fixed internal constants with no builder knob, and deliberately not
+folded into `MaxDecodedBytes`: a byte budget generous enough for real
+certificates and keys still admits a conversion that runs for minutes, so a byte
+budget is the wrong shape for a quadratic cost. Nothing conforming comes close
+to either ceiling — RFC 5280 §4.1.2.2 caps a certificate serial at 20 octets,
+which is at most 49 decimal digits, and a P-521 field element needs at most 157
+— so there is no legitimate value for a knob to admit.
+
 ## Detached signature placement (inclusive C14N)
 
 `SignDetached` and `SignEnveloping` return a detached `ds:Signature` for the
