@@ -11,7 +11,6 @@ import (
 	"time"
 
 	helium "github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/xmlenc1"
 	"github.com/stretchr/testify/require"
 )
@@ -406,106 +405,10 @@ func TestDecryptObservesContextPerCipherValueChild(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-// childShape renders count children of the element whose text a parse collects.
-// A collected element's children are joined by reading the content each one
-// reports for ITSELF, and only a leaf reports that out of its own stored text:
-// an element child reports the aggregate of its whole descendant subtree. So the
-// two shapes below put the same attacker-chosen child count at two different
-// places — the collected element's own child list, and a descendant list one
-// level under it — and a walk that observed only the first would read the second
-// to its end after the caller cancelled.
-type childShape struct {
-	name     string
-	children func(count int) string
-}
-
-// Empty comments are the cheapest children these walks can be handed: they
-// carry no characters, so the value the parse collects is the same however many
-// of them the document repeats, at either shape.
+// Empty comments are the cheapest children this walk can be handed: they carry
+// no characters, so the value the parse collects is the same however many of
+// them the document repeats.
 func flatChildren(count int) string { return strings.Repeat(`<!---->`, count) }
-
-func nestedChildren(count int) string {
-	return `<ignored>` + strings.Repeat(`<!---->`, count) + `</ignored>`
-}
-
-func childShapes() []childShape {
-	return []childShape{
-		{name: "flat", children: flatChildren},
-		{name: "nested", children: nestedChildren},
-	}
-}
-
-// TestDecryptObservesContextPerCarriedKeyNameChild pins the interior of the
-// walk that collects an EncryptedKey's xenc:CarriedKeyName. That element's
-// children are joined into a name and charged against no budget, so how many
-// of them a document carries — and how deep it puts them — is the document's
-// choice alone, and a walk that observed the context only at the top of that
-// join would read every one of them after the caller cancelled.
-func TestDecryptObservesContextPerCarriedKeyNameChild(t *testing.T) {
-	kek := randKey(t, 32)
-	sessionKey := randKey(t, 32)
-	cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, sessionKey, []byte("payload"))
-	require.NoError(t, err)
-	wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
-	require.NoError(t, err)
-
-	for _, shape := range childShapes() {
-		t.Run(shape.name, func(t *testing.T) {
-			encryptedData := func(t *testing.T, comments int) *helium.Element {
-				t.Helper()
-				doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`">`+
-					`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
-					`<ds:KeyInfo><xenc:EncryptedKey>`+
-					`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
-					`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(wrapped)+`</xenc:CipherValue></xenc:CipherData>`+
-					`<xenc:CarriedKeyName>session`+shape.children(comments)+`</xenc:CarriedKeyName>`+
-					`</xenc:EncryptedKey></ds:KeyInfo>`+
-					`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipher)+`</xenc:CipherValue></xenc:CipherData>`+
-					`</xenc:EncryptedData>`)
-				return doc.DocumentElement()
-			}
-
-			const (
-				few  = 4
-				many = 4096
-			)
-
-			// The two documents must differ only in how long the walk runs, never in
-			// what it collects, so the name is read back from both.
-			carriedKeyName := func(t *testing.T, comments int) string {
-				t.Helper()
-				ed, err := xmlenc1.ParseEncryptedDataForTest(encryptedData(t, comments))
-				require.NoError(t, err)
-				require.Len(t, ed.EncryptedKeys, 1)
-				return ed.EncryptedKeys[0].CarriedKeyName
-			}
-			require.Equal(t, "session", carriedKeyName(t, few))
-			require.Equal(t, "session", carriedKeyName(t, many))
-
-			decryptor := xmlenc1.NewDecryptor().KeyEncryptionKey(kek)
-			pollsFor := func(t *testing.T, comments int) int {
-				t.Helper()
-				counter := newPollCounter()
-				plaintext, err := decryptor.DecryptBytes(counter, encryptedData(t, comments))
-				require.NoError(t, err)
-				require.Equal(t, []byte("payload"), plaintext)
-				return counter.calls()
-			}
-
-			fewPolls := pollsFor(t, few)
-			require.GreaterOrEqual(t, pollsFor(t, many)-fewPolls, many-few,
-				"the CarriedKeyName walk must observe the context once per child, at every depth it reads")
-
-			// A context that stays live for exactly as many polls as the WHOLE decrypt
-			// of the small document takes, against the large one. The threshold is
-			// measured from the fixture rather than written down, so it follows the
-			// parse instead of pinning its internals.
-			ctx := newCancelAfterErrCalls(fewPolls)
-			_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
-			require.ErrorIs(t, err, context.Canceled)
-		})
-	}
-}
 
 // TestDecryptObservesContextPerPublicKeyChild pins the interior of the walk
 // that collects a dsig11:PublicKey point out of an ECDH-ES originator key. The
@@ -594,60 +497,6 @@ func TestDecryptObservesContextPerPublicKeyChild(t *testing.T) {
 	ctx := newCancelAfterErrCalls(fewPolls)
 	_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
 	require.ErrorIs(t, err, context.Canceled)
-}
-
-// TestCollectedValueMatchesSharedTextContent pins that reading a value under a
-// live context collects the bytes the shared, context-free helper collects. The
-// parse keeps its own copy of that join so it can observe the context inside it,
-// and the copy reproduces helium's whole aggregation — a nested element's own
-// subtree, comment and processing-instruction text, CDATA, document order — so
-// the shared helper is the oracle for all of it, not just for the top level.
-func TestCollectedValueMatchesSharedTextContent(t *testing.T) {
-	kek := randKey(t, 32)
-	sessionKey := randKey(t, 32)
-	wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
-	require.NoError(t, err)
-
-	// Every child kind the join can meet, with elements nested two deep so the
-	// aggregation of a child's own subtree is exercised rather than assumed, and
-	// an entity reference at both levels: its Entity child is owned by the DTD,
-	// so it is also where the walk's owned-child boundary is exercised.
-	const body = `a<b>c<d>e</d><!--skipme-->f</b><![CDATA[g]]><?pi data?>h<empty/>&ent;<wrap>&ent;</wrap>`
-
-	doc := mustParseXML(t, `<!DOCTYPE xenc:EncryptedData [<!ENTITY ent "i">]>`+
-		`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`">`+
-		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
-		`<ds:KeyInfo><xenc:EncryptedKey>`+
-		`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256KeyWrap+`"/>`+
-		`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(wrapped)+`</xenc:CipherValue></xenc:CipherData>`+
-		`<xenc:CarriedKeyName>`+body+`</xenc:CarriedKeyName>`+
-		`</xenc:EncryptedKey></ds:KeyInfo>`+
-		`<xenc:CipherData><xenc:CipherValue></xenc:CipherValue></xenc:CipherData>`+
-		`</xenc:EncryptedData>`)
-
-	carried := findElementByLocalName(doc.DocumentElement(), "CarriedKeyName")
-	require.NotNil(t, carried)
-
-	ed, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
-	require.NoError(t, err)
-	require.Len(t, ed.EncryptedKeys, 1)
-
-	require.Equal(t, domutil.TextContent(carried), ed.EncryptedKeys[0].CarriedKeyName)
-	require.Equal(t, "aceskipmefgdatahii", ed.EncryptedKeys[0].CarriedKeyName)
-}
-
-// findElementByLocalName returns the first element at or under n whose local
-// name is local, in document order, or nil when there is none.
-func findElementByLocalName(n helium.Node, local string) *helium.Element {
-	if elem, ok := helium.AsNode[*helium.Element](n); ok && domutil.LocalName(elem) == local {
-		return elem
-	}
-	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
-		if found := findElementByLocalName(child, local); found != nil {
-			return found
-		}
-	}
-	return nil
 }
 
 // TestEncryptContentObservesContextPerChild pins the interior of the walk that

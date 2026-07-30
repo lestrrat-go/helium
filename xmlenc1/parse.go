@@ -97,6 +97,9 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 
 // parseEncryptedKey parses an EncryptedKey element, charging its CipherValue
 // to budget.
+//
+// A xenc:CarriedKeyName child is stepped over rather than read;
+// [EncryptedKey.CarriedKeyName] owns why the parse leaves that field unset.
 func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryptedKeyBudget) (*EncryptedKey, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedKey") {
 		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedKey", ErrMalformedEncrypted))
@@ -129,12 +132,6 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryp
 				return err
 			}
 			ek.CipherValue = cv
-		case isXMLEncElem(e, "CarriedKeyName"):
-			name, err := textContent(ctx, e)
-			if err != nil {
-				return err
-			}
-			ek.CarriedKeyName = name
 		case isDSigElem(e, "KeyInfo"):
 			agreement, err := parseAgreementMethodForKeyInfo(ctx, e)
 			if err != nil {
