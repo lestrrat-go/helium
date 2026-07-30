@@ -38,9 +38,9 @@ type encryptConfig struct {
 // recognizes.
 const DefaultBlockAlgorithm = AES256GCM11
 
-// Encryptor encrypts XML elements or content. It uses clone-on-write
-// semantics: each builder method returns a new Encryptor and the original
-// is never mutated.
+// Encryptor encrypts an XML element, an element's content, or arbitrary
+// octets — one terminal method each. It uses clone-on-write semantics: each
+// builder method returns a new Encryptor and the original is never mutated.
 type Encryptor struct {
 	cfg *encryptConfig
 }
@@ -251,10 +251,14 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 // EncryptBytes encrypts arbitrary octets and returns a detached
 // EncryptedData element owned by doc. It is the counterpart of
 // Decryptor.DecryptBytes: together they cover the payloads that are not an
-// XML element or element content, which W3C xmlenc-core1 §3.1 admits by
-// leaving @Type absent. The returned element carries no Type attribute for
-// exactly that reason, and no tree is modified — the caller decides where
-// to insert it.
+// XML element or element content.
+//
+// The returned element carries no Type attribute. W3C xmlenc-core1 §3.1
+// makes the attribute optional, and §4.2 "Well-known Type parameter values"
+// is the clause that gives an octet-stream reading: an Encryptor or Decryptor
+// SHOULD handle an unknown or empty Type value as a signal that the cleartext
+// is an opaque octet-stream. No tree is modified — the caller decides where
+// to insert the element.
 func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plaintext []byte) (*helium.Element, error) {
 	if err := contextErr(ctx); err != nil {
 		return nil, err
@@ -723,7 +727,7 @@ func (d Decryptor) SessionKey(key []byte) Decryptor {
 // that sentinel's godoc owns why. Whichever of the two the resolution returns
 // is the algorithm every later step is bound to, exactly as a wire-declared one
 // is: the AES-CBC opt-in gate (see [Decryptor.AllowUnauthenticatedCBC]), the
-// additional authenticated data of the legacy XML Encryption GCM identifiers,
+// additional authenticated data of the two 2001-namespace GCM identifiers,
 // the session-key length ([KeySizeError]), and the length a valid AES key-wrap
 // ciphertext must have.
 func (d Decryptor) BlockAlgorithm(uri string) Decryptor {
@@ -944,8 +948,8 @@ func (b *payloadCipherValueBudget) charge(n int) error {
 // caller states out of band with Decryptor.BlockAlgorithm, which owns the four
 // cases and the strict-match rule. Both decrypt entry points resolve through it
 // before anything else looks at the algorithm, so the CBC opt-in gate, the AEAD
-// additional data of the legacy GCM identifiers, and every key-length binding
-// all act on the one URI it returns.
+// additional data of the two 2001-namespace GCM identifiers, and every
+// key-length binding all act on the one URI it returns.
 func resolveDecryptBlockAlgorithm(cfg *decryptConfig, ed *EncryptedData) (string, error) {
 	if ed.EncryptionMethod == nil {
 		if cfg.blockAlgorithm == "" {
@@ -1360,9 +1364,15 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey, ses
 		}
 		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue, sessionKeySize)
 	default:
-		// Classify under the decrypt path while preserving the typed
-		// error in the chain for errors.As, consistent with the
-		// decryptSessionKey wrapping above.
-		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyTransport, Algorithm: alg})
+		// The URI matched neither the key transport nor the key wrap branch,
+		// so this arm cannot know which class the document meant it as: a
+		// key-wrap URI this package does not implement is as reachable here as
+		// a key-transport one or an invented URN. Report it as the
+		// EncryptedKey's declared algorithm, which is the one thing that holds
+		// for all of them, rather than naming a class and sending the caller
+		// to the wrong setter. Classify under the decrypt path while
+		// preserving the typed error in the chain for errors.As, consistent
+		// with the decryptSessionKey wrapping above.
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramEncryptedKey, Algorithm: alg})
 	}
 }

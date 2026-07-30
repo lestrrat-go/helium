@@ -705,7 +705,7 @@ func base64CharacterData(child helium.Node, valueName string) ([]byte, error) {
 		}
 		entity, ok := helium.AsNode[*helium.Entity](first)
 		if !ok {
-			return nil, fmt.Errorf("%w: %s holds an entity reference with no entity declaration", ErrMalformedEncrypted, valueName)
+			return nil, fmt.Errorf("%w: %s holds an entity reference whose first child is not an entity declaration", ErrMalformedEncrypted, valueName)
 		}
 		return entity.Content(), nil
 	}

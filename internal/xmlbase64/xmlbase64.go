@@ -171,7 +171,7 @@ func entityReplacementText(r *helium.EntityRef) ([]byte, error) {
 	}
 	entity, ok := helium.AsNode[*helium.Entity](first)
 	if !ok {
-		return nil, fmt.Errorf("xs:base64Binary value has an entity reference with no entity declaration (%s %q)", r.Type(), r.Name())
+		return nil, fmt.Errorf("xs:base64Binary value has an entity reference whose first child is not an entity declaration (%s %q)", r.Type(), r.Name())
 	}
 	return entity.Content(), nil
 }

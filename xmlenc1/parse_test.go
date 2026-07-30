@@ -393,11 +393,12 @@ const oaepParamsNotCharacterData = "which is not character data"
 // being expanded into something decodable.
 const oaepParamsInvalid = "invalid OAEPparams"
 
-// oaepParamsNoEntityDecl is the fragment an entity reference whose first child
+// oaepParamsBadEntityChild is the fragment an entity reference whose first child
 // is present but is not an Entity carries. Only a caller-built tree holds that
 // shape; a CHILDLESS entity reference is an ordinary parser output and is not
-// refused at all.
-const oaepParamsNoEntityDecl = "entity reference with no entity declaration"
+// refused at all, so the message must name the first child rather than a missing
+// declaration.
+const oaepParamsBadEntityChild = "entity reference whose first child is not an entity declaration"
 
 // oaepParamsEncryptedData builds an EncryptedData whose own EncryptionMethod
 // carries params as raw OAEPparams markup — text, CDATA sections, elements, or
@@ -711,7 +712,7 @@ func TestOAEPParamsEntityReference(t *testing.T) {
 
 		_, err = xmlenc1.ParseEncryptedDataForTest(encryptedData)
 		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
-		require.Contains(t, err.Error(), oaepParamsNoEntityDecl)
+		require.Contains(t, err.Error(), oaepParamsBadEntityChild)
 	})
 }
 
@@ -815,12 +816,12 @@ func TestOAEPParamsUndeclaredEntityReference(t *testing.T) {
 	})
 }
 
-// cipherValueNoEntityDecl is the whole refusal an entity reference whose first
+// cipherValueBadEntityChild is the whole refusal an entity reference whose first
 // child is present but is not an Entity carries on the CipherValue path. It
 // names the value, so asserting the entire fragment — not just its tail — is
 // what pins that base64CharacterData reports the call site it was reached from
 // rather than the OAEPparams one it shares its implementation with.
-const cipherValueNoEntityDecl = "CipherValue holds an entity reference with no entity declaration"
+const cipherValueBadEntityChild = "CipherValue holds an entity reference whose first child is not an entity declaration"
 
 // cipherValueEncryptedData builds an EncryptedData whose payload CipherValue
 // carries value as raw markup — text, CDATA sections, elements, or any mix.
@@ -975,7 +976,7 @@ func TestCipherValueEntityReference(t *testing.T) {
 
 		_, err = xmlenc1.ParseEncryptedDataForTest(encryptedData)
 		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
-		require.Contains(t, err.Error(), cipherValueNoEntityDecl)
+		require.Contains(t, err.Error(), cipherValueBadEntityChild)
 		require.NotContains(t, err.Error(), "OAEPparams")
 	})
 }

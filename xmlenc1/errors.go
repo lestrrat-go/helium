@@ -137,6 +137,13 @@ const (
 	paramConcatKDF      = "ConcatKDF digest algorithm"
 	paramSessionKey     = "session key"
 	paramKEK            = "key-encryption key"
+
+	// paramEncryptedKey names the EncryptedKey's own declared algorithm
+	// without saying which class of key protection it was meant to be. It is
+	// for the slot that dispatches on that URI and reached none of the
+	// recognized branches, where naming a class would point the caller at a
+	// setter the URI may have nothing to do with.
+	paramEncryptedKey = "EncryptedKey algorithm"
 )
 
 // UnsupportedAlgorithmError is returned for unrecognized algorithm URIs.

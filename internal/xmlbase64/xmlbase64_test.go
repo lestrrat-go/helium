@@ -641,6 +641,9 @@ func TestDecodeElement(t *testing.T) {
 		require.Error(t, err)
 		require.NotErrorIs(t, err, errCharge)
 		require.ErrorContains(t, err, "EntityRefNode")
+		// The refusal names the shape it refuses — a first child that is not an
+		// entity declaration — because a reference with NO child is accepted.
+		require.ErrorContains(t, err, "whose first child is not an entity declaration")
 		require.Equal(t, -1, charged, "the charge must not run once a child is refused")
 	})
 
