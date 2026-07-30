@@ -24,6 +24,18 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   data — this package's own measure against an on-the-wire algorithm
   substitution, not conformance with any specification, and a second reason a
   document carrying them does not interoperate.
+- An `EncryptedData` that carries no `EncryptionMethod` is decryptable only as
+  an opt-in. W3C xmlenc-core1 §3.1 and §3.2 leave the element optional and
+  require the recipient to already know the algorithm, and §4.4 admits obtaining
+  it out of band, so `Decryptor.BlockAlgorithm` supplies the block algorithm
+  URI; without it such a document fails with `ErrMalformedEncrypted`. The match
+  against the document is strict, so setting it can only narrow what a decrypt
+  accepts: the URI set there is used when the document declares none, the
+  document's is used when none is set, and a pair that disagrees fails with
+  `ErrConflictingBlockAlgorithm`. A document can therefore never override a
+  caller who stated the algorithm out of band. Whichever URI the resolution
+  returns is what the CBC opt-in, the legacy GCM additional authenticated data,
+  and every key-length binding act on.
 - AES-CBC is unauthenticated and vulnerable to padding-oracle attacks
   (Jager/Somorovsky 2011).
   - **Encryption:** selecting a CBC `BlockAlgorithm` requires
