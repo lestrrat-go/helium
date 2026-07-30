@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ['.', 'c14n', 'catalog', 'html', 'relaxng', 'schematron', 'sink', 'stream', 'xinclude', 'xpath1', 'xpath3', 'xpointer', 'xsd', 'xmldsig1', 'xslt3']
+        package: ['.', 'c14n', 'catalog', 'html', 'relaxng', 'schematron', 'sink', 'stream', 'xinclude', 'xpath1', 'xpath3', 'xpointer', 'xsd', 'xmldsig1', 'xmlenc1', 'xslt3']
     name: "Fuzz ${{ matrix.package }}"
     steps:
       - name: Checkout repository

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"strconv"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -263,6 +264,49 @@ func TestConcatKDFOtherInfoBudget(t *testing.T) {
 	}
 	_, err = concatKDFOtherInfo(overLimit)
 	require.ErrorIs(t, err, ErrMalformedEncrypted)
+}
+
+// parseConcatKDFHexAttribute refuses a hex attribute from its ENCODED length
+// alone, before hex.DecodeString allocates half of it. That ceiling coincides
+// exactly with the cumulative OtherInfo budget, so the precheck is an
+// allocation-avoidance guard rather than a distinct semantic gate: every value
+// it refuses the set-wide check in parseConcatKDFParams would refuse too, only
+// after paying for the decode. Its whole value is the allocation it never
+// makes, which is why it is not redundant and must not be simplified away.
+// Both guards wrap ErrMalformedEncrypted, so the message is what distinguishes
+// which one fired.
+func TestConcatKDFHexAttributePrecheckBoundary(t *testing.T) {
+	// Two hex characters per octet, over the field's own bytes plus the
+	// leading unused-bit octet the encoded form carries.
+	const limit = 2 * (maxConcatKDFOtherInfoBytes + 1)
+
+	tests := []struct {
+		name      string
+		hexLen    int
+		wantError bool
+	}{
+		{name: "at the limit", hexLen: limit},
+		{name: "one octet past the limit", hexLen: limit + 2, wantError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(
+				`<xenc11:ConcatKDFParams xmlns:xenc11="`+NamespaceXMLEnc11+`" PartyUInfo="`+strings.Repeat("0", tt.hexLen)+`"/>`,
+			))
+			require.NoError(t, err)
+
+			field, unusedBits, err := parseConcatKDFHexAttribute(doc.DocumentElement(), "PartyUInfo")
+			if tt.wantError {
+				require.ErrorIs(t, err, ErrMalformedEncrypted)
+				require.Contains(t, err.Error(), fmt.Sprintf("ConcatKDF PartyUInfo alone is over the %d byte OtherInfo limit", maxConcatKDFOtherInfoBytes))
+				return
+			}
+			require.NoError(t, err)
+			require.Zero(t, unusedBits)
+			require.Len(t, field, tt.hexLen/2-1)
+		})
+	}
 }
 
 // A 32-bit int overflows far below the address space a caller can fill,

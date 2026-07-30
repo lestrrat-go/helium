@@ -723,6 +723,10 @@ func TestMissingKeyNamesTheSetter(t *testing.T) {
 
 		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
 		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		// The message must name the mechanism and the key-transport algorithm
+		// the document declared, not only the setter that supplies the key.
+		require.Contains(t, err.Error(), "RSA key transport")
+		require.Contains(t, err.Error(), xmlenc1.RSAOAEP)
 		require.Contains(t, err.Error(), "Decryptor.PrivateKey")
 	})
 
@@ -737,6 +741,10 @@ func TestMissingKeyNamesTheSetter(t *testing.T) {
 
 		_, err = xmlenc1.NewDecryptor().Decrypt(t.Context(), edElem)
 		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+		// The message must name the mechanism and the key-wrap algorithm the
+		// document declared, not only the setter that supplies the key.
+		require.Contains(t, err.Error(), "AES key wrap")
+		require.Contains(t, err.Error(), xmlenc1.AES256KeyWrap)
 		require.Contains(t, err.Error(), "Decryptor.KeyEncryptionKey")
 	})
 
@@ -753,6 +761,7 @@ func TestMissingKeyNamesTheSetter(t *testing.T) {
 		require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
 		// The message must name the agreement algorithm the document
 		// declared, exactly as the RSA and AES branches name theirs.
+		require.Contains(t, err.Error(), "key agreement")
 		require.Contains(t, err.Error(), xmlenc1.ECDHES)
 		require.Contains(t, err.Error(), "Decryptor.ECPrivateKey")
 	})

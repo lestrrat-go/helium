@@ -146,12 +146,13 @@ Run specific test subsets via env vars:
 ## Fuzzing
 
 - Public-package fuzz coverage lives in package-local `fuzz_test.go` files.
-- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xslt3`.
+- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xmlenc1`, `xslt3`.
 - `shim` intentionally excluded from repo fuzz matrix.
 - `enum` + `sax` intentionally excluded from direct fuzzing → constants/interface-only surface.
 - Bound fuzz input sizes early. Return on oversize inputs.
 - Prefer in-memory stubs over filesystem/network access.
 - Parse/compile/validate/transform fuzz targets MUST tolerate invalid intermediate inputs by returning early instead of asserting.
+- `xmlenc1`'s `FuzzDecrypt` puts FIXED RSA, EC, and AES key material on one `Decryptor` (all three are settable together) and leaves `SessionKey` unset, so the input alone selects which key-protection path runs — RSA-OAEP, ECDH-ES, or AES key wrap — and every branch is reachable from the one target. The keys are fixed rather than generated per run because a crasher written under `testdata/fuzz` must reproduce.
 - The `xslt3` targets time each input's parse+compile (and transform) inline and fail via `t.Errorf` when it crosses `slowInputThreshold()` (`fuzz_test.go` `flagIfSlow`), so the fuzzing engine persists the exact bytes as a crasher. Go's own worker already turns a genuine hang into a crasher via a 10s deadlock detector (`internal/fuzz` `worker.go`), so this targets the slow-but-finite input (a few seconds) that 10s net misses — the input that drags run throughput toward the fuzztime deadline and surfaces only as an unactionable `context deadline exceeded` with no reproducer. The threshold MUST stay below Go's 10s worker deadline to fire first; it defaults to 5s (ample headroom over any legitimate compile, so no false trips under CI scheduler jitter) and is overridable via `HELIUM_FUZZ_SLOW_INPUT` (a Go duration). Timing inline (not in a child goroutine) keeps panics on `testing`'s normal minimizable-crasher path.
 
 ## Fuzz CI
