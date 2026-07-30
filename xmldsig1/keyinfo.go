@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"math/big"
 	"slices"
@@ -457,6 +458,82 @@ func parseKeyInfo(ctx context.Context, budget *verifyBudget, keyInfoElem *helium
 	return data, nil
 }
 
+// decodeKeyInfoValue decodes the CHARACTER DATA of elem, an xs:base64Binary
+// KeyInfo value named by what, charging charge for the decoded bytes before any
+// of them are built.
+//
+// Reading character data rather than the concatenation of every child's content
+// is the point. [xmlbase64.DecodeElement] takes text, CDATA and a one-hop entity
+// reference, and SKIPS a comment or a processing instruction, because per the XML
+// infoset neither contributes a character information item; it refuses any other
+// child, since xs:base64Binary is a simple type and a simple content type admits
+// only character information items. So a value a producer annotated with a
+// comment still decodes to the octets it encodes, instead of having the comment's
+// own text spliced into its base64 and rejecting an otherwise valid signature —
+// the KeyInfo parse runs before the key is resolved and before the crypto check,
+// so a value it refuses fails the whole verification even when nothing ever
+// consults that value. It is the same reader ds:SignatureValue, ds:DigestValue
+// and ds:X509Certificate go through (see decodeBudgeted), so every base64 value
+// in a signature is classified alike.
+//
+// An error carrying ErrInvalidKeyInfo — the only kind a charge here returns —
+// passes through unchanged, so a charge refusing a value states its own message.
+// Every other failure, a refused child or a base64 decode error, is malformed key
+// material and is reported as an invalid what under ErrInvalidKeyInfo. The charge
+// precedes the decode, so a value that is both over a limit and invalid base64
+// reports the limit.
+func decodeKeyInfoValue(elem *helium.Element, what string, charge func(int) error) ([]byte, error) {
+	decoded, err := xmlbase64.DecodeElement(elem, charge)
+	if errors.Is(err, ErrInvalidKeyInfo) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid %s base64: %v", ErrInvalidKeyInfo, what, err)
+	}
+	return decoded, nil
+}
+
+// chargeNothing is the [decodeKeyInfoValue] charge for a KeyInfo value that
+// carries no limit of its own: every one but the EC public key, whose limit the
+// curve set fixes (see maxECPublicKeyBytes). None of them is charged to the
+// verify budget either — decodeBudgeted names the values that are — because each
+// decodes to key material a fraction the size of the document parse the caller
+// has already paid for.
+func chargeNothing(int) error {
+	return nil
+}
+
+// maxECPublicKeyBytes bounds the decoded octet length of one dsig11:PublicKey
+// element inside a dsig11:ECKeyValue. chargeECPublicKey applies it.
+//
+// It is not a policy choice: it is the largest public key the three supported
+// curves can encode. dsig11:PublicKey carries a SEC1 uncompressed point, one
+// 0x04 tag octet followed by the two field elements, so it is 65 octets on
+// P-256, 97 on P-384 and 133 on P-521 — and [elliptic.Unmarshal] accepts nothing
+// else, refusing the compressed form and every over-length input on all three. A
+// value over 133 octets is therefore rejected by the curve whatever it holds, and
+// refusing it before it is built only moves the same verdict earlier.
+//
+// It is the maximum across ALL THREE curves rather than the selected curve's own
+// size, because at the moment the value is weighed there may be no selected curve
+// to weigh it by. dsig11:ECKeyValue puts no order on its children, so
+// dsig11:NamedCurve may follow dsig11:PublicKey, and a document carrying no
+// NamedCurve at all still has its PublicKey read before the missing-curve error
+// is raised. A per-curve bound would hold only for the one child order.
+const maxECPublicKeyBytes = 133
+
+// chargeECPublicKey refuses a dsig11:PublicKey value over maxECPublicKeyBytes.
+// [xmlbase64.DecodeElement] calls it with the value's decoded length before that
+// value's characters or octets are built, so an oversized point is refused
+// without being materialized first — and the KeyInfo is read before any key is
+// resolved and before anything the document says has been authenticated.
+func chargeECPublicKey(n int) error {
+	if n > maxECPublicKeyBytes {
+		return fmt.Errorf("%w: ECKeyValue PublicKey is over the %d byte limit", ErrInvalidKeyInfo, maxECPublicKeyBytes)
+	}
+	return nil
+}
+
 func parseX509Data(ctx context.Context, budget *verifyBudget, elem *helium.Element, data *KeyInfoData) error {
 	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 		if err := ctx.Err(); err != nil {
@@ -493,9 +570,9 @@ func parseX509Data(ctx context.Context, budget *verifyBudget, elem *helium.Eleme
 			// base64-encoded. Decode to the raw bytes so a KeySource can compare
 			// them against a certificate's SubjectKeyId; a decode error is
 			// malformed key material and fails closed.
-			ski, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			ski, err := decodeKeyInfoValue(e, "X509SKI", chargeNothing)
 			if err != nil {
-				return fmt.Errorf("%w: invalid X509SKI base64: %v", ErrInvalidKeyInfo, err)
+				return err
 			}
 			data.X509SKIs = append(data.X509SKIs, ski)
 		case "X509SubjectName":
@@ -597,9 +674,9 @@ func parseRSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		if !isDSigCoreNS(e) {
 			continue
 		}
-		decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+		decoded, err := decodeKeyInfoValue(e, "RSAKeyValue", chargeNothing)
 		if err != nil {
-			return fmt.Errorf("%w: invalid RSAKeyValue base64: %v", ErrInvalidKeyInfo, err)
+			return err
 		}
 		switch domutil.LocalName(e) {
 		case "Modulus":
@@ -645,9 +722,9 @@ func parseECKeyValue(elem *helium.Element, data *KeyInfoData) error {
 			}
 			kv.Curve = curve
 		case "PublicKey":
-			decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+			decoded, err := decodeKeyInfoValue(e, "ECKeyValue", chargeECPublicKey)
 			if err != nil {
-				return fmt.Errorf("%w: invalid ECKeyValue base64: %v", ErrInvalidKeyInfo, err)
+				return err
 			}
 			if kv.Curve == nil {
 				return fmt.Errorf("%w: ECKeyValue missing NamedCurve", ErrInvalidKeyInfo)
@@ -816,9 +893,9 @@ func parseDSAKeyValue(elem *helium.Element, data *KeyInfoData) error {
 		default:
 			continue
 		}
-		decoded, err := xmlbase64.DecodeString(domutil.TextContent(e))
+		decoded, err := decodeKeyInfoValue(e, "DSAKeyValue "+name, chargeNothing)
 		if err != nil {
-			return fmt.Errorf("%w: invalid DSAKeyValue %s base64: %v", ErrInvalidKeyInfo, name, err)
+			return err
 		}
 		*dst = new(big.Int).SetBytes(decoded)
 	}

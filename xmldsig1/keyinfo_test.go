@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"encoding/base64"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -219,6 +220,132 @@ func cut(s, sep string) (before, after string, found bool) {
 
 func base64StdEncode(b []byte) string {
 	return base64.StdEncoding.EncodeToString(b)
+}
+
+// signedKeyInfoDoc signs a small document with a whole-document enveloped
+// Reference and the given KeyInfo, and returns the serialized result for a case
+// to rewrite before reparsing it.
+//
+// The Reference's enveloped-signature transform removes the whole ds:Signature
+// before the digest, and ds:KeyInfo is inside it, so rewriting a KeyInfo value
+// leaves a valid signature. Each case below then turns on the KeyInfo parse
+// alone: it runs before the key is resolved and before any crypto, so a KeyInfo
+// the parse rejects fails the whole verification.
+func signedKeyInfoDoc(t *testing.T, key *rsa.PrivateKey, keyInfo xmldsig1.KeyInfoBuilder) string {
+	t.Helper()
+	doc := mustParseXML(t, `<doc><data>signed content</data></doc>`)
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		Reference(xmldsig1.NewEnvelopedReference()).
+		KeyInfo(keyInfo)
+	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+	serialized, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	return serialized
+}
+
+// valueTextBounds returns the offsets of the text of the first ds:local element
+// in serialized.
+func valueTextBounds(t *testing.T, serialized, local string) (int, int) {
+	t.Helper()
+	open := "<ds:" + local + ">"
+	openAt := strings.Index(serialized, open)
+	require.Positive(t, openAt, "signed document has no ds:%s", local)
+	start := openAt + len(open)
+	end := strings.Index(serialized, "</ds:"+local+">")
+	require.Greater(t, end, start, "ds:%s has no text", local)
+	return start, end
+}
+
+// commentInsideValue splices a comment into the middle of the text of the first
+// ds:local element, which is what a producer annotating a value inside the
+// element emits. Concatenating the element's child content would fold the
+// comment's own text into the base64 and leave the value undecodable.
+func commentInsideValue(t *testing.T, serialized, local string) string {
+	t.Helper()
+	start, end := valueTextBounds(t, serialized, local)
+	mid := start + (end-start)/2
+	return serialized[:mid] + "<!--XX-->" + serialized[mid:]
+}
+
+// entityWrittenValue rewrites the whole text of the first ds:local element into
+// a single reference to an internal-subset entity declaring that same text.
+// helium's parser does not substitute entities, so the value arrives as one
+// entity-reference child — the shape a document writing its base64 through an
+// entity actually has. The value's characters do not change, so the signature is
+// still the same signature.
+func entityWrittenValue(t *testing.T, serialized, local string) string {
+	t.Helper()
+	start, end := valueTextBounds(t, serialized, local)
+	rootAt := strings.Index(serialized, "<doc>")
+	require.Positive(t, rootAt, "signed document has no doc element")
+	return serialized[:rootAt] +
+		`<!DOCTYPE doc [<!ENTITY val "` + serialized[start:end] + `">]>` +
+		serialized[rootAt:start] + "&val;" + serialized[end:]
+}
+
+// TestKeyInfoBase64CharacterData covers reading the KeyInfo base64 values as
+// character data. A comment inside a value contributes no character information
+// item and is skipped instead of being spliced into the base64, and a value
+// written through an entity reference still decodes. Each case verifies a real
+// signature, because a rejected KeyInfo parse fails the whole verification.
+func TestKeyInfoBase64CharacterData(t *testing.T) {
+	// commented modulus: the ds:Modulus still decodes to the signing key's
+	// modulus, so the RSAKeyValue resolves and the signature verifies.
+	t.Run("commented modulus", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, commentInsideValue(t, signedKeyInfoDoc(t, key, xmldsig1.RSAKeyValueKeyInfo()), "Modulus"))
+
+		ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
+			require.NotNil(t, ki.RSAKeyValue)
+			require.Zero(t, ki.RSAKeyValue.Modulus.Cmp(key.N),
+				"the comment must not be spliced into the modulus")
+			return &key.PublicKey, nil
+		})
+		_, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	// commented X509SKI: the signature is verified with the certificate's key and
+	// the SKI is only a selector, so a commented ds:X509SKI must not fail the
+	// verification — and must decode to the octets it encodes.
+	t.Run("commented X509SKI", func(t *testing.T) {
+		key := generateRSAKey(t)
+		cert := generateSelfSignedCert(t, key)
+		ski := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+		encoded := base64StdEncode(ski)
+
+		signed := signedKeyInfoDoc(t, key, xmldsig1.X509DataKeyInfo(cert))
+		at := strings.Index(signed, "</ds:X509Data>")
+		require.Positive(t, at, "signed document has no ds:X509Data")
+		doc := mustParseXML(t, signed[:at]+
+			`<ds:X509SKI>`+encoded[:3]+`<!--XX-->`+encoded[3:]+`</ds:X509SKI>`+
+			signed[at:])
+
+		ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
+			require.Len(t, ki.X509SKIs, 1)
+			require.Equal(t, ski, ki.X509SKIs[0], "the comment must not be spliced into the X509SKI")
+			return cert.PublicKey, nil
+		})
+		_, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
+
+	// entity-written modulus: an entity reference stands for character data, so a
+	// modulus written as one decodes to the same modulus.
+	t.Run("entity-written modulus", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, entityWrittenValue(t, signedKeyInfoDoc(t, key, xmldsig1.RSAKeyValueKeyInfo()), "Modulus"))
+
+		ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
+			require.NotNil(t, ki.RSAKeyValue)
+			require.Zero(t, ki.RSAKeyValue.Modulus.Cmp(key.N),
+				"an entity-written modulus must decode to the same modulus")
+			return &key.PublicKey, nil
+		})
+		_, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
 }
 
 // TestX509DataKeyInfoRejectsNilCert proves a nil *x509.Certificate entry in the
