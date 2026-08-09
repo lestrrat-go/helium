@@ -287,6 +287,9 @@ func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encT
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
+	if elem == nil {
+		return nil, abort(ctx, fmt.Errorf("%w: %v", ErrEncryptionFailed, helium.ErrNilNode))
+	}
 
 	// Serialize the plaintext. Element encrypts the element itself;
 	// Content encrypts its children.
