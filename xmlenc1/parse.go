@@ -19,7 +19,7 @@ import (
 // element, payloadBudget caps the EncryptedData CipherValue, and cfg supplies
 // the effective EncryptedKey candidate limit. Both budgets are charged at the
 // earliest point that sees their values; the candidate limit is checked before
-// an excess candidate is parsed or retained.
+// an excess candidate is retained.
 //
 // ctx is observed throughout the parse, which is why every function below takes
 // it. The document decides how many children each element it describes carries,

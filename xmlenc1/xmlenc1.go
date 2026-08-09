@@ -888,11 +888,11 @@ func (d Decryptor) DecryptBytes(ctx context.Context, elem *helium.Element) ([]by
 
 // checkEncryptedKeyCap fails closed when an EncryptedData carries more
 // EncryptedKey candidates than the Decryptor's effective limit (zero => the
-// default, negative => unlimited), before the excess candidate is parsed or
-// retained. Candidates within the limit continue through the normal structure
-// and separate ciphertext-budget checks. An attacker who can pack a document
-// with junk <EncryptedKey> elements gets CPU amplification. Decryptor.MaxEncryptedKeys
-// documents the per-candidate cost this bounds.
+// default, negative => unlimited), before the excess candidate is retained.
+// Candidates continue through the normal structure and separate ciphertext-
+// budget checks before the count is enforced. An attacker who can pack a
+// document with junk <EncryptedKey> elements gets CPU amplification.
+// Decryptor.MaxEncryptedKeys documents the per-candidate cost this bounds.
 func checkEncryptedKeyCap(cfg *decryptConfig, candidates int) error {
 	maxKeys := cfg.maxEncryptedKeys
 	if maxKeys == 0 {

@@ -133,6 +133,16 @@ func TestMaxEncryptedKeys(t *testing.T) {
 		require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
+	t.Run("byte budget still applies before the candidate cap", func(t *testing.T) {
+		elem := manyKeyEncryptedData(t, 2, xmlenc1.DefaultMaxEncryptedKeyBytes)
+		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).
+			MaxEncryptedKeys(1).
+			MaxEncryptedKeyBytes(xmlenc1.DefaultMaxEncryptedKeyBytes).
+			Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+		require.NotErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+	})
+
 	t.Run("negative cap removes the limit", func(t *testing.T) {
 		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+5, rsaWrappedKeyBytes)
 		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeys(-1).Decrypt(t.Context(), elem)
