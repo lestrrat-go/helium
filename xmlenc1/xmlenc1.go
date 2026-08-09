@@ -348,21 +348,26 @@ type resolvedEncryptConfig struct {
 	recipientECDH   *ecdh.PublicKey
 }
 
-// resolveEncryptConfig decides eight parts of an Encryptor's configuration: it
-// defaults the block algorithm, enforces the CBC opt-in, requires a key
-// source, rejects a second key-protection mechanism, bounds the RSA-OAEP
-// label, requires the key-wrap URI to name a key wrap, holds the ECDH-ES
-// derivation parameters to their budget and digest, and resolves the ECDH-ES
-// recipient key. Every entry point calls it before any payload work, so none of
-// those eight is masked by a later failure to serialize or encrypt the
-// plaintext. Session-key length is not one of them: it is bound to the block
-// algorithm in encryptPlaintext, once the session key exists.
+// resolveEncryptConfig decides the payload-independent parts of an
+// Encryptor's configuration: it defaults and validates the block algorithm,
+// enforces the CBC opt-in, requires a key source, rejects a second
+// key-protection mechanism, validates RSA-OAEP's algorithm and dependent
+// parameters, bounds the RSA-OAEP label, requires the key-wrap URI to name a
+// key wrap, holds the ECDH-ES derivation parameters to their budget and digest,
+// and resolves the ECDH-ES recipient key. Every entry point calls it before
+// any payload work, so none of those checks is masked by a later failure to
+// serialize or encrypt the plaintext. Session-key length is not one of them:
+// it is bound to the block algorithm in encryptPlaintext, once the session key
+// exists.
 func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	// Secure by default: an unset block algorithm uses authenticated
 	// AES-256-GCM rather than refusing or falling back to CBC.
 	blockAlgorithm := cfg.blockAlgorithm
 	if blockAlgorithm == "" {
 		blockAlgorithm = DefaultBlockAlgorithm
+	}
+	if err := validateBlockAlgorithm(blockAlgorithm); err != nil {
+		return resolvedEncryptConfig{}, err
 	}
 
 	// Emitting new unauthenticated CBC ciphertext requires an explicit
@@ -385,6 +390,11 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 
 	if err := conflictingKeyProtection(cfg, hasKeyTransport, hasKeyAgreement, hasKeyWrap); err != nil {
 		return resolvedEncryptConfig{}, err
+	}
+	if hasKeyTransport {
+		if _, _, err := oaepHashes(cfg.keyTransport, cfg.oaepDigest, cfg.oaepMGF); err != nil {
+			return resolvedEncryptConfig{}, fmt.Errorf("%w: %w", ErrEncryptionFailed, err)
+		}
 	}
 
 	// The OAEP label is held to the same maxOAEPParamsBytes the parse side
