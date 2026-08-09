@@ -471,7 +471,7 @@ func encryptPlaintext(ctx context.Context, cfg *encryptConfig, resolved resolved
 	// Get or generate session key.
 	keySize, err := keySizeForAlgorithm(paramBlockAlgorithm, blockAlgorithm)
 	if err != nil {
-		return nil, abort(ctx, err)
+		return nil, abort(ctx, wrapBlockAlgorithmError(ErrEncryptionFailed, err))
 	}
 
 	sessionKey := cfg.sessionKey
@@ -1032,7 +1032,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 
 	sessionKeySize, err := keySizeForAlgorithm(paramBlockAlgorithm, alg)
 	if err != nil {
-		return nil, abort(ctx, err)
+		return nil, abort(ctx, wrapBlockAlgorithmError(ErrDecryptionFailed, err))
 	}
 
 	var lastErr error
@@ -1139,7 +1139,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	// before the loop, so every candidate's unwrap is length-bound.
 	sessionKeySize, err := keySizeForAlgorithm(paramBlockAlgorithm, alg)
 	if err != nil {
-		return nil, abort(ctx, err)
+		return nil, abort(ctx, wrapBlockAlgorithmError(ErrDecryptionFailed, err))
 	}
 
 	// A document may carry several EncryptedKey candidates (one per
@@ -1317,6 +1317,10 @@ func decryptCipherValue(ed *EncryptedData, alg string, sessionKey []byte) ([]byt
 	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue)
 	if err == nil {
 		return plaintext, nil
+	}
+	var unsupported *UnsupportedAlgorithmError
+	if errors.As(err, &unsupported) {
+		return nil, err
 	}
 	// Squash all decryption errors to the same sentinel — and crucially, the
 	// same string — so callers cannot distinguish "bad padding" from "bad

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xmlenc1"
 	"github.com/stretchr/testify/require"
 )
@@ -183,4 +184,41 @@ func TestKeySizeErrorMessage(t *testing.T) {
 	// configuring both a session key and a KEK knows which one to fix.
 	require.Equal(t, "session key", kse.Key)
 	require.Contains(t, kse.Error(), "requires a 32-byte session key, got 16 bytes")
+}
+
+func TestUnsupportedBlockAlgorithmErrors(t *testing.T) {
+	const algorithm = "urn:example:unsupported-block"
+
+	t.Run("encryption", func(t *testing.T) {
+		_, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(algorithm).
+			SessionKey(randKey(t, 32)).
+			EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+
+		var unsupported *xmlenc1.UnsupportedAlgorithmError
+		require.ErrorAs(t, err, &unsupported)
+		require.Equal(t, algorithm, unsupported.Algorithm)
+		require.Equal(t, "block algorithm", unsupported.Parameter)
+	})
+
+	t.Run("decryption", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, &xmlenc1.EncryptedData{
+			Type:             xmlenc1.TypeContent,
+			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: algorithm},
+			CipherValue:      []byte("ciphertext"),
+		})
+		require.NoError(t, err)
+
+		_, err = xmlenc1.NewDecryptor().
+			SessionKey(randKey(t, 32)).
+			DecryptBytes(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+
+		var unsupported *xmlenc1.UnsupportedAlgorithmError
+		require.ErrorAs(t, err, &unsupported)
+		require.Equal(t, algorithm, unsupported.Algorithm)
+		require.Equal(t, "block algorithm", unsupported.Parameter)
+	})
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -45,13 +46,21 @@ func validateKeySize(algParam, algorithm, keyParam string, key []byte) error {
 	return nil
 }
 
+func wrapBlockAlgorithmError(operation, err error) error {
+	var unsupported *UnsupportedAlgorithmError
+	if !errors.As(err, &unsupported) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", operation, err)
+}
+
 // blockEncrypt encrypts plaintext with the given algorithm. For AEAD
 // algorithms (GCM) the algorithm URI is bound into the additional
 // authenticated data so that an attacker cannot substitute a different
 // EncryptionMethod/@Algorithm on the wire.
 func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 	if err := validateKeySize(paramBlockAlgorithm, algorithm, paramSessionKey, key); err != nil {
-		return nil, err
+		return nil, wrapBlockAlgorithmError(ErrEncryptionFailed, err)
 	}
 	switch algorithm {
 	case AES128CBC, AES256CBC:
@@ -69,7 +78,7 @@ func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 		// compatibility.
 		return encryptGCM(key, plaintext, nil)
 	default:
-		return nil, &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm}
+		return nil, wrapBlockAlgorithmError(ErrEncryptionFailed, &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm})
 	}
 }
 
@@ -84,7 +93,7 @@ func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 	// (it is the recipient's configured / unwrapped key), so reporting a
 	// distinguishable KeySizeError here is not a padding-oracle signal.
 	if err := validateKeySize(paramBlockAlgorithm, algorithm, paramSessionKey, key); err != nil {
-		return nil, err
+		return nil, wrapBlockAlgorithmError(ErrDecryptionFailed, err)
 	}
 	switch algorithm {
 	case AES128CBC, AES256CBC:
@@ -94,7 +103,7 @@ func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 	case AES128GCM11, AES192GCM11, AES256GCM11:
 		return decryptGCM(key, ciphertext, nil)
 	default:
-		return nil, &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm}
+		return nil, wrapBlockAlgorithmError(ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm})
 	}
 }
 

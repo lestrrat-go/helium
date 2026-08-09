@@ -184,6 +184,8 @@ A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `E
 
 `ErrCipherValueBytesExceeded` is returned when an EncryptedData payload exceeds `Decryptor.MaxCipherValueBytes` (default `DefaultMaxCipherValueBytes`, 10 MiB). The parser charges decoded payload bytes before base64 assembly or block decryption, so text or CDATA splitting cannot bypass the limit. Match it with `errors.Is`.
 
+Block encryption and decryption failures wrap `ErrEncryptionFailed` or `ErrDecryptionFailed` as appropriate. Unsupported block-algorithm URIs preserve `*UnsupportedAlgorithmError` in the chain, so callers can match the operation sentinel with `errors.Is` and inspect the algorithm with `errors.As`.
+
 ## Error Accumulation Pattern
 
 ### XSD
