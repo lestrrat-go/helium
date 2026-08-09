@@ -109,9 +109,12 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   element child is refused, and a comment or processing instruction is ignored.
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
-  detached `EncryptedData` with no `Type` attribute (W3C xmlenc-core1 §3.1)
-  and does not modify the tree; `DecryptBytes` returns the plaintext octets
-  without parsing them as XML.
+  detached `EncryptedData` with no `Type` attribute and does not modify the
+  tree; because `Decrypt` treats an absent `Type` as `TypeElement`, recover
+  this payload with `DecryptBytes`, which returns the plaintext octets without
+  parsing them as XML. `Decrypt` accepts only an absent `Type`, `TypeElement`,
+  or `TypeContent`; use `DecryptBytes` for opaque or application-defined
+  payloads and for any other non-empty `Type`.
 - `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
   trial-decrypted (default 100, negative for unlimited), because an unbounded
   count is a CPU amplification vector; over the cap fails with

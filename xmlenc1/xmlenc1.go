@@ -253,12 +253,10 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 // Decryptor.DecryptBytes: together they cover the payloads that are not an
 // XML element or element content.
 //
-// The returned element carries no Type attribute. W3C xmlenc-core1 §3.1
-// makes the attribute optional, and §4.2 "Well-known Type parameter values"
-// is the clause that gives an octet-stream reading: an Encryptor or Decryptor
-// SHOULD handle an unknown or empty Type value as a signal that the cleartext
-// is an opaque octet-stream. No tree is modified — the caller decides where
-// to insert the element.
+// The returned element carries no Type attribute. Decrypt treats an absent
+// Type as TypeElement, so recover this payload with DecryptBytes, which returns
+// the plaintext octets without parsing them as XML. No tree is modified — the
+// caller decides where to insert the element.
 func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plaintext []byte) (*helium.Element, error) {
 	if err := contextErr(ctx); err != nil {
 		return nil, err
@@ -864,15 +862,16 @@ func (d Decryptor) MaxCipherValueBytes(n int) Decryptor {
 //
 // A TypeContent payload yields its children; a TypeElement payload (the
 // default when @Type is absent) must yield exactly one element node. An
-// unrecognized @Type is rejected as malformed — use DecryptBytes for a
-// payload that is not XML.
+// unrecognized non-empty @Type is rejected as malformed. Use DecryptBytes for
+// a payload that is not XML or has an application-defined Type.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
 	return decryptElement(ctx, d.config(), elem)
 }
 
 // DecryptBytes decrypts an EncryptedData element and returns its plaintext
-// octets without parsing them as XML. It is used for EncryptedData values whose
-// Type is an application-defined binary payload.
+// octets without parsing them as XML. It does not interpret @Type, so use it
+// for opaque or application-defined binary payloads, including values with no
+// Type attribute.
 func (d Decryptor) DecryptBytes(ctx context.Context, elem *helium.Element) ([]byte, error) {
 	return decryptBytes(ctx, d.config(), elem)
 }
