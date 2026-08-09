@@ -648,7 +648,8 @@ func TestEncryptBytes(t *testing.T) {
 		_, err := xmlenc1.NewEncryptor().
 			SessionKey(randKey(t, 32)).
 			EncryptBytes(t.Context(), nil, payload)
-		require.ErrorIs(t, err, xmlenc1.ErrMissingConfig)
+		require.ErrorIs(t, err, helium.ErrNilNode)
+		require.NotErrorIs(t, err, xmlenc1.ErrMissingConfig)
 	})
 
 	t.Run("applies the same key-source checks", func(t *testing.T) {
