@@ -16,8 +16,10 @@ import (
 
 // parseEncryptedData parses an EncryptedData element. encryptedKeyBudget
 // carries the cumulative EncryptedKey ciphertext allowance across the whole
-// element, and payloadBudget caps the EncryptedData CipherValue. Both are
-// charged at the earliest point that sees their values.
+// element, payloadBudget caps the EncryptedData CipherValue, and cfg supplies
+// the effective EncryptedKey candidate limit. Both budgets are charged at the
+// earliest point that sees their values; the candidate limit is checked before
+// an excess candidate is parsed or retained.
 //
 // ctx is observed throughout the parse, which is why every function below takes
 // it. The document decides how many children each element it describes carries,
@@ -27,7 +29,7 @@ import (
 // therefore runs through eachSibling, and every error return runs through abort,
 // so a caller that cancels is answered while the parse is still reading rather
 // than after it finishes. A live context leaves both untouched.
-func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyBudget *encryptedKeyBudget, payloadBudget *payloadCipherValueBudget) (*EncryptedData, error) {
+func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyBudget *encryptedKeyBudget, payloadBudget *payloadCipherValueBudget, cfg *decryptConfig) (*EncryptedData, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedData") {
 		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedData", ErrMalformedEncrypted))
 	}
@@ -52,7 +54,7 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyB
 			}
 			ed.EncryptionMethod = em
 		case isDSigElem(e, "KeyInfo"):
-			return parseKeyInfoForEncryption(ctx, e, ed, encryptedKeyBudget)
+			return parseKeyInfoForEncryption(ctx, e, ed, encryptedKeyBudget, cfg)
 		case isXMLEncElem(e, "CipherData"):
 			if seenCipherData {
 				return fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
@@ -82,7 +84,7 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyB
 	return ed, nil
 }
 
-func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *EncryptedData, budget *encryptedKeyBudget) error {
+func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *EncryptedData, budget *encryptedKeyBudget, cfg *decryptConfig) error {
 	return eachChildElement(ctx, elem, func(e *helium.Element) error {
 		if !isXMLEncElem(e, "EncryptedKey") {
 			return nil
@@ -90,6 +92,9 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 		ek, err := parseEncryptedKey(ctx, e, budget)
 		if err != nil {
 			return err
+		}
+		if err := checkEncryptedKeyCap(cfg, len(ed.EncryptedKeys)+1); err != nil {
+			return abort(ctx, err)
 		}
 		ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
 		return nil

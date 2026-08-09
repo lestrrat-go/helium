@@ -120,6 +120,19 @@ func TestMaxEncryptedKeys(t *testing.T) {
 		require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
+	t.Run("cap stops before retaining the first excess candidate", func(t *testing.T) {
+		doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`">`+
+			`<ds:KeyInfo>`+
+			`<xenc:EncryptedKey xmlns="`+xmlenc1.NamespaceXMLEnc+`"><xenc:CipherData><xenc:CipherValue>AA==</xenc:CipherValue></xenc:CipherData></xenc:EncryptedKey>`+
+			`<xenc:EncryptedKey xmlns="`+xmlenc1.NamespaceXMLEnc+`"><xenc:CipherData><xenc:CipherValue>AA==</xenc:CipherValue></xenc:CipherData></xenc:EncryptedKey>`+
+			`<xenc:EncryptedKey xmlns="`+xmlenc1.NamespaceXMLEnc+`"><xenc:CipherData><xenc:CipherValue>AA==</xenc:CipherValue></xenc:CipherData></xenc:EncryptedKey>`+
+			`</ds:KeyInfo>`+
+			`<xenc:CipherData><xenc:CipherValue>AA==</xenc:CipherValue></xenc:CipherData>`+
+			`</xenc:EncryptedData>`)
+		_, err := xmlenc1.NewDecryptor().MaxEncryptedKeys(2).Decrypt(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+	})
+
 	t.Run("negative cap removes the limit", func(t *testing.T) {
 		elem := manyKeyEncryptedData(t, xmlenc1.DefaultMaxEncryptedKeys+5, rsaWrappedKeyBytes)
 		_, err := xmlenc1.NewDecryptor().PrivateKey(generateRSAKey(t)).MaxEncryptedKeys(-1).Decrypt(t.Context(), elem)
