@@ -367,7 +367,7 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 		blockAlgorithm = DefaultBlockAlgorithm
 	}
 	if err := validateBlockAlgorithm(blockAlgorithm); err != nil {
-		return resolvedEncryptConfig{}, err
+		return resolvedEncryptConfig{}, wrapBlockAlgorithmError(ErrEncryptionFailed, err)
 	}
 
 	// Emitting new unauthenticated CBC ciphertext requires an explicit

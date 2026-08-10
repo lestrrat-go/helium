@@ -1034,7 +1034,7 @@ func TestConfigErrorPrecedesSerializationFailure(t *testing.T) {
 		require.ErrorAs(t, err, &unsupported)
 		require.Equal(t, "block algorithm", unsupported.Parameter)
 		require.Equal(t, "urn:example:unsupported-block", unsupported.Algorithm)
-		require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
 		require.NotContains(t, err.Error(), "invalid element name")
 	})
 
