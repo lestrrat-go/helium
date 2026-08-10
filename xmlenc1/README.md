@@ -110,9 +110,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute and does not modify the
-  tree; because `Decrypt` treats an absent `Type` as `TypeElement`, recover
+  tree; because `Decrypt` treats an empty or absent `Type` as `TypeElement`, recover
   this payload with `DecryptBytes`, which returns the plaintext octets without
-  parsing them as XML. `Decrypt` accepts only an absent `Type`, `TypeElement`,
+  parsing them as XML. `Decrypt` accepts only an empty or absent `Type`, `TypeElement`,
   or `TypeContent`; use `DecryptBytes` for opaque or application-defined
   payloads and for any other non-empty `Type`.
 - `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are

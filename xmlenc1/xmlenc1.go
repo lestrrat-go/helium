@@ -253,8 +253,8 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 // Decryptor.DecryptBytes: together they cover the payloads that are not an
 // XML element or element content.
 //
-// The returned element carries no Type attribute. Decrypt treats an absent
-// Type as TypeElement, so recover this payload with DecryptBytes, which returns
+// The returned element carries no Type attribute. Decrypt treats an empty or
+// absent Type as TypeElement, so recover this payload with DecryptBytes, which returns
 // the plaintext octets without parsing them as XML. No tree is modified — the
 // caller decides where to insert the element.
 func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plaintext []byte) (*helium.Element, error) {
@@ -861,7 +861,7 @@ func (d Decryptor) MaxCipherValueBytes(n int) Decryptor {
 // parent, so prefixes declared only on an ancestor resolve correctly.
 //
 // A TypeContent payload yields its children; a TypeElement payload (the
-// default when @Type is absent) must yield exactly one element node. An
+// default when @Type is empty or absent) must yield exactly one element node. An
 // unrecognized non-empty @Type is rejected as malformed. Use DecryptBytes for
 // a payload that is not XML or has an application-defined Type.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
@@ -1086,8 +1086,8 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, err
 	}
 
-	// Validate the declared content Type up front. An omitted Type defaults
-	// to Element (preserving prior behavior); any other non-empty value,
+	// Validate the declared content Type up front. An empty or omitted Type
+	// defaults to Element (preserving prior behavior); any other non-empty value,
 	// including unknown URIs, is rejected rather than silently treated as
 	// Element.
 	var isContent bool
