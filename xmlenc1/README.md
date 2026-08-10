@@ -156,7 +156,8 @@ marks REQUIRED are absent:
   `ds:KeyName` (§3.5, RECOMMENDED) and `xenc11:DerivedKey`.
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED). Block encryption and key wrapping are AES only, and
-  either URI fails with `*UnsupportedAlgorithmError`. The omission is
+  either URI fails with an error matching the relevant operation sentinel
+  while preserving `*UnsupportedAlgorithmError`. The omission is
   deliberate: Triple DES is a 64-bit block cipher, so Sweet32
   (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
   encryption after 2023.
