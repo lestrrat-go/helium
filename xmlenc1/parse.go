@@ -89,6 +89,10 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 		if !isXMLEncElem(e, "EncryptedKey") {
 			return nil
 		}
+		// Parse and charge the candidate before checking the count so malformed
+		// structure and the independent ciphertext budget keep their normal
+		// errors. The count guard runs before append: an excess candidate is
+		// never retained and therefore never reaches candidate crypto.
 		ek, err := parseEncryptedKey(ctx, e, budget)
 		if err != nil {
 			return err
