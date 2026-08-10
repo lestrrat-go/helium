@@ -783,7 +783,8 @@ func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 // MaxEncryptedKeys caps the number of <EncryptedKey> candidates the
 // Decryptor will trial-decrypt for a single EncryptedData. A document packed
 // with junk EncryptedKey elements is a CPU amplification (DoS) vector, so
-// the cap is enforced while parsing before an excess candidate is retained.
+// the cap is enforced while parsing before an excess candidate is parsed or
+// retained.
 //
 // A candidate's branch — which key it uses and what it costs — is dispatched
 // on its AgreementMethod first and on its declared algorithm second. An
@@ -802,8 +803,8 @@ func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 // Zero (the default) uses [DefaultMaxEncryptedKeys]; a negative value
 // removes the limit (matching helium's MaxDepth convention). A document
 // exceeding the effective cap fails with [ErrTooManyEncryptedKeys], in every
-// key configuration: the cap is applied to the parsed candidate list before
-// the [Decryptor.SessionKey] early return.
+// key configuration: the cap is applied while parsing the candidate list,
+// before the [Decryptor.SessionKey] early return.
 func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 	d = d.clone()
 	d.cfg.maxEncryptedKeys = n
@@ -815,12 +816,13 @@ func (d Decryptor) MaxEncryptedKeys(n int) Decryptor {
 // bounds how many candidates a document may carry; this bounds how large they
 // may be together, which that count alone does not.
 //
-// The budget is charged while the document is read, before each candidate's
-// CipherValue is assembled or decoded, and both are skipped once the running
-// total would exceed it. A CipherValue the base64 decoder would reject is
-// charged what that rejected decode costs, so malformed ciphertext cannot buy
-// work the budget was set to deny. Only <EncryptedKey> ciphertext counts. The
-// EncryptedData payload is charged separately by MaxCipherValueBytes.
+// The budget is charged while the document is read, before each retained
+// candidate's CipherValue is assembled or decoded. An excess candidate is
+// rejected by MaxEncryptedKeys before this budget or its structure is read. A
+// CipherValue the base64 decoder would reject is charged what that rejected
+// decode costs, so malformed ciphertext cannot buy work the budget was set to
+// deny. Only <EncryptedKey> ciphertext counts. The EncryptedData payload is
+// charged separately by MaxCipherValueBytes.
 //
 // What the budget bounds is memory held for a candidate, not the length of the
 // text it was written as. A CipherValue may carry XML whitespace between its
@@ -888,10 +890,9 @@ func (d Decryptor) DecryptBytes(ctx context.Context, elem *helium.Element) ([]by
 
 // checkEncryptedKeyCap fails closed when an EncryptedData carries more
 // EncryptedKey candidates than the Decryptor's effective limit (zero => the
-// default, negative => unlimited), before the excess candidate is retained.
-// Candidates continue through the normal structure and separate ciphertext-
-// budget checks before the count is enforced. An attacker who can pack a
-// document with junk <EncryptedKey> elements gets CPU amplification.
+// default, negative => unlimited), before the excess candidate is parsed or
+// retained. An attacker who can pack a document with junk <EncryptedKey>
+// elements gets CPU amplification.
 // Decryptor.MaxEncryptedKeys documents the per-candidate cost this bounds.
 func checkEncryptedKeyCap(cfg *decryptConfig, candidates int) error {
 	maxKeys := cfg.maxEncryptedKeys

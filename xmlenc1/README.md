@@ -118,8 +118,8 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 - `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
   trial-decrypted (default 100, negative for unlimited), because an unbounded
   count is a CPU amplification vector; over the cap fails while parsing,
-  before the excess candidate is appended to the retained list or any
-  candidate crypto runs. Its godoc owns the per-candidate branch dispatch:
+  before the excess candidate is parsed, retained, or reaches candidate
+  crypto. Its godoc owns the per-candidate branch dispatch:
   which key a candidate uses and what it costs. The cap is applied before the key
   configuration is consulted, so it also bounds a decrypt driven by a
   pre-shared
