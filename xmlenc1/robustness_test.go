@@ -247,7 +247,8 @@ func TestParseRejectsDuplicateCardinality(t *testing.T) {
 
 // TestDecryptType covers XENC-004: a non-empty Type other than Element or
 // Content (including unknown URIs) must be rejected rather than silently
-// treated as Element. An omitted Type keeps the historical Element default.
+// treated as Element. An empty or omitted Type keeps the historical Element
+// default.
 func TestDecryptType(t *testing.T) {
 	const algorithm = xmlenc1.AES256GCM
 
@@ -280,6 +281,20 @@ func TestDecryptType(t *testing.T) {
 		require.NoError(t, err)
 
 		elem := build(t, "", cipher)
+		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, helium.ElementNode, nodes[0].Type())
+	})
+
+	t.Run("explicit empty Type defaults to Element", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, []byte("<x>secret</x>"))
+		require.NoError(t, err)
+
+		elem := build(t, "", cipher)
+		require.NoError(t, elem.SetAttribute("Type", ""))
+
 		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
 		require.NoError(t, err)
 		require.Len(t, nodes, 1)
