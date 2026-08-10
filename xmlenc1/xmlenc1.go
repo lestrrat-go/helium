@@ -262,7 +262,7 @@ func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plain
 		return nil, err
 	}
 	if doc == nil {
-		return nil, abort(ctx, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", ErrMissingConfig))
+		return nil, abort(ctx, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", helium.ErrNilNode))
 	}
 	cfg := e.config()
 	resolved, err := resolveEncryptConfig(cfg)
