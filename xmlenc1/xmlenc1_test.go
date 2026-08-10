@@ -334,6 +334,36 @@ func TestEncryptErrors(t *testing.T) {
 	})
 }
 
+func TestEncryptNilElement(t *testing.T) {
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		SessionKey(randKey(t, 32))
+
+	for _, encrypt := range []struct {
+		name string
+		fn   func() (*helium.Element, error)
+	}{
+		{
+			name: "EncryptElement",
+			fn: func() (*helium.Element, error) {
+				return encryptor.EncryptElement(t.Context(), nil)
+			},
+		},
+		{
+			name: "EncryptContent",
+			fn: func() (*helium.Element, error) {
+				return encryptor.EncryptContent(t.Context(), nil)
+			},
+		},
+	} {
+		t.Run(encrypt.name, func(t *testing.T) {
+			_, err := encrypt.fn()
+			require.EqualError(t, err, "xmlenc1: encryption failed: nil node")
+			require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+		})
+	}
+}
+
 func TestEncryptElementPlacement(t *testing.T) {
 	t.Run("preserves sibling order", func(t *testing.T) {
 		for _, tc := range []struct {
