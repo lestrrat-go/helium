@@ -195,7 +195,10 @@ func TestUnsupportedBlockAlgorithmErrors(t *testing.T) {
 			BlockAlgorithm(algorithm).
 			SessionKey(randKey(t, 32)).
 			EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
-		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+		// The algorithm is rejected during configuration resolution, before
+		// the block-encryption operation begins, so no operation sentinel is
+		// added to the error chain.
+		require.NotErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
 
 		var unsupported *xmlenc1.UnsupportedAlgorithmError
 		require.ErrorAs(t, err, &unsupported)
