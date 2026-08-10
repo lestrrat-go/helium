@@ -967,11 +967,11 @@ func unserializableContent(t *testing.T) *helium.Element {
 	return root
 }
 
-// The configuration errors decided before serialization — the conflicting key
-// protection, missing key source, and CBC opt-in checks below — must reach the
-// caller even when the payload cannot be serialized. No payload can make the
-// configuration usable, so returning ErrEncryptionFailed here would point the
-// caller away from the real mistake.
+// The configuration errors decided before serialization — including algorithm
+// validation, key-protection conflicts, missing key source, and CBC opt-in —
+// must reach the caller even when the payload cannot be serialized. No payload
+// can make the configuration usable, so returning a serialization error here
+// would point the caller away from the real mistake.
 func TestConfigErrorPrecedesSerializationFailure(t *testing.T) {
 	key := generateRSAKey(t)
 	kek := randKey(t, 32)
@@ -1023,6 +1023,33 @@ func TestConfigErrorPrecedesSerializationFailure(t *testing.T) {
 			})
 		})
 	}
+
+	t.Run("unsupported block algorithm", func(t *testing.T) {
+		_, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm("urn:example:unsupported-block").
+			SessionKey(randKey(t, 32)).
+			EncryptElement(t.Context(), unserializableElement(t))
+		require.Error(t, err)
+		var unsupported *xmlenc1.UnsupportedAlgorithmError
+		require.ErrorAs(t, err, &unsupported)
+		require.Equal(t, "block algorithm", unsupported.Parameter)
+		require.Equal(t, "urn:example:unsupported-block", unsupported.Algorithm)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+		require.NotContains(t, err.Error(), "invalid element name")
+	})
+
+	t.Run("unsupported key transport algorithm", func(t *testing.T) {
+		_, err := xmlenc1.NewEncryptor().
+			KeyTransportAlgorithm("urn:example:unsupported-key-transport").
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), unserializableElement(t))
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
+		var unsupported *xmlenc1.UnsupportedAlgorithmError
+		require.ErrorAs(t, err, &unsupported)
+		require.Equal(t, "key transport algorithm", unsupported.Parameter)
+		require.Equal(t, "urn:example:unsupported-key-transport", unsupported.Algorithm)
+		require.NotContains(t, err.Error(), "invalid element name")
+	})
 }
 
 // encryptAllocPayload is the plaintext the allocation cases below hand to

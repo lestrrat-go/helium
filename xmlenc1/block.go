@@ -26,6 +26,19 @@ func keySizeForAlgorithm(algParam, algorithm string) (int, error) {
 	}
 }
 
+// validateBlockAlgorithm requires algorithm to name one of the supported
+// block encryption URIs. keySizeForAlgorithm also accepts key-wrap URIs, so it
+// cannot validate the role of a block algorithm on its own.
+func validateBlockAlgorithm(algorithm string) error {
+	switch algorithm {
+	case AES128CBC, AES256CBC, AES128GCM, AES256GCM,
+		AES128GCM11, AES192GCM11, AES256GCM11:
+		return nil
+	default:
+		return &UnsupportedAlgorithmError{Parameter: paramBlockAlgorithm, Algorithm: algorithm}
+	}
+}
+
 // validateKeySize ensures key is exactly the length required by the
 // declared algorithm URI. This binds the wire-declared algorithm to the
 // real key length: requesting, e.g., an AES-256 algorithm with a 16-byte

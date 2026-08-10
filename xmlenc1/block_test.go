@@ -195,6 +195,8 @@ func TestUnsupportedBlockAlgorithmErrors(t *testing.T) {
 			BlockAlgorithm(algorithm).
 			SessionKey(randKey(t, 32)).
 			EncryptBytes(t.Context(), helium.NewDefaultDocument(), []byte("payload"))
+		// Configuration validation happens before block encryption, but the
+		// error still carries the encryption operation sentinel.
 		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
 
 		var unsupported *xmlenc1.UnsupportedAlgorithmError
