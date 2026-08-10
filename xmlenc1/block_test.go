@@ -177,6 +177,7 @@ func TestKeySizeErrorMessage(t *testing.T) {
 
 	var kse *xmlenc1.KeySizeError
 	require.True(t, errors.As(err, &kse))
+	require.False(t, errors.Is(err, xmlenc1.ErrDecryptionFailed))
 	require.Equal(t, xmlenc1.AES256GCM, kse.Algorithm)
 	require.Equal(t, 32, kse.Want)
 	require.Equal(t, 16, kse.Got)
