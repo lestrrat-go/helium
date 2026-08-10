@@ -38,7 +38,8 @@ func HardenedParserForTest() helium.Parser {
 // rather than a cancellation. Cancellation of the parse is covered through the
 // public terminals instead.
 func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
-	return parseEncryptedData(context.Background(), elem, newEncryptedKeyBudget(&decryptConfig{}), newPayloadCipherValueBudget(&decryptConfig{}))
+	cfg := &decryptConfig{}
+	return parseEncryptedData(context.Background(), elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg), cfg)
 }
 
 // MaxOAEPParamsBytesForTest re-exports the xenc:OAEPparams decoded-size limit
