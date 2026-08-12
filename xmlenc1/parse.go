@@ -42,6 +42,11 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyB
 	// empty slice, so a boolean is the reliable duplicate sentinel.
 	var seenCipherData bool
 
+	// KeyInfo is a singleton in the xenc:EncryptedType sequence. Its branch
+	// appends candidates rather than assigning a field, so a boolean is the
+	// only reliable sentinel.
+	var seenKeyInfo bool
+
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "EncryptionMethod"):
@@ -54,6 +59,10 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyB
 			}
 			ed.EncryptionMethod = em
 		case isDSigElem(e, "KeyInfo"):
+			if seenKeyInfo {
+				return fmt.Errorf("%w: duplicate KeyInfo", ErrMalformedEncrypted)
+			}
+			seenKeyInfo = true
 			return parseKeyInfoForEncryption(ctx, e, ed, encryptedKeyBudget, cfg)
 		case isXMLEncElem(e, "CipherData"):
 			if seenCipherData {
@@ -115,7 +124,10 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryp
 	ek.ID, _ = elem.GetAttribute("Id")
 	ek.Recipient, _ = elem.GetAttribute("Recipient")
 
-	var seenCipherData bool
+	// KeyInfo is a singleton in the xenc:EncryptedType sequence. Its branch
+	// appends candidates rather than assigning a field, so a boolean is the
+	// only reliable sentinel.
+	var seenCipherData, seenKeyInfo bool
 
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
@@ -139,6 +151,10 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryp
 			}
 			ek.CipherValue = cv
 		case isDSigElem(e, "KeyInfo"):
+			if seenKeyInfo {
+				return fmt.Errorf("%w: duplicate KeyInfo", ErrMalformedEncrypted)
+			}
+			seenKeyInfo = true
 			agreement, err := parseAgreementMethodForKeyInfo(ctx, e)
 			if err != nil {
 				return err
@@ -350,12 +366,21 @@ func parseOriginatorKeyInfo(ctx context.Context, elem *helium.Element) (*ECKeyVa
 func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, error) {
 	var curve ecdh.Curve
 	var publicKey []byte
+	// NamedCurve and PublicKey are both singletons in the
+	// dsig11:ECKeyValueType sequence. Boolean sentinels are used because a
+	// decoded PublicKey can be a non-nil empty slice, the same reason the
+	// CipherData guards use one.
+	var seenNamedCurve, seenPublicKey bool
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		if e.URI() != NamespaceDSig11 {
 			return nil
 		}
 		switch domutil.LocalName(e) {
 		case "NamedCurve":
+			if seenNamedCurve {
+				return fmt.Errorf("%w: duplicate ECKeyValue NamedCurve", ErrMalformedEncrypted)
+			}
+			seenNamedCurve = true
 			uri, _ := e.GetAttribute("URI")
 			named, err := ecdhCurveForURI(uri)
 			if err != nil {
@@ -363,6 +388,10 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 			}
 			curve = named
 		case "PublicKey":
+			if seenPublicKey {
+				return fmt.Errorf("%w: duplicate ECKeyValue PublicKey", ErrMalformedEncrypted)
+			}
+			seenPublicKey = true
 			decoded, err := decodeBoundedBase64(ctx, e, "ECKeyValue PublicKey", maxECPublicKeyBytes, "invalid ECKeyValue base64")
 			if err != nil {
 				return err
