@@ -20,466 +20,6 @@ func containsError(errs []error, substr string) bool {
 	return false
 }
 
-func TestExtSubsetLookup_ElementInExtSubset(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	dtdPath := filepath.Join(dir, "ext.dtd")
-	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
-<!ELEMENT child EMPTY>
-<!ATTLIST child role CDATA #REQUIRED>`), 0600))
-
-	xml := `<?xml version="1.0"?>
-<!DOCTYPE root SYSTEM "` + dtdPath + `">
-<root><child role="main"/></root>`
-
-	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).ValidateDTD(true).FS(helium.PermissiveFS())
-	_, err := p.Parse(t.Context(), []byte(xml))
-	require.NoError(t, err, "validation should pass when declarations are in extSubset")
-}
-
-func TestExtSubsetLookup_EntityInExtSubset(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	dtdPath := filepath.Join(dir, "ext.dtd")
-	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (#PCDATA)>
-<!ENTITY extEnt "hello">`), 0600))
-
-	xml := `<?xml version="1.0"?>
-<!DOCTYPE root SYSTEM "` + dtdPath + `">
-<root/>`
-
-	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS())
-	doc, err := p.Parse(t.Context(), []byte(xml))
-	require.NoError(t, err)
-
-	ent, found := doc.GetEntity("extEnt")
-	require.True(t, found, "entity in extSubset should be found")
-	require.Equal(t, "hello", string(ent.Content()))
-}
-
-func TestExtSubsetLookup_AttributeInExtSubset(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	dtdPath := filepath.Join(dir, "ext.dtd")
-	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
-<!ELEMENT child EMPTY>
-<!ATTLIST child role CDATA #REQUIRED>`), 0600))
-
-	xml := `<?xml version="1.0"?>
-<!DOCTYPE root SYSTEM "` + dtdPath + `">
-<root><child/></root>`
-
-	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-	p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).ValidateDTD(true).ErrorHandler(collector).FS(helium.PermissiveFS())
-	_, err := p.Parse(t.Context(), []byte(xml))
-
-	require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-	require.True(t, containsError(collector.Errors(), "attribute role is required"))
-}
-
-func TestExtSubsetLookup_StandaloneYesPreventsExtSubset(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	dtdPath := filepath.Join(dir, "ext.dtd")
-	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
-<!ELEMENT child EMPTY>
-<!ENTITY extEnt "hello">`), 0600))
-
-	xml := `<?xml version="1.0" standalone="yes"?>
-<!DOCTYPE root SYSTEM "` + dtdPath + `">
-<root><child/></root>`
-
-	p := helium.NewParser().LoadExternalDTD(true)
-	doc, err := p.Parse(t.Context(), []byte(xml))
-	require.NoError(t, err)
-
-	_, found := doc.GetEntity("extEnt")
-	require.False(t, found, "standalone=yes should prevent extSubset entity lookup")
-}
-
-func TestEnumerationAttributeValidation(t *testing.T) {
-	t.Parallel()
-
-	t.Run("valid value accepted", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!ATTLIST root color (red|green|blue) #REQUIRED>
-]>
-<root color="green"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
-		_, err := p.Parse(t.Context(), []byte(xml))
-		require.NoError(t, err)
-	})
-
-	t.Run("invalid value rejected", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!ATTLIST root color (red|green|blue) #REQUIRED>
-]>
-<root color="yellow"/>`
-		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
-		_, err := p.Parse(t.Context(), []byte(xml))
-
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.True(t, containsError(collector.Errors(), "not among the enumerated set"))
-	})
-
-	t.Run("default value used when absent", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!ATTLIST root color (red|green|blue) "red">
-]>
-<root/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
-		_, err := p.Parse(t.Context(), []byte(xml))
-		require.NoError(t, err)
-	})
-}
-
-func TestEntityAttributeValidation(t *testing.T) {
-	t.Parallel()
-
-	t.Run("valid unparsed entity", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!NOTATION gif SYSTEM "image/gif">
-  <!ENTITY logo SYSTEM "logo.gif" NDATA gif>
-  <!ATTLIST root img ENTITY #REQUIRED>
-]>
-<root img="logo"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
-		_, err := p.Parse(t.Context(), []byte(xml))
-		require.NoError(t, err)
-	})
-
-	t.Run("undeclared entity", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!ATTLIST root img ENTITY #REQUIRED>
-]>
-<root img="noSuchEntity"/>`
-		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
-		_, err := p.Parse(t.Context(), []byte(xml))
-
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.True(t, containsError(collector.Errors(), "undeclared entity"))
-	})
-
-	t.Run("wrong entity type (internal)", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!ENTITY internalEnt "hello">
-  <!ATTLIST root img ENTITY #REQUIRED>
-]>
-<root img="internalEnt"/>`
-		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
-		_, err := p.Parse(t.Context(), []byte(xml))
-
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.True(t, containsError(collector.Errors(), "not unparsed"))
-	})
-}
-
-func TestEntitiesAttributeValidation(t *testing.T) {
-	t.Parallel()
-
-	t.Run("valid multiple unparsed entities", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!NOTATION gif SYSTEM "image/gif">
-  <!ENTITY logo1 SYSTEM "logo1.gif" NDATA gif>
-  <!ENTITY logo2 SYSTEM "logo2.gif" NDATA gif>
-  <!ATTLIST root imgs ENTITIES #REQUIRED>
-]>
-<root imgs="logo1 logo2"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
-		_, err := p.Parse(t.Context(), []byte(xml))
-		require.NoError(t, err)
-	})
-
-	t.Run("one undeclared entity", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root EMPTY>
-  <!NOTATION gif SYSTEM "image/gif">
-  <!ENTITY logo1 SYSTEM "logo1.gif" NDATA gif>
-  <!ATTLIST root imgs ENTITIES #REQUIRED>
-]>
-<root imgs="logo1 noSuchEntity"/>`
-		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
-		_, err := p.Parse(t.Context(), []byte(xml))
-
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.True(t, containsError(collector.Errors(), "undeclared entity"))
-	})
-}
-
-func TestNotationAttributeValidation(t *testing.T) {
-	t.Parallel()
-
-	t.Run("valid notation", func(t *testing.T) {
-		t.Parallel()
-
-		// A NOTATION attribute is not allowed on an EMPTY element (No Notation on
-		// Empty Element VC), so the element uses ANY content.
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root ANY>
-  <!NOTATION gif SYSTEM "image/gif">
-  <!NOTATION png SYSTEM "image/png">
-  <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
-]>
-<root fmt="gif"/>`
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true)
-		_, err := p.Parse(t.Context(), []byte(xml))
-		require.NoError(t, err)
-	})
-
-	t.Run("undeclared notation", func(t *testing.T) {
-		t.Parallel()
-
-		xml := `<?xml version="1.0"?>
-<!DOCTYPE root [
-  <!ELEMENT root ANY>
-  <!NOTATION gif SYSTEM "image/gif">
-  <!ATTLIST root fmt NOTATION (gif|png) #REQUIRED>
-]>
-<root fmt="png"/>`
-		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		p := helium.NewParser().ValidateDTD(true).DefaultDTDAttributes(true).ErrorHandler(collector)
-		_, err := p.Parse(t.Context(), []byte(xml))
-
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.True(t, containsError(collector.Errors(), "undeclared notation"))
-	})
-}
-
-// TestValidateSequenceContentModel exercises matchSeq for a valid and an invalid
-// (a, b, c) sequence content model.
-func TestValidateSequenceContentModel(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a, b, c)>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-<!ELEMENT c (#PCDATA)>
-]>`
-
-	valid := dtd + `<doc><a/><b/><c/></doc>`
-	errs := parseValidating(t, valid)
-	require.Empty(t, errs, "a valid (a,b,c) sequence has no validation errors")
-
-	// Out-of-order children violate the sequence.
-	invalid := dtd + `<doc><b/><a/><c/></doc>`
-	errs = parseValidating(t, invalid)
-	require.NotEmpty(t, errs, "an out-of-order sequence is a validation error")
-}
-
-// TestValidateChoiceContentModel exercises matchOr with a repeated choice.
-func TestValidateChoiceContentModel(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a | b)+>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-
-	valid := dtd + `<doc><a/><b/><a/></doc>`
-	errs := parseValidating(t, valid)
-	require.Empty(t, errs, "a valid (a|b)+ choice has no validation errors")
-
-	// An undeclared child element c is not part of the choice.
-	invalid := dtd + `<doc><a/><c/></doc>`
-	errs = parseValidating(t, invalid)
-	require.NotEmpty(t, errs, "a child outside the choice is a validation error")
-}
-
-// TestValidateMixedContent exercises validateMixedContent.
-func TestValidateMixedContent(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (#PCDATA|em)*>
-<!ELEMENT em (#PCDATA)>
-]>`
-
-	valid := dtd + `<doc>text <em>strong</em> more text</doc>`
-	errs := parseValidating(t, valid)
-	require.Empty(t, errs, "valid mixed content has no validation errors")
-
-	// A child not allowed by the mixed model.
-	invalid := dtd + `<doc>text <strong>bad</strong></doc>`
-	errs = parseValidating(t, invalid)
-	require.NotEmpty(t, errs, "an undeclared child in mixed content is a validation error")
-}
-
-// TestValidateRequiredAndFixedAttributes exercises the attribute-default checks.
-func TestValidateRequiredAndFixedAttributes(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc EMPTY>
-<!ATTLIST doc
-  req CDATA #REQUIRED
-  fix CDATA #FIXED "yes">
-]>`
-
-	valid := dtd + `<doc req="x" fix="yes"/>`
-	errs := parseValidating(t, valid)
-	require.Empty(t, errs, "all required/fixed attributes satisfied")
-
-	// Missing required attribute.
-	errs = parseValidating(t, dtd+`<doc fix="yes"/>`)
-	require.NotEmpty(t, errs, "missing #REQUIRED attribute is a validation error")
-
-	// Wrong value for a #FIXED attribute.
-	errs = parseValidating(t, dtd+`<doc req="x" fix="no"/>`)
-	require.NotEmpty(t, errs, "wrong #FIXED value is a validation error")
-}
-
-// TestValidateEnumerationAttribute exercises the enumeration token check.
-func TestValidateEnumerationAttribute(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc EMPTY>
-<!ATTLIST doc kind (red|green|blue) "red">
-]>`
-
-	errs := parseValidating(t, dtd+`<doc kind="green"/>`)
-	require.Empty(t, errs, "an enumerated value within the set is valid")
-
-	errs = parseValidating(t, dtd+`<doc kind="purple"/>`)
-	require.NotEmpty(t, errs, "a value outside the enumeration is a validation error")
-}
-
-// TestValidateUndeclaredElement exercises the "no declaration found" branch.
-func TestValidateUndeclaredElement(t *testing.T) {
-	t.Parallel()
-
-	const src = `<!DOCTYPE doc [
-<!ELEMENT doc (a)>
-<!ELEMENT a (#PCDATA)>
-]>
-<doc><a/><undeclared/></doc>`
-
-	errs := parseValidating(t, src)
-	require.NotEmpty(t, errs, "an undeclared element is a validation error")
-}
-
-// TestDTDValidationErrorLevel verifies a DTD-validation diagnostic reports its
-// true severity so a level-filtered ErrorCollector receives it, and that the
-// structured DTDValidationError is recoverable via errors.As.
-func TestDTDValidationErrorLevel(t *testing.T) {
-	t.Parallel()
-
-	const src = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ELEMENT doc EMPTY>
-  <!ATTLIST doc id ID #REQUIRED>
-]>
-<doc/>`
-
-	t.Run("collected at error level", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := t.Context()
-		ec := helium.NewErrorCollector(ctx, helium.ErrorLevelError)
-		_, err := helium.NewParser().
-			ValidateDTD(true).
-			ErrorHandler(ec).
-			Parse(ctx, []byte(src))
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-
-		errs := ec.Errors()
-		require.Len(t, errs, 1, "the error-level collector must receive the DTD diagnostic")
-
-		var dtdErr *helium.DTDValidationError
-		require.ErrorAs(t, errs[0], &dtdErr)
-		require.Equal(t, helium.ErrorLevelError, dtdErr.ErrorLevel())
-		require.Equal(t, "element doc: attribute id is required", dtdErr.Message)
-	})
-
-	t.Run("filtered out of warning-level collector", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := t.Context()
-		ec := helium.NewErrorCollector(ctx, helium.ErrorLevelWarning)
-		_, err := helium.NewParser().
-			ValidateDTD(true).
-			ErrorHandler(ec).
-			Parse(ctx, []byte(src))
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-
-		require.Empty(t, ec.Errors(), "a genuine error must not be collected as a warning")
-	})
-}
-
-// TestValidateRootMismatch exercises the root-name-vs-DTD-name check.
-func TestValidateRootMismatch(t *testing.T) {
-	t.Parallel()
-
-	const src = `<!DOCTYPE wrong [
-<!ELEMENT root EMPTY>
-]>
-<root/>`
-
-	errs := parseValidating(t, src)
-	require.NotEmpty(t, errs, "root element not matching the DTD name is a validation error")
-}
-
-// TestValidateOptionalElementContent exercises the ? occurrence in a sequence.
-func TestValidateOptionalElementContent(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a?, b)>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-
-	// Optional a omitted is valid.
-	errs := parseValidating(t, dtd+`<doc><b/></doc>`)
-	require.Empty(t, errs, "omitting an optional element is valid")
-
-	// Optional a present is also valid.
-	errs = parseValidating(t, dtd+`<doc><a/><b/></doc>`)
-	require.Empty(t, errs, "including an optional element is valid")
-}
-
 // collectingErrorHandler records every validation error delivered during a
 // validating parse so tests can assert on the failure surface.
 type collectingErrorHandler struct {
@@ -508,284 +48,559 @@ func parseValidating(t *testing.T, src string) []error {
 	return h.errs
 }
 
-// TestValidateContentModelOccurrences drives the occurrence variants of matchSeq
-// and matchOr (optional, zero-or-more, one-or-more) plus nested optional
-// sequences, exercising the seq/or matcher branches in valid.go that the simpler
-// once-only models did not reach.
-func TestValidateContentModelOccurrences(t *testing.T) {
+func TestValidateDocument(t *testing.T) {
 	t.Parallel()
 
-	t.Run("repeated sequence (a,b)+", func(t *testing.T) {
-		t.Parallel()
-		const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a, b)+>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-		require.Empty(t, parseValidating(t, dtd+`<doc><a/><b/><a/><b/></doc>`),
-			"two (a,b) repetitions validate")
-		require.NotEmpty(t, parseValidating(t, dtd+`<doc><a/><b/><a/></doc>`),
-			"a trailing partial (a,b) repetition fails")
-	})
-
-	t.Run("optional trailing element (a,b?)", func(t *testing.T) {
-		t.Parallel()
-		const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a, b?)>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-		require.Empty(t, parseValidating(t, dtd+`<doc><a/></doc>`),
-			"the optional trailing b may be absent")
-		require.Empty(t, parseValidating(t, dtd+`<doc><a/><b/></doc>`),
-			"the optional trailing b may be present")
-		require.NotEmpty(t, parseValidating(t, dtd+`<doc><a/><b/><b/></doc>`),
-			"a second b exceeds the optional occurrence")
-	})
-
-	t.Run("zero-or-more choice (a|b)*", func(t *testing.T) {
-		t.Parallel()
-		const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a | b)*>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-		require.Empty(t, parseValidating(t, dtd+`<doc></doc>`),
-			"zero occurrences of the choice validate")
-		require.Empty(t, parseValidating(t, dtd+`<doc><a/><a/><b/></doc>`),
-			"several occurrences of the choice validate")
-	})
-
-	t.Run("optional element a?", func(t *testing.T) {
-		t.Parallel()
-		const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a?, b)>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-		require.Empty(t, parseValidating(t, dtd+`<doc><b/></doc>`),
-			"the optional leading a may be omitted")
-		require.Empty(t, parseValidating(t, dtd+`<doc><a/><b/></doc>`),
-			"the optional leading a may be present")
-	})
-
-	t.Run("one-or-more element a+", func(t *testing.T) {
-		t.Parallel()
-		const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a+)>
-<!ELEMENT a (#PCDATA)>
-]>`
-		require.Empty(t, parseValidating(t, dtd+`<doc><a/><a/><a/></doc>`),
-			"multiple a children validate a+")
-		require.NotEmpty(t, parseValidating(t, dtd+`<doc></doc>`),
-			"zero a children fails a+")
-	})
-}
-
-// TestValidateGroupedSequenceOccurrences exercises matchSeq's Mult and Opt
-// occurrence branches via grouped sequence content models.
-func TestValidateGroupedSequenceOccurrences(t *testing.T) {
-	t.Parallel()
-
-	// (a, b)* — a repeated sequence group exercises matchSeq ElementContentMult.
-	const dtdMult = `<!DOCTYPE doc [
-<!ELEMENT doc (a, b)*>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-	require.Empty(t, parseValidating(t, dtdMult+`<doc><a/><b/><a/><b/></doc>`))
-	require.Empty(t, parseValidating(t, dtdMult+`<doc></doc>`)) // zero repetitions
-	require.NotEmpty(t, parseValidating(t, dtdMult+`<doc><a/></doc>`))
-
-	// (a, b)+ — one-or-more sequence group exercises matchSeq ElementContentPlus.
-	const dtdPlus = `<!DOCTYPE doc [
-<!ELEMENT doc (a, b)+>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-	require.Empty(t, parseValidating(t, dtdPlus+`<doc><a/><b/></doc>`))
-	require.Empty(t, parseValidating(t, dtdPlus+`<doc><a/><b/><a/><b/></doc>`))
-	require.NotEmpty(t, parseValidating(t, dtdPlus+`<doc></doc>`))
-}
-
-// TestValidateChoiceOccurrences exercises matchOr's Mult/Opt/Once branches.
-func TestValidateChoiceOccurrences(t *testing.T) {
-	t.Parallel()
-
-	// (a | b)* — choice with star.
-	const dtdMult = `<!DOCTYPE doc [
-<!ELEMENT doc (a | b)*>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-	require.Empty(t, parseValidating(t, dtdMult+`<doc></doc>`))
-	require.Empty(t, parseValidating(t, dtdMult+`<doc><a/><a/><b/></doc>`))
-
-	// (a | b) once — exactly one of the two.
-	const dtdOnce = `<!DOCTYPE doc [
-<!ELEMENT doc (a | b)>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-	require.Empty(t, parseValidating(t, dtdOnce+`<doc><a/></doc>`))
-	require.Empty(t, parseValidating(t, dtdOnce+`<doc><b/></doc>`))
-	require.NotEmpty(t, parseValidating(t, dtdOnce+`<doc><a/><b/></doc>`))
-}
-
-// TestValidateRepeatedElement exercises matchElement's Mult/Plus branches.
-func TestValidateRepeatedElement(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (a+, b*)>
-<!ELEMENT a (#PCDATA)>
-<!ELEMENT b (#PCDATA)>
-]>`
-	require.Empty(t, parseValidating(t, dtd+`<doc><a/></doc>`))
-	require.Empty(t, parseValidating(t, dtd+`<doc><a/><a/><a/><b/><b/></doc>`))
-	require.NotEmpty(t, parseValidating(t, dtd+`<doc><b/></doc>`)) // missing required a+
-}
-
-// TestValidateAttributeTypes exercises ID/IDREF/NMTOKEN/ENTITY attribute-type
-// validation paths.
-func TestValidateAttributeTypes(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc (item+)>
-<!ELEMENT item EMPTY>
-<!ATTLIST item
-  id   ID    #REQUIRED
-  ref  IDREF #IMPLIED
-  tok  NMTOKEN #IMPLIED>
-]>`
-
-	// Valid: unique IDs, IDREF resolves, NMTOKEN well-formed.
-	require.Empty(t, parseValidating(t,
-		dtd+`<doc><item id="a"/><item id="b" ref="a" tok="x1"/></doc>`))
-
-	// Duplicate ID is a validation error.
-	require.NotEmpty(t, parseValidating(t,
-		dtd+`<doc><item id="a"/><item id="a"/></doc>`))
-
-	// IDREF pointing at a non-existent ID is a validation error.
-	require.NotEmpty(t, parseValidating(t,
-		dtd+`<doc><item id="a" ref="missing"/></doc>`))
-}
-
-// TestValidateNmtokenColon verifies that DTD (non-namespace-aware) NMTOKEN /
-// NMTOKENS validation accepts the colon, which is part of the XML 1.0 NameChar
-// production, so a value like `x:image` is a valid NMTOKEN and must not be
-// rejected. A token with a genuinely illegal char still fails.
-func TestValidateNmtokenColon(t *testing.T) {
-	t.Parallel()
-
-	const dtd = `<!DOCTYPE doc [
-<!ELEMENT doc EMPTY>
-<!ATTLIST doc
-  tok  NMTOKEN  #IMPLIED
-  toks NMTOKENS #IMPLIED>
-]>`
-
-	// An NMTOKEN value containing a colon is valid (DTD is not namespace-aware).
-	require.Empty(t, parseValidating(t, dtd+`<doc tok="x:image"/>`),
-		"a colon is a valid NMTOKEN NameChar")
-
-	// An unprefixed NMTOKEN is unchanged.
-	require.Empty(t, parseValidating(t, dtd+`<doc tok="x1"/>`),
-		"an unprefixed NMTOKEN still validates")
-
-	// Each space-separated NMTOKENS token may carry a colon.
-	require.Empty(t, parseValidating(t, dtd+`<doc toks="x:image y:photo z1"/>`),
-		"colons are valid in each NMTOKENS token")
-
-	// A token with a genuinely illegal char (@) is still rejected.
-	require.NotEmpty(t, parseValidating(t, dtd+`<doc tok="a@b"/>`),
-		"an illegal NameChar is not a valid NMTOKEN")
-	require.NotEmpty(t, parseValidating(t, dtd+`<doc toks="ok x@y"/>`),
-		"an illegal NameChar in one NMTOKENS token is rejected")
-}
-
-// TestValidateNotationAttribute exercises NOTATION-typed attribute validation.
-func TestValidateNotationAttribute(t *testing.T) {
-	t.Parallel()
-
-	// A NOTATION attribute is not allowed on an EMPTY element (No Notation on
-	// Empty Element VC), so the element uses ANY content.
-	const dtd = `<!DOCTYPE doc [
-<!NOTATION gif SYSTEM "viewer">
-<!ELEMENT doc ANY>
-<!ATTLIST doc kind NOTATION (gif) #IMPLIED>
-]>`
-
-	require.Empty(t, parseValidating(t, dtd+`<doc kind="gif"/>`))
-	require.NotEmpty(t, parseValidating(t, dtd+`<doc kind="png"/>`))
-}
-
-// TestValidateNoDTD verifies that requesting DTD validation on a document with
-// neither an internal nor an external subset is a validity error (libxml2
-// XML_DTD_NO_DTD "no DTD found!"), while the same document parsed without
-// ValidateDTD succeeds and a document carrying a DTD still validates.
-func TestValidateNoDTD(t *testing.T) {
-	t.Parallel()
-
-	const noDTD = `<?xml version="1.0"?>
+	// requesting DTD validation on a document with
+	// neither an internal nor an external subset is a validity error (libxml2
+	// XML_DTD_NO_DTD "no DTD found!"), while the same document parsed without
+	// ValidateDTD succeeds and a document carrying a DTD still validates.
+	t.Run("no DTD", func(t *testing.T) {
+		const noDTD = `<?xml version="1.0"?>
 <root><child/></root>`
 
-	t.Run("ValidateDTD(true) with no DTD is invalid", func(t *testing.T) {
-		h := &collectingErrorHandler{}
-		_, err := helium.NewParser().
-			ValidateDTD(true).
-			ErrorHandler(h).
-			Parse(t.Context(), []byte(noDTD))
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.True(t, containsError(h.errs, "no DTD found"),
-			"expected a 'no DTD found' validity error, got %v", h.errs)
-	})
+		t.Run("ValidateDTD(true) with no DTD is invalid", func(t *testing.T) {
+			h := &collectingErrorHandler{}
+			_, err := helium.NewParser().
+				ValidateDTD(true).
+				ErrorHandler(h).
+				Parse(t.Context(), []byte(noDTD))
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.True(t, containsError(h.errs, "no DTD found"),
+				"expected a 'no DTD found' validity error, got %v", h.errs)
+		})
 
-	// The returned error must name the reason on its own. A caller that sets no
-	// ErrorHandler (the default NilErrorHandler discards diagnostics) otherwise
-	// sees only the bare "dtd: validation failed" sentinel and cannot tell a
-	// document that violates its DTD from one that has no DTD to violate.
-	t.Run("ValidateDTD(true) with no DTD reports the reason without a handler", func(t *testing.T) {
-		_, err := helium.NewParser().
-			ValidateDTD(true).
-			Parse(t.Context(), []byte(noDTD))
-		require.ErrorIs(t, err, helium.ErrNoDTDFound)
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.Contains(t, err.Error(), "no DTD found")
-	})
+		// The returned error must name the reason on its own. A caller that sets no
+		// ErrorHandler (the default NilErrorHandler discards diagnostics) otherwise
+		// sees only the bare "dtd: validation failed" sentinel and cannot tell a
+		// document that violates its DTD from one that has no DTD to violate.
+		t.Run("ValidateDTD(true) with no DTD reports the reason without a handler", func(t *testing.T) {
+			_, err := helium.NewParser().
+				ValidateDTD(true).
+				Parse(t.Context(), []byte(noDTD))
+			require.ErrorIs(t, err, helium.ErrNoDTDFound)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.Contains(t, err.Error(), "no DTD found")
+		})
 
-	// A document that HAS a DTD but violates it must stay distinguishable from
-	// the no-DTD case, so a caller can branch on ErrNoDTDFound.
-	t.Run("a document violating its DTD is not ErrNoDTDFound", func(t *testing.T) {
-		const violatesDTD = `<?xml version="1.0"?>
+		// A document that HAS a DTD but violates it must stay distinguishable from
+		// the no-DTD case, so a caller can branch on ErrNoDTDFound.
+		t.Run("a document violating its DTD is not ErrNoDTDFound", func(t *testing.T) {
+			const violatesDTD = `<?xml version="1.0"?>
 <!DOCTYPE root [
 <!ELEMENT root (child)>
 <!ELEMENT child EMPTY>
 ]>
 <root><wrong/></root>`
-		_, err := helium.NewParser().
-			ValidateDTD(true).
-			Parse(t.Context(), []byte(violatesDTD))
-		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
-		require.NotErrorIs(t, err, helium.ErrNoDTDFound)
-	})
+			_, err := helium.NewParser().
+				ValidateDTD(true).
+				Parse(t.Context(), []byte(violatesDTD))
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.NotErrorIs(t, err, helium.ErrNoDTDFound)
+		})
 
-	t.Run("ValidateDTD(false) with no DTD succeeds", func(t *testing.T) {
-		_, err := helium.NewParser().
-			ValidateDTD(false).
-			Parse(t.Context(), []byte(noDTD))
-		require.NoError(t, err)
-	})
+		t.Run("ValidateDTD(false) with no DTD succeeds", func(t *testing.T) {
+			_, err := helium.NewParser().
+				ValidateDTD(false).
+				Parse(t.Context(), []byte(noDTD))
+			require.NoError(t, err)
+		})
 
-	t.Run("ValidateDTD(true) with a DTD still validates", func(t *testing.T) {
-		const withDTD = `<?xml version="1.0"?>
+		t.Run("ValidateDTD(true) with a DTD still validates", func(t *testing.T) {
+			const withDTD = `<?xml version="1.0"?>
 <!DOCTYPE root [
 <!ELEMENT root (child)>
 <!ELEMENT child EMPTY>
 ]>
 <root><child/></root>`
-		require.Empty(t, parseValidating(t, withDTD))
+			require.Empty(t, parseValidating(t, withDTD))
+		})
+	})
+
+	// the root-name-vs-DTD-name check.
+	t.Run("root name mismatch", func(t *testing.T) {
+		const src = `<!DOCTYPE wrong [
+<!ELEMENT root EMPTY>
+]>
+<root/>`
+
+		errs := parseValidating(t, src)
+		require.NotEmpty(t, errs, "root element not matching the DTD name is a validation error")
+	})
+
+	// the "no declaration found" branch.
+	t.Run("undeclared element", func(t *testing.T) {
+		const src = `<!DOCTYPE doc [
+<!ELEMENT doc (a)>
+<!ELEMENT a (#PCDATA)>
+]>
+<doc><a/><undeclared/></doc>`
+
+		errs := parseValidating(t, src)
+		require.NotEmpty(t, errs, "an undeclared element is a validation error")
+	})
+
+	// a DTD-validation diagnostic reports its
+	// true severity so a level-filtered ErrorCollector receives it, and that the
+	// structured DTDValidationError is recoverable via errors.As.
+	t.Run("diagnostic error level", func(t *testing.T) {
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc/>`
+
+		t.Run("collected at error level", func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			ec := helium.NewErrorCollector(ctx, helium.ErrorLevelError)
+			_, err := helium.NewParser().
+				ValidateDTD(true).
+				ErrorHandler(ec).
+				Parse(ctx, []byte(src))
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+
+			errs := ec.Errors()
+			require.Len(t, errs, 1, "the error-level collector must receive the DTD diagnostic")
+
+			var dtdErr *helium.DTDValidationError
+			require.ErrorAs(t, errs[0], &dtdErr)
+			require.Equal(t, helium.ErrorLevelError, dtdErr.ErrorLevel())
+			require.Equal(t, "element doc: attribute id is required", dtdErr.Message)
+		})
+
+		t.Run("filtered out of warning-level collector", func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			ec := helium.NewErrorCollector(ctx, helium.ErrorLevelWarning)
+			_, err := helium.NewParser().
+				ValidateDTD(true).
+				ErrorHandler(ec).
+				Parse(ctx, []byte(src))
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+
+			require.Empty(t, ec.Errors(), "a genuine error must not be collected as a warning")
+		})
+	})
+}
+
+func TestValidateDTD(t *testing.T) {
+	t.Parallel()
+
+	t.Run("required attribute missing", func(t *testing.T) {
+		t.Parallel()
+
+		// #REQUIRED attribute missing -> validation error
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc/>`
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
+		doc, err := p.Parse(t.Context(), []byte(input))
+
+		require.Error(t, err, "missing #REQUIRED attribute should fail validation")
+		require.NotNil(t, doc, "document should still be returned with validation error")
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "required"))
+	})
+
+	t.Run("required attribute present", func(t *testing.T) {
+		t.Parallel()
+
+		// #REQUIRED attribute present -> no error
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc id="x1"/>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("fixed mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		// #FIXED attribute with wrong value -> validation error
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc version CDATA #FIXED "1.0">
+]>
+<doc version="2.0"/>`
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
+		_, err := p.Parse(t.Context(), []byte(input))
+
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "must be"))
+	})
+
+	t.Run("fixed correct", func(t *testing.T) {
+		t.Parallel()
+
+		// #FIXED attribute with correct value -> no error
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc version CDATA #FIXED "1.0">
+]>
+<doc version="1.0"/>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("empty element with content", func(t *testing.T) {
+		t.Parallel()
+
+		// EMPTY element with content -> validation error
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (child)>
+  <!ELEMENT child EMPTY>
+]>
+<doc><child>text</child></doc>`
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
+		_, err := p.Parse(t.Context(), []byte(input))
+
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "EMPTY"))
+	})
+
+	t.Run("element content valid", func(t *testing.T) {
+		t.Parallel()
+
+		// Element content model (a, b) with correct content -> no error
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a, b)>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc><a>hello</a><b>world</b></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("element content mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		// Element content model (a, b) with (b, a) -> validation error
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a, b)>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc><b>world</b><a>hello</a></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "wrong element order should fail content model")
+	})
+
+	t.Run("mixed content valid", func(t *testing.T) {
+		t.Parallel()
+
+		// Mixed content (#PCDATA | a)* -- text and <a> are allowed
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (#PCDATA | a)*>
+  <!ELEMENT a (#PCDATA)>
+]>
+<doc>hello <a>world</a> end</doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("mixed content bad child", func(t *testing.T) {
+		t.Parallel()
+
+		// Mixed content (#PCDATA | a)* -- <b> is NOT allowed
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (#PCDATA | a)*>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc>hello <b>world</b></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "<b> not allowed in mixed content (a)")
+	})
+
+	t.Run("no flag skips validation", func(t *testing.T) {
+		t.Parallel()
+
+		// Same invalid document but WITHOUT ValidateDTD -> should pass
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ATTLIST doc id ID #REQUIRED>
+]>
+<doc/>`
+
+		p := helium.NewParser()
+		// Don't set ValidateDTD
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "without ValidateDTD, validation should not run")
+	})
+
+	t.Run("choice content", func(t *testing.T) {
+		t.Parallel()
+
+		// Choice content model (a | b) with <a> -> valid
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a | b)>
+  <!ELEMENT a (#PCDATA)>
+  <!ELEMENT b (#PCDATA)>
+]>
+<doc><a>hello</a></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("repeat content", func(t *testing.T) {
+		t.Parallel()
+
+		// Repetition content model (a)+ with multiple <a> -> valid
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a)+>
+  <!ELEMENT a (#PCDATA)>
+]>
+<doc><a>1</a><a>2</a><a>3</a></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("repeat content empty", func(t *testing.T) {
+		t.Parallel()
+
+		// Repetition content model (a)+ with zero <a> -> invalid
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (a)+>
+  <!ELEMENT a (#PCDATA)>
+]>
+<doc></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "(a)+ requires at least one <a>")
+	})
+
+	t.Run("ID unique", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, item)>
+  <!ELEMENT item EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+]>
+<doc><item id="a"/><item id="b"/></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("ID duplicate", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, item)>
+  <!ELEMENT item EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+]>
+<doc><item id="a"/><item id="a"/></doc>`
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
+		_, err := p.Parse(t.Context(), []byte(input))
+
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "duplicate ID"))
+	})
+
+	t.Run("IDRef valid", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, ref)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT ref EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST ref target IDREF #REQUIRED>
+]>
+<doc><item id="x"/><ref target="x"/></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("IDRef missing", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, ref)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT ref EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST ref target IDREF #REQUIRED>
+]>
+<doc><item id="x"/><ref target="y"/></doc>`
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
+		_, err := p.Parse(t.Context(), []byte(input))
+
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "unknown ID"))
+	})
+
+	t.Run("IDRefs valid", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, item, refs)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT refs EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST refs targets IDREFS #REQUIRED>
+]>
+<doc><item id="a"/><item id="b"/><refs targets="a b"/></doc>`
+
+		p := helium.NewParser().ValidateDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+	})
+
+	t.Run("IDRefs missing", func(t *testing.T) {
+		t.Parallel()
+
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc (item, refs)>
+  <!ELEMENT item EMPTY>
+  <!ELEMENT refs EMPTY>
+  <!ATTLIST item id ID #REQUIRED>
+  <!ATTLIST refs targets IDREFS #REQUIRED>
+]>
+<doc><item id="a"/><refs targets="a z"/></doc>`
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().ValidateDTD(true).ErrorHandler(collector)
+		_, err := p.Parse(t.Context(), []byte(input))
+
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "unknown ID"))
+	})
+}
+
+func TestExtSubsetLookup(t *testing.T) {
+	t.Parallel()
+
+	t.Run("element in the external subset", func(t *testing.T) {
+		dir := t.TempDir()
+		dtdPath := filepath.Join(dir, "ext.dtd")
+		require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+<!ATTLIST child role CDATA #REQUIRED>`), 0600))
+
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root><child role="main"/></root>`
+
+		p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).ValidateDTD(true).FS(helium.PermissiveFS())
+		_, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err, "validation should pass when declarations are in extSubset")
+	})
+
+	t.Run("entity in the external subset", func(t *testing.T) {
+		dir := t.TempDir()
+		dtdPath := filepath.Join(dir, "ext.dtd")
+		require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (#PCDATA)>
+<!ENTITY extEnt "hello">`), 0600))
+
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root/>`
+
+		p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS())
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		ent, found := doc.GetEntity("extEnt")
+		require.True(t, found, "entity in extSubset should be found")
+		require.Equal(t, "hello", string(ent.Content()))
+	})
+
+	t.Run("attribute in the external subset", func(t *testing.T) {
+		dir := t.TempDir()
+		dtdPath := filepath.Join(dir, "ext.dtd")
+		require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+<!ATTLIST child role CDATA #REQUIRED>`), 0600))
+
+		xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root><child/></root>`
+
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).ValidateDTD(true).ErrorHandler(collector).FS(helium.PermissiveFS())
+		_, err := p.Parse(t.Context(), []byte(xml))
+
+		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+		require.True(t, containsError(collector.Errors(), "attribute role is required"))
+	})
+
+	t.Run("standalone yes prevents external-subset lookup", func(t *testing.T) {
+		dir := t.TempDir()
+		dtdPath := filepath.Join(dir, "ext.dtd")
+		require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (child)>
+<!ELEMENT child EMPTY>
+<!ENTITY extEnt "hello">`), 0600))
+
+		xml := `<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root><child/></root>`
+
+		p := helium.NewParser().LoadExternalDTD(true)
+		doc, err := p.Parse(t.Context(), []byte(xml))
+		require.NoError(t, err)
+
+		_, found := doc.GetEntity("extEnt")
+		require.False(t, found, "standalone=yes should prevent extSubset entity lookup")
 	})
 }

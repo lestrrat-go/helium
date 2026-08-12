@@ -9,31 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadSubsetOptionFlagsAreUnique(t *testing.T) {
-	t.Parallel()
-
-	assertUniqueFlags(t, []helium.LoadSubsetOption{
-		helium.DetectIDs,
-		helium.CompleteAttrs,
-		helium.SkipIDs,
-	})
-}
-
-func TestSetAndIsSet(t *testing.T) {
-	t.Parallel()
-
-	var l helium.LoadSubsetOption
-	require.False(t, l.IsSet(helium.DetectIDs))
-
-	l.Set(helium.DetectIDs)
-	require.True(t, l.IsSet(helium.DetectIDs))
-	require.False(t, l.IsSet(helium.CompleteAttrs))
-
-	l.Set(helium.CompleteAttrs)
-	require.True(t, l.IsSet(helium.DetectIDs))
-	require.True(t, l.IsSet(helium.CompleteAttrs))
-}
-
 func assertUniqueFlags[T bitset.Field](t *testing.T, flags []T) {
 	t.Helper()
 
@@ -48,4 +23,29 @@ func assertUniqueFlags[T bitset.Field](t *testing.T, flags []T) {
 			}
 		})
 	}
+}
+
+func TestOptions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set and is set", func(t *testing.T) {
+		var l helium.LoadSubsetOption
+		require.False(t, l.IsSet(helium.DetectIDs))
+
+		l.Set(helium.DetectIDs)
+		require.True(t, l.IsSet(helium.DetectIDs))
+		require.False(t, l.IsSet(helium.CompleteAttrs))
+
+		l.Set(helium.CompleteAttrs)
+		require.True(t, l.IsSet(helium.DetectIDs))
+		require.True(t, l.IsSet(helium.CompleteAttrs))
+	})
+
+	t.Run("flags are unique", func(t *testing.T) {
+		assertUniqueFlags(t, []helium.LoadSubsetOption{
+			helium.DetectIDs,
+			helium.CompleteAttrs,
+			helium.SkipIDs,
+		})
+	})
 }

@@ -23,17 +23,18 @@ var (
 func TestNilErrorHandler(t *testing.T) {
 	t.Parallel()
 
-	helium.NilErrorHandler{}.Handle(t.Context(), errors.New("should not panic"))
-}
+	t.Run("handle does not panic", func(t *testing.T) {
+		t.Parallel()
 
-func TestErrParseErrorImplementsErrorLeveler(t *testing.T) {
-	t.Parallel()
+		helium.NilErrorHandler{}.Handle(t.Context(), errors.New("should not panic"))
+	})
 
-	pe := helium.ErrParseError{
-		Err:   errors.New("test"),
-		Level: helium.ErrorLevelFatal,
-	}
-	require.Equal(t, helium.ErrorLevelFatal, pe.ErrorLevel())
+	// NilErrorHandler discards without panicking.
+	t.Run("discards a leveled error", func(t *testing.T) {
+		t.Parallel()
+		var h helium.NilErrorHandler
+		h.Handle(t.Context(), helium.NewLeveledError("ignored", helium.ErrorLevelWarning))
+	})
 }
 
 func TestErrorCollector(t *testing.T) {
@@ -151,11 +152,4 @@ func TestErrorCollector(t *testing.T) {
 		errs := ec.Errors()
 		require.Len(t, errs, 1)
 	})
-}
-
-// TestNilErrorHandlerDiscards verifies NilErrorHandler discards without panicking.
-func TestNilErrorHandlerDiscards(t *testing.T) {
-	t.Parallel()
-	var h helium.NilErrorHandler
-	h.Handle(t.Context(), helium.NewLeveledError("ignored", helium.ErrorLevelWarning))
 }

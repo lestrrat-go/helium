@@ -7,12 +7,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTreeBuilderSAXPath drives a content-rich document through the generic SAX
-// callback path so the TreeBuilder's SAX2Handler methods build the tree.
+// saxTreeBuilder embeds *helium.TreeBuilder without being a *TreeBuilder
+// itself. Because the parser only takes its fast (TreeBuilder-direct) path when
+// the supplied SAX handler is *exactly* a *TreeBuilder, wrapping it like this
+// forces the parser through the generic SAX2 callback path, exercising the
+// TreeBuilder's SAX2Handler methods (Comment, CDataBlock, Characters,
+// ProcessingInstruction, Reference, entity/DTD declaration callbacks, ...) that
+// the fast path bypasses.
+type saxTreeBuilder struct {
+	*helium.TreeBuilder
+}
+
 func TestTreeBuilderSAXPath(t *testing.T) {
 	t.Parallel()
 
-	const src = `<?xml version="1.0"?>
+	// A content-rich document through the generic SAX callback path, so the
+	// TreeBuilder's SAX2Handler methods build the tree.
+	t.Run("content-rich document", func(t *testing.T) {
+		const src = `<?xml version="1.0"?>
 <!DOCTYPE doc [
 <!ELEMENT doc (#PCDATA|child)*>
 <!ELEMENT child (#PCDATA)>
@@ -28,88 +40,74 @@ func TestTreeBuilderSAXPath(t *testing.T) {
   <![CDATA[ raw <data> & stuff ]]>
 </doc>`
 
-	handler := &saxTreeBuilder{TreeBuilder: helium.NewTreeBuilder()}
-	doc, err := helium.NewParser().
-		SubstituteEntities(true).
-		SAXHandler(handler).
-		Parse(t.Context(), []byte(src))
-	require.NoError(t, err, "parse through SAX path succeeds")
-	require.NotNil(t, doc)
+		handler := &saxTreeBuilder{TreeBuilder: helium.NewTreeBuilder()}
+		doc, err := helium.NewParser().
+			SubstituteEntities(true).
+			SAXHandler(handler).
+			Parse(t.Context(), []byte(src))
+		require.NoError(t, err, "parse through SAX path succeeds")
+		require.NotNil(t, doc)
 
-	root := doc.DocumentElement()
-	require.NotNil(t, root)
-	require.Equal(t, "doc", root.Name())
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		require.Equal(t, "doc", root.Name())
 
-	// The internal subset must have been built via the SAX DTD callbacks.
-	dtd := doc.IntSubset()
-	require.NotNil(t, dtd)
-	_, ok := dtd.LookupEntity("greeting")
-	require.True(t, ok, "greeting entity declared via SAX EntityDecl")
-	_, ok = dtd.LookupNotation("gif")
-	require.True(t, ok, "gif notation declared via SAX NotationDecl")
+		// The internal subset must have been built via the SAX DTD callbacks.
+		dtd := doc.IntSubset()
+		require.NotNil(t, dtd)
+		_, ok := dtd.LookupEntity("greeting")
+		require.True(t, ok, "greeting entity declared via SAX EntityDecl")
+		_, ok = dtd.LookupNotation("gif")
+		require.True(t, ok, "gif notation declared via SAX NotationDecl")
 
-	// Serialize the SAX-built tree to confirm the structure is intact.
-	out, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.Contains(t, out, "<child>")
-	require.Contains(t, out, "<![CDATA[")
-	require.Contains(t, out, "<?pi-target")
-	require.Contains(t, out, "<!--")
-}
+		// Serialize the SAX-built tree to confirm the structure is intact.
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, out, "<child>")
+		require.Contains(t, out, "<![CDATA[")
+		require.Contains(t, out, "<?pi-target")
+		require.Contains(t, out, "<!--")
+	})
 
-// TestTreeBuilderSAXPathNoEntitySubstitution drives the SAX path without entity
-// substitution so the Reference callback materializes entity-reference nodes.
-func TestTreeBuilderSAXPathNoEntitySubstitution(t *testing.T) {
-	t.Parallel()
+	// Namespaced markup through the SAX path, so StartElementNS/EndElementNS bind
+	// and serialize namespaces correctly.
+	t.Run("namespaces", func(t *testing.T) {
+		const src = `<root xmlns:a="urn:a" xmlns="urn:default">` +
+			`<a:child attr="v">text</a:child>` +
+			`<plain/>` +
+			`</root>`
 
-	const src = `<?xml version="1.0"?>
+		handler := &saxTreeBuilder{TreeBuilder: helium.NewTreeBuilder()}
+		doc, err := helium.NewParser().
+			SAXHandler(handler).
+			Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, out, `xmlns:a="urn:a"`)
+		require.Contains(t, out, `xmlns="urn:default"`)
+		require.Contains(t, out, "<a:child")
+	})
+
+	// The SAX path without entity substitution, so the Reference callback
+	// materializes entity-reference nodes.
+	t.Run("no entity substitution", func(t *testing.T) {
+		const src = `<?xml version="1.0"?>
 <!DOCTYPE doc [
 <!ENTITY greeting "hello">
 ]>
 <doc>before &greeting; after</doc>`
 
-	handler := &saxTreeBuilder{TreeBuilder: helium.NewTreeBuilder()}
-	doc, err := helium.NewParser().
-		SAXHandler(handler).
-		Parse(t.Context(), []byte(src))
-	require.NoError(t, err)
-	require.NotNil(t, doc)
+		handler := &saxTreeBuilder{TreeBuilder: helium.NewTreeBuilder()}
+		doc, err := helium.NewParser().
+			SAXHandler(handler).
+			Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
 
-	out, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.Contains(t, out, "&greeting;")
-}
-
-// TestTreeBuilderSAXPathNamespaces drives namespaced markup through the SAX
-// path so StartElementNS/EndElementNS bind and serialize namespaces correctly.
-func TestTreeBuilderSAXPathNamespaces(t *testing.T) {
-	t.Parallel()
-
-	const src = `<root xmlns:a="urn:a" xmlns="urn:default">` +
-		`<a:child attr="v">text</a:child>` +
-		`<plain/>` +
-		`</root>`
-
-	handler := &saxTreeBuilder{TreeBuilder: helium.NewTreeBuilder()}
-	doc, err := helium.NewParser().
-		SAXHandler(handler).
-		Parse(t.Context(), []byte(src))
-	require.NoError(t, err)
-
-	out, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.Contains(t, out, `xmlns:a="urn:a"`)
-	require.Contains(t, out, `xmlns="urn:default"`)
-	require.Contains(t, out, "<a:child")
-}
-
-// saxTreeBuilder embeds *helium.TreeBuilder without being a *TreeBuilder
-// itself. Because the parser only takes its fast (TreeBuilder-direct) path when
-// the supplied SAX handler is *exactly* a *TreeBuilder, wrapping it like this
-// forces the parser through the generic SAX2 callback path, exercising the
-// TreeBuilder's SAX2Handler methods (Comment, CDataBlock, Characters,
-// ProcessingInstruction, Reference, entity/DTD declaration callbacks, ...) that
-// the fast path bypasses.
-type saxTreeBuilder struct {
-	*helium.TreeBuilder
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, out, "&greeting;")
+	})
 }

@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testLineFoo is a short fragment used as the `Line` field in ErrParseError
+// fixtures. Test-fixture-only — no lexicon counterpart.
+const testLineFoo = "<foo>"
+
 func TestErrParseError(t *testing.T) {
 	t.Parallel()
 
@@ -85,6 +89,78 @@ func TestErrParseError(t *testing.T) {
 		})
 	})
 
+	t.Run("FormatError", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("parser error with file", func(t *testing.T) {
+			t.Parallel()
+			pe := helium.ErrParseError{
+				Err:        helium.ErrGtRequired,
+				File:       "test.xml",
+				Level:      helium.ErrorLevelFatal,
+				Line:       "<foo bar",
+				LineNumber: 1,
+				Column:     9,
+			}
+			got := pe.FormatError()
+			require.Equal(t, "test.xml:1: parser error : '>' was required here\n<foo bar\n        ^", got)
+		})
+
+		t.Run("namespace error with file", func(t *testing.T) {
+			t.Parallel()
+			pe := helium.ErrParseError{
+				Domain:     helium.ErrorDomainNamespace,
+				Err:        errors.New("namespace 'xLink' not found"),
+				File:       "gradient.xml",
+				Level:      helium.ErrorLevelFatal,
+				Line:       "<linearGradient xLink:href='#g'/>",
+				LineNumber: 5,
+				Column:     34,
+			}
+			got := pe.FormatError()
+			require.Equal(t, "gradient.xml:5: namespace error : namespace 'xLink' not found\n<linearGradient xLink:href='#g'/>\n                                 ^", got)
+		})
+
+		t.Run("warning level", func(t *testing.T) {
+			t.Parallel()
+			pe := helium.ErrParseError{
+				Err:        errors.New("something fishy"),
+				Level:      helium.ErrorLevelWarning,
+				Line:       "<root/>",
+				LineNumber: 1,
+				Column:     3,
+			}
+			got := pe.FormatError()
+			require.Equal(t, "parser warning : something fishy\n<root/>\n  ^", got)
+		})
+
+		t.Run("without file", func(t *testing.T) {
+			t.Parallel()
+			pe := helium.ErrParseError{
+				Err:        helium.ErrSpaceRequired,
+				Level:      helium.ErrorLevelError,
+				Line:       testLineFoo,
+				LineNumber: 1,
+				Column:     5,
+			}
+			got := pe.FormatError()
+			require.Equal(t, "parser error : space required\n<foo>\n    ^", got)
+		})
+
+		t.Run("no context line", func(t *testing.T) {
+			t.Parallel()
+			pe := helium.ErrParseError{
+				Err:        helium.ErrPrematureEOF,
+				File:       "empty.xml",
+				Level:      helium.ErrorLevelFatal,
+				LineNumber: 1,
+				Column:     1,
+			}
+			got := pe.FormatError()
+			require.Equal(t, "empty.xml:1: parser error : end of document reached", got)
+		})
+	})
+
 	t.Run("Level", func(t *testing.T) {
 		t.Parallel()
 		_, err := helium.NewParser().Parse(t.Context(), []byte("<broken"))
@@ -141,29 +217,49 @@ func TestErrorDomain(t *testing.T) {
 	})
 }
 
-func TestDTDDupTokenErrorFixed(t *testing.T) {
+func TestErrorLevel(t *testing.T) {
 	t.Parallel()
-	e := helium.DTDDupTokenError{Name: "foo"}
-	require.Contains(t, e.Error(), "standalone")
-	require.NotContains(t, e.Error(), "standlone")
+
+	t.Run("constants are ordered", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, helium.ErrorLevel(0), helium.ErrorLevelNone)
+		require.Equal(t, helium.ErrorLevel(1), helium.ErrorLevelWarning)
+		require.Equal(t, helium.ErrorLevel(2), helium.ErrorLevelError)
+		require.Equal(t, helium.ErrorLevel(3), helium.ErrorLevelFatal)
+
+		require.True(t, helium.ErrorLevelNone < helium.ErrorLevelWarning)
+		require.True(t, helium.ErrorLevelWarning < helium.ErrorLevelError)
+		require.True(t, helium.ErrorLevelError < helium.ErrorLevelFatal)
+	})
+
+	// The leveled-error type and its ErrorLeveler.
+	t.Run("NewLeveledError carries its level", func(t *testing.T) {
+		t.Parallel()
+
+		err := helium.NewLeveledError("boom", helium.ErrorLevelError)
+		require.EqualError(t, err, "boom")
+
+		leveler, ok := err.(helium.ErrorLeveler)
+		require.True(t, ok, "leveled error implements ErrorLeveler")
+		require.Equal(t, helium.ErrorLevelError, leveler.ErrorLevel())
+	})
+
+	t.Run("ErrParseError implements ErrorLeveler", func(t *testing.T) {
+		t.Parallel()
+
+		pe := helium.ErrParseError{
+			Err:   errors.New("test"),
+			Level: helium.ErrorLevelFatal,
+		}
+		require.Equal(t, helium.ErrorLevelFatal, pe.ErrorLevel())
+	})
 }
 
-func TestErrorLevelConstants(t *testing.T) {
+func TestErrorReporting(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, helium.ErrorLevel(0), helium.ErrorLevelNone)
-	require.Equal(t, helium.ErrorLevel(1), helium.ErrorLevelWarning)
-	require.Equal(t, helium.ErrorLevel(2), helium.ErrorLevelError)
-	require.Equal(t, helium.ErrorLevel(3), helium.ErrorLevelFatal)
 
-	require.True(t, helium.ErrorLevelNone < helium.ErrorLevelWarning)
-	require.True(t, helium.ErrorLevelWarning < helium.ErrorLevelError)
-	require.True(t, helium.ErrorLevelError < helium.ErrorLevelFatal)
-}
-
-func TestParseNoError(t *testing.T) {
-	t.Parallel()
 	// Malformed XML triggers SAX Error callback
-	const input = `<?xml version="1.0"?><root><child>text</chld></root>`
+	const malformed = `<?xml version="1.0"?><root><child>text</chld></root>`
 
 	t.Run("SAX Error callback fires by default", func(t *testing.T) {
 		t.Parallel()
@@ -175,7 +271,7 @@ func TestParseNoError(t *testing.T) {
 		}))
 
 		p := helium.NewParser().SAXHandler(s)
-		_, _ = p.Parse(t.Context(), []byte(input))
+		_, _ = p.Parse(t.Context(), []byte(malformed))
 		require.Greater(t, called.Load(), int32(0), "SAX Error handler should be called")
 	})
 
@@ -189,17 +285,14 @@ func TestParseNoError(t *testing.T) {
 		}))
 
 		p := helium.NewParser().SAXHandler(s).SuppressErrors(true)
-		_, err := p.Parse(t.Context(), []byte(input))
+		_, err := p.Parse(t.Context(), []byte(malformed))
 		require.Error(t, err, "parse should still return error")
 		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with SuppressErrors")
 	})
-}
 
-func TestWarningLocationInfo(t *testing.T) {
-	t.Parallel()
 	// XML with external subset makes undeclared entity references a warning
 	// rather than an error.
-	const input = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
+	const undeclared = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
 
 	t.Run("warning handler error wrapped with helium.ErrorLevelWarning", func(t *testing.T) {
 		t.Parallel()
@@ -210,7 +303,7 @@ func TestWarningLocationInfo(t *testing.T) {
 		}))
 
 		p := helium.NewParser().SAXHandler(s)
-		_, err := p.Parse(t.Context(), []byte(input))
+		_, err := p.Parse(t.Context(), []byte(undeclared))
 		require.Error(t, err)
 
 		var pe helium.ErrParseError
@@ -229,7 +322,7 @@ func TestWarningLocationInfo(t *testing.T) {
 		}))
 
 		p := helium.NewParser().SAXHandler(s)
-		_, err := p.Parse(t.Context(), []byte(input))
+		_, err := p.Parse(t.Context(), []byte(undeclared))
 		require.NoError(t, err)
 		require.NotEmpty(t, warnings, "warning handler should be called")
 		require.Contains(t, warnings[0], "undeclared")
@@ -245,91 +338,14 @@ func TestWarningLocationInfo(t *testing.T) {
 		}))
 
 		p := helium.NewParser().SAXHandler(s).SuppressWarnings(true)
-		_, _ = p.Parse(t.Context(), []byte(input))
+		_, _ = p.Parse(t.Context(), []byte(undeclared))
 		require.Equal(t, int32(0), called.Load(), "warning handler should NOT be called with SuppressWarnings")
 	})
 }
 
-func TestFormatError(t *testing.T) {
+func TestDTDDupTokenError(t *testing.T) {
 	t.Parallel()
-
-	t.Run("parser error with file", func(t *testing.T) {
-		t.Parallel()
-		pe := helium.ErrParseError{
-			Err:        helium.ErrGtRequired,
-			File:       "test.xml",
-			Level:      helium.ErrorLevelFatal,
-			Line:       "<foo bar",
-			LineNumber: 1,
-			Column:     9,
-		}
-		got := pe.FormatError()
-		require.Equal(t, "test.xml:1: parser error : '>' was required here\n<foo bar\n        ^", got)
-	})
-
-	t.Run("namespace error with file", func(t *testing.T) {
-		t.Parallel()
-		pe := helium.ErrParseError{
-			Domain:     helium.ErrorDomainNamespace,
-			Err:        errors.New("namespace 'xLink' not found"),
-			File:       "gradient.xml",
-			Level:      helium.ErrorLevelFatal,
-			Line:       "<linearGradient xLink:href='#g'/>",
-			LineNumber: 5,
-			Column:     34,
-		}
-		got := pe.FormatError()
-		require.Equal(t, "gradient.xml:5: namespace error : namespace 'xLink' not found\n<linearGradient xLink:href='#g'/>\n                                 ^", got)
-	})
-
-	t.Run("warning level", func(t *testing.T) {
-		t.Parallel()
-		pe := helium.ErrParseError{
-			Err:        errors.New("something fishy"),
-			Level:      helium.ErrorLevelWarning,
-			Line:       "<root/>",
-			LineNumber: 1,
-			Column:     3,
-		}
-		got := pe.FormatError()
-		require.Equal(t, "parser warning : something fishy\n<root/>\n  ^", got)
-	})
-
-	t.Run("without file", func(t *testing.T) {
-		t.Parallel()
-		pe := helium.ErrParseError{
-			Err:        helium.ErrSpaceRequired,
-			Level:      helium.ErrorLevelError,
-			Line:       testLineFoo,
-			LineNumber: 1,
-			Column:     5,
-		}
-		got := pe.FormatError()
-		require.Equal(t, "parser error : space required\n<foo>\n    ^", got)
-	})
-
-	t.Run("no context line", func(t *testing.T) {
-		t.Parallel()
-		pe := helium.ErrParseError{
-			Err:        helium.ErrPrematureEOF,
-			File:       "empty.xml",
-			Level:      helium.ErrorLevelFatal,
-			LineNumber: 1,
-			Column:     1,
-		}
-		got := pe.FormatError()
-		require.Equal(t, "empty.xml:1: parser error : end of document reached", got)
-	})
-}
-
-// TestNewLeveledError exercises the leveled-error type and its ErrorLeveler.
-func TestNewLeveledError(t *testing.T) {
-	t.Parallel()
-
-	err := helium.NewLeveledError("boom", helium.ErrorLevelError)
-	require.EqualError(t, err, "boom")
-
-	leveler, ok := err.(helium.ErrorLeveler)
-	require.True(t, ok, "leveled error implements ErrorLeveler")
-	require.Equal(t, helium.ErrorLevelError, leveler.ErrorLevel())
+	e := helium.DTDDupTokenError{Name: "foo"}
+	require.Contains(t, e.Error(), "standalone")
+	require.NotContains(t, e.Error(), "standlone")
 }

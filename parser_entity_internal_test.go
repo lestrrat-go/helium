@@ -23,117 +23,179 @@ func (h nilPEHandler) GetParameterEntity(context.Context, string) (sax.Entity, e
 	return nil, nil //nolint:nilnil
 }
 
-// TestValidateEntityValueRefsSideEffectFree proves that validateEntityValueRefs
-// leaves the live parser state it touches UNCHANGED, even when validation fails.
-//
-// The PE-expansion path resolves parameter-entity references through
-// parseStringPEReference, which mutates pctx.hasPERefs (always set true) and,
-// for an unresolved PE in a document with an external subset, clears pctx.valid.
-// Those mutations belong to the real parse, not to this throwaway syntax check.
-// validateEntityValueRefs must snapshot and restore hasPERefs and valid (and
-// sizeentcopy) so a failed PE-expanded validation does not perturb them.
-func TestValidateEntityValueRefsSideEffectFree(t *testing.T) {
+// validateEntityValueRefs must leave the live parser state it touches UNCHANGED,
+// on both the unresolved- and resolved-PE paths.
+func TestValidateEntityValueRefs(t *testing.T) {
 	t.Parallel()
 
-	tb := NewTreeBuilder()
-	handler := nilPEHandler{TreeBuilder: tb}
-	doc := NewDocument("1.0", "", StandaloneImplicitNo)
+	// The PE-expansion path resolves parameter-entity references through
+	// parseStringPEReference, which mutates pctx.hasPERefs (always set true) and,
+	// for an unresolved PE in a document with an external subset, clears pctx.valid.
+	// Those mutations belong to the real parse, not to this throwaway syntax check.
+	// validateEntityValueRefs must snapshot and restore hasPERefs and valid (and
+	// sizeentcopy) so a failed PE-expanded validation does not perturb them.
+	t.Run("state restored after a failed validation", func(t *testing.T) {
+		t.Parallel()
 
-	pctx := &parserCtx{}
-	require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
-	pctx.doc = doc
-	pctx.sax = handler
-	pctx.treeBuilder = tb
+		tb := NewTreeBuilder()
+		handler := nilPEHandler{TreeBuilder: tb}
+		doc := NewDocument("1.0", "", StandaloneImplicitNo)
 
-	// An external subset lets an UNRESOLVED PE reference take the path that clears
-	// pctx.valid (rather than erroring out as a missing PE), while still always
-	// setting pctx.hasPERefs. This is exactly the live-state mutation the
-	// validation pass must not leak.
-	pctx.hasExternalSubset = true
+		pctx := &parserCtx{}
+		require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+		pctx.doc = doc
+		pctx.sax = handler
+		pctx.treeBuilder = tb
 
-	ctx := withParserCtx(t.Context(), pctx)
+		// An external subset lets an UNRESOLVED PE reference take the path that clears
+		// pctx.valid (rather than erroring out as a missing PE), while still always
+		// setting pctx.hasPERefs. This is exactly the live-state mutation the
+		// validation pass must not leak.
+		pctx.hasExternalSubset = true
 
-	// Sanity: confirm the PE path actually mutates the fields, so the restore is
-	// genuinely doing work. Run parseStringPEReference directly on an unresolved
-	// PE and observe hasPERefs flip true and valid flip false.
-	probe := &parserCtx{}
-	require.NoError(t, probe.init(nil, bytes.NewReader(nil)))
-	probe.doc = doc
-	probe.sax = handler
-	probe.treeBuilder = tb
-	probe.hasExternalSubset = true
-	probe.valid = true
-	probe.hasPERefs = false
-	probeCtx := withParserCtx(t.Context(), probe)
-	_, _, perr := probe.parseStringPEReference(probeCtx, []byte("%missing;"))
-	require.NoError(t, perr, "an unresolved PE with an external subset must not error")
-	require.True(t, probe.hasPERefs, "parseStringPEReference must set hasPERefs (mutation under test)")
-	require.False(t, probe.valid, "parseStringPEReference must clear valid (mutation under test)")
+		ctx := withParserCtx(t.Context(), pctx)
 
-	// Known pre-state for the field-invariance assertion.
-	pctx.valid = true
-	pctx.hasPERefs = false
-	pctx.sizeentcopy = 0
+		// Sanity: confirm the PE path actually mutates the fields, so the restore is
+		// genuinely doing work. Run parseStringPEReference directly on an unresolved
+		// PE and observe hasPERefs flip true and valid flip false.
+		probe := &parserCtx{}
+		require.NoError(t, probe.init(nil, bytes.NewReader(nil)))
+		probe.doc = doc
+		probe.sax = handler
+		probe.treeBuilder = tb
+		probe.hasExternalSubset = true
+		probe.valid = true
+		probe.hasPERefs = false
+		probeCtx := withParserCtx(t.Context(), probe)
+		_, _, perr := probe.parseStringPEReference(probeCtx, []byte("%missing;"))
+		require.NoError(t, perr, "an unresolved PE with an external subset must not error")
+		require.True(t, probe.hasPERefs, "parseStringPEReference must set hasPERefs (mutation under test)")
+		require.False(t, probe.valid, "parseStringPEReference must clear valid (mutation under test)")
 
-	// A literal with an unresolved PE reference followed by a malformed general
-	// reference: the PE path mutates hasPERefs/valid, then the general-reference
-	// scan fails on "&broken" (missing semicolon). The validation therefore
-	// returns an error AND has touched the live state — exactly the case the
-	// restore must cover.
-	err := pctx.validateEntityValueRefs(ctx, []byte("%missing;&broken"))
-	require.Error(t, err, "a malformed general reference must make validation fail")
+		// Known pre-state for the field-invariance assertion.
+		pctx.valid = true
+		pctx.hasPERefs = false
+		pctx.sizeentcopy = 0
 
-	require.False(t, pctx.hasPERefs,
-		"hasPERefs must be restored after a failed PE-expanded validation")
-	require.True(t, pctx.valid,
-		"valid must be restored after a failed PE-expanded validation")
-	require.Equal(t, int64(0), pctx.sizeentcopy,
-		"sizeentcopy must be restored after a failed PE-expanded validation")
+		// A literal with an unresolved PE reference followed by a malformed general
+		// reference: the PE path mutates hasPERefs/valid, then the general-reference
+		// scan fails on "&broken" (missing semicolon). The validation therefore
+		// returns an error AND has touched the live state — exactly the case the
+		// restore must cover.
+		err := pctx.validateEntityValueRefs(ctx, []byte("%missing;&broken"))
+		require.Error(t, err, "a malformed general reference must make validation fail")
+
+		require.False(t, pctx.hasPERefs,
+			"hasPERefs must be restored after a failed PE-expanded validation")
+		require.True(t, pctx.valid,
+			"valid must be restored after a failed PE-expanded validation")
+		require.Equal(t, int64(0), pctx.sizeentcopy,
+			"sizeentcopy must be restored after a failed PE-expanded validation")
+	})
+
+	// The restore also covers the resolved-PE path: a real parameter entity is
+	// expanded during validation (setting hasPERefs and charging the amplification
+	// counter), yet hasPERefs and sizeentcopy are restored to their pre-validation
+	// values.
+	t.Run("state restored after a resolved PE", func(t *testing.T) {
+		t.Parallel()
+
+		pctx := &parserCtx{}
+		require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+
+		doc := NewDocument("1.0", "", StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("r", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("p", enum.InternalParameterEntity, "", "", "expansion")
+		require.NoError(t, err)
+		pctx.doc = doc
+
+		tb := NewTreeBuilder()
+		pctx.sax = tb
+		pctx.treeBuilder = tb
+
+		// A PE reference in an entity value is only expanded when the parser is
+		// effectively external (external subset or external parameter entity); in the
+		// internal subset it is a fatal WFC error. Put the context in the external
+		// subset so the resolved-PE EXPANSION path — the subject of this test — runs.
+		pctx.inSubset = inExternalSubset
+
+		ctx := withParserCtx(t.Context(), pctx)
+
+		pctx.valid = true
+		pctx.hasPERefs = false
+		pctx.sizeentcopy = 0
+
+		// "%p;" resolves to "expansion" (no general reference), so validation
+		// succeeds; the resolved-PE path still set hasPERefs and charged the counter.
+		err = pctx.validateEntityValueRefs(ctx, []byte("%p;"))
+		require.NoError(t, err, "a resolved PE with no general reference must validate cleanly")
+
+		require.False(t, pctx.hasPERefs,
+			"hasPERefs must be restored after a resolved-PE validation")
+		require.True(t, pctx.valid, "valid must be restored after a resolved-PE validation")
+		require.Equal(t, int64(0), pctx.sizeentcopy,
+			"sizeentcopy must be restored after a resolved-PE validation")
+	})
 }
 
-// TestValidateEntityValueRefsRestoresOnResolvedPE proves the restore also covers
-// the resolved-PE path: a real parameter entity is expanded during validation
-// (setting hasPERefs and charging the amplification counter), yet hasPERefs and
-// sizeentcopy are restored to their pre-validation values.
-func TestValidateEntityValueRefsRestoresOnResolvedPE(t *testing.T) {
-	t.Parallel()
+// An undeclared parameter entity must not panic anywhere in the decode path.
+//
+// For an undeclared parameter entity in a context with an external subset (or
+// after a prior PE reference), parseStringPEReference deliberately returns a nil
+// entity with NO error after clearing pctx.valid — the libxml2-faithful "PE not
+// declared, validity error, keep going" convention that the nilPEHandler models.
+// The '&' (general-entity) branch and expandEntityValueForRefCheck both guard
+// that nil; the '%' branch must too, or it dereferences ent.Content() and panics
+// the whole parse.
+func TestUndefinedParameterEntity(t *testing.T) {
+	// Drive the full Parse path with a SAX handler that uses the (nil, nil)
+	// convention and assert no panic.
+	t.Run("full parse does not panic", func(t *testing.T) {
+		cases := []string{
+			`<!DOCTYPE r SYSTEM "x" [<!ENTITY e "%missing;">]><r/>`,
+			`<!DOCTYPE r SYSTEM "x" [<!ENTITY % p "%missing;">]><r/>`,
+			`<!DOCTYPE r SYSTEM "x" [<!ENTITY e "a%missing;b">]><r/>`,
+		}
 
-	pctx := &parserCtx{}
-	require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+		for _, input := range cases {
+			t.Run(input, func(t *testing.T) {
+				handler := nilPEHandler{TreeBuilder: NewTreeBuilder()}
+				require.NotPanics(t, func() {
+					_, _ = NewParser().SAXHandler(handler).Parse(t.Context(), []byte(input))
+				})
+			})
+		}
+	})
 
-	doc := NewDocument("1.0", "", StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("r", "", "")
-	require.NoError(t, err)
-	_, err = dtd.AddEntity("p", enum.InternalParameterEntity, "", "", "expansion")
-	require.NoError(t, err)
-	pctx.doc = doc
+	// The decode branch directly: an undeclared parameter entity resolved through
+	// the (nil, nil) convention must expand to nothing (consistent with
+	// expandEntityValueForRefCheck) rather than panic, and must not surface an error.
+	t.Run("decodeEntities expands it to nothing", func(t *testing.T) {
+		pctx := &parserCtx{}
+		require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+		doc := NewDocument("1.0", "", StandaloneImplicitNo)
+		tb := NewTreeBuilder()
+		pctx.doc = doc
+		pctx.sax = nilPEHandler{TreeBuilder: tb}
+		pctx.treeBuilder = tb
+		pctx.hasExternalSubset = true
 
-	tb := NewTreeBuilder()
-	pctx.sax = tb
-	pctx.treeBuilder = tb
+		ctx := withParserCtx(t.Context(), pctx)
 
-	// A PE reference in an entity value is only expanded when the parser is
-	// effectively external (external subset or external parameter entity); in the
-	// internal subset it is a fatal WFC error. Put the context in the external
-	// subset so the resolved-PE EXPANSION path — the subject of this test — runs.
-	pctx.inSubset = inExternalSubset
-
-	ctx := withParserCtx(t.Context(), pctx)
-
-	pctx.valid = true
-	pctx.hasPERefs = false
-	pctx.sizeentcopy = 0
-
-	// "%p;" resolves to "expansion" (no general reference), so validation
-	// succeeds; the resolved-PE path still set hasPERefs and charged the counter.
-	err = pctx.validateEntityValueRefs(ctx, []byte("%p;"))
-	require.NoError(t, err, "a resolved PE with no general reference must validate cleanly")
-
-	require.False(t, pctx.hasPERefs,
-		"hasPERefs must be restored after a resolved-PE validation")
-	require.True(t, pctx.valid, "valid must be restored after a resolved-PE validation")
-	require.Equal(t, int64(0), pctx.sizeentcopy,
-		"sizeentcopy must be restored after a resolved-PE validation")
+		var out string
+		var err error
+		require.NotPanics(t, func() {
+			out, err = pctx.decodeEntities(ctx, []byte("a%missing;b"), SubstitutePERef)
+		})
+		require.NoError(t, err, "an undeclared PE in an external-subset context is a validity error, not fatal")
+		require.Equal(t, "ab", out, "the undeclared PE must expand to nothing")
+		// The unresolved PE reference must still be charged against entity-expansion
+		// accounting (reference width + per-reference fixed cost), otherwise an
+		// undeclared PE becomes a free way to dodge the amplification/ceiling limits.
+		require.Equal(t, int64(len("%missing;"))+entityFixedCost, pctx.sizeentcopy,
+			"unresolved PE reference must be charged against sizeentcopy")
+	})
 }
 
 // TestEntityHardCeiling verifies the absolute entity-expansion ceiling trips

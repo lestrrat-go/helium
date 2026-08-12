@@ -10,713 +10,8 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
-
-func TestXMLToDOMToXMLString(t *testing.T) {
-	t.Parallel()
-
-	skipped := map[string]struct{}{}
-	only := map[string]struct{}{}
-	if v := os.Getenv("HELIUM_DUMP_TEST_FILES"); v != "" {
-		for f := range strings.SplitSeq(v, ",") {
-			n := strings.TrimSpace(f)
-			only[n] = struct{}{}
-		}
-	}
-
-	dir := "test"
-	files, err := os.ReadDir(dir)
-	require.NoError(t, err, "os.ReadDir should succeed")
-
-	for _, fi := range files {
-		if fi.IsDir() {
-			continue
-		}
-
-		if len(only) > 0 {
-			if _, ok := only[fi.Name()]; !ok {
-				continue
-			}
-		} else {
-			if _, ok := skipped[fi.Name()]; ok {
-				t.Logf("Skipping test for '%s' for now...", fi.Name())
-				continue
-			}
-		}
-
-		fn := filepath.Join(dir, fi.Name())
-		if !strings.HasSuffix(fn, ".xml") {
-			continue
-		}
-
-		goldenfn := strings.ReplaceAll(fn, ".xml", ".dump")
-		if _, err := os.Stat(goldenfn); err != nil {
-			t.Logf("%s does not exist, skipping...", goldenfn)
-			continue
-		}
-		golden, err := os.ReadFile(goldenfn)
-		require.NoError(t, err, "os.ReadFile should succeed")
-
-		t.Logf("Parsing %s...", fn)
-		in, err := os.ReadFile(fn)
-		require.NoError(t, err, "os.ReadFile should succeed")
-
-		doc, err := helium.NewParser().Parse(t.Context(), in)
-		require.NoError(t, err, `Parse(...) succeeds`)
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err, "XMLString(doc) succeeds")
-
-		if string(golden) != str {
-			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
-			if err != nil {
-				t.Logf("Failed to file to save output: %s", err)
-				return
-			}
-			defer func() { _ = errout.Close() }()
-
-			_, _ = errout.WriteString(str)
-		}
-		require.Equal(t, string(golden), str, "roundtrip works")
-	}
-}
-
-func TestDOMToXMLString(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDefaultDocument()
-	//	defer doc.Free()
-
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-
-	require.NoError(t, doc.SetDocumentElement(root))
-	require.NoError(t, root.AppendText([]byte(`Hello, World!`)))
-
-	str, err := helium.WriteString(doc)
-	require.NoError(t, err, "XMLString(doc) succeeds")
-
-	t.Logf("%s", str)
-}
-
-func TestWriteRejectsInjectedNames(t *testing.T) {
-	t.Parallel()
-
-	t.Run("element name injection", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement(`root injected="1"`)
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "injected element name must not serialize")
-	})
-
-	t.Run("attribute name injection", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		// SetAttribute only rejects colons, so a space-bearing name slips
-		// through and would inject a second attribute on serialization.
-		err = root.SetAttribute(`x onmouseover`, "1")
-		require.NoError(t, err)
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "injected attribute name must not serialize")
-	})
-
-	t.Run("reserved xmlns attribute name rejected", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		// "xmlns" is a valid NCName, but a normal attribute named "xmlns"
-		// would be emitted as a namespace declaration that never went through
-		// DeclareNamespace.
-		err = root.SetAttribute("xmlns", "urn:evil")
-		require.NoError(t, err)
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "reserved xmlns attribute name must not serialize")
-	})
-
-	t.Run("reserved xmlns-prefixed attribute name rejected", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		// An attribute whose QName prefix is "xmlns" (e.g. "xmlns:foo") is a
-		// namespace declaration and must not be emitted as a normal attribute.
-		ns, err := doc.CreateNamespace("xmlns", "urn:x")
-		require.NoError(t, err)
-		err = root.SetAttributeNS("foo", "v", ns)
-		require.NoError(t, err)
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "reserved xmlns-prefixed attribute name must not serialize")
-	})
-
-	t.Run("valid element name serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, "<root/>")
-	})
-
-	t.Run("valid namespaced name serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, "<p:root")
-	})
-}
-
-func TestWriteActiveDefaultNamespace(t *testing.T) {
-	t.Parallel()
-
-	t.Run("active default namespace emits xmlns", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.SetActiveNamespace("", "urn:x"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, `xmlns="urn:x"`)
-	})
-
-	t.Run("active prefixed namespace still emits xmlns:p", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.SetActiveNamespace("p", "urn:x"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, `xmlns:p="urn:x"`)
-	})
-
-	t.Run("parsed default namespace declared exactly once", func(t *testing.T) {
-		t.Parallel()
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<x xmlns="urn:x"/>`))
-		require.NoError(t, err)
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Equal(t, 1, strings.Count(str, `xmlns="urn:x"`))
-	})
-
-	t.Run("unprefixed attribute gains no spurious xmlns", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.SetActiveNamespace("p", "urn:x"))
-		err = root.SetAttribute("id", "1")
-		require.NoError(t, err)
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.NotContains(t, str, `xmlns=""`)
-	})
-
-	t.Run("conflicting declared and active default emits a single reparseable xmlns", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		// A declared default that conflicts with the element's active default: the
-		// active binding wins and only one xmlns is emitted, so the output reparses.
-		require.NoError(t, root.DeclareNamespace("", "urn:declared"))
-		require.NoError(t, root.SetActiveNamespace("", "urn:active"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Equal(t, 1, strings.Count(str, "xmlns="), "exactly one default declaration: %s", str)
-		require.Contains(t, str, `xmlns="urn:active"`)
-		require.NotContains(t, str, `xmlns="urn:declared"`)
-
-		_, err = helium.NewParser().Parse(t.Context(), []byte(str))
-		require.NoError(t, err, "serialized output must reparse: %s", str)
-	})
-}
-
-func TestWriteInheritedNamespaces(t *testing.T) {
-	t.Parallel()
-
-	t.Run("seeded prefix is not re-declared on a using element", func(t *testing.T) {
-		t.Parallel()
-		// A fragment whose prefix is bound only on an ancestor outside the output:
-		// seeding that binding suppresses the otherwise-synthesized re-declaration.
-		doc, err := helium.NewParser().Parse(t.Context(),
-			[]byte(`<root xmlns:p="urn:p"><child><p:leaf/></child></root>`))
-		require.NoError(t, err)
-		root := doc.DocumentElement()
-		require.NotNil(t, root)
-		child := root.FirstChild()
-		require.NotNil(t, child)
-
-		var b bytes.Buffer
-		w := helium.NewWriter().XMLDeclaration(false).
-			InheritedNamespaces(map[string]string{"p": "urn:p"})
-		require.NoError(t, w.WriteTo(&b, child))
-		require.Equal(t, `<child><p:leaf/></child>`, b.String())
-	})
-
-	t.Run("without seeding the inherited prefix is re-declared", func(t *testing.T) {
-		t.Parallel()
-		doc, err := helium.NewParser().Parse(t.Context(),
-			[]byte(`<root xmlns:p="urn:p"><child><p:leaf/></child></root>`))
-		require.NoError(t, err)
-		child := doc.DocumentElement().FirstChild()
-		require.NotNil(t, child)
-
-		var b bytes.Buffer
-		w := helium.NewWriter().XMLDeclaration(false)
-		require.NoError(t, w.WriteTo(&b, child))
-		require.Contains(t, b.String(), `xmlns:p="urn:p"`)
-	})
-}
-
-func TestXHTMLWriteRejectsInjectedNames(t *testing.T) {
-	t.Parallel()
-
-	// newXHTMLDoc builds a document whose internal subset is an XHTML DTD, so
-	// serialization routes through dumpXHTMLNode / dumpXHTMLAttrList rather than
-	// the generic writeNode path.
-	newXHTMLDoc := func(t *testing.T) *helium.Document {
-		t.Helper()
-		doc := helium.NewDefaultDocument()
-		_, err := doc.CreateInternalSubset(
-			"html",
-			"-//W3C//DTD XHTML 1.0 Strict//EN",
-			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
-		)
-		require.NoError(t, err)
-		return doc
-	}
-
-	t.Run("element name injection", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement(`html injected="1"`)
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "injected XHTML element name must not serialize")
-	})
-
-	t.Run("attribute name injection", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		err = root.SetAttribute(`x onmouseover`, "1")
-		require.NoError(t, err)
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "injected XHTML attribute name must not serialize")
-	})
-
-	t.Run("valid element name serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, "<html")
-	})
-
-	t.Run("valid namespaced name serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, "<p:html")
-	})
-}
-
-func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
-	t.Parallel()
-
-	t.Run("namespace prefix injection", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		// DeclareNamespace does not validate the prefix, so a crafted prefix
-		// would inject raw markup into the start tag on serialization.
-		require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn"))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "injected namespace prefix must not serialize")
-	})
-
-	t.Run("valid prefix serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.DeclareNamespace("p", "urn:example"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, `xmlns:p="urn:example"`)
-	})
-
-	t.Run("default namespace serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.DeclareNamespace("", "urn:default"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, `xmlns="urn:default"`)
-	})
-
-	t.Run("reserved xml prefix serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.DeclareNamespace("xml", lexicon.NamespaceXML))
-
-		_, err = helium.WriteString(doc)
-		require.NoError(t, err, "reserved xml prefix must still serialize")
-	})
-
-	t.Run("reserved xmlns prefix rejected", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		// Namespaces-in-XML forbids declaring the xmlns prefix; the serializer
-		// must not emit xmlns:xmlns="...".
-		require.NoError(t, root.DeclareNamespace("xmlns", "urn"))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "reserved xmlns prefix must not serialize")
-	})
-}
-
-func TestXHTMLWriteRejectsInjectedNamespacePrefix(t *testing.T) {
-	t.Parallel()
-
-	newXHTMLDoc := func(t *testing.T) *helium.Document {
-		t.Helper()
-		doc := helium.NewDefaultDocument()
-		_, err := doc.CreateInternalSubset(
-			"html",
-			"-//W3C//DTD XHTML 1.0 Strict//EN",
-			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
-		)
-		require.NoError(t, err)
-		return doc
-	}
-
-	t.Run("namespace prefix injection", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.DeclareNamespace(`p injected="1`, "urn"))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "injected XHTML namespace prefix must not serialize")
-	})
-
-	t.Run("valid prefix serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.DeclareNamespace("p", "urn:example"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, `xmlns:p="urn:example"`)
-	})
-}
-
-// TestXHTMLWriteRejectsUnboundNamespacePrefix verifies that the XHTML
-// serialization path (taken when the internal subset is an XHTML 1.0 DTD)
-// applies the same unbound-prefix guard as the generic writeNode path: a QName
-// whose prefix is bound to an empty namespace URI has no reparseable
-// serialization and must fail with ErrWriterUnboundNamespacePrefix.
-func TestXHTMLWriteRejectsUnboundNamespacePrefix(t *testing.T) {
-	t.Parallel()
-
-	newXHTMLDoc := func(t *testing.T) *helium.Document {
-		t.Helper()
-		doc := helium.NewDefaultDocument()
-		_, err := doc.CreateInternalSubset(
-			"html",
-			"-//W3C//DTD XHTML 1.0 Strict//EN",
-			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
-		)
-		require.NoError(t, err)
-		return doc
-	}
-
-	t.Run("unbound element prefix rejected", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		ns, err := doc.CreateNamespace("foo", "")
-		require.NoError(t, err)
-		root, err := doc.CreateElementNS("html", ns)
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "unbound XHTML element prefix must not serialize")
-		require.ErrorIs(t, err, helium.ErrWriterUnboundNamespacePrefix)
-	})
-
-	t.Run("unbound attribute prefix rejected", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		ns, err := doc.CreateNamespace("foo", "")
-		require.NoError(t, err)
-		require.NoError(t, root.SetAttributeNS("bar", "baz", ns))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "unbound XHTML attribute prefix must not serialize")
-		require.ErrorIs(t, err, helium.ErrWriterUnboundNamespacePrefix)
-	})
-
-	t.Run("well-formed XHTML serializes unchanged", func(t *testing.T) {
-		t.Parallel()
-		doc := newXHTMLDoc(t)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.SetAttribute("lang", "en"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Equal(t, `<?xml version="1.0"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"></html>
-`, str)
-	})
-}
-
-// TestWriterAcceptsImplicitXMLPrefix verifies that checkNamespaceBinding treats
-// the reserved "xml" prefix as bound even when the namespace object carries an
-// empty href: Namespaces in XML binds "xml" by definition to the XML namespace,
-// so "xml:local" reparses without any in-scope declaration (the parser resolves
-// it in lookupNamespace). The empty-href case arises from
-// CreateNamespace("xml", "") and from html.Parse building colon names. A
-// non-xml prefix with an empty href must still be rejected.
-func TestWriterAcceptsImplicitXMLPrefix(t *testing.T) {
-	t.Parallel()
-
-	t.Run("empty-URI xml attribute serializes and reparses", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		ns, err := doc.CreateNamespace("xml", "")
-		require.NoError(t, err)
-		require.NoError(t, root.SetAttributeNS("lang", "en", ns))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err, "xml:lang with an empty-href xml namespace must serialize")
-		require.Contains(t, str, `xml:lang="en"`)
-
-		reparsed, err := helium.NewParser().Parse(t.Context(), []byte(str))
-		require.NoError(t, err, "writer output must reparse")
-		require.NotNil(t, reparsed)
-	})
-
-	t.Run("xml-prefixed element serializes and reparses", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		ns, err := doc.CreateNamespace("xml", "")
-		require.NoError(t, err)
-		root, err := doc.CreateElementNS("foo", ns)
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err, "an xml:-prefixed element must serialize")
-		require.Contains(t, str, `<xml:foo`)
-
-		reparsed, err := helium.NewParser().Parse(t.Context(), []byte(str))
-		require.NoError(t, err, "writer output must reparse")
-		require.NotNil(t, reparsed)
-	})
-
-	t.Run("XHTML path accepts empty-URI xml attribute", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		_, err := doc.CreateInternalSubset(
-			"html",
-			"-//W3C//DTD XHTML 1.0 Strict//EN",
-			"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
-		)
-		require.NoError(t, err)
-		root, err := doc.CreateElement("html")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		ns, err := doc.CreateNamespace("xml", "")
-		require.NoError(t, err)
-		require.NoError(t, root.SetAttributeNS("lang", "en", ns))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err, "XHTML serializer must accept the implicit xml prefix")
-		require.Contains(t, str, `xml:lang="en"`)
-	})
-
-	t.Run("non-xml prefix with empty URI still rejected", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		ns, err := doc.CreateNamespace("foo", "")
-		require.NoError(t, err)
-		require.NoError(t, root.SetAttributeNS("lang", "en", ns))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "a non-xml prefix bound to an empty URI must not serialize")
-		require.ErrorIs(t, err, helium.ErrWriterUnboundNamespacePrefix)
-	})
-}
-
-// TestXHTMLAttrErrorEmitsNoPartialChildren reproduces Finding 1: when an XHTML
-// element has an invalid attribute name AND non-element child content, the
-// serializer must abort at the first error and must NOT emit any of the child
-// content before returning the error.
-func TestXHTMLAttrErrorEmitsNoPartialChildren(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDefaultDocument()
-	_, err := doc.CreateInternalSubset(
-		"html",
-		"-//W3C//DTD XHTML 1.0 Strict//EN",
-		"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
-	)
-	require.NoError(t, err)
-
-	root, err := doc.CreateElement("html")
-	require.NoError(t, err)
-	require.NoError(t, doc.SetDocumentElement(root))
-
-	// Invalid attribute name on the element: serialization must fail before any
-	// child content is written.
-	err = root.SetAttribute(`x onmouseover`, "1")
-	require.NoError(t, err)
-
-	const childMarker = "SECRET_CHILD_TEXT"
-	text := doc.CreateText([]byte(childMarker))
-	require.NoError(t, root.AddChild(text))
-
-	var buf strings.Builder
-	err = helium.NewWriter().WriteTo(&buf, doc)
-	require.Error(t, err, "invalid XHTML attribute name must fail serialization")
-	require.NotContains(t, buf.String(), childMarker,
-		"no child content must be emitted after an attribute-name error")
-}
-
-// TestWriteRejectsXmlnsElementName reproduces Finding 2: an element whose QName
-// prefix is the reserved "xmlns" prefix must not serialize, even when an active
-// namespace bypasses dumpNs.
-func TestWriteRejectsXmlnsElementName(t *testing.T) {
-	t.Parallel()
-
-	t.Run("xmlns-prefixed element name rejected", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		// SetActiveNamespace sets the node's active namespace directly, so the
-		// "xmlns" prefix is emitted as the element QName prefix (<xmlns:root/>),
-		// which Namespaces-in-XML forbids.
-		require.NoError(t, root.SetActiveNamespace("xmlns", "urn:evil"))
-
-		_, err = helium.WriteString(doc)
-		require.Error(t, err, "xmlns-prefixed element name must not serialize")
-	})
-
-	t.Run("valid namespaced element name serializes", func(t *testing.T) {
-		t.Parallel()
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.SetActiveNamespace("p", "urn:example"))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-		require.Contains(t, str, "<p:root")
-	})
-
-	t.Run("bare xmlns element name serializes", func(t *testing.T) {
-		t.Parallel()
-		// "xmlns" is a valid element name: <xmlns>...</xmlns> is well-formed XML.
-		// It is reserved only as an attribute name (default-namespace decl), so
-		// an element literally named "xmlns" must serialize without error. This
-		// is the regression case from xslt3 test si-element-261.
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("xmlns")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err, "bare xmlns element name must serialize")
-		require.Contains(t, str, "<xmlns")
-	})
-}
 
 // BenchmarkWriteNonASCII serializes a document containing many non-ASCII
 // characters with EscapeNonASCII enabled, exercising the hex char ref path.
@@ -739,39 +34,6 @@ func BenchmarkWriteNonASCII(b *testing.B) {
 		err := w.WriteTo(io.Discard, doc)
 		require.NoError(b, err)
 	}
-}
-
-func TestDumpNsSkipsXmlPrefix(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	require.NoError(t, doc.SetDocumentElement(root))
-
-	// Add explicit xml: namespace declaration to the element
-	require.NoError(t, root.DeclareNamespace("xml", lexicon.NamespaceXML))
-
-	str, err := helium.WriteString(doc)
-	require.NoError(t, err)
-
-	// The xml: namespace declaration must NOT appear in the output.
-	// libxml2's xmlNsDumpOutput skips prefix "xml" unconditionally.
-	require.NotContains(t, str, "xmlns:xml")
-}
-
-func TestDumpNsPropagatesWriteError(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	require.NoError(t, doc.SetDocumentElement(root))
-	require.NoError(t, root.DeclareNamespace("p", "urn:test"))
-
-	writer := helium.NewWriter().XMLDeclaration(false)
-	err = writer.WriteTo(&namespaceFailWriter{failOn: "xmlns"}, doc)
-	require.ErrorIs(t, err, errNamespaceWrite)
 }
 
 var errNamespaceWrite = errors.New("namespace write failed")
@@ -833,53 +95,6 @@ const docWithEverything = `<?xml version="1.0" encoding="UTF-8"?>
 <?app instruction?>
 <root id="r1"><child>&greeting; world</child><child><![CDATA[<raw> & data]]></child></root>`
 
-func TestWritePropagatesWriteError(t *testing.T) {
-	t.Parallel()
-
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(docWithEverything))
-	require.NoError(t, err)
-
-	// Determine the full serialized length so we can fail at every prefix.
-	full, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.NotEmpty(t, full)
-
-	// Failing immediately must surface a non-nil error (previously nil).
-	require.ErrorIs(t, helium.Write(&failAfterNWriter{limit: 0}, doc), errShortWrite,
-		"serialization must report the writer error")
-
-	// Failing at any intermediate offset must also surface a non-nil error.
-	for limit := 1; limit < len(full); limit += 7 {
-		err := helium.Write(&failAfterNWriter{limit: limit}, doc)
-		require.Errorf(t, err, "write that fails after %d bytes must return an error", limit)
-	}
-}
-
-func TestWriteOutputUnchanged(t *testing.T) {
-	t.Parallel()
-
-	// The success path must remain byte-for-byte identical after routing all
-	// writes through the sticky-error session helpers.
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(docWithEverything))
-	require.NoError(t, err)
-
-	str, err := helium.WriteString(doc)
-	require.NoError(t, err)
-
-	expected := `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE root [
-<!ELEMENT root (child)*>
-<!ATTLIST root id CDATA #IMPLIED>
-<!ENTITY greeting "hello">
-<!NOTATION gif SYSTEM "image/gif" >
-]>
-<!--a top level comment-->
-<?app instruction?>
-<root id="r1"><child>&greeting; world</child><child><![CDATA[<raw> & data]]></child></root>
-`
-	require.Equal(t, expected, str)
-}
-
 // noEmptyWriteWriter is a strict io.Writer that rejects a zero-length Write,
 // mirroring writers that treat an empty chunk as an error. It records the bytes
 // written so callers can assert on the serialized output.
@@ -892,573 +107,6 @@ func (w *noEmptyWriteWriter) Write(p []byte) (int, error) {
 		return 0, errors.New("empty write rejected")
 	}
 	return w.buf.Write(p)
-}
-
-func TestFormatOutput(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nested elements", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("text-only element stays inline", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child>hello</child></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>hello</child>\n</root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("custom indent string", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("\t").WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n\t<child>\n\t\t<grandchild/>\n\t</child>\n</root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("explicit empty indent yields newlines with no indentation", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("").WriteTo(&buf, doc))
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n<child>\n<grandchild/>\n</child>\n</root>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("explicit empty indent never writes an empty chunk", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
-		require.NoError(t, err)
-
-		w := &noEmptyWriteWriter{}
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("").WriteTo(w, doc))
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n<child>\n<grandchild/>\n</child>\n</root>\n"
-		require.Equal(t, expected, w.buf.String())
-	})
-
-	t.Run("unset indent uses two-space default", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("without format stays compact", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
-		require.NoError(t, err)
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-
-		expected := "<?xml version=\"1.0\"?>\n<root><child><grandchild/></child></root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("multiple children", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/><c/></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n  <a/>\n  <b/>\n  <c/>\n</root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("element XMLString with format", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
-		require.NoError(t, err)
-
-		root := doc.DocumentElement()
-		require.NotNil(t, root)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, root))
-		str := buf.String()
-
-		expected := "<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("comment and PI children", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><!--comment--><child/><?pi data?></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n  <!--comment-->\n  <child/>\n  <?pi data?>\n</root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("deeply nested", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><a><b><c><d>text</d></c></b></a>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<a>\n  <b>\n    <c>\n      <d>text</d>\n    </c>\n  </b>\n</a>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("mixed content stays inline", func(t *testing.T) {
-		t.Parallel()
-
-		const input = `<resources><string name="welcome">Hello <b>world</b></string><version>1.0</version></resources>`
-
-		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-
-		// The mixed-content <string> element (non-whitespace text alongside a <b>
-		// child) must not have indentation injected around its children — doing so
-		// would corrupt "Hello " into "Hello\n      ". Only the pure-element
-		// container <resources> is formatted.
-		expected := "<resources>\n  <string name=\"welcome\">Hello <b>world</b></string>\n  <version>1.0</version>\n</resources>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("mixed content format is idempotent", func(t *testing.T) {
-		t.Parallel()
-
-		const input = `<resources><string name="welcome">Hello <b>world</b></string><version>1.0</version></resources>`
-
-		format := func(src []byte) string {
-			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), src)
-			require.NoError(t, err)
-			var buf strings.Builder
-			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-			return buf.String()
-		}
-
-		first := format([]byte(input))
-		// Re-parsing and re-formatting the already-formatted output must yield the
-		// exact same bytes; injected whitespace inside mixed content would become a
-		// real text node on reparse and compound on each pass.
-		second := format([]byte(first))
-		require.Equal(t, first, second)
-	})
-
-	t.Run("mixed content suppresses formatting subtree-wide", func(t *testing.T) {
-		t.Parallel()
-
-		// A pure-element descendant (<b> holding only <i/>) nested inside a
-		// mixed-content element (<p>) must NOT be formatted: libxml2 disables
-		// formatting for the whole subtree of a mixed element until it closes, so
-		// no whitespace may be injected anywhere inside <p>.
-		const input = `<p>left<b><i/></b>right</p>`
-
-		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-
-		expected := "<p>left<b><i/></b>right</p>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("direct CDATA child suppresses formatting", func(t *testing.T) {
-		t.Parallel()
-
-		// A direct CDATASection child is one of libxml2's mixed-content triggers
-		// (xmlNodeDumpOutputInternal treats TEXT, CDATA, and ENTITY_REF children
-		// alike). <data> mixes a pure-element child (<child> holding a nested
-		// <nested/>) ALONGSIDE the CDATA section, so hasOnlyTextChildren is false —
-		// only hasTextlikeChild keeps the subtree inline. The whole <data> subtree,
-		// including the nested element child, must serialize verbatim with no
-		// indentation injected, while the pure-element container <resources> is
-		// still formatted.
-		const input = `<resources><data><child><nested/></child><![CDATA[<raw> & data]]></data><version>1.0</version></resources>`
-
-		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-
-		expected := "<resources>\n  <data><child><nested/></child><![CDATA[<raw> & data]]></data>\n  <version>1.0</version>\n</resources>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("direct entity-reference child suppresses formatting", func(t *testing.T) {
-		t.Parallel()
-
-		// A direct EntityRef child is a libxml2 mixed-content trigger. <msg> mixes a
-		// pure-element child (<child> holding a nested <nested/>) ALONGSIDE an
-		// unexpanded &g; reference (default parser keeps entity references as nodes),
-		// so hasOnlyTextChildren is false — only hasTextlikeChild keeps the subtree
-		// inline. The whole <msg> subtree, including the nested element child,
-		// serializes verbatim with no indentation, while the container <resources>
-		// is formatted.
-		const input = `<!DOCTYPE resources [<!ENTITY g "hi there">]><resources><msg><child><nested/></child>&g;</msg><version>1.0</version></resources>`
-
-		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-
-		expected := "<!DOCTYPE resources [\n<!ENTITY g \"hi there\">\n]>\n<resources>\n  <msg><child><nested/></child>&g;</msg>\n  <version>1.0</version>\n</resources>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("whitespace-only text child suppresses formatting", func(t *testing.T) {
-		t.Parallel()
-
-		// A whitespace-only text child is still a TEXT node, so it triggers
-		// libxml2's mixed-content suppression. <item> mixes a pure-element child
-		// (<child> holding a nested <nested/>) ALONGSIDE a whitespace-only text
-		// node, so hasOnlyTextChildren is false — only hasTextlikeChild keeps the
-		// subtree inline. The significant whitespace must be preserved verbatim (no
-		// indentation injected) and the nested element child must not be formatted,
-		// which would corrupt the content and break idempotence. Blanks are NOT
-		// stripped here so the text child survives.
-		const input = `<resources><item><child><nested/></child>   </item><version>1.0</version></resources>`
-
-		doc, err := helium.NewParser().StripBlanks(false).Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-
-		expected := "<resources>\n  <item><child><nested/></child>   </item>\n  <version>1.0</version>\n</resources>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("pure-element child stays formatted", func(t *testing.T) {
-		t.Parallel()
-
-		// Control for the suppression cases above: with the same container shape
-		// but a pure-element child <a><b/></a> (no text-like child anywhere), the
-		// mixed-content rule does NOT fire, so <a> is formatted with normal nested
-		// indentation.
-		const input = `<resources><a><b/></a><version>1.0</version></resources>`
-
-		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-
-		expected := "<resources>\n  <a>\n    <b/>\n  </a>\n  <version>1.0</version>\n</resources>\n"
-		require.Equal(t, expected, buf.String())
-	})
-
-	t.Run("pure-text child stays inline", func(t *testing.T) {
-		t.Parallel()
-
-		// Control: a child with ONLY text content (<a>text</a>) is emitted inline
-		// (text-only elements never get their sole text wrapped in indentation),
-		// but this is the ordinary text-only path, not subtree-wide suppression:
-		// the container <resources> stays formatted.
-		const input = `<resources><a>text</a><version>1.0</version></resources>`
-
-		doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
-
-		expected := "<resources>\n  <a>text</a>\n  <version>1.0</version>\n</resources>\n"
-		require.Equal(t, expected, buf.String())
-	})
-}
-
-func TestXHTML(t *testing.T) {
-	t.Parallel()
-
-	t.Run("void element default NS self-closes", func(t *testing.T) {
-		t.Parallel()
-		// XHTML void elements in the default namespace (prefix == "") should
-		// use self-closing " />" syntax, matching libxml2's check:
-		//   (cur->ns == NULL) || (cur->ns->prefix == NULL)
-		input := `<?xml version="1.0"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><head><title>T</title></head><body><br/></body></html>`
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-
-		// <br> must be serialized as "<br />" (self-closing), not "<br></br>"
-		require.Contains(t, str, "<br />")
-		require.NotContains(t, str, "<br></br>")
-	})
-
-	t.Run("element children get indented", func(t *testing.T) {
-		t.Parallel()
-		input := `<?xml version="1.0"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><body><p>hello</p><p>world</p></body></html>`
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		// <body> has element children → they should be indented
-		require.Contains(t, str, "<body>\n    <p>")
-		require.Contains(t, str, "</p>\n  </body>")
-	})
-
-	t.Run("text-only elements stay inline", func(t *testing.T) {
-		t.Parallel()
-		input := `<?xml version="1.0"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><body><p>hello</p></body></html>`
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		// <p> has only text → no indentation inside
-		require.Contains(t, str, "<p>hello</p>")
-	})
-}
-
-func TestNoEmpty(t *testing.T) {
-	t.Parallel()
-
-	t.Run("empty element uses open+close tags", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root><br></br></root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("non-empty element unchanged", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><p>text</p></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root><p>text</p></root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("empty element with attributes", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><img src="a.png"/></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root><img src=\"a.png\"></img></root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("combined with format", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/></root>`))
-		require.NoError(t, err)
-
-		var buf strings.Builder
-		require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).Format(true).WriteTo(&buf, doc))
-		str := buf.String()
-
-		expected := "<?xml version=\"1.0\"?>\n<root>\n  <a></a>\n  <b></b>\n</root>\n"
-		require.Equal(t, expected, str)
-	})
-
-	t.Run("without NoEmpty stays self-closing", func(t *testing.T) {
-		t.Parallel()
-
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
-		require.NoError(t, err)
-
-		str, err := helium.WriteString(doc)
-		require.NoError(t, err)
-
-		expected := "<?xml version=\"1.0\"?>\n<root><br/></root>\n"
-		require.Equal(t, expected, str)
-	})
-}
-
-func TestDumpQuotingViaPublicAPI(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		inputXML string
-		expected string
-	}{
-		{
-			name: "doctype system id without quotes",
-			inputXML: `<?xml version="1.0"?>
-<!DOCTYPE root SYSTEM "hello">
-<root/>`,
-			expected: `<!DOCTYPE root SYSTEM "hello">`,
-		},
-		{
-			name: "doctype system id with only single quotes",
-			inputXML: `<?xml version="1.0"?>
-<!DOCTYPE root SYSTEM "it's">
-<root/>`,
-			expected: `<!DOCTYPE root SYSTEM "it's">`,
-		},
-		{
-			name: "internal entity with both quote kinds",
-			inputXML: `<?xml version="1.0"?>
-<!DOCTYPE root [
-<!ENTITY e "it's a &quot;test&quot;">
-]>
-<root/>`,
-			expected: `<!ENTITY e "it's a &quot;test&quot;">`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.inputXML))
-			require.NoError(t, err)
-
-			got, err := helium.WriteString(doc)
-			require.NoError(t, err)
-			require.Contains(t, got, tt.expected)
-		})
-	}
-}
-func TestWriteRejectsMalformedCommentPI(t *testing.T) {
-	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-
-	var sb strings.Builder
-	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("a--b"))),
-		"comment containing -- must be rejected")
-	sb.Reset()
-	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("a-"))),
-		"comment ending in - must be rejected")
-	sb.Reset()
-	require.Error(t, helium.Write(&sb, doc.CreateComment([]byte("-"))),
-		"single-dash comment must be rejected")
-	sb.Reset()
-	require.Error(t, helium.Write(&sb, doc.CreatePI("t", "a?>b")),
-		"PI content containing ?> must be rejected")
-
-	// Valid comment/PI still serialize.
-	sb.Reset()
-	require.NoError(t, helium.Write(&sb, doc.CreateComment([]byte(" ok "))))
-	sb.Reset()
-	require.NoError(t, helium.Write(&sb, doc.CreateComment([]byte(""))),
-		"empty comment must serialize without an out-of-range panic")
-	sb.Reset()
-	require.NoError(t, helium.Write(&sb, doc.CreatePI("php", "echo 1")))
-}
-
-// TestWriteRejectsMalformedPITarget ensures that an invalid PI target — in
-// particular one that injects markup — is rejected before being emitted, so
-// the serialized output never contains the injection.
-func TestWriteRejectsMalformedPITarget(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name   string
-		target string
-	}{
-		{name: "injection", target: "x?><evil/><?x"},
-		{name: "empty", target: ""},
-		{name: "starts-digit", target: "1bad"},
-		{name: "has-space", target: "a b"},
-		{name: "reserved-xml", target: "xml"},
-		{name: "invalid-utf8", target: "\xff\xfe"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			doc := helium.NewDefaultDocument()
-			root, err := doc.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(root))
-			require.NoError(t, root.AddChild(doc.CreatePI(tc.target, "")))
-
-			var sb strings.Builder
-			err = helium.Write(&sb, doc)
-			require.Error(t, err, "invalid PI target must be rejected")
-			require.NotContains(t, sb.String(), "<evil/>",
-				"injection must not be emitted")
-		})
-	}
-
-	// A valid target still serializes.
-	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("r")
-	require.NoError(t, err)
-	require.NoError(t, doc.SetDocumentElement(root))
-	require.NoError(t, root.AddChild(doc.CreatePI("php", "echo 1")))
-	var sb strings.Builder
-	require.NoError(t, helium.Write(&sb, doc))
-	require.Contains(t, sb.String(), "<?php echo 1?>")
 }
 
 // failOnSubstringWriter fails the first Write whose accumulated tail+payload
@@ -1486,140 +134,924 @@ func (w *failOnSubstringWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// TestWriteValidationPrecedesOutput verifies that malformed nodes are rejected
-// during the discard pass, before WriteTo calls the caller's writer.
-func TestWriteValidationPrecedesOutput(t *testing.T) {
+func TestSerialize(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name    string
-		sibling func(*helium.Document) helium.Node
-		wantErr error
-	}{
-		{
-			name:    "comment",
-			sibling: func(d *helium.Document) helium.Node { return d.CreateComment([]byte("a--b")) },
-			wantErr: helium.ErrWriterInvalidComment,
-		},
-		{
-			name:    "pi",
-			sibling: func(d *helium.Document) helium.Node { return d.CreatePI("t", "a?>b") },
-			wantErr: helium.ErrWriterInvalidPIContent,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	t.Run("XML to DOM to XML", func(t *testing.T) {
+		skipped := map[string]struct{}{}
+		only := map[string]struct{}{}
+		if v := os.Getenv("HELIUM_DUMP_TEST_FILES"); v != "" {
+			for f := range strings.SplitSeq(v, ",") {
+				n := strings.TrimSpace(f)
+				only[n] = struct{}{}
+			}
+		}
+
+		dir := "test"
+		files, err := os.ReadDir(dir)
+		require.NoError(t, err, "os.ReadDir should succeed")
+
+		for _, fi := range files {
+			if fi.IsDir() {
+				continue
+			}
+
+			if len(only) > 0 {
+				if _, ok := only[fi.Name()]; !ok {
+					continue
+				}
+			} else {
+				if _, ok := skipped[fi.Name()]; ok {
+					t.Logf("Skipping test for '%s' for now...", fi.Name())
+					continue
+				}
+			}
+
+			fn := filepath.Join(dir, fi.Name())
+			if !strings.HasSuffix(fn, ".xml") {
+				continue
+			}
+
+			goldenfn := strings.ReplaceAll(fn, ".xml", ".dump")
+			if _, err := os.Stat(goldenfn); err != nil {
+				t.Logf("%s does not exist, skipping...", goldenfn)
+				continue
+			}
+			golden, err := os.ReadFile(goldenfn)
+			require.NoError(t, err, "os.ReadFile should succeed")
+
+			t.Logf("Parsing %s...", fn)
+			in, err := os.ReadFile(fn)
+			require.NoError(t, err, "os.ReadFile should succeed")
+
+			doc, err := helium.NewParser().Parse(t.Context(), in)
+			require.NoError(t, err, `Parse(...) succeeds`)
+
+			str, err := helium.WriteString(doc)
+			require.NoError(t, err, "XMLString(doc) succeeds")
+
+			if string(golden) != str {
+				errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+				if err != nil {
+					t.Logf("Failed to file to save output: %s", err)
+					return
+				}
+				defer func() { _ = errout.Close() }()
+
+				_, _ = errout.WriteString(str)
+			}
+			require.Equal(t, string(golden), str, "roundtrip works")
+		}
+	})
+
+	t.Run("DOM to XML", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		//	defer doc.Free()
+
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.AppendText([]byte(`Hello, World!`)))
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err, "XMLString(doc) succeeds")
+
+		t.Logf("%s", str)
+	})
+
+	// WriteString on a programmatically built doc.
+	t.Run("without a DTD", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+		require.NoError(t, root.AppendText([]byte("text & more")))
+
+		s, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.True(t, strings.Contains(s, "<root>"))
+		require.Contains(t, s, "&amp;")
+	})
+
+	t.Run("format output", func(t *testing.T) {
+		t.Run("nested elements", func(t *testing.T) {
 			t.Parallel()
-			doc := helium.NewDefaultDocument()
-			root, err := doc.CreateElement("r")
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
 			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(root))
-			// A malformed top-level sibling follows the root element. The target
-			// writer would reject the separator between them if it were called.
-			require.NoError(t, doc.AddChild(tc.sibling(doc)))
 
-			out := &failOnSubstringWriter{trigger: "\n"}
-			err = helium.NewWriter().XMLDeclaration(false).WriteTo(out, doc)
-			require.ErrorIs(t, err, tc.wantErr)
-			require.Zero(t, out.writes, "validation must not call the target writer")
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
+			require.Equal(t, expected, str)
 		})
-	}
+
+		t.Run("text-only element stays inline", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child>hello</child></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>hello</child>\n</root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("custom indent string", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("\t").WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n\t<child>\n\t\t<grandchild/>\n\t</child>\n</root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("explicit empty indent yields newlines with no indentation", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("").WriteTo(&buf, doc))
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n<child>\n<grandchild/>\n</child>\n</root>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("explicit empty indent never writes an empty chunk", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+			require.NoError(t, err)
+
+			w := &noEmptyWriteWriter{}
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("").WriteTo(w, doc))
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n<child>\n<grandchild/>\n</child>\n</root>\n"
+			require.Equal(t, expected, w.buf.String())
+		})
+
+		t.Run("unset indent uses two-space default", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("without format stays compact", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+			require.NoError(t, err)
+
+			str, err := helium.WriteString(doc)
+			require.NoError(t, err)
+
+			expected := "<?xml version=\"1.0\"?>\n<root><child><grandchild/></child></root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("multiple children", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/><c/></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n  <a/>\n  <b/>\n  <c/>\n</root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("element XMLString with format", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><child><grandchild/></child></root>`))
+			require.NoError(t, err)
+
+			root := doc.DocumentElement()
+			require.NotNil(t, root)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, root))
+			str := buf.String()
+
+			expected := "<root>\n  <child>\n    <grandchild/>\n  </child>\n</root>"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("comment and PI children", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><!--comment--><child/><?pi data?></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n  <!--comment-->\n  <child/>\n  <?pi data?>\n</root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("deeply nested", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><a><b><c><d>text</d></c></b></a>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<a>\n  <b>\n    <c>\n      <d>text</d>\n    </c>\n  </b>\n</a>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("mixed content stays inline", func(t *testing.T) {
+			t.Parallel()
+
+			const input = `<resources><string name="welcome">Hello <b>world</b></string><version>1.0</version></resources>`
+
+			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+			// The mixed-content <string> element (non-whitespace text alongside a <b>
+			// child) must not have indentation injected around its children — doing so
+			// would corrupt "Hello " into "Hello\n      ". Only the pure-element
+			// container <resources> is formatted.
+			expected := "<resources>\n  <string name=\"welcome\">Hello <b>world</b></string>\n  <version>1.0</version>\n</resources>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("mixed content format is idempotent", func(t *testing.T) {
+			t.Parallel()
+
+			const input = `<resources><string name="welcome">Hello <b>world</b></string><version>1.0</version></resources>`
+
+			format := func(src []byte) string {
+				doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), src)
+				require.NoError(t, err)
+				var buf strings.Builder
+				require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+				return buf.String()
+			}
+
+			first := format([]byte(input))
+			// Re-parsing and re-formatting the already-formatted output must yield the
+			// exact same bytes; injected whitespace inside mixed content would become a
+			// real text node on reparse and compound on each pass.
+			second := format([]byte(first))
+			require.Equal(t, first, second)
+		})
+
+		t.Run("mixed content suppresses formatting subtree-wide", func(t *testing.T) {
+			t.Parallel()
+
+			// A pure-element descendant (<b> holding only <i/>) nested inside a
+			// mixed-content element (<p>) must NOT be formatted: libxml2 disables
+			// formatting for the whole subtree of a mixed element until it closes, so
+			// no whitespace may be injected anywhere inside <p>.
+			const input = `<p>left<b><i/></b>right</p>`
+
+			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+			expected := "<p>left<b><i/></b>right</p>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("direct CDATA child suppresses formatting", func(t *testing.T) {
+			t.Parallel()
+
+			// A direct CDATASection child is one of libxml2's mixed-content triggers
+			// (xmlNodeDumpOutputInternal treats TEXT, CDATA, and ENTITY_REF children
+			// alike). <data> mixes a pure-element child (<child> holding a nested
+			// <nested/>) ALONGSIDE the CDATA section, so hasOnlyTextChildren is false —
+			// only hasTextlikeChild keeps the subtree inline. The whole <data> subtree,
+			// including the nested element child, must serialize verbatim with no
+			// indentation injected, while the pure-element container <resources> is
+			// still formatted.
+			const input = `<resources><data><child><nested/></child><![CDATA[<raw> & data]]></data><version>1.0</version></resources>`
+
+			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+			expected := "<resources>\n  <data><child><nested/></child><![CDATA[<raw> & data]]></data>\n  <version>1.0</version>\n</resources>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("direct entity-reference child suppresses formatting", func(t *testing.T) {
+			t.Parallel()
+
+			// A direct EntityRef child is a libxml2 mixed-content trigger. <msg> mixes a
+			// pure-element child (<child> holding a nested <nested/>) ALONGSIDE an
+			// unexpanded &g; reference (default parser keeps entity references as nodes),
+			// so hasOnlyTextChildren is false — only hasTextlikeChild keeps the subtree
+			// inline. The whole <msg> subtree, including the nested element child,
+			// serializes verbatim with no indentation, while the container <resources>
+			// is formatted.
+			const input = `<!DOCTYPE resources [<!ENTITY g "hi there">]><resources><msg><child><nested/></child>&g;</msg><version>1.0</version></resources>`
+
+			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+			expected := "<!DOCTYPE resources [\n<!ENTITY g \"hi there\">\n]>\n<resources>\n  <msg><child><nested/></child>&g;</msg>\n  <version>1.0</version>\n</resources>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("whitespace-only text child suppresses formatting", func(t *testing.T) {
+			t.Parallel()
+
+			// A whitespace-only text child is still a TEXT node, so it triggers
+			// libxml2's mixed-content suppression. <item> mixes a pure-element child
+			// (<child> holding a nested <nested/>) ALONGSIDE a whitespace-only text
+			// node, so hasOnlyTextChildren is false — only hasTextlikeChild keeps the
+			// subtree inline. The significant whitespace must be preserved verbatim (no
+			// indentation injected) and the nested element child must not be formatted,
+			// which would corrupt the content and break idempotence. Blanks are NOT
+			// stripped here so the text child survives.
+			const input = `<resources><item><child><nested/></child>   </item><version>1.0</version></resources>`
+
+			doc, err := helium.NewParser().StripBlanks(false).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+			expected := "<resources>\n  <item><child><nested/></child>   </item>\n  <version>1.0</version>\n</resources>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("pure-element child stays formatted", func(t *testing.T) {
+			t.Parallel()
+
+			// Control for the suppression cases above: with the same container shape
+			// but a pure-element child <a><b/></a> (no text-like child anywhere), the
+			// mixed-content rule does NOT fire, so <a> is formatted with normal nested
+			// indentation.
+			const input = `<resources><a><b/></a><version>1.0</version></resources>`
+
+			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+			expected := "<resources>\n  <a>\n    <b/>\n  </a>\n  <version>1.0</version>\n</resources>\n"
+			require.Equal(t, expected, buf.String())
+		})
+
+		t.Run("pure-text child stays inline", func(t *testing.T) {
+			t.Parallel()
+
+			// Control: a child with ONLY text content (<a>text</a>) is emitted inline
+			// (text-only elements never get their sole text wrapped in indentation),
+			// but this is the ordinary text-only path, not subtree-wide suppression:
+			// the container <resources> stays formatted.
+			const input = `<resources><a>text</a><version>1.0</version></resources>`
+
+			doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().Format(true).IndentString("  ").XMLDeclaration(false).WriteTo(&buf, doc))
+
+			expected := "<resources>\n  <a>text</a>\n  <version>1.0</version>\n</resources>\n"
+			require.Equal(t, expected, buf.String())
+		})
+	})
+
+	t.Run("no-empty toggle", func(t *testing.T) {
+		t.Run("empty element uses open+close tags", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root><br></br></root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("non-empty element unchanged", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><p>text</p></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root><p>text</p></root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("empty element with attributes", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><img src="a.png"/></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root><img src=\"a.png\"></img></root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("combined with format", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><a/><b/></root>`))
+			require.NoError(t, err)
+
+			var buf strings.Builder
+			require.NoError(t, helium.NewWriter().SelfCloseEmptyElements(false).Format(true).WriteTo(&buf, doc))
+			str := buf.String()
+
+			expected := "<?xml version=\"1.0\"?>\n<root>\n  <a></a>\n  <b></b>\n</root>\n"
+			require.Equal(t, expected, str)
+		})
+
+		t.Run("without NoEmpty stays self-closing", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?><root><br/></root>`))
+			require.NoError(t, err)
+
+			str, err := helium.WriteString(doc)
+			require.NoError(t, err)
+
+			expected := "<?xml version=\"1.0\"?>\n<root><br/></root>\n"
+			require.Equal(t, expected, str)
+		})
+	})
+
+	t.Run("output unchanged", func(t *testing.T) {
+		// The success path must remain byte-for-byte identical after routing all
+		// writes through the sticky-error session helpers.
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(docWithEverything))
+		require.NoError(t, err)
+
+		str, err := helium.WriteString(doc)
+		require.NoError(t, err)
+
+		expected := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+<!ELEMENT root (child)*>
+<!ATTLIST root id CDATA #IMPLIED>
+<!ENTITY greeting "hello">
+<!NOTATION gif SYSTEM "image/gif" >
+]>
+<!--a top level comment-->
+<?app instruction?>
+<root id="r1"><child>&greeting; world</child><child><![CDATA[<raw> & data]]></child></root>
+`
+		require.Equal(t, expected, str)
+	})
+
+	t.Run("attribute quoting", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			inputXML string
+			expected string
+		}{
+			{
+				name: "doctype system id without quotes",
+				inputXML: `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "hello">
+<root/>`,
+				expected: `<!DOCTYPE root SYSTEM "hello">`,
+			},
+			{
+				name: "doctype system id with only single quotes",
+				inputXML: `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "it's">
+<root/>`,
+				expected: `<!DOCTYPE root SYSTEM "it's">`,
+			},
+			{
+				name: "internal entity with both quote kinds",
+				inputXML: `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ENTITY e "it's a &quot;test&quot;">
+]>
+<root/>`,
+				expected: `<!ENTITY e "it's a &quot;test&quot;">`,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(tt.inputXML))
+				require.NoError(t, err)
+
+				got, err := helium.WriteString(doc)
+				require.NoError(t, err)
+				require.Contains(t, got, tt.expected)
+			})
+		}
+	})
 }
 
-func TestWriteNilNode(t *testing.T) {
+func TestWriteErrors(t *testing.T) {
 	t.Parallel()
 
-	t.Run("WriteString interface nil", func(t *testing.T) {
-		t.Parallel()
-		s, err := helium.WriteString(nil)
-		require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
-		require.Empty(t, s)
+	t.Run("nil node", func(t *testing.T) {
+		t.Run("WriteString interface nil", func(t *testing.T) {
+			t.Parallel()
+			s, err := helium.WriteString(nil)
+			require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+			require.Empty(t, s)
+		})
+
+		t.Run("Write interface nil", func(t *testing.T) {
+			t.Parallel()
+			err := helium.Write(io.Discard, nil)
+			require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+		})
+
+		t.Run("WriteTo interface nil", func(t *testing.T) {
+			t.Parallel()
+			err := helium.NewWriter().WriteTo(io.Discard, nil)
+			require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+		})
+
+		t.Run("WriteTo typed nil", func(t *testing.T) {
+			t.Parallel()
+			var typedNil *helium.Element
+			err := helium.NewWriter().WriteTo(io.Discard, typedNil)
+			require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil node must return ErrNilNode")
+		})
+
+		t.Run("WriteTo typed nil document", func(t *testing.T) {
+			t.Parallel()
+			var typedNil *helium.Document
+			err := helium.NewWriter().WriteTo(io.Discard, typedNil)
+			require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil document must return ErrNilNode")
+		})
 	})
 
-	t.Run("Write interface nil", func(t *testing.T) {
-		t.Parallel()
-		err := helium.Write(io.Discard, nil)
-		require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+	t.Run("write error propagates", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(docWithEverything))
+		require.NoError(t, err)
+
+		// Determine the full serialized length so we can fail at every prefix.
+		full, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.NotEmpty(t, full)
+
+		// Failing immediately must surface a non-nil error (previously nil).
+		require.ErrorIs(t, helium.Write(&failAfterNWriter{limit: 0}, doc), errShortWrite,
+			"serialization must report the writer error")
+
+		// Failing at any intermediate offset must also surface a non-nil error.
+		for limit := 1; limit < len(full); limit += 7 {
+			err := helium.Write(&failAfterNWriter{limit: limit}, doc)
+			require.Errorf(t, err, "write that fails after %d bytes must return an error", limit)
+		}
 	})
 
-	t.Run("WriteTo interface nil", func(t *testing.T) {
-		t.Parallel()
-		err := helium.NewWriter().WriteTo(io.Discard, nil)
-		require.ErrorIs(t, err, helium.ErrNilNode, "nil node must return ErrNilNode")
+	// malformed nodes are rejected
+	// during the discard pass, before WriteTo calls the caller's writer.
+	t.Run("validation precedes output", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			sibling func(*helium.Document) helium.Node
+			wantErr error
+		}{
+			{
+				name:    "comment",
+				sibling: func(d *helium.Document) helium.Node { return d.CreateComment([]byte("a--b")) },
+				wantErr: helium.ErrWriterInvalidComment,
+			},
+			{
+				name:    "pi",
+				sibling: func(d *helium.Document) helium.Node { return d.CreatePI("t", "a?>b") },
+				wantErr: helium.ErrWriterInvalidPIContent,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root, err := doc.CreateElement("r")
+				require.NoError(t, err)
+				require.NoError(t, doc.SetDocumentElement(root))
+				// A malformed top-level sibling follows the root element. The target
+				// writer would reject the separator between them if it were called.
+				require.NoError(t, doc.AddChild(tc.sibling(doc)))
+
+				out := &failOnSubstringWriter{trigger: "\n"}
+				err = helium.NewWriter().XMLDeclaration(false).WriteTo(out, doc)
+				require.ErrorIs(t, err, tc.wantErr)
+				require.Zero(t, out.writes, "validation must not call the target writer")
+			})
+		}
 	})
 
-	t.Run("WriteTo typed nil", func(t *testing.T) {
-		t.Parallel()
-		var typedNil *helium.Element
-		err := helium.NewWriter().WriteTo(io.Discard, typedNil)
-		require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil node must return ErrNilNode")
+	t.Run("validation errors leave no output", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			build   func(*testing.T) *helium.Document
+			wantErr error
+		}{
+			{
+				name: "empty DTD name",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					_, err := doc.CreateInternalSubset("", "", "")
+					require.NoError(t, err)
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				wantErr: helium.ErrWriterInvalidDTDNode,
+			},
+			{
+				name: "invalid text character",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					require.NoError(t, root.AppendText([]byte("bad\x01text")))
+					return doc
+				},
+				wantErr: helium.ErrInvalidXMLChar,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				var out bytes.Buffer
+				err := helium.NewWriter().WriteTo(&out, tc.build(t))
+				require.ErrorIs(t, err, tc.wantErr)
+				require.Empty(t, out.String(), "validation errors must leave no output bytes")
+			})
+		}
 	})
 
-	t.Run("WriteTo typed nil document", func(t *testing.T) {
-		t.Parallel()
-		var typedNil *helium.Document
-		err := helium.NewWriter().WriteTo(io.Discard, typedNil)
-		require.ErrorIs(t, err, helium.ErrNilNode, "typed-nil document must return ErrNilNode")
+	// each structural-serialization
+	// failure the writer detects is reported via a named sentinel a caller can match
+	// with errors.Is, rather than an anonymous string-literal error.
+	t.Run("structural errors are matchable", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			build    func(t *testing.T) *helium.Document
+			sentinel error
+		}{
+			{
+				name: "invalid element name",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement(`root injected="1"`)
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidElementName,
+			},
+			{
+				name: "reserved element name",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					// CreateElement rejects a colon, so build the reserved
+					// "xmlns:root" name through an active namespace whose prefix
+					// is the reserved "xmlns" — the element's Name() is then
+					// "xmlns:root", which the writer must reject.
+					ns, err := doc.CreateNamespace("xmlns", "urn:reserved")
+					require.NoError(t, err)
+					root, err := doc.CreateElementNS("root", ns)
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				sentinel: helium.ErrWriterReservedElementName,
+			},
+			{
+				name: "invalid attribute name",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					err = root.SetAttribute(`x onmouseover`, "1")
+					require.NoError(t, err)
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidAttributeName,
+			},
+			{
+				name: "reserved attribute name",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					err = root.SetAttribute("xmlns", "urn:evil")
+					require.NoError(t, err)
+					return doc
+				},
+				sentinel: helium.ErrWriterReservedAttributeName,
+			},
+			{
+				name: "reserved namespace prefix",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					require.NoError(t, root.DeclareNamespace("xmlns", "urn:x"))
+					return doc
+				},
+				sentinel: helium.ErrWriterReservedNamespacePrefix,
+			},
+			{
+				name: "invalid namespace prefix",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					require.NoError(t, root.DeclareNamespace("bad prefix", "urn:x"))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidNamespacePrefix,
+			},
+			{
+				name: "unbound element namespace prefix",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					// A non-empty prefix bound to an empty URI: the element name
+					// serializes as "foo:root" with no xmlns:foo, which the parser
+					// cannot reparse.
+					ns, err := doc.CreateNamespace("foo", "")
+					require.NoError(t, err)
+					root, err := doc.CreateElementNS("root", ns)
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				sentinel: helium.ErrWriterUnboundNamespacePrefix,
+			},
+			{
+				name: "unbound attribute namespace prefix",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					ns, err := doc.CreateNamespace("foo", "")
+					require.NoError(t, err)
+					require.NoError(t, root.SetAttributeNS("bar", "v", ns))
+					return doc
+				},
+				sentinel: helium.ErrWriterUnboundNamespacePrefix,
+			},
+			{
+				name: "invalid comment content",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					require.NoError(t, root.AddChild(doc.CreateComment([]byte("a--b"))))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidComment,
+			},
+			{
+				name: "invalid PI target",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					require.NoError(t, root.AddChild(doc.CreatePI("1bad", "")))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidPITarget,
+			},
+			{
+				name: "invalid PI content",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					require.NoError(t, root.AddChild(doc.CreatePI("t", "a?>b")))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidPIContent,
+			},
+			{
+				name: "empty DOCTYPE name",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					_, err := doc.CreateInternalSubset("   ", "", "")
+					require.NoError(t, err)
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidDTDNode,
+			},
+			{
+				name: "DOCTYPE system literal with both quotes",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					_, err := doc.CreateInternalSubset("root", "", `a"b'c.dtd`)
+					require.NoError(t, err)
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidDTDNode,
+			},
+			{
+				name: "DOCTYPE public id with invalid PubidChar",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					_, err := doc.CreateInternalSubset("root", "bad{pubid", "sys.dtd")
+					require.NoError(t, err)
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidDTDNode,
+			},
+			{
+				name: "notation public id with invalid PubidChar",
+				build: func(t *testing.T) *helium.Document {
+					doc := helium.NewDefaultDocument()
+					dtd, err := doc.CreateInternalSubset("root", "", "")
+					require.NoError(t, err)
+					_, err = dtd.AddNotation("n", "bad{pubid", "n.exe")
+					require.NoError(t, err)
+					root, err := doc.CreateElement("root")
+					require.NoError(t, err)
+					require.NoError(t, doc.SetDocumentElement(root))
+					return doc
+				},
+				sentinel: helium.ErrWriterInvalidDTDNode,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc := tc.build(t)
+				var buf strings.Builder
+				err := helium.Write(&buf, doc)
+				require.Error(t, err, "malformed node must be rejected")
+				require.ErrorIs(t, err, tc.sentinel, "error must match the named sentinel")
+			})
+		}
 	})
 }
 
-func TestSerializeNotationSystemLiteralQuotes(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("doc", "", "")
-	require.NoError(t, err)
-
-	// no quote -> double-quote delimited.
-	_, err = dtd.AddNotation("plain", "", "plain.exe")
-	require.NoError(t, err)
-	// double quote only -> single-quote delimited.
-	_, err = dtd.AddNotation("dq", "", `has"dquote`)
-	require.NoError(t, err)
-	// single quote only -> double-quote delimited.
-	_, err = dtd.AddNotation("sq", "", `has'squote`)
-	require.NoError(t, err)
-
-	root, err := doc.CreateElement("doc")
-	require.NoError(t, err)
-	require.NoError(t, doc.AddChild(root))
-
-	out, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.Contains(t, out, `"plain.exe"`, "no-quote value double-quote delimited")
-	require.Contains(t, out, `'has"dquote'`, "double-quote-only value single-quote delimited")
-	require.Contains(t, out, `"has'squote"`, "single-quote-only value double-quote delimited")
-	_, err = helium.NewParser().Parse(t.Context(), []byte(out))
-	require.NoError(t, err)
-}
-
-// TestSerializeEntityContentWithPercent serializes an internal general entity
-// whose replacement text contains a literal '%', driving the dumpEntityContent
-// percent-escaping branch in the DTD writer.
-func TestSerializeEntityContentWithPercent(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("doc", "", "")
-	require.NoError(t, err)
-
-	// content has no orig set (AddEntity passes orig=""), so the writer falls
-	// through to dumpEntityContent; the '%' forces the escaping branch and the
-	// '"' forces the &quot; branch.
-	_, err = dtd.AddEntity("pct", enum.InternalGeneralEntity, "", "", `50% "done"`)
-	require.NoError(t, err)
-
-	root, err := doc.CreateElement("doc")
-	require.NoError(t, err)
-	require.NoError(t, doc.AddChild(root))
-
-	out, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.Contains(t, out, "<!ENTITY pct", "entity declaration serialized")
-	require.Contains(t, out, "&#x25;", "percent escaped via dumpEntityContent")
-	require.Contains(t, out, "&quot;", "embedded quote escaped via dumpEntityContent")
-}
-
-// TestWriterOptions exercises the Writer option toggles and serialization paths.
+// the Writer option toggles and serialization paths.
 func TestWriterOptions(t *testing.T) {
 	t.Parallel()
 	in, err := os.ReadFile("test/att12.xml")
@@ -1652,1646 +1084,4 @@ func TestWriterOptions(t *testing.T) {
 	err = helium.NewWriter().EscapeNonASCII(true).WriteTo(&buf, d2)
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "&#")
-}
-
-func TestWriterValidationErrorsLeaveNoOutput(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name    string
-		build   func(*testing.T) *helium.Document
-		wantErr error
-	}{
-		{
-			name: "empty DTD name",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				_, err := doc.CreateInternalSubset("", "", "")
-				require.NoError(t, err)
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			wantErr: helium.ErrWriterInvalidDTDNode,
-		},
-		{
-			name: "invalid text character",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				require.NoError(t, root.AppendText([]byte("bad\x01text")))
-				return doc
-			},
-			wantErr: helium.ErrInvalidXMLChar,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			var out bytes.Buffer
-			err := helium.NewWriter().WriteTo(&out, tc.build(t))
-			require.ErrorIs(t, err, tc.wantErr)
-			require.Empty(t, out.String(), "validation errors must leave no output bytes")
-		})
-	}
-}
-
-func TestWriterRejectInvalidChars(t *testing.T) {
-	t.Parallel()
-
-	// A C0 control character (U+0001) is invalid in XML 1.0. By default the
-	// writer REJECTS it with ErrInvalidXMLChar (the SERE0006 serialization
-	// error); RejectInvalidChars(false) opts into U+FFFD replacement.
-	textDoc := func() *helium.Document {
-		d := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-		r, err := d.CreateElement("r")
-		require.NoError(t, err)
-		require.NoError(t, d.AddChild(r))
-		require.NoError(t, r.AppendText([]byte("a\x01b")))
-		return d
-	}
-	attrDoc := func() *helium.Document {
-		d := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-		r, err := d.CreateElement("r")
-		require.NoError(t, err)
-		require.NoError(t, d.AddChild(r))
-		err = r.SetAttribute("v", "x\x01y")
-		require.NoError(t, err)
-		return d
-	}
-
-	// Default (zero-value Writer / NewWriter): an invalid char in text OR in an
-	// attribute value is rejected, and the failure matches ErrInvalidXMLChar.
-	_, err := helium.WriteString(textDoc())
-	require.ErrorIs(t, err, helium.ErrInvalidXMLChar)
-	var buf bytes.Buffer
-	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, textDoc()), helium.ErrInvalidXMLChar)
-	buf.Reset()
-	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, attrDoc()), helium.ErrInvalidXMLChar)
-
-	// EscapeNonASCII(false) still rejects by default \u2014 the check runs before any
-	// char-reference/replacement branch, independent of the escaping setting.
-	buf.Reset()
-	require.ErrorIs(t, helium.NewWriter().EscapeNonASCII(false).WriteTo(&buf, textDoc()), helium.ErrInvalidXMLChar)
-
-	// RejectInvalidChars(false) replaces the invalid char with U+FFFD. Under the
-	// default EscapeNonASCII the replacement is the &#xFFFD; reference (matching
-	// libxml2) \u2014 NEVER a bogus &#x1; reference for the out-of-range char.
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, textDoc()))
-	require.Contains(t, buf.String(), "&#xFFFD;")
-	require.NotContains(t, buf.String(), "&#x1;")
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, attrDoc()))
-	require.Contains(t, buf.String(), "&#xFFFD;")
-	require.NotContains(t, buf.String(), "&#x1;")
-
-	// With EscapeNonASCII(false) the replacement is the raw U+FFFD character.
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, textDoc()))
-	require.Contains(t, buf.String(), "\uFFFD")
-	require.NotContains(t, buf.String(), "&#x1;")
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, attrDoc()))
-	require.Contains(t, buf.String(), "\uFFFD")
-
-	// RejectInvalidChars rejects the control char regardless of the
-	// EscapeNonASCII setting (the check runs before char-reference escaping).
-	buf.Reset()
-	err = helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, textDoc())
-	require.ErrorIs(t, err, helium.ErrInvalidXMLChar)
-	buf.Reset()
-	err = helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(true).WriteTo(&buf, textDoc())
-	require.ErrorIs(t, err, helium.ErrInvalidXMLChar)
-
-	// A control char in an attribute value is rejected too (escaping covers
-	// attribute values, not only text nodes).
-	explicitAttrDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	r, err := explicitAttrDoc.CreateElement("r")
-	require.NoError(t, err)
-	require.NoError(t, explicitAttrDoc.AddChild(r))
-	err = r.SetAttribute("v", "x\x07y")
-	require.NoError(t, err)
-	buf.Reset()
-	err = helium.NewWriter().RejectInvalidChars(true).WriteTo(&buf, explicitAttrDoc)
-	require.ErrorIs(t, err, helium.ErrInvalidXMLChar)
-
-	// A valid document still serializes cleanly under the default rejection.
-	okDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	e, err := okDoc.CreateElement("r")
-	require.NoError(t, err)
-	require.NoError(t, okDoc.AddChild(e))
-	require.NoError(t, e.AppendText([]byte("plain text\tok")))
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().WriteTo(&buf, okDoc))
-	require.Contains(t, buf.String(), "plain text\tok")
-}
-
-func TestWriterXML11RestrictedChars(t *testing.T) {
-	t.Parallel()
-
-	// U+0001 is a restricted-but-VALID character in XML 1.1, serialized as a
-	// decimal character reference \u2014 never rejected and never replaced with
-	// U+FFFD \u2014 regardless of the RejectInvalidChars setting.
-	textDoc := func() *helium.Document {
-		d := helium.NewDocument("1.1", "UTF-8", helium.StandaloneImplicitNo)
-		r, err := d.CreateElement("r")
-		require.NoError(t, err)
-		require.NoError(t, d.AddChild(r))
-		require.NoError(t, r.AppendText([]byte("a\x01b")))
-		return d
-	}
-	attrDoc := func() *helium.Document {
-		d := helium.NewDocument("1.1", "UTF-8", helium.StandaloneImplicitNo)
-		r, err := d.CreateElement("r")
-		require.NoError(t, err)
-		require.NoError(t, d.AddChild(r))
-		err = r.SetAttribute("v", "x\x01y")
-		require.NoError(t, err)
-		return d
-	}
-
-	// Default (rejection) mode: the restricted char serializes as &#1;.
-	var buf bytes.Buffer
-	require.NoError(t, helium.NewWriter().WriteTo(&buf, textDoc()))
-	require.Contains(t, buf.String(), "&#1;")
-	require.NotContains(t, buf.String(), "\uFFFD")
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().WriteTo(&buf, attrDoc()))
-	require.Contains(t, buf.String(), "&#1;")
-
-	// Replacement mode: same decimal character reference, unaffected.
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, textDoc()))
-	require.Contains(t, buf.String(), "&#1;")
-	require.NotContains(t, buf.String(), "\uFFFD")
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, attrDoc()))
-	require.Contains(t, buf.String(), "&#1;")
-}
-
-// TestWriterRejectInvalidCharsRefFreeContexts covers the reference-less
-// serialization contexts — comment, PI data, and CDATA-section content — where a
-// character reference is not available. A C0 control (U+0001) is invalid in XML
-// 1.0 and restricted in XML 1.1. U+007F is valid in XML 1.0 but must be a
-// character reference in XML 1.1. Both are unserializable in these contexts. The
-// default policy rejects with ErrInvalidXMLChar; RejectInvalidChars(false)
-// substitutes a raw U+FFFD, never a character reference.
-func TestWriterRejectInvalidCharsRefFreeContexts(t *testing.T) {
-	t.Parallel()
-
-	build := map[string]func(version, value string) *helium.Document{
-		"comment-node": func(v, value string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r, err := d.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AddChild(d.CreateComment([]byte(value))))
-			return d
-		},
-		"pi-data": func(v, value string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r, err := d.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AddChild(d.CreatePI("t", value)))
-			return d
-		},
-		"cdata-section-node": func(v, value string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r, err := d.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AddChild(d.CreateCDATASection([]byte(value))))
-			return d
-		},
-		"cdata-section-element": func(v, value string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			r, err := d.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(r))
-			require.NoError(t, r.AppendText([]byte(value)))
-			return d
-		},
-	}
-
-	for _, tc := range []struct {
-		name    string
-		version string
-		value   string
-		ref     string
-	}{
-		{name: "xml10-c0", version: ver10, value: "a\x01b", ref: "&#1;"},
-		{name: "xml11-c0", version: ver11, value: "a\x01b", ref: "&#1;"},
-		{name: "xml11-restricted", version: ver11, value: "a\x7fb", ref: "&#127;"},
-	} {
-		for name, mk := range build {
-			t.Run(tc.name+"/"+name, func(t *testing.T) {
-				t.Parallel()
-				w := helium.NewWriter()
-				if name == "cdata-section-element" {
-					w = w.CDATASectionElements(map[string]struct{}{"{}r": {}})
-				}
-
-				// Default policy rejects with ErrInvalidXMLChar.
-				var buf bytes.Buffer
-				require.ErrorIs(t, w.WriteTo(&buf, mk(tc.version, tc.value)), helium.ErrInvalidXMLChar)
-
-				// Replacement mode substitutes a raw U+FFFD (a reference-less
-				// context cannot emit a character reference).
-				buf.Reset()
-				require.NoError(t, w.RejectInvalidChars(false).WriteTo(&buf, mk(tc.version, tc.value)))
-				require.Contains(t, buf.String(), "�")
-				require.NotContains(t, buf.String(), tc.ref)
-			})
-		}
-	}
-}
-
-func TestWriterXML11EntityValueRestrictedChars(t *testing.T) {
-	t.Parallel()
-
-	newDoc := func(t *testing.T, version string, typ enum.EntityType, orig bool, value string) *helium.Document {
-		t.Helper()
-		doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
-		dtd, err := doc.CreateInternalSubset("doc", "", "")
-		require.NoError(t, err)
-		ent, err := dtd.AddEntity("e", typ, "", "", value)
-		require.NoError(t, err)
-		if orig {
-			ent.SetOrig(value)
-		}
-		root, err := doc.CreateElement("doc")
-		require.NoError(t, err)
-		require.NoError(t, doc.AddChild(root))
-		return doc
-	}
-
-	for _, tc := range []struct {
-		name string
-		typ  enum.EntityType
-		orig bool
-	}{
-		{name: "general-content", typ: enum.InternalGeneralEntity},
-		{name: "general-orig", typ: enum.InternalGeneralEntity, orig: true},
-		{name: "parameter-content", typ: enum.InternalParameterEntity},
-		{name: "parameter-orig", typ: enum.InternalParameterEntity, orig: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			for _, writer := range []helium.Writer{
-				helium.NewWriter(),
-				helium.NewWriter().RejectInvalidChars(false),
-			} {
-				var buf bytes.Buffer
-				require.NoError(t, writer.WriteTo(&buf, newDoc(t, ver11, tc.typ, tc.orig, "a\x7fb")))
-				require.Contains(t, buf.String(), "a&#127;b")
-				require.NotContains(t, buf.String(), "a\x7fb")
-			}
-
-			// XML 1.0 keeps U+007F literal in every EntityValue storage path.
-			var buf bytes.Buffer
-			require.NoError(t, helium.NewWriter().WriteTo(&buf, newDoc(t, ver10, tc.typ, tc.orig, "a\x7fb")))
-			require.Contains(t, buf.String(), "a\x7fb")
-			require.NotContains(t, buf.String(), "a&#127;b")
-
-			// A validated reference remains verbatim instead of being double-escaped.
-			buf.Reset()
-			require.NoError(t, helium.NewWriter().WriteTo(&buf, newDoc(t, ver11, tc.typ, tc.orig, "a&#127;b")))
-			require.Contains(t, buf.String(), "a&#127;b")
-		})
-	}
-}
-
-func TestWriterRejectsXML11RestrictedCharsInDTDLiterals(t *testing.T) {
-	t.Parallel()
-
-	newDoc := func() *helium.Document {
-		doc := helium.NewDocument(ver11, "UTF-8", helium.StandaloneImplicitNo)
-		_, err := doc.CreateInternalSubset("doc", "", "sys\x7fid")
-		require.NoError(t, err)
-		root, err := doc.CreateElement("doc")
-		require.NoError(t, err)
-		require.NoError(t, doc.AddChild(root))
-		return doc
-	}
-
-	var buf bytes.Buffer
-	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, newDoc()), helium.ErrInvalidXMLChar)
-
-	buf.Reset()
-	require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, newDoc()))
-	require.Contains(t, buf.String(), "sys�id")
-	require.NotContains(t, buf.String(), "&#127;")
-}
-
-func TestWriterIgnoresStoredExternalIDsOnInternalEntities(t *testing.T) {
-	t.Parallel()
-
-	const (
-		invalidPublicID = "bad{pubid"
-		invalidSystemID = "bad\x01system"
-	)
-
-	for _, tc := range []struct {
-		name       string
-		entityType enum.EntityType
-		publicID   string
-		systemID   string
-	}{
-		{
-			name:       "general public ID",
-			entityType: enum.InternalGeneralEntity,
-			publicID:   invalidPublicID,
-		},
-		{
-			name:       "general system ID",
-			entityType: enum.InternalGeneralEntity,
-			systemID:   invalidSystemID,
-		},
-		{
-			name:       "parameter public ID",
-			entityType: enum.InternalParameterEntity,
-			publicID:   invalidPublicID,
-		},
-		{
-			name:       "parameter system ID",
-			entityType: enum.InternalParameterEntity,
-			systemID:   invalidSystemID,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := doc.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("entity", tc.entityType, tc.publicID, tc.systemID, "entity value")
-			require.NoError(t, err)
-			root, err := doc.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-
-			out, err := helium.WriteString(doc)
-			require.NoError(t, err)
-			require.Contains(t, out, "<!ENTITY")
-			require.Contains(t, out, "entity value")
-			if tc.publicID != "" {
-				require.NotContains(t, out, tc.publicID)
-			}
-			if tc.systemID != "" {
-				require.NotContains(t, out, tc.systemID)
-			}
-			require.NotContains(t, out, "\uFFFD")
-			_, err = helium.NewParser().Parse(t.Context(), []byte(out))
-			require.NoError(t, err)
-		})
-	}
-}
-
-func TestWriterValidatesExternalEntityIDs(t *testing.T) {
-	t.Parallel()
-
-	const (
-		invalidPublicID = "bad{pubid"
-		invalidSystemID = "bad\x01system"
-	)
-
-	for _, tc := range []struct {
-		name       string
-		entityType enum.EntityType
-		publicID   string
-		systemID   string
-		wantErr    error
-	}{
-		{
-			name:       "parsed general public ID",
-			entityType: enum.ExternalGeneralParsedEntity,
-			publicID:   invalidPublicID,
-			systemID:   "ext.ent",
-			wantErr:    helium.ErrWriterInvalidDTDNode,
-		},
-		{
-			name:       "unparsed general public ID",
-			entityType: enum.ExternalGeneralUnparsedEntity,
-			publicID:   invalidPublicID,
-			systemID:   "ext.ent",
-			wantErr:    helium.ErrWriterInvalidDTDNode,
-		},
-		{
-			name:       "parameter public ID",
-			entityType: enum.ExternalParameterEntity,
-			publicID:   invalidPublicID,
-			systemID:   "ext.ent",
-			wantErr:    helium.ErrWriterInvalidDTDNode,
-		},
-		{
-			name:       "parsed general system ID",
-			entityType: enum.ExternalGeneralParsedEntity,
-			systemID:   invalidSystemID,
-			wantErr:    helium.ErrInvalidXMLChar,
-		},
-		{
-			name:       "unparsed general system ID",
-			entityType: enum.ExternalGeneralUnparsedEntity,
-			systemID:   invalidSystemID,
-			wantErr:    helium.ErrInvalidXMLChar,
-		},
-		{
-			name:       "parameter system ID",
-			entityType: enum.ExternalParameterEntity,
-			systemID:   invalidSystemID,
-			wantErr:    helium.ErrInvalidXMLChar,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := doc.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("ext", tc.entityType, tc.publicID, tc.systemID, "")
-			require.NoError(t, err)
-			root, err := doc.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-
-			var buf bytes.Buffer
-			err = helium.NewWriter().WriteTo(&buf, doc)
-			require.ErrorIs(t, err, tc.wantErr)
-			require.NotContains(t, buf.String(), "\uFFFD")
-		})
-	}
-}
-
-func TestWriterSerializesValidExternalEntitySystemLiterals(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name     string
-		systemID string
-		want     string
-	}{
-		{
-			name:     "no quote",
-			systemID: "external.ent",
-			want:     `"external.ent"`,
-		},
-		{
-			name:     "double quote",
-			systemID: `external"quote.ent`,
-			want:     `'external"quote.ent'`,
-		},
-		{
-			name:     "single quote",
-			systemID: `external'quote.ent`,
-			want:     `"external'quote.ent"`,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := doc.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("ext", enum.ExternalGeneralParsedEntity, "", tc.systemID, "")
-			require.NoError(t, err)
-			root, err := doc.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-
-			out, err := helium.WriteString(doc)
-			require.NoError(t, err)
-			require.Contains(t, out, "SYSTEM "+tc.want)
-			_, err = helium.NewParser().Parse(t.Context(), []byte(out))
-			require.NoError(t, err)
-		})
-	}
-}
-
-func TestWriterRejectsUnrepresentableSystemLiterals(t *testing.T) {
-	t.Parallel()
-
-	const systemID = `external"quote'and-apostrophe.ent`
-	for _, tc := range []struct {
-		name string
-		add  func(*helium.DTD) error
-	}{
-		{
-			name: "parsed general entity with system ID",
-			add: func(dtd *helium.DTD) error {
-				_, err := dtd.AddEntity("ext", enum.ExternalGeneralParsedEntity, "", systemID, "")
-				return err
-			},
-		},
-		{
-			name: "unparsed general entity with public and system IDs",
-			add: func(dtd *helium.DTD) error {
-				_, err := dtd.AddEntity("ext", enum.ExternalGeneralUnparsedEntity, "Example", systemID, "")
-				return err
-			},
-		},
-		{
-			name: "parameter entity with system ID",
-			add: func(dtd *helium.DTD) error {
-				_, err := dtd.AddEntity("ext", enum.ExternalParameterEntity, "", systemID, "")
-				return err
-			},
-		},
-		{
-			name: "notation with system ID",
-			add: func(dtd *helium.DTD) error {
-				_, err := dtd.AddNotation("notation", "", systemID)
-				return err
-			},
-		},
-		{
-			name: "notation with public and system IDs",
-			add: func(dtd *helium.DTD) error {
-				_, err := dtd.AddNotation("notation", "Example", systemID)
-				return err
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := doc.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			require.NoError(t, tc.add(dtd))
-			root, err := doc.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-
-			var buf bytes.Buffer
-			err = helium.NewWriter().WriteTo(&buf, doc)
-			require.ErrorIs(t, err, helium.ErrWriterInvalidDTDNode)
-			require.NotContains(t, buf.String(), systemID)
-			require.NotContains(t, buf.String(), "&quot;")
-		})
-	}
-}
-
-func TestWriterExternalParameterEntityClosingDelimiter(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("doc", "", "")
-	require.NoError(t, err)
-	_, err = dtd.AddEntity("ext", enum.ExternalParameterEntity, "", "ext.ent", "")
-	require.NoError(t, err)
-	root, err := doc.CreateElement("doc")
-	require.NoError(t, err)
-	require.NoError(t, doc.AddChild(root))
-
-	var buf bytes.Buffer
-	require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
-	require.Contains(t, buf.String(), "<!ENTITY % ext SYSTEM \"ext.ent\">")
-	_, err = helium.NewParser().Parse(t.Context(), buf.Bytes())
-	require.NoError(t, err)
-}
-
-// TestWriterRejectInvalidCharsVerbatimNames covers every DTD/entity-reference NAME
-// emission site. A name is written verbatim between markup delimiters and has no
-// character-reference (and no U+FFFD) form, so a name carrying a C0 control
-// (U+0001) is REJECTED with ErrWriterInvalidName in BOTH the default and the
-// RejectInvalidChars(false) mode, and in BOTH XML versions (the Name grammar
-// subsumes the character-range check and is version-independent) — mirroring how
-// element/attribute names already behave. These names never reach the writer from
-// a parsed document (the parser validates them); they are reachable only through
-// the tree-construction APIs, which check only for a stray colon.
-func TestWriterRejectInvalidCharsVerbatimNames(t *testing.T) {
-	t.Parallel()
-
-	// Each builder produces a document whose only defect is a control character in
-	// one verbatim name; every other name is valid.
-	build := map[string]func(t *testing.T, v string) *helium.Document{
-		"doctype-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			_, err := d.CreateInternalSubset("r\x01", "", "")
-			require.NoError(t, err)
-			root, err := d.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"entity-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("e\x01", enum.InternalGeneralEntity, "", "", "v")
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"notation-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddNotation("n\x01", "", "sys")
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"ndata-notation-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("img", enum.ExternalGeneralUnparsedEntity, "", "pic.gif", "nota\x01")
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"element-decl-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddElementDecl("e\x01", enum.EmptyElementType, nil)
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"content-model-child-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			pcdata, err := d.CreateElementContent("", helium.ElementContentPCDATA)
-			require.NoError(t, err)
-			child, err := d.CreateElementContent("a\x01", helium.ElementContentElement)
-			require.NoError(t, err)
-			model, err := d.CreateElementContentChoice(pcdata, child, helium.ElementContentMult)
-			require.NoError(t, err)
-			_, err = dtd.AddElementDecl("m", enum.MixedElementType, model)
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"attlist-element-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddAttributeDecl("el\x01", "a", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"attlist-attr-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddAttributeDecl("el", "a\x01", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-		"entity-reference-name": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			root, err := d.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			ref, err := d.CreateCharRef("e\x01")
-			require.NoError(t, err)
-			require.NoError(t, root.AddChild(ref))
-			return d
-		},
-	}
-
-	for _, version := range []string{ver10, ver11} {
-		for name, mk := range build {
-			t.Run(version+"/"+name, func(t *testing.T) {
-				t.Parallel()
-				// Default (reject) mode fails with ErrWriterInvalidName.
-				var buf bytes.Buffer
-				require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk(t, version)), helium.ErrWriterInvalidName)
-				// RejectInvalidChars(false) does NOT rescue a name (it has no U+FFFD
-				// form): the same rejection stands.
-				buf.Reset()
-				require.ErrorIs(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, version)), helium.ErrWriterInvalidName)
-			})
-		}
-	}
-}
-
-// TestWriterRejectInvalidCharsCharRefTargets covers the numeric character-reference
-// TARGET sites — an EntityRefNode "#N" (CreateCharRef) in element content and a
-// &#N; reference inside an entity value. Unlike a verbatim name, a character
-// reference carries its character as a target that must be serializable in the
-// target XML version, so the decision is VERSION-SENSITIVE: U+0001 is out of range
-// for XML 1.0 (rejected/replaced) but a RestrictedChar valid for XML 1.1 output
-// (emitted as &#1;). This is the &#1;-in-1.1 legality case.
-func TestWriterRejectInvalidCharsCharRefTargets(t *testing.T) {
-	t.Parallel()
-
-	build := map[string]func(t *testing.T, v string) *helium.Document{
-		"entity-ref-charref": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			root, err := d.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			ref, err := d.CreateCharRef("#1")
-			require.NoError(t, err)
-			require.NoError(t, root.AddChild(ref))
-			return d
-		},
-		"entity-value-charref": func(t *testing.T, v string) *helium.Document {
-			d := helium.NewDocument(v, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := d.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&#1;")
-			require.NoError(t, err)
-			root, err := d.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, d.AddChild(root))
-			return d
-		},
-	}
-
-	for name, mk := range build {
-		t.Run("xml10/"+name, func(t *testing.T) {
-			t.Parallel()
-			// XML 1.0: &#1; targets an out-of-range character.
-			// Default mode rejects with ErrInvalidXMLChar (SERE0006).
-			var buf bytes.Buffer
-			require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, mk(t, "1.0")), helium.ErrInvalidXMLChar)
-
-			// Replacement mode substitutes the U+FFFD representation and NEVER emits a
-			// bogus &#1;. With the default EscapeNonASCII it is the &#xFFFD; reference.
-			buf.Reset()
-			require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, "1.0")))
-			require.Contains(t, buf.String(), "&#xFFFD;")
-			require.NotContains(t, buf.String(), "&#1;")
-
-			// With EscapeNonASCII(false) the replacement is the raw U+FFFD character.
-			buf.Reset()
-			require.NoError(t, helium.NewWriter().EscapeNonASCII(false).RejectInvalidChars(false).WriteTo(&buf, mk(t, "1.0")))
-			require.Contains(t, buf.String(), "�")
-			require.NotContains(t, buf.String(), "&#1;")
-		})
-
-		t.Run("xml11/"+name, func(t *testing.T) {
-			t.Parallel()
-			// XML 1.1: &#1; targets a RestrictedChar that is legal as a character
-			// reference, so it is emitted verbatim in BOTH modes — never rejected,
-			// never replaced.
-			var buf bytes.Buffer
-			require.NoError(t, helium.NewWriter().WriteTo(&buf, mk(t, "1.1")))
-			require.Contains(t, buf.String(), "&#1;")
-			require.NotContains(t, buf.String(), "�")
-
-			buf.Reset()
-			require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, mk(t, "1.1")))
-			require.Contains(t, buf.String(), "&#1;")
-			require.NotContains(t, buf.String(), "�")
-		})
-	}
-}
-
-// TestWriterRejectsMalformedCharRefMarkup keeps lexical failures separate from
-// target-range handling. EntityRefNode stores a body without delimiters, while
-// EntityValue carries complete reference markup in both content and orig paths.
-func TestWriterRejectsMalformedCharRefMarkup(t *testing.T) {
-	t.Parallel()
-
-	newEntityDoc := func(t *testing.T, version, value string, orig bool) *helium.Document {
-		t.Helper()
-		doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
-		dtd, err := doc.CreateInternalSubset("doc", "", "")
-		require.NoError(t, err)
-		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", value)
-		require.NoError(t, err)
-		if orig {
-			ent.SetOrig(value)
-		}
-		root, err := doc.CreateElement("doc")
-		require.NoError(t, err)
-		require.NoError(t, doc.AddChild(root))
-		return doc
-	}
-
-	for _, version := range []string{ver10, ver11} {
-		t.Run(version+"/entity-ref-uppercase-hex-introducer", func(t *testing.T) {
-			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
-			root, err := doc.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-			ref, err := doc.CreateCharRef("#X41")
-			require.NoError(t, err)
-			require.NoError(t, root.AddChild(ref))
-
-			var buf bytes.Buffer
-			require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, doc), helium.ErrWriterInvalidName)
-			require.NotContains(t, buf.String(), "&#X41;")
-		})
-
-		for _, tc := range []struct {
-			name  string
-			value string
-			orig  bool
-		}{
-			{name: "content-uppercase-hex-introducer", value: "&#X41;"},
-			{name: "content-missing-digits", value: "&#x;"},
-			{name: "content-bad-digit", value: "&#12z;"},
-			{name: "content-missing-semicolon", value: "&#12"},
-			{name: "content-overflow", value: "&#x110000;"},
-			{name: "orig-uppercase-hex-introducer", value: "&#X41;", orig: true},
-			{name: "orig-missing-digits", value: "&#x;", orig: true},
-			{name: "orig-bad-digit", value: "&#12z;", orig: true},
-			{name: "orig-missing-semicolon", value: "&#12", orig: true},
-			{name: "orig-overflow", value: "&#x110000;", orig: true},
-		} {
-			t.Run(version+"/"+tc.name, func(t *testing.T) {
-				var buf bytes.Buffer
-				err := helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, newEntityDoc(t, version, tc.value, tc.orig))
-				require.ErrorIs(t, err, helium.ErrWriterInvalidName)
-				require.NotContains(t, buf.String(), tc.value)
-			})
-		}
-	}
-}
-
-// TestWriterRejectsSurrogateCharRefTargets verifies that both numeric-reference
-// emitters reject the complete surrogate block in XML 1.0 and XML 1.1. Replacement
-// remains available only because the numeric syntax itself is valid.
-func TestWriterRejectsSurrogateCharRefTargets(t *testing.T) {
-	t.Parallel()
-
-	build := map[string]func(t *testing.T, version string) *helium.Document{
-		"entity-ref": func(t *testing.T, version string) *helium.Document {
-			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
-			root, err := doc.CreateElement("r")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-			ref, err := doc.CreateCharRef("#xD800")
-			require.NoError(t, err)
-			require.NoError(t, root.AddChild(ref))
-			return doc
-		},
-		"entity-value-content": func(t *testing.T, version string) *helium.Document {
-			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := doc.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "&#xD800;")
-			require.NoError(t, err)
-			root, err := doc.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-			return doc
-		},
-		"entity-value-orig": func(t *testing.T, version string) *helium.Document {
-			doc := helium.NewDocument(version, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := doc.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "plain")
-			require.NoError(t, err)
-			ent.SetOrig("&#xD800;")
-			root, err := doc.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-			return doc
-		},
-	}
-
-	for _, version := range []string{ver10, ver11} {
-		for name, makeDoc := range build {
-			t.Run(version+"/"+name, func(t *testing.T) {
-				var buf bytes.Buffer
-				require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, makeDoc(t, version)), helium.ErrInvalidXMLChar)
-
-				buf.Reset()
-				require.NoError(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, makeDoc(t, version)))
-				require.NotContains(t, buf.String(), "&#xD800;")
-				require.Contains(t, buf.String(), "&#xFFFD;")
-			})
-		}
-	}
-}
-
-// TestWriterRejectsMalformedEntityValueMarkup verifies that every ampersand in
-// content and parsed orig values is syntax, not repairable character data.
-func TestWriterRejectsMalformedEntityValueMarkup(t *testing.T) {
-	t.Parallel()
-
-	newEntityDoc := func(t *testing.T, value string, orig bool) *helium.Document {
-		t.Helper()
-		doc := helium.NewDocument(ver10, "UTF-8", helium.StandaloneImplicitNo)
-		dtd, err := doc.CreateInternalSubset("doc", "", "")
-		require.NoError(t, err)
-		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", value)
-		require.NoError(t, err)
-		if orig {
-			ent.SetOrig(value)
-		}
-		root, err := doc.CreateElement("doc")
-		require.NoError(t, err)
-		require.NoError(t, doc.AddChild(root))
-		return doc
-	}
-
-	for _, tc := range []struct {
-		name  string
-		value string
-		orig  bool
-	}{
-		{name: "content-bare-ampersand", value: "&"},
-		{name: "content-missing-semicolon", value: "&name"},
-		{name: "content-invalid-name", value: "&9name;"},
-		{name: "content-whitespace-name", value: "&bad name;"},
-		{name: "orig-bare-ampersand", value: "&", orig: true},
-		{name: "orig-missing-semicolon", value: "&name", orig: true},
-		{name: "orig-invalid-name", value: "&9name;", orig: true},
-		{name: "orig-whitespace-name", value: "&bad name;", orig: true},
-		{name: "orig-bare-percent", value: "%", orig: true},
-		{name: "orig-parameter-missing-semicolon", value: "%pe", orig: true},
-		{name: "orig-parameter-invalid-name", value: "%9pe;", orig: true},
-		{name: "orig-parameter-reference", value: "%pe;", orig: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			require.ErrorIs(t, helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, newEntityDoc(t, tc.value, tc.orig)), helium.ErrWriterInvalidName)
-			require.NotContains(t, buf.String(), tc.value)
-		})
-	}
-
-	var buf bytes.Buffer
-	require.NoError(t, helium.NewWriter().WriteTo(&buf, newEntityDoc(t, "value&amp;more", false)))
-	require.Contains(t, buf.String(), "value&amp;more")
-}
-
-// TestWriterRejectsDTDDeclarationNamesRequiringNCName keeps DTD declaration
-// names distinct from the broader DTD Name grammar used by element constructs.
-func TestWriterRejectsDTDDeclarationNamesRequiringNCName(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name string
-		typ  enum.EntityType
-	}{
-		{name: "general", typ: enum.InternalGeneralEntity},
-		{name: "parameter", typ: enum.InternalParameterEntity},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc := helium.NewDocument(ver10, "UTF-8", helium.StandaloneImplicitNo)
-			dtd, err := doc.CreateInternalSubset("doc", "", "")
-			require.NoError(t, err)
-			_, err = dtd.AddEntity("p:e", tc.typ, "", "", "value")
-			require.NoError(t, err)
-			root, err := doc.CreateElement("doc")
-			require.NoError(t, err)
-			require.NoError(t, doc.AddChild(root))
-
-			var buf bytes.Buffer
-			require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, doc), helium.ErrWriterInvalidName)
-			require.NotContains(t, buf.String(), "<!ENTITY p:e")
-		})
-	}
-}
-
-// TestWriterEntityValueScannerHandlesRepeatedMalformedPrefixes gives the scanner
-// one terminal semicolon after many malformed starts. A one-pass scanner rejects
-// the first reference without repeatedly searching the remaining suffix.
-func TestWriterEntityValueScannerHandlesRepeatedMalformedPrefixes(t *testing.T) {
-	value := strings.Repeat("&#", 32*1024) + ";"
-	doc := helium.NewDocument(ver10, "UTF-8", helium.StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("doc", "", "")
-	require.NoError(t, err)
-	_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", value)
-	require.NoError(t, err)
-	root, err := doc.CreateElement("doc")
-	require.NoError(t, err)
-	require.NoError(t, doc.AddChild(root))
-
-	var buf bytes.Buffer
-	require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, doc), helium.ErrWriterInvalidName)
-}
-
-// TestWriteStringWithoutDTD verifies WriteString on a programmatically built doc.
-func TestWriteStringWithoutDTD(t *testing.T) {
-	t.Parallel()
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	require.NoError(t, doc.AddChild(root))
-	require.NoError(t, root.AppendText([]byte("text & more")))
-
-	s, err := helium.WriteString(doc)
-	require.NoError(t, err)
-	require.True(t, strings.Contains(s, "<root>"))
-	require.Contains(t, s, "&amp;")
-}
-
-// TestWriterNormalization exercises Writer.Normalization: Unicode normalization is
-// scoped to text-node and attribute-value character content (Serialization 3.1
-// §4). Element/attribute names, comments, and PIs are never normalized.
-func TestWriterNormalization(t *testing.T) {
-	t.Parallel()
-	const decomposed = "e\u0301" // "e" + combining acute
-	const composed = "\u00e9"    // U+00E9
-	src := "<caf" + decomposed + " at" + decomposed + "=\"" + decomposed + "\">" +
-		"<!--" + decomposed + "--><?p " + decomposed + "?>" + decomposed +
-		"</caf" + decomposed + ">"
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-	require.NoError(t, err)
-
-	var buf strings.Builder
-	// EscapeNonASCII(false) so the composed é appears literally, isolating the
-	// normalization effect from the writer's numeric-reference escaping.
-	err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
-		Normalization("NFC").WriteTo(&buf, doc)
-	require.NoError(t, err)
-	out := buf.String()
-
-	// Text and attribute value are composed; names, comment, and PI stay decomposed.
-	require.Contains(t, out, ">"+composed+"</caf"+decomposed+">", "text normalized: %q", out)
-	require.Contains(t, out, "at"+decomposed+"=\""+composed+"\"", "attr value normalized, name not: %q", out)
-	require.Contains(t, out, "<caf"+decomposed, "element name not normalized: %q", out)
-	require.Contains(t, out, "<!--"+decomposed+"-->", "comment not normalized: %q", out)
-	require.Contains(t, out, "<?p "+decomposed+"?>", "PI not normalized: %q", out)
-	require.NotContains(t, out, "caf"+composed, "name must stay decomposed: %q", out)
-
-	// Without normalization the output is byte-identical to the source content.
-	var raw strings.Builder
-	err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).WriteTo(&raw, doc)
-	require.NoError(t, err)
-	require.NotContains(t, raw.String(), composed, "no normalization by default: %q", raw.String())
-}
-
-// TestWriterCharMapNormalizationVerbatim verifies that a character-map
-// replacement is emitted verbatim (never re-escaped, Unicode-normalized, or
-// rejected by the invalid-char policy) per XSLT/XQuery Serialization 3.1 §7, and
-// that this holds identically whether or not Normalization is active. The
-// surrounding content is still normalized; only the replacement span is inert.
-func TestWriterCharMapNormalizationVerbatim(t *testing.T) {
-	t.Parallel()
-
-	const decomposed = "é" // "e" + combining acute
-	const composed = "é"    // U+00E9
-
-	serialize := func(t *testing.T, w helium.Writer, src string) (string, error) {
-		t.Helper()
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-		require.NoError(t, err)
-		var buf strings.Builder
-		err = w.WriteTo(&buf, doc)
-		return buf.String(), err
-	}
-
-	// '@' maps to a replacement carrying XML markup characters; those must survive
-	// verbatim (not become &lt;/&amp;) in both text and attribute value, and the
-	// decomposed é around them must still compose under NFC.
-	t.Run("markup chars in replacement", func(t *testing.T) {
-		t.Parallel()
-		m := map[rune]string{'@': "<b>&"}
-		src := `<a x="` + decomposed + `@` + decomposed + `">` + decomposed + `@` + decomposed + `</a>`
-		for _, form := range []string{"", "NFC"} {
-			// The surrounding é composes under NFC; without normalization it stays
-			// decomposed. The '@' replacement is verbatim in both.
-			surround := decomposed
-			if form == "NFC" {
-				surround = composed
-			}
-			w := helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
-				CharacterMap(m).Normalization(form)
-			out, err := serialize(t, w, src)
-			require.NoError(t, err, "form=%q", form)
-			require.Contains(t, out, ">"+surround+"<b>&"+surround+"</a>",
-				"text replacement verbatim, surround normalized (form=%q): %q", form, out)
-			require.Contains(t, out, `x="`+surround+`<b>&`+surround+`"`,
-				"attr replacement verbatim, surround normalized (form=%q): %q", form, out)
-		}
-	})
-
-	// A replacement carrying a control character (an invalid XML char) is emitted
-	// verbatim; RejectInvalidChars must not reject it, and Normalization must not
-	// change that.
-	t.Run("control char in replacement with RejectInvalidChars", func(t *testing.T) {
-		t.Parallel()
-		m := map[rune]string{'@': "x\x01y"}
-		for _, form := range []string{"", "NFC"} {
-			w := helium.NewWriter().XMLDeclaration(false).CharacterMap(m).
-				RejectInvalidChars(true).Normalization(form)
-			out, err := serialize(t, w, `<a x="@">@</a>`)
-			require.NoError(t, err, "control-char replacement must not be rejected (form=%q)", form)
-			require.Contains(t, out, ">x\x01y</a>", "text replacement verbatim (form=%q): %q", form, out)
-			require.Contains(t, out, `x="x`+"\x01"+`y"`, "attr replacement verbatim (form=%q): %q", form, out)
-		}
-	})
-}
-
-// TestWriterCharMapNormalizationCreatedRune verifies that character-map matching
-// is decided on the PRE-normalization content (Serialization 3.1 §4: character
-// mapping — rule c — precedes Unicode normalization — rule d — and is never
-// re-applied): a mapped rune CREATED by NFC composition is emitted as that rune,
-// not as the replacement, so mapped-rune treatment is identical with and without
-// Normalization; a mapped rune PRESENT in the input still maps in both.
-func TestWriterCharMapNormalizationCreatedRune(t *testing.T) {
-	t.Parallel()
-
-	const decomposed = "é" // "e" + combining acute
-	const composed = "é"    // U+00E9
-	m := map[rune]string{'é': "<mapped>"}
-
-	serialize := func(t *testing.T, form, src string) string {
-		t.Helper()
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-		require.NoError(t, err)
-		var buf strings.Builder
-		err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
-			CharacterMap(m).Normalization(form).WriteTo(&buf, doc)
-		require.NoError(t, err)
-		return buf.String()
-	}
-
-	t.Run("NFC-composed rune is not newly matched", func(t *testing.T) {
-		t.Parallel()
-		src := `<a x="` + decomposed + `">` + decomposed + `</a>`
-		// Without Normalization the decomposed pair matches nothing.
-		out := serialize(t, "", src)
-		require.Contains(t, out, ">"+decomposed+"</a>", "text unmapped without normalization: %q", out)
-		require.Contains(t, out, `x="`+decomposed+`"`, "attr unmapped without normalization: %q", out)
-		require.NotContains(t, out, "<mapped>", "no replacement without normalization: %q", out)
-		// With NFC the pair composes to é — a rune CREATED by normalization — so
-		// it is emitted as é, not substituted with the replacement.
-		out = serialize(t, "NFC", src)
-		require.Contains(t, out, ">"+composed+"</a>", "text composed, not mapped: %q", out)
-		require.Contains(t, out, `x="`+composed+`"`, "attr composed, not mapped: %q", out)
-		require.NotContains(t, out, "<mapped>", "no replacement for a normalization-created rune: %q", out)
-	})
-
-	t.Run("input-present mapped rune still maps under NFC", func(t *testing.T) {
-		t.Parallel()
-		// Text mixes an input-present é (must map in both configurations) with a
-		// decomposed pair (must map in neither).
-		src := `<a x="` + composed + `">` + composed + decomposed + `</a>`
-		out := serialize(t, "", src)
-		require.Contains(t, out, `x="<mapped>"`, "attr mapped without normalization: %q", out)
-		require.Contains(t, out, "><mapped>"+decomposed+"</a>", "text: input é mapped, pair untouched: %q", out)
-		out = serialize(t, "NFC", src)
-		require.Contains(t, out, `x="<mapped>"`, "attr mapped under NFC: %q", out)
-		require.Contains(t, out, "><mapped>"+composed+"</a>", "text: input é mapped, pair composed unmapped: %q", out)
-	})
-}
-
-// TestWriterCharMapNormalizationPrivateUseSaturation verifies that
-// pre-normalization character-map matching does not depend on finding a rune
-// absent from the content: with content containing EVERY Unicode private-use
-// rune, a mapped rune present in the input is replaced exactly once, and a
-// mapped rune CREATED by NFKC composition (fullwidth Ａ → A) still stays
-// literal.
-func TestWriterCharMapNormalizationPrivateUseSaturation(t *testing.T) {
-	t.Parallel()
-
-	// All 137,468 private-use runes: the BMP Private Use Area plus both
-	// supplementary private-use planes.
-	var pu strings.Builder
-	for _, rng := range [][2]rune{{0xE000, 0xF8FF}, {0xF0000, 0xFFFFD}, {0x100000, 0x10FFFD}} {
-		for r := rng[0]; r <= rng[1]; r++ {
-			pu.WriteRune(r)
-		}
-	}
-	// Content: every private-use rune, then fullwidth Ａ (U+FF21, which NFKC
-	// maps to ASCII A — must stay literal), then ASCII A (mapped — exactly one
-	// replacement).
-	src := "<a>" + pu.String() + "ＡA</a>"
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-	require.NoError(t, err)
-
-	var buf strings.Builder
-	err = helium.NewWriter().XMLDeclaration(false).EscapeNonASCII(false).
-		CharacterMap(map[rune]string{'A': "<mapped>"}).Normalization("NFKC").
-		WriteTo(&buf, doc)
-	require.NoError(t, err)
-	out := buf.String()
-	require.Equal(t, 1, strings.Count(out, "<mapped>"),
-		"exactly one replacement: the input A maps, the NFKC-created A does not")
-	require.Contains(t, out, "A<mapped></a>",
-		"NFKC-composed A stays literal ahead of the replacement: %q", out[len(out)-40:])
-}
-
-// TestWriteReconcilesSubtreeNamespaces verifies that serializing a subtree
-// re-declares any namespace prefix its elements or attributes use but that was
-// bound only on an ancestor outside the subtree, so the output reparses. This
-// is the situation an XSLT result tree creates when it grafts in nodes from a
-// source document (W3C xslt30 si-lre-029/904/905, si-element-029).
-func TestWriteReconcilesSubtreeNamespaces(t *testing.T) {
-	t.Parallel()
-
-	// firstElem returns the first element child of n, or n itself.
-	firstElem := func(n helium.Node) helium.Node {
-		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-			if c.Type() == helium.ElementNode {
-				return c
-			}
-		}
-		return n
-	}
-
-	serializeSubtree := func(t *testing.T, src string) string {
-		t.Helper()
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-		require.NoError(t, err)
-		var buf bytes.Buffer
-		err = helium.NewWriter().XMLDeclaration(false).WriteTo(&buf, firstElem(doc.DocumentElement()))
-		require.NoError(t, err)
-		return buf.String()
-	}
-
-	t.Run("prefixed attribute bound on outer ancestor", func(t *testing.T) {
-		t.Parallel()
-		// gml is declared on the root; the serialized <b:elem> subtree uses it
-		// only on the gml:id attribute. Both b (element prefix) and gml (attr
-		// prefix) must be declared in the fragment.
-		out := serializeSubtree(t, `<root xmlns:gml="urn:g" xmlns:b="urn:b"><b:elem gml:id="x1"/></root>`)
-		require.Contains(t, out, `xmlns:gml="urn:g"`)
-		require.Contains(t, out, `xmlns:b="urn:b"`)
-		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
-		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
-	})
-
-	t.Run("prefix used only on element name", func(t *testing.T) {
-		t.Parallel()
-		out := serializeSubtree(t, `<root xmlns:p="urn:p"><p:child>text</p:child></root>`)
-		require.Contains(t, out, `xmlns:p="urn:p"`)
-		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
-		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
-	})
-
-	t.Run("locally declared prefix not duplicated", func(t *testing.T) {
-		t.Parallel()
-		// gml is declared on <b:elem> itself; reconciliation must not emit a
-		// second xmlns:gml.
-		out := serializeSubtree(t, `<root xmlns:b="urn:b"><b:elem xmlns:gml="urn:g" gml:id="x1"/></root>`)
-		require.Equal(t, 1, strings.Count(out, `xmlns:gml=`), "no duplicate declaration: %q", out)
-		require.Contains(t, out, `xmlns:b="urn:b"`)
-		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
-		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
-	})
-
-	t.Run("xml prefix never reconciled", func(t *testing.T) {
-		t.Parallel()
-		// xml:lang uses the implicitly-bound xml prefix; the serializer must not
-		// synthesize xmlns:xml.
-		out := serializeSubtree(t, `<root xmlns:b="urn:b"><b:elem xml:lang="en"/></root>`)
-		require.NotContains(t, out, `xmlns:xml=`, "xml prefix is implicitly bound: %q", out)
-		_, err := helium.NewParser().Parse(t.Context(), []byte(out))
-		require.NoError(t, err, "reconciled fragment must reparse: %q", out)
-	})
-}
-
-// TestWriterMapSettersCloneInput verifies the value-style contract for every
-// map-taking Writer setter: the setter copies its input, so mutating the
-// caller's map AFTER the setter call does not change the configured Writer.
-// Without cloning the setters would retain the caller's map by reference, so a
-// post-set mutation (or a concurrent write) would silently change serialization.
-func TestWriterMapSettersCloneInput(t *testing.T) {
-	t.Parallel()
-
-	serialize := func(t *testing.T, w helium.Writer, n helium.Node) string {
-		t.Helper()
-		var buf bytes.Buffer
-		require.NoError(t, w.WriteTo(&buf, n))
-		return buf.String()
-	}
-
-	parse := func(t *testing.T, src string) *helium.Document {
-		t.Helper()
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-		require.NoError(t, err)
-		return doc
-	}
-
-	t.Run("CharacterMap", func(t *testing.T) {
-		t.Parallel()
-		doc := parse(t, `<a>o</a>`)
-		m := map[rune]string{}
-		w := helium.NewWriter().CharacterMap(m)
-		m['o'] = "0" // mutate after set — must not reach the Writer
-		out := serialize(t, w, doc)
-		require.Contains(t, out, ">o</a>", "unmutated char preserved: %q", out)
-		require.NotContains(t, out, ">0</a>", "post-set mutation must not apply: %q", out)
-	})
-
-	t.Run("CDATASectionElements", func(t *testing.T) {
-		t.Parallel()
-		doc := parse(t, `<a>hi</a>`)
-		m := map[string]struct{}{}
-		w := helium.NewWriter().CDATASectionElements(m)
-		m["{}a"] = struct{}{} // mutate after set
-		out := serialize(t, w, doc)
-		require.NotContains(t, out, "CDATA", "post-set mutation must not apply: %q", out)
-	})
-
-	t.Run("SuppressIndentElements", func(t *testing.T) {
-		t.Parallel()
-		doc := parse(t, `<a><b>x</b></a>`)
-		m := map[string]struct{}{}
-		w := helium.NewWriter().XMLDeclaration(false).Format(true).SuppressIndentElements(m)
-		m["{}a"] = struct{}{} // mutate after set
-		out := serialize(t, w, doc)
-		// With no suppression the formatter indents <b> onto its own line.
-		require.Contains(t, out, "\n", "output stays formatted: %q", out)
-		require.NotContains(t, out, "<a><b>", "post-set suppression must not apply: %q", out)
-	})
-
-	t.Run("InheritedNamespaces", func(t *testing.T) {
-		t.Parallel()
-		firstElem := func(n helium.Node) helium.Node {
-			for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-				if c.Type() == helium.ElementNode {
-					return c
-				}
-			}
-			return n
-		}
-		doc := parse(t, `<root xmlns:p="urn:p"><p:child>text</p:child></root>`)
-		m := map[string]string{}
-		w := helium.NewWriter().XMLDeclaration(false).InheritedNamespaces(m)
-		m["p"] = "urn:p" // mutate after set — must not suppress the redeclaration
-		out := serialize(t, w, firstElem(doc.DocumentElement()))
-		require.Contains(t, out, `xmlns:p="urn:p"`, "post-set inherited ns must not apply: %q", out)
-	})
-}
-
-// TestWriterStructuralErrorsMatchable verifies that each structural-serialization
-// failure the writer detects is reported via a named sentinel a caller can match
-// with errors.Is, rather than an anonymous string-literal error.
-func TestWriterStructuralErrorsMatchable(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name     string
-		build    func(t *testing.T) *helium.Document
-		sentinel error
-	}{
-		{
-			name: "invalid element name",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement(`root injected="1"`)
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidElementName,
-		},
-		{
-			name: "reserved element name",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				// CreateElement rejects a colon, so build the reserved
-				// "xmlns:root" name through an active namespace whose prefix
-				// is the reserved "xmlns" — the element's Name() is then
-				// "xmlns:root", which the writer must reject.
-				ns, err := doc.CreateNamespace("xmlns", "urn:reserved")
-				require.NoError(t, err)
-				root, err := doc.CreateElementNS("root", ns)
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			sentinel: helium.ErrWriterReservedElementName,
-		},
-		{
-			name: "invalid attribute name",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				err = root.SetAttribute(`x onmouseover`, "1")
-				require.NoError(t, err)
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidAttributeName,
-		},
-		{
-			name: "reserved attribute name",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				err = root.SetAttribute("xmlns", "urn:evil")
-				require.NoError(t, err)
-				return doc
-			},
-			sentinel: helium.ErrWriterReservedAttributeName,
-		},
-		{
-			name: "reserved namespace prefix",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				require.NoError(t, root.DeclareNamespace("xmlns", "urn:x"))
-				return doc
-			},
-			sentinel: helium.ErrWriterReservedNamespacePrefix,
-		},
-		{
-			name: "invalid namespace prefix",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				require.NoError(t, root.DeclareNamespace("bad prefix", "urn:x"))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidNamespacePrefix,
-		},
-		{
-			name: "unbound element namespace prefix",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				// A non-empty prefix bound to an empty URI: the element name
-				// serializes as "foo:root" with no xmlns:foo, which the parser
-				// cannot reparse.
-				ns, err := doc.CreateNamespace("foo", "")
-				require.NoError(t, err)
-				root, err := doc.CreateElementNS("root", ns)
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			sentinel: helium.ErrWriterUnboundNamespacePrefix,
-		},
-		{
-			name: "unbound attribute namespace prefix",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				ns, err := doc.CreateNamespace("foo", "")
-				require.NoError(t, err)
-				require.NoError(t, root.SetAttributeNS("bar", "v", ns))
-				return doc
-			},
-			sentinel: helium.ErrWriterUnboundNamespacePrefix,
-		},
-		{
-			name: "invalid comment content",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				require.NoError(t, root.AddChild(doc.CreateComment([]byte("a--b"))))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidComment,
-		},
-		{
-			name: "invalid PI target",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				require.NoError(t, root.AddChild(doc.CreatePI("1bad", "")))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidPITarget,
-		},
-		{
-			name: "invalid PI content",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				require.NoError(t, root.AddChild(doc.CreatePI("t", "a?>b")))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidPIContent,
-		},
-		{
-			name: "empty DOCTYPE name",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				_, err := doc.CreateInternalSubset("   ", "", "")
-				require.NoError(t, err)
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidDTDNode,
-		},
-		{
-			name: "DOCTYPE system literal with both quotes",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				_, err := doc.CreateInternalSubset("root", "", `a"b'c.dtd`)
-				require.NoError(t, err)
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidDTDNode,
-		},
-		{
-			name: "DOCTYPE public id with invalid PubidChar",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				_, err := doc.CreateInternalSubset("root", "bad{pubid", "sys.dtd")
-				require.NoError(t, err)
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidDTDNode,
-		},
-		{
-			name: "notation public id with invalid PubidChar",
-			build: func(t *testing.T) *helium.Document {
-				doc := helium.NewDefaultDocument()
-				dtd, err := doc.CreateInternalSubset("root", "", "")
-				require.NoError(t, err)
-				_, err = dtd.AddNotation("n", "bad{pubid", "n.exe")
-				require.NoError(t, err)
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				return doc
-			},
-			sentinel: helium.ErrWriterInvalidDTDNode,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			doc := tc.build(t)
-			var buf strings.Builder
-			err := helium.Write(&buf, doc)
-			require.Error(t, err, "malformed node must be rejected")
-			require.ErrorIs(t, err, tc.sentinel, "error must match the named sentinel")
-		})
-	}
-}
-
-// TestWriterNormalizationRejectsInvalidForm verifies that an unrecognized
-// normalization-form value is observable (ErrUnsupportedNormalizationForm) rather
-// than silently disabling normalization, while the supported forms and the
-// disabling values ("", "none") are accepted.
-func TestWriterNormalizationRejectsInvalidForm(t *testing.T) {
-	t.Parallel()
-
-	newDoc := func(t *testing.T) *helium.Document {
-		doc := helium.NewDefaultDocument()
-		root, err := doc.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, doc.SetDocumentElement(root))
-		require.NoError(t, root.AppendText([]byte("x")))
-		return doc
-	}
-
-	for _, form := range []string{"NFCC", "nfc", "fully-normalized", "NONE", "garbage"} {
-		t.Run("rejects "+form, func(t *testing.T) {
-			t.Parallel()
-			var buf strings.Builder
-			err := helium.NewWriter().Normalization(form).WriteTo(&buf, newDoc(t))
-			require.Error(t, err, "unrecognized normalization form must be rejected")
-			require.ErrorIs(t, err, helium.ErrUnsupportedNormalizationForm)
-			require.Empty(t, buf.String(), "no output byte before the rejection")
-		})
-	}
-
-	for _, form := range []string{"", "none", "NFC", "NFD", "NFKC", "NFKD"} {
-		t.Run("accepts "+form, func(t *testing.T) {
-			t.Parallel()
-			var buf strings.Builder
-			err := helium.NewWriter().Normalization(form).WriteTo(&buf, newDoc(t))
-			require.NoError(t, err, "supported normalization form must serialize")
-		})
-	}
-
-	// A bare element (non-Document) path is also validated.
-	t.Run("bare element path", func(t *testing.T) {
-		t.Parallel()
-		doc := newDoc(t)
-		var buf strings.Builder
-		err := helium.NewWriter().Normalization("bogus").WriteTo(&buf, doc.DocumentElement())
-		require.ErrorIs(t, err, helium.ErrUnsupportedNormalizationForm)
-	})
 }
