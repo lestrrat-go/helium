@@ -191,90 +191,6 @@ func newEventEmitter(out io.Writer) sax.SAX2Handler {
 	return s
 }
 
-func TestDocumentLocatorIDs(t *testing.T) {
-	const baseURI = "test://document.xml"
-	var gotPublicID, gotSystemID string
-
-	s := sax.New()
-	s.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ context.Context, loc sax.DocumentLocator) error {
-		gotPublicID = loc.GetPublicID()
-		gotSystemID = loc.GetSystemID()
-		return nil
-	}))
-	s.SetOnStartDocument(sax.StartDocumentFunc(func(_ context.Context) error { return nil }))
-	s.SetOnEndDocument(sax.EndDocumentFunc(func(_ context.Context) error { return nil }))
-	s.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, _, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
-		return nil
-	}))
-	s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ context.Context, _, _, _ string) error { return nil }))
-	s.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, _ []byte) error { return nil }))
-
-	p := helium.NewParser().SAXHandler(s).BaseURI(baseURI)
-
-	_, err := p.Parse(t.Context(), []byte(`<root/>`))
-	require.NoError(t, err, "Parse should succeed")
-	require.Equal(t, "", gotPublicID, "GetPublicID should return empty string")
-	require.Equal(t, baseURI, gotSystemID, "GetSystemID should return base URI")
-}
-
-func TestSAXEvents(t *testing.T) {
-	skipped := map[string]struct{}{}
-
-	dir := "test"
-	files, err := os.ReadDir(dir)
-	require.NoError(t, err, "os.ReadDir should succeed")
-
-	for _, fi := range files {
-		if fi.IsDir() {
-			continue
-		}
-
-		if _, ok := skipped[fi.Name()]; ok {
-			t.Logf("Skipping test for '%s' for now...", fi.Name())
-			continue
-		}
-
-		fn := filepath.Join(dir, fi.Name())
-		if !strings.HasSuffix(fn, ".xml") {
-			continue
-		}
-
-		goldenfn := strings.ReplaceAll(fn, ".xml", ".sax2")
-		if _, err := os.Stat(goldenfn); err != nil {
-			continue
-		}
-
-		t.Logf("Testing %s...", fn)
-
-		in, err := os.ReadFile(fn)
-		require.NoError(t, err, "os.ReadFile should succeed")
-
-		golden, err := os.ReadFile(goldenfn)
-		require.NoError(t, err, "os.ReadFile should succeed")
-
-		out := bytes.Buffer{}
-		p := helium.NewParser().SAXHandler(newEventEmitter(&out))
-
-		_, err = p.Parse(t.Context(), in)
-		if err != nil {
-			t.Logf("source XML: %s", in)
-		}
-		require.NoError(t, err, "Parse should succeed (file = %s)", fn)
-
-		if string(golden) != out.String() {
-			errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
-			if err != nil {
-				t.Logf("Failed to file to save output: %s", err)
-				return
-			}
-			defer func() { _ = errout.Close() }()
-
-			_, _ = errout.Write(out.Bytes())
-		}
-		require.Equal(t, string(golden), out.String(), "SAX event streams should match (file = %s)", fn)
-	}
-}
-
 type parserChunkedReader struct {
 	data  []byte
 	chunk int
@@ -288,98 +204,6 @@ func (r *parserChunkedReader) Read(p []byte) (int, error) {
 	copy(p, r.data[:n])
 	r.data = r.data[n:]
 	return n, nil
-}
-
-func TestChunkedReaderPreservesIgnorableWhitespaceClassification(t *testing.T) {
-	var events []string
-
-	h := sax.New()
-	h.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(context.Context, sax.DocumentLocator) error { return nil }))
-	h.SetOnStartDocument(sax.StartDocumentFunc(func(context.Context) error { return nil }))
-	h.SetOnEndDocument(sax.EndDocumentFunc(func(context.Context) error { return nil }))
-	h.SetOnStartElementNS(sax.StartElementNSFunc(func(context.Context, string, string, string, []sax.Namespace, []sax.Attribute) error {
-		return nil
-	}))
-	h.SetOnEndElementNS(sax.EndElementNSFunc(func(context.Context, string, string, string) error { return nil }))
-	h.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
-		events = append(events, "characters:"+string(ch))
-		return nil
-	}))
-	h.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
-		events = append(events, "ignorable:"+string(ch))
-		return nil
-	}))
-
-	xml := "<root>\n  <a/>\n  <b/>\n</root>"
-	reader := &parserChunkedReader{
-		data:  []byte(xml),
-		chunk: 2,
-	}
-
-	doc, err := helium.NewParser().SAXHandler(h).ParseReader(t.Context(), reader)
-	require.NoError(t, err)
-	require.Nil(t, doc)
-
-	for _, event := range events {
-		require.False(t, strings.HasPrefix(event, "characters:"), "unexpected character event: %s", event)
-	}
-	require.Equal(t, []string{
-		"ignorable:\n  ",
-		"ignorable:\n  ",
-		"ignorable:\n",
-	}, events)
-}
-
-// A SAX wrapper that delegates to a TreeBuilder builds a DOM yet has
-// pctx.treeBuilder == nil (it is not the concrete *TreeBuilder). With
-// StripBlanks(true) and a tiny CharBufferSize, a pure-whitespace run longer than
-// the blank-prefix budget must still be classified over the whole run and
-// delivered via IgnorableWhitespace (which the TreeBuilder drops under
-// StripBlanks) — not downgraded to Characters by the chunked path's budget cap,
-// which would leave a stray whitespace text node in the DOM.
-func TestCharBufferStripBlanksTreeBuilderWrapper(t *testing.T) {
-	t.Parallel()
-
-	tb := helium.NewTreeBuilder()
-	wrapper := sax.New()
-	wrapper.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(ctx context.Context, loc sax.DocumentLocator) error {
-		return tb.SetDocumentLocator(ctx, loc)
-	}))
-	wrapper.SetOnStartDocument(sax.StartDocumentFunc(func(ctx context.Context) error {
-		return tb.StartDocument(ctx)
-	}))
-	wrapper.SetOnEndDocument(sax.EndDocumentFunc(func(ctx context.Context) error {
-		return tb.EndDocument(ctx)
-	}))
-	wrapper.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
-		return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
-	}))
-	wrapper.SetOnEndElementNS(sax.EndElementNSFunc(func(ctx context.Context, localname, prefix, uri string) error {
-		return tb.EndElementNS(ctx, localname, prefix, uri)
-	}))
-	wrapper.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, ch []byte) error {
-		return tb.Characters(ctx, ch)
-	}))
-	wrapper.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx context.Context, ch []byte) error {
-		return tb.IgnorableWhitespace(ctx, ch)
-	}))
-
-	// CharBufferSize(8) gives a blank-prefix budget floored at 64 KiB; a
-	// whitespace run past that budget is what the chunked path would downgrade
-	// to Characters. Keep it well above the floor.
-	input := "<root>" + strings.Repeat(" ", 70000) + "<child/></root>"
-
-	p := helium.NewParser().SAXHandler(wrapper).StripBlanks(true).CharBufferSize(8)
-	doc, err := p.Parse(t.Context(), []byte(input))
-	require.NoError(t, err)
-	require.NotNil(t, doc)
-
-	root := findDocumentElement(doc)
-	require.NotNil(t, root, "document element must exist")
-	first := root.FirstChild()
-	require.NotNil(t, first, "root must have children")
-	require.Equal(t, helium.ElementNode, first.Type(),
-		"large whitespace run must be dropped as ignorable whitespace, not delivered as a text node")
 }
 
 func newStopParserEntityHandler(seen *[]string, resolve sax.ResolveEntityFunc) sax.SAX2Handler {
@@ -450,6 +274,189 @@ func newStopParserEntityHandler(seen *[]string, resolve sax.ResolveEntityFunc) s
 	}))
 
 	return wrapper
+}
+
+// startElementRecorder builds a SAX handler that records start-element local
+// names, so a test can prove the buffered bytes were parsed before any read
+// error was surfaced.
+func startElementRecorder(seen *[]string) sax.SAX2Handler {
+	h := sax.New()
+	h.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, local, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+		*seen = append(*seen, local)
+		return nil
+	}))
+	return h
+}
+
+func TestSAXEvents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("events", func(t *testing.T) {
+		skipped := map[string]struct{}{}
+
+		dir := "test"
+		files, err := os.ReadDir(dir)
+		require.NoError(t, err, "os.ReadDir should succeed")
+
+		for _, fi := range files {
+			if fi.IsDir() {
+				continue
+			}
+
+			if _, ok := skipped[fi.Name()]; ok {
+				t.Logf("Skipping test for '%s' for now...", fi.Name())
+				continue
+			}
+
+			fn := filepath.Join(dir, fi.Name())
+			if !strings.HasSuffix(fn, ".xml") {
+				continue
+			}
+
+			goldenfn := strings.ReplaceAll(fn, ".xml", ".sax2")
+			if _, err := os.Stat(goldenfn); err != nil {
+				continue
+			}
+
+			t.Logf("Testing %s...", fn)
+
+			in, err := os.ReadFile(fn)
+			require.NoError(t, err, "os.ReadFile should succeed")
+
+			golden, err := os.ReadFile(goldenfn)
+			require.NoError(t, err, "os.ReadFile should succeed")
+
+			out := bytes.Buffer{}
+			p := helium.NewParser().SAXHandler(newEventEmitter(&out))
+
+			_, err = p.Parse(t.Context(), in)
+			if err != nil {
+				t.Logf("source XML: %s", in)
+			}
+			require.NoError(t, err, "Parse should succeed (file = %s)", fn)
+
+			if string(golden) != out.String() {
+				errout, err := os.OpenFile(fn+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+				if err != nil {
+					t.Logf("Failed to file to save output: %s", err)
+					return
+				}
+				defer func() { _ = errout.Close() }()
+
+				_, _ = errout.Write(out.Bytes())
+			}
+			require.Equal(t, string(golden), out.String(), "SAX event streams should match (file = %s)", fn)
+		}
+	})
+
+	// the attribute-value WFC
+	// walk resolves nested references through the SAX getEntity callback, so a pure
+	// SAX-event parse — a custom handler that REPLACES the tree builder, leaving no
+	// document being built and thus an empty document entity table — still catches
+	// an INDIRECT external reference in an attribute value.
+	//
+	// The document references the outer entity in element CONTENT before the
+	// attribute. Under SubstituteEntities(false) that content reference marks the
+	// entity checked, so the attribute-value path cannot lean on a one-shot
+	// replacement-text re-validation gated on the checked bit; the memoized
+	// attribute-value WFC walk must run regardless, resolving the nested external
+	// entity — reachable ONLY through the custom handler's GetEntity — and rejecting
+	// it ("No External Entity References"). A document-table-only walk misses this.
+	t.Run("an indirect entity reference in an attribute value", func(t *testing.T) {
+		// An external parsed entity is legal in element content but a WFC violation
+		// when reached (directly or indirectly) from an attribute value, so it is the
+		// clean way to check an entity in content first and still violate in an
+		// attribute. It is known ONLY to the custom GetEntity, never declared in the
+		// parsed DTD nor present in any document table.
+		extDoc := helium.NewDefaultDocument()
+		extDTD, err := extDoc.CreateInternalSubset("r", "", "")
+		require.NoError(t, err)
+		ext, err := extDTD.AddEntity("ext", enum.ExternalGeneralParsedEntity, "", "nul", "")
+		require.NoError(t, err)
+
+		// A pure SAX-event handler (NOT a TreeBuilder): no document tree is built, so
+		// pctx.doc is absent and the document entity table is empty. Declared entities
+		// are captured from the entity-declaration callback; the nested "ext" is
+		// pre-seeded so only GetEntity can resolve it.
+		h := sax.New()
+		entities := map[string]*helium.Entity{"ext": ext}
+		h.SetOnEntityDecl(sax.EntityDeclFunc(func(_ context.Context, name string, typ enum.EntityType, publicID, systemID, notation string) error {
+			d := helium.NewDefaultDocument()
+			dtd, derr := d.CreateInternalSubset("r", "", "")
+			if derr != nil {
+				return derr
+			}
+			e, derr := dtd.AddEntity(name, typ, publicID, systemID, notation)
+			if derr != nil {
+				return derr
+			}
+			entities[name] = e
+			return nil
+		}))
+		h.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
+			if e, ok := entities[name]; ok {
+				return e, nil
+			}
+			return nil, nil //nolint:nilnil
+		}))
+
+		const doc = `<!DOCTYPE r [
+<!ELEMENT r ANY>
+<!ELEMENT e EMPTY>
+<!ATTLIST e a CDATA #IMPLIED>
+<!ENTITY outer "&ext;">
+]>
+<r>&outer;<e a="&outer;"/></r>`
+
+		_, perr := helium.NewParser().SubstituteEntities(false).SAXHandler(h).
+			Parse(t.Context(), []byte(doc))
+		require.Error(t, perr, "an indirect external reference resolvable only via SAX GetEntity must violate the attribute-value WFC even after the entity is used in content")
+		require.Contains(t, perr.Error(), "attribute references external entity")
+	})
+}
+
+func TestDocumentLocator(t *testing.T) {
+	t.Parallel()
+
+	t.Run("IDs", func(t *testing.T) {
+		const baseURI = "test://document.xml"
+		var gotPublicID, gotSystemID string
+
+		s := sax.New()
+		s.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(_ context.Context, loc sax.DocumentLocator) error {
+			gotPublicID = loc.GetPublicID()
+			gotSystemID = loc.GetSystemID()
+			return nil
+		}))
+		s.SetOnStartDocument(sax.StartDocumentFunc(func(_ context.Context) error { return nil }))
+		s.SetOnEndDocument(sax.EndDocumentFunc(func(_ context.Context) error { return nil }))
+		s.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, _, _, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+			return nil
+		}))
+		s.SetOnEndElementNS(sax.EndElementNSFunc(func(_ context.Context, _, _, _ string) error { return nil }))
+		s.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, _ []byte) error { return nil }))
+
+		p := helium.NewParser().SAXHandler(s).BaseURI(baseURI)
+
+		_, err := p.Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err, "Parse should succeed")
+		require.Equal(t, "", gotPublicID, "GetPublicID should return empty string")
+		require.Equal(t, baseURI, gotSystemID, "GetSystemID should return base URI")
+	})
+
+	t.Run("current input ID", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY x "hello">
+]>
+<doc>&x;</doc>`
+
+		p := helium.NewParser().SubstituteEntities(true)
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+		require.Equal(t, "hello", string(doc.DocumentElement().Content()))
+	})
 }
 
 func TestStopParser(t *testing.T) {
@@ -726,5 +733,170 @@ func TestStopParser(t *testing.T) {
 		require.Contains(t, seen, "stop")
 		require.NotContains(t, seen, "entity-after")
 		require.NotContains(t, seen, "after")
+	})
+}
+
+func TestSAXWhitespace(t *testing.T) {
+	t.Parallel()
+
+	// A SAX wrapper that delegates to a TreeBuilder builds a DOM yet has
+	// pctx.treeBuilder == nil (it is not the concrete *TreeBuilder). With
+	// StripBlanks(true) and a tiny CharBufferSize, a pure-whitespace run longer than
+	// the blank-prefix budget must still be classified over the whole run and
+	// delivered via IgnorableWhitespace (which the TreeBuilder drops under
+	// StripBlanks) — not downgraded to Characters by the chunked path's budget cap,
+	// which would leave a stray whitespace text node in the DOM.
+	t.Run("the char buffer strips blanks through the TreeBuilder wrapper", func(t *testing.T) {
+		tb := helium.NewTreeBuilder()
+		wrapper := sax.New()
+		wrapper.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(ctx context.Context, loc sax.DocumentLocator) error {
+			return tb.SetDocumentLocator(ctx, loc)
+		}))
+		wrapper.SetOnStartDocument(sax.StartDocumentFunc(func(ctx context.Context) error {
+			return tb.StartDocument(ctx)
+		}))
+		wrapper.SetOnEndDocument(sax.EndDocumentFunc(func(ctx context.Context) error {
+			return tb.EndDocument(ctx)
+		}))
+		wrapper.SetOnStartElementNS(sax.StartElementNSFunc(func(ctx context.Context, localname, prefix, uri string, namespaces []sax.Namespace, attrs []sax.Attribute) error {
+			return tb.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
+		}))
+		wrapper.SetOnEndElementNS(sax.EndElementNSFunc(func(ctx context.Context, localname, prefix, uri string) error {
+			return tb.EndElementNS(ctx, localname, prefix, uri)
+		}))
+		wrapper.SetOnCharacters(sax.CharactersFunc(func(ctx context.Context, ch []byte) error {
+			return tb.Characters(ctx, ch)
+		}))
+		wrapper.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(ctx context.Context, ch []byte) error {
+			return tb.IgnorableWhitespace(ctx, ch)
+		}))
+
+		// CharBufferSize(8) gives a blank-prefix budget floored at 64 KiB; a
+		// whitespace run past that budget is what the chunked path would downgrade
+		// to Characters. Keep it well above the floor.
+		input := "<root>" + strings.Repeat(" ", 70000) + "<child/></root>"
+
+		p := helium.NewParser().SAXHandler(wrapper).StripBlanks(true).CharBufferSize(8)
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+
+		root := findDocumentElement(doc)
+		require.NotNil(t, root, "document element must exist")
+		first := root.FirstChild()
+		require.NotNil(t, first, "root must have children")
+		require.Equal(t, helium.ElementNode, first.Type(),
+			"large whitespace run must be dropped as ignorable whitespace, not delivered as a text node")
+	})
+
+	t.Run("a chunked reader preserves ignorable-whitespace classification", func(t *testing.T) {
+		var events []string
+
+		h := sax.New()
+		h.SetOnSetDocumentLocator(sax.SetDocumentLocatorFunc(func(context.Context, sax.DocumentLocator) error { return nil }))
+		h.SetOnStartDocument(sax.StartDocumentFunc(func(context.Context) error { return nil }))
+		h.SetOnEndDocument(sax.EndDocumentFunc(func(context.Context) error { return nil }))
+		h.SetOnStartElementNS(sax.StartElementNSFunc(func(context.Context, string, string, string, []sax.Namespace, []sax.Attribute) error {
+			return nil
+		}))
+		h.SetOnEndElementNS(sax.EndElementNSFunc(func(context.Context, string, string, string) error { return nil }))
+		h.SetOnCharacters(sax.CharactersFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, "characters:"+string(ch))
+			return nil
+		}))
+		h.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(func(_ context.Context, ch []byte) error {
+			events = append(events, "ignorable:"+string(ch))
+			return nil
+		}))
+
+		xml := "<root>\n  <a/>\n  <b/>\n</root>"
+		reader := &parserChunkedReader{
+			data:  []byte(xml),
+			chunk: 2,
+		}
+
+		doc, err := helium.NewParser().SAXHandler(h).ParseReader(t.Context(), reader)
+		require.NoError(t, err)
+		require.Nil(t, doc)
+
+		for _, event := range events {
+			require.False(t, strings.HasPrefix(event, "characters:"), "unexpected character event: %s", event)
+		}
+		require.Equal(t, []string{
+			"ignorable:\n  ",
+			"ignorable:\n  ",
+			"ignorable:\n",
+		}, events)
+	})
+}
+
+func TestDisableSAX(t *testing.T) {
+	t.Parallel()
+
+	t.Run("disable SAX", func(t *testing.T) {
+		t.Run("recover continues parsing", func(t *testing.T) {
+			t.Parallel()
+
+			// XML with a broken sibling element (mismatched end tag) followed by valid content
+			const input = `<?xml version="1.0"?>
+<root>
+  <good>ok</good>
+  <bad>text</baaaad>
+  <after>more</after>
+</root>`
+
+			p := helium.NewParser().RecoverOnError(true)
+			doc, err := p.Parse(t.Context(), []byte(input))
+			require.Error(t, err, "malformed XML should return error")
+			require.NotNil(t, doc, "Recover should return a partial document")
+
+			root := doc.DocumentElement()
+			require.NotNil(t, root, "root element should exist")
+			require.Equal(t, "root", root.Name())
+		})
+
+		t.Run("callbacks suppressed", func(t *testing.T) {
+			t.Parallel()
+
+			const input = `<?xml version="1.0"?>
+<root>
+  <before/>
+  <bad>text</baaaad>
+  <after/>
+</root>`
+
+			var elements []string
+			sh := sax.New()
+			sh.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, localname string, _ string, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+				elements = append(elements, localname)
+				return nil
+			}))
+
+			p := helium.NewParser().SAXHandler(sh).RecoverOnError(true)
+			_, err := p.Parse(t.Context(), []byte(input))
+			require.Error(t, err)
+
+			// "root" and "before" should have been delivered before the error.
+			// "bad" starts parsing (StartElementNS fires before content error).
+			// "after" should NOT appear because disableSAX is set after the error.
+			require.Contains(t, elements, "root")
+			require.Contains(t, elements, "before")
+			require.NotContains(t, elements, "after", "elements after error should be suppressed")
+		})
+
+		t.Run("no effect without recover", func(t *testing.T) {
+			t.Parallel()
+
+			const input = `<?xml version="1.0"?>
+<root>
+  <bad>text</baaaad>
+  <after/>
+</root>`
+
+			p := helium.NewParser()
+			doc, err := p.Parse(t.Context(), []byte(input))
+			require.Error(t, err, "malformed XML should fail")
+			require.Nil(t, doc, "without RecoverOnError, no document should be returned")
+		})
 	})
 }
