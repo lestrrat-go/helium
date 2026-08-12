@@ -2,6 +2,7 @@ package xmlenc1
 
 import (
 	"crypto/aes"
+	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
 )
@@ -146,8 +147,17 @@ func aesKeyUnwrap(kek, ciphertext []byte, keySize int) ([]byte, error) {
 		}
 	}
 
-	// Check integrity
-	if a != defaultIV {
+	// Check integrity in constant time. A is a function of the recipient's
+	// KEK and an attacker-chosen ciphertext, so how many of its leading
+	// bytes match the RFC 3394 IV is information about the KEK, not about
+	// the document, and must not reach the wire as a timing difference.
+	// Go's array equality is not a constant-time primitive: it lowers to a
+	// single 64-bit compare only where the backend can merge loads, and
+	// falls back to a short-circuiting pair of word compares (386) or a
+	// runtime.memequal call (arm, mips, riscv64, wasm) elsewhere.
+	// pkcs7UnpadConstantTime holds this package's other integrity check to
+	// the same rule.
+	if subtle.ConstantTimeCompare(a[:], defaultIV[:]) != 1 {
 		// Wrap in ErrDecryptionFailed so a caller testing only that
 		// sentinel catches a failed key unwrap the same way it catches a
 		// failed RSA key transport, which decryptSessionKey wraps.

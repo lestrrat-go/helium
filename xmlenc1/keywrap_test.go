@@ -261,3 +261,99 @@ func TestKeyWrapSize(t *testing.T) {
 		require.ErrorAs(t, err, &kse)
 	})
 }
+
+// newKeyWrapElem builds an EncryptedData element carrying wrapped as the
+// sole EncryptedKey's CipherValue, wrapping sessionKey-encrypted plaintext
+// under dataAlgorithm. It follows the same construction TestKeyWrapSize's
+// "wrapped key length must match the block algorithm" subtest uses, pulled
+// out to a named helper so TestKeyWrapIntegrityCheck's subtests can share it.
+func newKeyWrapElem(t *testing.T, dataAlgorithm string, sessionKey, wrapped []byte) *helium.Element {
+	t.Helper()
+	cipher, err := xmlenc1.EncryptBytesForTest(dataAlgorithm, sessionKey, []byte("<x>secret</x>"))
+	require.NoError(t, err)
+	doc := mustParseXML(t, `<root/>`)
+	elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, &xmlenc1.EncryptedData{
+		Type:             xmlenc1.TypeElement,
+		EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: dataAlgorithm},
+		EncryptedKeys: []*xmlenc1.EncryptedKey{{
+			EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
+			CipherValue:      wrapped,
+		}},
+		CipherValue: cipher,
+	})
+	require.NoError(t, err)
+	return elem
+}
+
+// flipLowBit returns a copy of b with bit 0 of the byte at position i
+// flipped, leaving every other byte untouched.
+func flipLowBit(b []byte, i int) []byte {
+	corrupted := make([]byte, len(b))
+	copy(corrupted, b)
+	corrupted[i] ^= 0x01
+	return corrupted
+}
+
+// TestKeyWrapIntegrityCheck exercises aesKeyUnwrap's RFC 3394 integrity
+// check — the comparison of the recovered A register against defaultIV —
+// through the public Decryptor. It pins the current pass/fail/error-message
+// behavior so a refactor of that comparison (e.g. to a constant-time
+// primitive) cannot silently change which wraps are accepted or what a
+// caller sees when one is rejected.
+func TestKeyWrapIntegrityCheck(t *testing.T) {
+	const dataAlgorithm = xmlenc1.AES256GCM // a 32-byte session key
+	kek := randKey(t, 32)
+	sessionKey := randKey(t, 32)
+
+	wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
+	require.NoError(t, err)
+	require.Len(t, wrapped, 40)
+
+	t.Run("the intact wrap still unwraps", func(t *testing.T) {
+		elem := newKeyWrapElem(t, dataAlgorithm, sessionKey, wrapped)
+		nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		s, err := helium.WriteString(nodes[0])
+		require.NoError(t, err)
+		require.Contains(t, s, "secret")
+	})
+
+	// Corrupting any one of the 40 wrapped-key wire bytes must be rejected,
+	// and every rejection must look identical to a caller: same sentinel
+	// errors, same error string. A position-dependent message would leak
+	// which byte the unwrap disagreed on.
+	t.Run("every corrupted wrap byte is rejected identically", func(t *testing.T) {
+		var wantErr string
+		for i := range wrapped {
+			elem := newKeyWrapElem(t, dataAlgorithm, sessionKey, flipLowBit(wrapped, i))
+			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
+			require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+			if i == 0 {
+				wantErr = err.Error()
+				continue
+			}
+			require.Equal(t, wantErr, err.Error())
+		}
+	})
+
+	// Wire bytes 0-7 carry the A register the integrity check actually
+	// compares against defaultIV. Covering each of those 8 bytes
+	// individually, including byte 7, is the direct exercise of that
+	// comparison rather than of diffusion through the surrounding rounds.
+	t.Run("a corrupted integrity register is rejected", func(t *testing.T) {
+		var wantErr string
+		for i := range 8 {
+			elem := newKeyWrapElem(t, dataAlgorithm, sessionKey, flipLowBit(wrapped, i))
+			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
+			require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+			if i == 0 {
+				wantErr = err.Error()
+				continue
+			}
+			require.Equal(t, wantErr, err.Error())
+		}
+	})
+}
