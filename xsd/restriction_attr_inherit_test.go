@@ -165,3 +165,102 @@ func TestRestrictionAttrInheritance10(t *testing.T) {
 		require.NoError(t, compileAndValidate(t, schemaXML, instanceXML, nil))
 	})
 }
+
+// TestExtensionOfRestrictionAttrInheritance10 covers the UBL/CCTS pattern: when
+// E extends R and R restricts B while only redeclaring some of B's attributes,
+// E's effective {attribute uses} must still include the undeclared uses R
+// inherited from B (XSD 1.0 §3.4.2.2).
+func TestExtensionOfRestrictionAttrInheritance10(t *testing.T) {
+	t.Parallel()
+
+	const simpleContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="E">
+    <xs:simpleContent>
+      <xs:extension base="R"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:simpleContent>
+      <xs:restriction base="B">
+        <xs:attribute name="mimeCode" type="xs:normalizedString" use="required"/>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:simpleContent>
+      <xs:extension base="xs:base64Binary">
+        <xs:attribute name="mimeCode" type="xs:normalizedString" use="optional"/>
+        <xs:attribute name="filename" type="xs:string" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:schema>`
+
+	const complexContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="R"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="B">
+        <xs:sequence>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+        <xs:attribute name="a1" type="xs:string" use="required"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:sequence>
+      <xs:element name="c" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="a1" type="xs:string" use="optional"/>
+    <xs:attribute name="a2" type="xs:string" use="optional"/>
+  </xs:complexType>
+</xs:schema>`
+
+	cases := map[string]struct {
+		schema   string
+		instance string
+		wantErr  bool
+	}{
+		"simpleContent extension of restriction inherits undeclared base attribute": {
+			schema:   simpleContentSchema,
+			instance: `<e mimeCode="application/pdf" filename="x.pdf">QQ==</e>`,
+		},
+		"simpleContent extension of restriction still requires redeclared required attribute": {
+			schema:   simpleContentSchema,
+			instance: `<e filename="x.pdf">QQ==</e>`,
+			wantErr:  true,
+		},
+		"complexContent extension of restriction inherits undeclared base attribute": {
+			schema:   complexContentSchema,
+			instance: `<e a1="x" a2="y"><c>z</c></e>`,
+		},
+		"complexContent extension of restriction still requires redeclared required attribute": {
+			schema:   complexContentSchema,
+			instance: `<e a2="y"><c>z</c></e>`,
+			wantErr:  true,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Arrange / Act
+			err := compileAndValidate(t, tc.schema, tc.instance, nil)
+
+			// Assert
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
