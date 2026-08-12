@@ -8,62 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAddChildRejectsEntityChildCycle covers the cycle that the ancestor-only
-// guard cannot see: an entity reference's child is the shared Entity node, whose
-// parent pointer stays the DTD (mirroring libxml2 / Document.CreateReference).
-// Because the Entity's parent is NOT the reference, adding that reference back
-// under the Entity forms a child-pointer cycle Entity -> ref -> Entity that the
-// ancestor walk (which follows PARENT pointers from the insertion point) never
-// detects. AddChild must reject it so downstream tree walkers cannot loop.
-func TestAddChildRejectsEntityChildCycle(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("root", "", "")
-	require.NoError(t, err)
-	ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
-	require.NoError(t, err)
-
-	// CreateReference links the shared Entity as the reference's child without
-	// setting the Entity's parent to the reference.
-	ref, err := doc.CreateReference("e")
-	require.NoError(t, err)
-	require.Equal(t, ent, ref.FirstChild(), "reference's child is the shared Entity node")
-
-	// ref's child is ent, so adding ref under ent closes a child-pointer cycle.
-	err = ent.AddChild(ref)
-	require.Error(t, err, "adding a reference under its own Entity child must be rejected")
-	require.ErrorContains(t, err, "cannot add a node as a child of itself or one of its descendants")
-
-	// The tree must be untouched: ent must not have gained ref as a child.
-	require.Nil(t, ent.FirstChild(), "Entity must not gain the reference as a child")
-	require.Nil(t, ent.LastChild(), "Entity must not gain the reference as a child")
-}
-
-// TestAddChildAllowsLegitimateEntityReference guards against over-rejection: a
-// reference whose Entity child does NOT reach the insertion parent is a normal,
-// legal insertion and must succeed. This is the shape produced when parsing
-// <root>&e;</root>.
-func TestAddChildAllowsLegitimateEntityReference(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("root", "", "")
-	require.NoError(t, err)
-	_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
-	require.NoError(t, err)
-
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	require.NoError(t, doc.SetDocumentElement(root))
-
-	ref, err := doc.CreateReference("e")
-	require.NoError(t, err)
-
-	require.NoError(t, root.AddChild(ref), "a reference whose Entity does not reach root is a legal child")
-	require.Equal(t, ref, root.FirstChild(), "reference must be attached under root")
-}
-
 // sharedEntityFixture builds a document whose DTD declares two general entities
 // (so the Entity nodes are siblings in the DTD declaration list) and returns a
 // root element plus an entity reference to the first entity, attached under
@@ -99,143 +43,185 @@ func sharedEntityFixture(t *testing.T) (root *helium.Element, ref *helium.Entity
 	return root, ref, e1
 }
 
-// TestWalkStaysWithinSubtreeAcrossSharedEntity verifies Walk applies the
-// owned-boundary rule: descending into a reference's shared Entity child and
-// then advancing must NOT follow the Entity's sibling pointer into the DTD's
-// unrelated declarations.
-func TestWalkStaysWithinSubtreeAcrossSharedEntity(t *testing.T) {
+func TestCycleGuards(t *testing.T) {
 	t.Parallel()
 
-	root, _, _ := sharedEntityFixture(t)
+	// the cycle that the ancestor-only
+	// guard cannot see: an entity reference's child is the shared Entity node, whose
+	// parent pointer stays the DTD (mirroring libxml2 / Document.CreateReference).
+	// Because the Entity's parent is NOT the reference, adding that reference back
+	// under the Entity forms a child-pointer cycle Entity -> ref -> Entity that the
+	// ancestor walk (which follows PARENT pointers from the insertion point) never
+	// detects. AddChild must reject it so downstream tree walkers cannot loop.
+	t.Run("AddChild rejects an entity child cycle", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+		require.NoError(t, err)
 
-	var visited []string
-	err := helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
-		visited = append(visited, n.Name())
-		return nil
-	}))
-	require.NoError(t, err)
-	require.Equal(t, []string{"root", "e1", "e1"}, visited,
-		"Walk visits root, the reference (named for e1), and the shared Entity — not the foreign e2 sibling")
-	require.NotContains(t, visited, "e2", "Walk must not spill into the DTD's other entity declarations")
-}
+		// CreateReference links the shared Entity as the reference's child without
+		// setting the Entity's parent to the reference.
+		ref, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		require.Equal(t, ent, ref.FirstChild(), "reference's child is the shared Entity node")
 
-// TestChildrenRespectOwnedBoundary verifies Children and ChildElements do not
-// follow a foreign child's sibling pointers out of the reference's own list.
-func TestChildrenRespectOwnedBoundary(t *testing.T) {
-	t.Parallel()
+		// ref's child is ent, so adding ref under ent closes a child-pointer cycle.
+		err = ent.AddChild(ref)
+		require.Error(t, err, "adding a reference under its own Entity child must be rejected")
+		require.ErrorContains(t, err, "cannot add a node as a child of itself or one of its descendants")
 
-	_, ref, ent := sharedEntityFixture(t)
+		// The tree must be untouched: ent must not have gained ref as a child.
+		require.Nil(t, ent.FirstChild(), "Entity must not gain the reference as a child")
+		require.Nil(t, ent.LastChild(), "Entity must not gain the reference as a child")
+	})
 
-	var kids []helium.Node
-	for c := range helium.Children(ref) {
-		kids = append(kids, c)
-	}
-	require.Equal(t, []helium.Node{ent}, kids,
-		"Children(ref) yields only the shared Entity, stopping at the owned boundary")
-}
+	// against over-rejection: a
+	// reference whose Entity child does NOT reach the insertion parent is a normal,
+	// legal insertion and must succeed. This is the shape produced when parsing
+	// <root>&e;</root>.
+	t.Run("AddChild allows a legitimate entity reference", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+		require.NoError(t, err)
 
-// TestDescendantsRespectOwnedBoundary verifies Descendants stays within the
-// reference's own subtree across the shared Entity child.
-func TestDescendantsRespectOwnedBoundary(t *testing.T) {
-	t.Parallel()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
 
-	_, ref, ent := sharedEntityFixture(t)
+		ref, err := doc.CreateReference("e")
+		require.NoError(t, err)
 
-	var got []helium.Node
-	for d := range helium.Descendants(ref) {
-		got = append(got, d)
-	}
-	require.Equal(t, []helium.Node{ent}, got,
-		"Descendants(ref) yields only the shared Entity, not the DTD siblings")
-}
+		require.NoError(t, root.AddChild(ref), "a reference whose Entity does not reach root is a legal child")
+		require.Equal(t, ref, root.FirstChild(), "reference must be attached under root")
+	})
 
-// TestContentStaysWithinOwnedBoundary verifies the aggregating Content() of an
-// entity reference returns only its shared Entity's content and does not spill
-// into the DTD's following declarations.
-func TestContentStaysWithinOwnedBoundary(t *testing.T) {
-	t.Parallel()
+	// Walk applies the
+	// owned-boundary rule: descending into a reference's shared Entity child and
+	// then advancing must NOT follow the Entity's sibling pointer into the DTD's
+	// unrelated declarations.
+	t.Run("Walk stays within the subtree across a shared entity", func(t *testing.T) {
+		root, _, _ := sharedEntityFixture(t)
 
-	_, ref, _ := sharedEntityFixture(t)
+		var visited []string
+		err := helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
+			visited = append(visited, n.Name())
+			return nil
+		}))
+		require.NoError(t, err)
+		require.Equal(t, []string{"root", "e1", "e1"}, visited,
+			"Walk visits root, the reference (named for e1), and the shared Entity — not the foreign e2 sibling")
+		require.NotContains(t, visited, "e2", "Walk must not spill into the DTD's other entity declarations")
+	})
 
-	require.Equal(t, []byte("x"), ref.Content(),
-		"Content(ref) is the shared Entity's text, not concatenated with foreign DTD siblings")
-}
+	// Walk returns ErrWalkCycle (rather than
+	// reporting SUCCESS) on a corrupt ONE-node sibling self-loop: a single child
+	// whose next pointer points at itself (c.next == c). nextWalkSibling must NOT
+	// silently terminate the self-loop — the duplicate flows back to the per-frame
+	// seenChildren set, which detects it, exactly as for a longer sibling cycle.
+	t.Run("Walk rejects a self sibling loop", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		c, err := doc.CreateElement("c")
+		require.NoError(t, err)
+		require.NoError(t, parent.AddChild(c))
 
-// TestContentTerminatesOnCyclicSiblingList verifies the aggregating Content()
-// terminates when a child's sibling pointer forms a cycle.
-func TestContentTerminatesOnCyclicSiblingList(t *testing.T) {
-	t.Parallel()
+		// Corrupt the sibling list into a one-node self-loop: c.next = c.
+		helium.UnsafeSetNextSibling(c, c)
 
-	doc := helium.NewDefaultDocument()
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	txt := doc.CreateText([]byte("a"))
-	require.NoError(t, root.AddChild(txt))
+		err = helium.Walk(parent, helium.NodeWalkerFunc(func(helium.Node) error { return nil }))
+		require.ErrorIs(t, err, helium.ErrWalkCycle,
+			"Walk must return ErrWalkCycle on a one-node sibling self-loop, not report success")
+	})
 
-	// Corrupt the sibling list into a self-cycle.
-	helium.UnsafeSetNextSibling(txt, txt)
+	// the requirement that Walk does not
+	// switch to a global visited set: two references to the same entity form a DAG
+	// where the shared Entity node is reached on two different paths, and Walk must
+	// visit it on each occurrence rather than deduplicating it away.
+	t.Run("Walk visits a shared entity twice", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+		require.NoError(t, err)
 
-	require.Equal(t, []byte("a"), root.Content(),
-		"Content must terminate on a cyclic sibling list instead of looping forever")
-}
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
 
-// TestWalkRejectsSelfSiblingLoop verifies Walk returns ErrWalkCycle (rather than
-// reporting SUCCESS) on a corrupt ONE-node sibling self-loop: a single child
-// whose next pointer points at itself (c.next == c). nextWalkSibling must NOT
-// silently terminate the self-loop — the duplicate flows back to the per-frame
-// seenChildren set, which detects it, exactly as for a longer sibling cycle.
-func TestWalkRejectsSelfSiblingLoop(t *testing.T) {
-	t.Parallel()
+		ref1, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		ref2, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		require.Equal(t, ent, ref1.FirstChild())
+		require.Equal(t, ent, ref2.FirstChild())
+		require.NoError(t, root.AddChild(ref1))
+		require.NoError(t, root.AddChild(ref2))
 
-	doc := helium.NewDefaultDocument()
-	parent, err := doc.CreateElement("parent")
-	require.NoError(t, err)
-	c, err := doc.CreateElement("c")
-	require.NoError(t, err)
-	require.NoError(t, parent.AddChild(c))
+		var entityVisits int
+		err = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
+			if n.Type() == helium.EntityNode {
+				entityVisits++
+			}
+			return nil
+		}))
+		require.NoError(t, err)
+		require.Equal(t, 2, entityVisits,
+			"the shared Entity reached via two references must be visited twice — no global dedup")
+	})
 
-	// Corrupt the sibling list into a one-node self-loop: c.next = c.
-	helium.UnsafeSetNextSibling(c, c)
+	// Children and ChildElements do not
+	// follow a foreign child's sibling pointers out of the reference's own list.
+	t.Run("Children respect the owned boundary", func(t *testing.T) {
+		_, ref, ent := sharedEntityFixture(t)
 
-	err = helium.Walk(parent, helium.NodeWalkerFunc(func(helium.Node) error { return nil }))
-	require.ErrorIs(t, err, helium.ErrWalkCycle,
-		"Walk must return ErrWalkCycle on a one-node sibling self-loop, not report success")
-}
-
-// TestWalkVisitsSharedEntityDAGTwice guards the requirement that Walk does not
-// switch to a global visited set: two references to the same entity form a DAG
-// where the shared Entity node is reached on two different paths, and Walk must
-// visit it on each occurrence rather than deduplicating it away.
-func TestWalkVisitsSharedEntityDAGTwice(t *testing.T) {
-	t.Parallel()
-
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
-	dtd, err := doc.CreateInternalSubset("root", "", "")
-	require.NoError(t, err)
-	ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
-	require.NoError(t, err)
-
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	require.NoError(t, doc.SetDocumentElement(root))
-
-	ref1, err := doc.CreateReference("e")
-	require.NoError(t, err)
-	ref2, err := doc.CreateReference("e")
-	require.NoError(t, err)
-	require.Equal(t, ent, ref1.FirstChild())
-	require.Equal(t, ent, ref2.FirstChild())
-	require.NoError(t, root.AddChild(ref1))
-	require.NoError(t, root.AddChild(ref2))
-
-	var entityVisits int
-	err = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() == helium.EntityNode {
-			entityVisits++
+		var kids []helium.Node
+		for c := range helium.Children(ref) {
+			kids = append(kids, c)
 		}
-		return nil
-	}))
-	require.NoError(t, err)
-	require.Equal(t, 2, entityVisits,
-		"the shared Entity reached via two references must be visited twice — no global dedup")
+		require.Equal(t, []helium.Node{ent}, kids,
+			"Children(ref) yields only the shared Entity, stopping at the owned boundary")
+	})
+
+	// Descendants stays within the
+	// reference's own subtree across the shared Entity child.
+	t.Run("Descendants respect the owned boundary", func(t *testing.T) {
+		_, ref, ent := sharedEntityFixture(t)
+
+		var got []helium.Node
+		for d := range helium.Descendants(ref) {
+			got = append(got, d)
+		}
+		require.Equal(t, []helium.Node{ent}, got,
+			"Descendants(ref) yields only the shared Entity, not the DTD siblings")
+	})
+
+	// the aggregating Content() of an
+	// entity reference returns only its shared Entity's content and does not spill
+	// into the DTD's following declarations.
+	t.Run("Content stays within the owned boundary", func(t *testing.T) {
+		_, ref, _ := sharedEntityFixture(t)
+
+		require.Equal(t, []byte("x"), ref.Content(),
+			"Content(ref) is the shared Entity's text, not concatenated with foreign DTD siblings")
+	})
+
+	// the aggregating Content()
+	// terminates when a child's sibling pointer forms a cycle.
+	t.Run("Content terminates on a cyclic sibling list", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		txt := doc.CreateText([]byte("a"))
+		require.NoError(t, root.AddChild(txt))
+
+		// Corrupt the sibling list into a self-cycle.
+		helium.UnsafeSetNextSibling(txt, txt)
+
+		require.Equal(t, []byte("a"), root.Content(),
+			"Content must terminate on a cyclic sibling list instead of looping forever")
+	})
 }

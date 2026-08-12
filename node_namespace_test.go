@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,9 +20,9 @@ func serializeAndReparse(t *testing.T, doc *helium.Document) string {
 	return str
 }
 
-// TestDeclareNamespaceCollapse covers the at-most-one-per-prefix contract for
+// DeclareNamespace covers the at-most-one-per-prefix contract for
 // DeclareNamespace (cases 1-4) and AddNamespaceDecl.
-func TestDeclareNamespaceCollapse(t *testing.T) {
+func TestDeclareNamespace(t *testing.T) {
 	t.Parallel()
 
 	t.Run("case1 fresh prefix appends", func(t *testing.T) {
@@ -455,5 +456,112 @@ func TestDeclareNamespaceCollapse(t *testing.T) {
 		str := serializeAndReparse(t, doc)
 		require.Equal(t, 1, strings.Count(str, `xmlns:p=`))
 		require.Contains(t, str, `xmlns:p="urn:new"`)
+	})
+}
+
+func TestLookupNamespace(t *testing.T) {
+	t.Parallel()
+
+	t.Run("lookup by href", func(t *testing.T) {
+		t.Run("found on element", func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			e, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
+
+			ns := helium.LookupNSByHref(e, "http://example.com")
+			require.NotNil(t, ns)
+			require.Equal(t, "x", ns.Prefix())
+		})
+
+		t.Run("found on ancestor", func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			parent, err := doc.CreateElement("parent")
+			require.NoError(t, err)
+			require.NoError(t, parent.DeclareNamespace("x", "http://example.com"))
+
+			child, err := doc.CreateElement("child")
+			require.NoError(t, err)
+			require.NoError(t, parent.AddChild(child))
+
+			ns := helium.LookupNSByHref(child, "http://example.com")
+			require.NotNil(t, ns)
+			require.Equal(t, "x", ns.Prefix())
+		})
+
+		t.Run("xml namespace", func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			e, err := doc.CreateElement("root")
+			require.NoError(t, err)
+
+			ns := helium.LookupNSByHref(e, lexicon.NamespaceXML)
+			require.NotNil(t, ns)
+			require.Equal(t, "xml", ns.Prefix())
+		})
+
+		t.Run("not found", func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			e, err := doc.CreateElement("root")
+			require.NoError(t, err)
+
+			ns := helium.LookupNSByHref(e, "http://not.found.com")
+			require.Nil(t, ns)
+		})
+	})
+
+	t.Run("lookup by prefix", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		e, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, e.DeclareNamespace("x", "http://example.com"))
+
+		ns := helium.LookupNSByPrefix(e, "x")
+		require.NotNil(t, ns)
+		require.Equal(t, "http://example.com", ns.URI())
+
+		ns = helium.LookupNSByPrefix(e, "xml")
+		require.NotNil(t, ns)
+		require.Equal(t, lexicon.NamespaceXML, ns.URI())
+
+		ns = helium.LookupNSByPrefix(e, "missing")
+		require.Nil(t, ns)
+	})
+
+	// DeclareNamespace, SetActiveNamespace, SetNamespace,
+	// AddNamespaceDecl and the qname caching in Name().
+	t.Run("node namespace methods", func(t *testing.T) {
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+
+		require.NoError(t, root.DeclareNamespace("p", "http://example.com/p"))
+		require.NoError(t, root.SetActiveNamespace("p", "http://example.com/p"))
+
+		// Name() now reflects the prefix and caches the qname.
+		require.Equal(t, "p:root", root.Name())
+		require.Equal(t, "p:root", root.Name()) // cached path
+		require.Equal(t, "p", root.Prefix())
+		require.Equal(t, "http://example.com/p", root.URI())
+
+		// AddNamespaceDecl with an existing namespace object.
+		ns := helium.NewNamespace("q", "http://example.com/q")
+		require.NoError(t, root.AddNamespaceDecl(ns))
+		root.SetNamespace(ns)
+		require.Equal(t, "q:root", root.Name())
+	})
+
+	// NamespaceNodeWrapper.Content.
+	t.Run("namespace node wrapper content", func(t *testing.T) {
+		ns := helium.NewNamespace("p", "urn:example")
+		nsw := helium.NewNamespaceNodeWrapper(ns, nil)
+		require.Equal(t, "urn:example", string(nsw.Content()))
+		require.Equal(t, "p", nsw.Name())
+	})
+
+	// the ClarkName helper.
+	t.Run("Clark name", func(t *testing.T) {
+		require.Equal(t, "{urn:example}local", helium.ClarkName("urn:example", "local"))
+		require.Equal(t, "{}local", helium.ClarkName("", "local"))
 	})
 }
