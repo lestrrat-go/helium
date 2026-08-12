@@ -10,11 +10,14 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 
 - Secure by default. `Encryptor` defaults to authenticated AES-256-GCM under
   the XML Encryption 1.1 identifier `AES256GCM11` (`DefaultBlockAlgorithm`)
-  when no `BlockAlgorithm` is set. W3C xmlenc-core1 §5.2 defines AES-GCM only
-  in the XML Encryption 1.1 namespace `http://www.w3.org/2009/xmlenc11#`, so
-  that is the identifier a conforming peer recognizes; 1.1 GCM uses the
-  specified IV, ciphertext, and authentication-tag encoding without additional
-  authenticated data.
+  when no `BlockAlgorithm` is set. W3C xmlenc-core1 §5.2.4 defines AES-GCM
+  only in the XML Encryption 1.1 namespace
+  `http://www.w3.org/2009/xmlenc11#`, so that is the namespace a peer can
+  recognize it in; its §5.1.1 table then marks `aes128-gcm` REQUIRED and
+  `aes256-gcm` OPTIONAL, so the default trades a guarantee of support for
+  the longer key and `BlockAlgorithm(AES128GCM11)` is the identifier every
+  conforming peer must accept. 1.1 GCM uses the specified IV, ciphertext,
+  and authentication-tag encoding without additional authenticated data.
 - The `AES128GCM` and `AES256GCM` identifiers, which put GCM in the 2001 XML
   Encryption namespace, are defined by no XML Security specification.
   `Encryptor.BlockAlgorithm` accepts them and `Decryptor` decrypts them, so
@@ -45,8 +48,20 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   - **Decryption:** `Decryptor` refuses CBC by default and returns
     `ErrCBCRequiresOptIn`. Pass `AllowUnauthenticatedCBC(true)` only if
     you must accept legacy CBC and you have verified that decryption
-    errors are not exposed to remote attackers. Decrypting existing CBC
-    ciphertext is not the vulnerability; emitting new CBC is.
+    errors are not exposed to remote attackers. Decryption is the
+    exposed operation: the attack feeds modified ciphertext to something
+    that decrypts it and reads the answer, so a decryptor that accepts
+    CBC is the oracle, while emitting CBC only leaves ciphertext for
+    some other recipient to accept. Hiding the errors narrows that
+    oracle rather than closing it — xmlenc-core1 §6.1.1 notes the
+    surrounding protocol can signal well-formedness by itself — so this
+    package collapses every CBC failure to one `ErrDecryptionFailed`
+    value and message, and AES-GCM remains the only full answer. The
+    oracle is the outcome, not the error text: under CBC, `Decrypt`
+    succeeds exactly when the recovered plaintext is well-formed XML,
+    which is the well-formedness oracle itself, and `DecryptBytes` is
+    stronger still — it returns the plaintext octets on valid padding
+    alone, with no XML constraint at all.
 - The inner parser used on the decrypted plaintext has DTD loading,
   external entity resolution, and network access all disabled. Decrypted
   bytes are attacker-controlled, so a relaxed parser would constitute an
@@ -130,6 +145,21 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   fails with `ErrEncryptedKeyBytesExceeded`. Its godoc owns what the budget
   covers and when it is charged. The budget is charged while the document is
   read, so it too bounds a decrypt driven by a pre-shared `SessionKey`.
+- `Decryptor.MaxCipherValueBytes` caps the decoded `<EncryptedData>`
+  payload one decrypt will hold (default 10 MiB, negative for
+  unlimited), because the payload is the one value a document may make
+  arbitrarily large; over the budget fails with
+  `ErrCipherValueBytesExceeded` before the value is assembled or
+  decoded, and so before block decryption or any plaintext parse. Its
+  godoc owns what the budget covers and when it is charged. The default
+  matches helium's own per-node content limit, which a payload spread
+  over several text or CDATA nodes would otherwise slip past; this
+  budget measures decoded octets, so neither that splitting nor the
+  whitespace `xs:base64Binary` permits changes what it charges. It is
+  charged while the document is read, so it too bounds a decrypt driven
+  by a pre-shared `SessionKey`, and it is separate from
+  `MaxEncryptedKeyBytes`, which bounds only the wrapped session-key
+  candidates.
 - An AES key-wrap `<EncryptedKey>` must carry exactly the session-key length
   the declared block algorithm requires, plus RFC 3394's 8-byte integrity
   block. Any other length fails with `ErrKeyUnwrapFailed` before the unwrap
@@ -139,7 +169,7 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 ## Conformance limitations
 
 Coverage of W3C xmlenc-core1 is a subset. Three constructs the specification
-marks REQUIRED are absent:
+marks REQUIRED are absent and each one fails a decrypt outright:
 
 - **`xenc:CipherReference`** (§3.3.1, §4.4). xmlenc-core1 lets `CipherData`
   carry either a `CipherValue` or a `CipherReference`; this package accepts
@@ -152,8 +182,11 @@ marks REQUIRED are absent:
   `ds:KeyInfo`, only an `xenc:EncryptedKey` child supplies the session key.
   A `<ds:RetrievalMethod URI="#id"/>` naming an `EncryptedKey` elsewhere in
   the same document is not read, so the decrypt fails with `ErrMissingKey`.
-  The two other `ds:KeyInfo` children this package does not read are
-  `ds:KeyName` (§3.5, RECOMMENDED) and `xenc11:DerivedKey`.
+  The other `ds:KeyInfo` children this package does not read are
+  `ds:KeyValue` (§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), and
+  `xenc11:DerivedKey` (§3.5.2). A `ds:KeyValue` inside an
+  `xenc:OriginatorKeyInfo` is a different position and is read, since
+  that is where ECDH-ES carries the sender's ephemeral key.
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED). Block encryption and key wrapping are AES only, and
   either URI fails with an error matching the relevant operation sentinel
@@ -161,6 +194,13 @@ marks REQUIRED are absent:
   deliberate: Triple DES is a 64-bit block cipher, so Sweet32
   (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
   encryption after 2023.
+
+Section 3 carries a blanket "features described in this section MUST be
+implemented", so four more constructs are unimplemented without failing a
+decrypt: `xenc:ReferenceList` (§3.6) and `xenc11:DerivedKey` (§3.5.2), both
+of which only matter for a detached key this package cannot follow anyway,
+`xenc:CarriedKeyName` (§3.5.1), which the parse steps over rather than reads,
+and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
 
 ## Choosing how the session key is protected
 
