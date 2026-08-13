@@ -209,6 +209,21 @@ decrypt:
   (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
   encryption after 2023.
 
+An `xenc:KeySize` child of `EncryptionMethod` is read and checked, but it is
+never used as a key length: every algorithm URI this package implements
+already fixes its own. A `KeySize` under a URI that implies a length must
+state exactly that length — in bits, per §5.6.2.2 — or the document is
+refused with `ErrMalformedEncrypted` while it is read, ahead of a pre-shared
+[`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key)'s early
+return, so a contradicting value cannot be bypassed that way; an
+`EncryptedData` carrying no `EncryptionMethod` at all has no `KeySize` to
+check either way. A `KeySize` under a URI that implies no length — RSA key
+transport above all — is accepted and ignored. What remains absent is
+`KeySize` as the length SOURCE, used when the URI alone cannot supply one;
+that case arises only for stream ciphers and key agreements naming such an
+algorithm, none of which this package implements. `Encryptor` writes no
+`KeySize`.
+
 Section 3 carries a blanket "features described in this section MUST be
 implemented", so four more constructs are unimplemented, and only one of them
 can fail a decrypt: `xenc:ReferenceList` (§3.6), which points from a key to the

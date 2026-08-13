@@ -1,6 +1,7 @@
 package xmlenc1_test
 
 import (
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -211,4 +212,46 @@ func TestDecryptBlockAlgorithm(t *testing.T) {
 		_, err = conflicting.Decrypt(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrConflictingBlockAlgorithm)
 	})
+}
+
+// TestDecryptRejectsKeySizeContradiction proves the xenc:KeySize consistency
+// check (xmlenc-core1 §3.2, §5.3, §5.6.2.2) runs at parse, before any
+// cryptography: an otherwise fully valid RSA-OAEP-protected EncryptedData
+// whose own (block-algorithm) EncryptionMethod carries a KeySize
+// contradicting its algorithm fails with ErrMalformedEncrypted even when the
+// recipient's correct PrivateKey is configured, so the refusal cannot be a
+// byproduct of a failed key transport or unwrap.
+func TestDecryptRejectsKeySizeContradiction(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, samlAssertion)
+
+	encryptor := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+		OAEPDigest(xmlenc1.DigestSHA256).
+		OAEPMGF(xmlenc1.MGFSHA256).
+		RecipientPublicKey(&key.PublicKey)
+
+	_, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+
+	// The payload EncryptionMethod (aes256-gcm) is self-closing on the wire;
+	// splice in a KeySize that contradicts its implied 256 bits.
+	original := `<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>`
+	tampered := `<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"><xenc:KeySize>128</xenc:KeySize></xenc:EncryptionMethod>`
+	require.Contains(t, xml, original)
+	xml = strings.Replace(xml, original, tampered, 1)
+
+	tdoc := mustParseXML(t, xml)
+	edElem := findEncryptedData(t, tdoc.DocumentElement())
+	require.NotNil(t, edElem)
+
+	_, err = xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+	require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+
+	_, err = xmlenc1.NewDecryptor().PrivateKey(key).DecryptBytes(t.Context(), edElem)
+	require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 }

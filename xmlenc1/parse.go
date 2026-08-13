@@ -5,8 +5,10 @@ import (
 	"crypto/ecdh"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -505,13 +507,23 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 			em.MGFAlgorithm = alg
 		case isXMLEncElem(e, "KeySize"):
 			// KeySize is an optional singleton in the schema. The package
-			// derives key sizes from the algorithm URI and does not consume
-			// KeySize, so enforce at-most-one cardinality to stay consistent
-			// with the other sub-element guards.
+			// derives key sizes from the algorithm URI and never uses KeySize
+			// as a length SOURCE, but xmlenc-core1 §3.2 makes a KeySize that
+			// CONTRADICTS the algorithm an error ("the presence of a KeySize
+			// child inconsistent with the algorithm MUST be treated as an
+			// error"; §5.3 states the same rule from the other side), so a
+			// present value is still read and checked against it.
 			if seenKeySize {
 				return fmt.Errorf("%w: duplicate KeySize", ErrMalformedEncrypted)
 			}
 			seenKeySize = true
+			bits, err := parseKeySizeBits(ctx, e)
+			if err != nil {
+				return err
+			}
+			if err := checkDeclaredKeySize(em.Algorithm, bits); err != nil {
+				return err
+			}
 		case isXMLEncElem(e, "OAEPparams"):
 			if seenOAEPParams {
 				return fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
@@ -529,6 +541,84 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 	}
 
 	return em, nil
+}
+
+// maxKeySizeChars bounds the lexical length of one xenc:KeySize value.
+// KeySize is xs:integer naming a key length in bits (§5.6.2.2), and every
+// value that can agree with an algorithm this package implements is three
+// digits (128, 192, 256). 64 leaves ample room for the whitespace, sign and
+// leading zeros xs:integer's lexical space permits, while still keeping the
+// parse from holding a number sized only by what the document says.
+const maxKeySizeChars = 64
+
+// parseKeySizeBits reads elem's character data as the lexical value of one
+// xenc:KeySize element and returns it as a number of bits.
+//
+// It walks elem's children directly rather than calling [helium.Element.Content],
+// for the same reason [decodeBoundedBase64] does: that accessor aggregates the
+// whole descendant subtree into one buffer, and this value is read while the
+// document is parsed, before anything it says is authenticated. It reuses
+// base64CharacterData, which already encodes the child-kind rules this value
+// needs too — despite the helper's name, those rules hold for any XML simple
+// content, not only base64: text and CDATA carry the value, an entity
+// reference contributes its declared replacement text through one hop, a
+// comment or processing instruction is ignored, and an element child is
+// refused. maxKeySizeChars is enforced as the characters are gathered, so a
+// document cannot make this walk hold a value sized only by what it sends.
+//
+// The gathered text is trimmed of the four characters xs:integer's
+// whiteSpace='collapse' facet permits and parsed with [strconv.Atoi], which
+// accepts the rest of that lexical space (an optional sign and leading zeros).
+// A value outside the lexical space is ErrMalformedEncrypted naming it. A value
+// INSIDE it that no int can hold is not: xs:integer is unbounded, so such a
+// value is returned clamped and left to the consistency check.
+func parseKeySizeBits(ctx context.Context, elem *helium.Element) (int, error) {
+	var chars []byte
+	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
+		text, err := base64CharacterData(child, "KeySize")
+		if err != nil {
+			return err
+		}
+		if len(chars)+len(text) > maxKeySizeChars {
+			return fmt.Errorf("%w: KeySize is over the %d character limit", ErrMalformedEncrypted, maxKeySizeChars)
+		}
+		chars = append(chars, text...)
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	// xs:integer carries whiteSpace='collapse', whose whitespace is exactly
+	// #x20, #x9, #xD and #xA. strings.TrimSpace would also strip U+00A0 and
+	// the other Unicode spaces, which are not in the lexical space.
+	value := strings.Trim(string(chars), " \t\r\n")
+	bits, err := strconv.Atoi(value)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
+		return 0, abort(ctx, fmt.Errorf("%w: invalid KeySize %q", ErrMalformedEncrypted, value))
+	}
+	// A well-formed xs:integer too large for an int is a value the schema
+	// permits, so it is not malformed. Atoi has already clamped it to
+	// MaxInt/MinInt, which can never equal an algorithm's key size, so a URI
+	// that implies a length still reports the contradiction and one that
+	// implies none still ignores it.
+	return bits, nil
+}
+
+// checkDeclaredKeySize enforces xmlenc-core1 §3.2's rule that a KeySize
+// inconsistent with the algorithm is an error (§5.3 restates it from the
+// EncryptionMethod side, and §5.6.2.2 fixes the unit: KeySize is "The size
+// in bits of the key") against algorithm's own implied length.
+//
+// keySizeForAlgorithm answers with an error for a URI that implies no length
+// at all — RSA key transport above all — and that is not a contradiction:
+// nothing on the wire disagrees with anything, so bits is accepted and
+// silently ignored, which is exactly what a URI silent on key length
+// anticipates. Only a URI that DOES imply a length is checked against it.
+func checkDeclaredKeySize(algorithm string, bits int) error {
+	want, err := keySizeForAlgorithm(paramBlockAlgorithm, algorithm)
+	if err == nil && bits != want*8 {
+		return fmt.Errorf("%w: KeySize %d bits is inconsistent with algorithm %q, which requires %d bits", ErrMalformedEncrypted, bits, algorithm, want*8)
+	}
+	return nil
 }
 
 // maxOAEPParamsBytes bounds the decoded octet length of one xenc:OAEPparams
@@ -662,6 +752,22 @@ func decodeBoundedBase64(ctx context.Context, elem *helium.Element, valueName st
 // undecodable and the decode fails, which is the right verdict for it. The
 // Entity's NextSibling is deliberately not followed either — it is the next
 // declaration in the DTD, not part of this value.
+//
+// The literal is returned in FULL rather than truncated to what the caller's
+// limit still has room for, and that whole cost is one transient copy of one
+// child: every caller weighs the returned text against its own limit and stops
+// at the first child that exceeds it, so at most one such copy is ever taken.
+// Its size is bounded twice over by the parser that built the tree —
+// [helium.DefaultMaxNodeContentSize] caps the declared literal itself, and
+// [helium.DefaultMaxEntityAmplification] caps the total expanded entity bytes
+// a document may reach as a multiple of its own input size, which is what
+// bounds how many references to that literal it can carry. Because the literal
+// is UNEXPANDED, a chain of entities
+// each referencing the one below costs the length of the reference text it is
+// written with (&inner;&inner;) rather than the length that text would expand
+// to, so nesting buys a document no size it did not already write. All of that
+// is measurable: a 4 MiB entity replacement and a 4 MiB plain text child
+// allocate the same 4.2 MB through [Decryptor.Decrypt].
 //
 // A CHILDLESS EntityRef is a normal parser output, not a caller-built shape:
 // per XML 1.0's "Entity Declared" constraint, an undeclared general entity is
