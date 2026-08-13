@@ -285,7 +285,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 		// XMLDSig §6.6.2 gives Base64 a special node-set conversion: concatenate
 		// text-node values, not canonical markup.
 		if step.algorithm == TransformBase64 && value.kind == transformValueNodeSet {
-			octets, err := base64TransformNodeSetOctets(value.nodes)
+			octets, err := base64TransformNodeSetOctets(ctx, value.nodes)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -305,7 +305,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 
 		switch step.algorithm {
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
-			octets, err := canonicalizeNodeSetValue(step.algorithm, value.nodes, step.prefixes)
+			octets, err := canonicalizeNodeSetValue(ctx, step.algorithm, value.nodes, step.prefixes)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -317,7 +317,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 			}
 			value = newOctetTransformValue(octets)
 		case TransformXPath:
-			nodes, err := materializeNodeSet(value.nodes)
+			nodes, err := materializeNodeSet(ctx, value.nodes)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -353,7 +353,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 		return nil, err
 	}
 	if value.kind == transformValueNodeSet {
-		return canonicalizeNodeSetValue(C14N10, value.nodes, nil)
+		return canonicalizeNodeSetValue(ctx, C14N10, value.nodes, nil)
 	}
 	return value.octets, nil
 }
@@ -374,10 +374,14 @@ func convertTransformValue(ctx context.Context, runtime transformRuntime, value 
 			}
 			return transformValue{}, fmt.Errorf("%w: octet input cannot be parsed for transform %d (%s): %v", ErrUnsupportedTransform, consumerIndex, consumerAlgorithm, err)
 		}
-		nodes := &nodeSetValue{doc: doc, nodes: collectDocumentNodes(doc), materialized: true}
+		docNodes, err := collectDocumentNodes(ctx, doc)
+		if err != nil {
+			return transformValue{}, err
+		}
+		nodes := &nodeSetValue{doc: doc, nodes: docNodes, materialized: true}
 		return newNodeSetTransformValue(nodes), nil
 	case value.kind == transformValueNodeSet && required == transformValueOctets:
-		octets, err := canonicalizeNodeSetValue(C14N10, value.nodes, nil)
+		octets, err := canonicalizeNodeSetValue(ctx, C14N10, value.nodes, nil)
 		if err != nil {
 			return transformValue{}, err
 		}
@@ -387,7 +391,7 @@ func convertTransformValue(ctx context.Context, runtime transformRuntime, value 
 	}
 }
 
-func materializeNodeSet(value *nodeSetValue) (*nodeSetValue, error) {
+func materializeNodeSet(ctx context.Context, value *nodeSetValue) (*nodeSetValue, error) {
 	if value == nil || value.doc == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
 	}
@@ -397,11 +401,11 @@ func materializeNodeSet(value *nodeSetValue) (*nodeSetValue, error) {
 	if value.origin == nil || value.origin.target == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no reference origin", ErrUnsupportedTransform)
 	}
-	if value.origin.wholeDoc {
-		value.nodes = collectDocumentNodes(value.origin.doc)
-	} else {
-		value.nodes = collectSubtreeNodes(value.origin.target)
+	nodes, err := originNodes(ctx, value.origin)
+	if err != nil {
+		return nil, err
 	}
+	value.nodes = nodes
 	if !value.origin.includeComments {
 		value.nodes = removeCommentNodes(value.nodes)
 	}
@@ -411,6 +415,18 @@ func materializeNodeSet(value *nodeSetValue) (*nodeSetValue, error) {
 	value.origin = nil
 	value.materialized = true
 	return value, nil
+}
+
+// originNodes builds the explicit node set a Reference selection stands for.
+// Materialized membership exists so a later transform can NARROW it — an XPath
+// filter drops nodes one at a time and may keep an element whose parent it
+// dropped — so every element carries its complete namespace axis here
+// (collectSubtreeNodes) rather than the reduced canonicalization set.
+func originNodes(ctx context.Context, origin *referenceNodeSetOrigin) ([]helium.Node, error) {
+	if origin.wholeDoc {
+		return collectDocumentNodes(ctx, origin.doc)
+	}
+	return collectSubtreeNodes(ctx, origin.target)
 }
 
 func removeCommentNodes(nodes []helium.Node) []helium.Node {
@@ -435,7 +451,7 @@ func applyEnvelopedTransform(value *nodeSetValue, sigElem *helium.Element) error
 	return nil
 }
 
-func canonicalizeNodeSetValue(method string, value *nodeSetValue, prefixes []string) ([]byte, error) {
+func canonicalizeNodeSetValue(ctx context.Context, method string, value *nodeSetValue, prefixes []string) ([]byte, error) {
 	if value == nil || value.doc == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
 	}
@@ -446,13 +462,13 @@ func canonicalizeNodeSetValue(method string, value *nodeSetValue, prefixes []str
 		origin := value.origin
 		switch {
 		case origin.envelopedPending:
-			return canonicalizeEnveloped(method, origin.doc, origin.target, origin.sigElem, origin.wholeDoc, prefixes)
+			return canonicalizeEnveloped(ctx, method, origin.doc, origin.target, origin.sigElem, origin.wholeDoc, prefixes)
 		case origin.wholeDoc:
 			return canonicalize(method, origin.doc, prefixes)
 		case origin.internalRoot != nil && isDescendantOrSelf(origin.target, origin.internalRoot):
-			return canonicalizeDetachedSubtree(method, origin.internalRoot, origin.target, prefixes)
+			return canonicalizeDetachedSubtree(ctx, method, origin.internalRoot, origin.target, prefixes)
 		default:
-			return canonicalizeSubtree(method, origin.target, prefixes)
+			return canonicalizeSubtree(ctx, method, origin.target, prefixes)
 		}
 	}
 	if !value.materialized {
@@ -461,11 +477,11 @@ func canonicalizeNodeSetValue(method string, value *nodeSetValue, prefixes []str
 	return canonicalizeNodeSet(method, value.nodes, value.doc, prefixes)
 }
 
-func base64TransformNodeSetOctets(value *nodeSetValue) ([]byte, error) {
+func base64TransformNodeSetOctets(ctx context.Context, value *nodeSetValue) ([]byte, error) {
 	if value == nil {
 		return nil, fmt.Errorf("%w: transform node-set is nil", ErrUnsupportedTransform)
 	}
-	materialized, err := materializeNodeSet(value)
+	materialized, err := materializeNodeSet(ctx, value)
 	if err != nil {
 		return nil, err
 	}

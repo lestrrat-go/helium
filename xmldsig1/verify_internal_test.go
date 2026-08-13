@@ -500,7 +500,7 @@ func TestEmptyReferencesRejected(t *testing.T) {
 	helium.UnlinkNode(ref)
 
 	// Recompute a valid SignatureValue over the reference-free SignedInfo.
-	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+	canonical, err := canonicalizeSubtree(t.Context(), ExcC14N10, signedInfo, nil)
 	require.NoError(t, err)
 	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 	require.NoError(t, err)
@@ -569,7 +569,7 @@ func TestDuplicateDigestValueRejected(t *testing.T) {
 	require.Equal(t, 2, countChildren(reference, "DigestValue"))
 
 	// Recompute a valid SignatureValue over the now-ambiguous SignedInfo.
-	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+	canonical, err := canonicalizeSubtree(t.Context(), ExcC14N10, signedInfo, nil)
 	require.NoError(t, err)
 	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 	require.NoError(t, err)
@@ -616,7 +616,7 @@ func TestVerifyLineWrappedDigestValue(t *testing.T) {
 	require.Contains(t, wrapped, " ")
 	setText(t, digestValue, wrapped)
 
-	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+	canonical, err := canonicalizeSubtree(t.Context(), ExcC14N10, signedInfo, nil)
 	require.NoError(t, err)
 	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 	require.NoError(t, err)
@@ -669,7 +669,7 @@ func TestReferenceNamespace(t *testing.T) {
 		// Recompute a valid SignatureValue over the mutated SignedInfo so the only
 		// thing standing between this document and a false "verified" result is the
 		// namespace check on the Reference count.
-		canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+		canonical, err := canonicalizeSubtree(t.Context(), ExcC14N10, signedInfo, nil)
 		require.NoError(t, err)
 		sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 		require.NoError(t, err)
@@ -728,7 +728,7 @@ func TestReferenceNamespace(t *testing.T) {
 		// Recompute a valid SignatureValue over the mutated SignedInfo so the only
 		// thing standing between this document and a false "verified" result is the
 		// core-namespace check on the Reference count.
-		canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+		canonical, err := canonicalizeSubtree(t.Context(), ExcC14N10, signedInfo, nil)
 		require.NoError(t, err)
 		sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 		require.NoError(t, err)
@@ -806,7 +806,7 @@ func TestCloneNilConfig(t *testing.T) {
 // SignatureValue check.
 func reSignSignedInfo(t *testing.T, doc *helium.Document, sigElem, signedInfo *helium.Element, prefixes []string, key *rsa.PrivateKey) {
 	t.Helper()
-	canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, prefixes)
+	canonical, err := canonicalizeSubtree(t.Context(), ExcC14N10, signedInfo, prefixes)
 	require.NoError(t, err)
 	sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 	require.NoError(t, err)

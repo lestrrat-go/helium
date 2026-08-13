@@ -65,7 +65,7 @@ func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document,
 	}
 
 	// Canonicalize SignedInfo and sign.
-	if err := computeAndSetSignatureValue(cfg, sigElem, signedInfo, sigValueElem, doc, key); err != nil {
+	if err := computeAndSetSignatureValue(ctx, cfg, sigElem, signedInfo, sigValueElem, doc, key); err != nil {
 		helium.UnlinkNode(sigElem)
 		return err
 	}
@@ -229,7 +229,7 @@ func signEnveloping(ctx context.Context, cfg *signerConfig, doc *helium.Document
 		}
 	}
 
-	if err := computeAndSetSignatureValue(cfg, sigElem, signedInfo, sigValueElem, doc, key); err != nil {
+	if err := computeAndSetSignatureValue(ctx, cfg, sigElem, signedInfo, sigValueElem, doc, key); err != nil {
 		return nil, err
 	}
 
@@ -457,7 +457,7 @@ func signDetached(ctx context.Context, cfg *signerConfig, doc *helium.Document, 
 		}
 	}
 
-	if err := computeAndSetSignatureValue(cfg, sigElem, signedInfo, sigValueElem, doc, key); err != nil {
+	if err := computeAndSetSignatureValue(ctx, cfg, sigElem, signedInfo, sigValueElem, doc, key); err != nil {
 		return nil, err
 	}
 
@@ -732,7 +732,7 @@ func processReference(ctx context.Context, cfg *signerConfig, doc *helium.Docume
 
 // computeAndSetSignatureValue canonicalizes SignedInfo, signs it, and sets
 // the SignatureValue element text.
-func computeAndSetSignatureValue(cfg *signerConfig, sigElem *helium.Element, signedInfo, sigValueElem *helium.Element, doc *helium.Document, key any) error {
+func computeAndSetSignatureValue(ctx context.Context, cfg *signerConfig, sigElem *helium.Element, signedInfo, sigValueElem *helium.Element, doc *helium.Document, key any) error {
 	// Canonicalize SignedInfo. When the Signature is already in the document tree
 	// (enveloped mode), canonicalize its SignedInfo subtree in place. When the
 	// Signature is detached (enveloping/detached mode, sigElem.Parent()==nil),
@@ -746,9 +746,9 @@ func computeAndSetSignatureValue(cfg *signerConfig, sigElem *helium.Element, sig
 	var canonical []byte
 	var err error
 	if sigElem.Parent() == nil {
-		canonical, err = canonicalizeDetachedSubtree(cfg.c14nMethod, sigElem, signedInfo, nil)
+		canonical, err = canonicalizeDetachedSubtree(ctx, cfg.c14nMethod, sigElem, signedInfo, nil)
 	} else {
-		canonical, err = canonicalizeSubtree(cfg.c14nMethod, signedInfo, nil)
+		canonical, err = canonicalizeSubtree(ctx, cfg.c14nMethod, signedInfo, nil)
 	}
 	if err != nil {
 		return err

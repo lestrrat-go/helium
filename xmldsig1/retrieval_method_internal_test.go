@@ -392,11 +392,11 @@ func TestRetrievalMethodTransformStepCap(t *testing.T) {
 			`<ds:Transforms>`+strings.Repeat(transform, n)+`</ds:Transforms></ds:RetrievalMethod>`)
 	}
 
-	steps, err := parseRetrievalTransforms(build(maxRetrievalTransformSteps).DocumentElement())
+	steps, err := parseRetrievalTransforms(t.Context(), build(maxRetrievalTransformSteps).DocumentElement())
 	require.NoError(t, err)
 	require.Len(t, steps, maxRetrievalTransformSteps)
 
-	steps, err = parseRetrievalTransforms(build(maxRetrievalTransformSteps + 1).DocumentElement())
+	steps, err = parseRetrievalTransforms(t.Context(), build(maxRetrievalTransformSteps+1).DocumentElement())
 	require.ErrorIs(t, err, ErrResourceLimitExceeded)
 	require.Nil(t, steps)
 }

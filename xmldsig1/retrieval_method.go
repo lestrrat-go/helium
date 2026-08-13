@@ -121,7 +121,7 @@ func prepareRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *heliu
 
 	state, ok := prepared[rm]
 	if !ok {
-		steps, err := parseRetrievalTransforms(rm)
+		steps, err := parseRetrievalTransforms(ctx, rm)
 		if err != nil {
 			return err
 		}
@@ -259,7 +259,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 // RetrievalMethod into transform steps, enforcing at most one core-namespace
 // Transforms element and the fixed pre-verification transform-step cap. A
 // foreign-namespace look-alike is ignored so it cannot steer processing.
-func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
+func parseRetrievalTransforms(ctx context.Context, rm *helium.Element) ([]transformStep, error) {
 	var transforms []parsedTransform
 	seen := false
 	for child := rm.FirstChild(); child != nil; child = child.NextSibling() {
@@ -274,7 +274,7 @@ func parseRetrievalTransforms(rm *helium.Element) ([]transformStep, error) {
 			return nil, fmt.Errorf("%w: multiple Transforms elements in RetrievalMethod", ErrInvalidKeyInfo)
 		}
 		seen = true
-		list, err := parseTransformList(e, maxRetrievalTransformSteps)
+		list, err := parseTransformList(ctx, e, maxRetrievalTransformSteps)
 		if err != nil {
 			return nil, err
 		}

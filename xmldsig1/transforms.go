@@ -155,9 +155,19 @@ func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byt
 }
 
 // canonicalizeSubtree canonicalizes a single element subtree by canonicalizing
-// the node-set of that subtree against its owning document.
-func canonicalizeSubtree(method string, elem *helium.Element, prefixes []string) ([]byte, error) {
-	return canonicalizeNodeSet(method, collectSubtreeNodes(elem), elem.OwnerDocument(), prefixes)
+// the node-set of that subtree against its owning document. The node set goes
+// straight to c14n, so it is built with the reduced, mode-aware namespace
+// membership (see collectCanonicalizationNodes).
+func canonicalizeSubtree(ctx context.Context, method string, elem *helium.Element, prefixes []string) ([]byte, error) {
+	mode, comments, err := resolveC14NMode(method)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := collectCanonicalizationNodes(ctx, elem, mode)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalizeNodeSetMode(mode, comments, nodes, elem.OwnerDocument(), prefixes)
 }
 
 // canonicalizeNodeSet canonicalizes an explicit node-set against doc using the
@@ -172,6 +182,13 @@ func canonicalizeNodeSet(method string, nodes []helium.Node, doc *helium.Documen
 	if err != nil {
 		return nil, err
 	}
+	return canonicalizeNodeSetMode(mode, comments, nodes, doc, prefixes)
+}
+
+// canonicalizeNodeSetMode is the shared node-set -> octet call for a method URI
+// whose c14n mode is already resolved, so a caller that needed the mode to build
+// the node set does not resolve it twice.
+func canonicalizeNodeSetMode(mode c14n.Mode, comments bool, nodes []helium.Node, doc *helium.Document, prefixes []string) ([]byte, error) {
 	canon := c14n.NewCanonicalizer(mode).NodeSet(nodes)
 	if comments {
 		canon = canon.Comments()
@@ -188,17 +205,21 @@ func canonicalizeNodeSet(method string, nodes []helium.Node, doc *helium.Documen
 // the initial node-set for a whole-document reference (URI="" or "#xpointer(/)")
 // when a transform needs explicit node membership. The materializer removes
 // comments for a comment-excluding Reference form before applying that transform.
-func collectDocumentNodes(doc *helium.Document) []helium.Node {
+func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
 	var nodes []helium.Node
 	for c := range helium.Children(doc) {
 		switch c.Type() {
 		case helium.ElementNode:
-			nodes = append(nodes, collectSubtreeNodes(c)...)
+			sub, err := collectSubtreeNodes(ctx, c)
+			if err != nil {
+				return nil, err
+			}
+			nodes = append(nodes, sub...)
 		case helium.CommentNode, helium.ProcessingInstructionNode:
 			nodes = append(nodes, c)
 		}
 	}
-	return nodes
+	return nodes, nil
 }
 
 // defaultXPathOpLimit bounds the number of evaluation operations a single XPath
@@ -377,7 +398,7 @@ func removeSignatureNodes(nodes []helium.Node, sigElem *helium.Element) []helium
 // of the subtree itself. Exclusive Canonical XML emits only visibly-utilized
 // namespaces and performs NO xml:* inheritance, so both an unused inherited
 // namespace and any inherited xml:* on the proxy leave its output byte-identical.
-func canonicalizeDetachedSubtree(method string, root, target *helium.Element, prefixes []string) ([]byte, error) {
+func canonicalizeDetachedSubtree(ctx context.Context, method string, root, target *helium.Element, prefixes []string) ([]byte, error) {
 	mode, _, err := resolveC14NMode(method)
 	if err != nil {
 		return nil, err
@@ -435,7 +456,7 @@ func canonicalizeDetachedSubtree(method string, root, target *helium.Element, pr
 	// a partial restore after such a caller-corrupted tree is not a defect here.
 	root.SetTreeDoc(tmp)
 
-	return canonicalizeSubtree(method, target, prefixes)
+	return canonicalizeSubtree(ctx, method, target, prefixes)
 }
 
 // copyInheritedXMLAttrs copies the caller document element's inherited xml:*
@@ -511,7 +532,7 @@ func isDescendantOrSelf(n helium.Node, root *helium.Element) bool {
 // live target element is canonicalized (URI="#id"). The returned bytes are
 // byte-identical to canonicalizing the same tree with the Signature physically
 // detached.
-func canonicalizeEnveloped(method string, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, prefixes []string) ([]byte, error) {
+func canonicalizeEnveloped(ctx context.Context, method string, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, prefixes []string) ([]byte, error) {
 	clone, err := helium.CopyDoc(doc)
 	if err != nil {
 		return nil, err
@@ -567,7 +588,7 @@ func canonicalizeEnveloped(method string, doc *helium.Document, target, sigElem 
 
 	// Fragment reference: canonicalize the cloned subtree corresponding to the
 	// live target element.
-	return canonicalizeSubtree(method, cloneTarget, prefixes)
+	return canonicalizeSubtree(ctx, method, cloneTarget, prefixes)
 }
 
 // childIndexPath returns the sequence of child indices that locate n starting
@@ -643,56 +664,270 @@ func resolveC14NMode(method string) (c14n.Mode, bool, error) {
 	}
 }
 
-// collectSubtreeNodes returns all nodes in the subtree rooted at n
-// (including n itself) in document order.
+// collectSubtreeNodes returns all nodes in the subtree rooted at n (including n
+// itself) in document order, giving every element the COMPLETE XPath in-scope
+// namespace axis.
 //
-// For each element it also emits one namespace node per in-scope namespace
-// (walking ancestors so that bindings declared above the subtree root are
-// carried in). The c14n package in node-set mode only renders namespaces that
-// are explicitly present in the node set, so without these the canonical bytes
-// of a namespace-qualified subtree would drop their xmlns declarations,
-// producing non-W3C output that breaks signature interop.
-func collectSubtreeNodes(n helium.Node) []helium.Node {
-	var nodes []helium.Node
-	var walk func(helium.Node)
-	walk = func(cur helium.Node) {
-		nodes = append(nodes, cur)
-		if elem, ok := helium.AsNode[*helium.Element](cur); ok {
-			// In-scope namespace axis. c14n keys namespace nodes by their
-			// parent element, so each wrapper is parented to this element.
-			for _, ns := range inScopeNamespaces(elem) {
-				nodes = append(nodes, helium.NewNamespaceNodeWrapper(ns, elem))
-			}
-			for _, attr := range elem.Attributes() {
-				nodes = append(nodes, attr)
-			}
-		}
-		// Enumerate owned children via helium.Children, which stops at a
-		// foreign-owned child (an entity reference's shared Entity node is owned
-		// by the DTD, whose sibling pointers thread into the DTD declaration
-		// list) and is cycle-safe. A raw FirstChild/NextSibling walk would spill
-		// DTD declaration nodes into the c14n node set. This matches the c14n
-		// canonicalizer itself, which enumerates element children and expands an
-		// entity reference through helium.Children, so the node set holds only
-		// the owned subtree.
-		for child := range helium.Children(cur) {
-			walk(child)
-		}
+// That axis costs one namespace node per (element x in-scope declaration), so it
+// is quadratic in the document by construction. It is used only where the node
+// set is an XPath filter transform's input: the filter is evaluated once per
+// node — namespace nodes included — and it may drop an interior element while
+// keeping that element's descendants, which makes every element's own axis
+// observable. Narrowing the axis there would change which nodes the filter sees
+// and which namespaces the survivors can still render, so the set stays complete
+// and the walk polls ctx instead.
+//
+// A node set that goes straight to c14n unfiltered is built by
+// collectCanonicalizationNodes, which is linear in the document.
+func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, error) {
+	c := &subtreeCollector{fullAxis: true}
+	if err := c.collect(ctx, n); err != nil {
+		return nil, err
 	}
-	walk(n)
-	return nodes
+	return c.nodes, nil
 }
 
-// inScopeNamespaces returns the namespaces in scope for elem, walking from the
-// document root down so that closer (inner) declarations override outer ones.
-// The implicit xml namespace is excluded — C14N never declares it explicitly.
-func inScopeNamespaces(elem *helium.Element) []*helium.Namespace {
-	byPrefix := domutil.InScopeNamespaces(elem, true)
-	result := make([]*helium.Namespace, 0, len(byPrefix))
-	for _, ns := range byPrefix {
-		result = append(result, ns)
+// collectCanonicalizationNodes returns the node set for canonicalizing the
+// subtree rooted at elem under mode, in document order. Every element,
+// attribute, and character node of the subtree is a member, exactly as in
+// collectSubtreeNodes; only the namespace nodes are reduced, to the ones that
+// can still change a byte of the canonical output. The result is therefore
+// linear in the document — one namespace node per declaration actually written
+// plus at most one per element — rather than quadratic in (elements x ancestor
+// declarations).
+//
+// It is valid ONLY for a set handed to c14n whole: every element of the subtree
+// stays a member, so each element's nearest rendered ancestor is its own parent.
+// Do not use it where an XPath filter may narrow the set (see
+// collectSubtreeNodes).
+//
+// The two canonicalization families need DIFFERENT namespace sets, because they
+// decide what to render from different inputs:
+//
+//   - Inclusive (Canonical XML 1.0 and 1.1) renders a namespace node when the
+//     nearest rendered ancestor's node set does NOT already carry that prefix
+//     with the same URI (c14n renderNamespacesNodeSet / nsRenderedByAncestor).
+//     Membership is compared against the ANCESTOR'S SET, so a binding an element
+//     inherits unchanged must be ABSENT from that element's set: keeping it
+//     while the parent's set has dropped it would emit a redundant declaration.
+//     What must stay is every binding the element CHANGES relative to its
+//     parent — that is what inclusive C14N emits — plus the in-scope default
+//     namespace, which the ancestor lookup also uses to decide whether to emit
+//     an xmlns="" undeclaration.
+//
+//   - Exclusive C14N renders only the namespaces an element VISIBLY UTILIZES
+//     (its own prefix, its attributes' prefixes) plus any prefix in an
+//     InclusiveNamespaces PrefixList, and suppresses one an output ancestor
+//     already rendered by consulting the rendered-namespace stack rather than
+//     the ancestor's node set (renderNamespacesExclusiveNodeSet). A visibly
+//     utilized binding that is missing from the element's own set is not
+//     rendered AT ALL, so applying the inclusive reduction here would emit
+//     element and attribute names whose prefixes are never declared. Exclusive
+//     therefore keeps the element's own prefix and every attribute prefix in
+//     addition to the changed bindings.
+//
+// A PrefixList needs no per-element handling of its own: the subtree root
+// carries the complete axis, so a listed prefix in scope there is rendered at
+// the root and suppressed by the rendered-namespace stack at every descendant
+// that does not rebind it — and a descendant that does rebind it has that
+// binding as a change.
+func collectCanonicalizationNodes(ctx context.Context, elem *helium.Element, mode c14n.Mode) ([]helium.Node, error) {
+	c := &subtreeCollector{exclusive: mode == c14n.ExclusiveC14N10}
+	if err := c.collect(ctx, elem); err != nil {
+		return nil, err
 	}
-	return result
+	return c.nodes, nil
+}
+
+// subtreeCollector walks a subtree once, tracking the in-scope namespace
+// bindings incrementally so no element recomputes them from its ancestor chain.
+// fullAxis selects the complete namespace axis on every element; otherwise the
+// reduced, mode-aware membership described on collectCanonicalizationNodes
+// applies, with exclusive naming the canonicalization family.
+type subtreeCollector struct {
+	fullAxis  bool
+	exclusive bool
+	scope     map[string]*helium.Namespace
+	nodes     []helium.Node
+	sinceCtx  int
+}
+
+// nsBinding records the binding one element replaced for a prefix, so the walk
+// can restore its parent's scope on the way out and can tell an inherited
+// binding from one the element changed.
+type nsBinding struct {
+	prefix string
+	prev   *helium.Namespace
+	had    bool
+}
+
+// ctxPollInterval is how many collected nodes pass between context checks. The
+// walk allocates a namespace node per binding, so a cancelled context must be
+// noticed inside the walk, not only at its end; polling every node would charge
+// a context read per node for no extra promptness.
+const ctxPollInterval = 256
+
+func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
+	// A context already cancelled when the walk starts stops it before any node
+	// is collected; the periodic poll below covers one cancelled while it runs.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.scope = make(map[string]*helium.Namespace)
+	if elem, ok := helium.AsNode[*helium.Element](n); ok {
+		// Seed the scope with the subtree root's own in-scope axis, so bindings
+		// declared ABOVE the root are carried in. Every deeper element updates
+		// this map incrementally instead of walking its ancestors again.
+		maps.Copy(c.scope, domutil.InScopeNamespaces(elem, true))
+	}
+	return c.walk(ctx, n, true)
+}
+
+func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) error {
+	c.sinceCtx++
+	if c.sinceCtx >= ctxPollInterval {
+		c.sinceCtx = 0
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+
+	c.nodes = append(c.nodes, n)
+
+	elem, isElem := helium.AsNode[*helium.Element](n)
+	var changed []nsBinding
+	if isElem {
+		if !root {
+			changed = c.enter(elem)
+		}
+		c.appendNamespaceNodes(elem, root, changed)
+		for _, attr := range elem.Attributes() {
+			c.nodes = append(c.nodes, attr)
+		}
+	}
+
+	// Enumerate owned children via helium.Children, which stops at a
+	// foreign-owned child (an entity reference's shared Entity node is owned by
+	// the DTD, whose sibling pointers thread into the DTD declaration list) and
+	// is cycle-safe. A raw FirstChild/NextSibling walk would spill DTD
+	// declaration nodes into the c14n node set. This matches the c14n
+	// canonicalizer itself, which enumerates element children and expands an
+	// entity reference through helium.Children, so the node set holds only the
+	// owned subtree.
+	for child := range helium.Children(n) {
+		if err := c.walk(ctx, child, false); err != nil {
+			return err
+		}
+	}
+
+	if isElem && !root {
+		c.leave(changed)
+	}
+	return nil
+}
+
+// enter applies elem's namespace declarations to the running scope and returns
+// the bindings it replaced, one entry per prefix touched. The rule matches
+// domutil.InScopeNamespaces exactly — declarations first, then the element's own
+// active namespace when nothing already binds its prefix — so the incremental
+// scope equals the ancestor-chain walk that function performs.
+func (c *subtreeCollector) enter(elem *helium.Element) []nsBinding {
+	var changed []nsBinding
+	for _, ns := range elem.Namespaces() {
+		changed = c.bind(ns, changed)
+	}
+	if ns := elem.Namespace(); ns != nil {
+		if _, ok := c.scope[ns.Prefix()]; !ok {
+			changed = c.bind(ns, changed)
+		}
+	}
+	return changed
+}
+
+func (c *subtreeCollector) bind(ns *helium.Namespace, changed []nsBinding) []nsBinding {
+	prefix := ns.Prefix()
+	if !slices.ContainsFunc(changed, func(b nsBinding) bool { return b.prefix == prefix }) {
+		prev, had := c.scope[prefix]
+		changed = append(changed, nsBinding{prefix: prefix, prev: prev, had: had})
+	}
+	c.scope[prefix] = ns
+	return changed
+}
+
+// leave restores the scope the element's parent had.
+func (c *subtreeCollector) leave(changed []nsBinding) {
+	for _, b := range changed {
+		if b.had {
+			c.scope[b.prefix] = b.prev
+			continue
+		}
+		delete(c.scope, b.prefix)
+	}
+}
+
+// appendNamespaceNodes emits elem's namespace nodes. c14n keys namespace nodes
+// by their parent element, so each wrapper is parented to elem. The implicit xml
+// namespace is never emitted — C14N never declares it explicitly.
+func (c *subtreeCollector) appendNamespaceNodes(elem *helium.Element, root bool, changed []nsBinding) {
+	// The subtree root has no rendered ancestor inside the node set, so it must
+	// carry the whole axis: inclusive C14N emits every in-scope binding there,
+	// and exclusive C14N resolves a PrefixList against it.
+	if c.fullAxis || root {
+		for prefix, ns := range c.scope {
+			if prefix == lexicon.PrefixXML {
+				continue
+			}
+			c.nodes = append(c.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
+		}
+		return
+	}
+
+	var emitted []string
+	for _, b := range changed {
+		ns := c.scope[b.prefix]
+		if b.had && b.prev.URI() == ns.URI() {
+			// A redeclaration of the binding already in scope changes nothing.
+			continue
+		}
+		emitted = c.emitNamespace(elem, b.prefix, emitted)
+	}
+
+	// The in-scope default namespace stays on every element: the inclusive
+	// ancestor lookup emits an xmlns="" undeclaration for an element whose set
+	// has no default-namespace node while its nearest rendered ancestor's set
+	// does, so dropping an unchanged default would undeclare it spuriously.
+	emitted = c.emitNamespace(elem, "", emitted)
+
+	if !c.exclusive {
+		return
+	}
+	// Exclusive C14N renders what an element visibly utilizes, and renders
+	// nothing for a prefix missing from the element's own set, so the element's
+	// own prefix and its attributes' prefixes stay members even when inherited
+	// unchanged.
+	if ns := elem.Namespace(); ns != nil {
+		emitted = c.emitNamespace(elem, ns.Prefix(), emitted)
+	}
+	for _, attr := range elem.Attributes() {
+		if prefix := attr.Prefix(); prefix != "" {
+			emitted = c.emitNamespace(elem, prefix, emitted)
+		}
+	}
+}
+
+// emitNamespace appends the namespace node for prefix when that prefix is in
+// scope and has not been emitted for this element yet, returning the updated
+// emitted-prefix list.
+func (c *subtreeCollector) emitNamespace(elem *helium.Element, prefix string, emitted []string) []string {
+	if prefix == lexicon.PrefixXML {
+		return emitted
+	}
+	ns, ok := c.scope[prefix]
+	if !ok || slices.Contains(emitted, prefix) {
+		return emitted
+	}
+	c.nodes = append(c.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
+	return append(emitted, prefix)
 }
 
 // referenceURIForm classifies a same-document Reference URI into the node-set

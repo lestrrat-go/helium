@@ -89,7 +89,7 @@ func TestXSLTTransformDigestOverStylesheetOutput(t *testing.T) {
 	// The digest input must equal the transformer's output over the pre-XSLT
 	// octets (the C14N 1.0 canonicalization of the content subtree), NOT the
 	// pre-XSLT octets themselves.
-	preOctets, err := canonicalizeSubtree(C14N10, target, nil)
+	preOctets, err := canonicalizeSubtree(t.Context(), C14N10, target, nil)
 	require.NoError(t, err)
 	expected, err := xslt3Transformer{}.TransformXSLT(t.Context(), ref.transforms[0].stylesheet, preOctets)
 	require.NoError(t, err)

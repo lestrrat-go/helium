@@ -54,7 +54,7 @@ func isXSLTNS(e *helium.Element) bool {
 // bytes carry the xsl: (and any other in-scope) namespace declarations — a
 // lossless, self-contained round-trip an [XSLTTransformer] can re-parse and
 // compile as a standalone stylesheet.
-func parseXSLTTransform(te *helium.Element) ([]byte, error) {
+func parseXSLTTransform(ctx context.Context, te *helium.Element) ([]byte, error) {
 	var styleElem *helium.Element
 	for c := te.FirstChild(); c != nil; c = c.NextSibling() {
 		// An entity-reference child can hide a second stylesheet or a foreign
@@ -85,7 +85,7 @@ func parseXSLTTransform(te *helium.Element) ([]byte, error) {
 	if styleElem == nil {
 		return nil, fmt.Errorf("%w: XSLT transform missing xsl:stylesheet element", ErrUnsupportedTransform)
 	}
-	octets, err := canonicalizeSubtree(C14N10, styleElem, nil)
+	octets, err := canonicalizeSubtree(ctx, C14N10, styleElem, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: cannot serialize XSLT stylesheet: %v", ErrUnsupportedTransform, err)
 	}

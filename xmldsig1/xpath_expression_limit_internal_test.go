@@ -153,7 +153,7 @@ func TestXPathFilterShortExpressionVerifies(t *testing.T) {
 	require.NotNil(t, digestValueElem)
 	setElementText(t, doc, digestValueElem, base64.StdEncoding.EncodeToString(digest))
 
-	signedInfoCanon, err := canonicalizeSubtree(parsed.c14nMethod, parsed.signedInfoElem, parsed.c14nPrefixes)
+	signedInfoCanon, err := canonicalizeSubtree(t.Context(), parsed.c14nMethod, parsed.signedInfoElem, parsed.c14nPrefixes)
 	require.NoError(t, err)
 	sigValue, err := signBytes(parsed.signatureAlg, key, signedInfoCanon, false)
 	require.NoError(t, err)
