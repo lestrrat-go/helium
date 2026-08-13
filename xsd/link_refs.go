@@ -816,7 +816,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if c.version != Version11 {
 				c.checkExtensionAttrDuplicates(ctx, td)
 				if td.BaseType.Attributes != nil {
-					td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+					td.Attributes = concatAttrUses(td.BaseType.Attributes, td.Attributes)
 				}
 				if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 					td.AnyAttribute = td.BaseType.AnyAttribute
@@ -959,7 +959,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if c.version != Version11 {
 			c.checkExtensionAttrDuplicates(ctx, td)
 			if td.BaseType.Attributes != nil {
-				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+				td.Attributes = concatAttrUses(td.BaseType.Attributes, td.Attributes)
 			}
 			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 				td.AnyAttribute = td.BaseType.AnyAttribute
@@ -3332,6 +3332,18 @@ func (c *compiler) finalizeAttrUses10(td *TypeDef, finalized, visiting map[*Type
 		}
 		td.Attributes = append(td.Attributes, bau)
 	}
+}
+
+// concatAttrUses returns base's attribute uses followed by own's in a FRESH
+// slice. Appending own directly onto base (append(base, own...)) parks the uses
+// in base's spare capacity whenever base has any, so a later append to the same
+// base slice — a sibling derivation merging base again, or finalizeAttrUses10
+// folding inherited uses into a restriction base — overwrites them and the
+// derived type silently loses its own attribute uses.
+func concatAttrUses(base, own []*AttrUse) []*AttrUse {
+	merged := make([]*AttrUse, 0, len(base)+len(own))
+	merged = append(merged, base...)
+	return append(merged, own...)
 }
 
 func (c *compiler) extensionWildcardUnion(ctx context.Context, td *TypeDef, base, derived *Wildcard) *Wildcard {

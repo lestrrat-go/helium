@@ -264,3 +264,109 @@ func TestExtensionOfRestrictionAttrInheritance10(t *testing.T) {
 		})
 	}
 }
+
+// TestExtensionOwnAttrsSurviveBaseGrowth10 pins the effective {attribute uses}
+// of an extension against the base attribute slice growing after the extension
+// merged it. Every complex type here declares three attributes so that its
+// Attributes slice has spare capacity (append growth is 1, 2, 4, ...): a merge
+// that appends the extension's own uses directly onto the base slice would park
+// them in that spare capacity, where the next append to the base overwrites
+// them and the extension silently loses its own attribute.
+func TestExtensionOwnAttrsSurviveBaseGrowth10(t *testing.T) {
+	t.Parallel()
+
+	// Two extensions of one base: each merges the same base slice, so E2's merge
+	// would overwrite the use E1 parked in the base's spare capacity.
+	const siblingExtensionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e1" type="E1"/>
+  <xs:element name="e2" type="E2"/>
+  <xs:complexType name="B">
+    <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+    <xs:attribute name="b1" type="xs:string"/>
+    <xs:attribute name="b2" type="xs:string"/>
+    <xs:attribute name="b3" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="E1">
+    <xs:complexContent>
+      <xs:extension base="B">
+        <xs:attribute name="own1" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="E2">
+    <xs:complexContent>
+      <xs:extension base="B">
+        <xs:attribute name="own2" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	// E extends R, and R then inherits g1 from its own base G: that inheriting
+	// append would overwrite the use E parked in R's spare capacity.
+	const extensionOfRestrictionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="G">
+    <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+    <xs:attribute name="r1" type="xs:string"/>
+    <xs:attribute name="r2" type="xs:string"/>
+    <xs:attribute name="r3" type="xs:string"/>
+    <xs:attribute name="g1" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="G">
+        <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+        <xs:attribute name="r1" type="xs:string"/>
+        <xs:attribute name="r2" type="xs:string"/>
+        <xs:attribute name="r3" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="R">
+        <xs:attribute name="own" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	cases := map[string]struct {
+		schema   string
+		instance string
+	}{
+		"first of two sibling extensions keeps its own attribute": {
+			schema:   siblingExtensionSchema,
+			instance: `<e1 own1="x"><c>z</c></e1>`,
+		},
+		"second of two sibling extensions keeps its own attribute": {
+			schema:   siblingExtensionSchema,
+			instance: `<e2 own2="x"><c>z</c></e2>`,
+		},
+		"sibling extension still inherits the base attributes": {
+			schema:   siblingExtensionSchema,
+			instance: `<e1 b1="x" b2="y" b3="z" own1="w"><c>z</c></e1>`,
+		},
+		"extension of a restriction keeps its own attribute": {
+			schema:   extensionOfRestrictionSchema,
+			instance: `<e own="x"><c>z</c></e>`,
+		},
+		"extension of a restriction inherits the grandbase attribute": {
+			schema:   extensionOfRestrictionSchema,
+			instance: `<e r1="x" g1="y" own="z"><c>z</c></e>`,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Arrange / Act
+			err := compileAndValidate(t, tc.schema, tc.instance, nil)
+
+			// Assert
+			require.NoError(t, err)
+		})
+	}
+}
