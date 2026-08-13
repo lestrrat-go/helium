@@ -816,7 +816,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			if c.version != Version11 {
 				c.checkExtensionAttrDuplicates(ctx, td)
 				if td.BaseType.Attributes != nil {
-					td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+					td.Attributes = concatAttrUses(td.BaseType.Attributes, td.Attributes)
 				}
 				if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 					td.AnyAttribute = td.BaseType.AnyAttribute
@@ -959,7 +959,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		if c.version != Version11 {
 			c.checkExtensionAttrDuplicates(ctx, td)
 			if td.BaseType.Attributes != nil {
-				td.Attributes = append(td.BaseType.Attributes, td.Attributes...)
+				td.Attributes = concatAttrUses(td.BaseType.Attributes, td.Attributes)
 			}
 			if td.AnyAttribute == nil && td.BaseType.AnyAttribute != nil {
 				td.AnyAttribute = td.BaseType.AnyAttribute
@@ -1039,8 +1039,9 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// the relaxed checkRestrictionAttrs — is what keeps it enforced. The merge must
 	// read a FINALIZED base attribute set, so an extension of a restriction (or vice
 	// versa) inherits correctly regardless of source order; the extension and
-	// restriction passes above DEFER all attribute work to here in 1.1. Gated to
-	// 1.1 so XSD 1.0 stays byte-identical.
+	// restriction passes above DEFER all attribute work to here in 1.1. XSD 1.0
+	// uses a separate merge-only topological pass (`finalizeAttrUses10`) that
+	// preserves historical check timing and restriction-wildcard rules.
 	if c.version == Version11 {
 		derived := make([]*TypeDef, 0, len(extensionTypes)+len(restrictionTypes))
 		derived = append(derived, extensionTypes...)
@@ -1058,17 +1059,31 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			c.finalizeEffectiveAttrs(ctx, td, merged, visiting)
 		}
 	} else {
-		// XSD 1.0: a restriction-derived complex type inherits each base attribute
-		// USE it does not redeclare or prohibit (§3.4.2 complex type {attribute
-		// uses}, restriction). The extension loop above already folds base
-		// attributes into extension types; this pass gives restriction types the
-		// same treatment so an inherited attribute carried on an instance is not
-		// falsely rejected. The base {attribute wildcard} is NOT inherited (a
-		// restriction's wildcard comes solely from its own content). Gated to 1.0
-		// (1.1 does this topologically in finalizeEffectiveAttrs).
-		inherited := make(map[*TypeDef]bool)
-		for _, td := range restrictionTypes {
-			c.inheritRestrictionAttrs10(td, inherited)
+		// XSD 1.0: finalize each derived complex type's effective {attribute uses}
+		// TOPOLOGICALLY across BOTH extension and restriction derivations
+		// (§3.4.2.2). The extension loop above already snapshots BaseType.Attributes
+		// onto extensions (so checkRestrictionAttrs on a restriction-of-extension
+		// still sees historically merged extension bases), and checkRestrictionAttrs
+		// already ran against each restriction base's OWN declarations. This merge-
+		// only pass (1) folds non-redeclared base uses into restriction types and
+		// (2) re-folds any uses a restriction base gained onto extensions that
+		// copied a stale snapshot — so an extension of a restriction inherits undeclared
+		// grandbase attributes. The base {attribute wildcard} is NOT inherited on
+		// restriction (a restriction's wildcard comes solely from its own content).
+		derived := make([]*TypeDef, 0, len(extensionTypes)+len(restrictionTypes))
+		derived = append(derived, extensionTypes...)
+		derived = append(derived, restrictionTypes...)
+		sort.SliceStable(derived, func(i, j int) bool {
+			si, sj := c.typeDefSources[derived[i]], c.typeDefSources[derived[j]]
+			if si.line != sj.line {
+				return si.line < sj.line
+			}
+			return si.ordinal < sj.ordinal
+		})
+		finalized := make(map[*TypeDef]bool)
+		visiting := make(map[*TypeDef]bool)
+		for _, td := range derived {
+			c.finalizeAttrUses10(td, finalized, visiting)
 		}
 	}
 
@@ -3274,44 +3289,61 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 	}
 }
 
-// inheritRestrictionAttrs10 folds a restriction-derived complex type's
-// non-redeclared base attribute USES into its own effective {attribute uses} for
-// XSD 1.0 (§3.4.2.2, {attribute uses}). A base whose derivation is itself a
-// restriction is inherited FIRST (memoized recursion) so a
-// restriction-of-a-restriction carries the base's own inherited attributes too;
-// extension bases are already fully merged by the extension loop. A derived use
-// of the same expanded QName (including use="prohibited") overrides the base use,
-// so it is skipped. The base {attribute wildcard} is deliberately NOT inherited:
-// in XSD 1.0 a restriction's {attribute wildcard} is computed SOLELY from its own
-// content (the "complete wildcard" of its attributeGroups/anyAttribute), so an
-// empty restriction of a base carrying a wildcard has NO wildcard. This runs
-// after checkRestrictionAttrs, which validated the derivation against the base's
-// own declarations.
-func (c *compiler) inheritRestrictionAttrs10(td *TypeDef, inherited map[*TypeDef]bool) {
-	if td == nil || inherited[td] {
+// finalizeAttrUses10 computes the effective {attribute uses} of a derived
+// complex type for XSD 1.0 (§3.4.2.2) TOPOLOGICALLY across BOTH extension and
+// restriction derivations: the base is finalized FIRST (recursively, regardless
+// of its derivation kind), then td inherits every base use it does not already
+// carry. Unlike finalizeEffectiveAttrs (1.1), this is MERGE-ONLY — compile-time
+// checkRestrictionAttrs / checkExtensionAttrDuplicates already ran against the
+// pre-finalization attribute sets (1.0 historical "required base attr must be
+// redeclared" semantics). A restriction deliberately does NOT inherit the base
+// {attribute wildcard} (complete wildcard from own content only). An extension
+// may already hold a stale in-loop snapshot of BaseType.Attributes; appending
+// only missing uses repairs chains where the base is a restriction that gained
+// inherited attributes after that snapshot. finalized memoizes completed types;
+// visiting guards a cyclic base chain from infinite recursion.
+func (c *compiler) finalizeAttrUses10(td *TypeDef, finalized, visiting map[*TypeDef]bool) {
+	if td == nil || finalized[td] {
 		return
 	}
-	inherited[td] = true
+	if visiting[td] {
+		return // cyclic base chain; the circular-type check reports the error
+	}
+	visiting[td] = true
 	base := td.BaseType
-	if base == nil {
+	if base != nil && base.Derivation != DerivationNone {
+		c.finalizeAttrUses10(base, finalized, visiting)
+	}
+	delete(visiting, td)
+	finalized[td] = true
+
+	if base == nil || td.Derivation == DerivationNone || len(base.Attributes) == 0 {
 		return
 	}
-	if base.Derivation == DerivationRestriction {
-		c.inheritRestrictionAttrs10(base, inherited)
-	}
-	if len(base.Attributes) == 0 {
-		return
-	}
+	// Restriction: do not inherit AnyAttribute. Extension: wildcards were already
+	// folded in the extension loop; only attribute USES are repaired here.
 	derivedByName := make(map[QName]struct{}, len(td.Attributes))
 	for _, au := range td.Attributes {
 		derivedByName[au.Name] = struct{}{}
 	}
 	for _, bau := range base.Attributes {
-		if _, redeclared := derivedByName[bau.Name]; redeclared {
+		if _, present := derivedByName[bau.Name]; present {
 			continue
 		}
 		td.Attributes = append(td.Attributes, bau)
 	}
+}
+
+// concatAttrUses returns base's attribute uses followed by own's in a FRESH
+// slice. Appending own directly onto base (append(base, own...)) parks the uses
+// in base's spare capacity whenever base has any, so a later append to the same
+// base slice — a sibling derivation merging base again, or finalizeAttrUses10
+// folding inherited uses into a restriction base — overwrites them and the
+// derived type silently loses its own attribute uses.
+func concatAttrUses(base, own []*AttrUse) []*AttrUse {
+	merged := make([]*AttrUse, 0, len(base)+len(own))
+	merged = append(merged, base...)
+	return append(merged, own...)
 }
 
 func (c *compiler) extensionWildcardUnion(ctx context.Context, td *TypeDef, base, derived *Wildcard) *Wildcard {

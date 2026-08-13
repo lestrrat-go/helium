@@ -165,3 +165,222 @@ func TestRestrictionAttrInheritance10(t *testing.T) {
 		require.NoError(t, compileAndValidate(t, schemaXML, instanceXML, nil))
 	})
 }
+
+// TestExtensionOfRestrictionAttrInheritance10 covers the UBL/CCTS pattern: when
+// E extends R and R restricts B while only redeclaring some of B's attributes,
+// E's effective {attribute uses} must still include the undeclared uses R
+// inherited from B (XSD 1.0 §3.4.2.2).
+func TestExtensionOfRestrictionAttrInheritance10(t *testing.T) {
+	t.Parallel()
+
+	const simpleContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="E">
+    <xs:simpleContent>
+      <xs:extension base="R"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:simpleContent>
+      <xs:restriction base="B">
+        <xs:attribute name="mimeCode" type="xs:normalizedString" use="required"/>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:simpleContent>
+      <xs:extension base="xs:base64Binary">
+        <xs:attribute name="mimeCode" type="xs:normalizedString" use="optional"/>
+        <xs:attribute name="filename" type="xs:string" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:schema>`
+
+	const complexContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="R"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="B">
+        <xs:sequence>
+          <xs:element name="c" type="xs:string"/>
+        </xs:sequence>
+        <xs:attribute name="a1" type="xs:string" use="required"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:sequence>
+      <xs:element name="c" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="a1" type="xs:string" use="optional"/>
+    <xs:attribute name="a2" type="xs:string" use="optional"/>
+  </xs:complexType>
+</xs:schema>`
+
+	cases := map[string]struct {
+		schema   string
+		instance string
+		wantErr  bool
+	}{
+		"simpleContent extension of restriction inherits undeclared base attribute": {
+			schema:   simpleContentSchema,
+			instance: `<e mimeCode="application/pdf" filename="x.pdf">QQ==</e>`,
+		},
+		"simpleContent extension of restriction still requires redeclared required attribute": {
+			schema:   simpleContentSchema,
+			instance: `<e filename="x.pdf">QQ==</e>`,
+			wantErr:  true,
+		},
+		"complexContent extension of restriction inherits undeclared base attribute": {
+			schema:   complexContentSchema,
+			instance: `<e a1="x" a2="y"><c>z</c></e>`,
+		},
+		"complexContent extension of restriction still requires redeclared required attribute": {
+			schema:   complexContentSchema,
+			instance: `<e a2="y"><c>z</c></e>`,
+			wantErr:  true,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Arrange / Act
+			err := compileAndValidate(t, tc.schema, tc.instance, nil)
+
+			// Assert
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestExtensionOwnAttrsSurviveBaseGrowth10 pins the effective {attribute uses}
+// of an extension against the base attribute slice growing after the extension
+// merged it. The slices that must carry a spare slot are the ones a later append
+// writes into: the sibling base B declares three attributes and the restriction R
+// declares three of its own, and because a type's []*AttrUse grows one use at a
+// time (append growth 1, 2, 4, ...) each of those is len 3 / cap 4 with exactly one
+// spare slot. A merge that appends the extension's own uses directly onto such a
+// slice parks them in that spare slot, where the next append to the same slice —
+// E2 merging B again, or finalizeAttrUses10 folding the inherited g1 into R —
+// overwrites them and the extension silently loses its own attribute. The other
+// fixture types drive those appends: G declares four attributes (r1, r2, r3, g1) so
+// that R inherits g1, and E1, E2 and E each declare one own attribute.
+//
+// Refutation of a review finding that these cases miss the "five-to-seven-attribute
+// slice-capacity boundaries": three IS such a boundary. Append growth for a type's
+// []*AttrUse runs 1, 2, 4, so a three-use base carries cap 4 with one spare slot,
+// which is the exact state the aliasing defect needs. Verified by reverting concatAttrUses
+// to `append(base, own...)` with everything else unchanged: four of the five subtests below
+// fail, and all five pass with concatAttrUses in place. A five-to-seven-attribute base is
+// the same mechanism on a larger array, and concatAttrUses never appends into the base's
+// array at any length, so no length-specific behavior exists for a wider band to reach.
+func TestExtensionOwnAttrsSurviveBaseGrowth10(t *testing.T) {
+	t.Parallel()
+
+	// Two extensions of one base: each merges the same base slice, so E2's merge
+	// would overwrite the use E1 parked in the base's spare capacity.
+	const siblingExtensionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e1" type="E1"/>
+  <xs:element name="e2" type="E2"/>
+  <xs:complexType name="B">
+    <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+    <xs:attribute name="b1" type="xs:string"/>
+    <xs:attribute name="b2" type="xs:string"/>
+    <xs:attribute name="b3" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="E1">
+    <xs:complexContent>
+      <xs:extension base="B">
+        <xs:attribute name="own1" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="E2">
+    <xs:complexContent>
+      <xs:extension base="B">
+        <xs:attribute name="own2" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	// E extends R, and R then inherits g1 from its own base G: that inheriting
+	// append would overwrite the use E parked in R's spare capacity.
+	const extensionOfRestrictionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="e" type="E"/>
+  <xs:complexType name="G">
+    <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+    <xs:attribute name="r1" type="xs:string"/>
+    <xs:attribute name="r2" type="xs:string"/>
+    <xs:attribute name="r3" type="xs:string"/>
+    <xs:attribute name="g1" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="G">
+        <xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>
+        <xs:attribute name="r1" type="xs:string"/>
+        <xs:attribute name="r2" type="xs:string"/>
+        <xs:attribute name="r3" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="R">
+        <xs:attribute name="own" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+	cases := map[string]struct {
+		schema   string
+		instance string
+	}{
+		"first of two sibling extensions keeps its own attribute": {
+			schema:   siblingExtensionSchema,
+			instance: `<e1 own1="x"><c>z</c></e1>`,
+		},
+		"second of two sibling extensions keeps its own attribute": {
+			schema:   siblingExtensionSchema,
+			instance: `<e2 own2="x"><c>z</c></e2>`,
+		},
+		"sibling extension still inherits the base attributes": {
+			schema:   siblingExtensionSchema,
+			instance: `<e1 b1="x" b2="y" b3="z" own1="w"><c>z</c></e1>`,
+		},
+		"extension of a restriction keeps its own attribute": {
+			schema:   extensionOfRestrictionSchema,
+			instance: `<e own="x"><c>z</c></e>`,
+		},
+		"extension of a restriction inherits the grandbase attribute": {
+			schema:   extensionOfRestrictionSchema,
+			instance: `<e r1="x" g1="y" own="z"><c>z</c></e>`,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Arrange / Act
+			err := compileAndValidate(t, tc.schema, tc.instance, nil)
+
+			// Assert
+			require.NoError(t, err)
+		})
+	}
+}
