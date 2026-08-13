@@ -876,9 +876,14 @@ func (d Decryptor) MaxCipherValueBytes(n int) Decryptor {
 //
 // A resolved resource is charged against the same budget its CipherData would
 // have been: [Decryptor.MaxCipherValueBytes] for an EncryptedData payload and
-// [Decryptor.MaxEncryptedKeyBytes] for an EncryptedKey. The resolver is asked
-// for no more than that budget still allows, so an oversized resource is
-// refused rather than buffered.
+// [Decryptor.MaxEncryptedKeyBytes] for an EncryptedKey. A resolver returns a
+// stream and this package reads it, so the bound holds for a resolver a caller
+// writes and not merely for the one shipped here: the read stops one byte past
+// what the budget still allows, it stops when ctx is done, and the stream is
+// closed on every one of those paths. What the package cannot constrain is what
+// happens INSIDE a resolver — one that buffers a whole resource itself, or
+// blocks before returning a stream at all, does so on the caller's own account.
+// [ReferenceResolver] states that division and why it falls there.
 func (d Decryptor) CipherReferenceResolver(r ReferenceResolver) Decryptor {
 	d = d.clone()
 	d.cfg.cipherReferenceResolver = r

@@ -179,18 +179,29 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   always resolve; every other URI fails with `ErrReferenceNotFound` until the
   caller sets `Decryptor.CipherReferenceResolver`, and configuring one adds the
   external form without changing how any same-document form resolves. helium
-  ships one implementation, `FSReferenceResolver(fsys)`, which performs no
+  ships one implementation, `FSReferenceResolver(fsys, root)`, which performs no
   network access and is fail-closed on anything that is not a plain in-tree
   path: a URI carrying an RFC 3986 scheme (a Windows drive letter included), a
   leftover fragment, and a path escaping the root after cleaning are all
-  refused. No HTTP resolver ships, because an attacker who controls a
+  refused. `root` declares the document-space prefix `fsys` stands for, which is
+  what lets an absolute URI inside that space resolve while one outside it stays
+  refused; an empty root serves relative URIs only. No HTTP resolver ships,
+  because an attacker who controls a
   `CipherReference` URI would otherwise steer requests at internal hosts or
   stall a decrypt, so whoever wants network dereferencing owns that SSRF and
-  availability risk. A resolved resource is charged against the same budget its
-  `CipherData` would have been — `MaxCipherValueBytes` for a payload reference,
-  `MaxEncryptedKeyBytes` for a key one — and the shipped resolver reads only one
-  byte past what the budget still allows, so an oversized resource is refused
-  rather than buffered. A same-document reference is bounded by the same
+  availability risk. A resolver hands back a stream and **this package reads
+  it**, so the bound holds for a resolver a caller writes and not only for the
+  shipped one: the read stops one byte past what the budget still allows —
+  `MaxCipherValueBytes` for a payload reference, `MaxEncryptedKeyBytes` for a
+  key one — it stops when the caller's context is done, and the stream is closed
+  on every one of those paths. Be plain about the limit of that: it removes the
+  PACKAGE's complicity, and it does not reach inside a resolver. A resolver that
+  buffers a whole resource itself, or that blocks before returning a stream at
+  all, does so on the caller's own account — nothing outside a resolver can
+  constrain what happens within it. The division falls there because the two
+  sides are trusted differently: the resolver is code the caller chose, while
+  the URI is chosen by an unauthenticated document, and it is the URI the
+  package must be immune to. A same-document reference is bounded by the same
   budgets: its canonical form is written through a limit-aware writer and stops
   at the first byte past the allowance, instead of canonicalizing an
   attacker-chosen subtree in full and discarding the result afterwards. The
@@ -292,10 +303,20 @@ depends on the transforms:
   counted before it is built, through the same bounded walk an inline
   `CipherValue` goes through.
 
-An external URI is joined against the document's base URI and handed to
-`Decryptor.CipherReferenceResolver`. Its result is an octet stream, so no
+An external URI is joined against the base URI **in force at the
+`CipherReference` element that wrote it** — the document's own URL, narrowed by
+every `xml:base` on the way down to that element — and the joined URI is what
+reaches `Decryptor.CipherReferenceResolver`. A resolver therefore never sees the
+raw attribute and never performs the join. Its result is an octet stream, so no
 canonicalization applies to it. With no resolver configured it fails with
 `ErrReferenceNotFound`.
+
+A document read with `Parser.ParseFile` carries that file's absolute path as its
+URL, so a sibling cipher text written as `URI="ct.bin"` arrives at the resolver
+as an absolute path in the document's space. That is what the `root` argument of
+`FSReferenceResolver` is for: `FSReferenceResolver(os.DirFS("/srv/docs"),
+"/srv/docs")` serves `/srv/docs/ct.bin` as `ct.bin`, and refuses every absolute
+path outside `/srv/docs`.
 
 A transform list may declare up to four transforms and every one of them must be
 `#base64`; each one past the first decodes the octets the one before it

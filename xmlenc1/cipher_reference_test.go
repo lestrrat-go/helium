@@ -5,9 +5,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"math"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -156,9 +159,109 @@ type countingResolver struct {
 	calls int
 }
 
-func (r *countingResolver) ResolveReference(_ context.Context, uri string) ([]byte, error) {
+func (r *countingResolver) ResolveReference(_ context.Context, uri string) (io.ReadCloser, error) {
 	r.calls++
 	return nil, fmt.Errorf("%w: countingResolver serves nothing (%q)", xmlenc1.ErrReferenceNotFound, uri)
+}
+
+// streamResolver is a caller-written resolver: it satisfies the public
+// interface and nothing more, which is what makes it the right subject for a
+// claim about what the PACKAGE bounds. It hands out an endless stream and
+// records that the stream was closed.
+type streamResolver struct {
+	closed chan struct{}
+	once   sync.Once
+}
+
+func newStreamResolver() *streamResolver {
+	return &streamResolver{closed: make(chan struct{})}
+}
+
+func (r *streamResolver) ResolveReference(context.Context, string) (io.ReadCloser, error) {
+	return &endlessStream{resolver: r}, nil
+}
+
+// nilStreamResolver reports neither a stream nor an error, which is the one
+// shape the interface cannot express and a resolver can still return.
+type nilStreamResolver struct{}
+
+func (nilStreamResolver) ResolveReference(context.Context, string) (io.ReadCloser, error) {
+	//nolint:nilnil // the whole point of the case is the shape a linter forbids.
+	return nil, nil
+}
+
+// endlessStream never reaches an end, so anything that finishes reading it did
+// so because it stopped, not because the resource did.
+type endlessStream struct {
+	resolver *streamResolver
+	read     int
+}
+
+func (s *endlessStream) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	s.read += len(p)
+	return len(p), nil
+}
+
+func (s *endlessStream) Close() error {
+	s.resolver.once.Do(func() { close(s.resolver.closed) })
+	return nil
+}
+
+// readResolved dereferences uri through resolver and returns the whole stream,
+// closing it. A resolver now hands back a stream rather than octets, so a test
+// asserting WHAT it served has to drain one.
+func readResolved(t *testing.T, resolver xmlenc1.ReferenceResolver, uri string) string {
+	t.Helper()
+	rc, err := resolver.ResolveReference(t.Context(), uri)
+	require.NoError(t, err)
+	defer rc.Close()
+	octets, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	return string(octets)
+}
+
+// blockingFS serves one file whose Read blocks until the file is closed or the
+// test releases it, which is the shape a hostile or wedged resource has: the
+// resolver hands back a stream that never produces a byte.
+//
+// Close releases the blocked Read, so a package that closes the stream on
+// cancellation is what lets the read goroutine finish rather than leak.
+type blockingFS struct {
+	released chan struct{}
+	once     sync.Once
+}
+
+func newBlockingFS() *blockingFS {
+	return &blockingFS{released: make(chan struct{})}
+}
+
+func (fsys *blockingFS) release() {
+	fsys.once.Do(func() { close(fsys.released) })
+}
+
+func (fsys *blockingFS) Open(string) (fs.File, error) {
+	return &blockingFile{fsys: fsys}, nil
+}
+
+type blockingFile struct {
+	fsys *blockingFS
+}
+
+func (f *blockingFile) Stat() (fs.FileInfo, error) {
+	return nil, fmt.Errorf("blockingFile has no stat")
+}
+
+func (f *blockingFile) Read([]byte) (int, error) {
+	<-f.fsys.released
+	return 0, io.EOF
+}
+
+func (f *blockingFile) Close() error {
+	f.fsys.release()
+	return nil
 }
 
 func TestCipherReference(t *testing.T) {
@@ -362,7 +465,7 @@ func TestCipherReference(t *testing.T) {
 		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
 		nodes, err := xmlenc1.NewDecryptor().
 			SessionKey(sessionKey).
-			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, "")).
 			Decrypt(t.Context(), elem)
 		require.NoError(t, err)
 		requireSecret(t, nodes)
@@ -378,7 +481,7 @@ func TestCipherReference(t *testing.T) {
 			`<ct Id="t">`+encoded+`</ct>`)
 		nodes, err := xmlenc1.NewDecryptor().
 			SessionKey(sessionKey).
-			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fstest.MapFS{})).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fstest.MapFS{}, "")).
 			Decrypt(t.Context(), elem)
 		require.NoError(t, err)
 		requireSecret(t, nodes)
@@ -386,7 +489,7 @@ func TestCipherReference(t *testing.T) {
 
 	t.Run("the resolver refuses", func(t *testing.T) {
 		fsys := fstest.MapFS{externalCipherPath: &fstest.MapFile{Data: []byte("payload")}}
-		resolver := xmlenc1.FSReferenceResolver(fsys)
+		resolver := xmlenc1.FSReferenceResolver(fsys, "")
 		for _, tc := range []struct {
 			name string
 			uri  string
@@ -396,7 +499,7 @@ func TestCipherReference(t *testing.T) {
 			{name: "a Windows drive letter", uri: `C:\ct.bin`},
 			{name: "a parent escape", uri: "../ct.bin"},
 			{name: "a nested parent escape", uri: "sub/../../ct.bin"},
-			{name: "an absolute path", uri: "/ct.bin"},
+			{name: "an absolute path with no root declared", uri: "/ct.bin"},
 			{name: "a fragment", uri: "ct.bin#frag"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
@@ -407,9 +510,46 @@ func TestCipherReference(t *testing.T) {
 
 		// A plain in-tree path is what remains after those refusals.
 		t.Run("but serves a plain path", func(t *testing.T) {
-			octets, err := resolver.ResolveReference(t.Context(), externalCipherPath)
-			require.NoError(t, err)
-			require.Equal(t, "payload", string(octets))
+			require.Equal(t, "payload", readResolved(t, resolver, externalCipherPath))
+		})
+	})
+
+	// An absolute URI is not refused for BEING absolute — it is refused for
+	// lying outside the space the caller declared its fs.FS to stand for. A
+	// document read from a file names its sibling cipher text through an
+	// absolute path once the join is done, so refusing every absolute path
+	// would refuse the feature's own motivating case.
+	t.Run("a declared root decides which absolute paths resolve", func(t *testing.T) {
+		fsys := fstest.MapFS{externalCipherPath: &fstest.MapFile{Data: []byte("payload")}}
+		resolver := xmlenc1.FSReferenceResolver(fsys, "/srv/docs")
+
+		t.Run("an in-root absolute path resolves", func(t *testing.T) {
+			require.Equal(t, "payload", readResolved(t, resolver, "/srv/docs/"+externalCipherPath))
+		})
+
+		// The root is matched at a segment boundary, so a sibling directory
+		// whose name merely starts with the root's is outside it.
+		for _, tc := range []struct {
+			name string
+			uri  string
+		}{
+			{name: "above the root", uri: "/srv/" + externalCipherPath},
+			{name: "in a sibling of the root", uri: "/srv/docs-public/" + externalCipherPath},
+			{name: "elsewhere entirely", uri: "/etc/passwd"},
+			{name: "escaping the root after stripping it", uri: "/srv/docs/../../etc/passwd"},
+			{name: "the root itself", uri: "/srv/docs/"},
+			{name: "a scheme URI outside the root", uri: "file:///srv/docs/" + externalCipherPath},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				_, err := resolver.ResolveReference(t.Context(), tc.uri)
+				require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+			})
+		}
+
+		// Declaring a root only widens what resolves; a relative URI, which is
+		// what a document parsed from memory produces, is served either way.
+		t.Run("and still serves a relative path", func(t *testing.T) {
+			require.Equal(t, "payload", readResolved(t, resolver, externalCipherPath))
 		})
 	})
 
@@ -645,7 +785,7 @@ func TestCipherReference(t *testing.T) {
 			elem := cipherRefDoc(t, cipherReferenceXML(` URI="empty.bin"`, ""), "")
 			_, err := xmlenc1.NewDecryptor().
 				SessionKey(newSessionKey(t)).
-				CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+				CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, "")).
 				Decrypt(t.Context(), elem)
 			require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
 			require.NotErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
@@ -681,14 +821,20 @@ func TestCipherReference(t *testing.T) {
 			return after.TotalAlloc - before.TotalAlloc
 		}
 
-		// A negative budget removes the limit, so the same document
-		// canonicalizes in full: that is what the bounded run must not pay.
-		// Neither run can avoid the one copy the DOM hands out per text node,
-		// which is this package's documented floor for reading a value.
+		// Both figures are weighed against the INPUT rather than against each
+		// other. Comparing the two measurements would anchor the assertion to
+		// the shared parse cost, which is most of the bounded figure and has
+		// nothing to do with the property: any change adding to that cost would
+		// flip the assertion while the property still held. Neither run can
+		// avoid the one copy the DOM hands out per text node, which is this
+		// package's documented floor for reading a value, so the bounded
+		// multiple is what admits that floor and refuses a full canonical form.
+		const boundedMultiple = 2
 		unbounded := spend(t, -1)
 		bounded := spend(t, 1024)
 		t.Logf("canonicalizing a %d byte subtree allocated %d bytes unbounded and %d bytes under a 1024 byte budget", len(big), unbounded, bounded)
-		require.Less(t, bounded, unbounded/2, "the canonicalization ran to completion before the budget refused it")
+		require.Less(t, bounded, uint64(boundedMultiple*len(big)), "the canonicalization ran to completion before the budget refused it")
+		require.Greater(t, unbounded, uint64(boundedMultiple*len(big)), "the unbounded run did not canonicalize the subtree it was given")
 	})
 
 	// The node-set a same-document reference names is bounded by the budget and
@@ -767,6 +913,47 @@ func TestCipherReference(t *testing.T) {
 		require.Less(t, elapsed, 10*time.Second, "the resolution ran on after its caller's deadline passed")
 	})
 
+	// The bound is the INTERFACE's, not a privilege of the shipped resolver:
+	// this resolver is written the way a caller writes one, its stream never
+	// ends, and the decrypt still stops at the budget and closes the stream.
+	// The package therefore holds no more than the allowance whatever the
+	// resolver hands it.
+	t.Run("a caller's endless stream is cut off at the budget", func(t *testing.T) {
+		resolver := newStreamResolver()
+		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
+		done := make(chan error, 1)
+		go func() {
+			_, err := xmlenc1.NewDecryptor().
+				SessionKey(newSessionKey(t)).
+				MaxCipherValueBytes(1024).
+				CipherReferenceResolver(resolver).
+				Decrypt(t.Context(), elem)
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+		case <-time.After(10 * time.Second):
+			t.Fatal("the decrypt read the endless stream past its budget")
+		}
+		select {
+		case <-resolver.closed:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the decrypt left the resolver's stream open")
+		}
+	})
+
+	// A resolver reporting neither a stream nor an error is a refusal rather
+	// than a panic inside the decrypt of a document nobody authenticated.
+	t.Run("a resolver returning no stream is not found", func(t *testing.T) {
+		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
+		_, err := xmlenc1.NewDecryptor().
+			SessionKey(newSessionKey(t)).
+			CipherReferenceResolver(nilStreamResolver{}).
+			Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+	})
+
 	// A resolver's own octets are bounded the same way: the shipped resolver
 	// reads only as far as the budget still allows, plus the one byte that
 	// proves the resource is over it.
@@ -776,7 +963,7 @@ func TestCipherReference(t *testing.T) {
 		_, err := xmlenc1.NewDecryptor().
 			SessionKey(newSessionKey(t)).
 			MaxCipherValueBytes(1024).
-			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, "")).
 			Decrypt(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
 	})
@@ -792,7 +979,7 @@ func TestCipherReference(t *testing.T) {
 		nodes, err := xmlenc1.NewDecryptor().
 			SessionKey(sessionKey).
 			MaxCipherValueBytes(math.MaxInt).
-			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, "")).
 			Decrypt(t.Context(), elem)
 		require.NoError(t, err)
 		requireSecret(t, nodes)
@@ -824,7 +1011,7 @@ func TestCipherReference(t *testing.T) {
 		nodes, err := xmlenc1.NewDecryptor().
 			KeyEncryptionKey(kek).
 			MaxEncryptedKeyBytes(math.MaxInt).
-			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, "")).
 			Decrypt(t.Context(), elem)
 		require.NoError(t, err)
 		requireSecret(t, nodes)
@@ -845,10 +1032,59 @@ func TestCipherReference(t *testing.T) {
 
 		nodes, err := xmlenc1.NewDecryptor().
 			SessionKey(sessionKey).
-			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, "")).
 			Decrypt(t.Context(), elem)
 		require.NoError(t, err)
 		requireSecret(t, nodes)
+	})
+
+	// The base a URI is joined against is the one in force at the element
+	// CARRYING the URI, so an xml:base between the EncryptedData and the
+	// CipherReference counts. Taking the base once at the EncryptedData would
+	// join against a base the reference is not written in.
+	t.Run("xml:base on the CipherReference is honored", func(t *testing.T) {
+		sessionKey := newSessionKey(t)
+		fsys := fstest.MapFS{"data/ct.bin": &fstest.MapFile{Data: cipherRefCiphertext(t, sessionKey)}}
+		doc := mustParseXML(t, `<root>`+
+			`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`" Type="`+xmlenc1.TypeElement+`">`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+			`<xenc:CipherData><xenc:CipherReference xml:base="data/"`+externalCipherURI+`/></xenc:CipherData>`+
+			`</xenc:EncryptedData></root>`)
+		elem := findEncryptedData(t, doc.DocumentElement())
+		require.NotNil(t, elem)
+
+		nodes, err := xmlenc1.NewDecryptor().
+			SessionKey(sessionKey).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, "")).
+			Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		requireSecret(t, nodes)
+	})
+
+	// A resource whose reads never return does not out-wait its caller: the
+	// package selects on the context while it reads and closes the stream, which
+	// is what releases the blocked read.
+	t.Run("a blocking resource does not out-wait the deadline", func(t *testing.T) {
+		fsys := newBlockingFS()
+		t.Cleanup(fsys.release)
+		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
+		decryptor := xmlenc1.NewDecryptor().
+			SessionKey(newSessionKey(t)).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, ""))
+
+		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer cancel()
+		done := make(chan error, 1)
+		go func() {
+			_, err := decryptor.Decrypt(ctx, elem)
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+		case <-time.After(10 * time.Second):
+			t.Fatal("the decrypt ran on past its caller's deadline")
+		}
 	})
 
 	// CipherReferenceResolver is clone-on-write like every other builder
@@ -858,7 +1094,7 @@ func TestCipherReference(t *testing.T) {
 		sessionKey := newSessionKey(t)
 		fsys := fstest.MapFS{externalCipherPath: &fstest.MapFile{Data: cipherRefCiphertext(t, sessionKey)}}
 		base := xmlenc1.NewDecryptor().SessionKey(sessionKey)
-		withResolver := base.CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys))
+		withResolver := base.CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, ""))
 
 		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
 		_, err := base.Decrypt(t.Context(), elem)

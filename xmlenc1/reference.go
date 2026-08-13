@@ -37,12 +37,14 @@ type refScope struct {
 	// itself, so an attached EncryptedData sees the whole document.
 	root *helium.Element
 
-	// baseURI is the base URI of the EncryptedData, used to name the document
-	// a refused reference was refused in. It takes no part in resolution:
-	// XMLDSig core §4.4.3.2 defines a same-document reference as URI="" or a
-	// bare "#..." fragment, so nothing here is ever resolved RELATIVE to a
-	// base, and a URI carrying a path is external however that path compares
-	// to this one.
+	// baseURI is the base URI of the EncryptedData, used ONLY to name the
+	// document a refused reference was refused in. It takes no part in any
+	// resolution: XMLDSig core §4.4.3.2 defines a same-document reference as
+	// URI="" or a bare "#..." fragment, so nothing here is ever resolved
+	// RELATIVE to a base, and a URI carrying a path is external however that
+	// path compares to this one. The external form does join against a base,
+	// but against the one in force at the element carrying the URI rather than
+	// this one — resolveExternalCipherReference states why.
 	baseURI string
 
 	// index maps every id in root's subtree to every element carrying it. It
@@ -73,17 +75,6 @@ func newRefScope(elem *helium.Element) *refScope {
 		root:    root,
 		baseURI: helium.NodeGetBase(elem.OwnerDocument(), elem),
 	}
-}
-
-// base returns the base URI an external CipherReference URI is joined against,
-// and the empty string when there is no scope or the document has none. A nil
-// scope is answered rather than dereferenced, so the external path behaves the
-// same as the same-document one for an EncryptedData with no document.
-func (s *refScope) base() string {
-	if s == nil {
-		return ""
-	}
-	return s.baseURI
 }
 
 // in names the document a reference was refused in, for the two reference
@@ -280,7 +271,7 @@ func resolveCipherReference(ctx context.Context, elem *helium.Element, ps *parse
 	if sameDoc {
 		octets, steps, err = resolveSameDocumentCipherReference(ctx, uri, steps, ps, budget)
 	} else {
-		octets, err = resolveExternalCipherReference(ctx, uri, ps, budget)
+		octets, err = resolveExternalCipherReference(ctx, elem, uri, ps, budget)
 	}
 	if err != nil {
 		return nil, err
@@ -789,18 +780,25 @@ func (v *nodeSetBase64Chars) visitNode(n helium.Node) error {
 // same-document reference through the caller's resolver, and fails closed with
 // ErrReferenceNotFound when there is none.
 //
-// The URI is joined against the document's base URI first, so a relative URI
-// resolves as any other relative reference in that document does. The resolver
-// is then asked for at most the budget's remaining allowance plus one byte, and
-// the returned octets are charged in full: a resolver that can bound its own
-// read never buffers an over-budget resource, and one that cannot is still held
-// to the budget before anything is built from what it returned.
-func resolveExternalCipherReference(ctx context.Context, uri string, ps *parseState, budget cipherValueBudget) ([]byte, error) {
+// The URI is joined against the base URI in force at elem — the
+// xenc:CipherReference element that WROTE the URI — so it resolves as any other
+// relative reference written at that spot does. The base is computed here
+// rather than taken once from the EncryptedData because xml:base applies per
+// element: a CipherReference, or anything between it and the EncryptedData, may
+// narrow the base the URI is written in, and a document read from a file
+// carries that file's own URL as the outermost base.
+//
+// What the resolver returns is a stream, and this package reads it: at most the
+// budget's remaining allowance plus one probe byte, abandoned when ctx is done,
+// and closed on every path. The octets are then charged in full, so nothing is
+// built from a resource the budget would not admit. ReferenceResolver owns the
+// whole of that division and the limit of what it can promise.
+func resolveExternalCipherReference(ctx context.Context, elem *helium.Element, uri string, ps *parseState, budget cipherValueBudget) ([]byte, error) {
 	resolver := ps.cfg.cipherReferenceResolver
 	if resolver == nil {
 		return nil, abort(ctx, fmt.Errorf("%w: CipherReference URI %q is not a same-document reference and no Decryptor.CipherReferenceResolver is configured%s", ErrReferenceNotFound, uri, ps.refs.in()))
 	}
-	joined, err := joinReferenceURI(ps.refs.base(), uri)
+	joined, err := joinReferenceURI(helium.NodeGetBase(elem.OwnerDocument(), elem), uri)
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
@@ -809,12 +807,18 @@ func resolveExternalCipherReference(ctx context.Context, uri string, ps *parseSt
 	if budget != nil {
 		limit = budget.remaining()
 	}
-	var octets []byte
-	if bounded, ok := resolver.(boundedReferenceResolver); ok {
-		octets, err = bounded.resolveReferenceWithLimit(ctx, joined, limit)
-	} else {
-		octets, err = resolver.ResolveReference(ctx, joined)
+	rc, err := resolver.ResolveReference(ctx, joined)
+	if err != nil {
+		return nil, abort(ctx, err)
 	}
+	// A resolver reporting neither a stream nor an error is refused rather than
+	// dereferenced: the alternative is a panic raised inside a decrypt of an
+	// unauthenticated document, and this is a third-party implementation the
+	// package cannot check any other way.
+	if rc == nil {
+		return nil, abort(ctx, fmt.Errorf("%w: the configured Decryptor.CipherReferenceResolver returned no stream for %q", ErrReferenceNotFound, joined))
+	}
+	octets, err := readBoundedReference(ctx, rc, joined, limit)
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
