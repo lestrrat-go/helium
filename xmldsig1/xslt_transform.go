@@ -87,6 +87,12 @@ func parseXSLTTransform(ctx context.Context, te *helium.Element) ([]byte, error)
 	}
 	octets, err := canonicalizeSubtree(ctx, C14N10, styleElem, nil)
 	if err != nil {
+		// A cancelled or expired context is the caller's, not a malformed
+		// transform: return it unchanged so errors.Is reaches context.Canceled /
+		// context.DeadlineExceeded, matching convertTransformValue.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		return nil, fmt.Errorf("%w: cannot serialize XSLT stylesheet: %v", ErrUnsupportedTransform, err)
 	}
 	return octets, nil
