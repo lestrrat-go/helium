@@ -173,41 +173,53 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 ## Conformance limitations
 
 Coverage of W3C xmlenc-core1 is a subset. Three constructs the specification
-marks REQUIRED are absent and each one fails a decrypt outright:
+marks REQUIRED are absent, and each bullet says when its absence fails a
+decrypt:
 
 - **`xenc:CipherReference`** (§3.3.1, §4.4). xmlenc-core1 lets `CipherData`
   carry either a `CipherValue` or a `CipherReference`; this package accepts
   only the `CipherValue`. Cipher text named by a URI is rejected with
   `ErrMalformedEncrypted`, including the same-document form that needs no
   I/O, on an `EncryptedData` payload and on every `EncryptedKey` alike, and
-  `Encryptor` writes no such form. §3.3.1 requires the URI dereferencing; the
+  `Encryptor` writes no such form; the rejection happens while the document is
+  read, so a pre-shared
+  [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) does not
+  decrypt past it. §3.3.1 requires the URI dereferencing; the
   transforms a `CipherReference` may carry are OPTIONAL there.
 - **Same-document `ds:RetrievalMethod`** (§3.5, REQUIRED). Inside
   `ds:KeyInfo`, only an `xenc:EncryptedKey` child supplies the session key.
   A `<ds:RetrievalMethod URI="#id"/>` naming an `EncryptedKey` elsewhere in
-  the same document is not read, so the decrypt fails with `ErrMissingKey`.
-  The other `ds:KeyInfo` children this package does not read are
-  `ds:KeyValue` (§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), and
+  the same document is not read, so the decrypt fails with `ErrMissingKey` —
+  unless a pre-shared
+  [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) supplies
+  the key, whose early return precedes key resolution and so never needs the
+  `RetrievalMethod`. The other `ds:KeyInfo` children this package does not
+  read are `ds:KeyValue` (§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), and
   `xenc11:DerivedKey` (§3.5.2). A `ds:KeyValue` inside an
   `xenc:OriginatorKeyInfo` is a different position and is read, since
   that is where ECDH-ES carries the sender's ephemeral key.
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
-  (§5.7.1, REQUIRED). Block encryption and key wrapping are AES only, and
-  either URI fails with an error matching the relevant operation sentinel
-  while preserving `*UnsupportedAlgorithmError`. The omission is
+  (§5.7.1, REQUIRED). Block encryption and key wrapping are AES only.
+  `#tripledes-cbc` names the block cipher and fails every decrypt with an
+  error matching the relevant operation sentinel while preserving
+  `*UnsupportedAlgorithmError`; `#kw-tripledes` names an `<EncryptedKey>`'s
+  wrapping and fails the same way only when that key must be resolved, so a
+  pre-shared `SessionKey` decrypts past it. The omission is
   deliberate: Triple DES is a 64-bit block cipher, so Sweet32
   (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
   encryption after 2023.
 
 Section 3 carries a blanket "features described in this section MUST be
 implemented", so four more constructs are unimplemented, and only one of them
-fails a decrypt: `xenc:ReferenceList` (§3.6), which points from a key to the
+can fail a decrypt: `xenc:ReferenceList` (§3.6), which points from a key to the
 items it encrypted and so only matters for a detached key this package cannot
 follow anyway; `xenc11:DerivedKey` (§3.5.2), which may appear in an
 `EncryptedData`'s own `ds:KeyInfo` and tells the recipient to derive the
 content key from master key material it already holds — the parse ignores it,
 so such an `EncryptedData` fails with `ErrMissingKey` instead of deriving the
-key; `xenc:CarriedKeyName` (§3.5.1), which the parse steps over rather than
+key, unless the caller supplies that key as a pre-shared `SessionKey`, whose
+early return precedes key resolution; `xenc:CarriedKeyName` (§3.5.1), which
+the parse steps over rather than
 reads; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
 
 ## Choosing how the session key is protected
