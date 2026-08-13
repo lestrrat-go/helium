@@ -376,6 +376,126 @@ func TestEncryptionMethodCardinality(t *testing.T) {
 	})
 }
 
+// TestEncryptionMethodKeySize verifies that parseEncryptionMethod checks a
+// present xenc:KeySize against the length its algorithm URI already implies
+// (xmlenc-core1 §3.2, §5.3, §5.6.2.2), rather than silently ignoring it: a
+// KeySize consistent with what the algorithm fixes parses, one inconsistent
+// with it is ErrMalformedEncrypted, and one under a URI that implies no
+// length at all (RSA key transport) is accepted and ignored.
+func TestEncryptionMethodKeySize(t *testing.T) {
+	const head = `<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">`
+	const cipher = `<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`
+
+	parse := func(t *testing.T, em string) (*xmlenc1.EncryptedData, error) {
+		t.Helper()
+		doc := mustParseXML(t, head+em+cipher)
+		elem, ok := helium.AsNode[*helium.Element](doc.DocumentElement())
+		require.True(t, ok)
+		return xmlenc1.ParseEncryptedDataForTest(elem)
+	}
+
+	t.Run("agreeing KeySize parses", func(t *testing.T) {
+		ed, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>256</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.AES256GCM, ed.EncryptionMethod.Algorithm)
+	})
+
+	t.Run("contradicting KeySize rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>128</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "128")
+		require.Contains(t, err.Error(), "256")
+	})
+
+	t.Run("byte-valued KeySize rejected", func(t *testing.T) {
+		// KeySize is in BITS (xmlenc-core1 §5.6.2.2). A producer that wrote
+		// the byte count (32, for AES-256) contradicts the algorithm rather
+		// than matching it — this pins the bits-not-bytes decision.
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>32</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "32")
+		require.Contains(t, err.Error(), "256")
+	})
+
+	t.Run("KeySize contradicting AES key wrap on EncryptedKey rejected", func(t *testing.T) {
+		doc := mustParseXML(t, head+
+			`<ds:KeyInfo><xenc:EncryptedKey>`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES128KeyWrap+`">`+
+			`<xenc:KeySize>256</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`+
+			`<xenc:CipherData><xenc:CipherValue>BBBB</xenc:CipherValue></xenc:CipherData>`+
+			`</xenc:EncryptedKey></ds:KeyInfo>`+
+			cipher)
+		elem, ok := helium.AsNode[*helium.Element](doc.DocumentElement())
+		require.True(t, ok)
+		_, err := xmlenc1.ParseEncryptedDataForTest(elem)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "256")
+		require.Contains(t, err.Error(), "128")
+	})
+
+	t.Run("KeySize under RSA-OAEP key transport accepted", func(t *testing.T) {
+		ed, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<xenc:KeySize>256</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.RSAOAEP11, ed.EncryptionMethod.Algorithm)
+	})
+
+	t.Run("whitespace and leading zeros accepted", func(t *testing.T) {
+		ed, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>  00256  </xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.AES256GCM, ed.EncryptionMethod.Algorithm)
+	})
+
+	t.Run("value spread over text and CDATA accepted", func(t *testing.T) {
+		// Proves the character-data walk, not Content(): a value split
+		// across a text node and a CDATA section must still be joined.
+		ed, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>2<![CDATA[56]]></xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.AES256GCM, ed.EncryptionMethod.Algorithm)
+	})
+
+	t.Run("element child rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize><bogus/></xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("comment ignored", func(t *testing.T) {
+		ed, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>2<!-- comment -->56</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.AES256GCM, ed.EncryptionMethod.Algorithm)
+	})
+
+	t.Run("over-length value refused before conversion", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>`+strings.Repeat("2", 65)+`</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	t.Run("non-integer rejected", func(t *testing.T) {
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>not-a-number</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+}
+
 // oaepParamsOverLimit is the fragment the OAEPparams size limit puts in its
 // error. Every parse failure in this package wraps ErrMalformedEncrypted, so
 // the sentinel alone cannot tell a value refused by the limit from one the

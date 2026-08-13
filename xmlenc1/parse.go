@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
@@ -505,13 +506,23 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 			em.MGFAlgorithm = alg
 		case isXMLEncElem(e, "KeySize"):
 			// KeySize is an optional singleton in the schema. The package
-			// derives key sizes from the algorithm URI and does not consume
-			// KeySize, so enforce at-most-one cardinality to stay consistent
-			// with the other sub-element guards.
+			// derives key sizes from the algorithm URI and never uses KeySize
+			// as a length SOURCE, but xmlenc-core1 §3.2 makes a KeySize that
+			// CONTRADICTS the algorithm an error ("the presence of a KeySize
+			// child inconsistent with the algorithm MUST be treated as an
+			// error"; §5.3 states the same rule from the other side), so a
+			// present value is still read and checked against it.
 			if seenKeySize {
 				return fmt.Errorf("%w: duplicate KeySize", ErrMalformedEncrypted)
 			}
 			seenKeySize = true
+			bits, err := parseKeySizeBits(ctx, e)
+			if err != nil {
+				return err
+			}
+			if err := checkDeclaredKeySize(em.Algorithm, bits); err != nil {
+				return err
+			}
 		case isXMLEncElem(e, "OAEPparams"):
 			if seenOAEPParams {
 				return fmt.Errorf("%w: duplicate OAEPparams", ErrMalformedEncrypted)
@@ -529,6 +540,73 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*Encrypti
 	}
 
 	return em, nil
+}
+
+// maxKeySizeChars bounds the lexical length of one xenc:KeySize value.
+// KeySize is xs:integer naming a key length in bits (§5.6.2.2), and every
+// value that can agree with an algorithm this package implements is three
+// digits (128, 192, 256). 64 leaves ample room for the whitespace, sign and
+// leading zeros xs:integer's lexical space permits, while still keeping the
+// parse from holding a number sized only by what the document says.
+const maxKeySizeChars = 64
+
+// parseKeySizeBits reads elem's character data as the lexical value of one
+// xenc:KeySize element and returns it as a number of bits.
+//
+// It walks elem's children directly rather than calling [helium.Element.Content],
+// for the same reason [decodeBoundedBase64] does: that accessor aggregates the
+// whole descendant subtree into one buffer, and this value is read while the
+// document is parsed, before anything it says is authenticated. It reuses
+// base64CharacterData, which already encodes the child-kind rules this value
+// needs too — despite the helper's name, those rules hold for any XML simple
+// content, not only base64: text and CDATA carry the value, an entity
+// reference contributes its declared replacement text through one hop, a
+// comment or processing instruction is ignored, and an element child is
+// refused. maxKeySizeChars is enforced as the characters are gathered, so a
+// document cannot make this walk hold a value sized only by what it sends.
+//
+// The gathered text is trimmed and parsed with [strconv.Atoi], which accepts
+// exactly the xs:integer lexical space (an optional sign and leading zeros).
+// A value outside that space is ErrMalformedEncrypted naming it.
+func parseKeySizeBits(ctx context.Context, elem *helium.Element) (int, error) {
+	var chars []byte
+	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
+		text, err := base64CharacterData(child, "KeySize")
+		if err != nil {
+			return err
+		}
+		if len(chars)+len(text) > maxKeySizeChars {
+			return fmt.Errorf("%w: KeySize is over the %d character limit", ErrMalformedEncrypted, maxKeySizeChars)
+		}
+		chars = append(chars, text...)
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	value := strings.TrimSpace(string(chars))
+	bits, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, abort(ctx, fmt.Errorf("%w: invalid KeySize %q", ErrMalformedEncrypted, value))
+	}
+	return bits, nil
+}
+
+// checkDeclaredKeySize enforces xmlenc-core1 §3.2's rule that a KeySize
+// inconsistent with the algorithm is an error (§5.3 restates it from the
+// EncryptionMethod side, and §5.6.2.2 fixes the unit: KeySize is "The size
+// in bits of the key") against algorithm's own implied length.
+//
+// keySizeForAlgorithm answers with an error for a URI that implies no length
+// at all — RSA key transport above all — and that is not a contradiction:
+// nothing on the wire disagrees with anything, so bits is accepted and
+// silently ignored, which is exactly what a URI silent on key length
+// anticipates. Only a URI that DOES imply a length is checked against it.
+func checkDeclaredKeySize(algorithm string, bits int) error {
+	want, err := keySizeForAlgorithm(paramBlockAlgorithm, algorithm)
+	if err == nil && bits != want*8 {
+		return fmt.Errorf("%w: KeySize %d bits is inconsistent with algorithm %q, which requires %d bits", ErrMalformedEncrypted, bits, algorithm, want*8)
+	}
+	return nil
 }
 
 // maxOAEPParamsBytes bounds the decoded octet length of one xenc:OAEPparams
