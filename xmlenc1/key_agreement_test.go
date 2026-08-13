@@ -64,7 +64,10 @@ func ecdhESDocument(otherInfo map[string]string) string {
 		}
 		attrs.WriteString(` ` + name + `="` + value + `"`)
 	}
-	return `<xenc:EncryptedData xmlns:xenc="` + xmlenc1.NamespaceXMLEnc + `" xmlns:ds="` + xmlenc1.NamespaceDSig + `" xmlns:dsig11="` + xmlenc1.NamespaceDSig11 + `" xmlns:xenc11="` + xmlenc1.NamespaceXMLEnc11 + `">` +
+	// The document declares Type="...#Element" so that Decrypt reaches key
+	// agreement: Decrypt refuses a payload whose @Type declares no XML content
+	// before it resolves any key (see ErrOpaquePayload).
+	return `<xenc:EncryptedData xmlns:xenc="` + xmlenc1.NamespaceXMLEnc + `" xmlns:ds="` + xmlenc1.NamespaceDSig + `" xmlns:dsig11="` + xmlenc1.NamespaceDSig11 + `" xmlns:xenc11="` + xmlenc1.NamespaceXMLEnc11 + `" Type="` + xmlenc1.TypeElement + `">` +
 		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES128GCM11 + `"/>` +
 		`<ds:KeyInfo><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="` + xmlenc1.AES128KeyWrap + `"/>` +
 		`<ds:KeyInfo><xenc:AgreementMethod Algorithm="` + xmlenc1.ECDHES + `">` +

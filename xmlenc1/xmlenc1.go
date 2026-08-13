@@ -253,10 +253,12 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 // Decryptor.DecryptBytes: together they cover the payloads that are not an
 // XML element or element content.
 //
-// The returned element carries no Type attribute. Decrypt treats an empty or
-// absent Type as TypeElement, so recover this payload with DecryptBytes, which returns
-// the plaintext octets without parsing them as XML. No tree is modified — the
-// caller decides where to insert the element.
+// The returned element carries no Type attribute, which is what xmlenc-core1
+// §3.1 asks of a plaintext that is neither an element nor element content.
+// Recover this payload with DecryptBytes, which returns the plaintext octets
+// without parsing them as XML; Decrypt refuses it with [ErrOpaquePayload]
+// rather than parsing octets whose Type never declared XML. No tree is
+// modified — the caller decides where to insert the element.
 func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plaintext []byte) (*helium.Element, error) {
 	if err := contextErr(ctx); err != nil {
 		return nil, err
@@ -903,10 +905,13 @@ func (d Decryptor) CipherReferenceResolver(r ReferenceResolver) Decryptor {
 // network access disabled, in the in-scope-namespace context of elem's
 // parent, so prefixes declared only on an ancestor resolve correctly.
 //
-// A TypeContent payload yields its children; a TypeElement payload (the
-// default when @Type is empty or absent) must yield exactly one element node. An
-// unrecognized non-empty @Type is rejected as malformed. Use DecryptBytes for
-// a payload that is not XML or has an application-defined Type.
+// Only the two @Type values that declare XML content are parsed: a
+// TypeContent payload yields its children, and a TypeElement payload must
+// yield exactly one element node. Every other @Type — absent, empty, or an
+// unrecognized URI — marks an opaque octet stream and is refused with
+// [ErrOpaquePayload], which explains why an unauthenticated attribute never
+// selects the XML path. Use DecryptBytes for such a payload; it returns the
+// plaintext octets without parsing them.
 func (d Decryptor) Decrypt(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
 	return decryptElement(ctx, d.config(), elem)
 }
@@ -1197,6 +1202,17 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 	return nil, abort(ctx, lastErr)
 }
 
+// opaqueTypeError reports an EncryptedData whose @Type does not declare XML
+// content. Both forms name Decryptor.DecryptBytes, the octet path that
+// recovers such a payload, and the absent case says so in as many words
+// rather than quoting an empty URI back at the caller.
+func opaqueTypeError(typeURI string) error {
+	if typeURI == "" {
+		return fmt.Errorf("%w: EncryptedData declares no Type; use Decryptor.DecryptBytes to recover the plaintext octets", ErrOpaquePayload)
+	}
+	return fmt.Errorf("%w: EncryptedData Type %q is neither %q nor %q; use Decryptor.DecryptBytes to recover the plaintext octets", ErrOpaquePayload, typeURI, TypeElement, TypeContent)
+}
+
 func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
 	if err := contextErr(ctx); err != nil {
 		return nil, err
@@ -1209,18 +1225,22 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		return nil, err
 	}
 
-	// Validate the declared content Type up front. An empty or omitted Type
-	// defaults to Element (preserving prior behavior); any other non-empty value,
-	// including unknown URIs, is rejected rather than silently treated as
-	// Element.
+	// Validate the declared content Type up front: only the two URIs that
+	// declare XML content are parsed as XML here. An absent, empty, or
+	// unrecognized Type marks an opaque octet stream (xmlenc-core1 §3.1,
+	// §4.2) and is refused, because @Type sits outside the ciphertext and no
+	// block algorithm authenticates it: defaulting it to Element would let
+	// anyone who can edit the document delete the attribute and have opaque
+	// plaintext parsed as XML and returned as nodes to graft into a tree.
+	// DecryptBytes is the octet path, and opaqueTypeError names it.
 	var isContent bool
 	switch ed.Type {
-	case "", TypeElement:
+	case TypeElement:
 		isContent = false
 	case TypeContent:
 		isContent = true
 	default:
-		return nil, abort(ctx, fmt.Errorf("%w: unsupported EncryptedData Type %q", ErrMalformedEncrypted, ed.Type))
+		return nil, abort(ctx, opaqueTypeError(ed.Type))
 	}
 
 	// Resolve the block algorithm and apply the CBC opt-in once, up front:
