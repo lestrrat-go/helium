@@ -1,7 +1,11 @@
 package xmlenc1_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -426,4 +430,261 @@ func TestRetrievalMethod(t *testing.T) {
 			requireSecret(t, nodes)
 		})
 	})
+}
+
+// wrappedKeyLen is the decoded CipherValue length wrappedKeyXML produces for
+// the given keys taken together: RFC 3394 key wrap adds one 8-octet block to
+// each key it wraps. The keys the matrix below wraps are all of DIFFERENT
+// lengths, so a total identifies WHICH keys were charged rather than only how
+// many.
+func wrappedKeyLen(keys ...[]byte) int {
+	total := 0
+	for _, key := range keys {
+		total += len(key) + 8
+	}
+	return total
+}
+
+// TestEncryptedKeyRetention drives every order in which one ds:KeyInfo can
+// offer xenc:EncryptedKey elements — carried inline, and named by a
+// ds:RetrievalMethod (xmlenc-core1 §3.5.3) — and holds each order to the same
+// invariant: one element is one candidate however many times the document
+// offers it, the peak candidate charge equals the final candidate count
+// exactly, and each retained candidate's ciphertext is charged once.
+//
+// A cross-ds:KeyInfo order is absent because it is unreachable:
+// parseEncryptedData refuses a second ds:KeyInfo as a duplicate.
+func TestEncryptedKeyRetention(t *testing.T) {
+	sessionKey := randKey(t, 32)
+	kek := randKey(t, 32)
+	// Two decoys, each a different length from the session key and from each
+	// other, so a row's byte total names the keys it expects to be charged.
+	// They wrap under the same KEK and unwrap to a length the AES-256-GCM
+	// payload cannot use, so a candidate holding one simply fails and the
+	// next is tried.
+	shortDecoy := randKey(t, 16)
+	longDecoy := randKey(t, 24)
+
+	inlineSession := wrappedKeyXML(t, "k1", kek, sessionKey, "")
+	inlineShort := wrappedKeyXML(t, "k2", kek, shortDecoy, "")
+	anonymousInline := wrappedKeyXML(t, "", kek, longDecoy, "")
+	// The session key nested inside another inline key's ds:KeyInfo, which
+	// parseEncryptedKey reads only for an xenc:AgreementMethod: the nested
+	// key is never walked inline, so only the reference reaches it.
+	nestingInline := wrappedKeyXML(t, "k3", kek, longDecoy, `<ds:KeyInfo>`+inlineSession+`</ds:KeyInfo>`)
+
+	refSession := retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#k1")
+	refShort := retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#k2")
+
+	for _, tc := range []struct {
+		name     string
+		keyInfo  string
+		trailing string
+		// keys are the DISTINCT EncryptedKey targets the ds:KeyInfo
+		// retains, in the order the document offers them.
+		keys [][]byte
+	}{
+		{
+			name:    "a reference before the inline element it names",
+			keyInfo: refSession + inlineSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:    "two references before the inline element they name",
+			keyInfo: refSession + refSession + inlineSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:    "a reference on each side of the inline element they name",
+			keyInfo: refSession + inlineSession + refSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:     "a reference to an outside key before a reference to the inline element",
+			keyInfo:  refShort + refSession + inlineSession,
+			trailing: `<keys>` + inlineShort + `</keys>`,
+			keys:     [][]byte{shortDecoy, sessionKey},
+		},
+		{
+			name:    "two inline elements both referenced first",
+			keyInfo: refSession + refShort + inlineSession + inlineShort,
+			keys:    [][]byte{sessionKey, shortDecoy},
+		},
+		{
+			name:    "an anonymous inline element before a reference to a later inline element",
+			keyInfo: anonymousInline + refSession + inlineSession,
+			keys:    [][]byte{longDecoy, sessionKey},
+		},
+		{
+			// A reference form carries no weight of its own: the
+			// retention path is the same one every form reaches.
+			name:    "a reference with no Type before the inline element it names",
+			keyInfo: retrievalMethodXML("", "#k1") + inlineSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:    "an XPointer reference before the inline element it names",
+			keyInfo: retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#xpointer(id('k1'))") + inlineSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:    "an inline element alone",
+			keyInfo: inlineSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:    "a reference after the inline element it names",
+			keyInfo: inlineSession + refSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:    "two references after the inline element they name",
+			keyInfo: inlineSession + refSession + refSession,
+			keys:    [][]byte{sessionKey},
+		},
+		{
+			name:     "a reference to a key outside the KeyInfo",
+			keyInfo:  refSession,
+			trailing: `<ds:KeyInfo>` + inlineSession + `</ds:KeyInfo>`,
+			keys:     [][]byte{sessionKey},
+		},
+		{
+			name:     "an inline element and a reference to a distinct outside key",
+			keyInfo:  inlineShort + refSession,
+			trailing: `<keys>` + inlineSession + `</keys>`,
+			keys:     [][]byte{shortDecoy, sessionKey},
+		},
+		{
+			name:    "two inline elements with references after both",
+			keyInfo: inlineSession + inlineShort + refSession + refShort,
+			keys:    [][]byte{sessionKey, shortDecoy},
+		},
+		{
+			name:    "a reference to a key nested inside an inline key",
+			keyInfo: nestingInline + refSession,
+			keys:    [][]byte{longDecoy, sessionKey},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			elem := retrievalDoc(t, sessionKey, tc.keyInfo, tc.trailing)
+			distinct := len(tc.keys)
+			keyBytes := wrappedKeyLen(tc.keys...)
+
+			// The candidate list itself. No budget states this: a
+			// repeated candidate is a correctness bug with both caps
+			// unlimited, because it is trial-decrypted twice.
+			ed, err := xmlenc1.ParseEncryptedDataForTest(elem)
+			require.NoError(t, err)
+			require.Len(t, ed.EncryptedKeys, distinct)
+
+			// The document decrypts at exactly the candidate count and
+			// exactly the ciphertext total its distinct targets need, so
+			// neither charge is made twice for one element.
+			nodes, err := xmlenc1.NewDecryptor().
+				KeyEncryptionKey(kek).
+				MaxEncryptedKeys(distinct).
+				MaxEncryptedKeyBytes(keyBytes).
+				Decrypt(t.Context(), elem)
+			require.NoError(t, err)
+			requireSecret(t, nodes)
+
+			// One byte less is refused, which is what says the total
+			// covers every distinct target rather than a subset.
+			_, err = xmlenc1.NewDecryptor().
+				KeyEncryptionKey(kek).
+				MaxEncryptedKeys(-1).
+				MaxEncryptedKeyBytes(keyBytes-1).
+				Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+
+			// One candidate short of the distinct count is refused too,
+			// so a retention that UNDER-charges fails here rather than
+			// passing the two assertions above. A single-target row
+			// cannot state this direction, because MaxEncryptedKeys(0)
+			// selects the default cap rather than a cap of none; its
+			// byte assertion carries it instead.
+			if distinct < 2 {
+				return
+			}
+			_, err = xmlenc1.NewDecryptor().
+				KeyEncryptionKey(kek).
+				MaxEncryptedKeys(distinct-1).
+				MaxEncryptedKeyBytes(-1).
+				Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+		})
+	}
+}
+
+// rsaWrappedKeyXML renders an xenc:EncryptedKey carrying an RSA-OAEP
+// ciphertext under pub, so resolving it costs one RSA private-key operation.
+// The ciphertext is built with SHA-256 while the element declares RSA-OAEP's
+// default SHA-1 label digest, so that operation runs in full and the padding
+// check then fails: what the caller measures is the WORK one candidate costs,
+// and every candidate is therefore reached.
+func rsaWrappedKeyXML(t *testing.T, id string, pub *rsa.PublicKey) string {
+	t.Helper()
+	wrapped, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, randKey(t, 32), nil)
+	require.NoError(t, err)
+	return `<xenc:EncryptedKey Id="` + id + `">` +
+		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP11 + `"/>` +
+		`<xenc:CipherData><xenc:CipherValue>` + base64.StdEncoding.EncodeToString(wrapped) + `</xenc:CipherValue></xenc:CipherData>` +
+		`</xenc:EncryptedKey>`
+}
+
+// decryptAllocBytes reports the bytes one failing Decrypt of elem allocates,
+// which is how the RSA private-key operations it performs are counted: the
+// error the terminal returns is the same whether a candidate was resolved once
+// or twice.
+func decryptAllocBytes(t *testing.T, decryptor xmlenc1.Decryptor, elem *helium.Element) uint64 {
+	t.Helper()
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := decryptor.Decrypt(t.Context(), elem)
+	runtime.ReadMemStats(&after)
+	require.Error(t, err)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// TestEncryptedKeyRetentionTrialDecryptions pins the security consequence the
+// candidate caps exist to bound: a document that offers ONE EncryptedKey
+// element both by ds:RetrievalMethod and inline must cost ONE trial
+// decryption, not two. A repeat candidate is trial-decrypted like any other,
+// so a document could otherwise double the private-key work it buys.
+//
+// The count is read from what a decrypt ALLOCATES, following
+// TestEncryptedKeyBytesAllocation's precedent for measuring what an error
+// cannot report. The cost of one extra candidate is measured in the same
+// suite rather than assumed, so the bound holds whatever an RSA operation
+// happens to allocate. This test must NOT run in parallel: TotalAlloc is
+// process-wide and a concurrent test would pollute the delta.
+func TestEncryptedKeyRetentionTrialDecryptions(t *testing.T) {
+	// no t.Parallel(): isolated so each delta reflects only its own Decrypt.
+	key := generateRSAKey(t)
+	sessionKey := randKey(t, 32)
+	inline := rsaWrappedKeyXML(t, "k1", &key.PublicKey)
+	otherInline := rsaWrappedKeyXML(t, "k2", &key.PublicKey)
+	reference := retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#k1")
+	// A reference that resolves and retains NOTHING, so the document it
+	// sits in pays everything the measured one pays — an extra ds:KeyInfo
+	// child, and the id index resolveSameDocument builds — except the
+	// candidate itself. It is the baseline the measurement is read against,
+	// so what remains between the two is one trial decryption and nothing
+	// else.
+	inertReference := retrievalMethodXML("", "#cert")
+
+	decryptor := xmlenc1.NewDecryptor().PrivateKey(key)
+	one := decryptAllocBytes(t, decryptor, retrievalDoc(t, sessionKey, inline, ""))
+	two := decryptAllocBytes(t, decryptor, retrievalDoc(t, sessionKey, inline+otherInline, ""))
+	baseline := decryptAllocBytes(t, decryptor, retrievalDoc(t, sessionKey, inertReference+inline, `<cert Id="cert">not a key</cert>`))
+	refThenInline := decryptAllocBytes(t, decryptor, retrievalDoc(t, sessionKey, reference+inline, ""))
+	t.Logf("one candidate: %d bytes; two candidates: %d bytes; one candidate behind a reference that retains nothing: %d bytes; a reference then the inline element it names: %d bytes", one, two, baseline, refThenInline)
+
+	// The cost of one more trial decryption, measured in this same suite
+	// rather than assumed, so the bound holds whatever an RSA operation of
+	// the day allocates.
+	perCandidate := two - one
+	require.Greater(t, two, one, "a second candidate must cost measurably more than one for this bound to mean anything")
+	require.Less(t, refThenInline, baseline+perCandidate/2, "a reference naming the inline element performed a second trial decryption")
 }

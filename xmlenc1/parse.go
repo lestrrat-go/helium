@@ -20,19 +20,49 @@ import (
 // thread through the document walk: cfg supplies the effective EncryptedKey
 // candidate limit, keys carries the cumulative EncryptedKey ciphertext
 // allowance across the whole element, payload caps the EncryptedData
-// CipherValue, and refs is the same-document scope a ds:RetrievalMethod
-// resolves in. Both budgets are charged at the earliest point that sees their
-// values; the candidate limit is checked before an excess candidate is
-// retained.
+// CipherValue, refs is the same-document scope a ds:RetrievalMethod resolves
+// in, and visited holds the candidates already taken. Both budgets are charged
+// at the earliest point that sees their values; the candidate limit is checked
+// in retainEncryptedKey, which is where a candidate is retained.
 //
 // Bundling these into one struct keeps parseEncryptedData's signature from
 // growing a parameter per addition; a later addition to this struct is
 // expected and should not require touching every call site's parameter list.
+//
+// It is per-parse state and never shared between calls, which is part of what
+// keeps a Decryptor safe to fire from several goroutines.
 type parseState struct {
 	cfg     *decryptConfig
 	keys    *encryptedKeyBudget
 	payload *payloadCipherValueBudget
 	refs    *refScope
+
+	// visited records the xenc:EncryptedKey elements already taken as
+	// candidates of this EncryptedData. A document may offer one element
+	// both inline and by ds:RetrievalMethod, and xmlenc-core1 §3.5.3 permits
+	// several of those methods, so one element can be offered many ways; it
+	// describes one key and must be charged and trial-decrypted once. This
+	// is DEDUPLICATION, not a loop guard — see parseRetrievalMethod for why
+	// no cycle is expressible. retainEncryptedKey is its only reader and its
+	// only writer.
+	visited map[*helium.Element]struct{}
+}
+
+// markVisited records elem as taken and reports whether it already was, so an
+// element offered a second time adds no second candidate.
+//
+// The map is built on first use, so an EncryptedData that offers no candidate
+// never allocates one and every parseState is usable with the field left zero,
+// whichever caller assembled it.
+func (ps *parseState) markVisited(elem *helium.Element) bool {
+	if _, seen := ps.visited[elem]; seen {
+		return true
+	}
+	if ps.visited == nil {
+		ps.visited = make(map[*helium.Element]struct{})
+	}
+	ps.visited[elem] = struct{}{}
+	return false
 }
 
 // parseEncryptedData parses an EncryptedData element.
@@ -122,25 +152,42 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 	return eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "EncryptedKey"):
-			if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
-				return abort(ctx, err)
-			}
-			// An inline candidate is recorded as taken so a RetrievalMethod
-			// naming this very element does not charge and trial-decrypt the
-			// same key a second time. It cannot itself be a repeat: each child
-			// of a ds:KeyInfo is walked once.
-			ps.refs.markVisited(e)
-			ek, err := parseEncryptedKey(ctx, e, ps)
-			if err != nil {
-				return err
-			}
-			ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
-			return nil
+			return retainEncryptedKey(ctx, e, ed, ps)
 		case isDSigElem(e, "RetrievalMethod"):
 			return parseRetrievalMethod(ctx, e, ed, ps)
 		}
 		return nil
 	})
+}
+
+// retainEncryptedKey takes elem as one more session-key candidate of ed, or
+// takes nothing when elem is already one. It is the SINGLE retention point for
+// both ways a ds:KeyInfo offers an xenc:EncryptedKey — carried inline, and
+// named by a ds:RetrievalMethod (xmlenc-core1 §3.5.3) — because a document may
+// offer the same element BOTH ways in either order, and one element describes
+// one key however many times it is offered.
+//
+// The order of the three steps is the invariant:
+//
+//   - the visited-set dedup runs FIRST, so an element already taken adds no
+//     second candidate whichever way it was taken the first time;
+//   - the candidate slot is charged only for an element being retained, so the
+//     peak charge equals the final candidate count exactly;
+//   - parseEncryptedKey, which spends the cumulative EncryptedKey ciphertext
+//     budget, runs exactly once per retained candidate and never for a repeat.
+func retainEncryptedKey(ctx context.Context, elem *helium.Element, ed *EncryptedData, ps *parseState) error {
+	if ps.markVisited(elem) {
+		return nil
+	}
+	if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
+		return abort(ctx, err)
+	}
+	ek, err := parseEncryptedKey(ctx, elem, ps)
+	if err != nil {
+		return err
+	}
+	ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
+	return nil
 }
 
 // parseRetrievalMethod reads one ds:RetrievalMethod child of a ds:KeyInfo and
@@ -166,12 +213,11 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 //   - an absent Type says nothing about what the URI names, so the target is
 //     used only if it IS an xenc:EncryptedKey and passed over otherwise.
 //
-// The candidate slot is charged at the moment a candidate is RETAINED — after
-// the URI is looked up and after the visited-set dedup, and before the target
-// is parsed — so the peak charge equals the final candidate count exactly. A
-// repeat reference adds no candidate and so charges nothing, and a reference
-// that retains nothing costs one probe of the id index that
-// resolveSameDocument builds once per decrypt.
+// A retained target is handed to retainEncryptedKey, which owns what retaining
+// one costs and in which order. A reference that retains nothing — one naming
+// a target already taken, or a target that is not an xenc:EncryptedKey — costs
+// one probe of the id index that resolveSameDocument builds once per decrypt,
+// and nothing else.
 //
 // A URI that is not a same-document reference is ErrReferenceNotFound whatever
 // it names, and no setting lifts that: §3.5 mandates only the same-document
@@ -215,18 +261,7 @@ func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *Encrypt
 		}
 		return abort(ctx, fmt.Errorf("%w: ds:RetrievalMethod URI %q declares Type %q but names a %s", ErrMalformedEncrypted, uri, typ, target.Name()))
 	}
-	if ps.refs.markVisited(target) {
-		return nil
-	}
-	if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
-		return abort(ctx, err)
-	}
-	ek, err := parseEncryptedKey(ctx, target, ps)
-	if err != nil {
-		return err
-	}
-	ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
-	return nil
+	return retainEncryptedKey(ctx, target, ed, ps)
 }
 
 // parseEncryptedKey parses an EncryptedKey element, charging its CipherValue

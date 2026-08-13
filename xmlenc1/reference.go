@@ -10,13 +10,18 @@ import (
 )
 
 // refScope is the same-document resolution context of one decrypt: the subtree
-// a reference may name, the id index over it, and the targets already taken.
-// One scope is built per Decrypt/DecryptBytes call and threaded through the
-// parse on parseState, so N references cost one document walk rather than N.
+// a reference may name and the id index over it. One scope is built per
+// Decrypt/DecryptBytes call and threaded through the parse on parseState, so N
+// references cost one document walk rather than N.
+//
+// It answers what a URI names, and nothing about what has been made of the
+// answer: which targets have already been taken as candidates is a property of
+// the EncryptedData being parsed rather than of URI resolution, so parseState
+// holds it.
 //
 // It is per-call state and never shared between calls, which is what keeps a
-// Decryptor safe to fire from several goroutines: the index and the visited
-// set below are both written during resolution.
+// Decryptor safe to fire from several goroutines: the index below is written
+// during resolution.
 type refScope struct {
 	// root is the subtree a same-document URI may name. It is the TOPMOST
 	// ELEMENT ancestor of the EncryptedData, not OwnerDocument's document
@@ -39,13 +44,6 @@ type refScope struct {
 	// once thereafter, so a document whose references are all skipped (a Type
 	// this package does not implement) never pays for the walk.
 	index map[string][]*helium.Element
-
-	// visited records the EncryptedKey elements already taken as candidates.
-	// xmlenc-core1 §3.5.3 permits several ds:RetrievalMethods, and two of them
-	// naming one EncryptedKey describe one key: it must be charged and
-	// trial-decrypted once, not once per reference. This is DEDUPLICATION, not
-	// a loop guard — see parseRetrievalMethod for why no cycle is expressible.
-	visited map[*helium.Element]struct{}
 }
 
 // newRefScope builds the resolution scope for a decrypt of elem. A nil elem
@@ -68,22 +66,7 @@ func newRefScope(elem *helium.Element) *refScope {
 	return &refScope{
 		root:    root,
 		baseURI: helium.NodeGetBase(elem.OwnerDocument(), elem),
-		visited: make(map[*helium.Element]struct{}),
 	}
-}
-
-// markVisited records elem as taken and reports whether it already was, so a
-// second reference to one EncryptedKey adds no second candidate. A nil scope
-// records nothing and reports nothing as seen.
-func (s *refScope) markVisited(elem *helium.Element) bool {
-	if s == nil {
-		return false
-	}
-	if _, seen := s.visited[elem]; seen {
-		return true
-	}
-	s.visited[elem] = struct{}{}
-	return false
 }
 
 // in names the document a reference was refused in, for the two reference
