@@ -407,9 +407,9 @@ and RSA-4096. Every one of them uses AES-GCM block encryption. So the snapshot
 is evidence about how the session key is protected and about AES-GCM, and it is
 evidence about nothing else: no CBC block algorithm appears in it, nothing the
 [conformance scope](#conformance-scope) above names as unimplemented or refused
-is covered by it, and it is not the merlin interop corpus. The ten are the suite in full, and the 1.1
-interop corpus holds no Triple DES vector, so the zero skips is not a vector
-being passed over.
+is covered by it, and it is not the merlin interop corpus. The ten are the
+suite in full, and the 1.1 interop corpus holds no Triple DES vector, so the
+zero skips is not a vector being passed over.
 
 The suite is available through the manual Conformance workflow and is not part
 of the release gate.
