@@ -914,6 +914,136 @@ func TestDuplicateAttributeUse(t *testing.T) {
 </xs:schema>`
 		require.Empty(t, compileFatalErrors(t, schema))
 	})
+
+	// An extension of a RESTRICTION collides with the attributes the base
+	// INHERITS, not only those it declares itself: R restricts B without
+	// redeclaring 'a', so 'a' is still in R's {attribute uses} and the extension
+	// redeclaring it is a duplicate. xmllint rejects both shapes. Both versions
+	// must agree — 1.0 re-checks against the finalized base in finalizeAttrUses10,
+	// 1.1 in finalizeEffectiveAttrs.
+	t.Run("rejects extension redeclaring an attribute its base inherits", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="B"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="R">
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="E"/>
+</xs:schema>`
+		require.Contains(t, compileSchemaErrorsVersion(t, schema, false), dup)
+		require.Contains(t, compileSchemaErrorsVersion(t, schema, true), dup)
+	})
+
+	t.Run("rejects simpleContent extension redeclaring an attribute its base inherits", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="a" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:simpleContent>
+      <xs:restriction base="B"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:simpleContent>
+      <xs:extension base="R">
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="root" type="E"/>
+</xs:schema>`
+		require.Contains(t, compileSchemaErrorsVersion(t, schema, false), dup)
+		require.Contains(t, compileSchemaErrorsVersion(t, schema, true), dup)
+	})
+
+	// The collision against a base attribute the base DECLARES is reported once,
+	// not once per check pass.
+	t.Run("reports an extension duplicate once", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="B">
+        <xs:attribute name="a" type="xs:int"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="E"/>
+</xs:schema>`
+		errs := compileFatalErrors(t, schema)
+		require.Equal(t, 1, strings.Count(errs, dup),
+			"extension duplicate must be reported once: %s", errs)
+	})
+
+	// Inheriting an attribute through a restriction base WITHOUT redeclaring it
+	// is the valid case and must stay clean.
+	t.Run("accepts extension inheriting a grandbase attribute", func(t *testing.T) {
+		t.Parallel()
+		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="B">
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="R">
+    <xs:complexContent>
+      <xs:restriction base="B"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="E">
+    <xs:complexContent>
+      <xs:extension base="R">
+        <xs:attribute name="b" type="xs:int"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="root" type="E"/>
+</xs:schema>`
+		require.Empty(t, compileSchemaErrorsVersion(t, schema, false))
+		require.Empty(t, compileSchemaErrorsVersion(t, schema, true))
+	})
+
+	// The component label matches xmllint: a global type is cited as
+	// "complex type 'name'", an anonymous/local one as "local complex type".
+	t.Run("cites the complex type the way xmllint does", func(t *testing.T) {
+		t.Parallel()
+		global := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:attribute name="a" type="xs:int"/>
+  </xs:complexType>
+  <xs:element name="root" type="T"/>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, global), "complex type 'T': Duplicate attribute use 'a'.")
+
+		local := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="a" type="xs:string"/>
+      <xs:attribute name="a" type="xs:int"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		require.Contains(t, compileFatalErrors(t, local), "local complex type: Duplicate attribute use 'a'.")
+	})
 }
 
 // TestSimpleContentExtensionProhibitedAttr verifies that a simpleContent

@@ -136,6 +136,17 @@ type compiler struct {
 	globalElemSources map[*ElementDecl]elemRefSource
 	// source info for type definitions, used in duplicate attribute errors
 	typeDefSources map[*TypeDef]typeDefSource
+	// extOwnAttrUses records, per XSD 1.0 extension-derived complex type, the
+	// attribute uses the type declares ITSELF — snapshotted before the extension
+	// loop folds the base's uses into td.Attributes. finalizeAttrUses10 re-runs
+	// the ct-props-correct.4 duplicate check against the FINALIZED base with this
+	// snapshot, so an attribute the base merely INHERITS still collides with the
+	// extension's own declaration.
+	extOwnAttrUses map[*TypeDef][]*AttrUse
+	// extAttrDupReported records the attribute names already reported as
+	// ct-props-correct.4 duplicates per extension type, so the in-loop check and
+	// the finalize-time re-check never report the same collision twice.
+	extAttrDupReported map[*TypeDef]map[QName]struct{}
 	// nextTypeDefOrdinal is a monotonic counter assigned to each typeDefSource in
 	// parse order. It is the final tie-breaker when ordering facet/notation
 	// diagnostics so that multiple anonymous (empty-named) types on the SAME
@@ -670,6 +681,8 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		attrGroupRefSources:       make(map[QName][]attrGroupSource),
 		globalElemSources:         make(map[*ElementDecl]elemRefSource),
 		typeDefSources:            make(map[*TypeDef]typeDefSource),
+		extOwnAttrUses:            make(map[*TypeDef][]*AttrUse),
+		extAttrDupReported:        make(map[*TypeDef]map[QName]struct{}),
 		typeKinds:                 make(map[QName]redefineKind),
 		itemTypeRefs:              make(map[*TypeDef]QName),
 		chameleonEligible:         make(map[any]struct{}),
