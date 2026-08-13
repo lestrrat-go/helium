@@ -115,7 +115,7 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 				return fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(ctx, e, ps.payload)
+			cv, err := parseCipherData(ctx, e, ps, ps.payload)
 			if err != nil {
 				return err
 			}
@@ -299,7 +299,7 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, ps *parseState
 				return fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(ctx, e, ps.keys)
+			cv, err := parseCipherData(ctx, e, ps, ps.keys)
 			if err != nil {
 				return err
 			}
@@ -978,51 +978,51 @@ func base64CharacterData(child helium.Node, valueName string) ([]byte, error) {
 // A second choice member of either kind (CipherValue+CipherValue,
 // CipherValue+CipherReference, CipherReference+CipherValue, or two
 // CipherReferences) is schema-invalid and rejected at parse rather than
-// silently using the first. CipherReference (indirect cipher text fetched
-// via a URI plus transforms) is not supported by helium and is rejected
-// explicitly; ignoring it would both lose data and defeat the
-// exactly-one-choice rule.
+// silently using the first.
 //
-// budget, when non-nil, is charged what decoding the CipherValue would cost —
-// xmlbase64.Counter owns that count, including what it charges base64 the
-// decoder will reject — before anything is built from it, so an over-budget
-// value never reaches the decoder. decodeCipherValue owns how that charge is
-// kept ahead of the work. A nil budget leaves the value unbounded, which is
-// only used by parser-only test helpers.
+// Both members yield the same thing — the cipher text octets — so the two
+// branches differ only in where those octets come from: a CipherValue carries
+// them inline as base64, while a CipherReference names them by URI and
+// resolveCipherReference (reference.go) owns what that means and what it costs.
 //
-// budget is passed explicitly rather than sourced from a parseState, because
-// which of ps.payload or ps.keys applies is a property of the caller (an
-// EncryptedData's own CipherData vs. an EncryptedKey's), not of parseState
-// itself.
-func parseCipherData(ctx context.Context, elem *helium.Element, budget cipherValueBudget) ([]byte, error) {
-	var decoded []byte
-	var seenChoice bool
+// The cardinality is settled in a first walk that reads no value at all, and
+// only then is the single member it found turned into octets. That order is
+// what keeps the schema-validity verdict independent of what the members hold:
+// a document offering two of them is refused for offering two, whether or not
+// the first one would have decoded or resolved. It also keeps a schema-invalid
+// document from spending anything — a CipherReference that reached a caller's
+// resolver first would turn an invalid document into a dereference.
+//
+// budget, when non-nil, is charged what the chosen member costs before anything
+// is built from it, so an over-budget value never reaches the decoder or the
+// canonicalizer. decodeCipherValue and resolveCipherReference each own how that
+// charge is kept ahead of their work. A nil budget leaves the value unbounded,
+// which is only used by parser-only test helpers.
+//
+// budget is passed explicitly rather than sourced from ps, because which of
+// ps.payload or ps.keys applies is a property of the caller (an EncryptedData's
+// own CipherData vs. an EncryptedKey's), not of parseState itself.
+func parseCipherData(ctx context.Context, elem *helium.Element, ps *parseState, budget cipherValueBudget) ([]byte, error) {
+	var choice *helium.Element
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
-		switch {
-		case isXMLEncElem(e, "CipherValue"):
-			if seenChoice {
-				return fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
-			}
-			seenChoice = true
-			d, err := decodeCipherValue(ctx, e, budget)
-			if err != nil {
-				return err
-			}
-			decoded = d
-		case isXMLEncElem(e, "CipherReference"):
-			if seenChoice {
-				return fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
-			}
-			return fmt.Errorf("%w: CipherReference is not supported", ErrMalformedEncrypted)
+		if !isXMLEncElem(e, "CipherValue") && !isXMLEncElem(e, "CipherReference") {
+			return nil
 		}
+		if choice != nil {
+			return fmt.Errorf("%w: CipherData allows exactly one of CipherValue or CipherReference", ErrMalformedEncrypted)
+		}
+		choice = e
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	if !seenChoice {
-		return nil, abort(ctx, fmt.Errorf("%w: missing CipherValue", ErrMalformedEncrypted))
+	if choice == nil {
+		return nil, abort(ctx, fmt.Errorf("%w: CipherData carries neither a CipherValue nor a CipherReference", ErrMalformedEncrypted))
 	}
-	return decoded, nil
+	if isXMLEncElem(choice, "CipherValue") {
+		return decodeCipherValue(ctx, choice, budget)
+	}
+	return resolveCipherReference(ctx, choice, ps, budget)
 }
 
 // decodeCipherValue charges budget for elem's base64 content and then decodes

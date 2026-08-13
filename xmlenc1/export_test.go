@@ -53,6 +53,12 @@ const MaxOAEPParamsBytesForTest = maxOAEPParamsBytes
 // of its value, which would drift from it.
 const MaxECPublicKeyBytesForTest = maxECPublicKeyBytes
 
+// MaxCipherReferenceTransformsForTest re-exports the cap on how many
+// ds:Transform children one xenc:CipherReference may declare, so a test can
+// size an over-cap list against the constant itself rather than a copy of its
+// value, which would drift from it.
+const MaxCipherReferenceTransformsForTest = maxCipherReferenceTransforms
+
 // MaxConcatKDFOtherInfoBytesForTest re-exports the cumulative ConcatKDF
 // OtherInfo budget so a test can size a parameter set against the constant
 // itself rather than a copy of its value, which would drift from it.

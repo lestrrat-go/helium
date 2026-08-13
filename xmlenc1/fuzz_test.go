@@ -105,6 +105,27 @@ func FuzzDecrypt(f *testing.F) {
 			PartyVInfo:   []byte{0x00, 0xaa},
 		})))
 
+	// Three same-document xenc:CipherReference shapes, one per way the octets
+	// are produced: canonicalization of a named subtree, a #base64 transform
+	// over that subtree's character data, and the null URI naming the whole
+	// resolution root. Each names a target INSIDE the EncryptedData, because
+	// the target is the document element here and the resolution root is its
+	// topmost element ancestor. No seed carries an external URI: the decryptor
+	// below has no resolver, so every external form is refused before any I/O
+	// could be attempted, and the target stays offline whatever the engine
+	// mutates these into.
+	for _, cipherReference := range []string{
+		`<xenc:CipherReference URI="#ct"/>`,
+		`<xenc:CipherReference URI="#ct"><xenc:Transforms><ds:Transform Algorithm="` + xmlenc1.NamespaceDSig + `base64"/></xenc:Transforms></xenc:CipherReference>`,
+		`<xenc:CipherReference URI=""/>`,
+	} {
+		f.Add([]byte(`<xenc:EncryptedData xmlns:xenc="` + xmlenc1.NamespaceXMLEnc + `" xmlns:ds="` + xmlenc1.NamespaceDSig + `" Type="` + xmlenc1.TypeElement + `">` +
+			`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+			`<xenc:EncryptionProperties><ct Id="ct">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</ct></xenc:EncryptionProperties>` +
+			`<xenc:CipherData>` + cipherReference + `</xenc:CipherData>` +
+			`</xenc:EncryptedData>`))
+	}
+
 	// An EncryptedData with nothing in it, and one whose shape is complete but
 	// whose every value is junk: the two ends the mutation engine works
 	// outward from.

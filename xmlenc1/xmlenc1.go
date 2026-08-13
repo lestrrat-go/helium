@@ -649,6 +649,7 @@ type decryptConfig struct {
 	maxEncryptedKeys        int
 	maxEncryptedKeyBytes    int
 	maxCipherValueBytes     int
+	cipherReferenceResolver ReferenceResolver
 }
 
 // Decryptor decrypts XML EncryptedData elements. It uses clone-on-write
@@ -856,6 +857,36 @@ func (d Decryptor) MaxEncryptedKeyBytes(n int) Decryptor {
 func (d Decryptor) MaxCipherValueBytes(n int) Decryptor {
 	d = d.clone()
 	d.cfg.maxCipherValueBytes = n
+	return d
+}
+
+// CipherReferenceResolver supplies the octets of an xenc:CipherReference whose
+// URI is NOT one of the four same-document forms, i.e. one naming a resource
+// outside the document being decrypted. [ReferenceResolver] owns what a
+// resolver is asked for and what the shipped [FSReferenceResolver] refuses.
+//
+// Nil is the default, and it is a deny rather than a gap: an external URI then
+// fails closed with [ErrReferenceNotFound], and no document can lift that by
+// itself. The same-document forms need no I/O and never reach a resolver, so
+// setting one changes nothing about how they resolve — it only adds the
+// external form. That split follows the specification: W3C xmlenc-core1 §3.3.1
+// imports XMLDSig's dereferencing model, in which the same-document forms are
+// normative MUSTs (xmldsig-core1 §4.4.3.2, §4.4.3.3) while HTTP dereferencing is
+// RECOMMENDED (§4.4.3.1).
+//
+// A resolved resource is charged against the same budget its CipherData would
+// have been: [Decryptor.MaxCipherValueBytes] for an EncryptedData payload and
+// [Decryptor.MaxEncryptedKeyBytes] for an EncryptedKey. A resolver returns a
+// stream and this package reads it, so the bound holds for a resolver a caller
+// writes and not merely for the one shipped here: the read stops one byte past
+// what the budget still allows, it stops when ctx is done, and the stream is
+// closed on every one of those paths. What the package cannot constrain is what
+// happens INSIDE a resolver — one that buffers a whole resource itself, or
+// blocks before returning a stream at all, does so on the caller's own account.
+// [ReferenceResolver] states that division and why it falls there.
+func (d Decryptor) CipherReferenceResolver(r ReferenceResolver) Decryptor {
+	d = d.clone()
+	d.cfg.cipherReferenceResolver = r
 	return d
 }
 
