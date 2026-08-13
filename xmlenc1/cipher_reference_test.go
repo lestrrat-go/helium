@@ -3,12 +3,14 @@ package xmlenc1_test
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"math"
 	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xmlenc1"
@@ -79,6 +81,74 @@ func cipherRefCiphertext(t *testing.T, key []byte) []byte {
 	return cipher
 }
 
+// canonicalOctetLength recovers the exact number of octets the same-document
+// reference uri yields against a document carrying trailing, by bisecting
+// MaxCipherValueBytes: the budget refuses the resolution one byte short of its
+// length and admits it at exactly that length. It measures the resolution
+// without reading it, which is what makes a claim about WHICH nodes a form
+// selects — comments among them — falsifiable from the outside.
+func canonicalOctetLength(t *testing.T, uri, trailing string) int {
+	t.Helper()
+	const ceiling = 1 << 16
+	require.True(t, cipherRefFitsBudget(t, uri, trailing, ceiling), "the resolution is longer than the bisection ceiling")
+	lo, hi := 0, ceiling
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if cipherRefFitsBudget(t, uri, trailing, mid) {
+			hi = mid
+			continue
+		}
+		lo = mid + 1
+	}
+	return lo
+}
+
+// cipherRefFitsBudget reports whether a same-document resolution stays within a
+// MaxCipherValueBytes of maxBytes. The decrypt itself always fails — the
+// resolved octets are canonical XML rather than ciphertext — so the budget
+// sentinel, not success, is what separates the two outcomes.
+func cipherRefFitsBudget(t *testing.T, uri, trailing string, maxBytes int) bool {
+	t.Helper()
+	elem := cipherRefDoc(t, cipherReferenceXML(` URI="`+uri+`"`, ""), trailing)
+	_, err := xmlenc1.NewDecryptor().
+		SessionKey(randKey(t, 32)).
+		MaxCipherValueBytes(maxBytes).
+		Decrypt(t.Context(), elem)
+	require.Error(t, err)
+	return !errors.Is(err, xmlenc1.ErrCipherValueBytesExceeded)
+}
+
+// wideDoc builds a document whose CipherReference names a subtree of elemCount
+// elements standing under a root that declares nsCount prefixes, and returns
+// that EncryptedData with the source's own size.
+//
+// It is the shape that makes a node-set expensive: every one of those
+// declarations is in scope on every one of those elements, so a resolution that
+// materialized the in-scope namespace AXIS per element would hold
+// elemCount × nsCount namespace nodes for a document of a few hundred KB.
+func wideDoc(t *testing.T, elemCount, nsCount int) (*helium.Element, int) {
+	t.Helper()
+	var decls strings.Builder
+	for i := range nsCount {
+		fmt.Fprintf(&decls, ` xmlns:n%d="urn:n%d"`, i, i)
+	}
+	var body strings.Builder
+	for range elemCount {
+		body.WriteString(`<e/>`)
+	}
+	src := `<root` + decls.String() + `>` +
+		`<xenc:EncryptedData xmlns:xenc="` + xmlenc1.NamespaceXMLEnc + `" xmlns:ds="` + xmlenc1.NamespaceDSig + `" Type="` + xmlenc1.TypeElement + `">` +
+		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+		`<xenc:CipherData>` + cipherReferenceXML(` URI="#t"`, "") + `</xenc:CipherData>` +
+		`</xenc:EncryptedData>` +
+		`<ct Id="t">` + body.String() + `</ct>` +
+		`</root>`
+	doc := mustParseXML(t, src)
+	elem := findEncryptedData(t, doc.DocumentElement())
+	require.NotNil(t, elem)
+	return elem, len(src)
+}
+
 // countingResolver records how many times a decrypt asked it for a resource
 // and always refuses, so a test can assert that a document never reached the
 // dereferencing stage at all.
@@ -114,6 +184,65 @@ func TestCipherReference(t *testing.T) {
 				requireSecret(t, nodes)
 			})
 		}
+	})
+
+	// A #base64 transform consumes the NODE-SET, and xmldsig-core1 §6.6.2 makes
+	// its input the string-value of that set: it "strips away the start and end
+	// tags of the identified element and any of its descendant elements", so the
+	// markup between the characters is not part of the value and base64 written
+	// anywhere under the target decodes.
+	t.Run("a base64 transform takes the target's whole string-value", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			trailer func(encoded string) string
+		}{
+			{
+				name:    "in a grandchild",
+				trailer: func(encoded string) string { return `<ct Id="t"><wrap><part>` + encoded + `</part></wrap></ct>` },
+			},
+			{
+				name: "split across an element boundary",
+				trailer: func(encoded string) string {
+					// The split falls inside a base64 quantum, so a walk that
+					// read each child on its own would decode neither half.
+					cut := len(encoded) / 2
+					return `<ct Id="t">` + encoded[:cut] + `<part>` + encoded[cut:] + `</part></ct>`
+				},
+			},
+			{
+				name:    "through a CDATA section",
+				trailer: func(encoded string) string { return `<ct Id="t"><part><![CDATA[` + encoded + `]]></part></ct>` },
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				sessionKey := newSessionKey(t)
+				encoded := base64.StdEncoding.EncodeToString(cipherRefCiphertext(t, sessionKey))
+				elem := cipherRefDoc(t,
+					cipherReferenceXML(` URI="#t"`, transformsXML(base64Transform)),
+					tc.trailer(encoded))
+				nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+				require.NoError(t, err)
+				requireSecret(t, nodes)
+			})
+		}
+
+		// The whole-document forms name a node-set too, so a #base64 transform
+		// takes the string-value of the WHOLE document. Every text node in the
+		// document below is the encoded value, so that string-value is it.
+		t.Run("for the whole-document forms", func(t *testing.T) {
+			for _, uri := range []string{"", "#xpointer(/)"} {
+				t.Run("URI="+uri, func(t *testing.T) {
+					sessionKey := newSessionKey(t)
+					encoded := base64.StdEncoding.EncodeToString(cipherRefCiphertext(t, sessionKey))
+					elem := cipherRefDoc(t,
+						cipherReferenceXML(` URI="`+uri+`"`, transformsXML(base64Transform)),
+						`<ct Id="t">`+encoded+`</ct>`)
+					nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+					require.NoError(t, err)
+					requireSecret(t, nodes)
+				})
+			}
+		})
 	})
 
 	// The transform list is a pipeline: the first transform consumes the
@@ -155,6 +284,32 @@ func TestCipherReference(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, strings.HasPrefix(string(ed.CipherValue), "<root>"))
 				require.Contains(t, string(ed.CipherValue), `<ct Id="t">x</ct>`)
+			})
+		}
+	})
+
+	// A CipherReference carries no CanonicalizationMethod, so the only node-set
+	// to octet conversion open to it is the default one — plain Canonical XML,
+	// which omits comments — and all four forms are therefore comment-free, the
+	// two XPointer ones included. The check is a measurement rather than a
+	// reading: the recovered octet count of each form is the same with a comment
+	// in the target as without one, which a form that admitted comments could
+	// not be.
+	t.Run("every same-document form is comment-free", func(t *testing.T) {
+		for _, tc := range []struct {
+			uri  string
+			want int
+		}{
+			{uri: "#t", want: 17},
+			{uri: "#xpointer(id('t'))", want: 17},
+			{uri: "", want: 402},
+			{uri: "#xpointer(/)", want: 414},
+		} {
+			t.Run("URI="+tc.uri, func(t *testing.T) {
+				plain := canonicalOctetLength(t, tc.uri, `<ct Id="t">x</ct>`)
+				commented := canonicalOctetLength(t, tc.uri, `<ct Id="t">x<!-- a comment --></ct>`)
+				require.Equal(t, tc.want, plain)
+				require.Equal(t, plain, commented, "the comment reached the canonical octets")
 			})
 		}
 	})
@@ -301,6 +456,54 @@ func TestCipherReference(t *testing.T) {
 			`<ct Id="t">AA==</ct>`)
 		_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+	})
+
+	// Neither xenc:CipherReferenceType nor xenc:TransformsType carries a
+	// wildcard, so an element the schema does not declare is refused rather than
+	// stepped over. Skipping one would drop a transform declaration out of the
+	// whitelist — and out of any policy or logging layer reading it — and
+	// resolve the reference as though the document had asked for something else.
+	t.Run("a foreign element in the transform list is refused", func(t *testing.T) {
+		const evilNS = `xmlns:evil="urn:evil"`
+		for _, tc := range []struct {
+			name  string
+			inner string
+		}{
+			{
+				name:  "a foreign-namespace Transform child",
+				inner: `<xenc:Transforms><ds:Transform Algorithm="` + base64Transform + `"/><evil:Transform ` + evilNS + ` Algorithm="urn:unsupported"/></xenc:Transforms>`,
+			},
+			{
+				name:  "a foreign-namespace Transforms wrapper",
+				inner: `<ds:Transforms><ds:Transform Algorithm="urn:unsupported"/></ds:Transforms>`,
+			},
+			{
+				name:  "a foreign element beside the wrapper",
+				inner: transformsXML(base64Transform) + `<evil:Extra ` + evilNS + `/>`,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				elem := cipherRefDoc(t,
+					cipherReferenceXML(` URI="#t"`, tc.inner),
+					`<ct Id="t">AA==</ct>`)
+				_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(t.Context(), elem)
+				require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+			})
+		}
+
+		// Foreign children count against the cap as they are collected, so a
+		// flood of them costs one refusal rather than a walk of them all.
+		t.Run("and counts against the transform cap", func(t *testing.T) {
+			var inner strings.Builder
+			for range 101 {
+				inner.WriteString(`<evil:Transform xmlns:evil="urn:evil" Algorithm="urn:unsupported"/>`)
+			}
+			elem := cipherRefDoc(t,
+				cipherReferenceXML(` URI="#t"`, `<xenc:Transforms>`+inner.String()+`</xenc:Transforms>`),
+				`<ct Id="t">AA==</ct>`)
+			_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		})
 	})
 
 	t.Run("an over-cap transform list is refused", func(t *testing.T) {
@@ -486,6 +689,82 @@ func TestCipherReference(t *testing.T) {
 		bounded := spend(t, 1024)
 		t.Logf("canonicalizing a %d byte subtree allocated %d bytes unbounded and %d bytes under a 1024 byte budget", len(big), unbounded, bounded)
 		require.Less(t, bounded, unbounded/2, "the canonicalization ran to completion before the budget refused it")
+	})
+
+	// The node-set a same-document reference names is bounded by the budget and
+	// by the document, not by the product of the two. A document that declares
+	// many prefixes high up and carries many elements below them is the shape
+	// that separates the two: every declaration is in scope on every element, so
+	// materializing the in-scope namespace axis per element would cost
+	// elements × declarations nodes for a document of a few hundred KB — work no
+	// output limit can see, since an inherited declaration is rendered once and
+	// costs no output bytes at all.
+	//
+	// This test must NOT run in parallel: TotalAlloc is process-wide and a
+	// concurrent test would pollute the deltas.
+	t.Run("a wide node-set is bounded by the document", func(t *testing.T) {
+		// no t.Parallel(): isolated so each delta reflects only its own Decrypt.
+		const (
+			elemCount = 50000
+			nsCount   = 500
+		)
+		for _, tc := range []struct {
+			name     string
+			maxBytes int
+			// spend bounds the allocation as a multiple of the source size.
+			spend int
+		}{
+			// One byte of allowance cannot fit 50k elements, and knowing that
+			// before the set is built is what stops the work: the refusal costs
+			// a fraction of the document rather than a multiple of it.
+			{name: "under a one byte budget", maxBytes: 1, spend: 8},
+			// The DEFAULT budget admits this document, so nothing refuses it —
+			// the resolution runs, and stays linear in the document.
+			{name: "under the default budget", maxBytes: 0, spend: 200},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				elem, size := wideDoc(t, elemCount, nsCount)
+				decryptor := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t))
+				if tc.maxBytes != 0 {
+					decryptor = decryptor.MaxCipherValueBytes(tc.maxBytes)
+				}
+				var before, after runtime.MemStats
+				runtime.GC()
+				runtime.ReadMemStats(&before)
+				_, err := decryptor.Decrypt(t.Context(), elem)
+				runtime.ReadMemStats(&after)
+				require.Error(t, err)
+				if tc.maxBytes == 1 {
+					require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+				}
+				spent := after.TotalAlloc - before.TotalAlloc
+				t.Logf("a %d byte document with %d elements under %d declarations allocated %d bytes", size, elemCount, nsCount, spent)
+				require.Less(t, spent, uint64(tc.spend*size), "the resolution allocated a multiple of the document it was given")
+			})
+		}
+	})
+
+	// The same walk observes the context once per node, so a caller that
+	// cancelled is answered while the walk is running rather than after it has
+	// stepped every node of a document the caller did not write.
+	t.Run("a cancelled context stops the node-set walk", func(t *testing.T) {
+		elem, _ := wideDoc(t, 50000, 500)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(ctx, elem)
+		require.ErrorIs(t, err, context.Canceled)
+
+		// And a deadline is not out-waited: the same document under a deadline
+		// of a tenth of a second returns in that order of time rather than in
+		// tens of seconds, which is what a walk polling nothing would cost.
+		deadline, stop := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer stop()
+		start := time.Now()
+		_, err = xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(deadline, elem)
+		elapsed := time.Since(start)
+		require.Error(t, err)
+		t.Logf("a 100ms deadline over a 50000 element reference returned after %s", elapsed)
+		require.Less(t, elapsed, 10*time.Second, "the resolution ran on after its caller's deadline passed")
 	})
 
 	// A resolver's own octets are bounded the same way: the shipped resolver

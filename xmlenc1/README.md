@@ -193,12 +193,22 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   rather than buffered. A same-document reference is bounded by the same
   budgets: its canonical form is written through a limit-aware writer and stops
   at the first byte past the allowance, instead of canonicalizing an
-  attacker-chosen subtree in full and discarding the result afterwards.
+  attacker-chosen subtree in full and discarding the result afterwards. The
+  node-set feeding that writer is bounded too — it is linear in the subtree
+  rather than in the product of its elements and the namespace declarations in
+  scope on them, and a selection whose element count alone cannot fit the
+  allowance is refused before it is built — and the walk observes the caller's
+  context once per node.
 - A `CipherReference` may declare transforms, and only the XMLDSig
   `#base64` transform is accepted. Every declared algorithm is validated before
   any of them runs, so a supported one standing ahead of an unsupported one is
   not executed first; a list longer than four, or a second `xenc:Transforms`,
-  is refused unread. Refusing is conforming — xmlenc-core1 §3.3.1 marks both
+  is refused unread. Neither `xenc:CipherReferenceType` nor
+  `xenc:TransformsType` carries a wildcard, so an element the schema does not
+  declare — a `Transform` in a foreign namespace, a `Transforms` wrapper in the
+  wrong one — is refused rather than stepped over, and counts against that cap
+  as it is read: a namespace-shifted transform cannot hide from the whitelist,
+  or from a policy layer reading the list. Refusing is conforming — xmlenc-core1 §3.3.1 marks both
   the `Transform` feature and the particular algorithms OPTIONAL — and XPath and
   XSLT are the reason the rule exists: either one evaluates an expression the
   document chose over a document nothing has authenticated yet, which is
@@ -274,8 +284,13 @@ depends on the transforms:
   the document, so the top-level processing instructions outside that element
   are included; every other form canonicalizes the named element's subtree.
 - with a **`#base64` transform** first, that transform consumes the node-set
-  directly and decodes the named element's character data, read through the same
-  bounded walk an inline `CipherValue` goes through.
+  directly and decodes its string-value: the text nodes of the selection in
+  document order, concatenated. xmldsig-core1 §6.6.2 "strips away the start and
+  end tags of the identified element and any of its descendant elements", so
+  base64 written in a descendant, or split across an element boundary, decodes
+  as the same characters written directly under the target would. The value is
+  counted before it is built, through the same bounded walk an inline
+  `CipherValue` goes through.
 
 An external URI is joined against the document's base URI and handed to
 `Decryptor.CipherReferenceResolver`. Its result is an octet stream, so no
