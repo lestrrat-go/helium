@@ -16,7 +16,7 @@ import (
 // decryptECDHSessionKey derives the KEK from the agreement and unwraps the
 // session key with it. sessionKeySize is the length the EncryptedData's block
 // algorithm requires; aesKeyUnwrap owns what it binds.
-func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey, sessionKeySize int) ([]byte, error) {
+func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *encryptedKey, sessionKeySize int) ([]byte, error) {
 	agreement := ek.AgreementMethod
 	if agreement == nil || agreement.Algorithm != ECDHES {
 		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramKeyAgreement, Algorithm: agreementAlgorithm(agreement)})
@@ -52,7 +52,7 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *EncryptedKey, sessionKeyS
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid ECDH private key: %v", ErrDecryptionFailed, err)
 	}
-	originatorKey, err := agreement.OriginatorKey.Curve.NewPublicKey(agreement.OriginatorKey.PublicKey)
+	originatorKey, err := agreement.OriginatorKey.curve.NewPublicKey(agreement.OriginatorKey.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid ECDH public key: %v", ErrDecryptionFailed, err)
 	}
@@ -114,7 +114,7 @@ func ecdhRecipientKey(recipient *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
 // It takes the recipient key already resolved by ecdhRecipientKey, so the
 // curve is known to be usable and nameable before the caller does any
 // payload-proportional work.
-func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string, params *ConcatKDFParams, sessionKey []byte) (*EncryptedKey, error) {
+func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string, params *ConcatKDFParams, sessionKey []byte) (*encryptedKey, error) {
 	// ECDH-ES derives a KEK, so the EncryptedKey algorithm must be a key wrap:
 	// anything else would declare a mechanism we are not performing.
 	// resolveEncryptConfig has already held the caller's configuration to this,
@@ -146,17 +146,17 @@ func encryptECDHSessionKey(recipientKey *ecdh.PublicKey, keyWrapAlgorithm string
 		return nil, err
 	}
 
-	return &EncryptedKey{
-		EncryptionMethod: &EncryptionMethod{Algorithm: keyWrapAlgorithm},
+	return &encryptedKey{
+		EncryptionMethod: &encryptionMethod{Algorithm: keyWrapAlgorithm},
 		CipherValue:      wrapped,
-		AgreementMethod: &AgreementMethod{
+		AgreementMethod: &agreementMethod{
 			Algorithm: ECDHES,
-			KeyDerivationMethod: &KeyDerivationMethod{
+			KeyDerivationMethod: &keyDerivationMethod{
 				Algorithm: ConcatKDF,
 				ConcatKDF: params,
 			},
-			OriginatorKey: &ECKeyValue{
-				Curve:     curve,
+			OriginatorKey: &ecKeyValue{
+				curve:     curve,
 				PublicKey: ephemeral.PublicKey().Bytes(),
 			},
 		},
@@ -208,7 +208,7 @@ func validateEncryptConcatKDFParams(params *ConcatKDFParams) error {
 	return nil
 }
 
-func agreementAlgorithm(agreement *AgreementMethod) string {
+func agreementAlgorithm(agreement *agreementMethod) string {
 	if agreement == nil {
 		return ""
 	}

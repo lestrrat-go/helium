@@ -8,7 +8,7 @@ import (
 )
 
 // marshalEncryptedData builds the EncryptedData DOM element tree.
-func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Element, error) {
+func marshalEncryptedData(doc *helium.Document, ed *encryptedData) (*helium.Element, error) {
 	root, err := doc.CreateElement("EncryptedData")
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func marshalEncryptedData(doc *helium.Document, ed *EncryptedData) (*helium.Elem
 }
 
 // marshalEncryptedKey builds the EncryptedKey DOM element tree.
-func marshalEncryptedKey(doc *helium.Document, ek *EncryptedKey) (*helium.Element, error) {
+func marshalEncryptedKey(doc *helium.Document, ek *encryptedKey) (*helium.Element, error) {
 	root, err := doc.CreateElement("EncryptedKey")
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func marshalEncryptedKey(doc *helium.Document, ek *EncryptedKey) (*helium.Elemen
 	return root, root.AddChild(cd)
 }
 
-func marshalEncryptionMethod(doc *helium.Document, em *EncryptionMethod) (*helium.Element, error) {
+func marshalEncryptionMethod(doc *helium.Document, em *encryptionMethod) (*helium.Element, error) {
 	elem, err := doc.CreateElement("EncryptionMethod")
 	if err != nil {
 		return nil, err
@@ -236,7 +236,7 @@ func marshalCipherData(doc *helium.Document, cipherValue []byte) (*helium.Elemen
 //	    </xenc:OriginatorKeyInfo>
 //	  </xenc:AgreementMethod>
 //	</ds:KeyInfo>
-func marshalAgreementKeyInfo(doc *helium.Document, agreement *AgreementMethod) (*helium.Element, error) {
+func marshalAgreementKeyInfo(doc *helium.Document, agreement *agreementMethod) (*helium.Element, error) {
 	keyInfo, err := doc.CreateElement("KeyInfo")
 	if err != nil {
 		return nil, err
@@ -282,7 +282,7 @@ func marshalAgreementKeyInfo(doc *helium.Document, agreement *AgreementMethod) (
 	return keyInfo, keyInfo.AddChild(am)
 }
 
-func marshalKeyDerivationMethod(doc *helium.Document, method *KeyDerivationMethod) (*helium.Element, error) {
+func marshalKeyDerivationMethod(doc *helium.Document, method *keyDerivationMethod) (*helium.Element, error) {
 	kdm, err := doc.CreateElement("KeyDerivationMethod")
 	if err != nil {
 		return nil, err
@@ -353,8 +353,8 @@ func marshalConcatKDFParams(doc *helium.Document, params *ConcatKDFParams) (*hel
 	return elem, elem.AddChild(dm)
 }
 
-func marshalOriginatorKeyInfo(doc *helium.Document, key *ECKeyValue) (*helium.Element, error) {
-	curveURI, err := ecdhURIForCurve(key.Curve)
+func marshalOriginatorKeyInfo(doc *helium.Document, key *ecKeyValue) (*helium.Element, error) {
+	curveURI, err := ecdhURIForCurve(key.curve)
 	if err != nil {
 		return nil, err
 	}
@@ -375,14 +375,14 @@ func marshalOriginatorKeyInfo(doc *helium.Document, key *ECKeyValue) (*helium.El
 		return nil, err
 	}
 
-	ecKeyValue, err := doc.CreateElement("ECKeyValue")
+	ecKeyValueElem, err := doc.CreateElement("ECKeyValue")
 	if err != nil {
 		return nil, err
 	}
-	if err := ecKeyValue.DeclareNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
+	if err := ecKeyValueElem.DeclareNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
 		return nil, err
 	}
-	if err := ecKeyValue.SetActiveNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
+	if err := ecKeyValueElem.SetActiveNamespace(nsPrefixDSig11, NamespaceDSig11); err != nil {
 		return nil, err
 	}
 
@@ -396,7 +396,7 @@ func marshalOriginatorKeyInfo(doc *helium.Document, key *ECKeyValue) (*helium.El
 	if err := namedCurve.SetAttribute("URI", curveURI); err != nil {
 		return nil, err
 	}
-	if err := ecKeyValue.AddChild(namedCurve); err != nil {
+	if err := ecKeyValueElem.AddChild(namedCurve); err != nil {
 		return nil, err
 	}
 
@@ -411,11 +411,11 @@ func marshalOriginatorKeyInfo(doc *helium.Document, key *ECKeyValue) (*helium.El
 	if err := publicKey.AddChild(doc.CreateText([]byte(encoded))); err != nil {
 		return nil, err
 	}
-	if err := ecKeyValue.AddChild(publicKey); err != nil {
+	if err := ecKeyValueElem.AddChild(publicKey); err != nil {
 		return nil, err
 	}
 
-	if err := keyValue.AddChild(ecKeyValue); err != nil {
+	if err := keyValue.AddChild(ecKeyValueElem); err != nil {
 		return nil, err
 	}
 	return oki, oki.AddChild(keyValue)

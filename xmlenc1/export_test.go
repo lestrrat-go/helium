@@ -6,6 +6,20 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
+// The xmlenc-core1 wire structs are unexported, so nothing outside this
+// package can name them and none of their fields is an API promise. These
+// aliases give the external test package a name for each one, so a test can
+// assemble or inspect a wire shape directly without the type appearing in the
+// shipped API. They exist only under test.
+type (
+	EncryptedData       = encryptedData
+	EncryptedKey        = encryptedKey
+	EncryptionMethod    = encryptionMethod
+	AgreementMethod     = agreementMethod
+	KeyDerivationMethod = keyDerivationMethod
+	ECKeyValue          = ecKeyValue
+)
+
 // EncryptBytesForTest encrypts an arbitrary byte slice with the given
 // algorithm and key and returns the resulting CipherValue (IV/nonce
 // prefix included). It exists solely so security tests can construct
@@ -19,7 +33,7 @@ func EncryptBytesForTest(algorithm string, key, plaintext []byte) ([]byte, error
 // MarshalEncryptedDataForTest is a test-only re-export of the package
 // internal marshaler so security tests can assemble EncryptedData
 // elements from raw fields.
-func MarshalEncryptedDataForTest(doc *helium.Document, ed *EncryptedData) (*helium.Element, error) {
+func MarshalEncryptedDataForTest(doc *helium.Document, ed *encryptedData) (*helium.Element, error) {
 	return marshalEncryptedData(doc, ed)
 }
 
@@ -37,7 +51,7 @@ func HardenedParserForTest() helium.Parser {
 // reference scope Decrypt builds, and under an uncancelled context, so what
 // these callers see is the parse's own verdict rather than a cancellation.
 // Cancellation of the parse is covered through the public terminals instead.
-func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
+func ParseEncryptedDataForTest(elem *helium.Element) (*encryptedData, error) {
 	cfg := &decryptConfig{}
 	ps := &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg), refs: newRefScope(elem)}
 	return parseEncryptedData(context.Background(), elem, ps)

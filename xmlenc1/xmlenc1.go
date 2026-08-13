@@ -155,7 +155,7 @@ func (e Encryptor) OAEPMGF(uri string) Encryptor {
 }
 
 // OAEPParams sets the RSA-OAEP label. A label over the 1 KiB limit
-// [EncryptionMethod.OAEPParams] documents fails the encryption with
+// [encryptionMethod.OAEPParams] documents fails the encryption with
 // [ErrEncryptionFailed], and only when key transport is the mechanism in use,
 // since that is the only one that writes a label.
 func (e Encryptor) OAEPParams(params []byte) Encryptor {
@@ -512,14 +512,14 @@ func encryptPlaintext(ctx context.Context, cfg *encryptConfig, resolved resolved
 	}
 
 	// Encrypt session key.
-	var encKey *EncryptedKey
+	var encKey *encryptedKey
 	if resolved.hasKeyTransport {
 		encKeyBytes, err := encryptSessionKey(cfg.keyTransport, cfg.recipientPubKey, sessionKey, cfg.oaepDigest, cfg.oaepMGF, cfg.oaepParams)
 		if err != nil {
 			return nil, abort(ctx, err)
 		}
-		encKey = &EncryptedKey{
-			EncryptionMethod: &EncryptionMethod{
+		encKey = &encryptedKey{
+			EncryptionMethod: &encryptionMethod{
 				Algorithm:    cfg.keyTransport,
 				DigestMethod: cfg.oaepDigest,
 				MGFAlgorithm: cfg.oaepMGF,
@@ -547,8 +547,8 @@ func encryptPlaintext(ctx context.Context, cfg *encryptConfig, resolved resolved
 		if err != nil {
 			return nil, abort(ctx, err)
 		}
-		encKey = &EncryptedKey{
-			EncryptionMethod: &EncryptionMethod{Algorithm: cfg.keyWrapAlgorithm},
+		encKey = &encryptedKey{
+			EncryptionMethod: &encryptionMethod{Algorithm: cfg.keyWrapAlgorithm},
 			CipherValue:      wrappedKey,
 		}
 	}
@@ -557,13 +557,13 @@ func encryptPlaintext(ctx context.Context, cfg *encryptConfig, resolved resolved
 	}
 
 	// Build EncryptedData.
-	var encKeys []*EncryptedKey
+	var encKeys []*encryptedKey
 	if encKey != nil {
-		encKeys = []*EncryptedKey{encKey}
+		encKeys = []*encryptedKey{encKey}
 	}
-	ed := &EncryptedData{
+	ed := &encryptedData{
 		Type:             encType,
-		EncryptionMethod: &EncryptionMethod{Algorithm: blockAlgorithm},
+		EncryptionMethod: &encryptionMethod{Algorithm: blockAlgorithm},
 		EncryptedKeys:    encKeys,
 		CipherValue:      cipherValue,
 	}
@@ -1082,7 +1082,7 @@ func (w *budgetWriter) Write(p []byte) (int, error) {
 // before anything else looks at the algorithm, so the CBC opt-in gate, the AEAD
 // additional data of the two 2001-namespace GCM identifiers, and every
 // key-length binding all act on the one URI it returns.
-func resolveDecryptBlockAlgorithm(cfg *decryptConfig, ed *EncryptedData) (string, error) {
+func resolveDecryptBlockAlgorithm(cfg *decryptConfig, ed *encryptedData) (string, error) {
 	if ed.EncryptionMethod == nil {
 		if cfg.blockAlgorithm == "" {
 			return "", fmt.Errorf("%w: missing EncryptionMethod; set Decryptor.BlockAlgorithm to supply the block algorithm out of band", ErrMalformedEncrypted)
@@ -1339,7 +1339,7 @@ func preferInformativeErr(existing, candidate error) error {
 // validates its shape. It returns the decrypted nodes only when the entire
 // pipeline succeeds, so a caller iterating session-key candidates can
 // safely fall through to the next candidate on any error.
-func finishDecrypt(ctx context.Context, ed *EncryptedData, elem *helium.Element, alg string, isContent bool, sessionKey []byte) ([]helium.Node, error) {
+func finishDecrypt(ctx context.Context, ed *encryptedData, elem *helium.Element, alg string, isContent bool, sessionKey []byte) ([]helium.Node, error) {
 	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
@@ -1445,7 +1445,7 @@ func (c *nodeCollector) appendElementNode(node helium.Node) error {
 	return nil
 }
 
-func decryptCipherValue(ed *EncryptedData, alg string, sessionKey []byte) ([]byte, error) {
+func decryptCipherValue(ed *encryptedData, alg string, sessionKey []byte) ([]byte, error) {
 	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue)
 	if err == nil {
 		return plaintext, nil
@@ -1490,7 +1490,7 @@ func newHardenedInnerParser() helium.Parser {
 // candidate protects. sessionKeySize is the length the EncryptedData's
 // declared block algorithm requires; the key-wrap branches pass it to
 // aesKeyUnwrap, which owns what it binds.
-func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey, sessionKeySize int) ([]byte, error) {
+func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *encryptedKey, sessionKeySize int) ([]byte, error) {
 	if ek.EncryptionMethod == nil {
 		return nil, fmt.Errorf("%w: EncryptedKey missing EncryptionMethod", ErrMalformedEncrypted)
 	}

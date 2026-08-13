@@ -64,9 +64,9 @@ func TestDecryptECDHSessionKeyAllowsOnlyAESKeyWrap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			priv, encryptedKey, want := newECDHEncryptedKey(t, tt.algorithm)
+			priv, ek, want := newECDHEncryptedKey(t, tt.algorithm)
 			// newECDHEncryptedKey wraps a 16-byte session key.
-			got, err := decryptECDHSessionKey(priv, encryptedKey, 16)
+			got, err := decryptECDHSessionKey(priv, ek, 16)
 			if tt.wantError {
 				require.ErrorIs(t, err, ErrDecryptionFailed)
 				var unsupported *UnsupportedAlgorithmError
@@ -79,7 +79,7 @@ func TestDecryptECDHSessionKeyAllowsOnlyAESKeyWrap(t *testing.T) {
 	}
 }
 
-func newECDHEncryptedKey(t *testing.T, algorithm string) (*ecdsa.PrivateKey, *EncryptedKey, []byte) {
+func newECDHEncryptedKey(t *testing.T, algorithm string) (*ecdsa.PrivateKey, *encryptedKey, []byte) {
 	t.Helper()
 
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -103,17 +103,17 @@ func newECDHEncryptedKey(t *testing.T, algorithm string) (*ecdsa.PrivateKey, *En
 	cipherValue, err := aesKeyWrap(kek, want)
 	require.NoError(t, err)
 
-	return privateKey, &EncryptedKey{
-		EncryptionMethod: &EncryptionMethod{Algorithm: algorithm},
+	return privateKey, &encryptedKey{
+		EncryptionMethod: &encryptionMethod{Algorithm: algorithm},
 		CipherValue:      cipherValue,
-		AgreementMethod: &AgreementMethod{
+		AgreementMethod: &agreementMethod{
 			Algorithm: ECDHES,
-			KeyDerivationMethod: &KeyDerivationMethod{
+			KeyDerivationMethod: &keyDerivationMethod{
 				Algorithm: ConcatKDF,
 				ConcatKDF: params,
 			},
-			OriginatorKey: &ECKeyValue{
-				Curve:     ecdh.P256(),
+			OriginatorKey: &ecKeyValue{
+				curve:     ecdh.P256(),
 				PublicKey: originatorKey.PublicKey().Bytes(),
 			},
 		},
