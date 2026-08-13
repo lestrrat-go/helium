@@ -1,6 +1,7 @@
 package xmlenc1_test
 
 import (
+	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -184,17 +185,89 @@ func TestMultiRecipientDecrypt(t *testing.T) {
 	})
 }
 
+// secondKeyInfoDropsAgreementMethod builds an EncryptedKey carrying two
+// ds:KeyInfo children: the first holds a full, cryptographically valid
+// ECDH-ES AgreementMethod (AgreementMethod/KeyDerivationMethod/
+// ConcatKDFParams/OriginatorKeyInfo), the second only a ds:KeyName hint.
+// Before the KeyInfo cardinality guard exists, the EncryptedKey branch
+// assigns ek.AgreementMethod on every ds:KeyInfo child rather than rejecting
+// a second one, so the KeyName-only KeyInfo silently overwrites the real
+// AgreementMethod with nil.
+func secondKeyInfoDropsAgreementMethod(t *testing.T) *helium.Element {
+	t.Helper()
+	point := ecPublicKeyPoint(t, ecdh.P256())
+	encoded := base64.StdEncoding.EncodeToString(point)
+
+	const xenc = `xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"`
+	const ds = `xmlns:ds="http://www.w3.org/2000/09/xmldsig#"`
+	const dsig11 = `xmlns:dsig11="http://www.w3.org/2009/xmldsig11#"`
+	const xenc11 = `xmlns:xenc11="http://www.w3.org/2009/xmlenc11#"`
+
+	xml := `<xenc:EncryptedData ` + xenc + ` ` + ds + ` ` + dsig11 + ` ` + xenc11 + `>` +
+		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+		`<ds:KeyInfo><xenc:EncryptedKey>` +
+		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES128KeyWrap + `"/>` +
+		`<ds:KeyInfo><xenc:AgreementMethod Algorithm="` + xmlenc1.ECDHES + `">` +
+		`<xenc11:KeyDerivationMethod Algorithm="` + xmlenc1.ConcatKDF + `">` +
+		`<xenc11:ConcatKDFParams><ds:DigestMethod Algorithm="` + xmlenc1.DigestSHA256 + `"/></xenc11:ConcatKDFParams>` +
+		`</xenc11:KeyDerivationMethod>` +
+		`<xenc:OriginatorKeyInfo><ds:KeyValue><dsig11:ECKeyValue>` +
+		`<dsig11:NamedCurve URI="` + ecCurveURIP256 + `"/>` +
+		`<dsig11:PublicKey>` + encoded + `</dsig11:PublicKey>` +
+		`</dsig11:ECKeyValue></ds:KeyValue></xenc:OriginatorKeyInfo>` +
+		`</xenc:AgreementMethod></ds:KeyInfo>` +
+		`<ds:KeyInfo><ds:KeyName>hint</ds:KeyName></ds:KeyInfo>` +
+		`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+		`</xenc:EncryptedKey></ds:KeyInfo>` +
+		`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+		`</xenc:EncryptedData>`
+	return mustParseXML(t, xml).DocumentElement()
+}
+
+// duplicateNamedCurve builds an ECDH-ES EncryptedKey whose dsig11:ECKeyValue
+// carries two dsig11:NamedCurve children (P-256 then P-521) ahead of one
+// real P-256 point. Before the ECKeyValue cardinality guard exists, the
+// second NamedCurve silently overrides curve selection, so the point is
+// weighed against the wrong curve and rejected with an invalid-point
+// message rather than a duplicate-NamedCurve one.
+func duplicateNamedCurve(t *testing.T) *helium.Element {
+	t.Helper()
+	point := base64.StdEncoding.EncodeToString(ecPublicKeyPoint(t, ecdh.P256()))
+	children := `<dsig11:NamedCurve URI="` + ecCurveURIP256 + `"/>` +
+		`<dsig11:NamedCurve URI="` + ecCurveURIP521 + `"/>` +
+		`<dsig11:PublicKey>` + point + `</dsig11:PublicKey>`
+	return ecKeyValueEncryptedData(t, children)
+}
+
+// duplicatePublicKey builds an ECDH-ES EncryptedKey whose dsig11:ECKeyValue
+// carries a NamedCurve followed by two independently generated, individually
+// valid P-256 points. Before the ECKeyValue cardinality guard exists, the
+// second PublicKey silently overwrites the first rather than being rejected.
+func duplicatePublicKey(t *testing.T) *helium.Element {
+	t.Helper()
+	first := base64.StdEncoding.EncodeToString(ecPublicKeyPoint(t, ecdh.P256()))
+	second := base64.StdEncoding.EncodeToString(ecPublicKeyPoint(t, ecdh.P256()))
+	children := `<dsig11:NamedCurve URI="` + ecCurveURIP256 + `"/>` +
+		`<dsig11:PublicKey>` + first + `</dsig11:PublicKey>` +
+		`<dsig11:PublicKey>` + second + `</dsig11:PublicKey>`
+	return ecKeyValueEncryptedData(t, children)
+}
+
 // TestParseRejectsDuplicateCardinality covers XENC-003: XML Encryption
 // allows at most one EncryptionMethod and one CipherData per EncryptedData
-// (and per EncryptedKey). Duplicates were previously accepted last-one-wins;
-// they must now be rejected during parse.
+// (and per EncryptedKey), at most one ds:KeyInfo per EncryptedType, and at
+// most one NamedCurve/PublicKey per dsig11:ECKeyValue. Duplicates were
+// previously accepted last-one-wins; they must now be rejected during
+// parse.
 func TestParseRejectsDuplicateCardinality(t *testing.T) {
 	const xenc = `xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"`
 	const ds = `xmlns:ds="http://www.w3.org/2000/09/xmldsig#"`
 
 	for _, tc := range []struct {
-		name string
-		xml  string
+		name    string
+		xml     string
+		build   func(t *testing.T) *helium.Element
+		wantMsg string
 	}{
 		{
 			name: "duplicate EncryptionMethod in EncryptedData",
@@ -236,11 +309,60 @@ func TestParseRejectsDuplicateCardinality(t *testing.T) {
 				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
 				`</xenc:EncryptedData>`,
 		},
+		{
+			name: "duplicate KeyInfo in EncryptedData",
+			xml: `<xenc:EncryptedData ` + xenc + ` ` + ds + `>` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+				`<ds:KeyInfo><xenc:EncryptedKey>` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES128KeyWrap + `"/>` +
+				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedKey></ds:KeyInfo>` +
+				`<ds:KeyInfo><xenc:EncryptedKey>` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES128KeyWrap + `"/>` +
+				`<xenc:CipherData><xenc:CipherValue>BBBB</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedKey></ds:KeyInfo>` +
+				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedData>`,
+		},
+		{
+			name: "duplicate KeyInfo in EncryptedKey",
+			xml: `<xenc:EncryptedData ` + xenc + ` ` + ds + `>` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+				`<ds:KeyInfo><xenc:EncryptedKey>` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP + `"/>` +
+				`<ds:KeyInfo/><ds:KeyInfo/>` +
+				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedKey></ds:KeyInfo>` +
+				`<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedData>`,
+		},
+		{
+			name:  "second KeyInfo in EncryptedKey drops AgreementMethod",
+			build: secondKeyInfoDropsAgreementMethod,
+		},
+		{
+			name:    "duplicate NamedCurve in ECKeyValue",
+			build:   duplicateNamedCurve,
+			wantMsg: "duplicate ECKeyValue NamedCurve",
+		},
+		{
+			name:  "duplicate PublicKey in ECKeyValue",
+			build: duplicatePublicKey,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := mustParseXML(t, tc.xml)
-			_, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+			elem := tc.build
+			var target *helium.Element
+			if elem != nil {
+				target = elem(t)
+			} else {
+				target = mustParseXML(t, tc.xml).DocumentElement()
+			}
+			_, err := xmlenc1.ParseEncryptedDataForTest(target)
 			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+			if tc.wantMsg != "" {
+				require.Contains(t, err.Error(), tc.wantMsg)
+			}
 		})
 	}
 }
