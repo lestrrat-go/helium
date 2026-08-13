@@ -267,20 +267,25 @@ func TestExtensionOfRestrictionAttrInheritance10(t *testing.T) {
 
 // TestExtensionOwnAttrsSurviveBaseGrowth10 pins the effective {attribute uses}
 // of an extension against the base attribute slice growing after the extension
-// merged it. Every complex type here declares three attributes so that its
-// Attributes slice has spare capacity (append growth is 1, 2, 4, ...): a merge
-// that appends the extension's own uses directly onto the base slice would park
-// them in that spare capacity, where the next append to the base overwrites
-// them and the extension silently loses its own attribute.
+// merged it. The slices that must carry a spare slot are the ones a later append
+// writes into: the sibling base B declares three attributes and the restriction R
+// declares three of its own, and because a type's []*AttrUse grows one use at a
+// time (append growth 1, 2, 4, ...) each of those is len 3 / cap 4 with exactly one
+// spare slot. A merge that appends the extension's own uses directly onto such a
+// slice parks them in that spare slot, where the next append to the same slice —
+// E2 merging B again, or finalizeAttrUses10 folding the inherited g1 into R —
+// overwrites them and the extension silently loses its own attribute. The other
+// fixture types drive those appends: G declares four attributes (r1, r2, r3, g1) so
+// that R inherits g1, and E1, E2 and E each declare one own attribute.
 //
 // Refutation of a review finding that these cases miss the "five-to-seven-attribute
-// slice-capacity boundaries": three IS such a boundary. Append growth for the base's
-// []*AttrUse runs 1, 2, 4, so a three-attribute base carries cap 4 with one spare slot,
+// slice-capacity boundaries": three IS such a boundary. Append growth for a type's
+// []*AttrUse runs 1, 2, 4, so a three-use base carries cap 4 with one spare slot,
 // which is the exact state the aliasing defect needs. Verified by reverting concatAttrUses
 // to `append(base, own...)` with everything else unchanged: four of the five subtests below
 // fail, and all five pass with concatAttrUses in place. A five-to-seven-attribute base is
-// the same mechanism on a larger array, and concatAttrUses allocates a fresh slice at every
-// length, so no length-specific behavior exists for a wider band to reach.
+// the same mechanism on a larger array, and concatAttrUses never appends into the base's
+// array at any length, so no length-specific behavior exists for a wider band to reach.
 func TestExtensionOwnAttrsSurviveBaseGrowth10(t *testing.T) {
 	t.Parallel()
 
