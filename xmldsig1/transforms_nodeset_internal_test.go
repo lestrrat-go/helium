@@ -149,22 +149,38 @@ func TestCanonicalizationNodeSetMatchesFullAxis(t *testing.T) {
 	})
 }
 
-// costDeclarations is how many namespace declarations the cost document puts on
-// one element, and costPerDeclaration is what each of them may cost the walk.
+// costDeclarations is how many namespace declarations each cost document
+// carries, and costConcentration is how many elements the reference document
+// spreads them over — the document under test puts every one of them on a single
+// element.
 //
-// A declaration costs the collectors a fraction of a microsecond, a little over
-// one under the race detector, and the document is parsed outside the
-// measurement — so the budget is several times what the walk actually spends,
-// while a per-element scan that grows with the declaration count spends tens of
-// microseconds apiece at this size, and more at any larger one.
+// The two documents give the collectors the same total work: the same
+// declarations bound, the same number of namespace nodes emitted, the same node
+// set built. They differ only in how many declarations sit on ONE element, which
+// is the count a membership test that scans what the element has already
+// recorded costs the square of. So the bound is a RATIO between them, and no
+// wall-clock constant enters it: a machine that is
+// uniformly slow, or a race-detector build, or a loaded runner scales both sides
+// alike and cancels out. An absolute budget cannot express that — it conflates
+// the growth this case exists to pin with the speed of whatever machine runs it.
+//
+// costMaxRatio sits between the two regimes. A collector linear in the
+// per-element count measures 1.9 to 2.4 here — the concentrated document's
+// running scope holds every prefix at once, so its map costs more per lookup —
+// and that holds under the race detector with the machine loaded. Put the
+// scan back and the same measurement reads 21 to 28, since concentrating the
+// declarations squares a cost the reference document pays costConcentration
+// times over a costConcentration-th of the count each. Seven is about the
+// geometric middle, roughly three times either regime.
 //
 // costRuns repeats each measurement and keeps the cheapest, so a scheduler
-// hiccup during one run cannot fail the case; a cost that is quadratic in the
-// declaration count is quadratic in every run.
+// hiccup during one run cannot inflate the ratio; a cost that is quadratic in
+// the per-element declaration count is quadratic in every run.
 const (
-	costDeclarations   = 20000
-	costPerDeclaration = 6 * time.Microsecond
-	costRuns           = 3
+	costDeclarations  = 20000
+	costConcentration = 32
+	costMaxRatio      = 7
+	costRuns          = 5
 )
 
 // declDenseDoc builds a document whose CHILD element carries decls namespace
@@ -185,6 +201,25 @@ func declDenseDoc(decls int) string {
 	return b.String()
 }
 
+// declSpreadDoc builds the reference document for declDenseDoc: elements
+// children carrying decls declarations each, no prefix shared between them, so
+// the walk binds elements*decls prefixes and emits a namespace node for every
+// one of them exactly as the dense document does. Only the per-element count
+// differs.
+func declSpreadDoc(elements, decls int) string {
+	var b strings.Builder
+	b.WriteString(`<root xmlns:r="urn:example:r">`)
+	for e := range elements {
+		fmt.Fprintf(&b, `<child%d`, e)
+		for i := range decls {
+			fmt.Fprintf(&b, ` xmlns:p%d_%d="urn:example:ns:%d:%d"`, e, i, e, i)
+		}
+		fmt.Fprintf(&b, `>text</child%d>`, e)
+	}
+	b.WriteString(`</root>`)
+	return b.String()
+}
+
 // collectC14N10Nodes and collectFullAxisNodes give the two collectors the one
 // signature the cost table below shares. Inclusive C14N 1.0 is the mode
 // Verifier.Verify canonicalizes SignedInfo under.
@@ -196,6 +231,39 @@ func collectFullAxisNodes(ctx context.Context, elem *helium.Element) ([]helium.N
 	return collectSubtreeNodes(ctx, elem)
 }
 
+// costDocument parses src and returns the element the collection starts from.
+// Parsing is deliberately outside every measurement: it is the cost of building
+// the DOM, not of walking it.
+func costDocument(t *testing.T, src string) *helium.Element {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	return root
+}
+
+// bestCollectionCost collects the node set under root costRuns times and returns
+// the cheapest run, requiring every run to produce the whole node set.
+func bestCollectionCost(t *testing.T, collect func(context.Context, *helium.Element) ([]helium.Node, error), root *helium.Element) time.Duration {
+	t.Helper()
+	best := time.Duration(-1)
+	for range costRuns {
+		start := time.Now()
+		nodes, err := collect(t.Context(), root)
+		elapsed := time.Since(start)
+		require.NoError(t, err)
+		// Every declaration is in scope on the element that carries it, so a
+		// set this small would mean the walk never did the work being compared.
+		require.GreaterOrEqual(t, len(nodes), costDeclarations,
+			"collector returned %d nodes for %d declarations", len(nodes), costDeclarations)
+		if best < 0 || elapsed < best {
+			best = elapsed
+		}
+	}
+	return best
+}
+
 // TestNodeSetCollectionCost bounds what an element carrying many namespace
 // declarations may cost the two node-set collectors. Both walk the subtree
 // through the same per-element binding loop, so a membership test that scans
@@ -204,19 +272,19 @@ func collectFullAxisNodes(ctx context.Context, elem *helium.Element) ([]helium.N
 // the ds:SignedInfo canonicalization and through a ds:RetrievalMethod's
 // transform pipeline.
 //
-// The bound is stated against the INPUT — one budget per declaration written —
-// rather than against a second measurement of the same code, so it cannot be
-// satisfied by a run that is merely as slow as another run.
+// The bound is stated against a document that does the SAME total work with the
+// declarations spread over many elements, so what it measures is the growth in
+// the per-element count alone and not the speed of the machine. Comparing the
+// concentrated document against a second measurement of ITSELF — at half the
+// size, say — would prove nothing: the quadratic scan measures the same 2.6x
+// there that the linear walk does, because both grow by the same factor when the
+// whole document grows.
 func TestNodeSetCollectionCost(t *testing.T) {
 	// no t.Parallel(): the case measures elapsed time, which a concurrent test
 	// competing for the same cores would inflate.
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(declDenseDoc(costDeclarations)))
-	require.NoError(t, err)
-	root := doc.DocumentElement()
-	require.NotNil(t, root)
-
-	budget := time.Duration(costDeclarations) * costPerDeclaration
+	concentrated := costDocument(t, declDenseDoc(costDeclarations))
+	spread := costDocument(t, declSpreadDoc(costConcentration, costDeclarations/costConcentration))
 
 	for _, tc := range []struct {
 		name    string
@@ -226,23 +294,13 @@ func TestNodeSetCollectionCost(t *testing.T) {
 		{name: "full-axis node set", collect: collectFullAxisNodes},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			best := time.Duration(-1)
-			for range costRuns {
-				start := time.Now()
-				nodes, err := tc.collect(t.Context(), root)
-				elapsed := time.Since(start)
-				require.NoError(t, err)
-				// Every declaration is in scope on the child, so a set this
-				// small would mean the walk never did the work being bounded.
-				require.GreaterOrEqual(t, len(nodes), costDeclarations,
-					"collector returned %d nodes for %d declarations", len(nodes), costDeclarations)
-				if best < 0 || elapsed < best {
-					best = elapsed
-				}
-			}
-			require.Less(t, best, budget,
-				"collecting a node set over %d declarations took %v, over the %v budget",
-				costDeclarations, best, budget)
+			onOneElement := bestCollectionCost(t, tc.collect, concentrated)
+			overManyElements := bestCollectionCost(t, tc.collect, spread)
+
+			require.Less(t, onOneElement, costMaxRatio*overManyElements,
+				"collecting a node set cost %v with %d declarations on one element and %v with the same %d spread over %d, a factor of %.1f: the per-element cost grows with the declaration count",
+				onOneElement, costDeclarations, overManyElements, costDeclarations, costConcentration,
+				float64(onOneElement)/float64(overManyElements))
 		})
 	}
 }
