@@ -512,10 +512,14 @@ filter transform. That transform is evaluated once per node — namespace nodes
 included — and may keep an element whose parent it drops, so every element there
 needs its own axis; the node set, and the one evaluation per member, are
 quadratic in the document. That is the transform's own data model, not a choice
-this package makes, and it is where a deadline earns its keep: both the walk
-that builds the node set and the per-node evaluation poll the context, so a
-`ctx` deadline bounds the work at roughly the rate times the deadline instead of
-running to completion.
+this package makes, and it is where a deadline earns its keep: nothing caps that
+node set's size, and both the walk that builds it and the per-node evaluation
+poll the context, so a `ctx` deadline bounds the work at roughly the rate times
+the deadline instead of running to completion. The walk charges its poll per
+collected node-set MEMBER — every element, attribute, and namespace node — and
+not per tree node walked, so an element that repeats the whole axis cannot carry
+a document's worth of members past a poll: what a passed deadline may still cost
+is one poll interval of members, whatever the document's shape.
 
 Pass one when verifying documents from untrusted sources. A Reference's
 transforms run only *after* the `SignatureValue` has verified, but a

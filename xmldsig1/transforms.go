@@ -761,11 +761,26 @@ type nsBinding struct {
 	had    bool
 }
 
-// ctxPollInterval is how many collected nodes pass between context checks. The
-// walk allocates a namespace node per binding, so a cancelled context must be
-// noticed inside the walk, not only at its end; polling every node would charge
-// a context read per node for no extra promptness.
+// ctxPollInterval is how many collected node-set members pass between context
+// checks. The walk allocates a namespace node per binding, so a cancelled
+// context must be noticed inside the walk, not only at its end; polling every
+// member would charge a context read per member for no extra promptness.
 const ctxPollInterval = 256
+
+// charge accounts n collected node-set members against the poll interval and
+// polls ctx when it elapses. Every append to c.nodes goes through it, because
+// the members are what the walk's cost is made of: one element can contribute
+// as many namespace nodes as the document has bindings, so counting only the
+// tree nodes walked would leave a whole element's worth of that work — the
+// bindings times the poll interval — inside one unpolled span.
+func (c *subtreeCollector) charge(ctx context.Context, n int) error {
+	c.sinceCtx += n
+	if c.sinceCtx < ctxPollInterval {
+		return nil
+	}
+	c.sinceCtx = 0
+	return ctx.Err()
+}
 
 func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
 	// A context already cancelled when the walk starts stops it before any node
@@ -777,19 +792,22 @@ func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
 	if elem, ok := helium.AsNode[*helium.Element](n); ok {
 		// Seed the scope with the subtree root's own in-scope axis, so bindings
 		// declared ABOVE the root are carried in. Every deeper element updates
-		// this map incrementally instead of walking its ancestors again.
-		maps.Copy(c.scope, domutil.InScopeNamespaces(elem, true))
+		// this map incrementally instead of walking its ancestors again. The
+		// seeding is charged like an emission: the root goes on to emit one
+		// namespace node per binding seeded here, so the two are the same size.
+		for prefix, ns := range domutil.InScopeNamespaces(elem, true) {
+			c.scope[prefix] = ns
+			if err := c.charge(ctx, 1); err != nil {
+				return err
+			}
+		}
 	}
 	return c.walk(ctx, n, true)
 }
 
 func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) error {
-	c.sinceCtx++
-	if c.sinceCtx >= ctxPollInterval {
-		c.sinceCtx = 0
-		if err := ctx.Err(); err != nil {
-			return err
-		}
+	if err := c.charge(ctx, 1); err != nil {
+		return err
 	}
 
 	c.nodes = append(c.nodes, n)
@@ -800,9 +818,15 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 		if !root {
 			changed = c.enter(elem)
 		}
-		c.appendNamespaceNodes(elem, root, changed)
-		for _, attr := range elem.Attributes() {
+		if err := c.appendNamespaceNodes(ctx, elem, root, changed); err != nil {
+			return err
+		}
+		attrs := elem.Attributes()
+		for _, attr := range attrs {
 			c.nodes = append(c.nodes, attr)
+		}
+		if err := c.charge(ctx, len(attrs)); err != nil {
+			return err
 		}
 	}
 
@@ -920,7 +944,12 @@ func (c *subtreeCollector) leave(changed []nsBinding) {
 // appendNamespaceNodes emits elem's namespace nodes. c14n keys namespace nodes
 // by their parent element, so each wrapper is parented to elem. The implicit xml
 // namespace is never emitted — C14N never declares it explicitly.
-func (c *subtreeCollector) appendNamespaceNodes(elem *helium.Element, root bool, changed []nsBinding) {
+//
+// It stops and reports the context's error when a poll falls due inside the
+// emission and the context is done. Nothing it has emitted is used then: the
+// caller abandons the whole node set, so aborting part way through an element
+// cannot change what a completed walk collects.
+func (c *subtreeCollector) appendNamespaceNodes(ctx context.Context, elem *helium.Element, root bool, changed []nsBinding) error {
 	// The subtree root has no rendered ancestor inside the node set, so it must
 	// carry the whole axis: inclusive C14N emits every in-scope binding there,
 	// and exclusive C14N resolves a PrefixList against it.
@@ -930,8 +959,11 @@ func (c *subtreeCollector) appendNamespaceNodes(elem *helium.Element, root bool,
 				continue
 			}
 			c.nodes = append(c.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
+			if err := c.charge(ctx, 1); err != nil {
+				return err
+			}
 		}
-		return
+		return nil
 	}
 
 	var emitted []string
@@ -946,49 +978,65 @@ func (c *subtreeCollector) appendNamespaceNodes(elem *helium.Element, root bool,
 			// A redeclaration of the binding already in scope changes nothing.
 			continue
 		}
-		emitted = c.emitNamespace(elem, b.prefix, emitted, emittedIndex)
+		var err error
+		emitted, err = c.emitNamespace(ctx, elem, b.prefix, emitted, emittedIndex)
+		if err != nil {
+			return err
+		}
 	}
 
 	// The in-scope default namespace stays on every element: the inclusive
 	// ancestor lookup emits an xmlns="" undeclaration for an element whose set
 	// has no default-namespace node while its nearest rendered ancestor's set
 	// does, so dropping an unchanged default would undeclare it spuriously.
-	emitted = c.emitNamespace(elem, "", emitted, emittedIndex)
+	emitted, err := c.emitNamespace(ctx, elem, "", emitted, emittedIndex)
+	if err != nil {
+		return err
+	}
 
 	if !c.exclusive {
-		return
+		return nil
 	}
 	// Exclusive C14N renders what an element visibly utilizes, and renders
 	// nothing for a prefix missing from the element's own set, so the element's
 	// own prefix and its attributes' prefixes stay members even when inherited
 	// unchanged.
 	if ns := elem.Namespace(); ns != nil {
-		emitted = c.emitNamespace(elem, ns.Prefix(), emitted, emittedIndex)
+		emitted, err = c.emitNamespace(ctx, elem, ns.Prefix(), emitted, emittedIndex)
+		if err != nil {
+			return err
+		}
 	}
 	for _, attr := range elem.Attributes() {
 		if prefix := attr.Prefix(); prefix != "" {
-			emitted = c.emitNamespace(elem, prefix, emitted, emittedIndex)
+			emitted, err = c.emitNamespace(ctx, elem, prefix, emitted, emittedIndex)
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // emitNamespace appends the namespace node for prefix when that prefix is in
 // scope and has not been emitted for this element yet, returning the updated
 // emitted-prefix list. index, when non-nil, holds the prefixes emitted already
-// carries.
-func (c *subtreeCollector) emitNamespace(elem *helium.Element, prefix string, emitted []string, index map[string]struct{}) []string {
+// carries. A prefix it does emit is charged against the poll interval, so it
+// reports the context's error when that poll falls due on a done context.
+func (c *subtreeCollector) emitNamespace(ctx context.Context, elem *helium.Element, prefix string, emitted []string, index map[string]struct{}) ([]string, error) {
 	if prefix == lexicon.PrefixXML {
-		return emitted
+		return emitted, nil
 	}
 	ns, ok := c.scope[prefix]
 	if !ok || prefixEmitted(prefix, emitted, index) {
-		return emitted
+		return emitted, nil
 	}
 	c.nodes = append(c.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
 	if index != nil {
 		index[prefix] = struct{}{}
 	}
-	return append(emitted, prefix)
+	emitted = append(emitted, prefix)
+	return emitted, c.charge(ctx, 1)
 }
 
 // referenceURIForm classifies a same-document Reference URI into the node-set

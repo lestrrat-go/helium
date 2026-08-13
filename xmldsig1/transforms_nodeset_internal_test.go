@@ -247,6 +247,93 @@ func TestNodeSetCollectionCost(t *testing.T) {
 	}
 }
 
+// The deadline case walks a document whose every element repeats the whole
+// in-scope namespace axis: deadlineDeclarations bindings on the collection root,
+// and deadlineChildren children below it, so the full axis holds over five
+// million node-set members. That is the shape a ds:RetrievalMethod's XPath
+// filter transform reaches before any signature is checked, and the one where a
+// poll that counted only walked TREE nodes let a quarter of those members —
+// ctxPollInterval elements, one whole axis each — pass inside a single unpolled
+// span.
+//
+// deadlineWindow is long enough that the deadline cannot expire before the
+// collection starts, where the entry check would catch it and the walk itself
+// would never be exercised.
+//
+// deadlineOverrunBudget is what the collector may still spend after the deadline
+// passes: one poll interval of members at ten microseconds each, hundreds of
+// times what a member costs, plus ten milliseconds for the timer granularity and
+// scheduler noise that dominate at this scale. It is a constant, so it does not
+// grow with the document — a collector that goes on collecting a share of the
+// axis fails it here and by a wider margin at any larger size.
+//
+// deadlineRuns repeats the measurement and keeps the fastest, so one descheduled
+// run cannot fail the case.
+const (
+	deadlineDeclarations  = 5000
+	deadlineChildren      = 1024
+	deadlineWindow        = 20 * time.Millisecond
+	deadlineOverrunBudget = ctxPollInterval*10*time.Microsecond + 10*time.Millisecond
+	deadlineRuns          = 3
+)
+
+// axisDenseDoc builds a document declaring decls prefixes on its root and
+// carrying children element children below it. Every child inherits the whole
+// axis, so the full-axis node set is decls per element.
+func axisDenseDoc(decls, children int) string {
+	var b strings.Builder
+	b.WriteString(`<root`)
+	for i := range decls {
+		fmt.Fprintf(&b, ` xmlns:p%d="urn:example:ns:%d"`, i, i)
+	}
+	b.WriteString(`>`)
+	for i := range children {
+		fmt.Fprintf(&b, `<c%d>t</c%d>`, i, i)
+	}
+	b.WriteString(`</root>`)
+	return b.String()
+}
+
+// TestNodeSetCollectionHonorsDeadline requires the full-axis collector to stop
+// within a bounded time of its context's deadline. The full axis is the node set
+// an XPath filter transform is evaluated over, and it is quadratic in the
+// document by the transform's own data model, so a deadline — not a size bound —
+// is what keeps it from running to completion on an attacker's document.
+//
+// The bound is stated against the poll interval and the document's size, not
+// against a second measurement of the same code, so a run that merely matches
+// another slow run cannot satisfy it.
+func TestNodeSetCollectionHonorsDeadline(t *testing.T) {
+	// no t.Parallel(): the case measures elapsed time, which a concurrent test
+	// competing for the same cores would inflate.
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(axisDenseDoc(deadlineDeclarations, deadlineChildren)))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+
+	best := time.Duration(-1)
+	for range deadlineRuns {
+		// The context is created here, immediately before the call, so the whole
+		// window is spent inside the collection.
+		ctx, cancel := context.WithTimeout(t.Context(), deadlineWindow)
+		start := time.Now()
+		_, err := collectSubtreeNodes(ctx, root)
+		elapsed := time.Since(start)
+		cancel()
+		require.ErrorIs(t, err, context.DeadlineExceeded,
+			"a full-axis collection over %d members ran to completion inside a %v deadline",
+			deadlineDeclarations*(deadlineChildren+1), deadlineWindow)
+		if best < 0 || elapsed < best {
+			best = elapsed
+		}
+	}
+
+	require.Less(t, best, deadlineWindow+deadlineOverrunBudget,
+		"the collector kept working for %v after a %v deadline, over the %v it may overrun by",
+		best-deadlineWindow, deadlineWindow, deadlineOverrunBudget)
+}
+
 // diffCorpusSeed fixes the generated corpus so a failure is reproducible: the
 // same seed always produces the same documents, and the counter-example is
 // printed with the failure.
