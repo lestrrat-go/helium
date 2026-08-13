@@ -55,9 +55,13 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
     some other recipient to accept. Hiding the errors narrows that
     oracle rather than closing it — xmlenc-core1 §6.1.1 notes the
     surrounding protocol can signal well-formedness by itself — so this
-    package collapses every CBC failure to one `ErrDecryptionFailed`
-    value and message, and AES-GCM remains the only full answer. The
-    oracle is the outcome, not the error text: under CBC, `Decrypt`
+    package collapses nearly every CBC failure to one
+    `ErrDecryptionFailed` value and message, and AES-GCM remains the
+    only full answer. The one exception is a wrong-length pre-shared
+    `SessionKey`: its length is caller-configured rather than
+    attacker-influenced, so a mismatch is reported as a bare
+    `KeySizeError` instead. The oracle is the outcome, not the error
+    text: under CBC, `Decrypt`
     succeeds only when the recovered plaintext parses, so its success
     or failure is the well-formedness oracle itself. The exact
     predicate depends on `@Type`: a `Content` payload need only parse
@@ -168,7 +172,11 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   the declared block algorithm requires, plus RFC 3394's 8-byte integrity
   block. Any other length fails with `ErrKeyUnwrapFailed` before the unwrap
   rounds run, so a document cannot spend AES work on a ciphertext that is
-  provably not a wrap of the key it declares.
+  provably not a wrap of the key it declares. The length check belongs to
+  the unwrap, so it is one of the steps a pre-shared
+  [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key)
+  returns ahead of: that candidate is never resolved, and a document
+  carrying one still decrypts.
 
 ## Conformance limitations
 
@@ -193,21 +201,32 @@ decrypt:
   unless a pre-shared
   [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) supplies
   the key, whose early return precedes key resolution and so never needs the
-  `RetrievalMethod`. The other `ds:KeyInfo` children this package does not
+  `RetrievalMethod`. That `ErrMissingKey` is what the caller sees only once
+  the block algorithm has resolved: resolution and the AES-CBC opt-in both
+  run ahead of the missing-key check, so an `EncryptedData` with no
+  `EncryptionMethod` and no `Decryptor.BlockAlgorithm` fails with
+  `ErrMalformedEncrypted`, and an AES-CBC one without
+  `AllowUnauthenticatedCBC(true)` with `ErrCBCRequiresOptIn`, whatever its
+  `ds:KeyInfo` holds. The other `ds:KeyInfo` children this package does not
   read are `ds:KeyValue` (§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), and
   `xenc11:DerivedKey` (§3.5.2). A `ds:KeyValue` inside an
   `xenc:OriginatorKeyInfo` is a different position and is read, since
   that is where ECDH-ES carries the sender's ephemeral key.
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED). Block encryption and key wrapping are AES only.
-  `#tripledes-cbc` names the block cipher and fails every decrypt with an
-  error matching the relevant operation sentinel while preserving
-  `*UnsupportedAlgorithmError`; `#kw-tripledes` names an `<EncryptedKey>`'s
-  wrapping and fails the same way only when that key must be resolved, so a
-  pre-shared `SessionKey` decrypts past it. The omission is
-  deliberate: Triple DES is a 64-bit block cipher, so Sweet32
-  (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
-  encryption after 2023.
+  `#tripledes-cbc` names the block cipher and fails with an error matching
+  the relevant operation sentinel while preserving
+  `*UnsupportedAlgorithmError`, in every key configuration, a pre-shared
+  `SessionKey` included; the CBC opt-in gate names only the two AES-CBC
+  URIs, so `AllowUnauthenticatedCBC(true)` is neither required for that
+  error nor changes it. The one case that reports something else is an
+  `EncryptedData` carrying no `<EncryptedKey>` and no `SessionKey`: the
+  missing key is checked first, so it fails with `ErrMissingKey`.
+  `#kw-tripledes` names an `<EncryptedKey>`'s wrapping and fails the same
+  way only when that key must be resolved, so a pre-shared `SessionKey`
+  decrypts past it. The omission is deliberate: Triple DES is a 64-bit
+  block cipher, so Sweet32 (CVE-2016-2183) applies, and NIST SP 800-131A
+  Rev. 2 disallows TDEA encryption after 2023.
 
 An `xenc:KeySize` child of `EncryptionMethod` is read and checked, but it is
 never used as a key length: every algorithm URI this package implements
@@ -232,9 +251,10 @@ follow anyway; `xenc11:DerivedKey` (§3.5.2), which may appear in an
 `EncryptedData`'s own `ds:KeyInfo` and tells the recipient to derive the
 content key from master key material it already holds — the parse ignores it,
 so such an `EncryptedData` fails with `ErrMissingKey` instead of deriving the
-key, unless the caller supplies that key as a pre-shared `SessionKey`, whose
-early return precedes key resolution; `xenc:CarriedKeyName` (§3.5.1), which
-the parse steps over rather than
+key, on the same terms the `ds:RetrievalMethod` bullet states: once the block
+algorithm has resolved, and unless the caller supplies that key as a
+pre-shared `SessionKey`, whose early return precedes key resolution;
+`xenc:CarriedKeyName` (§3.5.1), which the parse steps over rather than
 reads; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
 
 ## Choosing how the session key is protected
@@ -265,10 +285,16 @@ hits the length check.
 A non-empty `Decryptor.SessionKey` is not a preference among keys; it is an
 early return. `Decrypt` and `DecryptBytes` take it as the session key and
 return before candidate selection, per-candidate validation, and per-candidate
-key resolution. Its godoc owns the account of what that skips. Both
-`<EncryptedKey>` bounds — the `MaxEncryptedKeys` count and the
-`MaxEncryptedKeyBytes` budget — are applied ahead of the early return, so they
-apply here too.
+key resolution. Its godoc owns the account of what that skips. It returns
+early from the key handling alone, not from the decrypt, so everything ahead
+of that point still holds: the `MaxEncryptedKeys` count, the
+`MaxEncryptedKeyBytes` budget, and the `MaxCipherValueBytes` payload budget,
+all charged while the document is read; the `@Type` check; the
+block-algorithm resolution `ErrMalformedEncrypted` and
+`ErrConflictingBlockAlgorithm` come out of; the AES-CBC opt-in gate; and the
+check binding the supplied key's length to the resolved algorithm
+(`KeySizeError`). A decrypt that fails any of those reports that failure,
+whatever key the caller holds.
 
 ## Decryption does not modify the tree
 
