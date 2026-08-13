@@ -1,6 +1,7 @@
 package domutil
 
 import (
+	"context"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -71,13 +72,25 @@ func FindElementsByID(root helium.Node, id string) []*helium.Element {
 // non-short-circuiting duplicate collection: a caller can refuse a duplicate
 // id by checking len(index[id]) > 1 exactly as a single FindElementsByID call
 // would report it.
-func BuildIDIndex(root helium.Node) map[string][]*helium.Element {
+//
+// ctx is observed once per node visited and its error is returned as soon as
+// it is done, because the trip count of this walk is the size of a document the
+// caller did not write. A cancelled walk returns a nil index rather than a
+// partial one, so a caller cannot mistake "the id is absent" for "the walk
+// stopped before reaching it". A nil ctx is treated as uncancelled, matching
+// the packages whose own entry points accept one.
+func BuildIDIndex(ctx context.Context, root helium.Node) (map[string][]*helium.Element, error) {
 	index := make(map[string][]*helium.Element)
-	var walk func(helium.Node)
-	walk = func(n helium.Node) {
+	var walk func(helium.Node) error
+	walk = func(n helium.Node) error {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		elem, ok := helium.AsNode[*helium.Element](n)
 		if !ok {
-			return
+			return nil
 		}
 		for _, attr := range elem.Attributes() {
 			if !isIDAttribute(attr) {
@@ -101,9 +114,14 @@ func BuildIDIndex(root helium.Node) map[string][]*helium.Element {
 			index[id] = append(index[id], elem)
 		}
 		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-			walk(child)
+			if err := walk(child); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-	walk(root)
-	return index
+	if err := walk(root); err != nil {
+		return nil, err
+	}
+	return index, nil
 }

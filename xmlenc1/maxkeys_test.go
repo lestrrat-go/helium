@@ -258,6 +258,108 @@ func TestMaxEncryptedKeys(t *testing.T) {
 		require.NotErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
+	// A candidate a ds:RetrievalMethod supplies costs what an inline one
+	// costs, so the cap counts both alike.
+	t.Run("reference candidates count against the cap", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		kek := randKey(t, 32)
+		targets := `<ds:KeyInfo>` +
+			wrappedKeyXML(t, "a", kek, randKey(t, 32), "") +
+			wrappedKeyXML(t, "b", kek, randKey(t, 32), "") +
+			wrappedKeyXML(t, "c", kek, sessionKey, "") +
+			`</ds:KeyInfo>`
+		refs := retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#a") +
+			retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#b") +
+			retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#c")
+
+		_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(2).
+			Decrypt(t.Context(), retrievalDoc(t, sessionKey, refs, targets))
+		require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+
+		nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(3).
+			Decrypt(t.Context(), retrievalDoc(t, sessionKey, refs, targets))
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	// The slot is charged at the moment a candidate is RETAINED, which is
+	// after the URI is looked up and after the visited-set dedup. A reference
+	// that retains a candidate charges one slot; a reference that retains
+	// nothing charges none, so its own lookup outcome is what a decrypt
+	// reports.
+	t.Run("the cap counts retained candidates, not references examined", func(t *testing.T) {
+		// A reference naming a DISTINCT second EncryptedKey retains a second
+		// candidate, so a cap of one refuses the document. That target's
+		// CipherValue is far over the byte budget and the count is still what
+		// answers, which pins that the count check precedes parseEncryptedKey.
+		t.Run("a distinct second target charges a slot", func(t *testing.T) {
+			sessionKey := randKey(t, 32)
+			kek := randKey(t, 32)
+			keyInfo := wrappedKeyXML(t, "", kek, sessionKey, "") +
+				retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#k")
+			// 128 KiB of base64 decodes to 96 KiB, over the 64 KiB default.
+			oversized := `<xenc:EncryptedKey Id="k">` +
+				`<xenc:EncryptionMethod Algorithm="` + xmlenc1.RSAOAEP11 + `"/>` +
+				`<xenc:CipherData><xenc:CipherValue>` + strings.Repeat("A", 128<<10) + `</xenc:CipherValue></xenc:CipherData>` +
+				`</xenc:EncryptedKey>`
+
+			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(1).
+				Decrypt(t.Context(), retrievalDoc(t, sessionKey, keyInfo, oversized))
+			require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+			require.NotErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+
+			// Raising the cap lets the same document reach the ciphertext,
+			// which is what makes the assertion above about ordering rather
+			// than about a budget that was never going to be charged.
+			_, err = xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(2).
+				Decrypt(t.Context(), retrievalDoc(t, sessionKey, keyInfo, oversized))
+			require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
+		})
+
+		// Each reference below names something whose lookup has its own
+		// distinctive error and retains nothing, so the lookup is what
+		// answers even with the cap already filled by the inline key.
+		t.Run("a reference that retains nothing is not charged", func(t *testing.T) {
+			for _, tc := range []struct {
+				name     string
+				uri      string
+				resolved error
+				trailing string
+			}{
+				{
+					name:     "against a duplicate id",
+					uri:      "#k",
+					resolved: xmlenc1.ErrAmbiguousReference,
+					trailing: `<a Id="k"/><b Id="k"/>`,
+				},
+				{
+					name:     "against a missing id",
+					uri:      "#k",
+					resolved: xmlenc1.ErrReferenceNotFound,
+					trailing: "",
+				},
+				{
+					name:     "against an external URI",
+					uri:      "https://example.com/keys.xml#k",
+					resolved: xmlenc1.ErrReferenceNotFound,
+					trailing: "",
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					sessionKey := randKey(t, 32)
+					kek := randKey(t, 32)
+					keyInfo := wrappedKeyXML(t, "", kek, sessionKey, "") +
+						retrievalMethodXML(xmlenc1.TypeEncryptedKey, tc.uri)
+					elem := retrievalDoc(t, sessionKey, keyInfo, tc.trailing)
+
+					_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(1).Decrypt(t.Context(), elem)
+					require.ErrorIs(t, err, tc.resolved)
+					require.NotErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+				})
+			}
+		})
+	})
+
 	t.Run("cancelled context aborts the candidate loop", func(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, samlAssertion)

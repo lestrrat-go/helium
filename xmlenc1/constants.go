@@ -1,11 +1,11 @@
 // Package xmlenc1 implements W3C XML Encryption 1.1, naming each deliberate
 // departure from the specification and its reason.
 //
-// Covered: AES block encryption, AES key wrapping, RSA-OAEP key transport, and
-// ECDH-ES key agreement with ConcatKDF. Three constructs xmlenc-core1 marks
-// REQUIRED are absent, and not for the same reason: xenc:CipherReference and
-// same-document ds:RetrievalMethod are not yet implemented, while the Triple
-// DES algorithms #tripledes-cbc and #kw-tripledes are refused deliberately,
+// Covered: AES block encryption, AES key wrapping, RSA-OAEP key transport,
+// ECDH-ES key agreement with ConcatKDF, and same-document ds:RetrievalMethod.
+// Two constructs xmlenc-core1 marks REQUIRED are absent, and not for the same
+// reason: xenc:CipherReference is not yet implemented, while the Triple DES
+// algorithms #tripledes-cbc and #kw-tripledes are refused deliberately,
 // because Triple DES is a 64-bit block cipher that Sweet32 (CVE-2016-2183)
 // applies to. README.md's Conformance scope section owns the detail.
 package xmlenc1
@@ -86,6 +86,27 @@ const (
 const (
 	TypeElement = NamespaceXMLEnc + "Element"
 	TypeContent = NamespaceXMLEnc + "Content"
+)
+
+// Type URIs a ds:RetrievalMethod inside a ds:KeyInfo may declare (xmlenc-core1
+// §3.5.3).
+const (
+	// TypeEncryptedKey is the Type a ds:RetrievalMethod states to link to the
+	// xenc:EncryptedKey holding the key needed to decrypt the CipherData of
+	// the EncryptedData or EncryptedKey whose ds:KeyInfo carries it. A
+	// RetrievalMethod stating it must name an xenc:EncryptedKey; naming
+	// anything else is refused as ErrMalformedEncrypted.
+	TypeEncryptedKey = NamespaceXMLEnc + "EncryptedKey"
+
+	// typeDerivedKey is the Type a ds:RetrievalMethod states to link to an
+	// xenc11:DerivedKey (§3.5.2), which tells the recipient to derive the
+	// content key from master key material it already holds. This package
+	// implements no key derivation from a master key, so a RetrievalMethod
+	// stating it is stepped over rather than resolved, exactly as every other
+	// Type this package does not implement is. It is named here so the
+	// difference between "recognized and not implemented" and "not recognized
+	// at all" is visible in the code rather than only in a comment.
+	typeDerivedKey = NamespaceXMLEnc + "DerivedKey"
 )
 
 // Named-curve URIs carried by the XML Signature 1.1 dsig11:NamedCurve

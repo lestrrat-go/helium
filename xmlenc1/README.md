@@ -142,7 +142,13 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   trial-decrypted (default 100, negative for unlimited), because an unbounded
   count is a CPU amplification vector; over the cap fails while parsing,
   before the excess candidate is parsed, retained, or reaches candidate
-  crypto. Its godoc owns the per-candidate branch dispatch:
+  crypto. A candidate a
+  [`ds:RetrievalMethod`](#conformance-scope) supplies costs a slot exactly as
+  an inline `<EncryptedKey>` does, and the slot is charged when the candidate
+  is retained, so several references naming one `<EncryptedKey>` cost one slot
+  between them and a reference that supplies no candidate costs none — only a
+  probe of the id index the decrypt builds once. Its godoc owns the
+  per-candidate branch dispatch:
   which key a candidate uses and what it costs. The cap is applied before the key
   configuration is consulted, so it also bounds a decrypt driven by a
   pre-shared
@@ -181,12 +187,11 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 ## Conformance scope
 
 This package implements W3C xmlenc-core1, and where it deliberately departs
-from the specification it names the departure and the reason for it. Three
+from the specification it names the departure and the reason for it. Two
 constructs the specification marks REQUIRED are not implemented here, and they
 are not the same kind of thing: Triple DES is a deliberate refusal, while
-`xenc:CipherReference` and same-document `ds:RetrievalMethod` are not yet
-implemented. Each bullet says how a document that needs one of them fails a
-decrypt:
+`xenc:CipherReference` is not yet implemented. Each bullet says how a document
+that needs one of them fails a decrypt:
 
 - **`xenc:CipherReference`** (§3.3.1, §4.4) — not yet implemented.
   xmlenc-core1 lets `CipherData` carry either a `CipherValue` or a
@@ -199,25 +204,6 @@ decrypt:
   [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) does not
   decrypt past it. §3.3.1 requires the URI dereferencing; the
   transforms a `CipherReference` may carry are OPTIONAL there.
-- **Same-document `ds:RetrievalMethod`** (§3.5, REQUIRED) — not yet
-  implemented. Inside `ds:KeyInfo`, only an `xenc:EncryptedKey` child
-  supplies the session key.
-  A `<ds:RetrievalMethod URI="#id"/>` naming an `EncryptedKey` elsewhere in
-  the same document is not read, so the decrypt fails with `ErrMissingKey` —
-  unless a pre-shared
-  [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) supplies
-  the key, whose early return precedes key resolution and so never needs the
-  `RetrievalMethod`. That `ErrMissingKey` is what the caller sees only once
-  the block algorithm has resolved: resolution and the AES-CBC opt-in both
-  run ahead of the missing-key check, so an `EncryptedData` with no
-  `EncryptionMethod` and no `Decryptor.BlockAlgorithm` fails with
-  `ErrMalformedEncrypted`, and an AES-CBC one without
-  `AllowUnauthenticatedCBC(true)` with `ErrCBCRequiresOptIn`, whatever its
-  `ds:KeyInfo` holds. The other `ds:KeyInfo` children this package does not
-  read are `ds:KeyValue` (§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), and
-  `xenc11:DerivedKey` (§3.5.2). A `ds:KeyValue` inside an
-  `xenc:OriginatorKeyInfo` is a different position and is read, since
-  that is where ECDH-ES carries the sender's ephemeral key.
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED) — refused deliberately, and this package will not
   implement them. Triple DES is a 64-bit block cipher, so Sweet32
@@ -236,6 +222,48 @@ decrypt:
   `#kw-tripledes` names an `<EncryptedKey>`'s wrapping and fails the same
   way only when that key must be resolved, so a pre-shared `SessionKey`
   decrypts past it.
+
+Same-document `ds:RetrievalMethod` (§3.5, REQUIRED) is implemented and always
+on, with no setting to turn it off. Inside a `ds:KeyInfo`, a
+`<ds:RetrievalMethod Type=".../EncryptedKey" URI="#id"/>` names the
+`xenc:EncryptedKey` holding the session key, wherever in the same document that
+key sits, and §3.5.3 permits several of them. The candidate it supplies is
+tried at the position the reference occupies, so a `ds:KeyInfo` mixing inline
+`xenc:EncryptedKey` children with references tries them in document order. Two
+references naming one `EncryptedKey` yield one candidate, decrypted once and
+charged once against both [`MaxEncryptedKeys`](#bounds-and-limits) and
+[`MaxEncryptedKeyBytes`](#bounds-and-limits). Only the
+same-document form is REQUIRED and no external form is mandated anywhere, so a
+URI naming another resource is refused with `ErrReferenceNotFound` whatever it
+names — an external key location decides which key material the recipient
+trial-decrypts, which is not a decision a document gets to make for a caller.
+The four recognized forms are the ones XMLDSig core defines: `URI=""`,
+`URI="#id"`, `URI="#xpointer(/)"`, and `URI="#xpointer(id('id'))"`.
+
+Two refusals are worth naming. A URI matching MORE than one element fails with
+`ErrAmbiguousReference` rather than resolving to either: an attacker who can
+inject an element carrying an `Id` already in use would otherwise choose which
+key the recipient unwraps, which is XML Signature Wrapping applied to
+encryption. A URI matching none fails with `ErrReferenceNotFound`. Both are
+decided while the document is read, so they precede a pre-shared
+[`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key)'s early
+return: that caller does not decrypt past a reference this package refused.
+
+A `ds:RetrievalMethod` whose `Type` this package does not implement — a
+`#DerivedKey` (§3.5.2), or any type from another specification — is stepped
+over before its URI is looked at, so it costs nothing, cannot fail a decrypt,
+and a pre-shared `SessionKey` decrypts past it. A `Type` of
+`#EncryptedKey` naming something that is not an `xenc:EncryptedKey` is a
+contradiction inside the document and fails with `ErrMalformedEncrypted`; a
+reference with no `Type` at all is resolved, and its target used only if it is
+an `xenc:EncryptedKey`. `Encryptor` writes no `ds:RetrievalMethod`: §3.5
+requires support for reading one, not for writing one.
+
+The other `ds:KeyInfo` children this package does not read are `ds:KeyValue`
+(§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), and `xenc11:DerivedKey`
+(§3.5.2). A `ds:KeyValue` inside an `xenc:OriginatorKeyInfo` is a different
+position and is read, since that is where ECDH-ES carries the sender's
+ephemeral key.
 
 An `xenc:KeySize` child of `EncryptionMethod` is read and checked, but it is
 never used as a key length: every algorithm URI this package implements
@@ -260,9 +288,14 @@ follow anyway; `xenc11:DerivedKey` (§3.5.2), which may appear in an
 `EncryptedData`'s own `ds:KeyInfo` and tells the recipient to derive the
 content key from master key material it already holds — the parse ignores it,
 so such an `EncryptedData` fails with `ErrMissingKey` instead of deriving the
-key, on the same terms the `ds:RetrievalMethod` bullet states: once the block
-algorithm has resolved, and unless the caller supplies that key as a
-pre-shared `SessionKey`, whose early return precedes key resolution;
+key. That `ErrMissingKey` is what the caller sees only once the block algorithm
+has resolved: resolution and the AES-CBC opt-in both run ahead of the
+missing-key check, so an `EncryptedData` with no `EncryptionMethod` and no
+`Decryptor.BlockAlgorithm` fails with `ErrMalformedEncrypted`, and an AES-CBC
+one without `AllowUnauthenticatedCBC(true)` with `ErrCBCRequiresOptIn`,
+whatever its `ds:KeyInfo` holds. It does not arise at all when the caller
+supplies that key as a pre-shared `SessionKey`, whose early return precedes key
+resolution;
 `xenc:CarriedKeyName` (§3.5.1), which the parse steps over rather than
 reads; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
 

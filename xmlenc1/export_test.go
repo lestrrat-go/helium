@@ -33,13 +33,13 @@ func HardenedParserForTest() helium.Parser {
 // ParseEncryptedDataForTest is a test-only re-export of the package
 // internal EncryptedData parser so tests can assert namespace-aware
 // element matching directly against a parsed DOM. It parses under a
-// default Decryptor's CipherValue budgets, as Decrypt does, and under an
-// uncancelled context, so what these callers see is the parse's own verdict
-// rather than a cancellation. Cancellation of the parse is covered through the
-// public terminals instead.
+// default Decryptor's CipherValue budgets and the same same-document
+// reference scope Decrypt builds, and under an uncancelled context, so what
+// these callers see is the parse's own verdict rather than a cancellation.
+// Cancellation of the parse is covered through the public terminals instead.
 func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
 	cfg := &decryptConfig{}
-	ps := &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg)}
+	ps := &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg), refs: newRefScope(elem)}
 	return parseEncryptedData(context.Background(), elem, ps)
 }
 
