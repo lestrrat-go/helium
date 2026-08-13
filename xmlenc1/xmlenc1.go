@@ -649,6 +649,7 @@ type decryptConfig struct {
 	maxEncryptedKeys        int
 	maxEncryptedKeyBytes    int
 	maxCipherValueBytes     int
+	cipherReferenceResolver ReferenceResolver
 }
 
 // Decryptor decrypts XML EncryptedData elements. It uses clone-on-write
@@ -856,6 +857,31 @@ func (d Decryptor) MaxEncryptedKeyBytes(n int) Decryptor {
 func (d Decryptor) MaxCipherValueBytes(n int) Decryptor {
 	d = d.clone()
 	d.cfg.maxCipherValueBytes = n
+	return d
+}
+
+// CipherReferenceResolver supplies the octets of an xenc:CipherReference whose
+// URI is NOT one of the four same-document forms, i.e. one naming a resource
+// outside the document being decrypted. [ReferenceResolver] owns what a
+// resolver is asked for and what the shipped [FSReferenceResolver] refuses.
+//
+// Nil is the default, and it is a deny rather than a gap: an external URI then
+// fails closed with [ErrReferenceNotFound], and no document can lift that by
+// itself. The same-document forms need no I/O and never reach a resolver, so
+// setting one changes nothing about how they resolve — it only adds the
+// external form. That split follows the specification: W3C xmlenc-core1 §3.3.1
+// imports XMLDSig's dereferencing model, in which the same-document forms are
+// normative MUSTs (xmldsig-core1 §4.4.3.2, §4.4.3.3) while HTTP dereferencing is
+// RECOMMENDED (§4.4.3.1).
+//
+// A resolved resource is charged against the same budget its CipherData would
+// have been: [Decryptor.MaxCipherValueBytes] for an EncryptedData payload and
+// [Decryptor.MaxEncryptedKeyBytes] for an EncryptedKey. The resolver is asked
+// for no more than that budget still allows, so an oversized resource is
+// refused rather than buffered.
+func (d Decryptor) CipherReferenceResolver(r ReferenceResolver) Decryptor {
+	d = d.clone()
+	d.cfg.cipherReferenceResolver = r
 	return d
 }
 

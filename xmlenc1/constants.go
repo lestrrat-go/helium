@@ -2,12 +2,15 @@
 // departure from the specification and its reason.
 //
 // Covered: AES block encryption, AES key wrapping, RSA-OAEP key transport,
-// ECDH-ES key agreement with ConcatKDF, and same-document ds:RetrievalMethod.
-// Two constructs xmlenc-core1 marks REQUIRED are absent, and not for the same
-// reason: xenc:CipherReference is not yet implemented, while the Triple DES
-// algorithms #tripledes-cbc and #kw-tripledes are refused deliberately,
-// because Triple DES is a 64-bit block cipher that Sweet32 (CVE-2016-2183)
-// applies to. README.md's Conformance scope section owns the detail.
+// ECDH-ES key agreement with ConcatKDF, same-document ds:RetrievalMethod, and
+// xenc:CipherReference — same-document by default, and external through
+// [Decryptor.CipherReferenceResolver].
+//
+// The one construct xmlenc-core1 marks REQUIRED and this package does not
+// implement is Triple DES: the algorithms #tripledes-cbc and #kw-tripledes are
+// refused deliberately, because Triple DES is a 64-bit block cipher that
+// Sweet32 (CVE-2016-2183) applies to. README.md's Conformance scope section
+// owns the detail.
 package xmlenc1
 
 const (

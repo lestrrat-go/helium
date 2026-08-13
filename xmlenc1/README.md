@@ -174,6 +174,37 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   by a pre-shared `SessionKey`, and it is separate from
   `MaxEncryptedKeyBytes`, which bounds only the wrapped session-key
   candidates.
+- An [`xenc:CipherReference`](#conformance-scope) naming a resource OUTSIDE the
+  document is denied by default. The four same-document forms need no I/O and
+  always resolve; every other URI fails with `ErrReferenceNotFound` until the
+  caller sets `Decryptor.CipherReferenceResolver`, and configuring one adds the
+  external form without changing how any same-document form resolves. helium
+  ships one implementation, `FSReferenceResolver(fsys)`, which performs no
+  network access and is fail-closed on anything that is not a plain in-tree
+  path: a URI carrying an RFC 3986 scheme (a Windows drive letter included), a
+  leftover fragment, and a path escaping the root after cleaning are all
+  refused. No HTTP resolver ships, because an attacker who controls a
+  `CipherReference` URI would otherwise steer requests at internal hosts or
+  stall a decrypt, so whoever wants network dereferencing owns that SSRF and
+  availability risk. A resolved resource is charged against the same budget its
+  `CipherData` would have been — `MaxCipherValueBytes` for a payload reference,
+  `MaxEncryptedKeyBytes` for a key one — and the shipped resolver reads only one
+  byte past what the budget still allows, so an oversized resource is refused
+  rather than buffered. A same-document reference is bounded by the same
+  budgets: its canonical form is written through a limit-aware writer and stops
+  at the first byte past the allowance, instead of canonicalizing an
+  attacker-chosen subtree in full and discarding the result afterwards.
+- A `CipherReference` may declare transforms, and only the XMLDSig
+  `#base64` transform is accepted. Every declared algorithm is validated before
+  any of them runs, so a supported one standing ahead of an unsupported one is
+  not executed first; a list longer than four, or a second `xenc:Transforms`,
+  is refused unread. Refusing is conforming — xmlenc-core1 §3.3.1 marks both
+  the `Transform` feature and the particular algorithms OPTIONAL — and XPath and
+  XSLT are the reason the rule exists: either one evaluates an expression the
+  document chose over a document nothing has authenticated yet, which is
+  unbounded compute bought with a few bytes of markup. An unsupported algorithm
+  fails with `ErrMalformedEncrypted` wrapping an `*UnsupportedAlgorithmError`
+  that names the refused URI.
 - An AES key-wrap `<EncryptedKey>` must carry exactly the session-key length
   the declared block algorithm requires, plus RFC 3394's 8-byte integrity
   block. Any other length fails with `ErrKeyUnwrapFailed` before the unwrap
@@ -187,23 +218,10 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 ## Conformance scope
 
 This package implements W3C xmlenc-core1, and where it deliberately departs
-from the specification it names the departure and the reason for it. Two
-constructs the specification marks REQUIRED are not implemented here, and they
-are not the same kind of thing: Triple DES is a deliberate refusal, while
-`xenc:CipherReference` is not yet implemented. Each bullet says how a document
-that needs one of them fails a decrypt:
+from the specification it names the departure and the reason for it. One
+construct the specification marks REQUIRED is absent, and the omission is
+deliberate rather than pending:
 
-- **`xenc:CipherReference`** (§3.3.1, §4.4) — not yet implemented.
-  xmlenc-core1 lets `CipherData` carry either a `CipherValue` or a
-  `CipherReference`; this package accepts only the `CipherValue`. Cipher
-  text named by a URI is rejected with
-  `ErrMalformedEncrypted`, including the same-document form that needs no
-  I/O, on an `EncryptedData` payload and on every `EncryptedKey` alike, and
-  `Encryptor` writes no such form; the rejection happens while the document is
-  read, so a pre-shared
-  [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) does not
-  decrypt past it. §3.3.1 requires the URI dereferencing; the
-  transforms a `CipherReference` may carry are OPTIONAL there.
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED) — refused deliberately, and this package will not
   implement them. Triple DES is a 64-bit block cipher, so Sweet32
@@ -222,6 +240,63 @@ that needs one of them fails a decrypt:
   `#kw-tripledes` names an `<EncryptedKey>`'s wrapping and fails the same
   way only when that key must be resolved, so a pre-shared `SessionKey`
   decrypts past it.
+
+`xenc:CipherReference` (§3.3.1, REQUIRED) is implemented, on an `EncryptedData`
+payload and on every `EncryptedKey` alike. `CipherData` carries either a
+`CipherValue` holding the cipher text inline or a `CipherReference` naming it by
+URI, and the two are read into the same octets. `Encryptor` writes no
+`CipherReference`: §3.3.1 requires support for reading one, not for writing one.
+
+§3.3.1 defines no dereferencing of its own — it requires "the same URI encoding,
+dereferencing, scheme, and HTTP response codes as that of [XMLDSIG-CORE1]" — so
+what is REQUIRED is what that model makes required. There, dereferencing URIs in
+the HTTP scheme is RECOMMENDED (xmldsig-core1 §4.4.3.1) while the null URI, the
+shortname XPointer, and same-document dereferencing are MUSTs (§4.4.3.2,
+§4.4.3.3). So the same-document forms are implemented unconditionally, with no
+setting to turn them off, and external URIs are
+[default-denied behind an opt-in resolver](#security).
+
+The same four forms `ds:RetrievalMethod` recognizes resolve here: `URI=""`,
+`URI="#id"`, `URI="#xpointer(/)"`, and `URI="#xpointer(id('id'))"`. A **present
+but empty** `@URI` is the null URI naming the whole document; an **absent**
+`@URI` is a different thing entirely and fails with `ErrMalformedEncrypted`,
+because the xenc schema marks the attribute required. A URI matching more than
+one element fails with `ErrAmbiguousReference` and one matching none with
+`ErrReferenceNotFound`, for the same reasons those two refusals exist for
+`ds:RetrievalMethod`.
+
+What a same-document reference names is a node-set, and how it becomes octets
+depends on the transforms:
+
+- with **no transform**, the node-set is converted by Canonical XML 1.0 without
+  comments, which is what §4.4.3.3 requires of a node-set that has to become an
+  octet stream. A whole-document form naming the document element canonicalizes
+  the document, so the top-level processing instructions outside that element
+  are included; every other form canonicalizes the named element's subtree.
+- with a **`#base64` transform** first, that transform consumes the node-set
+  directly and decodes the named element's character data, read through the same
+  bounded walk an inline `CipherValue` goes through.
+
+An external URI is joined against the document's base URI and handed to
+`Decryptor.CipherReferenceResolver`. Its result is an octet stream, so no
+canonicalization applies to it. With no resolver configured it fails with
+`ErrReferenceNotFound`.
+
+A transform list may declare up to four transforms and every one of them must be
+`#base64`; each one past the first decodes the octets the one before it
+produced. [Security](#security) owns why nothing else is accepted there.
+
+The resolved octets are cipher text and go straight to the block decryption;
+they are never re-parsed as a document. A `CipherReference` naming the
+`EncryptedData` that carries it, or naming itself, is therefore inert rather
+than recursive — it terminates with whatever those octets decrypt to — and there
+is no recursion depth to configure. Every one of these outcomes is decided while
+the document is read, so all of them precede the block-algorithm resolution, the
+AES-CBC opt-in gate, and a pre-shared
+[`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key)'s early
+return: that caller does not decrypt past a reference this package refused, and
+a document this package will later refuse for its block algorithm still has its
+reference resolved first.
 
 Same-document `ds:RetrievalMethod` (§3.5, REQUIRED) is implemented and always
 on, with no setting to turn it off. Inside a `ds:KeyInfo`, a
@@ -438,11 +513,18 @@ Those ten vectors exercise key protection: six ECDH-ES ConcatKDF cases on
 EC-P256, EC-P384, and EC-P521, and four rsa-oaep cases on RSA-2048, RSA-3072,
 and RSA-4096. Every one of them uses AES-GCM block encryption. So the snapshot
 is evidence about how the session key is protected and about AES-GCM, and it is
-evidence about nothing else: no CBC block algorithm appears in it, nothing the
-[conformance scope](#conformance-scope) above names as unimplemented or refused
-is covered by it, and it is not the merlin interop corpus. The ten are the
+evidence about nothing else: no CBC block algorithm appears in it, the Triple
+DES algorithms the [conformance scope](#conformance-scope) above refuses are not
+covered by it, and it is not the merlin interop corpus. The ten are the
 suite in full, and the 1.1 interop corpus holds no Triple DES vector, so the
 zero skips is not a vector being passed over.
+
+No interop vector covers `xenc:CipherReference`, in this suite or in any other
+corpus the harness fetches. The one `CipherReference` vector in the Apache
+Santuario corpus needs BOTH an XPath transform and `aes192-cbc`, and this
+package implements neither, so there is nothing runnable to add and no skip
+entry to write — a skip would imply a vector is being passed over when none
+exists. The feature's evidence is this package's own tests.
 
 The suite is available through the manual Conformance workflow and is not part
 of the release gate.
