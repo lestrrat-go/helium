@@ -220,6 +220,7 @@ type ecKeyValue struct {
 	curve ecdh.Curve
 	// PublicKey is the base64-decoded dsig11:PublicKey point, in the
 	// uncompressed SEC 1 form (0x04 || X || Y) that
-	// ecdh.Curve.NewPublicKey accepts. Parsing validates it against Curve.
+	// ecdh.Curve.NewPublicKey accepts. Parsing validates it against the
+	// curve field.
 	PublicKey []byte
 }
