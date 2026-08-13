@@ -258,6 +258,80 @@ func TestMaxEncryptedKeys(t *testing.T) {
 		require.NotErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
 	})
 
+	// A candidate a ds:RetrievalMethod supplies costs what an inline one
+	// costs, so the cap counts both alike.
+	t.Run("reference candidates count against the cap", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		kek := randKey(t, 32)
+		targets := `<ds:KeyInfo>` +
+			wrappedKeyXML(t, "a", kek, randKey(t, 32), "") +
+			wrappedKeyXML(t, "b", kek, randKey(t, 32), "") +
+			wrappedKeyXML(t, "c", kek, sessionKey, "") +
+			`</ds:KeyInfo>`
+		refs := retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#a") +
+			retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#b") +
+			retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#c")
+
+		_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(2).
+			Decrypt(t.Context(), retrievalDoc(t, sessionKey, refs, targets))
+		require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+
+		nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(3).
+			Decrypt(t.Context(), retrievalDoc(t, sessionKey, refs, targets))
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	// The slot is charged BEFORE the URI is looked up, so a document packed
+	// with references cannot buy id lookups with them. Each excess reference
+	// below names something whose lookup has its own distinctive error; the
+	// cap is what answers, so no lookup ran.
+	t.Run("cap fires before a reference is resolved", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			uri      string
+			resolved error
+			trailing string
+		}{
+			{
+				name:     "against a duplicate id",
+				uri:      "#k",
+				resolved: xmlenc1.ErrAmbiguousReference,
+				trailing: `<a Id="k"/><b Id="k"/>`,
+			},
+			{
+				name:     "against a missing id",
+				uri:      "#k",
+				resolved: xmlenc1.ErrReferenceNotFound,
+				trailing: "",
+			},
+			{
+				name:     "against an external URI",
+				uri:      "https://example.com/keys.xml#k",
+				resolved: xmlenc1.ErrReferenceNotFound,
+				trailing: "",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				sessionKey := randKey(t, 32)
+				kek := randKey(t, 32)
+				keyInfo := wrappedKeyXML(t, "", kek, sessionKey, "") +
+					retrievalMethodXML(xmlenc1.TypeEncryptedKey, tc.uri)
+				elem := retrievalDoc(t, sessionKey, keyInfo, tc.trailing)
+
+				_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(1).Decrypt(t.Context(), elem)
+				require.ErrorIs(t, err, xmlenc1.ErrTooManyEncryptedKeys)
+				require.NotErrorIs(t, err, tc.resolved)
+
+				// Without the cap the same document reaches the lookup, which
+				// is what makes the assertion above about ordering rather
+				// than about a reference that could never have resolved.
+				_, err = xmlenc1.NewDecryptor().KeyEncryptionKey(kek).MaxEncryptedKeys(2).Decrypt(t.Context(), elem)
+				require.ErrorIs(t, err, tc.resolved)
+			})
+		}
+	})
+
 	t.Run("cancelled context aborts the candidate loop", func(t *testing.T) {
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, samlAssertion)

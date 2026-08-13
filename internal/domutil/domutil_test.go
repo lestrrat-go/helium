@@ -1,6 +1,7 @@
 package domutil_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -78,7 +79,8 @@ func TestFindElementsByID(t *testing.T) {
 			matches := domutil.FindElementsByID(doc.DocumentElement(), tc.id)
 			require.Len(t, matches, tc.count)
 
-			index := domutil.BuildIDIndex(doc.DocumentElement())
+			index, err := domutil.BuildIDIndex(t.Context(), doc.DocumentElement())
+			require.NoError(t, err)
 			require.Len(t, index[tc.id], tc.count)
 		})
 	}
@@ -108,7 +110,8 @@ func TestFindElementsByIDDTDDeclared(t *testing.T) {
 	require.Len(t, matches, 1)
 	require.Equal(t, "item", matches[0].LocalName())
 
-	index := domutil.BuildIDIndex(doc.DocumentElement())
+	index, err := domutil.BuildIDIndex(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
 	require.Len(t, index["x1"], 1)
 	require.Equal(t, "item", index["x1"][0].LocalName())
 	require.Len(t, index["x2"], 1)
@@ -125,7 +128,8 @@ func TestBuildIDIndexMultipleIDAttributes(t *testing.T) {
 	require.NoError(t, err)
 
 	root := doc.DocumentElement()
-	index := domutil.BuildIDIndex(root)
+	index, err := domutil.BuildIDIndex(t.Context(), root)
+	require.NoError(t, err)
 
 	for _, id := range []string{"a", "b"} {
 		require.Len(t, index[id], 1, "id %q", id)
@@ -148,7 +152,8 @@ func TestBuildIDIndexShadowedDuplicate(t *testing.T) {
 	require.NoError(t, err)
 
 	root := doc.DocumentElement()
-	index := domutil.BuildIDIndex(root)
+	index, err := domutil.BuildIDIndex(t.Context(), root)
+	require.NoError(t, err)
 
 	require.Len(t, index["sig"], 2)
 	require.Equal(t, "evil", index["sig"][0].LocalName())
@@ -157,8 +162,26 @@ func TestBuildIDIndexShadowedDuplicate(t *testing.T) {
 	require.Equal(t, domutil.FindElementsByID(root, "decoy"), index["decoy"])
 }
 
+// TestBuildIDIndexCancelled proves the walk answers a cancelled caller instead
+// of running to the end of a document it did not write, and that it hands back
+// no index at all rather than a partial one a caller could read an absent id
+// out of.
+func TestBuildIDIndexCancelled(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a id="x"/><b id="y"/></root>`))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	index, err := domutil.BuildIDIndex(ctx, doc.DocumentElement())
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, index)
+}
+
 // TestIDIndexAgreesWithFindElementsByID is the parity check the two functions
-// exist to satisfy: for any element shape, BuildIDIndex(root)[id] must be the
+// exist to satisfy: for any element shape, BuildIDIndex(ctx, root)[id] must be the
 // same elements in the same order as FindElementsByID(root, id). The candidate
 // ids are listed per document rather than read back from the index, so an
 // index that dropped an id entirely cannot hide behind its own key set.
@@ -238,7 +261,8 @@ func TestIDIndexAgreesWithFindElementsByID(t *testing.T) {
 			require.NoError(t, err)
 
 			root := doc.DocumentElement()
-			index := domutil.BuildIDIndex(root)
+			index, err := domutil.BuildIDIndex(t.Context(), root)
+			require.NoError(t, err)
 
 			for _, id := range tc.ids {
 				require.Equal(t, domutil.FindElementsByID(root, id), index[id], "id %q", id)
@@ -252,5 +276,7 @@ func TestFindElementsByIDNilRoot(t *testing.T) {
 	t.Parallel()
 
 	require.Empty(t, domutil.FindElementsByID(nil, "foo"))
-	require.Empty(t, domutil.BuildIDIndex(nil))
+	index, err := domutil.BuildIDIndex(t.Context(), nil)
+	require.NoError(t, err)
+	require.Empty(t, index)
 }

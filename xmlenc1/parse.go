@@ -19,8 +19,9 @@ import (
 // parseState bundles the per-parse state parseEncryptedData and its callees
 // thread through the document walk: cfg supplies the effective EncryptedKey
 // candidate limit, keys carries the cumulative EncryptedKey ciphertext
-// allowance across the whole element, and payload caps the EncryptedData
-// CipherValue. Both budgets are charged at the earliest point that sees their
+// allowance across the whole element, payload caps the EncryptedData
+// CipherValue, and refs is the same-document scope a ds:RetrievalMethod
+// resolves in. Both budgets are charged at the earliest point that sees their
 // values; the candidate limit is checked before an excess candidate is
 // retained.
 //
@@ -31,6 +32,7 @@ type parseState struct {
 	cfg     *decryptConfig
 	keys    *encryptedKeyBudget
 	payload *payloadCipherValueBudget
+	refs    *refScope
 }
 
 // parseEncryptedData parses an EncryptedData element.
@@ -107,21 +109,120 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 	return ed, nil
 }
 
+// parseKeyInfoForEncryption reads the ds:KeyInfo of an EncryptedData for the
+// session-key candidates it offers: an xenc:EncryptedKey carried inline, and a
+// ds:RetrievalMethod naming one elsewhere in the same document (xmlenc-core1
+// §3.5.3).
+//
+// The two branches are taken in DOCUMENT ORDER rather than inline-first, so a
+// reference-supplied candidate lands where the document put the reference. The
+// candidate list is tried in order, so reordering it would change which key a
+// document with several candidates is decrypted under.
 func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *EncryptedData, ps *parseState) error {
 	return eachChildElement(ctx, elem, func(e *helium.Element) error {
-		if !isXMLEncElem(e, "EncryptedKey") {
+		switch {
+		case isXMLEncElem(e, "EncryptedKey"):
+			if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
+				return abort(ctx, err)
+			}
+			// An inline candidate is recorded as taken so a RetrievalMethod
+			// naming this very element does not charge and trial-decrypt the
+			// same key a second time. It cannot itself be a repeat: each child
+			// of a ds:KeyInfo is walked once.
+			ps.refs.markVisited(e)
+			ek, err := parseEncryptedKey(ctx, e, ps)
+			if err != nil {
+				return err
+			}
+			ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
 			return nil
+		case isDSigElem(e, "RetrievalMethod"):
+			return parseRetrievalMethod(ctx, e, ed, ps)
 		}
-		if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
-			return abort(ctx, err)
-		}
-		ek, err := parseEncryptedKey(ctx, e, ps)
-		if err != nil {
-			return err
-		}
-		ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
 		return nil
 	})
+}
+
+// parseRetrievalMethod reads one ds:RetrievalMethod child of a ds:KeyInfo and
+// appends the EncryptedKey candidate it supplies to ed, appending nothing when
+// the reference supplies none. xmlenc-core1 §3.5.3 makes support for the
+// same-document form REQUIRED: it links to the EncryptedKey holding the key
+// needed to decrypt the associated CipherData, is always a child of
+// ds:KeyInfo, and may appear several times.
+//
+// It appends rather than returning the candidate because most of its outcomes
+// are "no candidate, no error" — a Type this package does not read, and a
+// target already taken by an earlier reference — and a returned (nil, nil)
+// would make every one of those indistinguishable from a bug at the call site.
+//
+// The @Type decides how far the reference is read, in this order:
+//
+//   - a Type this package does not implement (typeDerivedKey, or any foreign
+//     URI) is stepped over with no error and no cost — no candidate slot, no
+//     URI lookup — so a document naming a construct this package never
+//     honored behaves exactly as it did before references were resolved;
+//   - TypeEncryptedKey must name an xenc:EncryptedKey. Naming anything else is
+//     a contradiction inside the document, refused as ErrMalformedEncrypted;
+//   - an absent Type says nothing about what the URI names, so the target is
+//     used only if it IS an xenc:EncryptedKey and passed over otherwise.
+//
+// The candidate slot is charged BEFORE the URI is looked up, so a document
+// packed with references cannot buy id lookups with them. A URI that is not a
+// same-document reference is ErrReferenceNotFound whatever it names, and no
+// setting lifts that: §3.5 mandates only the same-document form, and an
+// external key location decides which key material the recipient
+// trial-decrypts.
+//
+// # Why no recursion is reachable
+//
+// Resolution is one step deep BY CONSTRUCTION, not by a depth limit.
+// parseEncryptedKey inspects exactly three children — xenc:EncryptionMethod,
+// xenc:CipherData, and ds:KeyInfo, and of that ds:KeyInfo only its
+// xenc:AgreementMethod — and no path below it ever looks for a
+// ds:RetrievalMethod. A resolved target therefore cannot itself resolve a
+// reference, so §6.5's EncryptedKey A → B → A cycle is not expressible here
+// and there is no depth constant to tune. The visited set is DEDUPLICATION,
+// for the several references §3.5.3 permits; it is not a loop guard, and the
+// termination argument does not rest on it.
+func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *EncryptedData, ps *parseState) error {
+	typ, _ := elem.GetAttribute("Type")
+	switch typ {
+	case "", TypeEncryptedKey:
+	case typeDerivedKey:
+		// Recognized, and deliberately not resolved: this package derives no
+		// key from master key material. README.md's Conformance scope section
+		// owns what such a document fails with.
+		return nil
+	default:
+		// A Type from another specification entirely, e.g. a ds:X509Data.
+		// Nothing here reads it, so nothing here refuses it either.
+		return nil
+	}
+
+	if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
+		return abort(ctx, err)
+	}
+
+	uri, _ := elem.GetAttribute("URI")
+	target, err := resolveSameDocument(ctx, ps.refs, uri)
+	if err != nil {
+		return abort(ctx, err)
+	}
+	if !isXMLEncElem(target, "EncryptedKey") {
+		if typ == "" {
+			return nil
+		}
+		return abort(ctx, fmt.Errorf("%w: ds:RetrievalMethod URI %q declares Type %q but names a %s", ErrMalformedEncrypted, uri, typ, target.Name()))
+	}
+	if ps.refs.markVisited(target) {
+		return nil
+	}
+	ek, err := parseEncryptedKey(ctx, target, ps)
+	if err != nil {
+		return err
+	}
+	ed.EncryptedKeys = append(ed.EncryptedKeys, ek)
+	return nil
 }
 
 // parseEncryptedKey parses an EncryptedKey element, charging its CipherValue

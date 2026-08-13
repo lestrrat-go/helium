@@ -43,6 +43,36 @@ var (
 	// DefaultMaxCipherValueBytes.
 	ErrCipherValueBytesExceeded = errors.New("xmlenc1: EncryptedData CipherValue exceeds the byte budget")
 
+	// ErrReferenceNotFound is returned when a ds:RetrievalMethod names
+	// something this package will not resolve: a URI that is not a
+	// same-document reference at all, or a same-document reference matching
+	// no element in the document the EncryptedData belongs to.
+	//
+	// Only the same-document form is REQUIRED (xmlenc-core1 §3.5), and no
+	// external form is mandated anywhere, so a URI naming another resource is
+	// refused whatever it names and there is no setting that lifts the
+	// refusal. An external key location decides which key material the
+	// recipient trial-decrypts, which is not a decision a document gets to
+	// make for a caller.
+	//
+	// The reference is resolved while the document is read, so this precedes
+	// the Decryptor.SessionKey early return: a pre-shared session key does not
+	// decrypt past a reference that was refused. A ds:RetrievalMethod whose
+	// Type this package does not implement is never resolved at all and so
+	// never reaches this error. Match with errors.Is.
+	ErrReferenceNotFound = errors.New("xmlenc1: reference not found")
+
+	// ErrAmbiguousReference is returned when a same-document
+	// ds:RetrievalMethod URI matches more than one element.
+	//
+	// This is XML Signature Wrapping applied to encryption. An attacker who
+	// can inject an element carrying an Id already in use would otherwise
+	// choose which of the two the recipient resolves, and so which key it
+	// unwraps and trial-decrypts with. Resolution therefore collects every
+	// match and refuses on more than one, rather than taking the first.
+	// Match with errors.Is.
+	ErrAmbiguousReference = errors.New("xmlenc1: ambiguous reference")
+
 	// ErrInvalidPadding names invalid PKCS#7 padding. Decryption never
 	// returns it: distinguishing a padding failure from any other CBC
 	// failure is exactly what a padding oracle needs, so decryptCBC

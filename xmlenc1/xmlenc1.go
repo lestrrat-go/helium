@@ -1076,7 +1076,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
-	ed, err := parseEncryptedData(ctx, elem, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg)})
+	ed, err := parseEncryptedData(ctx, elem, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg), refs: newRefScope(elem)})
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
@@ -1170,7 +1170,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
-	ed, err := parseEncryptedData(ctx, elem, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg)})
+	ed, err := parseEncryptedData(ctx, elem, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg), refs: newRefScope(elem)})
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
