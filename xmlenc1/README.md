@@ -289,7 +289,8 @@ key resolution. Its godoc owns the account of what that skips. It returns
 early from the key handling alone, not from the decrypt, so everything ahead
 of that point still holds: the `MaxEncryptedKeys` count, the
 `MaxEncryptedKeyBytes` budget, and the `MaxCipherValueBytes` payload budget,
-all charged while the document is read; the `@Type` check; the
+all charged while the document is read; `Decrypt`'s `@Type` check
+(`DecryptBytes` does not read `@Type`, so it has no such gate); the
 block-algorithm resolution `ErrMalformedEncrypted` and
 `ErrConflictingBlockAlgorithm` come out of; the AES-CBC opt-in gate; and the
 check binding the supplied key's length to the resolved algorithm
