@@ -245,7 +245,7 @@ func TestGeneralXPointerResolution(t *testing.T) {
 
 	// A whitespace-spelled id() selector (id ('dup')) that the literal fast path
 	// does NOT match must still route through the duplicate-detecting
-	// findElementsByIDUnder, NOT xpath1's built-in id(). Under duplicate xml:id,
+	// domutil.FindElementsByID, NOT xpath1's built-in id(). Under duplicate xml:id,
 	// the built-in's Document.GetElementByID returns the LAST duplicate (a silent
 	// XSW resolution to the wrong element); the resolver must instead surface
 	// ErrAmbiguousReference.
@@ -259,7 +259,7 @@ func TestGeneralXPointerResolution(t *testing.T) {
 	})
 
 	// Any id() use that is not the whole-expression selector (a wrapping paren, a
-	// predicate) cannot be routed through findElementsByIDUnder, so it is rejected
+	// predicate) cannot be routed through domutil.FindElementsByID, so it is rejected
 	// fail-closed rather than handed to the built-in id() — under duplicate xml:id
 	// the built-in would otherwise silently resolve to the last such element.
 	for _, expr := range []string{"(id('dup'))", "//a[id('dup')]"} {

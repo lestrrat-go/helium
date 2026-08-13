@@ -20,7 +20,7 @@ func TestParseKeyInfoRejectsBeforeAppendingBeyondCap(t *testing.T) {
 	require.True(t, ok)
 	ed := &EncryptedData{}
 	cfg := &decryptConfig{maxEncryptedKeys: 1}
-	err = parseKeyInfoForEncryption(t.Context(), keyInfo, ed, newEncryptedKeyBudget(cfg), cfg)
+	err = parseKeyInfoForEncryption(t.Context(), keyInfo, ed, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg)})
 	require.ErrorIs(t, err, ErrTooManyEncryptedKeys)
 	require.Contains(t, err.Error(), "2 candidates exceed the limit of 1")
 	require.Len(t, ed.EncryptedKeys, 1)
@@ -57,7 +57,7 @@ func TestParseKeyInfoRejectsExcessBeforeParsing(t *testing.T) {
 			require.True(t, ok)
 			ed := &EncryptedData{}
 			cfg := &decryptConfig{maxEncryptedKeys: 1, maxEncryptedKeyBytes: tc.maxEncryptedKeyBytes}
-			err = parseKeyInfoForEncryption(t.Context(), keyInfo, ed, newEncryptedKeyBudget(cfg), cfg)
+			err = parseKeyInfoForEncryption(t.Context(), keyInfo, ed, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg)})
 			require.ErrorIs(t, err, ErrTooManyEncryptedKeys)
 			require.Len(t, ed.EncryptedKeys, 1)
 			require.Equal(t, "first", ed.EncryptedKeys[0].ID)

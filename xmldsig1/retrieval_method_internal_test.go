@@ -16,6 +16,7 @@ import (
 	"time"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -273,7 +274,7 @@ func TestRetrievalMethodResolvesObjectInsideVerifiedSignature(t *testing.T) {
 		`<ds:RetrievalMethod URI="#cert-data" Type="`+TypeX509Data+`"/></ds:KeyInfo>`+
 		`<ds:Object><ds:X509Data Id="cert-data"><ds:X509Certificate>`+certB64+
 		`</ds:X509Certificate></ds:X509Data></ds:Object></ds:Signature></Root>`)
-	kis := findElementsByIDUnder(doc.DocumentElement(), "ki")
+	kis := domutil.FindElementsByID(doc.DocumentElement(), "ki")
 	require.Len(t, kis, 1)
 	cfg := &verifierConfig{}
 	data := &KeyInfoData{}

@@ -39,7 +39,8 @@ func HardenedParserForTest() helium.Parser {
 // public terminals instead.
 func ParseEncryptedDataForTest(elem *helium.Element) (*EncryptedData, error) {
 	cfg := &decryptConfig{}
-	return parseEncryptedData(context.Background(), elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg), cfg)
+	ps := &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg)}
+	return parseEncryptedData(context.Background(), elem, ps)
 }
 
 // MaxOAEPParamsBytesForTest re-exports the xenc:OAEPparams decoded-size limit

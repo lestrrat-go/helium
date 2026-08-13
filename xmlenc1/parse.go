@@ -16,12 +16,24 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
 )
 
-// parseEncryptedData parses an EncryptedData element. encryptedKeyBudget
-// carries the cumulative EncryptedKey ciphertext allowance across the whole
-// element, payloadBudget caps the EncryptedData CipherValue, and cfg supplies
-// the effective EncryptedKey candidate limit. Both budgets are charged at the
-// earliest point that sees their values; the candidate limit is checked before
-// an excess candidate is retained.
+// parseState bundles the per-parse state parseEncryptedData and its callees
+// thread through the document walk: cfg supplies the effective EncryptedKey
+// candidate limit, keys carries the cumulative EncryptedKey ciphertext
+// allowance across the whole element, and payload caps the EncryptedData
+// CipherValue. Both budgets are charged at the earliest point that sees their
+// values; the candidate limit is checked before an excess candidate is
+// retained.
+//
+// Bundling these into one struct keeps parseEncryptedData's signature from
+// growing a parameter per addition; a later addition to this struct is
+// expected and should not require touching every call site's parameter list.
+type parseState struct {
+	cfg     *decryptConfig
+	keys    *encryptedKeyBudget
+	payload *payloadCipherValueBudget
+}
+
+// parseEncryptedData parses an EncryptedData element.
 //
 // ctx is observed throughout the parse, which is why every function below takes
 // it. The document decides how many children each element it describes carries,
@@ -31,7 +43,7 @@ import (
 // therefore runs through eachSibling, and every error return runs through abort,
 // so a caller that cancels is answered while the parse is still reading rather
 // than after it finishes. A live context leaves both untouched.
-func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyBudget *encryptedKeyBudget, payloadBudget *payloadCipherValueBudget, cfg *decryptConfig) (*EncryptedData, error) {
+func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseState) (*EncryptedData, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedData") {
 		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedData", ErrMalformedEncrypted))
 	}
@@ -65,13 +77,13 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyB
 				return fmt.Errorf("%w: duplicate KeyInfo", ErrMalformedEncrypted)
 			}
 			seenKeyInfo = true
-			return parseKeyInfoForEncryption(ctx, e, ed, encryptedKeyBudget, cfg)
+			return parseKeyInfoForEncryption(ctx, e, ed, ps)
 		case isXMLEncElem(e, "CipherData"):
 			if seenCipherData {
 				return fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(ctx, e, payloadBudget)
+			cv, err := parseCipherData(ctx, e, ps.payload)
 			if err != nil {
 				return err
 			}
@@ -95,15 +107,15 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, encryptedKeyB
 	return ed, nil
 }
 
-func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *EncryptedData, budget *encryptedKeyBudget, cfg *decryptConfig) error {
+func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *EncryptedData, ps *parseState) error {
 	return eachChildElement(ctx, elem, func(e *helium.Element) error {
 		if !isXMLEncElem(e, "EncryptedKey") {
 			return nil
 		}
-		if err := checkEncryptedKeyCap(cfg, len(ed.EncryptedKeys)+1); err != nil {
+		if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
 			return abort(ctx, err)
 		}
-		ek, err := parseEncryptedKey(ctx, e, budget)
+		ek, err := parseEncryptedKey(ctx, e, ps)
 		if err != nil {
 			return err
 		}
@@ -113,11 +125,11 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 }
 
 // parseEncryptedKey parses an EncryptedKey element, charging its CipherValue
-// to budget.
+// to ps.keys.
 //
 // A xenc:CarriedKeyName child is stepped over rather than read;
 // [EncryptedKey.CarriedKeyName] owns why the parse leaves that field unset.
-func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryptedKeyBudget) (*EncryptedKey, error) {
+func parseEncryptedKey(ctx context.Context, elem *helium.Element, ps *parseState) (*EncryptedKey, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedKey") {
 		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedKey", ErrMalformedEncrypted))
 	}
@@ -147,7 +159,7 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, budget *encryp
 				return fmt.Errorf("%w: duplicate CipherData", ErrMalformedEncrypted)
 			}
 			seenCipherData = true
-			cv, err := parseCipherData(ctx, e, budget)
+			cv, err := parseCipherData(ctx, e, ps.keys)
 			if err != nil {
 				return err
 			}
@@ -837,6 +849,11 @@ func base64CharacterData(child helium.Node, valueName string) ([]byte, error) {
 // value never reaches the decoder. decodeCipherValue owns how that charge is
 // kept ahead of the work. A nil budget leaves the value unbounded, which is
 // only used by parser-only test helpers.
+//
+// budget is passed explicitly rather than sourced from a parseState, because
+// which of ps.payload or ps.keys applies is a property of the caller (an
+// EncryptedData's own CipherData vs. an EncryptedKey's), not of parseState
+// itself.
 func parseCipherData(ctx context.Context, elem *helium.Element, budget cipherValueBudget) ([]byte, error) {
 	var decoded []byte
 	var seenChoice bool
