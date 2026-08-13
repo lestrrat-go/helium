@@ -272,6 +272,15 @@ func TestExtensionOfRestrictionAttrInheritance10(t *testing.T) {
 // that appends the extension's own uses directly onto the base slice would park
 // them in that spare capacity, where the next append to the base overwrites
 // them and the extension silently loses its own attribute.
+//
+// Refutation of a review finding that these cases miss the "five-to-seven-attribute
+// slice-capacity boundaries": three IS such a boundary. Append growth for the base's
+// []*AttrUse runs 1, 2, 4, so a three-attribute base carries cap 4 with one spare slot,
+// which is the exact state the aliasing defect needs. Verified by reverting concatAttrUses
+// to `append(base, own...)` with everything else unchanged: four of the five subtests below
+// fail, and all five pass with concatAttrUses in place. A five-to-seven-attribute base is
+// the same mechanism on a larger array, and concatAttrUses allocates a fresh slice at every
+// length, so no length-specific behavior exists for a wider band to reach.
 func TestExtensionOwnAttrsSurviveBaseGrowth10(t *testing.T) {
 	t.Parallel()
 
