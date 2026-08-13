@@ -86,8 +86,19 @@ func BuildIDIndex(root helium.Node) map[string][]*helium.Element {
 			// xs:ID derives from xs:NCName, which collapses whitespace;
 			// match libxml2/helium normalization for xml:id.
 			id := strings.TrimSpace(attr.Value())
+			// Every id on the element is recorded, so an element carrying
+			// two ID attributes cannot hide the second one from a caller
+			// checking len(index[id]) > 1. Only a repeat of the SAME id on
+			// the SAME element is dropped, matching the value-conditional
+			// break in FindElementsByID. Checking the last entry suffices:
+			// the walk runs one element's attributes to completion before
+			// descending into its children, so an element's appends for a
+			// given id are never interleaved with another element's.
+			existing := index[id]
+			if len(existing) > 0 && existing[len(existing)-1] == elem {
+				continue
+			}
 			index[id] = append(index[id], elem)
-			break
 		}
 		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
 			walk(child)
