@@ -144,9 +144,11 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   before the excess candidate is parsed, retained, or reaches candidate
   crypto. A candidate a
   [`ds:RetrievalMethod`](#conformance-scope) supplies costs a slot exactly as
-  an inline `<EncryptedKey>` does, and the slot is charged before the
-  reference's URI is looked up, so a document packed with references cannot
-  buy id lookups with them. Its godoc owns the per-candidate branch dispatch:
+  an inline `<EncryptedKey>` does, and the slot is charged when the candidate
+  is retained, so several references naming one `<EncryptedKey>` cost one slot
+  between them and a reference that supplies no candidate costs none — only a
+  probe of the id index the decrypt builds once. Its godoc owns the
+  per-candidate branch dispatch:
   which key a candidate uses and what it costs. The cap is applied before the key
   configuration is consulted, so it also bounds a decrypt driven by a
   pre-shared
@@ -228,8 +230,9 @@ on, with no setting to turn it off. Inside a `ds:KeyInfo`, a
 key sits, and §3.5.3 permits several of them. The candidate it supplies is
 tried at the position the reference occupies, so a `ds:KeyInfo` mixing inline
 `xenc:EncryptedKey` children with references tries them in document order. Two
-references naming one `EncryptedKey` yield one candidate, decrypted and charged
-against [`MaxEncryptedKeyBytes`](#bounds-and-limits) once. Only the
+references naming one `EncryptedKey` yield one candidate, decrypted once and
+charged once against both [`MaxEncryptedKeys`](#bounds-and-limits) and
+[`MaxEncryptedKeyBytes`](#bounds-and-limits). Only the
 same-document form is REQUIRED and no external form is mandated anywhere, so a
 URI naming another resource is refused with `ErrReferenceNotFound` whatever it
 names — an external key location decides which key material the recipient

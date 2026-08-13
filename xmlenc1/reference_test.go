@@ -2,6 +2,7 @@ package xmlenc1_test
 
 import (
 	"encoding/base64"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -273,14 +274,67 @@ func TestRetrievalMethod(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, ed.EncryptedKeys, 1)
 
-		// One ciphertext charge: a budget of exactly one key's worth admits
-		// the document, which a second charge would not. The candidate cap is
-		// checked before a reference is resolved, so the repeat reference
-		// still occupies a check even though it adds no candidate; a cap of
-		// two is what that ordering costs.
+		// One count charge and one ciphertext charge: a cap of one and a
+		// budget of exactly one key's worth both admit the document, which a
+		// second charge of either would not.
 		nodes, err := xmlenc1.NewDecryptor().
 			KeyEncryptionKey(kek).
-			MaxEncryptedKeys(2).
+			MaxEncryptedKeys(1).
+			MaxEncryptedKeyBytes(len(ed.EncryptedKeys[0].CipherValue)).
+			Decrypt(t.Context(), build(t))
+		require.NoError(t, err)
+		requireSecret(t, nodes)
+	})
+
+	// An inline EncryptedKey marks itself taken, so a reference naming that
+	// very element is a repeat like any other and adds no candidate.
+	t.Run("a reference naming the inline EncryptedKey yields one candidate", func(t *testing.T) {
+		sessionKey, kek := newKeys(t)
+		build := func(t *testing.T) *helium.Element {
+			t.Helper()
+			return retrievalDoc(t, sessionKey,
+				wrappedKeyXML(t, "k", kek, sessionKey, "")+
+					retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#k"),
+				"")
+		}
+
+		ed, err := xmlenc1.ParseEncryptedDataForTest(build(t))
+		require.NoError(t, err)
+		require.Len(t, ed.EncryptedKeys, 1)
+
+		nodes, err := xmlenc1.NewDecryptor().
+			KeyEncryptionKey(kek).
+			MaxEncryptedKeys(1).
+			Decrypt(t.Context(), build(t))
+		require.NoError(t, err)
+		requireSecret(t, nodes)
+	})
+
+	// The cap counts candidates, not references examined, so a flood of
+	// references naming one key costs one slot however long the flood is. The
+	// byte budget is charged at the same point, so it too is charged once.
+	t.Run("many references to one EncryptedKey yield one candidate", func(t *testing.T) {
+		sessionKey, kek := newKeys(t)
+		build := func(t *testing.T) *helium.Element {
+			t.Helper()
+			refs := strings.Repeat(retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#k"), 50)
+			return retrievalDoc(t, sessionKey, refs,
+				`<ds:KeyInfo>`+wrappedKeyXML(t, "k", kek, sessionKey, "")+`</ds:KeyInfo>`)
+		}
+
+		ed, err := xmlenc1.ParseEncryptedDataForTest(build(t))
+		require.NoError(t, err)
+		require.Len(t, ed.EncryptedKeys, 1)
+
+		nodes, err := xmlenc1.NewDecryptor().
+			KeyEncryptionKey(kek).
+			MaxEncryptedKeys(1).
+			Decrypt(t.Context(), build(t))
+		require.NoError(t, err)
+		requireSecret(t, nodes)
+
+		nodes, err = xmlenc1.NewDecryptor().
+			KeyEncryptionKey(kek).
 			MaxEncryptedKeyBytes(len(ed.EncryptedKeys[0].CipherValue)).
 			Decrypt(t.Context(), build(t))
 		require.NoError(t, err)

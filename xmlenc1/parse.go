@@ -166,11 +166,16 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 //   - an absent Type says nothing about what the URI names, so the target is
 //     used only if it IS an xenc:EncryptedKey and passed over otherwise.
 //
-// The candidate slot is charged BEFORE the URI is looked up, so a document
-// packed with references cannot buy id lookups with them. A URI that is not a
-// same-document reference is ErrReferenceNotFound whatever it names, and no
-// setting lifts that: §3.5 mandates only the same-document form, and an
-// external key location decides which key material the recipient
+// The candidate slot is charged at the moment a candidate is RETAINED — after
+// the URI is looked up and after the visited-set dedup, and before the target
+// is parsed — so the peak charge equals the final candidate count exactly. A
+// repeat reference adds no candidate and so charges nothing, and a reference
+// that retains nothing costs one probe of the id index that
+// resolveSameDocument builds once per decrypt.
+//
+// A URI that is not a same-document reference is ErrReferenceNotFound whatever
+// it names, and no setting lifts that: §3.5 mandates only the same-document
+// form, and an external key location decides which key material the recipient
 // trial-decrypts.
 //
 // # Why no recursion is reachable
@@ -199,10 +204,6 @@ func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *Encrypt
 		return nil
 	}
 
-	if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
-		return abort(ctx, err)
-	}
-
 	uri, _ := elem.GetAttribute("URI")
 	target, err := resolveSameDocument(ctx, ps.refs, uri)
 	if err != nil {
@@ -216,6 +217,9 @@ func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *Encrypt
 	}
 	if ps.refs.markVisited(target) {
 		return nil
+	}
+	if err := checkEncryptedKeyCap(ps.cfg, len(ed.EncryptedKeys)+1); err != nil {
+		return abort(ctx, err)
 	}
 	ek, err := parseEncryptedKey(ctx, target, ps)
 	if err != nil {
