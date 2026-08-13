@@ -40,14 +40,14 @@ func TestConcatKDFNonByteAlignedOtherInfo(t *testing.T) {
 	require.Equal(t, want[:], got)
 }
 
-func TestConcatKDFSHA384AcceptsXMLDSigMoreURI(t *testing.T) {
+func TestConcatKDFSHA384AcceptsLegacyXMLEncURI(t *testing.T) {
 	sharedSecret := []byte{0x01, 0x02, 0x03, 0x04}
 
 	canonical, err := deriveConcatKDF(sharedSecret, &ConcatKDFParams{DigestMethod: DigestSHA384}, 48)
 	require.NoError(t, err)
-	alias, err := deriveConcatKDF(sharedSecret, &ConcatKDFParams{DigestMethod: DigestSHA384DSigMore}, 48)
+	legacy, err := deriveConcatKDF(sharedSecret, &ConcatKDFParams{DigestMethod: legacyDigestSHA384XMLEnc}, 48)
 	require.NoError(t, err)
-	require.Equal(t, canonical, alias)
+	require.Equal(t, canonical, legacy)
 }
 
 func TestDecryptECDHSessionKeyAllowsOnlyAESKeyWrap(t *testing.T) {

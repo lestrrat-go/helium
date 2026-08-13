@@ -372,7 +372,7 @@ func concatKDFHash(uri string) (func() hash.Hash, error) {
 		return sha1.New, nil
 	case DigestSHA256:
 		return sha256.New, nil
-	case DigestSHA384, DigestSHA384DSigMore:
+	case DigestSHA384, legacyDigestSHA384XMLEnc:
 		return sha512.New384, nil
 	case DigestSHA512:
 		return sha512.New, nil

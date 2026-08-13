@@ -86,7 +86,7 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 		digestHash = crypto.SHA1
 	case DigestSHA256:
 		digestHash = crypto.SHA256
-	case DigestSHA384, DigestSHA384DSigMore:
+	case DigestSHA384, legacyDigestSHA384XMLEnc:
 		digestHash = crypto.SHA384
 	case DigestSHA512:
 		digestHash = crypto.SHA512

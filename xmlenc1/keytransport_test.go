@@ -69,7 +69,35 @@ func TestRSAOAEP(t *testing.T) {
 		}
 	})
 
-	t.Run("oaep11 sha384 XMLDSig-more compatibility URI after parse", func(t *testing.T) {
+	t.Run("oaep11 sha384 emits the xmldsig-more digest URI", func(t *testing.T) {
+		// SHA-384 has no identifier in the 2001 xmlenc namespace: DigestSHA384
+		// must serialize as the xmldsig-more URI, never the legacy xmlenc# one.
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+
+		encryptor := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM11).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+			OAEPDigest(xmlenc1.DigestSHA384).
+			OAEPMGF(xmlenc1.MGFSHA1).
+			RecipientPublicKey(&key.PublicKey)
+
+		edElem, err := encryptor.EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		xml, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, xml, "http://www.w3.org/2001/04/xmldsig-more#sha384")
+		require.NotContains(t, xml, "http://www.w3.org/2001/04/xmlenc#sha384")
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
+	t.Run("oaep11 sha384 legacy xmlenc digest URI after parse still decrypts", func(t *testing.T) {
+		// A document this package (or an older version of it) emitted with the
+		// legacy xmlenc#sha384 digest URI must still decrypt.
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, samlAssertion)
 
@@ -87,8 +115,8 @@ func TestRSAOAEP(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, xml, xmlenc1.DigestSHA384)
 
-		compatDigest := xmlenc1.DigestSHA384DSigMore
-		tampered := strings.Replace(xml, xmlenc1.DigestSHA384, compatDigest, 1)
+		legacyDigest := xmlenc1.NamespaceXMLEnc + "sha384"
+		tampered := strings.Replace(xml, xmlenc1.DigestSHA384, legacyDigest, 1)
 		require.NotEqual(t, xml, tampered)
 
 		tdoc := mustParseXML(t, tampered)

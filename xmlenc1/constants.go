@@ -61,11 +61,22 @@ const (
 const (
 	DigestSHA1   = NamespaceDSig + "sha1"
 	DigestSHA256 = NamespaceXMLEnc + "sha256"
-	DigestSHA384 = NamespaceXMLEnc + "sha384"
-	// DigestSHA384DSigMore is the XMLDSig-more SHA-384 URI.
+	// DigestSHA384 has no identifier in the 2001 xmlenc namespace, unlike
+	// SHA-256 and SHA-512 above: xmlenc-core1 leaves SHA-384 undefined, and
+	// RFC 6931 places it in the xmldsig-more namespace instead. This constant
+	// uses that URI, matching xmldsig1.DigestSHA384.
+	DigestSHA384 = NamespaceDSigMore + "sha384"
+	// DigestSHA384DSigMore is a documented alias of DigestSHA384, kept for
+	// callers that reference it by this name.
 	DigestSHA384DSigMore = NamespaceDSigMore + "sha384"
 	DigestSHA512         = NamespaceXMLEnc + "sha512"
 )
+
+// legacyDigestSHA384XMLEnc is the SHA-384 digest URI this package once wrote
+// in the 2001 xmlenc namespace. No W3C specification defines it, but it is
+// accepted on read for compatibility with documents this package has already
+// emitted; it is never written.
+const legacyDigestSHA384XMLEnc = NamespaceXMLEnc + "sha384"
 
 // MGF algorithm URIs.
 const (

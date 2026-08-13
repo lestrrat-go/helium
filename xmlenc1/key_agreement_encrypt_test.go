@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -202,6 +203,60 @@ func TestEncryptECDHESEmptyDigestDropsOversizedOtherInfo(t *testing.T) {
 	require.Empty(t, kdf.SuppPrivInfo)
 
 	nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+}
+
+// SHA-384 has no identifier in the 2001 xmlenc namespace, so a ConcatKDF
+// DigestMethod set to DigestSHA384 must serialize as the xmldsig-more URI,
+// never the legacy xmlenc# one, and still decrypt.
+func TestEncryptECDHESSHA384EmitsXMLDSigMoreDigestURI(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+	doc := mustParseXML(t, samlAssertion)
+
+	edElem, err := xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(&key.PublicKey).
+		KeyDerivationParams(&xmlenc1.ConcatKDFParams{DigestMethod: xmlenc1.DigestSHA384}).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, xml, "http://www.w3.org/2001/04/xmldsig-more#sha384")
+	require.NotContains(t, xml, "http://www.w3.org/2001/04/xmlenc#sha384")
+
+	nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+}
+
+// A ConcatKDFParams DigestMethod carrying the legacy xmlenc#sha384 URI this
+// package (or an older version of it) once emitted must still decrypt.
+func TestDecryptECDHESAcceptsLegacyXMLEncSHA384DigestURI(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+	doc := mustParseXML(t, samlAssertion)
+
+	_, err := xmlenc1.NewEncryptor().
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(&key.PublicKey).
+		KeyDerivationParams(&xmlenc1.ConcatKDFParams{DigestMethod: xmlenc1.DigestSHA384}).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	xml, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, xml, xmlenc1.DigestSHA384)
+
+	legacyDigest := xmlenc1.NamespaceXMLEnc + "sha384"
+	tampered := strings.Replace(xml, xmlenc1.DigestSHA384, legacyDigest, 1)
+	require.NotEqual(t, xml, tampered)
+
+	tdoc := mustParseXML(t, tampered)
+	edNode := findEncryptedData(t, tdoc.DocumentElement())
+	require.NotNil(t, edNode)
+
+	nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edNode)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 }
