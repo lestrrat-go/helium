@@ -1,6 +1,8 @@
 package xmlenc1_test
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"errors"
 	"os"
@@ -65,66 +67,128 @@ func TestDecryptCBC(t *testing.T) {
 		require.Contains(t, s, "user@example.com")
 	})
 
-	// H2 Flaw 4: padding oracle hardening. Errors from CBC decryption must
-	// not distinguish "bad padding" from "valid padding but invalid XML" at
-	// the caller-visible boundary.
-	t.Run("padding oracle indistinguishable errors", func(t *testing.T) {
-		sessionKey := make([]byte, 16)
-		_, err := rand.Read(sessionKey)
-		require.NoError(t, err)
+	// H2 Flaw 4: padding oracle hardening, pinned over a fixed table instead
+	// of two ad hoc bit flips. Every one of nine distinct causes — a
+	// corrupted ciphertext, or one of eight different ways the recovered
+	// plaintext fails to parse or fails to match its declared Type — must
+	// report the exact same error string at the caller-visible boundary, so
+	// none of them can be told apart. The table runs each cause under both
+	// AES-CBC and AES-GCM, and under both Type=Element and Type=Content
+	// wherever that combination can fail at all: a shape violation like
+	// "two elements" only rejects Type=Element (Type=Content accepts
+	// multiple nodes), so those rows are skipped for Type=Content rather
+	// than asserted to fail.
+	t.Run("failure modes report the identical error", func(t *testing.T) {
+		sessionKey := randKey(t, 32) // AES-256: valid for both algorithms below
 
-		algorithm := xmlenc1.AES128CBC
-		plaintext := []byte("<x>secret data inside</x>")
-		cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, plaintext)
-		require.NoError(t, err)
+		deepNesting := strings.Repeat("<a>", 300) + "x" + strings.Repeat("</a>", 300)
 
-		mkED := func(c []byte) *helium.Element {
-			doc := mustParseXML(t, `<root/>`)
-			ed := &xmlenc1.EncryptedData{
-				Type:             xmlenc1.TypeElement,
-				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: algorithm},
-				CipherValue:      c,
-			}
-			edElem, mErr := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
-			require.NoError(t, mErr)
-			return edElem
+		modes := []struct {
+			name string
+			// plaintext is encrypted normally to produce the CipherValue.
+			// Ignored when cipherLevel is set.
+			plaintext string
+			// cipherLevel builds a CipherValue that fails inside the block
+			// cipher itself, before any plaintext is parsed, instead of
+			// encrypting plaintext.
+			cipherLevel bool
+			// elementOnly marks a mode that only Type=Element rejects; a
+			// Type=Content decrypt of the same CipherValue succeeds and is
+			// not exercised.
+			elementOnly bool
+		}{
+			{name: "bad padding", cipherLevel: true},
+			{name: "unparseable XML", plaintext: "<foo>"},
+			{name: "two elements", plaintext: "<a/><b/>", elementOnly: true},
+			{name: "zero nodes", plaintext: "", elementOnly: true},
+			{name: "text-only", plaintext: "just text", elementOnly: true},
+			{name: "comment-only", plaintext: "<!-- just a comment -->", elementOnly: true},
+			{name: "depth limit", plaintext: deepNesting},
+			{name: "undeclared prefix", plaintext: "<x:foo/>"},
+			{name: "DOCTYPE", plaintext: "<!DOCTYPE foo><foo/>"},
 		}
 
-		decryptor := xmlenc1.NewDecryptor().
-			SessionKey(sessionKey).
-			AllowUnauthenticatedCBC(true)
+		algorithms := []struct {
+			uri   string
+			label string
+		}{
+			{xmlenc1.AES256CBC, "CBC"},
+			{xmlenc1.AES256GCM, "GCM"},
+		}
+		types := []struct {
+			uri   string
+			label string
+		}{
+			{xmlenc1.TypeElement, "Element"},
+			{xmlenc1.TypeContent, "Content"},
+		}
 
-		// Mutation A: flip a bit in the IV. This randomizes the first
-		// plaintext block and is very likely to produce bytes that look
-		// like invalid padding once unpadding is attempted on the last
-		// block (since last block plaintext is unaffected, this often
-		// produces valid padding but garbage XML — useful contrast).
-		cipherA := append([]byte(nil), cipher...)
-		cipherA[0] ^= 0x01
+		want := xmlenc1.ErrDecryptionFailed.Error()
 
-		// Mutation B: flip a bit in the LAST ciphertext byte. This
-		// directly corrupts padding most of the time.
-		cipherB := append([]byte(nil), cipher...)
-		cipherB[len(cipherB)-1] ^= 0x01
+		for _, mode := range modes {
+			for _, alg := range algorithms {
+				cipherValue := corruptedBlockCipherValue(t, alg.uri, sessionKey)
+				if !mode.cipherLevel {
+					var err error
+					cipherValue, err = xmlenc1.EncryptBytesForTest(alg.uri, sessionKey, []byte(mode.plaintext))
+					require.NoError(t, err)
+				}
 
-		_, errA := decryptor.Decrypt(t.Context(), mkED(cipherA))
-		require.Error(t, errA)
-		require.ErrorIs(t, errA, xmlenc1.ErrDecryptionFailed)
-		require.False(t,
-			strings.Contains(strings.ToLower(errA.Error()), "padding"),
-			"error A leaks padding state: %v", errA)
-		require.False(t, errors.Is(errA, xmlenc1.ErrInvalidPadding),
-			"error A is distinguishable as ErrInvalidPadding: %v", errA)
+				for _, typ := range types {
+					if mode.elementOnly && typ.uri == xmlenc1.TypeContent {
+						continue
+					}
 
-		_, errB := decryptor.Decrypt(t.Context(), mkED(cipherB))
-		require.Error(t, errB)
-		require.ErrorIs(t, errB, xmlenc1.ErrDecryptionFailed)
-		require.False(t,
-			strings.Contains(strings.ToLower(errB.Error()), "padding"),
-			"error B leaks padding state: %v", errB)
-		require.False(t, errors.Is(errB, xmlenc1.ErrInvalidPadding),
-			"error B is distinguishable as ErrInvalidPadding: %v", errB)
+					t.Run(mode.name+"/"+alg.label+"/"+typ.label, func(t *testing.T) {
+						doc := mustParseXML(t, `<root/>`)
+						ed := &xmlenc1.EncryptedData{
+							Type:             typ.uri,
+							EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: alg.uri},
+							CipherValue:      cipherValue,
+						}
+						edElem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+						require.NoError(t, err)
+
+						decryptor := xmlenc1.NewDecryptor().
+							SessionKey(sessionKey).
+							AllowUnauthenticatedCBC(true)
+						_, err = decryptor.Decrypt(t.Context(), edElem)
+						require.Error(t, err)
+						require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+						require.Equal(t, want, err.Error(),
+							"mode %q under %s/%s must report the same error as every other mode", mode.name, alg.label, typ.label)
+					})
+				}
+			}
+		}
 	})
+}
+
+// corruptedBlockCipherValue returns a CipherValue that fails inside the
+// block cipher itself, before any plaintext is ever parsed, for the given
+// algorithm and key. Under AES-CBC it decrypts (with an all-zero key-derived
+// keystream block XORed against an all-zero IV) to a block whose last byte
+// is 0 — a PKCS#7 padding length of 0 is always invalid, so this reliably
+// fails padding without depending on crypto/rand. AES-GCM has no padding to
+// corrupt, so its analogous pre-parse cipher-level failure is a CipherValue
+// too short to hold a nonce and authentication tag.
+func corruptedBlockCipherValue(t *testing.T, algorithm string, key []byte) []byte {
+	t.Helper()
+	switch algorithm {
+	case xmlenc1.AES256CBC:
+		block, err := aes.NewCipher(key)
+		require.NoError(t, err)
+		raw := make([]byte, aes.BlockSize) // all-zero plaintext block
+		iv := make([]byte, aes.BlockSize)  // all-zero IV: deterministic, test-only
+		out := make([]byte, aes.BlockSize+len(raw))
+		cipher.NewCBCEncrypter(block, iv).CryptBlocks(out[aes.BlockSize:], raw)
+		return out
+	case xmlenc1.AES256GCM:
+		return nil // shorter than any nonce + authentication tag
+	default:
+		t.Fatalf("corruptedBlockCipherValue: unsupported algorithm %q", algorithm)
+		return nil
+	}
 }
 
 func TestEncryptCBC(t *testing.T) {
@@ -341,6 +405,180 @@ func TestXXE(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestDecryptBoundaryRegression runs a table of attacker-shaped documents
+// against one fixed key configuration (one RSA key pair and one KEK,
+// configured once and reused for every row) and requires that every one of
+// them fails through a sentinel Decrypt already documents: ErrDecryptionFailed,
+// ErrMalformedEncrypted, ErrMissingKey, or one of the budget sentinels. A
+// caller written to treat anything outside that set as an internal fault
+// worth logging verbatim must never see one from a document it did not write
+// itself.
+//
+// Two rows regress the fix in this package and are confirmed to fail before
+// it: a too-short session key wrapped under the recipient's own RSA public
+// key (attacker-controlled, since the public key is public), and a document
+// declaring kw-aes128 while the recipient's configured KeyEncryptionKey is 32
+// bytes (recipient-configured, so a distinguishable error would disclose its
+// length). Both used to surface a bare *KeySizeError, which satisfies none of
+// the four sentinels above.
+func TestDecryptBoundaryRegression(t *testing.T) {
+	rsaKey := generateRSAKey(t)
+	kek := randKey(t, 32)
+
+	decryptor := xmlenc1.NewDecryptor().
+		PrivateKey(rsaKey).
+		KeyEncryptionKey(kek).
+		AllowUnauthenticatedCBC(true)
+
+	for _, tc := range []struct {
+		name  string
+		build func(t *testing.T) *helium.Element
+	}{
+		{
+			// Regression: RSA key transport delivers whatever length the
+			// wrapped ciphertext decrypts to, and RSA-OAEP places no
+			// constraint on that length. The declared data algorithm
+			// (AES-256-GCM) needs 32 bytes; this transports 16.
+			name: "wrong-length session key under RSA key transport",
+			build: func(t *testing.T) *helium.Element {
+				shortSessionKey := randKey(t, 16)
+				transported := rsaTransportedKey(t, rsaKey, shortSessionKey)
+				cipher, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES128GCM, shortSessionKey, []byte("<x>secret</x>"))
+				require.NoError(t, err)
+
+				doc := mustParseXML(t, `<root/>`)
+				ed := &xmlenc1.EncryptedData{
+					Type:             xmlenc1.TypeElement,
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+					EncryptedKeys: []*xmlenc1.EncryptedKey{{
+						EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+						CipherValue:      transported,
+					}},
+					CipherValue: cipher,
+				}
+				elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+				require.NoError(t, err)
+				return elem
+			},
+		},
+		{
+			// Regression: the document picks the key-wrap algorithm; the
+			// KEK length that algorithm is checked against belongs to the
+			// recipient, not the document.
+			name: "kw-aes128 declared against a 32-byte KEK",
+			build: func(t *testing.T) *helium.Element {
+				doc := mustParseXML(t, `<root/>`)
+				ed := &xmlenc1.EncryptedData{
+					Type:             xmlenc1.TypeElement,
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+					EncryptedKeys: []*xmlenc1.EncryptedKey{{
+						EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES128KeyWrap},
+						CipherValue:      randKey(t, 24), // never reached: rejected before unwrap
+					}},
+					CipherValue: make([]byte, 64),
+				}
+				elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+				require.NoError(t, err)
+				return elem
+			},
+		},
+		{
+			name: "no EncryptedKey at all",
+			build: func(t *testing.T) *helium.Element {
+				doc := mustParseXML(t, `<root/>`)
+				ed := &xmlenc1.EncryptedData{
+					Type:             xmlenc1.TypeElement,
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+					CipherValue:      make([]byte, 64),
+				}
+				elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+				require.NoError(t, err)
+				return elem
+			},
+		},
+		{
+			name: "unsupported EncryptedData Type",
+			build: func(t *testing.T) *helium.Element {
+				doc := mustParseXML(t, `<root/>`)
+				ed := &xmlenc1.EncryptedData{
+					Type:             "urn:example:bogus-type",
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+					EncryptedKeys: []*xmlenc1.EncryptedKey{{
+						EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+						CipherValue:      make([]byte, 256),
+					}},
+					CipherValue: make([]byte, 64),
+				}
+				elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+				require.NoError(t, err)
+				return elem
+			},
+		},
+		{
+			name: "unsupported block algorithm",
+			build: func(t *testing.T) *helium.Element {
+				doc := mustParseXML(t, `<root/>`)
+				ed := &xmlenc1.EncryptedData{
+					Type:             xmlenc1.TypeElement,
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: "urn:example:unsupported-block"},
+					EncryptedKeys: []*xmlenc1.EncryptedKey{{
+						EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+						CipherValue:      make([]byte, 256),
+					}},
+					CipherValue: make([]byte, 64),
+				}
+				elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+				require.NoError(t, err)
+				return elem
+			},
+		},
+		{
+			// Budget sentinel: more EncryptedKey candidates than the
+			// Decryptor's default cap allows.
+			name: "too many EncryptedKey candidates",
+			build: func(t *testing.T) *helium.Element {
+				doc := mustParseXML(t, `<root/>`)
+				keys := make([]*xmlenc1.EncryptedKey, xmlenc1.DefaultMaxEncryptedKeys+1)
+				for i := range keys {
+					keys[i] = &xmlenc1.EncryptedKey{
+						EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.RSAOAEP},
+						CipherValue:      make([]byte, 8),
+					}
+				}
+				ed := &xmlenc1.EncryptedData{
+					Type:             xmlenc1.TypeElement,
+					EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256GCM},
+					EncryptedKeys:    keys,
+					CipherValue:      make([]byte, 64),
+				}
+				elem, err := xmlenc1.MarshalEncryptedDataForTest(doc, ed)
+				require.NoError(t, err)
+				return elem
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := decryptor.Decrypt(t.Context(), tc.build(t))
+			require.Error(t, err)
+			require.True(t, isDocumentedDecryptFailure(err),
+				"error matches none of the documented decrypt-failure sentinels: %v", err)
+		})
+	}
+}
+
+// isDocumentedDecryptFailure reports whether err matches one of the
+// sentinels Decrypt/DecryptBytes document as possible failures: a
+// decryption failure, a malformed EncryptedData, a missing key, or one of
+// the byte/count budget sentinels.
+func isDocumentedDecryptFailure(err error) bool {
+	return errors.Is(err, xmlenc1.ErrDecryptionFailed) ||
+		errors.Is(err, xmlenc1.ErrMalformedEncrypted) ||
+		errors.Is(err, xmlenc1.ErrMissingKey) ||
+		errors.Is(err, xmlenc1.ErrTooManyEncryptedKeys) ||
+		errors.Is(err, xmlenc1.ErrEncryptedKeyBytesExceeded) ||
+		errors.Is(err, xmlenc1.ErrCipherValueBytesExceeded)
 }
 
 // swapEncryptionMethodAlgorithm finds the EncryptionMethod child of

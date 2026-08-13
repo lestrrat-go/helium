@@ -1026,6 +1026,18 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 	keys := ed.effectiveEncryptedKeys()
 
 	if len(cfg.sessionKey) > 0 {
+		// The caller supplied the session key directly, so its length is
+		// caller-configured, not attacker-controlled: reject a mismatch
+		// against the declared block algorithm before any ciphertext is
+		// touched, with a bare KeySizeError rather than one wrapped in
+		// ErrDecryptionFailed. alg itself may still be unsupported (a
+		// document-declared value this Decryptor cannot honor at all), so
+		// route through wrapBlockAlgorithmError rather than returning err
+		// bare: that keeps an UnsupportedAlgorithmError wrapped exactly as
+		// it would be from blockDecrypt, while leaving a KeySizeError bare.
+		if err := validateKeySize(paramBlockAlgorithm, alg, paramSessionKey, cfg.sessionKey); err != nil {
+			return nil, abort(ctx, wrapBlockAlgorithmError(ErrDecryptionFailed, err))
+		}
 		plaintext, err := decryptCipherValue(ed, alg, cfg.sessionKey)
 		if err != nil {
 			return nil, abort(ctx, err)
@@ -1129,6 +1141,18 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	// candidate selection, per-candidate validation, and per-candidate key
 	// resolution. Decryptor.SessionKey documents what that skips.
 	if len(cfg.sessionKey) > 0 {
+		// The caller supplied the session key directly, so its length is
+		// caller-configured, not attacker-controlled: reject a mismatch
+		// against the declared block algorithm before any ciphertext is
+		// touched, with a bare KeySizeError rather than one wrapped in
+		// ErrDecryptionFailed. alg itself may still be unsupported (a
+		// document-declared value this Decryptor cannot honor at all), so
+		// route through wrapBlockAlgorithmError rather than returning err
+		// bare: that keeps an UnsupportedAlgorithmError wrapped exactly as
+		// it would be from blockDecrypt, while leaving a KeySizeError bare.
+		if err := validateKeySize(paramBlockAlgorithm, alg, paramSessionKey, cfg.sessionKey); err != nil {
+			return nil, abort(ctx, wrapBlockAlgorithmError(ErrDecryptionFailed, err))
+		}
 		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey)
 		if err != nil {
 			return nil, abort(ctx, err)
@@ -1328,6 +1352,16 @@ func decryptCipherValue(ed *EncryptedData, alg string, sessionKey []byte) ([]byt
 	if errors.As(err, &unsupported) {
 		return nil, err
 	}
+	// A KeySizeError, like an UnsupportedAlgorithmError, is decided before
+	// any ciphertext byte is touched (blockDecrypt checks it ahead of the
+	// cipher/padding operations), so it carries none of the cipher-,
+	// padding-, or parse-dependent timing the squash below exists to hide.
+	// Preserve it, still wrapped in ErrDecryptionFailed by blockDecrypt, so
+	// errors.As keeps working for it.
+	var keySize *KeySizeError
+	if errors.As(err, &keySize) {
+		return nil, err
+	}
 	// Squash all decryption errors to the same sentinel — and crucially, the
 	// same string — so callers cannot distinguish "bad padding" from "bad
 	// cipher" from "downstream parse" when CBC is in use. GCM authenticates
@@ -1386,9 +1420,14 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *EncryptedKey, ses
 		// Bind the declared key-wrap URI to the KEK length so a 16-byte
 		// KEK is not silently accepted as AES-128 against a kw-aes256
 		// declaration. The unwrapped session key is in turn validated
-		// against the data-encryption algorithm in blockDecrypt.
+		// against the data-encryption algorithm in blockDecrypt. alg is
+		// the EncryptedKey's declared algorithm, which the DOCUMENT
+		// chose, so a KeySizeError here would disclose the length of
+		// the recipient's own configured KeyEncryptionKey to whoever
+		// controls the document; wrap it in the same opaque
+		// ErrDecryptionFailed as every other failure instead.
 		if err := validateKeySize(paramKeyWrap, alg, paramKEK, cfg.keyEncryptionKey); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
 		}
 		return aesKeyUnwrap(cfg.keyEncryptionKey, ek.CipherValue, sessionKeySize)
 	default:
