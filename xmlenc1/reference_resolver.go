@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"path"
 	"strings"
 
@@ -135,7 +136,14 @@ func (r fsReferenceResolver) resolveReferenceWithLimit(ctx context.Context, uri 
 	// that extra byte into the budget's own over-limit error.
 	var src io.Reader = f
 	if maxBytes >= 0 {
-		src = io.LimitReader(f, int64(maxBytes)+1)
+		// int64(maxBytes)+1 wraps when maxBytes is math.MaxInt on a 64-bit
+		// platform, so only add the probe byte when there is room for it. At
+		// that allowance no resource can exceed the budget anyway.
+		limit := int64(maxBytes)
+		if limit < math.MaxInt64 {
+			limit++
+		}
+		src = io.LimitReader(f, limit)
 	}
 	data, err := io.ReadAll(src)
 	if err != nil {

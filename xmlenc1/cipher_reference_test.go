@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"runtime"
 	"strings"
 	"testing"
@@ -499,6 +500,55 @@ func TestCipherReference(t *testing.T) {
 			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
 			Decrypt(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrCipherValueBytesExceeded)
+	})
+
+	// math.MaxInt is the one budget value that must still let a valid
+	// external resource resolve: reference_resolver.go builds the probe read
+	// as int64(maxBytes)+1, and a maximum allowance must not look over
+	// budget.
+	t.Run("a maximum budget still resolves", func(t *testing.T) {
+		sessionKey := newSessionKey(t)
+		fsys := fstest.MapFS{externalCipherPath: &fstest.MapFile{Data: cipherRefCiphertext(t, sessionKey)}}
+		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
+		nodes, err := xmlenc1.NewDecryptor().
+			SessionKey(sessionKey).
+			MaxCipherValueBytes(math.MaxInt).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+			Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		requireSecret(t, nodes)
+	})
+
+	// The EncryptedKey budget reaches the same resolver code path for its own
+	// external CipherReference, so the maximum allowance must resolve there
+	// too.
+	t.Run("a maximum EncryptedKey budget still resolves", func(t *testing.T) {
+		sessionKey := newSessionKey(t)
+		kek := randKey(t, 32)
+		wrapped, err := xmlenc1.AESKeyWrapForTest(kek, sessionKey)
+		require.NoError(t, err)
+		keyInfo := `<ds:KeyInfo><xenc:EncryptedKey>` +
+			`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256KeyWrap + `"/>` +
+			`<xenc:CipherData>` + cipherReferenceXML(externalCipherURI, "") + `</xenc:CipherData>` +
+			`</xenc:EncryptedKey></ds:KeyInfo>`
+		doc := mustParseXML(t, `<root>`+
+			`<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" xmlns:ds="`+xmlenc1.NamespaceDSig+`" Type="`+xmlenc1.TypeElement+`">`+
+			`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/>`+
+			keyInfo+
+			`<xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(cipherRefCiphertext(t, sessionKey))+`</xenc:CipherValue></xenc:CipherData>`+
+			`</xenc:EncryptedData>`+
+			`</root>`)
+		elem := findEncryptedData(t, doc.DocumentElement())
+		require.NotNil(t, elem)
+
+		fsys := fstest.MapFS{externalCipherPath: &fstest.MapFile{Data: wrapped}}
+		nodes, err := xmlenc1.NewDecryptor().
+			KeyEncryptionKey(kek).
+			MaxEncryptedKeyBytes(math.MaxInt).
+			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys)).
+			Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		requireSecret(t, nodes)
 	})
 
 	// A relative URI is joined against the document's base URI before it
