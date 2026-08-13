@@ -462,10 +462,13 @@ func parseConcatKDFParams(ctx context.Context, elem *helium.Element) (*ConcatKDF
 
 func parseConcatKDFHexAttribute(elem *helium.Element, name string) ([]byte, uint8, error) {
 	value, ok := elem.GetAttribute(name)
-	if !ok || strings.TrimSpace(value) == "" {
+	// xs:hexBinary carries whiteSpace='collapse', whose whitespace is exactly
+	// #x20, #x9, #xD and #xA. strings.TrimSpace would also strip U+00A0 and
+	// the other Unicode spaces, which are not in the lexical space.
+	if !ok || strings.Trim(value, " \t\r\n") == "" {
 		return nil, 0, nil
 	}
-	value = strings.TrimSpace(value)
+	value = strings.Trim(value, " \t\r\n")
 	// A single field can never be larger than the whole set, so the same
 	// budget rules this attribute out from its hex length alone — before
 	// hex.DecodeString allocates half of it. The set-wide check in
