@@ -178,15 +178,20 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   returns ahead of: that candidate is never resolved, and a document
   carrying one still decrypts.
 
-## Conformance limitations
+## Conformance scope
 
-Coverage of W3C xmlenc-core1 is a subset. Three constructs the specification
-marks REQUIRED are absent, and each bullet says when its absence fails a
+This package implements W3C xmlenc-core1, and where it deliberately departs
+from the specification it names the departure and the reason for it. Three
+constructs the specification marks REQUIRED are not implemented here, and they
+are not the same kind of thing: Triple DES is a deliberate refusal, while
+`xenc:CipherReference` and same-document `ds:RetrievalMethod` are not yet
+implemented. Each bullet says how a document that needs one of them fails a
 decrypt:
 
-- **`xenc:CipherReference`** (§3.3.1, §4.4). xmlenc-core1 lets `CipherData`
-  carry either a `CipherValue` or a `CipherReference`; this package accepts
-  only the `CipherValue`. Cipher text named by a URI is rejected with
+- **`xenc:CipherReference`** (§3.3.1, §4.4) — not yet implemented.
+  xmlenc-core1 lets `CipherData` carry either a `CipherValue` or a
+  `CipherReference`; this package accepts only the `CipherValue`. Cipher
+  text named by a URI is rejected with
   `ErrMalformedEncrypted`, including the same-document form that needs no
   I/O, on an `EncryptedData` payload and on every `EncryptedKey` alike, and
   `Encryptor` writes no such form; the rejection happens while the document is
@@ -194,8 +199,9 @@ decrypt:
   [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) does not
   decrypt past it. §3.3.1 requires the URI dereferencing; the
   transforms a `CipherReference` may carry are OPTIONAL there.
-- **Same-document `ds:RetrievalMethod`** (§3.5, REQUIRED). Inside
-  `ds:KeyInfo`, only an `xenc:EncryptedKey` child supplies the session key.
+- **Same-document `ds:RetrievalMethod`** (§3.5, REQUIRED) — not yet
+  implemented. Inside `ds:KeyInfo`, only an `xenc:EncryptedKey` child
+  supplies the session key.
   A `<ds:RetrievalMethod URI="#id"/>` naming an `EncryptedKey` elsewhere in
   the same document is not read, so the decrypt fails with `ErrMissingKey` —
   unless a pre-shared
@@ -213,7 +219,12 @@ decrypt:
   `xenc:OriginatorKeyInfo` is a different position and is read, since
   that is where ECDH-ES carries the sender's ephemeral key.
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
-  (§5.7.1, REQUIRED). Block encryption and key wrapping are AES only.
+  (§5.7.1, REQUIRED) — refused deliberately, and this package will not
+  implement them. Triple DES is a 64-bit block cipher, so Sweet32
+  (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
+  encryption after 2023. The specification marks both REQUIRED; this is the
+  place where following it no longer makes sense. Block encryption and key
+  wrapping are AES only.
   `#tripledes-cbc` names the block cipher and fails with an error matching
   the relevant operation sentinel while preserving
   `*UnsupportedAlgorithmError`, in every key configuration, a pre-shared
@@ -224,9 +235,7 @@ decrypt:
   missing key is checked first, so it fails with `ErrMissingKey`.
   `#kw-tripledes` names an `<EncryptedKey>`'s wrapping and fails the same
   way only when that key must be resolved, so a pre-shared `SessionKey`
-  decrypts past it. The omission is deliberate: Triple DES is a 64-bit
-  block cipher, so Sweet32 (CVE-2016-2183) applies, and NIST SP 800-131A
-  Rev. 2 disallows TDEA encryption after 2023.
+  decrypts past it.
 
 An `xenc:KeySize` child of `EncryptionMethod` is read and checked, but it is
 never used as a key length: every algorithm URI this package implements
@@ -396,11 +405,11 @@ Those ten vectors exercise key protection: six ECDH-ES ConcatKDF cases on
 EC-P256, EC-P384, and EC-P521, and four rsa-oaep cases on RSA-2048, RSA-3072,
 and RSA-4096. Every one of them uses AES-GCM block encryption. So the snapshot
 is evidence about how the session key is protected and about AES-GCM, and it is
-evidence about nothing else: no CBC block algorithm appears in it, none of the
-[conformance limitations](#conformance-limitations) above are covered by it, and
-it is not the merlin interop corpus. The ten are the suite in full, and the 1.1
-interop corpus holds no Triple DES vector, so the zero skips is not a vector
-being passed over.
+evidence about nothing else: no CBC block algorithm appears in it, nothing the
+[conformance scope](#conformance-scope) above names as unimplemented or refused
+is covered by it, and it is not the merlin interop corpus. The ten are the
+suite in full, and the 1.1 interop corpus holds no Triple DES vector, so the
+zero skips is not a vector being passed over.
 
 The suite is available through the manual Conformance workflow and is not part
 of the release gate.

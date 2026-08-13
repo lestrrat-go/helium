@@ -1,12 +1,13 @@
-// Package xmlenc1 implements a subset of W3C XML Encryption 1.1.
+// Package xmlenc1 implements W3C XML Encryption 1.1, naming each deliberate
+// departure from the specification and its reason.
 //
 // Covered: AES block encryption, AES key wrapping, RSA-OAEP key transport, and
 // ECDH-ES key agreement with ConcatKDF. Three constructs xmlenc-core1 marks
-// REQUIRED are absent — xenc:CipherReference, same-document
-// ds:RetrievalMethod, and the Triple DES algorithms #tripledes-cbc and
-// #kw-tripledes, the last deliberately because Triple DES is a 64-bit block
-// cipher that Sweet32 (CVE-2016-2183) applies to. README.md's conformance
-// limitations own the detail.
+// REQUIRED are absent, and not for the same reason: xenc:CipherReference and
+// same-document ds:RetrievalMethod are not yet implemented, while the Triple
+// DES algorithms #tripledes-cbc and #kw-tripledes are refused deliberately,
+// because Triple DES is a 64-bit block cipher that Sweet32 (CVE-2016-2183)
+// applies to. README.md's Conformance scope section owns the detail.
 package xmlenc1
 
 const (
