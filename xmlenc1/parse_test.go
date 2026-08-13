@@ -456,6 +456,39 @@ func TestEncryptionMethodKeySize(t *testing.T) {
 		require.Equal(t, xmlenc1.AES256GCM, ed.EncryptionMethod.Algorithm)
 	})
 
+	t.Run("non-breaking space rejected", func(t *testing.T) {
+		// xs:integer's whiteSpace='collapse' facet covers exactly #x20, #x9,
+		// #xD and #xA, so the ASCII spaces the case above accepts are in the
+		// lexical space but U+00A0 is not. A value wrapped in NBSP is not an
+		// xs:integer and must be refused rather than trimmed into one.
+		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			"<xenc:KeySize>\u00a0256\u00a0</xenc:KeySize>"+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "invalid KeySize")
+	})
+
+	t.Run("out-of-range value is a consistency question, not a syntax one", func(t *testing.T) {
+		// xs:integer is unbounded, so a 64-digit value is well formed even
+		// though no int can hold it. It therefore reaches the consistency
+		// check like any other value: ignored under a URI that implies no
+		// key length, and inconsistent under one that does.
+		digits := strings.Repeat("9", 64)
+
+		ed, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.RSAOAEP11+`">`+
+			`<xenc:KeySize>`+digits+`</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.RSAOAEP11, ed.EncryptionMethod.Algorithm)
+
+		_, err = parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
+			`<xenc:KeySize>`+digits+`</xenc:KeySize>`+
+			`</xenc:EncryptionMethod>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "inconsistent")
+		require.Contains(t, err.Error(), "256")
+	})
+
 	t.Run("value spread over text and CDATA accepted", func(t *testing.T) {
 		// Proves the character-data walk, not Content(): a value split
 		// across a text node and a CDATA section must still be joined.

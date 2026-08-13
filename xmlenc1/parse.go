@@ -5,6 +5,7 @@ import (
 	"crypto/ecdh"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -565,9 +566,12 @@ const maxKeySizeChars = 64
 // refused. maxKeySizeChars is enforced as the characters are gathered, so a
 // document cannot make this walk hold a value sized only by what it sends.
 //
-// The gathered text is trimmed and parsed with [strconv.Atoi], which accepts
-// exactly the xs:integer lexical space (an optional sign and leading zeros).
-// A value outside that space is ErrMalformedEncrypted naming it.
+// The gathered text is trimmed of the four characters xs:integer's
+// whiteSpace='collapse' facet permits and parsed with [strconv.Atoi], which
+// accepts the rest of that lexical space (an optional sign and leading zeros).
+// A value outside the lexical space is ErrMalformedEncrypted naming it. A value
+// INSIDE it that no int can hold is not: xs:integer is unbounded, so such a
+// value is returned clamped and left to the consistency check.
 func parseKeySizeBits(ctx context.Context, elem *helium.Element) (int, error) {
 	var chars []byte
 	if err := eachSibling(ctx, elem.FirstChild(), func(child helium.Node) error {
@@ -583,11 +587,19 @@ func parseKeySizeBits(ctx context.Context, elem *helium.Element) (int, error) {
 	}); err != nil {
 		return 0, err
 	}
-	value := strings.TrimSpace(string(chars))
+	// xs:integer carries whiteSpace='collapse', whose whitespace is exactly
+	// #x20, #x9, #xD and #xA. strings.TrimSpace would also strip U+00A0 and
+	// the other Unicode spaces, which are not in the lexical space.
+	value := strings.Trim(string(chars), " \t\r\n")
 	bits, err := strconv.Atoi(value)
-	if err != nil {
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
 		return 0, abort(ctx, fmt.Errorf("%w: invalid KeySize %q", ErrMalformedEncrypted, value))
 	}
+	// A well-formed xs:integer too large for an int is a value the schema
+	// permits, so it is not malformed. Atoi has already clamped it to
+	// MaxInt/MinInt, which can never equal an algorithm's key size, so a URI
+	// that implies a length still reports the contradiction and one that
+	// implies none still ignores it.
 	return bits, nil
 }
 
@@ -740,6 +752,22 @@ func decodeBoundedBase64(ctx context.Context, elem *helium.Element, valueName st
 // undecodable and the decode fails, which is the right verdict for it. The
 // Entity's NextSibling is deliberately not followed either — it is the next
 // declaration in the DTD, not part of this value.
+//
+// The literal is returned in FULL rather than truncated to what the caller's
+// limit still has room for, and that whole cost is one transient copy of one
+// child: every caller weighs the returned text against its own limit and stops
+// at the first child that exceeds it, so at most one such copy is ever taken.
+// Its size is bounded twice over by the parser that built the tree —
+// [helium.DefaultMaxNodeContentSize] caps the declared literal itself, and
+// [helium.DefaultMaxEntityAmplification] caps the total expanded entity bytes
+// a document may reach as a multiple of its own input size, which is what
+// bounds how many references to that literal it can carry. Because the literal
+// is UNEXPANDED, a chain of entities
+// each referencing the one below costs the length of the reference text it is
+// written with (&inner;&inner;) rather than the length that text would expand
+// to, so nesting buys a document no size it did not already write. All of that
+// is measurable: a 4 MiB entity replacement and a 4 MiB plain text child
+// allocate the same 4.2 MB through [Decryptor.Decrypt].
 //
 // A CHILDLESS EntityRef is a normal parser output, not a caller-built shape:
 // per XML 1.0's "Entity Declared" constraint, an undeclared general entity is
