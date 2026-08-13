@@ -914,8 +914,10 @@ func tooManyEncryptedKeysError(candidates, maxKeys int) error {
 // documents the budget; this type only spends it.
 type encryptedKeyBudget struct {
 	// limit is the effective allowance in bytes. Negative means unlimited.
-	limit     int
-	remaining int
+	limit int
+	// left is the bytes still available; charge decrements it. The
+	// remaining method exposes it (and the unlimited case) to callers.
+	left int
 }
 
 // payloadCipherValueBudget is the per-EncryptedData allowance for the
@@ -926,6 +928,9 @@ type payloadCipherValueBudget struct {
 
 type cipherValueBudget interface {
 	charge(int) error
+	// remaining reports the bytes still available under the budget, or -1
+	// when it is unlimited.
+	remaining() int
 }
 
 // newEncryptedKeyBudget resolves a Decryptor's configured budget (zero => the
@@ -935,7 +940,7 @@ func newEncryptedKeyBudget(cfg *decryptConfig) *encryptedKeyBudget {
 	if limit == 0 {
 		limit = DefaultMaxEncryptedKeyBytes
 	}
-	return &encryptedKeyBudget{limit: limit, remaining: limit}
+	return &encryptedKeyBudget{limit: limit, left: limit}
 }
 
 func newPayloadCipherValueBudget(cfg *decryptConfig) *payloadCipherValueBudget {
@@ -956,10 +961,10 @@ func (b *encryptedKeyBudget) charge(n int) error {
 	if b == nil || b.limit < 0 {
 		return nil
 	}
-	if n > b.remaining {
+	if n > b.left {
 		return fmt.Errorf("%w: EncryptedKey ciphertext exceeds the total of %d bytes; raise or remove it with Decryptor.MaxEncryptedKeyBytes", ErrEncryptedKeyBytesExceeded, b.limit)
 	}
-	b.remaining -= n
+	b.left -= n
 	return nil
 }
 
@@ -971,6 +976,72 @@ func (b *payloadCipherValueBudget) charge(n int) error {
 		return fmt.Errorf("%w: payload ciphertext exceeds the limit of %d bytes; raise or remove it with Decryptor.MaxCipherValueBytes", ErrCipherValueBytesExceeded, b.limit)
 	}
 	return nil
+}
+
+// remaining reports the bytes still available under the budget, or -1 when it
+// is unlimited (including a nil budget, consistent with charge's nil
+// handling).
+func (b *encryptedKeyBudget) remaining() int {
+	if b == nil || b.limit < 0 {
+		return -1
+	}
+	return b.left
+}
+
+// remaining reports the budget's limit, or -1 when it is unlimited (including
+// a nil budget, consistent with charge's nil handling). Unlike
+// encryptedKeyBudget.remaining, this never decreases: charge is a one-shot
+// check rather than a running spend, and exactly one payload CipherValue
+// exists per EncryptedData, so the limit IS what remains until that single
+// check happens.
+func (b *payloadCipherValueBudget) remaining() int {
+	if b == nil || b.limit < 0 {
+		return -1
+	}
+	return b.limit
+}
+
+// budgetWriter is an io.Writer that stops a stream at a cipherValueBudget's
+// limit rather than letting it complete and having the caller reject the
+// finished result afterward. Bytes are forwarded to dst as long as the
+// running total stays within budget.remaining(); the moment a Write call
+// would push the total past it, the write fails with the budget's OWN
+// over-limit error — produced by a single charge call sized to the excess,
+// which is guaranteed to hit that budget's error branch and never mutate its
+// state — and nothing from that call reaches dst. A nil budget is unlimited,
+// matching this package's other CipherValue budgets.
+//
+// It exists so a later canonicalization stage (bounding a same-document
+// CipherReference target, in a follow-up PR) can be aborted at the limit
+// mid-stream, instead of paying the full cost of canonicalizing an oversized
+// subtree only to discard the finished result. A write that stays within the
+// limit is not itself charged: as with this package's other CipherValue
+// budgets, the caller charges budget once, with the final known total, after
+// the write completes successfully.
+type budgetWriter struct {
+	dst    io.Writer
+	budget cipherValueBudget
+	total  int
+}
+
+// newBudgetWriter returns a budgetWriter that forwards accepted bytes to dst,
+// bounded by budget.
+func newBudgetWriter(dst io.Writer, budget cipherValueBudget) *budgetWriter {
+	return &budgetWriter{dst: dst, budget: budget}
+}
+
+// Write implements io.Writer. It never partially forwards p to dst: either
+// every byte is accepted, or none are and an error is returned.
+func (w *budgetWriter) Write(p []byte) (int, error) {
+	if w.budget != nil {
+		total := w.total + len(p)
+		if limit := w.budget.remaining(); limit >= 0 && total > limit {
+			return 0, w.budget.charge(total)
+		}
+	}
+	n, err := w.dst.Write(p)
+	w.total += n
+	return n, err
 }
 
 // resolveDecryptBlockAlgorithm decides the block algorithm one EncryptedData is
@@ -1005,7 +1076,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
-	ed, err := parseEncryptedData(ctx, elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg), cfg)
+	ed, err := parseEncryptedData(ctx, elem, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg)})
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
@@ -1099,7 +1170,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
-	ed, err := parseEncryptedData(ctx, elem, newEncryptedKeyBudget(cfg), newPayloadCipherValueBudget(cfg), cfg)
+	ed, err := parseEncryptedData(ctx, elem, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg), payload: newPayloadCipherValueBudget(cfg)})
 	if err != nil {
 		return nil, abort(ctx, err)
 	}

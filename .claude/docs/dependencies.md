@@ -42,7 +42,7 @@ internal/xsdregex → (none)
 internal/xmlbase64 → helium (DecodeElement counts/charges/decodes a base64 value straight off its DOM children; the root never imports it back)
 internal/writerctl → (none)
 internal/xsd/value → internal/lexicon
-internal/domutil → helium, internal/lexicon, internal/xmlchar
+internal/domutil → helium, enum, internal/lexicon, internal/xmlchar
 internal/xpathstream → xpath3, internal/lexicon
 test           → helium
 ```

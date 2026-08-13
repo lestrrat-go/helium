@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/c14n"
-	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath1"
@@ -970,7 +969,7 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // duplicate id silently resolves to a single element (an XML Signature Wrapping
 // bypass). Instead, an expression whose whole value is an id('X') selector — in
 // ANY whitespace spelling (id('X'), id ('X'), id( "X" )) — resolves through the
-// duplicate-detecting findElementsByIDUnder, and ANY other use of id() (a
+// duplicate-detecting domutil.FindElementsByID, and ANY other use of id() (a
 // parenthesized or embedded id() call the selector parser cannot reduce to a
 // single literal id) is rejected fail-closed rather than handed to the built-in.
 // Every remaining expression is statically validated with the merged namespace
@@ -1002,7 +1001,7 @@ func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, e
 
 func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Document, prepared *preparedGeneralXPointer) (*helium.Element, error) {
 	if prepared.idSelector {
-		matches := findElementsByIDUnder(doc.DocumentElement(), prepared.id)
+		matches := domutil.FindElementsByID(doc.DocumentElement(), prepared.id)
 		switch len(matches) {
 		case 0:
 			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, prepared.id)
@@ -1031,7 +1030,7 @@ func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Docum
 // whitespace. isIDCall reports that the trimmed expression IS a top-level
 // id(...) call; ok additionally reports that it cleanly reduces to a single
 // quoted id literal, returned in the first result. A general-XPointer id()
-// selector is ALWAYS routed through the duplicate-detecting findElementsByIDUnder
+// selector is ALWAYS routed through the duplicate-detecting domutil.FindElementsByID
 // (never xpath1's built-in id()), so an id() call that is not a clean single
 // literal is reported as isIDCall && !ok for the caller to reject fail-closed.
 func parseXPointerIDSelector(expr string) (string, bool, bool) {
@@ -1071,7 +1070,7 @@ func parseXPointerIDSelector(expr string) (string, bool, bool) {
 // function anywhere outside a string literal — an id name token immediately
 // followed (modulo whitespace) by "(". The general-XPointer resolver uses it to
 // fail closed on any id() use it does not itself resolve through the
-// duplicate-detecting findElementsByIDUnder, since xpath1's built-in id()
+// duplicate-detecting domutil.FindElementsByID, since xpath1's built-in id()
 // (Document.GetElementByID) resolves a duplicate id to a single element.
 func expressionReferencesID(expr string) bool {
 	var quote byte
@@ -1166,9 +1165,9 @@ func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Nod
 	// any of: a DTD/schema-declared ID-typed attribute, xml:id, or the "id"
 	// attribute token in the casings "Id", "ID", or "id". We refuse to resolve
 	// the reference if more than one element matches.
-	matches := findElementsByIDUnder(doc.DocumentElement(), id)
+	matches := domutil.FindElementsByID(doc.DocumentElement(), id)
 	for _, root := range extraRoots {
-		matches = append(matches, findElementsByIDUnder(root, id)...)
+		matches = append(matches, domutil.FindElementsByID(root, id)...)
 	}
 	switch len(matches) {
 	case 0:
@@ -1178,53 +1177,4 @@ func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Nod
 	default:
 		return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
 	}
-}
-
-// findElementsByIDUnder walks the subtree rooted at root (root included) and
-// returns every element whose ID matches the given value. root may be nil, in
-// which case it returns no matches. The walk is exhaustive — it never
-// short-circuits — so that duplicate IDs are surfaced to the caller rather
-// than silently masked. We do NOT consult Document.GetElementByID: its
-// underlying ID table is keyed by ID value and Document.RegisterID
-// overwrites on collision, which would hide the duplicate-xml:id case that
-// XSW hardening relies on.
-//
-// An attribute is treated as an ID when it is any of:
-//   - declared ID-typed by a DTD or schema (AType == enum.AttrID);
-//   - xml:id (ID-typed by the W3C xml:id Recommendation);
-//   - the "id" attribute token in the casings "Id", "ID", or "id".
-//
-// This name set is FROZEN: it recognizes the "id" identifier token in the
-// three casings above plus xml:id, and MUST NOT grow to distinct convention
-// tokens such as "wsu:Id" or "AssertionID". Those are not universal ID names
-// — they are ID-typed only by their own schemas — so a document that relies
-// on them must declare that typing (DTD/schema, or by marking the attribute
-// AType == enum.AttrID) rather than have this heuristic guess.
-func findElementsByIDUnder(root helium.Node, id string) []*helium.Element {
-	var matches []*helium.Element
-	var walk func(helium.Node)
-	walk = func(n helium.Node) {
-		elem, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			return
-		}
-		for _, attr := range elem.Attributes() {
-			name := attr.Name()
-			isIDAttr := name == "Id" || name == "ID" || name == "id" || name == "xml:id" || attr.AType() == enum.AttrID
-			if !isIDAttr {
-				continue
-			}
-			// xs:ID derives from xs:NCName, which collapses whitespace;
-			// match libxml2/helium normalization for xml:id.
-			if strings.TrimSpace(attr.Value()) == id {
-				matches = append(matches, elem)
-				break
-			}
-		}
-		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
-			walk(child)
-		}
-	}
-	walk(root)
-	return matches
 }

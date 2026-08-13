@@ -1,0 +1,98 @@
+package domutil
+
+import (
+	"strings"
+
+	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
+)
+
+// isIDAttribute reports whether attr is treated as an ID attribute under the
+// FROZEN name/type rule documented on FindElementsByID. Both FindElementsByID
+// and BuildIDIndex apply it identically, so there is exactly one place the
+// rule lives.
+func isIDAttribute(attr *helium.Attribute) bool {
+	name := attr.Name()
+	return name == "Id" || name == "ID" || name == "id" || name == "xml:id" || attr.AType() == enum.AttrID
+}
+
+// FindElementsByID walks the subtree rooted at root (root included) and
+// returns every element whose ID matches the given value. root may be nil, in
+// which case it returns no matches. The walk is exhaustive — it never
+// short-circuits — so that duplicate IDs are surfaced to the caller rather
+// than silently masked. We do NOT consult Document.GetElementByID: its
+// underlying ID table is keyed by ID value and Document.RegisterID
+// overwrites on collision, which would hide the duplicate-xml:id case that
+// XSW hardening relies on.
+//
+// An attribute is treated as an ID when it is any of:
+//   - declared ID-typed by a DTD or schema (AType == enum.AttrID);
+//   - xml:id (ID-typed by the W3C xml:id Recommendation);
+//   - the "id" attribute token in the casings "Id", "ID", or "id".
+//
+// This name set is FROZEN: it recognizes the "id" identifier token in the
+// three casings above plus xml:id, and MUST NOT grow to distinct convention
+// tokens such as "wsu:Id" or "AssertionID". Those are not universal ID names
+// — they are ID-typed only by their own schemas — so a document that relies
+// on them must declare that typing (DTD/schema, or by marking the attribute
+// AType == enum.AttrID) rather than have this heuristic guess.
+func FindElementsByID(root helium.Node, id string) []*helium.Element {
+	var matches []*helium.Element
+	var walk func(helium.Node)
+	walk = func(n helium.Node) {
+		elem, ok := helium.AsNode[*helium.Element](n)
+		if !ok {
+			return
+		}
+		for _, attr := range elem.Attributes() {
+			if !isIDAttribute(attr) {
+				continue
+			}
+			// xs:ID derives from xs:NCName, which collapses whitespace;
+			// match libxml2/helium normalization for xml:id.
+			if strings.TrimSpace(attr.Value()) == id {
+				matches = append(matches, elem)
+				break
+			}
+		}
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			walk(child)
+		}
+	}
+	walk(root)
+	return matches
+}
+
+// BuildIDIndex walks the subtree rooted at root (root included) exactly once
+// and returns a map from every id value found to every element carrying it,
+// applying the identical FROZEN ID-name rule documented on FindElementsByID.
+// It exists so a caller resolving many ids against the same subtree pays for
+// one walk rather than one per id, while preserving the same exhaustive,
+// non-short-circuiting duplicate collection: a caller can refuse a duplicate
+// id by checking len(index[id]) > 1 exactly as a single FindElementsByID call
+// would report it.
+func BuildIDIndex(root helium.Node) map[string][]*helium.Element {
+	index := make(map[string][]*helium.Element)
+	var walk func(helium.Node)
+	walk = func(n helium.Node) {
+		elem, ok := helium.AsNode[*helium.Element](n)
+		if !ok {
+			return
+		}
+		for _, attr := range elem.Attributes() {
+			if !isIDAttribute(attr) {
+				continue
+			}
+			// xs:ID derives from xs:NCName, which collapses whitespace;
+			// match libxml2/helium normalization for xml:id.
+			id := strings.TrimSpace(attr.Value())
+			index[id] = append(index[id], elem)
+			break
+		}
+		for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+			walk(child)
+		}
+	}
+	walk(root)
+	return index
+}
