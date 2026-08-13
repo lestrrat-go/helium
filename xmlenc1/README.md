@@ -58,10 +58,14 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
     package collapses every CBC failure to one `ErrDecryptionFailed`
     value and message, and AES-GCM remains the only full answer. The
     oracle is the outcome, not the error text: under CBC, `Decrypt`
-    succeeds exactly when the recovered plaintext is well-formed XML,
-    which is the well-formedness oracle itself, and `DecryptBytes` is
-    stronger still — it returns the plaintext octets on valid padding
-    alone, with no XML constraint at all.
+    succeeds only when the recovered plaintext parses, so its success
+    or failure is the well-formedness oracle itself. The exact
+    predicate depends on `@Type`: a `Content` payload need only parse
+    as a well-formed fragment, while an `Element` payload — the
+    default when `@Type` is empty or absent — must in addition parse
+    to exactly one node, and that node must be an element.
+    `DecryptBytes` is stronger still — it returns the plaintext octets
+    on valid padding alone, with no XML constraint at all.
 - The inner parser used on the decrypted plaintext has DTD loading,
   external entity resolution, and network access all disabled. Decrypted
   bytes are attacker-controlled, so a relaxed parser would constitute an
@@ -196,11 +200,15 @@ marks REQUIRED are absent and each one fails a decrypt outright:
   encryption after 2023.
 
 Section 3 carries a blanket "features described in this section MUST be
-implemented", so four more constructs are unimplemented without failing a
-decrypt: `xenc:ReferenceList` (§3.6) and `xenc11:DerivedKey` (§3.5.2), both
-of which only matter for a detached key this package cannot follow anyway,
-`xenc:CarriedKeyName` (§3.5.1), which the parse steps over rather than reads,
-and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
+implemented", so four more constructs are unimplemented, and only one of them
+fails a decrypt: `xenc:ReferenceList` (§3.6), which points from a key to the
+items it encrypted and so only matters for a detached key this package cannot
+follow anyway; `xenc11:DerivedKey` (§3.5.2), which may appear in an
+`EncryptedData`'s own `ds:KeyInfo` and tells the recipient to derive the
+content key from master key material it already holds — the parse ignores it,
+so such an `EncryptedData` fails with `ErrMissingKey` instead of deriving the
+key; `xenc:CarriedKeyName` (§3.5.1), which the parse steps over rather than
+reads; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
 
 ## Choosing how the session key is protected
 
