@@ -222,6 +222,52 @@ func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.N
 	return nodes, nil
 }
 
+// collectConvertedDocumentNodes builds the whole-document node-set for a
+// document parsed at an octet boundary, sized to what the transform consuming it
+// can observe. A canonicalization transform takes the set whole, so the reduced,
+// mode-aware namespace membership yields identical octets while staying linear in
+// the document (see collectCanonicalizationNodes); the XPath filter transform is
+// evaluated once per node and may drop an interior element while keeping its
+// descendants, so it keeps the complete axis.
+//
+// Those two are the only node-set consumers a parse can feed: validateTransformSteps
+// rejects an enveloped-signature transform after an octet boundary, and base64
+// consumes a node-set through its own text-only conversion.
+func collectConvertedDocumentNodes(ctx context.Context, doc *helium.Document, consumerAlgorithm string) ([]helium.Node, error) {
+	mode, _, err := resolveC14NMode(consumerAlgorithm)
+	if err != nil {
+		// Not one of the six canonicalization URIs, so the consumer is the XPath
+		// filter and the set it is evaluated over must carry every namespace node.
+		return collectDocumentNodes(ctx, doc)
+	}
+	return collectCanonicalizationDocumentNodes(ctx, doc, mode)
+}
+
+// collectCanonicalizationDocumentNodes is collectDocumentNodes with the document
+// element's subtree built for canonicalization under mode rather than with the
+// complete namespace axis. The document element is the set's apex and its whole
+// subtree stays a member, which is what collectCanonicalizationNodes requires.
+func collectCanonicalizationDocumentNodes(ctx context.Context, doc *helium.Document, mode c14n.Mode) ([]helium.Node, error) {
+	var nodes []helium.Node
+	for c := range helium.Children(doc) {
+		switch c.Type() {
+		case helium.ElementNode:
+			elem, ok := helium.AsNode[*helium.Element](c)
+			if !ok {
+				continue
+			}
+			sub, err := collectCanonicalizationNodes(ctx, elem, mode)
+			if err != nil {
+				return nil, err
+			}
+			nodes = append(nodes, sub...)
+		case helium.CommentNode, helium.ProcessingInstructionNode:
+			nodes = append(nodes, c)
+		}
+	}
+	return nodes, nil
+}
+
 // defaultXPathOpLimit bounds the number of evaluation operations a single XPath
 // evaluation may perform, matching libxml2's opLimit mechanism (see
 // xpath1.Evaluator.OpLimit). xpath1 already caps recursion depth (5000) and

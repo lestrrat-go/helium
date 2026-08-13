@@ -2,6 +2,7 @@ package xmldsig1_test
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"runtime"
 	"strings"
@@ -114,6 +115,127 @@ func TestVerifyNamespaceHeavyDocument(t *testing.T) {
 		require.Less(t, allocated, uint64(allocPerInputByte*len(src)),
 			"verifying a %d-byte document allocated %d bytes", len(src), allocated)
 	})
+}
+
+// base64RetrievalDoc points the ds:RetrievalMethod's transform at the Base64
+// decode transform instead of a canonicalization one. XMLDSig core §6.6.2
+// converts a node-set to octets by concatenating its text nodes — self::text()
+// is empty for a namespace node, an attribute, an element, a comment and a
+// processing instruction — so this transform reads no namespace at all, and the
+// same document must not become two orders of magnitude more expensive for
+// naming it. wholeDoc selects the URI="" form, whose selection is the whole
+// document rather than the <bulk> subtree.
+func base64RetrievalDoc(decls, pad int, wholeDoc bool) string {
+	src := strings.Replace(namespaceHeavyDoc(decls, pad, false),
+		`<ds:Transform Algorithm="`+xmldsig1.C14N10+`"/>`,
+		`<ds:Transform Algorithm="`+xmldsig1.TransformBase64+`"/>`,
+		1)
+	if !wholeDoc {
+		return src
+	}
+	return strings.Replace(src, `<ds:RetrievalMethod URI="#bulk"`, `<ds:RetrievalMethod URI=""`, 1)
+}
+
+// TestVerifyBase64NodeSetDocument bounds the memory a Base64 transform on a
+// namespace-dense same-document selection can force out of verification before
+// the SignatureValue is checked. The bound is the same per-input-byte figure the
+// canonicalization path is held to, because Base64 reads strictly less of the
+// document than canonicalization does.
+func TestVerifyBase64NodeSetDocument(t *testing.T) {
+	const allocPerInputByte = 96
+
+	key := generateRSAKey(t)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+
+	for _, tc := range []struct {
+		name     string
+		wholeDoc bool
+	}{
+		// The subtree form selects the <bulk> element the RetrievalMethod names by
+		// id; the whole-document form selects every top-level element instead, which
+		// is a separate collection path.
+		{name: "RetrievalMethod subtree outside the Signature"},
+		{name: "whole-document RetrievalMethod", wholeDoc: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := base64RetrievalDoc(1350, 3500, tc.wholeDoc)
+			doc := mustParseXML(t, src)
+
+			// The decoded octets are not a certificate, so the failure comes from
+			// KeyInfo resolution — after the transform pipeline consumed the
+			// selection, which is the work being bounded.
+			_, err := verifier.Verify(t.Context(), doc)
+			require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+
+			allocated := verifyAllocatedBytes(t, verifier, src)
+			require.Less(t, allocated, uint64(allocPerInputByte*len(src)),
+				"verifying a %d-byte document allocated %d bytes", len(src), allocated)
+		})
+	}
+}
+
+// namespaceDensePayload is a namespace-dense document with no signature of its
+// own: decls declarations on the root and pad elements below it, so a node-set
+// giving every element the whole in-scope namespace axis holds decls*pad
+// namespace nodes for an input of size decls+pad.
+func namespaceDensePayload(decls, pad int) string {
+	var b strings.Builder
+	b.WriteString(`<payload`)
+	for i := range decls {
+		fmt.Fprintf(&b, ` xmlns:p%d="urn:example:ns:%d"`, i, i)
+	}
+	b.WriteString(`>`)
+	b.WriteString(strings.Repeat(`<e a="1"/>`, pad))
+	b.WriteString(`</payload>`)
+	return b.String()
+}
+
+// base64C14NRetrievalDoc carries a namespace-dense document as base64 text and
+// runs it through [Base64, C14N 1.0]: Base64 decodes the text to octets, and the
+// canonicalization transform re-parses those octets into a document of its own.
+// That second document is attacker-supplied too and is reached before the
+// SignatureValue is checked, so the node-set built for it needs the same bound
+// the original document's does.
+func base64C14NRetrievalDoc(decls, pad int) string {
+	payload := base64.StdEncoding.EncodeToString([]byte(namespaceDensePayload(decls, pad)))
+
+	var b strings.Builder
+	b.WriteString(`<root><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo>`)
+	b.WriteString(`<ds:CanonicalizationMethod Algorithm="` + xmldsig1.C14N10 + `"/>`)
+	b.WriteString(`<ds:SignatureMethod Algorithm="` + xmldsig1.AlgRSASHA256 + `"/>`)
+	b.WriteString(`<ds:Reference URI="#bulk"><ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>`)
+	b.WriteString(`<ds:DigestValue>AAAA</ds:DigestValue></ds:Reference>`)
+	b.WriteString(`</ds:SignedInfo><ds:SignatureValue>AAAA</ds:SignatureValue>`)
+	b.WriteString(`<ds:KeyInfo><ds:RetrievalMethod URI="#bulk" Type="` + xmldsig1.TypeRawX509Certificate + `">`)
+	b.WriteString(`<ds:Transforms>`)
+	b.WriteString(`<ds:Transform Algorithm="` + xmldsig1.TransformBase64 + `"/>`)
+	b.WriteString(`<ds:Transform Algorithm="` + xmldsig1.C14N10 + `"/>`)
+	b.WriteString(`</ds:Transforms></ds:RetrievalMethod></ds:KeyInfo></ds:Signature>`)
+	b.WriteString(`<bulk Id="bulk">` + payload + `</bulk></root>`)
+	return b.String()
+}
+
+// TestVerifyBase64ThenCanonicalizationDocument bounds the node-set built for a
+// document parsed at an octet boundary. The consumer here takes that set whole,
+// so it observes no more than the reduced, mode-aware namespace membership the
+// same canonicalization reads for a document that was never re-parsed.
+func TestVerifyBase64ThenCanonicalizationDocument(t *testing.T) {
+	const allocPerInputByte = 96
+
+	key := generateRSAKey(t)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+
+	src := base64C14NRetrievalDoc(3000, 1000)
+	doc := mustParseXML(t, src)
+
+	// The canonical octets are not a certificate, so the failure comes from
+	// KeyInfo resolution — after the re-parsed document's node set was built.
+	_, err := verifier.Verify(t.Context(), doc)
+	require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+
+	allocated := verifyAllocatedBytes(t, verifier, src)
+	require.Less(t, allocated, uint64(allocPerInputByte*len(src)),
+		"verifying a %d-byte document allocated %d bytes", len(src), allocated)
 }
 
 // cancellingKeySource resolves a key and cancels the verification context as it

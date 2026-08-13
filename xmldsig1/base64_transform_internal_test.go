@@ -176,6 +176,79 @@ func TestBase64ReferenceNodeSetIgnoresNonTextNodes(t *testing.T) {
 	}
 }
 
+// base64ReferenceOctets runs a same-document Reference carrying transforms
+// through the verification pipeline and returns the octets it digests.
+func base64ReferenceOctets(t *testing.T, doc *helium.Document, sig *helium.Element, uri string, transforms []parsedTransform) []byte {
+	t.Helper()
+	ref := parsedReference{uri: uri, digestAlgorithm: DigestSHA1, transforms: transforms}
+	_, octets, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, sig, ref)
+	require.NoError(t, err)
+	return octets
+}
+
+// xpathIdentityStep is an XPath filter that keeps every node. It forces the
+// Reference selection to be materialized as an explicit node-set, so a pipeline
+// carrying it digests the same octets through the explicit-membership path that
+// the same pipeline without it digests through the untouched selection.
+var xpathIdentityStep = parsedTransform{algorithm: TransformXPath, xpathExpr: "true()"}
+
+// TestBase64WholeDocumentTextMatchesMaterialized pins the whole-document Base64
+// selection against the explicit node-set built for the same document.
+//
+// collectDocumentNodes admits only an element subtree, a top-level comment and a
+// top-level processing instruction, so an internal subset is NOT part of the
+// selection: an entity declaration's replacement text belongs to the document
+// only where the document references the entity. A selection that walked every
+// document child would concatenate that replacement text a second time, ahead of
+// the document element, and digest octets no other implementation produces.
+func TestBase64WholeDocumentTextMatchesMaterialized(t *testing.T) {
+	// The entity's replacement text is itself base64, so a leaked copy stays
+	// decodable and changes the decoded octets rather than failing the decoder.
+	const xml = "<?xml version=\"1.0\"?>\n" +
+		"<!DOCTYPE root [\n" +
+		"<!ENTITY ent \"ZSB0\">\n" +
+		"]>\n" +
+		"<root>c29t&ent;ZXh0</root>"
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+
+	direct := base64ReferenceOctets(t, doc, nil, "", []parsedTransform{{algorithm: TransformBase64}})
+	require.Equal(t, "some text", string(direct),
+		"the whole-document selection is the document element's text, entity references expanded")
+
+	materialized := base64ReferenceOctets(t, doc, nil, "", []parsedTransform{xpathIdentityStep, {algorithm: TransformBase64}})
+	require.Equal(t, string(direct), string(materialized))
+}
+
+// TestBase64EnvelopedTargetInsideSignature pins the enveloped-signature rule for
+// a Reference whose target lives INSIDE the Signature. The transform removes
+// every descendant-or-self of the Signature, so the whole target subtree leaves
+// the node-set and nothing remains to decode. A selection that stopped only where
+// a node IS the Signature element would digest the target's own text instead.
+func TestBase64EnvelopedTargetInsideSignature(t *testing.T) {
+	const xml = `<root><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">` +
+		`<ds:Object Id="object">c29tZSB0ZXh0</ds:Object></ds:Signature></root>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	sig := findSig(doc.DocumentElement())
+	require.NotNil(t, sig)
+
+	direct := base64ReferenceOctets(t, doc, sig, objectFragment, []parsedTransform{
+		{algorithm: TransformEnvelopedSignature},
+		{algorithm: TransformBase64},
+	})
+	require.Empty(t, direct, "a target inside the removed Signature leaves an empty node-set")
+
+	materialized := base64ReferenceOctets(t, doc, sig, objectFragment, []parsedTransform{
+		{algorithm: TransformEnvelopedSignature},
+		xpathIdentityStep,
+		{algorithm: TransformBase64},
+	})
+	require.Equal(t, string(direct), string(materialized))
+}
+
 // TestBase64SignPreflightAccepted proves signing and execution share Base64
 // support for a caller-supplied Transform implementation.
 func TestBase64SignPreflightAccepted(t *testing.T) {
