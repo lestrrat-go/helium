@@ -1,6 +1,7 @@
 package xmldsig1
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -9,8 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/c14n"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,22 +118,16 @@ func TestCanonicalizationNodeSetMatchesFullAxis(t *testing.T) {
 	// default namespace changed and reset, prefixed attributes, and xml:* names
 	// on an omitted ancestor.
 	t.Run("generated documents", func(t *testing.T) {
-		rng := rand.New(rand.NewSource(diffCorpusSeed))
-		generated, comparisons := 0, 0
-		size := diffCorpusSize()
-		for i := range size {
-			src := randomNamespaceDoc(rng)
-			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-			if err != nil {
-				continue
-			}
-			generated++
-			for j, target := range diffTargets(doc) {
-				comparisons += requireSameCanonicalBytes(t, fmt.Sprintf("generated#%d[%d] %s", i, j, src), target)
-			}
-		}
-		require.Greater(t, generated, diffCorpusSize()*3/4, "too few generated documents parsed")
-		t.Logf("compared %d canonicalizations over %d generated documents", comparisons, generated)
+		requireGeneratedCorpusMatches(t, randomNamespaceDoc, diffCorpusSize())
+	})
+
+	// An element declaring many prefixes at once is the shape the walk answers
+	// membership for from an index rather than by scanning what it has recorded,
+	// and the corpus above never declares more than three on one element. This
+	// one straddles that count from both sides, with the same rebinding,
+	// redundant redeclaration, and default-namespace churn.
+	t.Run("generated documents with dense declarations", func(t *testing.T) {
+		requireGeneratedCorpusMatches(t, denseNamespaceDoc, diffCorpusSize()/4)
 	})
 
 	// A name whose prefix nothing in scope declares cannot be parsed — it is
@@ -150,6 +147,104 @@ func TestCanonicalizationNodeSetMatchesFullAxis(t *testing.T) {
 		requireSameCanonicalBytes(t, "undeclared prefix", root)
 		requireSameCanonicalBytes(t, "undeclared prefix apex", child)
 	})
+}
+
+// costDeclarations is how many namespace declarations the cost document puts on
+// one element, and costPerDeclaration is what each of them may cost the walk.
+//
+// A declaration costs the collectors a fraction of a microsecond, a little over
+// one under the race detector, and the document is parsed outside the
+// measurement — so the budget is several times what the walk actually spends,
+// while a per-element scan that grows with the declaration count spends tens of
+// microseconds apiece at this size, and more at any larger one.
+//
+// costRuns repeats each measurement and keeps the cheapest, so a scheduler
+// hiccup during one run cannot fail the case; a cost that is quadratic in the
+// declaration count is quadratic in every run.
+const (
+	costDeclarations   = 20000
+	costPerDeclaration = 6 * time.Microsecond
+	costRuns           = 3
+)
+
+// declDenseDoc builds a document whose CHILD element carries decls namespace
+// declarations.
+//
+// The declarations must NOT sit on the element the collection starts from: that
+// element's scope is seeded from its in-scope axis in one map copy, and the
+// per-element binding loop runs only BELOW it. A document that declares
+// everything on the collection root exercises none of the per-element work this
+// case bounds.
+func declDenseDoc(decls int) string {
+	var b strings.Builder
+	b.WriteString(`<root xmlns:r="urn:example:r"><child`)
+	for i := range decls {
+		fmt.Fprintf(&b, ` xmlns:p%d="urn:example:ns:%d"`, i, i)
+	}
+	b.WriteString(`>text</child></root>`)
+	return b.String()
+}
+
+// collectC14N10Nodes and collectFullAxisNodes give the two collectors the one
+// signature the cost table below shares. Inclusive C14N 1.0 is the mode
+// Verifier.Verify canonicalizes SignedInfo under.
+func collectC14N10Nodes(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
+	return collectCanonicalizationNodes(ctx, elem, c14n.C14N10)
+}
+
+func collectFullAxisNodes(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
+	return collectSubtreeNodes(ctx, elem)
+}
+
+// TestNodeSetCollectionCost bounds what an element carrying many namespace
+// declarations may cost the two node-set collectors. Both walk the subtree
+// through the same per-element binding loop, so a membership test that scans
+// what the element has already recorded makes both quadratic in the declaration
+// count — and an attacker reaches both before any signature is checked, through
+// the ds:SignedInfo canonicalization and through a ds:RetrievalMethod's
+// transform pipeline.
+//
+// The bound is stated against the INPUT — one budget per declaration written —
+// rather than against a second measurement of the same code, so it cannot be
+// satisfied by a run that is merely as slow as another run.
+func TestNodeSetCollectionCost(t *testing.T) {
+	// no t.Parallel(): the case measures elapsed time, which a concurrent test
+	// competing for the same cores would inflate.
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(declDenseDoc(costDeclarations)))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+
+	budget := time.Duration(costDeclarations) * costPerDeclaration
+
+	for _, tc := range []struct {
+		name    string
+		collect func(context.Context, *helium.Element) ([]helium.Node, error)
+	}{
+		{name: "canonicalization node set", collect: collectC14N10Nodes},
+		{name: "full-axis node set", collect: collectFullAxisNodes},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			best := time.Duration(-1)
+			for range costRuns {
+				start := time.Now()
+				nodes, err := tc.collect(t.Context(), root)
+				elapsed := time.Since(start)
+				require.NoError(t, err)
+				// Every declaration is in scope on the child, so a set this
+				// small would mean the walk never did the work being bounded.
+				require.GreaterOrEqual(t, len(nodes), costDeclarations,
+					"collector returned %d nodes for %d declarations", len(nodes), costDeclarations)
+				if best < 0 || elapsed < best {
+					best = elapsed
+				}
+			}
+			require.Less(t, best, budget,
+				"collecting a node set over %d declarations took %v, over the %v budget",
+				costDeclarations, best, budget)
+		})
+	}
 }
 
 // diffCorpusSeed fixes the generated corpus so a failure is reproducible: the
@@ -190,6 +285,28 @@ func corpusDocuments(t *testing.T) []string {
 	return paths
 }
 
+// requireGeneratedCorpusMatches draws size documents from build, seeded so a
+// failure is reproducible, and requires the reduced node set to match the full
+// axis at every apex of each.
+func requireGeneratedCorpusMatches(t *testing.T, build func(*rand.Rand) string, size int) {
+	t.Helper()
+	rng := rand.New(rand.NewSource(diffCorpusSeed))
+	generated, comparisons := 0, 0
+	for i := range size {
+		src := build(rng)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		if err != nil {
+			continue
+		}
+		generated++
+		for j, target := range diffTargets(doc) {
+			comparisons += requireSameCanonicalBytes(t, fmt.Sprintf("generated#%d[%d] %s", i, j, src), target)
+		}
+	}
+	require.Greater(t, generated, size*3/4, "too few generated documents parsed")
+	t.Logf("compared %d canonicalizations over %d generated documents", comparisons, generated)
+}
+
 // randomNamespaceDoc builds one namespace-dense document. Prefixes are drawn
 // from a small pool and URIs from an even smaller one, so rebinding, redundant
 // redeclaration, and reuse across siblings all occur often.
@@ -198,7 +315,30 @@ func randomNamespaceDoc(rng *rand.Rand) string {
 		rng:      rng,
 		prefixes: []string{"a", "b", "c", "d"},
 		uris:     []string{"urn:x:1", "urn:x:2", "urn:x:3"},
+		maxDecls: 3,
 		budget:   6 + rng.Intn(25),
+	}
+	var b strings.Builder
+	g.writeElement(&b, 0, nil)
+	return b.String()
+}
+
+// densePrefixes is a pool wide enough that one element can declare more prefixes
+// than the walk indexes membership for, and the URIs stay as few as above so a
+// wide element still rebinds and redundantly redeclares.
+var densePrefixes = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n"}
+
+// denseNamespaceDoc builds one document whose elements declare up to
+// len(densePrefixes) prefixes each, so the corpus covers elements on both sides
+// of the count at which the walk switches to an index. The element budget is
+// smaller than randomNamespaceDoc's because each element is far wider.
+func denseNamespaceDoc(rng *rand.Rand) string {
+	g := &docGenerator{
+		rng:      rng,
+		prefixes: densePrefixes,
+		uris:     []string{"urn:x:1", "urn:x:2", "urn:x:3"},
+		maxDecls: len(densePrefixes),
+		budget:   4 + rng.Intn(10),
 	}
 	var b strings.Builder
 	g.writeElement(&b, 0, nil)
@@ -209,6 +349,7 @@ type docGenerator struct {
 	rng      *rand.Rand
 	prefixes []string
 	uris     []string
+	maxDecls int
 	budget   int
 }
 
@@ -220,7 +361,7 @@ func (g *docGenerator) writeElement(b *strings.Builder, depth int, inScope []str
 
 	var decls []string
 	var declared []string
-	for n := g.rng.Intn(4); n > 0; n-- {
+	for n := g.rng.Intn(g.maxDecls + 1); n > 0; n-- {
 		prefix := g.prefixes[g.rng.Intn(len(g.prefixes))]
 		if slices.Contains(declared, prefix) {
 			// One element may bind a prefix once; a second xmlns:p attribute is

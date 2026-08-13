@@ -826,29 +826,81 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 	return nil
 }
 
+// prefixIndexThreshold is how many prefixes an element must offer before the
+// walk builds a membership index for them. The ordered records those indexes
+// shadow — the changed bindings and the emitted prefixes — are short on ordinary
+// elements, where a linear scan beats a map and the allocation is pure loss.
+const prefixIndexThreshold = 8
+
+// newPrefixIndex returns a membership index for an element offering n prefixes,
+// or nil when n is small enough that the callers' linear scans are cheaper.
+//
+// The index is allocated per element and dropped with it, deliberately: a
+// collector-wide map cleared between elements would keep the bucket array the
+// largest element grew, so every later element would pay for that one — the
+// document-wide cost this exists to remove.
+func newPrefixIndex(n int) map[string]struct{} {
+	if n < prefixIndexThreshold {
+		return nil
+	}
+	return make(map[string]struct{}, n)
+}
+
+// prefixRecorded reports whether this element already recorded a replaced
+// binding for prefix. index, when non-nil, answers from the membership index
+// instead of scanning changed, which is what keeps an element carrying many
+// declarations from costing the square of their count.
+func prefixRecorded(prefix string, changed []nsBinding, index map[string]struct{}) bool {
+	if index != nil {
+		_, ok := index[prefix]
+		return ok
+	}
+	return slices.ContainsFunc(changed, func(b nsBinding) bool { return b.prefix == prefix })
+}
+
+// prefixEmitted reports whether prefix already has a namespace node for this
+// element, from index when one was built and by scanning emitted otherwise.
+func prefixEmitted(prefix string, emitted []string, index map[string]struct{}) bool {
+	if index != nil {
+		_, ok := index[prefix]
+		return ok
+	}
+	return slices.Contains(emitted, prefix)
+}
+
 // enter applies elem's namespace declarations to the running scope and returns
 // the bindings it replaced, one entry per prefix touched. The rule matches
 // domutil.InScopeNamespaces exactly — declarations first, then the element's own
 // active namespace when nothing already binds its prefix — so the incremental
 // scope equals the ancestor-chain walk that function performs.
 func (c *subtreeCollector) enter(elem *helium.Element) []nsBinding {
+	decls := elem.Namespaces()
+	// One entry is added for the element's own active namespace below, so the
+	// index is sized for one more prefix than the element declares.
+	seen := newPrefixIndex(len(decls) + 1)
 	var changed []nsBinding
-	for _, ns := range elem.Namespaces() {
-		changed = c.bind(ns, changed)
+	for _, ns := range decls {
+		changed = c.bind(ns, changed, seen)
 	}
 	if ns := elem.Namespace(); ns != nil {
 		if _, ok := c.scope[ns.Prefix()]; !ok {
-			changed = c.bind(ns, changed)
+			changed = c.bind(ns, changed, seen)
 		}
 	}
 	return changed
 }
 
-func (c *subtreeCollector) bind(ns *helium.Namespace, changed []nsBinding) []nsBinding {
+// bind records the binding prefix had before ns replaced it, unless this element
+// already recorded one for that prefix, and installs ns in the running scope.
+// seen, when non-nil, holds the prefixes changed already carries.
+func (c *subtreeCollector) bind(ns *helium.Namespace, changed []nsBinding, seen map[string]struct{}) []nsBinding {
 	prefix := ns.Prefix()
-	if !slices.ContainsFunc(changed, func(b nsBinding) bool { return b.prefix == prefix }) {
+	if !prefixRecorded(prefix, changed, seen) {
 		prev, had := c.scope[prefix]
 		changed = append(changed, nsBinding{prefix: prefix, prev: prev, had: had})
+		if seen != nil {
+			seen[prefix] = struct{}{}
+		}
 	}
 	c.scope[prefix] = ns
 	return changed
@@ -883,20 +935,25 @@ func (c *subtreeCollector) appendNamespaceNodes(elem *helium.Element, root bool,
 	}
 
 	var emitted []string
+	// Every changed binding is a candidate for emission, and the default
+	// namespace, the element's own prefix, and its attributes' prefixes are
+	// candidates on top of those; sizing the index by changed alone lets it grow
+	// for the few extra rather than charging every element for them.
+	emittedIndex := newPrefixIndex(len(changed))
 	for _, b := range changed {
 		ns := c.scope[b.prefix]
 		if b.had && b.prev.URI() == ns.URI() {
 			// A redeclaration of the binding already in scope changes nothing.
 			continue
 		}
-		emitted = c.emitNamespace(elem, b.prefix, emitted)
+		emitted = c.emitNamespace(elem, b.prefix, emitted, emittedIndex)
 	}
 
 	// The in-scope default namespace stays on every element: the inclusive
 	// ancestor lookup emits an xmlns="" undeclaration for an element whose set
 	// has no default-namespace node while its nearest rendered ancestor's set
 	// does, so dropping an unchanged default would undeclare it spuriously.
-	emitted = c.emitNamespace(elem, "", emitted)
+	emitted = c.emitNamespace(elem, "", emitted, emittedIndex)
 
 	if !c.exclusive {
 		return
@@ -906,27 +963,31 @@ func (c *subtreeCollector) appendNamespaceNodes(elem *helium.Element, root bool,
 	// own prefix and its attributes' prefixes stay members even when inherited
 	// unchanged.
 	if ns := elem.Namespace(); ns != nil {
-		emitted = c.emitNamespace(elem, ns.Prefix(), emitted)
+		emitted = c.emitNamespace(elem, ns.Prefix(), emitted, emittedIndex)
 	}
 	for _, attr := range elem.Attributes() {
 		if prefix := attr.Prefix(); prefix != "" {
-			emitted = c.emitNamespace(elem, prefix, emitted)
+			emitted = c.emitNamespace(elem, prefix, emitted, emittedIndex)
 		}
 	}
 }
 
 // emitNamespace appends the namespace node for prefix when that prefix is in
 // scope and has not been emitted for this element yet, returning the updated
-// emitted-prefix list.
-func (c *subtreeCollector) emitNamespace(elem *helium.Element, prefix string, emitted []string) []string {
+// emitted-prefix list. index, when non-nil, holds the prefixes emitted already
+// carries.
+func (c *subtreeCollector) emitNamespace(elem *helium.Element, prefix string, emitted []string, index map[string]struct{}) []string {
 	if prefix == lexicon.PrefixXML {
 		return emitted
 	}
 	ns, ok := c.scope[prefix]
-	if !ok || slices.Contains(emitted, prefix) {
+	if !ok || prefixEmitted(prefix, emitted, index) {
 		return emitted
 	}
 	c.nodes = append(c.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
+	if index != nil {
+		index[prefix] = struct{}{}
+	}
 	return append(emitted, prefix)
 }
 
