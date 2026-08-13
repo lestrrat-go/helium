@@ -102,11 +102,18 @@ func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 // oracle by distinguishing the cause.
 func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 	// Bind the declared algorithm URI to the real key length before
-	// touching the ciphertext. The key length is not attacker-controlled
-	// (it is the recipient's configured / unwrapped key), so reporting a
-	// distinguishable KeySizeError here is not a padding-oracle signal.
+	// touching the ciphertext. A caller-configured SessionKey never
+	// reaches here — its length is checked, and any mismatch reported
+	// bare, before block decryption is even attempted. So the key
+	// reaching this point always came from RSA key transport (the
+	// recipient's public key is public, so an attacker can wrap a
+	// session key of any length), AES key unwrap, or key agreement —
+	// document-derived lengths, not caller configuration. Reporting a
+	// distinguishable KeySizeError here would be exactly the kind of
+	// oracle signal this function otherwise refuses to give, so wrap it
+	// in the same opaque ErrDecryptionFailed as every other failure.
 	if err := validateKeySize(paramBlockAlgorithm, algorithm, paramSessionKey, key); err != nil {
-		return nil, wrapBlockAlgorithmError(ErrDecryptionFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
 	}
 	switch algorithm {
 	case AES128CBC, AES256CBC:
