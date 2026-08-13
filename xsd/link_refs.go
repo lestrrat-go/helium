@@ -814,7 +814,8 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			// is topological across BOTH extension and restriction derivations so an
 			// extension of a restriction reads a FINALIZED base attribute set.
 			if c.version != Version11 {
-				c.checkExtensionAttrDuplicates(ctx, td)
+				c.recordExtensionOwnAttrs10(td)
+				c.checkExtensionAttrDuplicates(ctx, td, td.Attributes)
 				if td.BaseType.Attributes != nil {
 					td.Attributes = concatAttrUses(td.BaseType.Attributes, td.Attributes)
 				}
@@ -957,7 +958,8 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// Check for duplicate attributes before merging base type attributes, then
 		// inherit. XSD 1.1 defers both to finalizeEffectiveAttrs (topological).
 		if c.version != Version11 {
-			c.checkExtensionAttrDuplicates(ctx, td)
+			c.recordExtensionOwnAttrs10(td)
+			c.checkExtensionAttrDuplicates(ctx, td, td.Attributes)
 			if td.BaseType.Attributes != nil {
 				td.Attributes = concatAttrUses(td.BaseType.Attributes, td.Attributes)
 			}
@@ -1083,7 +1085,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		finalized := make(map[*TypeDef]bool)
 		visiting := make(map[*TypeDef]bool)
 		for _, td := range derived {
-			c.finalizeAttrUses10(td, finalized, visiting)
+			c.finalizeAttrUses10(ctx, td, finalized, visiting)
 		}
 	}
 
@@ -1473,15 +1475,19 @@ func appendAttrUses(dst, extra []*AttrUse) []*AttrUse {
 
 // checkExtensionAttrDuplicates reports an attribute use redeclared by a
 // (simpleContent or complexContent) extension type that its base type already
-// declares. Prohibited uses do not contribute an attribute use and are skipped
-// on both sides (mirroring checkDuplicateAttrUses), so a prohibited use carried
-// in via an attribute group does not falsely trigger a duplicate diagnostic.
-// Must run BEFORE the base attributes are merged into td.Attributes.
-func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef) {
+// carries (ct-props-correct.4). own holds the uses td declares ITSELF: the base
+// uses must not have been folded into it yet, or every inherited attribute would
+// look like a duplicate. Prohibited uses do not contribute an attribute use and
+// are skipped on both sides (mirroring checkDuplicateAttrUses), so a prohibited
+// use carried in via an attribute group does not falsely trigger a duplicate
+// diagnostic. Each collision is reported once per type (extAttrDupReported), so
+// the XSD 1.0 in-loop call and the finalize-time re-check against the finalized
+// base do not double-report.
+func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef, own []*AttrUse) {
 	if c.filename == "" || td.BaseType == nil {
 		return
 	}
-	if td.BaseType.Attributes == nil || td.Attributes == nil {
+	if len(td.BaseType.Attributes) == 0 || len(own) == 0 {
 		return
 	}
 	baseAttrNames := make(map[QName]bool, len(td.BaseType.Attributes))
@@ -1491,7 +1497,7 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 		}
 		baseAttrNames[au.Name] = true
 	}
-	for _, au := range td.Attributes {
+	for _, au := range own {
 		if au.Prohibited {
 			continue
 		}
@@ -1505,13 +1511,28 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 		if !ok {
 			continue
 		}
-		component := componentLocalComplexType
-		if !src.isLocal {
-			component = td.Name.Local
+		reported := c.extAttrDupReported[td]
+		if reported == nil {
+			reported = make(map[QName]struct{})
+			c.extAttrDupReported[td] = reported
 		}
+		if _, done := reported[au.Name]; done {
+			continue
+		}
+		reported[au.Name] = struct{}{}
 		msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-		c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
+		c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", complexTypeComponent(td, src), msg))
 	}
+}
+
+// complexTypeComponent renders the component label libxml2 uses in a complex-type
+// schema diagnostic: "local complex type" for an anonymous/local definition, and
+// "complex type 'name'" for a global one.
+func complexTypeComponent(td *TypeDef, src typeDefSource) string {
+	if src.isLocal {
+		return componentLocalComplexType
+	}
+	return "complex type '" + td.Name.Local + "'"
 }
 
 // checkDuplicateAttrUses reports duplicate attribute uses (by expanded QName)
@@ -1570,12 +1591,8 @@ func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
 				}
 				reported[au.Name] = true
 				src := c.typeDefSources[td]
-				component := componentLocalComplexType
-				if !src.isLocal {
-					component = td.Name.Local
-				}
 				msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
-				c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", component, msg))
+				c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", complexTypeComponent(td, src), msg))
 				continue
 			}
 			seen[au.Name] = true
@@ -3263,7 +3280,7 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 	case DerivationRestriction:
 		c.checkRestrictionAttrs(ctx, td)
 	case DerivationExtension:
-		c.checkExtensionAttrDuplicates(ctx, td)
+		c.checkExtensionAttrDuplicates(ctx, td, td.Attributes)
 	}
 
 	if len(base.Attributes) > 0 {
@@ -3293,16 +3310,19 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 // complex type for XSD 1.0 (§3.4.2.2) TOPOLOGICALLY across BOTH extension and
 // restriction derivations: the base is finalized FIRST (recursively, regardless
 // of its derivation kind), then td inherits every base use it does not already
-// carry. Unlike finalizeEffectiveAttrs (1.1), this is MERGE-ONLY — compile-time
-// checkRestrictionAttrs / checkExtensionAttrDuplicates already ran against the
-// pre-finalization attribute sets (1.0 historical "required base attr must be
-// redeclared" semantics). A restriction deliberately does NOT inherit the base
-// {attribute wildcard} (complete wildcard from own content only). An extension
-// may already hold a stale in-loop snapshot of BaseType.Attributes; appending
-// only missing uses repairs chains where the base is a restriction that gained
-// inherited attributes after that snapshot. finalized memoizes completed types;
-// visiting guards a cyclic base chain from infinite recursion.
-func (c *compiler) finalizeAttrUses10(td *TypeDef, finalized, visiting map[*TypeDef]bool) {
+// carry. checkRestrictionAttrs already ran against each restriction base's OWN
+// declarations (1.0 historical "required base attr must be redeclared"
+// semantics) and is NOT repeated here. The ct-props-correct.4 extension check IS
+// repeated, now against the finalized base, so an extension that redeclares an
+// attribute its base merely INHERITS is rejected; extAttrDupReported keeps the
+// in-loop diagnostic from being emitted twice. A restriction deliberately does
+// NOT inherit the base {attribute wildcard} (complete wildcard from own content
+// only). An extension may already hold a stale in-loop snapshot of
+// BaseType.Attributes; appending only missing uses repairs chains where the base
+// is a restriction that gained inherited attributes after that snapshot.
+// finalized memoizes completed types; visiting guards a cyclic base chain from
+// infinite recursion.
+func (c *compiler) finalizeAttrUses10(ctx context.Context, td *TypeDef, finalized, visiting map[*TypeDef]bool) {
 	if td == nil || finalized[td] {
 		return
 	}
@@ -3312,13 +3332,16 @@ func (c *compiler) finalizeAttrUses10(td *TypeDef, finalized, visiting map[*Type
 	visiting[td] = true
 	base := td.BaseType
 	if base != nil && base.Derivation != DerivationNone {
-		c.finalizeAttrUses10(base, finalized, visiting)
+		c.finalizeAttrUses10(ctx, base, finalized, visiting)
 	}
 	delete(visiting, td)
 	finalized[td] = true
 
 	if base == nil || td.Derivation == DerivationNone || len(base.Attributes) == 0 {
 		return
+	}
+	if td.Derivation == DerivationExtension {
+		c.checkExtensionAttrDuplicates(ctx, td, c.extensionOwnAttrs10(td))
 	}
 	// Restriction: do not inherit AnyAttribute. Extension: wildcards were already
 	// folded in the extension loop; only attribute USES are repaired here.
@@ -3332,6 +3355,28 @@ func (c *compiler) finalizeAttrUses10(td *TypeDef, finalized, visiting map[*Type
 		}
 		td.Attributes = append(td.Attributes, bau)
 	}
+}
+
+// recordExtensionOwnAttrs10 snapshots an XSD 1.0 extension type's OWN attribute
+// uses, taken in the extension loop just before the base's uses are folded in.
+// concatAttrUses builds a fresh slice, so the recorded header keeps referring to
+// the type's own uses alone.
+func (c *compiler) recordExtensionOwnAttrs10(td *TypeDef) {
+	if _, ok := c.extOwnAttrUses[td]; ok {
+		return
+	}
+	c.extOwnAttrUses[td] = td.Attributes
+}
+
+// extensionOwnAttrs10 returns the attribute uses an XSD 1.0 extension type
+// declares itself. A type the extension loop never merged (it bailed out on an
+// earlier derivation error) has no snapshot, and its td.Attributes still holds
+// its own uses alone.
+func (c *compiler) extensionOwnAttrs10(td *TypeDef) []*AttrUse {
+	if own, ok := c.extOwnAttrUses[td]; ok {
+		return own
+	}
+	return td.Attributes
 }
 
 // concatAttrUses returns base's attribute uses followed by own's in a FRESH
