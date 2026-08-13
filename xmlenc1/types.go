@@ -2,8 +2,8 @@ package xmlenc1
 
 import "crypto/ecdh"
 
-// EncryptionMethod represents the <EncryptionMethod> element.
-type EncryptionMethod struct {
+// encryptionMethod represents the <EncryptionMethod> element.
+type encryptionMethod struct {
 	// Algorithm is the algorithm URI carried by @Algorithm. Its meaning
 	// depends on where the EncryptionMethod sits: a block encryption URI
 	// on an EncryptedData, a key transport or key wrap URI on an
@@ -39,8 +39,8 @@ type EncryptionMethod struct {
 	OAEPParams []byte
 }
 
-// EncryptedData represents the <EncryptedData> element.
-type EncryptedData struct {
+// encryptedData represents the <EncryptedData> element.
+type encryptedData struct {
 	// ID is the @Id attribute, used to reference this EncryptedData from
 	// elsewhere in the document.
 	ID string
@@ -53,21 +53,21 @@ type EncryptedData struct {
 	// EncryptionMethod describes how the content itself is encrypted: a
 	// block encryption URI (AES-CBC or AES-GCM). Decryption needs it, so
 	// an EncryptedData without one fails with [ErrMalformedEncrypted].
-	EncryptionMethod *EncryptionMethod
+	EncryptionMethod *encryptionMethod
 	// EncryptedKey is the first EncryptedKey candidate, kept for backward
 	// compatibility with callers written against the old single-key field.
 	//
 	// Deprecated: use EncryptedKeys. When both are set, EncryptedKeys takes
 	// precedence and this field is ignored; when only this field is set it
 	// is treated as a single-element EncryptedKeys.
-	EncryptedKey *EncryptedKey
+	EncryptedKey *encryptedKey
 	// EncryptedKeys holds every EncryptedKey candidate found in KeyInfo
 	// (one per recipient). Decryption tries each in turn, so a
 	// multi-recipient document, or one with a bogus EncryptedKey
 	// prepended to a legitimate one, still resolves. A Decryptor with a
 	// non-empty SessionKey uses none of them — see
 	// [Decryptor.SessionKey].
-	EncryptedKeys []*EncryptedKey
+	EncryptedKeys []*encryptedKey
 	// CipherValue is the encrypted content, base64-decoded. Its internal
 	// layout belongs to the block algorithm: the AES modes used here all
 	// prefix the ciphertext with the IV, and GCM appends the
@@ -79,29 +79,29 @@ type EncryptedData struct {
 // reconciling the EncryptedKeys slice with the deprecated single
 // EncryptedKey field: EncryptedKeys wins when non-empty; otherwise the
 // deprecated field, if set, is treated as a single-element list.
-func (ed *EncryptedData) effectiveEncryptedKeys() []*EncryptedKey {
+func (ed *encryptedData) effectiveEncryptedKeys() []*encryptedKey {
 	if len(ed.EncryptedKeys) > 0 {
 		return ed.EncryptedKeys
 	}
 	if ed.EncryptedKey != nil {
-		return []*EncryptedKey{ed.EncryptedKey}
+		return []*encryptedKey{ed.EncryptedKey}
 	}
 	return nil
 }
 
-// EncryptedKey represents the <EncryptedKey> element: the session key of an
+// encryptedKey represents the <EncryptedKey> element: the session key of an
 // EncryptedData, protected for one recipient.
-type EncryptedKey struct {
+type encryptedKey struct {
 	// ID is the @Id attribute.
 	ID string
-	// Recipient is the @Recipient hint naming who the key is intended for.
+	// recipient is the @Recipient hint naming who the key is intended for.
 	// It is populated when parsing and carried for inspection only —
 	// encryption does not serialize it.
-	Recipient string
+	recipient string
 	// EncryptionMethod describes how the session key is protected: an
 	// RSA-OAEP key transport URI, an AES key wrap URI, or (with
 	// AgreementMethod set) the key wrap applied to the agreed key.
-	EncryptionMethod *EncryptionMethod
+	EncryptionMethod *encryptionMethod
 	// CipherValue is the protected session key, base64-decoded.
 	CipherValue []byte
 	// CarriedKeyName is the xenc:CarriedKeyName text, a name for the key this
@@ -123,28 +123,28 @@ type EncryptedKey struct {
 	CarriedKeyName string
 	// AgreementMethod, when set, means the key that protects CipherValue is
 	// derived by key agreement rather than supplied directly.
-	AgreementMethod *AgreementMethod
+	AgreementMethod *agreementMethod
 }
 
-// AgreementMethod describes a key agreement used to derive the key that
+// agreementMethod describes a key agreement used to derive the key that
 // protects an EncryptedKey. XML Encryption 1.1 places this element inside a
 // ds:KeyInfo child of the EncryptedKey.
-type AgreementMethod struct {
+type agreementMethod struct {
 	// Algorithm is the @Algorithm URI of the agreement. ECDHES is the
 	// supported value.
 	Algorithm string
 	// KeyDerivationMethod turns the agreed shared secret into a key of the
 	// length the EncryptionMethod requires.
-	KeyDerivationMethod *KeyDerivationMethod
+	KeyDerivationMethod *keyDerivationMethod
 	// OriginatorKey is the sender's ephemeral public key, from
 	// xenc:OriginatorKeyInfo. The recipient combines it with its own
 	// private key to reach the shared secret.
-	OriginatorKey *ECKeyValue
+	OriginatorKey *ecKeyValue
 }
 
-// KeyDerivationMethod describes the explicit KDF parameters carried by an
+// keyDerivationMethod describes the explicit KDF parameters carried by an
 // AgreementMethod.
-type KeyDerivationMethod struct {
+type keyDerivationMethod struct {
 	// Algorithm is the @Algorithm URI of the derivation function.
 	// ConcatKDF is the supported value.
 	Algorithm string
@@ -213,11 +213,11 @@ func (p *ConcatKDFParams) clone() *ConcatKDFParams {
 	return &cp
 }
 
-// ECKeyValue contains an XML Signature 1.1 elliptic-curve public key.
-type ECKeyValue struct {
-	// Curve is the named curve resolved from dsig11:NamedCurve/@URI:
+// ecKeyValue contains an XML Signature 1.1 elliptic-curve public key.
+type ecKeyValue struct {
+	// curve is the named curve resolved from dsig11:NamedCurve/@URI:
 	// P-256, P-384, or P-521.
-	Curve ecdh.Curve
+	curve ecdh.Curve
 	// PublicKey is the base64-decoded dsig11:PublicKey point, in the
 	// uncompressed SEC 1 form (0x04 || X || Y) that
 	// ecdh.Curve.NewPublicKey accepts. Parsing validates it against Curve.

@@ -18,7 +18,7 @@ func TestParseKeyInfoRejectsBeforeAppendingBeyondCap(t *testing.T) {
 
 	keyInfo, ok := helium.AsNode[*helium.Element](doc.DocumentElement().FirstChild())
 	require.True(t, ok)
-	ed := &EncryptedData{}
+	ed := &encryptedData{}
 	cfg := &decryptConfig{maxEncryptedKeys: 1}
 	err = parseKeyInfoForEncryption(t.Context(), keyInfo, ed, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg)})
 	require.ErrorIs(t, err, ErrTooManyEncryptedKeys)
@@ -55,7 +55,7 @@ func TestParseKeyInfoRejectsExcessBeforeParsing(t *testing.T) {
 
 			keyInfo, ok := helium.AsNode[*helium.Element](doc.DocumentElement().FirstChild())
 			require.True(t, ok)
-			ed := &EncryptedData{}
+			ed := &encryptedData{}
 			cfg := &decryptConfig{maxEncryptedKeys: 1, maxEncryptedKeyBytes: tc.maxEncryptedKeyBytes}
 			err = parseKeyInfoForEncryption(t.Context(), keyInfo, ed, &parseState{cfg: cfg, keys: newEncryptedKeyBudget(cfg)})
 			require.ErrorIs(t, err, ErrTooManyEncryptedKeys)

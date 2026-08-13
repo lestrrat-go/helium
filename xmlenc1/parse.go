@@ -75,12 +75,12 @@ func (ps *parseState) markVisited(elem *helium.Element) bool {
 // therefore runs through eachSibling, and every error return runs through abort,
 // so a caller that cancels is answered while the parse is still reading rather
 // than after it finishes. A live context leaves both untouched.
-func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseState) (*EncryptedData, error) {
+func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseState) (*encryptedData, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedData") {
 		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedData", ErrMalformedEncrypted))
 	}
 
-	ed := &EncryptedData{}
+	ed := &encryptedData{}
 	ed.ID, _ = elem.GetAttribute("Id")
 	ed.Type, _ = elem.GetAttribute("Type")
 
@@ -148,7 +148,7 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 // reference-supplied candidate lands where the document put the reference. The
 // candidate list is tried in order, so reordering it would change which key a
 // document with several candidates is decrypted under.
-func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *EncryptedData, ps *parseState) error {
+func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *encryptedData, ps *parseState) error {
 	return eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "EncryptedKey"):
@@ -175,7 +175,7 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *En
 //     peak charge equals the final candidate count exactly;
 //   - parseEncryptedKey, which spends the cumulative EncryptedKey ciphertext
 //     budget, runs exactly once per retained candidate and never for a repeat.
-func retainEncryptedKey(ctx context.Context, elem *helium.Element, ed *EncryptedData, ps *parseState) error {
+func retainEncryptedKey(ctx context.Context, elem *helium.Element, ed *encryptedData, ps *parseState) error {
 	if ps.markVisited(elem) {
 		return nil
 	}
@@ -235,7 +235,7 @@ func retainEncryptedKey(ctx context.Context, elem *helium.Element, ed *Encrypted
 // and there is no depth constant to tune. The visited set is DEDUPLICATION,
 // for the several references §3.5.3 permits; it is not a loop guard, and the
 // termination argument does not rest on it.
-func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *EncryptedData, ps *parseState) error {
+func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *encryptedData, ps *parseState) error {
 	typ, _ := elem.GetAttribute("Type")
 	switch typ {
 	case "", TypeEncryptedKey:
@@ -268,15 +268,15 @@ func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *Encrypt
 // to ps.keys.
 //
 // A xenc:CarriedKeyName child is stepped over rather than read;
-// [EncryptedKey.CarriedKeyName] owns why the parse leaves that field unset.
-func parseEncryptedKey(ctx context.Context, elem *helium.Element, ps *parseState) (*EncryptedKey, error) {
+// [encryptedKey.CarriedKeyName] owns why the parse leaves that field unset.
+func parseEncryptedKey(ctx context.Context, elem *helium.Element, ps *parseState) (*encryptedKey, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedKey") {
 		return nil, abort(ctx, fmt.Errorf("%w: expected xenc:EncryptedKey", ErrMalformedEncrypted))
 	}
 
-	ek := &EncryptedKey{}
+	ek := &encryptedKey{}
 	ek.ID, _ = elem.GetAttribute("Id")
-	ek.Recipient, _ = elem.GetAttribute("Recipient")
+	ek.recipient, _ = elem.GetAttribute("Recipient")
 
 	// KeyInfo is a singleton in the xenc:EncryptedType sequence. Its branch
 	// appends candidates rather than assigning a field, so a boolean is the
@@ -327,8 +327,8 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, ps *parseState
 	return ek, nil
 }
 
-func parseAgreementMethodForKeyInfo(ctx context.Context, elem *helium.Element) (*AgreementMethod, error) {
-	var agreement *AgreementMethod
+func parseAgreementMethodForKeyInfo(ctx context.Context, elem *helium.Element) (*agreementMethod, error) {
+	var agreement *agreementMethod
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		if !isXMLEncElem(e, "AgreementMethod") {
 			return nil
@@ -348,12 +348,12 @@ func parseAgreementMethodForKeyInfo(ctx context.Context, elem *helium.Element) (
 	return agreement, nil
 }
 
-func parseAgreementMethod(ctx context.Context, elem *helium.Element) (*AgreementMethod, error) {
+func parseAgreementMethod(ctx context.Context, elem *helium.Element) (*agreementMethod, error) {
 	algorithm, ok := elem.GetAttribute("Algorithm")
 	if !ok || algorithm == "" {
 		return nil, abort(ctx, fmt.Errorf("%w: AgreementMethod missing/empty Algorithm", ErrMalformedEncrypted))
 	}
-	agreement := &AgreementMethod{Algorithm: algorithm}
+	agreement := &agreementMethod{Algorithm: algorithm}
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {
 		case isXMLEncElem(e, "OriginatorKeyInfo"):
@@ -382,12 +382,12 @@ func parseAgreementMethod(ctx context.Context, elem *helium.Element) (*Agreement
 	return agreement, nil
 }
 
-func parseKeyDerivationMethod(ctx context.Context, elem *helium.Element) (*KeyDerivationMethod, error) {
+func parseKeyDerivationMethod(ctx context.Context, elem *helium.Element) (*keyDerivationMethod, error) {
 	algorithm, ok := elem.GetAttribute("Algorithm")
 	if !ok || algorithm == "" {
 		return nil, abort(ctx, fmt.Errorf("%w: KeyDerivationMethod missing/empty Algorithm", ErrMalformedEncrypted))
 	}
-	method := &KeyDerivationMethod{Algorithm: algorithm}
+	method := &keyDerivationMethod{Algorithm: algorithm}
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
 		if !isXMLEnc11Elem(e, "ConcatKDFParams") {
 			return nil
@@ -491,8 +491,8 @@ func parseConcatKDFHexAttribute(elem *helium.Element, name string) ([]byte, uint
 // list is observed against ctx at one rate; every child past the first match is
 // only stepped over, never parsed, so the key the document supplies is the same
 // one either way.
-func parseOriginatorKeyInfo(ctx context.Context, elem *helium.Element) (*ECKeyValue, error) {
-	var found *ECKeyValue
+func parseOriginatorKeyInfo(ctx context.Context, elem *helium.Element) (*ecKeyValue, error) {
+	var found *ecKeyValue
 	if err := eachChildElement(ctx, elem, func(keyValue *helium.Element) error {
 		if found != nil || !isDSigElem(keyValue, "KeyValue") {
 			return nil
@@ -517,7 +517,7 @@ func parseOriginatorKeyInfo(ctx context.Context, elem *helium.Element) (*ECKeyVa
 	return found, nil
 }
 
-func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, error) {
+func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ecKeyValue, error) {
 	var curve ecdh.Curve
 	var publicKey []byte
 	// NamedCurve and PublicKey are both singletons in the
@@ -562,7 +562,7 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ECKeyValue, er
 	if _, err := curve.NewPublicKey(publicKey); err != nil {
 		return nil, abort(ctx, fmt.Errorf("%w: invalid EC public key: %v", ErrMalformedEncrypted, err))
 	}
-	return &ECKeyValue{Curve: curve, PublicKey: publicKey}, nil
+	return &ecKeyValue{curve: curve, PublicKey: publicKey}, nil
 }
 
 // maxECPublicKeyBytes bounds the decoded octet length of one dsig11:PublicKey
@@ -621,8 +621,8 @@ func ecdhURIForCurve(curve ecdh.Curve) (string, error) {
 // the document is read, so everything here runs before any key is resolved and
 // before anything the document says has been authenticated. The only child it
 // decodes is OAEPparams, and maxOAEPParamsBytes owns what bounds that.
-func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*EncryptionMethod, error) {
-	em := &EncryptionMethod{}
+func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*encryptionMethod, error) {
+	em := &encryptionMethod{}
 	alg, ok := elem.GetAttribute("Algorithm")
 	if !ok || alg == "" {
 		return nil, abort(ctx, fmt.Errorf("%w: EncryptionMethod missing/empty Algorithm", ErrMalformedEncrypted))
