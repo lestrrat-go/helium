@@ -570,11 +570,13 @@ func TestDecryptBoundaryRegression(t *testing.T) {
 
 // isDocumentedDecryptFailure reports whether err matches one of the
 // sentinels Decrypt/DecryptBytes document as possible failures: a
-// decryption failure, a malformed EncryptedData, a missing key, or one of
-// the byte/count budget sentinels.
+// decryption failure, a malformed EncryptedData, a payload whose @Type
+// declares no XML content, a missing key, or one of the byte/count budget
+// sentinels.
 func isDocumentedDecryptFailure(err error) bool {
 	return errors.Is(err, xmlenc1.ErrDecryptionFailed) ||
 		errors.Is(err, xmlenc1.ErrMalformedEncrypted) ||
+		errors.Is(err, xmlenc1.ErrOpaquePayload) ||
 		errors.Is(err, xmlenc1.ErrMissingKey) ||
 		errors.Is(err, xmlenc1.ErrTooManyEncryptedKeys) ||
 		errors.Is(err, xmlenc1.ErrEncryptedKeyBytesExceeded) ||

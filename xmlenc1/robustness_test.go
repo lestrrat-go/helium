@@ -367,10 +367,13 @@ func TestParseRejectsDuplicateCardinality(t *testing.T) {
 	}
 }
 
-// TestDecryptType covers XENC-004: a non-empty Type other than Element or
-// Content (including unknown URIs) must be rejected rather than silently
-// treated as Element. An empty or omitted Type keeps the historical Element
-// default.
+// TestDecryptType covers XENC-004: Decrypt parses the recovered plaintext as
+// XML only when @Type names Element or Content. @Type sits outside the
+// ciphertext and is unauthenticated even under AES-GCM, so an absent, empty,
+// or unrecognized value is refused with ErrOpaquePayload rather than parsed:
+// stripping the attribute must not reinterpret an authenticated opaque octet
+// stream as an element the caller may graft into its tree. DecryptBytes is
+// the octet path, and the error names it.
 func TestDecryptType(t *testing.T) {
 	const algorithm = xmlenc1.AES256GCM
 
@@ -387,40 +390,68 @@ func TestDecryptType(t *testing.T) {
 		return elem
 	}
 
-	t.Run("unknown Type rejected", func(t *testing.T) {
+	// Each refusal builds an EncryptedData whose plaintext WOULD parse as one
+	// element, so the verdict comes from @Type alone and not from the payload.
+	for _, tc := range []struct {
+		name         string
+		typeURI      string
+		explicitAttr bool
+	}{
+		{name: "absent Type refused"},
+		{name: "explicit empty Type refused", explicitAttr: true},
+		{name: "unknown Type refused", typeURI: "urn:example:bogus-type"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sessionKey := randKey(t, 32)
+			cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, []byte("<x>secret</x>"))
+			require.NoError(t, err)
+
+			elem := build(t, tc.typeURI, cipher)
+			if tc.explicitAttr {
+				require.NoError(t, elem.SetAttribute("Type", ""))
+			}
+
+			_, err = xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrOpaquePayload)
+			// The payload is opaque, not malformed: the document is
+			// well-formed and a caller must be able to tell the two apart.
+			require.NotErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+			require.Contains(t, err.Error(), "DecryptBytes")
+		})
+	}
+
+	t.Run("Element Type parses as XML", func(t *testing.T) {
 		sessionKey := randKey(t, 32)
 		cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, []byte("<x>secret</x>"))
 		require.NoError(t, err)
 
-		elem := build(t, "urn:example:bogus-type", cipher)
+		elem := build(t, xmlenc1.TypeElement, cipher)
+		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+		require.Equal(t, helium.ElementNode, nodes[0].Type())
+	})
+
+	// The case the strict default is for: EncryptBytes emits no @Type, so an
+	// opaque payload reaches Decrypt looking exactly like one whose @Type an
+	// attacker stripped. Decrypt must refuse it by name instead of feeding the
+	// octets to the XML parser and reporting whatever that parse decided.
+	t.Run("opaque payload with no Type is refused, not parsed", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		payload := []byte{0x00, 0x01, 0xff, 0xfe, 'n', 'o', 't', ' ', 'x', 'm', 'l'}
+		doc := mustParseXML(t, `<root/>`)
+
+		elem, err := xmlenc1.NewEncryptor().SessionKey(sessionKey).EncryptBytes(t.Context(), doc, payload)
+		require.NoError(t, err)
+
 		_, err = xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
-		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
-	})
+		require.ErrorIs(t, err, xmlenc1.ErrOpaquePayload)
+		require.NotErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
 
-	t.Run("omitted Type defaults to Element", func(t *testing.T) {
-		sessionKey := randKey(t, 32)
-		cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, []byte("<x>secret</x>"))
+		// DecryptBytes is the path the error names, and it still works.
+		got, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).DecryptBytes(t.Context(), elem)
 		require.NoError(t, err)
-
-		elem := build(t, "", cipher)
-		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
-		require.NoError(t, err)
-		require.Len(t, nodes, 1)
-		require.Equal(t, helium.ElementNode, nodes[0].Type())
-	})
-
-	t.Run("explicit empty Type defaults to Element", func(t *testing.T) {
-		sessionKey := randKey(t, 32)
-		cipher, err := xmlenc1.EncryptBytesForTest(algorithm, sessionKey, []byte("<x>secret</x>"))
-		require.NoError(t, err)
-
-		elem := build(t, "", cipher)
-		require.NoError(t, elem.SetAttribute("Type", ""))
-
-		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
-		require.NoError(t, err)
-		require.Len(t, nodes, 1)
-		require.Equal(t, helium.ElementNode, nodes[0].Type())
+		require.Equal(t, payload, got)
 	})
 }
 

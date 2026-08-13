@@ -65,9 +65,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
     succeeds only when the recovered plaintext parses, so its success
     or failure is the well-formedness oracle itself. The exact
     predicate depends on `@Type`: a `Content` payload need only parse
-    as a well-formed fragment, while an `Element` payload — the
-    default when `@Type` is empty or absent — must in addition parse
-    to exactly one node, and that node must be an element.
+    as a well-formed fragment, while an `Element` payload must in
+    addition parse to exactly one node, and that node must be an
+    element. Any other `@Type` never reaches a parse at all.
     `DecryptBytes` is stronger still — it returns the plaintext octets
     on valid padding alone, with no XML constraint at all.
 - The inner parser used on the decrypted plaintext has DTD loading,
@@ -133,11 +133,18 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 - `Encryptor.EncryptBytes` and `Decryptor.DecryptBytes` handle payloads that
   are neither an element nor element content. `EncryptBytes` returns a
   detached `EncryptedData` with no `Type` attribute and does not modify the
-  tree; because `Decrypt` treats an empty or absent `Type` as `TypeElement`, recover
-  this payload with `DecryptBytes`, which returns the plaintext octets without
-  parsing them as XML. `Decrypt` accepts only an empty or absent `Type`, `TypeElement`,
-  or `TypeContent`; use `DecryptBytes` for opaque or application-defined
-  payloads and for any other non-empty `Type`.
+  tree; recover this payload with `DecryptBytes`, which returns the plaintext
+  octets without parsing them as XML. `Decrypt` parses only `TypeElement` and
+  `TypeContent` and refuses every other `Type` — absent, empty, or an
+  unrecognized URI — with `ErrOpaquePayload`. `@Type` sits outside the
+  ciphertext and no block algorithm authenticates it, so treating an absent
+  value as `TypeElement` would let anyone who can edit the document delete the
+  attribute and have opaque plaintext parsed as XML and handed back as nodes
+  to graft into a tree. xmlenc-core1 §4.2 asks a decryptor to read an unknown
+  or empty `Type` as a signal that the cleartext is an opaque octet stream,
+  and §3.1 puts the absent case in the same position. The error is deliberately
+  not `ErrMalformedEncrypted`: such a document is well-formed, and a caller
+  must be able to tell "retry with `DecryptBytes`" from a document to reject.
 - `Decryptor.MaxEncryptedKeys` caps how many `<EncryptedKey>` candidates are
   trial-decrypted (default 100, negative for unlimited), because an unbounded
   count is a CPU amplification vector; over the cap fails while parsing,

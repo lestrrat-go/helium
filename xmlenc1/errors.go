@@ -105,6 +105,29 @@ var (
 	// ErrMalformedEncrypted is returned when an EncryptedData element is malformed.
 	ErrMalformedEncrypted = errors.New("xmlenc1: malformed EncryptedData element")
 
+	// ErrOpaquePayload is returned by Decryptor.Decrypt when the
+	// EncryptedData's @Type does not declare XML content: it is absent, empty,
+	// or a URI other than TypeElement and TypeContent. Decrypt is the XML
+	// path, so it refuses such a payload, and every message wrapping this
+	// sentinel names Decryptor.DecryptBytes, which returns the plaintext
+	// octets without parsing them.
+	//
+	// @Type sits OUTSIDE the ciphertext and is authenticated by nothing, not
+	// even AES-GCM. Treating an absent or unrecognized value as TypeElement
+	// would let anyone who can edit the document delete the attribute and have
+	// an opaque octet stream parsed as XML and handed back as nodes to graft
+	// into a tree — type confusion decided by an attribute the recipient
+	// cannot verify. xmlenc-core1 §4.2 asks a decryptor to take an unknown or
+	// empty Type as a signal that the cleartext is an opaque octet stream, and
+	// §3.1 puts the absent case in the same position.
+	//
+	// It is deliberately NOT ErrMalformedEncrypted: such a document is
+	// well-formed, and a caller must be able to tell "this payload is opaque,
+	// retry with DecryptBytes" from a document it should reject outright.
+	// DecryptBytes never returns it — it does not read @Type at all. Match
+	// with errors.Is.
+	ErrOpaquePayload = errors.New("xmlenc1: EncryptedData payload is not XML")
+
 	// ErrMissingConfig is returned when required encryption config is missing.
 	ErrMissingConfig = errors.New("xmlenc1: missing required configuration")
 
