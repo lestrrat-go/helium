@@ -809,7 +809,7 @@ func TestAtomicEquals(t *testing.T) {
 	require.True(t, xpath3.AtomicEquals(intAtomic(3), intAtomic(3)))
 	require.False(t, xpath3.AtomicEquals(intAtomic(3), intAtomic(4)))
 	require.True(t, xpath3.AtomicEquals(strAtomic("x"), strAtomic("x")))
-	// Incomparable types return false rather than erroring.
+	// Incomparable types return false, and never error.
 	require.False(t, xpath3.AtomicEquals(strAtomic("x"), intAtomic(1)))
 }
 

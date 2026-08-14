@@ -171,7 +171,7 @@ func typeHasAssertions(td *TypeDef) bool {
 // corresponding copied element/attribute nodes so typed atomization (e.g. a
 // typed attribute in a value comparison) still works. If the copy fails for any
 // reason it falls back to the live element and annotations (the documented
-// non-isolated behavior) rather than skipping the assertion.
+// non-isolated behavior), skipping no assertion.
 func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *helium.Element) (helium.Node, map[helium.Node]string) {
 	live := map[helium.Node]string(vc.assertAnnotations)
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
@@ -243,7 +243,7 @@ func (vc *validationContext) mapAssertAnnotations(ctx context.Context, orig, cop
 	if !isRoot {
 		vc.materializeAssertDefault(ctx, orig, copied)
 	}
-	// Match attributes by expanded QName rather than positional index: the copy
+	// Match attributes by expanded QName, and never positional index: the copy
 	// may carry a different attribute ordering or extra namespace declarations.
 	ca := copied.Attributes()
 	for _, oattr := range orig.Attributes() {
@@ -348,7 +348,7 @@ func childNodes(n helium.Node) []helium.Node {
 // the typed simple value when td has simple content, otherwise the empty
 // sequence (complex content). For an EMPTY element the declaration's fixed/default
 // effective value is substituted first (mirroring validateSimpleContent), so
-// $value reflects the schema-normalized value rather than the raw empty text. The
+// $value reflects the schema-normalized value, and never the raw empty text. The
 // value is then whitespace-normalized per the content type's effective whiteSpace
 // facet before typing.
 func (vc *validationContext) assertValueSequence(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) xpath3.Sequence {
@@ -370,7 +370,7 @@ func (vc *validationContext) assertValueSequence(ctx context.Context, elem *heli
 	}
 	// A QName/NOTATION value substituted from the declaration's fixed/default
 	// resolves its prefix against the DECLARATION's namespace context, so $value
-	// binds the schema-intended URI rather than an unrelated instance binding.
+	// binds the schema-intended URI, and never an unrelated instance binding.
 	valueNS := effectiveValueNS(elem, edecl, isEmpty)
 	raw := normalizeWhiteSpace(value, resolveWhiteSpace(valueType))
 	return buildValueSequence(ctx, raw, valueNS, valueType, vc)

@@ -17,8 +17,8 @@ func (r stringURIResolver) ResolveURI(string) (io.ReadCloser, error) {
 }
 
 // fn:unparsed-text-lines over a resource with more lines than the configured
-// node-set/sequence cap must reject the result via the cap rather than
-// materializing the whole line sequence. Before the fix the function built an
+// node-set/sequence cap must reject the result via the cap, materializing no
+// whole line sequence. Before the fix the function built an
 // ItemSlice of every line with no fnMaxNodes guard, so an oversized resource
 // produced an unbounded sequence.
 func TestFnUnparsedTextLines_HonorsMaxNodes(t *testing.T) {

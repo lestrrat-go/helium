@@ -146,7 +146,7 @@ func TestAttrGroupDiamondNoCycle(t *testing.T) {
 // TestAttrGroupSelfReferenceCircular verifies that a SELF-referential attribute
 // group (<xs:attributeGroup name="g"><xs:attributeGroup ref="g"/></...>) outside
 // <xs:redefine> is reported as a circular reference (src-attribute_group.3),
-// rather than being silently dropped and compiling.
+// and is never silently dropped and compiled.
 func TestAttrGroupSelfReferenceCircular(t *testing.T) {
 	t.Parallel()
 
@@ -298,7 +298,7 @@ func TestAttrGroupIndirectCycleBackEdgeSourceInclude(t *testing.T) {
 // TestOccursDiagnosticSourceInclude verifies that the occurrence/all schema
 // diagnostics introduced for cos-all-limited / xs:nonNegativeInteger occurrence
 // validation are attributed to the DECLARING file when the offending particle
-// lives in an INCLUDED schema, rather than to the top-level compiler label.
+// lives in an INCLUDED schema, and never to the top-level compiler label.
 func TestOccursDiagnosticSourceInclude(t *testing.T) {
 	t.Parallel()
 

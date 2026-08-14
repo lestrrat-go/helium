@@ -10,8 +10,8 @@ import (
 )
 
 // Lowering DefaultMaxRecursionDepth must cause deeply-nested expressions
-// to terminate quickly with ErrRecursionLimit rather than continuing to
-// consume goroutine stack.
+// to terminate quickly with ErrRecursionLimit, consuming no further
+// goroutine stack.
 func TestDefaultMaxRecursionDepth_Tunable(t *testing.T) {
 	orig := xpath3.DefaultMaxRecursionDepth
 	xpath3.DefaultMaxRecursionDepth = 8

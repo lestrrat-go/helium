@@ -47,8 +47,8 @@ func TestCompile_ReuseAcrossDocuments(t *testing.T) {
 	}
 }
 
-// Compile must surface XPath syntax errors at compile time rather than
-// deferring them to each Evaluate call.
+// Compile must surface XPath syntax errors at compile time, deferring them
+// to no Evaluate call.
 func TestCompile_ReportsXPathSyntaxErrorEarly(t *testing.T) {
 	t.Parallel()
 	_, err := xpointer.Compile("xpath1(///)")
@@ -443,7 +443,7 @@ func TestInvalidSchemeNameRejected(t *testing.T) {
 	}
 
 	// A syntactically valid but unsupported scheme name is a QName, so it must
-	// continue to cascade as an unknown scheme rather than abort parsing. Here
+	// continue to cascade as an unknown scheme, aborting no parse. Here
 	// the unknown "foo" scheme yields no nodes and the following element() part
 	// resolves the target.
 	nodes, err := xpointer.Evaluate(t.Context(), doc, "foo(/x)element(x)")

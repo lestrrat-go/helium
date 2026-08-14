@@ -118,8 +118,8 @@ func TestStringArgCardinalityPreserved(t *testing.T) {
 	})
 
 	// The xs:string?-argument URI/codepoint functions share the same
-	// atomize-then-count coercion: an empty-array member must flatten away
-	// rather than count as a second item (XPTY0004).
+	// atomize-then-count coercion: an empty-array member must flatten away,
+	// counting as no second item (XPTY0004).
 	uriCases := []struct {
 		name, expr, want string
 	}{
@@ -282,7 +282,7 @@ func TestStringCoercionAtomizedEmptyResult(t *testing.T) {
 
 // TestDynamicCallElementOnlyRaisesFOTY0012 verifies that atomizing an
 // element-only-typed node against an xs:string? parameter surfaces the real
-// dynamic error err:FOTY0012 (the node has no typed value) rather than a
+// dynamic error err:FOTY0012 (the node has no typed value), and never a
 // generic XPTY0004, across every function-item invocation path: a named
 // function reference (invoked via fn:for-each), fn:function-lookup, an inline
 // function parameter, and an inline function return type. Each path previously

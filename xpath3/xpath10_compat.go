@@ -33,7 +33,7 @@ func doubleNaNAtom() AtomicValue {
 }
 
 // atomToCompatDouble converts a single atom to xs:double with fn:number
-// semantics: a lexically-invalid value yields NaN rather than an error.
+// semantics: a lexically-invalid value yields NaN, and never an error.
 func atomToCompatDouble(a AtomicValue) AtomicValue {
 	d, err := CastAtomic(a, TypeDouble)
 	if err != nil {

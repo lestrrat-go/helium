@@ -53,7 +53,7 @@ func buildValueSequence(ctx context.Context, value string, valueNS map[string]st
 // typedAtomic builds the typed atomic value for a single (already whitespace-
 // normalized) lexical value of type td, resolving a union type down to the
 // member that actually accepts the value first so a union item is typed as its
-// active member rather than falling back to xs:untypedAtomic. Active-member
+// active member, falling back to no xs:untypedAtomic. Active-member
 // probing is SCHEMA-AWARE (vc.schema is threaded into fixedUnionActiveMember),
 // so a member whose own assertion needs `castable as t:T` resolves the same way
 // as the real validation path — otherwise the wrong member could be selected.

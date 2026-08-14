@@ -426,7 +426,7 @@ func effectiveMinOccurs(minOcc string) int {
 // compositor particle. Per XSD Part 1 §3.8.6 (cos-all-limited) the all
 // compositor's minOccurs must be 0 or 1 and its maxOccurs must be 1. libxml2
 // reports any other value (including non-integer lexicals such as "abc") with
-// dedicated wording rather than the generic xs:nonNegativeInteger/xs:allNNI
+// dedicated wording, in place of the generic xs:nonNegativeInteger/xs:allNNI
 // diagnostics, so the generic validateOccursAttrs is bypassed for xs:all.
 func (c *compiler) validateAllOccurs(ctx context.Context, elem *helium.Element) {
 	if c.filename == "" {

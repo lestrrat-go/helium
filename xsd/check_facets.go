@@ -33,7 +33,7 @@ func baseFacets(td *TypeDef) *FacetSet {
 
 // checkFacetConsistency validates facet constraints for every facet-bearing
 // simple type — named globals AND inline/anonymous (local) simple types. It
-// iterates c.typeDefSources rather than c.schema.types so that inline simple
+// iterates c.typeDefSources, and never c.schema.types, so that inline simple
 // types on elements/attributes (which never enter the named-type table) are
 // checked too; otherwise an invalid bound on an anonymous type would slip
 // through checkFacetValueAgainstBase and become the very no-op this guards
@@ -393,7 +393,7 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 // {value} must be datatype-valid against the {base type definition}; an invalid
 // member (e.g. <xs:enumeration value="+NaN"/> on an xs:float base — signed NaN is
 // not in the float/double lexical space) makes the schema in error and must be
-// rejected at COMPILE time rather than silently compiling into an unsatisfiable
+// rejected at COMPILE time, compiling into no unsatisfiable
 // enumeration that fails at instance-validation time.
 //
 // This applies to ALL varieties — atomic, list, and union. validateValue is

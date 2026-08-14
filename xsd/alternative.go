@@ -181,7 +181,7 @@ func (c *compiler) parseTypeAlternative(ctx context.Context, elem *helium.Elemen
 	// A testless alternative (no @test attribute at all) is the unconditional
 	// default; it carries no compiled expression and always matches. Presence is
 	// tested with hasAttr so a present-but-empty test="" is compiled (and fails) as
-	// an invalid XPath rather than being silently treated as the default.
+	// an invalid XPath, and is never treated as the default.
 	if hasAttr(elem, attrTest) {
 		test := getAttr(elem, attrTest)
 		alt.Test = test
@@ -591,7 +591,7 @@ func (c *compiler) checkAltSubstitutability(ctx context.Context) {
 // resolveRefs), so the former fallback only ever masked NON-derivations (e.g.
 // xs:string for a user SmallInt, or for union(SmallInt, xs:boolean)). The W3C
 // suite is the safety net — if a real derivation is missed, isDerivedFrom must be
-// extended to cover it rather than reinstating the fallback.
+// extended to cover it, and the fallback must never be reinstated.
 func isValidlySubstitutable(alt, decl *TypeDef) bool {
 	return isValidlySubstitutableForDeclaredType(alt, decl, true)
 }

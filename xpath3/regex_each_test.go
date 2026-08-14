@@ -118,8 +118,8 @@ func TestRegexEachSubmatchIndexMultilineAnchorIsBounded(t *testing.T) {
 // FindAll pass. With an uncapped (or larger-than-ceiling) limit, that pass must
 // NOT allocate one record per input position: it is bounded to an internal
 // allocation ceiling, and an input that exceeds the ceiling is rejected with
-// ErrRegexMatchLimit before any match is delivered (rather than silently
-// truncated or allowed to amplify a bounded input into millions of records).
+// ErrRegexMatchLimit before any match is delivered, never silently
+// truncated and never amplifying a bounded input into millions of records.
 func TestRegexEachSubmatchIndexFullContextCeilingIsBounded(t *testing.T) {
 	t.Parallel()
 

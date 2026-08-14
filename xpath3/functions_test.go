@@ -828,7 +828,7 @@ func TestFnDateTime(t *testing.T) {
 
 	t.Run("dateTime as first arg is a type error", func(t *testing.T) {
 		// $arg1 is declared xs:date?; passing an xs:dateTime must raise
-		// XPTY0004 rather than being reinterpreted as a date.
+		// XPTY0004, and must never be reinterpreted as a date.
 		compiled, err := xpath3.NewCompiler().Compile(`dateTime(xs:dateTime("2020-01-01T12:00:00"), xs:time("01:02:03"))`)
 		require.NoError(t, err)
 		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
@@ -838,7 +838,7 @@ func TestFnDateTime(t *testing.T) {
 
 	t.Run("dateTime as second arg is a type error", func(t *testing.T) {
 		// $arg2 is declared xs:time?; passing an xs:dateTime must raise
-		// XPTY0004 rather than being reinterpreted as a time.
+		// XPTY0004, and must never be reinterpreted as a time.
 		compiled, err := xpath3.NewCompiler().Compile(`dateTime(xs:date("2020-01-01"), xs:dateTime("2020-01-01T12:00:00"))`)
 		require.NoError(t, err)
 		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
@@ -1051,8 +1051,8 @@ func TestFunctionLookupTypedParamValidation(t *testing.T) {
 		// Function-conversion casts an xs:untypedAtomic argument to the xs:integer
 		// parameter type; the cast of "not-an-int" fails with FORG0001. That real
 		// dynamic error must surface unchanged — matching the direct f(...) and
-		// f#1(...) call paths — rather than being collapsed into a generic
-		// XPTY0004 type-mismatch by the function-item invocation path.
+		// f#1(...) call paths — and must never collapse into a generic
+		// XPTY0004 type-mismatch on the function-item invocation path.
 		compiled, err := xpath3.NewCompiler().Compile(`function-lookup(QName("","f"), 1)(xs:untypedAtomic("not-an-int"))`)
 		require.NoError(t, err)
 		_, err = eval.Evaluate(t.Context(), compiled, doc)
@@ -1109,7 +1109,7 @@ func TestFunctionLookupCustomPrefixParamNoPanic(t *testing.T) {
 }
 
 // TestFnRoundScaleAware verifies that extreme but representable precisions
-// produce the spec-correct result rather than being blindly clamped, and that
+// produce the spec-correct result, and are never blindly clamped, and that
 // each case returns promptly (no Exp on an astronomically large exponent). The
 // huge-magnitude cases use integers far beyond float64 range, so results are
 // compared as exact decimal strings.
@@ -1266,7 +1266,7 @@ func TestFnRoundPrecisionArgValidation(t *testing.T) {
 }
 
 // TestFnRoundDecimalHugePrecision verifies that the decimal half-to-even path
-// computes huge-but-representable coarse precisions exactly, rather than being
+// computes huge-but-representable coarse precisions exactly, and is never
 // silently clamped to zero by a coarse downstream guard. The operand magnitude
 // bounds the scale, so the result must be the exact large value and return
 // promptly (no hang).
@@ -1315,7 +1315,7 @@ func TestFnRoundDecimalHugePrecision(t *testing.T) {
 // than 2 or 5) rounded at an astronomically large positive precision must NOT
 // build 10^precision via Exp. Such an operand has an unbounded fractional-digit
 // count, so a precision beyond roundMaxComputeScale (1<<20) is refused with
-// FOAR0002 rather than silently rounding at a lower scale (which would return an
+// FOAR0002, rounding silently at no lower scale (which would return an
 // observably wrong, lower-precision value). The refusal must be prompt, never a
 // hang or absurd allocation.
 func TestFnRoundNonTerminatingHugePrecision(t *testing.T) {
@@ -1365,7 +1365,7 @@ func TestFnRoundNonTerminatingHugePrecision(t *testing.T) {
 
 // TestFnRoundNonTerminatingAtCap verifies that a non-terminating xs:decimal
 // rounded at exactly roundMaxComputeScale (1<<20) fractional digits computes the
-// exact value (rather than erroring or silently clamping). 2/3 to 1<<20 digits is
+// exact value, erroring nowhere and clamping nothing. 2/3 to 1<<20 digits is
 // well-defined: every retained digit is 6 and the value rounds up in the last
 // place, so the result is "0." followed by (1<<20 - 1) sixes and a trailing 7.
 func TestFnRoundNonTerminatingAtCap(t *testing.T) {
@@ -1430,7 +1430,7 @@ func TestFnRoundHalfToEvenNegativePrecision(t *testing.T) {
 
 // TestFnRoundPrecisionCardinality verifies that the second ($precision) argument
 // of fn:round / fn:round-half-to-even is a required singleton: a multi-item
-// sequence must raise XPTY0004 rather than silently using its first item.
+// sequence must raise XPTY0004, and must never silently use its first item.
 func TestFnRoundPrecisionCardinality(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
@@ -1501,7 +1501,7 @@ func TestFnSequenceIntegerCardinalityArgs(t *testing.T) {
 }
 
 // fn:index-of's $search-param is a single atomic item (xs:anyAtomicType), so a
-// non-singleton search value is a type error (XPTY0004) rather than a silent
+// non-singleton search value is a type error (XPTY0004), and never a silent
 // search for just the first item.
 func TestFnIndexOfSearchCardinality(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")

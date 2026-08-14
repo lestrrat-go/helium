@@ -96,7 +96,7 @@ func (r *Regex) FindAllSubmatchIndex(s string, n int) ([][]int, error) {
 // whole string in one pass. That pass is bounded to an internal allocation
 // ceiling far below any byte-budget-sized limit, so when the pattern produces
 // more matches than the ceiling allows the call fails with [ErrRegexMatchLimit]
-// (a resource-exhaustion condition) rather than allocating a match record per
+// (a resource-exhaustion condition), allocating no match record per
 // input position. A caller enforcing its own budget of N should pass
 // limit = N+1 so that, when N is below the internal ceiling, it observes the
 // (N+1)th match and rejects before the ceiling is reached.

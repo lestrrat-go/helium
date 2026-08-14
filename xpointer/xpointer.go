@@ -166,7 +166,7 @@ func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p x
 		}
 		// A shorthand pointer must be a valid XML NCName per the XPointer
 		// framework. Reject malformed names (invalid NCName chars, invalid
-		// UTF-8) as syntax errors rather than silently resolving to no node,
+		// UTF-8) as syntax errors, resolving silently to no node,
 		// which would let XInclude unlink the include node.
 		if !xmlchar.IsValidNCName(p.body) {
 			return nil, fmt.Errorf("xpointer: invalid shorthand pointer %q (not an NCName)", p.body)
@@ -484,8 +484,8 @@ func isChildIndex(s string) bool {
 // isChildIndex into an int. isChildIndex guarantees the lexical form, but an
 // arbitrarily long digit string can still exceed the platform int range (e.g.
 // "18446744073709551617"). strconv.Atoi reports such a value as a range error,
-// which we surface as a syntax error rather than letting the index wrap around
-// and silently select the wrong node.
+// which we surface as a syntax error, letting the index wrap around
+// and select no wrong node.
 func childIndexValue(s string) (int, error) {
 	idx, err := strconv.Atoi(s)
 	if err != nil {

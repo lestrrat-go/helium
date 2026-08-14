@@ -256,7 +256,7 @@ func TestRangeOperator(t *testing.T) {
 // per-item sub-sequences (simple-map `!`, FLWOR `for ... return`, lookup `?`)
 // enforce the configured sequence/node-set size limit instead of materializing
 // unbounded output. maxNodes is lowered so the test is fast and proves the
-// evaluator stops early rather than after building everything.
+// evaluator stops early, well before building everything.
 func TestSequenceLimitComposition(t *testing.T) {
 	t.Parallel()
 

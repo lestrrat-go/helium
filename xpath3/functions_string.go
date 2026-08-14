@@ -1618,7 +1618,7 @@ func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, limit int, fn fun
 // Bounding the total index cells instead keeps the worst-case allocation fixed
 // regardless of capture count: the per-pattern match cap is derived from this
 // cell budget, and an input producing more cells than this is rejected with
-// [ErrRegexMatchLimit] rather than silently truncated or allowed to allocate
+// [ErrRegexMatchLimit], never silently truncated and never allowed to allocate
 // proportionally to the input.
 const maxFullContextIndexCells = 1 << 20 // ~1M index ints
 
@@ -1632,7 +1632,7 @@ const maxFullContextIndexCells = 1 << 20 // ~1M index ints
 // one (^, \A, \b, \B) would see a spurious "start of input" at every slice
 // boundary, so they are matched against the WHOLE string by Go's RE2 engine via
 // FindAllStringSubmatchIndex. That call is the only one that accumulates, so it
-// is bounded to the maxFullContextIndexCells budget rather than to the caller's
+// is bounded to the maxFullContextIndexCells budget, and never to the caller's
 // (possibly byte-budget-sized) limit; an input that exceeds that ceiling is
 // rejected with [ErrRegexMatchLimit] instead of allocating one match per input
 // position. RE2 stays linear, so a valid backtracking-shaped pattern like
@@ -1701,7 +1701,7 @@ func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([
 // may be derived from a large byte budget). When the caller's own limit is the
 // smaller bound, it governs and the caller observes the overflow itself; when
 // this function's ceiling is the binding bound and it is exceeded, the input is
-// rejected with [ErrRegexMatchLimit] rather than silently truncated. Each
+// rejected with [ErrRegexMatchLimit], and never silently truncated. Each
 // surviving match is handed to fn one at a time, so a caller checking a
 // cancelled context inside fn observes it between matches.
 func (r *compiledXPathRegex) eachStdFullContext(s string, limit int, fn func([]int) bool) error {

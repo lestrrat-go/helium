@@ -16,7 +16,7 @@ import "context"
 // xs:choice (the latter two restricting a base all per the RecurseUnordered / map
 // rules), including nested choices/sequences, via a recursive contribution walk
 // that maps each derived element to a base member as it goes — so the branches of
-// a choice correlate on the base member rather than on the derived element name
+// a choice correlate on the base member, and never on the derived element name
 // (e.g. choice(A1{2},A2{2}) with A1,A2 in base member a's substitution group
 // restricts base a{2}). Wildcards are NOT handled here — those route to
 // allRestrictsWithWildcards.
