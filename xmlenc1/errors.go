@@ -107,18 +107,6 @@ var (
 	// one, taking neither. Match with errors.Is.
 	ErrAmbiguousReference = errors.New("xmlenc1: ambiguous reference")
 
-	// ErrInvalidPadding names invalid AES-CBC padding. Decryption never
-	// returns it: distinguishing a padding failure from any other CBC
-	// failure is exactly what a padding oracle needs, so decryptCBC
-	// collapses every cause to ErrDecryptionFailed. It remains exported so
-	// that decryptCipherValue can defensively squash it should any future
-	// code path start returning it, and so tests can assert it never
-	// escapes.
-	//
-	// Deprecated: matching on this sentinel never succeeds. Test for
-	// ErrDecryptionFailed instead.
-	ErrInvalidPadding = errors.New("xmlenc1: invalid AES-CBC padding")
-
 	// ErrKeyUnwrapFailed is returned when AES key unwrap integrity check
 	// fails. It is always wrapped in ErrDecryptionFailed, so a caller that
 	// tests only for ErrDecryptionFailed catches a failed key unwrap the
