@@ -149,9 +149,9 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 // candidate list is tried in order, so reordering it would change which key a
 // document with several candidates is decrypted under.
 //
-// An xenc:AgreementMethod in this position — xmlenc-core1 §5.6 defines it as
-// the content of an EncryptedData's own ds:KeyInfo, alongside the
-// EncryptedKey position §3.5.3 defines it for — is stepped over unread, same
+// An xenc:AgreementMethod in this position — xmlenc-core1 §5.6 puts it in the
+// ds:KeyInfo of an EncryptedData or of an EncryptedKey alike — is stepped
+// over unread, same
 // as ds:KeyValue and ds:KeyName: §3.5 marks AgreementMethod support OPTIONAL
 // there, at the same grade as ds:KeyValue. An EncryptedData offering the
 // session key only that way carries no candidate this parse retains, so it
