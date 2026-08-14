@@ -488,11 +488,53 @@ the RetrievalMethod's transforms; only the result is charged. Those octets are
 therefore charged *after* they are materialized, and they are raw certificate
 bytes that were never base64-decoded.
 
-Verification also polls the
-context inside the KeyInfo and Reference parse loops, so a cancelled context or
-passed deadline stops the work promptly rather than only at loop boundaries —
-pass a `ctx` with a deadline to bound the per-Reference canonicalization of a
-SignedInfo that declares many References.
+Verification also polls the context inside the KeyInfo and Reference parse
+loops, and inside every stage that grows or narrows a node set: the subtree and
+whole-document collections, the comment-excluding and enveloped-signature
+filters, and the base64 node-set-to-text conversion. A cancelled context or a
+passed deadline stops that work rather than only being noticed at a stage
+boundary. Growing a node set is a single operation that charges what it added,
+so a stage added later inherits the poll instead of having to remember it.
+
+What a deadline does NOT bound is the canonicalization those stages feed.
+Canonical XML is written by the `c14n` package, and
+`c14n.Canonicalizer.CanonicalizeTo` takes no context; neither does the
+`helium.CopyDoc` an enveloped canonicalization clones the document with. Once a
+node set is handed over, that stage runs to completion however large it is, and
+giving it a deadline would be a public API change in two other packages. So a
+deadline bounds the node-set stages and the gaps between pipeline steps, NOT the
+whole verify path.
+
+What bounds the canonicalization of a subtree is its SIZE. The node set built
+for it carries one namespace node per declaration actually written, plus at most
+one per element, so it is linear in the document. It is deliberately not the
+complete XPath in-scope namespace axis, which would be one namespace node per
+(element × ancestor declaration) — quadratic work an attacker gets from a small
+well-formed document, before any signature is checked, since `SignedInfo` is
+canonicalized before the `SignatureValue` and a `ds:RetrievalMethod` can name a
+subtree anywhere in the document. The reduced set renders byte-identical
+canonical octets in every supported method, Exclusive C14N and its
+`InclusiveNamespaces` PrefixList included.
+
+The one node set that does carry the complete axis is the input to an `XPath`
+filter transform. That transform is evaluated once per node — namespace nodes
+included — and may keep an element whose parent it drops, so every element there
+needs its own axis; the node set, and the one evaluation per member, are
+quadratic in the document. That is the transform's own data model, not a choice
+this package makes, and it is where a deadline earns its keep: nothing caps that
+node set's size, and both the walk that builds it and the per-node evaluation
+poll the context, so a `ctx` deadline bounds the work at roughly the rate times
+the deadline instead of running to completion. The walk charges its poll per
+collected node-set MEMBER — every element, attribute, and namespace node — and
+not per tree node walked, so an element that repeats the whole axis cannot carry
+a document's worth of members past a poll: what a passed deadline may still cost
+is one poll interval of members, whatever the document's shape.
+
+Pass one when verifying documents from untrusted sources. A Reference's
+transforms run only *after* the `SignatureValue` has verified, but a
+`ds:RetrievalMethod`'s transforms run before it, so a RetrievalMethod carrying
+an XPath filter transform reaches that quadratic node set without a key or a
+valid signature.
 
 RetrievalMethod transforms have a separate fixed `maxRetrievalTransformSteps`
 cap because they execute before the SignatureValue check. It is not affected by

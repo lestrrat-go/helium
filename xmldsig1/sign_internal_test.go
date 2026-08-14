@@ -65,7 +65,7 @@ func TestComputeSignedInfoDetachedProxyMatchesAttach(t *testing.T) {
 
 				// NEW path: canonicalize via the throwaway-document proxy. The
 				// caller's document must be untouched afterward.
-				gotProxy, err := canonicalizeDetachedSubtree(method, sig, si, nil)
+				gotProxy, err := canonicalizeDetachedSubtree(t.Context(), method, sig, si, nil)
 				require.NoError(t, err)
 				require.Nil(t, sig.Parent(), "Signature must remain detached after proxy canonicalization")
 				afterProxy, err := helium.WriteString(doc)
@@ -75,7 +75,7 @@ func TestComputeSignedInfoDetachedProxyMatchesAttach(t *testing.T) {
 				// OLD path: temporarily attach the Signature under the document
 				// element, canonicalize SignedInfo in place, then unlink.
 				require.NoError(t, doc.DocumentElement().AddChild(sig))
-				gotAttach, err := canonicalizeSubtree(method, si, nil)
+				gotAttach, err := canonicalizeSubtree(t.Context(), method, si, nil)
 				require.NoError(t, err)
 				helium.UnlinkNode(sig)
 
@@ -105,7 +105,7 @@ func TestComputeAndSetSignatureValueNeverMutatesCallerDoc(t *testing.T) {
 		sig, si, sv, err := buildSignatureSkeleton(doc, cfg)
 		require.NoError(t, err)
 
-		require.NoError(t, computeAndSetSignatureValue(cfg, sig, si, sv, doc, rsaKey))
+		require.NoError(t, computeAndSetSignatureValue(t.Context(), cfg, sig, si, sv, doc, rsaKey))
 		require.Nil(t, sig.Parent(), "Signature must stay detached after signing")
 		require.Equal(t, wantChildren, directChildLocalNames(t, docElem),
 			"caller document element must gain no stray child on the success path")
@@ -129,7 +129,7 @@ func TestComputeAndSetSignatureValueNeverMutatesCallerDoc(t *testing.T) {
 		sig, si, sv, err := buildSignatureSkeleton(doc, cfg)
 		require.NoError(t, err)
 
-		err = computeAndSetSignatureValue(cfg, sig, si, sv, doc, ecKey)
+		err = computeAndSetSignatureValue(t.Context(), cfg, sig, si, sv, doc, ecKey)
 		require.ErrorIs(t, err, ErrKeyMismatch)
 		require.Nil(t, sig.Parent(), "Signature must stay detached after a signing error")
 		require.Equal(t, wantChildren, directChildLocalNames(t, docElem),
@@ -162,7 +162,7 @@ func TestComputeAndSetSignatureValueNeverMutatesCallerDoc(t *testing.T) {
 		helium.UnsafeSetNextSibling(firstChild, nilElem)
 
 		require.Panics(t, func() {
-			_ = computeAndSetSignatureValue(cfg, sig, si, sv, doc, rsaKey)
+			_ = computeAndSetSignatureValue(t.Context(), cfg, sig, si, sv, doc, rsaKey)
 		})
 		require.Equal(t, wantChildren, directChildLocalNames(t, docElem),
 			"caller document element must gain no stray child even when a panic unwinds through signing")

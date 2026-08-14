@@ -188,7 +188,7 @@ func TestCanonicalizeSubtreeKeepsNamespaceDecls(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("inclusive C14N 1.0", func(t *testing.T) {
-		out, err := canonicalizeSubtree(C14N10, target, nil)
+		out, err := canonicalizeSubtree(t.Context(), C14N10, target, nil)
 		require.NoError(t, err)
 		require.Contains(t, string(out), `xmlns:p="urn:p"`,
 			"canonical subtree must carry the in-scope xmlns:p declaration")
@@ -198,14 +198,14 @@ func TestCanonicalizeSubtreeKeepsNamespaceDecls(t *testing.T) {
 	})
 
 	t.Run("exclusive C14N 1.0", func(t *testing.T) {
-		out, err := canonicalizeSubtree(ExcC14N10, target, nil)
+		out, err := canonicalizeSubtree(t.Context(), ExcC14N10, target, nil)
 		require.NoError(t, err)
 		require.Contains(t, string(out), `xmlns:p="urn:p"`,
 			"exclusive canonical subtree must carry the visibly-utilized xmlns:p declaration")
 	})
 
 	t.Run("C14N 1.1", func(t *testing.T) {
-		out, err := canonicalizeSubtree(C14N11URI, target, nil)
+		out, err := canonicalizeSubtree(t.Context(), C14N11URI, target, nil)
 		require.NoError(t, err)
 		require.Contains(t, string(out), `xmlns:p="urn:p"`,
 			"C14N 1.1 canonical subtree must carry the in-scope xmlns:p declaration")
@@ -251,8 +251,10 @@ func TestCollectSubtreeNodesNoDTDSpill(t *testing.T) {
 	target, err := resolveReference(doc, "#x")
 	require.NoError(t, err)
 
+	nodes, err := collectSubtreeNodes(t.Context(), target)
+	require.NoError(t, err)
 	set := make(map[helium.Node]bool)
-	for _, n := range collectSubtreeNodes(target) {
+	for _, n := range nodes {
 		set[n] = true
 	}
 
@@ -276,7 +278,7 @@ func TestCanonicalizeSubtreeEntityFreeUnchanged(t *testing.T) {
 	target, err := resolveReference(doc, "#x")
 	require.NoError(t, err)
 
-	out, err := canonicalizeSubtree(C14N10, target, nil)
+	out, err := canonicalizeSubtree(t.Context(), C14N10, target, nil)
 	require.NoError(t, err)
 	require.Equal(t, `<target Id="x"><child>v</child></target>`, string(out))
 }
@@ -353,7 +355,7 @@ func TestCanonicalizeEnvelopedMatchesDetach(t *testing.T) {
 			if wholeDoc {
 				want, err = canonicalize(tc.method, doc, nil)
 			} else {
-				want, err = canonicalizeSubtree(tc.method, target, nil)
+				want, err = canonicalizeSubtree(t.Context(), tc.method, target, nil)
 			}
 			require.NoError(t, err)
 			// Reattach so the live tree is restored for the comparison below.
@@ -366,7 +368,7 @@ func TestCanonicalizeEnvelopedMatchesDetach(t *testing.T) {
 			liveBefore, err := helium.WriteString(doc)
 			require.NoError(t, err)
 
-			got, err := canonicalizeEnveloped(tc.method, doc, target, sig, wholeDoc, nil)
+			got, err := canonicalizeEnveloped(t.Context(), tc.method, doc, target, sig, wholeDoc, nil)
 			require.NoError(t, err)
 
 			require.Equal(t, string(want), string(got), "clone-based enveloped bytes must match the detach-based reference")
@@ -427,7 +429,7 @@ func TestTransformNamespace(t *testing.T) {
 		// Recompute a valid SignatureValue over the mutated SignedInfo so the only
 		// thing standing between this document and a false "verified" result is the
 		// namespace check on the Transform element.
-		canonical, err := canonicalizeSubtree(ExcC14N10, signedInfo, nil)
+		canonical, err := canonicalizeSubtree(t.Context(), ExcC14N10, signedInfo, nil)
 		require.NoError(t, err)
 		sigBytes, err := signBytes(AlgRSASHA256, key, canonical, false)
 		require.NoError(t, err)

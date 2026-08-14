@@ -222,7 +222,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 
 	// Canonicalize SignedInfo, honoring any ec:InclusiveNamespaces PrefixList
 	// declared on its CanonicalizationMethod (relevant for Exclusive C14N).
-	canonical, err := canonicalizeSubtree(parsed.c14nMethod, parsed.signedInfoElem, parsed.c14nPrefixes)
+	canonical, err := canonicalizeSubtree(ctx, parsed.c14nMethod, parsed.signedInfoElem, parsed.c14nPrefixes)
 	if err != nil {
 		return nil, err
 	}
@@ -684,7 +684,7 @@ func parseSignedInfo(ctx context.Context, budget *verifyBudget, elem *helium.Ele
 // digested as if absent. A positive maxSteps rejects the first core Transform
 // past that limit before its parameters are parsed; zero leaves the list
 // unlimited.
-func parseTransformList(transformsElem *helium.Element, maxSteps int) ([]parsedTransform, error) {
+func parseTransformList(ctx context.Context, transformsElem *helium.Element, maxSteps int) ([]parsedTransform, error) {
 	var transforms []parsedTransform
 	for tc := transformsElem.FirstChild(); tc != nil; tc = tc.NextSibling() {
 		te, ok := helium.AsNode[*helium.Element](tc)
@@ -724,7 +724,7 @@ func parseTransformList(transformsElem *helium.Element, maxSteps int) ([]parsedT
 		// parsing it here does not accept an unsupported transform, it only
 		// records the stylesheet the pipeline will hand to the transformer.
 		if alg == TransformXSLT {
-			stylesheet, err := parseXSLTTransform(te)
+			stylesheet, err := parseXSLTTransform(ctx, te)
 			if err != nil {
 				return nil, err
 			}
@@ -783,7 +783,7 @@ func parseReferenceElement(ctx context.Context, budget *verifyBudget, elem *heli
 				return ref, fmt.Errorf("%w: multiple Transforms elements", ErrInvalidSignature)
 			}
 			transformsSeen = true
-			transforms, err := parseTransformList(e, 0)
+			transforms, err := parseTransformList(ctx, e, 0)
 			if err != nil {
 				return ref, err
 			}

@@ -80,7 +80,7 @@ func TestDSASHA1VerifyEndToEnd(t *testing.T) {
 	// in DigestValue before canonicalizing SignedInfo.
 	object := findByLocalName(root, "Object")
 	require.NotNil(t, object)
-	objCanon, err := canonicalizeSubtree(C14N10, object, nil)
+	objCanon, err := canonicalizeSubtree(t.Context(), C14N10, object, nil)
 	require.NoError(t, err)
 	objDigest := sha1.Sum(objCanon)
 	digestValue := findByLocalName(root, "DigestValue")
@@ -91,7 +91,7 @@ func TestDSASHA1VerifyEndToEnd(t *testing.T) {
 	// r||s concatenation (each integer left-padded to Q's byte length).
 	signedInfo := findByLocalName(root, "SignedInfo")
 	require.NotNil(t, signedInfo)
-	siCanon, err := canonicalizeSubtree(C14N10, signedInfo, nil)
+	siCanon, err := canonicalizeSubtree(t.Context(), C14N10, signedInfo, nil)
 	require.NoError(t, err)
 	siDigest := sha1.Sum(siCanon)
 	r, s, err := dsa.Sign(rand.Reader, priv, siDigest[:])

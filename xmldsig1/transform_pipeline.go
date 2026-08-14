@@ -285,7 +285,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 		// XMLDSig §6.6.2 gives Base64 a special node-set conversion: concatenate
 		// text-node values, not canonical markup.
 		if step.algorithm == TransformBase64 && value.kind == transformValueNodeSet {
-			octets, err := base64TransformNodeSetOctets(value.nodes)
+			octets, err := base64TransformNodeSetOctets(ctx, value.nodes)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -305,7 +305,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 
 		switch step.algorithm {
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
-			octets, err := canonicalizeNodeSetValue(step.algorithm, value.nodes, step.prefixes)
+			octets, err := canonicalizeNodeSetValue(ctx, step.algorithm, value.nodes, step.prefixes)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -317,7 +317,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 			}
 			value = newOctetTransformValue(octets)
 		case TransformXPath:
-			nodes, err := materializeNodeSet(value.nodes)
+			nodes, err := materializeNodeSet(ctx, value.nodes)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -332,7 +332,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 			nodes.nodes = filtered
 			value = newNodeSetTransformValue(nodes)
 		case TransformEnvelopedSignature:
-			if err := applyEnvelopedTransform(value.nodes, runtime.signature); err != nil {
+			if err := applyEnvelopedTransform(ctx, value.nodes, runtime.signature); err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
 		case TransformXSLT:
@@ -353,7 +353,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 		return nil, err
 	}
 	if value.kind == transformValueNodeSet {
-		return canonicalizeNodeSetValue(C14N10, value.nodes, nil)
+		return canonicalizeNodeSetValue(ctx, C14N10, value.nodes, nil)
 	}
 	return value.octets, nil
 }
@@ -374,10 +374,14 @@ func convertTransformValue(ctx context.Context, runtime transformRuntime, value 
 			}
 			return transformValue{}, fmt.Errorf("%w: octet input cannot be parsed for transform %d (%s): %v", ErrUnsupportedTransform, consumerIndex, consumerAlgorithm, err)
 		}
-		nodes := &nodeSetValue{doc: doc, nodes: collectDocumentNodes(doc), materialized: true}
+		docNodes, err := collectConvertedDocumentNodes(ctx, doc, consumerAlgorithm)
+		if err != nil {
+			return transformValue{}, err
+		}
+		nodes := &nodeSetValue{doc: doc, nodes: docNodes, materialized: true}
 		return newNodeSetTransformValue(nodes), nil
 	case value.kind == transformValueNodeSet && required == transformValueOctets:
-		octets, err := canonicalizeNodeSetValue(C14N10, value.nodes, nil)
+		octets, err := canonicalizeNodeSetValue(ctx, C14N10, value.nodes, nil)
 		if err != nil {
 			return transformValue{}, err
 		}
@@ -387,7 +391,7 @@ func convertTransformValue(ctx context.Context, runtime transformRuntime, value 
 	}
 }
 
-func materializeNodeSet(value *nodeSetValue) (*nodeSetValue, error) {
+func materializeNodeSet(ctx context.Context, value *nodeSetValue) (*nodeSetValue, error) {
 	if value == nil || value.doc == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
 	}
@@ -397,33 +401,63 @@ func materializeNodeSet(value *nodeSetValue) (*nodeSetValue, error) {
 	if value.origin == nil || value.origin.target == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no reference origin", ErrUnsupportedTransform)
 	}
-	if value.origin.wholeDoc {
-		value.nodes = collectDocumentNodes(value.origin.doc)
-	} else {
-		value.nodes = collectSubtreeNodes(value.origin.target)
+	nodes, err := originNodes(ctx, value.origin)
+	if err != nil {
+		return nil, err
 	}
+	value.nodes = nodes
 	if !value.origin.includeComments {
-		value.nodes = removeCommentNodes(value.nodes)
+		value.nodes, err = removeCommentNodes(ctx, value.nodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if value.origin.envelopedPending {
-		value.nodes = removeSignatureNodes(value.nodes, value.origin.sigElem)
+		value.nodes, err = removeSignatureNodes(ctx, value.nodes, value.origin.sigElem)
+		if err != nil {
+			return nil, err
+		}
 	}
 	value.origin = nil
 	value.materialized = true
 	return value, nil
 }
 
-func removeCommentNodes(nodes []helium.Node) []helium.Node {
-	kept := make([]helium.Node, 0, len(nodes))
-	for _, node := range nodes {
-		if node.Type() != helium.CommentNode {
-			kept = append(kept, node)
-		}
+// originNodes builds the explicit node set a Reference selection stands for.
+// Materialized membership exists so a later transform can NARROW it — an XPath
+// filter drops nodes one at a time and may keep an element whose parent it
+// dropped — so every element carries its complete namespace axis here
+// (collectSubtreeNodes) rather than the reduced canonicalization set.
+func originNodes(ctx context.Context, origin *referenceNodeSetOrigin) ([]helium.Node, error) {
+	if origin.wholeDoc {
+		return collectDocumentNodes(ctx, origin.doc)
 	}
-	return kept
+	return collectSubtreeNodes(ctx, origin.target)
 }
 
-func applyEnvelopedTransform(value *nodeSetValue, sigElem *helium.Element) error {
+// removeCommentNodes drops every comment from a node-set, implementing the
+// comment-excluding Reference forms on an explicit node-set.
+//
+// A dropped comment is charged like a kept node: a set that is all comments
+// keeps nothing at all, so charging only what survives would read a whole node
+// set without ever polling.
+func removeCommentNodes(ctx context.Context, nodes []helium.Node) ([]helium.Node, error) {
+	kept := nodeSet{nodes: make([]helium.Node, 0, len(nodes))}
+	for _, node := range nodes {
+		if node.Type() == helium.CommentNode {
+			if err := kept.charge(ctx, 1); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := kept.add(ctx, node); err != nil {
+			return nil, err
+		}
+	}
+	return kept.nodes, nil
+}
+
+func applyEnvelopedTransform(ctx context.Context, value *nodeSetValue, sigElem *helium.Element) error {
 	if value == nil || !value.referenceSelection {
 		return fmt.Errorf("%w: enveloped-signature transform has no original Signature identity", ErrUnsupportedTransform)
 	}
@@ -431,11 +465,15 @@ func applyEnvelopedTransform(value *nodeSetValue, sigElem *helium.Element) error
 		value.origin.envelopedPending = true
 		return nil
 	}
-	value.nodes = removeSignatureNodes(value.nodes, sigElem)
+	nodes, err := removeSignatureNodes(ctx, value.nodes, sigElem)
+	if err != nil {
+		return err
+	}
+	value.nodes = nodes
 	return nil
 }
 
-func canonicalizeNodeSetValue(method string, value *nodeSetValue, prefixes []string) ([]byte, error) {
+func canonicalizeNodeSetValue(ctx context.Context, method string, value *nodeSetValue, prefixes []string) ([]byte, error) {
 	if value == nil || value.doc == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
 	}
@@ -446,13 +484,13 @@ func canonicalizeNodeSetValue(method string, value *nodeSetValue, prefixes []str
 		origin := value.origin
 		switch {
 		case origin.envelopedPending:
-			return canonicalizeEnveloped(method, origin.doc, origin.target, origin.sigElem, origin.wholeDoc, prefixes)
+			return canonicalizeEnveloped(ctx, method, origin.doc, origin.target, origin.sigElem, origin.wholeDoc, prefixes)
 		case origin.wholeDoc:
 			return canonicalize(method, origin.doc, prefixes)
 		case origin.internalRoot != nil && isDescendantOrSelf(origin.target, origin.internalRoot):
-			return canonicalizeDetachedSubtree(method, origin.internalRoot, origin.target, prefixes)
+			return canonicalizeDetachedSubtree(ctx, method, origin.internalRoot, origin.target, prefixes)
 		default:
-			return canonicalizeSubtree(method, origin.target, prefixes)
+			return canonicalizeSubtree(ctx, method, origin.target, prefixes)
 		}
 	}
 	if !value.materialized {
@@ -461,22 +499,127 @@ func canonicalizeNodeSetValue(method string, value *nodeSetValue, prefixes []str
 	return canonicalizeNodeSet(method, value.nodes, value.doc, prefixes)
 }
 
-func base64TransformNodeSetOctets(value *nodeSetValue) ([]byte, error) {
-	if value == nil {
-		return nil, fmt.Errorf("%w: transform node-set is nil", ErrUnsupportedTransform)
-	}
-	materialized, err := materializeNodeSet(value)
+func base64TransformNodeSetOctets(ctx context.Context, value *nodeSetValue) ([]byte, error) {
+	encoded, err := base64TransformNodeSetText(ctx, value)
 	if err != nil {
 		return nil, err
 	}
-	var encoded strings.Builder
-	for _, node := range materialized.nodes {
-		switch node.Type() {
-		case helium.TextNode, helium.CDATASectionNode:
-			_, _ = encoded.Write(node.Content())
+	return decodeBase64TransformOctets(encoded)
+}
+
+// base64TransformNodeSetText concatenates the base64 text a node-set stands for.
+// XMLDSig core §6.6.2 defines the node-set-to-octets conversion as
+// self::text() over the set in document order, string-values concatenated, and
+// self::text() is empty for a namespace node, an attribute, an element, a comment
+// and a processing instruction. An untouched Reference selection is therefore
+// walked for its text alone, without building the namespace axis the conversion
+// discards — the axis is one namespace node per (element x in-scope declaration),
+// so materializing it is quadratic in a document this transform never reads.
+//
+// A set an XPath filter already narrowed keeps the explicit membership loop: the
+// filter decided what remains, and only that may be read.
+func base64TransformNodeSetText(ctx context.Context, value *nodeSetValue) ([]byte, error) {
+	if value == nil {
+		return nil, fmt.Errorf("%w: transform node-set is nil", ErrUnsupportedTransform)
+	}
+	// The two guards below are materializeNodeSet's, in its order, so a malformed
+	// node-set reports the same error it always did.
+	if value.doc == nil {
+		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
+	}
+	// A context already cancelled when the conversion starts stops it before any
+	// text is read; the periodic polls below cover one cancelled while it runs.
+	// Both branches are reads of an attacker-sized node set, so the check sits
+	// above the first of them rather than on the path to one.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if value.materialized {
+		var encoded strings.Builder
+		var poll ctxPoll
+		for _, node := range value.nodes {
+			// Every member is read, and only some contribute text, so the poll is
+			// charged per member examined.
+			if err := poll.charge(ctx, 1); err != nil {
+				return nil, err
+			}
+			switch node.Type() {
+			case helium.TextNode, helium.CDATASectionNode:
+				_, _ = encoded.Write(node.Content())
+			}
+		}
+		return []byte(encoded.String()), nil
+	}
+	origin := value.origin
+	if origin == nil || origin.target == nil {
+		return nil, fmt.Errorf("%w: transform node-set has no reference origin", ErrUnsupportedTransform)
+	}
+
+	w := &textWalker{}
+	if origin.envelopedPending {
+		w.skip = origin.sigElem
+	}
+
+	if origin.wholeDoc {
+		for child := range helium.Children(origin.doc) {
+			// collectDocumentNodes admits only an element subtree, a top-level
+			// comment and a top-level processing instruction, and neither of the
+			// latter two contributes text. Descending into any other document child
+			// would digest octets the materialized set never holds — a DOCTYPE's
+			// internal subset carries its entity declarations' replacement text.
+			if child.Type() != helium.ElementNode {
+				continue
+			}
+			if err := w.walk(ctx, child); err != nil {
+				return nil, err
+			}
+		}
+		return []byte(w.out.String()), nil
+	}
+
+	// removeSignatureNodes drops every descendant-or-self of the Signature, so a
+	// target inside it leaves the set empty. Cutting the walk only where a node IS
+	// the Signature element would digest the target's own text instead.
+	if w.skip != nil && isDescendantOrSelf(origin.target, w.skip) {
+		return nil, nil
+	}
+	if err := w.walk(ctx, origin.target); err != nil {
+		return nil, err
+	}
+	return []byte(w.out.String()), nil
+}
+
+// textWalker gathers the text a Reference selection stands for. skip, when set,
+// is the enveloped Signature, whose subtree the walk does not enter; the
+// embedded poll counts walked nodes toward the next context poll.
+type textWalker struct {
+	ctxPoll
+	skip *helium.Element
+	out  strings.Builder
+}
+
+func (w *textWalker) walk(ctx context.Context, n helium.Node) error {
+	if err := w.charge(ctx, 1); err != nil {
+		return err
+	}
+	if w.skip != nil {
+		if elem, ok := helium.AsNode[*helium.Element](n); ok && elem == w.skip {
+			return nil
 		}
 	}
-	return decodeBase64TransformOctets([]byte(encoded.String()))
+	switch n.Type() {
+	case helium.TextNode, helium.CDATASectionNode:
+		_, _ = w.out.Write(n.Content())
+	}
+	// helium.Children expands an entity reference and stops at a foreign-owned
+	// child, so an entity contributes exactly the text the materialized node set
+	// holds and no DTD declaration spills in (see collectSubtreeNodes).
+	for child := range helium.Children(n) {
+		if err := w.walk(ctx, child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func decodeBase64TransformOctets(encoded []byte) ([]byte, error) {

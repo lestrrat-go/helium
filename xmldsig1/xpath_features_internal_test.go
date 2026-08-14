@@ -74,7 +74,7 @@ func TestGeneralXPointerVerifyRoundTrip(t *testing.T) {
 
 	// Canonicalize the (now digest-populated) SignedInfo and sign it, writing the
 	// SignatureValue.
-	signedInfoCanon, err := canonicalizeSubtree(parsed.c14nMethod, parsed.signedInfoElem, parsed.c14nPrefixes)
+	signedInfoCanon, err := canonicalizeSubtree(t.Context(), parsed.c14nMethod, parsed.signedInfoElem, parsed.c14nPrefixes)
 	require.NoError(t, err)
 	sigValue, err := signBytes(parsed.signatureAlg, key, signedInfoCanon, false)
 	require.NoError(t, err)
