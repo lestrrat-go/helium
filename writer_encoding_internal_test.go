@@ -10,7 +10,7 @@ import (
 // TestOutputEncodingUSASCIIRejectsTextNoEnc asserts that under an explicit
 // US-ASCII OutputEncoding a text node carrying the xmlTextNoEnc marker (emitted
 // verbatim with no escaping) whose content is non-ASCII fails with
-// ErrUnsupportedOutputEncoding via the ASCII-reject net rather than leaking raw
+// ErrUnsupportedOutputEncoding via the ASCII-reject net, leaking no raw
 // UTF-8 under the US-ASCII declaration. It is a white-box test because the marker
 // has no public setter (U2).
 func TestOutputEncodingUSASCIIRejectsTextNoEnc(t *testing.T) {

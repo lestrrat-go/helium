@@ -573,7 +573,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 
 	// Resolve the system URI against the document's base URI. Use BuildURI (the
 	// same GOOS-independent, forward-slash/file:-URI-aware resolver used for
-	// entity URIs) rather than filepath.Dir/Join: on Windows filepath.Join
+	// entity URIs), in place of filepath.Dir/Join: on Windows filepath.Join
 	// mangles a "file:///C:/dir/doc.xml" base (it cleans "file://" to "file:/"
 	// and emits '\' separators), so a nested external DTD declared with a
 	// relative SYSTEM id ("inc.dtd") never resolves and is silently dropped.
@@ -600,7 +600,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	if err != nil {
 		// Loading was requested (the resolve-once gate above passed), so a failed
 		// open is a requested-but-failed load, not an absent DTD. Surface it as a
-		// non-fatal warning rather than swallowing it silently — a caller that
+		// non-fatal warning, and never swallow it — a caller that
 		// asked to load/validate against the external subset gets a signal, while
 		// the parse stays lenient (matching libxml2, which warns but continues).
 		// Under DTD validation the missing content model then surfaces downstream

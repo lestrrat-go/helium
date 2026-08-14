@@ -132,7 +132,7 @@ func (w Writer) XMLVersion(v string) Writer {
 
 // isXML11RestrictedChar reports whether r is an XML 1.1 restricted character:
 // a control character that is a valid XML 1.1 Char but must be serialized as a
-// character reference rather than appearing literally (XML 1.1 §2.11).
+// character reference and never appear literally (XML 1.1 §2.11).
 // Tab (U+0009), LF (U+000A), and CR (U+000D) are excluded — they are handled by
 // the ordinary escaping rules.
 func isXML11RestrictedChar(r rune) bool {
@@ -153,7 +153,7 @@ func isXML11RestrictedChar(r rune) bool {
 }
 
 // isXML11SerializeAsCharRef reports whether r must be written as a character
-// reference (rather than literally) in XML 1.1 output. This is the XML 1.1
+// reference, and never literally, in XML 1.1 output. This is the XML 1.1
 // RestrictedChar set (isXML11RestrictedChar) PLUS the two end-of-line characters
 // NEL (U+0085) and LINE SEPARATOR (U+2028). Both are excluded from RestrictedChar,
 // but XML 1.1 §2.11 line-ending normalization translates them to U+000A on input,

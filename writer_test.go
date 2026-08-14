@@ -833,7 +833,7 @@ func TestWriteErrors(t *testing.T) {
 
 	// each structural-serialization
 	// failure the writer detects is reported via a named sentinel a caller can match
-	// with errors.Is, rather than an anonymous string-literal error.
+	// with errors.Is, and never as an anonymous string-literal error.
 	t.Run("structural errors are matchable", func(t *testing.T) {
 		for _, tc := range []struct {
 			name     string

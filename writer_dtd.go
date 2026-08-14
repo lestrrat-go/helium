@@ -77,7 +77,7 @@ func (d *writeSession) dumpDTD(out io.Writer, n Node) error {
 	if d.err == nil && pubLit != "" {
 		// A non-ASCII public id has no faithful US-ASCII serialization; reject that
 		// (encoding error) before the PubidChar check so the US-ASCII path keeps
-		// reporting the encoding failure rather than a PubidChar failure.
+		// reporting the encoding failure, in place of a PubidChar failure.
 		if d.rejectNonASCIIStr("DOCTYPE public identifier", pubLit) {
 			return d.err
 		}
@@ -450,7 +450,7 @@ func (d *writeSession) dumpNotationDecl(out io.Writer, n *Notation) error {
 
 	// A non-ASCII public id has no faithful US-ASCII serialization; reject that
 	// (encoding error) before the PubidChar check so the US-ASCII path keeps
-	// reporting the encoding failure rather than a PubidChar failure.
+	// reporting the encoding failure, in place of a PubidChar failure.
 	if pubLit != "" {
 		if d.rejectNonASCIIStr("notation public identifier", pubLit) {
 			return d.err
