@@ -396,7 +396,7 @@ func TestErroringTestXPath(t *testing.T) {
 		handler := messageCollector{msgs: &msgs}
 		// A report whose test errors is treated as false (does not fire),
 		// so validation is not marked failed, but the XPath error must
-		// still be surfaced rather than swallowed.
+		// still be surfaced, and never swallowed.
 		verr := schematron.NewValidator(schema).Label("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
 
 		require.NoError(t, verr)
@@ -1193,7 +1193,7 @@ func TestCompileFailsOnBrokenSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			// No error handler configured: the failure must surface via the
-			// returned error rather than being discarded.
+			// returned error, and must never be discarded.
 			schema, err := schematron.NewCompiler().Compile(t.Context(), doc)
 			require.ErrorIs(t, err, schematron.ErrCompileFailed)
 			require.Nil(t, schema)

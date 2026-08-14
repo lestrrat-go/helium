@@ -231,7 +231,7 @@ func TestDecoderAndUnmarshalAgreeOnXMLDecl(t *testing.T) {
 			decodeErr := drainDecoder(t, tc.xml)
 
 			// The agreement is the point: state it before the verdict, so a
-			// divergence reports as a divergence rather than as one entry
+			// divergence reports as a divergence, and never as one entry
 			// point's failure.
 			require.Equal(t, unmarshalErr != nil, decodeErr != nil,
 				"Unmarshal and Decoder must agree on %q\n  Unmarshal: %v\n  Decoder:   %v",
@@ -250,7 +250,7 @@ func TestDecoderAndUnmarshalAgreeOnXMLDecl(t *testing.T) {
 
 // TestDecoderXMLDeclErrorMessages pins the wording the Decoder reports for a
 // declaration it rejects. A version outside 1.0 keeps the unsupported-version
-// message rather than being reported as a grammar violation, and a non-UTF-8
+// message, and is never reported as a grammar violation, and a non-UTF-8
 // encoding with no CharsetReader keeps its own message.
 func TestDecoderXMLDeclErrorMessages(t *testing.T) {
 	const body = `<item><value>hi</value></item>`

@@ -258,7 +258,7 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 		// the root element (and epilogue), which helium accepts, and helium
 		// rejects a reserved-cased target upstream — none reaches here. An exact
 		// match is deliberate: folding here would silently DROP such a target
-		// rather than reject it, if one ever did.
+		// instead of rejecting it, if one ever did.
 		if target == lexicon.PrefixXML {
 			return nil // skip XML declaration
 		}
@@ -466,7 +466,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		// Per the TokenReader contract, (nil, nil) means "nothing happened"
 		// (e.g. a polling/non-blocking reader with no token available yet) and
 		// is NOT EOF; stdlib's Decoder.Token() returns it verbatim to the
-		// caller rather than retrying or erroring. Diverging here would break
+		// caller, with no retry and no error. Diverging here would break
 		// drop-in stdlib compatibility. The shim's own internal driving loops
 		// (Decode/populateElement, Skip) carry a bounded no-progress guard so
 		// the shim itself can never hang on a pathological reader.
@@ -749,8 +749,8 @@ func (s fixedWidthScheme) encodeASCII(str string) []byte {
 // detectFixedWidthScheme classifies the leading bytes of a fixed-width Unicode
 // stream (with or without a byte-order mark) into a UTF-16 or UCS-4 scheme. An
 // unusual UCS-4 byte order (2143 / 3412) is left unclassified (ok == false), so
-// the caller streams the full document and lets helium judge it rather than
-// guessing.
+// the caller streams the full document and lets helium judge it, guessing
+// nothing.
 func detectFixedWidthScheme(p []byte) (fixedWidthScheme, bool) {
 	if len(p) >= 4 {
 		switch {

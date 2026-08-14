@@ -5,7 +5,7 @@
 // comments, processing instructions, DTD declarations, and error reporting.
 //
 // Implementations can satisfy individual callback interfaces (e.g.,
-// [StartElementNS], [Characters]) rather than the full [SAX2Handler]. Adapter
+// [StartElementNS], [Characters]) in place of the full [SAX2Handler]. Adapter
 // function types like [StartElementNSFunc] and [CharactersFunc] are provided
 // for convenience.
 //

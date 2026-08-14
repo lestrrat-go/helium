@@ -25,8 +25,8 @@ const (
 // visitKey identifies a define visit by both the define pattern and the
 // ancestor flag context it was reached under. Forbidden-nesting checks depend on
 // ruleFlags, so the same define reached under a different context (e.g. once in
-// a normal position and once under <list>) must be checked again rather than
-// being suppressed by a pattern-only cache.
+// a normal position and once under <list>) must be checked again, and must never be
+// suppressed by a pattern-only cache.
 type visitKey struct {
 	pat   *pattern
 	flags ruleFlags
@@ -221,7 +221,7 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 			// The pattern facet is an XSD/XPath regular expression. Compile it once
 			// with the shared XSD-regex engine (xsdregex) so XSD-only constructs (\i,
 			// \c, \p{...}, character-class subtraction, …) are honoured and an invalid
-			// pattern is a fatal schema error rather than a silent runtime no-op or a
+			// pattern is a fatal schema error, and never a silent runtime no-op or a
 			// false rejection. The compilation is cached on the param for validation.
 			if p.patternChecked {
 				continue
@@ -247,8 +247,8 @@ func (c *compiler) checkDataFacets(ctx context.Context, pat *pattern) {
 			// whitespace — NOT Go's TrimSpace, which would accept NBSP — and
 			// value.ValidateBuiltin enforces the digit lexical and the >=0 range), so
 			// an out-of-space bound (negative, fractional, non-digit, NBSP-padded)
-			// is a fatal compile error rather than being parsed leniently at
-			// validation time and turning the facet into a no-op or reject-all.
+			// is a fatal compile error. Parsing it leniently at validation time
+			// would turn the facet into a no-op or a reject-all.
 			if value.ValidateBuiltin(value.Normalize(p.value, "nonNegativeInteger"), "nonNegativeInteger", value.Version10) != nil {
 				c.addPatternError(ctx, pat, fmt.Sprintf("value '%s' for facet '%s' is not a valid 'nonNegativeInteger'", p.value, p.name))
 			}

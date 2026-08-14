@@ -43,7 +43,7 @@ func validateXSDInstance(t *testing.T, grammar *relaxng.Grammar, value string) e
 // TestXSDDataTypeLexical exercises the XSD datatype library path of <data>.
 // Date/time/duration values that are not lexically valid must be rejected
 // (the previous code accepted them by mere length/prefix), and an unknown
-// datatype name must be rejected rather than silently accepted.
+// datatype name must be rejected, and never silently accepted.
 func TestXSDDataTypeLexical(t *testing.T) {
 	t.Parallel()
 

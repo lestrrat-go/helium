@@ -1324,7 +1324,7 @@ func (v *validator) matchAttrTokens(pat *pattern, tokens []string) (int, bool) {
 // match against the leading tokens, in greedy-preferred (descending) order
 // with duplicates removed. An empty slice means the pattern cannot match.
 //
-// Returning the full set (rather than a single count) lets the group matcher
+// Returning the full set, in place of a single count, lets the group matcher
 // backtrack: a greedy oneOrMore/zeroOrMore that over-consumes can yield tokens
 // back when a later mandatory member fails, and a choice with a zero-token
 // branch (e.g. empty) does not shadow a consuming branch.
@@ -1850,8 +1850,8 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 			// =collapse equality). Mirror matchData: recognized bare XSD type
 			// names are routed through the same XSD value path used there
 			// (documented libxml2/golden-compat deviation; see matchData and the
-			// token-matcher tests cited there); an unknown name fails rather than
-			// silently matching by raw equality.
+			// token-matcher tests cited there); an unknown name fails, and raw equality never stands in for a
+			// match.
 			switch pat.dataType.name {
 			case lexicon.TypeToken:
 				text = normalizeToken(text)
@@ -1868,7 +1868,7 @@ func (v *validator) matchValue(pat *pattern, text string) int {
 			}
 		default:
 			// Unknown datatype library: an unsupported <value> datatype cannot be
-			// satisfied, so it must fail rather than fall through to raw equality.
+			// satisfied, so it must fail, and must never fall through to raw equality.
 			return -1
 		}
 	}
@@ -1915,7 +1915,7 @@ func matchXSDValue(typeName, text, expected string) int {
 	}
 	// Normalize both the instance text and the <value> literal using the
 	// datatype's XSD whiteSpace facet (preserve/replace/collapse) before
-	// validating or comparing, rather than a blanket TrimSpace. This lets a
+	// validating or comparing, in place of a blanket TrimSpace. This lets a
 	// collapsible token like "a  b" validate and value-match "a b", while leaving
 	// xs:string untouched (preserve).
 	text = value.Normalize(text, typeName)
@@ -2058,7 +2058,7 @@ func (v *validator) matchDataType(pat *pattern, text string) int {
 	}
 
 	// Unknown built-in datatype name or unknown library: an unsupported datatype
-	// cannot be satisfied, so it must fail rather than silently match everything.
+	// cannot be satisfied, so it must fail, and must never silently match everything.
 	return -1
 }
 
@@ -2066,7 +2066,7 @@ func (v *validator) matchDataType(pat *pattern, text string) int {
 // Validation of any of these is routed through the shared XSD value validator
 // (internal/xsd/value) so RELAX NG and XSD agree on lexical/value spaces. Any
 // name outside this set is an unknown datatype and is rejected (a <data> against
-// an unsupported XSD type cannot be satisfied), rather than silently accepted.
+// an unsupported XSD type cannot be satisfied), and never silently accepted.
 var xsdDatatypeNames = map[string]struct{}{
 	"string": {}, "normalizedString": {}, "token": {},
 	"integer": {}, "int": {}, "long": {}, "short": {}, "byte": {},
@@ -2193,7 +2193,7 @@ func validateWithParams(text, typeName string, params []*param) int {
 		case "length":
 			// The bound is compile-time validated as an xs:nonNegativeInteger and
 			// parsed width-safely (big.Int) so a huge-but-valid bound is compared
-			// faithfully rather than overflowing int into a reject-all.
+			// faithfully, with no int overflow into a reject-all.
 			n, ok := parseNonNegFacetBound(p.value)
 			if !ok {
 				return -1
@@ -2260,7 +2260,7 @@ func validateWithParams(text, typeName string, params []*param) int {
 			}
 		default:
 			// Unsupported / unrecognized facet (enumeration, whiteSpace, or an
-			// unknown name). Fail closed rather than silently accept: an unenforced
+			// unknown name). Fail closed: an unenforced
 			// facet must not let the value through.
 			return -1
 		}
@@ -2307,7 +2307,7 @@ func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) b
 	cmp, ok := value.Compare(text, facetBound, typeName)
 	if !ok {
 		// A NaN operand (instance value or bound) is incomparable for the bounding
-		// facets, so the value fails the facet rather than slipping through. Other
+		// facets, so the value fails the facet and never slips through. Other
 		// indeterminate ordered comparisons remain treated as satisfied.
 		if value.IsFloatNaN(text) || value.IsFloatNaN(facetBound) {
 			return false
@@ -2324,7 +2324,7 @@ func facetOrderingOK(text, facetBound, typeName string, accept func(int) bool) b
 // the length facets), so by the time validation runs it is a well-formed integer
 // lexical with only XSD whitespace; it is normalized (XSD collapse — NOT Go's
 // unicode-space trimming, which would accept NBSP) before parsing. A big.Int is
-// used rather than strconv.Atoi so an arbitrarily large bound is compared
+// used in place of strconv.Atoi so an arbitrarily large bound is compared
 // faithfully instead of overflowing int and collapsing into a reject-all.
 func parseNonNegFacetBound(s string) (*big.Int, bool) {
 	n, ok := new(big.Int).SetString(value.Normalize(s, "nonNegativeInteger"), 10)
@@ -2385,8 +2385,8 @@ func hexBinaryOctets(s string) (int, bool) {
 // agree on what counts as a valid base64Binary. XSD permits embedded whitespace,
 // which is stripped first; the remainder must then be correctly padded and have
 // zero unused trailing bits (Strict()), so unpadded forms such as "TQ" or padded
-// forms with non-zero trailing bits such as "TR==" fail to decode rather than
-// yielding a bogus octet count.
+// forms with non-zero trailing bits such as "TR==" fail to decode, yielding no
+// bogus octet count.
 func decodeBase64Octets(s string) ([]byte, bool) {
 	stripped := strings.Map(func(r rune) rune {
 		if isXMLSpace(r) {
@@ -2425,7 +2425,7 @@ func xmlFields(s string) []string {
 }
 
 // isXMLSpaceOnly reports whether s consists entirely of XML whitespace (or is
-// empty), using XML's whitespace definition rather than Unicode's. Unlike
+// empty), using XML's whitespace definition, never Unicode's. Unlike
 // strings.TrimSpace-based emptiness checks it does not treat other Unicode
 // whitespace (such as NBSP) as whitespace, since those characters are
 // significant content in XML and must not be silently discarded.

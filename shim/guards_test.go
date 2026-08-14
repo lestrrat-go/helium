@@ -67,8 +67,8 @@ func TestInternalLoopNoProgressTerminates(t *testing.T) {
 
 // TestTokenReaderTransientNilNilDrivenLoop verifies that an internal driving
 // loop tolerates transient (nil, nil) reads ("no token available yet") and
-// proceeds once a real token is produced, rather than treating (nil, nil) as
-// EOF or error. Decode drives Token() in a loop, so this exercises the
+// proceeds once a real token is produced, treating (nil, nil) as neither
+// EOF nor error. Decode drives Token() in a loop, so this exercises the
 // driveToken no-progress retry on the transient case.
 func TestTokenReaderTransientNilNilDrivenLoop(t *testing.T) {
 	done := make(chan error, 1)

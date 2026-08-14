@@ -373,7 +373,7 @@ func TestRawTokenAltEncodingNoConverterStdlib(t *testing.T) {
 	d := NewDecoder(context.Background(), strings.NewReader(testInputAltEncodingStdlib))
 	// The declaration is the first thing in the document, so the
 	// missing-CharsetReader error surfaces on the declaration token itself — the
-	// first RawToken call — rather than after a leading whitespace token.
+	// first RawToken call — ahead of any leading whitespace token.
 	token, err := d.RawToken()
 	if token != nil {
 		t.Errorf("expected a nil token; got %#v", token)

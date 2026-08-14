@@ -35,9 +35,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			if err != nil {
 				// A rule context that cannot be evaluated means none of
 				// the rule's assertions can be checked. Treat this as a
-				// validation failure and surface the error rather than
-				// silently skipping the rule (which would let a broken
-				// schema report a false "valid" result).
+				// validation failure and surface the error. Silently
+				// skipping the rule would let a broken schema report a
+				// false "valid" result.
 				valid = false
 				handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
 				continue
@@ -73,7 +73,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 						// not be silently dropped: a later let or test that
 						// references it would then break in confusing ways.
 						// Treat this as a validation failure and surface the
-						// error rather than swallowing it -- otherwise an
+						// error and never swallow it -- otherwise an
 						// otherwise-passing rule with a broken let would make
 						// Validate report a false "valid" result (and with a
 						// nil handler the error would be invisible).
@@ -161,7 +161,7 @@ func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart
 			if p.expr == nil {
 				// The select expression failed to compile; the error was
 				// already reported through the handler at compile time, so
-				// stop here rather than emitting a bogus value.
+				// stop here, emitting no bogus value.
 				return string(buf), ""
 			}
 			result, err := ev.Evaluate(ctx, p.expr, node)

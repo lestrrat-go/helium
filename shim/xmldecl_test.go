@@ -160,7 +160,7 @@ func TestXMLDeclTargetBoundary(t *testing.T) {
 // <?Xml?> and <?xMl?> are illegal targets wherever they appear and every entry
 // point must reject them — while a longer xml-prefixed name stays a legal
 // ordinary PI. This pins that the pre-parsed TokenReader path agrees with
-// Unmarshal and the reader-backed Decoder rather than accepting a reserved-cased
+// Unmarshal and the reader-backed Decoder, accepting no reserved-cased
 // target as an ordinary PI.
 func TestXMLDeclReservedTargetCase(t *testing.T) {
 	t.Run("reserved-cased target is rejected everywhere", func(t *testing.T) {
@@ -235,7 +235,7 @@ func decodeDeliveredDecl(t *testing.T, leading []stdxml.Token, inst string) erro
 // TokenReader path defers to helium too, accepting a 1.1 declaration once it is
 // delivered as a token — encoding/xml's own decoder cannot deliver one (it
 // rejects 1.1 during tokenization), so that particular composition is the one
-// place shim cannot exercise, a limitation of encoding/xml rather than of shim.
+// place shim cannot exercise, a limitation encoding/xml imposes on it.
 func TestXMLDeclVersion11Accepted(t *testing.T) {
 	for name, src := range map[string]string{
 		"version only":         `<?xml version="1.1"?>` + itemOnly,
@@ -396,7 +396,7 @@ func TestXMLDeclAgreement(t *testing.T) {
 	})
 
 	// A declared version outside 1.0 is named as unsupported by both the
-	// Unmarshal and reader-backed Decoder paths, rather than reported as a bare
+	// Unmarshal and reader-backed Decoder paths, and is never reported as a bare
 	// grammar violation. The TokenReader path also rejects it (asserted through
 	// requireAllReject) but is not pinned to the same wording here.
 	t.Run("unsupported version is named by both entry points", func(t *testing.T) {

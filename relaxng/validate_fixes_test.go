@@ -24,8 +24,8 @@ func TestMatchDataUnknownDatatype(t *testing.T) {
 	t.Run("unknown datatype library", func(t *testing.T) {
 		t.Parallel()
 		// An explicit, unrecognized datatypeLibrary on <data> must fail closed:
-		// matchData returns -1 for an unknown library rather than matching
-		// everything. This directly discriminates the <data> library path
+		// matchData returns -1 for an unknown library, matching
+		// nothing. This directly discriminates the <data> library path
 		// (the bogus-name case above exercises the unknown built-in NAME path).
 		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
   <data type="string" datatypeLibrary="http://example.com/unknown-datatypes"/>
