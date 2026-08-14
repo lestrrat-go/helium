@@ -259,8 +259,8 @@ a QName/NOTATION-derived base validates via
 namespace-resolved `QNameValue` carrying the user type annotation; other bases
 cast through the builtin for the returned atomic value. String and untypedAtomic
 sources validate facets with `ValidateCastWithNS` against the original source
-lexical string so lexical facets such as patterns still see `"05"` rather than a
-canonicalized numeric value; already-typed sources validate the builtin cast
+lexical string so lexical facets such as patterns still see `"05"` exactly as
+written, with no numeric canonicalization; already-typed sources validate the builtin cast
 result's lexical form so a cross-cast such as `xs:dateTime(...) cast as MyDate`
 checks the `xs:date` value actually being returned. The helper then returns the
 user type annotation with `BaseType` set to that builtin base. Union targets from
@@ -291,8 +291,8 @@ list type is correctly NOT castable (it is a sequence, not a single value).
 (a non-XSD `TypeName` with a known-XSD `BaseType`) to its builtin base before
 formatting, mirroring `CastAtomic`'s dispatch normalization — so a user-typed
 temporal/binary/QName atom (e.g. a value of a user type derived from `xs:date`)
-stringifies as its canonical XSD lexical (`"2001-01-01"`) rather than the generic
-Go `%v` fallback. This keeps a union target's re-validation lexical correct when
+stringifies as its canonical XSD lexical (`"2001-01-01"`), never falling through
+to the generic Go `%v` form. This keeps a union target's re-validation lexical correct when
 the accepted member value carries a user type annotation.
 
 When the cast source is itself an already-resolved `QNameValue` (e.g. `data(@q)`

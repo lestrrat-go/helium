@@ -267,7 +267,7 @@ fail-closed on anything that is not a plain in-tree path: a URI carrying a schem
 (`http:`, `https:`, `file:`, `urn:`, any `scheme:` per RFC 3986, or a Windows
 drive letter) is refused; a path escaping the root (absolute, or `..` past the
 root) is refused; a leftover fragment is refused. Reads are bounded — a resource
-larger than 64 MiB fails with `ErrReferenceTooLarge` rather than being buffered in
+larger than 64 MiB fails with `ErrReferenceTooLarge` before it can be buffered in
 full.
 
 **No HTTP resolver is provided.** The interface is public so callers can
@@ -461,7 +461,7 @@ a RetrievalMethod URI names any element in the document by ID, of any local name
 and any namespace, inside `ds:Signature` or outside it.
 
 Each of those four is charged *before* the value is materialized, so for them
-the cap bounds what verification builds rather than only what it keeps.
+the cap bounds what verification builds, and not merely what it keeps.
 `xs:base64Binary` permits XML whitespace between characters and a value may be
 spread over any number of text and CDATA children, so the lexical text wrapped
 around a value is unbounded and unrelated to the bytes it decodes to; counting
@@ -469,7 +469,7 @@ it first is what keeps the memory under the cap both for a value the cap refuses
 and for every value it accepts. Text, CDATA, and entity-reference children carry
 a value's characters — a comment or processing instruction contributes none, and
 an element child, which `xs:base64Binary` does not admit at all, is rejected
-rather than read. An entity reference is read as the declared replacement text
+unread. An entity reference is read as the declared replacement text
 of the entity it names, taken in one step and not expanded further, so a
 document that writes a value as an entity reference verifies while the read
 stays bounded; a replacement that is not base64 fails the decode just as the
@@ -492,7 +492,7 @@ Verification also polls the context inside the KeyInfo and Reference parse
 loops, and inside every stage that grows or narrows a node set: the subtree and
 whole-document collections, the comment-excluding and enveloped-signature
 filters, and the base64 node-set-to-text conversion. A cancelled context or a
-passed deadline stops that work rather than only being noticed at a stage
+passed deadline stops that work where it stands, without waiting for a stage
 boundary. Growing a node set is a single operation that charges what it added,
 so a stage added later inherits the poll instead of having to remember it.
 
@@ -540,7 +540,7 @@ RetrievalMethod transforms have a separate fixed `maxRetrievalTransformSteps`
 cap because they execute before the SignatureValue check. It is not affected by
 the builder limits above.
 
-The two `KeyInfo` values written as decimal text rather than base64 have their
+The two `KeyInfo` values written as decimal text, where the rest carry base64, have their
 own fixed digit ceilings, also unaffected by the builder limits above: **1024
 digits** for a `ds:X509SerialNumber`, and **1024 digits** for each of the RFC
 4050 `ECDSAKeyValue` `PublicKey` `X` and `Y` `Value` attributes. Both are read
@@ -565,7 +565,7 @@ own length. The expression is refused with `ErrResourceLimitExceeded` where it i
 read off the document, so no over-length expression is compiled. Real filter
 expressions are tens to hundreds of bytes — the W3C `defCan-1` interop vector is
 75 characters — so the ceiling sits orders of magnitude above anything
-interoperable. It is a policy limit rather than a conformance boundary, and like
+interoperable. It is a policy limit, and no conformance boundary requires it; like
 the RetrievalMethod cap it is not affected by the builder limits above.
 
 ## Detached signature placement (inclusive C14N)

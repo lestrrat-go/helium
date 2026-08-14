@@ -89,5 +89,5 @@ source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/h
   (`<?xml version = "2.0"?>`) is rejected as an unsupported version;
   `encoding/xml` accepts it.
 - Namespace declarations are emitted before regular attributes.
-- `InputOffset` is approximate rather than exact.
+- `InputOffset` is approximate.
 - Empty elements in `,innerxml` may serialize as self-closed tags.

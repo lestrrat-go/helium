@@ -22,7 +22,7 @@ compare), and `assert-permutation` (type-aware atomic value compare + node
 `fn:deep-equal`) — and a weak-un-skip guard (`TestQT3WeakNoOpGuard`) fails if a
 run-enabled case degrades to a no-op pass. The committed `false_pass_risk` count
 is **0**: no case slips through on an unchecked assertion, so a green run reflects
-real conformance rather than silent no-op passes.
+real conformance, with no silent no-op passes behind it.
 
 The 141 skips split into **136 out-of-scope** (XQuery `load-xquery-module`,
 static typing, XSD 1.0, XML 1.1, Unicode 7.0, remote HTTP access, and
@@ -32,7 +32,7 @@ fixture-base-URI/resource cases). Zero cases fail.
 ### Known gaps
 
 The floor is four documented expected-fails, all genuine unimplemented-feature
-gaps rather than bugs:
+gaps, none of them bugs:
 
 - `json-to-xml-016` — `fn:json-to-xml(..., map{'validate':true()})` needs
   schema-import/PSVI type annotation so `j:number` is typed `xs:double`; helium

@@ -84,8 +84,8 @@ func (e Evaluator) TraceWriter(w io.Writer) Evaluator // nil → os.Stderr
 through the `URIResolver` / `HTTPClient` by `fn:unparsed-text`,
 `fn:unparsed-text-lines`, `fn:unparsed-text-available`, `fn:doc`,
 `fn:doc-available`, and `fn:json-doc`. `0` selects the default cap; a negative
-value disables the bound. Reads exceeding the cap fail rather than buffering an
-unbounded body: `fn:unparsed-text` / `fn:unparsed-text-lines` surface the
+value disables the bound. Reads exceeding the cap fail before an unbounded body is
+buffered: `fn:unparsed-text` / `fn:unparsed-text-lines` surface the
 over-cap error as `FOUT1170` (`fn:unparsed-text-available` returns false), while
 `fn:doc` / `fn:json-doc` surface it as a retrieval error `FODC0002` (`fn:doc-available`
 returns false).
@@ -196,7 +196,7 @@ func (r *Regex) EachSubmatchIndex(s string, limit int, fn func(m []int) bool) er
   (no backtracking-ReDoS blowup for RE2-compatible patterns like `^(a+)+b`).
   `limit` caps how many matches that pass may materialize: a caller enforcing a
   budget of N passes `limit = N+1` so the allocation stays proportional to the
-  budget rather than to the input's match count (`limit<=0` = uncapped).
+  budget, never to the input's match count (`limit<=0` = uncapped).
 
 ## Configuration types & resolvers
 

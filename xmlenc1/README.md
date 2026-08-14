@@ -56,13 +56,13 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
     that decrypts it and reads the answer, so a decryptor that accepts
     CBC is the oracle, while emitting CBC only leaves ciphertext for
     some other recipient to accept. Hiding the errors narrows that
-    oracle rather than closing it — xmlenc-core1 §6.1.1 notes the
+    oracle without closing it — xmlenc-core1 §6.1.1 notes the
     surrounding protocol can signal well-formedness by itself — so this
     package collapses nearly every CBC failure to one
     `ErrDecryptionFailed` value and message, and AES-GCM remains the
     only full answer. The one exception is a wrong-length pre-shared
-    `SessionKey`: its length is caller-configured rather than
-    attacker-influenced, so a mismatch is reported as a bare
+    `SessionKey`: the caller configures its length and an attacker
+    cannot influence it, so a mismatch is reported as a bare
     `KeySizeError` instead. The oracle is the outcome, not the error
     text: under CBC, `Decrypt`
     succeeds only when the recovered plaintext parses, so its success
@@ -119,7 +119,7 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   `ErrEncryptionFailed` before any payload work — and only when key transport is
   the mechanism in use, since that is the only one that writes a label — so a
   label this package writes is a label it reads back. The limit is a policy
-  ceiling rather than a conformance boundary: the xenc schema puts no length
+  ceiling, and no conformance boundary requires it: the xenc schema puts no length
   facet on the element, so a larger label is valid, and this package
   intentionally refuses one in both directions, neither writing nor reading it.
   The value is weighed as it is read and never joined into one
@@ -129,7 +129,7 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   contributes its entity's declared replacement text and is not expanded any
   further. An element child is refused with the same error, because asking one
   for its content would pull in its whole subtree, and a comment or processing
-  instruction is ignored rather than spliced into the base64. The one cost that
+  instruction is ignored, contributing nothing to the base64. The one cost that
   still follows the document is the copy the DOM hands out per child, which the
   walk pays exactly once.
 - A `dsig11:PublicKey` inside an ECDH-ES originator key is limited to 133 bytes
@@ -139,7 +139,7 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   largest SEC1 uncompressed point the three supported curves encode (65 on
   P-256, 97 on P-384, 133 on P-521), and `crypto/ecdh` accepts nothing else, so
   a longer value is rejected either way. The limit is the maximum across all
-  three rather than the selected curve's own size, because `dsig11:NamedCurve`
+  three, and the selected curve's own size cannot serve, because `dsig11:NamedCurve`
   may follow the `dsig11:PublicKey` or be absent altogether, so there may be no
   curve to size the value by when it is weighed. Over the limit fails with
   `ErrMalformedEncrypted`. The value is weighed as it is read and never joined
@@ -229,8 +229,8 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   budgets: its canonical form is written through a limit-aware writer and stops
   at the first byte past the allowance, instead of canonicalizing an
   attacker-chosen subtree in full and discarding the result afterwards. The
-  node-set feeding that writer is bounded too — it is linear in the subtree
-  rather than in the product of its elements and the namespace declarations in
+  node-set feeding that writer is bounded too — it is linear in the subtree,
+  never in the product of its elements and the namespace declarations in
   scope on them, and a selection whose element count alone cannot fit the
   allowance is refused before it is built — and the walk observes the caller's
   context once per node.
@@ -241,7 +241,7 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   is refused unread. Neither `xenc:CipherReferenceType` nor
   `xenc:TransformsType` carries a wildcard, so an element the schema does not
   declare — a `Transform` in a foreign namespace, a `Transforms` wrapper in the
-  wrong one — is refused rather than stepped over, and counts against that cap
+  wrong one — is refused outright, and counts against that cap
   as it is read: a namespace-shifted transform cannot hide from the whitelist,
   or from a policy layer reading the list. Refusing is conforming — xmlenc-core1 §3.3.1 marks both
   the `Transform` feature and the particular algorithms OPTIONAL — and XPath and
@@ -265,7 +265,7 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 This package implements W3C xmlenc-core1, and where it deliberately departs
 from the specification it names the departure and the reason for it. One
 construct the specification marks REQUIRED is absent, and the omission is
-deliberate rather than pending:
+deliberate and permanent:
 
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED) — refused deliberately, and this package will not
@@ -376,7 +376,7 @@ The four recognized forms are the ones XMLDSig core defines: `URI=""`,
 `URI="#id"`, `URI="#xpointer(/)"`, and `URI="#xpointer(id('id'))"`.
 
 Two refusals are worth naming. A URI matching MORE than one element fails with
-`ErrAmbiguousReference` rather than resolving to either: an attacker who can
+`ErrAmbiguousReference`, and resolves to neither: an attacker who can
 inject an element carrying an `Id` already in use would otherwise choose which
 key the recipient unwraps, which is XML Signature Wrapping applied to
 encryption. A URI matching none fails with `ErrReferenceNotFound`. Both are
@@ -431,8 +431,7 @@ one without `AllowUnauthenticatedCBC(true)` with `ErrCBCRequiresOptIn`,
 whatever its `ds:KeyInfo` holds. It does not arise at all when the caller
 supplies that key as a pre-shared `SessionKey`, whose early return precedes key
 resolution;
-`xenc:CarriedKeyName` (§3.5.1), which the parse steps over rather than
-reads; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
+`xenc:CarriedKeyName` (§3.5.1), which the parse steps over unread; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
 
 ## Choosing how the session key is protected
 
