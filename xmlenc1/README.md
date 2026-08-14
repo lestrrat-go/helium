@@ -586,8 +586,8 @@ package implements neither, so there is nothing runnable to add and no skip
 entry to write — a skip would imply a vector is being passed over when none
 exists. The feature's evidence is this package's own tests.
 
-AES-CBC is covered in this package's tests rather than by that suite, against a
-third-party vector. `TestInteropRetrievalMethod` decrypts
+This package's own tests carry the AES-CBC evidence, against a third-party
+vector. `TestInteropRetrievalMethod` decrypts
 `merlin-xmlenc-five/encrypt-element-aes256-cbc-retrieved-kw-aes256.xml` from the
 Apache Santuario corpus end to end, which exercises `aes256-cbc` block
 decryption, `kw-aes256` unwrapping, a same-document `ds:RetrievalMethod`, and

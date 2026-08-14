@@ -140,7 +140,7 @@ func TestUnpadConstantTime(t *testing.T) {
 
 // TestUnpadConstantTimeDefaultIsXMLEnc pins the zero value of cbcPadding to the
 // conforming rule, so a decrypt path that forgets to thread the option through
-// stays interoperable rather than silently becoming strict.
+// still accepts what every conforming peer writes.
 func TestUnpadConstantTimeDefaultIsXMLEnc(t *testing.T) {
 	var zero cbcPadding
 	require.Equal(t, cbcPaddingXMLEnc, zero)
