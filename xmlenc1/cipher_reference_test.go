@@ -222,10 +222,10 @@ func (nilStreamResolver) ResolveReference(context.Context, string) (io.ReadClose
 	return nil, nil
 }
 
-// errorStreamResolver returns a live stream ALONGSIDE its error, which is the
-// one shape ReferenceResolver's godoc still owes a close: the resolver call
-// itself failed, so nothing downstream ever reads the stream, and closing it
-// is the only thing standing between that shape and a leak.
+// errorStreamResolver returns a live stream ALONGSIDE its error. The resolver
+// call itself failed, so nothing downstream ever reads that stream, and the
+// close at the resolver call is the only thing standing between the shape and
+// a leak.
 type errorStreamResolver struct {
 	closed chan struct{}
 	once   sync.Once
@@ -1114,10 +1114,9 @@ func TestCipherReference(t *testing.T) {
 
 	// A resolver reporting an error ALONGSIDE a live stream still handed over
 	// a resource, and ReferenceResolver's godoc commits to closing a stream
-	// "on every path" — this pins the one path that used to reach the caller
-	// with the stream never closed, because the resolver's own error is
-	// returned before readBoundedReference, and every close before this fix
-	// lived only there.
+	// "on every path". This pins the one path that returns the resolver's own
+	// error ahead of readBoundedReference, where every other close lives, so
+	// the close has to happen at the resolver call itself.
 	t.Run("a resolver returning a stream with its error still closes it", func(t *testing.T) {
 		resolver := newErrorStreamResolver()
 		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
