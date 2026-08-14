@@ -143,7 +143,7 @@ func marshalEncryptionMethod(doc *helium.Document, em *encryptionMethod) (*heliu
 	// excludes the xenc namespace, so it can never match xenc:OAEPparams; and
 	// while xmlenc-core1 §3.1 asks only for laxly schema valid output, its own
 	// note bounds that allowance to what xsd:ANY admits, so it excuses what
-	// those foreign children contain rather than where the declared sequence
+	// those foreign children contain, and never where the declared sequence
 	// puts them. This package emits no xenc:KeySize, so the sequence is
 	// OAEPparams first and the two foreign children after it.
 	if len(em.OAEPParams) > 0 {
@@ -319,7 +319,7 @@ func marshalConcatKDFParams(doc *helium.Document, params *ConcatKDFParams) (*hel
 	// The OtherInfo fields are hexBinary bit strings: the first octet is the
 	// count of unused trailing bits, so the parser can reconstruct a value
 	// that is not a whole number of octets. An absent field is omitted
-	// entirely rather than written as an empty attribute.
+	// entirely, and never written as an empty attribute.
 	for _, field := range []struct {
 		name       string
 		value      []byte

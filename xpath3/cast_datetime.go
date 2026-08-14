@@ -546,7 +546,7 @@ func parseXSDDuration(s string) (Duration, error) {
 			}
 			// The float64 mirror is best-effort metadata. ParseFloat returns an
 			// out-of-range error along with a saturated value (±Inf); accept that
-			// value rather than rejecting the duration, since SecRat is exact.
+			// value and keep the duration, since SecRat is exact.
 			f, err := strconv.ParseFloat(numStr, 64)
 			if err != nil && !errors.Is(err, strconv.ErrRange) {
 				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)

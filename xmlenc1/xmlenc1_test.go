@@ -327,7 +327,7 @@ func TestEncryptErrors(t *testing.T) {
 		require.NoError(t, err)
 
 		// Decrypt with wrong key. Opt in to CBC so the failure exercises
-		// the wrong-key (RSA) path rather than the CBC opt-in gate.
+		// the wrong-key (RSA) path, well past the CBC opt-in gate.
 		decryptor := xmlenc1.NewDecryptor().PrivateKey(key2).AllowUnauthenticatedCBC(true)
 		_, err = decryptor.Decrypt(t.Context(), edElem)
 		require.Error(t, err)

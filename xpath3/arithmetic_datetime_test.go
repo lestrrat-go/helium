@@ -388,7 +388,7 @@ func TestDurationParseHugeWholeSeconds(t *testing.T) {
 
 // TestSchemaDerivedDurationAggregate verifies that fn:sum and fn:avg classify a
 // schema-derived duration (custom TypeName whose BaseType is a built-in
-// duration) via its BaseType rather than rejecting it with FORG0006.
+// duration) via its BaseType, and never rejects it with FORG0006.
 func TestSchemaDerivedDurationAggregate(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
@@ -418,8 +418,8 @@ func TestSchemaDerivedDurationAggregate(t *testing.T) {
 }
 
 // TestDateTimeAddDateOverflow guards against time.AddDate silently wrapping for
-// day/month magnitudes near math.MaxInt: such operands must report FODT0002
-// rather than returning a wrapped (or unchanged) date.
+// day/month magnitudes near math.MaxInt: such operands must report FODT0002,
+// returning no wrapped (or unchanged) date.
 func TestDateTimeAddDateOverflow(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 

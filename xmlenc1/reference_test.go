@@ -186,8 +186,8 @@ func TestRetrievalMethod(t *testing.T) {
 
 	// Two elements answering to one id is XML Signature Wrapping applied to
 	// encryption: an attacker who can inject a duplicate steers which key the
-	// recipient uses, so the document is refused rather than resolved to
-	// either candidate.
+	// recipient uses, so the document is refused, and resolved to
+	// neither candidate.
 	t.Run("a duplicate id is ambiguous", func(t *testing.T) {
 		sessionKey, kek := newKeys(t)
 		elem := retrievalDoc(t, sessionKey,
@@ -250,7 +250,7 @@ func TestRetrievalMethod(t *testing.T) {
 	})
 
 	// The two full-XPointer forms XMLDSig core names are same-document
-	// references like the bare id, so they resolve rather than fail closed.
+	// references like the bare id, so they resolve, and never fail closed.
 	t.Run("the XPointer id form resolves", func(t *testing.T) {
 		sessionKey, kek := newKeys(t)
 		elem := retrievalDoc(t, sessionKey,
@@ -346,8 +346,8 @@ func TestRetrievalMethod(t *testing.T) {
 	})
 
 	// A reference-supplied candidate lands where the document put the
-	// reference, so a caller reading the candidate list sees document order
-	// rather than inline candidates first.
+	// reference, so a caller reading the candidate list sees document order,
+	// and never inline candidates first.
 	t.Run("a reference keeps document order alongside an inline EncryptedKey", func(t *testing.T) {
 		sessionKey, kek := newKeys(t)
 		inline := wrappedKeyXML(t, "", kek, randKey(t, 32), "")
@@ -411,7 +411,7 @@ func TestRetrievalMethod(t *testing.T) {
 	// A reference is resolved while the document is read, which precedes the
 	// pre-shared SessionKey early return, so a refused reference fails a
 	// decrypt the caller could otherwise have completed on its own key. A
-	// reference that is skipped rather than resolved costs that caller
+	// reference that is skipped, and never resolved, costs that caller
 	// nothing.
 	t.Run("a pre-shared SessionKey", func(t *testing.T) {
 		t.Run("does not decrypt past a refused reference", func(t *testing.T) {
@@ -435,7 +435,7 @@ func TestRetrievalMethod(t *testing.T) {
 // wrappedKeyLen is the decoded CipherValue length wrappedKeyXML produces for
 // the given keys taken together: RFC 3394 key wrap adds one 8-octet block to
 // each key it wraps. The keys the matrix below wraps are all of DIFFERENT
-// lengths, so a total identifies WHICH keys were charged rather than only how
+// lengths, so a total identifies WHICH keys were charged, and not only how
 // many.
 func wrappedKeyLen(keys ...[]byte) int {
 	total := 0
@@ -589,7 +589,7 @@ func TestEncryptedKeyRetention(t *testing.T) {
 			requireSecret(t, nodes)
 
 			// One byte less is refused, which is what says the total
-			// covers every distinct target rather than a subset.
+			// covers every distinct target, and no subset of them.
 			_, err = xmlenc1.NewDecryptor().
 				KeyEncryptionKey(kek).
 				MaxEncryptedKeys(-1).
@@ -598,10 +598,10 @@ func TestEncryptedKeyRetention(t *testing.T) {
 			require.ErrorIs(t, err, xmlenc1.ErrEncryptedKeyBytesExceeded)
 
 			// One candidate short of the distinct count is refused too,
-			// so a retention that UNDER-charges fails here rather than
-			// passing the two assertions above. A single-target row
+			// so a retention that UNDER-charges fails here, and never
+			// passes the two assertions above. A single-target row
 			// cannot state this direction, because MaxEncryptedKeys(0)
-			// selects the default cap rather than a cap of none; its
+			// selects the default cap, and no cap of none; its
 			// byte assertion carries it instead.
 			if distinct < 2 {
 				return
@@ -656,7 +656,7 @@ func decryptAllocBytes(t *testing.T, decryptor xmlenc1.Decryptor, elem *helium.E
 // The count is read from what a decrypt ALLOCATES, following
 // TestEncryptedKeyBytesAllocation's precedent for measuring what an error
 // cannot report. The cost of one extra candidate is measured in the same
-// suite rather than assumed, so the bound holds whatever an RSA operation
+// suite, and never assumed, so the bound holds whatever an RSA operation
 // happens to allocate. This test must NOT run in parallel: TotalAlloc is
 // process-wide and a concurrent test would pollute the delta.
 func TestEncryptedKeyRetentionTrialDecryptions(t *testing.T) {
@@ -682,7 +682,7 @@ func TestEncryptedKeyRetentionTrialDecryptions(t *testing.T) {
 	t.Logf("one candidate: %d bytes; two candidates: %d bytes; one candidate behind a reference that retains nothing: %d bytes; a reference then the inline element it names: %d bytes", one, two, baseline, refThenInline)
 
 	// The cost of one more trial decryption, measured in this same suite
-	// rather than assumed, so the bound holds whatever an RSA operation of
+	// and never assumed, so the bound holds whatever an RSA operation of
 	// the day allocates.
 	perCandidate := two - one
 	require.Greater(t, two, one, "a second candidate must cost measurably more than one for this bound to mean anything")
