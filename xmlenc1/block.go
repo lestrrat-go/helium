@@ -99,8 +99,10 @@ func blockEncrypt(algorithm string, key, plaintext []byte) ([]byte, error) {
 // algorithm URI is verified as additional authenticated data. For CBC
 // the function returns ErrDecryptionFailed for ANY failure (cipher,
 // padding, or downstream parse) so callers cannot mount a padding
-// oracle by distinguishing the cause.
-func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
+// oracle by distinguishing the cause, and padding selects which unpadding rule
+// the CBC branches apply. padding is inert for every other algorithm, since
+// only CBC pads at all.
+func blockDecrypt(algorithm string, key, ciphertext []byte, padding cbcPadding) ([]byte, error) {
 	// Bind the declared algorithm URI to the real key length before
 	// touching the ciphertext. A caller-configured SessionKey never
 	// reaches here — its length is checked, and any mismatch reported
@@ -117,7 +119,7 @@ func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 	}
 	switch algorithm {
 	case AES128CBC, AES256CBC:
-		return decryptCBC(key, ciphertext)
+		return decryptCBC(key, ciphertext, padding)
 	case AES128GCM, AES256GCM:
 		return decryptGCM(key, ciphertext, []byte(algorithm))
 	case AES128GCM11, AES192GCM11, AES256GCM11:
@@ -136,12 +138,18 @@ func blockDecrypt(algorithm string, key, ciphertext []byte) ([]byte, error) {
 // Decryptor.AllowUnauthenticatedCBC(true).
 
 func encryptCBC(key, plaintext []byte) ([]byte, error) {
+	return cbcSeal(key, pkcs7Pad(plaintext, aes.BlockSize))
+}
+
+// cbcSeal CBC-encrypts already-padded plaintext under a fresh random IV and
+// returns IV || ciphertext. Padding is the caller's business, which is what
+// lets a test seal a block-aligned plaintext carrying padding this package
+// would never write itself.
+func cbcSeal(key, padded []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrEncryptionFailed, err)
 	}
-
-	padded := pkcs7Pad(plaintext, aes.BlockSize)
 
 	// IV || ciphertext
 	out := make([]byte, aes.BlockSize+len(padded))
@@ -155,7 +163,7 @@ func encryptCBC(key, plaintext []byte) ([]byte, error) {
 	return out, nil
 }
 
-func decryptCBC(key, data []byte) ([]byte, error) {
+func decryptCBC(key, data []byte, padding cbcPadding) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		// Caller error (wrong key size), not an oracle signal.
@@ -173,7 +181,7 @@ func decryptCBC(key, data []byte) ([]byte, error) {
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(plaintext, ciphertext)
 
-	out, ok := pkcs7UnpadConstantTime(plaintext, aes.BlockSize)
+	out, ok := unpadConstantTime(plaintext, padding)
 	if !ok {
 		// Do not distinguish "bad padding" from any other downstream
 		// failure: surface the same opaque ErrDecryptionFailed so the
@@ -231,7 +239,32 @@ func decryptGCM(key, data, aad []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-// PKCS#7 padding
+// CBC padding
+//
+// xmlenc-core1 §5.2.1 and PKCS#7 (RFC 5652 §6.3) disagree about the padding
+// octets that precede the final one, and cbcPadding names which of the two an
+// unpadding applies. Both rules put the padding LENGTH in the final octet and
+// require it to name between one octet and one whole block; they differ only in
+// what the octets ahead of it may hold.
+type cbcPadding bool
+
+const (
+	// cbcPaddingXMLEnc reads only the final octet, which is what
+	// xmlenc-core1 §5.2.1 specifies: a plaintext short by N octets is
+	// padded with N-1 octets of ARBITRARY value followed by a final octet
+	// N. The preceding octets carry no information a decryptor may act on,
+	// so they are not read. This is the value space every conforming XML
+	// Encryption implementation writes into, and it is this package's
+	// default.
+	cbcPaddingXMLEnc cbcPadding = false
+
+	// cbcPaddingPKCS7 additionally requires every padding octet to equal N,
+	// which is the PKCS#7 rule. It accepts a strict SUBSET of what
+	// cbcPaddingXMLEnc accepts, so a peer that fills the leading octets
+	// with anything else is refused. Decryptor.StrictPKCS7Padding selects
+	// it and owns why a caller would want that.
+	cbcPaddingPKCS7 cbcPadding = true
+)
 
 func pkcs7Pad(data []byte, blockSize int) []byte {
 	padding := blockSize - len(data)%blockSize
@@ -243,34 +276,45 @@ func pkcs7Pad(data []byte, blockSize int) []byte {
 	return padded
 }
 
-// pkcs7UnpadConstantTime removes PKCS#7 padding without short-circuiting
-// on the first invalid byte. The return value ok is false iff the
-// padding is invalid; valid is computed by walking every padding byte
-// regardless of intermediate mismatches.
+// unpadConstantTime removes CBC padding under the rule padding names, without
+// short-circuiting on the first invalid byte. The return value ok is false iff
+// the padding is invalid.
 //
-// Note: the work performed depends on the *padding length byte*, which
-// is observable in cache-timing studies but is the same trade-off as
-// stdlib `crypto/tls`'s legacy CBC unpadding. This is a defense in
-// depth on top of the primary mitigation (require opt-in for CBC). For
-// strong authentication use AES-GCM.
-func pkcs7UnpadConstantTime(data []byte, blockSize int) ([]byte, bool) {
-	if len(data) == 0 || len(data)%blockSize != 0 {
+// The length check is shared by both rules and comes first: the final octet
+// must name between one octet and one whole block, and no more octets than the
+// plaintext holds. Under cbcPaddingXMLEnc that check IS the whole verdict,
+// because §5.2.1 leaves the preceding octets arbitrary and a decryptor that
+// judged them would reject conforming ciphertext.
+//
+// Under cbcPaddingPKCS7 every octet of the padding region must also equal the
+// length, and that comparison walks the whole region regardless of
+// intermediate mismatches. The work it performs depends on the *padding length
+// octet*, which is observable in cache-timing studies but is the same trade-off
+// as stdlib crypto/tls's legacy CBC unpadding.
+//
+// Neither rule makes CBC safe. Both are defense in depth on top of the primary
+// mitigation, which is that CBC decryption requires an explicit opt-in
+// (Decryptor.AllowUnauthenticatedCBC). For real authentication use AES-GCM.
+func unpadConstantTime(data []byte, padding cbcPadding) ([]byte, bool) {
+	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
 		return nil, false
 	}
-	padding := int(data[len(data)-1])
-	// Bounds check on the padding length.
+	length := int(data[len(data)-1])
+	// Bounds check on the padding length, which both rules share.
 	good := 1
-	if padding == 0 || padding > blockSize || padding > len(data) {
+	if length == 0 || length > aes.BlockSize || length > len(data) {
 		good = 0
-		// Continue with a safe value so the inner loop still runs to
+		// Continue with a safe value so the loop below still runs to
 		// completion on a fixed range.
-		padding = blockSize
+		length = aes.BlockSize
 	}
-	// Compare every byte of the (assumed) padding region in constant
-	// time relative to `padding`.
-	want := byte(padding)
-	for i := len(data) - padding; i < len(data); i++ {
-		good &= subtle.ConstantTimeByteEq(data[i], want)
+	if padding == cbcPaddingPKCS7 {
+		// Compare every octet of the (assumed) padding region in constant
+		// time relative to `length`.
+		want := byte(length)
+		for i := len(data) - length; i < len(data); i++ {
+			good &= subtle.ConstantTimeByteEq(data[i], want)
+		}
 	}
 	if good != 1 {
 		return nil, false

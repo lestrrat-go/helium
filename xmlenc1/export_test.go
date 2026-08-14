@@ -78,6 +78,28 @@ const MaxCipherReferenceTransformsForTest = maxCipherReferenceTransforms
 // itself rather than a copy of its value, which would drift from it.
 const MaxConcatKDFOtherInfoBytesForTest = maxConcatKDFOtherInfoBytes
 
+// EncryptCBCArbitraryPaddingForTest AES-CBC encrypts plaintext under key,
+// padding it the way xmlenc-core1 §5.2.1 allows and this package never writes:
+// the final octet names the padding length N, and the N-1 octets ahead of it
+// are all filler rather than a repeat of N. It exists so a test can build the
+// conforming ciphertext a third-party implementation emits, which is the shape
+// PKCS#7 unpadding refuses.
+//
+// filler must differ from the padding length for the ciphertext to be
+// distinguishable from a PKCS#7-padded one; a caller passing the length itself
+// gets ordinary PKCS#7 padding back.
+func EncryptCBCArbitraryPaddingForTest(key, plaintext []byte, filler byte) ([]byte, error) {
+	blockSize := 16
+	n := blockSize - len(plaintext)%blockSize
+	padded := make([]byte, len(plaintext)+n)
+	copy(padded, plaintext)
+	for i := len(plaintext); i < len(padded)-1; i++ {
+		padded[i] = filler
+	}
+	padded[len(padded)-1] = byte(n)
+	return cbcSeal(key, padded)
+}
+
 // AESKeyWrapForTest wraps key material under a KEK using RFC 3394 AES Key
 // Wrap. It exists so security tests can assemble an EncryptedKey whose
 // wrapped session-key length does not match the declared block algorithm,

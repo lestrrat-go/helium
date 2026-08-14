@@ -648,6 +648,7 @@ type decryptConfig struct {
 	sessionKey              []byte
 	blockAlgorithm          string
 	allowUnauthenticatedCBC bool
+	strictPKCS7Padding      bool
 	maxEncryptedKeys        int
 	maxEncryptedKeyBytes    int
 	maxCipherValueBytes     int
@@ -780,6 +781,38 @@ func (d Decryptor) BlockAlgorithm(uri string) Decryptor {
 func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 	d = d.clone()
 	d.cfg.allowUnauthenticatedCBC = v
+	return d
+}
+
+// StrictPKCS7Padding narrows which AES-CBC padding a decrypt accepts from the
+// XML Encryption rule to the PKCS#7 one. It is off by default and it has no
+// effect on AES-GCM, which does not pad.
+//
+// W3C xmlenc-core1 §5.2.1 pads a plaintext short by N octets with N-1 octets of
+// ARBITRARY value and a final octet N, so the only thing a conforming decryptor
+// may read is that final octet. PKCS#7 (RFC 5652 §6.3) additionally fixes every
+// one of those octets to N. PKCS#7 padding is therefore always valid XML
+// Encryption padding, and the reverse does not hold: a peer that fills the
+// leading octets with anything else — random bytes above all — writes a
+// perfectly conforming ciphertext that this option refuses. Turning it on can
+// only narrow what a decrypt accepts, and what it excludes is conforming
+// documents, so leave it off for interoperability.
+//
+// It exists for a caller who controls both ends and wants the tighter check on
+// what it accepts back. That check is worth something small and specific:
+// under the XML Encryption rule any final octet from 1 to the block size is
+// acceptable, so roughly one in sixteen random forgeries survives unpadding,
+// while under PKCS#7 roughly one in 2^(8N) does. Both numbers describe an
+// unauthenticated mode. Neither closes the padding oracle, whose signal is
+// whether the decrypt succeeded at all rather than which step refused it, and
+// [Decryptor.AllowUnauthenticatedCBC] states the rest of that reasoning. A
+// caller who wants the ciphertext authenticated wants AES-GCM instead.
+//
+// [Encryptor] always writes PKCS#7-shaped padding, which both rules accept, so
+// this option never rejects a document this package produced.
+func (d Decryptor) StrictPKCS7Padding(v bool) Decryptor {
+	d = d.clone()
+	d.cfg.strictPKCS7Padding = v
 	return d
 }
 
@@ -1145,7 +1178,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		if err := validateKeySize(paramBlockAlgorithm, alg, paramSessionKey, cfg.sessionKey); err != nil {
 			return nil, abort(ctx, wrapBlockAlgorithmError(ErrDecryptionFailed, err))
 		}
-		plaintext, err := decryptCipherValue(ed, alg, cfg.sessionKey)
+		plaintext, err := decryptCipherValue(ed, alg, cfg.sessionKey, cbcPadding(cfg.strictPKCS7Padding))
 		if err != nil {
 			return nil, abort(ctx, err)
 		}
@@ -1185,7 +1218,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		if err := contextErr(ctx); err != nil {
 			return nil, err
 		}
-		plaintext, err := decryptCipherValue(ed, alg, sessionKey)
+		plaintext, err := decryptCipherValue(ed, alg, sessionKey, cbcPadding(cfg.strictPKCS7Padding))
 		if err != nil {
 			err = abort(ctx, err)
 			if isContextErr(err) {
@@ -1275,7 +1308,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		if err := validateKeySize(paramBlockAlgorithm, alg, paramSessionKey, cfg.sessionKey); err != nil {
 			return nil, abort(ctx, wrapBlockAlgorithmError(ErrDecryptionFailed, err))
 		}
-		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey)
+		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, cfg.sessionKey, cbcPadding(cfg.strictPKCS7Padding))
 		if err != nil {
 			return nil, abort(ctx, err)
 		}
@@ -1323,7 +1356,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 			lastErr = preferInformativeErr(lastErr, err)
 			continue
 		}
-		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, sessionKey)
+		nodes, err := finishDecrypt(ctx, ed, elem, alg, isContent, sessionKey, cbcPadding(cfg.strictPKCS7Padding))
 		if err != nil {
 			err = abort(ctx, err)
 			if isContextErr(err) {
@@ -1359,11 +1392,11 @@ func preferInformativeErr(existing, candidate error) error {
 // validates its shape. It returns the decrypted nodes only when the entire
 // pipeline succeeds, so a caller iterating session-key candidates can
 // safely fall through to the next candidate on any error.
-func finishDecrypt(ctx context.Context, ed *encryptedData, elem *helium.Element, alg string, isContent bool, sessionKey []byte) ([]helium.Node, error) {
+func finishDecrypt(ctx context.Context, ed *encryptedData, elem *helium.Element, alg string, isContent bool, sessionKey []byte, padding cbcPadding) ([]helium.Node, error) {
 	if err := contextErr(ctx); err != nil {
 		return nil, err
 	}
-	plaintext, err := decryptCipherValue(ed, alg, sessionKey)
+	plaintext, err := decryptCipherValue(ed, alg, sessionKey, padding)
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
@@ -1465,8 +1498,8 @@ func (c *nodeCollector) appendElementNode(node helium.Node) error {
 	return nil
 }
 
-func decryptCipherValue(ed *encryptedData, alg string, sessionKey []byte) ([]byte, error) {
-	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue)
+func decryptCipherValue(ed *encryptedData, alg string, sessionKey []byte, padding cbcPadding) ([]byte, error) {
+	plaintext, err := blockDecrypt(alg, sessionKey, ed.CipherValue, padding)
 	if err == nil {
 		return plaintext, nil
 	}

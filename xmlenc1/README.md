@@ -70,6 +70,20 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
     element. Any other `@Type` never reaches a parse at all.
     `DecryptBytes` is stronger still — it returns the plaintext octets
     on valid padding alone, with no XML constraint at all.
+  - **Padding:** decryption reads the padding the way xmlenc-core1 §5.2.1
+    writes it. A plaintext short by N octets is padded with N-1 octets of
+    ARBITRARY value and a final octet N, so the final octet is the only one
+    a conforming decryptor may act on; this package checks that it names
+    between one octet and one whole block, and does not read the rest.
+    PKCS#7 fixes every one of those octets to N instead, which is a strict
+    subset, so PKCS#7-padded ciphertext is always accepted here and the
+    reverse does not hold. `Decryptor.StrictPKCS7Padding(true)` narrows
+    the check to the PKCS#7 rule, and its godoc owns what that trades: it
+    refuses conforming documents, so it suits only a caller that controls
+    both ends. Whichever rule is in force, a refused padding reports the
+    same `ErrDecryptionFailed` as every other CBC failure. `Encryptor`
+    always writes PKCS#7-shaped padding, which both rules accept, so a
+    document this package produced decrypts under either.
 - The inner parser used on the decrypted plaintext has DTD loading,
   external entity resolution, and network access all disabled. Decrypted
   bytes are attacker-controlled, so a relaxed parser would constitute an
@@ -568,6 +582,14 @@ Santuario corpus needs BOTH an XPath transform and `aes192-cbc`, and this
 package implements neither, so there is nothing runnable to add and no skip
 entry to write — a skip would imply a vector is being passed over when none
 exists. The feature's evidence is this package's own tests.
+
+AES-CBC is covered in this package's tests rather than by that suite, against a
+third-party vector. `TestInteropRetrievalMethod` decrypts
+`merlin-xmlenc-five/encrypt-element-aes256-cbc-retrieved-kw-aes256.xml` from the
+Apache Santuario corpus end to end, which exercises `aes256-cbc` block
+decryption, `kw-aes256` unwrapping, a same-document `ds:RetrievalMethod`, and
+padding written by another implementation, all on a document nothing here
+produced.
 
 The suite gates releases: `release.yml`'s `conformance-gate` matrix runs it
 against the pinned harness commit, and a release is neither tagged nor published
