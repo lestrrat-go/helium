@@ -81,7 +81,7 @@ func TestDecryptBlockAlgorithm(t *testing.T) {
 	})
 
 	// The match is strict: a document that declares a different algorithm than
-	// the caller stated out of band is refused rather than allowed to override
+	// the caller stated out of band is refused, and never allowed to override
 	// the caller, which would be an algorithm-confusion surface.
 	t.Run("conflicting algorithms fail", func(t *testing.T) {
 		sessionKey := randKey(t, 32)

@@ -88,7 +88,7 @@ func TestParseXSLTTransformEntityHidden(t *testing.T) {
 	t.Run("entity replacement is a second stylesheet rejected", func(t *testing.T) {
 		// Children parse as [Element xsl:stylesheet, EntityRefNode evil]; the
 		// entity replacement is a second stylesheet the element-only scan cannot
-		// see. Must fail closed rather than accept the single visible element.
+		// see. Must fail closed, accepting no single visible element.
 		doctype := `<!DOCTYPE Reference [ <!ENTITY evil "<xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='1.0'/>"> ]>`
 		_, err := parseReferenceFragment(t, doctype+head+style+`&evil;`+tail)
 		require.ErrorIs(t, err, ErrUnsupportedTransform)
@@ -201,7 +201,7 @@ func (p *markerXSLTTransformer) TransformXSLT(_ context.Context, _, input []byte
 
 // TestXSLTTypedNilTransformerFailsClosed covers the same-document XSLT gate: a
 // typed-nil pointer XSLTTransformer must be treated as absent and fail closed
-// with ErrUnsupportedTransform rather than panic on the nil-receiver call.
+// with ErrUnsupportedTransform, never panicking on the nil-receiver call.
 func TestXSLTTypedNilTransformerFailsClosed(t *testing.T) {
 	const xml = `<doc><content Id="c1"><g>hi</g></content></doc>`
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))

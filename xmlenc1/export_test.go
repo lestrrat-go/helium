@@ -49,7 +49,7 @@ func HardenedParserForTest() helium.Parser {
 // element matching directly against a parsed DOM. It parses under a
 // default Decryptor's CipherValue budgets and the same same-document
 // reference scope Decrypt builds, and under an uncancelled context, so what
-// these callers see is the parse's own verdict rather than a cancellation.
+// these callers see is the parse's own verdict, and never a cancellation.
 // Cancellation of the parse is covered through the public terminals instead.
 func ParseEncryptedDataForTest(elem *helium.Element) (*encryptedData, error) {
 	cfg := &decryptConfig{}
@@ -58,24 +58,24 @@ func ParseEncryptedDataForTest(elem *helium.Element) (*encryptedData, error) {
 }
 
 // MaxOAEPParamsBytesForTest re-exports the xenc:OAEPparams decoded-size limit
-// so a test can pin the boundary against the constant itself rather than a
-// copy of its value, which would drift from it.
+// so a test can pin the boundary against the constant itself. A
+// copy of its value would drift from it.
 const MaxOAEPParamsBytesForTest = maxOAEPParamsBytes
 
 // MaxECPublicKeyBytesForTest re-exports the dsig11:PublicKey decoded-size limit
-// so a test can pin the boundary against the constant itself rather than a copy
-// of its value, which would drift from it.
+// so a test can pin the boundary against the constant itself. A copy
+// of its value would drift from it.
 const MaxECPublicKeyBytesForTest = maxECPublicKeyBytes
 
 // MaxCipherReferenceTransformsForTest re-exports the cap on how many
 // ds:Transform children one xenc:CipherReference may declare, so a test can
-// size an over-cap list against the constant itself rather than a copy of its
-// value, which would drift from it.
+// size an over-cap list against the constant itself. A copy of its
+// value would drift from it.
 const MaxCipherReferenceTransformsForTest = maxCipherReferenceTransforms
 
 // MaxConcatKDFOtherInfoBytesForTest re-exports the cumulative ConcatKDF
 // OtherInfo budget so a test can size a parameter set against the constant
-// itself rather than a copy of its value, which would drift from it.
+// itself. A copy of its value would drift from it.
 const MaxConcatKDFOtherInfoBytesForTest = maxConcatKDFOtherInfoBytes
 
 // EncryptCBCArbitraryPaddingForTest AES-CBC encrypts plaintext under key,

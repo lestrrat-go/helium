@@ -60,7 +60,7 @@ func parseXSLTTransform(ctx context.Context, te *helium.Element) ([]byte, error)
 		// An entity-reference child can hide a second stylesheet or a foreign
 		// element inside its replacement content. helium.NewParser() is
 		// non-substituting by default, so an internal DTD entity stays an
-		// EntityRefNode rather than being inlined — the element-only scan below
+		// EntityRefNode and is never inlined — the element-only scan below
 		// would never see the hidden markup and would wrongly accept the
 		// transform. Validate the EFFECTIVE child sequence by rejecting any
 		// entity node fail-closed, so exactly one direct xsl:stylesheet /

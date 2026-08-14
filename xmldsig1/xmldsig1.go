@@ -110,7 +110,7 @@ func (s Signer) clone() Signer {
 // when the Signer was constructed directly (a zero-value Signer{} whose cfg is
 // nil). This mirrors clone's nil handling so the sign terminals never
 // dereference a nil cfg: a zero-value Signer signs as a default Signer with no
-// references, returning ErrNoReferences rather than panicking.
+// references, returning ErrNoReferences and never panicking.
 func (s Signer) config() *signerConfig {
 	if s.cfg == nil {
 		return &signerConfig{c14nMethod: ExcC14N10}
@@ -237,7 +237,7 @@ func (s Signer) SignEnveloped(ctx context.Context, doc *helium.Document, parent 
 // Every content entry must be a movable node (helium.MutableNode); an ordinary
 // DOM element qualifies. A nil, typed-nil, or read-only content entry (e.g. a
 // namespace-node wrapper) is rejected with an indexed error wrapping
-// ErrInvalidSignature before any node is moved, rather than being silently
+// ErrInvalidSignature before any node is moved, and is never silently
 // dropped from the Object. Moving the content into the Object detaches it from
 // the caller's tree; if signing then fails at any later step, every moved node
 // is restored to its exact original position (parent, siblings, and order),
@@ -317,7 +317,7 @@ type verifierConfig struct {
 	allowXPointer bool
 	// lenientKeyInfo makes an UNRESOLVABLE ds:RetrievalMethod (one that cannot be
 	// dereferenced at all — no ReferenceResolver, or the target is not found) a
-	// skipped hint rather than a fatal error, so inline key material a KeySource
+	// skipped hint, and never a fatal error, so inline key material a KeySource
 	// could use still gets its chance. It never relaxes a RESOLVED-but-invalid
 	// RetrievalMethod (bad/absent Type, unsupported transform, cyclic chain,
 	// over-cap resource, ambiguous same-document target), which still fails
@@ -406,7 +406,7 @@ func (v Verifier) AllowSHA1(allow bool) Verifier {
 // A Reference satisfied via the resolver is marked External in the result (see
 // [VerifiedReference]); [VerifyResult.Covers] and [VerifyResult.SignedElement]
 // never report an external reference as covering in-document content, since it
-// resolves to bytes outside the document rather than an element.
+// resolves to bytes outside the document, and to no element.
 func (v Verifier) ReferenceResolver(r ReferenceResolver) Verifier {
 	v = v.clone()
 	v.cfg.referenceResolver = r
@@ -532,7 +532,7 @@ func (v Verifier) MaxKeyInfoEntries(n int) Verifier {
 // OWN size cap ([FSReferenceResolver] bounds one resource at 64 MiB) and runs it
 // through the RetrievalMethod's transforms; only then is the result charged. So
 // those octets are charged AFTER they are materialized, they are bounded by the
-// resolver's cap rather than by this one on the way in, and they are raw
+// resolver's cap, and by no cap of this one's on the way in, and they are raw
 // certificate bytes that were never base64-decoded at all.
 func (v Verifier) MaxDecodedBytes(n int) Verifier {
 	v = v.clone()
@@ -611,8 +611,8 @@ func (v Verifier) LenientKeyInfo(lenient bool) Verifier {
 // This name set is deliberately limited to the "id" token. Other conventions
 // (for example "wsu:Id" or SAML "AssertionID") are ID-typed only by their own
 // schemas, so a document relying on them must carry that typing — via its
-// DTD/schema, or by marking the attribute's type as an ID before verifying —
-// rather than have it inferred from the name. If more than one element matches
+// DTD/schema, or by marking the attribute's type as an ID before verifying.
+// The name alone never infers it. If more than one element matches
 // the referenced ID the reference is refused (ErrAmbiguousReference).
 //
 // Verification honors ctx: an already-cancelled or already-expired context
@@ -656,7 +656,7 @@ func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *
 	// Honor an already-cancelled or already-expired context before any work,
 	// including the nil / local-name / namespace validation guards below. The
 	// caller supplies sig directly, so on an attacker-controlled element a
-	// cancelled context must short-circuit here rather than pay for the
+	// cancelled context must short-circuit here, paying nothing for the
 	// validation before verifySignature's own ctx check would catch it.
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -679,7 +679,7 @@ func (v Verifier) VerifyElement(ctx context.Context, doc *helium.Document, sig *
 
 // findSignatureElements walks the tree and returns every ds:Signature
 // element. The walk is exhaustive so that multiple-Signature documents are
-// detected rather than silently resolved to the first match.
+// detected, and never silently resolved to the first match.
 func findSignatureElements(n helium.Node) []*helium.Element {
 	var out []*helium.Element
 	var walk func(helium.Node)

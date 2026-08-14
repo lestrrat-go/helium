@@ -41,7 +41,7 @@ const (
 // as the content of its xenc:CipherData and is followed by trailing as a
 // sibling, and returns that EncryptedData element.
 //
-// The xenc and ds prefixes are declared on the EncryptedData rather than on the
+// The xenc and ds prefixes are declared on the EncryptedData, and not on the
 // document element, so a trailing element the reference names inherits neither
 // and its canonical form is exactly the markup written here.
 func cipherRefDoc(t *testing.T, cipherData, trailing string) *helium.Element {
@@ -108,7 +108,7 @@ func canonicalOctetLength(t *testing.T, uri, trailing string) int {
 
 // cipherRefFitsBudget reports whether a same-document resolution stays within a
 // MaxCipherValueBytes of maxBytes. The decrypt itself always fails — the
-// resolved octets are canonical XML rather than ciphertext — so the budget
+// resolved octets are canonical XML, and no ciphertext at all — so the budget
 // sentinel, not success, is what separates the two outcomes.
 func cipherRefFitsBudget(t *testing.T, uri, trailing string, maxBytes int) bool {
 	t.Helper()
@@ -211,7 +211,7 @@ func (s *endlessStream) Close() error {
 }
 
 // readResolved dereferences uri through resolver and returns the whole stream,
-// closing it. A resolver now hands back a stream rather than octets, so a test
+// closing it. A resolver hands back a stream, in place of octets, so a test
 // asserting WHAT it served has to drain one.
 func readResolved(t *testing.T, resolver xmlenc1.ReferenceResolver, uri string) string {
 	t.Helper()
@@ -228,7 +228,7 @@ func readResolved(t *testing.T, resolver xmlenc1.ReferenceResolver, uri string) 
 // resolver hands back a stream that never produces a byte.
 //
 // Close releases the blocked Read, so a package that closes the stream on
-// cancellation is what lets the read goroutine finish rather than leak.
+// cancellation is what lets the read goroutine finish, and never leak.
 type blockingFS struct {
 	released chan struct{}
 	once     sync.Once
@@ -375,7 +375,7 @@ func TestCipherReference(t *testing.T) {
 		require.Equal(t, `<ct Id="t"><inner a="1">text</inner></ct>`, string(ed.CipherValue))
 	})
 
-	// The two whole-document forms name the root rather than an id, so their
+	// The two whole-document forms name the root, and no id, so their
 	// value is the canonical form of the whole document — the EncryptedData
 	// included, which is what makes them useless in practice and valid all the
 	// same.
@@ -394,7 +394,7 @@ func TestCipherReference(t *testing.T) {
 	// A CipherReference carries no CanonicalizationMethod, so the only node-set
 	// to octet conversion open to it is the default one — plain Canonical XML,
 	// which omits comments — and all four forms are therefore comment-free, the
-	// two XPointer ones included. The check is a measurement rather than a
+	// two XPointer ones included. The check is a measurement, and no mere
 	// reading: the recovered octet count of each form is the same with a comment
 	// in the target as without one, which a form that admitted comments could
 	// not be.
@@ -428,8 +428,8 @@ func TestCipherReference(t *testing.T) {
 	})
 
 	// Two elements answering to one id would let whoever injected the second
-	// choose which octets the recipient decrypts, so the document is refused
-	// rather than resolved to either.
+	// choose which octets the recipient decrypts, so the document is refused,
+	// and resolved to neither.
 	t.Run("a duplicate id is ambiguous", func(t *testing.T) {
 		elem := cipherRefDoc(t,
 			cipherReferenceXML(` URI="#t"`, transformsXML(base64Transform)),
@@ -444,7 +444,7 @@ func TestCipherReference(t *testing.T) {
 		require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
 	})
 
-	// External dereferencing is RECOMMENDED rather than REQUIRED by the
+	// External dereferencing is RECOMMENDED, and never REQUIRED, by the
 	// XMLDSig processing model xmlenc-core1 §3.3.1 imports, so it is off until
 	// the caller supplies a resolver.
 	t.Run("an external URI with no resolver is not found", func(t *testing.T) {
@@ -589,7 +589,7 @@ func TestCipherReference(t *testing.T) {
 	})
 
 	// CipherReferenceType declares Transforms with maxOccurs 1, so a second
-	// wrapper is schema-invalid and refused rather than silently merged.
+	// wrapper is schema-invalid and refused, and never silently merged.
 	t.Run("two Transforms elements are refused", func(t *testing.T) {
 		elem := cipherRefDoc(t,
 			cipherReferenceXML(` URI="#t"`, transformsXML(base64Transform)+transformsXML(base64Transform)),
@@ -599,8 +599,8 @@ func TestCipherReference(t *testing.T) {
 	})
 
 	// Neither xenc:CipherReferenceType nor xenc:TransformsType carries a
-	// wildcard, so an element the schema does not declare is refused rather than
-	// stepped over. Skipping one would drop a transform declaration out of the
+	// wildcard, so an element the schema does not declare is refused outright,
+	// and never stepped over. Skipping one would drop a transform declaration out of the
 	// whitelist — and out of any policy or logging layer reading it — and
 	// resolve the reference as though the document had asked for something else.
 	t.Run("a foreign element in the transform list is refused", func(t *testing.T) {
@@ -632,7 +632,7 @@ func TestCipherReference(t *testing.T) {
 		}
 
 		// Foreign children count against the cap as they are collected, so a
-		// flood of them costs one refusal rather than a walk of them all.
+		// flood of them costs one refusal, well short of a walk of them all.
 		t.Run("and counts against the transform cap", func(t *testing.T) {
 			var inner strings.Builder
 			for range 101 {
@@ -708,7 +708,7 @@ func TestCipherReference(t *testing.T) {
 
 	// parseCipherData is shared by the EncryptedData payload and every
 	// EncryptedKey, so an EncryptedKey may name its wrapped key by reference
-	// too — and it is charged to the EncryptedKey budget rather than the
+	// too — and it is charged to the EncryptedKey budget, and never the
 	// payload one.
 	t.Run("a CipherReference supplies an EncryptedKey", func(t *testing.T) {
 		sessionKey := newSessionKey(t)
@@ -793,7 +793,7 @@ func TestCipherReference(t *testing.T) {
 	})
 
 	// The canonicalization writes through a budgetWriter, so an oversized
-	// subtree is stopped at the limit rather than canonicalized in full and
+	// subtree is stopped at the limit, and never canonicalized in full and
 	// rejected afterwards. This test must NOT run in parallel: TotalAlloc is
 	// process-wide and a concurrent test would pollute the deltas.
 	t.Run("an over-budget canonicalization stops at the limit", func(t *testing.T) {
@@ -821,7 +821,7 @@ func TestCipherReference(t *testing.T) {
 			return after.TotalAlloc - before.TotalAlloc
 		}
 
-		// Both figures are weighed against the INPUT rather than against each
+		// Both figures are weighed against the INPUT, and never against each
 		// other. Comparing the two measurements would anchor the assertion to
 		// the shared parse cost, which is most of the bounded figure and has
 		// nothing to do with the property: any change adding to that cost would
@@ -862,7 +862,7 @@ func TestCipherReference(t *testing.T) {
 		}{
 			// One byte of allowance cannot fit 50k elements, and knowing that
 			// before the set is built is what stops the work: the refusal costs
-			// a fraction of the document rather than a multiple of it.
+			// a fraction of the document, and never a multiple of it.
 			{name: "under a one byte budget", maxBytes: 1, spend: 8},
 			// The DEFAULT budget admits this document, so nothing refuses it —
 			// the resolution runs, and stays linear in the document.
@@ -891,7 +891,7 @@ func TestCipherReference(t *testing.T) {
 	})
 
 	// The same walk observes the context once per node, so a caller that
-	// cancelled is answered while the walk is running rather than after it has
+	// cancelled is answered while the walk is running, well before it has
 	// stepped every node of a document the caller did not write.
 	t.Run("a cancelled context stops the node-set walk", func(t *testing.T) {
 		elem, _ := wideDoc(t, 50000, 500)
@@ -901,7 +901,7 @@ func TestCipherReference(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 
 		// And a deadline is not out-waited: the same document under a deadline
-		// of a tenth of a second returns in that order of time rather than in
+		// of a tenth of a second returns in that order of time, and never in
 		// tens of seconds, which is what a walk polling nothing would cost.
 		deadline, stop := context.WithTimeout(t.Context(), 100*time.Millisecond)
 		defer stop()

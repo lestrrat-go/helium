@@ -52,7 +52,7 @@ func TestKeySize(t *testing.T) {
 					BlockAlgorithm(tc.alg).
 					SessionKey(randKey(t, tc.size))
 				// Opt in to CBC so the failure exercises the key-size
-				// binding rather than the CBC encryption opt-in gate.
+				// binding, well past the CBC encryption opt-in gate.
 				if tc.cbc {
 					enc = enc.AllowLegacyCBC(true)
 				}

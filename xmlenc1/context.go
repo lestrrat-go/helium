@@ -51,7 +51,7 @@ func abort(ctx context.Context, err error) error {
 // end of that input after the caller cancelled, and the window scales with the
 // node count.
 //
-// The poll runs per node rather than every Nth node. Nothing here measured a
+// The poll runs per node, and never every Nth node. Nothing here measured a
 // cost worth trading exactness for: a poll is one mutex-guarded read against
 // per-node work that serializes a subtree or steps a DOM, and a stride would
 // make the bound depend on a constant nobody can derive from the input.

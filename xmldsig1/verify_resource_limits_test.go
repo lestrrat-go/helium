@@ -173,7 +173,7 @@ func TestVerifyBase64ValueChildren(t *testing.T) {
 
 	// A reference to an UNDECLARED entity is not a hand-built shape: with an
 	// external subset the parser did not read, an undeclared general entity is a
-	// validity error rather than a well-formedness one, so a non-validating
+	// validity error, and not a well-formedness one, so a non-validating
 	// parser keeps the reference and links no declaration to it. Any peer can
 	// send that document, before anything about it is authenticated.
 	//
@@ -256,8 +256,8 @@ func signedDocEntityValue(t *testing.T, key *rsa.PrivateKey, local, declared str
 	}
 
 	// The internal subset goes before the document element, and "inner" is
-	// declared so a declared value of "&inner;" is a reference to a real entity
-	// rather than a parse error — what must not happen is its EXPANSION.
+	// declared so a declared value of "&inner;" is a reference to a real entity,
+	// and not a parse error — what must not happen is its EXPANSION.
 	rootAt := strings.Index(serialized, "<doc>")
 	require.Positive(t, rootAt, "signed document has no doc element")
 	return mustParseXML(t, serialized[:rootAt]+
@@ -351,7 +351,7 @@ func TestVerifyDecodedBytesAllocation(t *testing.T) {
 	// A child that contributes no character data — a comment, or the element
 	// child xs:base64Binary does not admit at all — is never read, so nothing
 	// scaling with its text is allocated. That bound is a small fraction of the
-	// padding rather than a multiple of it.
+	// padding, and never a multiple of it.
 	const (
 		countOnly     = whitespace * 3 / 2
 		countAndBuild = whitespace * 5 / 2

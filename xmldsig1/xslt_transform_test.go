@@ -47,7 +47,7 @@ const xsltReferenceDoc = `<root xmlns="urn:helium:test">` +
 // canonicalization file (xmldsig1/transforms.go) places the cancellation exactly
 // where parseXSLTTransform consumes canonicalizeSubtree's error. Err is the only
 // cancellation signal that walk consults, so Done never becomes ready and the
-// value is standalone rather than derived from the test's context.
+// value is standalone, derived from no test context.
 type canonicalizeCancelContext struct {
 	armed atomic.Bool
 }
@@ -81,7 +81,7 @@ func TestVerifyXSLTTransformContextError(t *testing.T) {
 
 	// The same document under a live context reaches the XSLT transform and
 	// fails closed on it, which is what proves the cancelled run below really
-	// exercises the stylesheet serialization rather than stopping earlier.
+	// exercises the stylesheet serialization, and never stops earlier.
 	t.Run("live context reaches the XSLT transform", func(t *testing.T) {
 		doc := mustParseXML(t, xsltReferenceDoc)
 		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).

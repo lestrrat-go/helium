@@ -13,8 +13,7 @@ import (
 func TestXSW(t *testing.T) {
 	// duplicate id reproduces the classic XML Signature Wrapping shape: the
 	// document contains two elements with the same Id and the Reference URI
-	// matches both. Verify MUST refuse to resolve the reference rather than
-	// silently pick one.
+	// matches both. Verify MUST refuse to resolve the reference, picking neither.
 	t.Run("duplicate id", func(t *testing.T) {
 		xml := `<root><payload Id="target"><val>good</val></payload></root>`
 		key := generateRSAKey(t)

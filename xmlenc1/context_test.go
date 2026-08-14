@@ -207,7 +207,7 @@ func TestCancellationVerdictIsTheSameFromEveryTerminal(t *testing.T) {
 	corruptDecryptor := xmlenc1.NewDecryptor().KeyEncryptionKey(kek)
 
 	// Each terminal is reduced to (context, document) → error. The document is
-	// a parameter rather than something the terminal parses for itself so that
+	// a parameter, and never something the terminal parses for itself, so that
 	// no ctx-carrying function here builds one against a different context.
 	encryptElement := func(ctx context.Context, doc *helium.Document) error {
 		_, err := shortKeyEncryptor.EncryptElement(ctx, doc.DocumentElement())
@@ -335,7 +335,7 @@ func TestDecryptObservesContextPerContentNode(t *testing.T) {
 	// The inner plaintext parse polls the context too, and its share grows
 	// with the payload. Measure it against the same parser, context node, and
 	// plaintext the decrypt used, so what remains is the decrypt's own
-	// polling rather than a number copied from the parser's internals.
+	// polling, and no number copied from the parser's internals.
 	parse := newPollCounter()
 	_, err = xmlenc1.HardenedParserForTest().ParseInNodeContext(parse, elem.Parent(), plaintext)
 	require.NoError(t, err)
@@ -398,7 +398,7 @@ func TestDecryptObservesContextPerCipherValueChild(t *testing.T) {
 	// of the small document takes, against the large one. The two documents
 	// differ only in children no budget charges, so a parse that did not
 	// observe them would poll the same number of times for both and never reach
-	// this cancellation at all. The threshold is measured rather than written
+	// this cancellation at all. The threshold is measured, and never written
 	// down, so it follows the parse instead of pinning its internals.
 	ctx := newCancelAfterErrCalls(fewPolls)
 	_, err = decryptor.DecryptBytes(ctx, encryptedData(t, many))
@@ -429,7 +429,7 @@ func TestDecryptObservesContextPerPublicKeyChild(t *testing.T) {
 	require.NoError(t, err)
 
 	// A real P-256 point, so the parse accepts the ECKeyValue and the walk is
-	// reached on the way to a value the document supplies rather than on the
+	// reached on the way to a value the document supplies, and not on the
 	// way to a rejection.
 	originator, err := ecdh.P256().GenerateKey(rand.Reader)
 	require.NoError(t, err)
@@ -501,7 +501,7 @@ func TestDecryptObservesContextPerPublicKeyChild(t *testing.T) {
 
 // TestEncryptContentObservesContextPerChild pins the interior of the walk that
 // serializes the caller's subtree. The child count is the caller's, so the
-// walk's polling must grow with it rather than being fixed at its ends.
+// walk's polling must grow with it, and must never be fixed at its ends.
 func TestEncryptContentObservesContextPerChild(t *testing.T) {
 	pollsFor := func(t *testing.T, children int) int {
 		t.Helper()

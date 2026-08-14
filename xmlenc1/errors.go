@@ -63,7 +63,7 @@ var (
 	//     caller supplies a Decryptor.CipherReferenceResolver. §3.3.1 imports
 	//     XMLDSig's dereferencing model, which makes the same-document forms
 	//     MUSTs and HTTP dereferencing RECOMMENDED, so the external form is an
-	//     opt-in capability rather than an obligation.
+	//     opt-in capability, and no obligation.
 	//
 	// The reference is resolved while the document is read, so this precedes
 	// the Decryptor.SessionKey early return: a pre-shared session key does not
@@ -81,7 +81,7 @@ var (
 	// choose which of the two the recipient resolves, and so which key it
 	// unwraps and trial-decrypts with, or which octets it takes as the cipher
 	// text. Resolution therefore collects every match and refuses on more than
-	// one, rather than taking the first. Match with errors.Is.
+	// one, taking neither. Match with errors.Is.
 	ErrAmbiguousReference = errors.New("xmlenc1: ambiguous reference")
 
 	// ErrInvalidPadding names invalid AES-CBC padding. Decryption never
@@ -151,7 +151,7 @@ var (
 	// different one through Decryptor.BlockAlgorithm. The message names both
 	// URIs so the caller knows which of the two to change.
 	//
-	// The two are matched rather than ordered on purpose. Decryptor.BlockAlgorithm
+	// The two are matched on purpose, and never ordered. Decryptor.BlockAlgorithm
 	// exists for an EncryptedData that carries no EncryptionMethod at all, where
 	// the algorithm is known out of band (W3C xmlenc-core1 §3.1, §4.4); letting a
 	// document's declaration win over a caller who stated the algorithm would let
@@ -187,8 +187,8 @@ var (
 
 // Parameter roles reported by UnsupportedAlgorithmError and KeySizeError.
 // They name the configuration knob (or the wire attribute it maps to) that
-// the rejected value came from, so an error identifies which setter to fix
-// rather than only which URI was refused. They are diagnostic text: match
+// the rejected value came from, so an error identifies which setter to fix,
+// and not only which URI was refused. They are diagnostic text: match
 // on the error type and its Algorithm field, not on these strings.
 const (
 	paramBlockAlgorithm = "block algorithm"

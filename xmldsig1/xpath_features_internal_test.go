@@ -260,7 +260,7 @@ func TestGeneralXPointerResolution(t *testing.T) {
 
 	// Any id() use that is not the whole-expression selector (a wrapping paren, a
 	// predicate) cannot be routed through domutil.FindElementsByID, so it is rejected
-	// fail-closed rather than handed to the built-in id() — under duplicate xml:id
+	// fail-closed and never reaches the built-in id() — under duplicate xml:id
 	// the built-in would otherwise silently resolve to the last such element.
 	for _, expr := range []string{"(id('dup'))", "//a[id('dup')]"} {
 		t.Run("non-selector id() use is fail-closed: "+expr, func(t *testing.T) {
