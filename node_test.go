@@ -12,7 +12,7 @@ import (
 func TestAddChildShape(t *testing.T) {
 	// elem.AddChild(attr) must route the attribute into the element's property
 	// list, NOT the child list: it appears in Attributes()/GetAttribute, is absent
-	// from Children(), and serializes as an attribute rather than a child element.
+	// from Children(), and serializes as an attribute, never as a child element.
 	t.Run("attribute is routed to the property list", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		elem, err := doc.CreateElement("root")
@@ -212,7 +212,7 @@ func TestAddChildShape(t *testing.T) {
 func TestNodeConsistency(t *testing.T) {
 	// the reachable typed-nil path: a document with
 	// no root element yields a typed-nil *Element from DocumentElement(), and the
-	// public node helpers must treat it as nil rather than panicking.
+	// public node helpers must treat it as nil and never panic.
 	t.Run("typed-nil node", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 		de := doc.DocumentElement() // typed-nil *helium.Element for a rootless doc

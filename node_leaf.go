@@ -185,8 +185,8 @@ func (p *ProcessingInstruction) AddChild(cur Node) error {
 	default:
 		// A self-add (pi.AddChild(pi)) reaches here because a PI is not a text
 		// node; detect it by direct pointer identity so it matches every other
-		// leaf self-add (ErrCyclicNode) rather than the generic type rejection
-		// below. The check must be identity, NOT wouldCreateCycle: that guard
+		// leaf self-add (ErrCyclicNode), stopping short of the generic type
+		// rejection below. The check must be identity, NOT wouldCreateCycle: that guard
 		// walks the PI's ancestor chain, so it would also match an ancestor
 		// operand (pi.AddChild(parentElement)), which — like on the other
 		// strict leaves — is just another invalid operand and takes the shared
@@ -205,7 +205,7 @@ func (p *ProcessingInstruction) AddChild(cur Node) error {
 	}
 }
 
-// AppendText appends text to the PI's data string rather than creating a child
+// AppendText appends text to the PI's data string, creating no child
 // text node. See AddChild for rationale.
 func (p *ProcessingInstruction) AppendText(b []byte) error {
 	p.data += string(b)

@@ -42,8 +42,8 @@ func TestByteCursorSurfacesErrorReturnedWithData(t *testing.T) {
 	// Consume the buffered bytes.
 	require.NoError(t, cur.Advance(7))
 
-	// Once the buffer drains, the cursor must report the underlying error
-	// rather than silently treating the stream as cleanly terminated.
+	// Once the buffer drains, the cursor must report the underlying error,
+	// and must not treat the stream as cleanly terminated.
 	require.True(t, cur.Done(), "Done should be true after buffer drains")
 	require.ErrorIs(t, cur.Err(), wantErr, "the non-EOF read error must be surfaced after the buffered bytes are consumed")
 }

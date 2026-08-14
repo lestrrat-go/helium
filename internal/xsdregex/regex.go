@@ -1604,8 +1604,8 @@ func (r *Regexp) MatchString(s string) bool {
 	if r.backtrack != nil {
 		// regexp2 is a backtracking engine; the only error it returns is a
 		// match-timeout (see DefaultMatchTimeout()). A timed-out match cannot be
-		// proven to satisfy the pattern, so report it as a non-match rather than
-		// letting a catastrophic-backtracking input hang the caller.
+		// proven to satisfy the pattern, so report it as a non-match, so a
+		// catastrophic-backtracking input can never hang the caller.
 		ok, _ := r.backtrack.MatchString(s)
 		return ok
 	}
@@ -1618,8 +1618,8 @@ func (r *Regexp) MatchString(s string) bool {
 // beyond RE2's limit are compiled with the regexp2 backtracking engine, which
 // supports those constructs natively; all other patterns use Go's RE2 engine.
 // It returns an error for patterns that are not valid XML Schema regular
-// expressions, so callers can report a schema error rather than silently
-// ignoring the facet.
+// expressions, so callers can report a schema error and never silently
+// ignore the facet.
 func Compile(pattern string) (*Regexp, error) {
 	return CompileVersion(pattern, false)
 }

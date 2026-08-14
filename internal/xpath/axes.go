@@ -77,7 +77,7 @@ func AxisFromName(name string) (AxisType, bool) {
 // in the order defined by the XPath spec. maxNodes limits the result size
 // for unbounded axes; use DefaultMaxNodeSetLength if unsure. ctx is checked
 // inside the unbounded descendant/following/preceding walks so a cancelled
-// context aborts the traversal promptly rather than walking the whole subtree.
+// context aborts the traversal promptly, leaving the rest of the subtree unwalked.
 func TraverseAxis(ctx context.Context, axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error) {
 	if IsNilNode(node) {
 		return nil, nil

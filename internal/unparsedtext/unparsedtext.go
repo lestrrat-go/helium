@@ -49,7 +49,7 @@ type Config struct {
 	URIResolver URIResolver
 	// MaxBytes bounds the number of bytes read from a single resolver- or
 	// HTTP-backed resource. Reads larger than MaxBytes fail with an
-	// ErrCodeRetrieval error rather than buffering an unbounded body. A value
+	// ErrCodeRetrieval error before an unbounded body is buffered. A value
 	// of 0 selects DefaultMaxBytes; a negative value disables the bound.
 	MaxBytes int64
 }
@@ -447,7 +447,7 @@ func decodeBytes(data []byte, encoding string) (string, error) {
 		// All non-UTF-8 encodings (including utf-16le/be) go through
 		// iencoding.Load, whose Unicode decoders are strict: malformed source
 		// units (e.g. an unpaired UTF-16 surrogate) produce a decode error
-		// rather than silently substituting U+FFFD. The bare x/text UTF-16
+		// and substitute no U+FFFD. The bare x/text UTF-16
 		// decoders would replace such input, after which ValidateXMLChars
 		// accepts U+FFFD and the malformed resource decodes successfully
 		// instead of failing with FOUT1190.
@@ -600,7 +600,7 @@ func (r *FileURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	case parsed.Scheme == lexicon.SchemeFile:
 		// Convert the "file:" URI to a native filesystem path. On Windows a
 		// drive-letter URI ("file:///C:/dir/x.txt") yields a native path
-		// ("C:\\dir\\x.txt") rather than the spurious leading-slash, forward-slash
+		// ("C:\\dir\\x.txt"), in place of the spurious leading-slash, forward-slash
 		// form ("/C:/dir/x.txt") that parsed.Path holds; otherwise the
 		// containedRel check below compares it against a native BaseDir and
 		// wrongly reports the target as outside the base. iofs.FileURIToPath is
@@ -616,7 +616,7 @@ func (r *FileURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 	case parsed.Scheme == "" || isWindowsDriveScheme(parsed):
 		// uripath.IsAbsolutePath recognizes both POSIX- and Windows-absolute
 		// shapes regardless of GOOS, so a "/abs" or "C:\\abs" reference is kept
-		// absolute rather than joined against BaseDir.
+		// absolute, and never joined against BaseDir.
 		if filepath.IsAbs(uri) || uripath.IsAbsolutePath(uri) {
 			target = uri
 		} else {

@@ -50,7 +50,7 @@ var asciiEncodingNames = map[string]struct{}{
 }
 
 // asciiRawUTF8Names is the subset of US-ASCII aliases the no-override document
-// serializer emits as raw UTF-8 (via a UTF-8 passthrough encoder) rather than as
+// serializer emits as raw UTF-8 (via a UTF-8 passthrough encoder) in place of
 // numeric character references. It is deliberately narrower than
 // asciiEncodingNames (IsASCII): every other US-ASCII alias is
 // character-referenced on the no-override path.

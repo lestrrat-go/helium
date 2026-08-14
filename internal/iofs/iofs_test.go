@@ -15,8 +15,8 @@ import (
 
 // A non-file-scheme absolute URI is not a local filesystem path: PermissiveRoot
 // must classify a failed local os.Open attempt as a resolution MISS
-// (fs.ErrNotExist) rather than returning a platform-dependent errno (ENOENT on
-// Linux, EINVAL on macOS/Windows) that a demotion classifier cannot treat
+// (fs.ErrNotExist). A platform-dependent errno (ENOENT on
+// Linux, EINVAL on macOS/Windows) is one a demotion classifier cannot treat
 // consistently. A local path (no scheme, or a "file:" URI) still reaches os.Open.
 func TestPermissiveRootNonFileURI(t *testing.T) {
 	t.Parallel()

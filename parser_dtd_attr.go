@@ -36,7 +36,7 @@ const literalScanChunk = 4096
 // (multi-byte runes decoded via decodeRuneAt). HasByteAt distinguishes a real
 // end-of-input (a clean unterminated literal, returned to the caller for the
 // quote check) from a cursor read error such as a push-stream Read returning
-// context.Canceled (PeekAt also reports 0 there), which is surfaced rather than
+// context.Canceled (PeekAt also reports 0 there), which is surfaced and never
 // swallowed.
 func (pctx *parserCtx) scanQuotedLiteral(ctx context.Context, cur strcursor.Cursor, qch byte, pubid bool) (string, error) {
 	buf := bufferPool.Get()

@@ -106,7 +106,7 @@ func TestConfinedDirRefusesNonFileScheme(t *testing.T) {
 }
 
 // An opaque or empty-path "file:" URI ("file:inside", "file:") is served as the
-// root directory rather than rejected, matching the private confinedDirFS this
+// root directory, and accepted, matching the private confinedDirFS this
 // shared type replaces (localFilePath converted such a URI to an empty path, so
 // Open joined it onto root and returned the root dir — an "is a directory" read
 // error at the CLI). FileURIToPath rejects the opaque form, so ConfinedDir must

@@ -156,7 +156,7 @@ func TestBuiltinTypeValidation(t *testing.T) {
 			typeName: typeBase64Binary,
 			valid:    []string{"", "SGVsbG8=", "AAAA", "AA==", "AAAA ", " AA== ", "SGVs bG8="},
 			// Form-feed is not XSD whitespace (only space/tab/CR/LF), so "TQ\f=="
-			// must be rejected rather than treated as "TQ==". The "TR==", "AB==",
+			// must be rejected, and never treated as "TQ==". The "TR==", "AB==",
 			// and "AAB=" forms carry non-zero unused trailing pad bits, which are
 			// not valid xs:base64Binary lexical forms and must be rejected (strict
 			// decode).
@@ -351,7 +351,7 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeFloat, lexicon.XSLTVersion10, lexicon.FloatNaN, 0, false},
 		{lexicon.TypeFloat, lexicon.FloatNaN, lexicon.FloatNaN, 0, false},
 		// "+NaN"/"-NaN" are not valid xs:float lexical forms, so a comparison
-		// against them is indeterminate rather than treating them as NaN. This
+		// against them is indeterminate, and never treats them as NaN. This
 		// keeps the value space consistent with the lexical validator.
 		{lexicon.TypeFloat, "+NaN", lexicon.FloatNaN, 0, false},
 		{lexicon.TypeFloat, "-NaN", lexicon.FloatNaN, 0, false},
@@ -365,7 +365,7 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeFloat, "16777217", "16777216", 0, true},
 		// A finite lexical whose magnitude overflows float64 maps to ±INF in the
 		// XSD 1.1 value space (ValidateBuiltin accepts it), so it compares equal to
-		// the literal INF/-INF spelling rather than being rejected as unparsable.
+		// the literal INF/-INF spelling, and is never rejected as unparsable.
 		{lexicon.TypeFloat, "1e400", lexicon.FloatINF, 0, true},
 		{lexicon.TypeFloat, "-1e400", lexicon.FloatNegINF, 0, true},
 
@@ -409,7 +409,7 @@ func TestCompareValues(t *testing.T) {
 		{lexicon.TypeDate, "2023-12-31", testJan1, 1, true},
 		{lexicon.TypeDate, "2023-01-15Z", "2023-01-15+00:00", 0, true},
 		// Huge expanded years exceed an int but must still order correctly
-		// (arbitrary-precision year comparison), rather than overflowing to
+		// (arbitrary-precision year comparison), with no overflow to
 		// ok=false.
 		{lexicon.TypeDate, hugeDate, hugeDatePlus1, -1, true},
 		{lexicon.TypeDate, hugeDatePlus1, hugeDate, 1, true},
@@ -457,9 +457,8 @@ func TestCompareValues(t *testing.T) {
 		{typeGMonthDay, "--12-31", "--01-01", 1, true},
 
 		// Mixed-timezone partial gregorian types: the determinate ±14:00 rule
-		// needs a full calendar date, so these stay indeterminate rather than
-		// producing a wrong determinate result from normalizing a zero
-		// year/month/day field.
+		// needs a full calendar date, so these stay indeterminate. Normalizing a zero
+		// year/month/day field would produce a wrong determinate result.
 		{typeGYear, "2020", "2020Z", 0, false},
 		{typeGYearMonth, "2020-06", "2020-06Z", 0, false},
 		{typeGMonth, "--06", "--06Z", 0, false},
@@ -490,7 +489,7 @@ func TestCompareValues(t *testing.T) {
 		// Strict lexical validation gates comparison: the lenient internal date
 		// parsers used to accept these, but Compare now validates each operand
 		// against the builtin's lexical space first, so malformed input is
-		// indeterminate rather than silently comparing equal.
+		// indeterminate, and never silently compares equal.
 		{typeGYear, "2023abc", "2023", 0, false},                    // trailing junk on a gYear
 		{typeGMonthDay, "--02-30", "--02-29", 0, false},             // Feb 30 is not a valid gMonthDay
 		{lexicon.TypeDate, "2023-02-29", "2023-02-28", 0, false},    // 2023 is not a leap year
@@ -503,7 +502,7 @@ func TestCompareValues(t *testing.T) {
 		// Strict lexical validation now also gates the numeric, float and binary
 		// value-comparable types, not just date/time. A non-integer lexical, an
 		// out-of-range subtype value, a non-decimal lexical, and the wrong-case
-		// "Inf" are all indeterminate rather than silently comparing.
+		// "Inf" are all indeterminate, and none of them silently compares.
 		{lexicon.TypeInteger, "1.0", "1", 0, false},            // not an integer lexical
 		{"int", "2147483648", "0", 0, false},                   // out of range for xs:int
 		{"unsignedByte", "-1", "0", 0, false},                  // negative is out of range
@@ -521,7 +520,7 @@ func TestCompareValues(t *testing.T) {
 		// Date/time lexicals are whiteSpace=collapse, so XSD-whitespace padding
 		// (space/tab/CR/LF) must be stripped before validation and parsing, exactly
 		// like the numeric/binary paths. A padded operand therefore compares equal
-		// to its trimmed form rather than being rejected.
+		// to its trimmed form, and is never rejected.
 		{lexicon.TypeDate, " 2023-01-01 ", testJan1, 0, true},
 		{lexicon.TypeDateTime, "\t2023-01-15T10:30:00\n", testDT0, 0, true},
 		{lexicon.TypeTime, " 10:30:00 ", testT0, 0, true},
@@ -534,8 +533,8 @@ func TestCompareValues(t *testing.T) {
 
 		// Huge duration components must not overflow: months are parsed as big.Int
 		// and seconds as big.Rat, so a year/day count far beyond int64 range that
-		// passes ValidateBuiltin also compares correctly rather than failing to
-		// parse.
+		// passes ValidateBuiltin also compares correctly, with no parse
+		// failure.
 		{lexicon.TypeDuration, "P999999999999999999999999Y", "P999999999999999999999999Y", 0, true},
 		{lexicon.TypeDuration, "P999999999999999999999998Y", "P999999999999999999999999Y", -1, true},
 		{lexicon.TypeDuration, "P99999999999999999999D", "PT8639999999999999999913600S", 0, true},

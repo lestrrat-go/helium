@@ -479,8 +479,7 @@ func TestPINode(t *testing.T) {
 	// and never dereferences the receiver. The other strict leaves (Text, Comment,
 	// CDATASection) are not covered here — their rejection message formats
 	// n.Type() through the value-receiver docnode method, which dereferences a nil
-	// receiver, and that is out-of-contract caller misuse rather than guarded
-	// behavior.
+	// receiver, and that is out-of-contract caller misuse, outside what this guards.
 	t.Run("AddChild on a typed-nil receiver", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		elem := mustCreateElement(t, doc, "root")
@@ -940,8 +939,8 @@ func TestLeafGuards(t *testing.T) {
 	})
 
 	// inserting an already-linked
-	// non-MutableNode operand (NamespaceNodeWrapper) detaches it from its old parent
-	// rather than silently skipping the unlink and leaving a stale link.
+	// non-MutableNode operand (NamespaceNodeWrapper) detaches it from its old parent,
+	// skipping no unlink and leaving no stale link.
 	t.Run("AddChild with a non-mutable operand", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		src := mustCreateElement(t, doc, "src")
@@ -1031,7 +1030,7 @@ func TestLeafGuards(t *testing.T) {
 
 	// the multi-operand splice loop
 	// in replaceNode when one operand is a non-MutableNode wrapper, ensuring the
-	// loop links operands via base pointers rather than MutableNode setters.
+	// loop links operands via base pointers, bypassing the MutableNode setters.
 	t.Run("Replace of several nodes with a non-mutable operand", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		root := mustCreateElement(t, doc, "root")

@@ -21,7 +21,7 @@ import (
 // DecodeElement charges charge for the base64 content of e's character-data
 // children and then decodes it. It never builds the value's lexical text.
 //
-// That distinction is the whole point of taking an element rather than a
+// That distinction is the whole point of taking an element in place of a
 // string. xs:base64Binary permits XML whitespace between characters, and a
 // value's text may arrive as any number of text and CDATA children, so the
 // lexical length an attacker controls has no relation to the decoded bytes a
@@ -36,12 +36,12 @@ import (
 // builds just the characters the decoder will see.
 //
 // Text, CDATA, and entity-reference children are read, and nothing else is.
-// That is a bound rather than mere tidiness: an element child's Content is the
+// That is a bound, and not mere tidiness: an element child's Content is the
 // concatenation of that child's WHOLE subtree, aggregated into one buffer, so
 // reading a single element child would materialize an arbitrarily large tree
 // before any charge — exactly what counting first exists to prevent.
 //
-// An element child is refused with an error rather than skipped, because
+// An element child is refused with an error and never skipped, because
 // xs:base64Binary is a simple type and a simple content type admits only
 // character information items. Neither ds:DigestValue (a restriction of
 // xs:base64Binary) nor ds:SignatureValue (a simpleContent extension of it) may
@@ -66,7 +66,7 @@ import (
 // characters at most four thirds of it, the decoded bytes exactly it, and
 // nothing at all scaling with the lexical length. The copy
 // [helium.Text.Content] returns per child is the floor, so the peak is the
-// largest single child rather than the whole value.
+// largest single child, well under the whole value.
 //
 // charge's error is returned unchanged so a caller can pass its own
 // resource-limit error straight through; every other error returned is a
@@ -98,7 +98,7 @@ func DecodeElement(e *helium.Element, charge func(int) error) ([]byte, error) {
 	}
 	// The same decode DecodeString performs, minus the copy converting the
 	// already-stripped characters to a string, and sized at the count the
-	// charge approved rather than at encoding/base64's own padding-blind
+	// charge approved, in place of encoding/base64's own padding-blind
 	// DecodedLen — see [Counter.DecodedLen].
 	decoded := make([]byte, counter.DecodedLen())
 	n, err := base64.StdEncoding.Decode(decoded, chars)

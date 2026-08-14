@@ -241,7 +241,7 @@ func TestAddNamespaceDecl(t *testing.T) {
 	// The per-prefix dedup scan in DeclareNamespace/AddNamespaceDecl tolerates a
 	// nil nsDefs slot. The public AddNamespaceDecl rejects a nil ns with
 	// ErrNilNode, so a nil entry can only arise from a direct in-package field
-	// write; the scan must skip it rather than dereference it.
+	// write; the scan must skip it and never dereference it.
 	t.Run("nil nsDefs entry is skipped", func(t *testing.T) {
 		doc := NewDefaultDocument()
 		root, err := doc.CreateElement("root")
@@ -287,7 +287,7 @@ func TestSetNamespace(t *testing.T) {
 	// CreateElementNS reaches SetNamespace: an element created in one document
 	// with a namespace owned by another must keep its prefix/URI after the source
 	// document is freed and its slab is recycled. The observable serialization
-	// stays <p:root> rather than mutating to the reused binding.
+	// stays <p:root>, and never mutates to the reused binding.
 	t.Run("CreateElementNS namespace survives the source Free", func(t *testing.T) {
 		dest := NewDocument("1.0", "", StandaloneImplicitNo)
 		src := NewDocument("1.0", "", StandaloneImplicitNo)

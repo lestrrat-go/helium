@@ -7,7 +7,7 @@
 // normally added after each top-level child. Package helium installs both hooks
 // in its init.
 //
-// Hooks are typed with any (rather than helium.Writer) to avoid an import cycle:
+// Hooks are typed with any, in place of helium.Writer, to avoid an import cycle:
 // package helium imports this package to register them, so this package must not
 // import helium.
 package writerctl

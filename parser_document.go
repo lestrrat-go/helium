@@ -223,7 +223,7 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 
 	if cur.Peek() != '<' {
 		// A cancelled or failed read can leave the cursor at an apparent end
-		// of input; report the underlying cause rather than a misleading
+		// of input; report the underlying cause, in place of a misleading
 		// "start tag expected".
 		if err := ctx.Err(); err != nil {
 			return err
@@ -253,7 +253,7 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	}
 	// A clean Done() may mask a transcoding/decode error (e.g. an unpaired
 	// UTF-16 surrogate the decoder replaced with U+FFFD). Surface it as a fatal
-	// error rather than accepting truncated/malformed encoded input.
+	// error, so truncated or malformed encoded input is never accepted.
 	if err := pctx.cursorDecodeErr(); err != nil {
 		return pctx.error(ctx, err)
 	}
@@ -287,7 +287,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 	for {
 		// Check the context BEFORE cur.Done(), which may refill the cursor
 		// from an io.Reader and block; this lets a cancelled context be
-		// observed between reads rather than after a blocking refill.
+		// observed between reads, ahead of any blocking refill.
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -385,7 +385,7 @@ func (pctx *parserCtx) skipToRecoverPoint(ctx context.Context) error {
 	for {
 		// Check the context BEFORE cur.Done(), which may refill the cursor
 		// from an io.Reader and block; this lets a cancelled context abort
-		// recovery rather than spin or block.
+		// recovery, with no spin and no block.
 		if err := ctx.Err(); err != nil {
 			return err
 		}

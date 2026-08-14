@@ -160,7 +160,7 @@ func TestDecodedLen(t *testing.T) {
 			// And the same value line-wrapped, the way an XML producer
 			// would emit it.
 			{name: "junk body with padding and whitespace", value: "! \t!\r\n==", chars: 4},
-			// One '=' rather than two, so the deduction is smaller but
+			// One '=' in place of two, so the deduction is smaller but
 			// just as wrong.
 			{name: "junk body with single trailing padding", value: "!!!=", chars: 4},
 			// More than one quantum, so the shape check is not a
@@ -190,7 +190,7 @@ func TestDecodedLen(t *testing.T) {
 	// below can build. The alphabet carries one character of each kind that
 	// steers the count — two alphabet characters, padding, two whitespace
 	// forms, and two characters outside the alphabet — so the enumeration
-	// reaches every lexical shape the counter distinguishes rather than the
+	// reaches every lexical shape the counter distinguishes, well past the
 	// shapes anyone thought to name.
 	t.Run("exhaustive over short values", func(t *testing.T) {
 		const alphabet = "AB= \n!@"
@@ -398,7 +398,7 @@ func parseEntityValueElement(t *testing.T, decls, markup string) *helium.Element
 }
 
 // parseWholeDocumentValueElement parses doc whole and returns its document
-// element, for a case whose trigger lives in the prolog rather than in the
+// element, for a case whose trigger lives in the prolog, outside the
 // value.
 func parseWholeDocumentValueElement(t *testing.T, doc string) *helium.Element {
 	t.Helper()
@@ -466,7 +466,7 @@ func TestDecodeElement(t *testing.T) {
 
 	t.Run("reports the charge error for an over-budget invalid value", func(t *testing.T) {
 		// The charge precedes the decode, so a value that is both over budget
-		// and undecodable reports the budget rather than the base64 error. The
+		// and undecodable reports the budget, and never the base64 error. The
 		// count is the decoder's own buffer size for those characters, which is
 		// what a rejected decode would still allocate.
 		elem := parseValueElement(t, "!!!!!!!!")
@@ -565,8 +565,8 @@ func TestDecodeElement(t *testing.T) {
 	})
 
 	// Markup in the replacement text is likewise raw characters, which are not
-	// in the base64 alphabet, so the value fails the decode rather than being
-	// read as a subtree.
+	// in the base64 alphabet, so the value fails the decode, and no subtree
+	// is ever read.
 	t.Run("does not read markup in an entity replacement as a subtree", func(t *testing.T) {
 		elem := parseEntityValueElement(t, `<!ENTITY m "<x/>">`, "&m;")
 		var charged int
@@ -652,7 +652,7 @@ func TestDecodeElement(t *testing.T) {
 	// from the character count alone. Sizing a decode buffer below what
 	// encoding/base64 asks for is only safe if the count is exact for every
 	// value it accepts, so this walks every payload length through all three
-	// padding shapes rather than naming one.
+	// padding shapes, naming none of them individually.
 	t.Run("sizes the decode buffer at the charged count", func(t *testing.T) {
 		for n := range 256 {
 			data := make([]byte, n)
