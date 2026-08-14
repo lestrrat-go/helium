@@ -21,7 +21,7 @@ import (
 // The check is intentionally CONSERVATIVE: whenever a sub-case cannot be decided
 // with confidence (e.g. exotic wildcard interactions, substitution-group
 // containment, or structural shapes the recursion does not model), it treats the
-// derivation as VALID rather than risk a false rejection of a legitimate schema.
+// derivation as VALID, risking no false rejection of a legitimate schema.
 // Its job is to catch the clear violations — reordered particles, added/renamed
 // particles, and widened occurrence ranges — without breaking the golden suite.
 func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
@@ -93,8 +93,8 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 	// XSD 1.1: thread the BASE type's EFFECTIVE {open content} into the check so the
 	// deep wildcard-restricts-model-group decision can tell whether a derived declared
 	// wildcard's children are governed as the base's OPEN content (delegating that
-	// interaction to the §3.4.6.4 quadrant-B guard, checkDerivedWildcardReadmitsBaseOpen)
-	// rather than the base declared model group. Recomputed read-only because
+	// interaction to the §3.4.6.4 quadrant-B guard, checkDerivedWildcardReadmitsBaseOpen),
+	// and never the base declared model group. Recomputed read-only because
 	// resolveOpenContent has not yet populated base.OpenContent.
 	if c.version == Version11 {
 		if baseOC := c.effectiveOpenContentReadonly(base, map[*TypeDef]bool{}); baseOC != nil && baseOC.Wildcard != nil {
@@ -134,7 +134,7 @@ func (c *compiler) reportInvalidRestriction(ctx context.Context, td, base *TypeD
 // baseOpenContentKey carries (in ctx) the BASE type's effective {open content} for
 // the current restriction check, so the deep wildcard-restricts-model-group decision
 // can tell whether a derived declared wildcard's children are governed as the base's
-// OPEN content (and thus by the §3.4.6.4 quadrant-B guard) rather than the base
+// OPEN content (and thus by the §3.4.6.4 quadrant-B guard), and never the base
 // declared model group. Nil/absent means the base carries no open content.
 type baseOpenContentKey struct{}
 
@@ -219,7 +219,7 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			// the only sound option.
 			//
 			// EXCEPTION (XSD 1.1 open content): a child matching the derived declared
-			// wildcard may be governed as the BASE's OPEN content rather than by the base
+			// wildcard may be governed as the BASE's OPEN content, and not by the base
 			// declared model group — but ONLY when all hold:
 			//   1. the base model group at this position is EMPTIABLE (skippable), so a
 			//      document that drops it entirely and supplies only wildcard-matched
@@ -244,8 +244,8 @@ func particleValidRestriction(ctx context.Context, r, b *Particle, schema *Schem
 			//        decided by wildcardRestrictsModelGroup below.)
 			// When all hold, the §3.4.6.4 quadrant-B guard
 			// (checkDerivedWildcardReadmitsBaseOpen) enforces the remaining soundness —
-			// processContents at least as strong — so delegate to it rather than
-			// double-reject here. A NON-emptiable base group (its required content is
+			// processContents at least as strong — so delegate to it, double-rejecting nothing
+			// here. A NON-emptiable base group (its required content is
 			// dropped), a wildcard reaching outside the base open content, or a suffix base
 			// whose derived wildcard can admit a child is NOT covered: fall through to the
 			// sound wildcardRestrictsModelGroup decision.
@@ -491,9 +491,9 @@ func groupRestrictsGroup(ctx context.Context, r *Particle, rg *ModelGroup, b *Pa
 	// sequence/choice group that is a pointless wrapper around a single WILDCARD is
 	// equivalent to that wildcard particle. The derived group must then satisfy
 	// NSRecurseCheckCardinality against the base wildcard — its TOTAL
-	// element-emission range within the wildcard's range and every leaf admitted —
-	// rather than the element-by-element positional recurse the same-compositor
-	// rules would apply, which wrongly rejects e.g. a derived sequence(e,e,any)
+	// element-emission range within the wildcard's range and every leaf admitted.
+	// The element-by-element positional recurse the same-compositor
+	// rules would apply which wrongly rejects e.g. a derived sequence(e,e,any)
 	// restricting a base sequence(any{2,3}) by mapping element e{1,1} against the
 	// wildcard{2,3} (W3C particlesHa080 valid / particlesHa081 invalid).
 	// Version-independent — groupRestrictsWildcard is the sound §3.9.6 rule.
@@ -922,8 +922,7 @@ type wildcardOnlyReduction struct {
 // reduceWildcardOnlyParticle computes the all-wildcard emission profile of a base
 // particle. It is SOUND and fail-closed: it returns ok=false whenever it cannot
 // PROVE the profile is language-exact (a non-uniform position, or an occurrence
-// combination that would introduce a count HOLE). An element declaration is handled
-// rather than excluded: an emptiable (minOccurs=0) element contributes ε (an
+// combination that would introduce a count HOLE). An element declaration is handled, and never excluded: an emptiable (minOccurs=0) element contributes ε (an
 // all-wildcard document emits zero of it), while a required (minOccurs>=1) element
 // makes the position dead.
 func reduceWildcardOnlyParticle(p *Particle) (wildcardOnlyReduction, bool) {
@@ -985,7 +984,7 @@ func reduceWildcardOnlyGroupBody(g *ModelGroup) (wildcardOnlyReduction, bool) {
 			}
 			if m.dead {
 				// A choice can avoid a dead branch, so it is excluded from the
-				// all-wildcard union rather than killing the whole choice.
+				// all-wildcard union, killing no whole choice.
 				continue
 			}
 			if !hasLive {
@@ -1529,7 +1528,7 @@ func choiceReadmitsBaseElementUnsoundly(ctx context.Context, baseGroup, derivedG
 }
 
 // nameSpillableToWildcard reports whether the derived model group can route an n-named child
-// to a WILDCARD (rather than to an element) — the condition under which a base element name n
+// to a WILDCARD, in place of to an element — the condition under which a base element name n
 // is re-admitted through that wildcard, losing the base element's validation. It is a
 // REACHABILITY test, not a compositor or occurrence-count test: element precedence steals an
 // n-named child from a wildcard ONLY when the wildcard is a DIRECT alternative of a same-level
@@ -1644,7 +1643,7 @@ func recurseAll(ctx context.Context, rParticles, bParticles []*Particle, schema 
 func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Particle, schema *Schema, version Version) bool {
 	// Flatten nested 1/1 all-group members on BOTH sides so a base all reached via
 	// an xs:group ref (carrying required elements alongside a wildcard) and a
-	// derived nested all are both fully accounted for, rather than appearing as an
+	// derived nested all are both fully accounted for, appearing as no
 	// opaque ModelGroup particle that would be silently skipped.
 	bParticles = flattenAllParticles(bParticles)
 	rParticles = flattenAllParticles(rParticles)
@@ -1757,7 +1756,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 			// here, so silently accepting it would FALSE-ACCEPT a restriction whose
 			// nested group emits content OUTSIDE the base wildcard's namespace (e.g.
 			// base all{any ns="X"}, derived sequence(choice(element bad))). Fail
-			// closed: reject rather than admit content the base may forbid. No W3C
+			// closed: reject, admitting no content the base may forbid. No W3C
 			// conformance case needs the nested-non-all-group-under-wildcard
 			// restriction path (the wildcard restriction cases are all:all with
 			// direct wildcards; the sequence:all cases carry no wildcard), so this
@@ -2032,7 +2031,7 @@ func baseWildcardExclusive(bw *Particle, bwc *Wildcard, baseWilds []*Particle) b
 //
 // The element particle's occurrence range must also be a valid restriction of
 // the base group particle's range. When the recursion cannot decide a sub-case
-// with confidence it stays conservative (accepts) rather than risk a false
+// with confidence it stays conservative (accepts), risking no false
 // rejection.
 func elementRestrictsGroup(ctx context.Context, r *Particle, b *Particle, bg *ModelGroup, schema *Schema, version Version) bool {
 	// RecurseAsIfGroup wraps R in a SINGLETON group whose {min occurs} and

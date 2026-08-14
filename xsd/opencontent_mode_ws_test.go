@@ -8,7 +8,7 @@ import (
 
 // TestOpenContent_ModeWhitespace covers the parser-normalization finding: @mode is an
 // enumeration over xs:token (whiteSpace="collapse"), so a whitespace-padded value must
-// be collapsed before the enum comparison rather than rejected.
+// be collapsed before the enum comparison, and never rejected.
 func TestOpenContent_ModeWhitespace(t *testing.T) {
 	t.Parallel()
 

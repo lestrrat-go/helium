@@ -358,7 +358,7 @@ func TestOpenContent_InterleaveRefinementKeepsTrying(t *testing.T) {
 
 // TestOpenContent_MultipleWildcardChildren covers the gauntlet finding that both
 // <xs:openContent> and <xs:defaultOpenContent> must REJECT more than one <xs:any>
-// wildcard child rather than silently using the first.
+// wildcard child, and must never silently use the first.
 func TestOpenContent_MultipleWildcardChildren(t *testing.T) {
 	t.Parallel()
 	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`

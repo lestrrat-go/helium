@@ -35,7 +35,7 @@ type openMissSchemaFS struct{ openErr error }
 func (f openMissSchemaFS) Open(string) (fs.File, error) { return nil, f.openErr }
 
 // fatalOpenError is a FatalSchemaLoader-satisfying open error: a resource/policy
-// denial that must abort compilation rather than be demoted to a warning.
+// denial that must abort compilation, and must never be demoted to a warning.
 type fatalOpenError struct{}
 
 func (fatalOpenError) Error() string         { return "xsd_test: fatal open policy denial" }

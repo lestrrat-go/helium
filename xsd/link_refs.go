@@ -2837,7 +2837,7 @@ var builtinRestrictionParent = map[string]string{
 // of its item type, per XML Schema Part 2. These three list builtins carry no
 // BaseType links (they are registered as bare names), so builtinDerivesFrom
 // recognizes them explicitly to decide atomic-vs-list and list-vs-list
-// derivation rather than treating them as "unknown".
+// derivation, treating them as anything but "unknown".
 var builtinListItem = map[string]string{
 	typeIDRefs:   lexicon.TypeIDREF,
 	typeEntities: typeEntity,
@@ -2859,7 +2859,7 @@ func builtinDerivesFrom(derived, base string) (bool, bool) {
 	// decisions even though they carry no parent links: a list type is the same
 	// as itself, validly derives from xs:anySimpleType (cos-st-derived-ok 2.2.3),
 	// and is otherwise UNRELATED to every atomic type and to the other two list
-	// types. Deciding these (rather than returning "unknown") rejects an invalid
+	// types. Deciding these, in place of returning "unknown", rejects an invalid
 	// widening such as xs:IDREFS "restricted" by xs:string.
 	if isBuiltinListName(derived) || isBuiltinListName(base) {
 		if derived == base {
@@ -2956,8 +2956,8 @@ func simpleTypeValidlyRestricts(derived, base *TypeDef) bool {
 	// link and no list marker, so resolveVariety reports Atomic and the list
 	// branch above does not catch them. isDerivedFrom already failed, so the
 	// derived type is not in the base list's restriction chain (a real
-	// <xs:restriction base="xs:IDREFS"> sets the BaseType pointer). Decide here
-	// rather than fall through to the db/bb shortcut, which returns "valid"
+	// <xs:restriction base="xs:IDREFS"> sets the BaseType pointer). Decide here,
+	// falling through to no db/bb shortcut, which returns "valid"
 	// whenever the derived side has no builtin base name (db == "") — that is the
 	// gap that let an unrelated user list (xs:list itemType="xs:string") stand in
 	// for an xs:IDREFS base. An unrelated list or atomic is not a valid
@@ -3816,7 +3816,7 @@ func (c *compiler) resolveQName(ctx context.Context, elem *helium.Element, attrN
 	// present-but-empty, never absent. reportInvalidQNameValue dedups by (element,
 	// attribute, value), so a caller that already validated the same value
 	// (checkAttributeUse) does not double-report. Return a distinguished SENTINEL
-	// QName (isInvalidQName) rather than a plausible {targetNamespace}ref lookup key,
+	// QName (isInvalidQName), and no plausible {targetNamespace}ref lookup key,
 	// so downstream ref-resolution SKIPS the malformed value instead of emitting a
 	// spurious "does not resolve to a(n) …" follow-on on top of the clear
 	// invalid-QName diagnostic. A recovery placeholder is still installed for the

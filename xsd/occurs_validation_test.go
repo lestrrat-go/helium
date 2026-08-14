@@ -137,8 +137,8 @@ func TestOccursValidation(t *testing.T) {
 	})
 
 	// A group reference can also appear directly under xs:complexType (without an
-	// enclosing compositor). That branch lives in read_types.go rather than
-	// read_particles.go and formerly used the non-validating occurs parser, so a
+	// enclosing compositor). That branch lives in read_types.go, and not
+	// read_particles.go, and formerly used the non-validating occurs parser, so a
 	// negative minOccurs was silently accepted while xmllint rejects it.
 	t.Run("rejects on direct group reference under complexType", func(t *testing.T) {
 		t.Parallel()
