@@ -32,10 +32,10 @@ so a failed conformance run never leaves a public tag or partial release behind.
 4. The `timeline-presence` job checks in seconds that `version` has a row in the
    committed timeline (from step 2). If it does not, the run stops here — fix step
    2 and re-dispatch.
-5. The `conformance-gate` job runs the `xslt30`, `xmldsig2ed`, `xmldsig11`, and
-   `merlinxmldsig` suites against the pinned harness commit; only `xslt30`
-   enables slow tests. If any suite fails, the run stops here — **no tag, no
-   release.**
+5. The `conformance-gate` job runs the `xslt30`, `xmldsig2ed`, `xmldsig11`,
+   `merlinxmldsig`, and `xmlenc11` suites against the pinned harness commit;
+   only `xslt30` enables slow tests. If any suite fails, the run stops here —
+   **no tag, no release.**
 6. On green, the `release` job waits for **environment approval** (the `release`
    environment: maintainer reviewer, restricted to `main`). Approve it in the run.
 7. After approval it creates and pushes the `version` tag, then runs goreleaser
@@ -61,10 +61,10 @@ candidate and superseded by a real-tag re-measure afterwards. See
 ## Conformance gate
 
 A release cannot be tagged/published unless the XSLT 3.0, XMLDSig2Ed, XMLDSig
-1.1, and Merlin XMLDSig conformance suites pass with **0 failures**. The full
-XSLT suite is **release-gating, not
-PR-gating**: the heavyweight W3C conformance suites are never run on ordinary
-pushes or pull requests (they clone large upstream fixture sets and, with the
+1.1, Merlin XMLDSig, and XML Encryption 1.1 conformance suites pass with
+**0 failures**. The full XSLT suite is **release-gating, not PR-gating**: the
+heavyweight W3C conformance suites are never run on ordinary pushes or pull
+requests (they clone large upstream fixture sets and, with the
 performance-gated slow tests enabled, take many minutes), so they must not block
 day-to-day PR CI.
 
@@ -72,10 +72,10 @@ day-to-day PR CI.
 
 `.github/workflows/release.yml`'s `conformance-gate` matrix runs the reusable
 `.github/workflows/conformance-run.yml` for `xslt30`, `xmldsig2ed`, `xmldsig11`,
-and `merlinxmldsig`. Only the XSLT entry sets `slow: true`, which enables
-`HELIUM_SLOW_TESTS=1`. The `release` job declares `needs: conformance-gate` and
-runs *after* every matrix entry, so the tag is created and goreleaser runs only
-on a green set of suites.
+`merlinxmldsig`, and `xmlenc11`. Only the XSLT entry sets `slow: true`, which
+enables `HELIUM_SLOW_TESTS=1`. The `release` job declares
+`needs: conformance-gate` and runs *after* every matrix entry, so the tag is
+created and goreleaser runs only on a green set of suites.
 
 The reusable run gates on the reported failure **count**: after running the
 suite it reads `<testsuites failures="N">` from the JUnit report and fails the
@@ -91,10 +91,10 @@ tests on.
 
 ### Generated suite summaries
 
-The committed suite summaries under `xmldsig1/` are generated feature evidence
-for the helium and harness commits recorded in each file. They do not represent
-release-tag measurements. Release-tag results belong in `CONFORMANCE.md` and
-`tools/conformance-timeline/`.
+The committed suite summaries under `xmldsig1/` and `xmlenc1/` are generated
+feature evidence for the helium and harness commits recorded in each file. They
+do not represent release-tag measurements. Release-tag results belong in
+`CONFORMANCE.md` and `tools/conformance-timeline/`.
 
 ## The pinned release harness
 
@@ -113,7 +113,9 @@ gh api repos/lestrrat-go/helium-w3c-tests/commits/main --jq .sha
 ```
 
 Bump the pin in its own PR. It only advances which tests gate a release; nothing
-else depends on it.
+else depends on it. The one exception is adding a suite to the
+`conformance-gate` matrix: the pinned harness has to already carry that suite,
+so a new matrix entry and the pin bump that supplies it belong in the same PR.
 
 ## Environment approval
 

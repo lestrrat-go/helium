@@ -62,15 +62,16 @@ jobs:
           )
           PY
 
-  # Release-gating conformance runs: the full slow XSLT 3.0 suite and all three
-  # XMLDSig suites must pass with zero failures before anything is tagged or
-  # published. Every matrix entry is a required job result.
+  # Release-gating conformance runs: the full slow XSLT 3.0 suite, all three
+  # XMLDSig suites, and the XML Encryption 1.1 suite must pass with zero
+  # failures before anything is tagged or published. Every matrix entry is a
+  # required job result.
   conformance-gate:
     needs: timeline-presence
     strategy:
       fail-fast: false
       matrix:
-        suite: [xslt30, xmldsig2ed, xmldsig11, merlinxmldsig]
+        suite: [xslt30, xmldsig2ed, xmldsig11, merlinxmldsig, xmlenc11]
     permissions:
       contents: read
     uses: ./.github/workflows/conformance-run.yml
@@ -79,7 +80,9 @@ jobs:
       slow: ${{ matrix.suite == 'xslt30' }}
       # Pin the release gate to the certified harness commit. Update this SHA
       # only after a newer harness commit passes the manual Conformance run.
-      harness_ref: 6c987d8fe551efb4a9171fdb5657a922cff442d3
+      # This one is the first to carry the xmlenc11 suite, which the matrix
+      # above gates on, so the two must advance together.
+      harness_ref: 39d9ff5f072cf804e503588958178fc6e71cd32d
 
   release:
     needs: conformance-gate
