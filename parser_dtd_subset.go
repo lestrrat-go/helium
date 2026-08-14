@@ -220,7 +220,7 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 	// below pushes the replacement text so the keyword (and body) are parsed.
 	// skipBlankRun still records an over-cap whitespace run in pctx.blankRunErr,
 	// which must be surfaced here so the specific resource-limit error is reported
-	// at its source rather than a generic conditional-section sentinel
+	// at its source, in place of a generic conditional-section sentinel
 	// (ErrConditionalSectionKeyword / ErrConditionalSectionNotFinished).
 	if c := pctx.getCursor(); c != nil {
 		if _, err := pctx.skipBlankRun(ctx, c); err != nil {
@@ -289,7 +289,7 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			pctx.popSpentExternalSubsetInputs(baseLen)
 			if pctx.inputTab.Len() <= baseLen {
 				// Inspect the section's OWN cursor (the floor cursor at baseLen-1)
-				// directly rather than via getCursor(): if this external DTD's
+				// directly, bypassing getCursor(): if this external DTD's
 				// INCLUDE section reaches EOF before its "]]>" terminator,
 				// getCursor() would auto-pop the exhausted section cursor and
 				// return the enclosing (e.g. main document) cursor, which is not
@@ -839,7 +839,7 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 	// file, matching every other declaration error in that resource. The TextDecl
 	// grammar is enforced by parseTextDecl: VersionInfo is optional, EncodingDecl
 	// is REQUIRED, and no StandaloneDecl is permitted — a version-only or
-	// standalone-bearing declaration is rejected rather than leniently accepted.
+	// standalone-bearing declaration is rejected, and never leniently accepted.
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
 		return nil, "", err

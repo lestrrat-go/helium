@@ -68,7 +68,7 @@ func (f validPathFS) Open(name string) (fs.File, error) {
 
 // exactNameFS accepts ONLY one exact name (the historical file-URI name) and
 // records every open, standing in for a permissive caller FS keyed on the
-// file:// URI name rather than a normalized path.
+// file:// URI name, in place of a normalized path.
 type exactNameFS struct {
 	accept  string
 	content []byte

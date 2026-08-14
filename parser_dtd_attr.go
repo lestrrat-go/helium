@@ -56,7 +56,7 @@ func (pctx *parserCtx) scanQuotedLiteral(ctx context.Context, cur strcursor.Curs
 				// exhausted buffer. When the buffer is exhausted (no byte present)
 				// distinguish a clean end-of-input from a read failure (e.g. a
 				// push-stream Read returning context.Canceled) so cancellation is
-				// surfaced rather than treated as an unterminated literal.
+				// surfaced, and never treated as an unterminated literal.
 				if b == 0 && !cur.HasByteAt(off) {
 					if err := cur.Err(); err != nil {
 						return "", pctx.error(ctx, err)
@@ -317,7 +317,7 @@ func (pctx *parserCtx) parseDefaultDecl(ctx context.Context) (deftype enum.Attri
 		// The mandatory "S" after #FIXED — and, in the external subset, a
 		// parameter entity supplying the #FIXED value (e.g. `#FIXED %v;`) — is
 		// consumed through skipBlanksPE so a PE-supplied value's opening quote is
-		// reached rather than left unexpanded.
+		// reached, and never left unexpanded.
 		adv, serr := pctx.skipBlanksPE(ctx)
 		if serr != nil {
 			deftype = enum.AttrDefaultInvalid
@@ -567,7 +567,7 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 	// provided by a parameter entity's §4.4.8 padding or a crossed PE-input
 	// boundary in the external subset, so require it through skipBlanksPE (which
 	// also expands a "%pe;" that supplies the element name / attribute
-	// definitions) rather than a raw isBlankByte check. Re-fetch the cursor after
+	// definitions), in place of a raw isBlankByte check. Re-fetch the cursor after
 	// each skip and after each sub-parse: an expanded PE pushes a new input and an
 	// exhausted PE input is popped, so a cursor captured earlier is stale.
 	adv, err := pctx.skipBlanksPE(ctx)

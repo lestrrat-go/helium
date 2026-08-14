@@ -320,7 +320,7 @@ func TestExternalSubsetTextDecl(t *testing.T) {
 		require.NotNil(t, root)
 		require.Equal(t, "doc", root.LocalName())
 		// The general entity declared in the external subset resolved, proving the
-		// subset was parsed past its TextDecl rather than abandoned.
+		// subset was parsed past its TextDecl, and never abandoned.
 		require.Equal(t, "hello from ext subset", string(root.Content()))
 	})
 

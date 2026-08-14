@@ -184,7 +184,7 @@ func TestStripBlanks(t *testing.T) {
 	// which maps EMPTY to "mixed"): only ELEMENT content is ignorable and only
 	// ANY/MIXED is significant; EMPTY and UNDEFINED fall through to the heuristic,
 	// which here classifies the run as ignorable. So whitespace must be stripped for
-	// an EMPTY-declared element, matching an element-content model rather than an
+	// an EMPTY-declared element, matching an element-content model, as opposed to an
 	// ANY/MIXED one. Both the internal and external subset declaration paths must
 	// behave identically (areBlanks consults doc->intSubset then doc->extSubset).
 	t.Run("an empty content model", func(t *testing.T) {

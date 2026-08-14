@@ -142,7 +142,7 @@ func (overReportingInfo) Sys() any { return nil }
 
 // partialReadFS serves a small DTD whose Read hands back a few valid bytes and
 // then a NON-EOF error (a truncated/partial read) well under the size cap. A
-// truncated external subset must surface the read error rather than being
+// truncated external subset must surface the read error, and must never be
 // silently treated as an absent DTD.
 type partialReadFS struct {
 	prefix []byte
@@ -408,7 +408,7 @@ func TestParseExternalDTDLimits(t *testing.T) {
 <r/>`
 
 		// The DTD content is well under the cap but Read returns a non-EOF error,
-		// modelling a truncated transport. The parse must fail rather than silently
+		// modelling a truncated transport. The parse must fail, and must never silently
 		// accept the document as if no external subset existed.
 		fsys := partialReadFS{prefix: []byte("<!ELEMENT r EMPTY>")}
 
@@ -660,8 +660,8 @@ func TestParseExternalDTDParameterEntity(t *testing.T) {
 	// the property
 	// the blank-run cap MUST NOT break: the external-subset declaration step uses a
 	// blank-ONLY skip (skipBlankRun) precisely so a "%pe;" reference that follows
-	// whitespace is left for parsePEReference to expand, rather than being consumed
-	// by skipBlanks/handlePEReference without pushing its replacement text. With a
+	// whitespace is left for parsePEReference to expand. Consuming it
+	// through skipBlanks/handlePEReference would push no replacement text. With a
 	// non-trivial (but under-cap) whitespace run before "%pe;", the PE must still
 	// expand and its declarations apply — here a general entity declared inside the
 	// PE is registered.

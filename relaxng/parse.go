@@ -518,7 +518,7 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // When the result is computed by joining baseDir+href, any ".." segments
 // that would ascend above baseDir produce a non-nil error — the caller
 // reports an Include load failure with a clear "escapes base directory"
-// message rather than silently reading from an unintended directory.
+// message, and reads from no unintended directory.
 // Mirrors xsd's validateSchemaPath; defense-in-depth alongside whatever
 // path constraints the configured fs.FS enforces.
 func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) (string, error) {

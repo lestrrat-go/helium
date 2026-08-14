@@ -415,8 +415,8 @@ func nameClassCoversAll(outer *nameClass) bool {
 
 // nameClassContainsNoMatch reports whether the name class tree contains a
 // poisoned (ncNoMatch) leaf. It is used to detect an invalid name class nested
-// inside an <except>, which must poison the enclosing anyName/nsName rather than
-// be silently treated as an empty exclusion.
+// inside an <except>, which must poison the enclosing anyName/nsName, and must never be
+// silently treated as an empty exclusion.
 func nameClassContainsNoMatch(nc *nameClass) bool {
 	if nc == nil {
 		return false

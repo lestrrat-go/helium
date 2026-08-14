@@ -42,15 +42,15 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 	// avoiding the bytes.Buffer intermediate.
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
 		// Streaming SAX consumers that configured a char-buffer size get
-		// bounded memory: scan and deliver the run in fixed-size chunks rather
-		// than buffering the whole delimiter-free run (which would also grow the
-		// cursor's internal buffer) before chunking only the delivery.
+		// bounded memory: scan and deliver the run in fixed-size chunks. Buffering the whole
+		// delimiter-free run would also grow the cursor's internal buffer,
+		// leaving only the delivery chunked.
 		// pctx.doc == nil ensures no DOM is being built. A SAX wrapper that
 		// delegates to a TreeBuilder has pctx.treeBuilder == nil (it is not the
 		// concrete *TreeBuilder) yet pctx.doc is populated (TreeBuilder.StartDocument
 		// set it). Such wrappers must use the single-shot classification path so a
 		// large whitespace run is classified over the whole run and delivered via
-		// IgnorableWhitespace (which StripBlanks drops) rather than being downgraded
+		// IgnorableWhitespace (which StripBlanks drops), with no downgrade
 		// to Characters by the chunked path's blankBudget cap.
 		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil && pctx.doc == nil &&
 			pctx.sax != nil && !pctx.disableSAX {
@@ -246,7 +246,7 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 		// be buffered until then. To bound memory against a pathological multi-MiB
 		// run of pure whitespace, once the buffered blank prefix grows past
 		// blankBudget we stop treating it as ignorable and deliver it (and the
-		// rest of the run) as Characters rather than IgnorableWhitespace. Only
+		// rest of the run) as Characters, no longer as IgnorableWhitespace. Only
 		// abnormally large pure-blank runs are affected — realistic indentation /
 		// pretty-printing whitespace is far below blankBudget (see
 		// minPendingBlankBytes) and is still delivered as IgnorableWhitespace.
@@ -297,7 +297,7 @@ const minPendingBlankBytes = 1 << 16 // 64 KiB
 // it via handler in chunks of at most limit bytes, with bounded memory. It is
 // called once the run's classification is known and at least one chunk has
 // already been consumed, so an empty scan means the run ended at a delimiter or
-// EOF (handled by the caller) rather than an error.
+// EOF (handled by the caller), and signals no error.
 func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.UTF8Cursor, limit int, handler func(context.Context, []byte) error) error {
 	for {
 		// A SAX handler may have requested a stop on the previous chunk's
@@ -1155,7 +1155,7 @@ func (pctx *parserCtx) checkAttrValueStringWFC(ctx context.Context, s string, fl
 
 // walkAttrValueWFC walks content for a literal '<' or a nested general reference
 // to an external/unparsed/undefined entity, following internal general entities
-// transitively. It uses an EXPLICIT work stack rather than native recursion so a
+// transitively. It uses an EXPLICIT work stack, in place of native recursion, so a
 // long ACYCLIC chain of nested internal entities cannot grow the Go call stack
 // without bound; the visited set both guards reference cycles and bounds the
 // walk to the number of distinct declared entities. Each internal entity whose

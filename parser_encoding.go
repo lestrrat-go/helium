@@ -263,7 +263,7 @@ func (ctx *parserCtx) switchEncoding() error {
 //   - anything else — a different Unicode family, the opposite-endian UTF-16,
 //     or a non-Unicode encoding such as iso-8859-1 — is a fatal conflict.
 //
-// It consults ctx.declaredEncoding (the parsed EncName) rather than
+// It consults ctx.declaredEncoding (the parsed EncName), never
 // ctx.encoding, so it still fires under IgnoreEncoding(true): that option
 // suppresses the decoder switch (erasing ctx.encoding) but must not suppress
 // this fatal well-formedness check.

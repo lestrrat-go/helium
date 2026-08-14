@@ -82,7 +82,7 @@ func (s *stream) stopWatcher() {
 
 func (s *stream) Read(p []byte) (int, error) {
 	// Per the io.Reader contract a zero-length Read must return (0, nil)
-	// immediately rather than block on the wait loop below.
+	// immediately, never blocking on the wait loop below.
 	if len(p) == 0 {
 		return 0, nil
 	}
@@ -95,7 +95,7 @@ func (s *stream) Read(p []byte) (int, error) {
 	}
 
 	// Honor context cancellation before delivering buffered bytes so a
-	// cancelled parse aborts promptly rather than draining the buffer.
+	// cancelled parse aborts promptly, leaving the buffer undrained.
 	// Record the error so the parse epilogue can surface a cancellation
 	// the underlying parser may have swallowed. Only a Read that actually
 	// returns the context error sets this; a parse that completes without

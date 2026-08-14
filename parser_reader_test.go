@@ -106,7 +106,7 @@ type ebcdicSlowTailReader struct {
 // character-data buffering is the only large allocation under test. It records
 // the cumulative number of payload bytes it has handed out in nread, which the
 // memory-bounds test samples at the first SAX callback to prove the parser
-// streams rather than draining the whole run before delivering anything.
+// streams, draining no more than a bounded prefix before delivering anything.
 type genCharDataReader struct {
 	prefix []byte
 	fill   byte
@@ -582,7 +582,7 @@ func TestParseReaderEBCDIC(t *testing.T) {
 
 	// against a
 	// regression where the streaming EBCDIC path left inputSize seeded from the
-	// bounded sniff prefix (~256/512 bytes) rather than the real document size. A
+	// bounded sniff prefix (~256/512 bytes) in place of the real document size. A
 	// large internal entity referenced exactly once is legitimate (no
 	// amplification), and Parse([]byte) accepts it because inputSize is the full
 	// slice length. With only the prefix length as the divisor, the
@@ -864,8 +864,8 @@ func TestParseContextCancel(t *testing.T) {
 	})
 
 	// cancelling the context
-	// while Parse is running aborts promptly with the context error rather than
-	// running to completion. Cancellation is triggered deterministically from a SAX
+	// while Parse is running aborts promptly with the context error, well before
+	// it would run to completion. Cancellation is triggered deterministically from a SAX
 	// handler after a known number of elements have been parsed.
 	t.Run("cancelled during the parse", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())

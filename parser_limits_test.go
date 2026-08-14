@@ -551,8 +551,8 @@ func TestMaxNodeContentSize(t *testing.T) {
 	})
 
 	// the substituted
-	// entity-replacement path enforces the cap DURING decode rather than after
-	// fully materializing the expansion. The entity nests so its stored literal is
+	// entity-replacement path enforces the cap DURING decode, well before
+	// the expansion is fully materialized. The entity nests so its stored literal is
 	// tiny (~tens of KiB) but its full expansion is ~64 MiB. The amplification guard
 	// is disabled so only the node-content cap can stop it. If the decoder still
 	// built the whole replacement string before checking the cap (the old
@@ -622,12 +622,12 @@ func TestCharBufferSize(t *testing.T) {
 
 	// a large
 	// delimiter-free character-data run delivered to a streaming SAX consumer is
-	// scanned and delivered in bounded chunks rather than materialized whole. Before
+	// scanned and delivered in bounded chunks, and never materialized whole. Before
 	// the fix the entire run was buffered (in charBuf and the cursor's internal
 	// buffer) before the first chunk was delivered.
 	//
-	// Rather than sampling a global heap signal (non-deterministic, especially
-	// under t.Parallel), this instruments the reader: the parser pulls bytes from r
+	// A global heap signal would be non-deterministic, especially under
+	// t.Parallel, so this instruments the reader instead: the parser pulls bytes from r
 	// on demand, so the count of bytes read at the first SAX callback shows whether
 	// delivery began before the whole payload was drained. A streaming parser fires
 	// the first callback after reading only a bounded prefix (one cursor buffer ≈
@@ -725,7 +725,7 @@ func TestCharBufferSize(t *testing.T) {
 			"an over-budget blank run is downgraded to character data, not buffered whole as ignorable whitespace")
 
 		// The first callback must fire well before the whole run has been read,
-		// proving the blank prefix is bounded rather than materialized whole.
+		// proving the blank prefix is bounded, and never materialized whole.
 		require.Less(t, readAtFirstChunk, 1<<20,
 			"bounded-whitespace policy must deliver the first chunk after reading only a bounded prefix; read %d bytes first", readAtFirstChunk)
 	})
@@ -800,7 +800,7 @@ func TestCharBufferSize(t *testing.T) {
 	// path never splits a UTF-8 rune, even when CharBufferSize is smaller than a
 	// single multi-byte rune. ScanCharDataSlice returns a lone over-budget rune
 	// whole (to guarantee progress), and deliverCharacters must then deliver it
-	// whole rather than slicing it into invalid UTF-8 fragments.
+	// whole, slicing it into no invalid UTF-8 fragments.
 	t.Run("never splits a rune", func(t *testing.T) {
 		// Mix 2-, 3-, and 4-byte runes so a 1-byte buffer is narrower than every
 		// rune in the run.
@@ -825,7 +825,7 @@ func TestCharBufferSize(t *testing.T) {
 
 	// pins the chunked streaming-SAX
 	// path's classification of an all-whitespace run that ends at an entity
-	// reference ('&') rather than a start/end tag ('<'). The single-shot path
+	// reference ('&'), in place of a start/end tag ('<'). The single-shot path
 	// (areBlanksBytes) treats such a run as character data — it is ignorable
 	// whitespace only when the delimiter that ends it is '<' or CR. An earlier
 	// chunked implementation dropped that trailing-delimiter check and misreported

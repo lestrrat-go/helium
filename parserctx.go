@@ -98,7 +98,7 @@ type parserCtx struct {
 	// ebcdicStream marks an EBCDIC document read from a streaming io.Reader: in
 	// that mode rawInput holds only a bounded sniff prefix (enough for
 	// ExtractEBCDICEncoding), and the live cursor over the prefix+remainder
-	// stream is decoded in place rather than being reset from rawInput (which
+	// stream is decoded in place, with no reset from rawInput (which
 	// would otherwise require buffering the whole — possibly unbounded — input).
 	ebcdicStream bool
 	// ebcdicConsumed counts the bytes pulled from the underlying reader on the
@@ -113,8 +113,8 @@ type parserCtx struct {
 	instate        parserState
 	keepBlanks     bool
 	// charDataFromCharRef marks that the character data currently being delivered
-	// to the SAX Characters sink originated from a character reference (&#N;/&#xN;)
-	// rather than literal source text. TreeBuilder.Characters stamps the resulting
+	// to the SAX Characters sink originated from a character reference (&#N;/&#xN;),
+	// as opposed to literal source text. TreeBuilder.Characters stamps the resulting
 	// Text node's fromCharRef flag from it, so element-content validity can tell
 	// char-reference whitespace (not ignorable) from literal whitespace. Set only
 	// for the duration of a char-ref delivery (and a cached-entity Text replay of
@@ -157,8 +157,8 @@ type parserCtx struct {
 	// hasExternalPERef records that at least one EXTERNAL parameter entity was
 	// referenced (its content loaded from an external resource). Unlike a purely
 	// internal DTD, an external PE may fail to load or resolve incompletely, so
-	// helium cannot be certain an undeclared general entity is truly undeclared
-	// rather than declared in unread external markup — the undeclared-entity
+	// helium cannot be certain an undeclared general entity is truly undeclared,
+	// as opposed to declared in unread external markup — the undeclared-entity
 	// validity error (VC: Entity Declared) is therefore suppressed in that case.
 	hasExternalPERef bool
 	pedantic         bool
@@ -215,8 +215,8 @@ type parserCtx struct {
 // (its cursor) is popped from the input stack. It is used to scope pctx.baseURI
 // to an external parameter entity's own resolved URI while that entity's
 // replacement text is being parsed, so relative system IDs in declarations
-// INSIDE the entity resolve against the entity's location rather than the
-// containing DTD.
+// INSIDE the entity resolve against the entity's location, and never against
+// the containing DTD.
 type baseURIScope struct {
 	input   any
 	baseURI string
@@ -400,10 +400,10 @@ func (ctx *parserCtx) pushInput(in any) {
 // while that input is on the stack. The previous baseURI is restored when this
 // exact input is popped (popInput), so the override lasts precisely as long as
 // the pushed cursor is being consumed — even though the cursor is drained later
-// by the surrounding declaration loop rather than within the call that pushed it.
+// by the surrounding declaration loop, well outside the call that pushed it.
 // An empty baseURI is treated as "no override" (the input is pushed normally),
-// because clobbering baseURI to "" would break relative resolution rather than
-// help it.
+// because clobbering baseURI to "" would break relative resolution, helping
+// nothing.
 func (ctx *parserCtx) pushInputWithBaseURI(in any, baseURI string) {
 	if baseURI == "" {
 		ctx.pushInput(in)

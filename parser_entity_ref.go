@@ -541,7 +541,7 @@ func (pctx *parserCtx) lookupGeneralEntity(ctx context.Context, name string, inA
 // external subset and no external parameter entity (`parseDTDValid` set,
 // `!hasExternalSubset && !hasExternalPERef`). An external subset or external PE
 // may resolve incompletely (e.g. an empty/unreachable external PE), so helium
-// stays lenient there rather than risk rejecting a valid document. It returns nil
+// stays lenient there, at no risk of rejecting a valid document. It returns nil
 // when the reference should stay a non-fatal warning. The VC "Entity Declared"
 // applies to ALL general entity references alike — in element content AND in
 // attribute values (W3C rmt-e3e-13; matches libxml2's xmlValidityError).
@@ -855,15 +855,15 @@ func (pctx *parserCtx) parseEntityRef(ctx context.Context) (ent *Entity, err err
 		// through to the undeclared-entity handling below, matching libxml2's
 		// getEntity-returns-NULL behavior. Only a non-nil returned entity is
 		// consumed, and it must be a *Entity. A foreign sax.Entity
-		// implementation yields a clear error rather than a forced-cast panic.
+		// implementation yields a clear error, never a forced-cast panic.
 		loadedEnt, _ := s.GetEntity(ctx, name)
 		if loadedEnt != nil {
 			typed, ok := loadedEnt.(*Entity)
 			if !ok {
 				return nil, pctx.error(ctx, fmt.Errorf("SAX GetEntity returned unsupported entity type %T for entity '%s'", loadedEnt, name))
 			}
-			// Fall through to the well-formedness checks below rather than
-			// returning the SAX-resolved entity directly: a direct reference to
+			// Fall through to the well-formedness checks below, returning
+			// no SAX-resolved entity directly: a direct reference to
 			// an external/unparsed/parameter entity (or an internal entity whose
 			// replacement text contains '<') from an attribute value is a WFC
 			// violation regardless of which resolver produced the entity.
