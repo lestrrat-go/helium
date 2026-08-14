@@ -1538,8 +1538,12 @@ func decryptCipherValue(ed *encryptedData, alg string, sessionKey []byte, paddin
 	// Squash all decryption errors to the same sentinel — and crucially, the
 	// same string — so callers cannot distinguish "bad padding" from "bad
 	// cipher" from "downstream parse" when CBC is in use. GCM authenticates
-	// so this collapse is safe there too.
-	if errors.Is(err, ErrDecryptionFailed) || errors.Is(err, ErrInvalidPadding) {
+	// so this collapse is safe there too. There is no separate padding
+	// sentinel to squash alongside it: unpadConstantTime reports a refusal as
+	// a bare boolean and decryptCBC turns every CBC failure into
+	// ErrDecryptionFailed at the point it happens, which is what keeps the
+	// cause from ever reaching a caller.
+	if errors.Is(err, ErrDecryptionFailed) {
 		return nil, ErrDecryptionFailed
 	}
 	return nil, err

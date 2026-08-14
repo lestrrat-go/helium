@@ -199,7 +199,11 @@ func TestCBCPaddingPolicy(t *testing.T) {
 			Decrypt(t.Context(), wrongElem)
 		require.Error(t, wrongKeyErr)
 
+		// Identical STRINGS, not merely the same sentinel: the message is
+		// what a caller can read, so a padding refusal that named itself
+		// there would be the oracle even with both wrapping
+		// ErrDecryptionFailed.
 		require.Equal(t, wrongKeyErr.Error(), strictErr.Error())
-		require.NotErrorIs(t, strictErr, xmlenc1.ErrInvalidPadding)
+		require.ErrorIs(t, strictErr, xmlenc1.ErrDecryptionFailed)
 	})
 }
