@@ -148,6 +148,17 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 // reference-supplied candidate lands where the document put the reference. The
 // candidate list is tried in order, so reordering it would change which key a
 // document with several candidates is decrypted under.
+//
+// An xenc:AgreementMethod in this position — xmlenc-core1 §5.6 defines it as
+// the content of an EncryptedData's own ds:KeyInfo, alongside the
+// EncryptedKey position §3.5.3 defines it for — is stepped over unread, same
+// as ds:KeyValue and ds:KeyName: §3.5 marks AgreementMethod support OPTIONAL
+// there, at the same grade as ds:KeyValue. An EncryptedData offering the
+// session key only that way carries no candidate this parse retains, so it
+// fails decryption with ErrMissingKey like any other document with none,
+// naming Decryptor.SessionKey as the way to supply the key directly. The
+// EncryptedKey-level position IS read, by parseAgreementMethodForKeyInfo,
+// which is how this package performs ECDH-ES key agreement.
 func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *encryptedData, ps *parseState) error {
 	return eachChildElement(ctx, elem, func(e *helium.Element) error {
 		switch {

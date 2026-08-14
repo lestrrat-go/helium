@@ -396,10 +396,19 @@ an `xenc:EncryptedKey`. `Encryptor` writes no `ds:RetrievalMethod`: §3.5
 requires support for reading one, not for writing one.
 
 The other `ds:KeyInfo` children this package does not read are `ds:KeyValue`
-(§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), and `xenc11:DerivedKey`
-(§3.5.2). A `ds:KeyValue` inside an `xenc:OriginatorKeyInfo` is a different
-position and is read, since that is where ECDH-ES carries the sender's
-ephemeral key.
+(§3.5, OPTIONAL), `ds:KeyName` (§3.5, RECOMMENDED), `xenc11:DerivedKey`
+(§3.5.2), and an `xenc:AgreementMethod` in the `EncryptedData`-level
+`ds:KeyInfo` position §5.6 defines for it. §3.5 marks `AgreementMethod`
+support OPTIONAL there, the same grade as `ds:KeyValue`. A `ds:KeyValue`
+inside an `xenc:OriginatorKeyInfo` is a different position and is read, since
+that is where ECDH-ES carries the sender's ephemeral key, and so is an
+`xenc:AgreementMethod` inside an `xenc:EncryptedKey`'s own `ds:KeyInfo`,
+which this package DOES read — that is how it does ECDH-ES key agreement.
+An `EncryptedData` whose own `ds:KeyInfo` carries only the outer,
+`EncryptedData`-level form fails decryption with `ErrMissingKey`, and still
+decrypts under a pre-shared
+[`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key), the same
+as any other document with no readable key candidate.
 
 An `xenc:KeySize` child of `EncryptionMethod` is read and checked, but it is
 never used as a key length: every algorithm URI this package implements

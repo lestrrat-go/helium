@@ -3,6 +3,7 @@ package xmlenc1_test
 import (
 	"bytes"
 	"crypto/elliptic"
+	"encoding/base64"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -353,4 +354,73 @@ func TestEncryptECDHESRoundTripWithOtherInfo(t *testing.T) {
 	require.Equal(t, params.PartyVInfo, wire.PartyVInfo)
 	require.Equal(t, params.SuppPubInfo, wire.SuppPubInfo)
 	require.Equal(t, params.DigestMethod, wire.DigestMethod)
+}
+
+// outerAgreementMethodEncryptedData builds an EncryptedData whose OWN
+// ds:KeyInfo carries only an xenc:AgreementMethod — the EncryptedData-level
+// position xmlenc-core1 §5.6 defines for it, hoisted out of the
+// xenc:EncryptedKey-level ds:KeyInfo the rest of this file's ECDH-ES
+// documents put it in. parseKeyInfoForEncryption does not read an
+// AgreementMethod in this position, so the ConcatKDFParams and
+// OriginatorKeyInfo markup below never reach any crypto; they are shaped
+// like a real ECDH-ES offer only so the document is a realistic one to have
+// stepped over. cipherValue is embedded base64-encoded as the
+// CipherData/CipherValue.
+func outerAgreementMethodEncryptedData(t *testing.T, cipherValue []byte) *helium.Element {
+	t.Helper()
+	const publicKey = "BGoi18CKzCb0K8RTLj0pEFAj2MWDDilMemPZWlOIxS1WbAiR7UrhIstegXjYfIBEYXmnXZFEx/1Ns+yakYTm/B8="
+	xml := `<xenc:EncryptedData xmlns:xenc="` + xmlenc1.NamespaceXMLEnc + `" xmlns:ds="` + xmlenc1.NamespaceDSig + `" xmlns:dsig11="` + xmlenc1.NamespaceDSig11 + `" xmlns:xenc11="` + xmlenc1.NamespaceXMLEnc11 + `" Type="` + xmlenc1.TypeElement + `">` +
+		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES128GCM11 + `"/>` +
+		`<ds:KeyInfo><xenc:AgreementMethod Algorithm="` + xmlenc1.ECDHES + `">` +
+		`<xenc11:KeyDerivationMethod Algorithm="` + xmlenc1.ConcatKDF + `"><xenc11:ConcatKDFParams AlgorithmID="" PartyUInfo="00b9e13a70c35edcb3b66fda86b4898942" PartyVInfo=""><ds:DigestMethod Algorithm="` + xmlenc1.DigestSHA256 + `"/></xenc11:ConcatKDFParams></xenc11:KeyDerivationMethod>` +
+		`<xenc:OriginatorKeyInfo><ds:KeyValue><dsig11:ECKeyValue><dsig11:NamedCurve URI="` + ecCurveURIP256 + `"/><dsig11:PublicKey>` + publicKey + `</dsig11:PublicKey></dsig11:ECKeyValue></ds:KeyValue></xenc:OriginatorKeyInfo>` +
+		`</xenc:AgreementMethod></ds:KeyInfo>` +
+		`<xenc:CipherData><xenc:CipherValue>` + base64.StdEncoding.EncodeToString(cipherValue) + `</xenc:CipherValue></xenc:CipherData>` +
+		`</xenc:EncryptedData>`
+	return mustParseXML(t, xml).DocumentElement()
+}
+
+// An xenc:AgreementMethod at the EncryptedData-level ds:KeyInfo position is
+// OPTIONAL support (xmlenc-core1 §3.5, §5.6) that this package does not
+// implement: parseKeyInfoForEncryption steps over it, so such a document
+// offers no candidate this package can resolve into a content key, even with
+// Decryptor.ECPrivateKey set. This pins that the document is refused the
+// same way as any other EncryptedData with no readable key material —
+// ErrMissingKey, naming Decryptor.SessionKey as the way around it — and NOT
+// ErrUnsupportedKeyDerivation, which is reserved for the xenc11:DerivedKey
+// facility this package also lacks; conflating the two would send a caller
+// to the wrong remedy.
+func TestDecryptOuterAgreementMethodMissingKey(t *testing.T) {
+	key := randKey(t, 16)
+	plaintext := []byte(`<Secret>outer agreement method</Secret>`)
+	cipherValue, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES128GCM11, key, plaintext)
+	require.NoError(t, err)
+	edElem := outerAgreementMethodEncryptedData(t, cipherValue)
+
+	priv := generateECKey(t, elliptic.P256())
+	_, err = xmlenc1.NewDecryptor().ECPrivateKey(priv).Decrypt(t.Context(), edElem)
+	require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+	require.NotErrorIs(t, err, xmlenc1.ErrUnsupportedKeyDerivation)
+}
+
+// The same document TestDecryptOuterAgreementMethodMissingKey refuses still
+// decrypts once the caller supplies the content key directly:
+// Decryptor.SessionKey is an early return ahead of key resolution, so it
+// never reaches the xenc:AgreementMethod this package cannot read at the
+// EncryptedData level. This is the remedy TestDecryptOuterAgreementMethodMissingKey's
+// ErrMissingKey message names, and it must actually work.
+func TestDecryptOuterAgreementMethodSessionKeyBypasses(t *testing.T) {
+	key := randKey(t, 16)
+	plaintext := []byte(`<Secret>outer agreement method</Secret>`)
+	cipherValue, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES128GCM11, key, plaintext)
+	require.NoError(t, err)
+	edElem := outerAgreementMethodEncryptedData(t, cipherValue)
+
+	nodes, err := xmlenc1.NewDecryptor().SessionKey(key).Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+
+	decrypted, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Contains(t, decrypted, "outer agreement method")
 }
