@@ -233,7 +233,7 @@ func (c *compiler) vcDecimal(ctx context.Context, elem *helium.Element, attr, va
 	// Trim only ASCII XML whitespace (#x20/#x9/#xD/#xA), the whitespace facet's
 	// scope for xs:decimal — NOT strings.TrimSpace, which also strips Unicode
 	// whitespace like NBSP. So vc:minVersion="<NBSP>1.1" stays malformed (fatal
-	// under 1.1) rather than being silently accepted as "1.1".
+	// under 1.1), and is never silently accepted as "1.1".
 	s := strings.Trim(val, " \t\r\n")
 	if isValidXSDDecimal(s) {
 		return s, true

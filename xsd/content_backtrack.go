@@ -20,7 +20,7 @@ import (
 // contentModelAccepts proves, WITHOUT side effects, that children[0:] can be
 // fully consumed by the model group under SOME occurrence partition. It computes
 // the set of reachable end positions for each (particle|group, position) state,
-// memoized so the state space is O(#particles * #children) rather than
+// memoized so the state space is O(#particles * #children), well under
 // exponential, with a hard cap (btStateCap) after which it fails closed (returns
 // "not proven", keeping the greedy verdict).
 //
@@ -380,7 +380,7 @@ func (vc *validationContext) validateContentModelChildren(ctx context.Context, p
 		ed := elemLeafForChild(child, elemLeaves, vc.schema)
 		if ed == nil {
 			// contentModelAccepts guaranteed placement, so this is unreachable; report
-			// defensively rather than silently accept.
+			// defensively, accepting nothing silently.
 			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, "This element is not expected.")
 			contentErr = fmt.Errorf("unexpected element")
 			continue

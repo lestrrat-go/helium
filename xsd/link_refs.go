@@ -58,7 +58,7 @@ func (c *compiler) deferMissingTypeRef(qn QName) bool {
 // symbol space other than the type-definition one (a global attribute, model
 // group, or attribute group). An element @type naming such a component is a
 // wrong-symbol-space reference (src-resolve), not a §5.3 missing component, so it
-// must be reported rather than deferred.
+// must be reported, and never deferred.
 func (c *compiler) qnameNamesNonType(qn QName) bool {
 	if _, ok := c.schema.globalAttrs[qn]; ok {
 		return true
@@ -141,7 +141,7 @@ func (c *compiler) undeferredMissingElemTypes() map[*ElementDecl]QName {
 }
 
 // missingElemTypeIsNeeded reports whether a global element's missing @type is a
-// genuine dependency rather than a deferrable §5.3 unused-missing-component.
+// genuine dependency, and no deferrable §5.3 unused-missing-component.
 func (c *compiler) missingElemTypeIsNeeded(ge *ElementDecl, missqn QName) bool {
 	if _, ok := c.overrideChildElems[ge]; ok {
 		return true
@@ -187,7 +187,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 				// type and attribute-group references so such a valid reference
 				// resolves. A prefixed ref or one bound by an in-scope default
 				// namespace is NOT eligible, so a genuine unresolved reference
-				// still reports rather than silently resolving to {}local.
+				// still reports, resolving silently to no {}local.
 				ge, ok = c.schema.elements[QName{Local: qn.Local}]
 			}
 			// A type= reference (edecl.IsRef==false) names the TYPE symbol space, so a
@@ -1099,7 +1099,7 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 	// Only run UPA if there are no prior schema errors (libxml2 skips UPA when
 	// the schema has structural parse errors).
 	//
-	// Iterate in a deterministic source order (line, then ordinal) rather than via
+	// Iterate in a deterministic source order (line, then ordinal), and never via
 	// Go map ranging: checkUPA increments errorCount, and a stable order keeps both
 	// which violation is reported first and the downstream errorCount-gated checks
 	// (e.g. checkElementConsistent) independent of map iteration order.
@@ -2528,7 +2528,7 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 	}
 	// Component label and the reporting element kind follow the owner type's
 	// actual element kind (complexType vs simpleType), captured at parse time,
-	// rather than assuming a simpleType. A local complexType base ref that does
+	// assuming no simpleType. A local complexType base ref that does
 	// not resolve must report "element complexType" / "local complex type".
 	elemKind := src.elemKind
 	if elemKind == "" {
@@ -2646,7 +2646,7 @@ func (c *compiler) checkAttrUseConstraints(ctx context.Context) {
 // version-independent XSD rule enforced in BOTH 1.0 and 1.1). It mirrors
 // checkAttrUseConstraints: an invalid value (e.g. a decimal default of "XII", a
 // boolean "Yes", or a list/union default that does not satisfy the type) is a
-// schema error caught at compile time rather than silently injected into the
+// schema error caught at compile time, and never injected into the
 // instance.
 //
 // The type checked is the element's EFFECTIVE declared type (effectiveDeclType),
@@ -2777,10 +2777,10 @@ func (c *compiler) checkAttrRefFixedConflict(ctx context.Context, au, ga *AttrUs
 // Every atomic primitive (string, decimal, boolean, float, double, the
 // date/time/g* family, duration, the binary types, anyURI, QName, NOTATION)
 // is rooted at anySimpleType, which terminates the chain — so a cross-family
-// pair is decided ("known") and REJECTED rather than treated as "unknown" and
+// pair is decided ("known") and REJECTED, and never treated as "unknown" and
 // silently accepted. Only atomic types are listed here; the list builtins
 // (IDREFS/ENTITIES/NMTOKENS) are handled separately by builtinDerivesFrom via
-// builtinListItem so an atomic-vs-list pair is also decided rather than
+// builtinListItem so an atomic-vs-list pair is also decided, and never
 // silently accepted.
 var builtinRestrictionParent = map[string]string{
 	// string family
@@ -2810,7 +2810,7 @@ var builtinRestrictionParent = map[string]string{
 	lexicon.TypeUnsignedByte:       lexicon.TypeUnsignedShort,
 	lexicon.TypePositiveInteger:    lexicon.TypeNonNegativeInteger,
 	// remaining atomic primitives — each parented directly to anySimpleType.
-	// Listing them (rather than leaving them "unknown") lets builtinDerivesFrom
+	// Listing them, in place of leaving them "unknown", lets builtinDerivesFrom
 	// REJECT an invalid builtin redeclaration whose derived type lives outside
 	// the string/decimal families (e.g. base xs:int restricted by derived
 	// xs:boolean), instead of returning "unknown" and silently accepting it.

@@ -458,7 +458,7 @@ func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, f
 //   - Each enumeration facet literal of a QName/NOTATION-restricted type is
 //     resolved against the literal's captured in-scope namespaces. An unresolved
 //     prefix makes the literal an invalid QName/NOTATION and is reported as a
-//     schema error, rather than silently compiling into an unsatisfiable
+//     schema error, compiling into no unsatisfiable
 //     enumeration.
 //   - A simpleType whose base is (directly) xs:NOTATION with no enumeration facet
 //     is rejected: per XSD, xs:NOTATION may only be used as a base for a
@@ -675,7 +675,7 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 				continue
 			}
 			// A QName/NOTATION carrier may sit inside a member that is itself a list
-			// or a nested union, so detect it recursively rather than only on an
+			// or a nested union, so detect it recursively, and not only on an
 			// atomic QName/NOTATION member.
 			if typeHasQNameNotationCarrier(member) {
 				hasQNameMember = true

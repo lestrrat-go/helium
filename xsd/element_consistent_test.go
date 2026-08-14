@@ -59,7 +59,7 @@ func TestElementConsistent(t *testing.T) {
 				// A global element ref and a local element of the same name but a
 				// different type. The sequence is deterministic (UPA-clean) because
 				// the two occurrences are ordered, so the inconsistency is caught by
-				// cos-element-consistent rather than UPA.
+				// cos-element-consistent, and never by UPA.
 				name: "global ref vs local of a different type",
 				schemaXML: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a" type="xs:int"/>

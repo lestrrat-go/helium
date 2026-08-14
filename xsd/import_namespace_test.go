@@ -234,7 +234,7 @@ func TestCompile_ImportNoNamespaceListUnionRefs(t *testing.T) {
 // ONLY to unprefixed (chameleon-style) refs. A PREFIXED ref binds to its
 // prefix's namespace: if xmlns:o="urn:other" and the no-TNS imported schema
 // defines an UNQUALIFIED type t, then a ref written as "o:t" must report
-// unresolved {urn:other}t rather than silently falling back to {}t. This guards
+// unresolved {urn:other}t, falling back to no {}t. This guards
 // all four ref kinds (element type, base, list itemType, union memberTypes).
 func TestCompile_PrefixedRefNoEmptyNamespaceFallback(t *testing.T) {
 	compileErrors := func(t *testing.T, fsys fstest.MapFS) string {
@@ -332,7 +332,7 @@ func TestCompile_PrefixedRefNoEmptyNamespaceFallback(t *testing.T) {
 // binds unprefixed lexical QNames through the in-scope default namespace, so with
 // xmlns="urn:other" and a no-TNS imported schema that defines an unqualified type
 // t, an unprefixed ref "t" resolves to {urn:other}t — which must report unresolved
-// {urn:other}t rather than silently masking to {}t. A "not prefixed" gate alone
+// {urn:other}t, masking to no {}t. A "not prefixed" gate alone
 // would wrongly fire the fallback here; the gate must instead require the resolved
 // namespace to equal the schema's target namespace. Guards all four ref kinds.
 func TestCompile_DefaultNamespaceBoundRefNoEmptyNamespaceFallback(t *testing.T) {

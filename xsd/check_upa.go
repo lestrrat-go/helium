@@ -118,7 +118,7 @@ func (a *positionAutomaton) add(p *Particle) posInfo {
 // upaMaxRequiredExpansion caps how many required occurrence copies a single
 // range may expand into, to bound automaton size. XSD finite minOccurs is
 // typically small; past this bound the required copies are summarized as TWO
-// non-nullable body copies rather than the full chain. Two copies (not one) are
+// non-nullable body copies, in place of the full chain. Two copies (not one) are
 // kept because for determinism analysis `U{n}` with a non-nullable unit U and
 // n>=2 is invariant in n: `U{2}` already realizes every inter-copy
 // boundary-followpos overlap, so it correctly rejects `(a, a?){257}` while a
@@ -204,7 +204,7 @@ func (a *positionAutomaton) applyOccurs(minOccurs, maxOccurs int, body func() po
 	// single optional copy avoids falsely flagging interchangeable repeated copies
 	// (e.g. `<any maxOccurs="5"/>`).
 	//
-	// Past upaMaxRequiredExpansion the required chain is SUMMARIZED rather than
+	// Past upaMaxRequiredExpansion the required chain is SUMMARIZED, and never
 	// fully expanded, to bound automaton size. The summary must keep TWO copies,
 	// not one: for determinism analysis `U{n}` with a non-nullable unit U and
 	// n>=2 is invariant in n — every inter-copy boundary-followpos overlap that
@@ -413,8 +413,8 @@ func (a *positionAutomaton) walkCompositorBody(mg *ModelGroup) posInfo {
 // xs:all compositor body. Unlike a sequence, xs:all is order-independent: every
 // member is reachable regardless of which members have already been seen. So all
 // member firstpos are competing from the start state, and after any member is
-// consumed every OTHER member is still reachable. Modeling this faithfully
-// (rather than as an ordered sequence) is what catches a duplicate same-name
+// consumed every OTHER member is still reachable. Modeling this faithfully,
+// in place of as an ordered sequence, is what catches a duplicate same-name
 // member — two members with the same element name overlap in the union of
 // firstpos and fire the cos-nonambig (UPA) check.
 func (a *positionAutomaton) walkAllBody(mg *ModelGroup) posInfo {
@@ -625,8 +625,8 @@ func wildcardsOverlap(a, b firstSetEntry) bool {
 	// One negation, one finite set. They overlap iff the negation admits any
 	// namespace in the set. wildcardMatchesNS already encodes this package's
 	// negation semantics (##other = not(targetNS) and not(absent),
-	// ##not-absent = not(absent), ##any = everything), so reuse it per member
-	// rather than re-deriving the excluded namespaces here.
+	// ##not-absent = not(absent), ##any = everything), so reuse it per member,
+	// re-deriving no excluded namespaces here.
 	neg := a
 	set := bSet
 	if aSet != nil {

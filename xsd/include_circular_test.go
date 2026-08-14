@@ -30,8 +30,8 @@ func (f uriReadFS) ReadFile(name string) ([]byte, error) {
 }
 
 // A circular xs:include chain (main -> inc -> main) must compile cleanly: the
-// re-include of the top-level schema has to be recognized as already-loaded
-// rather than re-parsed. Before the fix includeVisited only contained documents
+// re-include of the top-level schema has to be recognized as already-loaded,
+// and never re-parsed. Before the fix includeVisited only contained documents
 // pulled in via loadInclude/loadRedefine, so the back-reference to main re-parsed
 // it and re-registered its declarations, producing spurious duplicate-component
 // errors. CompileFile seeds includeVisited with the root's resolved key to close
@@ -203,7 +203,7 @@ func TestCompile_CircularInclude_RelativeURLLocalBase(t *testing.T) {
 // and re-parse the root into spurious duplicate components. The seed must equal
 // the key the nested back-reference computes ("schemas/main.xsd"), which it does
 // because rootSchemaKey recognizes doc.URL() already sits under BaseDir and seeds
-// it unchanged rather than re-joining it onto BaseDir.
+// it unchanged, re-joining it onto no BaseDir.
 func TestCompile_CircularInclude_AlreadyResolvedURLLocalBase(t *testing.T) {
 	const ns = "urn:c"
 
@@ -324,7 +324,7 @@ func TestCompile_CircularInclude_DirURLNoBase(t *testing.T) {
 	const rootKey = "schemas/main.xsd"
 	fsys := uriReadFS{
 		// The back-reference key: present so a broken guard re-parses it into
-		// spurious duplicates (the bug) rather than failing with not-found.
+		// spurious duplicates (the bug), and never fails with not-found.
 		rootKey:   mainBytes,
 		"inc.xsd": incBytes,
 		// The distinct real include keyed by its bare basename.
