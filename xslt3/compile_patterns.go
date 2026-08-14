@@ -472,7 +472,7 @@ func resolvePatternFunctionNamespace(prefix string, nsBindings map[string]string
 // patternFunctionIdentity resolves a function call's (namespace URI, local name)
 // for pattern validation. The xpath3 parser keeps an EQName function call's whole
 // braced spelling in fc.Name (e.g. "Q{http://www.w3.org/2005/xpath-functions}current-group"),
-// so the braced URI must be read directly from the name rather than resolved
+// so the braced URI must be read directly from the name, and never resolved
 // through fc.Prefix. For the lexical (unprefixed or prefixed) form it falls back
 // to resolvePatternFunctionNamespace so explicit xmlns overrides are honored.
 func patternFunctionIdentity(fc xpath3.FunctionCall, nsBindings map[string]string) (uri, local string) {
@@ -908,7 +908,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 // alternative's predicates with the node as the context item and the population
 // focus (ec.position/ec.size) already in scope, so that positional predicates
 // like position()=3 are tested against the node's position within the population
-// being grouped rather than its document-order position. It returns true only
+// being grouped, and never its document-order position. It returns true only
 // when a ".[pred]" alternative matches; non-".[pred]" alternatives are left for
 // the caller to handle via matchPattern.
 func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execContext, node helium.Node) bool {
@@ -1913,7 +1913,7 @@ func collectDescendants(ctx context.Context, ec *execContext, test xpath3.NodeTe
 	var result []helium.Node
 	// collectDescendants has no error channel; a tree cycle (ErrWalkCycle) ends
 	// the walk over the traversable portion, degrading to the descendants found
-	// before the cycle rather than spinning. Parser-built and result trees are
+	// before the cycle, spinning nowhere. Parser-built and result trees are
 	// acyclic, so this arises only on a hand-corrupted tree.
 	_ = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n == root {

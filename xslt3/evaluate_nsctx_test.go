@@ -9,7 +9,7 @@ import (
 
 // XSLT3-ADV-004: xsl:evaluate's namespace-context attribute must produce a
 // single node. A non-node value (or an empty sequence) is a type error
-// XTTE3170 rather than being silently ignored.
+// XTTE3170, and is never silently ignored.
 func TestEvaluateNamespaceContextTypeError(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 	require.NoError(t, err)

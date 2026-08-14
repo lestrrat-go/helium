@@ -942,7 +942,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 	}
 
 	// XTSE3430: sort-before-merge="yes" is incompatible with streamable="yes".
-	// Fall back to non-streaming rather than raising a fatal error.
+	// Fall back to non-streaming, raising no fatal error.
 	if src.SortBeforeMerge && src.StreamableAttr {
 		src.StreamableAttr = false
 	}
@@ -1077,7 +1077,7 @@ func mergeStreamCheck(inst *mergeInst) error {
 	}
 	// XTSE3430: when a streamable merge-source select uses descendant-or-self
 	// axis (//), the merge-key must not navigate upward.
-	// Fall back to non-streaming rather than raising a fatal error.
+	// Fall back to non-streaming, raising no fatal error.
 	for _, src := range inst.Sources {
 		if !src.StreamableAttr || src.Select == nil {
 			continue

@@ -833,8 +833,8 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 	}
 
 	// Copy in-scope namespace declarations that are not excluded.
-	// Use c.nsBindings (scoped to this element's position in the stylesheet)
-	// rather than c.stylesheet.namespaces (which accumulates globally and
+	// Use c.nsBindings (scoped to this element's position in the stylesheet),
+	// and never c.stylesheet.namespaces (which accumulates globally and
 	// leaks namespaces from sibling variable trees).
 	for prefix, uri := range c.nsBindings {
 		if uri == lexicon.NamespaceXSLT || prefix == "" {

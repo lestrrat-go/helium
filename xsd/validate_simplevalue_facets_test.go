@@ -416,7 +416,7 @@ func TestNotationEnumUnprefixedDefaultNamespace(t *testing.T) {
 		t.Parallel()
 		// A NOTATION *value* with no prefix resolves to no namespace, so it cannot
 		// equal the {urn:p}jpeg enumeration — proving the enum picked up the schema
-		// default namespace rather than staying {}jpeg.
+		// default namespace, and never stayed {}jpeg.
 		errs, err := validateInstance(t, schemaXML,
 			`<tns:n xmlns:tns="urn:p">jpeg</tns:n>`)
 		require.Error(t, err)
@@ -513,8 +513,8 @@ func TestNotationEnumUnprefixedDefaultNamespaceListUnion(t *testing.T) {
 
 // TestEnumQNameUnboundPrefixCompileError verifies item 1: an enumeration literal
 // of a QName/NOTATION-restricted type whose prefix is not bound in the literal's
-// in-scope namespaces is reported as a compile-time schema error, rather than
-// silently compiling into an unsatisfiable enumeration.
+// in-scope namespaces is reported as a compile-time schema error, compiling into
+// no unsatisfiable enumeration.
 func TestEnumQNameUnboundPrefixCompileError(t *testing.T) {
 	t.Parallel()
 
@@ -1327,8 +1327,8 @@ func TestDurationRangeFacetReferenceDateOrder(t *testing.T) {
 // union is rejected at COMPILE time even when every union member is numeric
 // (ordered). A union's value space is not a single ordered scalar, so per XSD
 // §4.1.5 the range facets are not in its {applicable facets} set regardless of
-// member ordering — checkFacetApplicability reports "not allowed" rather than
-// letting the bound compile into a runtime no-op.
+// member ordering — checkFacetApplicability reports "not allowed", letting the bound compile into
+// no runtime no-op.
 func TestNumericUnionRangeFacetRejectedAtCompile(t *testing.T) {
 	t.Parallel()
 
@@ -1551,7 +1551,7 @@ func TestEnumQNameLiteralWhitespaceNormalized(t *testing.T) {
 // is rejected at COMPILE time. A union's value space is never a single ordered
 // scalar, so the range facets are outside its {applicable facets} set (XSD
 // §4.1.5) no matter what the member leaf resolves to; checkFacetApplicability
-// reports "not allowed" rather than deferring an inapplicable bound to a runtime
+// reports "not allowed", deferring no inapplicable bound to a runtime
 // no-op (which previously let some instances through and wrongly rejected others).
 func TestNestedUnionRangeFacetRejectedAtCompile(t *testing.T) {
 	t.Parallel()

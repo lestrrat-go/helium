@@ -45,7 +45,7 @@ func TestApplyTemplatesMixedSelectionOrder(t *testing.T) {
 // TestApplyTemplatesMixedSortPosition verifies that within an xsl:sort over a
 // mixed atomic+node selection, position()/last() in the sort key reflect the
 // full mixed sequence (size = number of selected items, position = 1-based
-// index in the unsorted sequence) rather than a stale size of 1.
+// index in the unsorted sequence), and never a stale size of 1.
 func TestApplyTemplatesMixedSortPosition(t *testing.T) {
 	ctx := t.Context()
 

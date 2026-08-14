@@ -95,7 +95,7 @@ func TestValidateResidualsXSD10(t *testing.T) {
 
 	// cvc-assess-elt: an element matched by a strict wildcard that has no matching
 	// global element declaration BUT carries a resolvable xsi:type is assessed
-	// against that type rather than rejected. (W3C addB116 / test75092)
+	// against that type, and never rejected. (W3C addB116 / test75092)
 	t.Run("strict wildcard child with xsi:type is valid", func(t *testing.T) {
 		t.Parallel()
 		schema := `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">

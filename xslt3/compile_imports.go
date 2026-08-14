@@ -609,7 +609,7 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 //
 // For a module root that IS the document element, only its own xml:base is
 // folded (via resolveRootXMLBase). For an EMBEDDED module root (one selected by
-// a fragment identifier, whose parent is another element rather than the
+// a fragment identifier, whose parent is another element and not the
 // Document) the FULL xml:base ancestor chain — the embedded root's own xml:base,
 // any wrapper element xml:base(s), and the document element's xml:base — is
 // folded onto the module URI, because all of those ancestors lie above the
@@ -640,7 +640,7 @@ func moduleEffectiveBaseURI(root *helium.Element, uri string) string {
 }
 
 // embeddedModuleRoot reports root as an EMBEDDED (fragment-selected) stylesheet
-// module root — its parent is an element rather than the Document — otherwise
+// module root — its parent is an element, and not the Document — otherwise
 // nil. The result is assigned to c.moduleRoot so descendant xml:base walks stop
 // at the embedded root (whose xml:base, plus any wrapper/document xml:base, is
 // already folded into the module's effective base URI by moduleEffectiveBaseURI).
@@ -737,8 +737,8 @@ func refDenotesDirectory(ref string) bool {
 }
 
 // ensureDirSlash guarantees that the PATH portion of a resolved URI ends in
-// '/', inserting the slash before any query ('?') or fragment ('#') component
-// rather than at the very end. A directory base carrying a query ("…/dir?v")
+// '/', inserting the slash before any query ('?') or fragment ('#') component,
+// and never at the very end. A directory base carrying a query ("…/dir?v")
 // thus becomes "…/dir/?v", never "…/dir?v/" (which would corrupt the query and
 // misplace the directory boundary). Idempotent when the path already ends in
 // '/'.
@@ -875,8 +875,8 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 
 	// Also cache the module document under its FOLDED effective base so doc('') /
 	// document('') from within this module (whose templates compile under
-	// c.baseURI) resolves to the module's own document rather than falling back to
-	// the principal stylesheet. The bare-uri entry stored above is kept for other
+	// c.baseURI) resolves to the module's own document, falling back to no
+	// principal stylesheet. The bare-uri entry stored above is kept for other
 	// lookups; when no xml:base applies the folded base equals uri and this is a
 	// no-op.
 	if c.baseURI != uri {

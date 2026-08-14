@@ -644,7 +644,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 			return adnExplicit, presence, dynamicErrorCause(errCodeFODC0002, err, "cannot read parameter-document %q: %v", href, err)
 		}
 		// The compile-time loader already returns an *XSLTError (XTSE0090);
-		// return it as-is rather than wrapping it in a second XTSE0090.
+		// return it as-is, wrapping it in no second XTSE0090.
 		var xe *XSLTError
 		if errors.As(err, &xe) {
 			return adnExplicit, presence, err
@@ -891,7 +891,7 @@ func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element
 	// Merge same-named attribute-sets (XSLT spec: union of all definitions).
 	// When an existing entry comes from a used package (OwnerPackage != nil)
 	// and the new definition is local, the local definition replaces the
-	// package's private attribute-set rather than merging with it.
+	// package's private attribute-set, merging with none of it.
 	if existing, ok := c.stylesheet.attributeSets[name]; ok {
 		if existing.OwnerPackage != nil {
 			// Replace package-scoped attribute-set with local definition.
@@ -1234,7 +1234,7 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 	// Resolve prefixes using the namespace context in scope at this
 	// declaration. Imported modules may bind the same prefix to a different
 	// URI than the importing module, so resolution must use the element's own
-	// in-scope bindings rather than a single flat stylesheet-wide map.
+	// in-scope bindings, and no single flat stylesheet-wide map.
 	declNS := c.spaceDeclNamespaces(elem)
 
 	for name := range strings.FieldsSeq(elements) {
@@ -1309,7 +1309,7 @@ func (c *compiler) spaceDeclNamespaces(elem *helium.Element) map[string]string {
 // the NameTest KIND in addition to its resolved name so that NameTests of
 // different shapes never collide. A collision would raise a false XTSE0270 for a
 // strip/preserve pair whose match priorities differ and is therefore resolved at
-// runtime rather than being a genuine conflict. XTSE0270 must fire only for two
+// runtime, and is no genuine conflict. XTSE0270 must fire only for two
 // rules of the SAME kind and SAME name at the same import precedence.
 //
 // The four distinguished kinds (with their effective match priorities) are:

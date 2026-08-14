@@ -242,7 +242,7 @@ const evaluateDocBaseURIAttrStylesheet = `
 // TestEvaluateDocResolvesAgainstBaseURIAttribute proves the xsl:evaluate
 // base-uri attribute governs XSLT-aware functions (fn:doc) and not just the
 // native xpath3 functions: doc("data.xml") must resolve against "mem://other/",
-// the declared base, rather than the using template's static base.
+// the declared base, and never the using template's static base.
 func TestEvaluateDocResolvesAgainstBaseURIAttribute(t *testing.T) {
 	const overrideURI = "mem://other/data.xml"
 	const templateURI = "mem://pkg/data.xml"

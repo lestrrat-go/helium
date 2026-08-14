@@ -137,8 +137,8 @@ func TestVersion11ExtensionUnionProcessContents(t *testing.T) {
 	t.Run("extension strict wildcard admits a globally-declared attribute", func(t *testing.T) {
 		t.Parallel()
 		// A strict wildcard accepts an attribute that DOES have a global
-		// declaration, confirming the result is strict (not skip) rather than
-		// rejecting everything.
+		// declaration, confirming the result is strict (not skip), rejecting
+		// nothing wholesale.
 		const declSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:attribute name="g" type="xs:string"/>
   <xs:complexType name="b">
