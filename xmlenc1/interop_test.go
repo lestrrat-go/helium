@@ -71,9 +71,9 @@ func TestInteropRetrievalMethod(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
 
-		// The session key was still reached and unwrapped: only the block
-		// decryption refused, which is what makes this a padding refusal
-		// rather than a key one.
+		// The session key was still reached and unwrapped, so the block
+		// decryption is the only step that refused, which is what identifies
+		// this as a padding refusal.
 		require.NotErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
 		require.NotErrorIs(t, err, xmlenc1.ErrMissingKey)
 	})

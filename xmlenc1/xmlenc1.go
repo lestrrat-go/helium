@@ -803,8 +803,8 @@ func (d Decryptor) AllowUnauthenticatedCBC(v bool) Decryptor {
 // under the XML Encryption rule any final octet from 1 to the block size is
 // acceptable, so roughly one in sixteen random forgeries survives unpadding,
 // while under PKCS#7 roughly one in 2^(8N) does. Both numbers describe an
-// unauthenticated mode. Neither closes the padding oracle, whose signal is
-// whether the decrypt succeeded at all rather than which step refused it, and
+// unauthenticated mode. Neither closes the padding oracle, whose signal is the
+// success or failure of the decrypt as a whole, and
 // [Decryptor.AllowUnauthenticatedCBC] states the rest of that reasoning. A
 // caller who wants the ciphertext authenticated wants AES-GCM instead.
 //

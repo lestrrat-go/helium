@@ -81,7 +81,7 @@ const MaxConcatKDFOtherInfoBytesForTest = maxConcatKDFOtherInfoBytes
 // EncryptCBCArbitraryPaddingForTest AES-CBC encrypts plaintext under key,
 // padding it the way xmlenc-core1 §5.2.1 allows and this package never writes:
 // the final octet names the padding length N, and the N-1 octets ahead of it
-// are all filler rather than a repeat of N. It exists so a test can build the
+// all carry filler chosen independently of N. It exists so a test can build the
 // conforming ciphertext a third-party implementation emits, which is the shape
 // PKCS#7 unpadding refuses.
 //

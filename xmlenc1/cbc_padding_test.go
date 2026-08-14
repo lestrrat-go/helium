@@ -16,7 +16,7 @@ const cbcPaddingPayload = `<greeting xmlns="urn:example">hello</greeting>`
 // arbitraryPaddedCipherValue builds the CipherValue a conforming third-party
 // implementation emits: AES-CBC over a plaintext padded the way xmlenc-core1
 // §5.2.1 allows, with the octets ahead of the final length octet holding filler
-// rather than a repeat of the length. This package never writes that shape
+// chosen independently of the length. This package never writes that shape
 // itself, so nothing built through Encryptor can stand in for it.
 func arbitraryPaddedCipherValue(t *testing.T, key []byte) []byte {
 	t.Helper()
@@ -82,8 +82,8 @@ func TestCBCPaddingPolicy(t *testing.T) {
 	})
 
 	// Turning the opt-in explicitly off is the same as leaving it unset, so a
-	// caller threading a configuration flag through gets the documented
-	// default rather than a third behavior.
+	// caller threading a configuration flag through gets exactly the
+	// documented default.
 	t.Run("the opt-in set to false matches the default", func(t *testing.T) {
 		key := randKey(t, 32)
 		doc := mustParseXML(t, cbcPaddingPayload)
@@ -143,8 +143,8 @@ func TestCBCPaddingPolicy(t *testing.T) {
 		require.Len(t, nodes, 1)
 	})
 
-	// DecryptBytes shares the block decryption, so it must apply the same rule
-	// as Decrypt rather than having a policy of its own.
+	// DecryptBytes shares the block decryption, so the rule it applies must be
+	// the one Decrypt applies.
 	t.Run("DecryptBytes applies the same rule", func(t *testing.T) {
 		const opaque = "not xml at all"
 
