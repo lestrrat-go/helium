@@ -22,16 +22,13 @@ const merlinKeyJed = "abcdefghijklmnopqrstuvwxyz012345"
 // corpus. Its EncryptedData carries no EncryptedKey of its own: its ds:KeyInfo
 // holds only a <ds:RetrievalMethod Type=".../EncryptedKey" URI="#encrypt-key-0"/>
 // naming an EncryptedKey that sits in a ds:KeyInfo elsewhere in the document.
-// Before same-document references resolved, this document had no key at all.
 //
-// The vector is decrypted as far as this package decrypts it. Its session key
-// is reached and unwrapped — proved below by which error the decrypt returns
-// rather than by plaintext — and the block decryption then stops on the
-// CBC padding, which is a property of the vector and not of the reference:
-// xmlenc-core1 §5.2.1 pads with N-1 ARBITRARY octets and a final octet N,
-// while this package's unpadding requires PKCS#7, where every padding octet
-// equals N. That is a separate limitation of the CBC path, so the assertions
-// below pin exactly the part the reference is responsible for.
+// The vector decrypts end to end, so it is evidence for two things at once:
+// the reference resolves and supplies the candidate, and the AES-CBC path reads
+// padding this package did not write. The vector pads the way xmlenc-core1
+// §5.2.1 allows — N-1 octets of arbitrary value and a final octet N — which is
+// exactly what Decryptor.StrictPKCS7Padding would refuse, so the subtest below
+// pins that refusal against the same document.
 func TestInteropRetrievalMethod(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("testdata", "interop", "encrypt-element-aes256-cbc-retrieved-kw-aes256.xml"))
 	require.NoError(t, err)
@@ -50,23 +47,34 @@ func TestInteropRetrievalMethod(t *testing.T) {
 	require.NotNil(t, ed.EncryptedKeys[0].EncryptionMethod)
 	require.Equal(t, xmlenc1.AES256KeyWrap, ed.EncryptedKeys[0].EncryptionMethod.Algorithm)
 
-	_, err = xmlenc1.NewDecryptor().
+	nodes, err := xmlenc1.NewDecryptor().
 		KeyEncryptionKey([]byte(merlinKeyJed)).
 		AllowUnauthenticatedCBC(true).
 		Decrypt(t.Context(), elem)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	require.Equal(t, "PaymentInfo", nodes[0].Name())
 
-	// ErrMissingKey would mean the reference produced no candidate, and
-	// ErrReferenceNotFound that it resolved to nothing. Neither is what this
-	// document does.
-	require.NotErrorIs(t, err, xmlenc1.ErrMissingKey)
-	require.NotErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
-	require.NotErrorIs(t, err, xmlenc1.ErrAmbiguousReference)
+	out, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Contains(t, out, "1234 567890 12345")
+	require.Contains(t, out, "Foo B Baz")
 
-	// The remaining failure is the block decryption. ErrKeyUnwrapFailed would
-	// mean the referenced EncryptedKey was reached but did not unwrap under
-	// the "jed" key-encryption key; its absence is what says the session key
-	// this vector transports was recovered.
-	require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
-	require.NotErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
+	// The same document under the PKCS#7 opt-in. This is what that option
+	// costs: a conforming third-party vector stops decrypting.
+	t.Run("refused under StrictPKCS7Padding", func(t *testing.T) {
+		_, err := xmlenc1.NewDecryptor().
+			KeyEncryptionKey([]byte(merlinKeyJed)).
+			AllowUnauthenticatedCBC(true).
+			StrictPKCS7Padding(true).
+			Decrypt(t.Context(), elem)
+		require.Error(t, err)
+		require.ErrorIs(t, err, xmlenc1.ErrDecryptionFailed)
+
+		// The session key was still reached and unwrapped: only the block
+		// decryption refused, which is what makes this a padding refusal
+		// rather than a key one.
+		require.NotErrorIs(t, err, xmlenc1.ErrKeyUnwrapFailed)
+		require.NotErrorIs(t, err, xmlenc1.ErrMissingKey)
+	})
 }

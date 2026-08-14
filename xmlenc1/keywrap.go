@@ -155,7 +155,7 @@ func aesKeyUnwrap(kek, ciphertext []byte, keySize int) ([]byte, error) {
 	// single 64-bit compare only where the backend can merge loads, and
 	// falls back to a short-circuiting pair of word compares (386) or a
 	// runtime.memequal call (arm, mips, riscv64, wasm) elsewhere.
-	// pkcs7UnpadConstantTime holds this package's other integrity check to
+	// unpadConstantTime holds this package's other integrity check to
 	// the same rule.
 	if subtle.ConstantTimeCompare(a[:], defaultIV[:]) != 1 {
 		// Wrap in ErrDecryptionFailed so a caller testing only that
