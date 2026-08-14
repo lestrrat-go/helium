@@ -2,10 +2,11 @@
 
 > **EXPERIMENTAL** — This package is under active development. Its API may change without notice, and it may be moved to a separate repository in the future.
 
-The `xmlenc1` package implements W3C XML Encryption 1.1 for helium documents,
-except for Triple DES, which it refuses deliberately even though the
-specification marks it REQUIRED. [Conformance scope](#conformance-scope) gives
-the reason, and names every other construct this package does not read.
+The `xmlenc1` package implements W3C XML Encryption 1.1 for helium documents.
+What it declines to implement is the cryptography the standards bodies have
+since retired: Triple DES is refused, because NIST disallowed it for encryption
+after 2023. [Conformance scope](#conformance-scope) states that refusal and its
+reason, and names every construct this package does not read.
 
 Import path: `github.com/lestrrat-go/helium/xmlenc1`
 
@@ -264,16 +265,16 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 
 This package implements W3C xmlenc-core1, and where it deliberately departs
 from the specification it names the departure and the reason for it. One
-construct the specification marks REQUIRED is absent, and the omission is
+algorithm the specification marks REQUIRED is refused, and the refusal is
 deliberate and permanent:
 
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED) — refused deliberately, and this package will not
   implement them. Triple DES is a 64-bit block cipher, so Sweet32
   (CVE-2016-2183) applies, and NIST SP 800-131A Rev. 2 disallows TDEA
-  encryption after 2023. The specification marks both REQUIRED; this is the
-  place where following it no longer makes sense. Block encryption and key
-  wrapping are AES only.
+  encryption after 2023. The specification marks both REQUIRED because it
+  predates that retirement; this package follows the retirement. Block
+  encryption and key wrapping are AES only.
   `#tripledes-cbc` names the block cipher and fails with an error matching
   the relevant operation sentinel while preserving
   `*UnsupportedAlgorithmError`, in every key configuration, a pre-shared
