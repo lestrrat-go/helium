@@ -32,7 +32,7 @@ import (
 //   - the default-deny resource loader (no URIResolver / HTTPClient => retrieval
 //     is refused, never a host fetch);
 //   - the maxRecursionDepth guard turning unbounded template recursion into a
-//     bounded XTDE0820 error rather than a Go stack overflow.
+//     bounded XTDE0820 error, and never a Go stack overflow.
 
 // ---------------------------------------------------------------------------
 // Cancellation: an already-cancelled context must be honored promptly by every
@@ -177,7 +177,7 @@ func TestResourceBudgetCancellationHonored(t *testing.T) {
 // TestResourceBudgetDeadlinePreemption proves mid-execution preemption: a short
 // deadline set on a genuinely long-running xsl:for-each must trip DURING the
 // loop (after transform setup completes), returning context.DeadlineExceeded
-// rather than running the whole 1..N range to completion.
+// well short of running the whole 1..N range to completion.
 func TestResourceBudgetDeadlinePreemption(t *testing.T) {
 	// Nested loops keep every individual range well under the xpath3 node-set
 	// length cap (10M) so the cost is in the ITERATION COUNT (~25M inner bodies),
@@ -318,7 +318,7 @@ func TestResourceBudgetMaxResourceBytesSourceDocument(t *testing.T) {
 // TestResourceBudgetMaxResourceBytesUnparsedText proves the same cap bounds an
 // fn:unparsed-text read: an over-cap resource makes unparsed-text-available
 // report false (per the documented contract, the built-in surfaces FOUT1170
-// / availability=false rather than ErrResourceTooLarge) instead of draining
+// / availability=false, and never ErrResourceTooLarge) instead of draining
 // the stream.
 func TestResourceBudgetMaxResourceBytesUnparsedText(t *testing.T) {
 	const limitBytes = int64(1024)
@@ -370,13 +370,13 @@ func TestResourceBudgetAnalyzeStringMatchCap(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // Default-deny: with NO resolver / HTTPClient, a hostile-URL retrieval must be
-// refused (errors) rather than fetched. This proves the loader never reaches
+// refused (errors), and never fetched. This proves the loader never reaches
 // out to an attacker-controlled endpoint on its own.
 // ---------------------------------------------------------------------------
 
 // TestResourceBudgetDefaultDenyHostileDoc proves doc() against a hostile
 // http(s) URL is refused (FODC0002) when no HTTPClient / URIResolver is
-// configured, rather than performing an SSRF-style fetch.
+// configured, performing no SSRF-style fetch.
 func TestResourceBudgetDefaultDenyHostileDoc(t *testing.T) {
 	const hostileDocStylesheet = `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -395,7 +395,7 @@ func TestResourceBudgetDefaultDenyHostileDoc(t *testing.T) {
 }
 
 // TestResourceBudgetDefaultDenyHostileUnparsedText proves fn:unparsed-text
-// against a hostile URL reports unavailable (rather than fetching) when no
+// against a hostile URL reports unavailable, and fetches nothing, when no
 // resolver is configured.
 func TestResourceBudgetDefaultDenyHostileUnparsedText(t *testing.T) {
 	const hostileTextStylesheet = `
@@ -416,7 +416,7 @@ func TestResourceBudgetDefaultDenyHostileUnparsedText(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // Fanout: xsl:result-document fanout over a large loop must honor cancellation
-// promptly rather than producing every secondary result.
+// promptly, producing no more secondary results.
 // ---------------------------------------------------------------------------
 
 // countingResultDocHandler counts the secondary result documents it receives.
@@ -471,8 +471,8 @@ func TestResourceBudgetResultDocumentFanoutCancellation(t *testing.T) {
 // TestResourceBudgetUnboundedRecursionIsBounded proves that a template that
 // recurses without a base case hits the maxRecursionDepth guard and returns
 // XTDE0820 instead of overflowing the stack. If the guard were absent the test
-// binary would crash with a fatal "stack overflow" runtime error rather than
-// returning an ordinary error.
+// binary would crash with a fatal "stack overflow" runtime error, returning no
+// ordinary error.
 func TestResourceBudgetUnboundedRecursionIsBounded(t *testing.T) {
 	const recursiveStylesheet = `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

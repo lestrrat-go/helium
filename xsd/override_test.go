@@ -416,7 +416,7 @@ func TestOverride_FetchMissRollbackPreservesEarlierPathMarker(t *testing.T) {
 
 // TestOverride_ImportWarningInTarget is the OVR-003 regression: an xs:import inside
 // an overridden target that fails to load must emit the same I/O / "Failed to
-// locate" warnings as a top-level import, rather than being silently skipped.
+// locate" warnings as a top-level import, and is never silently skipped.
 func TestOverride_ImportWarningInTarget(t *testing.T) {
 	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
 	const ns = "urn:o"

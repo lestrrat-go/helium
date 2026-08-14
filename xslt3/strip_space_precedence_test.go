@@ -17,7 +17,7 @@ const importedModuleURI = "mem:/imported.xsl"
 
 // TestStripSpaceImportPrecedence verifies that a conflicting strip-space /
 // preserve-space NameTest across an import boundary is resolved by import
-// precedence (the importing module wins) rather than raising a false XTSE0270,
+// precedence (the importing module wins), raising no false XTSE0270,
 // and that the higher-precedence rule governs whitespace stripping at runtime.
 func TestStripSpaceImportPrecedence(t *testing.T) {
 	t.Parallel()
@@ -272,7 +272,7 @@ func TestStripSpacePrefixNamespaceContext(t *testing.T) {
 
 // TestStripSpaceUndeclaredPrefix verifies that a prefix used in a strip-space
 // elements NameTest that is NOT in scope at the declaration raises XTSE0280,
-// rather than being silently accepted via a compiler-wide binding leaked from an
+// and is never accepted via a compiler-wide binding leaked from an
 // imported module.
 func TestStripSpaceUndeclaredPrefix(t *testing.T) {
 	t.Parallel()
@@ -312,7 +312,7 @@ func TestStripSpaceUndeclaredPrefix(t *testing.T) {
 // TestStripSpaceWildcardKindsNoConflict verifies that strip/preserve NameTests
 // of DIFFERENT kinds at the same import precedence do not raise a false
 // XTSE0270: their match priorities differ, so the conflict is resolved at
-// runtime by priority rather than being a genuine same-priority conflict.
+// runtime by priority, and is no genuine same-priority conflict.
 func TestStripSpaceWildcardKindsNoConflict(t *testing.T) {
 	t.Parallel()
 

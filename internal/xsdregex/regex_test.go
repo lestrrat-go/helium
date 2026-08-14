@@ -126,8 +126,8 @@ func TestUnknownBlockNegatedInCharClass(t *testing.T) {
 	// XSD 1.1 (test bug 13670): an unrecognized \p{Is<block>} matches every
 	// character and its negation \P{Is<block>} matches none. A character class
 	// whose only members are such negated-unknown-block contributions therefore
-	// denotes the empty set, which must compile to a never-matching construct
-	// rather than an empty [] that RE2 cannot parse.
+	// denotes the empty set, which must compile to a never-matching construct,
+	// since RE2 cannot parse an empty [].
 	t.Run("xsd11 negated-unknown-block sole member matches nothing", func(t *testing.T) {
 		re, err := xsdregex.CompileVersion(`[\P{IsFoo}]`, true)
 		require.NoError(t, err, `[\P{IsFoo}] must compile in XSD 1.1`)

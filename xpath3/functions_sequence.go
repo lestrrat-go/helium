@@ -124,7 +124,7 @@ func fnSubsequence(ctx context.Context, args []Sequence) (Sequence, error) {
 	if compat {
 		// The position argument is xs:double, so XPath 1.0 compatibility mode
 		// converts it with fn:number (first item; empty or non-numeric → NaN,
-		// which yields an empty result) rather than a cardinality/type error.
+		// which yields an empty result), and never a cardinality/type error.
 		sv, err := xpath10CompatNumberItem(args[1])
 		if err != nil {
 			return nil, err

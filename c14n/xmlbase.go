@@ -29,7 +29,7 @@ import (
 // libxml2-compat mode ignore it (best-effort result); strict mode turns it into
 // an operation failure.
 //
-// Component parsing uses net/url rather than a full port of libxml2's RFC 3986
+// Component parsing uses net/url, in place of a full port of libxml2's RFC 3986
 // URI parser. This is a deliberate, accepted trade-off: net/url has a few
 // micro-discrepancies from libxml2 on pathological URI forms that do not occur
 // in real xml:base values, and we do not paper over them:
@@ -69,7 +69,7 @@ func joinURIReference(base, ref string) (string, bool) {
 	}
 	basePath := decodedBasePath(baseURL)
 	// url.Parse lowercases the scheme; libxml2 preserves its original case, so
-	// inherit the raw lexical scheme rather than baseURL.Scheme.
+	// inherit the raw lexical scheme, leaving baseURL.Scheme unused.
 	baseScheme := ""
 	if baseURL.Scheme != "" {
 		baseScheme = rawScheme(base)
@@ -83,7 +83,7 @@ func joinURIReference(base, ref string) (string, bool) {
 	refQuery, refHasQuery := refURL.RawQuery, refURL.RawQuery != "" || refURL.ForceQuery
 	// The query is carried raw (libxml2 keeps query_raw verbatim), but the
 	// fragment is decoded on parse and re-escaped on save, so derive it from the
-	// decoded Fragment rather than EscapedFragment().
+	// decoded Fragment, where EscapedFragment() would double-escape.
 	refFrag, refHasFrag := escapeURIFragment(refURL.Fragment), strings.Contains(ref, "#")
 
 	// A "//" authority marker with no host is degenerate. On the reference it is
@@ -275,7 +275,7 @@ func rawScheme(s string) string {
 }
 
 // decodedBasePath returns a parsed base's path in decoded form. Go parses a
-// scheme-only base like "urn:base" with its payload in Opaque rather than Path;
+// scheme-only base like "urn:base" with its payload in Opaque, leaving Path empty;
 // libxml2 treats that payload as the (decoded) path, so fold it back, decoding
 // it the way url.Parse already decodes Path.
 func decodedBasePath(u *url.URL) string {
@@ -291,7 +291,7 @@ func decodedBasePath(u *url.URL) string {
 // faithfulXMLBaseValue reports whether a standalone xml:base value can be
 // canonicalized faithfully: it must parse as a URI reference and not be a
 // degenerate empty-authority form ("//", "///", "urn://", …). An empty value is
-// fine — it is dropped rather than emitted. Strict mode rejects a chain term for
+// fine — it is dropped and never emitted. Strict mode rejects a chain term for
 // which this is false, even a lone term that never participates in a join.
 func faithfulXMLBaseValue(v string) bool {
 	if v == "" {

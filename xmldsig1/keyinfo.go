@@ -36,7 +36,7 @@ type KeySource interface {
 	// ResolveKey returns the verification key for a signature. keyInfo is the
 	// document's parsed, UNTRUSTED KeyInfo (nil when the Signature carries no
 	// KeyInfo); alg is the SignatureMethod algorithm URI. See the [KeySource]
-	// contract: match keyInfo against trusted material rather than trusting it.
+	// contract: match keyInfo against trusted material, and never trust it.
 	ResolveKey(ctx context.Context, keyInfo *KeyInfoData, alg string) (any, error)
 }
 
@@ -462,7 +462,7 @@ func parseKeyInfo(ctx context.Context, budget *verifyBudget, keyInfoElem *helium
 // KeyInfo value named by what, charging charge for the decoded bytes before any
 // of them are built.
 //
-// Reading character data rather than the concatenation of every child's content
+// Reading character data, in place of the concatenation of every child's content,
 // is the point. [xmlbase64.DecodeElement] takes text, CDATA and a one-hop entity
 // reference, and SKIPS a comment or a processing instruction, because per the XML
 // infoset neither contributes a character information item; it refuses any other
@@ -514,8 +514,8 @@ func chargeNothing(int) error {
 // value over 133 octets is therefore rejected by the curve whatever it holds, and
 // refusing it before it is built only moves the same verdict earlier.
 //
-// It is the maximum across ALL THREE curves rather than the selected curve's own
-// size, because at the moment the value is weighed there may be no selected curve
+// It is the maximum across ALL THREE curves, and the selected curve's own
+// size cannot serve, because at the moment the value is weighed there may be no selected curve
 // to weigh it by. dsig11:ECKeyValue puts no order on its children, so
 // dsig11:NamedCurve may follow dsig11:PublicKey, and a document carrying no
 // NamedCurve at all still has its PublicKey read before the missing-curve error
@@ -668,7 +668,7 @@ func parseKeyValue(elem *helium.Element, data *KeyInfoData) error {
 			return parseRSAKeyValue(kvElem, data)
 		case "ECKeyValue":
 			// ECKeyValue is an XML-Signature 1.1 element, so it lives in the
-			// xmldsig11# namespace rather than the core namespace. Require that
+			// xmldsig11# namespace, and never the core one. Require that
 			// exact namespace and reject foreign-namespace look-alikes.
 			if !isDSig11NS(kvElem) {
 				continue
@@ -872,7 +872,7 @@ func parseRFC4050NamedCurve(elem *helium.Element) (elliptic.Curve, error) {
 // This site is the sharper of the two, because an ECDSAKeyValue carries two such
 // attributes and pays the cost twice per key.
 //
-// The conforming size is bounded by the curve rather than by a profile: X and Y
+// The conforming size is bounded by the curve, and by no profile: X and Y
 // are field elements, so the largest supported curve, P-521, needs at most 157
 // decimal digits, and a value the ceiling admits is still weighed by
 // [elliptic.Curve.IsOnCurve] and refused unless it is a real point. 1024 leaves

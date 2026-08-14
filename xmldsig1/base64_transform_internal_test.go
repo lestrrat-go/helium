@@ -82,7 +82,7 @@ func TestBase64ReferenceDecode(t *testing.T) {
 }
 
 // TestBase64ReferenceInvalidInput confirms that base64 content the decoder
-// rejects fails closed as ErrInvalidSignature rather than digesting partial or
+// rejects fails closed as ErrInvalidSignature, digesting no partial or
 // unintended bytes.
 func TestBase64ReferenceInvalidInput(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><Object Id="object">not!!!valid!!!</Object></root>`))
@@ -205,7 +205,7 @@ var xpathIdentityStep = parsedTransform{algorithm: TransformXPath, xpathExpr: "t
 // the document element, and digest octets no other implementation produces.
 func TestBase64WholeDocumentTextMatchesMaterialized(t *testing.T) {
 	// The entity's replacement text is itself base64, so a leaked copy stays
-	// decodable and changes the decoded octets rather than failing the decoder.
+	// decodable and changes the decoded octets, leaving the decoder to succeed.
 	const xml = "<?xml version=\"1.0\"?>\n" +
 		"<!DOCTYPE root [\n" +
 		"<!ENTITY ent \"ZSB0\">\n" +

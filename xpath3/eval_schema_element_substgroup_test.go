@@ -62,7 +62,7 @@ func (substGroupDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLoca
 // TestSchemaElementStepAndInstanceOfAgree verifies that the two schema-element()
 // matchers — the step node-test (eval_path.go) and the sequence-type instance-of
 // path (eval_types.go) — give the SAME answer, keying on substitution-group
-// membership rather than type derivation. The member m is selected/true by both;
+// membership, and never type derivation. The member m is selected/true by both;
 // the non-member e, whose type still derives from the head's type, is
 // rejected/false by both.
 func TestSchemaElementStepAndInstanceOfAgree(t *testing.T) {

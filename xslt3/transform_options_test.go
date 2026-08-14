@@ -35,7 +35,7 @@ const nsInitialTemplateStylesheet = `<?xml version="1.0"?>
 
 // TestTransformInitialTemplateQName proves sub-fix 1: an initial-template
 // supplied as a namespaced xs:QName resolves to the namespaced named template
-// rather than dropping the namespace and failing with XTDE0820.
+// dropping no namespace and never failing with XTDE0820.
 func TestTransformInitialTemplateQName(t *testing.T) {
 	sourceDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<doc>this</doc>`))
 	require.NoError(t, err)

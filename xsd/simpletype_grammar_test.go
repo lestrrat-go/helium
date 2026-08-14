@@ -83,8 +83,8 @@ func TestSimpleTypeGrammar(t *testing.T) {
 // the simpleType restriction-body grammar: xs:assertion and xs:explicitTimezone
 // are XSD 1.1-only constraining facets. In 1.1 they are valid facet children of a
 // restriction; in 1.0 they are unrecognized XSD-namespace elements, so the
-// schema-representation grammar rejects them as stray children (rather than
-// letting parseFacets silently ignore them and false-accept the schema).
+// schema-representation grammar rejects them as stray children, and never lets
+// parseFacets silently ignore them and false-accept the schema.
 func TestSimpleTypeGrammarVersionGatedFacets(t *testing.T) {
 	t.Parallel()
 

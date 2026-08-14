@@ -453,8 +453,7 @@ func validateDateComponents(value string, version Version) error {
 // isLeapYearStr reports whether the Gregorian year given as a (sign-stripped)
 // decimal digit string is a leap year. The year may be an arbitrarily large
 // expanded year, so leap-year status is computed via modulo arithmetic over the
-// digit string rather than by parsing into a fixed-width int (which would
-// overflow): a year is leap iff divisible by 4 and (not divisible by 100, or
+// digit string. Parsing into a fixed-width int would overflow: a year is leap iff divisible by 4 and (not divisible by 100, or
 // divisible by 400).
 func isLeapYearStr(year string) bool {
 	mod := func(s string, n int) int {

@@ -104,8 +104,8 @@ func isAnyType(td *TypeDef) bool {
 
 // isBuiltinSimpleType reports whether td is a built-in (XSD-namespace) SIMPLE type
 // definition. The built-in simple types are registered WITHOUT BaseType pointer
-// links, so their derivation must be resolved through the builtinSimpleBase table
-// rather than by walking BaseType.
+// links, so their derivation must be resolved through the builtinSimpleBase table,
+// and never by walking BaseType.
 func isBuiltinSimpleType(td *TypeDef) bool {
 	return td != nil && td.Name.NS == lexicon.NamespaceXSD && !td.IsComplex
 }

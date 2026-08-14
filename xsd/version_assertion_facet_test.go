@@ -1006,7 +1006,7 @@ func TestVersion11SimpleContentInlineTypePlusSiblingFacets(t *testing.T) {
 // TestVersion11UnionValueSchemaAwareMember verifies that union $value active-member
 // typing is schema-aware: a member whose own assertion needs `castable as t:T`
 // must be selectable when building $value, so the union assertion sees the right
-// type (here xs:integer rather than the xs:string fallback member).
+// type (here xs:integer, and never the xs:string fallback member).
 func TestVersion11UnionValueSchemaAwareMember(t *testing.T) {
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
@@ -1068,7 +1068,7 @@ func TestVersion11AssertIsolationKeepsDefaultNamespace(t *testing.T) {
 // TestVersion11UnionFixedEnumSchemaAware verifies that union enumeration/fixed
 // comparison resolves active members SCHEMA-AWARELY: a member whose own assertion
 // needs `castable as t:T` must be selectable, so the enumeration comparison runs
-// in the integer value space (where "05" == "5") rather than falling back to a
+// in the integer value space (where "05" == "5"), falling back to no
 // string member.
 func TestVersion11UnionFixedEnumSchemaAware(t *testing.T) {
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -1386,7 +1386,7 @@ func TestVersion11SimpleContentInapplicableFacetRejected(t *testing.T) {
 // TestVersion11UnionActiveListMemberValue verifies that union $value typing
 // produces the list-item sequence when the active member is a LIST (PR859-03):
 // here the union value "1 2" is active in IntList, so $value is two xs:int items
-// (count = 2) rather than one untyped atomic.
+// (count = 2), and no single untyped atomic.
 func TestVersion11UnionActiveListMemberValue(t *testing.T) {
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="IntList">

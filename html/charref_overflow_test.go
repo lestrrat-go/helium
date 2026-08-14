@@ -9,9 +9,9 @@ import (
 
 // TestNumericCharRefOverflow verifies that a numeric character reference whose
 // value overflows a 32-bit integer or exceeds the maximum Unicode code point is
-// mapped to the replacement character U+FFFD per HTML5, rather than being
-// dropped entirely (the buggy behavior treated ParseInt overflow as "no
-// digits" and emitted nothing). Both element-text and attribute-value contexts
+// mapped to the replacement character U+FFFD per HTML5, and is never dropped
+// entirely (the buggy behavior treated ParseInt overflow as "no digits" and
+// emitted nothing). Both element-text and attribute-value contexts
 // must produce U+FFFD.
 func TestNumericCharRefOverflow(t *testing.T) {
 	const repl = "�"

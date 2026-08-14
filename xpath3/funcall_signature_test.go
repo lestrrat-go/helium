@@ -124,8 +124,8 @@ func TestTypedUserFunctionObservesCoercedArg(t *testing.T) {
 // Finding 4: a TypedFunction declaring xs:anyAtomicType must accept a NODE
 // argument. Per the function-conversion rules the node is atomized (a node
 // atomizes to xs:untypedAtomic), and xs:untypedAtomic is a subtype of
-// xs:anyAtomicType, so the call must succeed and observe the atomized value
-// rather than failing the static signature check with XPTY0004.
+// xs:anyAtomicType, so the call must succeed and observe the atomized value,
+// and must never fail the static signature check with XPTY0004.
 func TestTypedUserFunctionAnyAtomicAcceptsNode(t *testing.T) {
 	t.Parallel()
 

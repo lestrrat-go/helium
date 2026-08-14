@@ -77,8 +77,8 @@ type parser struct {
 	// strips it (noBlanks) or emits it under the current element. char-data tokens
 	// ('&', NUL, lone '<') do NOT flush it — they are folded into the same run. The
 	// buffer is bounded by the content cap: a whitespace prefix that overruns the
-	// cap before any significance is known hard-fails with ErrContentSizeExceeded
-	// rather than buffering unbounded. Whitespace is only deferred while a decision
+	// cap before any significance is known hard-fails with ErrContentSizeExceeded,
+	// so nothing buffers unbounded. Whitespace is only deferred while a decision
 	// is genuinely pending: under StripBlanks (significance undecided) or before the
 	// body subtree is entered (implied-<body> insertion undecided). With StripBlanks
 	// OFF and the insertion target already established, in <head>, before the root
@@ -116,7 +116,7 @@ type parser struct {
 	// once a non-UTF-8 byte is seen. It is queried after parsing for the
 	// final detected encoding name. (An undeclared stream that stays valid
 	// UTF-8 past the buffering cap fails closed with a bounded-input error
-	// rather than committing to UTF-8, so the deferred reader never emits a
+	// and commits to no encoding, so the deferred reader never emits a
 	// sanitized U+FFFD of its own.)
 	deferredEncoding *deferredLatin1Reader
 
@@ -916,7 +916,7 @@ func (p *parser) parse(ctx context.Context) error {
 		// parser's stream returning the context error when its blocking wait
 		// is cancelled) is recorded by the cursor and otherwise masked by
 		// Done(). Surface it so a cancelled or failed read aborts the parse
-		// rather than silently accepting truncated input.
+		// and never silently accepts truncated input.
 		if err := p.cur.Err(); err != nil {
 			return err
 		}
@@ -977,8 +977,8 @@ func (p *parser) parse(ctx context.Context) error {
 	}
 	// A clean Done() may mask an underlying read error (e.g. a truncated or
 	// checksummed stream that returned data together with a non-EOF error, or a
-	// cancelled push-stream wait). Surface it as a fatal parse error rather than
-	// accepting the input as a cleanly terminated document. Mirrors the XML
+	// cancelled push-stream wait). Surface it as a fatal parse error, so the input is never
+	// accepted as a cleanly terminated document. Mirrors the XML
 	// parser's cursorDecodeErr.
 	if err := p.cur.Err(); err != nil {
 		return err
@@ -1172,7 +1172,7 @@ func (p *parser) parseComment(ctx context.Context) {
 	// be chunked: emitting a truncated first chunk and returning mid-construct
 	// would corrupt the document (the remainder leaks as stray text). Enforce
 	// the content limit as a HARD cap — fail the parse if the comment exceeds
-	// it before its terminator. Also abort promptly on cancellation rather than
+	// it before its terminator. Also abort promptly on cancellation, without
 	// scanning the whole (possibly unterminated) comment.
 	for ctx.Err() == nil {
 		// Use HasByteAt to distinguish EOF from a real NUL byte: PeekAt returns 0
@@ -1228,12 +1228,12 @@ func (p *parser) parseBogusComment(ctx context.Context) {
 	n := 0
 	// A bogus comment maps to a single indivisible SAX event / DOM node and
 	// cannot be chunked, so enforce the content limit as a HARD cap: fail the
-	// parse if it exceeds the limit before its '>' terminator rather than
-	// emitting a truncated comment. Abort promptly on cancellation too.
+	// parse if it exceeds the limit before its '>' terminator, emitting no
+	// truncated comment. Abort promptly on cancellation too.
 	for ctx.Err() == nil {
 		// HasByteAt distinguishes EOF from a real NUL (PeekAt returns 0 for both),
-		// so a NUL inside the bogus comment is counted as content rather than
-		// mistaken for end-of-input and bypassing the hard cap.
+		// so a NUL inside the bogus comment is counted as content and never
+		// mistaken for end-of-input in a way that bypasses the hard cap.
 		if !p.cur.HasByteAt(n) {
 			break
 		}
@@ -1272,12 +1272,12 @@ func (p *parser) parsePI(ctx context.Context) {
 	n := 0
 	// A PI is emitted as a single indivisible comment SAX event / DOM node and
 	// cannot be chunked, so enforce the content limit as a HARD cap: fail the
-	// parse if it exceeds the limit before its '>' terminator rather than
-	// emitting a truncated comment. Abort promptly on cancellation too.
+	// parse if it exceeds the limit before its '>' terminator, emitting no
+	// truncated comment. Abort promptly on cancellation too.
 	for ctx.Err() == nil {
 		// HasByteAt distinguishes EOF from a real NUL (PeekAt returns 0 for both),
-		// so a NUL inside the PI is counted as content rather than mistaken for
-		// end-of-input and bypassing the hard cap.
+		// so a NUL inside the PI is counted as content and never mistaken for
+		// end-of-input in a way that bypasses the hard cap.
 		if !p.cur.HasByteAt(n) {
 			break
 		}
@@ -1515,7 +1515,7 @@ func (p *parser) htmlStartCharData() {
 
 // normalizeNumericCharRef applies the HTML5 numeric-character-reference fixups
 // relevant to NUL handling. A U+0000 reference is a parse error that maps to the
-// replacement character U+FFFD rather than being dropped. Out-of-range and
+// replacement character U+FFFD, and is never dropped. Out-of-range and
 // surrogate code points likewise map to U+FFFD instead of producing an invalid
 // rune.
 func normalizeNumericCharRef(cp int) rune {
@@ -1548,7 +1548,7 @@ func parseNumericCharRef(digits string, base int) (int, bool) {
 // emitNumericCharRef emits the normalized output of a numeric character
 // reference. codepoint/haveDigits come from parsing the digit run (decimal or
 // hex). Per HTML5 a U+0000 reference, an overflowing/out-of-range value, or a
-// surrogate maps to U+FFFD via normalizeNumericCharRef rather than being
+// surrogate maps to U+FFFD via normalizeNumericCharRef and is never
 // dropped; nothing is emitted only when no digits were present at all.
 func (p *parser) emitNumericCharRef(codepoint int, haveDigits bool) {
 	if !haveDigits {
@@ -1653,7 +1653,7 @@ const saturatedCharRefChunk = 4096
 //   - The MaxContentSize cap governs the LITERAL text that an UNRESOLVED run
 //     would emit AND the work spent deciding an AMBIGUOUS legacy-prefix run.
 //     An unbounded digit run is consumed in fixed-size chunks while tracking
-//     value/overflow rather than buffered whole; an unresolved reference is
+//     value/overflow, and is never buffered whole; an unresolved reference is
 //     flushed as literal text in capped chunks; and a run that genuinely
 //     EXCEEDS the cap before its outcome is decided fails the parse with
 //     ErrContentSizeExceeded.
@@ -1666,7 +1666,7 @@ const saturatedCharRefChunk = 4096
 //     bytes-read bounded, the decision is made while CONSUMING the tail into a
 //     spool capped at MaxContentSize: if the run exceeds the cap before the end
 //     is reached, the parse hard-fails with ErrContentSizeExceeded and emits
-//     NOTHING, rather than streaming an unbounded tail. A no-';' legacy-prefix
+//     NOTHING, so no unbounded tail is ever streamed. A no-';' legacy-prefix
 //     run is therefore resolved only when its whole run fits the cap.
 //
 // ctx is checked between bounded chunks so a cancelled parse aborts promptly
@@ -1766,7 +1766,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 		// so a legacy/legacy-prefix run over a tiny cap hard-fails with NOTHING
 		// emitted, identical to the saturated path. (Example: `&ampZ` under
 		// MaxContentSize(2) — the 5-byte run "&ampZ" exceeds 2, so it must fail
-		// rather than emit "&" + "Z".)
+		// and emit neither "&" nor "Z".)
 		if !hasSemicolon {
 			sizeCap := effectiveContentCap(limit)
 			if 1+len(name) > sizeCap {
@@ -1787,7 +1787,7 @@ func (p *parser) parseCharRefBounded(ctx context.Context, limit int) {
 	// literal text in capped chunks. Even though the name fits the fixed
 	// lookahead window, the LITERAL run it produces is still charged against
 	// MaxContentSize: "&" plus the name length (plus any ';'). If that exceeds
-	// the cap, fail with ErrContentSizeExceeded rather than emitting an over-cap
+	// the cap, fail with ErrContentSizeExceeded and emit no over-cap
 	// literal.
 	sizeCap := effectiveContentCap(limit)
 	// Charge the full literal that will be emitted: '&' + name plus the trailing
@@ -1856,7 +1856,7 @@ func (p *parser) parseSaturatedCharRefLiteral(ctx context.Context, head string, 
 	// run is exhausted) — at which point the next byte settles the ';' question.
 	// chunkSize is bounded by both sizeCap (so a single chunk never retains more
 	// than the cap) and a small constant (so ctx cancellation and the over-cap
-	// check are observed at fine granularity rather than once per huge chunk).
+	// check are observed at fine granularity, never once per huge chunk).
 	chunkSize := min(saturatedCharRefChunk, sizeCap)
 	literalLen := 1 + len(head) // '&' + head; grows as the tail is consumed
 	var tail strings.Builder
@@ -2053,7 +2053,7 @@ func (p *parser) emitError(msg string, args ...any) error {
 //     unresolved char-ref literal, a U+FFFD replacement, or a lone literal '<' —
 //     flows through here, so the run is marked uniformly.
 //   - All-whitespace data whose run is not yet significant is, when its insertion
-//     target is still undecided, DEFERRED into pendingWS rather than emitted: in
+//     target is still undecided, DEFERRED into pendingWS and left unemitted: in
 //     <head> (target already correct) it is emitted there or dropped under
 //     noBlanks; before the root element it is ignorable and dropped; inside
 //     raw-text/RCDATA elements it is always kept.
@@ -2107,8 +2107,8 @@ func (p *parser) emitCharacters(data []byte) error {
 			// logical run across parents. When implied insertion is DISABLED
 			// (SuppressImplied) and an element is already open, the insertion target is
 			// fixed, so there is nothing to defer — fall through and emit immediately.
-			// deferPendingWS hard-fails an over-cap undecidable whitespace prefix
-			// rather than buffering unbounded.
+			// deferPendingWS hard-fails an over-cap undecidable whitespace prefix,
+			// so nothing buffers unbounded.
 			return p.deferPendingWS(data)
 		}
 		// Reaching here means inside <head> without StripBlanks, or an element is open
@@ -2281,8 +2281,8 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 	// fragment) to the buffer, flushing first if it would push the chunk past
 	// the cap. Flushing on whole-token boundaries keeps every emitted chunk
 	// valid UTF-8: a multi-byte rune is never split across two chunks. A single
-	// token larger than the cap is emitted whole as its own chunk rather than
-	// split, so no partial rune is ever produced.
+	// token larger than the cap is emitted whole as its own chunk, so no partial
+	// rune is ever produced.
 	appendToken := func(s string) {
 		if content.Len() > 0 && content.Len()+len(s) > limit {
 			flushChunk()
@@ -2295,7 +2295,7 @@ func (p *parser) parseRawContent(ctx context.Context, tagName string) {
 	// afterward would let an over-cap fatalErr (or a cancellation) trigger one
 	// more blocking read before this loop returns.
 	for {
-		// Abort promptly on context cancellation rather than buffering the
+		// Abort promptly on context cancellation, without buffering the
 		// entire (possibly gigantic or unterminated) section first. The main
 		// parse loop re-checks ctx.Err() and surfaces it.
 		if ctx.Err() != nil {
@@ -2467,7 +2467,7 @@ func isUTF8Continuation(b byte) bool {
 // so a chunk flushed at the cap never splits a multi-byte UTF-8 sequence. When
 // the run reached the cap (n >= limit) it backs n off to the last whole-rune
 // boundary; if the run begins with a single rune larger than the cap it extends
-// n forward to cover that rune whole rather than emitting a partial rune. A run
+// n forward to cover that rune whole, so no partial rune is emitted. A run
 // shorter than the cap (stopped at a real delimiter) is returned unchanged.
 func (p *parser) clampTextChunkToRune(n, limit int) int {
 	if n < limit {
@@ -2535,7 +2535,7 @@ func (p *parser) parseRCDATAContent(ctx context.Context, tagName string) {
 		if p.cur.Peek() == '&' {
 			p.parseCharRefBounded(ctx, limit)
 			// A char-ref over the content cap sets fatalErr; return from the
-			// current iteration immediately rather than scanning further. The
+			// current iteration immediately, scanning no further. The
 			// loop-top fatalErr guard already prevents another blocking read.
 			if p.fatalErr != nil {
 				return
@@ -2603,7 +2603,7 @@ func (p *parser) parsePlaintext(ctx context.Context) {
 	// appendToken writes a whole rune to the buffer, flushing first if it would
 	// push the chunk past the cap. Flushing on rune boundaries keeps every
 	// emitted chunk valid UTF-8 (no multi-byte rune split across chunks); a
-	// single rune larger than the cap is emitted whole rather than split.
+	// single rune larger than the cap is emitted whole and never split.
 	appendToken := func(s string) {
 		if content.Len() > 0 && content.Len()+len(s) > limit {
 			flushChunk()
@@ -2615,7 +2615,7 @@ func (p *parser) parsePlaintext(ctx context.Context) {
 	// afterward would let a fatalErr or cancellation trigger one more blocking
 	// read before this loop returns.
 	for {
-		// Abort promptly on context cancellation rather than buffering the
+		// Abort promptly on context cancellation, without buffering the
 		// entire (possibly endless) plaintext section first.
 		if ctx.Err() != nil {
 			flushChunk()
@@ -2682,7 +2682,7 @@ func (p *parser) parseAttributes() []Attribute {
 	var seen map[string]struct{}
 
 	// An over-cap attribute value sets fatalErr; stop scanning immediately so the
-	// main loop surfaces it rather than buffering further attributes.
+	// main loop surfaces it, with no further attributes buffered.
 	for p.fatalErr == nil {
 		p.skipWhitespace()
 		if p.cur.Done() || p.cur.Peek() == '>' || p.cur.Peek() == '/' {
@@ -2913,7 +2913,7 @@ func (p *parser) parseQuotedString() string {
 // drain it in fixed-size pieces. A limit <= 0 is treated as unbounded.
 //
 // It ALSO reports whether the scan was cut short by a read error / context
-// cancellation rather than by genuine exhaustion. PeekAt returns 0 both at true
+// cancellation, as opposed to genuine exhaustion. PeekAt returns 0 both at true
 // EOF and when fillBuffer hit a non-EOF read error (e.g. the push stream
 // returning context.Canceled when its blocking wait is cancelled). Both stop the
 // scan and produce a chunk shorter than limit, so length alone cannot tell "run

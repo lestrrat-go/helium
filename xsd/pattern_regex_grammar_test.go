@@ -24,7 +24,7 @@ func patternSchema(pattern string) string {
 // TestPatternRegexGrammarRejectsNonXSDConstructs verifies that xs:pattern values
 // using regex constructs valid in the XPath/.NET flavors but NOT in the XML
 // Schema regex grammar (XML Schema Part 2 Appendix F) are rejected at schema
-// compile time in the default (XSD 1.0) mode, rather than silently accepted.
+// compile time in the default (XSD 1.0) mode, and are never silently accepted.
 //
 // Three classes are covered: reluctant (non-greedy) quantifiers, '(?...)' group
 // extensions (including non-capturing '(?:...)'), and unbalanced parentheses.

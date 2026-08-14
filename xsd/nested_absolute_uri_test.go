@@ -39,7 +39,7 @@ func TestNestedIncludeAbsoluteURISchemaLocationDemoted(t *testing.T) {
 
 // The same absolute-URI import miss is demoted (warn/skip), but a schema that
 // genuinely DEPENDS on a component from the missing target still fails: the
-// unresolved reference surfaces as a fatal compilation error rather than being
+// unresolved reference surfaces as a fatal compilation error, and is never
 // masked by the demoted fetch. This confirms the required/strict context.
 func TestNestedImportAbsoluteURIMissingDependencyFatal(t *testing.T) {
 	t.Parallel()

@@ -617,8 +617,8 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				} else {
 					copiedNode = lastBefore.NextSibling()
 				}
-				// In sequence mode, the copied node is captured in pendingItems
-				// rather than attached to the DOM tree.
+				// In sequence mode, the copied node is captured in pendingItems,
+				// and attached to no DOM tree.
 				if copiedNode == nil && out.sequenceMode && len(out.pendingItems) > pendingBefore {
 					if ni, ok := out.pendingItems[len(out.pendingItems)-1].(xpath3.NodeItem); ok {
 						copiedNode = ni.Node

@@ -129,8 +129,8 @@ func TestFnDoc_HTTPClientHandlesUppercaseScheme(t *testing.T) {
 
 // A hostile or pathological resource must not be read in full: doc()/fn:doc
 // reads through a bounded reader capped at [xslt3.MaxResourceBytes]. The server
-// streams more than the cap; the transform must fail with an error rather than
-// buffering the whole body into memory. The handler tracks how many bytes it
+// streams more than the cap; the transform must fail with an error, buffering no
+// whole body into memory. The handler tracks how many bytes it
 // actually wrote so we can confirm the client stopped reading near the cap
 // instead of draining the entire (effectively unbounded) stream.
 func TestFnDoc_OverLimitResourceRejected(t *testing.T) {

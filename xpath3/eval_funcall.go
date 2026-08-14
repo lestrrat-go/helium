@@ -296,7 +296,7 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 			// Type-check arguments against declared parameter types. Coercion may
 			// convert an argument (e.g. xs:integer -> xs:double); the coerced value
 			// must be what the function observes, so store it back into a copy of the
-			// argument slice rather than discarding it and invoking with the original
+			// argument slice, discarding nothing and invoking with no original
 			// — mirroring the direct call path and fn:function-lookup.
 			if paramTypes != nil {
 				coerced := make([]Sequence, len(args))
@@ -566,7 +566,7 @@ func evalArrayConstructorExpr(evalFn exprEvaluator, ctx context.Context, ec *eva
 	}
 	// Drain the source lazily and bound each appended member: a huge/lazy source
 	// is rejected once the member count would exceed maxNodes (or OpLimit /
-	// cancellation fires) rather than materializing the whole structure up front.
+	// cancellation fires), materializing no whole structure up front.
 	var members []Sequence
 	total := 0
 	for item := range seqItems(seq) {

@@ -344,8 +344,8 @@ func TestEntitySizeCap(t *testing.T) {
 	t.Parallel()
 
 	// ensures that an external parsed entity whose content
-	// exceeds the size cap is rejected with the specific size-cap error (rather than
-	// read fully via io.ReadAll), and that the resolved input is closed. The source
+	// exceeds the size cap is rejected with the specific size-cap error, and never
+	// read fully via io.ReadAll, and that the resolved input is closed. The source
 	// is finite (cap+1 bytes) so a regression of the guard cannot hang or OOM the
 	// test; it would instead fail the specific-error assertion.
 	t.Run("an external entity is capped", func(t *testing.T) {
@@ -386,7 +386,7 @@ func TestEntitySizeCap(t *testing.T) {
 		t.Run("unterminated over-cap entity value fails closed (Parse)", func(t *testing.T) {
 			t.Parallel()
 			// No closing quote: the scanner runs to EOF. The cap must trip before the
-			// whole run is buffered, rather than growing unbounded.
+			// whole run is buffered, so nothing grows unbounded.
 			body := strings.Repeat("a", 200)
 			doc := `<!DOCTYPE r [<!ENTITY e "` + body
 			_, err := helium.NewParser().
@@ -420,7 +420,7 @@ func TestEntitySizeCap(t *testing.T) {
 	// literal scanners reached through an external ENTITY declaration in the
 	// internal subset (parseEntityDecl -> parseExternalID). A giant system or public
 	// literal in an external general or parameter entity declaration must fail closed
-	// with the per-node content cap rather than buffering unbounded; the generic
+	// with the per-node content cap, buffering nothing unbounded; the generic
 	// "value required" message must not mask the resource-limit error.
 	t.Run("an external entity declaration literal", func(t *testing.T) {
 		const limit = 64
@@ -466,7 +466,7 @@ func TestEntitySizeCap(t *testing.T) {
 	// the SYSTEM/PUBLIC literal
 	// scanners (parseSystemLiteral/parsePubidLiteral) reached through the DOCTYPE
 	// external ID. A giant system or public literal must fail closed with the
-	// per-node content cap rather than buffering unbounded; the generic "URI
+	// per-node content cap, buffering nothing unbounded; the generic "URI
 	// required" message must not mask the resource-limit error.
 	t.Run("an external ID literal", func(t *testing.T) {
 		const limit = 64

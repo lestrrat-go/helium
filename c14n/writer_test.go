@@ -44,7 +44,7 @@ func parseDoc(t *testing.T, src string) *helium.Document {
 func TestWriterErrors(t *testing.T) {
 	// propagate runs canonicalization against a writer that fails at every byte
 	// boundary from 0 up to the full output length. Every failure must surface
-	// as an error rather than a panic or silent success. This walks the
+	// as an error, never as a panic or a silent success. This walks the
 	// writer-error return branches throughout the canonicalizer.
 	t.Run("propagate", func(t *testing.T) {
 		docs := map[string]string{

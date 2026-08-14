@@ -45,7 +45,7 @@ func wrapElementBase64(t *testing.T, xml, tag string, col int) string {
 // various signature fields.
 func TestVerifyLineWrapped(t *testing.T) {
 	// SignatureValue: line-wrapped (valid xs:base64Binary with interspersed
-	// whitespace) still verifies rather than failing to base64-decode.
+	// whitespace) still verifies, and never fails to base64-decode.
 	// SignatureValue lives outside SignedInfo, so wrapping it post-signing does
 	// not disturb the signed bytes.
 	t.Run("signature value", func(t *testing.T) {
@@ -365,8 +365,8 @@ func TestVerifyDuplicateRejected(t *testing.T) {
 	// canonicalized and checked against SignatureValue), while an attacker
 	// prepends a second, UNSIGNED SignedInfo carrying a Reference to
 	// attacker-controlled content with a self-consistent DigestValue. Verify must
-	// reject the document rather than report the injected reference as covered by
-	// the signature.
+	// reject the document, and must never report the injected reference as covered
+	// by the signature.
 	t.Run("signed info", func(t *testing.T) {
 		xml := `<root><data Id="payload">secret</data></root>`
 		key := generateRSAKey(t)
@@ -507,7 +507,7 @@ const nilKeySourceSigDoc = `<doc xmlns:ds="http://www.w3.org/2000/09/xmldsig#">`
 
 // TestVerifyNilKeySource covers nil/typed-nil/zero-value key source guards.
 func TestVerifyNilKeySource(t *testing.T) {
-	// nil key source: a nil KeySource must surface a typed error rather than
+	// nil key source: a nil KeySource must surface a typed error, and must never
 	// panic on a nil pointer dereference when Verify reaches ResolveKey.
 	t.Run("nil", func(t *testing.T) {
 		const sigDoc = `<doc xmlns:ds="http://www.w3.org/2000/09/xmldsig#">` +
@@ -535,7 +535,7 @@ func TestVerifyNilKeySource(t *testing.T) {
 
 	// typed-nil func: a typed-nil KeySourceFunc passes the interface!=nil check in
 	// verifySignature (the interface carries a concrete type), so ResolveKey must
-	// guard the nil func itself and return a typed error rather than panic on the
+	// guard the nil func itself and return a typed error, never panicking on the
 	// nil call.
 	t.Run("typed nil func", func(t *testing.T) {
 		doc := mustParseXML(t, nilKeySourceSigDoc)
@@ -568,7 +568,7 @@ func TestVerifyNilKeySource(t *testing.T) {
 
 	// zero-value verifier: a zero-value Verifier{} constructed directly
 	// (bypassing NewVerifier) has a nil cfg. Verify/VerifyElement must surface a
-	// typed error rather than panic on the nil cfg dereference inside
+	// typed error, and must never panic on the nil cfg dereference inside
 	// verifySignature.
 	t.Run("zero value verifier", func(t *testing.T) {
 		doc := mustParseXML(t, nilKeySourceSigDoc)
@@ -615,7 +615,7 @@ func TestVerifyHonorsContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	// A context cancelled before verification must abort the Reference loop and
-	// surface the context error rather than completing a full verification.
+	// surface the context error, well short of a full verification.
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err = verifier.Verify(ctx, doc)
@@ -693,8 +693,8 @@ func TestVerifyShortCircuitsCancelledContext(t *testing.T) {
 // whole document to locate ds:Signature elements before delegating to the
 // per-signature verify path, so the cancellation check must sit ahead of that
 // walk: on a large or attacker-supplied document with no Signature, a cancelled
-// context must return the context error immediately rather than pay for the
-// unbounded discovery walk and then report ErrSignatureNotFound.
+// context must return the context error immediately, paying nothing for the
+// unbounded discovery walk and never reporting ErrSignatureNotFound.
 func TestVerifyShortCircuitsBeforeSignatureDiscovery(t *testing.T) {
 	doc := mustParseXML(t, `<root/>`)
 	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(nil))

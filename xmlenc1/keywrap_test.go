@@ -229,7 +229,7 @@ func TestKeyWrapSize(t *testing.T) {
 
 	// The URI is decided before any payload work, while the KEK length is bound
 	// after the block encryption, so a caller who got both wrong hears about the
-	// setting that can never work rather than about the key.
+	// setting that can never work, and nothing about the key.
 	t.Run("encrypt reports the URI ahead of the KEK length", func(t *testing.T) {
 		doc := mustParseXML(t, samlAssertion)
 		_, err := xmlenc1.NewEncryptor().
@@ -341,7 +341,7 @@ func TestKeyWrapIntegrityCheck(t *testing.T) {
 	// Wire bytes 0-7 carry the A register the integrity check actually
 	// compares against defaultIV. Covering each of those 8 bytes
 	// individually, including byte 7, is the direct exercise of that
-	// comparison rather than of diffusion through the surrounding rounds.
+	// comparison, and not of diffusion through the surrounding rounds.
 	t.Run("a corrupted integrity register is rejected", func(t *testing.T) {
 		var wantErr string
 		for i := range 8 {

@@ -69,7 +69,7 @@ type sortValue struct {
 	typeName string // original XSD type name (for XTDE1030 checking)
 	// atom carries the original atomized value (when hasAtom is true) so the
 	// XTDE1030 type-consistency check can probe true XPath comparability via
-	// xpath3.ValueCompare rather than comparing raw type names. Numeric/date
+	// xpath3.ValueCompare, comparing no raw type names. Numeric/date
 	// pre-conversion to num is independent of this — atom always reflects the
 	// untouched source type for the consistency gate.
 	atom    xpath3.AtomicValue
@@ -496,7 +496,7 @@ func fillSingletonSortValue(sv *sortValue, item xpath3.Item, dtMode *dataTypeMod
 		// Atomize to get the typed value. A schema/type-annotated node MUST then
 		// flow through the SAME auto numeric/date/duration promotion an atomic
 		// singleton receives, so a typed date/duration node sorts by its real
-		// value rather than as text. Reuse this single atomized value for both
+		// value, and never as text. Reuse this single atomized value for both
 		// the comparison value and the XTDE1030 gate (don't atomize twice).
 		atom, err := xpath3.AtomizeItem(v)
 		if err != nil {
@@ -580,7 +580,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		}
 		strVal := result.StringValue()
 		// XSLT 1.0 behavior (backwards-compatible processing): the sort key uses
-		// the FIRST item; the rest are discarded rather than raising XTTE1020
+		// the FIRST item; the rest are discarded, raising no XTTE1020
 		// (§13.1.2).
 		if seqLen > 1 && ec.isCompatExpr(sk.Select) {
 			seq = xpath3.ItemSlice{seq.Get(0)}
@@ -1302,8 +1302,8 @@ func (ec *execContext) execPerformSort(ctx context.Context, inst *performSortIns
 	}
 
 	// In capture mode (e.g. inside xsl:function), push sorted items
-	// directly so the caller receives a proper sequence of atomic values
-	// rather than merged text nodes.
+	// directly so the caller receives a proper sequence of atomic values,
+	// and no merged text nodes.
 	out := ec.currentOutput()
 	if out.captureItems && out.doc != nil && out.current == out.doc.DocumentElement() {
 		out.pendingItems = append(out.pendingItems, sequence.Materialize(seq)...)

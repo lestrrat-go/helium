@@ -21,7 +21,7 @@ import (
 //     which walk the BaseType chain.
 //
 // All of these are invalid schemas, so Compile must terminate and report
-// ErrCompilationFailed rather than crash or hang. Each case runs under a
+// ErrCompilationFailed, crashing nowhere and hanging never. Each case runs under a
 // watchdog so the test FAILS (instead of hanging the suite) if the loop ever
 // regresses.
 func TestCyclicSimpleTypeTerminates(t *testing.T) {

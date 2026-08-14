@@ -15,7 +15,7 @@ import (
 // golang.org/x/text norm.Form and reports whether normalization is active. "NFC",
 // "NFD", "NFKC", and "NFKD" enable it; "" and "none" disable it. Any other value
 // also returns active=false here, but validNormalizationForm rejects it so WriteTo
-// fails rather than silently disabling normalization (the caller — fn:serialize —
+// fails, and never silently disables normalization (the caller — fn:serialize —
 // rejects "fully-normalized" as SESU0011 before reaching the writer).
 func xmlNormalizationForm(form string) (norm.Form, bool) {
 	switch form {
@@ -168,7 +168,7 @@ var (
 
 // ErrInvalidXMLChar is returned by the writer when a character in the tree is
 // not valid in the target XML version and the writer is configured to reject
-// (rather than replace) such characters via Writer.RejectInvalidChars. It maps
+// such characters, in place of replacing them, via Writer.RejectInvalidChars. It maps
 // to the XSLT/XQuery serialization error SERE0006.
 var ErrInvalidXMLChar = errors.New("character is not valid in the target XML version")
 
@@ -242,7 +242,7 @@ const upperHex = "0123456789ABCDEF"
 
 // isXML11RestrictedChar reports whether r is an XML 1.1 restricted character: a
 // control character that is a valid XML 1.1 Char but must be serialized as a
-// character reference rather than appearing literally (XML 1.1 §2.11). Tab
+// character reference and never appear literally (XML 1.1 §2.11). Tab
 // (U+0009), LF (U+000A), and CR (U+000D) are excluded — they follow the ordinary
 // escaping rules.
 func isXML11RestrictedChar(r rune) bool {
@@ -263,7 +263,7 @@ func isXML11RestrictedChar(r rune) bool {
 }
 
 // isXML11SerializeAsCharRef reports whether r must be written as a character
-// reference (rather than literally) when producing XML 1.1 output. This is the
+// reference, and never literally, when producing XML 1.1 output. This is the
 // XML 1.1 RestrictedChar set (isXML11RestrictedChar) PLUS the two end-of-line
 // characters NEL (U+0085) and LINE SEPARATOR (U+2028). Both are excluded from
 // RestrictedChar, but XML 1.1 §2.11 line-ending normalization translates them to

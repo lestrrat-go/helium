@@ -1018,7 +1018,7 @@ func TestParserOptions(t *testing.T) {
 	})
 
 	// confirms SAXHandler(nil) restores the
-	// default TreeBuilder rather than leaving the parser handler-less. A nil handler
+	// default TreeBuilder, and never leaves the parser handler-less. A nil handler
 	// otherwise builds no tree, so Parse would report success with a nil *Document —
 	// a silent no-output result for a caller passing an optional handler straight
 	// through. This mirrors Parser.FS(nil), which likewise restores its default.
@@ -1269,7 +1269,7 @@ func TestParseExternalEntity(t *testing.T) {
 
 		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(fsys)
 		_, err := p.Parse(t.Context(), []byte(input))
-		require.Error(t, err, "malformed UTF-16 external entity must fail rather than inserting U+FFFD")
+		require.Error(t, err, "malformed UTF-16 external entity must fail and insert no U+FFFD")
 	})
 
 	t.Run("a valid encoding", func(t *testing.T) {

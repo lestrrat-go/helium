@@ -197,7 +197,7 @@ func TestRuneCursorReadShortBufferPartialRuneFit(t *testing.T) {
 
 	// A 2-byte buffer fits 'a' (1 byte) but not the following 2-byte 'é'.
 	// Read must emit only 'a' as a short read with no EOF, leaving 'é'
-	// buffered rather than reordering bytes from the underlying reader.
+	// buffered, with no bytes reordered from the underlying reader.
 	buf := make([]byte, 2)
 	n, err := cur.Read(buf)
 	require.NoError(t, err)

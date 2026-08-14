@@ -93,7 +93,7 @@ func TestDataOrderingFacets(t *testing.T) {
 		t.Parallel()
 		// Ordering facets are undefined for string-family types (their value space
 		// is not ordered), so the facet is inapplicable and rejected at compile
-		// time rather than silently accepted at validation.
+		// time, well before validation could silently accept it.
 		schema := `<element name="r" xmlns="http://relaxng.org/ns/structure/1.0" ` + xsd + `>
   <data type="string"><param name="minInclusive">b</param></data>
 </element>`
@@ -304,7 +304,7 @@ func TestDataDigitFacetsLexical(t *testing.T) {
 
 // TestDataUnsupportedFacetFailsClosed covers that an unrecognized / unsupported
 // <param> facet (a genuinely unknown name) is not silently accepted: a <data>
-// carrying one rejects its instance rather than matching anything.
+// carrying one rejects its instance and matches nothing.
 func TestDataUnsupportedFacetFailsClosed(t *testing.T) {
 	t.Parallel()
 

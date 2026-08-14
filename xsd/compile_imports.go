@@ -17,8 +17,8 @@ import (
 )
 
 // errImportDepthExceeded signals that xs:import recursion reached the
-// configured limit. processIncludes propagates this error rather than
-// treating it as a warning the way it treats ordinary I/O failures.
+// configured limit. processIncludes propagates this error, and never
+// treats it as a warning the way it treats ordinary I/O failures.
 var errImportDepthExceeded = errors.New("xsd: max import depth exceeded")
 
 // errIncludeDepthExceeded signals that xs:include/xs:redefine nesting reached
@@ -28,7 +28,7 @@ var errIncludeDepthExceeded = errors.New("xsd: max include depth exceeded")
 
 // errSchemaPathEscape signals that a schemaLocation joined onto baseDir
 // would escape upward via ".." segments. processIncludes surfaces this
-// as a fatal error rather than swallowing it as a generic I/O warning,
+// as a fatal error, swallowing it as no generic I/O warning,
 // so the containment violation is visible to callers.
 var errSchemaPathEscape = errors.New("xsd: schema location escapes base directory")
 
@@ -69,8 +69,8 @@ var errSchemaFetchMiss = errors.New("xsd: nested schema fetch miss")
 // xs:redefine target) exceeded [maxNestedSchemaSize] while being read. It is a
 // resource-limit guard, so it is classified fatal by [IsFatalSchemaLoad] and
 // must not be silently demoted to an I/O warning on the xs:import path: a
-// hostile schemaLocation (e.g. /dev/zero) must abort compilation rather than
-// be swallowed.
+// hostile schemaLocation (e.g. /dev/zero) must abort compilation, and must
+// never be swallowed.
 var errSchemaTooLarge = errors.New("xsd: schema resource exceeds size limit")
 
 // errNestedSchemaReadAfterOpen tags an error that occurred while READING a
@@ -355,8 +355,8 @@ func containsMultiError(err error) bool {
 }
 
 // FatalSchemaLoader is implemented by errors raised from a configured [fs.FS]
-// (see [Compiler.FS]) that must abort compilation rather than be demoted to a
-// warning when they occur while loading an xs:import target. The xsd compiler
+// (see [Compiler.FS]) that must abort compilation, and must never be demoted to
+// a warning, when they occur while loading an xs:import target. The xsd compiler
 // normally treats a failure to load an xs:import target as a non-fatal warning
 // ("Failed to locate a schema ... Skipping the import."), matching libxml2.
 // A resource-limit guard, however, must not be silently defeated by that
@@ -369,8 +369,8 @@ type FatalSchemaLoader interface {
 }
 
 // IsFatalSchemaLoad reports whether err (or anything in its chain) is a fatal
-// schema-load condition that must ABORT compilation rather than be demoted to a
-// warning or papered over by a fallback to a pre-compiled schema. It is the
+// schema-load condition that must ABORT compilation, and must never be demoted
+// to a warning or papered over by a fallback to a pre-compiled schema. It is the
 // single source of truth for this classification, shared by the xsd import
 // warn-and-continue paths and by xslt3's xsl:import-schema fallback guard so the
 // two layers cannot drift apart.
@@ -420,7 +420,7 @@ func schemaBaseDir(loc string) string {
 	}
 	// loc is an fs.FS key in forward-slash form (see ResolveSchemaURI); derive
 	// its parent directory with path.Dir so the result stays slash-separated on
-	// every OS rather than gaining backslashes via filepath.Dir on Windows.
+	// every OS, gaining no backslashes via filepath.Dir on Windows.
 	return path.Dir(uripath.ToSlash(loc))
 }
 
@@ -541,7 +541,7 @@ func (c *compiler) processIncludes(ctx context.Context, root *helium.Element) er
 
 // nestedLoadFailureFatal reports whether an xs:include/xs:redefine (and, via
 // [processImport], xs:import; and, via [loadOverride]/[overrideLoadTarget],
-// xs:override) load error must abort compilation rather than be
+// xs:override) load error must abort compilation, and must never be
 // demoted to a warning. It is FAIL-CLOSED: the ONLY demotable condition is a
 // CONFIRMED benign fetch/resolution miss ([nestedFetchMiss]) — schemaLocation is
 // only a hint (src-include.1 / src-import), so a missing or unresolvable target
@@ -583,7 +583,7 @@ func (c *compiler) reportMissingSchemaLocation(ctx context.Context, elem *helium
 // reportSchemaLoadWarning demotes a non-fatal xs:include/xs:import/xs:redefine
 // load failure to the libxml2 "I/O warning" + "Failed to locate … Skipping the
 // <verb>." warning pair, so an unresolvable schemaLocation hint skips that
-// composition element rather than aborting compilation. libxml2 treats a missing
+// composition element, aborting no compilation. libxml2 treats a missing
 // include/import/redefine target as a warning; only a fatal load condition
 // ([IsFatalSchemaLoad], e.g. a security-limit breach) aborts. elemKind is the XSD
 // element local name and verb the word after "Skipping the".
@@ -718,7 +718,7 @@ func (c *compiler) processImport(ctx context.Context, elem *helium.Element) erro
 
 // processNestedIncludes processes the xs:include/xs:import/xs:redefine declared
 // by an already-parsed included or redefined schema (incRoot), so a transitive
-// chain (main -> inc1 -> inc2) resolves rather than failing on declarations that
+// chain (main -> inc1 -> inc2) resolves, failing on no declarations that
 // only inc2 defines. The nested references in incRoot are relative to the
 // included schema, so baseDir/filename are temporarily switched to it (path is
 // its resolved fs key, location its raw schemaLocation). Recursion is bounded by
@@ -773,7 +773,7 @@ func (c *compiler) loadInclude(ctx context.Context, location string, includeElem
 		// (before the read, so a self-referential include cannot recurse).
 		// Roll it back: a genuinely-missing target is demoted to a warning by
 		// the caller, and a LATER xs:include/xs:redefine of the SAME location
-		// must be retried and warned about again rather than treated as
+		// must be retried and warned about again, and never treated as
 		// "already loaded" and silently skipped (which, for xs:redefine, would
 		// otherwise run its overrides against an empty Phase-A set and report a
 		// spurious duplicate-redefine error). A fatal read error aborts
@@ -1135,7 +1135,7 @@ func (c *compiler) loadRedefine(ctx context.Context, location string, redefineEl
 	// inherited from the redefining schema: reset to the spec defaults
 	// (unqualified / no flags) before applying this document's own declared
 	// values, so a redefined schema that omits them parses its declarations
-	// against the spec defaults rather than the parent's settings.
+	// against the spec defaults, and never the parent's settings.
 	savedElemForm := c.schema.elemFormQualified
 	savedAttrForm := c.schema.attrFormQualified
 	savedBlockDefault := c.schema.blockDefault
@@ -2156,7 +2156,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 
 	// The targetNamespace of the located schema must match the namespace
 	// declared on <xs:import> (XSD src-import; libxml2 rejects the mismatch
-	// rather than merging declarations from the wrong namespace). A present
+	// and merges no declarations from the wrong namespace). A present
 	// namespace requires that exact targetNamespace; an absent namespace
 	// requires the imported schema to have no targetNamespace. This is a
 	// fatal schema error, not an I/O warning, so it is emitted directly here

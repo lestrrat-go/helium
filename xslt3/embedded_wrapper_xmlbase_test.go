@@ -90,7 +90,7 @@ func TestEmbeddedModuleWrapperXMLBase(t *testing.T) {
 // xml:base and the embedded stylesheet's own xml:base. The module's templates
 // compile under that folded effective base, so the module document must be cached
 // under that same key for doc(”)/document(”) to resolve to the module's OWN
-// document rather than falling back to the principal stylesheet.
+// document, falling back to no principal stylesheet.
 func TestEmbeddedModuleWrapperDocSelfResolves(t *testing.T) {
 	const (
 		mainBase  = "mem://pkg/main.xsl"

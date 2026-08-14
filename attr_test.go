@@ -279,7 +279,7 @@ func TestSetAttribute(t *testing.T) {
 			require.Equal(t, "&amp;", v)
 
 			// The verbatim '&' is escaped by the writer, so it round-trips as
-			// A&amp;B rather than corrupting the serialized output.
+			// A&amp;B, leaving the serialized output intact.
 			out, err := helium.WriteString(elem)
 			require.NoError(t, err)
 			require.Contains(t, out, `a="A&amp;B"`)
@@ -410,7 +410,7 @@ func TestSetAttribute(t *testing.T) {
 			// (namespace URI, local name), regardless of which namespace
 			// declaration (pointer) they reference. Like every other Set*Attribute
 			// entry point, SetAttributeNS treats these as the SAME attribute and
-			// replaces in place rather than appending a second property or erroring.
+			// replaces in place, appending no second property and returning no error.
 			ns1 := helium.NewNamespace("a", "http://example.com/ns")
 			ns2 := helium.NewNamespace("b", "http://example.com/ns")
 
@@ -456,9 +456,8 @@ func TestSetAttribute(t *testing.T) {
 			// Two distinct *Namespace values that share the same URI but differ
 			// in prefix. SetAttributeNS routes through addProperty, which
 			// must treat these as the SAME attribute (expanded name {urn:x}a)
-			// and replace in place rather than creating a second property that
-			// serializes to a different QName (p:a vs q:a) yet has an identical
-			// expanded name.
+			// and replace in place. A second property would serialize to a
+			// different QName (p:a vs q:a) yet carry an identical expanded name.
 			ns1 := helium.NewNamespace("p", "urn:x")
 			ns2 := helium.NewNamespace("q", "urn:x")
 

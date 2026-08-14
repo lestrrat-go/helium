@@ -72,7 +72,7 @@ func TestDecryptBogusFirstKeyTriesNext(t *testing.T) {
 
 // TestMultiRecipientDecrypt covers XENC-002: an EncryptedData may carry
 // several EncryptedKey candidates (one per recipient), and decryption must
-// try each rather than committing to the first. This also makes a bogus
+// try each, committing to none of them first. This also makes a bogus
 // EncryptedKey prepended to a legitimate one a non-issue instead of a DoS.
 func TestMultiRecipientDecrypt(t *testing.T) {
 	const algorithm = xmlenc1.AES256GCM
@@ -167,7 +167,7 @@ func TestMultiRecipientDecrypt(t *testing.T) {
 		// WRONG session key, so block decryption fails with a real error.
 		// Second key is NON-APPLICABLE (RSA-OAEP, no private key supplied) and
 		// only yields ErrMissingKey. The informative ErrDecryptionFailed must
-		// surface rather than being overwritten by the trailing ErrMissingKey.
+		// surface, and the trailing ErrMissingKey must never overwrite it.
 		elem := newEncryptedData(t, []*xmlenc1.EncryptedKey{
 			{
 				EncryptionMethod: &xmlenc1.EncryptionMethod{Algorithm: xmlenc1.AES256KeyWrap},
@@ -190,8 +190,8 @@ func TestMultiRecipientDecrypt(t *testing.T) {
 // ECDH-ES AgreementMethod (AgreementMethod/KeyDerivationMethod/
 // ConcatKDFParams/OriginatorKeyInfo), the second only a ds:KeyName hint.
 // Before the KeyInfo cardinality guard exists, the EncryptedKey branch
-// assigns ek.AgreementMethod on every ds:KeyInfo child rather than rejecting
-// a second one, so the KeyName-only KeyInfo silently overwrites the real
+// assigns ek.AgreementMethod on every ds:KeyInfo child and rejects
+// no second one, so the KeyName-only KeyInfo silently overwrites the real
 // AgreementMethod with nil.
 func secondKeyInfoDropsAgreementMethod(t *testing.T) *helium.Element {
 	t.Helper()
@@ -229,7 +229,7 @@ func secondKeyInfoDropsAgreementMethod(t *testing.T) *helium.Element {
 // real P-256 point. Before the ECKeyValue cardinality guard exists, the
 // second NamedCurve silently overrides curve selection, so the point is
 // weighed against the wrong curve and rejected with an invalid-point
-// message rather than a duplicate-NamedCurve one.
+// message, and never a duplicate-NamedCurve one.
 func duplicateNamedCurve(t *testing.T) *helium.Element {
 	t.Helper()
 	point := base64.StdEncoding.EncodeToString(ecPublicKeyPoint(t, ecdh.P256()))
@@ -242,7 +242,7 @@ func duplicateNamedCurve(t *testing.T) *helium.Element {
 // duplicatePublicKey builds an ECDH-ES EncryptedKey whose dsig11:ECKeyValue
 // carries a NamedCurve followed by two independently generated, individually
 // valid P-256 points. Before the ECKeyValue cardinality guard exists, the
-// second PublicKey silently overwrites the first rather than being rejected.
+// second PublicKey silently overwrites the first and is never rejected.
 func duplicatePublicKey(t *testing.T) *helium.Element {
 	t.Helper()
 	first := base64.StdEncoding.EncodeToString(ecPublicKeyPoint(t, ecdh.P256()))
@@ -370,7 +370,7 @@ func TestParseRejectsDuplicateCardinality(t *testing.T) {
 // TestDecryptType covers XENC-004: Decrypt parses the recovered plaintext as
 // XML only when @Type names Element or Content. @Type sits outside the
 // ciphertext and is unauthenticated even under AES-GCM, so an absent, empty,
-// or unrecognized value is refused with ErrOpaquePayload rather than parsed:
+// or unrecognized value is refused with ErrOpaquePayload, and never parsed:
 // stripping the attribute must not reinterpret an authenticated opaque octet
 // stream as an element the caller may graft into its tree. DecryptBytes is
 // the octet path, and the error names it.

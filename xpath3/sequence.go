@@ -131,7 +131,7 @@ func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
 // (cont, err): cont is false once yield has requested a stop, so that recursive
 // array-member atomization halts IMMEDIATELY and no further members (or items)
 // are atomized. Propagating the stop is what lets a caller's bounded-work cap
-// (e.g. a singleton-cardinality check) surface its own rejection rather than a
+// (e.g. a singleton-cardinality check) surface its own rejection, and never a
 // later member's atomization error (e.g. FOTY0013 from a map).
 //
 // contentKindCheck, when non-nil (the fn:data / typed-value path only), is
@@ -142,7 +142,7 @@ func atomizeStream(seq Sequence, yield func(AtomicValue) (bool, error)) error {
 // element-only complex content has no typed value and raises err:FOTY0012; one
 // with empty complex content has typed value () and is SKIPPED (contributes no
 // atoms); everything else atomizes normally. Because the check is interleaved
-// with atomization rather than pre-scanned, the FIRST offending item wins — a
+// with atomization, and never pre-scanned, the FIRST offending item wins — a
 // map/function encountered earlier still raises FOTY0013 (from AtomizeItem)
 // before a later element-only element is reached — and element-only / empty /
 // nilled nodes nested inside arrays are handled too.
@@ -300,7 +300,7 @@ func atomizeListTokenAt(i int, tok, listItem string, ni NodeItem) (AtomicValue, 
 // (space, tab, CR, LF), matching XSD list tokenization and the validation / $value
 // paths (internal/xsd/value.XSDFields). Unlike strings.Fields it does NOT split on
 // NBSP or other Unicode whitespace, so a list item containing NBSP stays a single
-// token (and is then rejected by per-item lexical validation) rather than being
+// token (and is then rejected by per-item lexical validation), and is never
 // silently split into two atoms.
 func xsdListFields(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool {

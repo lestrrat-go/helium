@@ -1923,8 +1923,8 @@ func TestXIncludeFileURIHref(t *testing.T) {
 	t.Parallel()
 
 	// Write a real include target and reference it via an absolute file:// URI.
-	// The permissive resolver must convert the URI to an OS path rather than
-	// handing "file:/..." to os.Open verbatim.
+	// The permissive resolver must convert the URI to an OS path, and must never
+	// hand "file:/..." to os.Open verbatim.
 	dir := t.TempDir()
 	target := filepath.Join(dir, "inc.xml")
 	require.NoError(t, os.WriteFile(target, []byte(`<loaded>FromFileURI</loaded>`), 0o600))
@@ -2091,7 +2091,7 @@ func TestXIncludeSameDocumentXPointerNoResolver(t *testing.T) {
 // shorthand pointer (href="#a", which selects an element by ID) succeeds under
 // the deny-all default resolver even when a BaseURI is configured: the bare
 // fragment has no document part, so it must be evaluated against the in-memory
-// snapshot rather than re-loaded through the (deny-all) resolver.
+// snapshot, and never re-loaded through the (deny-all) resolver.
 func TestXIncludeShorthandPointerDefaultResolver(t *testing.T) {
 	t.Parallel()
 

@@ -72,7 +72,7 @@ func decryptECDHSessionKey(priv *ecdsa.PrivateKey, ek *encryptedKey, sessionKeyS
 // crypto/ecdh form ECDH-ES needs, and rejects any recipient key the package
 // cannot see an encryption through. Three distinct failures live here: the
 // key may carry no point at all (an ecdsa.PublicKey with unset coordinates,
-// which crypto/ecdsa dereferences rather than reporting), crypto/ecdh refuses
+// which crypto/ecdsa dereferences and never reports), crypto/ecdh refuses
 // some curves outright (P-224 has no ECDH form at all), and a curve it does
 // accept may still have no dsig11:NamedCurve URI, which would yield an
 // EncryptedKey no recipient can parse.
@@ -195,7 +195,7 @@ func effectiveKDFParams(params *ConcatKDFParams) *ConcatKDFParams {
 //
 // The caller passes the set effectiveKDFParams returns, so params with an empty
 // DigestMethod are weighed as the SHA-256 default carrying no OtherInfo that
-// stands in for them — the caller's fields are discarded rather than measured,
+// stands in for them — the caller's fields are discarded unmeasured,
 // exactly as the derivation discards them, so an oversized set paired with an
 // empty DigestMethod still encrypts.
 func validateEncryptConcatKDFParams(params *ConcatKDFParams) error {
@@ -286,7 +286,7 @@ const maxConcatKDFOtherInfoBytes = 4096
 // ConcatKDFParams it built itself.
 //
 // The set effectiveKDFParams replaces reaches none of those points: its
-// OtherInfo is dropped rather than measured, and the SHA-256 default that
+// OtherInfo is dropped unmeasured, and the SHA-256 default that
 // takes its place carries none. ConcatKDFParams' godoc states that carve-out
 // for callers.
 //

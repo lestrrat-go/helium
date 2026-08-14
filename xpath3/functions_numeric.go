@@ -195,7 +195,7 @@ func roundPrecisionArg(arg Sequence) (*big.Int, error) {
 // roundUnchanged and bypass the cap. Such an operand has no terminating decimal
 // expansion, so its value is well-defined at any requested fractional precision;
 // honour the request up to roundMaxComputeScale (so 10^p stays bounded), and
-// beyond that cap raise an error rather than silently rounding at a lower scale
+// beyond that cap raise an error, rounding silently at no lower scale
 // than asked. Silently clamping would return an observably wrong (lower-precision)
 // value; erroring keeps the computation DoS-safe without ever lying about the
 // result.
@@ -213,11 +213,11 @@ func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roun
 	}
 	// Non-negative precision. A non-terminating rational has no terminating
 	// decimal expansion, so fracDigits is the ratFracDigitNonTerminating
-	// sentinel rather than a true scale: it must NEVER be treated as "fully
+	// sentinel, and no true scale: it must NEVER be treated as "fully
 	// representable" (which would short-circuit to roundUnchanged and return the
 	// repeating operand). Handle it first — honour the request up to
 	// roundMaxComputeScale so 10^p stays bounded, and beyond that refuse with
-	// FOAR0002 rather than silently returning a lower-precision value. This must
+	// FOAR0002, returning no lower-precision value. This must
 	// precede the precision >= fracDigits test below, because a precision at or
 	// above the sentinel (e.g. 1<<30) would otherwise wrongly select
 	// roundUnchanged and bypass the cap entirely.
@@ -246,7 +246,7 @@ func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roun
 // roundMaxComputeScale bounds the positive (fine) compute scale handed to Exp for
 // a non-terminating decimal operand (whose fractional-digit count is the
 // ratFracDigitNonTerminating sentinel). A precision up to this is computed
-// exactly; a larger precision raises FOAR0002 rather than silently rounding at a
+// exactly; a larger precision raises FOAR0002, rounding silently at no
 // lower scale. It comfortably exceeds the fractional precision of any value that
 // can arise from terminating xs:decimal or float operands (a float64 has at most
 // ~324 fractional digits), so it never alters a representable result; it only
@@ -792,8 +792,8 @@ func ratRoundPrecision(r *big.Rat, precision int) *big.Rat {
 		return new(big.Rat).Quo(rounded, new(big.Rat).SetInt(scale))
 	}
 	// Negative precision: round to 10^(-precision). Operate on the rational
-	// directly (divide, round-half-towards-+∞, multiply back) rather than
-	// flooring to an integer first — flooring discards the fractional part and
+	// directly (divide, round-half-towards-+∞, multiply back), flooring to no
+	// integer first — flooring discards the fractional part and
 	// can push the value past the rounding boundary (e.g. -249.9 floors to -250
 	// or even -251, landing on the wrong multiple of 100).
 	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-precision)), nil)
@@ -817,8 +817,8 @@ func ratRoundPrecisionHalfToEven(r *big.Rat, precision int) *big.Rat {
 		return new(big.Rat).SetFrac(rounded, new(big.Int).Set(scale))
 	}
 	// Negative precision: round to 10^(-precision). Operate on the rational
-	// directly (divide, round-half-to-even, multiply back) rather than flooring
-	// to an integer first — flooring would discard the fractional part that can
+	// directly (divide, round-half-to-even, multiply back), flooring to no
+	// integer first — flooring would discard the fractional part that can
 	// break a tie at the rounding boundary (e.g. ...896.5...123 must round up,
 	// not be treated as an exact half that lands on the even digit).
 	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-precision)), nil)

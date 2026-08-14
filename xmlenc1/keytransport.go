@@ -69,8 +69,8 @@ func decryptSessionKey(algorithm string, priv *rsa.PrivateKey, ciphertext []byte
 func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error) {
 	// Whitelist the key-transport algorithm itself. Only the two supported
 	// RSA-OAEP variants may proceed; any other (or empty) URI is rejected
-	// here rather than silently performing RSA-OAEP and serializing a
-	// metadata @Algorithm that lies about the crypto actually performed.
+	// here. Performing RSA-OAEP anyway would serialize a metadata
+	// @Algorithm that lies about the crypto actually performed.
 	switch algorithm {
 	case RSAOAEP, RSAOAEP11:
 	default:
@@ -79,7 +79,7 @@ func oaepHashes(algorithm, digest, mgf string) (crypto.Hash, crypto.Hash, error)
 
 	// Resolve the label digest. An empty digest defaults to SHA-1, which
 	// matches the XML Encryption default for RSA-OAEP. An unrecognized
-	// (non-empty) digest URI is rejected rather than downgraded.
+	// (non-empty) digest URI is rejected, and never downgraded.
 	var digestHash crypto.Hash
 	switch digest {
 	case "", DigestSHA1:

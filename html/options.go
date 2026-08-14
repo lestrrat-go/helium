@@ -40,7 +40,7 @@ type parseConfig struct {
 	// the undecided-encoding deferred prefix: an undeclared-charset ParseReader or
 	// push stream that keeps proving valid UTF-8 buffers undecided only up to this
 	// cap, and an over-cap undecided-encoding stream is rejected with
-	// ErrContentSizeExceeded rather than committing to a Latin-1/UTF-8
+	// ErrContentSizeExceeded, committing to no Latin-1/UTF-8
 	// interpretation. Zero
 	// selects defaultMaxContentSize. It
 	// guards against unbounded memory growth on a gigantic or unterminated section.

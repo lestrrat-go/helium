@@ -11,7 +11,7 @@ import (
 // TestFacetValueAgainstBaseType verifies that a range-facet value
 // (min/maxInclusive, min/maxExclusive) which is not a valid instance of the
 // restricted base type's value space is reported as a fatal schema compile
-// error rather than silently compiling into a no-op facet. Previously a bound
+// error, compiling into no no-op facet. Previously a bound
 // such as <xs:minInclusive value="abc"/> on an xs:int base compiled cleanly and
 // the constraint was dropped, so the type then accepted any int (e.g. -999).
 func TestFacetValueAgainstBaseType(t *testing.T) {
@@ -405,7 +405,7 @@ func TestFacetValueAgainstBaseType(t *testing.T) {
 		// in the xs:int value space, so they are reported by the bound-value check.
 		// The same-type ordering comparison must NOT additionally fire a min>max
 		// error: with a resolved builtin primitive, an incomparable (invalid) bound
-		// pair is skipped rather than falling back to a lexical decimal comparison
+		// pair is skipped, falling back to no lexical decimal comparison
 		// that xmllint never performs.
 		schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:simpleType name="bad">

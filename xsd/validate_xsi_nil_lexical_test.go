@@ -8,8 +8,8 @@ import (
 
 // TestXsiNilLexical checks that the value of xsi:nil is parsed as an xs:boolean
 // (after whitespace collapse). Only "true"/"1" mean nilled; "false"/"0" mean
-// not-nilled; any other lexical (e.g. "maybe") is a lexical error rather than
-// being silently treated as if the attribute were absent.
+// not-nilled; any other lexical (e.g. "maybe") is a lexical error, and is never
+// treated as if the attribute were absent.
 func TestXsiNilLexical(t *testing.T) {
 	t.Parallel()
 

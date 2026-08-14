@@ -441,7 +441,7 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 	// else: the href had no document part (a pure fragment such as href="#a", or
 	// the href attribute was absent and only an xpointer was given) → this is a
 	// same-document reference. Leave resolved empty so includeXMLWithXPointer
-	// takes the in-memory snapshot path rather than re-loading the base URI
+	// takes the in-memory snapshot path and re-loads no base URI
 	// through the resolver — which, under the deny-all default resolver, would
 	// fail even though the target is the current document.
 
@@ -789,7 +789,7 @@ func (p *processor) loadXMLDoc(ctx context.Context, uri string, base string, sub
 	}
 	if err := p.accountIncludedBytes(uri, len(data)); err != nil {
 		// Cache the bytes anyway so a later same-URI include hits the same
-		// aggregate guard rather than re-fetching.
+		// aggregate guard, with no re-fetch.
 		p.docCache[cacheKey] = docCacheEntry{data: data}
 		return nil, err
 	}
@@ -881,7 +881,7 @@ const copiedNodeOverhead = 64
 // overlapping subtrees, bypassing the aggregate materialization bound.
 //
 // A tree cycle in the source (ErrWalkCycle) is propagated so the caller fails
-// the include rather than charging a partial cost and copying a corrupt tree.
+// the include, charging no partial cost and copying no corrupt tree.
 func subtreeCopyCost(n helium.Node) (int, error) {
 	var total int
 	if err := helium.Walk(n, helium.NodeWalkerFunc(func(node helium.Node) error {
@@ -961,7 +961,7 @@ func (p *processor) parseXMLData(ctx context.Context, data []byte, uri string, s
 	// into an FS-backed resolver; a custom (non-FS) resolver gets a deny-all FS
 	// so inner SYSTEM references cannot reach the host.
 	//
-	// Detection uses the fsBacked capability interface rather than a concrete
+	// Detection uses the fsBacked capability interface, in place of a concrete
 	// *fsResolver assertion so callers can wrap NewFSResolver (e.g. for
 	// logging/metrics) without silently losing the in-sandbox loader. The FS
 	// is wrapped with normalizingFS because the parser builds the names it
@@ -999,7 +999,7 @@ func (p *processor) includeText(inc *helium.Element, uri string, incBase string)
 	// Handle encoding attribute. Distinguish a missing encoding attribute
 	// (process the bytes as UTF-8) from one that is present but names an
 	// encoding we cannot honour. A present-but-empty encoding="" is treated
-	// as an unsupported encoding rather than as absent, so the raw bytes are
+	// as an unsupported encoding, and never as absent, so the raw bytes are
 	// not silently consumed as UTF-8.
 	if encName, ok := findAttr(inc, "encoding"); ok {
 		enc := encoding.Load(encName)
@@ -1210,7 +1210,7 @@ func ownerDocument(n helium.Node) *helium.Document {
 // rebuilt against the copy's own elements) that XPointer shorthand pointers
 // depend on (they resolve via Document.GetElementByID). So a SkipIDs source
 // yields a snapshot that resolves NO ids, and a parsed source's ids resolve to
-// the snapshot's elements rather than the original's.
+// the snapshot's elements, never the original's.
 //
 // Returns nil when the copy fails; the caller then falls back to evaluating
 // against the live (possibly mutated) document.
@@ -1692,7 +1692,7 @@ type fsResolver struct {
 // implement to expose the [fs.FS] it reads from. When a resolver is
 // fsBacked, XInclude threads that same FS into the inner parser so external
 // entities and DTDs declared inside an included document load through the
-// SAME sandbox (rather than the host filesystem behind the resolver's back).
+// SAME sandbox, never the host filesystem behind the resolver's back.
 // Resolvers that wrap [NewFSResolver] (e.g. for logging or metrics) should
 // also implement this so the in-sandbox loader is preserved through the wrap.
 type fsBacked interface {
@@ -1721,7 +1721,7 @@ type normalizingFS struct {
 func (n normalizingFS) Open(name string) (fs.File, error) {
 	// An included document parsed with BaseURI("file:///...") resolves its own
 	// external DTDs/entities against that base, yielding "file:" URIs (e.g.
-	// "file:///dir/decl.dtd") rather than plain paths. Convert those to a local
+	// "file:///dir/decl.dtd") in place of plain paths. Convert those to a local
 	// path here, mirroring fsResolver.Resolve, so nested external-DTD/entity
 	// resolution succeeds uniformly. Non-local-host file URIs are rejected.
 	if isFileURI(name) {

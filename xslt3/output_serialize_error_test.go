@@ -20,7 +20,7 @@ func invalidNameElement(t *testing.T) *helium.Element {
 	return el
 }
 
-// serializeNodeWithMethod must surface a serialization failure rather than
+// serializeNodeWithMethod must surface a serialization failure, and must never
 // discard it. Each output method whose branch drives a serializer (html, xhtml,
 // and the default xml path) must return the serializer's error for an
 // unserializable node. The xhtml and xml paths run the core writer, whose

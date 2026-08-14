@@ -163,7 +163,7 @@ func TestRestrictionAttrNamespace(t *testing.T) {
 		// Control: the base's effective wildcard (via the attribute group) is
 		// restricted to ##other; a derived ##any wildcard is a WIDENING, not a
 		// subset, so the derivation must still be rejected. This proves the fix
-		// compares against the real transitive wildcard rather than blanket-accepting.
+		// compares against the real transitive wildcard, blanket-accepting nothing.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:attributeGroup name="g">
     <xs:attribute name="a" type="xs:string"/>

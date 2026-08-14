@@ -10,7 +10,7 @@ import (
 // TestMalformedIDConstraint verifies that an identity-constraint declaration
 // (xs:unique/xs:key/xs:keyref) missing a required component — @name, the
 // <selector> child, or at least one <field> child — is rejected at compile time
-// (src-identity-constraint, XSD Structures 3.11) rather than silently accepted
+// (src-identity-constraint, XSD Structures 3.11), and is never accepted
 // and reduced to a no-op constraint. Before the fix every malformed case below
 // compiled clean and produced a constraint that never fired at validation time.
 func TestMalformedIDConstraint(t *testing.T) {

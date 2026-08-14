@@ -85,7 +85,7 @@ func TestChildReaches(t *testing.T) {
 }
 
 func TestWalkCycleGuards(t *testing.T) {
-	// Walk returns ErrWalkCycle (rather than looping forever) on a child-pointer
+	// Walk returns ErrWalkCycle, and never loops forever, on a child-pointer
 	// cycle that the guarded insertion API refuses to build: an entity reference's
 	// shared Entity child links back to the reference (ent.firstChild = ref,
 	// ref.firstChild = ent). The cycle is closed through the lower-level docnode
@@ -110,7 +110,7 @@ func TestWalkCycleGuards(t *testing.T) {
 			"Walk must detect the child-pointer cycle and return ErrWalkCycle instead of hanging")
 	})
 
-	// Walk terminates (rather than spinning forever) on a sibling cycle LONGER
+	// Walk terminates, and never spins forever, on a sibling cycle LONGER
 	// than one node: a parent whose two children form a 2-cycle a -> b -> a. The
 	// active-path guard alone does not catch this — each child is popped off the
 	// stack before its next sibling is examined — so the per-frame seenChildren set

@@ -91,8 +91,8 @@ func TestRelaxNGValidateOversizedIncludeIsSchemaCompFailure(t *testing.T) {
 	// compile diagnostic. The RELAX NG compiler may still return a (grammar,
 	// nil) with a poisoned notAllowed grammar in that case; the CLI must
 	// install an ErrorHandler so this is reported as a schema-compilation
-	// failure (ExitSchemaComp) rather than being silently discarded and then
-	// misreported as a per-input validation failure (ExitValidation).
+	// failure (ExitSchemaComp). Silently discarding it would misreport the
+	// failure as a per-input validation failure (ExitValidation).
 	dir := t.TempDir()
 
 	// defaultMaxResourceBytes in the relaxng package is 10 MiB; write an

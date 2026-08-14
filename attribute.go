@@ -77,13 +77,13 @@ func (n *Attribute) SetAType(v enum.AttributeType) {
 }
 
 // SetDefault marks (or unmarks) this attribute as a default attribute,
-// i.e. one supplied by the DTD rather than present in the source document.
+// i.e. one the DTD supplied and the source document never wrote.
 func (n *Attribute) SetDefault(b bool) {
 	n.defaultAttr = b
 }
 
 // IsDefault reports whether this attribute was supplied by the DTD as a
-// default value rather than being explicitly specified in the source document.
+// default value, with no explicit specification in the source document.
 func (n *Attribute) IsDefault() bool {
 	return n.defaultAttr
 }

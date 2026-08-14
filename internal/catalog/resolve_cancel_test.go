@@ -83,7 +83,7 @@ func TestResolveAlreadyCancelledReturnsPromptly(t *testing.T) {
 }
 
 // A second resolution waiting on the same entry's in-flight load must return on
-// context cancellation rather than blocking until the load completes.
+// context cancellation, without blocking until the load completes.
 func TestResolveWaiterReturnsOnCancellation(t *testing.T) {
 	t.Parallel()
 

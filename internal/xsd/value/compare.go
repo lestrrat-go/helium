@@ -26,7 +26,7 @@ const builtinTime = "time"
 
 // trimXSDSpace trims only XSD whitespace from both ends of s, leaving any other
 // Unicode whitespace (e.g. NBSP) in place so it is rejected by lexical
-// validation rather than silently stripped.
+// validation, and never silently stripped.
 func trimXSDSpace(s string) string {
 	return strings.Trim(s, xsdWhitespace)
 }
@@ -43,7 +43,7 @@ func xsdFields(s string) []string {
 
 // XSDFields splits s into items on runs of XSD whitespace only (space, tab, CR,
 // LF), the exported form of xsdFields. xs:list item separation is defined over
-// XSD whitespace, so callers must use this rather than strings.Fields: a list
+// XSD whitespace, so callers must use this in place of strings.Fields: a list
 // item containing NBSP (or other Unicode whitespace) stays a single token and is
 // then rejected by per-item lexical validation, instead of being silently split.
 func XSDFields(s string) []string {
@@ -219,7 +219,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		trimmed := trimXSDSpace(s)
 		// Validate strictly (lexical space + range for bounded subtypes) before
 		// canonicalizing, so e.g. "1.0"/integer, "2147483648"/int and "1/2"/
-		// decimal yield ok=false rather than a spurious canonical key.
+		// decimal yield ok=false, and no spurious canonical key.
 		if ValidateBuiltin(trimmed, builtinLocal, Version11) != nil {
 			return trimmed, false
 		}
@@ -239,7 +239,7 @@ func CanonicalKey(s, builtinLocal string) (string, bool) {
 		// List types: collapse internal whitespace so token sequences that
 		// differ only in separator whitespace are value-equal. Split on XSD
 		// whitespace only so a token containing NBSP is preserved (and stays
-		// invalid), rather than being silently split into two tokens.
+		// invalid), and is never silently split into two tokens.
 		return strings.Join(xsdFields(s), " "), false
 	default:
 		// Remaining string-derived types (token, NMTOKEN, Name, NCName, ID,
@@ -278,7 +278,7 @@ func canonicalFloatKey(s string, bitSize int) (string, bool) {
 	}
 	// A finite lexical value can overflow to infinity at the target precision
 	// (e.g. "1e40" rounds to +Inf in xs:float). Re-check after rounding so the
-	// key matches the XSD-canonical "INF"/"-INF" form rather than Go's
+	// key matches the XSD-canonical "INF"/"-INF" form, in place of Go's
 	// strconv.FormatFloat output ("+Inf"/"-Inf"), keeping equal values' keys
 	// consistent with the literal INF/-INF spellings above.
 	if math.IsInf(f, 1) {
@@ -491,8 +491,8 @@ func compareHexBinary(a, b string) (int, bool) {
 
 // compareBase64Binary compares two xs:base64Binary values in value space (the
 // decoded octet sequence), ignoring the whitespace permitted in the lexical
-// form. As with hexBinary, a deterministic bytes.Compare total order is returned
-// rather than a bare equality flag. Returns ok=false if either operand is not
+// form. As with hexBinary, a deterministic bytes.Compare total order is returned,
+// in place of a bare equality flag. Returns ok=false if either operand is not
 // valid base64Binary.
 func compareBase64Binary(a, b string) (int, bool) {
 	if !validBuiltinOperands(a, b, "base64Binary") {
@@ -541,7 +541,7 @@ func parseXSDFloat(s string) (float64, bool) {
 	// XSD 1.1 maps a float/double lexical whose magnitude overflows the value
 	// space to ±INF, and ValidateBuiltin accepts such lexicals (e.g. "1e400").
 	// strconv.ParseFloat signals this with ErrRange and returns ±Inf as the
-	// result, so honor that infinity rather than rejecting the value.
+	// result, so honor that infinity and accept the value.
 	if errors.Is(err, strconv.ErrRange) && math.IsInf(f, 0) {
 		return f, true
 	}
@@ -651,14 +651,14 @@ func CompareFloatFacetBound(a, b, builtinLocal string) (int, bool) {
 // two parsers are not consolidated despite accepting the same lexical forms.
 type xsdDateTime struct {
 	// year is held with arbitrary precision so that valid expanded years
-	// (e.g. 999999999999999999999999) compare correctly rather than
-	// overflowing a fixed-width int. A nil year is treated as 0 (used by the
+	// (e.g. 999999999999999999999999) compare correctly, with no
+	// fixed-width int to overflow. A nil year is treated as 0 (used by the
 	// year-agnostic gMonth/gDay/gMonthDay types).
 	year       *big.Int
 	month, day int
 	hour, min  int
 	// sec holds the seconds component (including any fractional digits) as an
-	// EXACT rational rather than a float64, so that two distinct valid lexicals
+	// EXACT rational, in place of a float64, so that two distinct valid lexicals
 	// that differ only in trailing fractional precision (e.g. "00.1" vs
 	// "00.1000000000000000000000000000000000001") stay distinct in both Compare
 	// and CanonicalKey instead of colliding through float rounding. A nil sec is
@@ -828,7 +828,7 @@ func parseXSDDate(s string) (xsdDateTime, bool) {
 		s = s[1:]
 	}
 	// YYYY-MM-DD[TZ]; the year is at least 4 digits and may be an expanded
-	// (arbitrarily long) year, so locate the first dash rather than assuming it
+	// (arbitrarily long) year, so locate the first dash, making no assumption that it
 	// sits at offset 4.
 	if len(s) < 10 {
 		return dt, false
@@ -1343,12 +1343,12 @@ func compareGMonthDay(a, b, builtinLocal string) (int, bool) {
 type xsdDuration struct {
 	negative bool
 	// months is the accumulated months component (years*12 + months) held as a
-	// *big.Int rather than an int so a valid lexical with a huge year/month
+	// *big.Int, in place of an int, so a valid lexical with a huge year/month
 	// component (e.g. "P999999999999999999999999Y") that passes ValidateBuiltin
 	// also compares and canonicalizes without overflow. A nil months is 0.
 	months *big.Int
 	// seconds is the accumulated seconds component (days/hours/minutes/seconds,
-	// including fractional seconds) held as an EXACT rational rather than a
+	// including fractional seconds) held as an EXACT rational, in place of a
 	// float64. This keeps two durations that differ only in trailing fractional
 	// precision (e.g. "PT0.1S" vs "PT0.1000000000000000000000000000000000001S")
 	// distinct in both Compare and CanonicalKey instead of colliding through

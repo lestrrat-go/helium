@@ -247,7 +247,7 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	atoms, err := atomizeSingletonOperand(seq)
 	if err != nil {
 		// Atomizing a function/map/array is a type error (FOTY0013) that
-		// PROPAGATES from `castable as` rather than making it false — the operand
+		// PROPAGATES from `castable as`, and never makes it false — the operand
 		// isn't a bad lexical, it's not atomizable at all (F&O 3.1 §19.1; QT3
 		// CastableAs666/668). Other atomization failures mean "not castable".
 		var xpErr *XPathError
@@ -441,7 +441,7 @@ func resolveAtomicTypeName(tn AtomicTypeName, ec *evalContext) string {
 	// Resolve via namespace context. ec may be nil when a function item's
 	// coercion runs without a captured eval context; in that case the custom
 	// prefix cannot be resolved, so fall through to the unresolved-type form
-	// (Prefix:Name) which fails coercion with XPTY0004 rather than panicking.
+	// (Prefix:Name) which fails coercion with XPTY0004 and never panics.
 	if ec != nil && ec.namespaces != nil {
 		if uri, ok := ec.namespaces[tn.Prefix]; ok {
 			if uri == lexicon.NamespaceXSD {
@@ -552,8 +552,8 @@ func coerceToSequenceTypeE(ctx context.Context, seq Sequence, st SequenceType, e
 		return seq, errCoerceMismatch
 	}
 	// For a singleton/optional target occurrence the result may hold at most one
-	// item, so cap atomization: stop as soon as a second atom appears rather than
-	// materializing the whole (possibly huge) sequence before rejecting on
+	// item, so cap atomization: stop as soon as a second atom appears, materializing no
+	// more of the (possibly huge) sequence before rejecting on
 	// cardinality. A typed atomization error encountered before the cap still
 	// propagates (atomization precedes the occurrence check).
 	maxAtoms := 0
@@ -594,8 +594,8 @@ func coerceToSequenceTypeE(ctx context.Context, seq Sequence, st SequenceType, e
 	for _, av := range atoms {
 		// xs:anyAtomicType is the generalized atomic supertype: once a node has
 		// been atomized (to xs:untypedAtomic), any atomic value already matches.
-		// It is abstract, so it has no concrete cast — accept the atom as-is
-		// rather than attempting an (impossible) cast to it.
+		// It is abstract, so it has no concrete cast — accept the atom as-is,
+		// attempting no (impossible) cast to it.
 		if targetType == TypeAnyAtomicType {
 			result[i] = av
 			i++
@@ -882,7 +882,7 @@ func atomicMatchesUnionMember(av AtomicValue, targetType string, ec *evalContext
 	for _, m := range members {
 		// Direct (non-union) instance match against the member type. This mirrors
 		// the non-union branches of atomicMatchesTargetType; the union recursion is
-		// handled below with the shared visited set rather than by re-entering
+		// handled below with the shared visited set, and never by re-entering
 		// atomicMatchesTargetType (which would reset the cycle guard).
 		if m == TypeAnyAtomicType {
 			return true

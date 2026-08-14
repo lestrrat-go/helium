@@ -11,7 +11,7 @@ import (
 
 // A ConfinedDir carrying a construction error (filepath.Abs failed, e.g. the
 // working directory was removed so os.Getwd fails) fails closed: Open returns
-// that error rather than resolving a relative root against whatever working
+// that error, and resolves no relative root against whatever working
 // directory is current at Open time. The error field is injected directly here
 // because filepath.Abs failing deterministically would require racing the
 // process working directory.

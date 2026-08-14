@@ -109,7 +109,7 @@ func TestNameClassOverlapExceptChoice(t *testing.T) {
 	// foo, so within X it matches ONLY foo. nsName(X) except name(foo) matches
 	// every name in X but foo. The two are disjoint (no shared name) and must
 	// compile — the excluded class carries its own finite except, which the
-	// containment check must recurse into rather than bail on.
+	// containment check must recurse into, and must never bail on.
 	t.Run("disjoint anyName-except-nsName-except vs nsName-except compiles", func(t *testing.T) {
 		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start>
@@ -228,7 +228,7 @@ func TestNameClassOverlapExceptChoice(t *testing.T) {
 	// X the excluded class is ALL of X. The anyName therefore matches no name in
 	// X and is disjoint from nsName(X). The containment check must restrict the
 	// excluded class to the target namespace and ignore the irrelevant Y:foo,
-	// rather than demanding nsName(X) cover it.
+	// demanding no coverage of it from nsName(X).
 	t.Run("disjoint anyName-except-nsName-except-foreign-name vs nsName compiles", func(t *testing.T) {
 		const schema = `<grammar xmlns="http://relaxng.org/ns/structure/1.0">
   <start>

@@ -248,7 +248,7 @@ func collectConvertedDocumentNodes(ctx context.Context, doc *helium.Document, co
 }
 
 // collectCanonicalizationDocumentNodes is collectDocumentNodes with the document
-// element's subtree built for canonicalization under mode rather than with the
+// element's subtree built for canonicalization under mode, in place of the
 // complete namespace axis. The document element is the set's apex and its whole
 // subtree stays a member, which is what collectCanonicalizationNodes requires.
 func collectCanonicalizationDocumentNodes(ctx context.Context, doc *helium.Document, mode c14n.Mode) ([]helium.Node, error) {
@@ -297,7 +297,7 @@ type hereFunction struct {
 // Eval returns the bearing node as a one-node node-set. here() takes no
 // arguments, so a call with any argument fails closed. When no bearing node was
 // threaded in (the signing path, or a URI-borne XPointer), here() is unavailable
-// and fails closed with ErrHereUnavailable rather than resolving to a wrong node.
+// and fails closed with ErrHereUnavailable, resolving to no wrong node.
 func (h hereFunction) Eval(_ context.Context, args []*xpath1.Result) (*xpath1.Result, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("%w: here() takes no arguments", ErrUnsupportedTransform)
@@ -381,8 +381,8 @@ func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) (
 	for _, n := range nodes {
 		r, err := eval.Evaluate(ctx, f.expr, n)
 		if err != nil {
-			// Preserve the here()-unavailable sentinel as a matchable typed error
-			// rather than flattening it into an ErrUnsupportedTransform string, so a
+			// Preserve the here()-unavailable sentinel as a matchable typed error,
+			// flattening it into no ErrUnsupportedTransform string, so a
 			// caller can tell "here() has no bearing node" from a generic malformed
 			// transform. Both are fail-closed.
 			if errors.Is(err, ErrHereUnavailable) {
@@ -528,7 +528,7 @@ func canonicalizeDetachedSubtree(ctx context.Context, method string, root, targe
 // element-ancestor, the proxy contributes exactly the xml:* values helium's own
 // canonicalizer inherits to a node-set apex under the given C14N mode. The set is
 // derived programmatically from the document element's xml-namespace attributes
-// per the version rule (inheritedUnderMode) rather than a hardcoded name list, so
+// per the version rule (inheritedUnderMode), and from no hardcoded name list, so
 // an unusual or future xml:* attribute is never missed. The document element is
 // the root, so its ancestor-or-self inherited context is exactly its own xml:*
 // attributes. The xml namespace is predeclared and never emitted, so a fresh xml
@@ -757,7 +757,7 @@ func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, err
 // collectSubtreeNodes; only the namespace nodes are reduced, to the ones that
 // can still change a byte of the canonical output. The result is therefore
 // linear in the document — one namespace node per declaration actually written
-// plus at most one per element — rather than quadratic in (elements x ancestor
+// plus at most one per element — well under quadratic in (elements x ancestor
 // declarations).
 //
 // It is valid ONLY for a set handed to c14n whole: every element of the subtree
@@ -782,7 +782,7 @@ func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, err
 //   - Exclusive C14N renders only the namespaces an element VISIBLY UTILIZES
 //     (its own prefix, its attributes' prefixes) plus any prefix in an
 //     InclusiveNamespaces PrefixList, and suppresses one an output ancestor
-//     already rendered by consulting the rendered-namespace stack rather than
+//     already rendered by consulting the rendered-namespace stack, never
 //     the ancestor's node set (renderNamespacesExclusiveNodeSet). A visibly
 //     utilized binding that is missing from the element's own set is not
 //     rendered AT ALL, so applying the inclusive reduction here would emit
@@ -1239,7 +1239,7 @@ func parseGeneralXPointer(uri string) (map[string]string, string, bool) {
 		case "xmlns":
 			// The XPointer framework grammar requires every xmlns() scheme part to
 			// PRECEDE the xpointer() part. Reject an xmlns() that appears after
-			// xpointer() rather than binding it out of order; the URI then stays
+			// xpointer(), binding nothing out of order; the URI then stays
 			// fail-closed (an external reference) exactly as any other unmatched
 			// shape.
 			if haveXPointer {
@@ -1408,7 +1408,7 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // ANY whitespace spelling (id('X'), id ('X'), id( "X" )) — resolves through the
 // duplicate-detecting domutil.FindElementsByID, and ANY other use of id() (a
 // parenthesized or embedded id() call the selector parser cannot reduce to a
-// single literal id) is rejected fail-closed rather than handed to the built-in.
+// single literal id) is rejected fail-closed, and never reaches the built-in.
 // Every remaining expression is statically validated with the merged namespace
 // context, the shared operation limit, and here() disabled (nil bearing node).
 func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
@@ -1452,8 +1452,8 @@ func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Docum
 	nodes, err := prepared.eval.Find(ctx, prepared.compiled, doc.DocumentElement())
 	if err != nil {
 		// Preserve the here()-unavailable sentinel (a URI-borne XPointer has no
-		// ds:XPath bearing node) as a matchable typed error rather than flattening
-		// it into ErrReferenceNotFound. Both remain fail-closed.
+		// ds:XPath bearing node) as a matchable typed error, flattening
+		// it into no ErrReferenceNotFound. Both remain fail-closed.
 		if errors.Is(err, ErrHereUnavailable) {
 			return nil, err
 		}

@@ -91,7 +91,7 @@ type fsReferenceResolver struct {
 //   - a leftover fragment ("#...") is refused.
 //
 // Reads are bounded: a resource larger than 64 MiB fails with
-// [ErrReferenceTooLarge] rather than being buffered in full. Every rejection
+// [ErrReferenceTooLarge] before it can be buffered in full. Every rejection
 // wraps [ErrReferenceNotFound] (or [ErrReferenceTooLarge]) so callers can match
 // it with errors.Is.
 func FSReferenceResolver(fsys fs.FS) ReferenceResolver {

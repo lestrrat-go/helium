@@ -110,8 +110,8 @@ func TestQualifiedAttributeDefaultInsertedInNamespace(t *testing.T) {
 
 // TestEmptyDefaultInvalidForType checks that a retained empty default like
 // default="" on an xs:integer attribute is rejected: "" is not a valid integer,
-// so the schema (or validation) must report an error rather than silently
-// inserting an invalid default.
+// so the schema (or validation) must report an error, inserting no
+// invalid default.
 func TestEmptyDefaultInvalidForType(t *testing.T) {
 	t.Parallel()
 

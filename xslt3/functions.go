@@ -707,7 +707,7 @@ func resolveAgainstBaseURI(uri string, baseURI string) string {
 	}
 	// Absolute-URI ref, or any ref against a URI base: defer to the shared
 	// canonical resolver (RFC 3986 + OmitHost preservation). On error, fall
-	// back to the raw ref rather than producing a host-dropping filepath join.
+	// back to the raw ref, producing no host-dropping filepath join.
 	if xsd.URIScheme(uri) != "" || xsd.URIScheme(baseURI) != "" {
 		resolved, err := xsd.ResolveSchemaURI(uri, baseURI)
 		if err != nil {
@@ -790,7 +790,7 @@ func (ec *execContext) resolveDocumentURI(uri string, baseDir string) string {
 	}
 	// Convert file:// URIs to local paths. Use iofs.FileURIToPath so a Windows
 	// drive-letter URI ("file:///D:/a/b") yields a drive path ("D:\\a\\b" on
-	// Windows) rather than a spurious leading-slash path ("/D:/a/b"). The result
+	// Windows), and no spurious leading-slash path ("/D:/a/b"). The result
 	// is then normalized with uripath.ToSlash so a non-drive POSIX-shaped URI
 	// ("file:///abs/x.xml") resolves to a forward-slash path ("/abs/x.xml") on
 	// EVERY OS — FileURIToPath would otherwise emit "\\abs\\x.xml" on Windows.

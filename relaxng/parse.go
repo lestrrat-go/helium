@@ -518,7 +518,7 @@ func combinePatterns(existing, incoming *pattern, mode string) *pattern {
 // When the result is computed by joining baseDir+href, any ".." segments
 // that would ascend above baseDir produce a non-nil error — the caller
 // reports an Include load failure with a clear "escapes base directory"
-// message rather than silently reading from an unintended directory.
+// message, and reads from no unintended directory.
 // Mirrors xsd's validateSchemaPath; defense-in-depth alongside whatever
 // path constraints the configured fs.FS enforces.
 func (c *compiler) resolveHref(_ context.Context, elem *helium.Element, href string) (string, error) {
@@ -1452,7 +1452,7 @@ func getAncestorNS(node *helium.Element) string {
 // carries it, but an explicit datatypeLibrary="" RESETS to the built-in
 // library even under an inherited XSD library. The walk therefore tests for
 // attribute PRESENCE (via the presence-aware unqualified lookup
-// getUnqualifiedAttrOpt) rather than non-emptiness, so an explicit empty value
+// getUnqualifiedAttrOpt), never for non-emptiness, so an explicit empty value
 // stops the walk and returns "" instead of leaking the inherited XSD library.
 // The second return value reports whether datatypeLibrary was declared anywhere
 // (on the element or an ancestor), so callers can tell an explicit empty reset
@@ -1539,7 +1539,7 @@ func groupableContentTypes(a, b rngContentType) bool {
 // pattern (collectLiveElements, following resolved refs under a cycle guard),
 // reaching every <element> reachable through the live start/define graph —
 // including those inside referenced defines and nested grammars. Seeding from the
-// start alone, rather than from every append-only c.scopes entry, is what keeps a
+// start alone, in place of every append-only c.scopes entry, is what keeps a
 // removed/overridden define out of the check: a nested-grammar scope created
 // while parsing a define that an <include> override later deletes stays in
 // c.scopes forever, but is unreachable from the live start, so its (now dead)
@@ -1717,9 +1717,9 @@ func (c *compiler) contentTypeOf(p *pattern, visited map[*pattern]struct{}) (rng
 //
 // The returned ok is false when the QName carries a prefix that is not bound to
 // any in-scope namespace declaration (other than the implicit xml prefix). An
-// unbound prefix must be a fatal compile error rather than silently treated as
-// the empty namespace, which would let a schema name match an unintended set of
-// instance elements.
+// unbound prefix must be a fatal compile error. Treating it as the empty
+// namespace would let a schema name match an unintended set of instance
+// elements.
 func resolveQName(schemaElem *helium.Element, qname string) (localName, ns string, ok bool) {
 	if prefix, ln, hasPrefix := strings.Cut(qname, ":"); hasPrefix {
 		localName = ln

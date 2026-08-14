@@ -177,8 +177,8 @@ func PermissiveFS() fs.FS {
 // symlink sandbox — stronger than [os.DirFS], which follows an in-root symlink
 // out of its root. A relative root is resolved against the process working
 // directory when DirFS is called; if that resolution fails (the working
-// directory is unavailable) the FS fails closed — every open returns the error
-// rather than resolving against a working directory current at open time.
+// directory is unavailable) the FS fails closed — every open returns the error,
+// and nothing resolves against a working directory current at open time.
 func DirFS(root string) fs.FS {
 	return iofs.NewConfinedDir(root)
 }
@@ -562,8 +562,8 @@ func (p Parser) LenientXMLDecl(v bool) Parser {
 // [Parser.Parse] still returns a built *Document. This mirrors [Parser.FS],
 // where nil likewise restores the default, and keeps a caller that forwards an
 // optional handler straight through from silently losing all output. To consume
-// events without building a tree, pass a handler that ignores them rather than
-// nil.
+// events without building a tree, pass a handler that ignores them; nil restores the
+// default instead.
 func (p Parser) SAXHandler(s sax.SAX2Handler) Parser {
 	p = p.clone()
 	if s == nil {
@@ -588,7 +588,7 @@ func (p Parser) BaseURI(uri string) Parser {
 // always respecting UTF-8 character boundaries.
 //
 // size is a target, not a hard cap, in two documented cases:
-//   - A single UTF-8 rune wider than size is delivered whole rather than split
+//   - A single UTF-8 rune wider than size is delivered whole, never split
 //     into invalid fragments, so that one callback may exceed size.
 //   - To keep memory bounded, an all-whitespace run that exceeds the internal
 //     pending-whitespace budget is delivered as Characters (not as
@@ -829,7 +829,7 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 // recover the encoding name from the XML declaration) and then streams and
 // decodes the remainder through the normal cursor pipeline, exactly like the
 // non-EBCDIC path. Resident memory is bounded by the parser's incremental
-// per-node content caps rather than by buffering the whole document, so a large
+// per-node content caps, and never by buffering the whole document, so a large
 // finite EBCDIC document parses (under the same per-node limits [Parse] applies)
 // while an unbounded stream is bounded by those caps. All inputs stream.
 //
@@ -884,7 +884,7 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	// is interrupted as soon as the parser regains control, instead of blocking
 	// inside Peek until the whole prefix arrives. The scratch buffer is larger
 	// than the EBCDIC prefix so a reader that returns more bytes than requested
-	// in one Read is captured in full rather than truncated; all captured bytes
+	// in one Read is captured in full and never truncated; all captured bytes
 	// are prepended to the remaining stream so the non-EBCDIC path is
 	// unaffected, and any non-EOF error returned alongside the bytes is
 	// preserved and surfaced once the buffered head drains.
@@ -1006,12 +1006,12 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 	if ebcdic {
 		// EBCDIC: rawInput is the bounded sniff prefix used by
 		// ExtractEBCDICEncoding; ebcdicStream tells parseDocument to decode the
-		// live prefix+remainder cursor in place rather than reset it from
+		// live prefix+remainder cursor in place, resetting nothing from
 		// rawInput (which is only a prefix here, not the whole document).
 		pctx.rawInput = head
 		pctx.ebcdicStream = true
 		// rawInput is only the sniff prefix here, so init would seed inputSize
-		// with the prefix length rather than the real document size. Count the
+		// with the prefix length in place of the real document size. Count the
 		// bytes the cursor actually pulls from the reconstructed stream (prefix +
 		// remainder) so the entity-amplification guard compares against the real
 		// consumed size — matching Parse([]byte), where inputSize is the full

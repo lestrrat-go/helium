@@ -380,7 +380,7 @@ func TestWildcardRestrictsChoiceWithProhibitedBranch(t *testing.T) {
 // nor an empty declared model (a is required), so the derived is not a language
 // subset. Because the base group at this position is not emptiable AND the derived
 // wildcard reaches outside the base open content, the wildcard-restricts-model-group
-// decision falls through to the sound reject rather than deferring to quadrant B
+// decision falls through to the sound reject, deferring to no quadrant B
 // (which exempts a disjoint-namespace wildcard).
 func TestWildcardRestrictsGroupOpenContentDisjointNamespace(t *testing.T) {
 	t.Parallel()
@@ -1268,7 +1268,7 @@ func TestWildcardRestrictsAllSubstMemberReadmittedRejects(t *testing.T) {
 //     namespace is urn:other — it excludes m, so nothing re-admits it.
 //   - strict-defers: the derived wildcard is STRICT, so it resolves a governing type
 //     the DYNAMIC EDC checks against the base local type at validation — compile
-//     accepts and defers, rather than over-rejecting.
+//     accepts and defers, over-rejecting nothing.
 func TestWildcardRestrictsAllSubstMemberSoundCompiles(t *testing.T) {
 	t.Parallel()
 
@@ -1623,8 +1623,8 @@ func TestWildcardRestrictsAllStrictGlobalDropsLocalConstraintRejects(t *testing.
 // beside a LAX derived wildcard that resolves the SAME global the base routes to (a
 // ref-to-global element re-admitted through a lax ##any whose global is that element) is
 // left to the runtime dynamic EDC. The global is identical to the base declaration, so it
-// drops no constraint, so the restriction is a valid deferral — it COMPILES rather than
-// being conservatively over-rejected. The overlapping element/wildcard base is UPA-invalid
+// drops no constraint, so the restriction is a valid deferral — it COMPILES, and is never
+// conservatively over-rejected. The overlapping element/wildcard base is UPA-invalid
 // in XSD 1.0, so this is reachable only in 1.1.
 func TestWildcardRestrictsAllLaxGlobalOwnNameDefers(t *testing.T) {
 	t.Parallel()

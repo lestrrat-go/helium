@@ -637,7 +637,7 @@ func compositeKeyString(seq xpath3.Sequence) string {
 func (ec *execContext) groupStartingWith(ctx context.Context, seq xpath3.Sequence, pat *pattern) []fegGroup {
 	// Materialize the population so positional predicates in the pattern
 	// (e.g. .[position()=3]) see the per-item focus of the population
-	// sequence rather than the stale outer focus (ENG-005).
+	// sequence, and never the stale outer focus (ENG-005).
 	pop := sequence.Materialize(seq)
 	savedPos := ec.position
 	savedSize := ec.size
@@ -668,7 +668,7 @@ func (ec *execContext) groupStartingWith(ctx context.Context, seq xpath3.Sequenc
 func (ec *execContext) groupEndingWith(ctx context.Context, seq xpath3.Sequence, pat *pattern) []fegGroup {
 	// Materialize the population so positional predicates in the pattern
 	// (e.g. .[position()=3]) see the per-item focus of the population
-	// sequence rather than the stale outer focus (ENG-005).
+	// sequence, and never the stale outer focus (ENG-005).
 	pop := sequence.Materialize(seq)
 	savedPos := ec.position
 	savedSize := ec.size

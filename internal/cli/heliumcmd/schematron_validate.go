@@ -70,7 +70,7 @@ func (c *schematronValidateCommand) runContext(ctx context.Context, args []strin
 		t0 = time.Now()
 	}
 	// Attach an ErrorHandler so fatal schema diagnostics (file/line/detail)
-	// reach stderr before the summary error, rather than being discarded.
+	// reach stderr before the summary error, and are never discarded.
 	ceh := &writerErrorHandler{w: c.stderr}
 	schema, err := schematron.NewCompiler().Label(cfg.schemaFile).ErrorHandler(ceh).CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {

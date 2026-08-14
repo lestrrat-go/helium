@@ -281,8 +281,8 @@ func TestSinkTypedNilHandlerFuncDoesNotPanic(t *testing.T) {
 	ctx := t.Context()
 
 	// A typed-nil HandlerFunc[T] is a non-nil Handler interface wrapping a nil
-	// function value. It must be detected and replaced with the no-op handler
-	// rather than slipping through to panic in HandlerFunc.Handle.
+	// function value. It must be detected and replaced with the no-op handler, so nothing
+	// slips through to panic in HandlerFunc.Handle.
 	var h sink.HandlerFunc[string]
 	require.Nil(t, h)
 

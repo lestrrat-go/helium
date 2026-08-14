@@ -72,7 +72,7 @@ func TestVerifyElementValid(t *testing.T) {
 // already-cancelled context short-circuits VerifyElement before its nil /
 // local-name / namespace validation guards run, not just before verifySignature.
 // Each case passes a cancelled context and asserts the returned error is the
-// context error rather than a validation error, proving the cancellation check
+// context error, and never a validation error, proving the cancellation check
 // precedes the nil/namespace validation on an attacker-controlled element.
 func TestVerifyElementShortCircuitsCancelledContextBeforeValidation(t *testing.T) {
 	key := generateRSAKey(t)

@@ -572,7 +572,7 @@ func TestEntityValueRefValidation(t *testing.T) {
 	// well-formed general reference. A direct char ref is character data; it must
 	// never combine with surrounding text to manufacture a "&Name;". Both repros
 	// would be wrongly accepted if direct char refs were resolved into the
-	// validation stream rather than treated as inert character data.
+	// validation stream instead of staying inert character data.
 	t.Run("a malformed general reference after a character reference", func(t *testing.T) {
 		t.Run("char ref completes a bare ampersand name", func(t *testing.T) {
 			t.Parallel()
@@ -633,7 +633,7 @@ func TestEntityValueRefValidation(t *testing.T) {
 			// the rejection is specific to the malformed declaration.
 			//
 			// The malformed per-declaration error in the external subset must now
-			// surface as a top-level parse error rather than being swallowed.
+			// surface as a top-level parse error, and is never swallowed.
 			fsys := fstest.MapFS{
 				dtdSystemID: {Data: []byte(
 					`<!ENTITY c "control">` + "\n" +

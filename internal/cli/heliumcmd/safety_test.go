@@ -70,7 +70,7 @@ func TestLintOutputOverLaterReadDTDSucceeds(t *testing.T) {
 	// validation, i.e. AFTER the output target is opened. The pre-flight
 	// collision check cannot catch this (the DTD path is not an input arg), so
 	// the temp-file-then-rename scheme must keep the DTD intact until its read
-	// completes. The run must succeed rather than truncate the DTD first.
+	// completes. The run must succeed and leave the DTD untruncated.
 	dir := t.TempDir()
 	dtdDir := filepath.Join(dir, "dtd")
 	require.NoError(t, os.Mkdir(dtdDir, 0o755))

@@ -72,8 +72,8 @@ func (r mapURIResolver) ResolveURI(uri string) (io.ReadCloser, error) {
 
 // recordingRejectResolver records every URI it is asked for and refuses to
 // serve any of them. It lets a test prove which URI the compiler attempted to
-// load (e.g. a raw relative href when no base URI was applied) rather than only
-// observing that resolution failed.
+// load (e.g. a raw relative href when no base URI was applied), and not only
+// that resolution failed.
 type recordingRejectResolver struct {
 	requested []string
 }

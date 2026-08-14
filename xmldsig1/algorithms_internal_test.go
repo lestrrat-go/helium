@@ -9,7 +9,7 @@ import (
 )
 
 // TestECDSADERToRawRejectsOversizedComponent proves ecdsaDERToRaw returns a
-// typed error rather than panicking when a signer hands back an r or s value
+// typed error, and never panics, when a signer hands back an r or s value
 // wider than the curve's byte width. A well-formed signer emits r and s in
 // [1, n), each fitting keySize bytes; a buggy HSM/PKCS#11 plugin could emit an
 // oversized component. Without the width guard, keySize-len(rBytes) goes negative

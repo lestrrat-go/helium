@@ -7,8 +7,8 @@ import (
 )
 
 // TestResolveQNameUnboundPrefix verifies that a QName-valued schema attribute
-// (here @type) whose prefix is not bound in scope is rejected at compile time
-// rather than silently mapping to the no-namespace declaration. Without this the
+// (here @type) whose prefix is not bound in scope is rejected at compile time,
+// and never maps to the no-namespace declaration. Without this the
 // unbound prefix "p" resolved to {} and an instance would validate against the
 // unrelated no-namespace type T.
 func TestResolveQNameUnboundPrefix(t *testing.T) {

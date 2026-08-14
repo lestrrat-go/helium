@@ -63,7 +63,7 @@ func TestTransformPostProcess(t *testing.T) {
 }
 
 // TestTransformStylesheetNodeElement drives fn:transform with a stylesheet-node
-// that is a bare (simplified / literal-result) element rather than a document
+// that is a bare (simplified / literal-result) element, and no document
 // node, mirroring QT3 cases fn-transform-7d and fn-transform-7e. The element is
 // used as the stylesheet root even when it is not its owner document's document
 // element.

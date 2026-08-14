@@ -801,9 +801,9 @@ func (c *compiler) checkOpenContentRestriction(ctx context.Context, td *TypeDef,
 // the base type's DECLARED content model as the (effectively unbounded) derived
 // open-content wildcard, even though the base carries no {open content} of its own
 // (saxonData Open/open022). The full content-model restriction-subsumption +
-// weak-wildcard-attribution problem is out of scope; rather than approximate it,
-// this accepts ONLY the single PROVABLY-SOUND shape and rejects everything else
-// (fail-closed):
+// weak-wildcard-attribution problem is out of scope, and this approximates
+// nothing: it accepts ONLY the single PROVABLY-SOUND shape and rejects everything
+// else (fail-closed):
 //
 //	The base content model contains EXACTLY ONE wildcard particle W and NO
 //	element-declaration particles anywhere; W's OWN occurrence is minOccurs=0,
@@ -1216,8 +1216,8 @@ func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 // modelGroupWildcardAdmitsName reports whether a content model contains a DECLARED
 // wildcard particle (recursing through nested groups) that admits the expanded name
 // {local, ns}. It backs the interleave open-content partition: a child matching a
-// declared xs:any can satisfy that wildcard in the declared sub-sequence rather than
-// being forced into open content. Non-emitting (maxOccurs=0) wildcards are skipped —
+// declared xs:any can satisfy that wildcard in the declared sub-sequence, and is
+// never forced into open content. Non-emitting (maxOccurs=0) wildcards are skipped —
 // they emit nothing, so they cannot consume a child.
 func modelGroupWildcardAdmitsName(mg *ModelGroup, local, ns string, schema *Schema) bool {
 	if mg == nil {
@@ -1468,7 +1468,7 @@ func assignDefinedSiblings(mg *ModelGroup, siblings []QName) {
 //     which match the open wildcard are removed (they are the open content);
 //     the rest must satisfy the declared model. An element whose name IS declared
 //     always goes through the model (weak-wildcard precedence), so a misplaced or
-//     excess declared element is still a violation rather than open content.
+//     excess declared element is still a violation, and never open content.
 func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem *helium.Element, mg *ModelGroup, oc *OpenContent) error {
 	// XSD 1.1 open content: a NON-EMITTING declared particle (effective maxOccurs 0 —
 	// its own maxOccurs=0, or under a maxOccurs=0 ancestor group) emits nothing, so it
@@ -1487,7 +1487,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 		// The entire declared model is non-emitting (e.g. an xs:choice all of whose
 		// branches are prohibited): it matches only the empty sequence, so every child
 		// routes to open content. Use an empty SEQUENCE with minOccurs 0 so the matcher
-		// reports "match nothing" rather than a missing required branch (an empty choice
+		// reports "match nothing", and no missing required branch (an empty choice
 		// with minOccurs>=1 would otherwise fail before leftover/open-content handling).
 		mg = &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1}
 	}

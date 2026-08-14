@@ -495,7 +495,7 @@ func TestTransformNamespace(t *testing.T) {
 func TestVerifyReferenceRejectsTransform(t *testing.T) {
 	// unsupported transform guards against signature-coverage fail-open: a
 	// Reference that declares a transform the verifier cannot apply must be
-	// rejected before digesting, rather than silently ignored and verified against
+	// rejected before digesting, and never silently ignored and verified against
 	// the untransformed canonical bytes.
 	//
 	// This exercises verifyReference directly because SignedInfo (which contains
@@ -522,7 +522,7 @@ func TestVerifyReferenceRejectsTransform(t *testing.T) {
 
 	// unsupported transform with enveloped ensures the enveloped detach/restore
 	// path also rejects an unsupported sibling transform (and restores the
-	// Signature element rather than leaving it detached).
+	// Signature element, leaving it attached).
 	t.Run("unsupported transform with enveloped", func(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(),
 			[]byte(`<root><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"/></root>`))

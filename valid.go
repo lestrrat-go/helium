@@ -299,7 +299,7 @@ var ErrDTDValidationFailed = errors.New("dtd: validation failed")
 // document that has neither an internal nor an external subset. Nothing
 // declares the document's elements, so a validating processor must report a
 // validity error (VC: Element Declared, XML §3.2; libxml2 XML_DTD_NO_DTD
-// "no DTD found!") rather than pass the document.
+// "no DTD found!") and must never pass the document.
 //
 // It wraps [ErrDTDValidationFailed], so [errors.Is] matches both: a caller
 // that only cares whether validation failed keeps matching the general

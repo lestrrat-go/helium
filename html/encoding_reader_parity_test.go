@@ -21,8 +21,8 @@ import (
 // document at once: because the document as a whole is not valid UTF-8, every
 // byte — including the leading valid UTF-8 multibyte sequence — is reinterpreted
 // as Windows-1252. The streaming ParseReader/ParseFile path must reach the same
-// result rather than passing the early UTF-8 bytes through verbatim and only
-// converting from the first invalid byte onward.
+// result. Passing the early UTF-8 bytes through verbatim and converting only
+// from the first invalid byte onward would diverge.
 func TestParseReaderDeferredLatin1MatchesParse(t *testing.T) {
 	t.Parallel()
 
@@ -468,8 +468,8 @@ func TestParseReaderDeclaredLatin1PastCapStaysISO88591(t *testing.T) {
 // fail-closed path: an UNDECLARED stream that stays valid UTF-8 past the deferred
 // reader's cap (the configured MaxContentSize) and THEN carries a raw non-UTF-8
 // byte. The []byte path would reinterpret the whole document as Latin-1, so the
-// streaming reader cannot safely commit to UTF-8; rather than silently mis-decode
-// the late byte it FAILS CLOSED with ErrContentSizeExceeded. This preserves
+// streaming reader cannot safely commit to UTF-8, so it FAILS CLOSED with
+// ErrContentSizeExceeded and never silently mis-decodes the late byte. This preserves
 // parity (no irreversible mis-decoded SAX/DOM output) and keeps memory bounded.
 func TestParseReaderDeferredOverCapFailsClosed(t *testing.T) {
 	t.Parallel()

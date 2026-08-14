@@ -175,7 +175,7 @@ func compileRule(compileCtx context.Context, elem *helium.Element, schNS string,
 // compileRuleChild processes a single child element of a <rule>.
 func compileRuleChild(compileCtx context.Context, r *rule, childElem *helium.Element, schNS string, eh helium.ErrorHandler) {
 	// Only Schematron-namespaced children carry structural meaning; foreign
-	// elements (e.g. <x:assert>) are ignored rather than executed.
+	// elements (e.g. <x:assert>) are ignored and never executed.
 	if !elementInNamespace(childElem, schNS) {
 		return
 	}

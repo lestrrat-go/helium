@@ -54,8 +54,8 @@ func TestNULCharacterNoHang(t *testing.T) {
 
 // TestNULCharacterReplaced verifies that a real U+0000 byte is replaced with
 // the U+FFFD replacement character (per HTML5 data/RCDATA/RAWTEXT/PLAINTEXT
-// state handling) across every content mode, rather than being dropped, kept
-// literally, or truncating the surrounding content.
+// state handling) across every content mode. It is never dropped, kept
+// literally, or allowed to truncate the surrounding content.
 func TestNULCharacterReplaced(t *testing.T) {
 	const repl = "�"
 

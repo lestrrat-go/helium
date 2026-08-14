@@ -32,14 +32,14 @@ const (
 // cancelAfterReader is an io.Reader that streams a fixed body and invokes a
 // cancel func once a threshold number of bytes has been read. It lets a test
 // cancel the context AFTER the parser has entered (and is actively scanning) a
-// raw-text / comment section, rather than before parsing starts.
+// raw-text / comment section, well after parsing starts.
 //
 // maxRead caps the bytes returned per Read so a single large read can't gulp
 // the whole input (and the entire target construct) before `after` is reached.
 // ParseReader first drains a 1024-byte charset prescan; throttling per-read and
 // placing `after` past that prescan AND inside the target construct ensures the
-// cancellation lands while the parser is actively scanning the construct rather
-// than during the prescan or before parsing starts.
+// cancellation lands while the parser is actively scanning the construct, past
+// the prescan and past the start of parsing.
 type cancelAfterReader struct {
 	data    []byte
 	pos     int
@@ -207,7 +207,7 @@ func TestRawTextChunksAreValidUTF8(t *testing.T) {
 }
 
 // TestRawTextContentChunkedUnderCap verifies that an over-cap raw-text /
-// plaintext / RCDATA section is delivered in bounded chunks rather than a
+// plaintext / RCDATA section is delivered in bounded chunks, never as a
 // single unbounded buffer, and that the full content is still produced.
 func TestRawTextContentChunkedUnderCap(t *testing.T) {
 	const limit = 1 << 10 // 1 KiB cap
@@ -266,7 +266,7 @@ func TestRawTextContentChunkedUnderCap(t *testing.T) {
 // TestNormalTextContentChunkedUnderCap verifies that a long delimiter-free
 // run of NORMAL (data-state) character data — the lone unbounded text path
 // alongside the already-chunked raw-text/RCDATA/plaintext sections — is
-// delivered to SAX in bounded chunks rather than buffered whole, and that the
+// delivered to SAX in bounded chunks and never buffered whole, and that the
 // full content is still produced intact. Regression for HTML-001.
 func TestNormalTextContentChunkedUnderCap(t *testing.T) {
 	const limit = 1 << 10 // 1 KiB cap
@@ -484,7 +484,7 @@ func TestCommentChunkingCorruptionRepro(t *testing.T) {
 
 	doc, err := html.NewParser().MaxContentSize(4).Parse(t.Context(), []byte(input))
 	require.ErrorIs(t, err, html.ErrContentSizeExceeded,
-		"over-cap comment must error rather than corrupt the document")
+		"over-cap comment must error and leave the document uncorrupted")
 	require.Nil(t, doc, "no document should be returned on a hard size error")
 
 	// Sanity: the same input parses cleanly when the cap accommodates it, and
@@ -575,12 +575,12 @@ func TestRawTextChunkSlicesAreIndependent(t *testing.T) {
 // within MaxContentSize resolves the legacy "amp" prefix and emits the tail as
 // ordinary text (see TestRCDATAWithinCapSaturatedLegacyResolves), but an
 // over-cap ambiguous legacy-prefix run hard-fails with ErrContentSizeExceeded
-// rather than streaming a partial result (see
+// and streams no partial result (see
 // TestRCDATAOverCapLegacyPrefixLongTailFails).
 //
 // Numeric references are unaffected (see TestRCDATANumericEntityNormalized):
 // they accumulate a saturating value without retaining the digit run, so an
-// overlong numeric reference still resolves rather than failing.
+// overlong numeric reference still resolves.
 func TestRCDATAOverCapNamedEntityFails(t *testing.T) {
 	const limit = 4
 	const runLen = 4096 // far larger than any valid entity name or legacy prefix
@@ -676,8 +676,8 @@ func TestRCDATAUnresolvedSemicolonCharged(t *testing.T) {
 // entity resolution uses a FIXED maxEntityNameLen lookahead, NOT MaxContentSize:
 // a known named reference whose resolved value is tiny (a single '&', '<', …)
 // resolves even when MaxContentSize is smaller than the entity NAME itself. With
-// MaxContentSize(2), `<title>&amp;</title>` must resolve to "&" rather than
-// being rejected because the 3-char name "amp" exceeds the cap.
+// MaxContentSize(2), `<title>&amp;</title>` must resolve to "&", and must not be
+// rejected because the 3-char name "amp" exceeds the cap.
 func TestRCDATASmallCapKnownEntityResolves(t *testing.T) {
 	const limit = 2 // smaller than the entity names below
 
@@ -723,8 +723,8 @@ func TestRCDATASmallCapKnownEntityResolves(t *testing.T) {
 // make it an over-long unknown literal, its absence legacy-resolves "amp". The
 // decision can only be made at the run's end, so settling it without an over-cap
 // spool is impossible once the run exceeds MaxContentSize. The parser therefore
-// HARD-FAILS with ErrContentSizeExceeded and emits NOTHING, rather than streaming
-// or buffering the unbounded tail. (A within-cap run still resolves — see
+// HARD-FAILS with ErrContentSizeExceeded and emits NOTHING, so the unbounded tail
+// is neither streamed nor buffered. (A within-cap run still resolves — see
 // TestRCDATAWithinCapSaturatedLegacyResolves.)
 func TestRCDATAOverCapLegacyPrefixLongTailFails(t *testing.T) {
 	const limit = 4
@@ -1125,7 +1125,7 @@ func TestRCDATALongWithinCapNamedEntityPreserved(t *testing.T) {
 
 // TestRCDATAShortNameOverCapFails pins that an UNRESOLVED named reference whose
 // alphanumeric name fits inside the fixed maxEntityNameLen lookahead — so it
-// takes the within-cap fallback path rather than the long-run branch — is STILL
+// takes the within-cap fallback path in place of the long-run branch — is STILL
 // charged against MaxContentSize. The literal run it produces is "&" plus the
 // name; if that alone exceeds the cap the parse must hard-fail with
 // ErrContentSizeExceeded, exactly like the long-run path. This guards the bug
@@ -1210,7 +1210,7 @@ func TestRCDATAShortNameOverCapFails(t *testing.T) {
 // TestRCDATANumericEntityNormalized verifies that the bounded RCDATA char-ref
 // scanner makes the SAME entity-resolution decision as the normal-text scanner
 // for numeric references, even with a tiny MaxContentSize: an overlong numeric
-// reference resolves (to U+FFFD on overflow) rather than being emitted as
+// reference resolves (to U+FFFD on overflow) and is never emitted as
 // literal text, and a long leading-zero reference still resolves to its value.
 func TestRCDATANumericEntityNormalized(t *testing.T) {
 	const limit = 4
@@ -1285,7 +1285,7 @@ func TestIndivisibleNodeCancellationNoPartialEmit(t *testing.T) {
 
 			// Cancel once the (still-unterminated) indivisible node has streamed
 			// PAST the 1024-byte charset prescan, so the scan loop observes
-			// ctx.Err() mid-construct rather than during the prescan. A meta
+			// ctx.Err() mid-construct, past the prescan. A meta
 			// charset forces the streaming path; throttled reads keep the cancel
 			// landing inside the construct.
 			r := &cancelAfterReader{data: []byte(tc.input), after: 1100, maxRead: 64, cancel: cancel}
@@ -1381,7 +1381,7 @@ func (r *blockOnExtraReadReader) Read(p []byte) (int, error) {
 // An unresolved over-cap named reference (`&zzzzzzzz;`, 10 literal bytes > cap 4)
 // sits PAST the 1024-byte charset prescan, preceded by valid RCDATA filler, so
 // the over-cap decision is made while streaming (the cursor buffer is exhausted
-// at the boundary) rather than during the prescan. A <meta charset="utf-8">
+// at the boundary), past the prescan. A <meta charset="utf-8">
 // forces the streaming sanitize path and throttled reads keep the cursor
 // refilling incrementally. The closing ';' is the LAST byte of the body and is
 // consumed as part of the unresolved run, so when parseCharRefBounded sets

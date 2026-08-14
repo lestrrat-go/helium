@@ -57,7 +57,7 @@ func TestTokenMatcherNoExponentialBlowup(t *testing.T) {
 // TestListGroupChoiceUnderOptional covers <list>s whose children are group/choice
 // nested under optional in element content. All such lists share the
 // matchListContent token matcher (validateList now delegates to it too), so they
-// must validate with full backtracking semantics rather than being mishandled.
+// must validate with full backtracking semantics, and must never be mishandled.
 func TestListGroupChoiceUnderOptional(t *testing.T) {
 	t.Parallel()
 

@@ -121,7 +121,7 @@ func TestStylesheetConcurrentReuse(t *testing.T) {
 
 			// Pre-parse each goroutine's source once. Each goroutine owns a
 			// distinct *helium.Document, so any failure is attributable to the
-			// shared *Stylesheet rather than a shared source tree.
+			// shared *Stylesheet, and no shared source tree.
 			sources := make([]*helium.Document, goroutines)
 			for i := range sources {
 				doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.source(i)))
@@ -311,7 +311,7 @@ func TestStylesheetConcurrentSchemaAwareDistinctSources(t *testing.T) {
 // attributes into the tree it validates, but that tree is now a PRIVATE COPY, so
 // the caller's original source document is left untouched. The result still
 // reflects the schema default (the copy carries the inserted attribute), proving
-// the mutation moved off the caller's tree rather than being skipped.
+// the mutation moved off the caller's tree, and was never skipped.
 func TestSchemaAwareDoesNotMutateSource(t *testing.T) {
 	schema := compileSchemaString(t, `
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

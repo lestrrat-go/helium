@@ -48,7 +48,7 @@ func TestSkipBlankBytesSurfacesReadError(t *testing.T) {
 		wantAdvanced bool // whether any whitespace was consumed first
 	}{
 		// First peek already hits the read error (no buffered blank): the
-		// i==0 branch must consult the sticky Err() rather than report "no blank".
+		// i==0 branch must consult the sticky Err() and never report "no blank".
 		"read error on first peek": {blanks: 0, wantAdvanced: false},
 		// Some blanks are consumed, then the read error stops the run short of a
 		// full chunk: the partial-chunk branch must surface the sticky Err() too.

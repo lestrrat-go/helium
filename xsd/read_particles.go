@@ -301,7 +301,7 @@ func (c *compiler) parseNamedAttributeGroup(ctx context.Context, elem *helium.El
 		// Any other XSD-namespace element child (e.g. a stray xs:element) is a
 		// schema-representation error. annotation and anyAttribute are permitted
 		// content (anyAttribute is silently accepted in XSD 1.0, so it is excused
-		// here rather than flagged). Version-INDEPENDENT XSD rule.
+		// here, and never flagged). Version-INDEPENDENT XSD rule.
 		if c.filename != "" && ce.URI() == lexicon.NamespaceXSD &&
 			!isXSDElement(ce, elemAnnotation) && !isXSDElement(ce, elemAnyAttribute) {
 			c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "attributeGroup",
@@ -385,7 +385,7 @@ func (c *compiler) checkAttrGroupRef(ctx context.Context, ce *helium.Element) {
 // reference is structurally well-formed (a PRESENT 'ref' attribute, no 'name', no
 // stray child), so the caller records the group ref and resolves its value — a
 // PRESENT-but-empty ref="" is passed through as a present ref so resolveQName reports
-// it as an invalid (empty) QName, rather than being silently dropped here; false
+// it as an invalid (empty) QName, and it is never silently dropped here; false
 // (having reported the error) otherwise. Version-INDEPENDENT XSD rule.
 func (c *compiler) checkContentModelGroupRef(ctx context.Context, ce *helium.Element) bool {
 	ref := getAttr(ce, attrRef)

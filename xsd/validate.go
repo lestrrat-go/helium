@@ -102,7 +102,7 @@ func fixedValueMatchesInternal(ctx context.Context, instance, fixed string, td *
 // fixedListMatches compares two whitespace-normalized list values item by item
 // in the list's item-type value space. Each item is dispatched through the
 // variety-aware comparator on the actual item type, so a list whose item type is
-// a union (or itself a list) is compared in the correct value space rather than
+// a union (or itself a list) is compared in the correct value space, and never as
 // raw lexical text.
 func fixedListMatches(ctx context.Context, instance, fixed string, td *TypeDef, instanceNS, fixedNS map[string]string, schema *Schema, version Version, allowXSD10LegacyGMonthInstance bool) bool {
 	ii := value.XSDFields(instance)
@@ -197,7 +197,7 @@ const crossMemberValueComparisonMaxDepth = 64
 // and union — so NO nesting level is dropped. A union of lists
 // (memberTypes="intList decimalList") compares the instance "1 2" (active in
 // intList) and the literal "1.0 2.0" (active in decimalList) item-by-item in
-// the decimal value space rather than value-comparing the whole multi-token
+// the decimal value space, value-comparing no whole multi-token
 // strings as scalars; and an item or member type that is itself a union (a
 // list-of-union, or a union-of-list-of-union) is resolved to its per-value
 // active member and recursed into, so arbitrary nesting bottoms out at atomic
@@ -280,7 +280,7 @@ func crossMemberValueEqualDepth(ctx context.Context, instance, fixed string, ins
 
 	// Both atomic. When the two item/member types are the SAME (e.g. both list
 	// items are xs:integer), compare in that one type's value space directly so a
-	// QName/NOTATION item pair resolves namespaces rather than being dropped by the
+	// QName/NOTATION item pair resolves namespaces, and is never dropped by the
 	// no-shared-family rule.
 	if instanceMember == fixedMember {
 		return fixedValueMatchesInternal(ctx, instance, fixed, fixedMember, instanceNS, fixedNS, schema, version, allowXSD10LegacyGMonthInstance)
@@ -411,7 +411,7 @@ func primitiveValueSpaceFamily(builtinLocal string) (string, bool, bool) {
 // throwaway validation context applies the same version-sensitive lexical rules
 // the main validation path uses — e.g. a 1.1-only lexical form ("+INF" for
 // xs:double) appearing INSIDE a union fixed-value or enumeration literal is
-// accepted in 1.1 mode rather than rejected under a defaulted Version10.
+// accepted in 1.1 mode, and never rejected under a defaulted Version10.
 // fixedUnionActiveMember returns the union member that accepts value. The schema
 // argument (nil when none is available) is threaded onto the throwaway
 // validation context so a member whose own xs:assertion needs schema-aware
@@ -528,7 +528,7 @@ type validationContext struct {
 	// Pass-2 identity-constraint evaluation consults this map (for the host decl and
 	// its IDCs / default / fixed / nillable metadata) BEFORE falling back to
 	// lookupElemDecl, so xs:key/xs:unique/xs:keyref declared on a local element are
-	// evaluated rather than silently skipped. Because it is written pre-assessment,
+	// evaluated, and never silently skipped. Because it is written pre-assessment,
 	// it must NOT be used as a "was assessed" signal — the ID/IDREF pass uses
 	// assessedElemType for that.
 	actualElemDecl map[*helium.Element]*ElementDecl
@@ -536,7 +536,7 @@ type validationContext struct {
 	// type name (the xpath3 annotation form, e.g. "xs:integer"). It is populated
 	// during validation in XSD 1.1 mode (nil otherwise) so xs:assert tests
 	// evaluate against a PSVI-typed tree: a typed attribute like @length atomizes
-	// to xs:nonNegativeInteger rather than xs:untypedAtomic (which a value
+	// to xs:nonNegativeInteger, and never xs:untypedAtomic (which a value
 	// comparison would cast to xs:string), and "instance of" tests see the
 	// declared type. Unassessed skip/lax-no-declaration content is deliberately
 	// excluded even when actualElemType records an xsi:type for IDC canonicalization.
@@ -554,7 +554,7 @@ type validationContext struct {
 	// default/fixed value, the effective (schema-normalized) value and the namespace
 	// context to resolve a QName/NOTATION default's prefix (the DECLARATION's
 	// context). isolatedAssertTree materializes these onto the isolated copy so
-	// data(c) on a DEFAULTED descendant atomizes the default rather than "" —
+	// data(c) on a DEFAULTED descendant atomizes the default, and never "" —
 	// matching the asserted element's own $value (which already substitutes it).
 	assertEffectiveValues map[helium.Node]assertEffectiveValue
 	// attrInheritable records, for XSD 1.1, the instance attribute nodes matched to
@@ -929,7 +929,7 @@ func (vc *validationContext) validateRootElement(ctx context.Context, elem *heli
 		return err
 	}
 	// Check block flags against xsi:type derivation. A blocked xsi:type is a
-	// validity error (cvc-elt.4.3): fail rather than silently fall back to the
+	// validity error (cvc-elt.4.3): fail, falling back to no
 	// declared type — otherwise a blocked narrowing whose value is also valid under
 	// the declared type (e.g. xsi:type="xs:int" / declared xs:integer with
 	// block="restriction") would be wrongly accepted. This mirrors the per-child
@@ -1103,7 +1103,7 @@ func (vc *validationContext) validateContentByType(ctx context.Context, elem *he
 		// reject ALL character content INCLUDING whitespace (cvc-complex-type.2.1),
 		// not merely non-whitespace text. read_types.go classifies an empty
 		// compositor as element-only with a non-nil empty model group, so the
-		// emptiness is detected via modelGroupHasContent here rather than at
+		// emptiness is detected via modelGroupHasContent here, and never at
 		// classification time. XSD 1.0 keeps the historical whitespace tolerance
 		// (rejectNonWhitespaceText below), byte-identical.
 		if td.ContentType == ContentTypeElementOnly && vc.version == Version11 && td.OpenContent == nil &&
@@ -1304,7 +1304,7 @@ func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *
 // The matched element ITSELF is annotated too: a PARENT IDC that selects this
 // skip-wildcard-matched element directly must see its xsi:type ACTUAL type, so an
 // xsi:type-introduced field (e.g. an inline xs:integer attribute) is canonicalized
-// in the actual type's value space rather than compared lexically.
+// in the actual type's value space, and never compared lexically.
 func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *helium.Element) {
 	// Record this element as un-assessed skip content so a pass-2 IDC selector
 	// does not pick it (an xs:key/xs:unique must not constrain unassessed nodes).
@@ -1377,7 +1377,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 
 	// Fixed value mismatch check (only when element has actual content).
 	// Compare in the *declared* type's value space (applying its whitespace
-	// facet) rather than an unconditional TrimSpace, so value-equal lexical
+	// facet), and never through an unconditional TrimSpace, so value-equal lexical
 	// variants are accepted and significant whitespace stays significant. The
 	// fixed-value constraint is defined by the element declaration's own type,
 	// not by an xsi:type actual type that may derive a different whiteSpace
@@ -1516,7 +1516,7 @@ func effectiveContentSimpleType(td *TypeDef) *TypeDef {
 // the text content of td. For a simpleContent COMPLEX type it walks through the
 // simpleContent derivation to the underlying simpleType/builtin (composing any
 // facet-only restriction), so a caller ATOMIZING a node typed with td sees the
-// narrowed content type — its list/union/QName variety — rather than the raw
+// narrowed content type — its list/union/QName variety — and never the raw
 // complex type. A non-simpleContent type (a plain simple type or an element-only
 // complex type) is returned unchanged. It mirrors the internal atomization the
 // xsd assert/$value path uses, so an external adapter (xslt3's schema registry)
@@ -1809,7 +1809,7 @@ func xsiSchemaLocationValueEqual(a, b string) bool {
 // isDeclaredXsiSchemaLocationUse reports whether au is a declared xsi:schemaLocation
 // attribute use (the only one of the four xsi: processor attributes whose
 // value space is a list with no scalar built-in type, so its fixed/default is
-// handled by the list helpers above rather than a built-in TypeDef).
+// handled by the list helpers above, and by no built-in TypeDef).
 func isDeclaredXsiSchemaLocationUse(au *AttrUse, version Version) bool {
 	return version == Version11 && au.Name.NS == lexicon.NamespaceXSI && au.Name.Local == attrSchemaLocation
 }
@@ -1957,7 +1957,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		if au, ok := allowed[aqn]; ok {
 			// Resolve the declared type up front so the fixed-value check can
 			// compare in the type's value space (applying its whitespace
-			// facet) rather than by raw string equality.
+			// facet), and never by raw string equality.
 			attrTD, tdOK := vc.attrUseType(au)
 			if au.Fixed != nil {
 				// xsi:schemaLocation has no scalar built-in type, so its fixed value
@@ -2473,8 +2473,8 @@ type mixedContentScan struct {
 	// invalid marks the initial value as indeterminate: the entity graph is
 	// cyclic, so its expansion cannot be materialized reliably. The mixed-fixed
 	// check then fails CLOSED (a cyclic entity graph can never represent a valid
-	// fixed value) rather than silently dropping the un-scanned content and
-	// admitting an invalid element. A deep-but-finite acyclic expansion is NOT
+	// fixed value), dropping no un-scanned content and
+	// admitting no invalid element. A deep-but-finite acyclic expansion is NOT
 	// invalid — it is scanned in full (the iterative walk has no depth cap).
 	invalid bool
 }
@@ -2709,7 +2709,7 @@ func mixedInitialValue(elem *helium.Element, fixed string) (initial string, hasC
 	// The budget is one byte past the fixed value: the initial value can only
 	// equal fixed if it is no longer than fixed, so accumulating one extra byte
 	// is enough to detect every mismatch (a longer value is a mismatch by
-	// length). Capping here — rather than at a large fixed floor — is what bounds
+	// length). Capping here, in place of at a large fixed floor, is what bounds
 	// the scan's memory to O(budget) on an adversarial exponential-expansion
 	// entity graph. The arena is preallocated to the budget so memoized
 	// contribution spans stay valid (it never reallocates).
@@ -3037,8 +3037,8 @@ func xsdTypeName(td *TypeDef) string {
 // *TypeDef so schemaDecls can recover the metadata; otherwise it is xsdTypeName. In
 // either case the anonymous list-item / union-member types reachable from a list/
 // union are registered too (assertRegisterAnonChildren) — INCLUDING anonymous ATOMIC
-// (faceted) members — so active-member selection validates the actual faceted member
-// rather than a collapsed builtin ancestor. Used ONLY for the assert annotations map;
+// (faceted) members — so active-member selection validates the actual faceted member,
+// and never a collapsed builtin ancestor. Used ONLY for the assert annotations map;
 // the user-facing annotations map keeps xsdTypeName, byte-identical. A standalone
 // anonymous ATOMIC node type keeps xsdTypeName so node annotations are not broadly
 // changed.

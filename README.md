@@ -198,12 +198,12 @@ byte-for-byte behavioral clone. Known differences:
 
 - `Decoder.Strict = false` is not supported; `Decoder.AutoClose` is a no-op and
   `HTMLAutoClose` is omitted.
-- Undeclared namespace prefixes are rejected rather than passed through.
+- Undeclared namespace prefixes are rejected at parse time.
 - Namespace declarations are emitted before regular attributes.
-- `Decoder.InputOffset` is approximate rather than exact.
+- `Decoder.InputOffset` is approximate.
 - Empty elements captured via `,innerxml` may re-serialize as self-closed tags.
 
-Migrate behind your own tests rather than assuming a transparent swap.
+Migrate behind your own tests, and treat the swap as a change in behavior.
 
 # Performance
 

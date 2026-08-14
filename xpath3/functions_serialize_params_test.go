@@ -809,7 +809,7 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 
 	t.Run("map-form extension-method QName is unsupported (SEPM0016)", func(t *testing.T) {
 		// An extension method is a valid method-type value, but helium implements
-		// no extension output methods, so it is an unsupported value rather than a
+		// no extension output methods, so it is an unsupported value, with no
 		// silent fall-through to the xml method.
 		doc := mustParseXML(t, `<root/>`)
 		_, err := evaluate(t.Context(), doc, `serialize(., map{"method":"ex:custom","omit-xml-declaration":true()})`)
@@ -1062,7 +1062,7 @@ func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
 // (json and adaptive apply it, fully-normalized is SESU0011); json-node-output-method
 // non-default over a serialized node is an honest unsupported error (not silent
 // xml); and a map-form namespaced-QName method is treated as an unsupported
-// extension (SEPM0016) rather than losing its namespace to XPTY0004.
+// extension (SEPM0016), losing its namespace to no XPTY0004.
 func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 	// U+00E9 (composed é) vs "e" + U+0301 (decomposed).
 	const composed = "\u00e9"
@@ -1102,7 +1102,7 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		// escaping: the decomposed "e" + U+0301 composes to é (U+00E9), which the
 		// writer's default non-ASCII escaping then emits as &#xE9; — exactly as a
 		// literal composed é serializes, so normalization is consistent with the
-		// rest of the writer rather than slipping a literal through a post-escape
+		// rest of the writer, slipping no literal through a post-escape
 		// pass.
 		require.Equal(t, `<e>&#xE9;</e>`, res.StringValue())
 	})
@@ -1643,8 +1643,8 @@ func TestSerialize_JSONCharacterMapsAndNormalization(t *testing.T) {
 // TestSerialize_TextMethodSENR0001 verifies that sequence normalization
 // (Serialization 3.1 §2 — "It is a serialization error [err:SENR0001] if an item
 // … is an attribute node, a namespace node or a function item") applies to the
-// text output method too: such items are rejected with SENR0001 rather than
-// silently contributing their string value. This routes through the same
+// text output method too: such items are rejected with SENR0001, contributing no
+// string value of their own. This routes through the same
 // serializeItemKindError checkpoint the xml/xhtml/html methods use.
 func TestSerialize_TextMethodSENR0001(t *testing.T) {
 	requireSENR0001 := func(t *testing.T, src, expr string) {

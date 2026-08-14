@@ -184,8 +184,8 @@ func catalogFilePath(ref string) (string, bool, error) {
 
 	// An opaque file: URI such as "file:next.xml" has u.Opaque set and an empty
 	// u.Path, and a "file://localhost" URI has no path at all. Neither denotes a
-	// local filesystem path, so reject them rather than letting an empty path
-	// fall through and read the process working directory.
+	// local filesystem path, so reject them. An empty path falling through
+	// would read the process working directory.
 	if u.Opaque != "" || u.Path == "" {
 		return "", false, fmt.Errorf("catalog: invalid file URI %q: no local path", ref)
 	}
@@ -206,7 +206,7 @@ func catalogFilePath(ref string) (string, bool, error) {
 // localPathToFileURI builds a "file://" URI from an absolute local filesystem
 // path. It is used as the catalog baseURI when the catalog was referenced by a
 // "file:" URI, so relative URIs in the catalog resolve back into "file:" URI
-// space rather than as bare filesystem paths.
+// space, and never as bare filesystem paths.
 //
 // (&url.URL{Scheme: "file", Path: ...}).String() percent-encodes as needed and,
 // on Windows, converts the OS separator to "/" via filepath.ToSlash. A Windows
@@ -410,7 +410,7 @@ func documentElement(doc *helium.Document) *helium.Element {
 // resolveEntryURI resolves a catalog entry's URI/prefix/catalog attribute
 // against base. When the value is a syntactically malformed URI that url.Parse
 // rejects, the error is reported through eh and ok is false so the caller skips
-// the entry rather than storing the raw, unresolved value as a usable mapping.
+// the entry and stores no raw, unresolved value as a usable mapping.
 func resolveEntryURI(ctx context.Context, eh helium.ErrorHandler, base, value string) (string, bool) {
 	resolved, err := icatalog.ResolveURI(base, value)
 	if err != nil {

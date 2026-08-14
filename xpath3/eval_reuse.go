@@ -21,7 +21,7 @@ type EvalState struct {
 	oneItem [1]Item // reusable backing for single-item results
 
 	// baseNode / baseContextItem capture the focus seeded by NewEvalState so
-	// each EvaluateReuse call starts from that base focus rather than a focus
+	// each EvaluateReuse call starts from that base focus, and never a focus
 	// mutated by a prior call.
 	baseNode        helium.Node
 	baseContextItem Item
@@ -33,7 +33,7 @@ type EvalState struct {
 }
 
 // SetContextItem sets the non-node context item on the eval state.
-// This is used when the context is an atomic value rather than a node
+// This is used when the context is an atomic value, and no node
 // (e.g., sorting a sequence of atomic items).
 //
 // The item becomes the base focus, so it persists as the starting focus
@@ -55,7 +55,7 @@ func (s *EvalState) SetPosition(pos int) { s.ec.position = pos }
 func (s *EvalState) SetSize(size int) { s.ec.size = size }
 
 // EvaluateReuse evaluates the expression using pre-allocated state,
-// resetting per-evaluation fields rather than allocating new.
+// resetting per-evaluation fields, and allocating none.
 // The node parameter replaces the context node for this evaluation.
 //
 // The returned Result is only valid until the next EvaluateReuse call

@@ -322,7 +322,7 @@ func resolveRelativeURI(base, ref string) string {
 // Absoluteness is decided with [xsd.URIScheme] (RFC 3986), not filepath.IsAbs:
 // when base is a URI (it has a scheme), a filepath-absolute or root-relative
 // loc such as "/inner.xsl" must be resolved against the base scheme/authority
-// (mem://pkg/main.xsl + /inner.xsl -> mem://pkg/inner.xsl) rather than passed
+// (mem://pkg/main.xsl + /inner.xsl -> mem://pkg/inner.xsl), and is never passed
 // through verbatim. Only a purely-local absolute path against a local base is
 // left unchanged.
 func resolveStylesheetLocation(base, loc string) string {
@@ -683,7 +683,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 	// the standalone path, the TransformOption values), including the effective
 	// per-resource read cap so that resources loaded while COMPILING the nested
 	// stylesheet/package (its include/import/schema/param-doc reads) honor the
-	// same MaxResourceBytes override rather than falling back to the default.
+	// same MaxResourceBytes override, falling back to no default.
 	nestedCompiler := cfg.nestedCompiler
 
 	// Apply static-params from the options map to the nested compiler.
@@ -721,7 +721,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		}
 		var readErr error
 		data, readErr = readResourceBounded(rc, cfg.maxResourceBytes)
-		// Close right after reading rather than deferring: the rest of this
+		// Close right after reading, deferring nothing: the rest of this
 		// function parses, compiles and runs the stylesheet, and we must not
 		// hold the source handle open across that work.
 		_ = rc.Close()
@@ -1208,7 +1208,7 @@ func transformMapSeq(m xpath3.MapItem, key string) xpath3.Sequence {
 
 // transformCapabilities is helium's advertised value for each XSLT-namespace
 // requested-property that fn:transform can reason about. supports-streaming is
-// false: helium materializes source documents into a DOM rather than streaming.
+// false: helium materializes source documents into a DOM, and streams nothing.
 var transformCapabilities = map[string]bool{
 	"is-schema-aware":                  true,
 	"supports-serialization":           true,
@@ -1419,7 +1419,7 @@ func applySerializationParams(base *OutputDef, seq xpath3.Sequence) *OutputDef {
 		}
 		// A recognized parameter present with an empty-sequence value overrides
 		// the inherited xsl:output value by resetting the parameter to its
-		// serialization default (F&O 3.1 §14.8.3), rather than leaving the
+		// serialization default (F&O 3.1 §14.8.3), leaving no
 		// inherited value in place.
 		if !transformOptionPresent(val) {
 			resetSerializationParam(out, name)
@@ -1578,8 +1578,8 @@ func serializationQNameClarkName(item xpath3.Item) string {
 
 // mergeSerializationQNames unions the Clark names of the xs:QName items in val
 // into base. The cdata-section-elements / suppress-indentation values supplied
-// via serialization-params accumulate onto the stylesheet's xsl:output set
-// rather than replacing it (F&O 3.1 §14.8.3), skipping duplicates.
+// via serialization-params accumulate onto the stylesheet's xsl:output set,
+// replacing none of it (F&O 3.1 §14.8.3), skipping duplicates.
 func mergeSerializationQNames(base []string, val xpath3.Sequence) []string {
 	seen := make(map[string]struct{}, len(base))
 	for _, n := range base {

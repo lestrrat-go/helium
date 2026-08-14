@@ -118,8 +118,8 @@ func TestFindElementsByIDDTDDeclared(t *testing.T) {
 }
 
 // TestBuildIDIndexMultipleIDAttributes proves BuildIDIndex records every id on
-// an element carrying more than one recognized ID attribute, rather than only
-// the first. FindElementsByID matches such an element for each of its ids, so
+// an element carrying more than one recognized ID attribute, down to the
+// last. FindElementsByID matches such an element for each of its ids, so
 // an index that kept only the first would disagree with it.
 func TestBuildIDIndexMultipleIDAttributes(t *testing.T) {
 	t.Parallel()
@@ -164,8 +164,8 @@ func TestBuildIDIndexShadowedDuplicate(t *testing.T) {
 
 // TestBuildIDIndexCancelled proves the walk answers a cancelled caller instead
 // of running to the end of a document it did not write, and that it hands back
-// no index at all rather than a partial one a caller could read an absent id
-// out of.
+// no index at all. A partial one would let a caller read an absent id out of
+// it.
 func TestBuildIDIndexCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -183,7 +183,7 @@ func TestBuildIDIndexCancelled(t *testing.T) {
 // TestIDIndexAgreesWithFindElementsByID is the parity check the two functions
 // exist to satisfy: for any element shape, BuildIDIndex(ctx, root)[id] must be the
 // same elements in the same order as FindElementsByID(root, id). The candidate
-// ids are listed per document rather than read back from the index, so an
+// ids are listed per document, never read back from the index, so an
 // index that dropped an id entirely cannot hide behind its own key set.
 // xmldsig1 and xmlenc1 must never disagree about which elements carry an id;
 // that disagreement is an XML Signature Wrapping hole.

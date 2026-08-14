@@ -496,7 +496,7 @@ func TestSchemaAttrWhitespaceCollapse(t *testing.T) {
 	// resolveQNameRef and is reported ONCE as an invalid QName (the invalidQName
 	// sentinel it yields never equals the redefined group's name, so it routes to the
 	// non-self branch and checkAttrGroupRefsResolve's sentinel guard suppresses any
-	// follow-on "does not resolve"), rather than being silently dropped.
+	// follow-on "does not resolve"), and is never silently dropped.
 	t.Run("redefine-override-attributeGroup-ref-empty", func(t *testing.T) {
 		t.Parallel()
 		fsys := fstest.MapFS{

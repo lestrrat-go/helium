@@ -496,7 +496,7 @@ func (l *lexer) scanNameOrKeyword() {
 }
 
 // isNameTestContext returns true if the previous token indicates that the
-// next name should be treated as a name test rather than a keyword.
+// next name should be treated as a name test, and never a keyword.
 // This occurs after '/', '//', '@', and '::'.
 func (l *lexer) isNameTestContext() bool {
 	if len(l.tokens) == 0 {

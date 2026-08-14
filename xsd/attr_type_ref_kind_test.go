@@ -88,7 +88,7 @@ func TestAttribute_TypeRefKindResolution(t *testing.T) {
 		// never declared) resolves to no global attribute but must not be rejected.
 		{"ref-xml-builtin", localShell, `<xs:attribute ref="xml:lang"/>`},
 		// A dangling ref into a FOREIGN namespace (e.g. one whose xs:import could not
-		// be loaded) is left lenient rather than over-rejected.
+		// be loaded) is left lenient, and never over-rejected.
 		{"ref-foreign-namespace", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:a" xmlns:x="urn:unloaded" targetNamespace="urn:a"><xs:import namespace="urn:unloaded"/><xs:complexType name="host"><xs:sequence/>%s</xs:complexType></xs:schema>`, `<xs:attribute ref="x:nope"/>`},
 	}
 	for _, tc := range valid {

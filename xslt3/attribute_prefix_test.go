@@ -13,7 +13,7 @@ import (
 // TestAttributeUndeclaredPrefixSequenceMode verifies that xsl:attribute with a
 // computed name using an undeclared prefix raises XTDE0860 even when the
 // attribute is constructed in sequence mode (xsl:variable/xsl:param with an
-// "as" type), rather than being captured silently as a no-namespace attribute.
+// "as" type), and is never captured silently as a no-namespace attribute.
 func TestAttributeUndeclaredPrefixSequenceMode(t *testing.T) {
 	ctx := t.Context()
 
@@ -48,7 +48,7 @@ func TestAttributeUndeclaredPrefixSequenceMode(t *testing.T) {
 // TestAttributeUndeclaredPrefixItemCapture verifies that xsl:attribute with a
 // computed name using an undeclared prefix raises XTDE0860 when the attribute is
 // captured as a standalone item (here via an item-serialization output method
-// that captures the result rather than building a tree).
+// that captures the result and builds no tree).
 func TestAttributeUndeclaredPrefixItemCapture(t *testing.T) {
 	ctx := t.Context()
 
@@ -81,8 +81,8 @@ func TestAttributeUndeclaredPrefixItemCapture(t *testing.T) {
 
 // TestAttributeInvalidQNameSequenceMode verifies that xsl:attribute with a
 // computed name that is not a lexically valid QName raises XTDE0850 in sequence
-// mode (xsl:variable/xsl:param with an "as" type), rather than silently
-// producing an attribute with an invalid name.
+// mode (xsl:variable/xsl:param with an "as" type), producing no
+// attribute with an invalid name.
 func TestAttributeInvalidQNameSequenceMode(t *testing.T) {
 	ctx := t.Context()
 
@@ -202,7 +202,7 @@ func TestAttributeExplicitNamespaceItemCapture(t *testing.T) {
 	ctx := t.Context()
 
 	// method="adaptive" is an item-serialization method, so the standalone
-	// xsl:attribute at the top level is captured as a pending item rather than
+	// xsl:attribute at the top level is captured as a pending item, and never
 	// attached to an element. The undeclared prefix "p" is overridden by
 	// namespace="urn:p", so the captured attribute node must be in urn:p.
 	xsltSrc := `<?xml version="1.0"?>

@@ -204,8 +204,8 @@ func (ec *execContext) snapshotNode(ctx context.Context, node helium.Node) (heli
 	// Add all in-scope namespaces from the original element directly onto
 	// the deep-copied element. This ensures that when the snapshot result
 	// is later copied into the result tree (via CopyNode in xsl:sequence),
-	// the inherited namespace bindings travel with the element itself
-	// rather than relying solely on the ancestor shell chain.
+	// the inherited namespace bindings travel with the element itself,
+	// relying on no ancestor shell chain alone.
 	if srcElem, ok := node.(*helium.Element); ok {
 		if dstElem, ok2 := copied.(*helium.Element); ok2 {
 			addInScopeNamespaces(srcElem, dstElem)

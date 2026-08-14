@@ -9,7 +9,7 @@ import (
 )
 
 // TestECDSARawToDERTypedError confirms a wrong-length raw ECDSA signature is
-// classified with a package sentinel (ErrVerificationFailed) rather than an
+// classified with a package sentinel (ErrVerificationFailed), never an
 // untyped error, so a caller's errors.Is check on the verify path succeeds.
 func TestECDSARawToDERTypedError(t *testing.T) {
 	_, err := ecdsaRawToDER([]byte{0x01, 0x02, 0x03}, 32)

@@ -118,7 +118,7 @@ func TestDeferredLatin1ReaderOverCapThenHighByteErrors(t *testing.T) {
 // reinterpret the WHOLE buffer as Windows-1252 (matching the in-memory []byte
 // path) — the switch fires while scanning the buffer, before the cap's
 // fail-closed check, so a real Latin-1 document whose first high byte sits right
-// at the cap still decodes correctly rather than being rejected.
+// at the cap still decodes correctly and is never rejected.
 func TestDeferredLatin1ReaderInvalidByteAtCapBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -175,7 +175,7 @@ func TestDeferredLatin1ReaderCapBoundaryIsChunkIndependent(t *testing.T) {
 // TestDeferredLatin1ReaderExactCapValidUTF8Accepted verifies the boundary's
 // accept side: an undeclared stream of EXACTLY maxBuffer valid-UTF-8 bytes
 // followed by EOF settles as UTF-8 and delivers every byte. The one-byte EOF
-// probe confirms the stream ended right at the cap, so it is accepted rather than
+// probe confirms the stream ended right at the cap, so it is accepted, and never
 // rejected as if more bytes might still follow. Uses a non-4096-aligned cap.
 func TestDeferredLatin1ReaderExactCapValidUTF8Accepted(t *testing.T) {
 	t.Parallel()

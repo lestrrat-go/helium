@@ -13,7 +13,7 @@ import (
 // preserve the REAL base frame's capture state. When the default output method
 // is json/adaptive (an item-serialization method) the base frame has
 // captureItems=true, so atomic values produced by xsl:sequence inside a primary
-// xsl:result-document MUST be preserved as separate XDM items rather than
+// xsl:result-document MUST be preserved as separate XDM items, and never
 // stringified into the DOM as text. With the regression, the buffer frame was
 // created without captureItems/sequenceMode, so the atomics were written as a
 // single merged text node instead of three integer items.
@@ -105,7 +105,7 @@ func TestResultDocumentSecondaryValidationFailRollbackTryCatch(t *testing.T) {
 // stages its element items into resultDocItems and serializes them in the
 // end-of-transform materialization loop. When that serialization fails — here a
 // two-element sequence whose text carries U+0001, an XML-invalid character — the
-// error MUST surface from the transform rather than being swallowed into a
+// error MUST surface from the transform, and must never be swallowed into a
 // silently empty secondary document.
 func TestResultDocumentSecondarySerializationErrorSurfaces(t *testing.T) {
 	ss := compileStylesheetString(t, `

@@ -166,7 +166,7 @@ func TestParseSignedInfo(t *testing.T) {
 	})
 
 	// A SignedInfo with no CanonicalizationMethod is structurally invalid and
-	// must be rejected up front rather than parsing OK and failing later as an
+	// must be rejected up front. Parsing OK would push the failure later, into an
 	// unsupported-algorithm error during canonicalization.
 	t.Run("missing CanonicalizationMethod", func(t *testing.T) {
 		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
@@ -183,8 +183,8 @@ func TestParseSignedInfo(t *testing.T) {
 	})
 
 	// A SignedInfo with no SignatureMethod is structurally invalid and must be
-	// rejected up front rather than parsing OK and failing later (possibly only
-	// after key resolution) as an unsupported-algorithm error.
+	// rejected up front. Parsing OK would push the failure later (possibly only
+	// after key resolution), into an unsupported-algorithm error.
 	t.Run("missing SignatureMethod", func(t *testing.T) {
 		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
 			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
@@ -212,8 +212,8 @@ func TestParseSignedInfo(t *testing.T) {
 	})
 
 	// A second CanonicalizationMethod makes the c14n algorithm ambiguous; the
-	// schema fixes its cardinality at one, so it must be rejected rather than
-	// accepted last-one-wins.
+	// schema fixes its cardinality at one, so it must be rejected,
+	// and never accepted last-one-wins.
 	t.Run("duplicate CanonicalizationMethod", func(t *testing.T) {
 		si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
 			`<ds:CanonicalizationMethod xmlns:ds="` + dsigNS + `" Algorithm="` + ExcC14N10 + `"/>` +
@@ -270,7 +270,7 @@ func TestParseReferenceElement(t *testing.T) {
 	})
 
 	// A Reference with no DigestMethod is structurally invalid and must be
-	// rejected up front rather than parsing OK and failing later as an
+	// rejected up front. Parsing OK would push the failure later, into an
 	// unsupported-digest error.
 	t.Run("missing DigestMethod", func(t *testing.T) {
 		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
@@ -283,7 +283,7 @@ func TestParseReferenceElement(t *testing.T) {
 	})
 
 	// A Reference with no DigestValue is structurally invalid and must be
-	// rejected up front rather than parsing OK and failing later as a digest
+	// rejected up front. Parsing OK would push the failure later, into a digest
 	// mismatch (the empty digest never matches the recomputed one).
 	t.Run("missing DigestValue", func(t *testing.T) {
 		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
@@ -336,8 +336,8 @@ func TestParseReferenceElement(t *testing.T) {
 	})
 
 	// An empty PrefixList is still misplaced under a non-exclusive transform; the
-	// boolean-tracked match must reject it rather than treat "no prefixes" as
-	// harmless.
+	// boolean-tracked match must reject it, treating "no prefixes" as anything
+	// but harmless.
 	t.Run("empty InclusiveNamespaces on non-exclusive transform rejected", func(t *testing.T) {
 		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
 			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
@@ -399,7 +399,7 @@ func TestParseReferenceElement(t *testing.T) {
 	})
 
 	// A second ec:InclusiveNamespaces under an exclusive Transform must be
-	// rejected rather than silently letting the last one win.
+	// rejected, and the last one must never win.
 	t.Run("multiple InclusiveNamespaces rejected", func(t *testing.T) {
 		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
 			`<ds:Transforms xmlns:ds="` + dsigNS + `">` +
@@ -431,7 +431,7 @@ func TestParseReferenceElement(t *testing.T) {
 
 	// Two DigestValue children (the core of DSIG-004): even when the second
 	// matches the recomputed digest, the ambiguous schema-invalid Reference
-	// must be rejected rather than accepted last-one-wins.
+	// must be rejected, and never accepted last-one-wins.
 	t.Run("duplicate DigestValue", func(t *testing.T) {
 		r := `<ds:Reference xmlns:ds="` + dsigNS + `" URI="">` +
 			`<ds:DigestMethod xmlns:ds="` + dsigNS + `" Algorithm="` + DigestSHA256 + `"/>` +
@@ -468,7 +468,7 @@ func TestParseReferenceElement(t *testing.T) {
 // Reference children. XML-Signature requires at least one Reference; a
 // SignatureValue computed over a reference-free SignedInfo cryptographically
 // verifies yet covers no document content, so the signature attests to
-// nothing. Verify must reject such a structure rather than report success.
+// nothing. Verify must reject such a structure, and must never report success.
 //
 // The attack is constructed with full key control (an attacker controlling the
 // signing key is the worst case): produce a genuine signature, strip the
@@ -802,7 +802,7 @@ func TestCloneNilConfig(t *testing.T) {
 // tampered) SignedInfo using Exclusive C14N (the signer's SignedInfo default)
 // and the given inclusive prefixes, replacing the existing SignatureValue text.
 // Tests use this after mutating SignedInfo so that verification reaches the
-// per-Reference transform handling rather than failing earlier on the
+// per-Reference transform handling, well past the
 // SignatureValue check.
 func reSignSignedInfo(t *testing.T, doc *helium.Document, sigElem, signedInfo *helium.Element, prefixes []string, key *rsa.PrivateKey) {
 	t.Helper()
@@ -974,7 +974,7 @@ func TestVerifySignedInfoInclusiveNamespaces(t *testing.T) {
 
 // TestVerifyRejectsSignatureMethodParameter guards DSIG-003: any child parameter
 // of SignatureMethod (e.g. ds:HMACOutputLength, which requests a truncated HMAC)
-// is unsupported and must be rejected fail-closed rather than silently ignored.
+// is unsupported and must be rejected fail-closed, and never silently ignored.
 func TestVerifyRejectsSignatureMethodParameter(t *testing.T) {
 	si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
 		`<ds:CanonicalizationMethod Algorithm="` + ExcC14N10 + `"/>` +
@@ -995,7 +995,7 @@ func TestVerifyRejectsSignatureMethodParameter(t *testing.T) {
 
 // TestVerifyRejectsCanonicalizationMethodParameter guards DSIG-002's
 // fail-closed arm: an unrecognized child parameter of CanonicalizationMethod
-// must be rejected rather than silently ignored.
+// must be rejected, and never silently ignored.
 func TestVerifyRejectsCanonicalizationMethodParameter(t *testing.T) {
 	si := `<ds:SignedInfo xmlns:ds="` + dsigNS + `">` +
 		`<ds:CanonicalizationMethod Algorithm="` + ExcC14N10 + `">` +
@@ -1019,7 +1019,7 @@ func TestVerifyRejectsCanonicalizationMethodParameter(t *testing.T) {
 // parameter and canonicalize() only honors its PrefixList for exclusive modes. A
 // non-exclusive CanonicalizationMethod (C14N 1.0 / C14N 1.1) declaring an
 // ec:InclusiveNamespaces parameter would have it silently ignored, so it must be
-// rejected rather than accepted.
+// rejected, and never accepted.
 func TestVerifyRejectsInclusiveNamespacesOnNonExclusiveC14N(t *testing.T) {
 	for _, alg := range []string{C14N10, C14N10Comments, C14N11URI, C14N11Comments} {
 		t.Run(alg, func(t *testing.T) {

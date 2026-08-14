@@ -425,7 +425,7 @@ func lookupFunctionItem(ctx context.Context, qv QNameValue, arity int) (Function
 		// function-reference path in eval_funcall.go. Coercion may convert an
 		// argument (e.g. xs:untypedAtomic -> xs:integer); the coerced value must
 		// be what the function observes, so store it back into a copy of the
-		// argument slice rather than discarding it and invoking with the original.
+		// argument slice, discarding nothing and invoking with no original.
 		if paramTypes != nil {
 			coerced := make([]Sequence, len(callArgs))
 			copy(coerced, callArgs)

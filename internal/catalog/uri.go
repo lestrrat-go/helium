@@ -71,8 +71,8 @@ func ResolveURI(base, value string) (string, error) {
 // HasScheme checks if s looks like a URI with a scheme (e.g., "http://...").
 // A single-letter "scheme" that is actually a Windows drive-letter prefix
 // (e.g. "C:\\path" or "D:/path") is NOT treated as a URI scheme, so a native
-// catalog base path is resolved with OS-path semantics rather than leaking the
-// drive letter into URI space.
+// catalog base path is resolved with OS-path semantics, and the drive letter
+// never leaks into URI space.
 func HasScheme(s string) bool {
 	if uripath.HasWindowsDrivePrefix(s) {
 		return false

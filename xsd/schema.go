@@ -374,7 +374,7 @@ type TypeDef struct {
 	// in THIS type's own schema document at parse time, captured only when the type
 	// has no explicit <xs:openContent>. Default open content is per-document
 	// (§3.4.2.1) and does not cross include/import boundaries, so it is captured at
-	// parse time rather than read globally in resolveRefs. resolveOpenContent
+	// parse time, and never read globally in resolveRefs. resolveOpenContent
 	// applies it (subject to appliesToEmpty and the effective content type).
 	pendingDefaultOpenContent *OpenContent
 }

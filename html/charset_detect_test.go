@@ -12,7 +12,7 @@ import (
 // the bare double-quoted/unquoted ones: single-quoted values and values with
 // ASCII whitespace around "=". When such a form declares utf-8, an invalid high
 // byte must be replaced with U+FFFD and raise the encoding-error diagnostic,
-// rather than silently falling back to the Latin-1/Windows-1252 decode.
+// with no silent fallback to the Latin-1/Windows-1252 decode.
 func TestCharsetDetect_WHATWGMetaForms(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +26,7 @@ func TestCharsetDetect_WHATWGMetaForms(t *testing.T) {
 		{name: "double-quoted-baseline", meta: `<meta charset="utf-8">`},
 		// The charset value sits inside the still-quoted content attribute, so
 		// the byte after "charset=" is 'u', not a quote. The unquoted-value scan
-		// must still stop at the enclosing quote, yielding "utf-8" rather than
+		// must still stop at the enclosing quote, yielding "utf-8" and not
 		// "utf-8\"". (Regression: PR #812 / HTML-004.)
 		{name: "http-equiv-content-type", meta: `<meta http-equiv="Content-Type" content="text/html; charset=utf-8">`},
 	} {

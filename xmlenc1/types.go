@@ -119,11 +119,11 @@ type encryptedKey struct {
 	// recursing through its whole descendant subtree, and
 	// internal/domutil.TextContent concatenates Content() over every direct
 	// child. xmlenc1 implements neither, so the cost above is what reading the
-	// field through them would take rather than work any xmlenc1 code path
+	// field through them would take, and no work any xmlenc1 code path
 	// performs.
 	CarriedKeyName string
 	// AgreementMethod, when set, means the key that protects CipherValue is
-	// derived by key agreement rather than supplied directly.
+	// derived by key agreement, and never supplied directly.
 	AgreementMethod *agreementMethod
 }
 
@@ -183,7 +183,7 @@ type ConcatKDFParams struct {
 	// DigestMethod is the hash driving the KDF, taken from the @Algorithm
 	// of the ds:DigestMethod child. Parsed wire parameters must carry one:
 	// a xenc11:ConcatKDFParams without it is rejected as malformed. On an
-	// Encryptor these parameters are configuration rather than wire data,
+	// Encryptor these parameters are configuration, and no wire data,
 	// and [Encryptor.KeyDerivationParams] states what an empty DigestMethod
 	// means there.
 	DigestMethod string
@@ -199,7 +199,7 @@ type ConcatKDFParams struct {
 // caller's arrays. A shallow struct copy would leave them aliased, and these
 // values feed both the derived KEK and the emitted xenc11:ConcatKDFParams, so
 // a later mutation of the caller's array would change what gets encrypted.
-// It is nil-safe, and an empty field stays empty rather than becoming a
+// It is nil-safe, and an empty field stays empty, and never becomes a
 // zero-length non-nil slice.
 func (p *ConcatKDFParams) clone() *ConcatKDFParams {
 	if p == nil {

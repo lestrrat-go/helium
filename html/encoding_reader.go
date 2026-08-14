@@ -239,7 +239,7 @@ func (sr *utf8SanitizeReader) Read(p []byte) (int, error) {
 	// error as sticky and process the bytes we did get; surface it only after
 	// the converted output drains. For the partial-rune logic below, any error
 	// (EOF or otherwise) means no further bytes are coming, so a truncated
-	// trailing rune is genuinely invalid rather than merely incomplete.
+	// trailing rune is genuinely invalid, and not merely incomplete.
 	eof := err != nil
 	if err != nil && err != io.EOF {
 		sr.readErr = err
@@ -385,8 +385,8 @@ func (sr *utf8SanitizeReader) trackByte(b byte) {
 //     made within the memory bound (a later high byte would flip the WHOLE
 //     document to Latin-1 per the []byte path, while EOF-while-valid would keep
 //     it UTF-8), so the reader returns a bounded-input error
-//     (ErrContentSizeExceeded) rather than committing to one interpretation and
-//     risking silently mis-decoded SAX/DOM output that diverges from
+//     (ErrContentSizeExceeded). Committing to one interpretation would
+//     risk silently mis-decoded SAX/DOM output that diverges from
 //     Parse([]byte). The probed byte's value is irrelevant — its mere presence
 //     means input ran past the cap.
 //
@@ -409,8 +409,8 @@ type deferredLatin1Reader struct {
 
 	// capErr is the sticky bounded-input error returned once the undecided
 	// (all-valid-UTF-8) prefix fills maxBuffer and a one-byte EOF probe proves
-	// more input follows. The reader fails closed here rather than committing to
-	// UTF-8.
+	// more input follows. The reader fails closed here, committing to no
+	// encoding.
 	capErr error
 
 	// readErr is a sticky non-EOF error returned by the underlying reader. An
@@ -463,8 +463,8 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 		}
 
 		// The undecided prefix reached the buffering cap without settling the
-		// encoding. Fail closed with the bounded-input error rather than commit to
-		// a UTF-8 interpretation that a later high byte would contradict.
+		// encoding. Fail closed with the bounded-input error. A UTF-8
+		// interpretation here is one a later high byte could contradict.
 		if dr.capErr != nil {
 			return 0, dr.capErr
 		}
@@ -534,7 +534,7 @@ func (dr *deferredLatin1Reader) Read(p []byte) (int, error) {
 		switch err {
 		case nil:
 			// No byte and no error: a misbehaving reader made no progress. Loop
-			// to probe again rather than spin, matching the chunk-read path.
+			// to probe again without spinning, matching the chunk-read path.
 			continue
 		case io.EOF:
 			// Stream ended exactly at the cap with everything valid UTF-8.
@@ -711,7 +711,7 @@ func isIncompleteTrailingRune(tail []byte) bool {
 		return false
 	}
 	// All bytes after the lead must be valid continuation bytes for this to be
-	// a clean truncation rather than an invalid sequence.
+	// a clean truncation and not an invalid sequence.
 	for _, c := range tail[1:] {
 		if c&0xC0 != 0x80 {
 			return false
@@ -806,7 +806,7 @@ func wrapReaderForHTML(r io.Reader, maxBuffer int) (io.Reader, string, *utf8Sani
 	}
 
 	// An explicit charset=iso-8859-1 is a DECLARED encoding: commit to Latin-1
-	// immediately rather than routing through the deferred/bounded path. The
+	// immediately, bypassing the deferred/bounded path. The
 	// deferred path is only for UNDECLARED streams; sending a declared Latin-1
 	// stream through it lets the 1 MiB commit cap wrongly settle a valid
 	// ISO-8859-1 document (ASCII head, first high byte past the cap) as UTF-8,
@@ -825,7 +825,7 @@ func wrapReaderForHTML(r io.Reader, maxBuffer int) (io.Reader, string, *utf8Sani
 	// through to the deferred reader, whose bounded probe fails closed at
 	// maxBuffer (ErrContentSizeExceeded).
 	//
-	// Use headHasGenuineInvalidUTF8 rather than !utf8.Valid: the latter reports
+	// Use headHasGenuineInvalidUTF8 here. A !utf8.Valid test reports
 	// false when the decision window splits an otherwise-valid multibyte rune,
 	// which would misclassify a valid UTF-8 document as Latin-1. An incomplete
 	// trailing rune is not a genuine error here — it falls through to the

@@ -260,7 +260,7 @@ func aggregateOwnedContent(n *docnode, b *bytes.Buffer, onPath map[*docnode]stru
 }
 
 // aggregatesOwnContent reports whether n's Content() is the child-aggregating
-// docnode implementation (a container) rather than a self-contained leaf
+// docnode implementation (a container), as opposed to a self-contained leaf
 // override. The leaf types enumerated here store their text directly and their
 // Content() cannot recurse; every other node type — including any future
 // container — aggregates its children and must be recursed under the
@@ -610,7 +610,7 @@ func addChild(n MutableNode, cur Node) error {
 	// An Attribute is never an ordinary child node. On an *Element it belongs in
 	// the properties list, mirroring libxml2's xmlAddChild, which routes an
 	// attribute operand into the parent's properties (replacing a same-named one)
-	// rather than the child list; on any other parent an attribute has no valid
+	// and never into the child list; on any other parent an attribute has no valid
 	// placement and is rejected. Handle this BEFORE the generic child-splice (and
 	// before any leaf content-merge fast path, which the leaf AddChild overrides
 	// reach only for text-like operands) so an attribute can never land in a child
@@ -999,7 +999,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	}
 
 	// Determine the true last replacement node. Operate on baseDocNode() links
-	// directly rather than through MutableNode setters so a non-MutableNode
+	// directly, bypassing the MutableNode setters, so a non-MutableNode
 	// replacement (e.g. NamespaceNodeWrapper) is spliced safely instead of
 	// panicking on a force-cast.
 	last := cur

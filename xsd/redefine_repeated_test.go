@@ -36,7 +36,7 @@ func TestRedefine_RepeatedDocument(t *testing.T) {
 	// (a) Two xs:redefine of the same base document redefining DIFFERENT
 	// components must both apply with no error. The second redefine targets an
 	// already-loaded document but a disjoint component, so it is processed
-	// against the cached Phase-A set rather than rejected.
+	// against the cached Phase-A set, and never rejected.
 	t.Run("disjoint components both apply", func(t *testing.T) {
 		t.Parallel()
 		const mainXSD = "disjoint_main.xsd"
@@ -105,8 +105,8 @@ func TestRedefine_RepeatedDocument(t *testing.T) {
 	})
 
 	// A redefine of a document already pulled in by a separate xs:include must
-	// apply its override against the included document's components rather than
-	// being rejected for the document path repeating. (Before the fix this was
+	// apply its override against the included document's components, and is never
+	// rejected for the document path repeating. (Before the fix this was
 	// reported as "already loaded".)
 	t.Run("redefine of separately-included document applies", func(t *testing.T) {
 		t.Parallel()

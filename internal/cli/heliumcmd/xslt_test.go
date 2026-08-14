@@ -73,7 +73,7 @@ func TestXSLTRelativeStylesheetExternalDTDEntityLoads(t *testing.T) {
 	writeFile(t, dir, "in.xml", `<?xml version="1.0"?><root/>`)
 
 	// Run from dir so the stylesheet is addressed by the relative path
-	// "sub/main.xsl" rather than an absolute temp path.
+	// "sub/main.xsl", with no absolute temp path involved.
 	t.Chdir(dir)
 
 	out, errOut, code := executeArgs(t, strings.NewReader(""),
@@ -200,7 +200,7 @@ func TestXSLTIncludeFileURIResolves(t *testing.T) {
   <xsl:template match="root"><out><xsl:value-of select="."/></out></xsl:template>
 </xsl:stylesheet>`)
 
-	// A file: URI href must resolve to the local module rather than being
+	// A file: URI href must resolve to the local module, and must never be
 	// handed verbatim to os.Open. Build the URI via url.URL so it is correct
 	// cross-platform (string concatenation yields "file://C:/..." on Windows,
 	// which parses with host "C:" and is rejected).

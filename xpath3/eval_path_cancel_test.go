@@ -33,8 +33,8 @@ func (c *cancelAfterNContext) Err() error {
 }
 
 // A context cancelled after evaluation starts must abort a wide child-axis
-// enumeration promptly with context.Canceled, rather than scanning the entire
-// child set before the per-step countOps observes the cancellation. The
+// enumeration promptly with context.Canceled, scanning no more than a part
+// of the child set before the per-step countOps observes the cancellation. The
 // cancel-after context lets evaluation start and only reports cancellation once
 // the hot child loop is already iterating, so without the in-loop ctx.Err()
 // check the loop would scan all children before the next countOps boundary.
@@ -70,8 +70,8 @@ func TestEvalChildAxis_ContextCancelledWideChildSet(t *testing.T) {
 
 // A context cancelled after evaluation starts must abort a wide attribute-axis
 // enumeration promptly with context.Canceled. The ForEachAttribute callback
-// path must stop iterating and surface the cancellation error rather than
-// scanning the full attribute list before the next countOps boundary.
+// path must stop iterating and surface the cancellation error, scanning no
+// more than a part of the attribute list before the next countOps boundary.
 func TestEvalAttributeAxis_ContextCancelledWideAttrSet(t *testing.T) {
 	const width = 5000
 	const cancelAfter = 50

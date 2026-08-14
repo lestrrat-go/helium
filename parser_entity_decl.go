@@ -321,7 +321,7 @@ func (pctx *parserCtx) parseEntityValue(ctx context.Context) (string, string, st
 
 	// decodeEntities below only substitutes parameter-entity references; general
 	// references are left literal and never syntax-checked. Validate them here so
-	// a malformed reference (e.g. a missing semicolon) is rejected rather than
+	// a malformed reference (e.g. a missing semicolon) is rejected, and never
 	// silently stored. This does not expand the general references.
 	//
 	// Validation runs over the PE-EXPANDED lexical stream so that a malformed
@@ -786,7 +786,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 //
 // Notably this copies BOTH maxElemDepth (the configured limit) AND the current
 // elemDepth, so element nesting that crosses an entity-expansion boundary keeps
-// accumulating against the same limit rather than restarting at 0.
+// accumulating against the same limit, restarting at nothing.
 //
 // It does NOT touch newctx.doc, newctx.external, or the per-context amplification
 // counters (sizeentcopy/inputSize/maxAmpl); those are handled by the caller
@@ -834,7 +834,7 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.ebcdicConsumed = pctx.ebcdicConsumed
 	// Inherit the parent's security/resolution policy so any external reference
 	// reached while expanding this replacement text honors the same FS sandbox,
-	// catalog, and base URI as the top-level parse rather than falling back to
+	// catalog, and base URI as the top-level parse, with no fallback to
 	// the permissive os.Open root.
 	newctx.fsys = pctx.fsys
 	newctx.catalog = pctx.catalog
@@ -1025,7 +1025,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	}
 	// A clean parseContent may mask a transcoding/decode error (e.g. an unpaired
 	// UTF-16 surrogate the decoder replaced with U+FFFD) in this context's own
-	// byte stream. Surface it as fatal rather than inserting U+FFFD, matching the
+	// byte stream. Surface it as fatal, inserting no U+FFFD, matching the
 	// document-level gate in parseDocument.
 	if err := newctx.cursorDecodeErr(); err != nil {
 		return nil, newctx.error(innerCtx, err)
@@ -1136,7 +1136,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	}
 	// A clean parseContent may mask a transcoding/decode error (e.g. an unpaired
 	// UTF-16 surrogate the decoder replaced with U+FFFD) in this context's own
-	// byte stream. Surface it as fatal rather than inserting U+FFFD, matching the
+	// byte stream. Surface it as fatal, inserting no U+FFFD, matching the
 	// document-level gate in parseDocument.
 	if err := newctx.cursorDecodeErr(); err != nil {
 		return nil, newctx.error(innerCtx, err)

@@ -21,7 +21,7 @@ func Example_helium_append_text() {
 
 	// AppendText appends text to the element. If the last child is already
 	// a text node, the new content is merged into it (concatenated),
-	// rather than creating a separate text node. This means two consecutive
+	// and no separate text node is created. This means two consecutive
 	// AppendText calls produce a single text node "hello world".
 	if err := root.AppendText([]byte("hello ")); err != nil {
 		fmt.Printf("failed to add content: %s\n", err)

@@ -1279,7 +1279,7 @@ func (c *compiler) parseSimpleType(ctx context.Context, elem *helium.Element, lo
 			// Parse memberTypes (a whitespace-collapsed LIST of xs:QName). Dispatch on
 			// PRESENCE: a PRESENT-but-empty memberTypes="" (or whitespace-only) is not a
 			// valid QName list, so it is reported once here (the same empty-report as
-			// resolveQNameListRef) rather than silently tokenizing to the empty set. A
+			// resolveQNameListRef), tokenizing to no empty set. A
 			// non-empty list resolves per token, each carrying its OWN chameleon
 			// eligibility (which resolveQNameListRef's plain []QName cannot convey), so
 			// the tokens are resolved inline instead of through that reader.

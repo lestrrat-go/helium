@@ -105,10 +105,10 @@ const (
 	// xenc11:DerivedKey (§3.5.2), which tells the recipient to derive the
 	// content key from master key material it already holds. This package
 	// implements no key derivation from a master key, so a RetrievalMethod
-	// stating it is stepped over rather than resolved, exactly as every other
+	// stating it is stepped over and never resolved, exactly as every other
 	// Type this package does not implement is. It is named here so the
 	// difference between "recognized and not implemented" and "not recognized
-	// at all" is visible in the code rather than only in a comment.
+	// at all" is visible in the code itself, and not only in a comment.
 	typeDerivedKey = NamespaceXMLEnc + "DerivedKey"
 )
 

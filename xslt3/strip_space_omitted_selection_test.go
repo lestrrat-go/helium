@@ -11,7 +11,7 @@ import (
 // TestStripSpaceDropsOmittedSelectionNodes verifies that when an initial match
 // selection mixes a whitespace-only text node (which strip-space OMITS from the
 // copy) with a real element child, the omitted node is DROPPED from the remapped
-// selection rather than passed through pointing at the unstripped original. The
+// selection, and never passed through pointing at the unstripped original. The
 // apply loop must then compute position()/last() from the filtered sequence.
 //
 // The selection /*/text()[1] | /*/child selects the leading whitespace-only text

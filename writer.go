@@ -59,7 +59,7 @@ type Writer struct {
 	// character maps). Empty/nil disables the feature.
 	charMap map[rune]string
 	// cdataElements holds the element names (expanded {uri}local form) whose
-	// direct text children are serialized as CDATA sections rather than escaped
+	// direct text children are serialized as CDATA sections, in place of escaped
 	// text (the cdata-section-elements serialization parameter). Matching is by
 	// exact expanded name. Empty/nil disables the feature.
 	cdataElements map[string]struct{}
@@ -109,8 +109,8 @@ type Writer struct {
 	normForm  norm.Form
 	// normFormRaw is the exact form string passed to Normalization, retained so
 	// WriteTo can reject an unrecognized value (a typo, or a form the writer does
-	// not implement) with ErrUnsupportedNormalizationForm rather than silently
-	// disabling normalization. Empty (the default) is valid and means "no
+	// not implement) with ErrUnsupportedNormalizationForm, so it never silently
+	// disables normalization. Empty (the default) is valid and means "no
 	// normalization requested".
 	normFormRaw string
 	// initialNSScope seeds the serializer's namespace scope with bindings
@@ -174,7 +174,7 @@ type writeSession struct {
 	err         error  // sticky write error; once set, further writes are skipped
 	// cdataText reports that the element currently being serialized is a
 	// cdata-section-element, so its direct text children are emitted as CDATA
-	// sections rather than escaped text.
+	// sections, in place of escaped text.
 	cdataText bool
 	// suppressDepth > 0 means the current subtree descends from a
 	// suppress-indentation element, so indentation is disabled for it even when
@@ -476,7 +476,7 @@ func (s *writeSession) checkVerbatimName(what, name string) bool {
 }
 
 // checkVerbatimNCName validates a DTD declaration name that the parser requires
-// to be an NCName rather than a full DTD Name.
+// to be an NCName, narrower than a full DTD Name.
 func (s *writeSession) checkVerbatimNCName(what, name string) bool {
 	return s.checkRawName(what, name, rawNameNCName, ErrWriterInvalidName)
 }
@@ -791,7 +791,7 @@ func (w Writer) OutputEncoding(v string) Writer {
 // of "NFC", "NFD", "NFKC", "NFKD" to enable it, or "" / "none" to disable it
 // (leaving output byte-identical). Any other value is an error: WriteTo fails with
 // ErrUnsupportedNormalizationForm before emitting any output byte, so a typo or an
-// unsupported form (e.g. "fully-normalized") is observable rather than silently
+// unsupported form (e.g. "fully-normalized") is observable, and never silently
 // swallowed. Normalization is scoped to text and attribute nodes (Serialization
 // 3.1 §4 character-expansion phase) — element/attribute names, comments, PIs, the
 // DOCTYPE, and the XML declaration are never normalized. A character map
@@ -865,7 +865,7 @@ func (w Writer) InheritedNamespaces(bindings map[string]string) Writer {
 // pseudo-attribute: the OutputEncoding override when set, otherwise the
 // document's own encoding. The override is whitespace-trimmed so the encoder
 // lookup (which trims) and the emitted label agree and the declaration carries a
-// valid EncName rather than a padded, unparseable one.
+// valid EncName, never a padded, unparseable one.
 func (d Writer) effectiveEncoding(doc *Document) string {
 	if d.outputEncoding != "" {
 		return strings.TrimSpace(d.outputEncoding)
@@ -945,8 +945,8 @@ func hasOnlyTextChildren(n Node) bool {
 // entity-reference node. This mirrors libxml2's xmlNodeDumpOutputInternal
 // (xmlsave.c): an element with any such child is mixed content, so it is marked
 // suppressed and formatting is disabled for its ENTIRE subtree (via suppressDepth)
-// until it closes — the children, and their descendants, are serialized inline
-// rather than having indentation whitespace injected. Formatting a mixed element's
+// until it closes — the children, and their descendants, are serialized inline,
+// with no indentation whitespace injected. Formatting a mixed element's
 // subtree would alter the text content and not be idempotent.
 func hasTextlikeChild(n Node) bool {
 	for c := range Children(n) {
@@ -993,7 +993,7 @@ func (d Writer) writeTo(out io.Writer, node Node) error {
 	// Reject an unrecognized normalization-form (a typo, or a form the writer does
 	// not implement) before any output byte, on both the Document and bare-element
 	// paths: Normalization stores the raw value and defers the check here so the
-	// failure is observable rather than a silent no-op. "" (the default) and "none"
+	// failure is observable, and never a silent no-op. "" (the default) and "none"
 	// are valid and disable normalization.
 	if !validNormalizationForm(d.normFormRaw) {
 		return fmt.Errorf("helium: unsupported normalization form %q: %w", d.normFormRaw, ErrUnsupportedNormalizationForm)
@@ -1002,7 +1002,7 @@ func (d Writer) writeTo(out io.Writer, node Node) error {
 	// branch, so a bare element/fragment is rejected exactly like a Document: the
 	// override drives the XML 1.1 escaping rules here and (on the Document path)
 	// the declaration's version pseudo-attribute, so a malformed value must fail
-	// on every path rather than being silently treated as XML 1.0. An empty
+	// on every path, and must never be treated as XML 1.0. An empty
 	// override keeps the document's own version and is validated on the Document
 	// path (writeDoc) against the document's version.
 	if d.outputVersion != "" && !isValidXMLVersion(d.outputVersion) {
@@ -1196,8 +1196,8 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	case DocumentNode, HTMLDocumentNode:
 		// An HTML document node (NewHTMLDocument / the HTML parser) is a *Document
 		// with a distinct etype; serialize it through the same document path so its
-		// children serialize rather than the node falling to the element path and
-		// being rejected for its "(document)" name.
+		// children serialize. Falling to the element path would reject the node
+		// for its "(document)" name.
 		if !d.noDecl {
 			if err = d.dumpDocContent(out, n); err != nil {
 				return err
@@ -1281,7 +1281,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		name := n.Name()
 		// A numeric character reference (&#N; / &#xN;) carries its character as a
 		// reference TARGET, so validate the referenced code point against the target
-		// XML version rather than the name grammar.
+		// XML version, and never against the name grammar.
 		if strings.HasPrefix(name, "#") {
 			if d.writeCharRef(out, name) {
 				return d.err
@@ -1436,7 +1436,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	// A prefixed element name whose prefix is bound to an empty namespace URI
 	// (e.g. an html.Parse colon name built via CreateNamespace(prefix, "")) has
 	// no reparseable serialization: the name emits as "prefix:local" but no
-	// xmlns:prefix is synthesized. Reject it rather than emit output the parser
+	// xmlns:prefix is synthesized. Reject it, emitting no output the parser
 	// cannot read.
 	if isNser && !d.checkNamespaceBinding("element name", name, nser.Prefix(), nser.URI()) {
 		return d.err

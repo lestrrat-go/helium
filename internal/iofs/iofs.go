@@ -25,8 +25,8 @@ const goosWindows = "windows"
 const opOpen = "open"
 
 // PermissiveRoot is an [fs.FS] backed by direct calls to [os.Open]. It
-// is the explicit opposite of [os.Root]: rather than sandboxing access
-// to a directory, it accepts any path the caller hands it — absolute,
+// is the explicit opposite of [os.Root]: where that sandboxes access
+// to a directory, this accepts any path the caller hands it — absolute,
 // containing "..", anywhere on the filesystem — and forwards verbatim
 // to os.Open without enforcing [fs.ValidPath].
 //

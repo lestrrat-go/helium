@@ -22,7 +22,7 @@ import (
 // scheme (http, https, ...) is refused, so this FS never reaches the network.
 // An absolute in-root name is served directly (no reliance on the parser's
 // base-relative retry), which is what lets ConfinedDir be rooted at an
-// ARBITRARY directory rather than only the document's own directory.
+// ARBITRARY directory, well beyond the document's own.
 //
 // Confinement is enforced with [os.Root] (os.OpenRoot, Go 1.24+): a lexical
 // within-root check rejects a "../"- or absolute-path escape, and os.Root then
@@ -44,8 +44,8 @@ type ConfinedDir struct {
 // working directory at call time. If that resolution fails (filepath.Abs
 // returns an error, e.g. os.Getwd fails because the working directory was
 // removed) the error is retained and every Open returns it — the FS fails
-// closed rather than fall back to a relative root that would be resolved
-// against a possibly-different working directory at Open time.
+// closed. Falling back to a relative root would resolve it against a
+// possibly-different working directory at Open time.
 func NewConfinedDir(dir string) ConfinedDir {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -123,7 +123,7 @@ func (c ConfinedDir) localPath(name string) (string, error) {
 // fileURILocalPath converts a "file:" URI into a local filesystem path, matching
 // the private confinedDirFS this shared type replaces. It differs from
 // [FileURIToPath] in ONE respect: an opaque or empty-path form ("file:inside",
-// "file:") is converted to an empty local path rather than rejected. Open then
+// "file:") is converted to an empty local path, and accepted. Open then
 // joins that empty path onto root and reads the root directory, which is the
 // observable CLI behavior (an "is a directory" read error) that the promotion
 // must preserve. FileURIToPath instead rejects the opaque form, because its

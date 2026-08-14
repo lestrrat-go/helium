@@ -269,7 +269,7 @@ func TestConcatKDFOtherInfoBudget(t *testing.T) {
 // parseConcatKDFHexAttribute refuses a hex attribute from its ENCODED length
 // alone, before hex.DecodeString allocates half of it. That ceiling coincides
 // exactly with the cumulative OtherInfo budget, so the precheck is an
-// allocation-avoidance guard rather than a distinct semantic gate: every value
+// allocation-avoidance guard, and no distinct semantic gate: every value
 // it refuses the set-wide check in parseConcatKDFParams would refuse too, only
 // after paying for the decode. Its whole value is the allocation it never
 // makes, which is why it is not redundant and must not be simplified away.

@@ -23,7 +23,7 @@ import "iter"
 // raw SetNextSibling/SetPrevSibling link setters — terminates the iteration
 // instead of looping forever, yielding the partial set gathered up to that
 // point. A range-over-func iterator has no error channel, so this truncation is
-// silent; to DETECT a cycle rather than silently stop at it, traverse with
+// silent; to DETECT a cycle instead of silently stopping at it, traverse with
 // [Walk], which returns [ErrWalkCycle].
 func Children(n Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
@@ -60,7 +60,7 @@ func Children(n Node) iter.Seq[Node] {
 // node but does not descend through it, so a child-pointer cycle terminates
 // cleanly instead of looping, yielding the partial set gathered up to that
 // point. A range-over-func iterator has no error channel, so this truncation is
-// silent; to DETECT a cycle rather than silently stop at it, traverse with
+// silent; to DETECT a cycle instead of silently stopping at it, traverse with
 // [Walk], which returns [ErrWalkCycle]. A shared DAG node reached on a different
 // path is not on the descent path and is still visited on each occurrence, so
 // DAG traversal is unchanged.
@@ -115,8 +115,8 @@ func Descendants(n Node) iter.Seq[Node] {
 // Like [Children], ChildElements advances between siblings using the
 // owned-boundary rule and terminates on a cyclic sibling pointer, yielding the
 // partial set gathered up to that point. A range-over-func iterator has no error
-// channel, so this truncation is silent; to DETECT a cycle rather than silently
-// stop at it, traverse with [Walk], which returns [ErrWalkCycle].
+// channel, so this truncation is silent; to DETECT a cycle instead of silently
+// stopping at it, traverse with [Walk], which returns [ErrWalkCycle].
 func ChildElements(n Node) iter.Seq[*Element] {
 	return func(yield func(*Element) bool) {
 		if isNilNode(n) {

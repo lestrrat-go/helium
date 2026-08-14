@@ -53,8 +53,8 @@ func xpathFilterSignatureDoc(t *testing.T, expr string) *helium.Document {
 // ds:Transform/XPath filter expression. The expression is attacker-controlled
 // and is compiled during Reference preflight, before the SignatureValue is
 // checked, and compiling one costs more than linearly in its length, so the
-// length is refused where the expression is read off the document rather than
-// anywhere further in.
+// length is refused where the expression is read off the document, and nowhere
+// further in.
 func TestXPathFilterExpressionCeiling(t *testing.T) {
 	// Both cases are the same shape one byte apart, so what separates them is the
 	// ceiling itself and not the expression's contents.
@@ -113,7 +113,7 @@ func TestXPathFilterExpressionErrorSize(t *testing.T) {
 
 	_, err := compileXPathFilterExpression(expr, newDSigXPathEvaluator(nil, nil, defaultXPathOpLimit))
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
-	// The bound is derived from the truncation length rather than written out, and
+	// The bound is derived from the truncation length, and never written out, and
 	// the message is asserted by size instead of by text so the wording stays free
 	// to change.
 	require.Less(t, len(err.Error()), maxErrorExpressionBytes+512)
@@ -200,7 +200,7 @@ func TestXPathFilterExpressionAllocation(t *testing.T) {
 
 	// Reading the expression off the DOM costs a copy of it, and parsing the
 	// document that holds it costs a few more, so the slack is a small multiple of
-	// the expression rather than nothing at all. Compiling it would cost about a
+	// the expression, and never nothing at all. Compiling it would cost about a
 	// hundred times, which no multiple this small can hide.
 	slack := uint64(8 * len(chain))
 	require.Less(t, oversize, baseline+slack,

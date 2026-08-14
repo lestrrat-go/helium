@@ -79,7 +79,7 @@ func TestCompile_RejectsParentEscapeInHref(t *testing.T) {
 
 // An absolute href cannot be proven contained in a *relative* baseDir:
 // filepath.Rel returns an error in that case, and the guard must treat that
-// as a containment failure rather than silently allowing the load. Without
+// as a containment failure, and must never allow the load. Without
 // the fix this reintroduces the absolute-href escape.
 func TestCompile_RejectsAbsoluteHrefWithRelativeBaseDir(t *testing.T) {
 	t.Parallel()

@@ -69,7 +69,7 @@ func TestElementOnlyXMLWhitespaceAllowed(t *testing.T) {
 // TestXsiTypeWhitespaceCollapsed covers an xsi:type attribute whose raw value
 // carries leading, trailing, and internal whitespace. xsi:type is an xs:QName,
 // whose whiteSpace facet is "collapse", so " t:derived " must normalize to
-// "t:derived" and resolve to the derived type rather than failing resolution.
+// "t:derived" and resolve to the derived type, failing no resolution.
 func TestXsiTypeWhitespaceCollapsed(t *testing.T) {
 	t.Parallel()
 

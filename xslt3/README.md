@@ -95,7 +95,7 @@ document is gated:
 `xsl:result-document` never writes to the filesystem either: secondary result
 documents are delivered in-memory to a `ResultDocumentHandler` (or collected),
 so output is confined to the caller's process. Retrieval functions raise their
-spec-mandated errors; the *availability* probes report `false` rather than
+spec-mandated errors; the *availability* probes report `false` without
 stat-ing the host.
 
 ### Granting access
@@ -162,7 +162,7 @@ deadlines. `Compile`, and the transform delivery methods (`Serialize`, `Do`,
 at their iteration points (e.g. `execute_control.go`, `execute_apply.go`,
 `execute_streaming.go`, `execute_misc.go`; `compile.go`, `compile_imports.go`,
 `compile_templates.go`), so a cancelled or expired context aborts the work
-promptly rather than running to completion. Always pass a `ctx` with a deadline
+promptly, well before it would run to completion. Always pass a `ctx` with a deadline
 when processing untrusted input.
 
 ### Resource bounds
@@ -397,7 +397,7 @@ accumulators, `xsl:merge`, `xsl:iterate` / `xsl:fork`, `xsl:try` / `xsl:catch`,
 maps and arrays, packages / `xsl:use-package`, and the XPath 3.1 data model.
 
 Unsupported optional features are reported with concrete error codes
-(e.g. `XTSE0090`, `XTSE0220`, `FOXT0003`) rather than silently
+(e.g. `XTSE0090`, `XTSE0220`, `FOXT0003`), so none is silently
 misinterpreted, and external resource access is default-deny.
 
 ### What is skipped, and why

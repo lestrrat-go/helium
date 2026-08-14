@@ -290,8 +290,8 @@ func TestErrorReporting(t *testing.T) {
 		require.Equal(t, int32(0), called.Load(), "SAX Error handler should NOT be called with SuppressErrors")
 	})
 
-	// XML with external subset makes undeclared entity references a warning
-	// rather than an error.
+	// XML with external subset makes undeclared entity references a warning,
+	// and no longer an error.
 	const undeclared = "<!DOCTYPE doc SYSTEM \"foo\">\n<doc>&undeclared;</doc>"
 
 	t.Run("warning handler error wrapped with helium.ErrorLevelWarning", func(t *testing.T) {

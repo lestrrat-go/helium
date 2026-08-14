@@ -60,8 +60,8 @@ func TestEnumerationValueSpace(t *testing.T) {
 		{name: "double signed NaN rejected", baseType: xsDoubleType, enum: []string{nanLexical}, instance: "-NaN", wantReject: true, wantRejectMsg: "is not a valid value of the atomic type 'xs:double'"},
 		// A signed-NaN enumeration member is itself an invalid lexical form, so the
 		// enumeration facet is not datatype-valid against its xs:float/xs:double base.
-		// Per XSD §3.16 the SCHEMA is in error: it must be rejected at compile time
-		// rather than compiling into an unsatisfiable enumeration that fails only at
+		// Per XSD §3.16 the SCHEMA is in error: it must be rejected at compile time,
+		// compiling into no unsatisfiable enumeration that fails only at
 		// instance validation.
 		{name: "float signed NaN member rejected at compile", baseType: xsFloatType, enum: []string{"+NaN"}, instance: nanLexical, wantCompileError: true},
 		{name: "double signed NaN member rejected at compile", baseType: xsDoubleType, enum: []string{"-NaN"}, instance: nanLexical, wantCompileError: true},

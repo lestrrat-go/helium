@@ -77,7 +77,7 @@ func fnResolveURI(ctx context.Context, args []Sequence) (Sequence, error) {
 	// fn:resolve-uri returns the empty sequence when the relative argument is
 	// empty. Detect emptiness AFTER atomization so an empty array or a
 	// nilled/empty-content typed node (which atomizes to the empty sequence, not
-	// to "") also yields () rather than resolving an empty relative reference.
+	// to "") also yields (), resolving no empty relative reference.
 	relative, empty, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err

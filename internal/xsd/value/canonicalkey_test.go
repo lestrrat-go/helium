@@ -148,7 +148,7 @@ func TestCanonicalKeySignedYearInvalid(t *testing.T) {
 // TestCanonicalKeyStrictDateValidation verifies that CanonicalKey validates the
 // value against the strict lexical space before canonicalizing, so malformed
 // date/time inputs (bad timezone, trailing junk, out-of-range fields) yield
-// ok=false rather than being silently canonicalized by the lenient internal
+// ok=false, and are never silently canonicalized by the lenient internal
 // parsers.
 func TestCanonicalKeyStrictDateValidation(t *testing.T) {
 	_ = t.Context()
@@ -277,7 +277,7 @@ func TestCanonicalKeyDuration(t *testing.T) {
 
 	// Huge month/day components (far beyond int64 range) are parsed as big.Int /
 	// big.Rat, so a valid huge-component duration canonicalizes and equal values
-	// collide rather than failing to parse.
+	// collide, with no parse failure.
 	huge, okHuge := value.CanonicalKey("P999999999999999999999999Y", "duration")
 	require.True(t, okHuge, "huge-year duration must canonicalize as valid")
 	hugeAlt, okHugeAlt := value.CanonicalKey("P999999999999999999999998Y12M", "duration")

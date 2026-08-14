@@ -265,7 +265,7 @@ func verifyDSA(hash crypto.Hash, key any, data, sig []byte) error {
 	// bytes for a 160-bit Q). The total length is therefore EXACTLY twice Q's
 	// byte width. Any other length — including an even length that happens to be
 	// splittable at a midpoint — is not a valid encoding; enforcing the exact
-	// width (rather than accepting any even length and splitting in half) closes
+	// width, in place of accepting any even length and splitting in half, closes
 	// a signature-malleability gap where a mis-padded r||s would otherwise be
 	// silently reinterpreted as a different (r, s) pair.
 	if pub.Q == nil || pub.Q.Sign() <= 0 {

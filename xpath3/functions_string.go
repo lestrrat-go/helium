@@ -266,7 +266,7 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	// fn:compare returns the empty sequence if either argument is empty. Detect
 	// emptiness AFTER atomization so an empty array or nilled/empty-content typed
-	// node (which atomizes to () rather than "") also yields () — a raw seqLen
+	// node (which atomizes to (), and never to "") also yields () — a raw seqLen
 	// gate would let such a value fall through to comparing "" against the other.
 	s1, empty1, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
@@ -286,7 +286,7 @@ func fnCompare(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnCodepointEqual(ctx context.Context, args []Sequence) (Sequence, error) {
 	// fn:codepoint-equal returns the empty sequence if either argument is empty,
 	// where "empty" is the post-atomization emptiness (empty array / nilled node
-	// atomize to () rather than "").
+	// atomize to (), and never to "").
 	s1, empty1, err := coerceAtomizedString(ctx, args[0])
 	if err != nil {
 		return nil, err
@@ -1227,7 +1227,7 @@ func buildAnalyzeStringTreeByPattern(m []int, groupParents []int) *analyzeString
 	// if the static parenthesis analysis and the compiled regex ever disagree on
 	// the group count, this must not index out of range — analyzeStringParentOf
 	// then treats an unknown group as a direct child of the match, which is
-	// well-formed, rather than panicking.
+	// well-formed, and never panics.
 	numGroups := len(m)/2 - 1
 	nodes := make([]*analyzeStringGroup, numGroups+1)
 	nodes[0] = root
@@ -1391,7 +1391,7 @@ type compiledXPathRegex struct {
 	// eachStdSubmatchIndex matches them against the whole string via a bounded
 	// FindAllStringSubmatchIndex instead. The pattern stays on Go's RE2 engine
 	// (no backtracking-ReDoS regression), and the caller-supplied limit bounds
-	// the up-front materialization to the resource cap rather than the match
+	// the up-front materialization to the resource cap, and never to the match
 	// count.
 	stdNeedsFullContext bool
 }
@@ -1593,7 +1593,7 @@ func (r *compiledXPathRegex) FindAllStringSubmatchIndex(s string, n int) ([][]in
 // returns false. limit caps the maximum number of matches ever produced (a
 // non-positive limit means no cap); it bounds the up-front materialization for
 // the one path that cannot stream incrementally (leading-context patterns),
-// keeping live memory proportional to the cap rather than the input's match
+// keeping live memory proportional to the cap, and never to the input's match
 // count. The streaming paths never accumulate matches at all.
 func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, limit int, fn func([]int) bool) error {
 	// Normalize the public contract: a non-positive limit means "uncapped".
@@ -1618,7 +1618,7 @@ func (r *compiledXPathRegex) eachStringSubmatchIndex(s string, limit int, fn fun
 // Bounding the total index cells instead keeps the worst-case allocation fixed
 // regardless of capture count: the per-pattern match cap is derived from this
 // cell budget, and an input producing more cells than this is rejected with
-// [ErrRegexMatchLimit] rather than silently truncated or allowed to allocate
+// [ErrRegexMatchLimit], never silently truncated and never allowed to allocate
 // proportionally to the input.
 const maxFullContextIndexCells = 1 << 20 // ~1M index ints
 
@@ -1632,7 +1632,7 @@ const maxFullContextIndexCells = 1 << 20 // ~1M index ints
 // one (^, \A, \b, \B) would see a spurious "start of input" at every slice
 // boundary, so they are matched against the WHOLE string by Go's RE2 engine via
 // FindAllStringSubmatchIndex. That call is the only one that accumulates, so it
-// is bounded to the maxFullContextIndexCells budget rather than to the caller's
+// is bounded to the maxFullContextIndexCells budget, and never to the caller's
 // (possibly byte-budget-sized) limit; an input that exceeds that ceiling is
 // rejected with [ErrRegexMatchLimit] instead of allocating one match per input
 // position. RE2 stays linear, so a valid backtracking-shaped pattern like
@@ -1701,7 +1701,7 @@ func (r *compiledXPathRegex) eachStdSubmatchIndex(s string, limit int, fn func([
 // may be derived from a large byte budget). When the caller's own limit is the
 // smaller bound, it governs and the caller observes the overflow itself; when
 // this function's ceiling is the binding bound and it is exceeded, the input is
-// rejected with [ErrRegexMatchLimit] rather than silently truncated. Each
+// rejected with [ErrRegexMatchLimit], and never silently truncated. Each
 // surviving match is handed to fn one at a time, so a caller checking a
 // cancelled context inside fn observes it between matches.
 func (r *compiledXPathRegex) eachStdFullContext(s string, limit int, fn func([]int) bool) error {

@@ -240,7 +240,7 @@ type compiler struct {
 	// pulled in via xs:include/xs:redefine on this compiler, so a transitive or
 	// diamond chain loads each included document at most once. It is the cycle
 	// guard for circular includes: a re-include of an already-loaded document is
-	// skipped rather than re-parsed (which would re-register its declarations and
+	// skipped, and never re-parsed (which would re-register its declarations and
 	// recurse forever).
 	includeVisited map[string]struct{}
 	// includeDepth and maxIncludeDepth bound xs:include/xs:redefine nesting as a
@@ -303,7 +303,7 @@ type compiler struct {
 	overridePaths map[string]struct{}
 	// droppedOverrideTypes records type override children that matched no target
 	// component and were therefore ignored. A reference to one must remain a
-	// schema error rather than being deferred as an unused missing component.
+	// schema error, and must never be deferred as an unused missing component.
 	droppedOverrideTypes map[QName]struct{}
 	// failedRedefineTypes records the names of the inline simpleType/complexType
 	// children of an xs:redefine whose target document FAILED to load (a demoted
@@ -318,7 +318,7 @@ type compiler struct {
 	// referencedGlobalElems records the global element declarations that are the
 	// target of an xs:element @ref in a content model. A referenced global element
 	// whose @type is a missing component is genuinely needed, so its missing type is
-	// a compile-time error rather than a deferrable §5.3 unused-missing-component.
+	// a compile-time error, and no deferrable §5.3 unused-missing-component.
 	referencedGlobalElems map[*ElementDecl]struct{}
 	// notations records the QNames of every <xs:notation> declared in the schema
 	// (and its included/imported documents). Used to verify that an xs:NOTATION
@@ -468,7 +468,7 @@ type groupRefSource struct {
 	line  int
 	local string // referencing element display name (e.g. "group")
 	// nested is true when the group reference is contained inside another model
-	// group (xs:sequence/xs:choice/xs:all) rather than being the sole top-level
+	// group (xs:sequence/xs:choice/xs:all), and is not the sole top-level
 	// particle of a complex type's content. A reference to an 'all' model group
 	// is forbidden when nested.
 	nested bool
@@ -485,7 +485,7 @@ type groupRefSource struct {
 	// included/imported schema when the ref was parsed inside an
 	// xs:include/xs:import/xs:redefine, else the compiler filename. checkAllGroupRef
 	// runs after parsing (from resolveRefs / the redefine loop) when c.includeFile
-	// has been restored, so the source must be captured here rather than recomputed.
+	// has been restored, so the source must be captured here, and never recomputed.
 	source string
 }
 
@@ -846,7 +846,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// blockDefault/finalDefault validation above; the comparison matches the
 	// local <xs:attribute>/@form check (no whitespace collapse). The presence of
 	// the attribute is detected with hasAttr so an explicit empty value is
-	// rejected rather than treated as absent.
+	// rejected, and never treated as absent.
 	for _, fa := range []string{attrElementFormDefault, attrAttributeFormDefault} {
 		if !hasAttr(root, fa) || c.filename == "" {
 			continue
@@ -1751,7 +1751,7 @@ func registerBuiltinTypes(s *Schema, version Version) {
 
 // intrinsicBuiltinFacets returns the spec-mandated INTRINSIC facets a built-in
 // datatype carries in its own {facets} — the ones the schema-for-schemas records
-// directly on the datatype rather than deriving them from a lexical/value space.
+// directly on the datatype, deriving them from no lexical/value space.
 // They are registered on the built-in TypeDef so the facet-restriction checks
 // (baseFacets/effectiveInheritedRangeBounds and the inherited-length consistency)
 // see them when a user type restricts the built-in; instance validation already

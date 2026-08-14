@@ -207,8 +207,8 @@ func TestSignEnveloping_InclusiveC14NInObjectRef_UnusedRootNamespace(t *testing.
 // reference must still leave the Signature detached with its original owning
 // document restored. canonicalizeDetachedSubtree temporarily moves the live
 // Signature into a throwaway document; if canonicalization panics, the library
-// must undo that move on the unwinding path rather than leaving the caller's
-// Signature parented to a throwaway document. The panic here is forced by a
+// must undo that move on the unwinding path, leaving the caller's
+// Signature parented to its own document. The panic here is forced by a
 // caller-corrupted Manifest (a nil namespace declaration); preventing the panic
 // itself is out of scope — restoring the node's state is the requirement.
 func TestSignEnveloping_CanonicalizationPanicRestoresSignature(t *testing.T) {
@@ -266,8 +266,8 @@ func TestSignEnveloping_CanonicalizationPanicRestoresSignature(t *testing.T) {
 }
 
 // An id that exists BOTH in the caller's document and in the Signature's own
-// Object content is an ambiguous cross-tree collision and must be rejected
-// rather than silently resolving to one of them.
+// Object content is an ambiguous cross-tree collision and must be rejected,
+// resolving to neither of them.
 func TestSignEnveloping_AmbiguousIDAcrossTrees(t *testing.T) {
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, `<Foo><Bar Id="dup"><Baz Value="v"/></Bar></Foo>`)

@@ -48,7 +48,7 @@ func (pctx *parserCtx) blankRunLimit() int {
 // checking the context between chunks and capping the total run length. It
 // returns whether any whitespace was consumed and, when the run exceeds the
 // blank-run limit, ErrNodeContentTooLarge. Memory stays bounded regardless of
-// run length because it advances as it scans rather than peeking an
+// run length because it advances as it scans, peeking no
 // ever-growing offset.
 func (pctx *parserCtx) skipBlankRun(ctx context.Context, cur blankScanner) (bool, error) {
 	limit := pctx.blankRunLimit()
@@ -69,7 +69,7 @@ func (pctx *parserCtx) skipBlankRun(ctx context.Context, cur blankScanner) (bool
 			}
 			// Advance consumes the bytes just scanned. It cannot normally fail
 			// here (the scan already buffered them via PeekAt), but a read error
-			// that slips through is surfaced rather than swallowed so the parse
+			// that slips through is surfaced and never swallowed, so the parse
 			// aborts instead of re-scanning the same bytes forever.
 			if err := cur.Advance(i); err != nil {
 				return advanced, err
@@ -84,8 +84,8 @@ func (pctx *parserCtx) skipBlankRun(ctx context.Context, cur blankScanner) (bool
 		// position. PeekAt reporting 0 there is ambiguous — a genuine non-blank
 		// byte (possibly a real NUL) versus an exhausted buffer. When no byte is
 		// present (HasByteAt is false) the scan ran out of input; if the cursor
-		// also recorded a sticky read error, a read FAILED rather than the stream
-		// ending cleanly — most importantly a push-stream Read returning
+		// also recorded a sticky read error, a read FAILED and the stream did not
+		// end cleanly — most importantly a push-stream Read returning
 		// context.Canceled when cancellation unblocks a pending wait. Surface that
 		// error (and any pending ctx error) so callers propagate cancellation
 		// instead of synthesizing a syntax error ("blank needed after '<?xml'").
@@ -265,8 +265,8 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	// applying libxml2 areBlanks' own decl switch (NOT xmlIsMixedElement, which
 	// collapses EMPTY into "mixed"): ELEMENT content makes the whitespace
 	// ignorable; ANY or MIXED makes it significant; EMPTY or UNDEFINED — and no
-	// declaration at all — fall through to the heuristic below rather than being
-	// treated as mixed. This is why areBlanksBytes consults elementDeclType
+	// declaration at all — fall through to the heuristic below, and none of them
+	// counts as mixed. This is why areBlanksBytes consults elementDeclType
 	// (raw content-model type) instead of IsMixedElement (the mixed bool).
 	//
 	// Skip the DTD lookup for the synthetic pseudo-root that wraps entity
@@ -321,7 +321,7 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 
 	pdn := elem.baseDocNode()
 	// An empty element about to close (e.g. <a>  </a>) keeps its whitespace as
-	// text content rather than dropping it.
+	// text content, dropping none of it.
 	if pdn.firstChild == nil && cur.Peek() == '<' && cur.PeekAt(1) == '/' {
 		return false
 	}
@@ -344,16 +344,16 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 // whitespaceContextIgnorable reports whether, given only the current parse
 // context (xml:space, the node stack, and the mixed-content model), an
 // all-whitespace character-data run at this position would be reported as
-// ignorable whitespace rather than character data.
+// ignorable whitespace, as opposed to character data.
 //
 // Unlike areBlanksBytes it omits the byte-level blankness test and the
 // cursor lookahead at the end of the run, so it can be evaluated once for a
 // run that is delivered in streaming chunks (where the end-of-run delimiter is
 // not yet in view). For the cursorless (pure-SAX, doc == nil) case it returns
-// true rather than peeking for the trailing delimiter; the chunked caller
+// true, peeking for no trailing delimiter; the chunked caller
 // compensates by tracking blankness incrementally AND by re-applying the
-// trailing-delimiter check once the run ends (a blank run ending at '&' rather
-// than '<'/CR is character data, matching the single-shot path).
+// trailing-delimiter check once the run ends (a blank run ending at '&', in place of
+// '<'/CR, is character data, matching the single-shot path).
 func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 	if ctx.spaceTab[len(ctx.spaceTab)-1] == 1 {
 		return false

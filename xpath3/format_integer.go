@@ -18,7 +18,7 @@ func fnFormatInteger(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	// $picture is a required, exactly-one xs:string. Validate it before the
 	// empty-$value short-circuit so an empty or oversized picture raises
-	// XPTY0004 rather than panicking on picSeq.Get(0).
+	// XPTY0004 and never panics on picSeq.Get(0).
 	picture, err := coerceArgToStringRequired(ctx, args[1])
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func classifyFormatToken(primary string) formatTokenKind {
 	}
 
 	// Mixed decimal-digit pictures with ASCII letters fall back to the default
-	// decimal token rather than being validated as decimal-digit patterns.
+	// decimal token, and are never validated as decimal-digit patterns.
 	hasDecimalPattern := false
 	hasASCIILetter := false
 	for _, r := range runes {

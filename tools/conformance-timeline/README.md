@@ -81,7 +81,7 @@ exhaust its memory.
 An expected failure is a *passing Go test* (the harness asserts the divergence), so it
 lands in the JUnit **pass bucket** with the marker only in `system-out`. It is not a
 passing conformance result — helium does not produce what the case asks for — so it is
-counted as **not-passing** and shown as `⚠` rather than rounded into a perfect score.
+counted as **not-passing** and shown as `⚠`, so it can never round into a perfect score.
 
 Reference xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0.
 
@@ -97,8 +97,8 @@ The harness skips 481 slow XSLT cases (streaming, heavy source docs) unless
 `HELIUM_SLOW_TESTS=1`. These are **not** inapplicable — they are simply not run — so
 they must not vanish from the denominator.
 
-Both scripts detect that cutoff from the release's own content rather than
-hardcoding a tag:
+Both scripts detect that cutoff from the release's own content, with no tag
+hardcoded:
 
 - **v0.4.0 and later** are measured *with* `HELIUM_SLOW_TESTS=1`, so the 481 cases get
   real verdicts (all pass: 12,827 / 0 fail / 300 skip, matching `xslt3/CONFORMANCE.md`).
@@ -125,7 +125,7 @@ Two rules keep this honest:
 1. **`-parallel 1`.** With parallel subtests an out-of-memory lands on whichever
    goroutine allocates next — usually an innocent bystander (a case blamed for an
    OOM here passed in 2s when run alone) — and peak memory is the *sum* of the
-   concurrent cases rather than any one case's. Serialized, the case running when
+   concurrent cases, well above any one case's. Serialized, the case running when
    the binary dies is the case that killed it.
 2. **Every culprit is re-checked against the reference tag.** If it dies there too,
    it is our harness/fixture at fault, not the old release; it is recorded as

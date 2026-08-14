@@ -75,7 +75,7 @@ func (s *resolveState) checkVisited(url, id1, id2 string) bool {
 // Returns the resolved URI or "" if not found.
 //
 // Resolve is safe to call concurrently on a single *Catalog: per-resolution
-// state lives in a local resolveState rather than on the receiver.
+// state lives in a local resolveState, and never on the receiver.
 func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 	if c == nil {
 		return ""
@@ -90,8 +90,8 @@ func (c *Catalog) Resolve(ctx context.Context, pubID, sysID string) string {
 
 // ResolveResult is like Resolve but also reports whether resolution ended in a
 // catalog break (the libxml2 "cut" signal: a matching delegate was consulted and
-// every delegate target failed, so the search must STOP rather than fall through
-// to later catalogs in a chain). An exhausted nextCatalog chain is NOT a break:
+// every delegate target failed, so the search must STOP there and consult
+// no later catalog in the chain). An exhausted nextCatalog chain is NOT a break:
 // it is a plain no-match. When broke is true the search must not continue; when
 // it is false a "" result means "no match, keep searching".
 func (c *Catalog) ResolveResult(ctx context.Context, pubID, sysID string) (uri string, broke bool) {
@@ -151,7 +151,7 @@ func (c *Catalog) ResolveURI(ctx context.Context, uri string) string {
 
 // ResolveURIResult is like ResolveURI but also reports whether resolution ended
 // in a catalog break (see [Catalog.ResolveResult]). When broke is true a chain
-// caller must stop searching rather than fall through to later catalogs.
+// caller must stop searching and consult no later catalog.
 func (c *Catalog) ResolveURIResult(ctx context.Context, uri string) (resolved string, broke bool) {
 	if c == nil || uri == "" {
 		return "", false

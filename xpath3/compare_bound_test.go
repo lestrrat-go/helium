@@ -37,7 +37,7 @@ func TestValueComparison_CardinalityEarlyStop(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "XPTY0004")
 	// Distinguishing empty / one / more-than-one needs at most two atoms; the
-	// fix must early-stop rather than drain all n items.
+	// fix must early-stop, draining no more than that.
 	require.LessOrEqual(t, produced, 2,
 		"value comparison must early-stop atomization, not materialize the whole operand")
 }

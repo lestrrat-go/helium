@@ -86,7 +86,7 @@ func CopyDoc(src *Document) (*Document, error) {
 	// Copy all document children (the DTD was already handled) through the shared
 	// core in over-declare / AddChild mode, reproducing the historical behavior.
 	// onCopy records the source->copy element correspondence so the ID table can be
-	// rebuilt against the copy's own elements rather than aliasing the source map.
+	// rebuilt against the copy's own elements, aliasing nothing in the source map.
 	var onCopy func(src, cp Node)
 	var corr elemCorrespondence
 	if len(src.ids) > 0 {

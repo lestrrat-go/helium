@@ -93,7 +93,7 @@ template matching and modes; `xsl:apply-templates` / `xsl:call-template` /
 `xsl:iterate` / `xsl:fork`; `xsl:try` / `xsl:catch`; maps and arrays;
 packages / `xsl:use-package`; and the XPath 3.1 data model. Unsupported
 *optional* features are reported with concrete error codes
-(e.g. `XTSE0090`, `XTSE0220`, `FOXT0003`) rather than silently misinterpreted.
+(e.g. `XTSE0090`, `XTSE0220`, `FOXT0003`), so none is silently misinterpreted.
 
 ## Skip taxonomy
 
@@ -147,7 +147,7 @@ the generated case tables in `helium-w3c-tests` `xslt3/`).
 |---------|-----------------------------------|------------------|-----------------------------------|
 | `validation-0201` | Transform output is content-correct; only Saxon-identical XHTML *formatting* differs (3-space indent, inline-element whitespace, XML declaration on the root line, `&#xa0;` preservation) — a serialization-cosmetics detail, not a semantic gap. | Eventually (serialization polish) | Low — a formatting-only change, isolated to the XHTML serializer. |
 | `regex-syntax-xslt20-0984` | Unicode-version dependency, not a spec divergence: `[\w]` is correctly `[^\p{P}\p{Z}\p{C}]`; the test expects U+2308/U+2309 to match `\w` (pre-Unicode-6.1 category Sm), but Go's current Unicode tables classify them as Ps/Pe, so `\w` correctly excludes them. | No | High — matching the old expectation would mean diverging from Go's current Unicode data; our output is the correct current one. |
-| `backwards-041` | Depends on the source nodes' `base-uri()` resolving against a *fixture* base URI rather than the test-set file path — a harness/environment dependence, not a transform defect. | No (fixture-dependent) | Low — no engine behavior involved. |
+| `backwards-041` | Depends on the source nodes' `base-uri()` resolving against a *fixture* base URI where the test-set file path is what the harness supplies — a harness/environment dependence, not a transform defect. | No (fixture-dependent) | Low — no engine behavior involved. |
 | `backwards-019` | The XSLT 1.0-only **default output method** (implicit-1.0 result tree serialized `xhtml`→`xml`) is not implemented; this is a backwards-compatibility *serialization default*, not a Basic 3.0 facility. | Maybe (BCM completeness) | Low — gated to effective-version < 2.0 output defaulting. |
 | `import-schema-203` | Asserts a **placeholder** error code `XXXX9999` (not a real spec code); helium raises a concrete diagnostic instead. | No | N/A — the expected code is a catalog placeholder. |
 | `normalize-unicode-008` | Requires an external fixture `NormalizationTest.txt` that is not shipped; a missing-fixture dependence, not an engine gap. | No (fixture-dependent) | None. |

@@ -77,7 +77,7 @@ type parsedTransform struct {
 // for every embedded certificate. The three caps come from the Verifier config
 // (with conservative defaults); a non-positive effective cap disables that check.
 // The context is polled separately inside the KeyInfo/Reference parse loops so a
-// cancelled context stops the work promptly rather than only at their boundaries.
+// cancelled context stops the work promptly, well inside their boundaries.
 type verifyBudget struct {
 	maxRefs    int
 	maxEntries int
@@ -125,7 +125,7 @@ func (b *verifyBudget) consume(n int) error {
 // decodeBudgeted decodes elem's base64 content, charging the decoded byte
 // budget BEFORE the value is materialized. It is the only way a base64 value in
 // the document is decoded on the verify path, because charging after the decode
-// bounds what is KEPT rather than what is BUILT: xs:base64Binary permits XML
+// bounds what is KEPT, and never what is BUILT: xs:base64Binary permits XML
 // whitespace between characters and a value may be spread over any number of
 // text and CDATA children, so joining that text first allocates a lexical
 // length no cap ever approved — and goes on allocating it for every value the
@@ -157,7 +157,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	// preflight, KeyInfo parse (x509.ParseCertificate per cert), KeySource
 	// resolution, SignedInfo canonicalization, and one SignatureValue crypto
 	// verify — are bounded but non-trivial, so a context the caller cancelled
-	// before calling must short-circuit here rather than run them to completion.
+	// before calling must short-circuit here, running none of them to completion.
 	// The per-Reference loop below repeats this check each iteration.
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -518,7 +518,7 @@ func parseSignatureElement(ctx context.Context, budget *verifyBudget, sigElem *h
 	parsed := &parsedSignature{}
 
 	// The XML-Signature schema mandates exactly one SignedInfo and exactly one
-	// SignatureValue per ds:Signature. This MUST be enforced rather than
+	// SignatureValue per ds:Signature. This MUST be enforced, and never resolved
 	// last-one-wins: only a single SignedInfo is canonicalized and checked
 	// against SignatureValue (see verifySignature), yet every SignedInfo's
 	// References were being appended to the result. An attacker could prepend
@@ -585,7 +585,7 @@ func parseSignedInfo(ctx context.Context, budget *verifyBudget, elem *helium.Ele
 	// The XML-Signature schema fixes SignedInfo's content model as
 	// (CanonicalizationMethod, SignatureMethod, Reference+) with exactly one
 	// CanonicalizationMethod and exactly one SignatureMethod. Enforce that
-	// cardinality rather than accepting duplicates last-one-wins: a crafted
+	// cardinality, accepting no duplicates last-one-wins: a crafted
 	// SignedInfo carrying two SignatureMethod (or CanonicalizationMethod)
 	// children is schema-invalid and ambiguous about which algorithm the
 	// signature actually commits to, so a conforming verifier must reject it.
@@ -680,7 +680,7 @@ func parseSignedInfo(ctx context.Context, budget *verifyBudget, elem *helium.Ele
 // <evil:Transform Algorithm="...">) is ignored, and the 1.1 xmldsig11# namespace
 // does not satisfy the check. Each Transform's Algorithm and its validated
 // parameters (the XPath expression, or an ec:InclusiveNamespaces prefix list) are
-// recorded; an unrecognized parameter child is rejected fail-closed rather than
+// recorded; an unrecognized parameter child is rejected fail-closed, and never
 // digested as if absent. A positive maxSteps rejects the first core Transform
 // past that limit before its parameters are parsed; zero leaves the list
 // unlimited.
@@ -756,8 +756,8 @@ func parseReferenceElement(ctx context.Context, budget *verifyBudget, elem *heli
 
 	// The XML-Signature schema fixes Reference's content model as
 	// (Transforms?, DigestMethod, DigestValue) with at most one Transforms and
-	// exactly one DigestMethod and one DigestValue. Enforce that cardinality
-	// rather than accepting duplicates last-one-wins: a crafted Reference with
+	// exactly one DigestMethod and one DigestValue. Enforce that cardinality,
+	// accepting no duplicates last-one-wins: a crafted Reference with
 	// two DigestValue children (the second crafted to match the recomputed
 	// digest) is schema-invalid and ambiguous about which digest the signature
 	// commits to, so a conforming verifier must reject it.
@@ -865,8 +865,8 @@ func parseCanonicalizationParameters(elem *helium.Element, alg string) ([]string
 // during canonicalization, so an ec:InclusiveNamespaces there — even with an
 // empty PrefixList — is rejected. Any other child element is an unknown
 // parameter we cannot honor; accepting it while digesting as if absent would be
-// fail-open, so it too is rejected. A second ec:InclusiveNamespaces is rejected
-// rather than silently letting the last one win. The context label
+// fail-open, so it too is rejected. A second ec:InclusiveNamespaces is rejected,
+// and the last one never wins. The context label
 // ("CanonicalizationMethod" / "Transform") only shapes the error message.
 func parseInclusiveNamespaceParameters(elem *helium.Element, alg, context string) ([]string, error) {
 	var prefixes []string

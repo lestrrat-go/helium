@@ -72,7 +72,7 @@ func lookupItem(evalFn exprEvaluator, ctx context.Context, ec *evalContext, item
 			var boundErr error
 			// Bounded internal walk: iterate the stored values in place without
 			// cloning (mirroring the get0/entries0 walkers) so a borrowed lazy
-			// value is bound-checked rather than eagerly cloned.
+			// value is bound-checked, and never eagerly cloned.
 			// appendBoundedClonedSeq drains each value lazily, enforcing maxNodes
 			// (and OpLimit / cancellation) BEFORE the value is materialized — so a
 			// lazy value whose Materialize is unbounded/panics trips the bound

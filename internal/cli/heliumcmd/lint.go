@@ -461,8 +461,8 @@ func (c *command) parseArgs(args []string) (*config, []string) {
 	}
 
 	// --noout suppresses all writing, so opening (and thus truncating) the
-	// output file would silently destroy its contents. Reject the combination
-	// rather than clobber the file. --xpath also sets noout but still writes
+	// output file would silently destroy its contents. Reject the combination, leaving the file
+	// intact. --xpath also sets noout but still writes
 	// its result to the output destination, so it is exempt.
 	if cfg.outputFile != "" && cfg.noout && cfg.xpathExpr == "" {
 		_, _ = fmt.Fprintf(c.stderr, "%s: --output cannot be combined with --noout\n", c.prog)

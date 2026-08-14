@@ -88,8 +88,8 @@ func TestValueTokenNBSP(t *testing.T) {
 }
 
 // TestValueUnknownDatatype covers item 2: a <value> with an unknown datatype
-// name (empty library) or an unknown datatypeLibrary must FAIL rather than
-// matching by raw string equality.
+// name (empty library) or an unknown datatypeLibrary must FAIL, and must never
+// match by raw string equality.
 func TestValueUnknownDatatype(t *testing.T) {
 	t.Parallel()
 

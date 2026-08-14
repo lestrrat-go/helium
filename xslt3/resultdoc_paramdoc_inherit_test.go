@@ -67,7 +67,7 @@ func TestResultDocParamDocInheritsDefaultOutput(t *testing.T) {
 		// The map's integer key 1 and string key "1" both become the JSON name
 		// "1": a duplicate name that SERE0022 rejects unless allow-duplicate-names
 		// ="yes". That value is set only on the default xsl:output and OMITTED by
-		// the parameter-document, so it must be inherited rather than reset to false.
+		// the parameter-document, so it must be inherited, and never reset to false.
 		inv := ss.Transform(parseTransformSource(t)).URIResolver(resolver)
 		_, err := inv.Do(t.Context())
 		require.NoError(t, err, "inherited allow-duplicate-names=yes must survive a parameter-document that omits it (no SERE0022)")

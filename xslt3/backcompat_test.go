@@ -26,7 +26,7 @@ func transformStr(t *testing.T, xsltSrc string) (string, error) {
 
 // TestBackCompatXPathArithmetic verifies that a version="1.0" stylesheet both
 // compiles/runs (no XTDE0160) and evaluates XPath in 1.0 compatibility mode:
-// '3' + 4 becomes 7 rather than a type error.
+// '3' + 4 becomes 7, and never a type error.
 func TestBackCompatXPathArithmetic(t *testing.T) {
 	ss := `<?xml version="1.0"?>
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -65,7 +65,7 @@ func TestBackCompatPerSubtreeOverride(t *testing.T) {
 // TestBackCompatSortKeyInnerCompat verifies that a version="1.0" xsl:sort key
 // evaluates its inner expression in XPath 1.0 compatibility mode even on the
 // optimized (EvaluateReuse) sort path: string(.) + 0 coerces the string to a
-// number rather than raising XPTY0004.
+// number, raising no XPTY0004.
 func TestBackCompatSortKeyInnerCompat(t *testing.T) {
 	ss := `<?xml version="1.0"?>
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

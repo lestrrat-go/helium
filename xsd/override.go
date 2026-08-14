@@ -214,7 +214,7 @@ func (c *compiler) collectOverrideChildren(ctx context.Context, overrideElem *he
 		default:
 			// A MODELED component (complexType/simpleType/group/attributeGroup, and
 			// element/attribute) is validated here BEFORE keying: a malformed name
-			// (present-empty, whitespace-only, or "a b") is a schema error rather than
+			// (present-empty, whitespace-only, or "a b") is a schema error, and never
 			// a silent drop, mirroring the xs:redefine dispatch. An absent @name is
 			// skipped (not a valid component key), preserving existing behavior.
 			var nameOK bool

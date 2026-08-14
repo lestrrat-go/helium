@@ -378,7 +378,7 @@ func isSubtypeOf(actualType, targetType string) bool {
 // built-in BaseType (set when TypeName is a user-defined schema type derived by
 // restriction). Unlike PromoteSchemaType it never falls back to the Go value's
 // kind, so a sibling type (e.g. xs:dateTime relative to xs:date) is correctly
-// rejected rather than reinterpreted from its time.Time payload.
+// rejected, and never reinterpreted from its time.Time payload.
 func isAtomicSubtypeOf(av AtomicValue, targetType string) bool {
 	if isSubtypeOf(av.TypeName, targetType) {
 		return true
@@ -560,7 +560,7 @@ func (a AtomicValue) DoubleVal() float64 {
 func (a AtomicValue) FloatVal() *FloatValue {
 	// A schema-derived xs:float can be backed by a *FloatValue at double
 	// precision (e.g. NewDouble(16777217)). Honor the effective numeric type so
-	// such values are narrowed to single precision rather than returned as-is.
+	// such values are narrowed to single precision, and never returned as-is.
 	singlePrec := a.effectiveNumericType() == TypeFloat
 	if fv, ok := a.Value.(*FloatValue); ok {
 		if singlePrec {
@@ -841,7 +841,7 @@ func normalizeMapKey(key AtomicValue) mapKey {
 		// Exact numeric types must normalize with exact arithmetic, never float64:
 		// ToFloat64 overflows values > MaxFloat64 to +Inf, collapsing distinct keys.
 		// Also consult BaseType so a user-defined schema type derived from
-		// xs:integer/xs:decimal is normalized exactly rather than via float64.
+		// xs:integer/xs:decimal is normalized exactly, and never via float64.
 		if isIntegerDerived(key.TypeName) || isIntegerDerived(key.BaseType) {
 			bi := key.BigInt()
 			if bi.IsInt64() {
@@ -1089,7 +1089,7 @@ func (m MapItem) forEach0(fn func(AtomicValue, Sequence) error) error {
 // entries0 returns the map's entries in insertion order without cloning. The
 // returned slice and its value sequences are the map's own backing storage;
 // callers must not mutate either. Used by bounded walkers that iterate value
-// sequences in place rather than allocating a []Sequence copy.
+// sequences in place, allocating no []Sequence copy.
 func (m MapItem) entries0() []mapEntry {
 	return m.entries
 }

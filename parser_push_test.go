@@ -95,7 +95,7 @@ func TestPushParser(t *testing.T) {
 		t.Parallel()
 		// Push one byte at a time from a separate goroutine with a small
 		// delay between pushes so the background parser wakes on a partially
-		// buffered stream rather than seeing the whole input at once. A slow
+		// buffered stream, well before the whole input arrives. A slow
 		// producer that splits the XML declaration across pushes must not be
 		// mistaken for end-of-input: fillBuffer has to keep reading until it
 		// has the bytes it asked for. Regression test for the incremental
@@ -290,9 +290,8 @@ func TestPushParser(t *testing.T) {
 		// whitespace after "<?xml". Cancelling unblocks that Read with
 		// context.Canceled, which the cursor records as a sticky Err() while
 		// PeekAt reports 0. The blank scanner must surface that read error so the
-		// cancellation propagates as context.Canceled rather than the parser
-		// synthesizing a syntax error ("blank needed after '<?xml'") that would
-		// mask it.
+		// cancellation propagates as context.Canceled. A synthesized syntax
+		// error ("blank needed after '<?xml'") would mask it.
 		ctx, cancel := context.WithCancel(t.Context())
 
 		p := helium.NewParser()

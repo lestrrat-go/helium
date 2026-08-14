@@ -608,8 +608,8 @@ func numericToRatExact(a AtomicValue) (*big.Rat, bool) {
 		return nil, false
 	}
 	// Promote a schema-derived double/float (custom TypeName, BaseType=xs:double/
-	// xs:float) so ToFloat64 reads the underlying value rather than keying off the
-	// unknown TypeName and returning 0.
+	// xs:float) so ToFloat64 reads the underlying value. Keying off the
+	// unknown TypeName would return 0.
 	f := PromoteSchemaType(a).ToFloat64()
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		return nil, false

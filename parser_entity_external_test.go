@@ -466,7 +466,7 @@ func TestExternalParameterEntity(t *testing.T) {
 	// general entity g whose value is "%p;" — WITHOUT any top-level "%p;" reference
 	// that would otherwise be what first caches p's content. g's expanded value must
 	// equal value.ent's content, proving the load happens through the centralized
-	// PE-replacement path rather than depending on reference order.
+	// PE-replacement path, independent of reference order.
 	//
 	// The leading control general entity sidesteps the same separate pre-existing
 	// first-declaration bug noted on TestExternalParameterEntityNestedRelativeBaseURI.
@@ -549,8 +549,8 @@ func TestExternalParameterEntity(t *testing.T) {
 	})
 
 	// a self-recursive
-	// external parameter entity is rejected with a recursion error rather than
-	// pushing cursors until the entity-amplification ceiling trips (or OOM): pe.ent's
+	// external parameter entity is rejected with a recursion error, well before
+	// cursors pile up to the entity-amplification ceiling (or OOM): pe.ent's
 	// replacement text references the very PE that loaded it, so the active-PE guard
 	// must fail the parse the moment the nested "%pe;" is seen.
 	t.Run("self recursion is rejected", func(t *testing.T) {
@@ -634,8 +634,8 @@ func TestExternalParameterEntity(t *testing.T) {
 	})
 
 	// the PUBLIC external parameter
-	// entity path records the public and system IDs in the correct fields rather than
-	// swapping them.
+	// entity path records the public and system IDs in the correct fields, with no
+	// swap.
 	t.Run("a PUBLIC declaration is captured", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			dtdSystemID: {Data: []byte(

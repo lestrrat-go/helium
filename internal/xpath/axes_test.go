@@ -134,8 +134,8 @@ func (c *cancelAfterNContext) Err() error {
 }
 
 // TestTraverseAxisDescendant_ContextCancelledMidWalk verifies that a context
-// cancelled AFTER the descendant traversal has begun aborts the walk promptly
-// rather than completing the full walk over a deep tree. Without an in-loop
+// cancelled AFTER the descendant traversal has begun aborts the walk promptly,
+// leaving a deep tree only partly walked. Without an in-loop
 // ctx.Err() check the walk would visit all depth nodes regardless.
 func TestTraverseAxisDescendant_ContextCancelledMidWalk(t *testing.T) {
 	const depth = 20000
@@ -212,7 +212,7 @@ func TestTraverseAxisDescendant_WideChildEnumerationChecksContext(t *testing.T) 
 
 // TestTraverseAxisChild_WideContextCancelledMidWalk verifies that the child
 // axis (routed through TraverseAxisSimple) aborts promptly when the context is
-// cancelled partway through enumeration, rather than materializing the full
+// cancelled partway through enumeration, materializing no full
 // node-set after cancellation. cancelAfterNContext lets the TraverseAxis-entry
 // ctx.Err() succeed and only reports cancellation once enumeration is underway,
 // so this genuinely exercises the in-loop ctx check inside axisChild.

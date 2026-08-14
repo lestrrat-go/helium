@@ -25,8 +25,8 @@ func buildWideElementDoc(width int) string {
 
 // fn:idref walks the entire document collecting IDREF matches. That walk must
 // honor context cancellation: a context cancelled after evaluation begins must
-// abort the walk promptly with context.Canceled rather than scanning every node
-// and silently swallowing the error returned by the tree walk.
+// abort the walk promptly with context.Canceled, scanning only part of the
+// document and swallowing no error returned by the tree walk.
 func TestFnIDRef_ContextCancelledWideDoc(t *testing.T) {
 	const width = 50000
 	const cancelAfter = 50

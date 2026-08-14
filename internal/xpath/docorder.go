@@ -535,8 +535,8 @@ func compareElementOrder(a, b helium.Node) int {
 	}
 
 	// ancA and ancB are siblings; determine order by interleaved
-	// forward/backward search. This is O(distance) between them
-	// rather than O(total_siblings).
+	// forward/backward search. This is O(distance) between them,
+	// well under O(total_siblings).
 	return compareSiblingOrder(ancA, ancB)
 }
 
@@ -607,7 +607,7 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 
 // compareSiblingOrder determines the order of two sibling nodes by
 // walking forward and backward from both simultaneously. This is
-// O(distance) between the two nodes rather than O(total_siblings).
+// O(distance) between the two nodes, well under O(total_siblings).
 func compareSiblingOrder(a, b helium.Node) int {
 	// Interleave: walk NextSibling from a and PrevSibling from a.
 	// Also walk NextSibling from b and PrevSibling from b.

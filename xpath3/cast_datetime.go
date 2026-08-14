@@ -546,7 +546,7 @@ func parseXSDDuration(s string) (Duration, error) {
 			}
 			// The float64 mirror is best-effort metadata. ParseFloat returns an
 			// out-of-range error along with a saturated value (±Inf); accept that
-			// value rather than rejecting the duration, since SecRat is exact.
+			// value and keep the duration, since SecRat is exact.
 			f, err := strconv.ParseFloat(numStr, 64)
 			if err != nil && !errors.Is(err, strconv.ErrRange) {
 				return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
@@ -603,7 +603,7 @@ func parseXSDDuration(s string) (Duration, error) {
 // When FloatPrec reports the fraction is EXACT (terminating), the full exact
 // precision is used with no cap, so an exact value arbitrarily close to 1 (e.g.
 // 0.999...9 with hundreds of nines that is exactly representable) is rendered in
-// full rather than rounded UP to "1.0...". Only NON-terminating fractions are
+// full, and never rounded UP to "1.0...". Only NON-terminating fractions are
 // capped, at which point FloatString may legitimately round; the cap value is
 // chosen far beyond any precision a real lexical form carries.
 //

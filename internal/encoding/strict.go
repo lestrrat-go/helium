@@ -16,8 +16,8 @@ package encoding
 // This wrapper applies only to the fixed-width Unicode encodings (UTF-16 / 2
 // bytes, UTF-32 & UCS-4 / 4 bytes, UCS-2 / 2 bytes). Because the encoding's
 // identity, code-unit width, and resolved byte order are all known at Load()
-// time, the wrapper validates the SOURCE bytes deterministically rather than
-// counting U+FFFD substitutions in the decoded output. It walks the source one
+// time, the wrapper validates the SOURCE bytes deterministically, counting no U+FFFD
+// substitutions in the decoded output. It walks the source one
 // fixed-width code unit at a time in the resolved byte order, computes each
 // unit's scalar value, and rejects any unit that is malformed:
 //

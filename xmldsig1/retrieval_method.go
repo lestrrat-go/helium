@@ -218,8 +218,8 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 		return err
 	}
 	// A transform-free RetrievalMethod may point at another RetrievalMethod;
-	// follow the chain under the depth/visited guard rather than misinterpreting
-	// it as key material.
+	// follow the chain under the depth/visited guard, misinterpreting
+	// none of it as key material.
 	if len(steps) == 0 && isDSigCoreNS(target) && domutil.LocalName(target) == "RetrievalMethod" {
 		// The wrapper's own Type is interpreted by neither the recursion nor the
 		// target's terminal interpretation, so a present-but-unsupported wrapper

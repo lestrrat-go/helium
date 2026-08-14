@@ -12,7 +12,7 @@ import (
 // TestIDCFieldMultipleNodes covers cvc-identity-constraint.3: for each selected
 // node, every field XPath must evaluate to either an empty node-set or a
 // node-set with exactly one member. A field that selects more than one node is a
-// validation error rather than being silently reduced to its first node.
+// validation error, and is never reduced to its first node.
 func TestIDCFieldMultipleNodes(t *testing.T) {
 	t.Parallel()
 

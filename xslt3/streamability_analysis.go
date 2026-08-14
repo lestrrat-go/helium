@@ -26,7 +26,7 @@ func lookupFuncStreamability(ss *Stylesheet, localName string, arity int) string
 // It checks templates in streamable modes and bodies of xsl:source-document
 // streamable="yes" for non-streamable constructs. Per the W3C spec, a Basic
 // XSLT Processor that cannot stream a construct should fall back to
-// non-streaming (DOM-based) execution rather than raising a fatal error.
+// non-streaming (DOM-based) execution, raising no fatal error.
 // When an XTSE3430 violation is detected, the affected mode, source-document,
 // accumulator, or function is demoted to non-streamable and compilation
 // continues.
@@ -356,7 +356,7 @@ func checkStreamableInstruction(ss *Stylesheet, inst instruction) error {
 
 // checkStreamableInstructionCtx checks a single instruction for streamability violations.
 // When inResultDoc is true, certain checks are relaxed (e.g., xsl:sequence select="."
-// inside for-each is allowed because nodes flow to a serializer rather than being
+// inside for-each is allowed because nodes flow to a serializer, and are never
 // returned as a sequence).
 func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc bool) error {
 	switch v := inst.(type) {

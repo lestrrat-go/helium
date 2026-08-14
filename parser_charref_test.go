@@ -121,7 +121,7 @@ func TestCharRef(t *testing.T) {
 	// against the index-out-of-range panic in
 	// parseStringCharRef when malformed character references appear inside entity
 	// declarations. Each malformed input must yield a structured
-	// helium.ErrParseError rather than panic.
+	// helium.ErrParseError, never a panic.
 	t.Run("a malformed reference does not panic", func(t *testing.T) {
 		malformed := []string{
 			`<!DOCTYPE root [<!ENTITY e "&#">]><root>&e;</root>`,
@@ -146,7 +146,7 @@ func TestCharRef(t *testing.T) {
 	// against an out-of-range character
 	// reference wrapping int32 into a valid-looking rune. These exercise the
 	// content-path parser (parseCharRef) and the parameter-entity declaration
-	// branch, both of which must report an error rather than silently producing a
+	// branch, both of which must report an error and produce no
 	// bogus character.
 	t.Run("an out-of-range reference is rejected", func(t *testing.T) {
 		cases := []string{
@@ -266,14 +266,14 @@ func TestGetEntityErrors(t *testing.T) {
 
 	t.Run("a foreign type in an attribute value does not panic", func(t *testing.T) {
 		// Exercise the nested string-decoding path (parseStringEntityRef ->
-		// entityCheck) rather than the direct attribute parseEntityRef path.
+		// entityCheck), in place of the direct attribute parseEntityRef path.
 		//
 		// `foo` is declared in the internal subset as "&bar;" and resolves to a
 		// real *helium.Entity (the handler returns nil for it). Decoding "&foo;"
 		// recurses into its content, calling parseStringEntityRef("&bar;"), which
 		// returns a FOREIGN (non-*helium.Entity) sax.Entity for `bar`. That foreign
 		// value then reaches entityCheck, which must handle it gracefully via its
-		// comma-ok assertion rather than triggering a forced-cast panic.
+		// comma-ok assertion, triggering no forced-cast panic.
 		h := sax.New()
 		h.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
 			if name == "bar" {

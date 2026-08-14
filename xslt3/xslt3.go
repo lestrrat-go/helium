@@ -69,7 +69,7 @@ type externalEntityLoader func(ctx context.Context, uri string) ([]byte, error)
 // the legacy permissive behavior is restored (external DTD / general entity
 // loading via LoadExternalDTD + SubstituteEntities), but the loads are routed
 // through entityLoader (the configured URIResolver / HTTPClient, subject to the
-// configured resource limits) rather than the parser's raw filesystem/network.
+// configured resource limits), and never the parser's raw filesystem/network.
 // When entityLoader is nil the permissive parse falls back to the parser's
 // default resource access. extraOpts lets callers layer additional parser
 // options (e.g. DefaultDTDAttributes); they are applied in BOTH branches. In

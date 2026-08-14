@@ -27,7 +27,7 @@ func compileErrorsFor(t *testing.T, schema string) string {
 
 // TestUnboundPrefixInNameIsCompileError covers D-RNG-002: a QName whose prefix
 // is not bound to any in-scope namespace declaration must be a fatal compile
-// error rather than being silently treated as the empty namespace. Otherwise a
+// error, and must never be treated as the empty namespace. Otherwise a
 // schema such as <element name="p:admin"> (without xmlns:p) would wrongly match
 // a no-namespace <admin/> instance.
 func TestUnboundPrefixInNameIsCompileError(t *testing.T) {
@@ -113,7 +113,7 @@ func TestUnboundPrefixInNameIsCompileError(t *testing.T) {
 // unbound-prefix fix: an invalid/unbound name inside an <except> compiles to a
 // never-matching name class. On the DEFAULT compile path (no error collector)
 // the fatal diagnostic is dropped, so the enclosing anyName/nsName must poison
-// itself rather than silently treat the exclusion as empty — otherwise it would
+// itself, and must never treat the exclusion as empty — otherwise it would
 // match everything and spuriously validate the instance.
 func TestUnboundPrefixInExceptPoisonsNameClass(t *testing.T) {
 	t.Parallel()
@@ -208,7 +208,7 @@ func TestUnboundPrefixInExceptPoisonsNameClass(t *testing.T) {
 // name-class case: a <choice> whose branch is a <name> with an unbound prefix
 // compiles that branch to a never-matching name class. On the DEFAULT compile
 // path (no error collector) the fatal diagnostic is dropped, so the choice must
-// inherit the taint rather than silently validate via its remaining branch —
+// inherit the taint, and must never validate via its remaining branch —
 // otherwise an unbound-prefix branch would be masked by a valid sibling branch.
 func TestUnboundPrefixInChoiceNameClassPoisonsChoice(t *testing.T) {
 	t.Parallel()
@@ -385,7 +385,7 @@ func compileWithDefaultHandler(t *testing.T, schema string) *relaxng.Grammar {
 // TestWhitespaceOnlyNameIsCompileError covers the presence-aware name lookup: a
 // name attribute whose value is XML whitespace only trims to "" but is still
 // PRESENT. It must be treated as an invalid (empty) QName — a fatal compile
-// error installing a never-matching name class — rather than as an ABSENT name,
+// error installing a never-matching name class — and never as an ABSENT name,
 // which would leave no name class and make <attribute>/<element> match anything.
 func TestWhitespaceOnlyNameIsCompileError(t *testing.T) {
 	t.Parallel()
@@ -580,7 +580,7 @@ func TestSchemaAttrNBSPNotTrimmed(t *testing.T) {
 // check: the combine attribute on <start>/<define> may only be "", "choice",
 // or "interleave" after XML-space trimming (spec §4.17). A non-empty invalid
 // value — including a leading-NBSP " choice" that survives XML-space trimming —
-// must be a fatal compile error rather than silently falling through to the
+// must be a fatal compile error, and must never fall through to the
 // default group combine.
 func TestInvalidCombineValueIsCompileError(t *testing.T) {
 	t.Parallel()

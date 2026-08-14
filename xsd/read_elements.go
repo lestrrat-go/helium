@@ -37,7 +37,7 @@ type attrUseReadOptions struct {
 // unqualified declarations coerced into an enclosing namespace as a unit; one that
 // DOES declares its components in that namespace directly. It is used to decide
 // whether an unprefixed attribute @ref (which has no namespace of its own) should
-// resolve to no namespace ({}) rather than be coerced to the effective target
+// resolve to no namespace ({}), and never be coerced to the effective target
 // namespace.
 func elementDocDeclaresTargetNS(elem *helium.Element) bool {
 	owner := elem.OwnerDocument()
@@ -102,7 +102,7 @@ func parseParticleOccurs(elem *helium.Element) (int, int) {
 // integer. maxOccurs (allowMax) may additionally be the literal "unbounded",
 // represented by the Unbounded sentinel. ok is false when the lexical value is
 // not a valid non-negative integer (or "unbounded" when permitted); callers
-// report a schema error in that case rather than silently accepting a bogus
+// report a schema error in that case, accepting no bogus
 // occurrence count.
 func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 	if allowMax && s == attrValUnbounded {
@@ -119,7 +119,7 @@ func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 		// isASCIIDigits guaranteed a non-empty all-digits string, so the only
 		// possible Atoi failure is a range error: a lexically valid
 		// xs:nonNegativeInteger whose magnitude exceeds int. The value space is
-		// unbounded, so this is valid — clamp it rather than reject. A maxOccurs
+		// unbounded, so this is valid — clamp it, and reject nothing. A maxOccurs
 		// beyond int range is treated as "unbounded" (matching the MS "maxOccurs
 		// > 4096 ⇒ xs:any" behavior); a minOccurs clamps to a large finite cap.
 		if allowMax {
@@ -247,7 +247,7 @@ func (c *compiler) validateOccursAttrs(ctx context.Context, elem *helium.Element
 	}
 
 	// minOccurs must not exceed maxOccurs. The comparison is on the collapsed
-	// digit strings (compareNonNegDigits) rather than the parsed ints, so a value
+	// digit strings (compareNonNegDigits), and never the parsed ints, so a value
 	// too large for an int — clamped to a sentinel by parseNonNegativeOccurs — is
 	// still checked (an overflowing maxOccurs clamps to Unbounded, which an int
 	// comparison would treat as +inf and wrongly skip). The effective occurrences
@@ -1158,7 +1158,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	name := collapsedAttr(elem, attrName)
 	// Detect the @ref form by PRESENCE, not value: getAttr cannot tell an absent
 	// attribute from an empty one, so a literal ref="" must be recognized as the
-	// (invalid) ref form rather than silently treated as absent and dropped.
+	// (invalid) ref form, and never treated as absent and dropped.
 	hasRef := c.version == Version11 && hasAttr(elem, attrRef)
 	if !hasRef && !hasAttr(elem, attrName) {
 		// @name is required (XSD Structures 3.11.2 / src-identity-constraint).
@@ -1298,7 +1298,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 			// refer=" k " resolves instead of failing on a whitespace-padded prefix).
 			// resolveIDCReferQName resolves the QName namespace-aware; an unbound
 			// prefix is a fatal error there. Store the resolved QName so validation
-			// looks the target up by full identity rather than by local name only.
+			// looks the target up by full identity, and never by local name only.
 			idc.Refer = collapsedAttr(elem, attrRefer)
 			idc.ReferQName, idc.referUnbound = c.resolveIDCReferQName(ctx, elem, idc)
 		}
@@ -1396,7 +1396,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 	// Pre-compile selector XPath expression. A malformed selector XPath is a
 	// fatal schema error: leaving SelectorExpr nil would silently disable the
 	// whole constraint (the field-level uniqueness/keyref checks would never
-	// run), so an invalid schema must fail to compile rather than validate
+	// run), so an invalid schema must fail to compile, validating no
 	// documents as if no constraint were present.
 	if idc.Selector != "" {
 		compiled, err := compileIDCXPath(idc.Selector, false, selectorNS)
@@ -1452,7 +1452,7 @@ func (c *compiler) parseIDConstraint(ctx context.Context, elem *helium.Element, 
 // "  ##targetNamespace  " must resolve to the target namespace, not be mistaken for
 // a literal URI. Every caller (schema-level root/include/redefine/import and the
 // idc/CTA local selector/field paths) routes through here, so the collapse is
-// centralized here rather than duplicated per call site.
+// centralized here, and duplicated at no call site.
 func resolveXPathDefaultNSToken(elem *helium.Element, raw, targetNS string) string {
 	collapsed := normalizeWhiteSpace(raw, "collapse")
 	switch collapsed {
@@ -1552,7 +1552,7 @@ func (c *compiler) resolveIDCReferQName(ctx context.Context, elem *helium.Elemen
 // element's in-scope namespaces. A prefixed ref resolves its prefix; a prefixed
 // ref whose prefix is not bound in scope is a fatal schema error (reported via
 // reportUnboundQNamePrefix, mirroring every other QName-valued schema attribute)
-// rather than silently mapping to the empty namespace — the returned bool reports
+// and never maps to the empty namespace — the returned bool reports
 // that so resolveConstraintRefs can suppress its own "unknown constraint"
 // diagnostic. An unprefixed ref uses the in-scope default namespace, falling back
 // to the schema's target namespace (identity-constraints live in the target

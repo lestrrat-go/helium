@@ -603,7 +603,7 @@ func TestOpenContent_DirectProhibitedParticleRuntime(t *testing.T) {
 
 // TestOpenContent_AllNonEmittingGroup covers the gauntlet finding that pruning a
 // group down to ZERO members (e.g. an xs:choice all of whose branches are
-// maxOccurs=0) must drop the group rather than leave an empty group whose matcher
+// maxOccurs=0) must drop the group, leaving no empty group whose matcher
 // reports "missing" — the all-prohibited declared model emits nothing, so every
 // child routes to open content.
 func TestOpenContent_AllNonEmittingGroup(t *testing.T) {

@@ -322,7 +322,7 @@ func restoreMovedContent(moved []movedContent) {
 		}
 		// No anchor became ready this pass. A well-formed tree cannot reach here
 		// (sibling links form a strict order with no cycle), but never spin:
-		// detach the rest so they end up cleanly unlinked rather than left
+		// detach the rest so they end up cleanly unlinked, never left
 		// double-linked inside the discarded Object.
 		for _, m := range moved {
 			if _, ok := pending[m.node]; !ok {
@@ -412,7 +412,7 @@ func restoreOneContent(m movedContent, pending map[helium.Node]struct{}) bool {
 			return true
 		}
 	}
-	// Last resort: leave the node detached rather than double-linked.
+	// Last resort: leave the node detached, and never double-linked.
 	helium.UnlinkNode(m.node)
 	return true
 }

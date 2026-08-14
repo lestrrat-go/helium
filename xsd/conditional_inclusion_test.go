@@ -408,7 +408,7 @@ func TestConditionalInclusion(t *testing.T) {
 		// sub-collector during the pre-pass, then fails parseSchemaChildren on a
 		// nameless top-level complexType (an early `return err` path in loadImport).
 		// The sub-collector's diagnostic and error count must still be propagated to
-		// the parent (so the compile fails) rather than silently dropped behind the
+		// the parent (so the compile fails), and never dropped behind the
 		// import's I/O-warning demotion.
 		const mainXSD = "vc_imp_main.xsd"
 		fsys := fstest.MapFS{

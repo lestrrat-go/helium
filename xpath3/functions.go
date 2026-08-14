@@ -272,8 +272,8 @@ func isExtensionBuiltin(fn Function) bool {
 // StandardFunctionAcceptsArity reports whether (uri, name) is a STANDARD F&O 3.1
 // function or a built-in type constructor (i.e. registered and NOT a helium
 // extension) that accepts the given arity. Conformance-restricted static contexts
-// such as XSD 1.1 conditional type assignment must use this rather than
-// BuiltinFunctionAcceptsArity so that forward-looking extension functions (e.g.
+// such as XSD 1.1 conditional type assignment must use this, and never
+// BuiltinFunctionAcceptsArity, so that forward-looking extension functions (e.g.
 // fn:flatten) are not treated as available.
 func StandardFunctionAcceptsArity(uri, name string, arity int) bool {
 	fn, ok := builtinFunctions3[QualifiedName{URI: uri, Name: name}]
@@ -339,7 +339,7 @@ func seqToStringErr(ctx context.Context, seq Sequence) (string, error) {
 // that has no atomizable typed value: err:FOTY0012 (an element-only-typed node)
 // or err:FOTY0013 (a function or map item). Option extractors that otherwise map
 // a conversion failure to their own bad-value error code (XPTY0004 / FOJS0005)
-// must let these dynamic errors surface unchanged rather than masking them, so
+// must let these dynamic errors surface unchanged, masking none of them, so
 // that atomizing such a value as an option value reports FOTY0012/FOTY0013
 // consistently with fn:data and the xs:string? coercion.
 func isNoTypedValueError(err error) bool {
@@ -457,7 +457,7 @@ func coerceArgToInteger(seq Sequence) (int64, error) {
 		return v, nil
 	case *big.Int:
 		// Int64() silently wraps a value outside int64 range. Clamp to the
-		// signed-64 extremes so callers treat it as out of range rather than a
+		// signed-64 extremes so callers treat it as out of range, and never as a
 		// wrapped (valid-looking) position.
 		if v.IsInt64() {
 			return v.Int64(), nil

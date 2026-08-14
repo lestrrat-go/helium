@@ -51,7 +51,7 @@ func TestFnDateTimeDerivedArgType(t *testing.T) {
 
 // TestExtractDurationSchemaDerived verifies the duration accessors and the
 // timezone consumers accept a schema-derived duration whose TypeName is a
-// user-defined type carrying a built-in BaseType, rather than rejecting it with
+// user-defined type carrying a built-in BaseType, and never rejects it with
 // XPTY0004 because the custom TypeName is not a built-in subtype.
 func TestExtractDurationSchemaDerived(t *testing.T) {
 	dtd, err := parseXSDDuration("P3DT4H5M6S")
@@ -193,7 +193,7 @@ func TestImplicitTimezoneExactSecRat(t *testing.T) {
 
 // TestValidateTimezoneOffsetUnderflow verifies that a nonzero offset whose
 // seconds underflow float64 (and therefore round to exactly 0.0 in d.Seconds)
-// is still rejected via the exact SecRat-aware rational, rather than being
+// is still rejected via the exact SecRat-aware rational, and never
 // silently accepted as UTC.
 func TestValidateTimezoneOffsetUnderflow(t *testing.T) {
 	lex := "PT0." + strings.Repeat("0", 400) + "1S"

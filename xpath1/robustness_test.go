@@ -44,7 +44,7 @@ func TestEvaluateContext(t *testing.T) {
 	})
 
 	// verifies that a cancelled context aborts a long evaluation promptly with
-	// the context error rather than running to completion.
+	// the context error, well short of running to completion.
 	t.Run("cancelled", func(t *testing.T) {
 		// Build a reasonably large tree so descendant traversal does real work.
 		var sb strings.Builder
@@ -69,7 +69,7 @@ func TestEvaluateContext(t *testing.T) {
 
 	// verifies that a context cancelled before evaluation aborts even the
 	// "simple" (bounded result size) axes promptly with context.Canceled,
-	// rather than materializing the full node-set. child::* and attribute::*
+	// materializing no full node-set. child::* and attribute::*
 	// route through TraverseAxisSimple, which previously never consulted ctx —
 	// so a wide node could yield a full result with a nil error after
 	// cancellation occurred.
@@ -199,7 +199,7 @@ func TestNodeSetComparisonBounded(t *testing.T) {
 	})
 
 	// Context cancellation is honored mid-compare: a context cancelled before
-	// evaluation aborts the n*n comparison with context.Canceled rather than
+	// evaluation aborts the n*n comparison with context.Canceled, well short of
 	// running to completion.
 	t.Run("context cancellation honored", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
@@ -209,7 +209,7 @@ func TestNodeSetComparisonBounded(t *testing.T) {
 	})
 
 	// The comparison path itself owns the string-value work: the right-hand
-	// node-set comes from a custom function rather than a location path, so
+	// node-set comes from a custom function, and no location path, so
 	// eval()'s top-level cancellation check runs (uncancelled) BEFORE the
 	// operands are evaluated. The function cancels the context as a side effect
 	// just before handing back the node-set, so the cancellation is honored

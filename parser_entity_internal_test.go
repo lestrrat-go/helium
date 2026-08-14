@@ -12,8 +12,8 @@ import (
 
 // nilPEHandler embeds a TreeBuilder but reports every parameter entity as
 // "not declared but not an error" — i.e. returns (nil, nil) — which drives
-// parseStringPEReference down the branch that clears pctx.valid (rather than
-// erroring on a missing PE). This is exactly the live-state mutation the
+// parseStringPEReference down the branch that clears pctx.valid, in place of
+// erroring on a missing PE. This is exactly the live-state mutation the
 // validation pass must snapshot and restore.
 type nilPEHandler struct {
 	*TreeBuilder
@@ -48,7 +48,7 @@ func TestValidateEntityValueRefs(t *testing.T) {
 		pctx.treeBuilder = tb
 
 		// An external subset lets an UNRESOLVED PE reference take the path that clears
-		// pctx.valid (rather than erroring out as a missing PE), while still always
+		// pctx.valid, in place of erroring out as a missing PE, while still always
 		// setting pctx.hasPERefs. This is exactly the live-state mutation the
 		// validation pass must not leak.
 		pctx.hasExternalSubset = true
@@ -170,7 +170,7 @@ func TestUndefinedParameterEntity(t *testing.T) {
 
 	// The decode branch directly: an undeclared parameter entity resolved through
 	// the (nil, nil) convention must expand to nothing (consistent with
-	// expandEntityValueForRefCheck) rather than panic, and must not surface an error.
+	// expandEntityValueForRefCheck), never panic, and must not surface an error.
 	t.Run("decodeEntities expands it to nothing", func(t *testing.T) {
 		pctx := &parserCtx{}
 		require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
@@ -201,8 +201,8 @@ func TestUndefinedParameterEntity(t *testing.T) {
 // TestEntityHardCeiling verifies the absolute entity-expansion ceiling trips
 // even when the amplification ratio check is disabled
 // (MaxEntityAmplification(-1)). It lowers entityHardCeiling for the duration of
-// the test so the ceiling can be exercised with a modest document rather than
-// expanding toward the production 1 GB cap (which risked CI OOM).
+// the test so the ceiling can be exercised with a modest document, well short of
+// the production 1 GB cap (which risked CI OOM).
 func TestEntityHardCeiling(t *testing.T) {
 	orig := entityHardCeiling
 	entityHardCeiling = 50_000 // tiny ceiling: trips well under any real memory

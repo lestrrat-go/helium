@@ -142,7 +142,7 @@ func TestIDCCrossElementKeyRefOutOfScope(t *testing.T) {
 
 // TestIDCKeyRefUnboundReferPrefix covers an xs:keyref/@refer that uses a
 // namespace prefix not bound in scope. @refer is a QName, so an unbound prefix is
-// a fatal schema compilation error rather than being silently accepted (which the
+// a fatal schema compilation error, and is never silently accepted (which the
 // previous local-name-only matching did).
 func TestIDCKeyRefUnboundReferPrefix(t *testing.T) {
 	t.Parallel()

@@ -10,7 +10,7 @@ import (
 )
 
 // A mutual xs:import cycle between distinct namespaces is legal XSD and must
-// TERMINATE cleanly rather than recurse without bound. A chain like
+// TERMINATE cleanly, recursing without bound nowhere. A chain like
 // A(urn:a) → B(urn:b) → C(urn:c) → A(urn:a) is invisible to the per-compiler
 // `importedNS` map (each step is a fresh namespace at its import site); the
 // shared active-import-ancestry set short-circuits the back-edge to a document

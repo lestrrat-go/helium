@@ -38,7 +38,7 @@ func namespaceHeavyDoc(decls, pad int, signedInfoPad bool) string {
 	b.WriteString(`<ds:Reference URI=""><ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>`)
 	b.WriteString(`<ds:DigestValue>AAAA</ds:DigestValue></ds:Reference>`)
 	if signedInfoPad {
-		// The padding is wrapped rather than left as a direct SignedInfo child so
+		// The padding is wrapped, and never left as a direct SignedInfo child, so
 		// this document measures the canonicalization node set alone.
 		b.WriteString(`<pad>`)
 		b.WriteString(strings.Repeat(`<e a="1"/>`, pad))
@@ -124,7 +124,7 @@ func TestVerifyNamespaceHeavyDocument(t *testing.T) {
 // processing instruction — so this transform reads no namespace at all, and the
 // same document must not become two orders of magnitude more expensive for
 // naming it. wholeDoc selects the URI="" form, whose selection is the whole
-// document rather than the <bulk> subtree.
+// document, well beyond the <bulk> subtree.
 func base64RetrievalDoc(decls, pad int, wholeDoc bool) string {
 	src := strings.Replace(namespaceHeavyDoc(decls, pad, false),
 		`<ds:Transform Algorithm="`+xmldsig1.C14N10+`"/>`,
@@ -267,7 +267,7 @@ func xpathFilterRetrievalDoc(decls, pad int) string {
 }
 
 // TestVerifyDeadlineDuringNodeSetConstruction pins that a deadline stops node-set
-// construction rather than only being noticed once the whole set is built. The
+// construction while it runs, well before the whole set is built. The
 // document costs seconds of work to canonicalize, so a deadline an order of
 // magnitude shorter must surface as the deadline error.
 func TestVerifyDeadlineDuringNodeSetConstruction(t *testing.T) {

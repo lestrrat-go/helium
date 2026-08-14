@@ -9,7 +9,7 @@ import (
 )
 
 // TestIDCValueSpaceKeys covers identity-constraint key comparison in the XSD
-// value space rather than the lexical space (XSD 3.11.4). For an xs:integer
+// value space, and never the lexical space (XSD 3.11.4). For an xs:integer
 // field, "5", "+5", and "05" denote the same value and must be treated as the
 // same key for uniqueness and keyref matching.
 func TestIDCValueSpaceKeys(t *testing.T) {

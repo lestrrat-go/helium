@@ -92,7 +92,7 @@ func TestPrefixedFnStreamabilityXSLTLayer(t *testing.T) {
 // calls to special-cased built-ins classify the same as their unprefixed forms.
 // The parser keeps the whole braced spelling in FunctionCall.Name with an empty
 // Prefix, so the XSLT streamability gates must normalize it via the shared
-// lexicon.StreamFnLocalName helper rather than comparing raw names.
+// lexicon.StreamFnLocalName helper, comparing no raw names.
 func TestEQNameFnStreamabilityXSLTLayer(t *testing.T) {
 	const fnNS = "http://www.w3.org/2005/xpath-functions"
 	compile := func(t *testing.T, src string) *xpath3.Expression {

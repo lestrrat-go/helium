@@ -28,8 +28,8 @@ func (ctx *parserCtx) parseCDataContent() (string, error) {
 	off := 0
 	for {
 		// Enforce the node-content cap during accumulation so a giant CDATA
-		// section fails before its closing ]]> is reached, rather than after
-		// buffering the whole run. Checking here also bounds cur.PeekAt(off)
+		// section fails before its closing ]]> is reached, and before
+		// the whole run is buffered. Checking here also bounds cur.PeekAt(off)
 		// growth (and thus the cursor's internal buffer).
 		if ctx.nodeContentTooLong(buf.Len()) {
 			return "", ErrNodeContentTooLarge
@@ -79,7 +79,7 @@ func (pctx *parserCtx) parseMisc(ctx context.Context) error {
 	for {
 		// Check the context BEFORE cur.Done(), which may refill the cursor
 		// from an io.Reader and block; this lets a cancelled context be
-		// observed between reads rather than after a blocking refill.
+		// observed between reads, ahead of any blocking refill.
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -295,7 +295,7 @@ func isXMLCharValue(c uint32) bool {
 // The C0/C1 control characters (0x1-0x1F, 0x7F-0x9F) the XML 1.0 Char
 // production forbids are valid XML 1.1 characters; only U+0000 is disallowed.
 // XML 1.1 requires the restricted characters to appear as character references
-// rather than literally, so this predicate governs only the char-reference
+// and never literally, so this predicate governs only the char-reference
 // value check.
 func isXML11CharValue(c uint32) bool {
 	if c == 0 {

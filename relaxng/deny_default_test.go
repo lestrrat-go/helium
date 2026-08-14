@@ -78,7 +78,7 @@ func TestCompile_DenyAllFSByDefault(t *testing.T) {
 
 // A single include/externalRef target larger than the configured
 // MaxResourceBytes cap must be rejected with a clear "exceeds the maximum
-// resource size" error rather than read in full (RNG-008).
+// resource size" error, and is never read in full (RNG-008).
 func TestCompile_MaxResourceBytes(t *testing.T) {
 	t.Parallel()
 

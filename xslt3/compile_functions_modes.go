@@ -21,7 +21,7 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	// Capture the declaration-site static namespace context BEFORE validating
 	// the @as sequence type, so that schema-element()/schema-attribute() (and
 	// plain element/attribute tests) resolve their prefixes against the context
-	// in scope at this element rather than against the runtime stylesheet-wide
+	// in scope at this element, and never against the runtime stylesheet-wide
 	// map. The in-scope bindings are derived from the element's own and ancestor
 	// xmlns declarations on the DOM tree — that is authoritative and immune to
 	// pollution of the mutable c.nsBindings by earlier xsl:include processing.
@@ -91,7 +91,7 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 // canonicalSequenceTypeKey returns a namespace-resolved canonical string for an
 // @as sequence type. It reuses the xpath3 sequence-type parser AST and the single
 // resolveSequenceTypeQName resolver so that the XTSE3087 cross-module agreement
-// check compares the meaning of two types rather than their lexical form: two
+// check compares the meaning of two types, and never their lexical form: two
 // declarations agree iff their canonical keys are equal. On a parse failure (the
 // type was already rejected upstream) it falls back to whitespace-normalized text.
 func canonicalSequenceTypeKey(as string, resolve nsResolver, defaultElemNS string, hasDefaultElemNS bool) string {
@@ -246,7 +246,7 @@ func writeCanonicalNodeTest(b *strings.Builder, nt xpath3.NodeTest, resolve nsRe
 
 // isBuiltinXSDLocalName reports whether an unprefixed type name denotes a
 // built-in XML Schema type (interpreted in the XSD namespace) per the runtime
-// normalizeTypeName mapping, rather than a user type in no namespace.
+// normalizeTypeName mapping, and no user type in no namespace.
 func isBuiltinXSDLocalName(local string) bool {
 	switch local {
 	case lexicon.TypeString, "integer", "decimal", "double", "float",

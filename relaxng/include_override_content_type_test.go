@@ -70,7 +70,7 @@ func TestIncludeOverrideContentTypeCheck(t *testing.T) {
 		// append-only scope list before main.rng OVERRIDES x (deleting it from the
 		// live scope). The nested-grammar scope is now DEAD — unreachable from the
 		// live start — so its bad define must NOT be content-type checked. Seeding
-		// the check from every append-only scope, rather than from the live start
+		// the check from every append-only scope, in place of the live start
 		// graph, wrongly flags it.
 		badNested := `<element name="x">` +
 			`<grammar ` + ns + `>` +

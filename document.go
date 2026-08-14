@@ -274,7 +274,7 @@ func (d *Document) Version() string {
 
 // SetVersion sets the document's XML declaration version (e.g. "1.0" or "1.1").
 // Serialization consults this to decide whether XML 1.1 restricted control
-// characters are emitted as character references rather than rejected.
+// characters are emitted as character references instead of being rejected.
 func (d *Document) SetVersion(v string) {
 	d.version = v
 }
@@ -897,7 +897,7 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
 // bool for VC-error callers, mirroring xmlIsMixedElement), this returns the raw
 // content-model type so whitespace classification can apply libxml2 areBlanks'
 // own decl switch, in which EMPTY and UNDEFINED fall through to the heuristic
-// rather than being treated as mixed.
+// instead of counting as mixed.
 func (d *Document) elementDeclType(name string) (enum.ElementType, bool) {
 	for _, dtd := range []*DTD{d.intSubset, d.extSubset} {
 		if dtd == nil {
@@ -1151,13 +1151,13 @@ func (d *Document) RegisterID(id string, elem *Element) {
 
 // IDTable returns the document's ID->element table populated during parsing
 // (mirroring libxml2's xmlAddID). The returned map is the document's own, not a
-// copy, and is nil for documents built without an interned ID table (e.g. via the
-// API rather than the parser); callers MUST NOT mutate it — writing to it
+// copy, and is nil for documents built without an interned ID table (e.g. one the API built and
+// the parser never saw); callers MUST NOT mutate it — writing to it
 // corrupts the document's ID index. It lets a derived document (e.g. an
 // xsl:strip-space copy) rebuild an equivalent table by translating each entry's
 // element through the original->copy correspondence, preserving the interned
-// table's identity and O(1) lookup fidelity rather than re-deriving ids through
-// the lazy O(n) GetElementByID fallback walk.
+// table's identity and O(1) lookup fidelity. Re-deriving ids would fall back to
+// the lazy O(n) GetElementByID walk.
 func (d *Document) IDTable() map[string]*Element {
 	return d.ids
 }

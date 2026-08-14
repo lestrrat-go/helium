@@ -212,7 +212,7 @@ func TestSerializeResultText(t *testing.T) {
 }
 
 // Top-level xsl:comment and xsl:processing-instruction output uses standalone
-// adaptive-item serialization rather than an XML declaration.
+// adaptive-item serialization, and no XML declaration.
 func TestPrimaryAdaptiveCommentAndProcessingInstruction(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -843,7 +843,7 @@ func requireControlCharRef(t *testing.T, out string) {
 }
 
 // SerializeItems with method="xml" must propagate the writer's invalid-char
-// rejection as SERE0006 rather than silently truncating the output. Under an
+// rejection as SERE0006, truncating no output. Under an
 // XML 1.1 OutputDef version, U+0001 is a legal character reference, so the same
 // item serializes with nil error and a char reference instead.
 func TestSerializeItemsXMLInvalidChar(t *testing.T) {

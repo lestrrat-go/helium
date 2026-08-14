@@ -11,7 +11,7 @@ import (
 
 // TestValueOfNodeSetStringValue verifies that a <value-of> over a node-set
 // emits the XPath 1.0 string-value (the text content of the first node in
-// document order) rather than the node's element name.
+// document order), and never the node's element name.
 func TestValueOfNodeSetStringValue(t *testing.T) {
 	const schemaSrc = `<?xml version="1.0" encoding="UTF-8"?>
 <schema xmlns="http://purl.oclc.org/dsdl/schematron">

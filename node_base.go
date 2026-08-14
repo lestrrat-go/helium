@@ -78,8 +78,8 @@ func SetNodeBaseURI(n Node, uri string) {
 // url.ResolveReference.
 //
 // Native Windows paths (a drive-letter prefix such as "C:\\dir\\doc.xml" or a
-// backslash/UNC path) are recognized and resolved with local-path semantics
-// rather than being handed to url.Parse, which would otherwise read the drive
+// backslash/UNC path) are recognized and resolved with local-path semantics,
+// and never handed to url.Parse, which would read the drive
 // letter "C" as a URI scheme and emit garbage like "c:///child.xml". POSIX
 // behavior is unchanged: only inputs whose string shape is Windows-native take
 // the native branch, so the shape is recognized — and tested — on any GOOS.

@@ -12,7 +12,7 @@ import (
 // re-parsing an already-resolved attribute value. xsl:copy-of of an element (and
 // xsl:copy) duplicates the source element into the result tree via a deep copy;
 // the attribute value returned by the parser is already entity-resolved, so it
-// must be stored LITERALLY (and re-escaped by the serializer) rather than fed
+// must be stored LITERALLY (and re-escaped by the serializer), and never fed
 // back through a value-parsing setter (SetParsedAttribute), which would choke on
 // a bare '&' (an "entity was unterminated" error) or silently double-resolve
 // '&amp;amp;'.

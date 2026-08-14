@@ -73,7 +73,7 @@ func TestResolveSchemaURI(t *testing.T) {
 
 // TestResolveSchemaURIError verifies that an unresolvable URI reference (an
 // invalid RFC 3986 reference such as "%zz.xsd" against an https base) is
-// REJECTED with an error rather than silently filepath-collapsed into a
+// REJECTED with an error, and never filepath-collapsed into a
 // corrupted, authority-dropped name like "https:/example.com/s/%zz.xsd".
 func TestResolveSchemaURIError(t *testing.T) {
 	for _, tc := range []struct {

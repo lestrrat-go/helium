@@ -116,8 +116,8 @@ func TestCycleGuards(t *testing.T) {
 		require.NotContains(t, visited, "e2", "Walk must not spill into the DTD's other entity declarations")
 	})
 
-	// Walk returns ErrWalkCycle (rather than
-	// reporting SUCCESS) on a corrupt ONE-node sibling self-loop: a single child
+	// Walk returns ErrWalkCycle, and never reports
+	// SUCCESS, on a corrupt ONE-node sibling self-loop: a single child
 	// whose next pointer points at itself (c.next == c). nextWalkSibling must NOT
 	// silently terminate the self-loop — the duplicate flows back to the per-frame
 	// seenChildren set, which detects it, exactly as for a longer sibling cycle.
@@ -140,7 +140,7 @@ func TestCycleGuards(t *testing.T) {
 	// the requirement that Walk does not
 	// switch to a global visited set: two references to the same entity form a DAG
 	// where the shared Entity node is reached on two different paths, and Walk must
-	// visit it on each occurrence rather than deduplicating it away.
+	// visit it on each occurrence, deduplicating nothing away.
 	t.Run("Walk visits a shared entity twice", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 		dtd, err := doc.CreateInternalSubset("root", "", "")

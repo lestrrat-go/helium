@@ -241,7 +241,7 @@ func TestXHTMLRejects(t *testing.T) {
 
 	t.Run("injected names", func(t *testing.T) {
 		// newXHTMLDoc builds a document whose internal subset is an XHTML DTD, so
-		// serialization routes through dumpXHTMLNode / dumpXHTMLAttrList rather than
+		// serialization routes through dumpXHTMLNode / dumpXHTMLAttrList, bypassing
 		// the generic writeNode path.
 		newXHTMLDoc := func(t *testing.T) *helium.Document {
 			t.Helper()

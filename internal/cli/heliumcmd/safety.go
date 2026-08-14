@@ -55,8 +55,8 @@ func readInput(r io.Reader, name string, maxBytes int64) ([]byte, error) {
 	}
 
 	// Read up to the cap, then probe for one more byte to distinguish
-	// "exactly at cap" from "over cap". Probing separately (rather than
-	// reading maxBytes+1) avoids overflow when maxBytes == math.MaxInt64.
+	// "exactly at cap" from "over cap". Probing separately, in place of
+	// reading maxBytes+1, avoids overflow when maxBytes == math.MaxInt64.
 	buf, err := io.ReadAll(io.LimitReader(r, maxBytes))
 	if err != nil {
 		return nil, err //nolint:wrapcheck // caller reports raw error
@@ -102,7 +102,7 @@ type pendingOutput struct {
 
 // newPendingOutput creates a temporary file in the same directory as the final
 // target and prepares the atomic rename. When dest is a symlink, the rename
-// target is the resolved real file rather than the link itself: os.Rename would
+// target is the resolved real file, and never the link itself: os.Rename would
 // otherwise replace the symlink with a regular file, leaving the linked-to file
 // untouched (a regression from os.Create, which writes THROUGH symlinks). For a
 // non-symlink dest the target is dest unchanged.
@@ -145,7 +145,7 @@ func newPendingOutput(dest string) (*pendingOutput, error) {
 // case). When target exists it must be a regular file (refusing directories,
 // devices, fifos, etc.) and must be writable: os.Rename would otherwise
 // overwrite a read-only file and the command would exit 0, masking the failure.
-// Writability is probed with an O_WRONLY open (closed immediately) rather than
+// Writability is probed with an O_WRONLY open (closed immediately), never
 // inferred from the mode bits, so it honors ownership and ACLs the way the
 // subsequent write would.
 func checkExistingTargetWritable(target string) error {
@@ -319,7 +319,7 @@ func newConfinedDirFS(file string) fs.FS {
 // here (xsl:include/xsl:import, plus stylesheet-location reads via the retained
 // resolver) are subject to the same byte limit as the top-level inputs. xslt3
 // drains the returned reader with io.ReadAll, so the resolver must enforce the
-// cap itself rather than relying on the caller; a maxInputBytes <= 0 disables
+// cap itself, with no help from the caller; a maxInputBytes <= 0 disables
 // it (unbounded read).
 type fileResolver struct {
 	maxInputBytes int64

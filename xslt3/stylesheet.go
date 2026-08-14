@@ -166,7 +166,7 @@ type globalContextItemDef struct {
 	As  string // sequence type (e.g., "document-node(element(codd))")
 	// Namespaces captures the in-scope namespace bindings (prefix→URI) at the
 	// declaration element, so the @as sequence type resolves prefixes exactly
-	// as written at the declaration site rather than against the runtime
+	// as written at the declaration site, and never against the runtime
 	// stylesheet-wide namespace map.
 	Namespaces map[string]string
 	// XPathDefaultNS is the in-scope xpath-default-namespace (default element

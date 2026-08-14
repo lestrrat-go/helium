@@ -120,7 +120,7 @@ func TestOpenContent_ChoiceEmptiablePrune(t *testing.T) {
 // TestComplexContent_StrayChildRejected covers the gauntlet finding that
 // <xs:complexContent> has a (annotation?, (restriction | extension)) content model:
 // any other child — notably a stray <xs:openContent>, which belongs INSIDE the
-// restriction/extension wrapper — must be a schema error rather than silently
+// restriction/extension wrapper — must be a schema error, and is never silently
 // ignored.
 func TestComplexContent_StrayChildRejected(t *testing.T) {
 	t.Parallel()

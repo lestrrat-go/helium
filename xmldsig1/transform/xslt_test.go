@@ -112,7 +112,7 @@ func TestXSLTTextOutputPreservesTrailingNewline(t *testing.T) {
 }
 
 // TestXSLTRejectsMalformedStylesheet proves a non-well-formed stylesheet is an
-// error rather than a silent empty transform.
+// error, and never a silent empty transform.
 func TestXSLTRejectsMalformedStylesheet(t *testing.T) {
 	_, err := transform.XSLT{}.TransformXSLT(t.Context(), []byte("not a stylesheet <"), []byte(`<a/>`))
 	require.Error(t, err)

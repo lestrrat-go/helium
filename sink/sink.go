@@ -38,7 +38,7 @@ func WithBufferSize(n int) Option {
 // and processed asynchronously by a Handler in a background goroutine.
 //
 // A nil *Sink is safe to use — Handle() is a no-op on a nil receiver. A Sink
-// created with a nil Handler is also safe — items are discarded rather than
+// created with a nil Handler is also safe — items are discarded and never
 // delivered, so delivery never panics.
 //
 // When T is error, *Sink[error] satisfies the helium.ErrorHandler interface.
@@ -109,7 +109,7 @@ func isNilHandler[T any](handler Handler[T]) bool {
 //
 // Handle may be called re-entrantly from within a Handler. In that case it does
 // a non-blocking best-effort send (dropping the item if the buffer is full or
-// the sink is closing) rather than blocking: the calling goroutine is the
+// the sink is closing), and never blocks: the calling goroutine is the
 // worker itself, so blocking on its own buffer would deadlock and would also
 // stall a concurrent Close that waits on in-flight senders.
 func (s *Sink[T]) Handle(ctx context.Context, data T) {

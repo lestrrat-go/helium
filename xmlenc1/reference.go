@@ -18,11 +18,11 @@ import (
 // refScope is the same-document resolution context of one decrypt: the subtree
 // a reference may name and the id index over it. One scope is built per
 // Decrypt/DecryptBytes call and threaded through the parse on parseState, so N
-// references cost one document walk rather than N.
+// references cost one document walk, well under N.
 //
 // It answers what a URI names, and nothing about what has been made of the
 // answer: which targets have already been taken as candidates is a property of
-// the EncryptedData being parsed rather than of URI resolution, so parseState
+// the EncryptedData being parsed, and not of URI resolution, so parseState
 // holds it.
 //
 // It is per-call state and never shared between calls, which is what keeps a
@@ -43,7 +43,7 @@ type refScope struct {
 	// URI="" or a bare "#..." fragment, so nothing here is ever resolved
 	// RELATIVE to a base, and a URI carrying a path is external however that
 	// path compares to this one. The external form does join against a base,
-	// but against the one in force at the element carrying the URI rather than
+	// but against the one in force at the element carrying the URI, and never
 	// this one — resolveExternalCipherReference states why.
 	baseURI string
 
@@ -166,7 +166,7 @@ func parseXPointerID(expr string) (string, bool) {
 // resolveSameDocument returns the single element a same-document URI names
 // within scope, building scope's id index on first use.
 //
-// A CipherReference names a NODE-SET rather than an element, so it resolves
+// A CipherReference names a NODE-SET, and no single element, so it resolves
 // through [resolveCipherReferenceNodeSet] and this function answers only the
 // ds:RetrievalMethod path, where xmldsig-core1 §4.4.3 does name a single
 // element (an xenc:EncryptedKey) and there is no node-set to convert.
@@ -213,7 +213,7 @@ func resolveSameDocument(ctx context.Context, scope *refScope, uri string) (*hel
 
 // cipherReferenceBase64Transform is the one ds:Transform algorithm a
 // CipherReference may declare here: the XMLDSig base64 transform, which decodes
-// its input rather than evaluating anything the document wrote.
+// its input and evaluates nothing the document wrote.
 const cipherReferenceBase64Transform = NamespaceDSig + "base64"
 
 // maxCipherReferenceTransforms bounds how many ds:Transform children one
@@ -226,7 +226,7 @@ const cipherReferenceBase64Transform = NamespaceDSig + "base64"
 // CipherReference carries none or one, and the transform feature is OPTIONAL
 // (xmlenc-core1 §3.3.1) in the first place. The cap is applied as the children
 // are collected, so it holds ahead of the algorithm validation below and a
-// flood of transforms costs one refusal rather than a walk of them all.
+// flood of transforms costs one refusal, well short of a walk of them all.
 const maxCipherReferenceTransforms = 4
 
 // resolveCipherReference dereferences one xenc:CipherReference into the octets
@@ -255,7 +255,7 @@ const maxCipherReferenceTransforms = 4
 //
 // The result is never re-parsed as a document: it goes to the block decryption
 // as ciphertext. So a reference naming the EncryptedData that carries it, or
-// naming itself, is inert rather than recursive and there is no depth to bound.
+// naming itself, is inert, terminating at whatever those octets decrypt to, and there is no depth to bound.
 func resolveCipherReference(ctx context.Context, elem *helium.Element, ps *parseState, budget cipherValueBudget) ([]byte, error) {
 	uri, ok := elem.GetAttribute("URI")
 	if !ok {
@@ -280,7 +280,7 @@ func resolveCipherReference(ctx context.Context, elem *helium.Element, ps *parse
 	// Whatever produced the octets, every transform not already consumed
 	// applies to them in order. The list is at most maxCipherReferenceTransforms
 	// long and every entry has been validated as #base64, so this loop's trip
-	// count is fixed by the cap rather than by the document and each pass only
+	// count is fixed by the cap, and never by the document and each pass only
 	// shrinks the value it is given.
 	for range steps {
 		octets, err = decodeBase64Octets(ctx, octets)
@@ -313,7 +313,7 @@ func resolveCipherReference(ctx context.Context, elem *helium.Element, ps *parse
 // elements", so base64 nested anywhere under the target contributes.
 //
 // Both conversions read the one node-set resolveCipherReferenceNodeSet built,
-// so what a URI selects is decided once rather than re-derived per conversion.
+// so what a URI selects is decided once, and re-derived per conversion never.
 func resolveSameDocumentCipherReference(ctx context.Context, uri string, steps []string, ps *parseState, budget cipherValueBudget) ([]byte, []string, error) {
 	set, err := resolveCipherReferenceNodeSet(ctx, ps.refs, uri)
 	if err != nil {
@@ -331,10 +331,10 @@ func resolveSameDocumentCipherReference(ctx context.Context, uri string, steps [
 }
 
 // cipherReferenceNodeSet is what a same-document CipherReference URI names: the
-// node-set both conversions above consume, described by its selection rather
-// than materialized as a slice.
+// node-set both conversions above consume, described by its selection and
+// materialized as no slice.
 //
-// It is described rather than materialized because the two conversions need
+// It is described this way because the two conversions need
 // different things of it — canonicalization needs every namespace and attribute
 // node the canonicalizer renders, while the #base64 string-value walk needs only
 // character data — and materializing the larger of the two for both would make a
@@ -347,7 +347,7 @@ type cipherReferenceNodeSet struct {
 	// target is the element the selection is rooted at: the named element, or
 	// the document element for the two whole-document forms.
 	target *helium.Element
-	// wholeDoc records that the URI selected the document rather than one
+	// wholeDoc records that the URI selected the document, and not one
 	// element, so the canonicalization can include the top-level processing
 	// instructions that sit outside the document element.
 	wholeDoc bool
@@ -371,13 +371,13 @@ type cipherReferenceNodeSet struct {
 // That section recommends the XPointer forms only "if the application also
 // intends to support any canonicalization that preserves comments", which this
 // one cannot. Canonical XML 1.0 §2.1 likewise makes with-comments a parameter
-// of the METHOD rather than a property of the node-set, xmldsig1 converts a
+// of the METHOD, and no property of the node-set, xmldsig1 converts a
 // transform-free reference with plain C14N 1.0 here too, and Santuario guards
 // comment output the same way — so a comment-bearing form would diverge from
 // both the sibling package and the implementation this package interoperates
 // with.
 //
-// The claim is measurable rather than asserted: bisecting
+// The claim is measurable, and never merely asserted: bisecting
 // [Decryptor.MaxCipherValueBytes] recovers the exact canonical octet count of a
 // resolution, and adding a comment to the target leaves all four counts
 // unchanged — 17 for "#t" and for "#xpointer(id('t'))", 402 for URI="" and 414
@@ -398,7 +398,7 @@ func resolveCipherReferenceNodeSet(ctx context.Context, scope *refScope, uri str
 //
 // enterElement and leaveElement bracket an element's descendants, so a visitor
 // that tracks state down the tree (the namespace bindings in scope, say) can
-// undo it on the way back up rather than recomputing it per node, which is what
+// undo it on the way back up, recomputing nothing per node, which is what
 // keeps the walk linear in the size of the subtree.
 type nodeSetVisitor interface {
 	enterElement(*helium.Element) error
@@ -478,7 +478,7 @@ func (leafVisitor) leaveElement(*helium.Element) {}
 // which is the conversion xmldsig-core1 §4.4.3.3 requires of a node-set that
 // has to become an octet stream.
 //
-// The canonical form is written into a budgetWriter rather than into a plain
+// The canonical form is written into a budgetWriter, and never into a plain
 // buffer, so an attacker-chosen subtree is stopped at the first byte past the
 // remaining allowance instead of being canonicalized in full and rejected
 // afterwards. The budget itself is charged once, with the final total, only
@@ -551,7 +551,7 @@ type canonicalNodeSetCollector struct {
 	// inScope is the running prefix→binding map at the element being visited.
 	// It is nil until the selection root seeds it with that element's whole
 	// in-scope axis, and is mutated and restored as the walk descends and
-	// returns, so the whole walk pays for one map rather than one per element.
+	// returns, so the whole walk pays for one map, and never one per element.
 	inScope map[string]*helium.Namespace
 	// undo holds, per open element, the bindings inScope carried before that
 	// element's declarations were applied, innermost frame last.
@@ -591,7 +591,7 @@ func (c *canonicalNodeSetCollector) leaveElement(*helium.Element) {
 	frame := c.undo[len(c.undo)-1]
 	c.undo = c.undo[:len(c.undo)-1]
 	// Innermost first, so an element that bound one prefix twice restores the
-	// binding it found rather than the one it made in between.
+	// binding it found, and never the one it made in between.
 	for _, binding := range slices.Backward(frame) {
 		if !binding.bound {
 			delete(c.inScope, binding.prefix)
@@ -641,7 +641,7 @@ func (c *canonicalNodeSetCollector) pushSelectionRoot(e *helium.Element) {
 // A declaration that merely repeats the binding already in scope changes
 // nothing and is not a member: the canonicalizer suppresses such a
 // redeclaration against the nearest visible ancestor, so admitting it would
-// have to be suppressed again rather than rendered.
+// have to be suppressed again, and never rendered.
 func (c *canonicalNodeSetCollector) pushDeclarations(e *helium.Element) {
 	var frame []nsBinding
 	var boundDefault bool
@@ -704,7 +704,7 @@ func (c *canonicalNodeSetCollector) visitNode(n helium.Node) error {
 // state across each node boundary because a base64 quantum (and padding itself)
 // may be split between them; only then is the charge made, and only then are
 // the characters the decoder sees built. What is held is therefore bounded by
-// the budget rather than by the size of the selection.
+// the budget, and never by the size of the selection.
 func decodeCipherReferenceNodeSet(ctx context.Context, set cipherReferenceNodeSet, budget cipherValueBudget) ([]byte, error) {
 	var counting nodeSetBase64Counter
 	if err := walkCipherReferenceNodeSet(ctx, set, &counting); err != nil {
@@ -721,7 +721,7 @@ func decodeCipherReferenceNodeSet(ctx context.Context, set cipherReferenceNodeSe
 	}
 	// The characters are already stripped, so this is the decode
 	// xmlbase64.DecodeString performs minus the copy that would convert them to
-	// a string, sized at the count the budget charged rather than at
+	// a string, sized at the count the budget charged, and never at
 	// encoding/base64's own padding-blind DecodedLen.
 	decoded := make([]byte, counting.counter.DecodedLen())
 	n, err := base64.StdEncoding.Decode(decoded, collecting.chars)
@@ -782,8 +782,8 @@ func (v *nodeSetBase64Chars) visitNode(n helium.Node) error {
 //
 // The URI is joined against the base URI in force at elem — the
 // xenc:CipherReference element that WROTE the URI — so it resolves as any other
-// relative reference written at that spot does. The base is computed here
-// rather than taken once from the EncryptedData because xml:base applies per
+// relative reference written at that spot does. The base is computed here,
+// and never taken once from the EncryptedData, because xml:base applies per
 // element: a CipherReference, or anything between it and the EncryptedData, may
 // narrow the base the URI is written in, and a document read from a file
 // carries that file's own URL as the outermost base.
@@ -811,7 +811,7 @@ func resolveExternalCipherReference(ctx context.Context, elem *helium.Element, u
 	if err != nil {
 		return nil, abort(ctx, err)
 	}
-	// A resolver reporting neither a stream nor an error is refused rather than
+	// A resolver reporting neither a stream nor an error is refused, and never
 	// dereferenced: the alternative is a panic raised inside a decrypt of an
 	// unauthenticated document, and this is a third-party implementation the
 	// package cannot check any other way.
@@ -853,7 +853,7 @@ func decodeBase64Octets(ctx context.Context, octets []byte) ([]byte, error) {
 // The wrapper is xenc:Transforms — the xenc namespace, not the ds one, which
 // the xenc schema declares as a local element of type xenc:TransformsType —
 // while its children are ds:Transform. CipherReferenceType declares the wrapper
-// with maxOccurs 1, so a second one is schema-invalid and refused rather than
+// with maxOccurs 1, so a second one is schema-invalid and refused, and never
 // merged.
 //
 // Validating the whole list before returning it is the point: a supported

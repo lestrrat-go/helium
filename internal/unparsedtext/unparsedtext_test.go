@@ -786,8 +786,8 @@ func TestDecodeTextUTF16WithExplicitEncoding(t *testing.T) {
 
 func TestDecodeTextUTF16Malformed(t *testing.T) {
 	// A lone high surrogate (D800) is not a valid UTF-16 code unit on its own.
-	// Decoding it must fail with FOUT1190 rather than silently substituting
-	// U+FFFD and succeeding.
+	// Decoding it must fail with FOUT1190, substituting no
+	// U+FFFD and never succeeding.
 	t.Run("lone high surrogate, explicit utf-16le", func(t *testing.T) {
 		_, err := unparsedtext.DecodeText([]byte{0x00, 0xD8}, "utf-16le")
 		require.Error(t, err)
@@ -824,7 +824,7 @@ func TestDecodeTextUTF16Malformed(t *testing.T) {
 
 	t.Run("lone high surrogate, explicit generic utf-16 with BE BOM", func(t *testing.T) {
 		// The BOM is stripped before decoding, so generic "utf-16" must honor
-		// the BE endianness from the BOM rather than its LE default; the lone
+		// the BE endianness from the BOM, overriding its LE default; the lone
 		// big-endian high surrogate must be rejected.
 		_, err := unparsedtext.DecodeText([]byte{0xFE, 0xFF, 0xD8, 0x00}, "utf-16")
 		require.Error(t, err)

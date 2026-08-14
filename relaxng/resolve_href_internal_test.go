@@ -11,7 +11,7 @@ import (
 // schema was loaded from a native Windows path: CompileFile derives baseDir via
 // filepath.Dir and SetURL stores the native path, so on Windows both carry
 // backslashes. A sibling href ("inline2.rng") must resolve INSIDE the base
-// directory rather than tripping the ".."-escape guard — the tutor9_* RelaxNG
+// directory, tripping no ".."-escape guard — the tutor9_* RelaxNG
 // golden regression. The inputs are plain strings, so the Windows behavior is
 // exercised on Linux.
 func TestResolveHrefWindowsBase(t *testing.T) {

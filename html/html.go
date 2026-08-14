@@ -111,14 +111,14 @@ func (p Parser) Strict(v bool) Parser {
 // consumed run ("&" + name) fits within the cap; over the cap it hard-fails with
 // [ErrContentSizeExceeded] and emits NOTHING. This is enforced uniformly: a SHORT
 // within-lookahead run (e.g. "&ampZ" under a cap of 2) and a SATURATED ambiguous
-// run (e.g. "&amp" followed by a long alphanumeric tail) both hard-fail rather
-// than emit a partial resolution.
+// run (e.g. "&amp" followed by a long alphanumeric tail) both hard-fail, emitting no
+// partial resolution.
 //
 // MaxContentSize also bounds the undecided-encoding deferred prefix: an
 // undeclared-charset [Parser.ParseReader] or push stream whose bytes keep
 // proving valid UTF-8 buffers undecided only up to this cap, and an over-cap
-// undecided-encoding stream is rejected with [ErrContentSizeExceeded] rather
-// than committing to a single Latin-1/UTF-8 interpretation.
+// undecided-encoding stream is rejected with [ErrContentSizeExceeded], committing
+// to no single Latin-1/UTF-8 interpretation.
 //
 // Otherwise this bounds only the streaming scanner / SAX chunk size. DOM
 // construction via
@@ -131,7 +131,7 @@ func (p Parser) Strict(v bool) Parser {
 // it is a HARD cap: these constructs map to a single indivisible SAX event and
 // DOM node and cannot be chunked without corrupting the document, so one
 // exceeding this size before its terminator fails the parse with
-// [ErrContentSizeExceeded] rather than emitting a truncated node. The attribute
+// [ErrContentSizeExceeded] and emits no truncated node. The attribute
 // cap is enforced per byte and also covers '&'-led entity and '&#'-led numeric
 // runs, so an unterminated value cannot buffer without limit.
 //
@@ -147,7 +147,7 @@ func (p Parser) Strict(v bool) Parser {
 // refuses to flush a run whose leading whitespace prefix alone reaches the cap
 // with yet more whitespace beyond it, because doing so would require buffering
 // the run unbounded to learn its significance or parent. Such a run fails the
-// parse with [ErrContentSizeExceeded] rather than parsing successfully. Once a
+// parse with [ErrContentSizeExceeded]. Once a
 // non-whitespace byte is seen the run is known significant and is chunked
 // normally (its leading whitespace, including the whole first non-whitespace
 // rune even when the cap splits it, rides along in the first chunk). Default-mode
@@ -157,7 +157,7 @@ func (p Parser) Strict(v bool) Parser {
 //
 // Indivisible STRUCTURAL token scans — a tag name, end-tag name, attribute name,
 // PUBLIC/SYSTEM DOCTYPE literal, or intra-tag whitespace run — are also HARD-
-// capped, but against a separate structural scan cap rather than this value:
+// capped, but against a separate structural scan cap and not this value:
 // because callers legitimately set MaxContentSize very small, the structural cap
 // is FLOORED at the 16 MiB default (so ordinary names like "script" always parse)
 // and only grows when MaxContentSize is raised above that floor. An over-cap
@@ -194,8 +194,8 @@ func (p Parser) parseConfig() parseConfig {
 // default): an undeclared stream that ends with valid UTF-8 at or below the cap
 // is accepted, but if the cap fills with no non-UTF-8 byte and more input still
 // follows the encoding cannot be settled within the bound, so the reader fails
-// closed with a bounded-input error ([ErrContentSizeExceeded]) rather than
-// committing to UTF-8 and risking a silently mis-decoded later byte.
+// closed with a bounded-input error ([ErrContentSizeExceeded]). Committing to
+// UTF-8 here would risk a silently mis-decoded later byte.
 func (p Parser) ParseReader(ctx context.Context, r io.Reader) (*helium.Document, error) {
 	tb := newTreeBuilder()
 	hp := newParserFromReader(ctx, r, tb, p.parseConfig())
@@ -299,7 +299,7 @@ type PushParser = push.Parser[*helium.Document]
 // keeps proving valid UTF-8 stays undecided and buffers up to a bounded prefix
 // (the configured [Parser.MaxContentSize], 16 MiB by default); if it ends with
 // valid UTF-8 at or below the cap it is accepted, otherwise it fails closed with
-// a bounded-input error ([ErrContentSizeExceeded]) rather than committing to a
+// a bounded-input error ([ErrContentSizeExceeded]), committing to no
 // possibly-wrong UTF-8 interpretation. The completed Document is returned once
 // [PushParser.Close] is called.
 func (p Parser) NewPushParser(ctx context.Context) *PushParser {

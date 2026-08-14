@@ -16,7 +16,7 @@ import (
 
 // compileSchemaFromURI loads a schema document through the compiler's
 // configured URIResolver (default-deny: with no resolver, the load is
-// refused rather than falling back to os.ReadFile) and compiles it
+// refused, falling back to no os.ReadFile) and compiles it
 // in-memory. The resolver provides the same secure-by-default and
 // path-traversal sandboxing model that xsl:import/include stylesheet
 // loads use.
@@ -203,7 +203,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 	baseURI := c.baseURI
 	if xmlBase, ok := elem.GetAttributeNS("base", lexicon.NamespaceXML); ok && xmlBase != "" {
 		// Fold xml:base into the effective base using the URI-aware schema
-		// resolver rather than helium.BuildURI. BuildURI filepath.Join's for the
+		// resolver, and never helium.BuildURI. BuildURI filepath.Join's for the
 		// file: scheme, collapsing a canonical "file:///tmp/styles/main.xsl" base
 		// to a bare local path and dropping the scheme/authority; the resolver
 		// preserves file: and other no-authority URI spellings via RFC 3986 so

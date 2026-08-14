@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The decryptor's key material is fixed rather than generated per run, because
+// The decryptor's key material is fixed, and never generated per run, because
 // it belongs to the target and not to the input: a crasher the fuzzing engine
 // writes under testdata/fuzz has to reproduce, and every path past a successful
 // key unwrap depends on which key was configured. These keys exist only here
@@ -81,7 +81,7 @@ func FuzzDecrypt(f *testing.F) {
 
 	// Three documents this package produced itself, one per key-protection
 	// mechanism, so the engine starts from inputs that decrypt all the way
-	// through rather than from shapes that fail at the parse gate.
+	// through, and never from shapes that fail at the parse gate.
 	f.Add(fuzzSeedDocument(f, xmlenc1.NewEncryptor().
 		BlockAlgorithm(xmlenc1.AES256CBC).
 		AllowLegacyCBC(true).
@@ -161,8 +161,8 @@ func FuzzDecrypt(f *testing.F) {
 }
 
 // fuzzSeedDocument encrypts one small element and returns the serialized
-// EncryptedData, so a seed is always whatever the current Encryptor emits
-// rather than a transcript that can drift from it.
+// EncryptedData, so a seed is always whatever the current Encryptor emits, and never a
+// transcript that can drift from it.
 func fuzzSeedDocument(f *testing.F, encryptor xmlenc1.Encryptor) []byte {
 	f.Helper()
 	doc, err := helium.NewParser().Parse(f.Context(), []byte(`<root id="r"><inner attr="v">secret</inner>tail</root>`))

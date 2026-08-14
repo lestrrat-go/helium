@@ -70,7 +70,7 @@ func TestOutputEncoding(t *testing.T) {
 
 		// The declaration is a valid EncName, so the output reparses and the content
 		// round-trips. Re-serialize forcing UTF-8 so the recovered character is the
-		// raw UTF-8 "é" rather than its Latin-1 byte.
+		// raw UTF-8 "é", never its Latin-1 byte.
 		rt, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 		var rtbuf bytes.Buffer
@@ -80,7 +80,7 @@ func TestOutputEncoding(t *testing.T) {
 
 	// asserts that every registered
 	// US-ASCII alias takes the same char-referencing path as the canonical
-	// "US-ASCII" name, rather than emitting raw UTF-8 because the loaded encoder
+	// "US-ASCII" name, and emits no raw UTF-8 just because the loaded encoder
 	// delegates to UTF-8.
 	t.Run("ASCII aliases match US-ASCII", func(t *testing.T) {
 		src := []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root a=\"é\">☃</root>")
@@ -113,7 +113,7 @@ func TestOutputEncoding(t *testing.T) {
 
 	// asserts that an explicitly set
 	// OutputEncoding naming an encoding the writer cannot emit is a hard error,
-	// rather than silently emitting UTF-8 under a false declaration.
+	// and never silently emits UTF-8 under a false declaration.
 	t.Run("unsupported encoding errors", func(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestOutputEncodingUSASCII(t *testing.T) {
 
 	// asserts that an explicit US-ASCII
 	// OutputEncoding override escapes every non-ASCII character as a numeric
-	// character reference rather than emitting raw UTF-8 under a US-ASCII
+	// character reference, emitting no raw UTF-8 under a US-ASCII
 	// declaration. US-ASCII can represent any document via character references, so
 	// this is not an unsupported-encoding error; the result is valid US-ASCII and
 	// reparses to the original content.
@@ -184,7 +184,7 @@ func TestOutputEncodingUSASCII(t *testing.T) {
 	// asserts that under an explicit
 	// US-ASCII OutputEncoding a non-ASCII entity-reference name or DTD-internal name
 	// (DOCTYPE, <!ENTITY>, <!ELEMENT>, <!ATTLIST> element/attribute name, enumeration
-	// token) fails with ErrUnsupportedOutputEncoding rather than emitting raw UTF-8
+	// token) fails with ErrUnsupportedOutputEncoding, emitting no raw UTF-8
 	// under a US-ASCII declaration, and that no raw non-ASCII octet leaks into the
 	// buffer before the error fires.
 	t.Run("rejects non-ASCII names", func(t *testing.T) {
@@ -304,7 +304,7 @@ func TestOutputEncodingUSASCII(t *testing.T) {
 	// explicit US-ASCII OutputEncoding a non-ASCII character in a context that
 	// cannot hold a character reference — comment text, CDATA section, PI
 	// target/data, an element/attribute name — fails with
-	// ErrUnsupportedOutputEncoding rather than emitting raw UTF-8 under a US-ASCII
+	// ErrUnsupportedOutputEncoding, emitting no raw UTF-8 under a US-ASCII
 	// declaration.
 	t.Run("rejects reference-free contexts", func(t *testing.T) {
 		cases := map[string]string{
@@ -350,7 +350,7 @@ func TestOutputEncodingUSASCII(t *testing.T) {
 	// asserts that under an
 	// explicit US-ASCII OutputEncoding (the octet-producing WriteTo path) a
 	// character-map replacement string carrying a non-ASCII character fails with a
-	// labelled ErrUnsupportedOutputEncoding rather than emitting the raw replacement
+	// labelled ErrUnsupportedOutputEncoding, emitting no raw replacement
 	// verbatim (a character map is never re-escaped, so a non-ASCII replacement would
 	// leak raw UTF-8 under the US-ASCII declaration). Covers U1 in both text and
 	// attribute-value content.
@@ -449,7 +449,7 @@ func TestSerializeWithoutEncodingOverride(t *testing.T) {
 
 	// asserts that fn:serialize's
 	// declaration-only US-ASCII mode (asciiOutput set, but the octets stay a UTF-8
-	// string) keeps a non-ASCII character-map replacement RAW rather than rejecting
+	// string) keeps a non-ASCII character-map replacement RAW, and never rejects
 	// it: the ASCII-reject net and the character-map reject both key on
 	// asciiOutput && !declOnlyEncoding, so declaration-only output is unchanged. Text
 	// outside the character map is still char-referenced.

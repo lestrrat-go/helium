@@ -33,7 +33,7 @@ func baseFacets(td *TypeDef) *FacetSet {
 
 // checkFacetConsistency validates facet constraints for every facet-bearing
 // simple type — named globals AND inline/anonymous (local) simple types. It
-// iterates c.typeDefSources rather than c.schema.types so that inline simple
+// iterates c.typeDefSources, and never c.schema.types, so that inline simple
 // types on elements/attributes (which never enter the named-type table) are
 // checked too; otherwise an invalid bound on an anonymous type would slip
 // through checkFacetValueAgainstBase and become the very no-op this guards
@@ -393,7 +393,7 @@ func (c *compiler) checkFacetValueAgainstBase(ctx context.Context, td *TypeDef, 
 // {value} must be datatype-valid against the {base type definition}; an invalid
 // member (e.g. <xs:enumeration value="+NaN"/> on an xs:float base — signed NaN is
 // not in the float/double lexical space) makes the schema in error and must be
-// rejected at COMPILE time rather than silently compiling into an unsatisfiable
+// rejected at COMPILE time, compiling into no unsatisfiable
 // enumeration that fails at instance-validation time.
 //
 // This applies to ALL varieties — atomic, list, and union. validateValue is
@@ -458,7 +458,7 @@ func (c *compiler) checkEnumValueAgainstBase(ctx context.Context, td *TypeDef, f
 //   - Each enumeration facet literal of a QName/NOTATION-restricted type is
 //     resolved against the literal's captured in-scope namespaces. An unresolved
 //     prefix makes the literal an invalid QName/NOTATION and is reported as a
-//     schema error, rather than silently compiling into an unsatisfiable
+//     schema error, compiling into no unsatisfiable
 //     enumeration.
 //   - A simpleType whose base is (directly) xs:NOTATION with no enumeration facet
 //     is rejected: per XSD, xs:NOTATION may only be used as a base for a
@@ -675,7 +675,7 @@ func (c *compiler) enumLiteralHasUnboundQName(ctx context.Context, ev string, en
 				continue
 			}
 			// A QName/NOTATION carrier may sit inside a member that is itself a list
-			// or a nested union, so detect it recursively rather than only on an
+			// or a nested union, so detect it recursively, and not only on an
 			// atomic QName/NOTATION member.
 			if typeHasQNameNotationCarrier(member) {
 				hasQNameMember = true

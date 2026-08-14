@@ -215,8 +215,8 @@ func TestRetrievalMethodChainDepthCap(t *testing.T) {
 }
 
 func TestResolveRetrievalMethodLoopRejected(t *testing.T) {
-	// A RetrievalMethod that references itself by id must fail closed rather than
-	// dereferencing an unbounded chain.
+	// A RetrievalMethod that references itself by id must fail closed, dereferencing no
+	// unbounded chain.
 	doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod Id="rm1" URI="#rm1" Type="`+TypeX509Data+`"/></ds:KeyInfo>`)
 	cfg := &verifierConfig{}
 	data := &KeyInfoData{}
@@ -355,7 +355,7 @@ func TestReviewUnsupportedWrapperTypeFailsClosed(t *testing.T) {
 // TestRetrievalMethodRejectsUnsupportedTransform proves a RetrievalMethod's
 // ds:Transforms are inspected and applied, not ignored: an unsupported transform
 // fails closed with ErrUnsupportedTransform for both external and same-document
-// targets, rather than silently accepting the resolved certificate.
+// targets, and never silently accepts the resolved certificate.
 func TestRetrievalMethodRejectsUnsupportedTransform(t *testing.T) {
 	t.Run("external", func(t *testing.T) {
 		_, der := selfSignedCert(t)

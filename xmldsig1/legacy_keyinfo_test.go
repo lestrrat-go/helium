@@ -129,8 +129,8 @@ func TestX509IssuerSerialExtraction(t *testing.T) {
 }
 
 // TestDSASignUnsupported confirms a signing attempt with the DSA-SHA1 URI fails
-// with a clear "DSA signing is not supported" error rather than a generic
-// key-type mismatch or map miss. AllowSHA1(true) is set so the weak-algorithm
+// with a clear "DSA signing is not supported" error, which names the missing
+// feature outright. AllowSHA1(true) is set so the weak-algorithm
 // gate does not mask the DSA-specific rejection.
 func TestDSASignUnsupported(t *testing.T) {
 	key := generateRSAKey(t)

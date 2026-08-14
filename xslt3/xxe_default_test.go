@@ -92,8 +92,8 @@ func TestXXE_RuntimeDocBlockedByDefault(t *testing.T) {
 // but the load is now ROUTED THROUGH the configured URIResolver (not the raw
 // filesystem). The external SYSTEM entity resolves against the document's base
 // URI and the resulting entity URI is served by the same resolver. This proves
-// opted-in entities go through the resolver-mediated, resource-limited channel
-// rather than the parser's default os.Open.
+// opted-in entities go through the resolver-mediated, resource-limited channel,
+// and never the parser's default os.Open.
 func TestXXE_RuntimeDocAllowedWithOptIn(t *testing.T) {
 	t.Parallel()
 

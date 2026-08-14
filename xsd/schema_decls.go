@@ -56,8 +56,8 @@ func (d schemaDecls) lookupTypeName(typeName string) (*TypeDef, bool) {
 // lookupAtomizationType resolves a type name to the *TypeDef that drives ATOMIZATION
 // of a node annotated with it. For a simpleContent COMPLEX type it returns the
 // EFFECTIVE content simple type (effectiveContentSimpleType) — the narrowed
-// content (a nested/simpleContent restriction to xs:QName, a list, a union, …) —
-// rather than the raw complex type, so data()/list/union node atomization matches
+// content (a nested/simpleContent restriction to xs:QName, a list, a union, …),
+// and never the raw complex type, so data()/list/union node atomization matches
 // validation and $value (which both type the content via the same effective type).
 // A non-simpleContent type is returned unchanged.
 func (d schemaDecls) lookupAtomizationType(typeName string) (*TypeDef, bool) {
@@ -190,7 +190,7 @@ func (d schemaDecls) IsSubtypeOf(typeName, baseTypeName string) bool {
 // whether the element (memberLocal, memberNS) is a transitive member (after
 // block/derivation filtering) of the substitution group headed by
 // (headLocal, headNS), so the schema-element() kind test matches by
-// substitution-group membership rather than mere type-derivation.
+// substitution-group membership, and never by mere type-derivation.
 func (d schemaDecls) IsSubstitutionGroupMember(memberLocal, memberNS, headLocal, headNS string) bool {
 	member := QName{Local: memberLocal, NS: memberNS}
 	for _, m := range d.schema.SubstGroupMembers(QName{Local: headLocal, NS: headNS}) {

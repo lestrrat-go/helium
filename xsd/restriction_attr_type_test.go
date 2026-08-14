@@ -184,7 +184,7 @@ func TestRestrictionAttrType(t *testing.T) {
 	t.Run("rejects derived builtin widening base inline restricted type", func(t *testing.T) {
 		t.Parallel()
 		// Same widening, but the base attribute's restricted simple type is an
-		// inline (anonymous) <xs:simpleType> rather than a named one.
+		// inline (anonymous) <xs:simpleType>, and no named one.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:complexType name="Base">
     <xs:sequence/>
@@ -629,7 +629,7 @@ func TestRestrictionAttrType(t *testing.T) {
 		// (xs:list itemType="xs:string"). The user list is not derived from xs:IDREFS
 		// (it has no <xs:restriction base="xs:IDREFS"> pointer), and IDREFS is a list
 		// of xs:IDREF — an unrelated list type that admits values the base does not,
-		// so the restriction must be rejected rather than silently accepted because
+		// so the restriction must be rejected, and is never accepted merely because
 		// the derived side has no builtin base name.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
   <xs:simpleType name="StringList">

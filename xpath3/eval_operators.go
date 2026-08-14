@@ -134,7 +134,7 @@ func appendBounded(dst ItemSlice, src []Item, maxNodes int) (ItemSlice, error) {
 //
 // It also charges one op (and honors cancellation) per appended item via
 // fnCountOp, so draining a large lazy source respects OpLimit / context
-// cancellation rather than running to completion unbounded.
+// cancellation, and never runs to completion unbounded.
 func appendBoundedSeq(ctx context.Context, ec *evalContext, dst ItemSlice, src Sequence, maxNodes int) (ItemSlice, error) {
 	for item := range seqItems(src) {
 		if err := fnCountOp(ctx, ec); err != nil {
@@ -149,7 +149,7 @@ func appendBoundedSeq(ctx context.Context, ec *evalContext, dst ItemSlice, src S
 }
 
 // appendBoundedClonedSeq behaves like appendBoundedSeq but appends a defensive
-// deep clone of each item rather than the item itself. It is used by lookup /
+// deep clone of each item, and never the item itself. It is used by lookup /
 // map:get paths that drain a BORROWED (no-clone) stored map value via get0:
 // draining lazily charges op (and honors cancellation) and enforces maxNodes
 // BEFORE each item is appended, so a borrowed lazy value whose Materialize is
@@ -510,7 +510,7 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 // filterPreservesOrder returns true if the filter expression is a call to the
 // built-in fn:reverse or fn:sort, which explicitly control sequence order. In
 // these cases, a subsequent path step (/@attr) should preserve the caller's
-// ordering rather than re-sorting into document order.
+// ordering, re-sorting into no document order.
 //
 // The decision is made against the runtime function resolver so that a rebound
 // "fn" prefix or a user function overriding the built-in is not mistaken for

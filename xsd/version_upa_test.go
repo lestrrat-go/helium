@@ -110,8 +110,8 @@ func TestVersion11WildcardPrecedence(t *testing.T) {
 // TestVersion11WildcardPrecedenceNested verifies that element-over-wildcard
 // precedence also holds when the wildcard is NOT a direct choice branch but is
 // wrapped inside a model group (here a sequence). The typed element declaration
-// must still win over the nested skip wildcard so an invalid value is rejected
-// rather than swallowed by the wildcard branch (XSD11-001, nested case).
+// must still win over the nested skip wildcard so an invalid value is rejected,
+// and never swallowed by the wildcard branch (XSD11-001, nested case).
 func TestVersion11WildcardPrecedenceNested(t *testing.T) {
 	// Branch 1 wraps the skip wildcard in a sequence; branch 2 is the typed
 	// element. Naive top-level classification treats branch 1 as "non-wildcard"
@@ -241,8 +241,8 @@ func TestVersion11WildcardPrecedenceCommit(t *testing.T) {
 	// Branch 1 is sequence(element a:int, element b:int); branch 2 is a skip
 	// wildcard. For a first <a>, branch 1 is element-first and is selected. If
 	// branch 1 then fails (a's value is not an int, and/or b is missing), the
-	// choice must report that failure rather than letting the wildcard swallow
-	// <a> and false-accept the document.
+	// choice must report that failure, letting the wildcard swallow
+	// no <a> and false-accept no document.
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root">
     <xs:complexType>

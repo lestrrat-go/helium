@@ -10,8 +10,8 @@ import (
 // nbsp is U+00A0 NON-BREAKING SPACE, which is Unicode whitespace but NOT one of
 // the four XSD whitespace characters (#x20, #x9, #xD, #xA). xs:list item
 // separation is defined over XSD whitespace only, so an item containing NBSP must
-// stay a single token (and then fail per-item lexical validation) rather than
-// being split into separate valid items.
+// stay a single token (and then fail per-item lexical validation), and is never
+// split into separate valid items.
 const nbsp = " "
 
 // TestListItemNBSPNotSeparator covers schema-defined xs:list validation: a value

@@ -81,7 +81,7 @@ func TestCatalogExternalSubsetFileURI(t *testing.T) {
 	dtdPath := filepath.Join(dir, "test.dtd")
 	require.NoError(t, os.WriteFile(dtdPath, []byte(dtdContent), 0644))
 
-	// Catalog mapping the system ID to a "file:" URI rather than a bare path.
+	// Catalog mapping the system ID to a "file:" URI, in place of a bare path.
 	// The resolved value reaches the parser as "file:///...", which must be
 	// converted to a local path before being opened (CAT-001).
 	fileURI := nativePathToFileURI(dtdPath)

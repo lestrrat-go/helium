@@ -73,8 +73,8 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 
 	// xs:dateTimeStamp carries a mandatory-timezone invariant. AtomicValue is
 	// public and mutable, so a caller can retag a no-timezone xs:dateTime as
-	// TypeDateTimeStamp; enforce the invariant before the identity fast path
-	// rather than trusting the type tag.
+	// TypeDateTimeStamp; enforce the invariant before the identity fast path,
+	// trusting no type tag.
 	if targetType == TypeDateTimeStamp && v.TypeName == TypeDateTimeStamp {
 		t, ok := v.Value.(time.Time)
 		if !ok {

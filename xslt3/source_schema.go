@@ -14,7 +14,7 @@ import (
 // document's xsi:schemaLocation / xsi:noNamespaceSchemaLocation attributes.
 // Schema bytes are fetched through the transformation's configured
 // URIResolver / HTTPClient (default-deny: with nothing configured the load
-// is refused) rather than via a raw os.ReadFile, so runtime schema loads
+// is refused), and never via a raw os.ReadFile, so runtime schema loads
 // obey the same secure-by-default policy as fn:doc and document().
 func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *helium.Document) ([]*xsd.Schema, error) {
 	root := doc.DocumentElement()

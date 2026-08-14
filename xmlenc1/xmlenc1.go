@@ -63,7 +63,7 @@ func (e Encryptor) clone() Encryptor {
 // Encryptor{} whose cfg is nil). This mirrors clone's nil handling so the
 // encrypt terminals never dereference a nil cfg: a zero-value Encryptor
 // encrypts as a default Encryptor with no key source, returning
-// ErrMissingConfig rather than panicking.
+// ErrMissingConfig and never panicking.
 func (e Encryptor) config() *encryptConfig {
 	if e.cfg == nil {
 		return &encryptConfig{}
@@ -126,7 +126,7 @@ func (e Encryptor) RecipientPublicKey(key *rsa.PublicKey) Encryptor {
 // The key is still protected by whichever mechanism is configured (key
 // transport or key wrapping); supplying it does not skip that step. A
 // non-empty key's length must match the block algorithm exactly, or
-// encryption fails with a [KeySizeError] rather than silently encrypting at
+// encryption fails with a [KeySizeError], and never silently encrypts at
 // a weaker strength than the emitted @Algorithm claims. An empty or nil key
 // never reaches that check, because the generated key is used instead.
 //
@@ -191,7 +191,7 @@ func (e Encryptor) KeyEncryptionKey(kek []byte) Encryptor {
 // counterpart of Decryptor.ECPrivateKey, and supports P-256, P-384, and
 // P-521.
 //
-// ECDH-ES derives the key-encryption key rather than taking one, so
+// ECDH-ES derives the key-encryption key, and takes none, so
 // KeyWrapAlgorithm still selects the AES Key Wrap variant applied to the
 // session key, while KeyEncryptionKey belongs to the separate AES key
 // wrapping mechanism; [ErrConflictingKeyConfig] states how many mechanisms an
@@ -215,8 +215,8 @@ func (e Encryptor) RecipientECPublicKey(key *ecdsa.PublicKey) Encryptor {
 // the wire in the emitted xenc11:ConcatKDFParams. A nil params, or one with
 // an empty DigestMethod, falls back to SHA-256 with empty OtherInfo.
 // [ConcatKDFParams] states the size limit the five OtherInfo fields share.
-// An encryption whose params name a DigestMethod and exceed that limit fails
-// rather than emitting a document no hardened recipient would accept. Params
+// An encryption whose params name a DigestMethod and exceed that limit fails,
+// emitting no document a hardened recipient would refuse. Params
 // with an empty DigestMethod take the fallback above instead: their OtherInfo
 // is discarded before any derivation, so it is never measured against the
 // limit and never reaches the wire.
@@ -256,8 +256,8 @@ func (e Encryptor) EncryptContent(ctx context.Context, elem *helium.Element) (*h
 // The returned element carries no Type attribute, which is what xmlenc-core1
 // §3.1 asks of a plaintext that is neither an element nor element content.
 // Recover this payload with DecryptBytes, which returns the plaintext octets
-// without parsing them as XML; Decrypt refuses it with [ErrOpaquePayload]
-// rather than parsing octets whose Type never declared XML. No tree is
+// without parsing them as XML; Decrypt refuses it with [ErrOpaquePayload], parsing no octets
+// whose Type never declared XML. No tree is
 // modified — the caller decides where to insert the element.
 func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plaintext []byte) (*helium.Element, error) {
 	if err := contextErr(ctx); err != nil {
@@ -363,7 +363,7 @@ type resolvedEncryptConfig struct {
 // exists.
 func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 	// Secure by default: an unset block algorithm uses authenticated
-	// AES-256-GCM rather than refusing or falling back to CBC.
+	// AES-256-GCM, refusing nothing and falling back to no CBC.
 	blockAlgorithm := cfg.blockAlgorithm
 	if blockAlgorithm == "" {
 		blockAlgorithm = DefaultBlockAlgorithm
@@ -455,7 +455,7 @@ func resolveEncryptConfig(cfg *encryptConfig) (resolvedEncryptConfig, error) {
 // mechanism is not a pair — it supplies the key that mechanism protects.
 //
 // Agreement and wrap share the same KeyWrapAlgorithm URI, so that message
-// names the two setters rather than two algorithms.
+// names the two setters, and no two algorithms.
 func conflictingKeyProtection(cfg *encryptConfig, hasKeyTransport, hasKeyAgreement, hasKeyWrap bool) error {
 	switch {
 	case hasKeyTransport && hasKeyAgreement:
@@ -582,7 +582,7 @@ func encryptPlaintext(ctx context.Context, cfg *encryptConfig, resolved resolved
 
 // childSerializer accumulates the serialized form of each node handed to it,
 // so serializeChildren can walk the caller's subtree through eachSibling and
-// observe the context per child rather than only at the ends of a walk whose
+// observe the context per child, and not only at the ends of a walk whose
 // length the caller chooses.
 type childSerializer struct {
 	sb strings.Builder
@@ -679,7 +679,7 @@ func (d Decryptor) clone() Decryptor {
 // Decryptor{} whose cfg is nil). This mirrors clone's nil handling so the
 // decrypt terminals never dereference a nil cfg: a zero-value Decryptor
 // decrypts as a default Decryptor with no key, returning ErrMissingKey
-// rather than panicking.
+// and never panicking.
 func (d Decryptor) config() *decryptConfig {
 	if d.cfg == nil {
 		return &decryptConfig{}
@@ -900,7 +900,7 @@ func (d Decryptor) MaxCipherValueBytes(n int) Decryptor {
 // outside the document being decrypted. [ReferenceResolver] owns what a
 // resolver is asked for and what the shipped [FSReferenceResolver] refuses.
 //
-// Nil is the default, and it is a deny rather than a gap: an external URI then
+// Nil is the default, and it is a deny, and no gap: an external URI then
 // fails closed with [ErrReferenceNotFound], and no document can lift that by
 // itself. The same-document forms need no I/O and never reach a resolver, so
 // setting one changes nothing about how they resolve — it only adds the
@@ -1060,7 +1060,7 @@ func (b *encryptedKeyBudget) remaining() int {
 // remaining reports the budget's limit, or -1 when it is unlimited (including
 // a nil budget, consistent with charge's nil handling). Unlike
 // encryptedKeyBudget.remaining, this never decreases: charge is a one-shot
-// check rather than a running spend, and exactly one payload CipherValue
+// check, and no running spend, and exactly one payload CipherValue
 // exists per EncryptedData, so the limit IS what remains until that single
 // check happens.
 func (b *payloadCipherValueBudget) remaining() int {
@@ -1071,7 +1071,7 @@ func (b *payloadCipherValueBudget) remaining() int {
 }
 
 // budgetWriter is an io.Writer that stops a stream at a cipherValueBudget's
-// limit rather than letting it complete and having the caller reject the
+// limit. Letting it complete would leave the caller to reject the
 // finished result afterward. Bytes are forwarded to dst as long as the
 // running total stays within budget.remaining(); the moment a Write call
 // would push the total past it, the write fails with the budget's OWN
@@ -1169,10 +1169,10 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		// The caller supplied the session key directly, so its length is
 		// caller-configured, not attacker-controlled: reject a mismatch
 		// against the declared block algorithm before any ciphertext is
-		// touched, with a bare KeySizeError rather than one wrapped in
+		// touched, with a bare KeySizeError, and never one wrapped in
 		// ErrDecryptionFailed. alg itself may still be unsupported (a
 		// document-declared value this Decryptor cannot honor at all), so
-		// route through wrapBlockAlgorithmError rather than returning err
+		// route through wrapBlockAlgorithmError and never return err
 		// bare: that keeps an UnsupportedAlgorithmError wrapped exactly as
 		// it would be from blockDecrypt, while leaving a KeySizeError bare.
 		if err := validateKeySize(paramBlockAlgorithm, alg, paramSessionKey, cfg.sessionKey); err != nil {
@@ -1237,8 +1237,8 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 
 // opaqueTypeError reports an EncryptedData whose @Type does not declare XML
 // content. Both forms name Decryptor.DecryptBytes, the octet path that
-// recovers such a payload, and the absent case says so in as many words
-// rather than quoting an empty URI back at the caller.
+// recovers such a payload, and the absent case says so in as many words,
+// quoting no empty URI back at the caller.
 func opaqueTypeError(typeURI string) error {
 	if typeURI == "" {
 		return fmt.Errorf("%w: EncryptedData declares no Type; use Decryptor.DecryptBytes to recover the plaintext octets", ErrOpaquePayload)
@@ -1299,10 +1299,10 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		// The caller supplied the session key directly, so its length is
 		// caller-configured, not attacker-controlled: reject a mismatch
 		// against the declared block algorithm before any ciphertext is
-		// touched, with a bare KeySizeError rather than one wrapped in
+		// touched, with a bare KeySizeError, and never one wrapped in
 		// ErrDecryptionFailed. alg itself may still be unsupported (a
 		// document-declared value this Decryptor cannot honor at all), so
-		// route through wrapBlockAlgorithmError rather than returning err
+		// route through wrapBlockAlgorithmError and never return err
 		// bare: that keeps an UnsupportedAlgorithmError wrapped exactly as
 		// it would be from blockDecrypt, while leaving a KeySizeError bare.
 		if err := validateKeySize(paramBlockAlgorithm, alg, paramSessionKey, cfg.sessionKey); err != nil {
@@ -1338,7 +1338,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	var lastErr error
 	for _, ek := range keys {
 		// Poll the caller's deadline between candidates so a cancellation
-		// interrupts the per-candidate key-resolution work rather than
+		// interrupts the per-candidate key-resolution work, well short of
 		// running to completion over every EncryptedKey.
 		if err := contextErr(ctx); err != nil {
 			return nil, err
@@ -1591,8 +1591,8 @@ func resolveSessionKeyFromEncryptedKey(cfg *decryptConfig, ek *encryptedKey, ses
 		// key-wrap URI this package does not implement is as reachable here as
 		// a key-transport one or an invented URN. Report it as the
 		// EncryptedKey's declared algorithm, which is the one thing that holds
-		// for all of them, rather than naming a class and sending the caller
-		// to the wrong setter. Classify under the decrypt path while
+		// for all of them. Naming a class would send the caller to the wrong
+		// setter. Classify under the decrypt path while
 		// preserving the typed error in the chain for errors.As, consistent
 		// with the decryptSessionKey wrapping above.
 		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, &UnsupportedAlgorithmError{Parameter: paramEncryptedKey, Algorithm: alg})

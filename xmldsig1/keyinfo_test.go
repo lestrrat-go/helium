@@ -76,7 +76,7 @@ func TestX509CertKeySourceNil(t *testing.T) {
 }
 
 // TestX509DataKeyInfoEmpty confirms that X509DataKeyInfo with zero certificates
-// fails signing with ErrInvalidKeyInfo rather than silently emitting a
+// fails signing with ErrInvalidKeyInfo, emitting no
 // schema-invalid empty <X509Data>.
 func TestX509DataKeyInfoEmpty(t *testing.T) {
 	key := generateRSAKey(t)
@@ -349,7 +349,7 @@ func TestKeyInfoBase64CharacterData(t *testing.T) {
 }
 
 // TestX509DataKeyInfoRejectsNilCert proves a nil *x509.Certificate entry in the
-// varargs is rejected with a typed ErrInvalidKeyInfo rather than panicking on
+// varargs is rejected with a typed ErrInvalidKeyInfo, and never panics on
 // cert.Raw, both when BuildKeyInfo is invoked directly and when it is reached
 // through a signing entry point. SignEnveloping rejects it in its preflight,
 // before any caller content is moved into the <Object>.

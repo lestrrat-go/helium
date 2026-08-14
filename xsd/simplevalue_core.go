@@ -466,7 +466,7 @@ func validateListValue(ctx context.Context, value string, valueNS map[string]str
 	// whitespace-collapsed whole-list value, walking the base chain. The list's
 	// length facets are interpreted as item counts above; checkFacets would
 	// instead measure character length, so enumeration and pattern are applied
-	// here on their own rather than via the generic checkFacets path.
+	// here on their own, and never via the generic checkFacets path.
 	for cur := range baseChain(td) {
 		if cur.Facets == nil {
 			continue
