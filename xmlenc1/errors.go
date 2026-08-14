@@ -15,6 +15,29 @@ var (
 	// ErrMissingKey is returned when no decryption key is available.
 	ErrMissingKey = errors.New("xmlenc1: no decryption key available")
 
+	// ErrUnsupportedKeyDerivation is returned when an EncryptedData offers its
+	// session key ONLY through an xenc11:DerivedKey (xmlenc-core1 §3.5.2),
+	// which tells the recipient to derive the content key from master key
+	// material it already holds. This package implements no key derivation from
+	// a master key, so it cannot decrypt such a document.
+	//
+	// It is deliberately NOT ErrMissingKey. That sentinel says no decryption key
+	// is available, which sends a caller to audit the keys it configured — and no
+	// key it configures can help, because the document asked for a facility this
+	// package does not have. A caller must be able to tell "I set this up wrong"
+	// from "helium cannot read this document at all". Match with errors.Is.
+	//
+	// It covers both ways a ds:KeyInfo offers the construct: an xenc11:DerivedKey
+	// carried inline, and a ds:RetrievalMethod whose Type names one. It is raised
+	// only when derivation was the ONLY option: an EncryptedData that ALSO
+	// carries a usable xenc:EncryptedKey decrypts under that key, since the
+	// unimplemented construct costs a document nothing it could otherwise do.
+	//
+	// A pre-shared [Decryptor.SessionKey] never reaches it. That early return
+	// precedes key resolution entirely, so a caller holding the session key
+	// decrypts a document whose ds:KeyInfo this package cannot read.
+	ErrUnsupportedKeyDerivation = errors.New("xmlenc1: key derivation from master key material is not supported")
+
 	// ErrTooManyEncryptedKeys is returned when an EncryptedData carries more
 	// EncryptedKey candidates than the Decryptor's effective limit, which
 	// guards against CPU amplification (DoS). Decryptor.MaxEncryptedKeys owns

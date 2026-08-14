@@ -139,14 +139,20 @@ func TestRetrievalMethod(t *testing.T) {
 
 	// A Type this package does not implement is skipped outright: no
 	// resolution is attempted, so even a URI that could not resolve at all
-	// costs nothing and the decrypt fails only for want of a key.
+	// costs nothing. What the decrypt then reports depends on whether the Type
+	// was RECOGNIZED. A DerivedKey is a construct this package knows and does
+	// not implement, so it reports the facility it lacks; a Type from another
+	// specification says nothing about a key at all, so the document is simply
+	// keyless. Neither URI is ever looked at, which the two NotErrorIs
+	// assertions below pin for both.
 	t.Run("a foreign Type is skipped and never resolved", func(t *testing.T) {
 		for _, tc := range []struct {
 			name string
 			typ  string
+			want error
 		}{
-			{name: "DerivedKey", typ: xmlenc1.NamespaceXMLEnc + "DerivedKey"},
-			{name: "X509Data", typ: xmlenc1.NamespaceDSig + "X509Data"},
+			{name: "DerivedKey", typ: xmlenc1.NamespaceXMLEnc + "DerivedKey", want: xmlenc1.ErrUnsupportedKeyDerivation},
+			{name: "X509Data", typ: xmlenc1.NamespaceDSig + "X509Data", want: xmlenc1.ErrMissingKey},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				sessionKey, kek := newKeys(t)
@@ -154,7 +160,7 @@ func TestRetrievalMethod(t *testing.T) {
 					retrievalMethodXML(tc.typ, "https://example.com/keys.xml#k"),
 					`<ds:KeyInfo>`+wrappedKeyXML(t, "k", kek, sessionKey, "")+`</ds:KeyInfo>`)
 				_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
-				require.ErrorIs(t, err, xmlenc1.ErrMissingKey)
+				require.ErrorIs(t, err, tc.want)
 				require.NotErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
 				require.NotErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 			})

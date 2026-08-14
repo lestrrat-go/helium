@@ -1188,7 +1188,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		return plaintext, nil
 	}
 	if len(keys) == 0 {
-		return nil, abort(ctx, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey))
+		return nil, abort(ctx, noCandidateError(ed))
 	}
 
 	sessionKeySize, err := keySizeForAlgorithm(paramBlockAlgorithm, alg)
@@ -1244,6 +1244,24 @@ func opaqueTypeError(typeURI string) error {
 		return fmt.Errorf("%w: EncryptedData declares no Type; use Decryptor.DecryptBytes to recover the plaintext octets", ErrOpaquePayload)
 	}
 	return fmt.Errorf("%w: EncryptedData Type %q is neither %q nor %q; use Decryptor.DecryptBytes to recover the plaintext octets", ErrOpaquePayload, typeURI, TypeElement, TypeContent)
+}
+
+// noCandidateError reports an EncryptedData whose key resolution found no
+// session-key candidate at all. It is the single wording site for that outcome,
+// shared by Decrypt and DecryptBytes so the two never drift.
+//
+// It distinguishes the two ways a document reaches it, because they ask
+// different things of the caller. A document that offered its key ONLY through
+// an xenc11:DerivedKey asked for a facility this package does not implement, so
+// no key the caller supplies can help and the error names the facility. Every
+// other document simply carries no key material, so the error names the setter
+// that supplies one directly. [ErrUnsupportedKeyDerivation] owns the rest of
+// that distinction.
+func noCandidateError(ed *encryptedData) error {
+	if ed.offersDerivedKey {
+		return fmt.Errorf("%w: EncryptedData offers its session key only through an xenc11:DerivedKey; supply the derived key as Decryptor.SessionKey to decrypt it", ErrUnsupportedKeyDerivation)
+	}
+	return fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey)
 }
 
 func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Element) ([]helium.Node, error) {
@@ -1316,7 +1334,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 	}
 
 	if len(keys) == 0 {
-		return nil, abort(ctx, fmt.Errorf("%w: EncryptedData carries no EncryptedKey; set Decryptor.SessionKey to supply the key directly", ErrMissingKey))
+		return nil, abort(ctx, noCandidateError(ed))
 	}
 
 	// The declared block algorithm fixes the session-key length, and with it

@@ -74,6 +74,18 @@ type encryptedData struct {
 	// prefix the ciphertext with the IV, and GCM appends the
 	// authentication tag.
 	CipherValue []byte
+	// offersDerivedKey records that the ds:KeyInfo offered the session key
+	// through an xenc11:DerivedKey (xmlenc-core1 §3.5.2), inline or named by a
+	// ds:RetrievalMethod. The parse reads no such key, so this is the only
+	// trace of the construct left by the time key resolution runs.
+	//
+	// It exists so a document offering ONLY derivation is refused with
+	// [ErrUnsupportedKeyDerivation], naming the facility this package lacks,
+	// where the candidate list alone would report [ErrMissingKey] and send the
+	// caller to audit keys that could never have helped. A document that also
+	// carries a usable EncryptedKey decrypts under it, so this is consulted
+	// only when the candidate list came out empty.
+	offersDerivedKey bool
 }
 
 // effectiveEncryptedKeys returns the EncryptedKey candidates to use,

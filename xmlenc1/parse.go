@@ -155,6 +155,12 @@ func parseKeyInfoForEncryption(ctx context.Context, elem *helium.Element, ed *en
 			return retainEncryptedKey(ctx, e, ed, ps)
 		case isDSigElem(e, "RetrievalMethod"):
 			return parseRetrievalMethod(ctx, e, ed, ps)
+		case isXMLEnc11Elem(e, "DerivedKey"):
+			// Recognized, and read no further: this package derives no key
+			// from master key material. Recording it is what lets a document
+			// offering ONLY derivation be refused for the facility it asked
+			// for; encryptedData.offersDerivedKey owns why.
+			ed.offersDerivedKey = true
 		}
 		return nil
 	})
@@ -241,8 +247,12 @@ func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *encrypt
 	case "", TypeEncryptedKey:
 	case typeDerivedKey:
 		// Recognized, and deliberately not resolved: this package derives no
-		// key from master key material. README.md's Conformance scope section
-		// owns what such a document fails with.
+		// key from master key material. The URI is never looked at, so the
+		// reference costs nothing; recording the offer is what lets a document
+		// with no other candidate be refused for the facility it asked for.
+		// encryptedData.offersDerivedKey owns why, and README.md's Conformance
+		// scope section owns what such a document fails with.
+		ed.offersDerivedKey = true
 		return nil
 	default:
 		// A Type from another specification entirely, e.g. a ds:X509Data.

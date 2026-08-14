@@ -421,15 +421,22 @@ can fail a decrypt: `xenc:ReferenceList` (§3.6), which points from a key to the
 items it encrypted and so only matters for a detached key this package cannot
 follow anyway; `xenc11:DerivedKey` (§3.5.2), which may appear in an
 `EncryptedData`'s own `ds:KeyInfo` and tells the recipient to derive the
-content key from master key material it already holds — the parse ignores it,
-so such an `EncryptedData` fails with `ErrMissingKey` instead of deriving the
-key. That `ErrMissingKey` is what the caller sees only once the block algorithm
-has resolved: resolution and the AES-CBC opt-in both run ahead of the
-missing-key check, so an `EncryptedData` with no `EncryptionMethod` and no
+content key from master key material it already holds — the parse reads no such
+key, so an `EncryptedData` offering ONLY that fails with
+`ErrUnsupportedKeyDerivation`, naming the facility this package lacks. That
+sentinel is deliberately not `ErrMissingKey`: no key the caller supplies can
+make such a document decrypt, so the error must not send it to audit its key
+configuration. Both ways a `ds:KeyInfo` offers the construct reach it, carried
+inline and named by a `ds:RetrievalMethod` whose `Type` says `#DerivedKey`. A
+document that ALSO carries a usable `xenc:EncryptedKey` decrypts under that
+key, since a construct this package does not implement costs it nothing it
+could otherwise do. The refusal is what the caller sees only once the block
+algorithm has resolved: resolution and the AES-CBC opt-in both run ahead of the
+key-resolution check, so an `EncryptedData` with no `EncryptionMethod` and no
 `Decryptor.BlockAlgorithm` fails with `ErrMalformedEncrypted`, and an AES-CBC
 one without `AllowUnauthenticatedCBC(true)` with `ErrCBCRequiresOptIn`,
 whatever its `ds:KeyInfo` holds. It does not arise at all when the caller
-supplies that key as a pre-shared `SessionKey`, whose early return precedes key
+supplies the key as a pre-shared `SessionKey`, whose early return precedes key
 resolution;
 `xenc:CarriedKeyName` (§3.5.1), which the parse steps over unread; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
 
