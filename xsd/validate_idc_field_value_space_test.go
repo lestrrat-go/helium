@@ -9,7 +9,7 @@ import (
 )
 
 // TestIDCFieldXSITypeActualType covers identity-constraint key comparison when an
-// IDC field's type is contributed by an xsi:type ACTUAL type rather than the
+// IDC field's type is contributed by an xsi:type ACTUAL type, and not the
 // element's declared type. `item` is declared as a baseType with no attributes;
 // the instance supplies xsi:type="itemType" which adds an inline xs:integer
 // attribute `n`. The IDC field canonicalizer must consult the actual type

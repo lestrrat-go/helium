@@ -552,8 +552,8 @@ func TestIDSkipWildcardNotAssessed(t *testing.T) {
 }
 
 // TestIDConstraintRefUnboundPrefix verifies that an identity-constraint @ref
-// using a namespace prefix that is not bound in scope is a fatal schema error
-// rather than silently resolving to the no-namespace constraint set.
+// using a namespace prefix that is not bound in scope is a fatal schema error,
+// resolving to no no-namespace constraint set.
 func TestIDConstraintRefUnboundPrefix(t *testing.T) {
 	t.Parallel()
 	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

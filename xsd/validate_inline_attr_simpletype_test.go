@@ -8,7 +8,7 @@ import (
 
 // TestInlineAttributeSimpleType checks that an attribute use declared with an
 // inline anonymous <xs:simpleType> restriction has its value validated against
-// the anonymous type — including its facets — rather than the restriction being
+// the anonymous type — including its facets — with no part of the restriction
 // silently ignored. This covers all three paths that reach an attribute use:
 //   - a direct local <xs:attribute name="a"> with an inline simpleType
 //   - a local <xs:attribute ref="a"/> referencing a global attribute whose

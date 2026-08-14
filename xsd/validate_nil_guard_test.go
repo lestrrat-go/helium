@@ -47,8 +47,8 @@ func TestValidateNilDocument(t *testing.T) {
 	require.True(t, h.closed, "handler should be closed even on the nil-document path")
 }
 
-// TestValidateNilContext asserts that Validate normalizes a nil context.Context
-// rather than panicking while evaluating an identity-constraint XPath.
+// TestValidateNilContext asserts that Validate normalizes a nil context.Context,
+// and never panics while evaluating an identity-constraint XPath.
 func TestValidateNilContext(t *testing.T) {
 	const schemaSrc = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

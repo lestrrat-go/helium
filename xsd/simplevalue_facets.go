@@ -22,7 +22,7 @@ func compareDecimal(a, b string) int {
 // type, boolean, the binary types, anyURI, QName/NOTATION, or a non-atomic
 // (list/union) carrier with an empty/unknown local — the facet is INAPPLICABLE
 // and this returns (0, false), which the caller treats as the bound being
-// satisfied rather than coercing the value into a spurious comparison.
+// satisfied, coercing the value into no spurious comparison.
 //
 // For the ordered types the actual ordering is deferred to value.Compare, which
 // orders numeric and date/time/duration value spaces and itself returns ok=false

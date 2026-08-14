@@ -1243,7 +1243,7 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 		if wc.ProcessContents == ProcessStrict {
 			// cvc-assess-elt: with no matching global element declaration, a
 			// resolvable xsi:type still supplies a ·governing type definition·, so the
-			// element is assessed against it rather than rejected (XSD §3.3.4 /
+			// element is assessed against it, and never rejected (XSD §3.3.4 /
 			// §3.4.4.3; matches Xerces/Saxon and the W3C strict-wildcard-with-xsi:type
 			// cases). Only when NEITHER a declaration NOR a usable xsi:type is present
 			// does the strict wildcard fail.
@@ -1534,7 +1534,7 @@ func wildcardExpected(wc *Wildcard) string {
 // appear in an instance, but a concrete descendant behind an abstract intermediate
 // (h <- abstract m1 <- concrete m2) is still reached. Used by runtime matching
 // (elemMatchesDeclOrSubst) and restriction subsumption (findBaseAllMember). It
-// builds ON TOP of #877's substitutableMembersFor rather than re-walking substGroups.
+// builds ON TOP of #877's substitutableMembersFor, re-walking no substGroups.
 func instanceSubstMembers(head *ElementDecl, schema *Schema) []*ElementDecl {
 	all := substitutableMembersFor(head, schema)
 	concrete := all[:0] // substitutableMembersFor returns a fresh slice; reuse it

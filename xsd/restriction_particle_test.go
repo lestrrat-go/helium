@@ -871,7 +871,7 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 	// Repeated nested group: a valid restriction whose content is a repeated
 	// nested group (the nested group's own occurrence range times its children's
 	// emission) must be accepted. The recursion must descend into the nested
-	// group rather than mis-folding its occurrence range.
+	// group, mis-folding no occurrence range.
 	t.Run("accepts repeated nested group equivalent restriction", func(t *testing.T) {
 		t.Parallel()
 		// Base outer sequence holds a nested sequence(a,b) repeated exactly twice;
@@ -992,7 +992,7 @@ func TestRestrictionParticleSubsumption(t *testing.T) {
 		t.Parallel()
 		// Base sequence(a); derived keeps a and adds a prohibited leaf z
 		// (maxOccurs="0") that has no counterpart in the base. The prohibited leaf
-		// emits nothing, so it must be skipped during subsumption rather than
+		// emits nothing, so it must be skipped during subsumption, and never
 		// treated as an added particle.
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="Base">

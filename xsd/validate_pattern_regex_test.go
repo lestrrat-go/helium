@@ -8,7 +8,7 @@ import (
 
 // TestPatternFacetXSDRegexConstructs checks that pattern facets using XSD regex
 // constructs Go's RE2 does not support (\i, \c name-character escapes, \p{Is...}
-// Unicode block escapes) are enforced rather than silently skipped.
+// Unicode block escapes) are enforced in full, and never silently skipped.
 func TestPatternFacetXSDRegexConstructs(t *testing.T) {
 	t.Parallel()
 
@@ -100,7 +100,7 @@ func TestPatternFacetInvalidRegexp(t *testing.T) {
 // TestPatternFacetRejectsNonXSDConstructs checks that constructs outside the XSD
 // regex grammar are rejected even when the pattern would otherwise compile under
 // the regexp2 backtracking engine. XSD has no back-references, and \b is a
-// Perl-specific escape; both must be schema errors rather than silently accepted.
+// Perl-specific escape; both must be schema errors, and are never silently accepted.
 func TestPatternFacetRejectsNonXSDConstructs(t *testing.T) {
 	t.Parallel()
 

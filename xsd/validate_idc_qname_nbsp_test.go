@@ -13,7 +13,7 @@ import (
 // Unicode whitespace but NOT one of the four XSD whitespace characters, so a value
 // like "p:a<NBSP>" is NOT a valid xs:QName and must be rejected by content
 // validation. The IDC canonicalizer must trim only XSD whitespace (it resolves the
-// already-collapsed lexical value directly) rather than Go's strings.TrimSpace,
+// already-collapsed lexical value directly), and never Go's strings.TrimSpace,
 // which strips NBSP and would canonicalize "p:a<NBSP>" identically to a sibling
 // plain "p:a" — producing a spurious "Duplicate key-sequence" diagnostic on top of
 // the genuine lexical error.

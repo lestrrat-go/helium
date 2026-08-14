@@ -284,8 +284,8 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 			}
 			if err != nil {
 				// A field XPath that compiles but fails at evaluation (e.g. an
-				// unknown function) must likewise surface as an error rather than
-				// being silently treated as an absent field.
+				// unknown function) must likewise surface as an error, and is never
+				// treated as an absent field.
 				return nil, fmt.Errorf("xsd: IDC field XPath %q failed to evaluate: %w", fieldXPath, err)
 			}
 
@@ -612,7 +612,7 @@ func (vc *validationContext) canonicalAtomicKey(raw string, fieldNode helium.Nod
 		ns := fieldNodeNSContext(fieldNode)
 		// normalized is already whitespace-processed by normalizeWhiteSpace above
 		// (QName/NOTATION have whiteSpace="collapse", so leading/trailing XSD
-		// whitespace is gone). Resolve it directly rather than re-trimming with
+		// whitespace is gone). Resolve it directly, re-trimming with no
 		// strings.TrimSpace, which strips Unicode whitespace (e.g. NBSP) that is
 		// NOT XSD whitespace and would corrupt the canonical key — producing false
 		// duplicate/keyref diagnostics for QName values containing such characters.
@@ -649,7 +649,7 @@ func (vc *validationContext) canonicalAtomicKey(raw string, fieldNode helium.Nod
 // pre-flattened leaf would lose that wrapper facet and falsely accept the value.
 // A member that is itself a list or union is returned as-is; the caller then
 // canonicalizes it by recursing through canonicalValueKey, so list/union members
-// are handled in their own value space rather than as opaque atoms.
+// are handled in their own value space, and never as opaque atoms.
 //
 // fieldNode supplies the namespace context threaded into member validation so a
 // QName/NOTATION member with a QName-valued facet (e.g. an enumeration of

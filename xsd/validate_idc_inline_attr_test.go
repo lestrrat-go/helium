@@ -9,8 +9,8 @@ import (
 )
 
 // TestIDCInlineAttrTypeValueSpace covers identity-constraint key comparison when
-// the constrained attribute is declared with an INLINE anonymous <xs:simpleType>
-// rather than a named type reference. The IDC key canonicalizer must resolve the
+// the constrained attribute is declared with an INLINE anonymous <xs:simpleType>,
+// and no named type reference. The IDC key canonicalizer must resolve the
 // inline type the same way the content validator does (au.Type before
 // au.TypeName), so xs:integer fields "5" and "+5" denote the same value and must
 // collide for uniqueness and match for keyrefs.

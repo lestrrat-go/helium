@@ -92,7 +92,7 @@ func TestMixedFixedCyclicEntityRejectedByAddChild(t *testing.T) {
 // low-level node primitives (which AddChild's guard cannot catch — it only
 // guards parent/child insertion, not a direct SetNextSibling). The scan's
 // child-collection loop is cycle-guarded, so it terminates and marks the scan
-// invalid rather than spinning forever. mixedInitialValue must therefore return
+// invalid, spinning forever nowhere. mixedInitialValue must therefore return
 // invalid=true (the caller then fails the fixed-value check closed) and, above
 // all, must RETURN — a regression would hang the scan.
 func TestMixedFixedCorruptSiblingCycleFailsClosed(t *testing.T) {

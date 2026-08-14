@@ -13,7 +13,7 @@ import (
 // processContents="skip" wildcard (cvc-identity-constraint.3 / XSD 1.1 §3.11.4).
 //
 // In XSD 1.1 such a node is UNASSESSED (no type annotation), so the field
-// contributes NO value rather than failing the simple-type requirement — the
+// contributes NO value, failing no simple-type requirement — the
 // node simply drops out of the qualified node-set. In XSD 1.0 there is no such
 // relaxation, so the unassessed complex-typed node is a validity error. An
 // element field whose type is ACTUALLY assessed as complex is rejected in BOTH

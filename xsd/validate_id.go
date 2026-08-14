@@ -197,8 +197,8 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 
 // collectIDNodes records every node whose PSVI is-id property is true into out.
 // It mirrors validateIDIDREF's walk over assessed ID-family elements and
-// attributes, but applies the XDM 3.1 is-id rule (valueIsID) rather than
-// entering values into a uniqueness table: an atomic xs:ID, a SINGLETON list of
+// attributes, but applies the XDM 3.1 is-id rule (valueIsID), entering values into no
+// uniqueness table: an atomic xs:ID, a SINGLETON list of
 // xs:ID, or a union that selects an xs:ID-derived member is is-id; a multi-item
 // list, or a union selecting a non-ID member, is not. The recorded node is the
 // is-id node itself — an ID-typed element (its owning element is that element)
