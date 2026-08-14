@@ -569,8 +569,10 @@ package implements neither, so there is nothing runnable to add and no skip
 entry to write — a skip would imply a vector is being passed over when none
 exists. The feature's evidence is this package's own tests.
 
-The suite is available through the manual Conformance workflow and is not part
-of the release gate.
+The suite gates releases: `release.yml`'s `conformance-gate` matrix runs it
+against the pinned harness commit, and a release is neither tagged nor published
+unless it reports zero failures. It is also available on demand through the
+manual Conformance workflow.
 
 Run it from `../helium-w3c-tests`:
 

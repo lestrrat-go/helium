@@ -6,10 +6,9 @@ name: Conformance run
 # fails when the suite reports any failures.
 #
 # Invoked by conformance.yml (nightly/manual entrypoint) and by release.yml
-# (the release-gating xslt30, xmldsig2ed, xmldsig11, and merlinxmldsig runs;
-# xmlenc11 is currently manual because its expectation ledger has known gaps;
-# only xslt30 enables slow tests). Kept as a single source of truth so the
-# checkout/fetch/run logic is not duplicated.
+# (the release-gating xslt30, xmldsig2ed, xmldsig11, merlinxmldsig, and
+# xmlenc11 runs; only xslt30 enables slow tests). Kept as a single source of
+# truth so the checkout/fetch/run logic is not duplicated.
 on:
   workflow_call:
     inputs:
