@@ -644,10 +644,15 @@ func TestEncryptBytes(t *testing.T) {
 		require.Equal(t, before, after)
 	})
 
+	// Every encrypt entry point reports a nil operand the same way: the
+	// operation sentinel first, so a caller matching ErrEncryptionFailed
+	// catches it whichever terminal it called, and helium.ErrNilNode under it
+	// so a caller that wants to know WHICH operand still can.
 	t.Run("reports a missing document", func(t *testing.T) {
 		_, err := xmlenc1.NewEncryptor().
 			SessionKey(randKey(t, 32)).
 			EncryptBytes(t.Context(), nil, payload)
+		require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
 		require.ErrorIs(t, err, helium.ErrNilNode)
 		require.NotErrorIs(t, err, xmlenc1.ErrMissingConfig)
 	})
