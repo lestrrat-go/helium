@@ -2,7 +2,10 @@
 
 > **EXPERIMENTAL** — This package is under active development. Its API may change without notice, and it may be moved to a separate repository in the future.
 
-The `xmlenc1` package implements W3C XML Encryption 1.1 for helium documents.
+The `xmlenc1` package implements W3C XML Encryption 1.1 for helium documents,
+except for Triple DES, which it refuses deliberately even though the
+specification marks it REQUIRED. [Conformance scope](#conformance-scope) gives
+the reason, and names every other construct this package does not read.
 
 Import path: `github.com/lestrrat-go/helium/xmlenc1`
 
