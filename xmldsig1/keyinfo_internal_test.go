@@ -98,7 +98,7 @@ func TestParseECKeyValueErrors(t *testing.T) {
 	})
 
 	// only NamedCurve (no PublicKey point) must be rejected as an incomplete
-	// ECKeyValue rather than yielding a partial key with a nil point.
+	// ECKeyValue, yielding no partial key with a nil point.
 	t.Run("named curve without public key", func(t *testing.T) {
 		elem := ecElem(t, `<dsig11:NamedCurve xmlns:dsig11="`+NamespaceDSig11+`" URI="urn:oid:1.2.840.10045.3.1.7"/>`)
 		var data KeyInfoData
@@ -224,7 +224,7 @@ func TestParseRSAKeyValue(t *testing.T) {
 	})
 
 	// only Exponent (no Modulus) must be rejected as an incomplete RSAKeyValue
-	// rather than yielding a partial key with a nil modulus.
+	// yielding no partial key with a nil modulus.
 	t.Run("exponent without modulus", func(t *testing.T) {
 		d := mustParse(t, `<ds:RSAKeyValue xmlns:ds="`+NamespaceDSig+`"><ds:Exponent xmlns:ds="`+NamespaceDSig+`">AQAB</ds:Exponent></ds:RSAKeyValue>`)
 		var data KeyInfoData
@@ -295,7 +295,7 @@ func TestParseForeignChild(t *testing.T) {
 
 	// rsa key value child covers parseRSAKeyValue's foreign-namespace child
 	// continue branch: the foreign Modulus is skipped, leaving an incomplete
-	// RSAKeyValue that must be rejected rather than emitted as a partial key.
+	// RSAKeyValue that must be rejected, and never emitted as a partial key.
 	t.Run("rsa key value child", func(t *testing.T) {
 		doc := mustParse(t, `<ds:RSAKeyValue xmlns:ds="`+NamespaceDSig+`"><evil:Modulus xmlns:evil="urn:evil">AQAB</evil:Modulus></ds:RSAKeyValue>`)
 		var data KeyInfoData

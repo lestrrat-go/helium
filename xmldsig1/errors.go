@@ -60,7 +60,7 @@ var (
 	// document can force before verification rejects it. A base64 value decoded
 	// off the document is charged against [Verifier.MaxDecodedBytes] before it is
 	// decoded, so a value that is both over the cap and invalid base64 reports
-	// this error rather than the base64 one.
+	// this error, and never the base64 one.
 	ErrResourceLimitExceeded = errors.New("xmldsig1: verification resource limit exceeded")
 
 	// ErrAmbiguousReference is returned when a Reference URI resolves to more
@@ -80,7 +80,7 @@ var (
 	// ErrRetrievalMethodLoop is returned when a ds:RetrievalMethod chain is
 	// cyclic or exceeds the maximum follow depth. A RetrievalMethod whose target
 	// is itself a RetrievalMethod is followed, so an unbounded or self-referential
-	// chain is rejected fail-closed rather than dereferenced without limit.
+	// chain is rejected fail-closed, and never dereferenced without limit.
 	ErrRetrievalMethodLoop = errors.New("xmldsig1: RetrievalMethod chain is cyclic or too deep")
 
 	// ErrInvalidSignature is returned when the Signature element is malformed.
@@ -89,7 +89,7 @@ var (
 	// ErrNoKeySource is returned when a Verifier was created with a nil
 	// KeySource and verification is attempted. Without a KeySource there is no
 	// way to resolve a verification key, so this is rejected before any key
-	// resolution rather than panicking on a nil dereference.
+	// resolution, and never panics on a nil dereference.
 	ErrNoKeySource = errors.New("xmldsig1: no key source configured")
 
 	// ErrHereUnavailable is returned when the XPath here() function is invoked in
@@ -97,7 +97,7 @@ var (
 	// to the element carrying the XPath expression — the ds:XPath element of an
 	// XPath filter transform. It is threaded through only on the XPath filter
 	// transform path; the signing path and a URI-borne XPointer carry no bearing
-	// element, so here() fails closed there rather than resolving to a wrong node.
+	// element, so here() fails closed there, resolving to no wrong node.
 	ErrHereUnavailable = errors.New("xmldsig1: here() has no bearing node in this context")
 )
 

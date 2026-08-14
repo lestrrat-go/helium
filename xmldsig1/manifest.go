@@ -24,7 +24,7 @@ type preparedManifestReference struct {
 // unsupported transform, an unresolved external reference, or a digest mismatch
 // is recorded as that inner reference's Err/Valid=false, never a panic and
 // never a silent pass. Because the results are advisory (XMLDSig core §5.1), an
-// inner failure is captured rather than propagated.
+// inner failure is captured and never propagated.
 //
 // All direct inner references are parsed and statically prepared before any is
 // executed. A preparation failure records an advisory error for the failing
@@ -47,7 +47,7 @@ func validateManifestReferences(ctx context.Context, budget *verifyBudget, cfg *
 		}
 		// Bound the walk on cancellation: a Manifest can carry arbitrarily many
 		// inner references and each digest resolves and canonicalizes a node-set.
-		// Stop with the results gathered so far rather than run to completion.
+		// Stop with the results gathered so far, well short of completion.
 		if err := ctx.Err(); err != nil {
 			break
 		}

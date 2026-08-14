@@ -210,7 +210,7 @@ func validateTransformSteps(runtime transformRuntime, initialKind transformValue
 		}
 
 		// Base64 has an algorithm-specific node-set input rule. It consumes a
-		// node-set directly when present, rather than triggering generic C14N.
+		// node-set directly when present, triggering no generic C14N.
 		if step.algorithm == TransformBase64 && kind == transformValueNodeSet {
 			kind = transformValueOctets
 			hasSignatureIdentity = false
@@ -427,7 +427,7 @@ func materializeNodeSet(ctx context.Context, value *nodeSetValue) (*nodeSetValue
 // Materialized membership exists so a later transform can NARROW it — an XPath
 // filter drops nodes one at a time and may keep an element whose parent it
 // dropped — so every element carries its complete namespace axis here
-// (collectSubtreeNodes) rather than the reduced canonicalization set.
+// (collectSubtreeNodes), in place of the reduced canonicalization set.
 func originNodes(ctx context.Context, origin *referenceNodeSetOrigin) ([]helium.Node, error) {
 	if origin.wholeDoc {
 		return collectDocumentNodes(ctx, origin.doc)
@@ -530,7 +530,7 @@ func base64TransformNodeSetText(ctx context.Context, value *nodeSetValue) ([]byt
 	// A context already cancelled when the conversion starts stops it before any
 	// text is read; the periodic polls below cover one cancelled while it runs.
 	// Both branches are reads of an attacker-sized node set, so the check sits
-	// above the first of them rather than on the path to one.
+	// above the first of them, ahead of either path.
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

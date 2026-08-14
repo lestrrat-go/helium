@@ -70,7 +70,7 @@ func TestOutputEncoding(t *testing.T) {
 
 		// The declaration is a valid EncName, so the output reparses and the content
 		// round-trips. Re-serialize forcing UTF-8 so the recovered character is the
-		// raw UTF-8 "é" rather than its Latin-1 byte.
+		// raw UTF-8 "é", never its Latin-1 byte.
 		rt, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
 		require.NoError(t, err)
 		var rtbuf bytes.Buffer

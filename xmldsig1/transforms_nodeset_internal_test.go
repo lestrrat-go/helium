@@ -122,7 +122,7 @@ func TestCanonicalizationNodeSetMatchesFullAxis(t *testing.T) {
 	})
 
 	// An element declaring many prefixes at once is the shape the walk answers
-	// membership for from an index rather than by scanning what it has recorded,
+	// membership for from an index, and never by scanning what it has recorded,
 	// and the corpus above never declares more than three on one element. This
 	// one straddles that count from both sides, with the same rebinding,
 	// redundant redeclaration, and default-namespace churn.
@@ -326,7 +326,7 @@ const (
 // emissionPrefixes prefixes and whose single child carries one attribute per
 // prefix. own extra declarations are put on that child.
 //
-// The document is built rather than parsed because parsing thousands of
+// The document is built, and never parsed, because parsing thousands of
 // attributes onto one element is itself quadratic in helium's attribute
 // insertion, which is a separate cost and would dominate a measurement of the
 // walk. What the walk sees is the same tree either way.
@@ -555,7 +555,7 @@ func signatureSubtreeNodes(t *testing.T, count int) ([]helium.Node, *helium.Elem
 // pipeline builds or narrows to stop on a cancelled context. Each of these sets
 // is reached before any signature is checked — a ds:RetrievalMethod names any
 // element in the document and runs its own transforms — and each is bounded by a
-// deadline rather than by a size cap, so a stage that reads a whole set without
+// deadline, with no size cap behind it, so a stage that reads a whole set without
 // polling spends the document's cost after the deadline has passed.
 func TestNodeSetGrowthHonorsCancellation(t *testing.T) {
 	// The whole-document node set a URI="" or "#xpointer(/)" reference stands for.
@@ -720,7 +720,7 @@ func (g *docGenerator) writeElement(b *strings.Builder, depth int, inScope []str
 	case 0:
 		decls = append(decls, fmt.Sprintf(` xmlns="%s"`, g.uris[g.rng.Intn(len(g.uris))]))
 	case 1:
-		// A default-namespace reset, which C14N must undeclare rather than leak.
+		// A default-namespace reset, which C14N must undeclare, and must never leak.
 		decls = append(decls, ` xmlns=""`)
 	}
 

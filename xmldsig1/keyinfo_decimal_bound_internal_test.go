@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The two decimal integers a ds:KeyInfo carries as text rather than base64 — the
+// The two decimal integers a ds:KeyInfo carries as text, where the rest carry base64 — the
 // ds:X509SerialNumber and the RFC 4050 PublicKey X/Y Value attributes — are
 // converted to a big.Int, and that conversion is quadratic in the digit count.
 // Both are read before the SignatureValue is checked, so both have a fixed digit
@@ -57,7 +57,7 @@ func rfc4050KeyInfo(t *testing.T, x, y string) *helium.Document {
 // padDecimal returns value left-padded with zeros to exactly digits characters.
 // Leading zeros do not change what a base-10 conversion yields, so a padded copy
 // of a conforming value is the same value written at whatever length a case needs
-// — which is how the at-ceiling cases stay real values rather than arbitrary
+// — which is how the at-ceiling cases stay real values, and never arbitrary
 // digit strings.
 func padDecimal(t *testing.T, value string, digits int) string {
 	t.Helper()
