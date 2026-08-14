@@ -211,7 +211,7 @@ func TestHOFMaterializationLimit(t *testing.T) {
 // ErrNodeSetLimit WITHOUT first materializing it. The lazy source is a 1<<40
 // (≈1.1 trillion) integer range supplied via a variable: materializing it would
 // attempt a ~9 TB allocation (each Item is multiple words), so any path that
-// still does "materialize, then check" would OOM or hang here rather than return
+// still does "materialize, then check" would OOM or hang here, and never return
 // promptly. A correct, streaming/precheck implementation stops after at most
 // `limit` items.
 //
@@ -279,7 +279,7 @@ func TestHOFLazySequenceLimit(t *testing.T) {
 // respects OpLimit (and, by extension, context cancellation) instead of running
 // to completion unbounded. Each callback returns the huge lazy range on its
 // first invocation; with NO node-set limit but a low op-limit the drain must
-// stop with ErrOpLimit rather than materialize the trillion-item range.
+// stop with ErrOpLimit, materializing no part of the trillion-item range.
 func TestAppendBoundedSeqHonorsOpLimit(t *testing.T) {
 	t.Parallel()
 
@@ -303,7 +303,7 @@ func TestAppendBoundedSeqHonorsOpLimit(t *testing.T) {
 
 			var evalErr error
 			// NotPanics guards against a regression that drains the lazy range
-			// without an op check (which would hang / OOM rather than abort).
+			// without an op check (which would hang / OOM and never abort).
 			require.NotPanics(t, func() {
 				_, evalErr = xpath3.NewEvaluator(xpath3.EvalBorrowing).
 					Variables(vars).
@@ -320,7 +320,7 @@ func TestAppendBoundedSeqHonorsOpLimit(t *testing.T) {
 // array:for-each-pair, array:join, array:flat-map, and map:find — charge the
 // sub-sequence length against the op-counter BEFORE the bulk clone/append. A
 // callback result / array member list / matched value that is below maxNodes but
-// whose length exceeds OpLimit must be rejected with ErrOpLimit rather than
+// whose length exceeds OpLimit must be rejected with ErrOpLimit, and never
 // silently cloned. With NO node-set limit (so only the op-counter can fire) and
 // a low op-limit, each case's single oversized sub-sequence must trip ErrOpLimit.
 func TestBulkCloneSitesHonorOpLimit(t *testing.T) {
@@ -502,7 +502,7 @@ func TestArrayMemberCountBound(t *testing.T) {
 // TestFlatMapEmptyArrayOpLimit proves array:flat-map charges an op for every
 // callback result ITEM — including items that are EMPTY arrays whose member
 // expansion appends nothing. A regression that charged ops only per appended
-// member (rather than once per result item) would let a callback returning many
+// member, in place of once per result item, would let a callback returning many
 // empty arrays run unbounded. The callback returns a variable-bound sequence of
 // `wide` empty arrays (bound via EvalBorrowing so producing it costs no ops), so
 // ONLY flat-map's per-result-item op-charge can stop the run; with no node-set
@@ -1033,7 +1033,7 @@ func TestFoldNeverMaterializesInput(t *testing.T) {
 // array structure is iterative/bounded and does not blow the goroutine stack.
 // The nested array flattens to a single item, so the node-set limit is not the
 // guard here; the op-counter is, ensuring deep recursion-shaped input is
-// rejected with ErrOpLimit rather than exhausting the stack.
+// rejected with ErrOpLimit, exhausting no stack.
 func TestArrayFlattenDeepNesting(t *testing.T) {
 	t.Parallel()
 
@@ -1081,8 +1081,8 @@ func TestArrayFlattenDeepNesting(t *testing.T) {
 // TestMapFindDeepNesting verifies that map:find on a deeply nested map structure
 // is iterative/bounded and does not blow the goroutine stack. The nesting yields
 // a single match, so the op-counter (not the node-set limit) is the guard,
-// ensuring deep recursion-shaped input is rejected with ErrOpLimit rather than
-// exhausting the stack.
+// ensuring deep recursion-shaped input is rejected with ErrOpLimit, exhausting
+// no stack.
 func TestMapFindDeepNesting(t *testing.T) {
 	t.Parallel()
 
@@ -1284,7 +1284,7 @@ func TestSequenceConcatHonorsNodeSetLimit(t *testing.T) {
 // TestSequenceConcatHonorsOpLimit proves that the concatenation in
 // evalSequenceExpr charges an op per appended item, so a sequence of operands
 // whose total length exceeds OpLimit aborts with ErrOpLimit (and, by extension,
-// honors context cancellation) rather than running unbounded.
+// honors context cancellation), and never runs unbounded.
 func TestSequenceConcatHonorsOpLimit(t *testing.T) {
 	t.Parallel()
 

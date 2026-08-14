@@ -134,7 +134,7 @@ func fnNamespaceURIForPrefix(_ context.Context, args []Sequence) (Sequence, erro
 // requireSingleElement validates a required element() argument: it must be
 // exactly one node and that node must be a *helium.Element. This is validated
 // before any sibling argument is coerced so an invalid element() arg yields
-// XPTY0004 rather than an error from atomizing the other argument.
+// XPTY0004, and never an error from atomizing the other argument.
 func requireSingleElement(seq Sequence, fname string) (*helium.Element, error) {
 	if seqLen(seq) != 1 {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fname + ": expects a single element"}
@@ -221,8 +221,8 @@ func parseLexicalQName(qname string) (string, string, error) {
 
 // coerceQNameString atomizes a QName string argument with streaming and a
 // max-one cap on the ATOMIZED result, then enforces the string/anyURI/
-// untypedAtomic rules. Atomizing first (rather than checking item cardinality
-// up front) means a single array/list item that atomizes to multiple values is
+// untypedAtomic rules. Atomizing first, in place of checking item cardinality
+// up front, means a single array/list item that atomizes to multiple values is
 // rejected as XPTY0004 (a cardinality error), not FOTY0013. Streaming stops
 // once a second atom appears.
 func coerceQNameString(seq Sequence, allowEmpty bool, message string) (string, error) {

@@ -353,7 +353,7 @@ func TestXMLToJSON_OptionsMap(t *testing.T) {
 // map value is an element-only-typed node surfaces err:FOTY0012 — the node has
 // no typed value, so option (function) conversion cannot atomize it to a string.
 // This guards that option-map string extraction threads the ctx-aware
-// typed-value atomization rather than plain AtomizeSequence.
+// typed-value atomization, and never plain AtomizeSequence.
 func TestSerialize_OptionElementOnlyRaisesFOTY0012(t *testing.T) {
 	doc := mustParseXML(t, `<root><child>hi</child></root>`)
 	root := doc.DocumentElement()
@@ -396,8 +396,8 @@ func TestSerialize_OptionElementOnlyRaisesFOTY0012(t *testing.T) {
 
 // TestOptionMapElementOnlyRaisesFOTY0012 locks in the proactive sweep: every
 // string-valued OPTION-MAP extractor that atomizes its value must surface
-// err:FOTY0012 for an element-only-typed node (no typed value) rather than
-// masking it as the function's own bad-option error (FOJS0005 / XPTY0004).
+// err:FOTY0012 for an element-only-typed node (no typed value), masking it as
+// no bad-option error of the function's own (FOJS0005 / XPTY0004).
 // Covers map:merge, fn:parse-json, and fn:json-to-xml "duplicates" options.
 func TestOptionMapElementOnlyRaisesFOTY0012(t *testing.T) {
 	doc := mustParseXML(t, `<root><child>hi</child></root>`)
@@ -439,7 +439,7 @@ func TestOptionMapElementOnlyRaisesFOTY0012(t *testing.T) {
 // TestOptionMapFunctionValueRaisesFOTY0013 verifies the companion propagation:
 // a function/map item used as a string-valued option value has no atomizable
 // typed value, so atomizing it raises err:FOTY0013 — the extractors must let it
-// surface rather than masking it as their own bad-option error (FOJS0005 /
+// surface, masking it as no bad-option error of their own (FOJS0005 /
 // XPTY0004 / SEPM0016). No schema wiring is needed since the value is a function
 // item regardless of content-kind.
 func TestOptionMapFunctionValueRaisesFOTY0013(t *testing.T) {

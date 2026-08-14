@@ -92,10 +92,10 @@ func fnMapMerge(ctx context.Context, args []Sequence) (Sequence, error) {
 // a string. The option is declared as xs:string, so only xs:untypedAtomic,
 // xs:string (and subtypes), and xs:anyURI (and subtypes) are accepted; any other
 // atomic type — even a custom type whose Go payload happens to be a string — is a
-// FOJS0005 error rather than being silently accepted. A single-item array still
+// FOJS0005 error, and is never silently accepted. A single-item array still
 // flattens to its member via atomization. Atomization is ctx-aware: an
 // element-only-typed node has no typed value, so it surfaces err:FOTY0012
-// unchanged rather than being masked as the FOJS0005 invalid-option error.
+// unchanged, masked as no FOJS0005 invalid-option error.
 func coerceDuplicatesOption(ctx context.Context, val Sequence) (string, error) {
 	var first AtomicValue
 	count := 0
@@ -242,7 +242,7 @@ func fnMapForEach(ctx context.Context, args []Sequence) (Sequence, error) {
 	// materialized by ForEach's clone before the bound/op guards run. For each
 	// entry: bound the value length against maxNodes and charge the value's
 	// length (min 1) of ops BEFORE cloning the key/value into the callback, so a
-	// pathological lazy value is rejected rather than eagerly materialized.
+	// pathological lazy value is rejected, and never eagerly materialized.
 	mapErr := m.forEach0(func(k AtomicValue, v Sequence) error {
 		vLen := seqLen(v)
 		if maxNodes > 0 && vLen > maxNodes {
@@ -283,7 +283,7 @@ func fnMapFind(ctx context.Context, args []Sequence) (Sequence, error) {
 
 // mapFindIter searches for a key in maps within items. Per XPath 3.1, map:find
 // searches recursively through maps and arrays, in document order. The walk is
-// performed iteratively with an explicit work stack rather than recursively, so
+// performed iteratively with an explicit work stack, and never recursively, so
 // a pathologically nested input cannot exhaust the goroutine stack when no op
 // limit is set. The traversal charges an op per item and bounds the accumulated
 // result item count so a deeply or widely nested input cannot exhaust resources.
@@ -294,7 +294,7 @@ func fnMapFind(ctx context.Context, args []Sequence) (Sequence, error) {
 // consumed via Sequence.Get so a lazy value/member sequence is never expanded
 // into a temporary slice. A matched value is looked up without cloning (get0)
 // and its length bound-checked before it is cloned, so a borrowed lazy value is
-// rejected rather than materialized. The stack is LIFO, so on descending into a
+// rejected, and never materialized. The stack is LIFO, so on descending into a
 // nested map/array the parent frame is left in place beneath the child frame,
 // yielding document order.
 func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequence, key AtomicValue) ([]Sequence, error) {
@@ -330,7 +330,7 @@ func mapFindIter(ctx context.Context, ec *evalContext, maxNodes int, root Sequen
 			// Look the value up WITHOUT cloning (get0) and bound-check its length
 			// before materializing: a borrowed lazy value (e.g. a huge integer
 			// range stored via map:entry, which does not clone) must be rejected
-			// with ErrNodeSetLimit rather than materialized by the clone in Get.
+			// with ErrNodeSetLimit, and never materialized by the clone in Get.
 			if val, found := v.get0(key); found {
 				// Each matched value becomes one member of the result array.
 				// appendArrayMember bounds both the member count (many empty

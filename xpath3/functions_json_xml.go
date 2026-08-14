@@ -175,7 +175,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 		return elem, nil
 	case jsonLexicalNumber:
 		// Retain the JSON number's exact lexical form (e.g. 23E0, 0.23e+02, -0,
-		// 1000000000000) rather than the canonical xs:double, per F&O 3.1 (bug
+		// 1000000000000), and never the canonical xs:double, per F&O 3.1 (bug
 		// 28179).
 		if err := elem.AppendText([]byte(v.lexical)); err != nil {
 			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append numeric value: %v", err)}
@@ -327,8 +327,8 @@ func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, e
 		// reject e.g. map{"duplicates": ([], "use-first")}.
 		s, err := coerceArgToStringRequired(ctx, v)
 		if err != nil {
-			// An element-only-typed node has no typed value: surface err:FOTY0012
-			// rather than masking it as the XPTY0004 bad-value error.
+			// An element-only-typed node has no typed value: surface err:FOTY0012,
+			// masking it as no XPTY0004 bad-value error.
 			if isNoTypedValueError(err) {
 				return opts, err
 			}

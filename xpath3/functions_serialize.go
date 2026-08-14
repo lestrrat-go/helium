@@ -81,7 +81,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	// An extension method (a prefixed QName) is a valid method-type value but
 	// helium implements no extension output methods, so it is an unsupported
-	// value (SEPM0016) rather than a silent fall-through to the xml method. The
+	// value (SEPM0016), with no silent fall-through to the xml method. The
 	// built-in methods and the unspecified default ("") dispatch below.
 	if opts.method != "" && !isBuiltinSerializeMethod(opts.method) {
 		return nil, &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("output method %q is not supported", opts.method)}
@@ -89,7 +89,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	// The version parameter, for the methods that emit an XML declaration, must
 	// name an XML version the serializer supports (1.0 or 1.1); any other value
-	// is the SESU0013 unsupported-version serialization error rather than a
+	// is the SESU0013 unsupported-version serialization error, and never a
 	// bogus version pseudo-attribute. It also drives the XML 1.1 escaping /
 	// undeclaration rules, so it must be validated even when the declaration is
 	// omitted.
@@ -1038,8 +1038,8 @@ func isExtensionMethodName(v string) bool {
 // built-in output method, or a prefixed QName / non-null EQName naming an
 // extension method. A bare non-built-in NCName (e.g. "bogus") is NOT valid.
 // Note: passing validation does not imply the method is SUPPORTED — an extension
-// method is valid but unimplemented, and fnSerialize rejects it at dispatch
-// rather than silently falling through to the xml method.
+// method is valid but unimplemented, and fnSerialize rejects it at dispatch,
+// with no silent fall-through to the xml method.
 func serializeMethodValid(v string) bool {
 	return isBuiltinSerializeMethod(v) || isExtensionMethodName(v)
 }
@@ -1140,7 +1140,7 @@ func readSerializeParamQNameNames(elem *helium.Element) (map[string]struct{}, er
 	names := make(map[string]struct{})
 	// QNames-type is an xs:list, so tokens split ONLY on XSD list whitespace
 	// (#x20/#x9/#xA/#xD) — NBSP and other Unicode whitespace stay inside the token
-	// and then fail NCName validation, rather than being silently split.
+	// and then fail NCName validation, and are never silently split.
 	for _, token := range xsdListFields(value) {
 		key, err := resolveSerializeNameToken(elem, token)
 		if err != nil {
@@ -1243,8 +1243,8 @@ func resolveSerializeStandaloneMap(ctx context.Context, v Sequence) (string, err
 	// singleton cardinality. An empty atomized value selects the parameter
 	// default (omit); it is not a bad value (QT3 serialize-xml-131 supplies
 	// map{"standalone":()}). Atomization is ctx-aware: an element-only-typed node
-	// has no typed value, so it surfaces err:FOTY0012 rather than being masked as
-	// the XPTY0004 bad-value error.
+	// has no typed value, so it surfaces err:FOTY0012, masked as no
+	// XPTY0004 bad-value error.
 	atoms, err := atomizeTypedValue(ctx, v)
 	if err != nil {
 		if isNoTypedValueError(err) {
@@ -1672,8 +1672,8 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		// helium serializes a node embedded in JSON only with the xml method (the
 		// json-node-output-method default). A non-default value (html/xhtml/text or
 		// an extension) would change the node's serialization, which helium does
-		// not implement — so rather than silently emitting xml, it is an explicit
-		// unsupported-feature error (SEPM0016). The empty/"xml" default is honored.
+		// not implement, so it is an explicit unsupported-feature error
+		// (SEPM0016), and never a silent emission of xml. The empty/"xml" default is honored.
 		if m := opts.jsonNodeOutputMethod; m != "" && m != lexicon.PrefixXML {
 			return "", &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("json-node-output-method %q is not supported for a node embedded in JSON", m)}
 		}
@@ -2124,7 +2124,7 @@ func htmlDoctype(opts serializeOptions) string {
 // §7.4.6 requires the system identifier be enclosed in quotation marks (#x22) OR
 // apostrophes (#x27) — it does not mandate double quotes — and SEPM0016 rejects
 // only a value containing BOTH, so a value with just a `"` (e.g. `a"b`) must be
-// single-quoted (`'a"b'`) rather than emitted as malformed `"a"b"`. This mirrors
+// single-quoted (`'a"b'`), and never emitted as malformed `"a"b"`. This mirrors
 // helium's dtdQuoteChar used by the xml output method's DOCTYPE path (writer_dtd.go).
 func writeDoctypeSystemLiteral(b *strings.Builder, sys string) {
 	quote := byte('"')

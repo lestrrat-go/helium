@@ -92,7 +92,7 @@ func fnEnvironmentVariable(ctx context.Context, args []Sequence) (Sequence, erro
 		return SingleString(val), nil
 	}
 	// Look the name up against os.Environ() with an EXACT, case-sensitive match
-	// rather than os.LookupEnv. On Windows os.LookupEnv is case-insensitive and
+	// and never os.LookupEnv. On Windows os.LookupEnv is case-insensitive and
 	// the canonical name differs in case (e.g. "Path"), so environment-variable
 	// ("path") would return a value while available-environment-variables()
 	// lists only "Path" — making the two accessors mutually inconsistent and

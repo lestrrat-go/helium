@@ -9,7 +9,7 @@ import (
 )
 
 // map:merge's optional second argument is a single map. A non-map options
-// argument (or a multi-item sequence) must raise XPTY0004 rather than being
+// argument (or a multi-item sequence) must raise XPTY0004, and is never
 // silently ignored.
 func TestMapMergeRejectsNonMapOptions(t *testing.T) {
 	t.Parallel()
@@ -76,7 +76,7 @@ func TestMapMergeRejectDuplicateKey(t *testing.T) {
 	require.Equal(t, "FOJS0003", xpErr.Code, expr)
 }
 
-// An invalid "duplicates" option value must raise FOJS0005 rather than being
+// An invalid "duplicates" option value must raise FOJS0005, and is never
 // silently accepted. Per F&O 3.1 this covers empty, multi-item, non-string,
 // and unknown values alike.
 func TestMapMergeRejectsInvalidDuplicates(t *testing.T) {

@@ -135,8 +135,8 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 // rules, interleaving a typed-value check with atomization: a NILLED element has
 // no typed value and is skipped (typed value ()); an element whose schema type
 // annotation resolves to ELEMENT-ONLY complex content has no typed value and
-// raises err:FOTY0012 (rather than fabricating an xs:untypedAtomic from its
-// string value); an element with EMPTY complex content has typed value () and is
+// raises err:FOTY0012, fabricating no xs:untypedAtomic from its
+// string value; an element with EMPTY complex content has typed value () and is
 // skipped (contributes no atoms); mixed/simple content and everything else
 // atomize normally. It backs fn:data AND the xs:string?-argument function
 // conversion (coerceAtomizedString / seqToStringErr), since atomizing an

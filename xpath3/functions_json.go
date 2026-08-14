@@ -35,7 +35,7 @@ type jsonOptions struct {
 
 // jsonLexicalNumber carries a JSON number's exact lexical form for
 // fn:json-to-xml, which retains the source representation in the <number>
-// element rather than the canonical xs:double produced by fn:parse-json.
+// element, and never the canonical xs:double produced by fn:parse-json.
 type jsonLexicalNumber struct {
 	lexical string
 }
@@ -134,8 +134,8 @@ func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error)
 	if v, found := m.Get(dupKey); found {
 		s, err := coerceArgToStringRequired(ctx, v)
 		if err != nil {
-			// An element-only-typed node has no typed value: surface err:FOTY0012
-			// rather than masking it as the FOJS0005 invalid-option error.
+			// An element-only-typed node has no typed value: surface err:FOTY0012,
+			// masking it as no FOJS0005 invalid-option error.
 			if isNoTypedValueError(err) {
 				return opts, err
 			}
