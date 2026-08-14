@@ -151,7 +151,7 @@ func TestImportSchemaNestedIncludeThroughResolver(t *testing.T) {
 
 // TestImportSchemaNestedIncludeDenied verifies that when the resolver supplies
 // the main schema but NOT its nested include, the nested xs:include is denied
-// through the resolver rather than read off the local filesystem.
+// through the resolver, and never read off the local filesystem.
 func TestImportSchemaNestedIncludeDenied(t *testing.T) {
 	const baseURI = "mem://stylesheets/main.xsl"
 	const mainSchemaURI = "mem:/stylesheets/main.xsd"
@@ -250,7 +250,7 @@ func TestImportSchemaInlineNestedIncludeDefaultDeny(t *testing.T) {
 
 // TestImportSchemaInlineNestedIncludeDenied verifies that when a resolver is
 // configured but does NOT supply the nested include, the inline schema's
-// xs:include is denied through the resolver rather than read off disk.
+// xs:include is denied through the resolver, and never read off disk.
 func TestImportSchemaInlineNestedIncludeDenied(t *testing.T) {
 	const baseURI = "mem://stylesheets/main.xsl"
 

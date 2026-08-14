@@ -11,7 +11,7 @@ import (
 
 // TestForEachGroupStartingWithPositionalPattern verifies that a positional
 // pattern in group-starting-with sees the per-item focus (position/size of the
-// population sequence) rather than the stale outer focus (ENG-005). The
+// population sequence), and never the stale outer focus (ENG-005). The
 // population is an atomic sequence, so the pattern predicate is evaluated with
 // the item as context and reads ec.position/ec.size. With the bug, position()=3
 // never matches (position stuck at the outer 1), producing a single group; the

@@ -295,8 +295,8 @@ func (ec *execContext) fnCurrentMergeKey(_ context.Context, _ []xpath3.Sequence)
 
 // accumulatorLookup implements both accumulator-before() and accumulator-after().
 // The caller passes an accessor that returns the per-node value and error maps
-// for the appropriate phase. An accessor is used (rather than passing the maps
-// directly) because the maps are lazily allocated: ensureAccumulatorStates may
+// for the appropriate phase. An accessor is used, in place of passing the maps
+// directly, because the maps are lazily allocated: ensureAccumulatorStates may
 // assign a new map to the execContext field after the call begins.
 func (ec *execContext) accumulatorLookup(
 	ctx context.Context,
@@ -331,7 +331,7 @@ func (ec *execContext) accumulatorLookup(
 	}
 	// XTTE3360: context item must be a node (not atomic), and not an attribute
 	// or namespace node. Use the XPath function context node (which reflects
-	// path steps like ../accumulator-before(...)) rather than ec.contextNode
+	// path steps like ../accumulator-before(...)), and never ec.contextNode
 	// (which is the XSLT template context and may still be an attribute).
 	xpathNode := xpath3.FnContextNode(ctx)
 	if xpathNode == nil {

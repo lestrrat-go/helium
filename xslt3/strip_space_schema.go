@@ -98,8 +98,8 @@ func schemaContentCategory(typeName string, reg *schemaRegistry) schemaContentCa
 		// A built-in xs: type is a simple/atomic type (whitespace is part of the
 		// value) EXCEPT the ur-types and the "not validated" sentinel, which carry
 		// no content-type verdict. Anonymous element-only types collapse to
-		// xs:anyType under xsdTypeName, so xs:anyType stays neutral rather than
-		// wrongly claiming element-only.
+		// xs:anyType under xsdTypeName, so xs:anyType stays neutral, claiming
+		// element-only nowhere.
 		switch typeName {
 		case "xs:untyped", "xs:anyType", "xs:anySimpleType":
 			return schemaCatNeutral

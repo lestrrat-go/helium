@@ -196,7 +196,7 @@ func listItemTypeDef(listTD *xsd.TypeDef) *xsd.TypeDef {
 // into a sequence of per-item atoms, each typed as the item type — the XDM
 // representation of a list value. It only handles an ATOMIC item type (the common
 // case, e.g. xs:list itemType="xs:integer"); a union/list item type returns ok=false
-// so the caller keeps the single-atom fallback rather than mis-typing the tokens.
+// so the caller keeps the single-atom fallback, mis-typing no tokens.
 func (ec *execContext) expandSchemaListValue(listTD *xsd.TypeDef, lexical string) (xpath3.Sequence, bool) {
 	itemTD := listItemTypeDef(listTD)
 	if itemTD == nil {

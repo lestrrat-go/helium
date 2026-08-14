@@ -15,7 +15,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 	// XSLT 3.0 processes the selected sequence in SEQUENCE ORDER. Keep a
 	// single ordered item list so mixed sequences of nodes and atomic values
 	// (e.g. select="('a', /root/b)") are dispatched in the order they appear,
-	// rather than processing all nodes before all atomic values.
+	// with no pass over all nodes before all atomic values.
 	var items xpath3.ItemSlice
 	if inst.Select != nil {
 		result, err := ec.evalXPath(ctx, inst.Select, ec.contextNode)

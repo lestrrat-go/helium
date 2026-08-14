@@ -69,7 +69,7 @@ func TestEnsureFileURI(t *testing.T) {
 
 // TestLoadParameterDocumentURIAbsolute verifies that the serialization
 // parameter-document loader hands an absolute-URI href (scheme, no "://")
-// to its loader unchanged rather than filepath.Join'ing it onto the base.
+// to its loader unchanged, filepath.Join'ing it onto no base.
 func TestLoadParameterDocumentURIAbsolute(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -129,8 +129,8 @@ func TestResolveTransformStylesheetLocURIBase(t *testing.T) {
 // TestResolveDocumentURIAbsolute verifies that runtime document()/doc()
 // resolution (functions.go resolveDocumentURI) is URI-aware: an absolute-URI
 // ref carrying a scheme with no "//" authority (e.g. document('urn:doc'),
-// doc('file:/x.xml')) is returned UNCHANGED rather than filepath.Join'ed onto
-// the base dir, and a relative ref against a URI base keeps the base
+// doc('file:/x.xml')) is returned UNCHANGED, filepath.Join'ed onto no
+// base dir, and a relative ref against a URI base keeps the base
 // scheme/authority instead of losing it before retrieveDocumentBytes.
 func TestResolveDocumentURIAbsolute(t *testing.T) {
 	ec := &execContext{}
@@ -163,8 +163,8 @@ func TestResolveDocumentURIAbsolute(t *testing.T) {
 		{"file unc rejected not stripped", "file:////server/share/x.xml", testDocsDir, "file:////server/share/x.xml"},
 		// url.Parse percent-decodes u.Path, so a "%5C"/"%5c" encoded backslash
 		// decodes to "/\server/share" — still a UNC path on Windows. FileURIToPath
-		// rejects it, so the fallback must keep the original file: URI verbatim
-		// rather than stripping "file://" into a bare UNC path.
+		// rejects it, so the fallback must keep the original file: URI verbatim,
+		// stripping "file://" into no bare UNC path.
 		{"file unc encoded backslash not stripped", "file:///%5Cserver/share/x.xml", testDocsDir, "file:///%5Cserver/share/x.xml"},
 		{"file unc encoded backslash lower not stripped", "file:///%5cserver/share/x.xml", testDocsDir, "file:///%5cserver/share/x.xml"},
 		// Windows-shaped local base resolves with forward-slash output on any OS

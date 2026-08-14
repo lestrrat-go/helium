@@ -720,7 +720,7 @@ func isGroundingExprSS(ss *Stylesheet, expr xpath3.Expr) bool {
 }
 
 // exprProducesAtomicResult returns true if the outermost expression produces an
-// atomic result (string, number, boolean) rather than streaming nodes. This
+// atomic result (string, number, boolean), and streams no nodes. This
 // includes function calls like string(), number(), count(), etc., as well as
 // arithmetic expressions, comparisons, and other operators that always produce
 // atomic values.

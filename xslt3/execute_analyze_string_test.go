@@ -50,7 +50,7 @@ func TestAnalyzeStringNormalOutput(t *testing.T) {
 // at every character boundary, amplifying a bounded input string into an
 // unbounded number of match/segment allocations. The work must be bounded
 // against the execution resource budget (MaxResourceBytes) and fail with
-// ErrResourceTooLarge rather than exhausting memory.
+// ErrResourceTooLarge, exhausting no memory.
 func TestAnalyzeStringEmptyMatchIsCapped(t *testing.T) {
 	t.Parallel()
 
@@ -157,7 +157,7 @@ func TestAnalyzeStringCapBreachCarriesCatchableCode(t *testing.T) {
 		"$err:code must carry the concrete XTDE1140 code so xsl:catch can match it")
 }
 
-// A cancelled context is honored promptly by xsl:analyze-string rather than
+// A cancelled context is honored promptly by xsl:analyze-string, well short of
 // running its per-segment loop to completion.
 func TestAnalyzeStringHonorsCancelledContext(t *testing.T) {
 	t.Parallel()

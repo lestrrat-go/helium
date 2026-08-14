@@ -114,8 +114,8 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 	// Validate the supplied global context item against the declared sequence
 	// type using the namespace-aware type
 	// machinery, so that prefixed element tests like
-	// document-node(element(p:root)) compare both local name and namespace
-	// rather than local name alone. Prefixes and the default element namespace
+	// document-node(element(p:root)) compare both local name and namespace,
+	// and never local name alone. Prefixes and the default element namespace
 	// in the @as type must resolve against the namespace context of the
 	// xsl:global-context-item declaration itself, not the runtime
 	// stylesheet-wide context, so install the saved declaration-site context
@@ -706,7 +706,7 @@ func (ec *execContext) effectiveStaticBaseURI() string {
 		// stylesheet's base URI. The override already carries the declaration
 		// base whenever it is known; an empty pinned base is authoritative (e.g.
 		// a used package whose PackageResolver returns an empty base), so we
-		// return "" rather than falling back to ec.stylesheet.baseURI — falling
+		// return "" and fall back to no ec.stylesheet.baseURI — falling
 		// back would resolve the global's xsl:evaluate / unparsed-text against
 		// the USING stylesheet, the very bug this pinning prevents.
 		return ec.staticBaseURIOverride

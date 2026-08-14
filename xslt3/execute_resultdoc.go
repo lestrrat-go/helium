@@ -745,7 +745,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		// double-primary result.
 		//
 		// The buffer frame stands IN for the base frame: it temporarily replaces
-		// ec.outputStack[0] (rather than being pushed on top), so that the body
+		// ec.outputStack[0], and is never pushed on top, so that the body
 		// observes the same outputStack depth (1) and the same insideResultDocPrimary
 		// state as a true direct write. This keeps every depth-sensitive branch
 		// (XTRE1495 suppression, rawResultSequence capture, etc.) behaving exactly
@@ -791,8 +791,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			// allow-duplicate-names defaults to "no" per XSLT 3.0 §20. The value
 			// (including the result-document AVT and any named-format/default
 			// xsl:output base) was already evaluated up front in the preflight via
-			// evalResultDocOutputDef; reuse it so a failing AVT was surfaced there
-			// rather than silently swallowed here.
+			// evalResultDocOutputDef; reuse it so a failing AVT was surfaced there,
+			// and never silently swallowed here.
 			// When the primary result-document declares no serialization
 			// attributes of its own, primaryOverrides is nil. In that case the
 			// effective allow-duplicate-names comes from the resolved default

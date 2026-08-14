@@ -279,7 +279,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 			out := ec.currentOutput()
 			if out.captureItems {
 				// In capture mode (inside variable/function body),
-				// append items directly rather than writing to DOM,
+				// append items directly, writing to no DOM,
 				// so non-node items (maps, arrays) are preserved.
 				out.pendingItems = append(out.pendingItems, sequence.Materialize(ec.breakValue)...)
 			} else {

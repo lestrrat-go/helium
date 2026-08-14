@@ -168,7 +168,7 @@ func TestSortInvalidDataTypeEmptyRaisesXTDE0030(t *testing.T) {
 }
 
 // XSLT3-ADV-003: an invalid evaluated data-type with non-empty input must also
-// raise XTDE0030 rather than silently falling back to text sorting.
+// raise XTDE0030, falling back to no text sorting.
 func TestSortInvalidDataTypeRaisesXTDE0030(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -384,8 +384,8 @@ func TestMultiKeySortNumberAutoNodeKeyBypassRaisesXTDE1030(t *testing.T) {
 // XSLT3-102 r3: a default-data-type sort mixing xs:dateTimeStamp and xs:dateTime
 // must NOT raise XTDE1030. In the repo's XSD 1.1 model xs:dateTimeStamp is a
 // subtype of xs:dateTime and the two are mutually comparable with the value
-// comparison `lt`/`eq` operators, so the consistency check must accept them
-// rather than rejecting on raw type-name inequality.
+// comparison `lt`/`eq` operators, so the consistency check must accept them,
+// rejecting on no raw type-name inequality.
 func TestSingleKeySortDateTimeStampDateTimeNoError(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"

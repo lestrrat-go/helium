@@ -131,8 +131,8 @@ func mapElementAttributes(nodeMap map[helium.Node]helium.Node, ea, eb *helium.El
 // The wrapper is re-bound by preference to an in-scope declaration on the copied
 // owner (or an ancestor) with the same prefix and URI, since namespace nodes can
 // be reported on a descendant of the element that declares them. When no such
-// declaration exists, the namespace is one the XPath axis SYNTHESIZES rather than
-// one stored in Namespaces() — most notably the implicit `xml` binding, which the
+// declaration exists, the namespace is one the XPath axis SYNTHESIZES, and none
+// stored in Namespaces() — most notably the implicit `xml` binding, which the
 // namespace axis fabricates and which never appears in any element's declarations
 // (see internal/xpath/axes.go CollectNamespaceNodes). For those, synthesize an
 // equivalent Namespace bound to the copied owner, mirroring the axis, so the
@@ -240,8 +240,8 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	// selection at all, independent of how many nodes it currently holds. After
 	// strip-space remaps the selection (remapSelectionToCopy), an all-whitespace
 	// selection can shrink to length 0. In that case the apply-templates step
-	// must run against the (empty) selection — producing no output — rather than
-	// falling through to the source document.
+	// must run against the (empty) selection — producing no output — and must never
+	// fall through to the source document.
 	selectionSupplied := matchSelection != nil
 
 	captureItems := cfg != nil && cfg.rawCapture
@@ -362,7 +362,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	sourceValidated := false
 	// sourceCopied records whether effectiveSource has been replaced by a private
 	// deep copy (made for schema validation). When set, the strip block below
-	// strips that copy IN PLACE rather than making a second deep copy.
+	// strips that copy IN PLACE, making no second deep copy.
 	sourceCopied := false
 	if ss.schemaAware || len(runtimeSchemas) > 0 {
 		ec.schemaRegistry = &schemaRegistry{schemas: runtimeSchemas}
@@ -894,7 +894,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		ov := cloneOutputDef(ec.primaryOutputOverrides)
 		if ov.Method != "" {
 			outDef.Method = ov.Method
-			// Carry the override's explicitness rather than forcing it true:
+			// Carry the override's explicitness, forcing it true nowhere:
 			// an override built solely from AVT-only attributes (media-type,
 			// html-version, etc.) inherits the base method without making it
 			// explicit, so forcing MethodExplicit=true here would wrongly
@@ -909,13 +909,13 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		}
 		// ov folds in the default xsl:output base via evalResultDocOutputDef, so
 		// it is the effective output definition. Assign the boolean serialization
-		// fields directly rather than OR-ing with outDef: an explicit false on
+		// fields directly, OR-ing with no outDef: an explicit false on
 		// the result-document (e.g. indent="{false()}") must override an inherited
 		// true. OR-ing would wrongly keep the inherited true on.
 		outDef.Indent = ov.Indent
 		outDef.OmitDeclaration = ov.OmitDeclaration
 		// Carry the omit-xml-declaration explicitness so the xhtml/html5
-		// serializer respects an explicit value rather than defaulting it to
+		// serializer respects an explicit value, defaulting it to no
 		// "yes" (output_html.go keys on OmitDeclarationExplicit).
 		outDef.OmitDeclarationExplicit = ov.OmitDeclarationExplicit
 		if ov.DoctypeSystem != "" {

@@ -822,7 +822,7 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 		}
 		// XTTE3170: when the namespace-context attribute is supplied, its value
 		// must be a single node. An empty sequence, multiple items, or a non-node
-		// item is a type error rather than being silently ignored.
+		// item is a type error, and is never silently ignored.
 		if ncLen != 1 {
 			return dynamicError(errCodeXTTE3170,
 				"xsl:evaluate namespace-context produced %d items; a single node is required", ncLen)

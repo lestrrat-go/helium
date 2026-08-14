@@ -121,7 +121,7 @@ func checkSequenceType(ctx context.Context, seq xpath3.Sequence, st sequenceType
 }
 
 // isAtomicTargetType returns true when the item type string names an atomic
-// type (e.g. "xs:decimal", "xs:string") rather than a node/function/map test.
+// type (e.g. "xs:decimal", "xs:string"), and no node/function/map test.
 func isAtomicTargetType(itemType string) bool {
 	if itemType == "" || itemType == lexicon.NodeTestItem {
 		return false

@@ -469,8 +469,8 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 		ec.defaultCollation = tmpl.DefaultCollation
 	}
 	// When entering a template with a node context, clear the atomic context
-	// item so that next-match and other instructions use the node context
-	// rather than a stale atomic value (e.g., from xsl:analyze-string).
+	// item so that next-match and other instructions use the node context,
+	// and never a stale atomic value (e.g., from xsl:analyze-string).
 	if node != nil {
 		ec.contextItem = nil
 	}

@@ -79,7 +79,7 @@ func TestResultDocumentPrimaryAVTOnlyKeepsHTMLAutoDetect(t *testing.T) {
 }
 
 // An invalid AVT value for ANY boolean serialization parameter on
-// xsl:result-document must raise SEPM0016 rather than being silently coerced to
+// xsl:result-document must raise SEPM0016, and is never silently coerced to
 // false. All boolean serialization-param AVTs route through one shared helper,
 // so a single invalid value is enough to fail each one.
 func TestResultDocumentInvalidBooleanAVTRaisesSEPM0016(t *testing.T) {

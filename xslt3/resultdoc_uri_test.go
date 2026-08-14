@@ -30,8 +30,8 @@ func TestResultDocumentDuplicateURICanonical(t *testing.T) {
 }
 
 // A-007: an xsl:result-document format AVT that raises a dynamic error
-// (e.g. {1 idiv 0}) must surface that error rather than silently falling back
-// to the static/default format.
+// (e.g. {1 idiv 0}) must surface that error, falling back to no
+// static/default format.
 func TestResultDocumentFormatAVTErrorPropagates(t *testing.T) {
 	ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

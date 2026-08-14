@@ -356,7 +356,7 @@ func TestImportSchemaXMLBaseFileURIBase(t *testing.T) {
 // declared (the would-be nested include is absent), so the xsd compiler cannot
 // resolve it. The compiler reports a fatal unresolved-type diagnostic and
 // installs a recovery placeholder; the file-backed xsl:import-schema path must
-// surface this as XTSE0220 rather than silently succeeding with an invalid
+// surface this as XTSE0220, succeeding with no invalid
 // schema.
 const ddMainSchemaMissingType = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"

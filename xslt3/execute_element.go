@@ -836,7 +836,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 	}
 
 	// In sequence mode (variable/param with as), capture the attribute as a
-	// standalone item rather than attaching it to an element.
+	// standalone item, attaching it to no element.
 	out := ec.currentOutput()
 	if out.sequenceMode {
 		localName := resolved.localName
@@ -897,7 +897,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 				"cannot add attribute %q to a document node", name)
 		}
 		// In adaptive/json output mode or build-tree=no, capture the
-		// attribute as a pending item rather than raising XTDE0820.
+		// attribute as a pending item, raising no XTDE0820.
 		if ec.isItemOutputMethod() || out.captureItems {
 			// Create a standalone attribute node by attaching it to a
 			// temporary element, then capturing it as a node item.
@@ -1143,7 +1143,7 @@ func undeclareInheritedNamespaces(parent *helium.Element) {
 			}
 			// If the child element itself uses this prefix (i.e., its
 			// namespace matches the inherited binding), add an explicit
-			// declaration rather than undeclaring. This preserves the
+			// declaration, and undeclare nothing. This preserves the
 			// element's own namespace while blocking further inheritance.
 			childPrefix := childElem.Prefix()
 			childURI := childElem.URI()

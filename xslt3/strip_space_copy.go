@@ -60,8 +60,8 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// ID table (populated during parse) is authoritative for id()/GetElementByID on
 	// the source; the copy must reproduce it so both the no-strip and strip-space
 	// paths resolve ids identically. Translating the table reproduces the source's
-	// interned ID-table identity (and resolves at O(1)) rather than re-deriving ids
-	// through the lazy O(n) GetElementByID fallback walk, which — though it now looks
+	// interned ID-table identity (and resolves at O(1)). Re-deriving ids
+	// would fall back to the lazy O(n) GetElementByID walk, which — though it now looks
 	// up DTD ATTLIST decls by their raw qualified name (prefix+local), correctly
 	// handling a prefixed element's ATTLIST (e.g. <!ATTLIST a:item eid ID>) — would
 	// still yield a table with different element identities. Skip the rebuild when the source skips ids
@@ -86,7 +86,7 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// declared in an external DTD would resolve under no-strip (which transforms
 	// the source directly) but not under strip-space (which transforms this copy).
 	//
-	// Deep-copy the external subset (rather than sharing the pointer): the copy
+	// Deep-copy the external subset, sharing no pointer: the copy
 	// document can be exposed to user code via raw-result capture, and *DTD has
 	// mutators, so an aliased external subset would let a handler mutating the
 	// copy's ExtSubset corrupt the source. CopyExtSubset gives the copy its own

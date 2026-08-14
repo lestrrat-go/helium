@@ -559,8 +559,8 @@ func TestParameterDocumentOverCapPreservesSentinel(t *testing.T) {
 }
 
 // A runtime xsl:result-document parameter-document (an AVT, so it is loaded
-// during execution rather than at compile time) that exceeds the cap must FAIL
-// the transformation rather than be silently swallowed. Before the fix the
+// during execution, and not at compile time) that exceeds the cap must FAIL
+// the transformation, and must never be silently swallowed. Before the fix the
 // runtime loader cached the OutputDef only on success and otherwise continued,
 // so the over-cap read never surfaced and callers could not observe the
 // ErrResourceTooLarge sentinel.

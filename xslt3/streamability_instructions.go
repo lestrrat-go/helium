@@ -360,8 +360,8 @@ func countAttributeSetDownward(ss *Stylesheet, asDef *attributeSetDef) int {
 // - xsl:sequence select="." returning streamed nodes from for-each body
 //
 // When inResultDoc is true, the xsl:sequence select="." check is skipped
-// because nodes flow to a serializer (xsl:result-document) rather than
-// being returned as a sequence that requires materialization.
+// because nodes flow to a serializer (xsl:result-document), and are never
+// returned as a sequence that requires materialization.
 func checkForEachStreamable(_ *Stylesheet, inst instruction, inResultDoc bool) error {
 	switch v := inst.(type) {
 	case *forEachInst:

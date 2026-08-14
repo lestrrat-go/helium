@@ -17,7 +17,7 @@ import (
 // configured URIResolver / HTTPClient and its default-deny policy) into an
 // [fs.FS] suitable for [xsd.Compiler.FS]. It is how nested xs:include /
 // xs:import / xs:redefine references inside a resolver-loaded schema are
-// routed through the SAME resolver rather than the xsd compiler's default
+// routed through the SAME resolver, and never the xsd compiler's default
 // os.Open. Without it, a schema fetched from an in-memory or HTTP resolver
 // would have its nested references read off the local filesystem, bypassing
 // the secure-by-default policy.
@@ -69,7 +69,7 @@ func (s schemaResolverFS) Open(name string) (fs.File, error) {
 // vocabulary: it satisfies errors.Is(_, fs.ErrNotExist) — so xsd's Open-path
 // isBenignResolutionMiss demotes the optional nested load — while preserving the
 // original loader error's message and unwrap chain. It reports fs.ErrNotExist via
-// Is rather than embedding the sentinel so the original chain (carrying the
+// Is, embedding no sentinel, so the original chain (carrying the
 // resolver's own message and any errSchemaResolutionMiss tag) stays intact.
 type schemaMissNotExistError struct{ cause error }
 
@@ -154,7 +154,7 @@ func isDemotableSchemaMiss(err error) bool {
 }
 
 // fatalSchemaLoadError marks a schema-load failure that the xsd compiler must
-// treat as fatal rather than demoting to a warning. It satisfies
+// treat as fatal, demoting to no warning. It satisfies
 // [xsd.FatalSchemaLoader] and unwraps to the underlying error so the original
 // cause (e.g. [ErrResourceTooLarge]) remains discoverable via errors.Is /
 // errors.As across the xsd→xslt3 boundary.

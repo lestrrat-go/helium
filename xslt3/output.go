@@ -115,7 +115,7 @@ func (out *outputFrame) captureSequenceItems(items xpath3.ItemSlice) {
 // This is used for result-documents with method="json" or method="adaptive".
 // An element, document, comment, or processing-instruction node item carrying
 // a character invalid for the target XML version fails with the serialization
-// error SERE0006 rather than emitting truncated output. Other item kinds (text,
+// error SERE0006, emitting no truncated output. Other item kinds (text,
 // attribute nodes, and atomics) are not range-checked and emit their content
 // unmodified.
 func SerializeItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {

@@ -335,7 +335,7 @@ func (r *memResolver) Resolve(uri string) (io.ReadCloser, error) {
 }
 
 // TestFnTransformCustomURIScheme verifies that fn:transform() resolves
-// relative stylesheet-location using proper URI resolution rather than
+// relative stylesheet-location using proper URI resolution, and never
 // filepath.Join, so custom URI schemes (e.g. mem://) are preserved.
 func TestFnTransformCustomURIScheme(t *testing.T) {
 	resolver := &memResolver{
@@ -445,8 +445,8 @@ func TestFnTransformInheritsRuntimeResolver(t *testing.T) {
 
 // TestFnTransformInheritsRuntimeResourceCap verifies that fn:doc /
 // fn:unparsed-text inside a stylesheet invoked via fn:transform() honors the
-// outer Invocation's MaxResourceBytes override rather than silently falling
-// back to the default cap. The inner stylesheet reads a resolver-backed
+// outer Invocation's MaxResourceBytes override, falling back to no
+// default cap. The inner stylesheet reads a resolver-backed
 // resource larger than the default cap: it must be refused at the default cap
 // and accepted once the outer Invocation raises (or disables) the bound.
 func TestFnTransformInheritsRuntimeResourceCap(t *testing.T) {

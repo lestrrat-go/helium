@@ -74,7 +74,7 @@ func TestSourceDocumentDefaultDeny(t *testing.T) {
 
 // TestSourceDocumentRoutesThroughResolver verifies that with a recording
 // resolver installed, xsl:source-document retrieves its document through the
-// resolver (receiving the resolved URI) rather than via os.ReadFile.
+// resolver (receiving the resolved URI), and never via os.ReadFile.
 func TestSourceDocumentRoutesThroughResolver(t *testing.T) {
 	path := writeTempXML(t, `<data v="hello"/>`)
 
@@ -99,7 +99,7 @@ const streamAvailableStylesheet = `
 </xsl:stylesheet>`
 
 // TestStreamAvailableDefaultDeny verifies fn:stream-available returns false
-// (rather than stat-ing the host filesystem) when no URIResolver is installed,
+// (stat-ing no host filesystem) when no URIResolver is installed,
 // even though the referenced file exists on disk.
 func TestStreamAvailableDefaultDeny(t *testing.T) {
 	path := writeTempXML(t, `<data/>`)
@@ -163,7 +163,7 @@ func TestMergeDefaultDeny(t *testing.T) {
 
 // TestMergeRoutesThroughResolver verifies that with a recording resolver
 // installed, xsl:merge retrieves its merge-source document through the
-// resolver (receiving the resolved URI) rather than via os.ReadFile.
+// resolver (receiving the resolved URI), and never via os.ReadFile.
 func TestMergeRoutesThroughResolver(t *testing.T) {
 	path := writeTempXML(t, `<data><row k="a"/></data>`)
 

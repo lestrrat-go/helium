@@ -280,8 +280,8 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 		}
 		out := ec.currentOutput()
 		// In sequence mode (e.g. an xsl:variable with as="attribute()"), capture
-		// the copied attribute as a standalone item rather than attaching it to
-		// the capturing element, mirroring xsl:copy-of. Preserve the source
+		// the copied attribute as a standalone item, attaching it to
+		// no capturing element, mirroring xsl:copy-of. Preserve the source
 		// attribute's type annotation per XSLT 3.0 §16.1.1.
 		if out.sequenceMode {
 			var attrNS *helium.Namespace

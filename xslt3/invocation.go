@@ -408,7 +408,7 @@ func (inv Invocation) GlobalContextSelect(expr string) Invocation {
 // work stays bounded regardless of input size.
 //
 // The XPath built-ins fn:unparsed-text, fn:unparsed-text-lines, and
-// fn:json-doc read through the xpath3 layer rather than the XSLT loader: they
+// fn:json-doc read through the xpath3 layer, and never the XSLT loader: they
 // honor the same byte cap but do NOT surface [ErrResourceTooLarge]. An over-cap
 // fn:unparsed-text / fn:unparsed-text-lines read surfaces FOUT1170
 // (fn:unparsed-text-available returns false), and an over-cap fn:json-doc read

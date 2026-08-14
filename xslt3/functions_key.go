@@ -146,7 +146,7 @@ func (ec *execContext) fnGenerateID(ctx context.Context, args []xpath3.Sequence)
 	var node helium.Node
 	if len(args) == 0 {
 		// No argument: use the XPath context node (correct inside
-		// predicates) rather than the XSLT context node.
+		// predicates), and never the XSLT context node.
 		if xpathNode := xpath3.FnContextNode(ctx); xpathNode != nil {
 			node = xpathNode
 		} else {
@@ -306,12 +306,12 @@ func (ec *execContext) fnStreamAvailable(ctx context.Context, args []xpath3.Sequ
 	if uri == "" {
 		return xpath3.SingleBoolean(false), nil
 	}
-	// Retrieve through the configured URIResolver / HTTPClient rather than
-	// stat-ing the host filesystem directly. We only need the leading bytes
+	// Retrieve through the configured URIResolver / HTTPClient, stat-ing no
+	// host filesystem directly. We only need the leading bytes
 	// to decide whether the resource is XML, so read a bounded prefix instead
 	// of the whole document. With no resolver installed this fails the
 	// default-deny check; an unavailable resource is reported as not
-	// streamable (false) rather than surfaced as an error.
+	// streamable (false), and never surfaced as an error.
 	resolved := ec.resolveDocumentURI(uri, ec.baseDir())
 	prefix, err := ec.retrieveDocumentPrefix(ctx, resolved, 256)
 	if err != nil {
