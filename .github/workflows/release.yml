@@ -2,10 +2,10 @@ name: Release
 
 # Dispatch-driven release. Instead of triggering on a pushed tag (which would
 # leave a public tag behind if the conformance gate then failed), a release is
-# started manually with a version input. The required XSLT 3.0 and XMLDSig
-# conformance suites run FIRST; only when they are green does the release job
-# create the tag and run goreleaser. A red gate stops the run before any tag
-# exists, so a failing conformance test has zero side effects.
+# started manually with a version input. The required XSLT 3.0, XMLDSig, and
+# XML Encryption conformance suites run FIRST; only when they are green does the
+# release job create the tag and run goreleaser. A red gate stops the run before
+# any tag exists, so a failing conformance test has zero side effects.
 #
 # The release job is bound to the `release` GitHub Environment, which requires
 # maintainer approval and is restricted to the `main` branch — so the tag/publish
