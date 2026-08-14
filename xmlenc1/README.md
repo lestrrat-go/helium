@@ -227,14 +227,27 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   sides are trusted differently: the resolver is code the caller chose, while
   the URI is chosen by an unauthenticated document, and it is the URI the
   package must be immune to. A same-document reference is bounded by the same
-  budgets: its canonical form is written through a limit-aware writer and stops
-  at the first byte past the allowance, instead of canonicalizing an
-  attacker-chosen subtree in full and discarding the result afterwards. The
-  node-set feeding that writer is bounded too — it is linear in the subtree,
-  never in the product of its elements and the namespace declarations in
-  scope on them, and a selection whose element count alone cannot fit the
-  allowance is refused before it is built — and the walk observes the caller's
-  context once per node.
+  budgets, and the bound is on canonical OUTPUT OCTETS, not on the work
+  producing them costs: the writer feeding c14n stops at the first byte past
+  the allowance, but Canonical XML's own per-element scan for which namespace
+  declarations are still in scope runs in proportion to elements times
+  in-scope declarations, and a document shaped to be heavy in both can spend
+  a great deal of that work while emitting almost nothing, leaving the byte
+  budget with nothing to refuse. What actually bounds a resolution shaped
+  that way is the caller's own context: the writer polls it on every write
+  alongside the budget check, so a cancelled or expired caller stops the
+  canonicalization promptly regardless of how little it has written so far.
+  For a NAMED reference (`#id` or `#xpointer(id('id'))`), a node-set collector
+  runs ahead of that writer and is itself bounded and linear in the subtree —
+  linear in its elements, never in the product of its elements and the
+  namespace declarations in scope on them, and a selection whose element
+  count alone cannot fit the allowance is refused before it is built — and it
+  too observes the caller's context once per node. The two WHOLE-DOCUMENT
+  forms (`URI=""` and `#xpointer(/)` naming the document element) have no
+  collector stage at all: canonicalizing straight to the writer is the only
+  work such a reference does, so that writer's own context poll is the sole
+  place the whole resolution can ever notice a caller who has stopped
+  waiting.
 - A `CipherReference` may declare transforms, and only the XMLDSig
   `#base64` transform is accepted. Every declared algorithm is validated before
   any of them runs, so a supported one standing ahead of an unsupported one is

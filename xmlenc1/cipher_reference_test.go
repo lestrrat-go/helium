@@ -152,6 +152,38 @@ func wideDoc(t *testing.T, elemCount, nsCount int) (*helium.Element, int) {
 	return elem, len(src)
 }
 
+// wideWholeDoc is wideDoc's whole-document counterpart: it builds a document
+// of the same shape, but the CipherReference's URI (uriAttr, verbatim as in
+// cipherReferenceXML) names the document, so the canonicalization the
+// EncryptedData carries has no node-set collector ahead of it — the whole-doc
+// gate in canonicalizeCipherReferenceNodeSet skips straight to writing the
+// canonical form. That makes canonicalizeCipherReferenceNodeSet's own
+// context-aware write loop the ONLY code that can ever observe a caller's
+// cancellation for this shape, which is what makes it the right fixture for
+// proving that loop, and not some earlier stage, is what stops a decrypt.
+func wideWholeDoc(t *testing.T, uriAttr string, elemCount, nsCount int) (*helium.Element, int) {
+	t.Helper()
+	var decls strings.Builder
+	for i := range nsCount {
+		fmt.Fprintf(&decls, ` xmlns:n%d="urn:n%d"`, i, i)
+	}
+	var body strings.Builder
+	for range elemCount {
+		body.WriteString(`<e/>`)
+	}
+	src := `<root` + decls.String() + `>` +
+		`<xenc:EncryptedData xmlns:xenc="` + xmlenc1.NamespaceXMLEnc + `" xmlns:ds="` + xmlenc1.NamespaceDSig + `" Type="` + xmlenc1.TypeElement + `">` +
+		`<xenc:EncryptionMethod Algorithm="` + xmlenc1.AES256GCM + `"/>` +
+		`<xenc:CipherData>` + cipherReferenceXML(uriAttr, "") + `</xenc:CipherData>` +
+		`</xenc:EncryptedData>` +
+		body.String() +
+		`</root>`
+	doc := mustParseXML(t, src)
+	elem := findEncryptedData(t, doc.DocumentElement())
+	require.NotNil(t, elem)
+	return elem, len(src)
+}
+
 // countingResolver records how many times a decrypt asked it for a resource
 // and always refuses, so a test can assert that a document never reached the
 // dereferencing stage at all.
@@ -911,6 +943,100 @@ func TestCipherReference(t *testing.T) {
 		require.Error(t, err)
 		t.Logf("a 100ms deadline over a 50000 element reference returned after %s", elapsed)
 		require.Less(t, elapsed, 10*time.Second, "the resolution ran on after its caller's deadline passed")
+	})
+
+	// The two whole-document forms (URI="" and "#xpointer(/)") never build a
+	// node-set: the gate in canonicalizeCipherReferenceNodeSet sends them
+	// straight to c14n.Canonicalize, so the write loop feeding it is the ONLY
+	// code in the whole resolution that is ever in a position to see a
+	// caller's cancellation. wideWholeDoc's fixture keeps the structural
+	// preamble (EncryptedData's own handful of children) fixed and tiny while
+	// scaling namespace declarations on the root, which is what makes plain
+	// document canonicalization — and only that, not the node-set path
+	// wideDoc's named forms use — expensive: measured on this fixture, an
+	// unbounded run takes over a second where every earlier stage this
+	// decrypt passes through finishes in tens of milliseconds.
+	//
+	// This can't flake on timing: it never measures elapsed time. It races a
+	// short, fixed deadline against a document sized so the write loop cannot
+	// finish inside the watchdog if it ignores that deadline, and asserts only
+	// on which of those two outcomes happened — the deadline's own error, or a
+	// t.Fatal from a watchdog with wide margin on both sides (comfortably
+	// above the deadline, comfortably below the fixture's measured unbounded
+	// run), never a precise duration.
+	for _, tc := range []struct {
+		name string
+		uri  string
+	}{
+		{name: `URI=""`, uri: ""},
+		{name: `URI="#xpointer(/)"`, uri: "#xpointer(/)"},
+	} {
+		t.Run("a whole-document reference stops for "+tc.name, func(t *testing.T) {
+			elem, _ := wideWholeDoc(t, ` URI="`+tc.uri+`"`, 10000, 1000)
+			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(ctx, elem)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+			case <-time.After(600 * time.Millisecond):
+				t.Fatal("the whole-document canonicalization ran on after its caller's deadline passed")
+			}
+		})
+	}
+
+	// A named form ("#id") DOES build a node-set first, and that walk already
+	// polls ctx. What it does not cover is a cancellation landing AFTER the
+	// walk finishes and WHILE the resulting node-set is being canonicalized —
+	// exactly the gap the whole-document tests above cannot exercise, since
+	// they have no walk to finish first. Reaching that gap needs a deadline
+	// that survives the walk and expires during canonicalization, which needs
+	// the two phases to cost very differently: the walk here is linear in
+	// element count, while c14n's OWN per-element namespace-visibility scan
+	// (unrelated to xmlenc1's collector, which this package's other tests
+	// document as linear) is what actually costs elements × in-scope
+	// declarations, so a document with many elements AND many namespace
+	// declarations makes canonicalization dominate the walk by a wide,
+	// measured margin — on this fixture, well over an order of magnitude.
+	//
+	// Building this fixture is the expensive part of this test (parsing tens
+	// of thousands of namespace declarations costs real time on its own), not
+	// the decrypt this subtest races against a deadline. As above, nothing
+	// here asserts on elapsed time; the watchdog only needs to sit inside the
+	// measured gap between a cancelled decrypt's prompt return and an
+	// uncancelled one's full run, and that gap is wide enough on this fixture
+	// to leave comfortable margin on both sides.
+	t.Run("a named reference stops during canonicalization, after its node-set is built", func(t *testing.T) {
+		elem, _ := wideDoc(t, 60000, 60000)
+		ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+		defer cancel()
+		done := make(chan error, 1)
+		go func() {
+			_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(ctx, elem)
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("the canonicalization ran on after its caller's deadline passed, well past the node-set walk that already observes it")
+		}
+	})
+
+	// The fix above changes nothing about what a non-cancelled decrypt
+	// produces: the same same-document reference resolves to the identical
+	// canonical octets whether or not the writer feeding c14n also polls a
+	// context that never comes due. The two counts pinned here are
+	// canonicalOctetLength's own bisection against this test's fixture, and
+	// never change across a run: a budgetWriter that additionally checks a
+	// live context still forwards every byte a within-limit write always did.
+	t.Run("a live context does not change the canonical octets", func(t *testing.T) {
+		require.Equal(t, 16, canonicalOctetLength(t, "#t", `<ct Id="t"></ct>`), "the named form's canonical octet count")
+		require.Equal(t, 401, canonicalOctetLength(t, "", `<ct Id="t"></ct>`), "the whole-document form's canonical octet count")
 	})
 
 	// The bound is the INTERFACE's, not a privilege of the shipped resolver:

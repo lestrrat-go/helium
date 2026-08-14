@@ -1078,37 +1078,62 @@ func (b *payloadCipherValueBudget) remaining() int {
 }
 
 // budgetWriter is an io.Writer that stops a stream at a cipherValueBudget's
-// limit. Letting it complete would leave the caller to reject the
-// finished result afterward. Bytes are forwarded to dst as long as the
-// running total stays within budget.remaining(); the moment a Write call
-// would push the total past it, the write fails with the budget's OWN
-// over-limit error — produced by a single charge call sized to the excess,
-// which is guaranteed to hit that budget's error branch and never mutate its
-// state — and nothing from that call reaches dst. A nil budget is unlimited,
-// matching this package's other CipherValue budgets.
+// limit and stops it when ctx is done. Letting it complete would leave the
+// caller to reject the finished result afterward, or would leave a
+// cancelled caller waiting on work it already asked to stop. Bytes are
+// forwarded to dst as long as ctx is live and the running total stays
+// within budget.remaining(); the moment a Write call would push the total
+// past it, the write fails with the budget's OWN over-limit error —
+// produced by a single charge call sized to the excess, which is guaranteed
+// to hit that budget's error branch and never mutate its state — and
+// nothing from that call reaches dst. A nil budget is unlimited, matching
+// this package's other CipherValue budgets. A nil ctx never stops a write,
+// matching contextErr's handling of a nil context elsewhere in this
+// package.
 //
-// It exists so a later canonicalization stage (bounding a same-document
-// CipherReference target, in a follow-up PR) can be aborted at the limit
-// mid-stream, instead of paying the full cost of canonicalizing an oversized
-// subtree only to discard the finished result. A write that stays within the
-// limit is not itself charged: as with this package's other CipherValue
-// budgets, the caller charges budget once, with the final known total, after
-// the write completes successfully.
+// The context carries a SINGLE writer, rather than a second wrapper layered
+// in front of it, because ctx.Done() and the budget guard the same call —
+// every Write this package makes goes through canonicalizeCipherReferenceNodeSet's
+// one c14n.Canonicalize call — so one struct with one poll per Write reads
+// as the whole story, where two writers would split one decision (does this
+// call proceed) across two types for no caller that needs them apart.
+//
+// It exists so a same-document CipherReference's canonicalization stage can
+// be aborted mid-stream, at the limit or at the caller's cancellation,
+// instead of paying the full cost of canonicalizing an oversized or
+// attacker-prolonged subtree only to discard the finished result. A write
+// that stays within the limit is not itself charged: as with this package's
+// other CipherValue budgets, the caller charges budget once, with the final
+// known total, after the write completes successfully.
 type budgetWriter struct {
 	dst    io.Writer
 	budget cipherValueBudget
+	ctx    context.Context //nolint:containedctx // io.Writer's Write has no ctx parameter to poll instead
 	total  int
 }
 
 // newBudgetWriter returns a budgetWriter that forwards accepted bytes to dst,
-// bounded by budget.
-func newBudgetWriter(dst io.Writer, budget cipherValueBudget) *budgetWriter {
-	return &budgetWriter{dst: dst, budget: budget}
+// bounded by budget and stopped once ctx is done.
+func newBudgetWriter(ctx context.Context, dst io.Writer, budget cipherValueBudget) *budgetWriter {
+	return &budgetWriter{dst: dst, budget: budget, ctx: ctx}
 }
 
 // Write implements io.Writer. It never partially forwards p to dst: either
 // every byte is accepted, or none are and an error is returned.
+//
+// The context is polled first, ahead of the budget, on every call and never
+// only every Nth one — c14n writes once per node, so a stride would leave
+// the observed delay a function of how much markup one node produces, a
+// bound nobody could derive from the input. Checking the context first also
+// means a Write that arrives after the caller is already gone never spends
+// a charge call: whichever of the two conditions this Write would have hit
+// on a live context, only the caller's own cancellation is what the return
+// value reports, since abort() at the call site would override any other
+// error to ctx.Err() the moment the context is done anyway.
 func (w *budgetWriter) Write(p []byte) (int, error) {
+	if err := contextErr(w.ctx); err != nil {
+		return 0, err
+	}
 	if w.budget != nil {
 		total := w.total + len(p)
 		if limit := w.budget.remaining(); limit >= 0 && total > limit {
