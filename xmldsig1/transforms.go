@@ -864,9 +864,25 @@ func (s *nodeSet) add(ctx context.Context, n helium.Node) error {
 	return s.charge(ctx, 1)
 }
 
+// addAll appends nodes a poll interval at a time, so the span between two polls
+// is bounded by that interval and not by the length of the slice handed in — the
+// subtree collections that feed this method return the whole document's node set
+// on a whole-document reference. The capacity for the entire slice is taken in
+// one step first: chunked appends alone would re-grow the backing array
+// geometrically, which costs about five times a single bulk append at a million
+// members, while growing once leaves the copy within a percent of it at every
+// size.
 func (s *nodeSet) addAll(ctx context.Context, nodes []helium.Node) error {
-	s.nodes = append(s.nodes, nodes...)
-	return s.charge(ctx, len(nodes))
+	s.nodes = slices.Grow(s.nodes, len(nodes))
+	for len(nodes) > 0 {
+		n := min(len(nodes), ctxPollInterval)
+		s.nodes = append(s.nodes, nodes[:n]...)
+		if err := s.charge(ctx, n); err != nil {
+			return err
+		}
+		nodes = nodes[n:]
+	}
+	return nil
 }
 
 func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
