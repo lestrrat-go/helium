@@ -484,6 +484,14 @@ func (leafVisitor) leaveElement(*helium.Element) {}
 // afterwards. The budget itself is charged once, with the final total, only
 // after the write completed.
 //
+// budgetWriter also polls ctx on every Write, which is what stops a
+// cancelled or expired caller here: the budget bounds OUTPUT OCTETS, not
+// work, and this walk's cost is elements times in-scope namespace
+// declarations, a shape that can run long while emitting almost nothing. For
+// a whole-document form (below) there is no node-set collector ahead of this
+// call at all, so this write loop is the only place in the whole resolution
+// that ever observes cancellation.
+//
 // A whole-document form (URI="" or "#xpointer(/)") naming the document element
 // canonicalizes the DOCUMENT, so the top-level processing instructions that sit
 // outside that element are included, as §4.4.3.2's "every non-comment node of
@@ -505,7 +513,7 @@ func canonicalizeCipherReferenceNodeSet(ctx context.Context, set cipherReference
 		canon = canon.NodeSet(collector.nodes)
 	}
 	var buf bytes.Buffer
-	if err := canon.Canonicalize(set.doc, newBudgetWriter(&buf, budget)); err != nil {
+	if err := canon.Canonicalize(set.doc, newBudgetWriter(ctx, &buf, budget)); err != nil {
 		return nil, abort(ctx, err)
 	}
 	if budget != nil {

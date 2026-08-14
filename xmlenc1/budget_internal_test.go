@@ -2,6 +2,7 @@ package xmlenc1
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -60,7 +61,7 @@ func TestBudgetWriter(t *testing.T) {
 
 		var dst bytes.Buffer
 		budget := &payloadCipherValueBudget{limit: 10}
-		w := newBudgetWriter(&dst, budget)
+		w := newBudgetWriter(t.Context(), &dst, budget)
 
 		n, err := w.Write([]byte("hello"))
 		require.NoError(t, err)
@@ -81,7 +82,7 @@ func TestBudgetWriter(t *testing.T) {
 
 		var dst bytes.Buffer
 		budget := &payloadCipherValueBudget{limit: 4}
-		w := newBudgetWriter(&dst, budget)
+		w := newBudgetWriter(t.Context(), &dst, budget)
 
 		n, err := w.Write([]byte("hello"))
 		require.Zero(t, n)
@@ -94,7 +95,7 @@ func TestBudgetWriter(t *testing.T) {
 
 		var dst bytes.Buffer
 		budget := &payloadCipherValueBudget{limit: -1}
-		w := newBudgetWriter(&dst, budget)
+		w := newBudgetWriter(t.Context(), &dst, budget)
 
 		n, err := w.Write(bytes.Repeat([]byte("x"), 1024))
 		require.NoError(t, err)
@@ -105,7 +106,7 @@ func TestBudgetWriter(t *testing.T) {
 		t.Parallel()
 
 		var dst bytes.Buffer
-		w := newBudgetWriter(&dst, nil)
+		w := newBudgetWriter(t.Context(), &dst, nil)
 
 		n, err := w.Write([]byte("hello"))
 		require.NoError(t, err)
@@ -117,7 +118,7 @@ func TestBudgetWriter(t *testing.T) {
 
 		var dst bytes.Buffer
 		budget := &payloadCipherValueBudget{limit: 8}
-		w := newBudgetWriter(&dst, budget)
+		w := newBudgetWriter(t.Context(), &dst, budget)
 
 		n, err := w.Write([]byte("hello")) // 5 bytes, within limit
 		require.NoError(t, err)
@@ -129,5 +130,50 @@ func TestBudgetWriter(t *testing.T) {
 		require.Zero(t, n)
 		require.ErrorIs(t, err, ErrCipherValueBytesExceeded)
 		require.Equal(t, "hello", dst.String(), "the earlier accepted write is unaffected")
+	})
+
+	t.Run("a done context fails closed without forwarding or charging", func(t *testing.T) {
+		t.Parallel()
+
+		var dst bytes.Buffer
+		budget := &payloadCipherValueBudget{limit: 10}
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		w := newBudgetWriter(ctx, &dst, budget)
+
+		n, err := w.Write([]byte("hello"))
+		require.Zero(t, n)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, dst.String(), "nothing from a Write on a done context reaches dst")
+	})
+
+	// A Write that is simultaneously over budget and past a done context
+	// reports the context, not the budget: the context is polled first, so
+	// budget.charge is never even called, which is why this is the branch
+	// that wins and not merely the value abort() would have produced anyway.
+	t.Run("a done context wins over an over-limit write", func(t *testing.T) {
+		t.Parallel()
+
+		var dst bytes.Buffer
+		budget := &payloadCipherValueBudget{limit: 4}
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		w := newBudgetWriter(ctx, &dst, budget)
+
+		n, err := w.Write([]byte("hello"))
+		require.Zero(t, n)
+		require.ErrorIs(t, err, context.Canceled)
+		require.NotErrorIs(t, err, ErrCipherValueBytesExceeded)
+	})
+
+	t.Run("a nil context never stops a write", func(t *testing.T) {
+		t.Parallel()
+
+		var dst bytes.Buffer
+		w := newBudgetWriter(nil, &dst, nil) //nolint:staticcheck // exercising contextErr's documented nil handling
+
+		n, err := w.Write([]byte("hello"))
+		require.NoError(t, err)
+		require.Equal(t, 5, n)
 	})
 }
