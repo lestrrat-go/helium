@@ -206,7 +206,7 @@ func canonicalizeNodeSetMode(mode c14n.Mode, comments bool, nodes []helium.Node,
 // when a transform needs explicit node membership. The materializer removes
 // comments for a comment-excluding Reference form before applying that transform.
 func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
-	var nodes []helium.Node
+	var set nodeSet
 	for c := range helium.Children(doc) {
 		switch c.Type() {
 		case helium.ElementNode:
@@ -214,12 +214,16 @@ func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.N
 			if err != nil {
 				return nil, err
 			}
-			nodes = append(nodes, sub...)
+			if err := set.addAll(ctx, sub); err != nil {
+				return nil, err
+			}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
-			nodes = append(nodes, c)
+			if err := set.add(ctx, c); err != nil {
+				return nil, err
+			}
 		}
 	}
-	return nodes, nil
+	return set.nodes, nil
 }
 
 // collectConvertedDocumentNodes builds the whole-document node-set for a
@@ -248,7 +252,7 @@ func collectConvertedDocumentNodes(ctx context.Context, doc *helium.Document, co
 // complete namespace axis. The document element is the set's apex and its whole
 // subtree stays a member, which is what collectCanonicalizationNodes requires.
 func collectCanonicalizationDocumentNodes(ctx context.Context, doc *helium.Document, mode c14n.Mode) ([]helium.Node, error) {
-	var nodes []helium.Node
+	var set nodeSet
 	for c := range helium.Children(doc) {
 		switch c.Type() {
 		case helium.ElementNode:
@@ -260,12 +264,16 @@ func collectCanonicalizationDocumentNodes(ctx context.Context, doc *helium.Docum
 			if err != nil {
 				return nil, err
 			}
-			nodes = append(nodes, sub...)
+			if err := set.addAll(ctx, sub); err != nil {
+				return nil, err
+			}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
-			nodes = append(nodes, c)
+			if err := set.add(ctx, c); err != nil {
+				return nil, err
+			}
 		}
 	}
-	return nodes, nil
+	return set.nodes, nil
 }
 
 // defaultXPathOpLimit bounds the number of evaluation operations a single XPath
@@ -393,15 +401,25 @@ func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) (
 // from a node-set, implementing the enveloped-signature transform on the
 // explicit node-set used by the XPath-filter path (the non-XPath path omits the
 // Signature via canonicalizeEnveloped's document clone instead).
-func removeSignatureNodes(nodes []helium.Node, sigElem *helium.Element) []helium.Node {
-	kept := make([]helium.Node, 0, len(nodes))
+//
+// A dropped node is charged like a kept one: testing it walks its ancestor
+// chain, and a set that lies entirely inside the Signature keeps nothing at all,
+// so charging only what survives would read a whole node set without ever
+// polling.
+func removeSignatureNodes(ctx context.Context, nodes []helium.Node, sigElem *helium.Element) ([]helium.Node, error) {
+	kept := nodeSet{nodes: make([]helium.Node, 0, len(nodes))}
 	for _, n := range nodes {
 		if isDescendantOrSelf(n, sigElem) {
+			if err := kept.charge(ctx, 1); err != nil {
+				return nil, err
+			}
 			continue
 		}
-		kept = append(kept, n)
+		if err := kept.add(ctx, n); err != nil {
+			return nil, err
+		}
 	}
-	return kept
+	return kept.nodes, nil
 }
 
 // canonicalizeDetachedSubtree canonicalizes target, an element that lives inside
@@ -791,11 +809,10 @@ func collectCanonicalizationNodes(ctx context.Context, elem *helium.Element, mod
 // reduced, mode-aware membership described on collectCanonicalizationNodes
 // applies, with exclusive naming the canonicalization family.
 type subtreeCollector struct {
+	nodeSet
 	fullAxis  bool
 	exclusive bool
 	scope     map[string]*helium.Namespace
-	nodes     []helium.Node
-	sinceCtx  int
 }
 
 // nsBinding records the binding one element replaced for a prefix, so the walk
@@ -807,25 +824,49 @@ type nsBinding struct {
 	had    bool
 }
 
-// ctxPollInterval is how many collected node-set members pass between context
-// checks. The walk allocates a namespace node per binding, so a cancelled
-// context must be noticed inside the walk, not only at its end; polling every
-// member would charge a context read per member for no extra promptness.
+// ctxPollInterval is how many units of work pass between context checks. The
+// work these walks do is allocating and reading node-set members, so a cancelled
+// context must be noticed inside a walk, not only at its end; polling every unit
+// would charge a context read per member for no extra promptness.
 const ctxPollInterval = 256
 
-// charge accounts n collected node-set members against the poll interval and
-// polls ctx when it elapses. Every append to c.nodes goes through it, because
-// the members are what the walk's cost is made of: one element can contribute
-// as many namespace nodes as the document has bindings, so counting only the
-// tree nodes walked would leave a whole element's worth of that work — the
-// bindings times the poll interval — inside one unpolled span.
-func (c *subtreeCollector) charge(ctx context.Context, n int) error {
-	c.sinceCtx += n
-	if c.sinceCtx < ctxPollInterval {
+// ctxPoll counts work against the poll interval on behalf of one walk or one
+// node set.
+type ctxPoll struct {
+	since int
+}
+
+// charge accounts n units of work against the poll interval and polls ctx when
+// it elapses.
+func (p *ctxPoll) charge(ctx context.Context, n int) error {
+	p.since += n
+	if p.since < ctxPollInterval {
 		return nil
 	}
-	c.sinceCtx = 0
+	p.since = 0
 	return ctx.Err()
+}
+
+// nodeSet is a node set under construction. add and addAll are the ONLY
+// operations that grow it, and both charge what they added, so a site that grows
+// a node set cannot leave that growth unpolled: there is no uncharged append to
+// write. The members are what the cost is made of — one element can contribute
+// as many namespace nodes as the document has bindings — so charging anything
+// coarser, the tree nodes walked or the sets appended, would leave a whole
+// element's or a whole subtree's worth of work inside one unpolled span.
+type nodeSet struct {
+	ctxPoll
+	nodes []helium.Node
+}
+
+func (s *nodeSet) add(ctx context.Context, n helium.Node) error {
+	s.nodes = append(s.nodes, n)
+	return s.charge(ctx, 1)
+}
+
+func (s *nodeSet) addAll(ctx context.Context, nodes []helium.Node) error {
+	s.nodes = append(s.nodes, nodes...)
+	return s.charge(ctx, len(nodes))
 }
 
 func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
@@ -852,11 +893,9 @@ func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
 }
 
 func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) error {
-	if err := c.charge(ctx, 1); err != nil {
+	if err := c.add(ctx, n); err != nil {
 		return err
 	}
-
-	c.nodes = append(c.nodes, n)
 
 	elem, isElem := helium.AsNode[*helium.Element](n)
 	var changed []nsBinding
@@ -867,12 +906,10 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 		if err := c.appendNamespaceNodes(ctx, elem, root, changed); err != nil {
 			return err
 		}
-		attrs := elem.Attributes()
-		for _, attr := range attrs {
-			c.nodes = append(c.nodes, attr)
-		}
-		if err := c.charge(ctx, len(attrs)); err != nil {
-			return err
+		for _, attr := range elem.Attributes() {
+			if err := c.add(ctx, attr); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -896,46 +933,53 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 	return nil
 }
 
-// prefixIndexThreshold is how many prefixes an element must offer before the
-// walk builds a membership index for them. The ordered records those indexes
-// shadow — the changed bindings and the emitted prefixes — are short on ordinary
-// elements, where a linear scan beats a map and the allocation is pure loss.
+// prefixIndexThreshold is how many prefixes a set must hold before it indexes
+// them. Below it a linear scan beats a map and the allocation is pure loss, and
+// the sets an ordinary element builds — the prefixes it changed, the prefixes it
+// has emitted — never reach it.
 const prefixIndexThreshold = 8
 
-// newPrefixIndex returns a membership index for an element offering n prefixes,
-// or nil when n is small enough that the callers' linear scans are cheaper.
+// prefixSet answers "does this element's set already hold this prefix" for one
+// element. It owns both representations and switches between them ITSELF, on
+// what it has actually been given: no caller states a capacity, so no caller can
+// state one that a later call site outgrows. That is the whole point of the
+// type. Membership is exact string equality either way, so which representation
+// answers never changes an answer — only what the answer costs.
 //
-// The index is allocated per element and dropped with it, deliberately: a
+// A set is built per element and dropped with it, deliberately: a
 // collector-wide map cleared between elements would keep the bucket array the
 // largest element grew, so every later element would pay for that one — the
-// document-wide cost this exists to remove.
-func newPrefixIndex(n int) map[string]struct{} {
-	if n < prefixIndexThreshold {
-		return nil
-	}
-	return make(map[string]struct{}, n)
+// document-wide cost the index exists to remove.
+type prefixSet struct {
+	list  []string
+	index map[string]struct{}
 }
 
-// prefixRecorded reports whether this element already recorded a replaced
-// binding for prefix. index, when non-nil, answers from the membership index
-// instead of scanning changed, which is what keeps an element carrying many
-// declarations from costing the square of their count.
-func prefixRecorded(prefix string, changed []nsBinding, index map[string]struct{}) bool {
-	if index != nil {
-		_, ok := index[prefix]
+// contains reports whether prefix is already in the set, scanning the ordered
+// list until the set has grown large enough to index itself.
+func (s *prefixSet) contains(prefix string) bool {
+	if s.index != nil {
+		_, ok := s.index[prefix]
 		return ok
 	}
-	return slices.ContainsFunc(changed, func(b nsBinding) bool { return b.prefix == prefix })
+	return slices.Contains(s.list, prefix)
 }
 
-// prefixEmitted reports whether prefix already has a namespace node for this
-// element, from index when one was built and by scanning emitted otherwise.
-func prefixEmitted(prefix string, emitted []string, index map[string]struct{}) bool {
-	if index != nil {
-		_, ok := index[prefix]
-		return ok
+// add puts prefix in the set, building the index the moment the set reaches the
+// size at which scanning it stops being the cheaper answer.
+func (s *prefixSet) add(prefix string) {
+	s.list = append(s.list, prefix)
+	if s.index != nil {
+		s.index[prefix] = struct{}{}
+		return
 	}
-	return slices.Contains(emitted, prefix)
+	if len(s.list) < prefixIndexThreshold {
+		return
+	}
+	s.index = make(map[string]struct{}, len(s.list))
+	for _, p := range s.list {
+		s.index[p] = struct{}{}
+	}
 }
 
 // enter applies elem's namespace declarations to the running scope and returns
@@ -944,17 +988,14 @@ func prefixEmitted(prefix string, emitted []string, index map[string]struct{}) b
 // active namespace when nothing already binds its prefix — so the incremental
 // scope equals the ancestor-chain walk that function performs.
 func (c *subtreeCollector) enter(elem *helium.Element) []nsBinding {
-	decls := elem.Namespaces()
-	// One entry is added for the element's own active namespace below, so the
-	// index is sized for one more prefix than the element declares.
-	seen := newPrefixIndex(len(decls) + 1)
+	var seen prefixSet
 	var changed []nsBinding
-	for _, ns := range decls {
-		changed = c.bind(ns, changed, seen)
+	for _, ns := range elem.Namespaces() {
+		changed = c.bind(ns, changed, &seen)
 	}
 	if ns := elem.Namespace(); ns != nil {
 		if _, ok := c.scope[ns.Prefix()]; !ok {
-			changed = c.bind(ns, changed, seen)
+			changed = c.bind(ns, changed, &seen)
 		}
 	}
 	return changed
@@ -962,15 +1003,13 @@ func (c *subtreeCollector) enter(elem *helium.Element) []nsBinding {
 
 // bind records the binding prefix had before ns replaced it, unless this element
 // already recorded one for that prefix, and installs ns in the running scope.
-// seen, when non-nil, holds the prefixes changed already carries.
-func (c *subtreeCollector) bind(ns *helium.Namespace, changed []nsBinding, seen map[string]struct{}) []nsBinding {
+// seen holds the prefixes changed already carries.
+func (c *subtreeCollector) bind(ns *helium.Namespace, changed []nsBinding, seen *prefixSet) []nsBinding {
 	prefix := ns.Prefix()
-	if !prefixRecorded(prefix, changed, seen) {
+	if !seen.contains(prefix) {
 		prev, had := c.scope[prefix]
 		changed = append(changed, nsBinding{prefix: prefix, prev: prev, had: had})
-		if seen != nil {
-			seen[prefix] = struct{}{}
-		}
+		seen.add(prefix)
 	}
 	c.scope[prefix] = ns
 	return changed
@@ -1004,29 +1043,26 @@ func (c *subtreeCollector) appendNamespaceNodes(ctx context.Context, elem *heliu
 			if prefix == lexicon.PrefixXML {
 				continue
 			}
-			c.nodes = append(c.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
-			if err := c.charge(ctx, 1); err != nil {
+			if err := c.add(ctx, helium.NewNamespaceNodeWrapper(ns, elem)); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	var emitted []string
-	// Every changed binding is a candidate for emission, and the default
-	// namespace, the element's own prefix, and its attributes' prefixes are
-	// candidates on top of those; sizing the index by changed alone lets it grow
-	// for the few extra rather than charging every element for them.
-	emittedIndex := newPrefixIndex(len(changed))
+	// The candidates are the changed bindings, the default namespace, the
+	// element's own prefix, and every attribute prefix. Nobody counts them: the
+	// set sizes itself from what it is given, so an element whose candidates are
+	// mostly attribute prefixes — which no count of changed bindings predicts —
+	// indexes them exactly as an element that declared them would.
+	var emitted prefixSet
 	for _, b := range changed {
 		ns := c.scope[b.prefix]
 		if b.had && b.prev.URI() == ns.URI() {
 			// A redeclaration of the binding already in scope changes nothing.
 			continue
 		}
-		var err error
-		emitted, err = c.emitNamespace(ctx, elem, b.prefix, emitted, emittedIndex)
-		if err != nil {
+		if err := c.emitNamespace(ctx, elem, b.prefix, &emitted); err != nil {
 			return err
 		}
 	}
@@ -1035,8 +1071,7 @@ func (c *subtreeCollector) appendNamespaceNodes(ctx context.Context, elem *heliu
 	// ancestor lookup emits an xmlns="" undeclaration for an element whose set
 	// has no default-namespace node while its nearest rendered ancestor's set
 	// does, so dropping an unchanged default would undeclare it spuriously.
-	emitted, err := c.emitNamespace(ctx, elem, "", emitted, emittedIndex)
-	if err != nil {
+	if err := c.emitNamespace(ctx, elem, "", &emitted); err != nil {
 		return err
 	}
 
@@ -1048,15 +1083,13 @@ func (c *subtreeCollector) appendNamespaceNodes(ctx context.Context, elem *heliu
 	// own prefix and its attributes' prefixes stay members even when inherited
 	// unchanged.
 	if ns := elem.Namespace(); ns != nil {
-		emitted, err = c.emitNamespace(ctx, elem, ns.Prefix(), emitted, emittedIndex)
-		if err != nil {
+		if err := c.emitNamespace(ctx, elem, ns.Prefix(), &emitted); err != nil {
 			return err
 		}
 	}
 	for _, attr := range elem.Attributes() {
 		if prefix := attr.Prefix(); prefix != "" {
-			emitted, err = c.emitNamespace(ctx, elem, prefix, emitted, emittedIndex)
-			if err != nil {
+			if err := c.emitNamespace(ctx, elem, prefix, &emitted); err != nil {
 				return err
 			}
 		}
@@ -1065,24 +1098,22 @@ func (c *subtreeCollector) appendNamespaceNodes(ctx context.Context, elem *heliu
 }
 
 // emitNamespace appends the namespace node for prefix when that prefix is in
-// scope and has not been emitted for this element yet, returning the updated
-// emitted-prefix list. index, when non-nil, holds the prefixes emitted already
-// carries. A prefix it does emit is charged against the poll interval, so it
-// reports the context's error when that poll falls due on a done context.
-func (c *subtreeCollector) emitNamespace(ctx context.Context, elem *helium.Element, prefix string, emitted []string, index map[string]struct{}) ([]string, error) {
+// scope and emitted does not already hold it, recording it there. emitted is
+// carried by pointer and has nothing to rethread, so a call site cannot drop the
+// record and make the element emit a duplicate namespace node — which would
+// change the canonical octets. A prefix it does emit is charged against the poll
+// interval, so it reports the context's error when that poll falls due on a done
+// context.
+func (c *subtreeCollector) emitNamespace(ctx context.Context, elem *helium.Element, prefix string, emitted *prefixSet) error {
 	if prefix == lexicon.PrefixXML {
-		return emitted, nil
+		return nil
 	}
 	ns, ok := c.scope[prefix]
-	if !ok || prefixEmitted(prefix, emitted, index) {
-		return emitted, nil
+	if !ok || emitted.contains(prefix) {
+		return nil
 	}
-	c.nodes = append(c.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
-	if index != nil {
-		index[prefix] = struct{}{}
-	}
-	emitted = append(emitted, prefix)
-	return emitted, c.charge(ctx, 1)
+	emitted.add(prefix)
+	return c.add(ctx, helium.NewNamespaceNodeWrapper(ns, elem))
 }
 
 // referenceURIForm classifies a same-document Reference URI into the node-set

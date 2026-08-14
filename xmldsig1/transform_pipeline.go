@@ -332,7 +332,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 			nodes.nodes = filtered
 			value = newNodeSetTransformValue(nodes)
 		case TransformEnvelopedSignature:
-			if err := applyEnvelopedTransform(value.nodes, runtime.signature); err != nil {
+			if err := applyEnvelopedTransform(ctx, value.nodes, runtime.signature); err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
 		case TransformXSLT:
@@ -407,10 +407,16 @@ func materializeNodeSet(ctx context.Context, value *nodeSetValue) (*nodeSetValue
 	}
 	value.nodes = nodes
 	if !value.origin.includeComments {
-		value.nodes = removeCommentNodes(value.nodes)
+		value.nodes, err = removeCommentNodes(ctx, value.nodes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if value.origin.envelopedPending {
-		value.nodes = removeSignatureNodes(value.nodes, value.origin.sigElem)
+		value.nodes, err = removeSignatureNodes(ctx, value.nodes, value.origin.sigElem)
+		if err != nil {
+			return nil, err
+		}
 	}
 	value.origin = nil
 	value.materialized = true
@@ -429,17 +435,29 @@ func originNodes(ctx context.Context, origin *referenceNodeSetOrigin) ([]helium.
 	return collectSubtreeNodes(ctx, origin.target)
 }
 
-func removeCommentNodes(nodes []helium.Node) []helium.Node {
-	kept := make([]helium.Node, 0, len(nodes))
+// removeCommentNodes drops every comment from a node-set, implementing the
+// comment-excluding Reference forms on an explicit node-set.
+//
+// A dropped comment is charged like a kept node: a set that is all comments
+// keeps nothing at all, so charging only what survives would read a whole node
+// set without ever polling.
+func removeCommentNodes(ctx context.Context, nodes []helium.Node) ([]helium.Node, error) {
+	kept := nodeSet{nodes: make([]helium.Node, 0, len(nodes))}
 	for _, node := range nodes {
-		if node.Type() != helium.CommentNode {
-			kept = append(kept, node)
+		if node.Type() == helium.CommentNode {
+			if err := kept.charge(ctx, 1); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := kept.add(ctx, node); err != nil {
+			return nil, err
 		}
 	}
-	return kept
+	return kept.nodes, nil
 }
 
-func applyEnvelopedTransform(value *nodeSetValue, sigElem *helium.Element) error {
+func applyEnvelopedTransform(ctx context.Context, value *nodeSetValue, sigElem *helium.Element) error {
 	if value == nil || !value.referenceSelection {
 		return fmt.Errorf("%w: enveloped-signature transform has no original Signature identity", ErrUnsupportedTransform)
 	}
@@ -447,7 +465,11 @@ func applyEnvelopedTransform(value *nodeSetValue, sigElem *helium.Element) error
 		value.origin.envelopedPending = true
 		return nil
 	}
-	value.nodes = removeSignatureNodes(value.nodes, sigElem)
+	nodes, err := removeSignatureNodes(ctx, value.nodes, sigElem)
+	if err != nil {
+		return err
+	}
+	value.nodes = nodes
 	return nil
 }
 
@@ -505,9 +527,22 @@ func base64TransformNodeSetText(ctx context.Context, value *nodeSetValue) ([]byt
 	if value.doc == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
 	}
+	// A context already cancelled when the conversion starts stops it before any
+	// text is read; the periodic polls below cover one cancelled while it runs.
+	// Both branches are reads of an attacker-sized node set, so the check sits
+	// above the first of them rather than on the path to one.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if value.materialized {
 		var encoded strings.Builder
+		var poll ctxPoll
 		for _, node := range value.nodes {
+			// Every member is read, and only some contribute text, so the poll is
+			// charged per member examined.
+			if err := poll.charge(ctx, 1); err != nil {
+				return nil, err
+			}
 			switch node.Type() {
 			case helium.TextNode, helium.CDATASectionNode:
 				_, _ = encoded.Write(node.Content())
@@ -518,11 +553,6 @@ func base64TransformNodeSetText(ctx context.Context, value *nodeSetValue) ([]byt
 	origin := value.origin
 	if origin == nil || origin.target == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no reference origin", ErrUnsupportedTransform)
-	}
-	// A context already cancelled when the walk starts stops it before any text is
-	// read; the walk's own periodic poll covers one cancelled while it runs.
-	if err := ctx.Err(); err != nil {
-		return nil, err
 	}
 
 	w := &textWalker{}
@@ -560,21 +590,17 @@ func base64TransformNodeSetText(ctx context.Context, value *nodeSetValue) ([]byt
 }
 
 // textWalker gathers the text a Reference selection stands for. skip, when set,
-// is the enveloped Signature, whose subtree the walk does not enter; sinceCtx
-// counts walked nodes toward the next context poll.
+// is the enveloped Signature, whose subtree the walk does not enter; the
+// embedded poll counts walked nodes toward the next context poll.
 type textWalker struct {
-	skip     *helium.Element
-	out      strings.Builder
-	sinceCtx int
+	ctxPoll
+	skip *helium.Element
+	out  strings.Builder
 }
 
 func (w *textWalker) walk(ctx context.Context, n helium.Node) error {
-	w.sinceCtx++
-	if w.sinceCtx >= ctxPollInterval {
-		w.sinceCtx = 0
-		if err := ctx.Err(); err != nil {
-			return err
-		}
+	if err := w.charge(ctx, 1); err != nil {
+		return err
 	}
 	if w.skip != nil {
 		if elem, ok := helium.AsNode[*helium.Element](n); ok && elem == w.skip {

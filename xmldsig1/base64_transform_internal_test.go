@@ -1,6 +1,8 @@
 package xmldsig1
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -282,4 +284,22 @@ func TestBase64SignVerifyRoundTrip(t *testing.T) {
 	result, err := NewVerifier(StaticKey(key)).Verify(t.Context(), doc)
 	require.NoError(t, err)
 	require.Len(t, result.References, 1)
+}
+
+// TestBase64MaterializedNodeSetHonorsCancellation pins that the base64
+// node-set-to-text conversion stops on a cancelled context when it reads a set
+// that is ALREADY materialized. That set is what an XPath filter transform
+// leaves behind, it is as large as the document that produced it, and a
+// ds:RetrievalMethod reaches this conversion before any signature is checked.
+func TestBase64MaterializedNodeSetHonorsCancellation(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root>`+strings.Repeat(`<e>t</e>`, chargedNodeCount)+`</root>`))
+	require.NoError(t, err)
+	nodes, err := collectSubtreeNodes(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err = base64TransformNodeSetText(ctx, &nodeSetValue{doc: doc, nodes: nodes, materialized: true})
+	require.ErrorIs(t, err, context.Canceled)
 }

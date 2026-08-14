@@ -244,8 +244,9 @@ func costDocument(t *testing.T, src string) *helium.Element {
 }
 
 // bestCollectionCost collects the node set under root costRuns times and returns
-// the cheapest run, requiring every run to produce the whole node set.
-func bestCollectionCost(t *testing.T, collect func(context.Context, *helium.Element) ([]helium.Node, error), root *helium.Element) time.Duration {
+// the cheapest run. Every run must produce least members or more: a smaller set
+// would mean the walk never did the work being compared.
+func bestCollectionCost(t *testing.T, collect func(context.Context, *helium.Element) ([]helium.Node, error), root *helium.Element, least int) time.Duration {
 	t.Helper()
 	best := time.Duration(-1)
 	for range costRuns {
@@ -253,10 +254,8 @@ func bestCollectionCost(t *testing.T, collect func(context.Context, *helium.Elem
 		nodes, err := collect(t.Context(), root)
 		elapsed := time.Since(start)
 		require.NoError(t, err)
-		// Every declaration is in scope on the element that carries it, so a
-		// set this small would mean the walk never did the work being compared.
-		require.GreaterOrEqual(t, len(nodes), costDeclarations,
-			"collector returned %d nodes for %d declarations", len(nodes), costDeclarations)
+		require.GreaterOrEqual(t, len(nodes), least,
+			"collector returned %d nodes, fewer than the %d the document puts in scope", len(nodes), least)
 		if best < 0 || elapsed < best {
 			best = elapsed
 		}
@@ -294,8 +293,8 @@ func TestNodeSetCollectionCost(t *testing.T) {
 		{name: "full-axis node set", collect: collectFullAxisNodes},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			onOneElement := bestCollectionCost(t, tc.collect, concentrated)
-			overManyElements := bestCollectionCost(t, tc.collect, spread)
+			onOneElement := bestCollectionCost(t, tc.collect, concentrated, costDeclarations)
+			overManyElements := bestCollectionCost(t, tc.collect, spread, costDeclarations)
 
 			require.Less(t, onOneElement, costMaxRatio*overManyElements,
 				"collecting a node set cost %v with %d declarations on one element and %v with the same %d spread over %d, a factor of %.1f: the per-element cost grows with the declaration count",
@@ -303,6 +302,104 @@ func TestNodeSetCollectionCost(t *testing.T) {
 				float64(onOneElement)/float64(overManyElements))
 		})
 	}
+}
+
+// emissionPrefixes is how many prefixes the emission-cost documents put in scope
+// and carry on attributes, and emissionOwnDeclarations is how many declarations
+// of its own the CONTROL document's element adds on top.
+//
+// emissionMaxRatio sits between the two regimes. The two documents differ by
+// those few declarations and nothing else — same elements, same attributes, same
+// prefixes emitted, same node set — so a collector whose emission is linear in
+// the element's prefix count measures 0.7 to 1.2 here. Size the membership index
+// from the element's DECLARATIONS instead and the same measurement reads 9 to
+// 17: the control's declarations force an index and the other document's
+// attribute prefixes, which no count of declarations predicts, are left to a
+// scan that costs the square of their number. Three is about the middle.
+const (
+	emissionPrefixes        = 4000
+	emissionOwnDeclarations = 16
+	emissionMaxRatio        = 3
+)
+
+// emissionDocument builds, WITHOUT parsing, a document whose root declares
+// emissionPrefixes prefixes and whose single child carries one attribute per
+// prefix. own extra declarations are put on that child.
+//
+// The document is built rather than parsed because parsing thousands of
+// attributes onto one element is itself quadratic in helium's attribute
+// insertion, which is a separate cost and would dominate a measurement of the
+// walk. What the walk sees is the same tree either way.
+func emissionDocument(t *testing.T, own int) *helium.Element {
+	t.Helper()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(root))
+
+	namespaces := make([]*helium.Namespace, emissionPrefixes)
+	for i := range namespaces {
+		namespaces[i] = helium.NewNamespace(fmt.Sprintf("p%d", i), fmt.Sprintf("urn:example:ns:%d", i))
+		require.NoError(t, root.AddNamespaceDecl(namespaces[i]))
+	}
+
+	child, err := doc.CreateElement("c")
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(child))
+	for i := range own {
+		require.NoError(t, child.AddNamespaceDecl(helium.NewNamespace(fmt.Sprintf("q%d", i), fmt.Sprintf("urn:example:own:%d", i))))
+	}
+	// Every attribute names an INHERITED prefix, so the child changes no binding
+	// of its own for them while still making every one of them a candidate for
+	// emission.
+	for _, ns := range namespaces {
+		require.NoError(t, child.SetAttributeNS("a", "v", ns))
+	}
+	return root
+}
+
+// collectExclusiveNodes is the collector the emission cost below measures.
+// Exclusive C14N is the mode an attacker names in a ds:CanonicalizationMethod or
+// a ds:RetrievalMethod transform, and the only one whose emission reads the
+// element's attribute prefixes.
+func collectExclusiveNodes(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
+	return collectCanonicalizationNodes(ctx, elem, c14n.ExclusiveC14N10)
+}
+
+// TestNodeSetEmissionCost bounds what an element carrying many INHERITED
+// attribute prefixes may cost the exclusive canonicalization collector. The
+// emission asks "has this prefix been emitted for this element already" once per
+// candidate, and the candidates are the element's changed bindings, the default
+// namespace, its own prefix, and every attribute prefix. An element that changes
+// nothing and carries thousands of prefixed attributes offers thousands of
+// candidates, so a membership test that scans what has been emitted so far costs
+// the square of that count — reachable before any signature is checked, through
+// the ds:SignedInfo canonicalization and through a ds:RetrievalMethod's
+// transform pipeline.
+//
+// TestVerifyNamespaceHeavyDocument cannot see this class. The emission allocates
+// one namespace node per prefix in either regime, so the ALLOCATION stays flat
+// while the time grows. What is measured here is time.
+//
+// The control document is the same document plus a handful of declarations on
+// the same element. It does the same work and holds the same node set, so what
+// the ratio measures is how the element's own prefix count is answered and not
+// the speed of the machine: a uniformly slow machine, a race-detector build, or
+// a loaded runner scales both sides alike and cancels out.
+func TestNodeSetEmissionCost(t *testing.T) {
+	// no t.Parallel(): the case measures elapsed time, which a concurrent test
+	// competing for the same cores would inflate.
+
+	inherited := emissionDocument(t, 0)
+	declaring := emissionDocument(t, emissionOwnDeclarations)
+
+	onInheritedPrefixes := bestCollectionCost(t, collectExclusiveNodes, inherited, emissionPrefixes)
+	withOwnDeclarations := bestCollectionCost(t, collectExclusiveNodes, declaring, emissionPrefixes)
+
+	require.Less(t, onInheritedPrefixes, emissionMaxRatio*withOwnDeclarations,
+		"collecting a node set cost %v for an element carrying %d inherited attribute prefixes and %v for the same element declaring %d namespaces of its own, a factor of %.1f: what the element's prefixes cost depends on how many it declared",
+		onInheritedPrefixes, emissionPrefixes, withOwnDeclarations, emissionOwnDeclarations,
+		float64(onInheritedPrefixes)/float64(withOwnDeclarations))
 }
 
 // The deadline case walks a document whose every element repeats the whole
@@ -390,6 +487,107 @@ func TestNodeSetCollectionHonorsDeadline(t *testing.T) {
 	require.Less(t, best, deadlineWindow+deadlineOverrunBudget,
 		"the collector kept working for %v after a %v deadline, over the %v it may overrun by",
 		best-deadlineWindow, deadlineWindow, deadlineOverrunBudget)
+}
+
+// chargedNodeCount is how many members each cancellation case below collects or
+// filters. It is several poll intervals' worth, so a walk that charges the work
+// it does reaches a poll well inside the set, and one that charges nothing never
+// polls at all however large the set grows.
+const chargedNodeCount = 4 * ctxPollInterval
+
+// topLevelCommentDoc builds a document whose children are count comments and
+// nothing else. A whole-document collection admits every one of them as a
+// member, so appending them is the only work it does — which is what makes this
+// document decide whether those appends are charged.
+//
+// A parsed document carries a document element too, and reaches the same appends
+// around it. It cannot stand in here: collecting that element's subtree polls the
+// context at its own entry, and that entry check would report a cancellation no
+// matter what the sibling appends do.
+func topLevelCommentDoc(t *testing.T, count int) *helium.Document {
+	t.Helper()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
+	for i := range count {
+		require.NoError(t, doc.AddChild(doc.CreateComment(fmt.Appendf(nil, "c%d", i))))
+	}
+	return doc
+}
+
+// cancelledContext returns a context that is already cancelled, so what a case
+// using it measures is whether the work it hands the context to looks.
+func cancelledContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	return ctx
+}
+
+// documentChildNodes returns doc's children as the node slice the node-set
+// filters take.
+func documentChildNodes(doc *helium.Document) []helium.Node {
+	var nodes []helium.Node
+	for child := range helium.Children(doc) {
+		nodes = append(nodes, child)
+	}
+	return nodes
+}
+
+// signatureSubtreeNodes returns a node set drawn entirely from inside a
+// Signature element, together with that element. removeSignatureNodes drops
+// every member of such a set, so it keeps nothing at all — the shape that tells
+// a filter charging only what it keeps from one charging the nodes it reads.
+func signatureSubtreeNodes(t *testing.T, count int) ([]helium.Node, *helium.Element) {
+	t.Helper()
+	src := `<root><sig>` + strings.Repeat(`<e a="1"/>`, count) + `</sig></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	sig, ok := helium.AsNode[*helium.Element](root.FirstChild())
+	require.True(t, ok)
+	nodes, err := collectSubtreeNodes(t.Context(), sig)
+	require.NoError(t, err)
+	require.Greater(t, len(nodes), chargedNodeCount)
+	return nodes, sig
+}
+
+// TestNodeSetGrowthHonorsCancellation requires every node-set the transform
+// pipeline builds or narrows to stop on a cancelled context. Each of these sets
+// is reached before any signature is checked — a ds:RetrievalMethod names any
+// element in the document and runs its own transforms — and each is bounded by a
+// deadline rather than by a size cap, so a stage that reads a whole set without
+// polling spends the document's cost after the deadline has passed.
+func TestNodeSetGrowthHonorsCancellation(t *testing.T) {
+	// The whole-document node set a URI="" or "#xpointer(/)" reference stands for.
+	t.Run("whole-document collection", func(t *testing.T) {
+		doc := topLevelCommentDoc(t, chargedNodeCount)
+		_, err := collectDocumentNodes(cancelledContext(t), doc)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	// The same set built for a canonicalization consumer, which reads a reduced
+	// namespace membership but the identical document children.
+	t.Run("whole-document canonicalization collection", func(t *testing.T) {
+		doc := topLevelCommentDoc(t, chargedNodeCount)
+		_, err := collectCanonicalizationDocumentNodes(cancelledContext(t), doc, c14n.C14N10)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	// A comment-excluding Reference form drops every comment from the
+	// materialized set.
+	t.Run("comment removal", func(t *testing.T) {
+		nodes := documentChildNodes(topLevelCommentDoc(t, chargedNodeCount))
+		_, err := removeCommentNodes(cancelledContext(t), nodes)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	// The enveloped-signature transform on an explicit node set, which tests each
+	// member against the Signature's subtree.
+	t.Run("signature-node removal", func(t *testing.T) {
+		nodes, sig := signatureSubtreeNodes(t, chargedNodeCount)
+		_, err := removeSignatureNodes(cancelledContext(t), nodes, sig)
+		require.ErrorIs(t, err, context.Canceled)
+	})
 }
 
 // diffCorpusSeed fixes the generated corpus so a failure is reproducible: the
