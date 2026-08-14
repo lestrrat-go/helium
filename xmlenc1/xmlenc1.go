@@ -264,7 +264,11 @@ func (e Encryptor) EncryptBytes(ctx context.Context, doc *helium.Document, plain
 		return nil, err
 	}
 	if doc == nil {
-		return nil, abort(ctx, fmt.Errorf("%w: EncryptBytes requires a document to own the EncryptedData element", helium.ErrNilNode))
+		// Both sentinels are wrapped, in the order every encrypt terminal uses:
+		// the operation first, so a caller matching ErrEncryptionFailed catches
+		// a nil operand whichever entry point it called, and helium.ErrNilNode
+		// under it so a caller that wants to know WHICH operand still can.
+		return nil, abort(ctx, fmt.Errorf("%w: %w: EncryptBytes requires a document to own the EncryptedData element", ErrEncryptionFailed, helium.ErrNilNode))
 	}
 	cfg := e.config()
 	resolved, err := resolveEncryptConfig(cfg)
@@ -288,7 +292,10 @@ func encrypt(ctx context.Context, cfg *encryptConfig, elem *helium.Element, encT
 		return nil, abort(ctx, err)
 	}
 	if elem == nil {
-		return nil, abort(ctx, fmt.Errorf("%w: %v", ErrEncryptionFailed, helium.ErrNilNode))
+		// helium.ErrNilNode is WRAPPED, not formatted with %v: a caller asking
+		// which operand was nil must be able to match it, and EncryptBytes
+		// reports its own nil document the same way.
+		return nil, abort(ctx, fmt.Errorf("%w: %w", ErrEncryptionFailed, helium.ErrNilNode))
 	}
 
 	// Serialize the plaintext. Element encrypts the element itself;

@@ -228,13 +228,18 @@ const (
 
 // UnsupportedAlgorithmError is returned for unrecognized algorithm URIs.
 //
-// Construct it with keyed fields only, as in
-// &UnsupportedAlgorithmError{Algorithm: uri}. The field set grows as the
-// diagnostics improve, and every such addition stops an unkeyed composite
-// literal from compiling. That break is accepted under this package's
-// EXPERIMENTAL, pre-1.0 API posture; keyed literals are unaffected and are
-// the supported form.
+// Construct it with keyed fields, as in
+// &UnsupportedAlgorithmError{Algorithm: uri}. An unexported field makes an
+// unkeyed composite literal fail to compile from another package, which is
+// deliberate and is what lets the field set GROW as the diagnostics improve
+// without breaking a caller: nobody can have written the positional form that
+// a new field would invalidate. Reading the exported fields, comparing values,
+// and recovering the type with errors.As are all unaffected.
 type UnsupportedAlgorithmError struct {
+	// The blank field blocks unkeyed literals from outside this package; see
+	// the type's own doc for why. It is zero-size, so it costs nothing.
+	_ struct{}
+
 	// Parameter names the algorithm slot that rejected the URI, e.g.
 	// "block algorithm" or "MGF algorithm". It is diagnostic text and may
 	// be empty when the slot is not known at the point of failure.
@@ -255,10 +260,14 @@ func (e *UnsupportedAlgorithmError) Error() string {
 // on the wire while supplying a 16-byte key that crypto/aes would silently
 // treat as AES-128.
 //
-// Construct it with keyed fields only, as in
+// Construct it with keyed fields, as in
 // &KeySizeError{Algorithm: uri, Want: want, Got: got}; see
-// UnsupportedAlgorithmError for why unkeyed literals are unsupported here.
+// UnsupportedAlgorithmError for why an unkeyed literal cannot compile here.
 type KeySizeError struct {
+	// The blank field blocks unkeyed literals from outside this package; see
+	// UnsupportedAlgorithmError for why. It is zero-size, so it costs nothing.
+	_ struct{}
+
 	// Key names the key that was the wrong length, e.g. "session key" or
 	// "key-encryption key". It is diagnostic text and may be empty when
 	// the role is not known at the point of failure.
