@@ -81,7 +81,7 @@ func extractArrayIndex(seq Sequence) (int, error) {
 	}
 	// On 64-bit platforms int(iv) is exact; on 32-bit, clamp out-of-int values
 	// to the int extremes so the caller's 1..size bounds check still rejects
-	// them (as out of range) rather than wrapping into a valid-looking index.
+	// them (as out of range), wrapping into no valid-looking index.
 	const maxInt = int(^uint(0) >> 1)
 	if iv > int64(maxInt) {
 		return maxInt, nil
@@ -270,7 +270,7 @@ func fnArrayFlatten(ctx context.Context, args []Sequence) (Sequence, error) {
 	var result ItemSlice
 
 	// Walk the (possibly deeply nested) array structure iteratively with an
-	// explicit work stack rather than recursively, so a pathologically nested
+	// explicit work stack, and never recursively, so a pathologically nested
 	// input cannot exhaust the goroutine stack. The op-counter and node-set
 	// limit bound the total work and output respectively.
 	//

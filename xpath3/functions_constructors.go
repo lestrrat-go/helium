@@ -399,7 +399,7 @@ func atomizeConstructorArg(seq Sequence, typeName string) (AtomicValue, bool, er
 	// count, not the raw sequence length. Per function-conversion semantics, an
 	// item that cannot be atomized (a map/function → FOTY0013) must surface that
 	// error even when it appears after the second atom, so we atomize to
-	// completion rather than short-circuiting; XPTY0004 cardinality applies only
+	// completion, short-circuiting nowhere; XPTY0004 cardinality applies only
 	// when atomization succeeds and yields more than one atom.
 	var first AtomicValue
 	var count int

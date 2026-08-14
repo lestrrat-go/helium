@@ -244,7 +244,7 @@ func resolveActiveUnionLeaf(ctx context.Context, ec *evalContext, n helium.Node,
 }
 
 // resolveActiveUnionLeafForValue resolves the active leaf member of unionType for an
-// EXPLICIT value (rather than the node's whole string value), used to resolve EACH
+// EXPLICIT value, in place of the node's whole string value, used to resolve EACH
 // token of an xs:list whose item type is a union — so a list-of-union node atomizes
 // each token through its own active member (matching $value), not one static base.
 // QName/NOTATION members still resolve their prefix against the node n's namespaces.

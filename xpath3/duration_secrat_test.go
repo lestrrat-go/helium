@@ -25,7 +25,7 @@ func evalExprErr(t *testing.T, node helium.Node, expr string) error {
 }
 
 // TestDurationAccessorsExactSeconds verifies the *-from-duration accessors use
-// the exact SecRat-aware seconds magnitude rather than the lossy float64
+// the exact SecRat-aware seconds magnitude, and never the lossy float64
 // Seconds field, so a fraction arbitrarily close to a whole second does not
 // inflate the whole-second part.
 func TestDurationAccessorsExactSeconds(t *testing.T) {
@@ -147,7 +147,7 @@ func TestDateTimePlusExactDayTimeDuration(t *testing.T) {
 
 // TestYearMonthDurationRejectsUnderflowingDayTime verifies that an
 // underflowing-but-nonzero EXACT dayTime seconds value is rejected when casting
-// to xs:yearMonthDuration, rather than being silently accepted as P0M.
+// to xs:yearMonthDuration, and never silently accepted as P0M.
 func TestYearMonthDurationRejectsUnderflowingDayTime(t *testing.T) {
 	lex := "PT0." + strings.Repeat("0", 400) + "1S"
 	_, err := xpath3.CastFromString(lex, xpath3.TypeYearMonthDuration)
@@ -181,7 +181,7 @@ func TestNonTerminatingFractionTruncated(t *testing.T) {
 }
 
 // TestDaysFromDurationBigDayCount verifies days-from-duration returns the exact
-// big-int day count rather than narrowing via int64 (which would produce
+// big-int day count, narrowing through no int64 (which would produce
 // negative garbage for a day count above int64 max).
 func TestDaysFromDurationBigDayCount(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
@@ -254,7 +254,7 @@ func TestYearMonthDurationArithmeticOverflow(t *testing.T) {
 }
 
 // TestDateTimeSubtractExactSeconds verifies dateTime − dateTime computes the
-// difference with EXACT integer/rational seconds rather than a rounded float64,
+// difference with EXACT integer/rational seconds, and never a rounded float64,
 // so two dateTimes that differ by a single second (even when their magnitudes
 // exceed float64's 2^53 exact range) do not collapse to the same duration.
 func TestDateTimeSubtractExactSeconds(t *testing.T) {
@@ -449,7 +449,7 @@ func TestDurationMulDoubleFloatExact(t *testing.T) {
 }
 
 // TestDurationMulNonFiniteDoubleErrors verifies that a non-finite (Inf/NaN)
-// xs:double multiplier still reports an error rather than silently producing a
+// xs:double multiplier still reports an error, producing no
 // bogus duration.
 func TestDurationMulNonFiniteDoubleErrors(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
@@ -462,7 +462,7 @@ func TestDurationMulNonFiniteDoubleErrors(t *testing.T) {
 }
 
 // TestMapKeyFloat64BackedValue verifies that a schema-derived xs:double/xs:float
-// atomic backed by a plain float64 (rather than *FloatValue) can be used as a
+// atomic backed by a plain float64, in place of *FloatValue, can be used as a
 // map key without panicking, and folds into the shared numeric key bucket so an
 // equal xs:double key collides with it.
 func TestMapKeyFloat64BackedValue(t *testing.T) {
@@ -516,7 +516,7 @@ func TestMapKeyFloat64BackedValue(t *testing.T) {
 
 // TestAvgYearMonthDurationExactMonths verifies fn:avg over yearMonthDurations
 // divides the exact month total by the count using rational arithmetic, so a
-// large average keeps full precision rather than losing a month through a
+// large average keeps full precision, losing no month through a
 // float64 round-trip.
 func TestAvgYearMonthDurationExactMonths(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")

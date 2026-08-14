@@ -477,7 +477,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 	}
 	if family == familyNumeric {
 		// When every value is an xs:integer subtype (widest stays xs:integer),
-		// F&O 3.1 retains the type of the selected item rather than collapsing to
+		// F&O 3.1 retains the type of the selected item, collapsing to no
 		// xs:integer; otherwise apply numeric type promotion to the widest type.
 		if widest == TypeInteger {
 			return SingleAtomic(bestOrig), nil
@@ -758,12 +758,12 @@ func distinctValueFastKey(a AtomicValue) (distinctGroup, string, bool) {
 	case isIntegerDerived(et) || et == TypeDecimal:
 		// Promote via BaseType so a schema-derived integer/decimal (custom TypeName,
 		// built-in BaseType, backed by int64/*big.Int/*big.Rat) keys on its effective
-		// value rather than the un-promoted toRatForCompare producing 0.
+		// value. The un-promoted toRatForCompare would produce 0.
 		return distinctGroupDecimalInt, "n:" + toRatForCompare(PromoteSchemaType(a)).RatString(), true
 	case et == TypeFloat:
 		// Promote via BaseType so a schema-derived float (custom TypeName, built-in
 		// BaseType, backed by float64/float32/*FloatValue) keys on its effective
-		// value rather than the un-promoted ToFloat64 producing 0.
+		// value. The un-promoted ToFloat64 would produce 0.
 		f := float32(PromoteSchemaType(a).ToFloat64())
 		if f == 0 {
 			f = 0

@@ -18,7 +18,7 @@ func float64Double() AtomicValue {
 }
 
 // TestFloat64BackedNoPanic verifies that no xpath3 code path panics on an
-// xs:double atomic whose backing value is a plain float64 rather than a
+// xs:double atomic whose backing value is a plain float64, in place of a
 // *FloatValue. Several call sites used to force-assert *FloatValue.
 func TestFloat64BackedNoPanic(t *testing.T) {
 	t.Run("DoubleVal accessor", func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestAggregateSchemaDerivedFloatWidth(t *testing.T) {
 
 // TestDistinctValuesSchemaDerivedCollapse verifies that distinct-values folds a
 // schema-derived value with its built-in equivalent via the BaseType-aware fast
-// key, rather than keying solely on TypeName.
+// key, and never on TypeName alone.
 func TestDistinctValuesSchemaDerivedCollapse(t *testing.T) {
 	t.Run("schema-derived NCName collapses with string", func(t *testing.T) {
 		derived := AtomicValue{TypeName: "my:code", BaseType: TypeNCName, Value: "x"}

@@ -461,7 +461,7 @@ func fnDaysFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 		days.Neg(days)
 	}
 	// The day count can exceed int64 (e.g. P9223372036854775808D), so return the
-	// exact big.Int rather than narrowing via Int64().
+	// exact big.Int, narrowing through no Int64().
 	return SingleIntegerBig(days), nil
 }
 

@@ -603,7 +603,7 @@ func parseXSDDuration(s string) (Duration, error) {
 // When FloatPrec reports the fraction is EXACT (terminating), the full exact
 // precision is used with no cap, so an exact value arbitrarily close to 1 (e.g.
 // 0.999...9 with hundreds of nines that is exactly representable) is rendered in
-// full rather than rounded UP to "1.0...". Only NON-terminating fractions are
+// full, and never rounded UP to "1.0...". Only NON-terminating fractions are
 // capped, at which point FloatString may legitimately round; the cap value is
 // chosen far beyond any precision a real lexical form carries.
 //

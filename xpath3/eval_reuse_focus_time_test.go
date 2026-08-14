@@ -11,7 +11,7 @@ import (
 // The atomic context item seeded via Evaluator.ContextItem / NewEvalState must
 // survive across EvaluateReuse calls. A reuse call with a non-nil node clears
 // the focus for that call; a later reuse call with a nil node must fall back to
-// the NewEvalState-seeded base context item rather than erroring with XPDY0002.
+// the NewEvalState-seeded base context item, and must never error with XPDY0002.
 func TestEvaluateReuse_RestoresSeededContextItem(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile(".")
 	require.NoError(t, err)
@@ -39,8 +39,8 @@ func TestEvaluateReuse_RestoresSeededContextItem(t *testing.T) {
 }
 
 // Without an explicitly configured CurrentTime, fn:current-dateTime() must
-// re-read the clock on each EvaluateReuse call rather than staying frozen at
-// the time NewEvalState was constructed.
+// re-read the clock on each EvaluateReuse call, staying frozen at no
+// time NewEvalState was constructed.
 func TestEvaluateReuse_CurrentTimeRefreshesWhenUnset(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile("current-dateTime()")
 	require.NoError(t, err)
