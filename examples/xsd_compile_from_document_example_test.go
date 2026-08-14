@@ -26,7 +26,7 @@ func Example_xsd_compile_from_document() {
 
 	// NewCompiler().Compile compiles a schema from an in-memory Document,
 	// as opposed to CompileFile which reads from a file path. Use Compile
-	// when the schema is available as a string or byte slice rather than on disk.
+	// when the schema is available as a string or byte slice with no file on disk.
 	schema, err := xsd.NewCompiler().Compile(context.Background(), schemaDoc)
 	if err != nil {
 		fmt.Printf("failed to compile schema: %s\n", err)

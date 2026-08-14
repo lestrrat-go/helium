@@ -48,7 +48,7 @@ func Example_sax_parse() {
 
 	// Parse triggers the SAX events. The returned document may be nil
 	// or minimal when using SAX mode, since the purpose is event-driven
-	// processing rather than DOM construction.
+	// processing, with no tree to build.
 	_, err := p.Parse(context.Background(), []byte(src))
 	if err != nil {
 		fmt.Printf("failed to parse: %s\n", err)

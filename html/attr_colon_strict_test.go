@@ -9,7 +9,7 @@ import (
 
 // A colon-bearing attribute name is rejected by Element.SetAttribute. Under
 // Strict(true) that rejection must surface as a fatal parse error naming the
-// offending attribute, rather than being silently dropped.
+// offending attribute, and must never be silently dropped.
 func TestAttrColon_StrictSurfacesSetAttributeError(t *testing.T) {
 	const input = `<p x:y="1" a="2">text</p>`
 

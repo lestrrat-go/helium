@@ -20,8 +20,8 @@ func isIDAttribute(attr *helium.Attribute) bool {
 // FindElementsByID walks the subtree rooted at root (root included) and
 // returns every element whose ID matches the given value. root may be nil, in
 // which case it returns no matches. The walk is exhaustive — it never
-// short-circuits — so that duplicate IDs are surfaced to the caller rather
-// than silently masked. We do NOT consult Document.GetElementByID: its
+// short-circuits — so that duplicate IDs are surfaced to the caller and never
+// silently masked. We do NOT consult Document.GetElementByID: its
 // underlying ID table is keyed by ID value and Document.RegisterID
 // overwrites on collision, which would hide the duplicate-xml:id case that
 // XSW hardening relies on.
@@ -36,7 +36,7 @@ func isIDAttribute(attr *helium.Attribute) bool {
 // tokens such as "wsu:Id" or "AssertionID". Those are not universal ID names
 // — they are ID-typed only by their own schemas — so a document that relies
 // on them must declare that typing (DTD/schema, or by marking the attribute
-// AType == enum.AttrID) rather than have this heuristic guess.
+// AType == enum.AttrID), which this heuristic will never guess for it.
 func FindElementsByID(root helium.Node, id string) []*helium.Element {
 	var matches []*helium.Element
 	var walk func(helium.Node)
@@ -68,14 +68,14 @@ func FindElementsByID(root helium.Node, id string) []*helium.Element {
 // and returns a map from every id value found to every element carrying it,
 // applying the identical FROZEN ID-name rule documented on FindElementsByID.
 // It exists so a caller resolving many ids against the same subtree pays for
-// one walk rather than one per id, while preserving the same exhaustive,
+// one walk in place of one per id, while preserving the same exhaustive,
 // non-short-circuiting duplicate collection: a caller can refuse a duplicate
 // id by checking len(index[id]) > 1 exactly as a single FindElementsByID call
 // would report it.
 //
 // ctx is observed once per node visited and its error is returned as soon as
 // it is done, because the trip count of this walk is the size of a document the
-// caller did not write. A cancelled walk returns a nil index rather than a
+// caller did not write. A cancelled walk returns a nil index, never a
 // partial one, so a caller cannot mistake "the id is absent" for "the walk
 // stopped before reaching it". A nil ctx is treated as uncancelled, matching
 // the packages whose own entry points accept one.

@@ -219,8 +219,8 @@ var (
 	errNoCursor               = errors.New("parser has no input")
 )
 
-// isParseAbort reports whether err signals that parsing must stop immediately
-// rather than be treated as a recoverable parse error. This covers the
+// isParseAbort reports whether err signals that parsing must stop immediately,
+// with no treatment as a recoverable parse error. This covers the
 // internal stop sentinel (helium.StopParser) and context cancellation /
 // deadline expiry. Such errors must never enter recovery, be rewrapped as a
 // parse error, or fire SAX error handlers as if the document were malformed.

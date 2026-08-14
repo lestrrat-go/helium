@@ -177,9 +177,9 @@ func (d *htmlDumper) checkName(kind, name string) {
 		d.check(fmt.Errorf("invalid HTML %s name: empty", kind))
 		return
 	}
-	// Decode rune-by-rune rather than ranging over the string: a range loop
-	// yields utf8.RuneError both for genuinely invalid bytes and for a
-	// validly-encoded U+FFFD, so we cannot tell them apart by rune alone.
+	// Decode rune-by-rune. A range loop yields utf8.RuneError both for
+	// genuinely invalid bytes and for a validly-encoded U+FFFD, so it cannot
+	// tell them apart by rune alone.
 	// DecodeRuneInString returns size==1 for invalid encodings, letting us
 	// reject only the former while permitting a real U+FFFD (size==3), which
 	// the parser accepts and which does not break out of the tag.
@@ -220,7 +220,7 @@ func isUnsafeNameRune(r rune) bool {
 // before it is written into a tag. Unlike checkName (the loose attribute
 // rule), this enforces the HTML tag-name grammar so that names libxml2 treats
 // as malformed — e.g. CreateElement("a?b") or CreateElement("a&b") — are
-// rejected rather than serialized verbatim as <a?b> / <a&b>.
+// rejected, and never serialized verbatim as <a?b> / <a&b>.
 //
 // The accepted set is derived from what the HTML parser tokenizes as a tag
 // name (parser.parseName via isNameChar): ASCII letters, digits, ':', '-',
@@ -237,9 +237,8 @@ func (d *htmlDumper) checkElementName(name string) {
 		d.check(fmt.Errorf("invalid HTML element name: empty"))
 		return
 	}
-	// Decode rune-by-rune rather than ranging over the string: a range loop
-	// yields utf8.RuneError both for genuinely invalid bytes and for a
-	// validly-encoded U+FFFD. DecodeRuneInString returns size==1 for invalid
+	// Decode rune-by-rune. A range loop yields utf8.RuneError both for
+	// genuinely invalid bytes and for a validly-encoded U+FFFD. DecodeRuneInString returns size==1 for invalid
 	// encodings, letting us reject only the former while permitting a real
 	// U+FFFD (size==3), which the parser accepts and which does not break out
 	// of the tag.

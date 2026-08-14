@@ -206,7 +206,7 @@ func TestOptionsNoBlanksOverCapHardErrors(t *testing.T) {
 	// after the whole run is known, so the cap may not split it early. But a run
 	// whose leading whitespace prefix alone overruns the cap (with yet more
 	// whitespace beyond it) cannot be decided without unbounded buffering, so it
-	// must HARD-FAIL with ErrContentSizeExceeded rather than buffer the run whole.
+	// must HARD-FAIL with ErrContentSizeExceeded and never buffer the run whole.
 	input := `<p>  a</p>`
 	_, err := html.NewParser().
 		StripBlanks(true).
@@ -450,7 +450,7 @@ func TestSuppressImpliedTinyChunkPreservesLeadingSpace(t *testing.T) {
 func TestSuppressImpliedOverCapWhitespaceSoftCap(t *testing.T) {
 	// Under SuppressImplied with an element already open the insertion target is
 	// fixed and there is nothing to defer, so an over-cap all-whitespace run must
-	// STREAM under the soft cap rather than hard-fail on the undecidable-prefix
+	// STREAM under the soft cap and must not hard-fail on the undecidable-prefix
 	// path (that path only applies while a parent/significance is genuinely
 	// undecided). `<p>   </p>` must deliver all whitespace and never error.
 	spaces := strings.Repeat(" ", 50)

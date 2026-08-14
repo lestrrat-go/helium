@@ -298,7 +298,7 @@ func TestCopyDoc(t *testing.T) {
 
 		// The copy serializes byte-for-byte identically to the original: the
 		// serializer re-escapes '&'/'<' on both, and the resolved values are stored
-		// literally rather than re-parsed.
+		// literally, with no re-parse.
 		require.Equal(t, orig, copied)
 
 		// And CopyNode of just the element (the other deepCopier entry point) too.

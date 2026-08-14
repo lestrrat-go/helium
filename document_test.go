@@ -292,8 +292,8 @@ func TestDocumentCreateNode(t *testing.T) {
 
 	t.Run("char ref rejects an empty name", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
-		// "&" decodes to an empty name; this must be rejected rather than
-		// producing a degenerate entity-ref node with an empty name.
+		// "&" decodes to an empty name; so this must be rejected. Accepting it
+		// would produce a degenerate entity-ref node with an empty name.
 		ref, err := doc.CreateCharRef("&")
 		require.Error(t, err, "CreateCharRef with empty decoded name must return an error")
 		require.Nil(t, ref)

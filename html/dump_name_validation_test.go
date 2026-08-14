@@ -29,7 +29,7 @@ func TestWriteRejectsInvalidElementName(t *testing.T) {
 
 // TestWriteRejectsMalformedElementName ensures the HTML serializer refuses to
 // write element names that libxml2 treats as malformed tag names — e.g.
-// CreateElement("a?b") or CreateElement("a&b") — rather than serializing them
+// CreateElement("a?b") or CreateElement("a&b") — and never serializes them
 // verbatim as <a?b> / <a&b>. Element names use the stricter HTML tag-name
 // grammar; '?' and '&' (accepted in the loose ATTRIBUTE rule) are rejected
 // here.
@@ -179,7 +179,7 @@ func TestWriteRejectsInjectedNamespacePrefix(t *testing.T) {
 
 // TestWriteRejectsInjectedAttributeNamespacePrefix covers the
 // emitAttrNSDecls path: an attribute whose namespace prefix is unsafe must
-// also be rejected rather than emitted as an xmlns: declaration.
+// also be rejected, and never emitted as an xmlns: declaration.
 func TestWriteRejectsInjectedAttributeNamespacePrefix(t *testing.T) {
 	doc := helium.NewHTMLDocument()
 	root, err := doc.CreateElement("svg")

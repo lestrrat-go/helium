@@ -102,8 +102,8 @@ func TestDoctypeQuotedLiteralOverCapFails(t *testing.T) {
 // and bypass the hard cap. parseQuotedString must distinguish a genuine NUL
 // content byte (HasByteAt true, PeekAt 0) from true end-of-input — like the
 // comment/PI scanners — so an unterminated over-cap literal whose tail begins
-// with a NUL still fails closed with ErrContentSizeExceeded rather than exiting
-// the scanner early (leaving fatalErr unset) and emitting a partial subset.
+// with a NUL still fails closed with ErrContentSizeExceeded. Exiting
+// the scanner early would leave fatalErr unset and emit a partial subset.
 func TestDoctypeLiteralEmbeddedNULOverCapFails(t *testing.T) {
 	over := "\x00" + strings.Repeat("a", scanTokenCeiling+8)
 
@@ -127,7 +127,7 @@ func TestDoctypeLiteralEmbeddedNULOverCapFails(t *testing.T) {
 }
 
 // TestOverCapEndTagNameDoesNotDrainStream verifies that an over-cap end-tag
-// name surfaces its ErrContentSizeExceeded fatal PROMPTLY rather than first
+// name surfaces its ErrContentSizeExceeded fatal PROMPTLY, without first
 // draining the remainder of an abusive stream in the "skip to '>'" loop. The
 // trailing junk after the over-cap name must never be read. (countingReader and
 // metaUTF8 are shared with rawtext_bounds_test.go.)
@@ -221,7 +221,7 @@ func TestOverCapStartTagNameEmitsNoStrayText(t *testing.T) {
 // TestOverCapDoctypeWhitespaceDoesNotBlock is the regression for the parseDoctype
 // streaming-block gap: an over-cap intra-DOCTYPE whitespace run sets fatalErr in
 // the FIRST skipWhitespace, but parseDoctype must check fatalErr IMMEDIATELY and
-// return rather than continuing into the next scanner (parseName / the second
+// return, never continuing into the next scanner (parseName / the second
 // skipWhitespace), whose PeekAt would issue another (blocking) Read on a streaming
 // reader stalled right at the over-cap boundary.
 //

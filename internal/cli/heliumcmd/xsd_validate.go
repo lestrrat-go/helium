@@ -117,8 +117,8 @@ func (c *xsdValidateCommand) runContext(ctx context.Context, args []string) int 
 		t0 = time.Now()
 	}
 	// Compile with a Label and an ErrorHandler so fatal schema diagnostics
-	// (file/line/detail) reach stderr before the summary error, rather than
-	// being discarded.
+	// (file/line/detail) reach stderr before the summary error, and are
+	// never discarded.
 	ceh := &compileErrorHandler{w: c.stderr}
 	// The xsd compiler now denies nested-schema FS access by default; the CLI is
 	// a trusted local tool, so restore permissive host access for

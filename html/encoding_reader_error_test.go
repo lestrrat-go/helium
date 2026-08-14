@@ -86,7 +86,7 @@ func (r *chunkReader) Read(p []byte) (int, error) {
 // reader's undecided (still-valid-UTF-8) path: the underlying reader returns
 // valid UTF-8 bytes together with a sentinel non-EOF error before any invalid
 // byte appears. The buffered bytes must be delivered, but the sentinel error
-// must then surface rather than the parse silently succeeding.
+// must then surface, and the parse must not silently succeed.
 func TestParseReaderSurfacesReadErrorUndecidedUTF8(t *testing.T) {
 	t.Parallel()
 
@@ -151,7 +151,7 @@ func TestParseReaderSurfacesReadErrorAfterLatin1Switch(t *testing.T) {
 
 	// Build a document larger than the 1024-byte charset-detection window so the
 	// Latin-1 switch and the read error both occur during streaming, AFTER the
-	// peek phase — exercising the switched (fillLatin1) path rather than the
+	// peek phase — exercising the switched (fillLatin1) path, well past the
 	// peek-level error handling.
 	var head []byte
 	head = append(head, []byte("<html><body>")...)
@@ -273,7 +273,7 @@ func TestParseReaderLatin1SwitchErrorDoesNotReReadStream(t *testing.T) {
 	sentinel := errors.New("post-switch failure")
 
 	// Head larger than the 1024-byte detection window keeps the switch and the
-	// error in the streaming (fillLatin1) phase rather than the sniff phase.
+	// error in the streaming (fillLatin1) phase, past the sniff phase.
 	var head []byte
 	head = append(head, []byte("<html><body>")...)
 	for len(head) < 2048 {

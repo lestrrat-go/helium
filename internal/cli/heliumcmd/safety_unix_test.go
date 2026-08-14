@@ -20,7 +20,7 @@ func TestLintOutputSelfTruncateRejectedViaSymlink(t *testing.T) {
 
 	// A symlink pointing at the input is a genuine same-file alias whose
 	// lexical path differs: os.SameFile (inode/device) must catch it so the
-	// collision check fires rather than some incidental open failure.
+	// collision check fires, and no incidental open failure stands in for it.
 	link := filepath.Join(dir, "alias.xml")
 	require.NoError(t, os.Symlink(xmlFile, link))
 

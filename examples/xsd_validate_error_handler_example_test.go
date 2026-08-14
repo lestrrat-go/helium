@@ -13,7 +13,7 @@ func Example_xsd_validate_error_handler() {
 	// When validating an XML document against a schema, individual
 	// validation errors can be received through an ErrorHandler.
 	// This is useful when you want to inspect or log each error
-	// separately, rather than parsing the combined error string.
+	// separately, with no need to parse the combined error string.
 
 	const schemaSrc = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

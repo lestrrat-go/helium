@@ -17,7 +17,7 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // content (script/style/textarea/plaintext), these constructs map to a single
 // indivisible SAX event and DOM node, so they cannot be chunked without
 // corrupting the document. The cap is therefore enforced as a hard limit and
-// the parse fails rather than emitting a truncated node and leaking the
+// the parse fails, emitting no truncated node and leaking no
 // remainder as stray text.
 //
 // It is also returned — in normal data-state text as well as the RCDATA path —
@@ -41,8 +41,7 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // with implied insertion enabled, so the next non-whitespace byte would open the
 // implied <body>). The scanner cannot flush a run whose leading whitespace prefix
 // reaches the cap with yet more whitespace beyond it without buffering the run
-// unbounded to learn its significance or parent — such a run fails rather than
-// parsing successfully. Default-mode whitespace with a fixed insertion target and
+// unbounded to learn its significance or parent — such a run fails. Default-mode whitespace with a fixed insertion target and
 // no StripBlanks stays a soft-cap stream and never hits this case.
 //
 // It is also returned for an over-cap indivisible STRUCTURAL token scan: a
@@ -60,9 +59,9 @@ var ErrHandlerUnspecified = errors.New("handler unspecified")
 // default) without ever revealing their encoding. Such a stream cannot be
 // committed to UTF-8 within the memory bound — a later non-UTF-8 byte would flip
 // the whole document to Windows-1252 (matching [Parser.Parse]) while EOF would
-// keep it UTF-8 — so rather than buffer it unbounded or risk a silently
-// mis-decoded result that diverges from the in-memory path, the reader fails
-// closed with this error. A stream that declares its charset, or that settles its
+// keep it UTF-8 — so the reader fails closed with this error, buffering nothing
+// unbounded and risking no silently mis-decoded result that diverges from the
+// in-memory path. A stream that declares its charset, or that settles its
 // encoding (reaches EOF or a non-UTF-8 byte) below the limit, is unaffected.
 var ErrContentSizeExceeded = errors.New("content size limit exceeded")
 

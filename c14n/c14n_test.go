@@ -422,7 +422,7 @@ func TestEntityReferenceReplacementUnboundPrefixAtSecondSiteErrors(t *testing.T)
 	// referenced first where q is bound and then where q is UNBOUND. The second
 	// expansion cannot borrow the first site's cached binding — a prefixed name
 	// whose prefix is not in scope at the reference site is not namespace-well-formed
-	// there, so canonicalization must error rather than emit a borrowed binding.
+	// there, so canonicalization must error, and must not borrow that binding.
 	src := `<!DOCTYPE r [<!ENTITY x "<e q:a=&#34;v&#34;/>">]>` +
 		`<r><a xmlns:q="urn:one">&x;</a><b>&x;</b></r>`
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
@@ -444,7 +444,7 @@ func TestEntityReferenceReplacementElementUnboundPrefixAtSecondSiteErrors(t *tes
 	// first where p is bound and then where p is UNBOUND. The second expansion
 	// cannot borrow the first site's cached binding — an element name whose prefix
 	// is not in scope at the reference site is not namespace-well-formed there, so
-	// canonicalization must error rather than emit a dangling prefix. This mirrors
+	// canonicalization must error, leaving no dangling prefix in the output. This mirrors
 	// the attribute-axis case on the element-name axis and must hold in every mode.
 	src := `<!DOCTYPE r [<!ENTITY x "<p:e/>">]>` +
 		`<r><a xmlns:p="urn:one">&x;</a><b>&x;</b></r>`
@@ -478,7 +478,7 @@ func TestEntityReferenceReplacementNamespaceContextPerSiteNodeSet(t *testing.T) 
 	// Node-set C14N: the same entity, whose replacement is a q-prefixed element, is
 	// referenced twice under DIFFERENT q bindings, with the whole tree selected. The
 	// node-set namespace rendering must reflect each reference site's own binding for
-	// q rather than the URI cached on the shared Entity declaration node.
+	// q. The URI cached on the shared Entity declaration node is stale here.
 	src := `<!DOCTYPE r [<!ENTITY x "<p:x/>">]>` +
 		`<r xmlns:p="urn:default"><a xmlns:p="urn:one">&x;</a><b xmlns:p="urn:two">&x;</b></r>`
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
@@ -523,8 +523,8 @@ func TestEntityReferenceReplacementDefaultNamespaceReverseOrderExclusive(t *test
 	// with NO default namespace and then inside a sibling that declares a default
 	// namespace. Parsing caches the replacement element's active namespace at the
 	// first (no-default) site as nil, so the second site must re-derive the
-	// element's own namespace from the reference-site default binding rather than
-	// trusting the cached nil. At the first site <e> is in no namespace; at the
+	// element's own namespace from the reference-site default binding, since the
+	// cached nil is stale. At the first site <e> is in no namespace; at the
 	// second it is in urn:two and must emit xmlns="urn:two".
 	src := `<!DOCTYPE r [<!ENTITY x "<e/>">]>` +
 		`<r xmlns:p="urn:p"><p:a>&x;</p:a><p:b xmlns="urn:two">&x;</p:b></r>`
@@ -586,8 +586,8 @@ func TestEntityReferenceReplacementReservedXMLPrefixElementName(t *testing.T) {
 	t.Parallel()
 	// An entity-replacement element whose NAME uses the reserved "xml" prefix is
 	// namespace-well-formed at any reference site (the prefix is implicitly
-	// bound) and must canonicalize successfully rather than erroring as an
-	// out-of-scope prefix. Output must be byte-identical to the fully-expanded
+	// bound) and must canonicalize successfully, with no out-of-scope-prefix
+	// error. Output must be byte-identical to the fully-expanded
 	// document in every mode.
 	entitySrc := `<!DOCTYPE r [<!ENTITY x "<xml:e/>">]><r>&x;</r>`
 	expandedSrc := `<r><xml:e/></r>`
@@ -902,7 +902,7 @@ func TestC14N11StrictFailClosedOmittedAttr(t *testing.T) {
 
 // TestC14N10StrictFailClosedXMLBase verifies the strict fail-closed guard also
 // covers C14N 1.0, where xml:base is an ordinary (visible or inherited) attribute
-// rather than a fixup result — caught at the shared writeAttribute chokepoint.
+// and no fixup result — caught at the shared writeAttribute chokepoint.
 func TestC14N10StrictFailClosedXMLBase(t *testing.T) {
 	t.Parallel()
 	// Visible own degenerate xml:base.

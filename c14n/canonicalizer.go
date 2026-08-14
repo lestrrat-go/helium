@@ -27,9 +27,9 @@ type canonicalizer struct {
 	// entityNSContext is a stack of entity-expansion frames, pushed when the walk
 	// descends through an EntityRef. While non-empty, an entity-replacement element
 	// resolves the prefixes it does not itself declare against the reference site's
-	// bindings rather than the shared Entity declaration node's DTD-context parent
-	// chain and its cached active-namespace pointers (both resolved once at parse
-	// time against the first reference site). The frame also carries the reference
+	// bindings. The shared Entity declaration node's DTD-context parent chain and
+	// its cached active-namespace pointers are both resolved once at parse time
+	// against the first reference site, so they are stale here. The frame also carries the reference
 	// site's visibility so, in node-set mode, the replacement subtree is emitted iff
 	// the reference site is selected — helium's XPath cannot place entity-internal
 	// nodes in a node set, so their visibility is inherited from the reference site.
@@ -159,8 +159,8 @@ func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
 	}
 	// C14N requires an operation failure on a relative namespace URI. A URI is
 	// relative unless it carries a scheme, so parse it and require a non-empty
-	// scheme rather than testing for a stray ":" (which a relative reference such
-	// as "a/b:c" also contains). Mirrors libxml2's xmlC14NCheckForRelativeNamespaces
+	// scheme. Testing for a stray ":" would also match a relative reference such
+	// as "a/b:c". Mirrors libxml2's xmlC14NCheckForRelativeNamespaces
 	// (xmlParseURI + scheme==NULL). url.Parse tolerates a raw space inside an
 	// opaque part (e.g. "urn:foo bar") that libxml2's parser rejects, so reject
 	// any whitespace/control byte up front — a valid URI never contains one.
@@ -498,7 +498,7 @@ func (c *canonicalizer) writeQualifiedName(e *helium.Element) error {
 	if ns != nil && ns.Prefix() != "" {
 		// Resolve the element prefix against the reference site. For an
 		// entity-replacement element whose prefix is out of scope at this
-		// reference site this errors rather than emitting a dangling prefix.
+		// reference site this errors, leaving no dangling prefix behind.
 		if _, err := c.resolvedNSURI(e, ns); err != nil {
 			return err
 		}
@@ -908,8 +908,8 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 // scope. Any other prefixed entity element whose prefix is not in scope at the
 // current reference site cannot be canonicalized (a prefixed name with an
 // out-of-scope prefix is namespace-not-well-formed for that expansion), so this
-// is an error rather than a borrowed stale first-site binding or a dangling
-// prefix.
+// is an error. Neither a stale first-site binding nor a dangling prefix is
+// emitted.
 func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) (string, error) {
 	if c.currentEntityFrame() == nil {
 		return ns.URI(), nil
@@ -959,8 +959,8 @@ func (c *canonicalizer) entityDefaultNSURI(e *helium.Element) string {
 // always implicitly in scope and resolves to the XML namespace. Any other
 // prefixed entity attribute whose prefix is not in scope at the current
 // reference site cannot be canonicalized (a prefixed name with an out-of-scope
-// prefix is namespace-not-well-formed for that expansion), so this is an error
-// rather than a borrowed stale first-site binding.
+// prefix is namespace-not-well-formed for that expansion), so this is an error, and the
+// stale first-site binding is never borrowed.
 func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attribute) (string, error) {
 	if c.currentEntityFrame() == nil {
 		return attr.URI(), nil
@@ -1334,8 +1334,8 @@ func (c *canonicalizer) writeAttribute(entry attrSortEntry) error {
 
 	// Write value: check for fixup value first (C14N 1.1 xml:base). A fixup may
 	// legitimately be the empty string (an empty relative reference resolving
-	// back to the base), so rely on hasFixup rather than fixupValue != "" to
-	// avoid falling through to writeAttrValue(nil) for synthetic entries.
+	// back to the base), so rely on hasFixup, which a fixupValue != "" test would miss,
+	// falling through to writeAttrValue(nil) for synthetic entries.
 	if entry.hasFixup {
 		if err := escapeAttrValue(c.out, []byte(entry.fixupValue)); err != nil {
 			return err

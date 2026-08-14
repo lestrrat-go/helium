@@ -77,7 +77,7 @@ func (c *relaxNGValidateCommand) runContext(ctx context.Context, args []string) 
 	//
 	// Compile with a Label and an ErrorHandler so fatal schema diagnostics
 	// (e.g. an over-cap include/externalRef "exceeds the maximum resource
-	// size") reach stderr and fail compilation, rather than being discarded.
+	// size") reach stderr and fail compilation, and are never discarded.
 	// The RELAX NG compiler may return a (grammar, nil) with a poisoned
 	// notAllowed grammar on a fatal diagnostic; validating against it would
 	// misreport schema-load failure as per-input validation failure.

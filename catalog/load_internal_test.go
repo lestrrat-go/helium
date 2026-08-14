@@ -61,7 +61,7 @@ func TestFileURIPath(t *testing.T) {
 }
 
 // catalogFilePath must treat a bare Windows drive-letter path as a local OS
-// path rather than rejecting "C" as an unsupported URI scheme.
+// path, and must not read "C" as an unsupported URI scheme.
 func TestCatalogFilePathDriveLetterIsLocal(t *testing.T) {
 	tests := []string{
 		`C:\tmp\catalog.xml`,
@@ -127,7 +127,7 @@ func TestCatalogFilePathRemoteHostRejected(t *testing.T) {
 
 // catalogFilePath must reject an opaque file: URI such as "file:next.xml"
 // (url.URL.Opaque is set, Path is empty). Such a reference has no local path,
-// so it must error rather than silently fall through to reading the process
+// so it must error. Falling through would read the process
 // working directory.
 func TestCatalogFilePathOpaqueRejected(t *testing.T) {
 	tests := []string{

@@ -108,7 +108,7 @@ func TestLintEncodeBytesValid(t *testing.T) {
 
 func TestLintEncodeWithXPathRejected(t *testing.T) {
 	// The --xpath path serializes node values without applying --encode, so the
-	// combination must be rejected rather than silently produce output that does
+	// combination must be rejected, so no output is silently produced that does
 	// not match the declared encoding. Order-independent.
 	for _, args := range [][]string{
 		{"--encode", "ISO-8859-1", "--xpath", "//root"},

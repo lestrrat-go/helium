@@ -13,7 +13,7 @@ import (
 // same way the RCDATA path is, instead of routing through the old unbounded
 // parseCharRef scan. A long unresolved name that still fits the cap is echoed
 // literally; one that exceeds the cap hard-fails with ErrContentSizeExceeded
-// rather than buffering the whole run.
+// before the whole run is buffered.
 func TestNormalTextNamedRefBounded(t *testing.T) {
 	t.Run("within_cap_preserved", func(t *testing.T) {
 		const limit = 100
@@ -56,8 +56,8 @@ func TestNormalTextNamedRefBounded(t *testing.T) {
 
 // TestNormalTextNumericRefBounded pins that a numeric character reference in the
 // normal data state consumes its digit run in bounded chunks (with overflow
-// saturation) rather than materializing the whole run via the old unbounded
-// parseWhile. An arbitrarily long overflowing run parses successfully and
+// saturation), never materializing the whole run the way the old unbounded
+// parseWhile did. An arbitrarily long overflowing run parses successfully and
 // normalizes to U+FFFD, the same output the RCDATA path produces.
 func TestNormalTextNumericRefBounded(t *testing.T) {
 	const limit = 8

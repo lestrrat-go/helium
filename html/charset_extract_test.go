@@ -12,7 +12,7 @@ import (
 // extractDeclaredCharset must yield a clean encoding name even when the charset
 // value sits inside a still-quoted content attribute. The byte after "charset="
 // is then an ordinary letter (not a quote), so the unquoted-value scan must
-// terminate at the enclosing quote rather than swallowing it. (Regression:
+// terminate at the enclosing quote and leave it unswallowed. (Regression:
 // PR #812 / HTML-004 — previously returned `utf-8"`/`iso-8859-1"`.)
 func TestExtractDeclaredCharset(t *testing.T) {
 	t.Parallel()

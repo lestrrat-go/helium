@@ -53,7 +53,7 @@ func readCatalogBytes(ctx context.Context, absPath string, readLimit int64) ([]b
 	data, err := io.ReadAll(io.LimitReader(f, readLimit))
 	if err != nil {
 		// A deadline-interrupted read surfaces as os.ErrDeadlineExceeded; report
-		// the cancellation cause rather than a generic read error.
+		// the cancellation cause, which a generic read error would hide.
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			if cerr := ctx.Err(); cerr != nil {
 				return nil, cerr

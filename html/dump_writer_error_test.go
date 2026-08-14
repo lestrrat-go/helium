@@ -39,7 +39,7 @@ const dumpErrTestHTML = `<!DOCTYPE html>
 
 // TestSerializerPropagatesWriteError verifies that when the underlying
 // io.Writer fails partway through serialization, the serialize call returns
-// a non-nil error rather than silently producing truncated output (the prior
+// a non-nil error, and produces no silently truncated output (the prior
 // behavior, where structural write sites discarded their errors).
 func TestSerializerPropagatesWriteError(t *testing.T) {
 	doc, err := html.NewParser().Parse(t.Context(), []byte(dumpErrTestHTML))

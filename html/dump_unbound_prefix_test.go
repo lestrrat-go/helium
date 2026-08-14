@@ -28,7 +28,7 @@ func TestUnboundPrefixSerialization(t *testing.T) {
 	require.NoError(t, err, "HTML serializer must handle the unbound-prefix DOM")
 	require.Contains(t, htmlOut, "foo:bar")
 
-	// The generic XML writer refuses the same element rather than emit
+	// The generic XML writer refuses the same element, so it emits no
 	// namespace-ill-formed output.
 	_, err = helium.WriteString(elem)
 	require.Error(t, err, "generic writer must reject the unbound prefix")
