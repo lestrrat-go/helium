@@ -1091,12 +1091,11 @@ func (b *payloadCipherValueBudget) remaining() int {
 // matching contextErr's handling of a nil context elsewhere in this
 // package.
 //
-// The context carries a SINGLE writer, rather than a second wrapper layered
-// in front of it, because ctx.Done() and the budget guard the same call —
-// every Write this package makes goes through canonicalizeCipherReferenceNodeSet's
-// one c14n.Canonicalize call — so one struct with one poll per Write reads
-// as the whole story, where two writers would split one decision (does this
-// call proceed) across two types for no caller that needs them apart.
+// ONE writer carries both the context and the budget, because the two guard
+// the same decision: whether this Write call proceeds. Every Write this
+// package makes goes through canonicalizeCipherReferenceNodeSet's single
+// c14n.Canonicalize call, so one struct with one poll per Write states that
+// decision in one place, and nothing here needs the two conditions apart.
 //
 // It exists so a same-document CipherReference's canonicalization stage can
 // be aborted mid-stream, at the limit or at the caller's cancellation,
@@ -1125,11 +1124,11 @@ func newBudgetWriter(ctx context.Context, dst io.Writer, budget cipherValueBudge
 // only every Nth one — c14n writes once per node, so a stride would leave
 // the observed delay a function of how much markup one node produces, a
 // bound nobody could derive from the input. Checking the context first also
-// means a Write that arrives after the caller is already gone never spends
-// a charge call: whichever of the two conditions this Write would have hit
-// on a live context, only the caller's own cancellation is what the return
-// value reports, since abort() at the call site would override any other
-// error to ctx.Err() the moment the context is done anyway.
+// spares a charge call on a Write that arrives after the caller is already
+// gone. The order costs the caller no information either way: abort() at the
+// call site overrides every error to ctx.Err() once the context is done, so
+// a cancelled caller reads its own cancellation whichever condition this
+// Write met.
 func (w *budgetWriter) Write(p []byte) (int, error) {
 	if err := contextErr(w.ctx); err != nil {
 		return 0, err
