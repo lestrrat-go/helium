@@ -89,7 +89,7 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 	var seenCipherData bool
 
 	// KeyInfo is a singleton in the xenc:EncryptedType sequence. Its branch
-	// appends candidates rather than assigning a field, so a boolean is the
+	// appends candidates and assigns no field, so a boolean is the
 	// only reliable sentinel.
 	var seenKeyInfo bool
 
@@ -144,7 +144,7 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 // ds:RetrievalMethod naming one elsewhere in the same document (xmlenc-core1
 // §3.5.3).
 //
-// The two branches are taken in DOCUMENT ORDER rather than inline-first, so a
+// The two branches are taken in DOCUMENT ORDER, and never inline-first, so a
 // reference-supplied candidate lands where the document put the reference. The
 // candidate list is tried in order, so reordering it would change which key a
 // document with several candidates is decrypted under.
@@ -197,7 +197,7 @@ func retainEncryptedKey(ctx context.Context, elem *helium.Element, ed *encrypted
 // needed to decrypt the associated CipherData, is always a child of
 // ds:KeyInfo, and may appear several times.
 //
-// It appends rather than returning the candidate because most of its outcomes
+// It appends the candidate, and returns none, because most of its outcomes
 // are "no candidate, no error" — a Type this package does not read, and a
 // target already taken by an earlier reference — and a returned (nil, nil)
 // would make every one of those indistinguishable from a bug at the call site.
@@ -267,7 +267,7 @@ func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *encrypt
 // parseEncryptedKey parses an EncryptedKey element, charging its CipherValue
 // to ps.keys.
 //
-// A xenc:CarriedKeyName child is stepped over rather than read;
+// A xenc:CarriedKeyName child is stepped over unread;
 // [encryptedKey.CarriedKeyName] owns why the parse leaves that field unset.
 func parseEncryptedKey(ctx context.Context, elem *helium.Element, ps *parseState) (*encryptedKey, error) {
 	if elem == nil || !isXMLEncElem(elem, "EncryptedKey") {
@@ -279,7 +279,7 @@ func parseEncryptedKey(ctx context.Context, elem *helium.Element, ps *parseState
 	ek.recipient, _ = elem.GetAttribute("Recipient")
 
 	// KeyInfo is a singleton in the xenc:EncryptedType sequence. Its branch
-	// appends candidates rather than assigning a field, so a boolean is the
+	// appends candidates and assigns no field, so a boolean is the
 	// only reliable sentinel.
 	var seenCipherData, seenKeyInfo bool
 
@@ -490,7 +490,7 @@ func parseConcatKDFHexAttribute(elem *helium.Element, name string) ([]byte, uint
 
 // parseOriginatorKeyInfo returns the FIRST dsig11:ECKeyValue under the first
 // ds:KeyValue that carries one. Both walks run to the end of their sibling
-// chain once it is found rather than returning from inside, so the whole child
+// chain once it is found, returning from nowhere inside, so the whole child
 // list is observed against ctx at one rate; every child past the first match is
 // only stepped over, never parsed, so the key the document supplies is the same
 // one either way.
@@ -581,8 +581,8 @@ func parseECKeyValue(ctx context.Context, elem *helium.Element) (*ecKeyValue, er
 // by the curve whatever it holds, and refusing it before it is built only moves
 // the same verdict earlier.
 //
-// It is the maximum across ALL THREE curves rather than the selected curve's own
-// size, because at the moment the value is weighed there may be no selected
+// It is the maximum across ALL THREE curves, and the selected curve's own
+// size cannot serve, because at the moment the value is weighed there may be no selected
 // curve to weigh it by. dsig11:ECKeyValue puts no order on its children, so
 // dsig11:NamedCurve may follow dsig11:PublicKey, and a document carrying no
 // NamedCurve at all still has its PublicKey read before the missing-curve error
@@ -709,7 +709,7 @@ const maxKeySizeChars = 64
 // parseKeySizeBits reads elem's character data as the lexical value of one
 // xenc:KeySize element and returns it as a number of bits.
 //
-// It walks elem's children directly rather than calling [helium.Element.Content],
+// It walks elem's children directly, calling no [helium.Element.Content],
 // for the same reason [decodeBoundedBase64] does: that accessor aggregates the
 // whole descendant subtree into one buffer, and this value is read while the
 // document is parsed, before anything it says is authenticated. It reuses
@@ -881,7 +881,7 @@ func decodeBoundedBase64(ctx context.Context, elem *helium.Element, valueName st
 	}
 	// The characters are already stripped, so this is the decode
 	// xmlbase64.DecodeString performs minus the copy that would convert them to
-	// a string, sized at the counted decoded length rather than at
+	// a string, sized at the counted decoded length, and never at
 	// encoding/base64's own padding-blind DecodedLen — see
 	// [xmlbase64.Counter.DecodedLen], which is exact for a value the decoder
 	// accepts and never below what a rejected decode writes.
@@ -908,7 +908,7 @@ func decodeBoundedBase64(ctx context.Context, elem *helium.Element, valueName st
 // Entity's NextSibling is deliberately not followed either — it is the next
 // declaration in the DTD, not part of this value.
 //
-// The literal is returned in FULL rather than truncated to what the caller's
+// The literal is returned in FULL, truncated to nothing the caller's
 // limit still has room for, and that whole cost is one transient copy of one
 // child: every caller weighs the returned text against its own limit and stops
 // at the first child that exceeds it, so at most one such copy is ever taken.
@@ -919,7 +919,7 @@ func decodeBoundedBase64(ctx context.Context, elem *helium.Element, valueName st
 // bounds how many references to that literal it can carry. Because the literal
 // is UNEXPANDED, a chain of entities
 // each referencing the one below costs the length of the reference text it is
-// written with (&inner;&inner;) rather than the length that text would expand
+// written with (&inner;&inner;), well under the length that text would expand
 // to, so nesting buys a document no size it did not already write. All of that
 // is measurable: a 4 MiB entity replacement and a 4 MiB plain text child
 // allocate the same 4.2 MB through [Decryptor.Decrypt].
@@ -941,7 +941,7 @@ func decodeBoundedBase64(ctx context.Context, elem *helium.Element, valueName st
 // subtree into one buffer, so asking such a child for its content spends the
 // entire subtree's text before a limit measured in DECODED OCTETS can look at
 // it — and since a subtree of whitespace decodes to nothing, the limit would
-// not fire at all. Refusing rather than skipping is what the value says too: an
+// not fire at all. Refusing, in place of skipping, is what the value says too: an
 // element child makes the content invalid xs:base64Binary, and quietly dropping
 // it would decode a value the document did not write.
 //
@@ -980,8 +980,7 @@ func base64CharacterData(child helium.Node, valueName string) ([]byte, error) {
 // CipherData is a choice of EXACTLY ONE CipherValue or one CipherReference.
 // A second choice member of either kind (CipherValue+CipherValue,
 // CipherValue+CipherReference, CipherReference+CipherValue, or two
-// CipherReferences) is schema-invalid and rejected at parse rather than
-// silently using the first.
+// CipherReferences) is schema-invalid and rejected at parse, using neither.
 //
 // Both members yield the same thing — the cipher text octets — so the two
 // branches differ only in where those octets come from: a CipherValue carries
@@ -1002,7 +1001,7 @@ func base64CharacterData(child helium.Node, valueName string) ([]byte, error) {
 // charge is kept ahead of their work. A nil budget leaves the value unbounded,
 // which is only used by parser-only test helpers.
 //
-// budget is passed explicitly rather than sourced from ps, because which of
+// budget is passed explicitly, and never sourced from ps, because which of
 // ps.payload or ps.keys applies is a property of the caller (an EncryptedData's
 // own CipherData vs. an EncryptedKey's), not of parseState itself.
 func parseCipherData(ctx context.Context, elem *helium.Element, ps *parseState, budget cipherValueBudget) ([]byte, error) {
@@ -1047,10 +1046,10 @@ func parseCipherData(ctx context.Context, elem *helium.Element, ps *parseState, 
 // What is held is therefore bounded by the budget: the stripped characters at
 // most four thirds of it, the decoded bytes at most it, and nothing at all
 // scaling with the lexical length. The copy [helium.Text.Content] returns per
-// child is the floor, so the peak is the largest single child rather than the
+// child is the floor, so the peak is the largest single child, well under the
 // whole value.
-// Both passes walk EVERY child kind, so they go through eachSibling directly
-// rather than eachChildElement. The children that contribute nothing to the
+// Both passes walk EVERY child kind, so they go through eachSibling directly,
+// and never eachChildElement. The children that contribute nothing to the
 // value — a comment, a processing instruction — are charged against no budget,
 // which makes their number the one thing here the document sets for free; the
 // per-child poll is what bounds the time a cancelled caller waits for them.
@@ -1084,7 +1083,7 @@ func decodeCipherValue(ctx context.Context, elem *helium.Element, budget cipherV
 	}
 	// The characters are already stripped, so this is the decode
 	// xmlbase64.DecodeString performs minus the copy that would convert them to
-	// a string, sized at the count the budget charged rather than at
+	// a string, sized at the count the budget charged, and never at
 	// encoding/base64's own padding-blind DecodedLen — see
 	// [xmlbase64.Counter.DecodedLen].
 	decoded := make([]byte, counter.DecodedLen())

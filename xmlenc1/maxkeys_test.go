@@ -72,7 +72,7 @@ func manyKeySessionKeyEncryptedData(t *testing.T, n, size int, sessionKey []byte
 
 // rawKeyCipherValueEncryptedData builds an EncryptedData whose single
 // EncryptedKey carries cipherValue as raw CipherValue text. The text is
-// written straight into the document rather than marshalled from an
+// written straight into the document, and never marshalled from an
 // EncryptedKey, which is the only way to put a chosen lexical form — base64
 // the decoder rejects, interspersed whitespace, or CDATA sections — in front
 // of the byte budget.
@@ -655,7 +655,7 @@ func TestPayloadCipherValueSplitAcrossNodes(t *testing.T) {
 // DECODED octets could refuse it — and since a subtree of whitespace decodes to
 // nothing, the budget would not fire on it at all. The lexical size of that
 // subtree is the document author's to choose, so the cost would follow the
-// markup rather than the budget.
+// markup, and never the budget.
 //
 // The error assertions alone cannot see this: the value is refused either way,
 // and only what was allocated getting there tells the two apart. This reads the

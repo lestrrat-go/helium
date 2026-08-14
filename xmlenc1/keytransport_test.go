@@ -103,8 +103,8 @@ func TestRSAOAEP(t *testing.T) {
 	t.Run("oaep11 distinct digest and MGF hash round-trip", func(t *testing.T) {
 		// XML Encryption 1.1 permits an RSA-OAEP DigestMethod that differs
 		// from the MGF1 hash. crypto/rsa's option-bearing OAEP API can
-		// represent the two distinctly, so this must round-trip rather than
-		// be rejected.
+		// represent the two distinctly, so this must round-trip, and must
+		// never be rejected.
 		key := generateRSAKey(t)
 		doc := mustParseXML(t, samlAssertion)
 
@@ -251,7 +251,7 @@ func TestRSAOAEP(t *testing.T) {
 			require.ErrorIs(t, err, xmlenc1.ErrEncryptionFailed)
 
 			// No partial EncryptedData/MGF element should have been serialized.
-			// Match the element start-tag markup (":MGF") rather than the bare
+			// Match the element start-tag markup (":MGF"), and never the bare
 			// "MGF" substring, which a random base64 CipherValue could contain.
 			xml, werr := helium.WriteString(doc)
 			require.NoError(t, werr)
@@ -476,7 +476,7 @@ func TestEncryptorOAEPParamsRoundTrip(t *testing.T) {
 // TestEncryptorOAEPParamsBound covers the decoded-size limit the encrypt side
 // applies to Encryptor.OAEPParams. It is the same limit the parser applies to an
 // xenc:OAEPparams it reads, so a label this package writes is a label it reads
-// back, and the boundary is pinned against the constant rather than a copy of
+// back, and the boundary is pinned against the constant itself, and never a copy of
 // its value.
 func TestEncryptorOAEPParamsBound(t *testing.T) {
 	t.Run("at the limit round-trips", func(t *testing.T) {
@@ -552,9 +552,9 @@ func TestEncryptorOAEPParamsBound(t *testing.T) {
 // excludes the xenc target namespace, so it can never match xenc:OAEPparams;
 // and the laxly schema valid output xmlenc-core1 §3.1 asks for is bounded by
 // its own note to what xsd:ANY admits, so it excuses what those foreign
-// children contain rather than where the declared sequence puts them.
+// children contain, and never where the declared sequence puts them.
 //
-// The assertions are on byte offsets rather than on a golden document so the
+// The assertions are on byte offsets, and on no golden document, so the
 // test states the ordering rule instead of a snapshot of one serialization.
 func TestOAEPEncryptionMethodWireOrder(t *testing.T) {
 	key := generateRSAKey(t)

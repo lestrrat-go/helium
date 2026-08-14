@@ -97,7 +97,7 @@ func boundaryOtherInfo(algorithmID, partyUInfo int) map[string]string {
 // The ConcatKDF OtherInfo attributes are xs:hexBinary, whose whiteSpace
 // facet is 'collapse' and whose whitespace is exactly #x20, #x9, #xD and
 // #xA. A value wrapped in any other Unicode space survives collapse and is
-// therefore not in the lexical space, so it must be refused rather than
+// therefore not in the lexical space, so it must be refused, and never
 // trimmed into a well-formed one. Accepting it makes helium read a document a
 // schema-validating peer rejects. U+000B and U+000C are deliberately absent:
 // both are outside XML 1.0's Char production, so the XML parser refuses such a
@@ -118,7 +118,7 @@ func TestParseConcatKDFHexAttributeWhitespace(t *testing.T) {
 		{name: "em space", value: "\u2003" + partyUInfo + "\u2003"},
 		{name: "ideographic space", value: "\u3000" + partyUInfo + "\u3000"},
 		// A value that is nothing but a non-XML space collapses to itself, not
-		// to the empty string, so it is an INVALID field rather than an absent
+		// to the empty string, so it is an INVALID field, and no absent
 		// one and must not be silently read as omitted.
 		{name: "lone no-break space", value: "\u00a0"},
 	}
@@ -262,7 +262,7 @@ func oversizedKDFParams() *xmlenc1.ConcatKDFParams {
 
 // Params with an empty DigestMethod are replaced wholesale by the SHA-256
 // default with empty OtherInfo before any derivation runs, so their OtherInfo
-// is discarded rather than measured against the budget. This pins that
+// is discarded unmeasured against the budget. This pins that
 // documented fallback in both directions — an oversized field is inert when
 // the digest is absent and fatal when it is present — so ConcatKDFParams'
 // godoc cannot drift back into promising a check the empty-digest path does

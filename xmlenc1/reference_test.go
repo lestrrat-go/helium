@@ -20,8 +20,8 @@ const retrievalPlaintext = `<secret>hidden</secret>`
 
 // wrappedKeyXML renders an xenc:EncryptedKey holding sessionKey under an
 // AES-256 key wrap, carrying the given Id and the given extra markup inside
-// the EncryptedKey (a ds:KeyInfo, say). The wrap is computed here rather than
-// produced by an Encryptor because these documents place the EncryptedKey
+// the EncryptedKey (a ds:KeyInfo, say). The wrap is computed here, and never
+// produced by an Encryptor, because these documents place the EncryptedKey
 // somewhere no Encryptor writes one: outside the EncryptedData that names it.
 func wrappedKeyXML(t *testing.T, id string, kek, sessionKey []byte, extra string) string {
 	t.Helper()
@@ -140,7 +140,7 @@ func TestRetrievalMethod(t *testing.T) {
 	// A Type this package does not implement is skipped outright: no
 	// resolution is attempted, so even a URI that could not resolve at all
 	// costs nothing and the decrypt fails only for want of a key.
-	t.Run("a foreign Type is skipped rather than resolved", func(t *testing.T) {
+	t.Run("a foreign Type is skipped and never resolved", func(t *testing.T) {
 		for _, tc := range []struct {
 			name string
 			typ  string

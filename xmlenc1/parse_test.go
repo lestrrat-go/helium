@@ -40,8 +40,8 @@ func TestParse(t *testing.T) {
 		t.Run("duplicate CipherValue", func(t *testing.T) {
 			// CipherData is a choice of exactly one CipherValue (or one
 			// CipherReference); two CipherValue children are schema-invalid
-			// and must be rejected at parse rather than silently using the
-			// first.
+			// and must be rejected at parse, using neither the first
+			// nor the second.
 			doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"><xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue><xenc:CipherValue>BBBB</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`)
 			elem, ok := helium.AsNode[*helium.Element](doc.DocumentElement())
 			require.True(t, ok)
@@ -210,7 +210,7 @@ func TestParse(t *testing.T) {
 		t.Run("foreign root with valid xenc children is rejected", func(t *testing.T) {
 			// The entry element itself is foreign-namespaced even though all
 			// of its children are correctly xenc-qualified. The parser must
-			// reject the entry element rather than trusting the children.
+			// reject the entry element, and must never trust the children.
 			xml := `<foo:EncryptedData xmlns:foo="` + foreignNS + `" xmlns:xenc="` + xencNS + `">` +
 				`<xenc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>` +
 				`<xenc:CipherData><xenc:CipherValue>aGVsbG8=</xenc:CipherValue></xenc:CipherData>` +
@@ -378,7 +378,7 @@ func TestEncryptionMethodCardinality(t *testing.T) {
 
 // TestEncryptionMethodKeySize verifies that parseEncryptionMethod checks a
 // present xenc:KeySize against the length its algorithm URI already implies
-// (xmlenc-core1 §3.2, §5.3, §5.6.2.2), rather than silently ignoring it: a
+// (xmlenc-core1 §3.2, §5.3, §5.6.2.2), and never silently ignores it: a
 // KeySize consistent with what the algorithm fixes parses, one inconsistent
 // with it is ErrMalformedEncrypted, and one under a URI that implies no
 // length at all (RSA key transport) is accepted and ignored.
@@ -460,7 +460,7 @@ func TestEncryptionMethodKeySize(t *testing.T) {
 		// xs:integer's whiteSpace='collapse' facet covers exactly #x20, #x9,
 		// #xD and #xA, so the ASCII spaces the case above accepts are in the
 		// lexical space but U+00A0 is not. A value wrapped in NBSP is not an
-		// xs:integer and must be refused rather than trimmed into one.
+		// xs:integer and must be refused, and never trimmed into one.
 		_, err := parse(t, `<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`">`+
 			"<xenc:KeySize>\u00a0256\u00a0</xenc:KeySize>"+
 			`</xenc:EncryptionMethod>`)
@@ -542,8 +542,8 @@ const oaepParamsNotCharacterData = "which is not character data"
 
 // oaepParamsInvalid is the fragment the base64 decoder's refusal carries. An
 // entity reference contributes its DECLARED replacement text and nothing below
-// it, so an entity holding another reference or markup lands here rather than
-// being expanded into something decodable.
+// it, so an entity holding another reference or markup lands here, and is never
+// expanded into something decodable.
 const oaepParamsInvalid = "invalid OAEPparams"
 
 // oaepParamsChildOfType is the fragment a child-kind refusal puts in front of
@@ -555,7 +555,7 @@ const oaepParamsChildOfType = "OAEPparams holds a child of type"
 // oaepParamsBadEntityChild is the fragment an entity reference whose first child
 // is present but is not an Entity carries. Only a caller-built tree holds that
 // shape; a CHILDLESS entity reference is an ordinary parser output and is not
-// refused at all, so the message must name the first child rather than a missing
+// refused at all, so the message must name the first child, and never a missing
 // declaration.
 const oaepParamsBadEntityChild = "entity reference whose first child is not an entity declaration"
 
@@ -610,7 +610,7 @@ func oaepParamsEntityEncryptedData(t *testing.T, decls, params string) *helium.E
 }
 
 // oaepParamsDoctypeEncryptedData is oaepParamsEntityEncryptedData with the
-// WHOLE doctype declaration chosen by the caller rather than just its internal
+// WHOLE doctype declaration chosen by the caller, and not just its internal
 // subset. Which DTD shape a document carries is what decides whether the parser
 // refuses an undeclared general entity reference outright or keeps it in the
 // DOM, so a test of that behaviour has to write the declaration itself.
@@ -731,7 +731,7 @@ func TestOAEPParamsBound(t *testing.T) {
 
 	// Comments and processing instructions are not character data either, but
 	// unlike an element they may appear inside any element and say nothing
-	// about its value, so they are ignored rather than refused. Reading one
+	// about its value, so they are ignored, and never refused. Reading one
 	// would splice its text into the base64 and decode a label the document
 	// never wrote.
 	t.Run("comments and processing instructions are ignored", func(t *testing.T) {
@@ -766,7 +766,7 @@ func TestOAEPParamsBound(t *testing.T) {
 
 // TestOAEPParamsEntityReference covers the entity-reference child, which a
 // conforming document may write anywhere character data is allowed and which
-// the parse path therefore has to read rather than refuse.
+// the parse path therefore has to read, and never refuse.
 //
 // Reading it is bounded because it goes exactly one hop: the EntityRef's first
 // child is the declared Entity, and helium.Entity.Content is a leaf accessor
@@ -877,7 +877,7 @@ func TestOAEPParamsEntityReference(t *testing.T) {
 
 // TestOAEPParamsUndeclaredEntityReference covers the entity reference the
 // PARSER leaves with no Entity under it, which is where the one-hop walk meets
-// a real document rather than a tree a test built by hand.
+// a real document, and no tree a test built by hand.
 //
 // XML 1.0's "Entity Declared" constraint makes an undeclared general entity a
 // fatal well-formedness error only when the document is standalone="yes", or
@@ -900,7 +900,7 @@ func TestOAEPParamsUndeclaredEntityReference(t *testing.T) {
 	require.Len(t, encodedLabel, 16)
 	// The reference sits BETWEEN two halves of one base64 value, so a walk that
 	// contributed anything for it — even a single character — would corrupt the
-	// quantum boundary and change the decoded bytes rather than merely fail.
+	// quantum boundary and change the decoded bytes, going well past a mere failure.
 	split := encodedLabel[:8] + `&undeclared;` + encodedLabel[8:]
 
 	// An external subset is one of the two DTD shapes that downgrade the
@@ -924,7 +924,7 @@ func TestOAEPParamsUndeclaredEntityReference(t *testing.T) {
 		require.Equal(t, label, ed.EncryptionMethod.OAEPParams)
 	})
 
-	// And the shape itself, asserted on the DOM rather than inferred from the
+	// And the shape itself, asserted on the DOM and inferred from no
 	// decode: the parser really does hand the walk an EntityRef with a nil
 	// first child, so the guard on that case is load-bearing for parsed input.
 	t.Run("the parser produces an entity reference with no child", func(t *testing.T) {
@@ -978,8 +978,8 @@ func TestOAEPParamsUndeclaredEntityReference(t *testing.T) {
 // cipherValueBadEntityChild is the whole refusal an entity reference whose first
 // child is present but is not an Entity carries on the CipherValue path. It
 // names the value, so asserting the entire fragment — not just its tail — is
-// what pins that base64CharacterData reports the call site it was reached from
-// rather than the OAEPparams one it shares its implementation with.
+// what pins that base64CharacterData reports the call site it was reached from,
+// and never the OAEPparams one it shares its implementation with.
 const cipherValueBadEntityChild = "CipherValue holds an entity reference whose first child is not an entity declaration"
 
 // cipherValueEncryptedData builds an EncryptedData whose payload CipherValue
@@ -1059,7 +1059,7 @@ func TestCipherValueEntityReference(t *testing.T) {
 	// both cuts away from a quantum boundary. So the entity's characters have
 	// to be concatenated with the siblings' in order, not substituted for them
 	// and not appended after them: any other arrangement changes the decoded
-	// bytes rather than merely failing.
+	// bytes, going well past a mere failure.
 	t.Run("an entity reference between text siblings decodes as one value", func(t *testing.T) {
 		ed, err := xmlenc1.ParseEncryptedDataForTest(cipherValueDoctypeEncryptedData(t,
 			`<!DOCTYPE xenc:EncryptedData [<!ENTITY middle "`+encoded[2:9]+`">]>`,
@@ -1093,7 +1093,7 @@ func TestCipherValueEntityReference(t *testing.T) {
 		encryptedData := cipherValueDoctypeEncryptedData(t,
 			`<!DOCTYPE xenc:EncryptedData SYSTEM "no-such.dtd">`, split)
 
-		// The shape itself, asserted on the DOM rather than inferred from the
+		// The shape itself, asserted on the DOM and inferred from no
 		// decode: the parser really does hand this walk a childless EntityRef.
 		var seen int
 		for child := cipherValueElement(t, encryptedData).FirstChild(); child != nil; child = child.NextSibling() {
@@ -1121,7 +1121,7 @@ func TestCipherValueEntityReference(t *testing.T) {
 	//
 	// The message must name CipherValue: base64CharacterData takes the value
 	// name from its caller, and nothing else pins that this call site passes
-	// its own rather than the OAEPparams one.
+	// its own, and never the OAEPparams one.
 	t.Run("an entity reference holding an element is rejected", func(t *testing.T) {
 		encryptedData := cipherValueEncryptedData(t, `AA==`)
 		doc := encryptedData.OwnerDocument()
@@ -1713,7 +1713,7 @@ const (
 )
 
 // carriedKeyNamePayload is the plaintext every fixture below decrypts to, so a
-// measurement that lost its success is caught rather than measured.
+// measurement that lost its success is caught, and never measured.
 const carriedKeyNamePayload = "payload"
 
 // TestCarriedKeyNameIsNotRead pins that the decrypt parse never materializes an

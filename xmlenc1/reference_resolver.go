@@ -23,7 +23,7 @@ import (
 // external reference stays fail-closed with [ErrReferenceNotFound], which is
 // the default.
 //
-// That default is what the specification permits rather than a shortfall of it.
+// That default is what the specification permits, and no shortfall of it.
 // W3C xmlenc-core1 §3.3.1 requires "the same URI encoding, dereferencing,
 // scheme, and HTTP response codes as that of [XMLDSIG-CORE1]" and defines no
 // dereferencing of its own; xmldsig-core1 §4.4.3.1 makes dereferencing URIs in
@@ -71,7 +71,7 @@ import (
 // is the URI the package must be immune to.
 //
 // ResolveReference must be safe to call from multiple goroutines. Returning a
-// nil stream with a nil error is refused as [ErrReferenceNotFound] rather than
+// nil stream with a nil error is refused as [ErrReferenceNotFound], and never
 // dereferenced.
 type ReferenceResolver interface {
 	ResolveReference(ctx context.Context, uri string) (io.ReadCloser, error)
@@ -145,7 +145,7 @@ func (r fsReferenceResolver) ResolveReference(ctx context.Context, uri string) (
 // relativizeToRoot turns a document-space URI into the path an fs.FS rooted at
 // root knows it by, by stripping that prefix.
 //
-// A URI that does not lie under root is returned UNCHANGED rather than refused
+// A URI that does not lie under root is returned UNCHANGED, and never refused
 // here, so it goes on to face exactly the checks an empty root applies: a
 // relative path is served, and an absolute path or a scheme URI outside the
 // declared root is refused by fsNameFromURI. Declaring a root therefore only
@@ -153,7 +153,7 @@ func (r fsReferenceResolver) ResolveReference(ctx context.Context, uri string) (
 //
 // The prefix is compared with a trailing slash so it can only match at a
 // segment boundary: a root of "/srv/docs" does not admit "/srv/docs-public/x".
-// A URI equal to the root itself names a directory rather than a resource, so
+// A URI equal to the root itself names a directory, and no resource, so
 // it strips to nothing and is left to be refused.
 func relativizeToRoot(root, uri string) string {
 	if root == "" {
@@ -227,15 +227,15 @@ type referenceRead struct {
 //
 // The read runs on its own goroutine because a Read that never returns cannot
 // be polled out of: this function leaves as soon as ctx is done, and CLOSING rc
-// is what releases the blocked read so that goroutine finishes rather than
-// stranding. The channel is buffered, so the goroutine's send never blocks even
+// is what releases the blocked read so that goroutine finishes, and never
+// strands. The channel is buffered, so the goroutine's send never blocks even
 // when nothing is waiting for it any more. Reading and closing therefore
 // overlap on the cancellation path, which is the same contract every stream
 // handed across a package boundary is closed under (an os.File, an HTTP
 // response body).
 //
 // The goroutine polls ctx once per chunk as well, so a stream that keeps
-// yielding bytes stops being read too rather than merely stopping being waited
+// yielding bytes stops being read too, and not merely stops being waited
 // for.
 func readBoundedReference(ctx context.Context, rc io.ReadCloser, uri string, maxBytes int) ([]byte, error) {
 	if err := contextErr(ctx); err != nil {
@@ -260,13 +260,13 @@ func readBoundedReference(ctx context.Context, rc io.ReadCloser, uri string, max
 // referenceReadChunk is how much of a resolver's stream one Read asks for. It
 // is the size io.Copy and bufio use, and it is also the granularity of the
 // context poll below: a resource yielding bytes steadily is answered once per
-// chunk rather than once at its end.
+// chunk, and never once at its end.
 const referenceReadChunk = 32 * 1024
 
 // readReferenceOctets performs the bounded read readBoundedReference waits on,
 // and reports the result exactly once.
 //
-// The copy is written out rather than handed to io.ReadAll so the context poll
+// The copy is written out, and never handed to io.ReadAll, so the context poll
 // sits inside the loop: a stream that keeps yielding bytes — an endless one
 // above all — is abandoned at the caller's cancellation instead of at an end it
 // may never reach.
