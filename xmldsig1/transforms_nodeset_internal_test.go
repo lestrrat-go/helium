@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -165,22 +166,27 @@ func TestCanonicalizationNodeSetMatchesFullAxis(t *testing.T) {
 // the growth this case exists to pin with the speed of whatever machine runs it.
 //
 // costMaxRatio sits between the two regimes. A collector linear in the
-// per-element count measures 1.9 to 2.4 here — the concentrated document's
+// per-element count measures 0.4 to 2.7 here — the concentrated document's
 // running scope holds every prefix at once, so its map costs more per lookup —
 // and that holds under the race detector with the machine loaded. Put the
 // scan back and the same measurement reads 21 to 28, since concentrating the
 // declarations squares a cost the reference document pays costConcentration
-// times over a costConcentration-th of the count each. Seven is about the
-// geometric middle, roughly three times either regime.
+// times over a costConcentration-th of the count each. Ten sits nearly four
+// times above the linear regime and a little over twice below the quadratic
+// one, which is the room a shared CI runner needs: one there times the same
+// assertion 40% apart on two runs of the same code, and reads this ratio as
+// high as 7.4 with nothing wrong.
 //
 // costRuns repeats each measurement and keeps the cheapest, so a scheduler
 // hiccup during one run cannot inflate the ratio; a cost that is quadratic in
-// the per-element declaration count is quadratic in every run.
+// the per-element declaration count is quadratic in every run. Nine of them is
+// what a runner that deschedules a test for tens of milliseconds needs to leave
+// one clean run behind.
 const (
 	costDeclarations  = 20000
 	costConcentration = 32
-	costMaxRatio      = 7
-	costRuns          = 5
+	costMaxRatio      = 10
+	costRuns          = 9
 )
 
 // declDenseDoc builds a document whose CHILD element carries decls namespace
@@ -311,15 +317,18 @@ func TestNodeSetCollectionCost(t *testing.T) {
 // emissionMaxRatio sits between the two regimes. The two documents differ by
 // those few declarations and nothing else — same elements, same attributes, same
 // prefixes emitted, same node set — so a collector whose emission is linear in
-// the element's prefix count measures 0.7 to 1.2 here. Size the membership index
+// the element's prefix count measures 0.5 to 2.0 here. Size the membership index
 // from the element's DECLARATIONS instead and the same measurement reads 9 to
 // 17: the control's declarations force an index and the other document's
 // attribute prefixes, which no count of declarations predicts, are left to a
-// scan that costs the square of their number. Three is about the middle.
+// scan that costs the square of their number. Five sits two and a half times
+// above the linear regime and nearly twice below the quadratic one, which is
+// the room a shared CI runner needs: one there reads this ratio as high as 3.1
+// with nothing wrong. The measurement is a best of costRuns, as above.
 const (
 	emissionPrefixes        = 4000
 	emissionOwnDeclarations = 16
-	emissionMaxRatio        = 3
+	emissionMaxRatio        = 5
 )
 
 // emissionDocument builds, WITHOUT parsing, a document whose root declares
@@ -415,22 +424,51 @@ func TestNodeSetEmissionCost(t *testing.T) {
 // collection starts, where the entry check would catch it and the walk itself
 // would never be exercised.
 //
-// deadlineOverrunBudget is what the collector may still spend after the deadline
-// passes: one poll interval of members at ten microseconds each, hundreds of
-// times what a member costs, plus ten milliseconds for the timer granularity and
-// scheduler noise that dominate at this scale. It is a constant, so it does not
-// grow with the document — a collector that goes on collecting a share of the
-// axis fails it here and by a wider margin at any larger size.
-//
 // deadlineRuns repeats the measurement and keeps the fastest, so one descheduled
 // run cannot fail the case.
 const (
-	deadlineDeclarations  = 5000
-	deadlineChildren      = 1024
-	deadlineWindow        = 20 * time.Millisecond
-	deadlineOverrunBudget = ctxPollInterval*10*time.Microsecond + 10*time.Millisecond
-	deadlineRuns          = 3
+	deadlineDeclarations = 5000
+	deadlineChildren     = 1024
+	deadlineWindow       = 20 * time.Millisecond
+	deadlineRuns         = 5
 )
+
+// deadlineOverrunBudget is what the collector may still spend after the deadline
+// passes: one poll interval of members at ten microseconds each, hundreds of
+// times what a member costs, plus the slack the platform's own clock charges
+// before the collector has done anything at all. It does not grow with the
+// document — a collector that goes on collecting a share of the axis fails it
+// here and by a wider margin at any larger size. The share this case is stated
+// against, ctxPollInterval elements of one whole axis each, is a quarter of the
+// set and costs seventy milliseconds on an unloaded machine and more on a busy
+// one, so every budget below stays well under it.
+var deadlineOverrunBudget = ctxPollInterval*10*time.Microsecond + deadlineClockSlack()
+
+// deadlineClockSlack is how late the platform alone can make a promptly
+// abandoned collection look.
+//
+// On Windows the whole measurement runs off the clock-interrupt tick. Go reads
+// the monotonic clock from the KUSER_SHARED_DATA interrupt time
+// (runtime/time_windows_amd64.s), which the kernel advances once per clock
+// interrupt — every 15.625 ms at the default period, and near 1 ms only while
+// some process holds timeBeginPeriod. The runtime therefore cannot see the
+// deadline pass until the next tick, and time.Since quantizes the elapsed
+// reading at that same tick, so two ticks — about 31 ms — is what the platform
+// can charge on its own. A budget under one tick measures the interrupt period
+// and not the collector, and no amount of promptness can meet it. Thirty-two
+// milliseconds covers both ticks.
+//
+// Everywhere else the monotonic clock is nanosecond-resolution
+// (clock_gettime, mach_absolute_time) and the runtime wakes off epoll or
+// kqueue: an unloaded machine overruns by a few hundred microseconds and a
+// heavily oversubscribed one by a few milliseconds, so ten milliseconds is
+// scheduler noise and nothing else.
+func deadlineClockSlack() time.Duration {
+	if runtime.GOOS == "windows" {
+		return 32 * time.Millisecond
+	}
+	return 10 * time.Millisecond
+}
 
 // axisDenseDoc builds a document declaring decls prefixes on its root and
 // carrying children element children below it. Every child inherits the whole
