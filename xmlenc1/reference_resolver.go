@@ -57,8 +57,9 @@ import (
 // the caller's context. It reads one byte past what the allowance still admits
 // and no further, so it never materializes an oversized resource; it abandons
 // the read the moment ctx is done, and it CLOSES the stream on every path —
-// completion, over-budget, and cancellation alike. A resolver hands over a
-// stream and owes it nothing more.
+// completion, over-budget, and cancellation alike, and equally when
+// ResolveReference itself returns a stream alongside an error. A resolver
+// hands over a stream and owes it nothing more.
 //
 // Be precise about what that does and does not buy. It removes THIS PACKAGE's
 // complicity: whatever a URI names, the package holds no more than the budget

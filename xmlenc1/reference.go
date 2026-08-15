@@ -817,6 +817,14 @@ func resolveExternalCipherReference(ctx context.Context, elem *helium.Element, u
 	}
 	rc, err := resolver.ResolveReference(ctx, joined)
 	if err != nil {
+		// A resolver reporting an error may still have handed over a live
+		// stream, and closing it here is what keeps that shape from leaking:
+		// the error is the resolver's own, and rc.Close's is discarded rather
+		// than folded into it, so the caller sees the resolver's error
+		// unchanged.
+		if rc != nil {
+			rc.Close()
+		}
 		return nil, abort(ctx, err)
 	}
 	// A resolver reporting neither a stream nor an error is refused, and never

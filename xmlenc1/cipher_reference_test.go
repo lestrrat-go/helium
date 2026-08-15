@@ -222,6 +222,38 @@ func (nilStreamResolver) ResolveReference(context.Context, string) (io.ReadClose
 	return nil, nil
 }
 
+// errorStreamResolver returns a live stream ALONGSIDE its error. The resolver
+// call itself failed, so nothing downstream ever reads that stream, and the
+// close at the resolver call is the only thing standing between the shape and
+// a leak.
+type errorStreamResolver struct {
+	closed chan struct{}
+	once   sync.Once
+}
+
+func newErrorStreamResolver() *errorStreamResolver {
+	return &errorStreamResolver{closed: make(chan struct{})}
+}
+
+func (r *errorStreamResolver) ResolveReference(context.Context, string) (io.ReadCloser, error) {
+	return &closeTrackingStream{resolver: r}, fmt.Errorf("%w: errorStreamResolver always fails", xmlenc1.ErrReferenceNotFound)
+}
+
+// closeTrackingStream is an empty stream that records its own Close against
+// the errorStreamResolver that produced it.
+type closeTrackingStream struct {
+	resolver *errorStreamResolver
+}
+
+func (s *closeTrackingStream) Read([]byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (s *closeTrackingStream) Close() error {
+	s.resolver.once.Do(func() { close(s.resolver.closed) })
+	return nil
+}
+
 // endlessStream never reaches an end, so anything that finishes reading it did
 // so because it stopped, not because the resource did.
 type endlessStream struct {
@@ -1078,6 +1110,26 @@ func TestCipherReference(t *testing.T) {
 			CipherReferenceResolver(nilStreamResolver{}).
 			Decrypt(t.Context(), elem)
 		require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+	})
+
+	// A resolver reporting an error ALONGSIDE a live stream still handed over
+	// a resource, and ReferenceResolver's godoc commits to closing a stream
+	// "on every path". This pins the one path that returns the resolver's own
+	// error ahead of readBoundedReference, where every other close lives, so
+	// the close has to happen at the resolver call itself.
+	t.Run("a resolver returning a stream with its error still closes it", func(t *testing.T) {
+		resolver := newErrorStreamResolver()
+		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
+		_, err := xmlenc1.NewDecryptor().
+			SessionKey(newSessionKey(t)).
+			CipherReferenceResolver(resolver).
+			Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+		select {
+		case <-resolver.closed:
+		default:
+			t.Fatal("the decrypt left the resolver's stream open")
+		}
 	})
 
 	// A resolver's own octets are bounded the same way: the shipped resolver
