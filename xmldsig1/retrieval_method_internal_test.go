@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -40,6 +41,18 @@ type countingReferenceResolver struct {
 
 func (r *countingReferenceResolver) ResolveReference(_ context.Context, _ string) ([]byte, error) {
 	r.calls.Add(1)
+	return r.octets, nil
+}
+
+type capturingReferenceResolver struct {
+	calls  atomic.Int32
+	octets []byte
+	uri    string
+}
+
+func (r *capturingReferenceResolver) ResolveReference(_ context.Context, uri string) ([]byte, error) {
+	r.calls.Add(1)
+	r.uri = uri
 	return r.octets, nil
 }
 
@@ -99,6 +112,57 @@ func TestResolveRetrievalMethodNoResolverFailsClosed(t *testing.T) {
 	err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
 	require.ErrorIs(t, err, ErrReferenceNotFound)
 	require.Empty(t, data.X509Certificates)
+}
+
+func TestRetrievalMethodRequiresURI(t *testing.T) {
+	resolver := &countingReferenceResolver{}
+	for _, lenient := range []bool{false, true} {
+		t.Run(fmt.Sprintf("lenient=%t", lenient), func(t *testing.T) {
+			doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod Type="`+TypeRawX509Certificate+`"/></ds:KeyInfo>`)
+			cfg := &verifierConfig{
+				lenientKeyInfo:    lenient,
+				referenceResolver: resolver,
+			}
+			data := &KeyInfoData{}
+
+			err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+			require.ErrorIs(t, err, ErrInvalidKeyInfo)
+			require.Contains(t, err.Error(), "ds:RetrievalMethod has no URI attribute")
+			require.Zero(t, resolver.calls.Load(), "missing URI must fail before resolver use")
+			require.Empty(t, data.X509Certificates)
+		})
+	}
+}
+
+func TestRetrievalMethodEmptyURIIsValid(t *testing.T) {
+	cert, der := selfSignedCert(t)
+	doc := mustParse(t, `<ds:X509Data xmlns:ds="`+NamespaceDSig+`"><ds:X509Certificate>`+
+		base64.StdEncoding.EncodeToString(der)+`</ds:X509Certificate><ds:RetrievalMethod URI="" Type="`+
+		TypeX509Data+`"/></ds:X509Data>`)
+	cfg := &verifierConfig{}
+	data := &KeyInfoData{}
+
+	err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+	require.NoError(t, err)
+	require.Len(t, data.X509Certificates, 1)
+	require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
+}
+
+func TestRetrievalMethodUsesEffectiveBase(t *testing.T) {
+	cert, der := selfSignedCert(t)
+	resolver := &capturingReferenceResolver{octets: der}
+	doc := mustParse(t, `<root xmlns:ds="`+NamespaceDSig+`" xml:base="https://example.test/outer/">`+
+		`<ds:KeyInfo xml:base="inner/"><ds:RetrievalMethod URI="cert.der" Type="`+
+		TypeRawX509Certificate+`"/></ds:KeyInfo></root>`)
+	cfg := &verifierConfig{referenceResolver: resolver}
+	data := &KeyInfoData{}
+
+	err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement().FirstChild().(*helium.Element), data)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), resolver.calls.Load())
+	require.Equal(t, "https://example.test/outer/inner/cert.der", resolver.uri)
+	require.Len(t, data.X509Certificates, 1)
+	require.Equal(t, cert.Raw, data.X509Certificates[0].Raw)
 }
 
 func TestResolveRetrievalMethodsPreflightsBeforeResolver(t *testing.T) {

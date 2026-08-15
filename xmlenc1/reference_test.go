@@ -74,6 +74,14 @@ func retrievalMethodXML(typ, uri string) string {
 	return `<ds:RetrievalMethod` + typAttr + ` URI="` + uri + `"/>`
 }
 
+func retrievalMethodWithoutURIXML(typ string) string {
+	typAttr := ""
+	if typ != "" {
+		typAttr = ` Type="` + typ + `"`
+	}
+	return `<ds:RetrievalMethod` + typAttr + `/>`
+}
+
 // requireSecret asserts that nodes is the single <secret> element
 // retrievalPlaintext describes, i.e. that the decrypt found the session key
 // the RetrievalMethod pointed at.
@@ -93,6 +101,27 @@ func TestRetrievalMethod(t *testing.T) {
 		t.Helper()
 		return randKey(t, 32), randKey(t, 32)
 	}
+
+	t.Run("a missing URI is malformed before Type skipping or session-key use", func(t *testing.T) {
+		for _, typ := range []string{xmlenc1.TypeEncryptedKey, xmlenc1.NamespaceDSig + "X509Data"} {
+			t.Run(typ, func(t *testing.T) {
+				sessionKey := randKey(t, 32)
+				elem := retrievalDoc(t, sessionKey, retrievalMethodWithoutURIXML(typ), "")
+				_, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+				require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+				require.Contains(t, err.Error(), "ds:RetrievalMethod has no URI attribute")
+				require.NotErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+			})
+		}
+	})
+
+	t.Run("a present empty URI remains valid", func(t *testing.T) {
+		sessionKey := randKey(t, 32)
+		elem := retrievalDoc(t, sessionKey, retrievalMethodXML("", ""), "")
+		nodes, err := xmlenc1.NewDecryptor().SessionKey(sessionKey).Decrypt(t.Context(), elem)
+		require.NoError(t, err)
+		requireSecret(t, nodes)
+	})
 
 	t.Run("a same-document target supplies the session key", func(t *testing.T) {
 		sessionKey, kek := newKeys(t)

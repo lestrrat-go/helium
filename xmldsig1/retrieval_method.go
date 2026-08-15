@@ -21,6 +21,7 @@ const maxRetrievalMethodDepth = 5
 const maxRetrievalTransformSteps = 16
 
 type preparedRetrievalMethod struct {
+	uri   string
 	steps []transformStep
 }
 
@@ -108,10 +109,13 @@ func prepareRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *heliu
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	uri, err := retrievalMethodURI(rm)
+	if err != nil {
+		return err
+	}
 	if depth >= maxRetrievalMethodDepth {
 		return fmt.Errorf("%w: chain exceeds %d links", ErrRetrievalMethodLoop, maxRetrievalMethodDepth)
 	}
-	uri, _ := rm.GetAttribute("URI")
 	typ, _ := rm.GetAttribute("Type")
 
 	if _, seen := visited[uri]; seen {
@@ -138,7 +142,7 @@ func prepareRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *heliu
 		if _, err := validateTransformSteps(runtime, initialKind, steps); err != nil {
 			return err
 		}
-		state = &preparedRetrievalMethod{steps: steps}
+		state = &preparedRetrievalMethod{uri: uri, steps: steps}
 		prepared[rm] = state
 	}
 
@@ -175,18 +179,16 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	if depth >= maxRetrievalMethodDepth {
 		return fmt.Errorf("%w: chain exceeds %d links", ErrRetrievalMethodLoop, maxRetrievalMethodDepth)
 	}
-	uri, _ := rm.GetAttribute("URI")
-	typ, _ := rm.GetAttribute("Type")
-
-	if _, seen := visited[uri]; seen {
-		return fmt.Errorf("%w: %q revisited", ErrRetrievalMethodLoop, uri)
-	}
-	visited[uri] = struct{}{}
-
 	state, ok := prepared[rm]
 	if !ok {
 		return fmt.Errorf("%w: RetrievalMethod pipeline was not prepared", ErrInvalidKeyInfo)
 	}
+	uri := state.uri
+	if _, seen := visited[uri]; seen {
+		return fmt.Errorf("%w: %q revisited", ErrRetrievalMethodLoop, uri)
+	}
+	visited[uri] = struct{}{}
+	typ, _ := rm.GetAttribute("Type")
 	steps := state.steps
 	_, wholeDoc, includeComments, sameDocument := referenceURIForm(uri)
 	runtime := transformRuntime{
@@ -200,7 +202,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	// resolved octets run through the same transform pipeline the external
 	// Reference digest path uses before Type interpretation.
 	if !sameDocument {
-		octets, err := resolveRetrievalOctets(ctx, cfg, doc, uri)
+		octets, err := resolveRetrievalOctets(ctx, cfg, doc, rm, uri)
 		if err != nil {
 			return err
 		}
@@ -288,18 +290,27 @@ func parseRetrievalTransforms(ctx context.Context, rm *helium.Element) ([]transf
 }
 
 // resolveRetrievalOctets dereferences an external RetrievalMethod URI through the
-// configured ReferenceResolver, joining it against the document's base URI first.
+// configured ReferenceResolver, joining it against the RetrievalMethod's
+// effective base URI first.
 // Without a resolver it stays fail-closed with ErrReferenceNotFound, identical to
 // the external-Reference posture, and it inherits the shared 64 MiB resolver cap.
-func resolveRetrievalOctets(ctx context.Context, cfg *verifierConfig, doc *helium.Document, uri string) ([]byte, error) {
+func resolveRetrievalOctets(ctx context.Context, cfg *verifierConfig, doc *helium.Document, rm *helium.Element, uri string) ([]byte, error) {
 	if cfg.referenceResolver == nil {
 		return nil, fmt.Errorf("%w: unsupported RetrievalMethod URI: %s", ErrReferenceNotFound, uri)
 	}
-	joined, err := joinReferenceURI(doc.URL(), uri)
+	joined, err := joinReferenceURI(helium.NodeGetBase(doc, rm), uri)
 	if err != nil {
 		return nil, err
 	}
 	return resolveReferenceOctets(ctx, cfg.referenceResolver, joined)
+}
+
+func retrievalMethodURI(rm *helium.Element) (string, error) {
+	uri, ok := rm.GetAttribute("URI")
+	if !ok {
+		return "", fmt.Errorf("%w: ds:RetrievalMethod has no URI attribute", ErrInvalidKeyInfo)
+	}
+	return uri, nil
 }
 
 // interpretRetrievalOctets interprets externally retrieved octets by the
