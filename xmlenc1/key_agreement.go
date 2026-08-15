@@ -370,6 +370,8 @@ func concatKDFHash(uri string) (func() hash.Hash, error) {
 	switch uri {
 	case DigestSHA1:
 		return sha1.New, nil
+	case DigestSHA224:
+		return sha256.New224, nil
 	case DigestSHA256:
 		return sha256.New, nil
 	case DigestSHA384, DigestSHA384DSigMore:
