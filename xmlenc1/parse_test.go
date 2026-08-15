@@ -1,6 +1,7 @@
 package xmlenc1_test
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
@@ -237,9 +238,9 @@ func TestParse(t *testing.T) {
 }
 
 // TestMarshalParseRoundTrip exercises the serialize and parse paths for the
-// optional fields both directions carry: the EncryptedData's ID and Type, its
-// EncryptionMethod's DigestMethod, MGFAlgorithm and OAEPParams, and an
-// EncryptedKey with its own ID and EncryptionMethod. The marshaler's own
+// optional fields both directions carry: the EncryptedData's ID and Type, an
+// RSA-OAEP EncryptedKey's ID and EncryptionMethod fields, and the outer
+// EncryptedData's CipherValue. The marshaler's own
 // in-memory DOM is fed straight back to the internal EncryptedData parser, with
 // no serialization to bytes and no reparse through the public XML parser in
 // between, so what is pinned is that the two internal directions agree on the
@@ -251,10 +252,7 @@ func TestMarshalParseRoundTrip(t *testing.T) {
 		ID:   "ED-1",
 		Type: xmlenc1.TypeElement,
 		EncryptionMethod: &xmlenc1.EncryptionMethod{
-			Algorithm:    xmlenc1.AES256GCM,
-			DigestMethod: xmlenc1.DigestSHA256,
-			MGFAlgorithm: xmlenc1.MGFSHA256,
-			OAEPParams:   []byte("params-bytes"),
+			Algorithm: xmlenc1.AES256GCM,
 		},
 		EncryptedKeys: []*xmlenc1.EncryptedKey{
 			{
@@ -263,6 +261,7 @@ func TestMarshalParseRoundTrip(t *testing.T) {
 					Algorithm:    xmlenc1.RSAOAEP11,
 					DigestMethod: xmlenc1.DigestSHA256,
 					MGFAlgorithm: xmlenc1.MGFSHA256,
+					OAEPParams:   []byte("params-bytes"),
 				},
 				CipherValue: []byte("wrapped-key-bytes"),
 			},
@@ -283,16 +282,96 @@ func TestMarshalParseRoundTrip(t *testing.T) {
 	require.Equal(t, xmlenc1.TypeElement, parsed.Type)
 	require.NotNil(t, parsed.EncryptionMethod)
 	require.Equal(t, xmlenc1.AES256GCM, parsed.EncryptionMethod.Algorithm)
-	require.Equal(t, xmlenc1.DigestSHA256, parsed.EncryptionMethod.DigestMethod)
-	require.Equal(t, xmlenc1.MGFSHA256, parsed.EncryptionMethod.MGFAlgorithm)
-	require.Equal(t, []byte("params-bytes"), parsed.EncryptionMethod.OAEPParams)
+	require.Empty(t, parsed.EncryptionMethod.DigestMethod)
+	require.Empty(t, parsed.EncryptionMethod.MGFAlgorithm)
+	require.Empty(t, parsed.EncryptionMethod.OAEPParams)
 
 	require.Len(t, parsed.EncryptedKeys, 1)
 	require.Equal(t, "EK-1", parsed.EncryptedKeys[0].ID)
 	require.NotNil(t, parsed.EncryptedKeys[0].EncryptionMethod)
 	require.Equal(t, xmlenc1.RSAOAEP11, parsed.EncryptedKeys[0].EncryptionMethod.Algorithm)
+	require.Equal(t, xmlenc1.DigestSHA256, parsed.EncryptedKeys[0].EncryptionMethod.DigestMethod)
+	require.Equal(t, xmlenc1.MGFSHA256, parsed.EncryptedKeys[0].EncryptionMethod.MGFAlgorithm)
+	require.Equal(t, []byte("params-bytes"), parsed.EncryptedKeys[0].EncryptionMethod.OAEPParams)
 	require.Equal(t, []byte("wrapped-key-bytes"), parsed.EncryptedKeys[0].CipherValue)
 	require.Equal(t, []byte("cipher-bytes"), parsed.CipherValue)
+}
+
+// TestEncryptionMethodPermittedChildren verifies the XML Encryption §3.2
+// algorithm-specific child rules before any child value is decoded.
+func TestEncryptionMethodPermittedChildren(t *testing.T) {
+	const head = `<xenc:EncryptedData xmlns:xenc="` + xmlenc1.NamespaceXMLEnc + `" xmlns:ds="` + xmlenc1.NamespaceDSig + `" xmlns:xenc11="` + xmlenc1.NamespaceXMLEnc11 + `">`
+	const cipher = `<xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`
+
+	parse := func(t *testing.T, algorithm, children string) (*xmlenc1.EncryptedData, error) {
+		t.Helper()
+		doc := mustParseXML(t, head+`<xenc:EncryptionMethod Algorithm="`+algorithm+`">`+children+`</xenc:EncryptionMethod>`+cipher)
+		return xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+	}
+
+	t.Run("RSA-OAEP 1.0 permits digest and OAEPparams", func(t *testing.T) {
+		ed, err := parse(t, xmlenc1.RSAOAEP, `<ds:DigestMethod Algorithm="`+xmlenc1.DigestSHA256+`"/><xenc:OAEPparams>AAAA</xenc:OAEPparams>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.DigestSHA256, ed.EncryptionMethod.DigestMethod)
+		require.Equal(t, []byte{0, 0, 0}, ed.EncryptionMethod.OAEPParams)
+	})
+
+	t.Run("RSA-OAEP 1.1 permits all RSA fields", func(t *testing.T) {
+		ed, err := parse(t, xmlenc1.RSAOAEP11, `<ds:DigestMethod Algorithm="`+xmlenc1.DigestSHA256+`"/><xenc11:MGF Algorithm="`+xmlenc1.MGFSHA256+`"/><xenc:OAEPparams>AAAA</xenc:OAEPparams>`)
+		require.NoError(t, err)
+		require.Equal(t, xmlenc1.DigestSHA256, ed.EncryptionMethod.DigestMethod)
+		require.Equal(t, xmlenc1.MGFSHA256, ed.EncryptionMethod.MGFAlgorithm)
+	})
+
+	for _, algorithm := range []string{xmlenc1.AES256GCM, xmlenc1.AES256KeyWrap} {
+		t.Run(algorithm+" permits KeySize only", func(t *testing.T) {
+			ed, err := parse(t, algorithm, `<xenc:KeySize>256</xenc:KeySize>`)
+			require.NoError(t, err)
+			require.Equal(t, algorithm, ed.EncryptionMethod.Algorithm)
+		})
+	}
+
+	t.Run("legacy RSA-OAEP rejects MGF", func(t *testing.T) {
+		_, err := parse(t, xmlenc1.RSAOAEP, `<xenc11:MGF Algorithm="`+xmlenc1.MGFSHA256+`"/>`)
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "does not permit child")
+	})
+
+	for _, tc := range []struct {
+		name      string
+		algorithm string
+		child     string
+	}{
+		{"AES rejects DigestMethod", xmlenc1.AES256GCM, `<ds:DigestMethod Algorithm="` + xmlenc1.DigestSHA256 + `"/>`},
+		{"AES rejects OAEPparams before decoding", xmlenc1.AES256GCM, `<xenc:OAEPparams>not-base64</xenc:OAEPparams>`},
+		{"AES rejects MGF", xmlenc1.AES256GCM, `<xenc11:MGF Algorithm="` + xmlenc1.MGFSHA256 + `"/>`},
+		{"key wrap rejects DigestMethod", xmlenc1.AES256KeyWrap, `<ds:DigestMethod Algorithm="` + xmlenc1.DigestSHA256 + `"/>`},
+		{"unknown child is rejected", xmlenc1.RSAOAEP11, `<xenc:Unexpected/>`},
+		{"misqualified MGF is rejected", xmlenc1.RSAOAEP11, `<xenc:MGF Algorithm="` + xmlenc1.MGFSHA256 + `"/>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parse(t, tc.algorithm, tc.child)
+			require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+			require.Contains(t, err.Error(), "does not permit child")
+		})
+	}
+
+	t.Run("nested EncryptedKey uses the same gate", func(t *testing.T) {
+		doc := mustParseXML(t, head+`<xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"/><ds:KeyInfo><xenc:EncryptedKey><xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"><xenc:OAEPparams>not-base64</xenc:OAEPparams></xenc:EncryptionMethod><xenc:CipherData><xenc:CipherValue>AAAA</xenc:CipherValue></xenc:CipherData></xenc:EncryptedKey></ds:KeyInfo>`+cipher)
+		_, err := xmlenc1.ParseEncryptedDataForTest(doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "does not permit child")
+	})
+
+	t.Run("session key does not bypass the gate", func(t *testing.T) {
+		key := bytes.Repeat([]byte{0x42}, 32)
+		ciphertext, err := xmlenc1.EncryptBytesForTest(xmlenc1.AES256GCM, key, []byte(`<secret>payload</secret>`))
+		require.NoError(t, err)
+		doc := mustParseXML(t, `<xenc:EncryptedData xmlns:xenc="`+xmlenc1.NamespaceXMLEnc+`" Type="`+xmlenc1.TypeElement+`"><xenc:EncryptionMethod Algorithm="`+xmlenc1.AES256GCM+`"><xenc:OAEPparams>not-base64</xenc:OAEPparams></xenc:EncryptionMethod><xenc:CipherData><xenc:CipherValue>`+base64.StdEncoding.EncodeToString(ciphertext)+`</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>`)
+		_, err = xmlenc1.NewDecryptor().SessionKey(key).Decrypt(t.Context(), doc.DocumentElement())
+		require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
+		require.Contains(t, err.Error(), "does not permit child")
+	})
 }
 
 // TestEncryptionMethodCardinality verifies that parseEncryptionMethod is

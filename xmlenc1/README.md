@@ -438,6 +438,13 @@ that case arises only for stream ciphers and key agreements naming such an
 algorithm, none of which this package implements. `Encryptor` writes no
 `KeySize`.
 
+The parser enforces the XML Encryption §3.2 `EncryptionMethod` child rules
+before decoding any child value. `xenc:KeySize` is allowed for every algorithm;
+`ds:DigestMethod` and `xenc:OAEPparams` are allowed only for RSA-OAEP; and
+`xenc11:MGF` is allowed only for RSA-OAEP 1.1. Unknown or misplaced direct
+children fail with `ErrMalformedEncrypted`, including when a pre-shared
+`Decryptor.SessionKey` would otherwise bypass key processing.
+
 Section 3 carries a blanket "features described in this section MUST be
 implemented", so four more constructs are unimplemented, and only one of them
 can fail a decrypt: `xenc:ReferenceList` (§3.6), which points from a key to the
