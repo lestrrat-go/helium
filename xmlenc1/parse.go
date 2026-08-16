@@ -660,6 +660,9 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*encrypti
 	var seenDigestMethod, seenMGF, seenOAEPParams, seenKeySize bool
 
 	if err := eachChildElement(ctx, elem, func(e *helium.Element) error {
+		if !permittedEncryptionMethodChild(em.Algorithm, e) {
+			return fmt.Errorf("%w: EncryptionMethod algorithm %q does not permit child %q", ErrMalformedEncrypted, em.Algorithm, e.Name())
+		}
 		switch {
 		case isDSigElem(e, "DigestMethod"):
 			if seenDigestMethod {
@@ -671,7 +674,7 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*encrypti
 				return fmt.Errorf("%w: DigestMethod missing/empty Algorithm", ErrMalformedEncrypted)
 			}
 			em.DigestMethod = alg
-		case isMGFElem(e):
+		case isXMLEnc11Elem(e, "MGF"):
 			if seenMGF {
 				return fmt.Errorf("%w: duplicate MGF", ErrMalformedEncrypted)
 			}
@@ -717,6 +720,24 @@ func parseEncryptionMethod(ctx context.Context, elem *helium.Element) (*encrypti
 	}
 
 	return em, nil
+}
+
+// permittedEncryptionMethodChild reports whether e is a direct child allowed
+// by the EncryptionMethod algorithm. XML Encryption §3.2 makes KeySize
+// universal, while the RSA-OAEP fields are restricted to the algorithms that
+// use them. Unknown children are rejected rather than ignored, before their
+// values can be decoded or used by a later crypto path.
+func permittedEncryptionMethodChild(algorithm string, e *helium.Element) bool {
+	switch {
+	case isXMLEncElem(e, "KeySize"):
+		return true
+	case isDSigElem(e, "DigestMethod"), isXMLEncElem(e, "OAEPparams"):
+		return algorithm == RSAOAEP || algorithm == RSAOAEP11
+	case isXMLEnc11Elem(e, "MGF"):
+		return algorithm == RSAOAEP11
+	default:
+		return false
+	}
 }
 
 // maxKeySizeChars bounds the lexical length of one xenc:KeySize value.
@@ -1147,11 +1168,4 @@ func isDSigElem(e *helium.Element, local string) bool {
 
 func isDSig11Elem(e *helium.Element, local string) bool {
 	return isElemNS(e, local, NamespaceDSig11)
-}
-
-// isMGFElem reports whether e is an MGF element. The element is defined
-// in the XML Encryption 1.1 namespace, but accept the base xmlenc
-// namespace too for robustness against producers that misqualify it.
-func isMGFElem(e *helium.Element) bool {
-	return isElemNS(e, "MGF", NamespaceXMLEnc11, NamespaceXMLEnc)
 }
