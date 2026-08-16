@@ -50,6 +50,19 @@ func TestConcatKDFSHA384AcceptsXMLDSigMoreURI(t *testing.T) {
 	require.Equal(t, canonical, alias)
 }
 
+func TestConcatKDFSHA224FixedVector(t *testing.T) {
+	sharedSecret := []byte{0x01, 0x02, 0x03, 0x04}
+
+	got, err := deriveConcatKDF(sharedSecret, &ConcatKDFParams{DigestMethod: DigestSHA224}, 28)
+	require.NoError(t, err)
+	require.Equal(t, []byte{
+		0x89, 0x46, 0xd1, 0x81, 0x5c, 0x52, 0xc9, 0x1b,
+		0x36, 0xc3, 0xe0, 0xab, 0xfa, 0xef, 0xe8, 0x63,
+		0xb1, 0xaa, 0x5e, 0x38, 0xee, 0x1f, 0x51, 0xae,
+		0xd0, 0x03, 0x1e, 0x8f,
+	}, got)
+}
+
 func TestDecryptECDHSessionKeyAllowsOnlyAESKeyWrap(t *testing.T) {
 	tests := []struct {
 		name      string

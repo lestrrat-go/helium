@@ -124,6 +124,30 @@ func TestEncryptECDHESWireForm(t *testing.T) {
 	require.Len(t, nodes, 1)
 }
 
+func TestEncryptECDHESSHA224(t *testing.T) {
+	key := generateECKey(t, elliptic.P256())
+	doc := mustParseXML(t, samlAssertion)
+
+	edElem, err := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM11).
+		KeyWrapAlgorithm(xmlenc1.AES256KeyWrap).
+		RecipientECPublicKey(&key.PublicKey).
+		KeyDerivationParams(&xmlenc1.ConcatKDFParams{
+			DigestMethod: xmlenc1.DigestSHA224,
+			PartyUInfo:   []byte{0x01, 0x02},
+		}).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	ed, err := xmlenc1.ParseEncryptedDataForTest(edElem)
+	require.NoError(t, err)
+	require.Equal(t, xmlenc1.DigestSHA224, ed.EncryptedKeys[0].AgreementMethod.KeyDerivationMethod.ConcatKDF.DigestMethod)
+
+	nodes, err := xmlenc1.NewDecryptor().ECPrivateKey(key).Decrypt(t.Context(), edElem)
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+}
+
 // Params that omit DigestMethod are unspecified in full: the SHA-256 fallback
 // must come with empty OtherInfo, not with the caller's OtherInfo attached to
 // a digest the caller never chose.

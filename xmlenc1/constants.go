@@ -63,7 +63,9 @@ const (
 
 // Digest algorithm URIs (for RSA-OAEP 1.1).
 const (
-	DigestSHA1   = NamespaceDSig + "sha1"
+	DigestSHA1 = NamespaceDSig + "sha1"
+	// DigestSHA224 is the XMLDSig-more SHA-224 URI.
+	DigestSHA224 = NamespaceDSigMore + "sha224"
 	DigestSHA256 = NamespaceXMLEnc + "sha256"
 	DigestSHA384 = NamespaceXMLEnc + "sha384"
 	// DigestSHA384DSigMore is the XMLDSig-more SHA-384 URI.
@@ -74,6 +76,7 @@ const (
 // MGF algorithm URIs.
 const (
 	MGFSHA1   = NamespaceXMLEnc11 + "mgf1sha1"
+	MGFSHA224 = NamespaceXMLEnc11 + "mgf1sha224"
 	MGFSHA256 = NamespaceXMLEnc11 + "mgf1sha256"
 	MGFSHA384 = NamespaceXMLEnc11 + "mgf1sha384"
 	MGFSHA512 = NamespaceXMLEnc11 + "mgf1sha512"

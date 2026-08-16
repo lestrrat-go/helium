@@ -40,6 +40,29 @@ func TestRSAOAEP(t *testing.T) {
 		require.Contains(t, s, "user@example.com")
 	})
 
+	t.Run("oaep11 sha224 digest and MGF round-trip", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+
+		edElem, err := xmlenc1.NewEncryptor().
+			BlockAlgorithm(xmlenc1.AES256GCM).
+			KeyTransportAlgorithm(xmlenc1.RSAOAEP11).
+			OAEPDigest(xmlenc1.DigestSHA224).
+			OAEPMGF(xmlenc1.MGFSHA224).
+			RecipientPublicKey(&key.PublicKey).
+			EncryptElement(t.Context(), doc.DocumentElement())
+		require.NoError(t, err)
+
+		serialized, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, serialized, xmlenc1.DigestSHA224)
+		require.Contains(t, serialized, xmlenc1.MGFSHA224)
+
+		nodes, err := xmlenc1.NewDecryptor().PrivateKey(key).Decrypt(t.Context(), edElem)
+		require.NoError(t, err)
+		require.Len(t, nodes, 1)
+	})
+
 	t.Run("oaep11 sha384 and sha512 round-trip", func(t *testing.T) {
 		for _, tc := range []struct {
 			name   string
