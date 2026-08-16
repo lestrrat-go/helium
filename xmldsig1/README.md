@@ -112,6 +112,12 @@ forms are the only ones that carry comments through. An `"#id"` that matches mor
 than one element (across the document and any enveloping `Object` content) is
 rejected with `ErrAmbiguousReference`, defending against XML Signature Wrapping.
 
+`ds:RetrievalMethod` requires its `URI` attribute. An absent attribute is
+`ErrInvalidKeyInfo`, including when `LenientKeyInfo(true)` is enabled; a present
+empty value remains the null same-document URI. External RetrievalMethod URIs
+are joined against the effective base of the RetrievalMethod element, including
+any inherited `xml:base`, before the configured resolver receives them.
+
 ### Transforms
 
 The supported transforms are the enveloped-signature transform, the

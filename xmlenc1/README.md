@@ -398,10 +398,13 @@ decided while the document is read, so they precede a pre-shared
 [`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key)'s early
 return: that caller does not decrypt past a reference this package refused.
 
-A `ds:RetrievalMethod` whose `Type` this package does not implement — a
-`#DerivedKey` (§3.5.2), or any type from another specification — is stepped
-over before its URI is looked at, so it costs nothing, cannot fail a decrypt,
-and a pre-shared `SessionKey` decrypts past it. A `Type` of
+A `ds:RetrievalMethod` must carry its `URI` attribute. A missing attribute is
+`ErrMalformedEncrypted`, even when the `Type` is one this package skips and
+even when a pre-shared `SessionKey` is configured. A present empty value is the
+valid null same-document URI. After that presence check, a `Type` this package
+does not implement — a `#DerivedKey` (§3.5.2), or any type from another
+specification — is stepped over before its URI is resolved, so it costs nothing,
+cannot fail a decrypt, and a pre-shared `SessionKey` decrypts past it. A `Type` of
 `#EncryptedKey` naming something that is not an `xenc:EncryptedKey` is a
 contradiction inside the document and fails with `ErrMalformedEncrypted`; a
 reference with no `Type` at all is resolved, and its target used only if it is

@@ -253,6 +253,11 @@ func retainEncryptedKey(ctx context.Context, elem *helium.Element, ed *encrypted
 // for the several references §3.5.3 permits; it is not a loop guard, and the
 // termination argument does not rest on it.
 func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *encryptedData, ps *parseState) error {
+	uri, ok := elem.GetAttribute("URI")
+	if !ok {
+		return abort(ctx, fmt.Errorf("%w: ds:RetrievalMethod has no URI attribute, which the xenc schema requires", ErrMalformedEncrypted))
+	}
+
 	typ, _ := elem.GetAttribute("Type")
 	switch typ {
 	case "", TypeEncryptedKey:
@@ -271,7 +276,6 @@ func parseRetrievalMethod(ctx context.Context, elem *helium.Element, ed *encrypt
 		return nil
 	}
 
-	uri, _ := elem.GetAttribute("URI")
 	target, err := resolveSameDocument(ctx, ps.refs, uri)
 	if err != nil {
 		return abort(ctx, err)
