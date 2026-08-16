@@ -1,7 +1,5 @@
 # xmlenc1
 
-> **EXPERIMENTAL** — This package is under active development. Its API may change without notice, and it may be moved to a separate repository in the future.
-
 The `xmlenc1` package implements W3C XML Encryption 1.1 for helium documents.
 What it declines to implement is the cryptography the standards bodies have
 since retired: Triple DES is refused, because NIST disallowed it for encryption

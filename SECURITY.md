@@ -40,9 +40,11 @@ certificate source and checks which element the verified signature covers. Exter
 references and XSLT are opt-in advanced features with caller-owned transport,
 resource, and execution policy.
 
-The `xmlenc1` (XML Encryption) package is **experimental** and falls outside the
-security-support boundary until it stabilizes. Reports are welcome, but `xmlenc1`
-should not be relied on inside a security or compliance boundary yet.
+The `xmlenc1` (XML Encryption) package has scoped production support for W3C XML
+Encryption 1.1. It uses authenticated AES-GCM by default, refuses retired Triple
+DES algorithms, and requires explicit opt-in for CBC and external cipher
+references. Callers should review their deployment's security and compliance
+requirements.
 
 ## Reporting a Vulnerability
 

@@ -81,7 +81,7 @@ an embedded example.
 | [`stream`](stream/README.md) | Streaming XML writer. | Writes XML directly without building a DOM. |
 | [`xinclude`](xinclude/README.md) | XInclude processing for helium documents. | Supports recursive inclusion and custom resolvers. |
 | [`xmldsig1`](xmldsig1/README.md) | W3C XML Digital Signatures 1.1 over helium documents. | Scoped production support for explicit same-document profiles; external references and XSLT are opt-in advanced features. |
-| [`xmlenc1`](xmlenc1/README.md) | W3C XML Encryption 1.1 over helium documents. | **Experimental**; API may change. Retired cryptography is refused, so block encryption and key wrapping are AES only. |
+| [`xmlenc1`](xmlenc1/README.md) | W3C XML Encryption 1.1 over helium documents. | Scoped production support. Retired cryptography is refused, so block encryption and key wrapping are AES only. |
 | [`xpath1`](xpath1/README.md) | XPath 1.0 compilation and evaluation. | Includes convenience helpers like `Find` and `Evaluate`. |
 | [`xpath3`](xpath3/README.md) | XPath 3.1 compilation and evaluation. | Includes a compiler, evaluator, maps, arrays, and HOFs. |
 | [`xpointer`](xpointer/README.md) | XPointer evaluation. | Supports shorthand, `element()`, and XPath-backed schemes. |
@@ -186,8 +186,9 @@ The `xmldsig1` package supports narrow, explicit same-document verification
 profiles when the application pins its trusted key or certificate source and
 checks `VerifyResult.Covers` before consuming a signed element. External
 references and XSLT remain opt-in advanced features with caller-owned resource
-and execution policy. The `xmlenc1` package remains **experimental** and should
-not be relied on inside a security or compliance boundary.
+and execution policy. The `xmlenc1` package uses authenticated AES-GCM by
+default and refuses retired Triple DES algorithms. Callers should still review
+their deployment's security and compliance requirements.
 
 # `encoding/xml` compatibility
 
@@ -244,7 +245,7 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 
 * **Implemented:** XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
 * **Scoped production support:** W3C XML Digital Signatures 1.1 (`xmldsig1`) for explicit same-document verification profiles. External references and XSLT are opt-in advanced features with caller-owned resource and execution policy.
-* **Experimental:** XML Encryption 1.1 (`xmlenc1`). It refuses the cryptography the standards bodies have since retired, so Triple DES is out and block encryption and key wrapping are AES only. Its API may change and may move to a separate repository.
+* **Scoped production support:** W3C XML Encryption 1.1 (`xmlenc1`) with a documented security exception for retired cryptography. Triple DES is refused, so block encryption and key wrapping are AES only.
 * **CLI:** the `helium` command provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
 
 Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
