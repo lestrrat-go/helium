@@ -576,259 +576,253 @@ func TestLeafGuards(t *testing.T) {
 
 	// every leaf-type AddChild override against the
 	// shared self/ancestor cycle guard and auto-unlink contract.
-	t.Run("AddChild", func(t *testing.T) {
-		for _, tc := range leafCases() {
-			t.Run(tc.name, func(t *testing.T) {
+	for _, tc := range leafCases() {
+		t.Run("AddChild "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("self insertion is rejected", func(t *testing.T) {
 				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.new(t, doc)
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
 
-				t.Run("self insertion is rejected", func(t *testing.T) {
-					t.Parallel()
-					doc := helium.NewDefaultDocument()
-					root := mustCreateElement(t, doc, "root")
-					leaf := tc.new(t, doc)
-					require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+				err := leaf.AddChild(leaf)
+				require.Error(t, err, "AddChild(self) must be rejected")
+				require.ErrorIs(t, err, tc.addChildSelfErr)
 
-					err := leaf.AddChild(leaf)
-					require.Error(t, err, "AddChild(self) must be rejected")
-					require.ErrorIs(t, err, tc.addChildSelfErr)
-
-					require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
-					require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
-					require.Equal(t, helium.Node(root), leaf.Parent(), "leaf parent must stay root")
-					requireNoCycle(t, root)
-				})
-
-				if tc.canContainChildren {
-					t.Run("ancestor insertion is rejected", func(t *testing.T) {
-						t.Parallel()
-						doc := helium.NewDefaultDocument()
-						root := mustCreateElement(t, doc, "root")
-						leaf := tc.new(t, doc)
-						require.NoError(t, root.AddChild(leaf), "leaf starts under root")
-
-						// Inserting root (an ancestor of leaf) as a child of leaf would
-						// make an ancestor a descendant of itself.
-						err := leaf.AddChild(root)
-						require.Error(t, err, "inserting an ancestor must be rejected")
-						require.ErrorContains(t, err, errAddChildCycle)
-
-						require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
-						require.Nil(t, root.Parent(), "root must remain the tree root")
-						require.Equal(t, helium.Node(root), leaf.Parent(), "tree must stay intact")
-						requireNoCycle(t, root)
-					})
-
-					t.Run("legal already-linked move unlinks from old parent", func(t *testing.T) {
-						t.Parallel()
-						doc := helium.NewDefaultDocument()
-						container := tc.new(t, doc)
-						oldParent := mustCreateElement(t, doc, "old")
-						moving := mustCreateElement(t, doc, "moving")
-						require.NoError(t, oldParent.AddChild(moving), "moving starts under old parent")
-
-						// Moving moving from oldParent into the leaf container must detach
-						// it from oldParent first, leaving no stale links behind.
-						require.NoError(t, container.AddChild(moving), "reparenting into leaf container succeeds")
-
-						require.Equal(t, helium.Node(container), moving.Parent(), "moving parent is now the container")
-						require.Equal(t, helium.Node(moving), container.FirstChild(), "container firstChild is moving")
-						require.Equal(t, helium.Node(moving), container.LastChild(), "container lastChild is moving")
-						require.Nil(t, oldParent.FirstChild(), "old parent no longer holds moving")
-						require.Nil(t, oldParent.LastChild(), "old parent no longer holds moving")
-						require.Nil(t, moving.PrevSibling(), "moving has no stale prev")
-						require.Nil(t, moving.NextSibling(), "moving has no stale next")
-						requireNoCycle(t, container)
-						requireNoCycle(t, oldParent)
-					})
-				} else {
-					// The strict leaves (Text, Comment, CDATASection, PI) never hold
-					// children, so an ancestor operand is not a potential cycle — it
-					// is just another invalid operand, and must take the shared
-					// ErrInvalidOperation shape (not ErrCyclicNode, which is reserved
-					// for the self-add).
-					t.Run("ancestor operand is rejected as invalid operation", func(t *testing.T) {
-						t.Parallel()
-						doc := helium.NewDefaultDocument()
-						root := mustCreateElement(t, doc, "root")
-						mid := mustCreateElement(t, doc, "mid")
-						require.NoError(t, root.AddChild(mid), "mid starts under root")
-						leaf := tc.new(t, doc)
-						require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
-
-						for name, operand := range map[string]helium.Node{
-							"parent":   mid,
-							"ancestor": root,
-						} {
-							err := leaf.AddChild(operand)
-							require.Error(t, err, "AddChild(%s) must be rejected", name)
-							require.ErrorIs(t, err, helium.ErrInvalidOperation)
-							require.NotErrorIs(t, err, helium.ErrCyclicNode)
-							require.ErrorContains(t, err,
-								fmt.Sprintf("cannot add a %s as a child of a %s node", helium.ElementNode, leaf.Type()))
-						}
-
-						require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
-						require.Equal(t, helium.Node(mid), leaf.Parent(), "tree must stay intact")
-						require.Nil(t, root.Parent(), "root must remain the tree root")
-						requireNoCycle(t, root)
-					})
-				}
+				require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
+				require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
+				require.Equal(t, helium.Node(root), leaf.Parent(), "leaf parent must stay root")
+				requireNoCycle(t, root)
 			})
-		}
-	})
 
-	// every leaf-type AddSibling override against
-	// the shared self/ancestor cycle guard and auto-unlink contract.
-	t.Run("AddSibling", func(t *testing.T) {
-		for _, tc := range leafCases() {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-
-				t.Run("self insertion is rejected", func(t *testing.T) {
-					t.Parallel()
-					doc := helium.NewDefaultDocument()
-					root := mustCreateElement(t, doc, "root")
-					leaf := tc.new(t, doc)
-					require.NoError(t, root.AddChild(leaf), "leaf starts under root")
-
-					err := leaf.AddSibling(leaf)
-					require.Error(t, err, "AddSibling(self) must be rejected")
-					require.ErrorContains(t, err, errAddSiblingCycle)
-
-					require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
-					require.Equal(t, helium.Node(leaf), root.LastChild(), "tree must not be corrupted")
-					require.Nil(t, leaf.NextSibling(), "leaf must not gain a sibling")
-					require.Nil(t, leaf.PrevSibling(), "leaf must not gain a sibling")
-					requireNoCycle(t, root)
-				})
-
+			if tc.canContainChildren {
 				t.Run("ancestor insertion is rejected", func(t *testing.T) {
 					t.Parallel()
 					doc := helium.NewDefaultDocument()
 					root := mustCreateElement(t, doc, "root")
-					mid := mustCreateElement(t, doc, "mid")
 					leaf := tc.new(t, doc)
-					require.NoError(t, root.AddChild(mid), "mid starts under root")
-					require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
+					require.NoError(t, root.AddChild(leaf), "leaf starts under root")
 
-					// A sibling of leaf lands under mid; installing root (mid's ancestor)
-					// there would make an ancestor a descendant of itself.
-					err := leaf.AddSibling(root)
-					require.Error(t, err, "inserting an ancestor as a sibling must be rejected")
-					require.ErrorContains(t, err, errAddSiblingCycle)
+					// Inserting root (an ancestor of leaf) as a child of leaf would
+					// make an ancestor a descendant of itself.
+					err := leaf.AddChild(root)
+					require.Error(t, err, "inserting an ancestor must be rejected")
+					require.ErrorContains(t, err, errAddChildCycle)
 
+					require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
 					require.Nil(t, root.Parent(), "root must remain the tree root")
-					require.Equal(t, helium.Node(leaf), mid.FirstChild(), "tree must stay intact")
-					require.Equal(t, helium.Node(leaf), mid.LastChild(), "tree must stay intact")
-					require.Nil(t, leaf.NextSibling(), "leaf must not gain a sibling")
+					require.Equal(t, helium.Node(root), leaf.Parent(), "tree must stay intact")
 					requireNoCycle(t, root)
 				})
 
 				t.Run("legal already-linked move unlinks from old parent", func(t *testing.T) {
 					t.Parallel()
 					doc := helium.NewDefaultDocument()
-					dst := mustCreateElement(t, doc, "dst")
-					src := mustCreateElement(t, doc, "src")
-					anchor := tc.new(t, doc)
+					container := tc.new(t, doc)
+					oldParent := mustCreateElement(t, doc, "old")
 					moving := mustCreateElement(t, doc, "moving")
-					require.NoError(t, dst.AddChild(anchor), "anchor starts under dst")
-					require.NoError(t, src.AddChild(moving), "moving starts under src")
+					require.NoError(t, oldParent.AddChild(moving), "moving starts under old parent")
 
-					// anchor.AddSibling(moving) must detach moving from src before
-					// splicing it after anchor under dst.
-					require.NoError(t, anchor.AddSibling(moving), "moving anchor's sibling succeeds")
+					// Moving moving from oldParent into the leaf container must detach
+					// it from oldParent first, leaving no stale links behind.
+					require.NoError(t, container.AddChild(moving), "reparenting into leaf container succeeds")
 
-					require.Equal(t, helium.Node(dst), moving.Parent(), "moving parent is now dst")
-					require.Equal(t, helium.Node(moving), anchor.NextSibling(), "moving follows anchor")
-					require.Equal(t, helium.Node(anchor), moving.PrevSibling(), "anchor precedes moving")
-					require.Equal(t, helium.Node(moving), dst.LastChild(), "dst lastChild is moving")
-					require.Nil(t, src.FirstChild(), "src no longer holds moving")
-					require.Nil(t, src.LastChild(), "src no longer holds moving")
-					requireNoCycle(t, dst)
-					requireNoCycle(t, src)
+					require.Equal(t, helium.Node(container), moving.Parent(), "moving parent is now the container")
+					require.Equal(t, helium.Node(moving), container.FirstChild(), "container firstChild is moving")
+					require.Equal(t, helium.Node(moving), container.LastChild(), "container lastChild is moving")
+					require.Nil(t, oldParent.FirstChild(), "old parent no longer holds moving")
+					require.Nil(t, oldParent.LastChild(), "old parent no longer holds moving")
+					require.Nil(t, moving.PrevSibling(), "moving has no stale prev")
+					require.Nil(t, moving.NextSibling(), "moving has no stale next")
+					requireNoCycle(t, container)
+					requireNoCycle(t, oldParent)
 				})
+			} else {
+				// The strict leaves (Text, Comment, CDATASection, PI) never hold
+				// children, so an ancestor operand is not a potential cycle — it
+				// is just another invalid operand, and must take the shared
+				// ErrInvalidOperation shape (not ErrCyclicNode, which is reserved
+				// for the self-add).
+				t.Run("ancestor operand is rejected as invalid operation", func(t *testing.T) {
+					t.Parallel()
+					doc := helium.NewDefaultDocument()
+					root := mustCreateElement(t, doc, "root")
+					mid := mustCreateElement(t, doc, "mid")
+					require.NoError(t, root.AddChild(mid), "mid starts under root")
+					leaf := tc.new(t, doc)
+					require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
+
+					for name, operand := range map[string]helium.Node{
+						"parent":   mid,
+						"ancestor": root,
+					} {
+						err := leaf.AddChild(operand)
+						require.Error(t, err, "AddChild(%s) must be rejected", name)
+						require.ErrorIs(t, err, helium.ErrInvalidOperation)
+						require.NotErrorIs(t, err, helium.ErrCyclicNode)
+						require.ErrorContains(t, err,
+							fmt.Sprintf("cannot add a %s as a child of a %s node", helium.ElementNode, leaf.Type()))
+					}
+
+					require.Nil(t, leaf.FirstChild(), "leaf must not gain a child")
+					require.Equal(t, helium.Node(mid), leaf.Parent(), "tree must stay intact")
+					require.Nil(t, root.Parent(), "root must remain the tree root")
+					requireNoCycle(t, root)
+				})
+			}
+		})
+	}
+
+	// every leaf-type AddSibling override against
+	// the shared self/ancestor cycle guard and auto-unlink contract.
+	for _, tc := range leafCases() {
+		t.Run("AddSibling "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("self insertion is rejected", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.new(t, doc)
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+
+				err := leaf.AddSibling(leaf)
+				require.Error(t, err, "AddSibling(self) must be rejected")
+				require.ErrorContains(t, err, errAddSiblingCycle)
+
+				require.Equal(t, helium.Node(leaf), root.FirstChild(), "tree must not be corrupted")
+				require.Equal(t, helium.Node(leaf), root.LastChild(), "tree must not be corrupted")
+				require.Nil(t, leaf.NextSibling(), "leaf must not gain a sibling")
+				require.Nil(t, leaf.PrevSibling(), "leaf must not gain a sibling")
+				requireNoCycle(t, root)
 			})
-		}
-	})
+
+			t.Run("ancestor insertion is rejected", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				mid := mustCreateElement(t, doc, "mid")
+				leaf := tc.new(t, doc)
+				require.NoError(t, root.AddChild(mid), "mid starts under root")
+				require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
+
+				// A sibling of leaf lands under mid; installing root (mid's ancestor)
+				// there would make an ancestor a descendant of itself.
+				err := leaf.AddSibling(root)
+				require.Error(t, err, "inserting an ancestor as a sibling must be rejected")
+				require.ErrorContains(t, err, errAddSiblingCycle)
+
+				require.Nil(t, root.Parent(), "root must remain the tree root")
+				require.Equal(t, helium.Node(leaf), mid.FirstChild(), "tree must stay intact")
+				require.Equal(t, helium.Node(leaf), mid.LastChild(), "tree must stay intact")
+				require.Nil(t, leaf.NextSibling(), "leaf must not gain a sibling")
+				requireNoCycle(t, root)
+			})
+
+			t.Run("legal already-linked move unlinks from old parent", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				dst := mustCreateElement(t, doc, "dst")
+				src := mustCreateElement(t, doc, "src")
+				anchor := tc.new(t, doc)
+				moving := mustCreateElement(t, doc, "moving")
+				require.NoError(t, dst.AddChild(anchor), "anchor starts under dst")
+				require.NoError(t, src.AddChild(moving), "moving starts under src")
+
+				// anchor.AddSibling(moving) must detach moving from src before
+				// splicing it after anchor under dst.
+				require.NoError(t, anchor.AddSibling(moving), "moving anchor's sibling succeeds")
+
+				require.Equal(t, helium.Node(dst), moving.Parent(), "moving parent is now dst")
+				require.Equal(t, helium.Node(moving), anchor.NextSibling(), "moving follows anchor")
+				require.Equal(t, helium.Node(anchor), moving.PrevSibling(), "anchor precedes moving")
+				require.Equal(t, helium.Node(moving), dst.LastChild(), "dst lastChild is moving")
+				require.Nil(t, src.FirstChild(), "src no longer holds moving")
+				require.Nil(t, src.LastChild(), "src no longer holds moving")
+				requireNoCycle(t, dst)
+				requireNoCycle(t, src)
+			})
+		})
+	}
 
 	// every leaf-type Replace override (Text,
 	// Comment, CDATASection, ProcessingInstruction, EntityRef). Each override
 	// delegates to replaceNode, so this confirms the override exists and is wired to
 	// the shared ancestor-rejection guard and to the linked / non-MutableNode
 	// replacement splice.
-	t.Run("Replace", func(t *testing.T) {
-		for _, tc := range leafCases() {
-			t.Run(tc.name, func(t *testing.T) {
+	for _, tc := range leafCases() {
+		t.Run("Replace "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("ancestor replacement is rejected", func(t *testing.T) {
 				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				mid := mustCreateElement(t, doc, "mid")
+				leaf := tc.new(t, doc)
+				require.NoError(t, root.AddChild(mid), "mid starts under root")
+				require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
 
-				t.Run("ancestor replacement is rejected", func(t *testing.T) {
-					t.Parallel()
-					doc := helium.NewDefaultDocument()
-					root := mustCreateElement(t, doc, "root")
-					mid := mustCreateElement(t, doc, "mid")
-					leaf := tc.new(t, doc)
-					require.NoError(t, root.AddChild(mid), "mid starts under root")
-					require.NoError(t, mid.AddChild(leaf), "leaf starts under mid")
+				// Replacing leaf with mid (its parent/ancestor) would splice an
+				// ancestor below itself, creating a cycle.
+				err := leaf.Replace(mid)
+				require.Error(t, err, "replacing leaf with an ancestor must be rejected")
+				require.ErrorContains(t, err, errReplaceCycle)
 
-					// Replacing leaf with mid (its parent/ancestor) would splice an
-					// ancestor below itself, creating a cycle.
-					err := leaf.Replace(mid)
-					require.Error(t, err, "replacing leaf with an ancestor must be rejected")
-					require.ErrorContains(t, err, errReplaceCycle)
-
-					require.Equal(t, helium.Node(leaf), mid.FirstChild(), "leaf stays under mid")
-					require.Equal(t, helium.Node(mid), leaf.Parent(), "leaf parent stays mid")
-					requireNoCycle(t, root)
-				})
-
-				t.Run("legal already-linked replacement splices in", func(t *testing.T) {
-					t.Parallel()
-					doc := helium.NewDefaultDocument()
-					root := mustCreateElement(t, doc, "root")
-					leaf := tc.new(t, doc)
-					incoming := mustCreateElement(t, doc, "incoming")
-					require.NoError(t, root.AddChild(leaf), "leaf starts under root")
-
-					src := mustCreateElement(t, doc, "src")
-					require.NoError(t, src.AddChild(incoming), "incoming starts under src")
-
-					// incoming is already linked under src; replacing leaf with it must
-					// detach it from src and splice it into leaf's position under root.
-					require.NoError(t, leaf.Replace(incoming), "linked replacement succeeds")
-
-					require.Equal(t, helium.Node(incoming), root.FirstChild(), "incoming took leaf's position")
-					require.Equal(t, helium.Node(incoming), root.LastChild(), "incoming is the only child")
-					require.Equal(t, helium.Node(root), incoming.Parent(), "incoming parent is root")
-					require.Nil(t, src.FirstChild(), "src no longer holds incoming")
-					require.Nil(t, leaf.Parent(), "replaced leaf is detached")
-					require.Nil(t, leaf.NextSibling(), "replaced leaf has no stale next")
-					require.Nil(t, leaf.PrevSibling(), "replaced leaf has no stale prev")
-					requireNoCycle(t, root)
-					requireNoCycle(t, src)
-				})
-
-				t.Run("non-mutable replacement splices in", func(t *testing.T) {
-					t.Parallel()
-					doc := helium.NewDefaultDocument()
-					root := mustCreateElement(t, doc, "root")
-					leaf := tc.new(t, doc)
-					require.NoError(t, root.AddChild(leaf), "leaf starts under root")
-
-					ns := helium.NewNamespace("p", "urn:example")
-					nsw := helium.NewNamespaceNodeWrapper(ns, nil)
-
-					// A non-MutableNode replacement must not panic on a force-cast and
-					// must take leaf's position under root.
-					require.NoError(t, leaf.Replace(nsw), "non-mutable replacement succeeds")
-
-					require.Equal(t, helium.Node(nsw), root.FirstChild(), "wrapper took leaf's position")
-					require.Equal(t, helium.Node(root), nsw.Parent(), "wrapper parent is root")
-					require.Nil(t, leaf.Parent(), "replaced leaf is detached")
-					requireNoCycle(t, root)
-				})
+				require.Equal(t, helium.Node(leaf), mid.FirstChild(), "leaf stays under mid")
+				require.Equal(t, helium.Node(mid), leaf.Parent(), "leaf parent stays mid")
+				requireNoCycle(t, root)
 			})
-		}
-	})
+
+			t.Run("legal already-linked replacement splices in", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.new(t, doc)
+				incoming := mustCreateElement(t, doc, "incoming")
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+
+				src := mustCreateElement(t, doc, "src")
+				require.NoError(t, src.AddChild(incoming), "incoming starts under src")
+
+				// incoming is already linked under src; replacing leaf with it must
+				// detach it from src and splice it into leaf's position under root.
+				require.NoError(t, leaf.Replace(incoming), "linked replacement succeeds")
+
+				require.Equal(t, helium.Node(incoming), root.FirstChild(), "incoming took leaf's position")
+				require.Equal(t, helium.Node(incoming), root.LastChild(), "incoming is the only child")
+				require.Equal(t, helium.Node(root), incoming.Parent(), "incoming parent is root")
+				require.Nil(t, src.FirstChild(), "src no longer holds incoming")
+				require.Nil(t, leaf.Parent(), "replaced leaf is detached")
+				require.Nil(t, leaf.NextSibling(), "replaced leaf has no stale next")
+				require.Nil(t, leaf.PrevSibling(), "replaced leaf has no stale prev")
+				requireNoCycle(t, root)
+				requireNoCycle(t, src)
+			})
+
+			t.Run("non-mutable replacement splices in", func(t *testing.T) {
+				t.Parallel()
+				doc := helium.NewDefaultDocument()
+				root := mustCreateElement(t, doc, "root")
+				leaf := tc.new(t, doc)
+				require.NoError(t, root.AddChild(leaf), "leaf starts under root")
+
+				ns := helium.NewNamespace("p", "urn:example")
+				nsw := helium.NewNamespaceNodeWrapper(ns, nil)
+
+				// A non-MutableNode replacement must not panic on a force-cast and
+				// must take leaf's position under root.
+				require.NoError(t, leaf.Replace(nsw), "non-mutable replacement succeeds")
+
+				require.Equal(t, helium.Node(nsw), root.FirstChild(), "wrapper took leaf's position")
+				require.Equal(t, helium.Node(root), nsw.Parent(), "wrapper parent is root")
+				require.Nil(t, leaf.Parent(), "replaced leaf is detached")
+				requireNoCycle(t, root)
+			})
+		})
+	}
 
 	// the leaf-node AddChild/AddSibling
 	// overrides which run a content-merge fast path (Text.AddChild, Text.AddSibling,
@@ -838,7 +832,7 @@ func TestLeafGuards(t *testing.T) {
 	// matching typed-nil concrete pointer (Go's interface nil trap) are exercised,
 	// since the overrides run a type assertion / debug log / preflight before the
 	// guard would otherwise be reached.
-	t.Run("fast-path nil operand", func(t *testing.T) {
+	{
 		cases := []struct {
 			name string
 			// op runs the override under test against the supplied operand.
@@ -898,7 +892,7 @@ func TestLeafGuards(t *testing.T) {
 		}
 
 		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
+			t.Run("fast-path nil operand "+tc.name, func(t *testing.T) {
 				t.Parallel()
 
 				t.Run("literal nil", func(t *testing.T) {
@@ -936,7 +930,7 @@ func TestLeafGuards(t *testing.T) {
 				})
 			})
 		}
-	})
+	}
 
 	// inserting an already-linked
 	// non-MutableNode operand (NamespaceNodeWrapper) detaches it from its old parent,

@@ -293,6 +293,57 @@ func TestParameterEntity(t *testing.T) {
 func TestParameterEntityBoundary(t *testing.T) {
 	t.Parallel()
 
+	t.Run("an element declaration split across a PE boundary", func(t *testing.T) {
+		t.Parallel()
+
+		// PE starts the element declaration but the closing '>' is in the main DTD.
+		// This crosses an entity boundary -> parse error (syntax or boundary).
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % start "<!ELEMENT doc EMPTY">
+  %start;>
+]>
+<doc/>`
+
+		p := helium.NewParser().LoadExternalDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "boundary-violating PE should cause a parse error")
+	})
+
+	t.Run("an attribute-list declaration split across a PE boundary", func(t *testing.T) {
+		t.Parallel()
+
+		// PE starts the ATTLIST declaration but the closing '>' is in the main DTD.
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ELEMENT doc EMPTY>
+  <!ENTITY % start "<!ATTLIST doc attr CDATA #IMPLIED">
+  %start;>
+]>
+<doc/>`
+
+		p := helium.NewParser().LoadExternalDTD(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "boundary-violating PE should cause a parse error")
+	})
+
+	t.Run("a well-nested PE parses", func(t *testing.T) {
+		t.Parallel()
+
+		// PE expands to a complete declaration -- no boundary violation.
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY % decl "<!ELEMENT doc EMPTY>">
+  %decl;
+]>
+<doc/>`
+
+		p := helium.NewParser().LoadExternalDTD(true)
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err)
+		require.NotNil(t, doc)
+	})
+
 	// the XML validity constraints
 	// that a markup declaration (and a parenthesized content-model group) must start
 	// and stop in the SAME entity: a closing '>' or ')' supplied by a DIFFERENT
@@ -410,7 +461,7 @@ func TestParameterEntityBoundary(t *testing.T) {
 	// This matches libxml2's xmlExpandPEsInEntityValue PARSER_EXTERNAL gate and
 	// closes W3C not-wf cases not-wf-sa-160, not-wf-sa-162, ibm-not-wf-P29-ibm29n04,
 	// ibm-not-wf-P69-ibm69n06 and ibm-not-wf-P69-ibm69n07.
-	t.Run("a PE reference inside an internal-subset entity value", func(t *testing.T) {
+	{
 		newParser := func() helium.Parser {
 			return helium.NewParser().
 				BlockXXE(false).
@@ -420,7 +471,7 @@ func TestParameterEntityBoundary(t *testing.T) {
 				FS(helium.PermissiveFS())
 		}
 
-		t.Run("rejected in internal subset", func(t *testing.T) {
+		t.Run("a PE reference inside an internal-subset entity value is rejected", func(t *testing.T) {
 			t.Parallel()
 
 			notWF := map[string]string{
@@ -462,7 +513,7 @@ func TestParameterEntityBoundary(t *testing.T) {
 			}
 		})
 
-		t.Run("permitted in external subset", func(t *testing.T) {
+		t.Run("a PE reference inside an external-subset entity value is permitted", func(t *testing.T) {
 			t.Parallel()
 
 			// The very same construct (a PE reference inside an entity value) is
@@ -501,5 +552,5 @@ func TestParameterEntityBoundary(t *testing.T) {
 			require.NoError(t, err, "a PE reference between declarations is well formed in the internal subset")
 			require.Equal(t, "hi", string(doc.DocumentElement().Content()))
 		})
-	})
+	}
 }

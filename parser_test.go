@@ -1157,63 +1157,6 @@ func TestRecoverOnError(t *testing.T) {
 	})
 }
 
-func TestEntityBoundary(t *testing.T) {
-	t.Parallel()
-
-	t.Run("entity boundary", func(t *testing.T) {
-		t.Run("element decl", func(t *testing.T) {
-			t.Parallel()
-
-			// PE starts the element declaration but the closing '>' is in the main DTD.
-			// This crosses an entity boundary -> parse error (syntax or boundary).
-			const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % start "<!ELEMENT doc EMPTY">
-  %start;>
-]>
-<doc/>`
-
-			p := helium.NewParser().LoadExternalDTD(true)
-			_, err := p.Parse(t.Context(), []byte(input))
-			require.Error(t, err, "boundary-violating PE should cause a parse error")
-		})
-
-		t.Run("attribute list decl", func(t *testing.T) {
-			t.Parallel()
-
-			// PE starts the ATTLIST declaration but the closing '>' is in the main DTD.
-			const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ELEMENT doc EMPTY>
-  <!ENTITY % start "<!ATTLIST doc attr CDATA #IMPLIED">
-  %start;>
-]>
-<doc/>`
-
-			p := helium.NewParser().LoadExternalDTD(true)
-			_, err := p.Parse(t.Context(), []byte(input))
-			require.Error(t, err, "boundary-violating PE should cause a parse error")
-		})
-
-		t.Run("well-nested PE", func(t *testing.T) {
-			t.Parallel()
-
-			// PE expands to a complete declaration -- no boundary violation.
-			const input = `<?xml version="1.0"?>
-<!DOCTYPE doc [
-  <!ENTITY % decl "<!ELEMENT doc EMPTY>">
-  %decl;
-]>
-<doc/>`
-
-			p := helium.NewParser().LoadExternalDTD(true)
-			doc, err := p.Parse(t.Context(), []byte(input))
-			require.NoError(t, err)
-			require.NotNil(t, doc)
-		})
-	})
-}
-
 func TestParseExternalEntity(t *testing.T) {
 	t.Parallel()
 

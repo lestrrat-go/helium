@@ -833,70 +833,68 @@ func TestSAXWhitespace(t *testing.T) {
 func TestDisableSAX(t *testing.T) {
 	t.Parallel()
 
-	t.Run("disable SAX", func(t *testing.T) {
-		t.Run("recover continues parsing", func(t *testing.T) {
-			t.Parallel()
+	t.Run("recover continues parsing", func(t *testing.T) {
+		t.Parallel()
 
-			// XML with a broken sibling element (mismatched end tag) followed by valid content
-			const input = `<?xml version="1.0"?>
+		// XML with a broken sibling element (mismatched end tag) followed by valid content
+		const input = `<?xml version="1.0"?>
 <root>
   <good>ok</good>
   <bad>text</baaaad>
   <after>more</after>
 </root>`
 
-			p := helium.NewParser().RecoverOnError(true)
-			doc, err := p.Parse(t.Context(), []byte(input))
-			require.Error(t, err, "malformed XML should return error")
-			require.NotNil(t, doc, "Recover should return a partial document")
+		p := helium.NewParser().RecoverOnError(true)
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "malformed XML should return error")
+		require.NotNil(t, doc, "Recover should return a partial document")
 
-			root := doc.DocumentElement()
-			require.NotNil(t, root, "root element should exist")
-			require.Equal(t, "root", root.Name())
-		})
+		root := doc.DocumentElement()
+		require.NotNil(t, root, "root element should exist")
+		require.Equal(t, "root", root.Name())
+	})
 
-		t.Run("callbacks suppressed", func(t *testing.T) {
-			t.Parallel()
+	t.Run("callbacks suppressed", func(t *testing.T) {
+		t.Parallel()
 
-			const input = `<?xml version="1.0"?>
+		const input = `<?xml version="1.0"?>
 <root>
   <before/>
   <bad>text</baaaad>
   <after/>
 </root>`
 
-			var elements []string
-			sh := sax.New()
-			sh.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, localname string, _ string, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
-				elements = append(elements, localname)
-				return nil
-			}))
+		var elements []string
+		sh := sax.New()
+		sh.SetOnStartElementNS(sax.StartElementNSFunc(func(_ context.Context, localname string, _ string, _ string, _ []sax.Namespace, _ []sax.Attribute) error {
+			elements = append(elements, localname)
+			return nil
+		}))
 
-			p := helium.NewParser().SAXHandler(sh).RecoverOnError(true)
-			_, err := p.Parse(t.Context(), []byte(input))
-			require.Error(t, err)
+		p := helium.NewParser().SAXHandler(sh).RecoverOnError(true)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err)
 
-			// "root" and "before" should have been delivered before the error.
-			// "bad" starts parsing (StartElementNS fires before content error).
-			// "after" should NOT appear because disableSAX is set after the error.
-			require.Contains(t, elements, "root")
-			require.Contains(t, elements, "before")
-			require.NotContains(t, elements, "after", "elements after error should be suppressed")
-		})
+		// "root" and "before" should have been delivered before the error.
+		// "bad" starts parsing (StartElementNS fires before content error).
+		// "after" should NOT appear because disableSAX is set after the error.
+		require.Contains(t, elements, "root")
+		require.Contains(t, elements, "before")
+		require.NotContains(t, elements, "after", "elements after error should be suppressed")
+	})
 
-		t.Run("no effect without recover", func(t *testing.T) {
-			t.Parallel()
+	t.Run("no effect without recover", func(t *testing.T) {
+		t.Parallel()
 
-			const input = `<?xml version="1.0"?>
+		const input = `<?xml version="1.0"?>
 <root>
   <bad>text</baaaad>
   <after/>
 </root>`
 
-			p := helium.NewParser()
-			doc, err := p.Parse(t.Context(), []byte(input))
-			require.Error(t, err, "malformed XML should fail")
-			require.Nil(t, doc, "without RecoverOnError, no document should be returned")
-		})
+		p := helium.NewParser()
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "malformed XML should fail")
+		require.Nil(t, doc, "without RecoverOnError, no document should be returned")
 	})
 }

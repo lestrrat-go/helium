@@ -161,23 +161,21 @@ func TestDocument(t *testing.T) {
 			requireNoCycle(t, doc)
 		})
 
-		t.Run("non-element node is rejected and leaves doc untouched", func(t *testing.T) {
-			for _, tc := range []struct {
-				name string
-				node helium.MutableNode
-			}{
-				{"text node", helium.NewDefaultDocument().CreateText([]byte("x"))},
-				{"comment node", helium.NewDefaultDocument().CreateComment([]byte("c"))},
-			} {
-				t.Run(tc.name, func(t *testing.T) {
-					doc := helium.NewDefaultDocument()
-					err := doc.SetDocumentElement(tc.node)
-					require.ErrorIs(t, err, helium.ErrInvalidOperation)
-					require.Nil(t, doc.FirstChild(), "rejected non-element must not be linked as a child")
-					require.Nil(t, doc.DocumentElement(), "doc has no document element")
-				})
-			}
-		})
+		for _, tc := range []struct {
+			name string
+			node helium.MutableNode
+		}{
+			{"text node", helium.NewDefaultDocument().CreateText([]byte("x"))},
+			{"comment node", helium.NewDefaultDocument().CreateComment([]byte("c"))},
+		} {
+			t.Run("a "+tc.name+" is rejected and leaves doc untouched", func(t *testing.T) {
+				doc := helium.NewDefaultDocument()
+				err := doc.SetDocumentElement(tc.node)
+				require.ErrorIs(t, err, helium.ErrInvalidOperation)
+				require.Nil(t, doc.FirstChild(), "rejected non-element must not be linked as a child")
+				require.Nil(t, doc.DocumentElement(), "doc has no document element")
+			})
+		}
 
 		t.Run("element-kind marker that is not a concrete *Element is rejected", func(t *testing.T) {
 			doc := helium.NewDefaultDocument()
@@ -279,10 +277,6 @@ func TestDocument(t *testing.T) {
 		}
 		require.True(t, found, "document gained a text child")
 	})
-}
-
-func TestDocumentCreateNode(t *testing.T) {
-	t.Parallel()
 
 	t.Run("PI owner document", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)

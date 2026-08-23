@@ -216,172 +216,171 @@ func TestXMLDecl(t *testing.T) {
 		})
 	})
 
-	// three DTD/XML declarations that are
-	// missing a component the grammar makes mandatory. Each production has a
-	// malformed form that must now be a fatal well-formedness error AND a
-	// well-formed near-miss (including a present-but-empty literal) that must still
-	// parse, guarding against over-rejection.
-	t.Run("missing mandatory part", func(t *testing.T) {
-		// NotationDecl [82]: '<!NOTATION' S Name S (ExternalID | PublicID) S? '>'.
-		// The ExternalID/PublicID is mandatory (W3C ibm-not-wf-P82-ibm82n03).
-		t.Run("notation", func(t *testing.T) {
+	// The three groups below cover DTD/XML declarations that are missing a
+	// component the grammar makes mandatory. Each production has a malformed form
+	// that must be a fatal well-formedness error AND a well-formed near-miss
+	// (including a present-but-empty literal) that must still parse, guarding
+	// against over-rejection.
+
+	// NotationDecl [82]: '<!NOTATION' S Name S (ExternalID | PublicID) S? '>'.
+	// The ExternalID/PublicID is mandatory (W3C ibm-not-wf-P82-ibm82n03).
+	t.Run("missing mandatory part of a notation declaration", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("missing ExternalID/PublicID rejected", func(t *testing.T) {
 			t.Parallel()
-
-			t.Run("missing ExternalID/PublicID rejected", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n >]><root/>`))
-				require.ErrorIs(t, err, helium.ErrNotationExternalIDRequired)
-			})
-
-			t.Run("SYSTEM form parses", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n SYSTEM "n.dtd">]><root/>`))
-				require.NoError(t, err)
-			})
-
-			t.Run("PUBLIC-only form parses", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n PUBLIC "pub-id">]><root/>`))
-				require.NoError(t, err)
-			})
-
-			t.Run("SYSTEM empty literal parses", func(t *testing.T) {
-				t.Parallel()
-				// A present-but-empty SystemLiteral is well formed; found=true so it
-				// is not mistaken for a missing ExternalID.
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n SYSTEM "">]><root/>`))
-				require.NoError(t, err)
-			})
-
-			t.Run("colon in name rejected", func(t *testing.T) {
-				t.Parallel()
-				// A NotationDecl Name is a non-namespaced Name; a colon is forbidden
-				// under namespace processing (W3C not-wf rmt-ns10-044).
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION a:b SYSTEM "n.dtd">]><root/>`))
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "colons are forbidden from notation names")
-			})
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n >]><root/>`))
+			require.ErrorIs(t, err, helium.ErrNotationExternalIDRequired)
 		})
 
-		// EntityDecl [73] EntityDef / [74] PEDef: EntityValue | ExternalID(...).
-		// A declaration with neither is fatal (W3C o-p73fail4).
-		t.Run("entity", func(t *testing.T) {
+		t.Run("SYSTEM form parses", func(t *testing.T) {
 			t.Parallel()
-
-			t.Run("general missing value/ExternalID rejected", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge >]><root/>`))
-				require.ErrorIs(t, err, helium.ErrValueRequired)
-			})
-
-			t.Run("parameter missing value/ExternalID rejected", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % pe >]><root/>`))
-				require.ErrorIs(t, err, helium.ErrValueRequired)
-			})
-
-			t.Run("general EntityValue parses", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge "value">]><root/>`))
-				require.NoError(t, err)
-			})
-
-			t.Run("general ExternalID parses", func(t *testing.T) {
-				t.Parallel()
-				// Declared but not referenced, so the external resource is never
-				// loaded; the declaration alone must be accepted.
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge SYSTEM "ge.ent">]><root/>`))
-				require.NoError(t, err)
-			})
-
-			t.Run("general SYSTEM empty literal parses", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge SYSTEM "">]><root/>`))
-				require.NoError(t, err)
-			})
-
-			t.Run("parameter SYSTEM empty literal registers", func(t *testing.T) {
-				t.Parallel()
-				// A present-but-empty SystemLiteral is a valid ExternalID, so the PE
-				// must be registered even though its literal is empty.
-				doc, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % pe SYSTEM "">]><root/>`))
-				require.NoError(t, err)
-				_, ok := doc.GetParameterEntity("pe")
-				require.True(t, ok, "external PE with empty SystemLiteral must register")
-			})
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n SYSTEM "n.dtd">]><root/>`))
+			require.NoError(t, err)
 		})
 
-		// EncodingDecl [80]: S 'encoding' Eq ('"' EncName '"' | "'" EncName "'").
-		// A present "encoding" keyword with no EncName is fatal (W3C
-		// ibm-not-wf-P80-ibm80n03); an absent keyword is benign.
-		t.Run("encoding", func(t *testing.T) {
+		t.Run("PUBLIC-only form parses", func(t *testing.T) {
 			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n PUBLIC "pub-id">]><root/>`))
+			require.NoError(t, err)
+		})
 
-			t.Run("missing EncName (no quote) rejected", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0" encoding= ?><root/>`))
-				require.Error(t, err)
-			})
+		t.Run("SYSTEM empty literal parses", func(t *testing.T) {
+			t.Parallel()
+			// A present-but-empty SystemLiteral is well formed; found=true so it
+			// is not mistaken for a missing ExternalID.
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION n SYSTEM "">]><root/>`))
+			require.NoError(t, err)
+		})
 
-			t.Run("empty EncName rejected", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0" encoding=""?><root/>`))
-				require.Error(t, err)
-			})
+		t.Run("colon in name rejected", func(t *testing.T) {
+			t.Parallel()
+			// A NotationDecl Name is a non-namespaced Name; a colon is forbidden
+			// under namespace processing (W3C not-wf rmt-ns10-044).
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!NOTATION a:b SYSTEM "n.dtd">]><root/>`))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "colons are forbidden from notation names")
+		})
+	})
 
-			t.Run("valid EncName parses", func(t *testing.T) {
-				t.Parallel()
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0" encoding="UTF-8"?><root/>`))
-				require.NoError(t, err)
-			})
+	// EntityDecl [73] EntityDef / [74] PEDef: EntityValue | ExternalID(...).
+	// A declaration with neither is fatal (W3C o-p73fail4).
+	t.Run("missing mandatory part of an entity declaration", func(t *testing.T) {
+		t.Parallel()
 
-			t.Run("absent encoding with standalone parses", func(t *testing.T) {
-				t.Parallel()
-				// No encoding keyword at all: the benign AttrNotFoundError must fall
-				// through to the optional StandaloneDecl, not become fatal.
-				_, err := helium.NewParser().Parse(t.Context(),
-					[]byte(`<?xml version="1.0" standalone="yes"?><root/>`))
-				require.NoError(t, err)
-			})
+		t.Run("general missing value/ExternalID rejected", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge >]><root/>`))
+			require.ErrorIs(t, err, helium.ErrValueRequired)
+		})
 
-			// The UTF-16 XMLDecl is parsed on the rune cursor
-			// (parseEncodingDeclFromCursor), which must enforce EncName [81] just like
-			// the byte path.
-			t.Run("UTF-16 empty EncName rejected", func(t *testing.T) {
-				t.Parallel()
-				doc := utf16Bytes(`<?xml version="1.0" encoding=""?><root/>`, true)
-				_, err := helium.NewParser().Parse(t.Context(), doc)
-				require.Error(t, err)
-			})
+		t.Run("parameter missing value/ExternalID rejected", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % pe >]><root/>`))
+			require.ErrorIs(t, err, helium.ErrValueRequired)
+		})
 
-			t.Run("UTF-16 invalid EncName rejected", func(t *testing.T) {
-				t.Parallel()
-				// "1bad" violates EncName [81] (must start with a letter).
-				doc := utf16Bytes(`<?xml version="1.0" encoding="1bad"?><root/>`, true)
-				_, err := helium.NewParser().Parse(t.Context(), doc)
-				require.Error(t, err)
-			})
+		t.Run("general EntityValue parses", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge "value">]><root/>`))
+			require.NoError(t, err)
+		})
 
-			t.Run("UTF-16 valid EncName parses", func(t *testing.T) {
-				t.Parallel()
-				doc := utf16Bytes(`<?xml version="1.0" encoding="UTF-16"?><root/>`, true)
-				_, err := helium.NewParser().Parse(t.Context(), doc)
-				require.NoError(t, err)
-			})
+		t.Run("general ExternalID parses", func(t *testing.T) {
+			t.Parallel()
+			// Declared but not referenced, so the external resource is never
+			// loaded; the declaration alone must be accepted.
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge SYSTEM "ge.ent">]><root/>`))
+			require.NoError(t, err)
+		})
+
+		t.Run("general SYSTEM empty literal parses", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY ge SYSTEM "">]><root/>`))
+			require.NoError(t, err)
+		})
+
+		t.Run("parameter SYSTEM empty literal registers", func(t *testing.T) {
+			t.Parallel()
+			// A present-but-empty SystemLiteral is a valid ExternalID, so the PE
+			// must be registered even though its literal is empty.
+			doc, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0"?><!DOCTYPE root [<!ENTITY % pe SYSTEM "">]><root/>`))
+			require.NoError(t, err)
+			_, ok := doc.GetParameterEntity("pe")
+			require.True(t, ok, "external PE with empty SystemLiteral must register")
+		})
+	})
+
+	// EncodingDecl [80]: S 'encoding' Eq ('"' EncName '"' | "'" EncName "'").
+	// A present "encoding" keyword with no EncName is fatal (W3C
+	// ibm-not-wf-P80-ibm80n03); an absent keyword is benign.
+	t.Run("missing mandatory part of an encoding declaration", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("missing EncName (no quote) rejected", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0" encoding= ?><root/>`))
+			require.Error(t, err)
+		})
+
+		t.Run("empty EncName rejected", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0" encoding=""?><root/>`))
+			require.Error(t, err)
+		})
+
+		t.Run("valid EncName parses", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0" encoding="UTF-8"?><root/>`))
+			require.NoError(t, err)
+		})
+
+		t.Run("absent encoding with standalone parses", func(t *testing.T) {
+			t.Parallel()
+			// No encoding keyword at all: the benign AttrNotFoundError must fall
+			// through to the optional StandaloneDecl, not become fatal.
+			_, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<?xml version="1.0" standalone="yes"?><root/>`))
+			require.NoError(t, err)
+		})
+
+		// The UTF-16 XMLDecl is parsed on the rune cursor
+		// (parseEncodingDeclFromCursor), which must enforce EncName [81] just like
+		// the byte path.
+		t.Run("UTF-16 empty EncName rejected", func(t *testing.T) {
+			t.Parallel()
+			doc := utf16Bytes(`<?xml version="1.0" encoding=""?><root/>`, true)
+			_, err := helium.NewParser().Parse(t.Context(), doc)
+			require.Error(t, err)
+		})
+
+		t.Run("UTF-16 invalid EncName rejected", func(t *testing.T) {
+			t.Parallel()
+			// "1bad" violates EncName [81] (must start with a letter).
+			doc := utf16Bytes(`<?xml version="1.0" encoding="1bad"?><root/>`, true)
+			_, err := helium.NewParser().Parse(t.Context(), doc)
+			require.Error(t, err)
+		})
+
+		t.Run("UTF-16 valid EncName parses", func(t *testing.T) {
+			t.Parallel()
+			doc := utf16Bytes(`<?xml version="1.0" encoding="UTF-16"?><root/>`, true)
+			_, err := helium.NewParser().Parse(t.Context(), doc)
+			require.NoError(t, err)
 		})
 	})
 }
@@ -532,12 +531,12 @@ func TestEncodingDetection(t *testing.T) {
 	// matching declaration, a BOM alias, and — crucially — a BOM-less document
 	// declaring a single-byte encoding) must still parse, guarding against
 	// over-rejection.
-	t.Run("BOM conflicts with the declared encoding", func(t *testing.T) {
+	{
 		bomUTF8 := []byte{0xEF, 0xBB, 0xBF}
 		bomUTF16BE := []byte{0xFE, 0xFF}
 		bomUTF16LE := []byte{0xFF, 0xFE}
 
-		t.Run("rejected", func(t *testing.T) {
+		t.Run("BOM conflict rejected", func(t *testing.T) {
 			t.Parallel()
 
 			t.Run("utf-8 BOM with iso-8859-1 declaration", func(t *testing.T) {
@@ -583,7 +582,7 @@ func TestEncodingDetection(t *testing.T) {
 			})
 		})
 
-		t.Run("accepted", func(t *testing.T) {
+		t.Run("BOM conflict accepted", func(t *testing.T) {
 			t.Parallel()
 
 			t.Run("utf-8 BOM with matching declaration", func(t *testing.T) {
@@ -688,7 +687,7 @@ func TestEncodingDetection(t *testing.T) {
 		// IgnoreEncoding(true) suppresses the decoder switch but must NOT suppress
 		// the BOM/encoding-mismatch well-formedness check — the declared encoding is
 		// still recorded for the check even though ctx.encoding is erased.
-		t.Run("ignore-encoding", func(t *testing.T) {
+		t.Run("BOM conflict with ignore-encoding", func(t *testing.T) {
 			t.Parallel()
 
 			t.Run("utf-8 BOM with iso-8859-1 declaration still fatal", func(t *testing.T) {
@@ -719,7 +718,7 @@ func TestEncodingDetection(t *testing.T) {
 		// BOM/encoding-mismatch check. The declared EncName is recorded at the leaf
 		// EncName parser, so it is authoritative on the lenient path too. The check
 		// must also hold when LenientXMLDecl and IgnoreEncoding are combined.
-		t.Run("lenient-decl", func(t *testing.T) {
+		t.Run("BOM conflict with a lenient declaration", func(t *testing.T) {
 			t.Parallel()
 
 			t.Run("utf-8 BOM with iso-8859-1 declaration still fatal", func(t *testing.T) {
@@ -781,7 +780,7 @@ func TestEncodingDetection(t *testing.T) {
 				require.NoError(t, err)
 			})
 		})
-	})
+	}
 
 	// is a regression for E-UCS4-CONSUMES-LT: the
 	// encoding auto-detector used to CONSUME the four leading bytes during UCS-4

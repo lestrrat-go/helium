@@ -257,45 +257,43 @@ func TestXML11Characters(t *testing.T) {
 func TestXML11PrefixUndeclaration(t *testing.T) {
 	t.Parallel()
 
-	t.Run("prefix undeclaration", func(t *testing.T) {
-		// Namespaces in XML 1.1 §5: a prefixed namespace declaration with an empty
-		// value (xmlns:pfx="") undeclares the prefix. This is well-formed only in an
-		// XML 1.1 document; XML 1.0 forbids it.
-		const undecl = `<doc xmlns:a="http://a/"><para xmlns:a=""/></doc>`
+	// Namespaces in XML 1.1 §5: a prefixed namespace declaration with an empty
+	// value (xmlns:pfx="") undeclares the prefix. This is well-formed only in an
+	// XML 1.1 document; XML 1.0 forbids it.
+	const undecl = `<doc xmlns:a="http://a/"><para xmlns:a=""/></doc>`
 
-		// XML 1.0: rejected.
-		_, err := helium.NewParser().Parse(t.Context(),
-			[]byte(`<?xml version="1.0"?>`+undecl))
-		require.Error(t, err, "XML 1.0 must reject a prefixed namespace undeclaration")
+	// XML 1.0: rejected.
+	_, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<?xml version="1.0"?>`+undecl))
+	require.Error(t, err, "XML 1.0 must reject a prefixed namespace undeclaration")
 
-		// No XML declaration defaults to XML 1.0: rejected.
-		_, err = helium.NewParser().Parse(t.Context(), []byte(undecl))
-		require.Error(t, err, "an implicit XML 1.0 document must reject xmlns:pfx=\"\"")
+	// No XML declaration defaults to XML 1.0: rejected.
+	_, err = helium.NewParser().Parse(t.Context(), []byte(undecl))
+	require.Error(t, err, "an implicit XML 1.0 document must reject xmlns:pfx=\"\"")
 
-		// XML 1.1: accepted, and the prefix binding is removed on the inner element.
-		doc, err := helium.NewParser().Parse(t.Context(),
-			[]byte(`<?xml version="1.1"?>`+undecl))
-		require.NoError(t, err, "XML 1.1 must accept a prefixed namespace undeclaration")
+	// XML 1.1: accepted, and the prefix binding is removed on the inner element.
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<?xml version="1.1"?>`+undecl))
+	require.NoError(t, err, "XML 1.1 must accept a prefixed namespace undeclaration")
 
-		para := doc.DocumentElement().FirstChild().(*helium.Element)
-		require.Equal(t, "para", para.Name())
-		var hasUndecl bool
-		for _, ns := range para.Namespaces() {
-			if ns.Prefix() == "a" {
-				require.Equal(t, "", ns.URI(),
-					"the prefix a must be undeclared (empty URI) on the inner element")
-				hasUndecl = true
-			}
+	para := doc.DocumentElement().FirstChild().(*helium.Element)
+	require.Equal(t, "para", para.Name())
+	var hasUndecl bool
+	for _, ns := range para.Namespaces() {
+		if ns.Prefix() == "a" {
+			require.Equal(t, "", ns.URI(),
+				"the prefix a must be undeclared (empty URI) on the inner element")
+			hasUndecl = true
 		}
-		require.True(t, hasUndecl, "the undeclaration must be recorded on the inner element")
+	}
+	require.True(t, hasUndecl, "the undeclaration must be recorded on the inner element")
 
-		// The reserved xml/xmlns prefixes may never be undeclared, even in XML 1.1.
-		for _, input := range []string{
-			`<?xml version="1.1"?><doc xmlns:xml=""/>`,
-			`<?xml version="1.1"?><doc xmlns:xmlns=""/>`,
-		} {
-			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-			require.Error(t, err, "must reject undeclaring a reserved prefix in %q", input)
-		}
-	})
+	// The reserved xml/xmlns prefixes may never be undeclared, even in XML 1.1.
+	for _, input := range []string{
+		`<?xml version="1.1"?><doc xmlns:xml=""/>`,
+		`<?xml version="1.1"?><doc xmlns:xmlns=""/>`,
+	} {
+		_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+		require.Error(t, err, "must reject undeclaring a reserved prefix in %q", input)
+	}
 }

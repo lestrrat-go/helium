@@ -128,7 +128,7 @@ func TestXMLCharValidation(t *testing.T) {
 			{"U+FFFF", 0xFFFF},
 		}
 		for _, tt := range invalid {
-			t.Run("invalid/"+tt.name, func(t *testing.T) {
+			t.Run("invalid "+tt.name, func(t *testing.T) {
 				t.Parallel()
 				input := "<r>" + string(tt.r) + "</r>"
 				p := helium.NewParser()
@@ -148,7 +148,7 @@ func TestXMLCharValidation(t *testing.T) {
 			{"U+1FFFE", 0x1FFFE},   // non-character per Unicode, but valid XML Char
 		}
 		for _, tt := range valid {
-			t.Run("valid/"+tt.name, func(t *testing.T) {
+			t.Run("valid "+tt.name, func(t *testing.T) {
 				t.Parallel()
 				input := "<r>" + string(tt.r) + "</r>"
 				p := helium.NewParser()
@@ -195,19 +195,16 @@ func TestParseAttrValue(t *testing.T) {
 			{"tab-after", "", "\tx"},
 		}
 
-		t.Run("valid-U+FFFD", func(t *testing.T) {
-			t.Parallel()
-			for _, tr := range triggers {
-				t.Run(tr.name, func(t *testing.T) {
-					t.Parallel()
-					input := `<r a="` + tr.before + string(rune(0xFFFD)) + tr.after + `"/>`
-					_, err := helium.NewParser().Parse(t.Context(), []byte(input))
-					require.NoError(t, err, "real U+FFFD on slow path must parse (%s)", tr.name)
-				})
-			}
-		})
+		for _, tr := range triggers {
+			t.Run("valid U+FFFD "+tr.name, func(t *testing.T) {
+				t.Parallel()
+				input := `<r a="` + tr.before + string(rune(0xFFFD)) + tr.after + `"/>`
+				_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+				require.NoError(t, err, "real U+FFFD on slow path must parse (%s)", tr.name)
+			})
+		}
 
-		t.Run("invalid", func(t *testing.T) {
+		t.Run("invalid characters", func(t *testing.T) {
 			t.Parallel()
 			for _, r := range []rune{0xFFFE, 0xFFFF} {
 				input := `<r a="` + string(r) + `&amp;"/>`
