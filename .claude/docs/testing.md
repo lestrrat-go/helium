@@ -50,7 +50,7 @@ testdata/libxml2-compat/
 ### Package Naming
 
 - **`*_test.go`** (external `xxx_test` package) — golden file comparison, SAX events, serialization. Preferred for all new tests.
-- **`*_internal_test.go`** (internal `xxx` package) — tests needing unexported access
+- **`*_internal_test.go`** (internal `xxx` package) — tests needing unexported access. In the root package there is one per production area: `dtd_internal_test.go`, `node_internal_test.go`, `parser_internal_test.go`, `writer_internal_test.go`.
 
 ### Test Shape
 
@@ -70,11 +70,10 @@ subtest levels. A file is split by production area once it approaches ~2000 line
 | `parser_dtd_test.go` | root | External DTD loading: size/read limits, malformed declarations, PE expansion |
 | `parser_dtd_subset_test.go` | root | Conditional sections and external-subset text declarations |
 | `parser_attlist_test.go` | root | `<!ATTLIST>` parsing and attribute-value validation by declared type |
-| `parser_entity_test.go` | root | General entity substitution, predefined entities, references, entity-value validation |
+| `parser_entity_test.go` | root | General entity substitution, predefined entities, references, entity-value validation, undeclared entities, SAX `GetEntity` error paths |
 | `parser_entity_param_test.go` | root | Parameter entities and PE/markup boundary rules |
 | `parser_entity_external_test.go` | root | External general and parameter entities, text declarations, base-URI resolution |
 | `parser_entity_limits_test.go` | root | Entity amplification, depth and size caps |
-| `parser_entity_undeclared_test.go` | root | Undeclared/undefined entity handling |
 | `parser_limits_test.go` | root | Depth, name-length, node-content and char-buffer limits |
 | `parser_security_test.go` | root | FS confinement, safe defaults, network gating, XXE |
 | `parser_whitespace_test.go` | root | Blank stripping, whitespace preservation, over-cap whitespace |
@@ -88,19 +87,18 @@ subtest levels. A file is split by production area once it approaches ~2000 line
 | `writer_namespace_test.go` | root | Namespace emission and subtree reconciliation |
 | `writer_dtd_test.go` | root | DTD serialization (subset/escaping/formatting/self-close, entity and literal emission) |
 | `writer_xhtml_test.go` | root | XHTML serialization output |
-| `writer_encoding_test.go` | root | Output encoding, US-ASCII escaping |
+| `writer_encoding_test.go` | root | Output encoding, US-ASCII escaping, the no-override path |
 | `writer_declaration_test.go` | root | XML declaration emission |
 | `attr_test.go` | root | Attribute creation, lookup, namespaces, list repair |
 | `element_test.go` | root | Element creation, content, AddChild/AddSibling/Replace |
-| `node_test.go` | root | Generic node linkage shape, consistency, defensive copies |
+| `node_test.go` | root | Generic node linkage shape, consistency, defensive copies, cycle and owned-boundary guards |
 | `node_leaf_test.go` | root | Text/Comment/CDATA/PI/Entity/Notation node methods and guards |
-| `node_cycle_test.go` | root | Cycle and owned-boundary guards |
 | `node_namespace_test.go` | root | `DeclareNamespace` collapse and namespace lookup |
 | `tree_test.go` | root | Base URIs, tree mutation, `Walk`, node accessors |
 | `copy_test.go` | root | `CopyNode`/`CopyDoc`/`CopyDTDInfo`/`CopyExtSubset` deep-copy coverage |
 | `dtd_test.go` | root | DTD data-model: internal-subset accessors, element/attr/notation decls, node wrappers |
 | `valid_test.go` | root | Document-level DTD validation and external-subset lookup |
-| `valid_attr_test.go` | root | Attribute-type, entity-attribute and per-instance attribute validity |
+| `valid_attr_test.go` | root | Attribute-type, entity-attribute, required/fixed and per-instance attribute validity |
 | `valid_content_test.go` | root | Content-model and element-content validation |
 | `tree_builder_test.go` | root | SAX-path tree construction (`TreeBuilder`) |
 | `c14n_test.go` | c14n | C14N golden file tests |

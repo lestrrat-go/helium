@@ -1,29 +1,11 @@
 package helium_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/enum"
-	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
 )
-
-// foreignEntity is a sax.Entity implementation that is NOT *helium.Entity.
-// A custom SAX handler returning such a value must produce an error rather
-// than panic from a forced type assertion.
-type foreignEntity struct {
-	name    string
-	content []byte
-}
-
-func (e *foreignEntity) Name() string                { return e.name }
-func (e *foreignEntity) SetOrig(string)              {}
-func (e *foreignEntity) EntityType() enum.EntityType { return enum.InternalGeneralEntity }
-func (e *foreignEntity) Content() []byte             { return e.content }
-func (e *foreignEntity) Checked() bool               { return true }
-func (e *foreignEntity) MarkChecked()                {}
 
 func TestCharRef(t *testing.T) {
 	t.Parallel()
@@ -258,63 +240,5 @@ func TestCreateCharRef(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "<root>"+tc.want+"</root>", str)
 		}
-	})
-}
-
-func TestGetEntityErrors(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a foreign type in an attribute value does not panic", func(t *testing.T) {
-		// Exercise the nested string-decoding path (parseStringEntityRef ->
-		// entityCheck), in place of the direct attribute parseEntityRef path.
-		//
-		// `foo` is declared in the internal subset as "&bar;" and resolves to a
-		// real *helium.Entity (the handler returns nil for it). Decoding "&foo;"
-		// recurses into its content, calling parseStringEntityRef("&bar;"), which
-		// returns a FOREIGN (non-*helium.Entity) sax.Entity for `bar`. That foreign
-		// value then reaches entityCheck, which must handle it gracefully via its
-		// comma-ok assertion, triggering no forced-cast panic.
-		h := sax.New()
-		h.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
-			if name == "bar" {
-				return &foreignEntity{name: name, content: []byte("hello")}, nil
-			}
-			return nil, nil //nolint:nilnil
-		}))
-
-		const input = `<!DOCTYPE root [<!ENTITY foo "&bar;">]><root attr="&foo;"/>`
-
-		require.NotPanics(t, func() {
-			_, _ = helium.NewParser().SAXHandler(h).Parse(t.Context(), []byte(input))
-		})
-	})
-
-	t.Run("a foreign type returns an error, not a panic", func(t *testing.T) {
-		h := sax.New()
-		h.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
-			return &foreignEntity{name: name, content: []byte("hello")}, nil
-		}))
-
-		const input = `<!DOCTYPE root [<!ENTITY foo "ignored">]><root>&foo;</root>`
-
-		require.NotPanics(t, func() {
-			_, err := helium.NewParser().SAXHandler(h).Parse(t.Context(), []byte(input))
-			require.Error(t, err, "foreign sax.Entity type should yield an error")
-		})
-	})
-
-	t.Run("a nil handler error does not panic", func(t *testing.T) {
-		// A handler returning (nil, err) (e.g. "entity not found") must not panic.
-		// Per libxml2 semantics this falls through to undeclared-entity handling.
-		h := sax.New()
-		h.SetOnGetEntity(sax.GetEntityFunc(func(_ context.Context, name string) (sax.Entity, error) {
-			return nil, context.Canceled
-		}))
-
-		const input = `<!DOCTYPE root [<!ENTITY foo "ignored">]><root>&foo;</root>`
-
-		require.NotPanics(t, func() {
-			_, _ = helium.NewParser().SAXHandler(h).Parse(t.Context(), []byte(input))
-		})
 	})
 }

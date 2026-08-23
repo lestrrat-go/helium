@@ -140,6 +140,100 @@ func TestOutputEncoding(t *testing.T) {
 		require.Equal(t, plain.String(), ascii.String())
 		require.Contains(t, plain.String(), "世")
 	})
+
+	// On the no-override path default escaping emits a hex character reference
+	// under the document's own declaration, and an unloadable parsed encoding is
+	// NOT turned into a hard error.
+	t.Run("no override leaves the output unchanged", func(t *testing.T) {
+		src := []byte(`<?xml version="1.0" encoding="UTF-8"?><root>é</root>`)
+		doc, err := helium.NewParser().Parse(t.Context(), src)
+		require.NoError(t, err)
+
+		var buf bytes.Buffer
+		err = helium.NewWriter().WriteTo(&buf, doc)
+		require.NoError(t, err)
+
+		out := buf.String()
+		require.Contains(t, out, `encoding="UTF-8"`)
+		require.Contains(t, out, "&#xE9;")
+		require.NotContains(t, out, "\xc3\xa9")
+
+		// An unloadable encoding recorded on the document must still serialize
+		// (declaration-only) when there is no OutputEncoding override.
+		built := helium.NewDefaultDocument()
+		root, err := built.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, built.SetDocumentElement(root))
+		built.SetEncoding("x-unknown-enc")
+
+		var buf2 bytes.Buffer
+		err = helium.NewWriter().WriteTo(&buf2, built)
+		require.NoError(t, err)
+		require.Contains(t, buf2.String(), `encoding="x-unknown-enc"`)
+	})
+
+	// asserts the NO-OVERRIDE path
+	// stays byte-identical to origin for US-ASCII aliases recorded on the document:
+	// csASCII / ANSI_X3.4-1968 emit raw UTF-8 (via the historical passthrough), while
+	// us-ascii / ascii / iso-ir-6 character-reference. This is the binding non-goal —
+	// no OutputEncoding override, so nothing may divert these bytes.
+	t.Run("no override leaves ASCII alias bytes unchanged", func(t *testing.T) {
+		// raw: the doc encoding names whose no-override output keeps the non-ASCII
+		// character as raw UTF-8 octets. charref: those that emit a hex reference.
+		raw := []string{"csASCII", "ANSI_X3.4-1968"}
+		charref := []string{"us-ascii", "ascii", "iso-ir-6"}
+
+		build := func(t *testing.T, enc string) string {
+			t.Helper()
+			doc := helium.NewDefaultDocument()
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.SetDocumentElement(root))
+			require.NoError(t, root.AddChild(doc.CreateText([]byte("é"))))
+			doc.SetEncoding(enc)
+			var buf bytes.Buffer
+			require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+			return buf.String()
+		}
+
+		for _, enc := range raw {
+			out := build(t, enc)
+			require.Contains(t, out, "\xc3\xa9", "no-override %q must emit raw UTF-8", enc)
+			require.NotContains(t, out, "&#xE9;", "no-override %q must not char-reference", enc)
+		}
+		for _, enc := range charref {
+			out := build(t, enc)
+			require.Contains(t, out, "&#xE9;", "no-override %q must char-reference", enc)
+			require.NotContains(t, out, "\xc3\xa9", "no-override %q must not emit raw UTF-8", enc)
+		}
+	})
+
+	// asserts that fn:serialize's
+	// declaration-only US-ASCII mode (asciiOutput set, but the octets stay a UTF-8
+	// string) keeps a non-ASCII character-map replacement RAW, and never rejects
+	// it: the ASCII-reject net and the character-map reject both key on
+	// asciiOutput && !declOnlyEncoding, so declaration-only output is unchanged. Text
+	// outside the character map is still char-referenced.
+	t.Run("declaration-only US-ASCII keeps the raw character map", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root>@é</root>"))
+		require.NoError(t, err)
+
+		w := helium.NewWriter().
+			CharacterMap(map[rune]string{'@': "€"}). // '@' -> EURO SIGN
+			OutputEncoding("US-ASCII")
+		declOnly, ok := writerctl.EnableDeclarationOnlyEncoding(w).(helium.Writer)
+		require.True(t, ok)
+
+		var buf bytes.Buffer
+		require.NoError(t, declOnly.WriteTo(&buf, doc))
+
+		out := buf.String()
+		require.Contains(t, out, `encoding="US-ASCII"`)
+		// The character-map replacement stays raw (declaration-only keeps octets UTF-8).
+		require.Contains(t, out, "€")
+		// A non-mapped non-ASCII text character is still char-referenced.
+		require.Contains(t, out, "&#xE9;")
+	})
 }
 
 func TestOutputEncodingUSASCII(t *testing.T) {
@@ -373,104 +467,5 @@ func TestOutputEncodingUSASCII(t *testing.T) {
 				requireASCIIRejected(t, &buf, err)
 			})
 		}
-	})
-}
-
-func TestSerializeWithoutEncodingOverride(t *testing.T) {
-	t.Parallel()
-
-	// asserts the no-override path is
-	// byte-identical to prior behavior: default escaping still emits a hex
-	// character reference under the document's own declaration, and an unloadable
-	// parsed encoding is NOT turned into a hard error when no override is set.
-	t.Run("output unchanged", func(t *testing.T) {
-		src := []byte(`<?xml version="1.0" encoding="UTF-8"?><root>é</root>`)
-		doc, err := helium.NewParser().Parse(t.Context(), src)
-		require.NoError(t, err)
-
-		var buf bytes.Buffer
-		err = helium.NewWriter().WriteTo(&buf, doc)
-		require.NoError(t, err)
-
-		out := buf.String()
-		require.Contains(t, out, `encoding="UTF-8"`)
-		require.Contains(t, out, "&#xE9;")
-		require.NotContains(t, out, "\xc3\xa9")
-
-		// An unloadable encoding recorded on the document must still serialize
-		// (declaration-only) when there is no OutputEncoding override.
-		built := helium.NewDefaultDocument()
-		root, err := built.CreateElement("root")
-		require.NoError(t, err)
-		require.NoError(t, built.SetDocumentElement(root))
-		built.SetEncoding("x-unknown-enc")
-
-		var buf2 bytes.Buffer
-		err = helium.NewWriter().WriteTo(&buf2, built)
-		require.NoError(t, err)
-		require.Contains(t, buf2.String(), `encoding="x-unknown-enc"`)
-	})
-
-	// asserts the NO-OVERRIDE path
-	// stays byte-identical to origin for US-ASCII aliases recorded on the document:
-	// csASCII / ANSI_X3.4-1968 emit raw UTF-8 (via the historical passthrough), while
-	// us-ascii / ascii / iso-ir-6 character-reference. This is the binding non-goal —
-	// no OutputEncoding override, so nothing may divert these bytes.
-	t.Run("ASCII alias bytes unchanged", func(t *testing.T) {
-		// raw: the doc encoding names whose no-override output keeps the non-ASCII
-		// character as raw UTF-8 octets. charref: those that emit a hex reference.
-		raw := []string{"csASCII", "ANSI_X3.4-1968"}
-		charref := []string{"us-ascii", "ascii", "iso-ir-6"}
-
-		build := func(t *testing.T, enc string) string {
-			t.Helper()
-			doc := helium.NewDefaultDocument()
-			root, err := doc.CreateElement("root")
-			require.NoError(t, err)
-			require.NoError(t, doc.SetDocumentElement(root))
-			require.NoError(t, root.AddChild(doc.CreateText([]byte("é"))))
-			doc.SetEncoding(enc)
-			var buf bytes.Buffer
-			require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
-			return buf.String()
-		}
-
-		for _, enc := range raw {
-			out := build(t, enc)
-			require.Contains(t, out, "\xc3\xa9", "no-override %q must emit raw UTF-8", enc)
-			require.NotContains(t, out, "&#xE9;", "no-override %q must not char-reference", enc)
-		}
-		for _, enc := range charref {
-			out := build(t, enc)
-			require.Contains(t, out, "&#xE9;", "no-override %q must char-reference", enc)
-			require.NotContains(t, out, "\xc3\xa9", "no-override %q must not emit raw UTF-8", enc)
-		}
-	})
-
-	// asserts that fn:serialize's
-	// declaration-only US-ASCII mode (asciiOutput set, but the octets stay a UTF-8
-	// string) keeps a non-ASCII character-map replacement RAW, and never rejects
-	// it: the ASCII-reject net and the character-map reject both key on
-	// asciiOutput && !declOnlyEncoding, so declaration-only output is unchanged. Text
-	// outside the character map is still char-referenced.
-	t.Run("declaration-only US-ASCII keeps the raw character map", func(t *testing.T) {
-		doc, err := helium.NewParser().Parse(t.Context(), []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root>@é</root>"))
-		require.NoError(t, err)
-
-		w := helium.NewWriter().
-			CharacterMap(map[rune]string{'@': "€"}). // '@' -> EURO SIGN
-			OutputEncoding("US-ASCII")
-		declOnly, ok := writerctl.EnableDeclarationOnlyEncoding(w).(helium.Writer)
-		require.True(t, ok)
-
-		var buf bytes.Buffer
-		require.NoError(t, declOnly.WriteTo(&buf, doc))
-
-		out := buf.String()
-		require.Contains(t, out, `encoding="US-ASCII"`)
-		// The character-map replacement stays raw (declaration-only keeps octets UTF-8).
-		require.Contains(t, out, "€")
-		// A non-mapped non-ASCII text character is still char-referenced.
-		require.Contains(t, out, "&#xE9;")
 	})
 }
