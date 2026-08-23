@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"io/fs"
@@ -943,5 +944,88 @@ func TestExternalEntityBaseURI(t *testing.T) {
 			"relative SYSTEM id must resolve against the windows-drive file: base")
 		_, found := doc.GetEntity("greet")
 		require.True(t, found, "entity from external DTD must be declared, proving the file: DTD URI was resolved")
+	})
+}
+
+func TestParseExternalEntity(t *testing.T) {
+	t.Parallel()
+
+	t.Run("external entities", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY ext SYSTEM "ext.xml">
+]>
+<doc>&ext;</doc>`
+
+		// The external entity is declared in the internal subset and its content is
+		// served through the configured FS, exercising the default resolution path.
+		fsys := fstest.MapFS{
+			"ext.xml": &fstest.MapFile{Data: []byte("<inner>hello</inner>")},
+		}
+
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(fsys)
+		doc, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "Parse with external entity should succeed")
+		require.NotNil(t, doc, "external entity parse should produce a document")
+
+		var buf bytes.Buffer
+		require.NoError(t, helium.NewWriter().WriteTo(&buf, doc))
+		out := buf.String()
+		require.Contains(t, out, "<inner", "external entity element should be expanded into the document")
+		require.Contains(t, out, ">hello</inner>", "external entity content should be expanded into the document")
+	})
+
+	t.Run("a malformed encoding", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY ext SYSTEM "ext.xml">
+]>
+<doc>&ext;</doc>`
+
+		// External entity bytes: UTF-16BE BOM, then "<a>" and an unpaired high
+		// surrogate (0xD800) before "</a>". The decoder would silently substitute
+		// U+FFFD for the surrogate; the parser must instead treat it as fatal,
+		// matching the document-level decode-error gate.
+		utf16be := func(s string) []byte {
+			b := make([]byte, 0, len(s)*2)
+			for _, r := range s {
+				b = append(b, byte(r>>8), byte(r))
+			}
+			return b
+		}
+		ent := []byte{0xFE, 0xFF} // BOM
+		ent = append(ent, utf16be("<a>")...)
+		ent = append(ent, 0xD8, 0x00) // unpaired high surrogate
+		ent = append(ent, utf16be("</a>")...)
+
+		fsys := fstest.MapFS{"ext.xml": &fstest.MapFile{Data: ent}}
+
+		p := helium.NewParser().BlockXXE(false).SubstituteEntities(true).FS(fsys)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.Error(t, err, "malformed UTF-16 external entity must fail and insert no U+FFFD")
+	})
+
+	t.Run("a valid encoding", func(t *testing.T) {
+		const input = `<?xml version="1.0"?>
+<!DOCTYPE doc [
+  <!ENTITY ext SYSTEM "ext.xml">
+]>
+<doc>&ext;</doc>`
+
+		// A well-formed UTF-16BE external entity (BOM + "<a/>") must still load.
+		utf16be := func(s string) []byte {
+			b := make([]byte, 0, len(s)*2)
+			for _, r := range s {
+				b = append(b, byte(r>>8), byte(r))
+			}
+			return b
+		}
+		ent := append([]byte{0xFE, 0xFF}, utf16be("<a/>")...)
+
+		fsys := fstest.MapFS{"ext.xml": &fstest.MapFile{Data: ent}}
+
+		p := helium.NewParser().SubstituteEntities(true).FS(fsys)
+		_, err := p.Parse(t.Context(), []byte(input))
+		require.NoError(t, err, "well-formed UTF-16 external entity must load")
 	})
 }

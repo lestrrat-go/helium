@@ -157,7 +157,7 @@ func TestWriterRejectsInvalidChars(t *testing.T) {
 			{name: "xml11-restricted", version: ver11, value: "a\x7fb", ref: "&#127;"},
 		} {
 			for name, mk := range build {
-				t.Run(tc.name+"/"+name, func(t *testing.T) {
+				t.Run(tc.name+" "+name, func(t *testing.T) {
 					t.Parallel()
 					w := helium.NewWriter()
 					if name == "cdata-section-element" {
@@ -298,7 +298,7 @@ func TestWriterRejectsInvalidChars(t *testing.T) {
 
 		for _, version := range []string{ver10, ver11} {
 			for name, mk := range build {
-				t.Run(version+"/"+name, func(t *testing.T) {
+				t.Run(version+" "+name, func(t *testing.T) {
 					t.Parallel()
 					// Default (reject) mode fails with ErrWriterInvalidName.
 					var buf bytes.Buffer
@@ -345,7 +345,7 @@ func TestWriterRejectsInvalidChars(t *testing.T) {
 		}
 
 		for name, mk := range build {
-			t.Run("xml10/"+name, func(t *testing.T) {
+			t.Run("xml10 "+name, func(t *testing.T) {
 				t.Parallel()
 				// XML 1.0: &#1; targets an out-of-range character.
 				// Default mode rejects with ErrInvalidXMLChar (SERE0006).
@@ -366,7 +366,7 @@ func TestWriterRejectsInvalidChars(t *testing.T) {
 				require.NotContains(t, buf.String(), "&#1;")
 			})
 
-			t.Run("xml11/"+name, func(t *testing.T) {
+			t.Run("xml11 "+name, func(t *testing.T) {
 				t.Parallel()
 				// XML 1.1: &#1; targets a RestrictedChar that is legal as a character
 				// reference, so it is emitted verbatim in BOTH modes — never rejected,
@@ -435,7 +435,7 @@ func TestWriterRejectsInvalidChars(t *testing.T) {
 				{name: "orig-missing-semicolon", value: "&#12", orig: true},
 				{name: "orig-overflow", value: "&#x110000;", orig: true},
 			} {
-				t.Run(version+"/"+tc.name, func(t *testing.T) {
+				t.Run(version+" "+tc.name, func(t *testing.T) {
 					var buf bytes.Buffer
 					err := helium.NewWriter().RejectInvalidChars(false).WriteTo(&buf, newEntityDoc(t, version, tc.value, tc.orig))
 					require.ErrorIs(t, err, helium.ErrWriterInvalidName)
@@ -487,7 +487,7 @@ func TestWriterRejectsInvalidChars(t *testing.T) {
 
 		for _, version := range []string{ver10, ver11} {
 			for name, makeDoc := range build {
-				t.Run(version+"/"+name, func(t *testing.T) {
+				t.Run(version+" "+name, func(t *testing.T) {
 					var buf bytes.Buffer
 					require.ErrorIs(t, helium.NewWriter().WriteTo(&buf, makeDoc(t, version)), helium.ErrInvalidXMLChar)
 

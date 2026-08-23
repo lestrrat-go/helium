@@ -131,7 +131,7 @@ func TestWriterDTDNames(t *testing.T) {
 
 // Emission checks the exact grammar selected by the attribute type before any
 // token is written.
-func TestWriterValidatesAttributeEnumerationGrammar(t *testing.T) {
+func TestWriterAttributeEnumeration(t *testing.T) {
 	tests := []struct {
 		name    string
 		atype   enum.AttributeType
@@ -177,4 +177,30 @@ func TestWriterValidatesAttributeEnumerationGrammar(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A text node carrying the xmlTextNoEnc marker is emitted verbatim with no
+// escaping. These are white-box tests because the marker has no public setter
+// (U2).
+func TestWriteTextNoEnc(t *testing.T) {
+	t.Parallel()
+
+	// Non-ASCII marked content must fail with ErrUnsupportedOutputEncoding via
+	// the ASCII-reject net, leaking no raw UTF-8 under the US-ASCII declaration.
+	t.Run("US-ASCII rejects non-ASCII content", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		txt := doc.CreateText([]byte("café"))
+		txt.name = xmlTextNoEnc // mark as pre-encoded, emitted without escaping
+		require.NoError(t, root.AddChild(txt))
+
+		var buf bytes.Buffer
+		err = NewWriter().OutputEncoding("US-ASCII").WriteTo(&buf, doc)
+		require.ErrorIs(t, err, ErrUnsupportedOutputEncoding)
+		for i := range buf.Len() {
+			require.Less(t, buf.Bytes()[i], byte(0x80), "leaked non-ASCII octet 0x%X at %d", buf.Bytes()[i], i)
+		}
+	})
 }

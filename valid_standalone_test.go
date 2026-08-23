@@ -40,13 +40,13 @@ func parseStandaloneOpt(t *testing.T, src, extDTD string, defaultAttrs bool) ([]
 func TestStandalone(t *testing.T) {
 	t.Parallel()
 
-	// the VC: Standalone Document Declaration
-	// (XML §2.9) for external-subset markup effects: a standalone="yes" document may
-	// not rely on external default attributes or on attribute-value normalization
-	// driven by an external tokenized-type declaration. Each rule has a rejecting
-	// case plus near-misses (standalone="no"/absent and internal-only declarations)
-	// to prove there is no over-rejection.
-	t.Run("external declaration", func(t *testing.T) {
+	// The groups below cover VC: Standalone Document Declaration (XML §2.9) for
+	// external-subset markup effects: a standalone="yes" document may not rely on
+	// external default attributes or on attribute-value normalization driven by an
+	// external tokenized-type declaration. Each rule has a rejecting case plus
+	// near-misses (standalone="no"/absent and internal-only declarations) to prove
+	// there is no over-rejection.
+	{
 		// Rule: attribute defaulted from the external subset.
 		t.Run("external default attribute", func(t *testing.T) {
 			t.Parallel()
@@ -321,7 +321,7 @@ func TestStandalone(t *testing.T) {
 				require.False(t, containsError(errs, "normalization"))
 			})
 		})
-	})
+	}
 
 	// DTD validation uses element
 	// declarations from the external subset even for a standalone="yes" document

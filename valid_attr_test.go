@@ -347,40 +347,40 @@ func TestValidateEntityAttribute(t *testing.T) {
 	})
 }
 
-// the attribute-default checks.
-func TestValidateRequiredAndFixedAttributes(t *testing.T) {
+func TestAttributeValidity(t *testing.T) {
 	t.Parallel()
 
-	const dtd = `<!DOCTYPE doc [
+	// the attribute-default checks.
+	t.Run("required and fixed attributes", func(t *testing.T) {
+		t.Parallel()
+
+		const dtd = `<!DOCTYPE doc [
 <!ELEMENT doc EMPTY>
 <!ATTLIST doc
   req CDATA #REQUIRED
   fix CDATA #FIXED "yes">
 ]>`
 
-	valid := dtd + `<doc req="x" fix="yes"/>`
-	errs := parseValidating(t, valid)
-	require.Empty(t, errs, "all required/fixed attributes satisfied")
+		valid := dtd + `<doc req="x" fix="yes"/>`
+		errs := parseValidating(t, valid)
+		require.Empty(t, errs, "all required/fixed attributes satisfied")
 
-	// Missing required attribute.
-	errs = parseValidating(t, dtd+`<doc fix="yes"/>`)
-	require.NotEmpty(t, errs, "missing #REQUIRED attribute is a validation error")
+		// Missing required attribute.
+		errs = parseValidating(t, dtd+`<doc fix="yes"/>`)
+		require.NotEmpty(t, errs, "missing #REQUIRED attribute is a validation error")
 
-	// Wrong value for a #FIXED attribute.
-	errs = parseValidating(t, dtd+`<doc req="x" fix="no"/>`)
-	require.NotEmpty(t, errs, "wrong #FIXED value is a validation error")
-}
+		// Wrong value for a #FIXED attribute.
+		errs = parseValidating(t, dtd+`<doc req="x" fix="no"/>`)
+		require.NotEmpty(t, errs, "wrong #FIXED value is a validation error")
+	})
 
-func TestAttributeValidityCompleteness(t *testing.T) {
-	t.Parallel()
-
-	// the per-instance attribute VCs
-	// enforced in validateElementAttributes: Attribute Value Type (every present
-	// attribute must be declared, for ordinary attributes and for xmlns/xmlns:*
-	// namespace declarations) and Fixed Attribute Default (a #FIXED namespace
-	// declaration must match). Each VC has a rejecting case and a valid near-miss so
-	// the check does not over-reject.
-	t.Run("per-instance validity constraints", func(t *testing.T) {
+	// The groups below cover the per-instance attribute VCs enforced in
+	// validateElementAttributes: Attribute Value Type (every present attribute must
+	// be declared, for ordinary attributes and for xmlns/xmlns:* namespace
+	// declarations) and Fixed Attribute Default (a #FIXED namespace declaration must
+	// match). Each VC has a rejecting case and a valid near-miss so the check does
+	// not over-reject.
+	{
 		// VC: Attribute Value Type — an ordinary undeclared attribute is invalid
 		// (W3C ibm-invalid-P41-ibm41i01.xml).
 		t.Run("undeclared ordinary attribute", func(t *testing.T) {
@@ -485,7 +485,7 @@ func TestAttributeValidityCompleteness(t *testing.T) {
 				require.NoError(t, err)
 			})
 		})
-	})
+	}
 
 	// is the over-rejection guard for the
 	// "must be declared" VC: helium injects a synthetic xml:base attribute onto the

@@ -259,35 +259,34 @@ func TestAttlistDecl(t *testing.T) {
 func TestValidateAttributeValue(t *testing.T) {
 	t.Parallel()
 
-	t.Run("by declared type", func(t *testing.T) {
-		tests := []struct {
-			name    string
-			typ     enum.AttributeType
-			value   string
-			wantErr bool
-		}{
-			{name: "ID valid", typ: enum.AttrID, value: "myid"},
-			{name: "ID invalid", typ: enum.AttrID, value: "123", wantErr: true},
-			{name: "NMTOKEN valid", typ: enum.AttrNmtoken, value: "hello-world"},
-			{name: "NMTOKEN valid digits", typ: enum.AttrNmtoken, value: "123"},
-			{name: "NMTOKEN invalid", typ: enum.AttrNmtoken, value: "hello world", wantErr: true},
-			{name: "NMTOKENS valid", typ: enum.AttrNmtokens, value: "hello world"},
-			{name: "IDREFS valid", typ: enum.AttrIDRefs, value: "id1 id2"},
-			{name: "IDREFS invalid", typ: enum.AttrIDRefs, value: "id1 123", wantErr: true},
-			{name: "CDATA anything", typ: enum.AttrCDATA, value: "anything goes here!"},
-		}
+	// Each case is validated against the type declared for it in the DTD.
+	tests := []struct {
+		name    string
+		typ     enum.AttributeType
+		value   string
+		wantErr bool
+	}{
+		{name: "ID valid", typ: enum.AttrID, value: "myid"},
+		{name: "ID invalid", typ: enum.AttrID, value: "123", wantErr: true},
+		{name: "NMTOKEN valid", typ: enum.AttrNmtoken, value: "hello-world"},
+		{name: "NMTOKEN valid digits", typ: enum.AttrNmtoken, value: "123"},
+		{name: "NMTOKEN invalid", typ: enum.AttrNmtoken, value: "hello world", wantErr: true},
+		{name: "NMTOKENS valid", typ: enum.AttrNmtokens, value: "hello world"},
+		{name: "IDREFS valid", typ: enum.AttrIDRefs, value: "id1 id2"},
+		{name: "IDREFS invalid", typ: enum.AttrIDRefs, value: "id1 123", wantErr: true},
+		{name: "CDATA anything", typ: enum.AttrCDATA, value: "anything goes here!"},
+	}
 
-		for _, tc := range tests {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-				err := parseWithDTDAttributeType(t, tc.typ, tc.value)
-				if tc.wantErr {
-					require.Error(t, err)
-					return
-				}
-				require.NoError(t, err)
-			})
-		}
-	})
+			err := parseWithDTDAttributeType(t, tc.typ, tc.value)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }

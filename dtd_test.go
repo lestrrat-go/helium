@@ -414,7 +414,7 @@ func TestDTDElement(t *testing.T) {
 // TestExternalIDPublicSystemLiteral covers XML 1.0 [75] ExternalID: the PUBLIC
 // form requires a following SystemLiteral, whereas NotationDecl [83] PublicID
 // permits PUBLIC with only a PubidLiteral.
-func TestExternalIDPublicSystemLiteral(t *testing.T) {
+func TestExternalID(t *testing.T) {
 	t.Parallel()
 
 	t.Run("doctype PUBLIC without system literal rejected", func(t *testing.T) {
