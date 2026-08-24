@@ -53,6 +53,14 @@ type sortKey struct {
 // unknownSortKey is the key of a node no indexed document describes.
 var unknownSortKey = sortKey{docOrder: -1, position: -1}
 
+// before reports whether k sorts strictly before other.
+func (k sortKey) before(other sortKey) bool {
+	if k.docOrder != other.docOrder {
+		return k.docOrder < other.docOrder
+	}
+	return k.position < other.position
+}
+
 // sortKeyLocked returns the sort key of n from the already-indexed state,
 // without indexing anything. The caller must hold c.mu.
 func (c *DocOrderCache) sortKeyLocked(n helium.Node) sortKey {
@@ -116,6 +124,27 @@ func (c *DocOrderCache) indexSortKeys(a, b []helium.Node) []sortKey {
 		keys = append(keys, c.ensureSortKeyLocked(n))
 	}
 	return keys
+}
+
+// indexInDocOrder indexes the document of every node in nodes and reports
+// whether the nodes are already strictly increasing in document order. It
+// visits every node even once the answer is known to be false, because
+// document registration order depends on where each document first appears.
+// Unlike indexSortKeys it keeps no per-node key, so the common already-ordered
+// node-set costs no sort-key buffer at all.
+func (c *DocOrderCache) indexInDocOrder(nodes []helium.Node) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ordered := true
+	prev := c.ensureSortKeyLocked(nodes[0])
+	for _, n := range nodes[1:] {
+		key := c.ensureSortKeyLocked(n)
+		if ordered && !prev.before(key) {
+			ordered = false
+		}
+		prev = key
+	}
+	return ordered
 }
 
 // Position returns the document-order position of a node, or -1 if unknown.
@@ -250,24 +279,6 @@ type NSNodeKey struct {
 	Prefix string
 }
 
-// strictlyOrdered reports whether keys is strictly increasing. A strictly
-// increasing key sequence proves the corresponding nodes are already in
-// document order AND pairwise distinct: every indexed node owns a unique
-// position, so two equal keys mean either a repeat or a pair the sort would
-// have to settle.
-func strictlyOrdered(keys []sortKey) bool {
-	for i := 1; i < len(keys); i++ {
-		prev, cur := keys[i-1], keys[i]
-		if prev.docOrder > cur.docOrder {
-			return false
-		}
-		if prev.docOrder == cur.docOrder && prev.position >= cur.position {
-			return false
-		}
-	}
-	return true
-}
-
 // sortByPrecomputedKeys sorts result by precomputed sort keys, avoiding
 // repeated map lookups during the O(n log n) sort phase.
 // Uses SliceStable to preserve input order for equal positions.
@@ -341,17 +352,18 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 	if len(nodes) <= 1 {
 		return nodes, nil
 	}
-	// Resolve every input node's sort key up front, under a single lock, and
-	// index any document the cache does not describe yet. Document
-	// registration order follows first appearance in the input, which is the
-	// order the deduplicated result would have produced.
-	keys := cache.indexSortKeys(nodes, nil)
-	if len(nodes) <= maxNodes && strictlyOrdered(keys) {
-		// The input is already pairwise distinct and in document order, so both
-		// the dedup pass and the sort are no-ops. Clamp the capacity so the
+	// Index every input node's document up front, under a single lock.
+	// Document registration order follows first appearance in the input, which
+	// is the order the deduplicated result would have produced. A strictly
+	// increasing key sequence proves the input is already pairwise distinct and
+	// in document order — every indexed node owns a unique position, so two
+	// equal keys mean either a repeat or a pair the sort would have to settle.
+	if cache.indexInDocOrder(nodes) && len(nodes) <= maxNodes {
+		// Both the dedup pass and the sort are no-ops. Clamp the capacity so the
 		// returned slice never shares spare capacity with the caller's buffer.
 		return nodes[:len(nodes):len(nodes)], nil
 	}
+	keys := cache.indexSortKeys(nodes, nil)
 	// Cap the seen-map and result allocations at the limit (plus one slot to
 	// detect overflow) so a large, duplicate-heavy input does not over-allocate
 	// buffers sized to the full input when the deduplicated result fits well
