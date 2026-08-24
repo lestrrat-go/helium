@@ -314,10 +314,6 @@ please open a GitHub Discussion first.
 
 # Sponsors
 
-Helium is developed and maintained in the open. Keeping a full XML stack —
-parser, XPath 3.1, XSLT 3.0, XSD, Relax NG, Schematron, and the W3C conformance
-suites that keep them honest — working and up to date is ongoing work.
-
 If this project is useful to you or your company, please consider sponsoring:
 
 [![Sponsor lestrrat](https://img.shields.io/badge/Sponsor-lestrrat-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/lestrrat)
