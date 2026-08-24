@@ -65,18 +65,27 @@ func compileSchema(compileCtx context.Context, doc *helium.Document, cfg *compil
 		return nil, errNotSchemaElement
 	}
 
-	eng := xpath1Engine{}
-
-	schema := &Schema{
-		namespaces: make(map[string]string),
-		engine:     eng,
-	}
-
 	var inner helium.ErrorHandler = helium.NilErrorHandler{}
 	if cfg != nil && cfg.errorHandler != nil {
 		inner = cfg.errorHandler
 	}
 	eh := &fatalTrackingHandler{inner: inner}
+
+	binding, err := resolveQueryBinding(cfg, root)
+	if err != nil {
+		// An unimplemented query language binding is fatal: evaluating the
+		// schema's expressions as if they were written in a binding we do
+		// support would report results the schema never asked for.
+		eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("%s\n", err), helium.ErrorLevelFatal))
+		return nil, err
+	}
+	eng := binding.newEngine()
+
+	schema := &Schema{
+		namespaces: make(map[string]string),
+		binding:    binding,
+		engine:     eng,
+	}
 	sp := &schemaParser{schNS: schNS, eh: eh, engine: eng}
 
 	// Phase-based parsing matching libxml2's xmlSchematronParse ordering:

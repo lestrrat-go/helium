@@ -6,7 +6,17 @@ type Schema struct {
 	patterns   []*pattern
 	namespaces map[string]string // prefix -> URI from <ns> elements
 	title      string
+	binding    QueryBinding
 	engine     engine
+}
+
+// QueryBinding reports the query language binding the schema compiled with.
+// See [Compiler.QueryBinding] for how it is resolved.
+func (s *Schema) QueryBinding() QueryBinding {
+	if s == nil {
+		return QueryBindingUnspecified
+	}
+	return s.binding
 }
 
 type pattern struct {
