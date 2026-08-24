@@ -319,7 +319,7 @@ and the default xpath3 behavior is unchanged.
 - `evalContext` created fresh per call, discarded after
 - Hot-path node/item rebinding during predicates, path steps, and simple-map evaluation mutates the current `evalContext` temporarily and restores it afterward instead of allocating copied child contexts
 - Default language comes from `WithDefaultLanguage`; built-ins fall back to `"en"` when unset
-- `DocOrderCache` lazy, O(n) build, O(1) lookup
+- `DocOrderCache` lazy, O(n) build, O(1) lookup: one flat `map[helium.Node]sortKey` covering every indexed document, so a position lookup is a single hash probe with no parent-chain walk. A second map records each document root's registration order, which orders nodes from different trees
 - Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does not change captured behavior
 
 ## Safety Limits
