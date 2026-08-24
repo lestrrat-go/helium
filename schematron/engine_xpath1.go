@@ -10,8 +10,9 @@ import (
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
-// xpath1Engine backs the XPath 1.0 query language bindings ("xslt", "xslt1",
-// "xpath", "xpath1", and the absent-attribute default). Its conversions
+// xpath1Engine backs the default query language binding of ISO/IEC 19757-3
+// Annex C: XPath 1.0 as extended by XSLT 1.0, selected by the value "xslt"
+// or by an absent queryBinding attribute. Its conversions
 // follow libxml2's schematron.c so golden output stays byte-identical.
 type xpath1Engine struct{}
 
