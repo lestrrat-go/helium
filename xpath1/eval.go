@@ -213,14 +213,13 @@ func evalStepWithPredicates(ctx context.Context, ec *evalContext, nodes []helium
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		candidates, err := traverseAxis(ctx, step.Axis, n)
+		matched, traversed, err := appendAxisMatches(ctx, nil, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(len(candidates)); err != nil {
+		if err := ec.countOps(traversed); err != nil {
 			return nil, err
 		}
-		matched := filterByNodeTest(candidates, step.NodeTest, step.Axis, ec)
 		for _, pred := range step.Predicates {
 			matched, err = applyPredicate(ctx, ec, matched, pred)
 			if err != nil {
@@ -239,27 +238,17 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		candidates, err := traverseAxis(ctx, step.Axis, n)
+		var traversed int
+		var err error
+		next, traversed, err = appendAxisMatches(ctx, next, ec, n, step.Axis, step.NodeTest)
 		if err != nil {
 			return nil, err
 		}
-		if err := ec.countOps(len(candidates)); err != nil {
+		if err := ec.countOps(traversed); err != nil {
 			return nil, err
 		}
-		next = append(next, filterByNodeTest(candidates, step.NodeTest, step.Axis, ec)...)
 	}
 	return ixpath.DeduplicateNodes(next, ec.docOrder, maxNodeSetLength)
-}
-
-// filterByNodeTest returns only those nodes that match the given node test.
-func filterByNodeTest(candidates []helium.Node, nt NodeTest, axis AxisType, ec *evalContext) []helium.Node {
-	matched := make([]helium.Node, 0, len(candidates))
-	for _, c := range candidates {
-		if matchNodeTest(nt, c, axis, ec) {
-			matched = append(matched, c)
-		}
-	}
-	return matched
 }
 
 func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) bool {
