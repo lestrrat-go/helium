@@ -8,8 +8,9 @@ import (
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
-// xpath3Engine backs the XPath 3.1 query language bindings ("xslt3",
-// "xpath3", "xpath31").
+// xpath3Engine backs the XSLT 3.0 binding of ISO/IEC 19757-3:2020 Annex J
+// ("xslt3"), whose query language is XPath 3.1, and the XPath 3.0 binding of
+// Annex K ("xpath3"), which XPath 3.1 is a superset of.
 //
 // Resource access is denied by default: fn:doc, fn:collection and
 // fn:unparsed-text retrieve nothing unless the evaluator is given a URI
