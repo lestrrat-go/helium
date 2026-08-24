@@ -112,21 +112,12 @@ func (v xpath1Value) stringValue() string {
 	return ""
 }
 
-// nodeName extracts a node name from an XPath 1.0 result. Only element and
-// attribute nodes have a name (matching libxml2 behavior).
+// nodeName extracts a node name from an XPath 1.0 result.
 func (v xpath1Value) nodeName() string {
 	if v.result.Type != xpath1.NodeSetResult || len(v.result.NodeSet) == 0 {
 		return ""
 	}
-	n := v.result.NodeSet[0]
-	if n.Type() == helium.ElementNode {
-		return n.Name()
-	}
-	// Use type assertion for attributes since Attribute.Type() may not be set correctly.
-	if attr, ok := n.(*helium.Attribute); ok {
-		return attr.Name()
-	}
-	return ""
+	return nodeDisplayName(v.result.NodeSet[0])
 }
 
 // variable converts a result to a value suitable for variable binding.

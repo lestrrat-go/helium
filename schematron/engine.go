@@ -67,3 +67,16 @@ type value interface {
 	// empty string when the result holds no named node.
 	nodeName() string
 }
+
+// nodeDisplayName returns the name <name> reports for a node. Only element
+// and attribute nodes have one (matching libxml2 behavior).
+func nodeDisplayName(n helium.Node) string {
+	if n.Type() == helium.ElementNode {
+		return n.Name()
+	}
+	// Use type assertion for attributes since Attribute.Type() may not be set correctly.
+	if attr, ok := n.(*helium.Attribute); ok {
+		return attr.Name()
+	}
+	return ""
+}

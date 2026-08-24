@@ -24,6 +24,10 @@ const (
 	// queryBinding values "xslt", "xslt1", "xpath" and "xpath1", and is the
 	// binding a schema with no queryBinding attribute gets.
 	QueryBindingXPath1
+
+	// QueryBindingXPath3 evaluates expressions with XPath 3.1. It covers the
+	// queryBinding values "xslt3", "xpath3" and "xpath31".
+	QueryBindingXPath3
 )
 
 // ErrUnsupportedQueryBinding is returned by [ParseQueryBinding], and by
@@ -41,13 +45,15 @@ func (b QueryBinding) String() string {
 		return "unspecified"
 	case QueryBindingXPath1:
 		return "xpath1"
+	case QueryBindingXPath3:
+		return "xpath3"
 	}
 	return fmt.Sprintf("QueryBinding(%d)", int(b))
 }
 
 // supportedQueryBindings lists the accepted queryBinding values, in the order
 // they appear in the "unsupported binding" error message.
-var supportedQueryBindings = []string{"xslt", "xslt1", "xpath", "xpath1"}
+var supportedQueryBindings = []string{"xslt", "xslt1", "xpath", "xpath1", "xslt3", "xpath3", "xpath31"}
 
 // ParseQueryBinding maps a queryBinding attribute value to a [QueryBinding].
 // The value is trimmed and matched without regard to case. An empty value
@@ -59,14 +65,19 @@ func ParseQueryBinding(s string) (QueryBinding, error) {
 		return QueryBindingUnspecified, nil
 	case "xslt", "xslt1", "xpath", "xpath1":
 		return QueryBindingXPath1, nil
+	case "xslt3", "xpath3", "xpath31":
+		return QueryBindingXPath3, nil
 	}
 	return QueryBindingUnspecified, unsupportedQueryBinding(s)
 }
 
 // newEngine returns the engine that evaluates expressions for this binding.
 func (b QueryBinding) newEngine() engine {
-	if b == QueryBindingXPath1 {
+	switch b {
+	case QueryBindingXPath1:
 		return xpath1Engine{}
+	case QueryBindingXPath3:
+		return xpath3Engine{}
 	}
 	return nil
 }
