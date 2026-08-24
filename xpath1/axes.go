@@ -7,23 +7,15 @@ import (
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
-// traverseAxis returns the nodes along the given axis from the context node,
-// in the order defined by the XPath spec. ctx is checked inside the unbounded
-// descendant/following/preceding walks so a cancelled context aborts traversal
-// promptly.
-func traverseAxis(ctx context.Context, axis AxisType, node helium.Node) ([]helium.Node, error) {
-	return ixpath.TraverseAxis(ctx, axis, node, maxNodeSetLength)
-}
-
 // appendAxisMatches appends the nodes on axis from node that satisfy nodeTest
 // to dst and returns the grown slice together with the number of nodes the
 // axis traversal visited (the operation count the step must charge).
 //
 // The child, attribute, self and parent axes are walked straight into dst, so a
 // step on those axes materializes neither the full candidate list nor a
-// separate matched list. The remaining axes fall back to traverseAxis and
-// filter its result into dst. Traversal order, the per-node context checks, and
-// the visited count are the same either way.
+// separate matched list. The remaining axes are appended to dst by
+// [ixpath.AppendAxis] and then compacted in place. Traversal order, the
+// per-node context checks, and the visited count are the same either way.
 func appendAxisMatches(ctx context.Context, dst []helium.Node, ec *evalContext, node helium.Node, axis AxisType, nodeTest NodeTest) ([]helium.Node, int, error) {
 	if ixpath.IsNilNode(node) {
 		return dst, 0, nil
@@ -89,14 +81,24 @@ func appendAxisMatches(ctx context.Context, dst []helium.Node, ec *evalContext, 
 		return dst, 1, nil
 	}
 
-	candidates, err := traverseAxis(ctx, axis, node)
+	// The remaining axes are collected into dst first and then compacted in
+	// place, so the descendant walks still write into the caller's buffer
+	// instead of a throwaway candidate slice.
+	mark := len(dst)
+	dst, err := ixpath.AppendAxis(ctx, dst, axis, node, maxNodeSetLength)
 	if err != nil {
 		return nil, 0, err
 	}
-	for _, candidate := range candidates {
-		if matchNodeTest(nodeTest, candidate, axis, ec) {
-			dst = append(dst, candidate)
+	traversed := len(dst) - mark
+	kept := mark
+	for i := mark; i < len(dst); i++ {
+		if !matchNodeTest(nodeTest, dst[i], axis, ec) {
+			continue
 		}
+		if kept != i {
+			dst[kept] = dst[i]
+		}
+		kept++
 	}
-	return dst, len(candidates), nil
+	return dst[:kept], traversed, nil
 }
