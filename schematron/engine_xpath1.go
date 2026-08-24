@@ -24,7 +24,11 @@ func (xpath1Engine) compile(src string) (compiledExpr, error) {
 }
 
 func (xpath1Engine) runner(namespaces map[string]string) runner {
-	return xpath1Runner{ev: xpath1.NewEvaluator().Namespaces(namespaces)}
+	// One document-order cache is shared by every expression evaluated
+	// against the instance. Without it xpath1 indexes the whole document
+	// again on every evaluation, which makes validation quadratic in
+	// document size.
+	return xpath1Runner{ev: xpath1.NewEvaluator().Namespaces(namespaces), docOrder: &ixpath.DocOrderCache{}}
 }
 
 type xpath1Expr struct {
@@ -35,7 +39,8 @@ type xpath1Expr struct {
 func (e *xpath1Expr) source() string { return e.src }
 
 type xpath1Runner struct {
-	ev xpath1.Evaluator
+	ev       xpath1.Evaluator
+	docOrder *ixpath.DocOrderCache
 }
 
 func (r xpath1Runner) evaluate(ctx context.Context, expr compiledExpr, node helium.Node) (value, error) {
@@ -43,7 +48,7 @@ func (r xpath1Runner) evaluate(ctx context.Context, expr compiledExpr, node heli
 	if !ok {
 		return nil, errWrongEngine
 	}
-	result, err := r.ev.Evaluate(ctx, e.expr, node)
+	result, err := r.ev.Evaluate(ixpath.WithDocOrderCache(ctx, r.docOrder), e.expr, node)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +60,7 @@ func (r xpath1Runner) bind(name string, v value) runner {
 	if !ok {
 		return r
 	}
-	return xpath1Runner{ev: r.ev.AdditionalVariables(map[string]any{name: xv.variable()})}
+	return xpath1Runner{ev: r.ev.AdditionalVariables(map[string]any{name: xv.variable()}), docOrder: r.docOrder}
 }
 
 type xpath1Value struct {

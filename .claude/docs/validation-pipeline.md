@@ -791,6 +791,8 @@ The `queryBinding` attribute on `<schema>` selects the query language. `resolveQ
 
 Rule contexts go through `contextToXPath` in both bindings, so a context that is an XSLT match pattern but not an expression (`key('k','v')`) is unsupported. The XPath 3.1 engine passes no URI resolver and no HTTP client, and `xpath3` denies file and network retrieval without one, so `fn:doc`/`fn:collection`/`fn:unparsed-text` cannot read anything.
 
+Each `runner` carries ONE document-order cache for the whole validation run, shared by every rule context, test, let and message expression: `xpath1Runner` holds an `ixpath.DocOrderCache` and passes it through `ixpath.WithDocOrderCache` on every evaluate (xpath1 otherwise builds a throwaway cache per evaluation, `xpath1/eval.go`), and `xpath3Runner` sets `xpath3.Evaluator.DocOrderCache`. Re-indexing the instance per evaluation makes validation quadratic in document size. The cache lives exactly as long as the run, so a document mutated between two `Validate` calls is re-indexed.
+
 ### Compile: Document → Schema
 
 Three-phase parsing (after the binding is resolved):
