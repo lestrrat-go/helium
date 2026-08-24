@@ -17,6 +17,7 @@ type schematronValidateConfig struct {
 	version       bool
 	maxInputBytes int64
 	maxDepth      int
+	queryBinding  schematron.QueryBinding
 }
 
 type schematronValidateInput struct {
@@ -72,7 +73,11 @@ func (c *schematronValidateCommand) runContext(ctx context.Context, args []strin
 	// Attach an ErrorHandler so fatal schema diagnostics (file/line/detail)
 	// reach stderr before the summary error, and are never discarded.
 	ceh := &writerErrorHandler{w: c.stderr}
-	schema, err := schematron.NewCompiler().Label(cfg.schemaFile).ErrorHandler(ceh).CompileFile(ctx, cfg.schemaFile)
+	compiler := schematron.NewCompiler().Label(cfg.schemaFile).ErrorHandler(ceh)
+	if cfg.queryBinding != schematron.QueryBindingUnspecified {
+		compiler = compiler.QueryBinding(cfg.queryBinding)
+	}
+	schema, err := compiler.CompileFile(ctx, cfg.schemaFile)
 	if cfg.timing {
 		_, _ = fmt.Fprintf(c.stderr, "Compiling schema took %s\n", time.Since(t0))
 	}
@@ -97,6 +102,7 @@ func (c *schematronValidateCommand) showUsage() {
 	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
 	Validate XML files against a Schematron schema
 	--timing : print timing information to stderr
+	--query-binding NAME : force the query language binding (xslt, xslt1, xpath, xpath1, xslt3, xpath3, xpath31)
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
 	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 	--version : display the version of the XML library used
@@ -114,6 +120,18 @@ func (c *schematronValidateCommand) parseArgs(args []string) (*schematronValidat
 			cfg.version = true
 		case "--timing":
 			cfg.timing = true
+		case flagQueryBinding:
+			i++
+			if i >= len(args) {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --query-binding requires an argument\n", c.prog)
+				return nil, nil
+			}
+			b, err := schematron.ParseQueryBinding(args[i])
+			if err != nil {
+				_, _ = fmt.Fprintf(c.stderr, "%s: --query-binding: %s\n", c.prog, err)
+				return nil, nil
+			}
+			cfg.queryBinding = b
 		case flagMaxInputBytes:
 			i++
 			if i >= len(args) {

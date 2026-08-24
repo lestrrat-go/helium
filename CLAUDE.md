@@ -28,6 +28,14 @@ XSD 1.1 is fully implemented behind the `Version11` opt-in. The committed W3C co
 
 Do NOT enforce 1.1-only clauses in the 1.0/default path — 1.0 must stay byte-identical to origin.
 
+## Schematron — Query Binding
+
+The schematron package implements two `queryBinding` families and refuses every other value. `xslt`/`xslt1`/`xpath`/`xpath1` and an absent attribute resolve to `QueryBindingXPath1` (the `xpath1` engine, byte-identical to libxml2); `xslt3`/`xpath3`/`xpath31` resolve to `QueryBindingXPath3` (the `xpath3` engine). The 2.0 bindings and the non-XPath bindings (`xquery`, `stx`, `exslt`) fail compilation with `ErrUnsupportedQueryBinding`. `resolveQueryBinding` (`querybinding.go`) resolves in order: a forced `Compiler.QueryBinding()` (always wins, and skips the attribute) → the schema attribute → `Compiler.DefaultQueryBinding(b)` → `QueryBindingXPath1`. The resolved binding is frozen onto the compiled `Schema`.
+
+`engine`/`runner`/`value` (`engine.go`) is the seam the two engines implement, so `parse.go` and `validate.go` never name an XPath package. The `value` methods carry the per-binding semantics: `effectiveBoolean` cannot fail under 1.0 but raises FORG0006 for a multi-item atomic sequence under 3.1 (reported, test treated as false); `stringValue` (`<value-of>`) takes the first node's string-value under 1.0 and space-joins every atomized item under 3.1; `<let>` binds a sequence under 3.1. Rule contexts go through `contextToXPath` in both bindings, so an XSLT match pattern that is not an expression (`key('k','v')`) is unsupported. The 3.1 engine passes no URI resolver and no HTTP client, so `fn:doc`/`fn:collection`/`fn:unparsed-text` retrieve nothing.
+
+Do NOT change the XPath 1.0 path — it must stay byte-identical to libxml2.
+
 ## XSLT 3.0 — Conformance Scope
 
 The xslt3 package targets **Basic XSLT 3.0** conformance (W3C spec Section 27). The spec defines 8 conformance levels; only "Basic XSLT Processor" is required. The remaining 7 are optional features:

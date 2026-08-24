@@ -16,8 +16,8 @@ const xpath3Instance = `<?xml version="1.0" encoding="UTF-8"?>
 </root>`
 
 // validateWithSchema compiles src, validates xpath3Instance against it, and
-// returns the validation error together with everything the schema reported.
-func validateWithSchema(t *testing.T, src string) (error, []error) { //nolint:revive // the reported errors matter as much as the verdict
+// returns everything the schema reported together with the validation error.
+func validateWithSchema(t *testing.T, src string) ([]error, error) {
 	t.Helper()
 
 	schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(src))
@@ -36,7 +36,7 @@ func validateWithSchema(t *testing.T, src string) (error, []error) { //nolint:re
 		Validate(t.Context(), instDoc)
 	_ = collector.Close()
 
-	return valErr, collector.Errors()
+	return collector.Errors(), valErr
 }
 
 // schemaSrc wraps one rule body in a schema using the given binding.
@@ -61,13 +61,13 @@ func TestXPath3BindingFunctions(t *testing.T) {
 	const ruleBody = `      <assert test="matches(@code, '^[A-Z]{2}-[0-9]+$')">code must be well formed</assert>`
 
 	t.Run("xslt3", func(t *testing.T) {
-		valErr, reported := validateWithSchema(t, schemaSrc("xslt3", ruleBody))
+		reported, valErr := validateWithSchema(t, schemaSrc("xslt3", ruleBody))
 		require.NoError(t, valErr, "fn:matches must resolve under XPath 3.1")
 		require.Empty(t, reported, "no errors reported")
 	})
 
 	t.Run("default", func(t *testing.T) {
-		valErr, reported := validateWithSchema(t, schemaSrc("", ruleBody))
+		reported, valErr := validateWithSchema(t, schemaSrc("", ruleBody))
 		require.Error(t, valErr, "fn:matches does not exist in XPath 1.0")
 		require.NotEmpty(t, reported, "the unregistered function is reported")
 	})
@@ -79,14 +79,14 @@ func TestXPath3BindingValueOf(t *testing.T) {
 	const ruleBody = `      <assert test="false()">items: <value-of select="item"/></assert>`
 
 	t.Run("xslt3", func(t *testing.T) {
-		valErr, reported := validateWithSchema(t, schemaSrc("xslt3", ruleBody))
+		reported, valErr := validateWithSchema(t, schemaSrc("xslt3", ruleBody))
 		require.ErrorIs(t, valErr, schematron.ErrValidationFailed)
 		require.Len(t, reported, 1)
 		require.Contains(t, reported[0].Error(), "items: one two three")
 	})
 
 	t.Run("default", func(t *testing.T) {
-		valErr, reported := validateWithSchema(t, schemaSrc("", ruleBody))
+		reported, valErr := validateWithSchema(t, schemaSrc("", ruleBody))
 		require.ErrorIs(t, valErr, schematron.ErrValidationFailed)
 		require.Len(t, reported, 1)
 		require.Contains(t, reported[0].Error(), "items: one")
@@ -99,13 +99,13 @@ func TestXPath3BindingValueOf(t *testing.T) {
 func TestXPath3BindingEffectiveBooleanValue(t *testing.T) {
 	const ruleBody = `      <assert test="string(item[1])">the first item has text</assert>`
 
-	valErr, reported := validateWithSchema(t, schemaSrc("xslt3", `      <assert test="(1, 2)">two numbers have no boolean value</assert>`))
+	reported, valErr := validateWithSchema(t, schemaSrc("xslt3", `      <assert test="(1, 2)">two numbers have no boolean value</assert>`))
 	require.ErrorIs(t, valErr, schematron.ErrValidationFailed, "the assert fires because the test is not true")
 	require.NotEmpty(t, reported)
 	require.Contains(t, reported[0].Error(), "FORG0006", "the XPath error code reaches the handler")
 
 	// A single-item test still converts, so the sibling case passes.
-	valErr, _ = validateWithSchema(t, schemaSrc("xslt3", ruleBody))
+	_, valErr = validateWithSchema(t, schemaSrc("xslt3", ruleBody))
 	require.NoError(t, valErr, "a single string has an effective boolean value")
 }
 
@@ -117,7 +117,7 @@ func TestXPath3BindingLet(t *testing.T) {
       <assert test="$total = 3">expected three items</assert>
       <assert test="string-join($items, '|') = 'one|two|three'">items must join in order</assert>`
 
-	valErr, reported := validateWithSchema(t, schemaSrc("xpath3", ruleBody))
+	reported, valErr := validateWithSchema(t, schemaSrc("xpath3", ruleBody))
 	require.NoError(t, valErr, "sequence-valued let bindings must work")
 	require.Empty(t, reported)
 }
@@ -139,7 +139,7 @@ func TestXPath3BindingRuleContext(t *testing.T) {
   </pattern>
 </schema>`
 
-	valErr, reported := validateWithSchema(t, src)
+	reported, valErr := validateWithSchema(t, src)
 	require.NoError(t, valErr, "element and attribute contexts must both match")
 	require.Empty(t, reported)
 }
@@ -150,7 +150,7 @@ func TestXPath3BindingRuleContext(t *testing.T) {
 func TestXPath3BindingResourceAccessDenied(t *testing.T) {
 	const ruleBody = `      <assert test="doc('file:///etc/hostname')">no document access</assert>`
 
-	valErr, reported := validateWithSchema(t, schemaSrc("xslt3", ruleBody))
+	reported, valErr := validateWithSchema(t, schemaSrc("xslt3", ruleBody))
 	require.ErrorIs(t, valErr, schematron.ErrValidationFailed)
 	require.NotEmpty(t, reported)
 	require.Contains(t, reported[0].Error(), "FODC0002", "retrieval must fail")

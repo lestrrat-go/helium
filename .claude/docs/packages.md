@@ -286,15 +286,17 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.Label(s)` / `.ErrorHandler(h)` / `.Parser(helium.Parser)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`. `Parser` sets the parser used by `CompileFile` (parse policy: limits, FS, XXE/network); unset → default `helium.NewParser()`
+- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.Label(s)` / `.ErrorHandler(h)` / `.Parser(helium.Parser)` / `.QueryBinding(b)` / `.DefaultQueryBinding(b)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`. `Parser` sets the parser used by `CompileFile` (parse policy: limits, FS, XXE/network); unset → default `helium.NewParser()`. `QueryBinding` forces the query language binding and ignores the schema's `queryBinding` attribute; `DefaultQueryBinding` only chooses the fallback for a schema that names none
 - **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Label(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
 - `ErrValidationFailed` — sentinel returned by `Validator.Validate` on validation failure; individual `*ValidationError` delivered to ErrorHandler
 - `ErrNoSchema` — sentinel returned by `Validator.Validate` when the Validator has no compiled schema
 - `ErrCompileFailed` — sentinel returned by `Compiler.Compile`/`CompileFile` when compilation fails
+- `ErrUnsupportedQueryBinding` — sentinel returned by `ParseQueryBinding` and by `Compiler.Compile`/`CompileFile` for a query language binding this package does not implement
+- **QueryBinding** — `QueryBindingUnspecified` / `QueryBindingXPath1` (`xslt`, `xslt1`, `xpath`, `xpath1`, absent attribute) / `QueryBindingXPath3` (`xslt3`, `xpath3`, `xpath31`); `ParseQueryBinding(s)` maps an attribute value (trimmed, case-insensitive), `Schema.QueryBinding()` reports the resolved binding. 2.0 bindings and the non-XPath bindings (`xquery`, `stx`, `exslt`) are refused
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
-- Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting)
-- Imports: helium, internal/xpath, xpath1/, internal/xpath1/number
+- Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting), `querybinding.go` (binding resolution), `engine.go` (engine/runner/value seam), `engine_xpath1.go` + `engine_xpath3.go` (per-binding engines)
+- Imports: helium, internal/xpath, xpath1/, xpath3/, internal/xpath1/number
 
 ## catalog/
 

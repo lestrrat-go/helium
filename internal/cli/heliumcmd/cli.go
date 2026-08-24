@@ -15,6 +15,7 @@ const (
 	flagTiming        = "--timing"
 	flagMaxInputBytes = "--max-input-bytes"
 	flagMaxDepth      = "--max-depth"
+	flagQueryBinding  = "--query-binding"
 )
 
 // applyMaxDepth applies the --max-depth flag value to p following the CLI
