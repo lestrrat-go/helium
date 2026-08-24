@@ -11,8 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCallTemplateCoercesParamsToDeclaredTypes(t *testing.T) {
-	ss := compileStylesheetString(t, `
+func TestCallTemplate(t *testing.T) {
+	t.Run("params are coerced to their declared types", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
   xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -32,11 +33,40 @@ func TestCallTemplateCoercesParamsToDeclaredTypes(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	source := parseTransformSource(t)
-	result, err := xslt3.TransformString(t.Context(), source, ss)
-	require.NoError(t, err)
-	require.Contains(t, result, `a="true"`)
-	require.Contains(t, result, `c="true"`)
+		source := parseTransformSource(t)
+		result, err := xslt3.TransformString(t.Context(), source, ss)
+		require.NoError(t, err)
+		require.Contains(t, result, `a="true"`)
+		require.Contains(t, result, `c="true"`)
+	})
+
+	// ENG-002: a caller-supplied empty sequence () for a param with
+	// as="xs:string" (cardinality exactly-one) must raise XTTE0590, not pass
+	// silently.
+	t.Run("an empty sequence for an exactly-one param fails", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <out>
+      <xsl:call-template name="show">
+        <xsl:with-param name="p" select="()"/>
+      </xsl:call-template>
+    </out>
+  </xsl:template>
+
+  <xsl:template name="show">
+    <xsl:param name="p" as="xs:string"/>
+    <q><xsl:value-of select="$p"/></q>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+		source := parseTransformSource(t)
+		_, err := xslt3.TransformString(t.Context(), source, ss)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "XTTE0590")
+	})
 }
 
 // TestGlobalParamStaticBaseURI verifies that static-base-uri() inside a
@@ -64,11 +94,12 @@ func TestGlobalParamStaticBaseURI(t *testing.T) {
 	require.Contains(t, out, "http://example.com/override/")
 }
 
-// TestCommentBodyNoStraySpace verifies that xsl:comment body construction
-// does not produce a stray leading space when an empty TVT precedes text.
-func TestCommentBodyNoStraySpace(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
+func TestInstructionBody(t *testing.T) {
+	// TestCommentBodyNoStraySpace verifies that xsl:comment body construction
+	// does not produce a stray leading space when an empty TVT precedes text.
+	t.Run("a comment body gains no stray space", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="empty" select="''"/>
@@ -82,218 +113,22 @@ func TestCommentBodyNoStraySpace(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-	// The comment content should be "hello" with no leading space.
-	require.Contains(t, out, "<!--hello-->")
-}
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+		// The comment content should be "hello" with no leading space.
+		require.Contains(t, out, "<!--hello-->")
+	})
 
-// TestDocVariableInterleavesSequence verifies that a document-node variable
-// body preserves document order between literal result elements and
-// xsl:sequence outputs (constructed nodes and atomics interleaved).
-func TestDocVariableInterleavesSequence(t *testing.T) {
-	ctx := t.Context()
-	tests := []struct {
-		name string
-		body string
-		want string
-	}{
-		{
-			name: "atomic between elements",
-			body: `<a/><xsl:sequence select="'b'"/><c/>`,
-			want: "<out><a/>b<c/></out>",
-		},
-		{
-			name: "node from sequence between elements",
-			body: `<a/><xsl:sequence select="//src"/><c/>`,
-			want: "<out><a/><src/><c/></out>",
-		},
-		{
-			// xsl:sequence select="/" yields a document node; its children
-			// (the source root element) must be spliced in document order,
-			// not the document node itself.
-			name: "document node between elements",
-			body: `<a/><xsl:sequence select="/"/><c/>`,
-			want: "<out><a/><doc><src/></doc><c/></out>",
-		},
-		{
-			name: "multiple atomics interleaved",
-			body: `<xsl:sequence select="1"/><a/><xsl:sequence select="2"/><b/><xsl:sequence select="3"/>`,
-			want: "<out>1<a/>2<b/>3</out>",
-		},
-		{
-			name: "trailing element after sequence",
-			body: `<xsl:sequence select="('x','y')"/><z/>`,
-			want: "<out>x y<z/></out>",
-		},
-		{
-			// xsl:try select also captures into the document; it must keep
-			// document order with surrounding literal result elements, not be
-			// appended after them.
-			name: "try select between elements",
-			body: `<a/><xsl:try select="'b'"><xsl:catch select="'x'"/></xsl:try><c/>`,
-			want: "<out><a/>b<c/></out>",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <xsl:variable name="v">` + tc.body + `</xsl:variable>
-    <out><xsl:copy-of select="$v"/></out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-			doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-			require.NoError(t, err)
-			ss, err := xslt3.CompileStylesheet(ctx, doc)
-			require.NoError(t, err)
-			src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
-			out, err := ss.Transform(src).Serialize(ctx)
-			require.NoError(t, err)
-			require.Contains(t, out, tc.want)
-		})
-	}
-}
-
-// TestDocVariableDocumentNodeSequenceSplicesChildren verifies the structural
-// shape of a document variable built with xsl:sequence select="/" interleaved
-// with literal elements. The document node must contribute its children (the
-// source root element) spliced in document order, so $v/node() sees three
-// nodes (a, doc, c) with the source root in the middle — not a nested document
-// node that would collapse $v/node() to two (a, c).
-func TestDocVariableDocumentNodeSequenceSplicesChildren(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <xsl:variable name="v"><a/><xsl:sequence select="/"/><c/></xsl:variable>
-    <out count="{count($v/node())}" mid="{local-name($v/node()[2])}"/>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-	require.Contains(t, out, `count="3"`)
-	require.Contains(t, out, `mid="doc"`)
-}
-
-// TestDocVariableMergesAdjacentText verifies that text produced by xsl:sequence
-// adjacent to text from xsl:text/xsl:value-of is merged into a single text node
-// in the constructed document tree (XSLT result-tree construction merges
-// adjacent text nodes), so node-level XPath sees one text node, not two.
-func TestDocVariableMergesAdjacentText(t *testing.T) {
-	ctx := t.Context()
-	tests := []struct {
-		name string
-		body string
-	}{
-		{name: "sequence then text", body: `<xsl:sequence select="'a'"/><xsl:text>b</xsl:text>`},
-		{name: "text then sequence", body: `<xsl:text>a</xsl:text><xsl:sequence select="'b'"/>`},
-		{name: "text sequence text", body: `<xsl:text>a</xsl:text><xsl:sequence select="'b'"/><xsl:text>c</xsl:text>`},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <xsl:variable name="v">` + tc.body + `</xsl:variable>
-    <out count="{count($v/text())}"><xsl:value-of select="string($v)"/></out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-			doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-			require.NoError(t, err)
-			ss, err := xslt3.CompileStylesheet(ctx, doc)
-			require.NoError(t, err)
-			src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
-			out, err := ss.Transform(src).Serialize(ctx)
-			require.NoError(t, err)
-			require.Contains(t, out, `count="1"`)
-		})
-	}
-}
-
-// TestDocVariableTypedTemplateResultOrder verifies that the result of a typed
-// (as="...") template invoked via xsl:call-template inside a document-variable
-// body keeps document order with surrounding literal result elements, rather
-// than being appended after them.
-func TestDocVariableTypedTemplateResultOrder(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xsl:template match="/">
-    <xsl:variable name="v"><a/><xsl:call-template name="emit"/><c/></xsl:variable>
-    <out><xsl:copy-of select="$v"/></out>
-  </xsl:template>
-  <xsl:template name="emit" as="xs:string"><xsl:sequence select="'b'"/></xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-	require.Regexp(t, `<a[^>]*/>b<c[^>]*/>`, out)
-}
-
-// TestDocVariableNestedSequenceNoPlaceholderLeak verifies that an xsl:sequence
-// nested inside an xsl:copy in a document-variable body writes into the copied
-// element directly (not via a document-level placeholder). The copied element
-// becomes the temp tree's document element, so the placeholder capture path
-// must not fire there — otherwise the unresolved placeholder PI leaks into
-// output.
-func TestDocVariableNestedSequenceNoPlaceholderLeak(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <xsl:variable name="v">
-      <xsl:for-each select="/doc/src">
-        <xsl:copy><xsl:sequence select="'b'"/></xsl:copy>
-      </xsl:for-each>
-    </xsl:variable>
-    <out><xsl:copy-of select="$v"/></out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-	require.Contains(t, out, "<out><src>b</src></out>")
-	require.NotContains(t, out, "helium-xsl-sequence-placeholder")
-}
-
-// TestPIBodyNoStraySpace verifies that xsl:processing-instruction body
-// does not produce a stray leading space when an empty TVT precedes text.
-func TestPIBodyNoStraySpace(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
+	// TestPIBodyNoStraySpace verifies that xsl:processing-instruction body
+	// does not produce a stray leading space when an empty TVT precedes text.
+	t.Run("a PI body gains no stray space", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:param name="empty" select="''"/>
@@ -307,15 +142,214 @@ func TestPIBodyNoStraySpace(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-	// The PI content should be "data" with no leading space.
-	require.Contains(t, out, "<?target data?>")
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+		// The PI content should be "data" with no leading space.
+		require.Contains(t, out, "<?target data?>")
+	})
+}
+
+func TestDocVariable(t *testing.T) {
+	// TestDocVariableInterleavesSequence verifies that a document-node variable
+	// body preserves document order between literal result elements and
+	// xsl:sequence outputs (constructed nodes and atomics interleaved).
+	t.Run("interleaves sequence", func(t *testing.T) {
+		ctx := t.Context()
+		tests := []struct {
+			name string
+			body string
+			want string
+		}{
+			{
+				name: "atomic between elements",
+				body: `<a/><xsl:sequence select="'b'"/><c/>`,
+				want: "<out><a/>b<c/></out>",
+			},
+			{
+				name: "node from sequence between elements",
+				body: `<a/><xsl:sequence select="//src"/><c/>`,
+				want: "<out><a/><src/><c/></out>",
+			},
+			{
+				// xsl:sequence select="/" yields a document node; its children
+				// (the source root element) must be spliced in document order,
+				// not the document node itself.
+				name: "document node between elements",
+				body: `<a/><xsl:sequence select="/"/><c/>`,
+				want: "<out><a/><doc><src/></doc><c/></out>",
+			},
+			{
+				name: "multiple atomics interleaved",
+				body: `<xsl:sequence select="1"/><a/><xsl:sequence select="2"/><b/><xsl:sequence select="3"/>`,
+				want: "<out>1<a/>2<b/>3</out>",
+			},
+			{
+				name: "trailing element after sequence",
+				body: `<xsl:sequence select="('x','y')"/><z/>`,
+				want: "<out>x y<z/></out>",
+			},
+			{
+				// xsl:try select also captures into the document; it must keep
+				// document order with surrounding literal result elements, not be
+				// appended after them.
+				name: "try select between elements",
+				body: `<a/><xsl:try select="'b'"><xsl:catch select="'x'"/></xsl:try><c/>`,
+				want: "<out><a/>b<c/></out>",
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v">` + tc.body + `</xsl:variable>
+    <out><xsl:copy-of select="$v"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+				doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+				require.NoError(t, err)
+				ss, err := xslt3.CompileStylesheet(ctx, doc)
+				require.NoError(t, err)
+				src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
+				out, err := ss.Transform(src).Serialize(ctx)
+				require.NoError(t, err)
+				require.Contains(t, out, tc.want)
+			})
+		}
+	})
+
+	// TestDocVariableDocumentNodeSequenceSplicesChildren verifies the structural
+	// shape of a document variable built with xsl:sequence select="/" interleaved
+	// with literal elements. The document node must contribute its children (the
+	// source root element) spliced in document order, so $v/node() sees three
+	// nodes (a, doc, c) with the source root in the middle — not a nested document
+	// node that would collapse $v/node() to two (a, c).
+	t.Run("document node sequence splices children", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v"><a/><xsl:sequence select="/"/><c/></xsl:variable>
+    <out count="{count($v/node())}" mid="{local-name($v/node()[2])}"/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+		require.Contains(t, out, `count="3"`)
+		require.Contains(t, out, `mid="doc"`)
+	})
+
+	// TestDocVariableMergesAdjacentText verifies that text produced by xsl:sequence
+	// adjacent to text from xsl:text/xsl:value-of is merged into a single text node
+	// in the constructed document tree (XSLT result-tree construction merges
+	// adjacent text nodes), so node-level XPath sees one text node, not two.
+	t.Run("merges adjacent text", func(t *testing.T) {
+		ctx := t.Context()
+		tests := []struct {
+			name string
+			body string
+		}{
+			{name: "sequence then text", body: `<xsl:sequence select="'a'"/><xsl:text>b</xsl:text>`},
+			{name: "text then sequence", body: `<xsl:text>a</xsl:text><xsl:sequence select="'b'"/>`},
+			{name: "text sequence text", body: `<xsl:text>a</xsl:text><xsl:sequence select="'b'"/><xsl:text>c</xsl:text>`},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v">` + tc.body + `</xsl:variable>
+    <out count="{count($v/text())}"><xsl:value-of select="string($v)"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+				doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+				require.NoError(t, err)
+				ss, err := xslt3.CompileStylesheet(ctx, doc)
+				require.NoError(t, err)
+				src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+				out, err := ss.Transform(src).Serialize(ctx)
+				require.NoError(t, err)
+				require.Contains(t, out, `count="1"`)
+			})
+		}
+	})
+
+	// TestDocVariableTypedTemplateResultOrder verifies that the result of a typed
+	// (as="...") template invoked via xsl:call-template inside a document-variable
+	// body keeps document order with surrounding literal result elements, rather
+	// than being appended after them.
+	t.Run("typed template result order", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/">
+    <xsl:variable name="v"><a/><xsl:call-template name="emit"/><c/></xsl:variable>
+    <out><xsl:copy-of select="$v"/></out>
+  </xsl:template>
+  <xsl:template name="emit" as="xs:string"><xsl:sequence select="'b'"/></xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, _ := helium.NewParser().Parse(ctx, []byte(`<dummy/>`))
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+		require.Regexp(t, `<a[^>]*/>b<c[^>]*/>`, out)
+	})
+
+	// TestDocVariableNestedSequenceNoPlaceholderLeak verifies that an xsl:sequence
+	// nested inside an xsl:copy in a document-variable body writes into the copied
+	// element directly (not via a document-level placeholder). The copied element
+	// becomes the temp tree's document element, so the placeholder capture path
+	// must not fire there — otherwise the unresolved placeholder PI leaks into
+	// output.
+	t.Run("nested sequence no placeholder leak", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:variable name="v">
+      <xsl:for-each select="/doc/src">
+        <xsl:copy><xsl:sequence select="'b'"/></xsl:copy>
+      </xsl:for-each>
+    </xsl:variable>
+    <out><xsl:copy-of select="$v"/></out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, _ := helium.NewParser().Parse(ctx, []byte(`<doc><src/></doc>`))
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+		require.Contains(t, out, "<out><src>b</src></out>")
+		require.NotContains(t, out, "helium-xsl-sequence-placeholder")
+	})
 }
 
 func TestAnnotateAttrRegistersIDSubtype(t *testing.T) {
@@ -460,14 +494,15 @@ func TestGlobalContextItemXPathDefaultNamespace(t *testing.T) {
 	require.Error(t, err, "root in wrong namespace must be rejected")
 }
 
-// TestApplyTemplatesMixedSelectionOrder verifies that xsl:apply-templates
-// processes a mixed sequence of atomic values and nodes in sequence order,
-// not by processing all nodes before all atomic values. Per XSLT 3.0, the
-// selected sequence is processed in order.
-func TestApplyTemplatesMixedSelectionOrder(t *testing.T) {
-	ctx := t.Context()
+func TestApplyTemplates(t *testing.T) {
+	// TestApplyTemplatesMixedSelectionOrder verifies that xsl:apply-templates
+	// processes a mixed sequence of atomic values and nodes in sequence order,
+	// not by processing all nodes before all atomic values. Per XSLT 3.0, the
+	// selected sequence is processed in order.
+	t.Run("mixed selection order", func(t *testing.T) {
+		ctx := t.Context()
 
-	xsltSrc := `<?xml version="1.0"?>
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -478,33 +513,33 @@ func TestApplyTemplatesMixedSelectionOrder(t *testing.T) {
   <xsl:template match="b">[node:<xsl:value-of select="."/>]</xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root><b>B</b></root>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root><b>B</b></root>`))
+		require.NoError(t, err)
 
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
 
-	// Sequence order is: 'a', /root/b, 'c'. The buggy implementation emits
-	// all nodes first, producing [node:B][str:a][str:c].
-	require.Contains(t, out, `[str:a][node:B][str:c]`)
-}
+		// Sequence order is: 'a', /root/b, 'c'. The buggy implementation emits
+		// all nodes first, producing [node:B][str:a][str:c].
+		require.Contains(t, out, `[str:a][node:B][str:c]`)
+	})
 
-// TestApplyTemplatesMixedSortPosition verifies that within an xsl:sort over a
-// mixed atomic+node selection, position()/last() in the sort key reflect the
-// full mixed sequence (size = number of selected items, position = 1-based
-// index in the unsorted sequence), and never a stale size of 1.
-func TestApplyTemplatesMixedSortPosition(t *testing.T) {
-	ctx := t.Context()
+	// TestApplyTemplatesMixedSortPosition verifies that within an xsl:sort over a
+	// mixed atomic+node selection, position()/last() in the sort key reflect the
+	// full mixed sequence (size = number of selected items, position = 1-based
+	// index in the unsorted sequence), and never a stale size of 1.
+	t.Run("mixed sort position", func(t *testing.T) {
+		ctx := t.Context()
 
-	// Selection is ('x', /root/a, 'y'), three items. Sort key = position()
-	// in descending order, so the processing order must be reversed:
-	// 'y' (pos 3), /root/a (pos 2), 'x' (pos 1).
-	xsltSrc := `<?xml version="1.0"?>
+		// Selection is ('x', /root/a, 'y'), three items. Sort key = position()
+		// in descending order, so the processing order must be reversed:
+		// 'y' (pos 3), /root/a (pos 2), 'x' (pos 1).
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -517,28 +552,28 @@ func TestApplyTemplatesMixedSortPosition(t *testing.T) {
   <xsl:template match="a">[node:<xsl:value-of select="."/>]</xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root><a>A</a></root>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root><a>A</a></root>`))
+		require.NoError(t, err)
 
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
 
-	require.Contains(t, out, `[str:y][node:A][str:x]`)
-}
+		require.Contains(t, out, `[str:y][node:A][str:x]`)
+	})
 
-// TestApplyTemplatesMixedSortLast verifies that last() in the sort key over a
-// mixed atomic+node selection reports the full mixed sequence size.
-func TestApplyTemplatesMixedSortLast(t *testing.T) {
-	ctx := t.Context()
+	// TestApplyTemplatesMixedSortLast verifies that last() in the sort key over a
+	// mixed atomic+node selection reports the full mixed sequence size.
+	t.Run("mixed sort last", func(t *testing.T) {
+		ctx := t.Context()
 
-	// last() must be 3 for every item. Sort key = (last() - position()) so the
-	// order is reversed: 'y' (3-3=0), /root/a (3-2=1), 'x' (3-1=2) ascending.
-	xsltSrc := `<?xml version="1.0"?>
+		// last() must be 3 for every item. Sort key = (last() - position()) so the
+		// order is reversed: 'y' (3-3=0), /root/a (3-2=1), 'x' (3-1=2) ascending.
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -551,31 +586,31 @@ func TestApplyTemplatesMixedSortLast(t *testing.T) {
   <xsl:template match="a">[node:<xsl:value-of select="."/>]</xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root><a>A</a></root>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root><a>A</a></root>`))
+		require.NoError(t, err)
 
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
 
-	require.Contains(t, out, `[str:y][node:A][str:x]`)
-}
+		require.Contains(t, out, `[str:y][node:A][str:x]`)
+	})
 
-// TestApplyTemplatesMixedSortCurrent verifies that current() in the sort key
-// resolves to the node being sorted for NODE items in a mixed selection, while
-// non-node items still atomize via the context item.
-func TestApplyTemplatesMixedSortCurrent(t *testing.T) {
-	ctx := t.Context()
+	// TestApplyTemplatesMixedSortCurrent verifies that current() in the sort key
+	// resolves to the node being sorted for NODE items in a mixed selection, while
+	// non-node items still atomize via the context item.
+	t.Run("mixed sort current", func(t *testing.T) {
+		ctx := t.Context()
 
-	// Selection mixes nodes and a string. Sort by current() string value so
-	// node items sort by their own value via current(). Nodes a/b/c have
-	// values "3","1","2"; string "0" sorts first. Expected ascending order:
-	// '0', b(1), c(2), a(3).
-	xsltSrc := `<?xml version="1.0"?>
+		// Selection mixes nodes and a string. Sort by current() string value so
+		// node items sort by their own value via current(). Nodes a/b/c have
+		// values "3","1","2"; string "0" sorts first. Expected ascending order:
+		// '0', b(1), c(2), a(3).
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -588,221 +623,25 @@ func TestApplyTemplatesMixedSortCurrent(t *testing.T) {
   <xsl:template match="*">[node:<xsl:value-of select="."/>]</xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root><a>3</a><b>1</b><c>2</c></root>`))
-	require.NoError(t, err)
-
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-
-	require.Contains(t, out, `[str:0][node:1][node:2][node:3]`)
-}
-
-// TestForEachGroupStartingWithPositionalPattern verifies that a positional
-// pattern in group-starting-with sees the per-item focus (position/size of the
-// population sequence), and never the stale outer focus (ENG-005). The
-// population is an atomic sequence, so the pattern predicate is evaluated with
-// the item as context and reads ec.position/ec.size. With the bug, position()=3
-// never matches (position stuck at the outer 1), producing a single group; the
-// fix yields two groups split before the 3rd item.
-func TestForEachGroupStartingWithPositionalPattern(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <out>
-      <xsl:for-each-group select="(1,2,3,4,5)" group-starting-with=".[position()=3]">
-        <group><xsl:value-of select="string-join(current-group()!string(.), ',')"/></group>
-      </xsl:for-each-group>
-    </out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-
-	require.Equal(t, 2, strings.Count(out, "<group>"),
-		"positional pattern should split into two groups, got: %s", out)
-	require.Contains(t, out, "<group>1,2</group>")
-	require.Contains(t, out, "<group>3,4,5</group>")
-}
-
-// TestForEachGroupEndingWithPositionalPattern verifies the same per-item focus
-// handling for group-ending-with (ENG-005). position()=3 ends a group at the
-// 3rd item of the population.
-func TestForEachGroupEndingWithPositionalPattern(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <out>
-      <xsl:for-each-group select="(1,2,3,4,5)" group-ending-with=".[position()=3]">
-        <group><xsl:value-of select="string-join(current-group()!string(.), ',')"/></group>
-      </xsl:for-each-group>
-    </out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-
-	require.Equal(t, 2, strings.Count(out, "<group>"),
-		"positional pattern should split into two groups, got: %s", out)
-	require.Contains(t, out, "<group>1,2,3</group>")
-	require.Contains(t, out, "<group>4,5</group>")
-}
-
-// TestForEachGroupStartingWithNodePositionalPattern verifies that a positional
-// pattern in group-starting-with sees the per-item focus of the population when
-// the population is a sequence of element NODES (UNRES-7, #684 follow-up). The
-// node path previously delegated straight to matchPattern, which re-established
-// the node's document-order focus and ignored ec.position/ec.size, so
-// position()=3 never matched and the items collapsed into a single group. The
-// fix routes ".[pred]" alternatives through the population focus, splitting
-// before the 3rd node.
-func TestForEachGroupStartingWithNodePositionalPattern(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <out>
-      <xsl:for-each-group select="root/item" group-starting-with=".[position()=3]">
-        <group><xsl:value-of select="string-join(current-group()!string(@n), ',')"/></group>
-      </xsl:for-each-group>
-    </out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, err := helium.NewParser().Parse(ctx, []byte(
-		`<root><item n="1"/><item n="2"/><item n="3"/><item n="4"/><item n="5"/></root>`))
-	require.NoError(t, err)
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-
-	require.Equal(t, 2, strings.Count(out, "<group>"),
-		"node positional pattern should split into two groups, got: %s", out)
-	require.Contains(t, out, "<group>1,2</group>")
-	require.Contains(t, out, "<group>3,4,5</group>")
-}
-
-// TestForEachGroupEndingWithNodePositionalPattern verifies the same per-item
-// focus handling for group-ending-with over element NODES (UNRES-7). A group
-// ends at the 3rd node of the population.
-func TestForEachGroupEndingWithNodePositionalPattern(t *testing.T) {
-	ctx := t.Context()
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <out>
-      <xsl:for-each-group select="root/item" group-ending-with=".[position()=3]">
-        <group><xsl:value-of select="string-join(current-group()!string(@n), ',')"/></group>
-      </xsl:for-each-group>
-    </out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-	src, err := helium.NewParser().Parse(ctx, []byte(
-		`<root><item n="1"/><item n="2"/><item n="3"/><item n="4"/><item n="5"/></root>`))
-	require.NoError(t, err)
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-
-	require.Equal(t, 2, strings.Count(out, "<group>"),
-		"node positional pattern should split into two groups, got: %s", out)
-	require.Contains(t, out, "<group>1,2,3</group>")
-	require.Contains(t, out, "<group>4,5</group>")
-}
-
-// TestForEachGroupStartingWithNumericLiteralPattern verifies the numeric-literal
-// positional predicate (the atomic branch of matchContextItemPredicates) does an
-// exact float compare, not a truncating int compare. position()=2.7 is never
-// true, so ".[2.7]" must not start a group anywhere over (1,2,3,4,5), yielding a
-// single group; ".[3]" and ".[3.0]" both match position 3 exactly and split.
-func TestForEachGroupStartingWithNumericLiteralPattern(t *testing.T) {
-	ctx := t.Context()
-	tmpl := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:template match="/">
-    <out>
-      <xsl:for-each-group select="(1,2,3,4,5)" group-starting-with=".[%s]">
-        <group><xsl:value-of select="string-join(current-group()!string(.), ',')"/></group>
-      </xsl:for-each-group>
-    </out>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	run := func(t *testing.T, pred string) string {
-		t.Helper()
-		xsltSrc := strings.Replace(tmpl, "%s", pred, 1)
 		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
 		require.NoError(t, err)
 		ss, err := xslt3.CompileStylesheet(ctx, doc)
 		require.NoError(t, err)
-		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root><a>3</a><b>1</b><c>2</c></root>`))
 		require.NoError(t, err)
+
 		out, err := ss.Transform(src).Serialize(ctx)
 		require.NoError(t, err)
-		return out
-	}
 
-	t.Run("fractional literal never matches", func(t *testing.T) {
-		out := run(t, "2.7")
-		require.Equal(t, 1, strings.Count(out, "<group>"),
-			"position()=2.7 is never true, expected a single group, got: %s", out)
-		require.Contains(t, out, "<group>1,2,3,4,5</group>")
+		require.Contains(t, out, `[str:0][node:1][node:2][node:3]`)
 	})
 
-	t.Run("integer literal matches position", func(t *testing.T) {
-		out := run(t, "3")
-		require.Equal(t, 2, strings.Count(out, "<group>"),
-			".[3] should split at position 3, got: %s", out)
-		require.Contains(t, out, "<group>1,2</group>")
-		require.Contains(t, out, "<group>3,4,5</group>")
-	})
-
-	t.Run("integer-valued float matches position", func(t *testing.T) {
-		out := run(t, "3.0")
-		require.Equal(t, 2, strings.Count(out, "<group>"),
-			".[3.0] should split at position 3, got: %s", out)
-		require.Contains(t, out, "<group>1,2</group>")
-		require.Contains(t, out, "<group>3,4,5</group>")
-	})
-}
-
-// ENG-001: a template rule matching an ATOMIC item with a required param
-// supplied via xsl:with-param must succeed (no XTDE0700) and the param value
-// must be visible in the template body.
-func TestApplyTemplatesAtomicRequiredParamSupplied(t *testing.T) {
-	ss := compileStylesheetString(t, `
+	// ENG-001: a template rule matching an ATOMIC item with a required param
+	// supplied via xsl:with-param must succeed (no XTDE0700) and the param value
+	// must be visible in the template body.
+	t.Run("atomic required param supplied", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
   xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -820,80 +659,252 @@ func TestApplyTemplatesAtomicRequiredParamSupplied(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	source := parseTransformSource(t)
-	result, err := xslt3.TransformString(t.Context(), source, ss)
-	require.NoError(t, err)
-	require.Contains(t, result, "<got>supplied</got>")
+		source := parseTransformSource(t)
+		result, err := xslt3.TransformString(t.Context(), source, ss)
+		require.NoError(t, err)
+		require.Contains(t, result, "<got>supplied</got>")
+	})
 }
 
-// ENG-002: a caller-supplied empty sequence () for a param with
-// as="xs:string" (cardinality exactly-one) must raise XTTE0590, not pass
-// silently.
-func TestCallTemplateEmptySequenceForExactlyOneParamFails(t *testing.T) {
-	ss := compileStylesheetString(t, `
+func TestForEachGroup(t *testing.T) {
+	// TestForEachGroupStartingWithPositionalPattern verifies that a positional
+	// pattern in group-starting-with sees the per-item focus (position/size of the
+	// population sequence), and never the stale outer focus (ENG-005). The
+	// population is an atomic sequence, so the pattern predicate is evaluated with
+	// the item as context and reads ec.position/ec.size. With the bug, position()=3
+	// never matches (position stuck at the outer 1), producing a single group; the
+	// fix yields two groups split before the 3rd item.
+	t.Run("starting with positional pattern", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="/">
     <out>
-      <xsl:call-template name="show">
-        <xsl:with-param name="p" select="()"/>
-      </xsl:call-template>
+      <xsl:for-each-group select="(1,2,3,4,5)" group-starting-with=".[position()=3]">
+        <group><xsl:value-of select="string-join(current-group()!string(.), ',')"/></group>
+      </xsl:for-each-group>
     </out>
   </xsl:template>
+</xsl:stylesheet>`
 
-  <xsl:template name="show">
-    <xsl:param name="p" as="xs:string"/>
-    <q><xsl:value-of select="$p"/></q>
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+
+		require.Equal(t, 2, strings.Count(out, "<group>"),
+			"positional pattern should split into two groups, got: %s", out)
+		require.Contains(t, out, "<group>1,2</group>")
+		require.Contains(t, out, "<group>3,4,5</group>")
+	})
+
+	// TestForEachGroupEndingWithPositionalPattern verifies the same per-item focus
+	// handling for group-ending-with (ENG-005). position()=3 ends a group at the
+	// 3rd item of the population.
+	t.Run("ending with positional pattern", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each-group select="(1,2,3,4,5)" group-ending-with=".[position()=3]">
+        <group><xsl:value-of select="string-join(current-group()!string(.), ',')"/></group>
+      </xsl:for-each-group>
+    </out>
   </xsl:template>
-</xsl:stylesheet>`)
+</xsl:stylesheet>`
 
-	source := parseTransformSource(t)
-	_, err := xslt3.TransformString(t.Context(), source, ss)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "XTTE0590")
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+
+		require.Equal(t, 2, strings.Count(out, "<group>"),
+			"positional pattern should split into two groups, got: %s", out)
+		require.Contains(t, out, "<group>1,2,3</group>")
+		require.Contains(t, out, "<group>4,5</group>")
+	})
+
+	// TestForEachGroupStartingWithNodePositionalPattern verifies that a positional
+	// pattern in group-starting-with sees the per-item focus of the population when
+	// the population is a sequence of element NODES (UNRES-7, #684 follow-up). The
+	// node path previously delegated straight to matchPattern, which re-established
+	// the node's document-order focus and ignored ec.position/ec.size, so
+	// position()=3 never matched and the items collapsed into a single group. The
+	// fix routes ".[pred]" alternatives through the population focus, splitting
+	// before the 3rd node.
+	t.Run("starting with node positional pattern", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each-group select="root/item" group-starting-with=".[position()=3]">
+        <group><xsl:value-of select="string-join(current-group()!string(@n), ',')"/></group>
+      </xsl:for-each-group>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(
+			`<root><item n="1"/><item n="2"/><item n="3"/><item n="4"/><item n="5"/></root>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+
+		require.Equal(t, 2, strings.Count(out, "<group>"),
+			"node positional pattern should split into two groups, got: %s", out)
+		require.Contains(t, out, "<group>1,2</group>")
+		require.Contains(t, out, "<group>3,4,5</group>")
+	})
+
+	// TestForEachGroupEndingWithNodePositionalPattern verifies the same per-item
+	// focus handling for group-ending-with over element NODES (UNRES-7). A group
+	// ends at the 3rd node of the population.
+	t.Run("ending with node positional pattern", func(t *testing.T) {
+		ctx := t.Context()
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each-group select="root/item" group-ending-with=".[position()=3]">
+        <group><xsl:value-of select="string-join(current-group()!string(@n), ',')"/></group>
+      </xsl:for-each-group>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(
+			`<root><item n="1"/><item n="2"/><item n="3"/><item n="4"/><item n="5"/></root>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+
+		require.Equal(t, 2, strings.Count(out, "<group>"),
+			"node positional pattern should split into two groups, got: %s", out)
+		require.Contains(t, out, "<group>1,2,3</group>")
+		require.Contains(t, out, "<group>4,5</group>")
+	})
+
+	// TestForEachGroupStartingWithNumericLiteralPattern verifies the numeric-literal
+	// positional predicate (the atomic branch of matchContextItemPredicates) does an
+	// exact float compare, not a truncating int compare. position()=2.7 is never
+	// true, so ".[2.7]" must not start a group anywhere over (1,2,3,4,5), yielding a
+	// single group; ".[3]" and ".[3.0]" both match position 3 exactly and split.
+	t.Run("starting with numeric literal pattern", func(t *testing.T) {
+		ctx := t.Context()
+		tmpl := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out>
+      <xsl:for-each-group select="(1,2,3,4,5)" group-starting-with=".[%s]">
+        <group><xsl:value-of select="string-join(current-group()!string(.), ',')"/></group>
+      </xsl:for-each-group>
+    </out>
+  </xsl:template>
+</xsl:stylesheet>`
+
+		run := func(t *testing.T, pred string) string {
+			t.Helper()
+			xsltSrc := strings.Replace(tmpl, "%s", pred, 1)
+			doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(ctx, doc)
+			require.NoError(t, err)
+			src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(ctx)
+			require.NoError(t, err)
+			return out
+		}
+
+		t.Run("fractional literal never matches", func(t *testing.T) {
+			out := run(t, "2.7")
+			require.Equal(t, 1, strings.Count(out, "<group>"),
+				"position()=2.7 is never true, expected a single group, got: %s", out)
+			require.Contains(t, out, "<group>1,2,3,4,5</group>")
+		})
+
+		t.Run("integer literal matches position", func(t *testing.T) {
+			out := run(t, "3")
+			require.Equal(t, 2, strings.Count(out, "<group>"),
+				".[3] should split at position 3, got: %s", out)
+			require.Contains(t, out, "<group>1,2</group>")
+			require.Contains(t, out, "<group>3,4,5</group>")
+		})
+
+		t.Run("integer-valued float matches position", func(t *testing.T) {
+			out := run(t, "3.0")
+			require.Equal(t, 2, strings.Count(out, "<group>"),
+				".[3.0] should split at position 3, got: %s", out)
+			require.Contains(t, out, "<group>1,2</group>")
+			require.Contains(t, out, "<group>3,4,5</group>")
+		})
+	})
 }
 
-// Variables declared inside xsl:try (or its xsl:catch) must not leak into the
-// surrounding scope. After the instruction completes, an outer variable of the
-// same name must still resolve to its outer value.
-func TestTryDoesNotLeakVariables(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		body string
-	}{
-		{
-			// Try body succeeds; inner $x must not shadow outer $x afterward.
-			name: "success",
-			body: `
+func TestTryCatch(t *testing.T) {
+	// Variables declared inside xsl:try (or its xsl:catch) must not leak into the
+	// surrounding scope. After the instruction completes, an outer variable of the
+	// same name must still resolve to its outer value.
+	t.Run("xsl:try does not leak variables", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			body string
+		}{
+			{
+				// Try body succeeds; inner $x must not shadow outer $x afterward.
+				name: "success",
+				body: `
       <xsl:try>
         <xsl:variable name="x" select="'inner'"/>
         <xsl:catch/>
       </xsl:try>`,
-		},
-		{
-			// Try body fails; catch runs and declares $x, which must not leak.
-			name: "catch",
-			body: `
+			},
+			{
+				// Try body fails; catch runs and declares $x, which must not leak.
+				name: "catch",
+				body: `
       <xsl:try>
         <xsl:sequence select="1 div xs:integer('not-a-number')"/>
         <xsl:catch>
           <xsl:variable name="x" select="'inner'"/>
         </xsl:catch>
       </xsl:try>`,
-		},
-		{
-			// rollback-output="no" with a successful try body.
-			name: "no-rollback-success",
-			body: `
+			},
+			{
+				// rollback-output="no" with a successful try body.
+				name: "no-rollback-success",
+				body: `
       <xsl:try rollback-output="no">
         <xsl:variable name="x" select="'inner'"/>
         <xsl:catch/>
       </xsl:try>`,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ss := compileStylesheetString(t, `
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xsl:template match="/">
     <xsl:variable name="x" select="'outer'"/>
@@ -901,21 +912,21 @@ func TestTryDoesNotLeakVariables(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-			result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
-			require.NoError(t, err)
-			require.Contains(t, result, ">outer<")
-			require.NotContains(t, result, ">inner<")
-		})
-	}
-}
+				result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+				require.NoError(t, err)
+				require.Contains(t, result, ">outer<")
+				require.NotContains(t, result, ">inner<")
+			})
+		}
+	})
 
-// A tunnel parameter set by an xsl:call-template whose with-param evaluation
-// later fails must not leak into templates invoked from the surrounding
-// xsl:catch. The tunnel param is evaluated (mutating the active tunnel map)
-// before a sibling with-param raises a dynamic error; the error is caught, and
-// a second template called from xsl:catch must see the tunnel param as absent.
-func TestCallTemplateTunnelParamDoesNotLeakAcrossCaughtError(t *testing.T) {
-	ss := compileStylesheetString(t, `
+	// A tunnel parameter set by an xsl:call-template whose with-param evaluation
+	// later fails must not leak into templates invoked from the surrounding
+	// xsl:catch. The tunnel param is evaluated (mutating the active tunnel map)
+	// before a sibling with-param raises a dynamic error; the error is caught, and
+	// a second template called from xsl:catch must see the tunnel param as absent.
+	t.Run("a call-template tunnel param does not leak across a caught error", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xsl:template match="/">
     <out>
@@ -942,28 +953,28 @@ func TestCallTemplateTunnelParamDoesNotLeakAcrossCaughtError(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
-	require.NoError(t, err)
-	require.Contains(t, result, "NOLEAK")
-	require.NotContains(t, result, "LEAKED")
-}
+		result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, result, "NOLEAK")
+		require.NotContains(t, result, "LEAKED")
+	})
 
-// A tunnel parameter must not become observable to a template invoked from a
-// LATER sibling with-param's BODY before control is actually transferred to the
-// target template. Here the first with-param sets the tunnel param, and a later
-// with-param body contains an xsl:try whose error is caught; the xsl:catch calls
-// another template that reads the same tunnel param. Because the value is still
-// being assembled (the call/next-match/apply-imports has not yet handed control
-// to its target), the called template must see the tunnel param as ABSENT.
-// This is the two-phase guarantee that xsl:apply-templates already provides.
-func TestTunnelParamNotObservedByLaterWithParamBody(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		src  string
-	}{
-		{
-			name: "call-template",
-			src: `
+	// A tunnel parameter must not become observable to a template invoked from a
+	// LATER sibling with-param's BODY before control is actually transferred to the
+	// target template. Here the first with-param sets the tunnel param, and a later
+	// with-param body contains an xsl:try whose error is caught; the xsl:catch calls
+	// another template that reads the same tunnel param. Because the value is still
+	// being assembled (the call/next-match/apply-imports has not yet handed control
+	// to its target), the called template must see the tunnel param as ABSENT.
+	// This is the two-phase guarantee that xsl:apply-templates already provides.
+	t.Run("a tunnel param is not observed by a later with-param body", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			src  string
+		}{
+			{
+				name: "call-template",
+				src: `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xsl:template match="/">
     <out>
@@ -992,10 +1003,10 @@ func TestTunnelParamNotObservedByLaterWithParamBody(t *testing.T) {
     <xsl:value-of select="$tp"/>
   </xsl:template>
 </xsl:stylesheet>`,
-		},
-		{
-			name: "next-match",
-			src: `
+			},
+			{
+				name: "next-match",
+				src: `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xsl:template match="root" priority="2">
     <out>
@@ -1024,26 +1035,26 @@ func TestTunnelParamNotObservedByLaterWithParamBody(t *testing.T) {
     <xsl:value-of select="$tp"/>
   </xsl:template>
 </xsl:stylesheet>`,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ss := compileStylesheetString(t, tc.src)
-			result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
-			require.NoError(t, err)
-			require.Contains(t, result, "NOLEAK")
-			require.NotContains(t, result, "LEAKED")
-		})
-	}
-}
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ss := compileStylesheetString(t, tc.src)
+				result, err := ss.Transform(parseTransformSource(t)).Serialize(t.Context())
+				require.NoError(t, err)
+				require.Contains(t, result, "NOLEAK")
+				require.NotContains(t, result, "LEAKED")
+			})
+		}
+	})
 
-// Same two-phase guarantee for xsl:apply-imports: a tunnel with-param set by an
-// earlier sibling must not be visible to a template invoked from a later
-// with-param body whose inner error is caught, before control is transferred to
-// the imported template.
-func TestApplyImportsTunnelParamNotObservedByLaterWithParamBody(t *testing.T) {
-	const importedURI = "mem:/imported-tunnel.xsl"
+	// Same two-phase guarantee for xsl:apply-imports: a tunnel with-param set by an
+	// earlier sibling must not be visible to a template invoked from a later
+	// with-param body whose inner error is caught, before control is transferred to
+	// the imported template.
+	t.Run("an apply-imports tunnel param is not observed by a later with-param body", func(t *testing.T) {
+		const importedURI = "mem:/imported-tunnel.xsl"
 
-	imported := `<?xml version="1.0"?>
+		imported := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="root">
     <xsl:param name="tp" tunnel="yes"/>
@@ -1052,7 +1063,7 @@ func TestApplyImportsTunnelParamNotObservedByLaterWithParamBody(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	main := `<?xml version="1.0"?>
+		main := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xsl:import href="` + importedURI + `"/>
   <xsl:output method="xml" omit-xml-declaration="yes"/>
@@ -1078,92 +1089,95 @@ func TestApplyImportsTunnelParamNotObservedByLaterWithParamBody(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	resolver := &memResolver{files: map[string]string{importedURI: imported}}
+		resolver := &memResolver{files: map[string]string{importedURI: imported}}
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(main))
+		require.NoError(t, err)
 
-	ss, err := xslt3.NewCompiler().
-		BaseURI("mem:/main.xsl").
-		URIResolver(resolver).
-		Compile(t.Context(), doc)
-	require.NoError(t, err)
+		ss, err := xslt3.NewCompiler().
+			BaseURI("mem:/main.xsl").
+			URIResolver(resolver).
+			Compile(t.Context(), doc)
+		require.NoError(t, err)
 
-	source, err := helium.NewParser().Parse(t.Context(), []byte("<root/>"))
-	require.NoError(t, err)
+		source, err := helium.NewParser().Parse(t.Context(), []byte("<root/>"))
+		require.NoError(t, err)
 
-	out, err := xslt3.TransformString(t.Context(), source, ss)
-	require.NoError(t, err)
-	require.Contains(t, out, "NOLEAK")
-	require.NotContains(t, out, "LEAKED")
+		out, err := xslt3.TransformString(t.Context(), source, ss)
+		require.NoError(t, err)
+		require.Contains(t, out, "NOLEAK")
+		require.NotContains(t, out, "LEAKED")
+	})
 }
 
-// TestCopyOfAttributeValuesNotReparsed guards against the result-tree copy path
-// re-parsing an already-resolved attribute value. xsl:copy-of of an element (and
-// xsl:copy) duplicates the source element into the result tree via a deep copy;
-// the attribute value returned by the parser is already entity-resolved, so it
-// must be stored LITERALLY (and re-escaped by the serializer), and never fed
-// back through a value-parsing setter (SetParsedAttribute), which would choke on
-// a bare '&' (an "entity was unterminated" error) or silently double-resolve
-// '&amp;amp;'.
-func TestCopyOfAttributeValuesNotReparsed(t *testing.T) {
-	t.Parallel()
+func TestCopyOf(t *testing.T) {
+	// TestCopyOfAttributeValuesNotReparsed guards against the result-tree copy path
+	// re-parsing an already-resolved attribute value. xsl:copy-of of an element (and
+	// xsl:copy) duplicates the source element into the result tree via a deep copy;
+	// the attribute value returned by the parser is already entity-resolved, so it
+	// must be stored LITERALLY (and re-escaped by the serializer), and never fed
+	// back through a value-parsing setter (SetParsedAttribute), which would choke on
+	// a bare '&' (an "entity was unterminated" error) or silently double-resolve
+	// '&amp;amp;'.
+	t.Run("attribute values not reparsed", func(t *testing.T) {
+		t.Parallel()
 
-	// srcAttr is the lexical attribute value as authored in the source XML;
-	// wantAttr is its expected serialization after an entity-resolved round trip.
-	cases := []struct {
-		name     string
-		srcAttr  string
-		wantAttr string
-	}{
-		{"ampersand", "x&amp;y", "x&amp;y"},
-		{"less-than", "a&lt;b", "a&lt;b"},
-		{"greater-than", "a&gt;b", "a&gt;b"},
-		{"quote", "&quot;q&quot;", "&quot;q&quot;"},
-		{"numeric-ref", "&#65;&#66;", "AB"},
-		{"double-escaped", "&amp;amp;", "&amp;amp;"},
-		{"mixed", "p?a=1&amp;b=2&lt;3", "p?a=1&amp;b=2&lt;3"},
-	}
+		// srcAttr is the lexical attribute value as authored in the source XML;
+		// wantAttr is its expected serialization after an entity-resolved round trip.
+		cases := []struct {
+			name     string
+			srcAttr  string
+			wantAttr string
+		}{
+			{"ampersand", "x&amp;y", "x&amp;y"},
+			{"less-than", "a&lt;b", "a&lt;b"},
+			{"greater-than", "a&gt;b", "a&gt;b"},
+			{"quote", "&quot;q&quot;", "&quot;q&quot;"},
+			{"numeric-ref", "&#65;&#66;", "AB"},
+			{"double-escaped", "&amp;amp;", "&amp;amp;"},
+			{"mixed", "p?a=1&amp;b=2&lt;3", "p?a=1&amp;b=2&lt;3"},
+		}
 
-	copyOfSheet := compileSheet(t, `<out><xsl:copy-of select="."/></out>`)
-	copySheet := compileSheet(t, `<xsl:copy select="."><xsl:copy-of select="@*"/></xsl:copy>`)
+		copyOfSheet := compileSheet(t, `<out><xsl:copy-of select="."/></out>`)
+		copySheet := compileSheet(t, `<xsl:copy select="."><xsl:copy-of select="@*"/></xsl:copy>`)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 
-			src, err := helium.NewParser().Parse(t.Context(),
-				[]byte(`<e a="`+tc.srcAttr+`"/>`))
-			require.NoError(t, err)
+				src, err := helium.NewParser().Parse(t.Context(),
+					[]byte(`<e a="`+tc.srcAttr+`"/>`))
+				require.NoError(t, err)
 
-			wantElem := `<e a="` + tc.wantAttr + `"/>`
+				wantElem := `<e a="` + tc.wantAttr + `"/>`
 
-			// xsl:copy-of of the element: the previously-broken path.
-			out, err := xslt3.TransformString(t.Context(), src, copyOfSheet)
-			require.NoError(t, err, "xsl:copy-of must not re-parse the resolved value")
-			require.Equal(t, "<out>"+wantElem+"</out>", out)
+				// xsl:copy-of of the element: the previously-broken path.
+				out, err := xslt3.TransformString(t.Context(), src, copyOfSheet)
+				require.NoError(t, err, "xsl:copy-of must not re-parse the resolved value")
+				require.Equal(t, "<out>"+wantElem+"</out>", out)
 
-			// xsl:copy of the element plus xsl:copy-of of its attributes.
-			out2, err := xslt3.TransformString(t.Context(), src, copySheet)
-			require.NoError(t, err, "xsl:copy must not re-parse the resolved value")
-			require.Equal(t, wantElem, out2)
-		})
-	}
-}
+				// xsl:copy of the element plus xsl:copy-of of its attributes.
+				out2, err := xslt3.TransformString(t.Context(), src, copySheet)
+				require.NoError(t, err, "xsl:copy must not re-parse the resolved value")
+				require.Equal(t, wantElem, out2)
+			})
+		}
+	})
 
-// TestCopyOfNamespacedAttributeNotReparsed exercises the namespaced-attribute
-// branch of the deep-copy attribute loop (SetAttributeNS).
-func TestCopyOfNamespacedAttributeNotReparsed(t *testing.T) {
-	t.Parallel()
+	// TestCopyOfNamespacedAttributeNotReparsed exercises the namespaced-attribute
+	// branch of the deep-copy attribute loop (SetAttributeNS).
+	t.Run("namespaced attribute not reparsed", func(t *testing.T) {
+		t.Parallel()
 
-	src, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<e xmlns:p="urn:p" p:a="x&amp;y&lt;z"/>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<e xmlns:p="urn:p" p:a="x&amp;y&lt;z"/>`))
+		require.NoError(t, err)
 
-	ss := compileSheet(t, `<out><xsl:copy-of select="."/></out>`)
-	out, err := xslt3.TransformString(t.Context(), src, ss)
-	require.NoError(t, err)
-	require.Equal(t, `<out><e xmlns:p="urn:p" p:a="x&amp;y&lt;z"/></out>`, out)
+		ss := compileSheet(t, `<out><xsl:copy-of select="."/></out>`)
+		out, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		require.Equal(t, `<out><e xmlns:p="urn:p" p:a="x&amp;y&lt;z"/></out>`, out)
+	})
 }
 
 // compileSheet compiles a minimal stylesheet whose single template body (matched
@@ -1181,17 +1195,18 @@ func compileSheet(t *testing.T, body string) *xslt3.Stylesheet {
 	return ss
 }
 
-// TestAttributeUndeclaredPrefixSequenceMode verifies that xsl:attribute with a
-// computed name using an undeclared prefix raises XTDE0860 even when the
-// attribute is constructed in sequence mode (xsl:variable/xsl:param with an
-// "as" type), and is never captured silently as a no-namespace attribute.
-func TestAttributeUndeclaredPrefixSequenceMode(t *testing.T) {
-	ctx := t.Context()
+func TestAttribute(t *testing.T) {
+	// TestAttributeUndeclaredPrefixSequenceMode verifies that xsl:attribute with a
+	// computed name using an undeclared prefix raises XTDE0860 even when the
+	// attribute is constructed in sequence mode (xsl:variable/xsl:param with an
+	// "as" type), and is never captured silently as a no-namespace attribute.
+	t.Run("undeclared prefix sequence mode", func(t *testing.T) {
+		ctx := t.Context()
 
-	// The variable has an "as" type, so xsl:attribute is constructed in
-	// sequence mode. The computed name "p:a" uses prefix "p" which is not
-	// declared anywhere in scope, so XTDE0860 must be raised.
-	xsltSrc := `<?xml version="1.0"?>
+		// The variable has an "as" type, so xsl:attribute is constructed in
+		// sequence mode. The computed name "p:a" uses prefix "p" which is not
+		// declared anywhere in scope, so XTDE0860 must be raised.
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="/">
@@ -1202,32 +1217,32 @@ func TestAttributeUndeclaredPrefixSequenceMode(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
 
-	_, err = ss.Transform(src).Serialize(ctx)
-	require.Error(t, err, "undeclared prefix in computed attribute name must raise an error")
-	require.True(t, strings.Contains(err.Error(), "XTDE0860"),
-		"expected XTDE0860, got: %v", err)
-}
+		_, err = ss.Transform(src).Serialize(ctx)
+		require.Error(t, err, "undeclared prefix in computed attribute name must raise an error")
+		require.True(t, strings.Contains(err.Error(), "XTDE0860"),
+			"expected XTDE0860, got: %v", err)
+	})
 
-// TestAttributeUndeclaredPrefixItemCapture verifies that xsl:attribute with a
-// computed name using an undeclared prefix raises XTDE0860 when the attribute is
-// captured as a standalone item (here via an item-serialization output method
-// that captures the result and builds no tree).
-func TestAttributeUndeclaredPrefixItemCapture(t *testing.T) {
-	ctx := t.Context()
+	// TestAttributeUndeclaredPrefixItemCapture verifies that xsl:attribute with a
+	// computed name using an undeclared prefix raises XTDE0860 when the attribute is
+	// captured as a standalone item (here via an item-serialization output method
+	// that captures the result and builds no tree).
+	t.Run("undeclared prefix item capture", func(t *testing.T) {
+		ctx := t.Context()
 
-	// method="adaptive" is an item-serialization method, so an xsl:attribute
-	// constructed directly under the document node is captured as a pending
-	// item. The computed name "p:a" uses an undeclared prefix "p", so XTDE0860
-	// must be raised.
-	xsltSrc := `<?xml version="1.0"?>
+		// method="adaptive" is an item-serialization method, so an xsl:attribute
+		// constructed directly under the document node is captured as a pending
+		// item. The computed name "p:a" uses an undeclared prefix "p", so XTDE0860
+		// must be raised.
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:output method="adaptive"/>
@@ -1236,31 +1251,31 @@ func TestAttributeUndeclaredPrefixItemCapture(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
 
-	_, err = ss.Transform(src).Serialize(ctx)
-	require.Error(t, err, "undeclared prefix in computed attribute name must raise an error")
-	require.True(t, strings.Contains(err.Error(), "XTDE0860"),
-		"expected XTDE0860, got: %v", err)
-}
+		_, err = ss.Transform(src).Serialize(ctx)
+		require.Error(t, err, "undeclared prefix in computed attribute name must raise an error")
+		require.True(t, strings.Contains(err.Error(), "XTDE0860"),
+			"expected XTDE0860, got: %v", err)
+	})
 
-// TestAttributeInvalidQNameSequenceMode verifies that xsl:attribute with a
-// computed name that is not a lexically valid QName raises XTDE0850 in sequence
-// mode (xsl:variable/xsl:param with an "as" type), producing no
-// attribute with an invalid name.
-func TestAttributeInvalidQNameSequenceMode(t *testing.T) {
-	ctx := t.Context()
+	// TestAttributeInvalidQNameSequenceMode verifies that xsl:attribute with a
+	// computed name that is not a lexically valid QName raises XTDE0850 in sequence
+	// mode (xsl:variable/xsl:param with an "as" type), producing no
+	// attribute with an invalid name.
+	t.Run("invalid QName sequence mode", func(t *testing.T) {
+		ctx := t.Context()
 
-	// "1bad" is not a valid NCName/QName (NCNames cannot start with a digit),
-	// so XTDE0850 must be raised even though the attribute is constructed in
-	// sequence mode.
-	xsltSrc := `<?xml version="1.0"?>
+		// "1bad" is not a valid NCName/QName (NCNames cannot start with a digit),
+		// so XTDE0850 must be raised even though the attribute is constructed in
+		// sequence mode.
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="/">
@@ -1271,31 +1286,31 @@ func TestAttributeInvalidQNameSequenceMode(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
 
-	_, err = ss.Transform(src).Serialize(ctx)
-	require.Error(t, err, "invalid QName in computed attribute name must raise an error")
-	require.True(t, strings.Contains(err.Error(), "XTDE0850"),
-		"expected XTDE0850, got: %v", err)
-}
+		_, err = ss.Transform(src).Serialize(ctx)
+		require.Error(t, err, "invalid QName in computed attribute name must raise an error")
+		require.True(t, strings.Contains(err.Error(), "XTDE0850"),
+			"expected XTDE0850, got: %v", err)
+	})
 
-// TestAttributeInvalidQNameItemCapture verifies that xsl:attribute with a
-// computed name that is not a lexically valid QName raises XTDE0850 when the
-// attribute is captured as a standalone item via an item-serialization output
-// method.
-func TestAttributeInvalidQNameItemCapture(t *testing.T) {
-	ctx := t.Context()
+	// TestAttributeInvalidQNameItemCapture verifies that xsl:attribute with a
+	// computed name that is not a lexically valid QName raises XTDE0850 when the
+	// attribute is captured as a standalone item via an item-serialization output
+	// method.
+	t.Run("invalid QName item capture", func(t *testing.T) {
+		ctx := t.Context()
 
-	// As above, "1bad" is not a valid QName. With method="adaptive" the
-	// attribute is captured as a pending item, and XTDE0850 must still be
-	// raised.
-	xsltSrc := `<?xml version="1.0"?>
+		// As above, "1bad" is not a valid QName. With method="adaptive" the
+		// attribute is captured as a pending item, and XTDE0850 must still be
+		// raised.
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:output method="adaptive"/>
@@ -1304,30 +1319,30 @@ func TestAttributeInvalidQNameItemCapture(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
 
-	_, err = ss.Transform(src).Serialize(ctx)
-	require.Error(t, err, "invalid QName in computed attribute name must raise an error")
-	require.True(t, strings.Contains(err.Error(), "XTDE0850"),
-		"expected XTDE0850, got: %v", err)
-}
+		_, err = ss.Transform(src).Serialize(ctx)
+		require.Error(t, err, "invalid QName in computed attribute name must raise an error")
+		require.True(t, strings.Contains(err.Error(), "XTDE0850"),
+			"expected XTDE0850, got: %v", err)
+	})
 
-// TestAttributeExplicitNamespaceSequenceMode verifies that an xsl:attribute with
-// a computed name using an undeclared prefix BUT an explicit namespace= attribute
-// is assigned that namespace (not no-namespace) when constructed in sequence mode.
-func TestAttributeExplicitNamespaceSequenceMode(t *testing.T) {
-	ctx := t.Context()
+	// TestAttributeExplicitNamespaceSequenceMode verifies that an xsl:attribute with
+	// a computed name using an undeclared prefix BUT an explicit namespace= attribute
+	// is assigned that namespace (not no-namespace) when constructed in sequence mode.
+	t.Run("explicit namespace sequence mode", func(t *testing.T) {
+		ctx := t.Context()
 
-	// The prefix "p" is undeclared, but namespace="urn:p" is supplied, so the
-	// attribute must be in urn:p, not in no-namespace. We capture it in a
-	// sequence-typed variable and emit its namespace URI as text.
-	xsltSrc := `<?xml version="1.0"?>
+		// The prefix "p" is undeclared, but namespace="urn:p" is supplied, so the
+		// attribute must be in urn:p, not in no-namespace. We capture it in a
+		// sequence-typed variable and emit its namespace URI as text.
+		xsltSrc := `<?xml version="1.0"?>
 <xsl:stylesheet version="3.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:output method="text"/>
@@ -1339,18 +1354,63 @@ func TestAttributeExplicitNamespaceSequenceMode(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
 
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
 
-	out, err := ss.Transform(src).Serialize(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "urn:p", strings.TrimSpace(out),
-		"computed attribute with explicit namespace= must be in that namespace in sequence mode")
+		out, err := ss.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "urn:p", strings.TrimSpace(out),
+			"computed attribute with explicit namespace= must be in that namespace in sequence mode")
+	})
+
+	// TestAttributeExplicitNamespaceItemCapture verifies that an xsl:attribute with a
+	// computed name using an undeclared prefix BUT an explicit namespace= attribute
+	// is assigned that namespace (not no-namespace) when captured as a standalone
+	// item via an item-serialization output method (the item-capture path). The
+	// captured attribute node's namespace URI is inspected via a PrimaryItemsHandler.
+	t.Run("explicit namespace item capture", func(t *testing.T) {
+		ctx := t.Context()
+
+		// method="adaptive" is an item-serialization method, so the standalone
+		// xsl:attribute at the top level is captured as a pending item, and never
+		// attached to an element. The undeclared prefix "p" is overridden by
+		// namespace="urn:p", so the captured attribute node must be in urn:p.
+		xsltSrc := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="adaptive"/>
+  <xsl:template match="/">
+    <xsl:attribute name="{'p:a'}" namespace="urn:p" select="'x'"/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+		doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
+		require.NoError(t, err)
+		ss, err := xslt3.CompileStylesheet(ctx, doc)
+		require.NoError(t, err)
+
+		src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
+		require.NoError(t, err)
+
+		capture := &primaryItemsCapture{}
+		_, err = ss.Transform(src).PrimaryItemsHandler(capture).Do(ctx)
+		require.NoError(t, err)
+
+		require.NotNil(t, capture.seq, "expected primary items to be captured")
+		require.Equal(t, 1, capture.seq.Len(), "expected a single captured attribute item")
+		ni, ok := capture.seq.Get(0).(xpath3.NodeItem)
+		require.True(t, ok, "captured item must be a node item")
+		attr, ok := helium.AsNode[*helium.Attribute](ni.Node)
+		require.True(t, ok, "captured node must be an attribute")
+		require.Equal(t, "a", attr.LocalName())
+		require.Equal(t, "urn:p", attr.URI(),
+			"computed attribute with explicit namespace= must be in that namespace in item-capture mode")
+	})
 }
 
 // primaryItemsCapture is a PrimaryItemsHandler that records the items captured
@@ -1362,50 +1422,6 @@ type primaryItemsCapture struct {
 func (p *primaryItemsCapture) HandlePrimaryItems(seq xpath3.Sequence) error {
 	p.seq = seq
 	return nil
-}
-
-// TestAttributeExplicitNamespaceItemCapture verifies that an xsl:attribute with a
-// computed name using an undeclared prefix BUT an explicit namespace= attribute
-// is assigned that namespace (not no-namespace) when captured as a standalone
-// item via an item-serialization output method (the item-capture path). The
-// captured attribute node's namespace URI is inspected via a PrimaryItemsHandler.
-func TestAttributeExplicitNamespaceItemCapture(t *testing.T) {
-	ctx := t.Context()
-
-	// method="adaptive" is an item-serialization method, so the standalone
-	// xsl:attribute at the top level is captured as a pending item, and never
-	// attached to an element. The undeclared prefix "p" is overridden by
-	// namespace="urn:p", so the captured attribute node must be in urn:p.
-	xsltSrc := `<?xml version="1.0"?>
-<xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:output method="adaptive"/>
-  <xsl:template match="/">
-    <xsl:attribute name="{'p:a'}" namespace="urn:p" select="'x'"/>
-  </xsl:template>
-</xsl:stylesheet>`
-
-	doc, err := helium.NewParser().Parse(ctx, []byte(xsltSrc))
-	require.NoError(t, err)
-	ss, err := xslt3.CompileStylesheet(ctx, doc)
-	require.NoError(t, err)
-
-	src, err := helium.NewParser().Parse(ctx, []byte(`<root/>`))
-	require.NoError(t, err)
-
-	capture := &primaryItemsCapture{}
-	_, err = ss.Transform(src).PrimaryItemsHandler(capture).Do(ctx)
-	require.NoError(t, err)
-
-	require.NotNil(t, capture.seq, "expected primary items to be captured")
-	require.Equal(t, 1, capture.seq.Len(), "expected a single captured attribute item")
-	ni, ok := capture.seq.Get(0).(xpath3.NodeItem)
-	require.True(t, ok, "captured item must be a node item")
-	attr, ok := helium.AsNode[*helium.Attribute](ni.Node)
-	require.True(t, ok, "captured node must be an attribute")
-	require.Equal(t, "a", attr.LocalName())
-	require.Equal(t, "urn:p", attr.URI(),
-		"computed attribute with explicit namespace= must be in that namespace in item-capture mode")
 }
 
 // analyzeStringStylesheet builds an xsl:analyze-string stylesheet using the
@@ -1424,158 +1440,160 @@ func analyzeStringStylesheet(regex string) string {
 		`</xsl:stylesheet>`
 }
 
-// A normal xsl:analyze-string still produces correct alternating
-// matching / non-matching output. This pins byte-identical behavior across the
-// incremental-processing change.
-func TestAnalyzeStringNormalOutput(t *testing.T) {
-	t.Parallel()
+func TestAnalyzeString(t *testing.T) {
+	// A normal xsl:analyze-string still produces correct alternating
+	// matching / non-matching output. This pins byte-identical behavior across the
+	// incremental-processing change.
+	t.Run("normal output", func(t *testing.T) {
+		t.Parallel()
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(analyzeStringStylesheet("[0-9]")))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(analyzeStringStylesheet("[0-9]")))
+		require.NoError(t, err)
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+		require.NoError(t, err)
 
-	source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc>a1b2c3</doc>`))
-	require.NoError(t, err)
+		source, err := helium.NewParser().Parse(t.Context(), []byte(`<doc>a1b2c3</doc>`))
+		require.NoError(t, err)
 
-	result, err := ss.Transform(source).Serialize(t.Context())
-	require.NoError(t, err)
-	require.Contains(t, result,
-		"<out><n>a</n><m>1</m><n>b</n><m>2</m><n>c</n><m>3</m></out>")
-}
+		result, err := ss.Transform(source).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, result,
+			"<out><n>a</n><m>1</m><n>b</n><m>2</m><n>c</n><m>3</m></out>")
+	})
 
-// An xsl:analyze-string with an empty-matching regex over a large input matches
-// at every character boundary, amplifying a bounded input string into an
-// unbounded number of match/segment allocations. The work must be bounded
-// against the execution resource budget (MaxResourceBytes) and fail with
-// ErrResourceTooLarge, exhausting no memory.
-func TestAnalyzeStringEmptyMatchIsCapped(t *testing.T) {
-	t.Parallel()
+	// An xsl:analyze-string with an empty-matching regex over a large input matches
+	// at every character boundary, amplifying a bounded input string into an
+	// unbounded number of match/segment allocations. The work must be bounded
+	// against the execution resource budget (MaxResourceBytes) and fail with
+	// ErrResourceTooLarge, exhausting no memory.
+	t.Run("empty match is capped", func(t *testing.T) {
+		t.Parallel()
 
-	// regex "x*" matches a zero-length string at every position of an all-'a'
-	// input, so an L-char input yields L+1 matches.
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(analyzeStringStylesheet("x*")))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
-	require.NoError(t, err)
+		// regex "x*" matches a zero-length string at every position of an all-'a'
+		// input, so an L-char input yields L+1 matches.
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(analyzeStringStylesheet("x*")))
+		require.NoError(t, err)
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+		require.NoError(t, err)
 
-	source, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<doc>`+strings.Repeat("a", 5000)+`</doc>`))
-	require.NoError(t, err)
+		source, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<doc>`+strings.Repeat("a", 5000)+`</doc>`))
+		require.NoError(t, err)
 
-	// Cap well below the resulting match count; the breach must surface
-	// ErrResourceTooLarge through the dynamic-error wrapping.
-	_, err = ss.Transform(source).
-		MaxResourceBytes(1000).
-		Serialize(t.Context())
-	require.Error(t, err)
-	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
-		"empty-matching xsl:analyze-string over a large input must honor the resource cap")
-	require.ErrorIs(t, err, xslt3.ErrDynamicError,
-		"the analyze-string cap breach is a runtime (dynamic) error")
-}
+		// Cap well below the resulting match count; the breach must surface
+		// ErrResourceTooLarge through the dynamic-error wrapping.
+		_, err = ss.Transform(source).
+			MaxResourceBytes(1000).
+			Serialize(t.Context())
+		require.Error(t, err)
+		require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+			"empty-matching xsl:analyze-string over a large input must honor the resource cap")
+		require.ErrorIs(t, err, xslt3.ErrDynamicError,
+			"the analyze-string cap breach is a runtime (dynamic) error")
+	})
 
-// A multi-line "^" (flags="m") is a leading-context anchor that matches at every
-// line start, so an input of N newlines yields ~N matches. Unlike "x*", this
-// pattern cannot stream incrementally on RE2; it is matched in one bounded
-// FindAll pass whose limit is the cap, so the cap is enforced without first
-// materializing every line-start match.
-func TestAnalyzeStringMultilineAnchorIsCapped(t *testing.T) {
-	t.Parallel()
+	// A multi-line "^" (flags="m") is a leading-context anchor that matches at every
+	// line start, so an input of N newlines yields ~N matches. Unlike "x*", this
+	// pattern cannot stream incrementally on RE2; it is matched in one bounded
+	// FindAll pass whose limit is the cap, so the cap is enforced without first
+	// materializing every line-start match.
+	t.Run("multiline anchor is capped", func(t *testing.T) {
+		t.Parallel()
 
-	stylesheet := `<?xml version="1.0"?>` +
-		`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
-		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
-		`<xsl:template match="/"><out>` +
-		`<xsl:analyze-string select="string(.)" regex="^" flags="m">` +
-		`<xsl:matching-substring><m/></xsl:matching-substring>` +
-		`<xsl:non-matching-substring><n><xsl:value-of select="."/></n></xsl:non-matching-substring>` +
-		`</xsl:analyze-string>` +
-		`</out></xsl:template>` +
-		`</xsl:stylesheet>`
+		stylesheet := `<?xml version="1.0"?>` +
+			`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">` +
+			`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
+			`<xsl:template match="/"><out>` +
+			`<xsl:analyze-string select="string(.)" regex="^" flags="m">` +
+			`<xsl:matching-substring><m/></xsl:matching-substring>` +
+			`<xsl:non-matching-substring><n><xsl:value-of select="."/></n></xsl:non-matching-substring>` +
+			`</xsl:analyze-string>` +
+			`</out></xsl:template>` +
+			`</xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
+		require.NoError(t, err)
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+		require.NoError(t, err)
 
-	// A long run of newlines: each line start is a (zero-length) match, so the
-	// match count grows with the input far past the cap below.
-	source, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<doc>`+strings.Repeat("\n", 5000)+`</doc>`))
-	require.NoError(t, err)
+		// A long run of newlines: each line start is a (zero-length) match, so the
+		// match count grows with the input far past the cap below.
+		source, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<doc>`+strings.Repeat("\n", 5000)+`</doc>`))
+		require.NoError(t, err)
 
-	_, err = ss.Transform(source).
-		MaxResourceBytes(1000).
-		Serialize(t.Context())
-	require.Error(t, err)
-	require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
-		"a multiline-anchor xsl:analyze-string over a large input must honor the resource cap")
-	require.ErrorIs(t, err, xslt3.ErrDynamicError,
-		"the analyze-string cap breach is a runtime (dynamic) error")
-}
+		_, err = ss.Transform(source).
+			MaxResourceBytes(1000).
+			Serialize(t.Context())
+		require.Error(t, err)
+		require.ErrorIs(t, err, xslt3.ErrResourceTooLarge,
+			"a multiline-anchor xsl:analyze-string over a large input must honor the resource cap")
+		require.ErrorIs(t, err, xslt3.ErrDynamicError,
+			"the analyze-string cap breach is a runtime (dynamic) error")
+	})
 
-// An xsl:analyze-string resource-cap breach must be a catchable dynamic error
-// carrying a concrete, non-empty $err:code (XTDE1140), so an xsl:catch can match
-// on it. A breach reported with an empty code would leave $err:code empty and
-// defeat code-specific catch matching.
-func TestAnalyzeStringCapBreachCarriesCatchableCode(t *testing.T) {
-	t.Parallel()
+	// An xsl:analyze-string resource-cap breach must be a catchable dynamic error
+	// carrying a concrete, non-empty $err:code (XTDE1140), so an xsl:catch can match
+	// on it. A breach reported with an empty code would leave $err:code empty and
+	// defeat code-specific catch matching.
+	t.Run("cap breach carries catchable code", func(t *testing.T) {
+		t.Parallel()
 
-	stylesheet := `<?xml version="1.0"?>` +
-		`<xsl:stylesheet version="3.0"` +
-		` xmlns:xsl="http://www.w3.org/1999/XSL/Transform"` +
-		` xmlns:err="http://www.w3.org/2005/xqt-errors">` +
-		`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
-		`<xsl:template match="/"><out>` +
-		`<xsl:try>` +
-		`<xsl:analyze-string select="string(.)" regex="x*">` +
-		`<xsl:matching-substring><m/></xsl:matching-substring>` +
-		`<xsl:non-matching-substring><n/></xsl:non-matching-substring>` +
-		`</xsl:analyze-string>` +
-		`<xsl:catch><code><xsl:value-of select="local-name-from-QName($err:code)"/></code></xsl:catch>` +
-		`</xsl:try>` +
-		`</out></xsl:template>` +
-		`</xsl:stylesheet>`
+		stylesheet := `<?xml version="1.0"?>` +
+			`<xsl:stylesheet version="3.0"` +
+			` xmlns:xsl="http://www.w3.org/1999/XSL/Transform"` +
+			` xmlns:err="http://www.w3.org/2005/xqt-errors">` +
+			`<xsl:output method="xml" omit-xml-declaration="yes"/>` +
+			`<xsl:template match="/"><out>` +
+			`<xsl:try>` +
+			`<xsl:analyze-string select="string(.)" regex="x*">` +
+			`<xsl:matching-substring><m/></xsl:matching-substring>` +
+			`<xsl:non-matching-substring><n/></xsl:non-matching-substring>` +
+			`</xsl:analyze-string>` +
+			`<xsl:catch><code><xsl:value-of select="local-name-from-QName($err:code)"/></code></xsl:catch>` +
+			`</xsl:try>` +
+			`</out></xsl:template>` +
+			`</xsl:stylesheet>`
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
+		require.NoError(t, err)
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+		require.NoError(t, err)
 
-	source, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<doc>`+strings.Repeat("a", 5000)+`</doc>`))
-	require.NoError(t, err)
+		source, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<doc>`+strings.Repeat("a", 5000)+`</doc>`))
+		require.NoError(t, err)
 
-	result, err := ss.Transform(source).
-		MaxResourceBytes(1000).
-		Serialize(t.Context())
-	require.NoError(t, err, "the analyze-string cap breach must be catchable, not propagate")
-	require.Contains(t, result, "<code>XTDE1140</code>",
-		"$err:code must carry the concrete XTDE1140 code so xsl:catch can match it")
-}
+		result, err := ss.Transform(source).
+			MaxResourceBytes(1000).
+			Serialize(t.Context())
+		require.NoError(t, err, "the analyze-string cap breach must be catchable, not propagate")
+		require.Contains(t, result, "<code>XTDE1140</code>",
+			"$err:code must carry the concrete XTDE1140 code so xsl:catch can match it")
+	})
 
-// A cancelled context is honored promptly by xsl:analyze-string, well short of
-// running its per-segment loop to completion.
-func TestAnalyzeStringHonorsCancelledContext(t *testing.T) {
-	t.Parallel()
+	// A cancelled context is honored promptly by xsl:analyze-string, well short of
+	// running its per-segment loop to completion.
+	t.Run("honors cancelled context", func(t *testing.T) {
+		t.Parallel()
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(analyzeStringStylesheet("x*")))
-	require.NoError(t, err)
-	ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
-	require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(analyzeStringStylesheet("x*")))
+		require.NoError(t, err)
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), doc)
+		require.NoError(t, err)
 
-	source, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<doc>`+strings.Repeat("a", 5000)+`</doc>`))
-	require.NoError(t, err)
+		source, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<doc>`+strings.Repeat("a", 5000)+`</doc>`))
+		require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
 
-	_, err = ss.Transform(source).Serialize(ctx)
-	require.Error(t, err)
-	require.ErrorIs(t, err, context.Canceled,
-		"a cancelled context must be honored during xsl:analyze-string")
+		_, err = ss.Transform(source).Serialize(ctx)
+		require.Error(t, err)
+		require.ErrorIs(t, err, context.Canceled,
+			"a cancelled context must be honored during xsl:analyze-string")
+	})
 }
 
 // nilledFwdSchema declares <doc>'s <n> child as a NILLABLE xs:integer, so a

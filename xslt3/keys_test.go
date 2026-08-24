@@ -8,22 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSelfRecursiveKeyUseReturnsEmptyDuringBuild(t *testing.T) {
-	ss := compileStylesheetString(t, `
-<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:key name="self" match="root" use="string(count(key('self', '0')))"/>
-  <xsl:template match="/">
-    <out><xsl:value-of select="count(key('self', '0'))"/></out>
-  </xsl:template>
-</xsl:stylesheet>`)
-
-	result, err := xslt3.TransformString(t.Context(), parseTransformSource(t), ss)
-	require.NoError(t, err)
-	require.Contains(t, result, "<out>1</out>")
-}
-
-func TestKeyBasicLookup(t *testing.T) {
-	ss := compileStylesheetString(t, `
+func TestKey(t *testing.T) {
+	t.Run("basic lookup", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:key name="items" match="item" use="@id"/>
   <xsl:template match="/">
@@ -31,17 +18,17 @@ func TestKeyBasicLookup(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item id="a" val="hello"/><item id="b" val="world"/></root>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item id="a" val="hello"/><item id="b" val="world"/></root>`))
+		require.NoError(t, err)
 
-	result, err := xslt3.TransformString(t.Context(), src, ss)
-	require.NoError(t, err)
-	t.Logf("result: %s", result)
-	require.Contains(t, result, "<out>hello</out>")
-}
+		result, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		t.Logf("result: %s", result)
+		require.Contains(t, result, "<out>hello</out>")
+	})
 
-func TestKeyInForEachSelect(t *testing.T) {
-	ss := compileStylesheetString(t, `
+	t.Run("in a for-each select", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:key name="items" match="item" use="@cat"/>
   <xsl:template match="root">
@@ -49,17 +36,17 @@ func TestKeyInForEachSelect(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
+		require.NoError(t, err)
 
-	result, err := xslt3.TransformString(t.Context(), src, ss)
-	require.NoError(t, err)
-	t.Logf("result: %s", result)
-	require.Contains(t, result, "<out>2</out>")
-}
+		result, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		t.Logf("result: %s", result)
+		require.Contains(t, result, "<out>2</out>")
+	})
 
-func TestKeyWithGenerateId(t *testing.T) {
-	ss := compileStylesheetString(t, `
+	t.Run("with generate-id()", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:key name="items" match="item" use="@cat"/>
   <xsl:template match="root">
@@ -71,18 +58,18 @@ func TestKeyWithGenerateId(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
+		require.NoError(t, err)
 
-	result, err := xslt3.TransformString(t.Context(), src, ss)
-	require.NoError(t, err)
-	t.Logf("result: %s", result)
-	require.Contains(t, result, `cat="a"`)
-	require.Contains(t, result, `cat="b"`)
-}
+		result, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		t.Logf("result: %s", result)
+		require.Contains(t, result, `cat="a"`)
+		require.Contains(t, result, `cat="b"`)
+	})
 
-func TestKeyInPredicate(t *testing.T) {
-	ss := compileStylesheetString(t, `
+	t.Run("in predicate", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:key name="items" match="item" use="@cat"/>
   <xsl:template match="root">
@@ -90,18 +77,50 @@ func TestKeyInPredicate(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
-	require.NoError(t, err)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item cat="a"/><item cat="b"/><item cat="a"/></root>`))
+		require.NoError(t, err)
 
-	result, err := xslt3.TransformString(t.Context(), src, ss)
-	require.NoError(t, err)
-	t.Logf("result: %s", result)
-	// All 3 items should match since key('items', @cat) returns non-empty for all
-	require.Contains(t, result, "<x/><x/><x/>")
-}
+		result, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		t.Logf("result: %s", result)
+		// All 3 items should match since key('items', @cat) returns non-empty for all
+		require.Contains(t, result, "<x/><x/><x/>")
+	})
 
-func TestCanonicalKeyUsesQNameValueSpace(t *testing.T) {
-	ss := compileStylesheetString(t, `
+	t.Run("empty name arg returns error", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:key name="items" match="item" use="@id"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="key((), 'v')"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item id="v"/></root>`))
+		require.NoError(t, err)
+
+		// An empty sequence for the key name must produce a dynamic type error,
+		// not an index-out-of-range panic.
+		_, err = xslt3.TransformString(t.Context(), src, ss)
+		require.Error(t, err)
+	})
+
+	t.Run("a self-recursive key use returns empty during the build", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:key name="self" match="root" use="string(count(key('self', '0')))"/>
+  <xsl:template match="/">
+    <out><xsl:value-of select="count(key('self', '0'))"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+		result, err := xslt3.TransformString(t.Context(), parseTransformSource(t), ss)
+		require.NoError(t, err)
+		require.Contains(t, result, "<out>1</out>")
+	})
+
+	t.Run("a canonical key uses the QName value space", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
   xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -113,40 +132,22 @@ func TestCanonicalKeyUsesQNameValueSpace(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	source, err := helium.NewParser().Parse(t.Context(), []byte(
-		`<root>`+
-			`<item xmlns:one="urn:test" type="one:mp3"/>`+
-			`<item xmlns:two="urn:test" type="two:mp3"/>`+
-			`</root>`))
-	require.NoError(t, err)
+		source, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<root>`+
+				`<item xmlns:one="urn:test" type="one:mp3"/>`+
+				`<item xmlns:two="urn:test" type="two:mp3"/>`+
+				`</root>`))
+		require.NoError(t, err)
 
-	result, err := xslt3.TransformString(t.Context(), source, ss)
-	require.NoError(t, err)
+		result, err := xslt3.TransformString(t.Context(), source, ss)
+		require.NoError(t, err)
 
-	// Both items use the same QName (urn:test, mp3), so key() must return 2.
-	require.Contains(t, result, "<count>2</count>")
-}
+		// Both items use the same QName (urn:test, mp3), so key() must return 2.
+		require.Contains(t, result, "<count>2</count>")
+	})
 
-func TestKeyEmptyNameArgReturnsError(t *testing.T) {
-	ss := compileStylesheetString(t, `
-<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:key name="items" match="item" use="@id"/>
-  <xsl:template match="/">
-    <out><xsl:value-of select="key((), 'v')"/></out>
-  </xsl:template>
-</xsl:stylesheet>`)
-
-	src, err := helium.NewParser().Parse(t.Context(), []byte(`<root><item id="v"/></root>`))
-	require.NoError(t, err)
-
-	// An empty sequence for the key name must produce a dynamic type error,
-	// not an index-out-of-range panic.
-	_, err = xslt3.TransformString(t.Context(), src, ss)
-	require.Error(t, err)
-}
-
-func TestMutuallyRecursiveKeysDoNotOverflow(t *testing.T) {
-	ss := compileStylesheetString(t, `
+	t.Run("mutually recursive keys do not overflow", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:key name="a" match="root" use="string(count(key('b', '0')))"/>
   <xsl:key name="b" match="root" use="string(count(key('a', '0')))"/>
@@ -155,7 +156,8 @@ func TestMutuallyRecursiveKeysDoNotOverflow(t *testing.T) {
   </xsl:template>
 </xsl:stylesheet>`)
 
-	result, err := xslt3.TransformString(t.Context(), parseTransformSource(t), ss)
-	require.NoError(t, err)
-	require.Contains(t, result, "<out>1</out>")
+		result, err := xslt3.TransformString(t.Context(), parseTransformSource(t), ss)
+		require.NoError(t, err)
+		require.Contains(t, result, "<out>1</out>")
+	})
 }

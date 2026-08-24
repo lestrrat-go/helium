@@ -54,10 +54,14 @@ testdata/libxml2-compat/
 
 ### Test Shape
 
-Root-package tests are grouped by the production function or method under test:
-one top-level `TestXxx` per production entry point, with `t.Run` subtests naming
-the scenario (`TestParseMalformed/"a duplicate attribute"`). Nesting stops at two
-subtest levels. A file is split by production area once it approaches ~2000 lines.
+Root-package and `xslt3` tests are grouped by the production function or method
+under test: one top-level `TestXxx` per production entry point, with `t.Run`
+subtests naming the scenario (`TestParseMalformed/"a duplicate attribute"`).
+Nesting stops at two subtest levels, and a subtest name never contains `/`,
+which would read as a further level. A file is split by production area once it
+approaches ~2000 lines. Name a test file after the production file it covers
+(`compile_patterns.go` ↔ `compile_patterns_test.go`), never after the scenario or
+bug that prompted it.
 
 ### Common Test File Names
 
