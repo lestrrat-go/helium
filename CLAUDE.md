@@ -34,6 +34,8 @@ The schematron package accepts ONLY the `queryBinding` values ISO/IEC 19757-3 de
 
 `engine`/`runner`/`value` (`engine.go`) is the seam the two engines implement, so `parse.go` and `validate.go` never name an XPath package. The `value` methods carry the per-binding semantics: `effectiveBoolean` cannot fail under 1.0 but raises FORG0006 for a multi-item atomic sequence under 3.1 (reported, test treated as false); `stringValue` (`<value-of>`) takes the first node's string-value under 1.0 and space-joins every atomized item under 3.1; `<let>` binds a sequence under 3.1. Rule contexts go through `contextToXPath` in both bindings, so an XSLT match pattern that is not an expression (`key('k','v')`) is unsupported. The 3.1 engine passes no URI resolver and no HTTP client, so `fn:doc`/`fn:collection`/`fn:unparsed-text` retrieve nothing.
 
+Both engines build ONE document-order cache per validation run and share it across every expression (`xpath1Runner.docOrder` threaded through `ixpath.WithDocOrderCache`, `xpath3.Evaluator.DocOrderCache`). Without it each evaluation indexes the whole instance again, which makes validation quadratic in document size. Keep the cache per run: a cache outliving the run would go stale against a mutated document.
+
 Do NOT change the XPath 1.0 path — it must stay byte-identical to libxml2.
 
 ## XSLT 3.0 — Conformance Scope
