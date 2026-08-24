@@ -311,3 +311,13 @@ Please keep pull requests focused and small enough to review quickly.
 
 For usage questions, design discussion, or "is this approach reasonable?" questions,
 please open a GitHub Discussion first.
+
+# Sponsors
+
+If this project is useful to you or your company, please consider sponsoring:
+
+[![Sponsor lestrrat](https://img.shields.io/badge/Sponsor-lestrrat-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/lestrrat)
+
+Sponsorship funds continued maintenance, conformance work, and support for the
+people who rely on this library. Both individual and corporate sponsorships are
+welcome.
