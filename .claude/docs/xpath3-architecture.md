@@ -28,7 +28,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 
 | File | Contents |
 |------|----------|
-| `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, all 13 axis functions, namespace helpers |
+| `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
 | `stringvalue.go` | `StringValue(Node)`, `appendTextDescendants` (unexported, iterative stack-based traversal), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
 | `limits.go` | `DefaultMaxRecursionDepth=5000`, `DefaultMaxNodeSetLength=10_000_000`, `ErrNodeSetLimit` |
@@ -37,7 +37,14 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 
 ```go
 func TraverseAxis(ctx context.Context, axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error)
+func AppendAxis(ctx context.Context, dst []helium.Node, axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error)
 ```
+
+`AppendAxis` appends the traversal to a caller-supplied buffer so a multi-step
+walk accumulates in one slice instead of one slice per context node. The
+descendant and descendant-or-self axes write straight into `dst`; the others
+delegate to `TraverseAxis` and append its result. `maxNodes` caps what THIS
+traversal appends, so the limit means the same thing in both functions.
 
 ### `DocOrderCache` signature
 
@@ -45,6 +52,8 @@ func TraverseAxis(ctx context.Context, axis AxisType, node helium.Node, maxNodes
 type DocOrderCache struct { ... }
 func (c *DocOrderCache) BuildFrom(root helium.Node)
 func (c *DocOrderCache) Position(n helium.Node) int
+func (c *DocOrderCache) Compare(a, b helium.Node) int
+func (c *DocOrderCache) Less(a, b helium.Node) bool
 func (c *DocOrderCache) Reset() // clear cache; callers MUST call after mutating the document
 func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)

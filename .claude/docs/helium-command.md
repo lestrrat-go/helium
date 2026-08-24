@@ -164,11 +164,12 @@ Primary file: `internal/cli/heliumcmd/relaxng_validate.go`
 
 Primary file: `internal/cli/heliumcmd/schematron_validate.go`
 
-- Usage: `helium schematron validate [--timing] [--max-input-bytes N] [--max-depth N] SCHEMA [XMLfiles ...]`
+- Usage: `helium schematron validate [--timing] [--max-input-bytes N] [--max-depth N] [--query-binding NAME] SCHEMA [XMLfiles ...]`
 - Schema path mandatory positional arg
 - `--max-input-bytes N` caps bytes read per XML input (file or stdin) via `readInput`/`readInputFile`; default `DefaultMaxInputBytes` (100 MiB), `0` = unlimited; over-cap fails with `ExitReadFile`
 - `--max-depth N` caps element nesting depth (default `256`, `0` = unlimited); when absent, the `NewParser` default is left untouched; over-cap fails the parse (`ExitErr`)
 - Schema compiled once with `schematron.NewCompiler().Label(path).CompileFile(ctx, path)`
+- `--query-binding NAME` forces the query language binding (`xslt`, `xslt3`, `xpath3`), overriding the schema's `queryBinding` attribute; an unrecognized name is rejected before compilation. Unset, the attribute decides, and an unsupported attribute value exits `ExitSchemaComp`
 - Each XML input parsed with `helium.NewParser()` + validated with `schematron.NewValidator(schema).Label(name).Validate(ctx, doc)`
 - Validation passes `.Label(input.name)` so error output names the current XML source
 

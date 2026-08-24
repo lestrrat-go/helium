@@ -234,3 +234,74 @@ func TestSchematronValidateStdIn(t *testing.T) {
 	code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile})
 	require.Equal(t, heliumcmd.ExitOK, code)
 }
+
+func TestSchematronValidateQueryBinding(t *testing.T) {
+	const xpath3Schema = `<?xml version="1.0"?>
+<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">
+  <pattern>
+    <rule context="root">
+      <assert test="matches(@code, '^[A-Z]+$')">code must be upper case</assert>
+    </rule>
+  </pattern>
+</schema>`
+
+	const xml = `<?xml version="1.0"?><root code="AB"/>`
+
+	t.Run("schema binding selects the engine", func(t *testing.T) {
+		dir := t.TempDir()
+		schemaFile := writeFile(t, dir, "schema.sch", xpath3Schema)
+		xmlFile := writeFile(t, dir, "doc.xml", xml)
+
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitOK, code)
+	})
+
+	t.Run("unsupported schema binding fails compilation", func(t *testing.T) {
+		dir := t.TempDir()
+		schemaFile := writeFile(t, dir, "schema.sch", strings.Replace(xpath3Schema, `"xslt3"`, `"xslt2"`, 1))
+		xmlFile := writeFile(t, dir, "doc.xml", xml)
+
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitSchemaComp, code)
+		require.Contains(t, stderr.String(), "unsupported query language binding")
+	})
+
+	t.Run("flag forces the binding", func(t *testing.T) {
+		dir := t.TempDir()
+		schemaFile := writeFile(t, dir, "schema.sch", strings.Replace(xpath3Schema, `"xslt3"`, `"xquery"`, 1))
+		xmlFile := writeFile(t, dir, "doc.xml", xml)
+
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, io.Discard)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, flagQueryBinding, "xpath3", schemaFile, xmlFile})
+		require.Equal(t, heliumcmd.ExitOK, code)
+	})
+
+	t.Run("invalid flag value is rejected", func(t *testing.T) {
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, flagQueryBinding, "xslt2", "schema.sch"})
+		require.Equal(t, heliumcmd.ExitErr, code)
+		require.Contains(t, stderr.String(), "unsupported query language binding")
+	})
+
+	t.Run("flag requires an argument", func(t *testing.T) {
+		var stderr bytes.Buffer
+		ctx := heliumcmd.WithIO(t.Context(), strings.NewReader(""), io.Discard, &stderr)
+		ctx = heliumcmd.WithStdinTTY(ctx, true)
+
+		code := heliumcmd.Execute(ctx, []string{cmdSchematron, cmdValidate, flagQueryBinding})
+		require.Equal(t, heliumcmd.ExitErr, code)
+		require.Contains(t, stderr.String(), "--query-binding requires an argument")
+	})
+}

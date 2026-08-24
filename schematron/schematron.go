@@ -11,10 +11,12 @@ import (
 )
 
 type compileConfig struct {
-	label        string
-	baseDir      string
-	errorHandler helium.ErrorHandler
-	parser       *helium.Parser
+	label               string
+	baseDir             string
+	errorHandler        helium.ErrorHandler
+	parser              *helium.Parser
+	queryBinding        QueryBinding
+	defaultQueryBinding QueryBinding
 }
 
 type validateConfig struct {
@@ -85,6 +87,26 @@ func (c Compiler) ErrorHandler(h helium.ErrorHandler) Compiler {
 func (c Compiler) Parser(p helium.Parser) Compiler {
 	c = c.clone()
 	c.cfg.parser = &p
+	return c
+}
+
+// QueryBinding forces the query language binding used to compile the schema.
+// A forced binding always wins: the schema's own queryBinding attribute is
+// not consulted, so a schema naming an unsupported binding still compiles.
+// Unset (the default), the binding comes from the schema attribute.
+func (c Compiler) QueryBinding(b QueryBinding) Compiler {
+	c = c.clone()
+	c.cfg.queryBinding = b
+	return c
+}
+
+// DefaultQueryBinding sets the binding used for a schema that carries no
+// queryBinding attribute. It never overrides a binding forced through
+// [Compiler.QueryBinding] or one named by the schema itself; it only replaces
+// the standalone default, which is [QueryBindingXPath1].
+func (c Compiler) DefaultQueryBinding(b QueryBinding) Compiler {
+	c = c.clone()
+	c.cfg.defaultQueryBinding = b
 	return c
 }
 

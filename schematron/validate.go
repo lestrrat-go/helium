@@ -3,13 +3,9 @@ package schematron
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
-	ixpath "github.com/lestrrat-go/helium/internal/xpath"
-	"github.com/lestrrat-go/helium/internal/xpath1/number"
-	"github.com/lestrrat-go/helium/xpath1"
 )
 
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
@@ -22,7 +18,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	}
 	valid := true
 
-	ev := xpath1.NewEvaluator().Namespaces(schema.namespaces)
+	ev := schema.engine.runner(schema.namespaces)
 
 	for _, pat := range schema.patterns {
 		// ISO Schematron: within a pattern, each node is processed by only
@@ -31,7 +27,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		// rules. The set is reset for each pattern.
 		matched := make(map[helium.Node]bool)
 		for _, r := range pat.rules {
-			result, err := ev.Evaluate(ctx, r.contextExpr, doc)
+			result, err := ev.evaluate(ctx, r.contextExpr, doc)
 			if err != nil {
 				// A rule context that cannot be evaluated means none of
 				// the rule's assertions can be checked. Treat this as a
@@ -42,11 +38,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
 				continue
 			}
-			if result.Type != xpath1.NodeSetResult {
-				continue
-			}
-
-			for _, node := range result.NodeSet {
+			// A rule context that selects anything other than nodes claims
+			// no node at all.
+			for _, node := range result.nodeSet() {
 				// A rule context may resolve to element or attribute
 				// nodes (e.g. context="@id" becomes //@id). Other node
 				// types are not valid rule contexts.
@@ -67,7 +61,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				// libxml2's xmlSchematronRegisterVariables behavior.
 				ruleEv := ev
 				for _, lb := range r.lets {
-					letResult, err := ruleEv.Evaluate(ctx, lb.expr, node)
+					letResult, err := ruleEv.evaluate(ctx, lb.expr, node)
 					if err != nil {
 						// A let whose expression cannot be evaluated must
 						// not be silently dropped: a later let or test that
@@ -81,25 +75,26 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
 						continue
 					}
-					ruleEv = ruleEv.AdditionalVariables(map[string]any{
-						lb.name: xpathResultToValue(letResult),
-					})
+					ruleEv = ruleEv.bind(lb.name, letResult)
 				}
 
 				for _, t := range r.tests {
-					testResult, err := ruleEv.Evaluate(ctx, t.compiled, node)
+					testResult, err := ruleEv.evaluate(ctx, t.compiled, node)
 
-					// A test XPath that cannot be evaluated must not be
-					// treated as satisfied. Surface the error and treat
-					// the test as false: an assert (fires when false)
-					// then fails, while a report (fires when true) stays
-					// silent — mirroring libxml2's xmlSchematronRunTest,
-					// which returns 0 (false) on evaluation failure.
+					// A test XPath that cannot be evaluated, or whose result
+					// has no effective boolean value, must not be treated as
+					// satisfied. Surface the error and treat the test as
+					// false: an assert (fires when false) then fails, while
+					// a report (fires when true) stays silent — mirroring
+					// libxml2's xmlSchematronRunTest, which returns 0
+					// (false) on evaluation failure.
 					var boolVal bool
+					if err == nil {
+						boolVal, err = testResult.effectiveBoolean()
+					}
 					if err != nil {
+						boolVal = false
 						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
-					} else {
-						boolVal = xpathResultToBool(testResult)
 					}
 
 					// Assert: fire error when false.
@@ -144,7 +139,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 // after each segment (text, name, value-of), if the accumulated buffer
 // ends with whitespace, all trailing whitespace is replaced with a
 // single space. Internal whitespace within segments is preserved.
-func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart, node helium.Node) (msg string, xpathErr string) {
+func formatMessage(ctx context.Context, ev runner, parts []messagePart, node helium.Node) (msg string, xpathErr string) {
 	var buf []byte
 	for _, part := range parts {
 		switch p := part.(type) {
@@ -152,9 +147,9 @@ func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart
 			buf = append(buf, p.text...)
 		case namePart:
 			if p.expr != nil {
-				result, err := ev.Evaluate(ctx, p.expr, node)
+				result, err := ev.evaluate(ctx, p.expr, node)
 				if err == nil {
-					buf = append(buf, xpathResultToName(result)...)
+					buf = append(buf, result.nodeName()...)
 				}
 			}
 		case valueOfPart:
@@ -164,12 +159,12 @@ func formatMessage(ctx context.Context, ev xpath1.Evaluator, parts []messagePart
 				// stop here, emitting no bogus value.
 				return string(buf), ""
 			}
-			result, err := ev.Evaluate(ctx, p.expr, node)
+			result, err := ev.evaluate(ctx, p.expr, node)
 			if err != nil {
 				// Runtime XPath error — report alongside the validation error.
 				return string(buf), fmt.Sprintf("XPath error : %s", formatXPathError(err))
 			}
-			buf = append(buf, xpathResultToString(result)...)
+			buf = append(buf, result.stringValue()...)
 		}
 		buf = trimTrailingWS(buf)
 	}
@@ -209,79 +204,6 @@ func trimTrailingWS(buf []byte) []byte {
 	}
 	buf = buf[:end]
 	return append(buf, ' ')
-}
-
-// xpathResultToBool converts an XPath result to a boolean.
-func xpathResultToBool(r *xpath1.Result) bool {
-	switch r.Type {
-	case xpath1.BooleanResult:
-		return r.Bool
-	case xpath1.NumberResult:
-		return r.Number != 0 && !math.IsNaN(r.Number)
-	case xpath1.StringResult:
-		return r.String != ""
-	case xpath1.NodeSetResult:
-		return len(r.NodeSet) > 0
-	}
-	return false
-}
-
-// xpathResultToString converts an XPath result to a string.
-func xpathResultToString(r *xpath1.Result) string {
-	switch r.Type {
-	case xpath1.StringResult:
-		return r.String
-	case xpath1.NumberResult:
-		// XPath 1.0 string(number): reuse the canonical xmlXPathFormatNumber
-		// port (integers without a decimal point, "NaN"/"Infinity"/"-Infinity",
-		// no trailing ".0") instead of Go's default formatting.
-		return number.ToString(r.Number)
-	case xpath1.BooleanResult:
-		// XPath 1.0 string(boolean): "true"/"false" (lowercase).
-		if r.Bool {
-			return "true"
-		}
-		return "false"
-	case xpath1.NodeSetResult:
-		if len(r.NodeSet) == 0 {
-			return ""
-		}
-		// XPath 1.0: a node-set converts to the string-value of the node
-		// first in document order.
-		return ixpath.StringValue(r.NodeSet[0])
-	}
-	return ""
-}
-
-// xpathResultToName extracts a node name from an XPath result.
-// Only returns a name for element and attribute nodes (matching libxml2 behavior).
-func xpathResultToName(r *xpath1.Result) string {
-	if r.Type == xpath1.NodeSetResult && len(r.NodeSet) > 0 {
-		n := r.NodeSet[0]
-		if n.Type() == helium.ElementNode {
-			return n.Name()
-		}
-		// Use type assertion for attributes since Attribute.Type() may not be set correctly.
-		if attr, ok := n.(*helium.Attribute); ok {
-			return attr.Name()
-		}
-	}
-	return ""
-}
-
-// xpathResultToValue converts an XPath result to a value suitable for variable binding.
-func xpathResultToValue(r *xpath1.Result) any {
-	switch r.Type {
-	case xpath1.NodeSetResult:
-		return r.NodeSet
-	case xpath1.StringResult:
-		return r.String
-	case xpath1.NumberResult:
-		return r.Number
-	case xpath1.BooleanResult:
-		return r.Bool
-	}
-	return nil
 }
 
 // getNodePath returns the XPath path to a node (equivalent to libxml2's xmlGetNodePath).

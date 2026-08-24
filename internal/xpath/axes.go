@@ -86,16 +86,63 @@ func TraverseAxis(ctx context.Context, axis AxisType, node helium.Node, maxNodes
 		return nil, err
 	}
 	switch axis {
-	case AxisDescendant:
-		return axisDescendant(ctx, node, maxNodes)
-	case AxisDescendantOrSelf:
-		return axisDescendantOrSelf(ctx, node, maxNodes)
+	case AxisDescendant, AxisDescendantOrSelf:
+		return AppendAxis(ctx, nil, axis, node, maxNodes)
 	case AxisFollowing:
 		return axisFollowing(ctx, node, maxNodes)
 	case AxisPreceding:
 		return axisPreceding(ctx, node, maxNodes)
 	}
 	return TraverseAxisSimple(ctx, axis, node)
+}
+
+// maxInt is the largest value an int can hold, used to saturate the node-set
+// limit when offsetting it past the nodes already in the destination slice
+// would overflow.
+const maxInt = int(^uint(0) >> 1)
+
+// AppendAxis appends the nodes along axis from node to dst, in the order
+// defined by the XPath spec, and returns the grown slice. It lets a caller
+// accumulate several traversals in one buffer instead of allocating a fresh
+// slice per traversal.
+//
+// maxNodes limits how many nodes THIS traversal may append; nodes already in
+// dst do not count against it, so the limit means the same thing it does in
+// TraverseAxis. ctx is checked inside the unbounded descendant walks so a
+// cancelled context aborts the traversal promptly. On error dst is discarded
+// and the returned slice is nil, as in TraverseAxis.
+func AppendAxis(ctx context.Context, dst []helium.Node, axis AxisType, node helium.Node, maxNodes int) ([]helium.Node, error) {
+	if IsNilNode(node) {
+		return dst, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	switch axis {
+	case AxisDescendant, AxisDescendantOrSelf:
+		limit := maxNodes
+		if n := len(dst); n > 0 {
+			limit = maxNodes + n
+			if limit < n { // overflow: maxNodes was near maxInt
+				limit = maxInt
+			}
+		}
+		if axis == AxisDescendantOrSelf {
+			if err := appendAxisNode(&dst, node, limit); err != nil {
+				return nil, err
+			}
+		}
+		if err := collectDescendants(ctx, node, &dst, limit); err != nil {
+			return nil, err
+		}
+		return dst, nil
+	}
+
+	nodes, err := TraverseAxis(ctx, axis, node, maxNodes)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, nodes...), nil
 }
 
 // TraverseAxisSimple handles axes whose result size is bounded by the tree
@@ -165,14 +212,6 @@ func axisChild(ctx context.Context, node helium.Node) ([]helium.Node, error) {
 	return result, nil
 }
 
-func axisDescendant(ctx context.Context, node helium.Node, maxNodes int) ([]helium.Node, error) {
-	var result []helium.Node
-	if err := collectDescendants(ctx, node, &result, maxNodes); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
 func appendAxisNode(result *[]helium.Node, node helium.Node, maxNodes int) error {
 	*result = append(*result, node)
 	if len(*result) > maxNodes {
@@ -216,17 +255,6 @@ func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.
 		}
 	}
 	return nil
-}
-
-func axisDescendantOrSelf(ctx context.Context, node helium.Node, maxNodes int) ([]helium.Node, error) {
-	result := make([]helium.Node, 0, 1)
-	if err := appendAxisNode(&result, node, maxNodes); err != nil {
-		return nil, err
-	}
-	if err := collectDescendants(ctx, node, &result, maxNodes); err != nil {
-		return nil, err
-	}
-	return result, nil
 }
 
 func axisParent(node helium.Node) []helium.Node {

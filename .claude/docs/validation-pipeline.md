@@ -777,11 +777,25 @@ nameClass { kind (ncName|ncAnyName|ncNsName|ncChoice), name, ns, left/right, exc
 
 ## Schematron
 
-Files: `schematron/schematron.go` (API), `parse.go` (compiler), `validate.go` (engine), `schema.go` (model)
+Files: `schematron/schematron.go` (API), `parse.go` (compiler), `validate.go` (engine), `schema.go` (model), `querybinding.go` (query language binding), `engine.go` + `engine_xpath1.go` + `engine_xpath3.go` (query language engines)
+
+### Query language bindings
+
+The `queryBinding` attribute on `<schema>` selects the query language. `resolveQueryBinding` (`querybinding.go`) resolves in order: a forced `Compiler.QueryBinding()` (always wins, and skips the attribute entirely) → the schema's `queryBinding` attribute → a configured `Compiler.DefaultQueryBinding(b)` → `QueryBindingXPath1`. Only the values ISO/IEC 19757-3 defines normatively AND this package implements are accepted: `xslt` and an absent attribute resolve to `QueryBindingXPath1` (Annex C), `xslt3` (2020 Annex J) and `xpath3` (2020 Annex K) to `QueryBindingXPath3`. Values are trimmed (the attribute is `xsd:token`) and matched case-insensitively (each annex says "in any mix of upper and lower case letters"). Everything else fails compilation with `ErrUnsupportedQueryBinding` and a fatal diagnostic, as clause 6.4 requires: the 2.0 bindings are defined but unimplemented, and `xpath`/`xquery`/`exslt`/`stx` are reserved without a definition, so a schema naming one is refused rather than guessed at. The resolved binding is frozen onto the compiled `Schema` (`Schema.QueryBinding()`) along with the engine the `Validator` runs.
+
+`engine` (`engine.go`) is the seam between the two: it compiles an expression to a `compiledExpr` and builds a namespace-bound `runner`, whose `evaluate` returns a `value`. The `value` interface holds the per-binding conversions — `nodeSet`, `effectiveBoolean`, `stringValue`, `nodeName` — so compilation and validation never name a concrete XPath package. Differences that matter:
+
+- `effectiveBoolean` cannot fail under XPath 1.0. Under XPath 3.1 a sequence of more than one item starting with an atomic value raises FORG0006, which is reported and treated as a false test.
+- `stringValue` (`<value-of>`) takes the string-value of the first node under XPath 1.0, and joins every atomized item with a single space under XPath 3.1 (the XSLT 2.0-and-later rule).
+- `<let>` binds an XPath 1.0 object under the 1.0 binding, and a whole sequence under 3.1.
+
+Rule contexts go through `contextToXPath` in both bindings, so a context that is an XSLT match pattern but not an expression (`key('k','v')`) is unsupported. The XPath 3.1 engine passes no URI resolver and no HTTP client, and `xpath3` denies file and network retrieval without one, so `fn:doc`/`fn:collection`/`fn:unparsed-text` cannot read anything.
+
+Each `runner` carries ONE document-order cache for the whole validation run, shared by every rule context, test, let and message expression: `xpath1Runner` holds an `ixpath.DocOrderCache` and passes it through `ixpath.WithDocOrderCache` on every evaluate (xpath1 otherwise builds a throwaway cache per evaluation, `xpath1/eval.go`), and `xpath3Runner` sets `xpath3.Evaluator.DocOrderCache`. Re-indexing the instance per evaluation makes validation quadratic in document size. The cache lives exactly as long as the run, so a document mutated between two `Validate` calls is re-indexed.
 
 ### Compile: Document → Schema
 
-Three-phase parsing:
+Three-phase parsing (after the binding is resolved):
 1. **Phase 1: Title** — optional `<title>`
 2. **Phase 2: Namespace declarations** — all `<ns prefix="x" uri="...">` → `schema.namespaces` map
 3. **Phase 3: Patterns** — `<pattern>` → `<rule context="xpath">` → `<let>`, `<assert test="xpath">`, `<report test="xpath">`
@@ -809,7 +823,7 @@ Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri
    - Create rule-specific XPath context with variables
 4. For each test:
    - Evaluate XPath, convert to boolean
-   - If the test XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and treat the test as `false` (mirrors libxml2 `xmlSchematronRunTest` returning 0): an **assert** then fires/fails, a **report** stays silent. A broken test is never treated as satisfied.
+   - If the test XPath **errors at evaluation**, or its result has no effective boolean value (XPath 3.1 FORG0006), surface an `XPath error : ...` diagnostic and treat the test as `false` (mirrors libxml2 `xmlSchematronRunTest` returning 0): an **assert** then fires/fails, a **report** stays silent. A broken test is never treated as satisfied.
    - **Assert**: error if false
    - **Report**: error if true
 5. Format message (interpolate text/name/value-of parts)
@@ -818,10 +832,10 @@ Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri
 ### Key Data Model
 
 ```
-Schema { patterns []*pattern, namespaces map[string]string }
+Schema { patterns []*pattern, namespaces map[string]string, binding QueryBinding, engine engine }
 pattern { name, rules []*rule }
-rule { context string, contextExpr *xpath.Expression, tests []*test, lets []*letBinding }
-test { typ (Assert|Report), expr, compiled *xpath.Expression, message []messagePart }
+rule { context string, contextExpr compiledExpr, tests []*test, lets []*letBinding }
+test { typ (Assert|Report), expr, compiled compiledExpr, message []messagePart }
 ```
 
 ## DTD Validation

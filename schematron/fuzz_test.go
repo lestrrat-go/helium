@@ -24,6 +24,30 @@ func FuzzCompile(f *testing.F) {
     </rule>
   </pattern>
 </schema>`))
+	f.Add([]byte(`<?xml version="1.0"?>
+<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">
+  <pattern>
+    <rule context="root">
+      <assert test="matches(@code, '^[A-Z]+$')">code must be upper case</assert>
+    </rule>
+  </pattern>
+</schema>`))
+	f.Add([]byte(`<?xml version="1.0"?>
+<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt2">
+  <pattern>
+    <rule context="root">
+      <assert test="child">missing child</assert>
+    </rule>
+  </pattern>
+</schema>`))
+	f.Add([]byte(`<?xml version="1.0"?>
+<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="  XSLT3  ">
+  <pattern>
+    <rule context="root">
+      <assert test="child">missing child</assert>
+    </rule>
+  </pattern>
+</schema>`))
 	f.Add([]byte(``))
 	f.Add([]byte(`not a schema`))
 

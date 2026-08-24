@@ -1,15 +1,22 @@
 package schematron
 
-import (
-	"github.com/lestrrat-go/helium/xpath1"
-)
-
 // Schema is a compiled Schematron schema.
 // (libxml2: xmlSchematronPtr)
 type Schema struct {
 	patterns   []*pattern
 	namespaces map[string]string // prefix -> URI from <ns> elements
 	title      string
+	binding    QueryBinding
+	engine     engine
+}
+
+// QueryBinding reports the query language binding the schema compiled with.
+// See [Compiler.QueryBinding] for how it is resolved.
+func (s *Schema) QueryBinding() QueryBinding {
+	if s == nil {
+		return QueryBindingUnspecified
+	}
+	return s.binding
 }
 
 type pattern struct {
@@ -18,8 +25,8 @@ type pattern struct {
 }
 
 type rule struct {
-	context     string             // XPath context expression (source)
-	contextExpr *xpath1.Expression // compiled XPath
+	context     string       // XPath context expression (source)
+	contextExpr compiledExpr // compiled XPath
 	tests       []*test
 	lets        []*letBinding
 	line        int
@@ -34,15 +41,15 @@ const (
 
 type test struct {
 	typ      testType
-	expr     string             // XPath test expression (source)
-	compiled *xpath1.Expression // compiled XPath
-	message  []messagePart      // parsed message content
+	expr     string        // XPath test expression (source)
+	compiled compiledExpr  // compiled XPath
+	message  []messagePart // parsed message content
 	line     int
 }
 
 type letBinding struct {
 	name string
-	expr *xpath1.Expression
+	expr compiledExpr
 }
 
 // messagePart is a piece of an assert/report message.
@@ -59,16 +66,16 @@ func (textPart) msgPart() {}
 
 // namePart is a <name/> or <name path="..."/> element in a message.
 type namePart struct {
-	path string             // XPath path expression (default ".")
-	expr *xpath1.Expression // compiled path expression
+	path string       // XPath path expression (default ".")
+	expr compiledExpr // compiled path expression
 }
 
 func (namePart) msgPart() {}
 
 // valueOfPart is a <value-of select="..."/> element in a message.
 type valueOfPart struct {
-	sel  string             // XPath select expression
-	expr *xpath1.Expression // compiled select expression
+	sel  string       // XPath select expression
+	expr compiledExpr // compiled select expression
 }
 
 func (valueOfPart) msgPart() {}
