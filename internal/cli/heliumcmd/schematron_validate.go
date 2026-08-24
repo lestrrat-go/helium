@@ -102,7 +102,7 @@ func (c *schematronValidateCommand) showUsage() {
 	_, _ = fmt.Fprintf(c.stderr, `Usage : %s [options] SCHEMA [XMLfiles ...]
 	Validate XML files against a Schematron schema
 	--timing : print timing information to stderr
-	--query-binding NAME : force the query language binding (xslt, xslt1, xpath, xpath1, xslt3, xpath3, xpath31)
+	--query-binding NAME : force the query language binding (xslt, xslt3, xpath3)
 	--max-input-bytes N : cap bytes read per input (0 = unlimited)
 	--max-depth N : cap element nesting depth (default 256, 0 = unlimited)
 	--version : display the version of the XML library used

@@ -292,7 +292,7 @@ Schematron schema compilation and validation.
 - `ErrNoSchema` — sentinel returned by `Validator.Validate` when the Validator has no compiled schema
 - `ErrCompileFailed` — sentinel returned by `Compiler.Compile`/`CompileFile` when compilation fails
 - `ErrUnsupportedQueryBinding` — sentinel returned by `ParseQueryBinding` and by `Compiler.Compile`/`CompileFile` for a query language binding this package does not implement
-- **QueryBinding** — `QueryBindingUnspecified` / `QueryBindingXPath1` (`xslt`, `xslt1`, `xpath`, `xpath1`, absent attribute) / `QueryBindingXPath3` (`xslt3`, `xpath3`, `xpath31`); `ParseQueryBinding(s)` maps an attribute value (trimmed, case-insensitive), `Schema.QueryBinding()` reports the resolved binding. 2.0 bindings and the non-XPath bindings (`xquery`, `stx`, `exslt`) are refused
+- **QueryBinding** — `QueryBindingUnspecified` / `QueryBindingXPath1` (`xslt`, absent attribute) / `QueryBindingXPath3` (`xslt3`, `xpath3`); `ParseQueryBinding(s)` maps an attribute value (trimmed, case-insensitive), `Schema.QueryBinding()` reports the resolved binding. Every other value is refused, including the unimplemented 2.0 bindings and the names the standard reserves without defining (`xpath`, `xquery`, `stx`, `exslt`)
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
 - Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting), `querybinding.go` (binding resolution), `engine.go` (engine/runner/value seam), `engine_xpath1.go` + `engine_xpath3.go` (per-binding engines)

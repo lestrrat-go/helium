@@ -36,12 +36,27 @@ func compileBindingSchema(t *testing.T, c schematron.Compiler, binding string) (
 }
 
 func TestQueryBindingResolution(t *testing.T) {
-	t.Run("accepted attribute values", func(t *testing.T) {
-		for _, binding := range []string{"", "xslt", "xslt1", "xpath", "xpath1", "XSLT", " xpath "} {
+	// ISO/IEC 19757-3 Annex C: no queryBinding attribute, or the value
+	// "xslt" in any mix of upper and lower case letters, selects the default
+	// binding of XPath 1.0 as extended by XSLT 1.0.
+	t.Run("accepted XPath 1.0 values", func(t *testing.T) {
+		for _, binding := range []string{"", "xslt", "XSLT", "Xslt", " xslt "} {
 			t.Run(fmt.Sprintf("%q", binding), func(t *testing.T) {
 				schema, err := compileBindingSchema(t, schematron.NewCompiler(), binding)
 				require.NoError(t, err, "compile schema")
 				require.Equal(t, schematron.QueryBindingXPath1, schema.QueryBinding())
+			})
+		}
+	})
+
+	// ISO/IEC 19757-3:2020 Annex J binds "xslt3" to XSLT 3.0, whose query
+	// language is XPath 3.1, and Annex K binds "xpath3" to XPath 3.0.
+	t.Run("accepted XPath 3.1 values", func(t *testing.T) {
+		for _, binding := range []string{"xslt3", "xpath3", "XSLT3", " XPath3 "} {
+			t.Run(fmt.Sprintf("%q", binding), func(t *testing.T) {
+				schema, err := compileBindingSchema(t, schematron.NewCompiler(), binding)
+				require.NoError(t, err, "compile schema")
+				require.Equal(t, schematron.QueryBindingXPath3, schema.QueryBinding())
 			})
 		}
 	})
@@ -95,7 +110,9 @@ func TestParseQueryBinding(t *testing.T) {
 	}{
 		{input: "", expect: schematron.QueryBindingUnspecified},
 		{input: "xslt", expect: schematron.QueryBindingXPath1},
-		{input: "XPath1", expect: schematron.QueryBindingXPath1},
+		{input: "XSLT", expect: schematron.QueryBindingXPath1},
+		{input: "xslt3", expect: schematron.QueryBindingXPath3},
+		{input: "XPath3", expect: schematron.QueryBindingXPath3},
 	} {
 		t.Run(fmt.Sprintf("%q", tc.input), func(t *testing.T) {
 			b, err := schematron.ParseQueryBinding(tc.input)
@@ -114,6 +131,7 @@ func TestParseQueryBinding(t *testing.T) {
 func TestQueryBindingString(t *testing.T) {
 	require.Equal(t, "unspecified", schematron.QueryBindingUnspecified.String())
 	require.Equal(t, "xpath1", schematron.QueryBindingXPath1.String())
+	require.Equal(t, "xpath3", schematron.QueryBindingXPath3.String())
 }
 
 // TestQueryBindingCompiledSchemaEvaluates checks that a schema naming an

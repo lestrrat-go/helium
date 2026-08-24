@@ -46,7 +46,9 @@ func Example_schematron_query_binding() {
 	}
 
 	// A binding this package does not implement is refused at compile time
-	// rather than evaluated as if it were XPath 1.0.
+	// rather than evaluated as if it were XPath 1.0. ISO/IEC 19757-3 requires
+	// that refusal: only the bindings the standard defines and this package
+	// implements are accepted.
 	rejectedDoc, err := p.Parse(context.Background(), []byte(
 		`<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt2">
   <pattern>
@@ -66,5 +68,5 @@ func Example_schematron_query_binding() {
 	// Output:
 	// binding: xpath3
 	// schematron: validation failed
-	// schematron: unsupported query language binding "xslt2" (supported: xslt, xslt1, xpath, xpath1, xslt3, xpath3, xpath31)
+	// schematron: unsupported query language binding "xslt2" (supported: xslt, xslt3, xpath3)
 }
