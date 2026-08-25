@@ -1040,6 +1040,11 @@ func (p *pattern) matchesAttributes() bool {
 // namespace nodes during the document walk.
 func (p *pattern) matchesNamespaceNodes() bool {
 	for _, alt := range p.Alternatives {
+		// Skipping a neverMatches alternative cannot lose a namespace node:
+		// matchPatternAlt returns false for every node under that same flag,
+		// and key table building matches only through that path. An
+		// alternative skipped here therefore selects nothing anywhere, so this
+		// skip is exactly the matcher's.
 		if alt.neverMatches {
 			continue
 		}
