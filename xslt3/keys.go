@@ -301,6 +301,16 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 		}
 	}
 
+	// Check whether any key definition matches namespace nodes so we know
+	// whether to enumerate in-scope namespace nodes during the walk.
+	needsNSNodes := false
+	for _, kd := range defs {
+		if kd.Match.matchesNamespaceNodes() {
+			needsNSNodes = true
+			break
+		}
+	}
+
 	// indexNode tries to match a single node against all key defs and index it.
 	indexNode := func(node helium.Node) error {
 		for _, kd := range defs {
@@ -407,12 +417,14 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 					}
 				}
 			}
-			// Collect in-scope namespace nodes (including inherited ones)
-			// to match XPath namespace axis semantics.
-			nsNodes := collectInScopeNSNodes(elem)
-			for _, nsNode := range nsNodes {
-				if err := indexNode(nsNode); err != nil {
-					return err
+			if needsNSNodes {
+				// Collect in-scope namespace nodes (including inherited ones)
+				// to match XPath namespace axis semantics.
+				nsNodes := collectInScopeNSNodes(elem)
+				for _, nsNode := range nsNodes {
+					if err := indexNode(nsNode); err != nil {
+						return err
+					}
 				}
 			}
 		}
