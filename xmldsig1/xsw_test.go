@@ -225,6 +225,72 @@ func TestVerifyMultipleSignatures(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestSignLoopMutatesIDSpace pins the reason the signing path must never
+// gain an id index: the signing tree's id space changes between reference
+// resolutions, so any index built once before the reference loop would go
+// stale mid-signature and silently resolve a reference that should fail
+// closed as ambiguous.
+//
+// signEnveloped inserts the Signature element into the document before the
+// reference loop runs, and processReference appends a <ds:Reference Id="..">
+// carrying that reference's ID into SignedInfo as each reference is
+// resolved. So reference i is resolved against a tree that already contains
+// references 0..i-1 and their ids. Here reference[0] carries ID="dup" and
+// the document already has an element with id="dup": by the time
+// reference[1] (URI="#dup") resolves, the tree holds two id="dup" elements
+// and resolution must report ErrAmbiguousReference. A per-sign id index
+// built once before the loop would have captured only the original element
+// and resolved reference[1] to a single, wrong answer — turning a
+// fail-closed XML Signature Wrapping check into a silent resolution, and
+// producing a signature that any conformant verifier rejects as ambiguous
+// once it walks the finished tree. This is why resolveReference on the sign
+// path always performs a fresh walk and must not be handed a cached index.
+func TestSignLoopMutatesIDSpace(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, `<root xmlns="urn:bench"><a id="first">x</a><b id="dup">y</b></root>`)
+
+	s := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		CanonicalizationMethod(xmldsig1.ExcC14N10).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#first",
+			ID:              "dup",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		}).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#dup",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		})
+
+	err := s.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key)
+	require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
+}
+
+// TestSignLoopBaselineNoCollision is the control for TestSignLoopMutatesIDSpace:
+// without the colliding reference ID, the same two references sign cleanly.
+func TestSignLoopBaselineNoCollision(t *testing.T) {
+	key := generateRSAKey(t)
+	doc := mustParseXML(t, `<root xmlns="urn:bench"><a id="first">x</a><b id="dup">y</b></root>`)
+
+	s := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+		CanonicalizationMethod(xmldsig1.ExcC14N10).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#first",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		}).
+		Reference(xmldsig1.ReferenceConfig{
+			URI:             "#dup",
+			DigestAlgorithm: xmldsig1.DigestSHA256,
+			Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+		})
+
+	require.NoError(t, s.SignEnveloped(t.Context(), doc, doc.DocumentElement(), key))
+}
+
 // TestSignEnvelopedSiblingPositionStable locks in the current behavior
 // (Signature appended at end of parent) and ensures any future change is
 // deliberate. The signed document's canonical form is byte-stable across
