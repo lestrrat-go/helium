@@ -775,38 +775,57 @@ func nodeTestPriority(test xpath3.NodeTest) float64 {
 
 // matchPattern tests whether a node matches the pattern.
 func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium.Node) bool {
-	// Temporarily set xpath-default-namespace from pattern's compile-time value.
-	// Also clear contextItem so predicates evaluate with the candidate node
-	// as the context item (not an atomic value from an enclosing instruction
-	// like xsl:analyze-string). Per XSLT spec, the set of captured substrings
-	// is empty when evaluating patterns: regex-group() must return empty
-	// sequence inside a pattern, not groups from an enclosing matching-substring.
-	saved := ec.xpathDefaultNS
-	savedHas := ec.hasXPathDefaultNS
+	// Temporarily clear contextItem so predicates evaluate with the candidate
+	// node as the context item (not an atomic value from an enclosing
+	// instruction like xsl:analyze-string), and clear regexGroups. Per XSLT
+	// spec, the set of captured substrings is empty when evaluating patterns:
+	// regex-group() must return empty sequence inside a pattern, not groups
+	// from an enclosing matching-substring. These fields, plus contextNode/
+	// currentNode/inPatternMatch, depend only on node — never on which pattern
+	// is being probed — so a caller that probes many patterns against the same
+	// node (a dispatch scan) can set them once and call matchPatternProbe
+	// directly instead of paying this save/restore on every probe.
 	savedGroups := ec.regexGroups
 	savedContext := ec.contextNode
 	savedCurrent := ec.currentNode
 	savedItem := ec.contextItem
 	savedInPattern := ec.inPatternMatch
-	savedPatternNS := ec.patternNamespaces
-	savedPatternCompat := ec.patternCompat
-	ec.xpathDefaultNS = p.xpathDefaultNS
-	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
 	ec.contextNode = node
 	ec.currentNode = node
 	ec.contextItem = nil
 	ec.inPatternMatch = true
-	ec.patternNamespaces = p.nsBindings
-	ec.patternCompat = p.compat
 	defer func() {
-		ec.xpathDefaultNS = saved
-		ec.hasXPathDefaultNS = savedHas
 		ec.regexGroups = savedGroups
 		ec.contextNode = savedContext
 		ec.currentNode = savedCurrent
 		ec.contextItem = savedItem
 		ec.inPatternMatch = savedInPattern
+	}()
+
+	return p.matchPatternProbe(ctx, ec, node)
+}
+
+// matchPatternProbe tests whether node matches the pattern, assuming the
+// caller has already set the node-scoped execContext fields (contextNode,
+// currentNode, contextItem, inPatternMatch, regexGroups) for node — either via
+// matchPattern itself, or once around a dispatch loop that probes many
+// patterns against the same node (see findFirstMatch / hasConflictingMatch).
+// It saves and restores only the fields that vary per pattern:
+// xpath-default-namespace, the pattern's lexical namespace snapshot, and its
+// backwards-compatible-processing flag.
+func (p *pattern) matchPatternProbe(ctx context.Context, ec *execContext, node helium.Node) bool {
+	saved := ec.xpathDefaultNS
+	savedHas := ec.hasXPathDefaultNS
+	savedPatternNS := ec.patternNamespaces
+	savedPatternCompat := ec.patternCompat
+	ec.xpathDefaultNS = p.xpathDefaultNS
+	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
+	ec.patternNamespaces = p.nsBindings
+	ec.patternCompat = p.compat
+	defer func() {
+		ec.xpathDefaultNS = saved
+		ec.hasXPathDefaultNS = savedHas
 		ec.patternNamespaces = savedPatternNS
 		ec.patternCompat = savedPatternCompat
 	}()
@@ -1583,12 +1602,16 @@ func matchNameTest(_ context.Context, ec *execContext, nt xpath3.NameTest, node 
 		// *:local matches any namespace
 		return nodeLocal == nt.Local
 	}
+	// Resolve through the same shared helper the dispatch index's signature
+	// extractor uses (resolveStaticPatternName in dispatch_index.go), so the
+	// two resolution paths cannot drift apart. During pattern matching
+	// ec.patternNamespaces and ec.xpathDefaultNS hold exactly the pattern's
+	// own p.nsBindings/p.xpathDefaultNS (matchPattern/matchPatternProbe set
+	// them), which is what ec.resolvePrefix already short-circuits to via
+	// resolvePatternPrefix while ec.inPatternMatch is set.
 	expectedURI := ""
-	if nt.Prefix != "" && ec != nil {
-		expectedURI = ec.resolvePrefix(nt.Prefix)
-	} else if nt.Prefix == "" && ec != nil && isElem {
-		// Unprefixed element names use xpath-default-namespace
-		expectedURI = ec.xpathDefaultNS
+	if ec != nil {
+		expectedURI = resolveStaticPatternName(nt, ec.patternNamespaces, ec.xpathDefaultNS, isElem)
 	}
 	if nodeLocal != nt.Local || nodeURI != expectedURI {
 		return false

@@ -104,10 +104,19 @@ type Stylesheet struct {
 	// XPath 1.0 compatibility mode (XSLT backwards-compatible processing, effective
 	// version < 2.0), keyed by pointer identity. nil when the stylesheet has no
 	// backwards-compatible subtree, so the common case costs a nil-map lookup.
-	compatExprs          map[*xpath3.Expression]struct{}
-	templates            []*template
-	namedTemplates       map[string]*template
-	modeTemplates        map[string][]*template // mode -> templates sorted by import-precedence then priority
+	compatExprs    map[*xpath3.Expression]struct{}
+	templates      []*template
+	namedTemplates map[string]*template
+	modeTemplates  map[string][]*template // mode -> templates sorted by import-precedence then priority
+	// modeIndex holds, per mode, a templateIndex built from modeTemplates[mode]
+	// once it is sorted (compiler.sortTemplates), keyed by node kind and
+	// expanded name so findFirstMatch / hasConflictingMatch can skip templates
+	// their pattern's terminal step provably cannot match. A nil entry (or a
+	// missing key) means the mode's list is below templateIndexThreshold, or
+	// has no entries at all — dispatch falls back to a plain linear scan.
+	// Built once, eagerly, at the end of Compile; never mutated afterward, so
+	// it is safe to read from concurrent Transform calls without locking.
+	modeIndex            map[string]*templateIndex
 	defaultMode          string
 	globalVars           []*variable // topologically sorted
 	globalParams         []*param
