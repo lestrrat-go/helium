@@ -520,10 +520,9 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	}
 
 	existing := ctx.attsDefault[elemName]
-	for _, a := range existing {
-		if a.Name() == attrName {
-			return
-		}
+	dkey := specialAttrKey{elem: elemName, attr: attrName}
+	if _, ok := ctx.attsDefaultSeen[dkey]; ok {
+		return
 	}
 
 	var prefix string
@@ -546,6 +545,7 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 		attr.SetAType(decl.AType())
 	}
 	ctx.attsDefault[elemName] = append(existing, attr)
+	ctx.attsDefaultSeen[dkey] = struct{}{}
 }
 
 func (ctx *parserCtx) lookupAttributeDefault(elemName string) ([]*Attribute, bool) {

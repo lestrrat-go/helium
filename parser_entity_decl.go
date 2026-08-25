@@ -806,6 +806,7 @@ func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.sax = pctx.sax
 	newctx.treeBuilder = pctx.treeBuilder
 	newctx.attsDefault = pctx.attsDefault
+	newctx.attsDefaultSeen = pctx.attsDefaultSeen
 	newctx.options = pctx.options
 	newctx.loadsubset = pctx.loadsubset
 	newctx.replaceEntities = pctx.replaceEntities

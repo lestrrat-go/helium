@@ -154,6 +154,7 @@ Each cap is enforced DURING accumulation (fail-closed before the whole run buffe
 - **UTF-8 fast paths** — `parseQName`/`parseNCName`/`parseAttributeValueInternal` try `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the cursor buffer, invalidating borrowed slices), and use `AdvanceFast()` when the run is proven newline-free. See `internal/strcursor/utf8cursor.go`.
 - **Name interning** (`intern.go`) — global lexicon seed with a `(first byte, length)` cheap-check before the map probe.
 - **Entity-amplification / external bounds** — see Entity Expansion above.
+- **Start-tag duplicate detection** (`parser_element.go` `attrDupSetThreshold` = 32) — per-start-tag attribute (qualified-name and expanded-name) and namespace-declaration duplicate checks scan the tag's own `attrs`/`nsDeclared` linearly below the threshold (unchanged, no allocation); at or above it each switches once to a map-backed set (`ensureAttrSet`/`ensureNsSet`, keyed by `attrKey`{local, prefix-or-URI} or bare prefix string), so a tag with many attributes or namespace declarations is linear instead of quadratic. `addAttributeDefault` (`parser_dtd_attr.go`) uses an unconditional map (`parserCtx.attsDefaultSeen`, shared with `attsDefault` via `inheritNestedParserState`) with no threshold, since it already does a map probe/store per call.
 
 ## Context Cancellation (parse abort)
 

@@ -152,6 +152,15 @@ type parserCtx struct {
 	// VC: Standalone Document Declaration normalization check.
 	attrNormChanged bool
 	attsDefault     map[string][]*Attribute
+	// attsDefaultSeen mirrors attsDefault, keyed by (elem, attr) exactly as
+	// declared, so addAttributeDefault can reject a repeated <!ATTLIST>
+	// default with a single map probe instead of rescanning
+	// attsDefault[elemName] (a scan that grows with every declaration
+	// already recorded for that element, made worse by Attribute.Name()'s
+	// per-call cost). Append-only for the same reason attsDefault is:
+	// nothing in a duplicate-declared default's semantics ever needs to
+	// invalidate an entry.
+	attsDefaultSeen map[specialAttrKey]struct{}
 	valid           bool
 	hasPERefs       bool
 	// hasExternalPERef records that at least one EXTERNAL parameter entity was
@@ -683,6 +692,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.attsSpecial = map[specialAttrKey]enum.AttributeType{}
 	ctx.attsSpecialExternal = map[specialAttrKey]struct{}{}
 	ctx.attsDefault = map[string][]*Attribute{}
+	ctx.attsDefaultSeen = map[specialAttrKey]struct{}{}
 	ctx.wellFormed = true
 	ctx.spaceTab = ctx.spaceTab[:0]
 	ctx.spaceTab = append(ctx.spaceTab, -1) // initial value before any element

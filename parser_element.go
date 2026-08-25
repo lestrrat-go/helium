@@ -469,6 +469,22 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// still having consumed a same-element declaration that a later
 	// duplicate must conflict with. Reset per element (nsDeclared[:0]).
 	nsDeclared := pctx.nsDeclaredBuf[:0]
+
+	// nsSet mirrors attrSet below, but for nsDeclared: it stays nil for
+	// every ordinary tag and is built once, from the prefixes recorded so
+	// far, the first time nsDeclared reaches attrDupSetThreshold. Own key
+	// space (bare prefix strings, "" for the default namespace) since
+	// nsDeclared duplicate detection is independent of attribute duplicate
+	// detection.
+	var nsSet map[string]struct{}
+
+	// attrSet backs the qualified-name duplicate check below (and the
+	// DTD-default application pass further down) once the tag's attribute
+	// count reaches attrDupSetThreshold. It stays nil — and the linear scan
+	// below stays the only code executed — for every ordinary tag; it is
+	// built once, from the attrs collected so far, the first time an
+	// attribute is about to be added at or past the threshold.
+	var attrSet map[attrKey]struct{}
 	for pctx.instate != psEOF {
 		pctx.skipBlanks(ctx)
 		if cur.Peek() == '>' {
@@ -499,7 +515,13 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// same-element duplicates). The check uses nsDeclared, which
 			// records every same-element declaration even one the parseNsClean
 			// skip path would not push onto nsTab.
-			if slices.Contains(nsDeclared, "") {
+			nsSet = ensureNsSet(nsSet, nsDeclared)
+			if nsSet != nil {
+				if _, ok := nsSet[""]; ok {
+					return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+				}
+				nsSet[""] = struct{}{}
+			} else if slices.Contains(nsDeclared, "") {
 				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
 			}
 			nsDeclared = append(nsDeclared, "")
@@ -544,6 +566,10 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				// defaulting. Without this, the explicit binding takes the early
 				// goto and is never recorded, letting the DTD default override
 				// the reserved xml namespace.
+				nsSet = ensureNsSet(nsSet, nsDeclared)
+				if nsSet != nil {
+					nsSet[attname] = struct{}{}
+				}
 				nsDeclared = append(nsDeclared, attname)
 				goto SkipNS
 			}
@@ -556,7 +582,13 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// one the parseNsClean skip path would not push onto nsTab, so a
 			// later duplicate is still caught. A prefix bound only in an
 			// ancestor is valid shadowing and is not in nsDeclared.
-			if slices.Contains(nsDeclared, attname) {
+			nsSet = ensureNsSet(nsSet, nsDeclared)
+			if nsSet != nil {
+				if _, ok := nsSet[attname]; ok {
+					return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+				}
+				nsSet[attname] = struct{}{}
+			} else if slices.Contains(nsDeclared, attname) {
 				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
 			}
 			nsDeclared = append(nsDeclared, attname)
@@ -583,10 +615,22 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		// XML 1.0 §3.1: a start tag may not carry two attributes with the
 		// same qualified name. Reject before appending or invoking any
 		// SAX/DOM callback. (Namespace declarations are duplicate-checked
-		// in their own branches above and never reach here.)
-		for i := range attrs {
-			if attrs[i].localname == attname && attrs[i].prefix == aprefix {
+		// in their own branches above and never reach here.) Below
+		// attrDupSetThreshold this is the same linear scan as ever; at or
+		// above it attrSet turns the check into a single map probe, so an
+		// attacker-sized tag stays linear instead of quadratic.
+		attrSet = ensureAttrSet(attrSet, attrs)
+		if attrSet != nil {
+			k := attrKey{local: attname, prefix: aprefix}
+			if _, ok := attrSet[k]; ok {
 				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+			}
+			attrSet[k] = struct{}{}
+		} else {
+			for i := range attrs {
+				if attrs[i].localname == attname && attrs[i].prefix == aprefix {
+					return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+				}
 			}
 		}
 
@@ -626,9 +670,10 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			// explicit binding must win over a DTD-supplied default. Because
 			// nsStack.Lookup is LIFO, pushing the DTD default afterwards would
 			// otherwise shadow the explicit one.
+			nsSet = ensureNsSet(nsSet, nsDeclared)
 			for _, attr := range defaults {
 				if attr.LocalName() == lexicon.PrefixXMLNS && attr.Prefix() == "" {
-					if slices.Contains(nsDeclared, "") {
+					if nsSetContains(nsSet, nsDeclared, "") {
 						continue
 					}
 					// A DTD-defaulted default namespace is subject to the
@@ -648,7 +693,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 				if attname == lexicon.PrefixXMLNS && aprefix == "" {
 					continue
 				} else if aprefix == lexicon.PrefixXMLNS {
-					if slices.Contains(nsDeclared, attname) {
+					if nsSetContains(nsSet, nsDeclared, attname) {
 						continue
 					}
 					// DTD-defaulted namespace declarations are subject to the
@@ -669,14 +714,26 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 					pctx.pushNS(attname, attr.Value())
 					nbNs++
 				} else {
+					// attrs grows with every default appended below, so this
+					// rescan is the same O(D*(A+D)) shape as the literal-attribute
+					// scan above; reuse attrSet (built once attrs first reaches
+					// attrDupSetThreshold) for the same reason.
+					attrSet = ensureAttrSet(attrSet, attrs)
 					dup := false
-					for _, ea := range attrs {
-						if ea.localname == attname && ea.prefix == aprefix {
-							dup = true
-							break
+					if attrSet != nil {
+						_, dup = attrSet[attrKey{local: attname, prefix: aprefix}]
+					} else {
+						for _, ea := range attrs {
+							if ea.localname == attname && ea.prefix == aprefix {
+								dup = true
+								break
+							}
 						}
 					}
 					if !dup {
+						if attrSet != nil {
+							attrSet[attrKey{local: attname, prefix: aprefix}] = struct{}{}
+						}
 						attrs = append(attrs, attrData{
 							localname: attname,
 							prefix:    aprefix,
@@ -710,6 +767,33 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// been pushed, so prefixes declared after the attributes still resolve.
 	// Unprefixed attributes are in no namespace (a default xmlns does not
 	// apply to attributes) and are excluded from this check.
+	//
+	// Above attrDupSetThreshold, expandedLast precomputes, for every
+	// (localname, resolved URI) expanded name, the HIGHEST attrs index
+	// carrying it (skipping unprefixed attributes, the reserved xml prefix,
+	// and any prefix that resolves to "" — an unbound-prefix attribute never
+	// participates in a duplicate match, matching the inner loop's
+	// `iuri != ""` guard below). The main loop then replaces the inner j
+	// loop with a single map probe: `expandedLast[key] > i` is exactly the
+	// original's "some j > i shares this expanded name", so which error
+	// (this one or the unbound-prefix namespaceError two lines below) fires
+	// first, and at which i, is unchanged. lookupNamespace is pure — it only
+	// reads nsTab, already fully pushed for this tag — so precomputing it
+	// ahead of the main loop cannot itself change any outcome.
+	var expandedLast map[attrKey]int
+	if len(attrs) >= attrDupSetThreshold {
+		expandedLast = make(map[attrKey]int, 2*len(attrs))
+		for i := range attrs {
+			if attrs[i].prefix == "" || attrs[i].prefix == lexicon.PrefixXML {
+				continue
+			}
+			uri := pctx.lookupNamespace(attrs[i].prefix)
+			if uri == "" {
+				continue
+			}
+			expandedLast[attrKey{local: attrs[i].localname, prefix: uri}] = i
+		}
+	}
 	for i := range attrs {
 		if attrs[i].prefix == "" || attrs[i].prefix == lexicon.PrefixXML {
 			continue
@@ -723,6 +807,12 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		// is never affected.)
 		if iuri == "" {
 			return pctx.namespaceError(ctx, errors.New("namespace '"+attrs[i].prefix+"' not found"))
+		}
+		if expandedLast != nil {
+			if last, ok := expandedLast[attrKey{local: attrs[i].localname, prefix: iuri}]; ok && last > i {
+				return pctx.error(ctx, errors.New("duplicate attribute is not allowed"))
+			}
+			continue
 		}
 		for j := i + 1; j < len(attrs); j++ {
 			if attrs[j].prefix == "" || attrs[j].prefix == lexicon.PrefixXML {
@@ -1363,4 +1453,62 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	value = v
 	err = nil
 	return
+}
+
+// attrKey identifies an attribute by its (local name, prefix-or-URI) pair,
+// used as a map key by the start-tag duplicate-detection sets below. A
+// struct key, not a concatenated string, for the reason specialAttrKey
+// documents in parser_dtd_attr.go: elem+":"+attr collides distinct QName
+// pairs.
+type attrKey struct {
+	local  string
+	prefix string
+}
+
+// attrDupSetThreshold is the attribute count at or above which start-tag
+// duplicate detection (qualified name, expanded name, and DTD-default
+// application) switches from a linear scan of the attributes collected so
+// far to a map-backed set. Below the threshold the scan is cheaper than
+// building and probing a map; a package-level constant lets a test drive
+// the attribute count directly off it rather than a magic number that would
+// silently stop exercising the set path if the threshold ever changes.
+const attrDupSetThreshold = 32
+
+// ensureAttrSet returns attrSet unchanged once it is non-nil or attrs has not
+// yet reached attrDupSetThreshold. The first time attrs reaches the
+// threshold it builds the set once from the attrs collected so far. Callers
+// use a nil return to mean "stay on the linear scan".
+func ensureAttrSet(attrSet map[attrKey]struct{}, attrs []attrData) map[attrKey]struct{} {
+	if attrSet != nil || len(attrs) < attrDupSetThreshold {
+		return attrSet
+	}
+	attrSet = make(map[attrKey]struct{}, 2*len(attrs))
+	for i := range attrs {
+		attrSet[attrKey{local: attrs[i].localname, prefix: attrs[i].prefix}] = struct{}{}
+	}
+	return attrSet
+}
+
+// ensureNsSet is ensureAttrSet's counterpart for nsDeclared, the same-element
+// namespace-declaration-prefix list.
+func ensureNsSet(nsSet map[string]struct{}, nsDeclared []string) map[string]struct{} {
+	if nsSet != nil || len(nsDeclared) < attrDupSetThreshold {
+		return nsSet
+	}
+	nsSet = make(map[string]struct{}, 2*len(nsDeclared))
+	for _, p := range nsDeclared {
+		nsSet[p] = struct{}{}
+	}
+	return nsSet
+}
+
+// nsSetContains reports whether prefix is recorded in nsDeclared, consulting
+// nsSet when built (nsSet is nil below attrDupSetThreshold) instead of
+// rescanning nsDeclared linearly.
+func nsSetContains(nsSet map[string]struct{}, nsDeclared []string, prefix string) bool {
+	if nsSet != nil {
+		_, ok := nsSet[prefix]
+		return ok
+	}
+	return slices.Contains(nsDeclared, prefix)
 }
