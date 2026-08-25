@@ -8,12 +8,15 @@ import (
 // deepCopyOptions configures the shared deep-copy core (deepCopier). It is the
 // single set of "speed/shape primitives" that every deep-copy site in the tree
 // layer is expressed through: the leaf-node copy switch, the attribute copy
-// loop, the namespace binding, and the child-linking strategy all live in one
-// place and are selected by these knobs.
+// loop, and the namespace binding all live in one place and are selected by
+// these knobs. Child-linking is NOT one of these knobs: copyChildren always
+// links through appendCopiedChild (see its doc comment), which every
+// deep-copy site can share safely because copyNode never returns a node that
+// is already linked or that carries a foreign child link.
 //
 // The defaults (the zero value) reproduce the historical helium.CopyDoc/CopyNode
-// behavior EXACTLY: over-declared namespaces and preflighted AddChild linking,
-// no filtering, no mapping. Callers that want the faster shape opt in.
+// behavior EXACTLY: over-declared namespaces, no filtering, no mapping.
+// Callers that want the faster shape opt in.
 type deepCopyOptions struct {
 	// overDeclareNS selects the namespace-declaration strategy for elements.
 	//
@@ -30,13 +33,6 @@ type deepCopyOptions struct {
 	// copy is not over-declared. A fallback declaration is emitted only for a
 	// degenerate source whose active namespace is not in scope anywhere.
 	overDeclareNS bool
-
-	// fastLink links children with UnsafeAppendChild (no cycle/dup-attr preflight)
-	// when true. The copy core only ever builds a freshly-constructed,
-	// provably-acyclic, duplicate-free tree, so the preflight is pure overhead;
-	// the general path keeps AddChild (false) to remain byte-for-byte identical
-	// to the historical behavior on its callers.
-	fastLink bool
 
 	// omit, when non-nil, decides whether a node is dropped from the copy. It is
 	// the generalized node-filter predicate: strip-space passes a
@@ -89,15 +85,77 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 		if child == nil {
 			continue
 		}
-		if dc.opts.fastLink {
-			if err := appendFastChild(parent, child); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := parent.AddChild(child); err != nil {
+		if err := appendCopiedChild(parent, child); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// appendCopiedChild links child as the last child of parent, mirroring
+// addChild's linking rules (node.go) — including the adjacent-Text merge and
+// its pdn.lastChild correction — WITHOUT running addChild's cycle-guard
+// preflight (wouldCreateCycle). Skipping that preflight is what makes
+// CopyNode linear instead of quadratic in tree depth: AddChild's preflight
+// runs childReaches over cur's already-built subtree whenever cur has
+// children, so linking a deep tree bottom-up through AddChild re-walks a
+// growing subtree at every level.
+//
+// This is safe ONLY for a child that copyNode just returned. Every copyNode
+// branch allocates a brand-new node owned by dc.dst that has never been
+// linked anywhere: TextNode/CDATASectionNode/CommentNode/
+// ProcessingInstructionNode create fresh leaf nodes; EntityRefNode calls
+// dc.dst.CreateCharRef, which creates a childless EntityRef with no shared
+// Entity child (unlike CreateReference, whose EntityRef DOES carry a foreign
+// child link — CreateCharRef never installs one); ElementNode recurses through
+// copyElement, itself built only from fresh nodes; and the default branch
+// delegates to CopyNode, which for every node type it supports likewise
+// returns a freshly allocated, unlinked node. None of these can already be
+// linked into a tree or carry a foreign child link, so wouldCreateCycle could
+// never have found anything for such a child — the preflight is pure
+// overhead here. Do NOT call this on a node from outside the copier: an
+// arbitrary caller-supplied child has no such guarantee.
+func appendCopiedChild(parent MutableNode, child Node) error {
+	pdn := parent.baseDocNode()
+	cdn := child.baseDocNode()
+
+	last := pdn.lastChild
+	if last == nil {
+		pdn.firstChild = child
+		pdn.lastChild = child
+		cdn.parent = parent
+		return nil
+	}
+
+	ldn := last.baseDocNode()
+	curType := cdn.etype
+	// Mirrors addChild's direct-link fast path, including its adjacent-Text
+	// exclusion: two Text nodes in a row must merge, not link, so a source
+	// with two separate adjacent Text children (never produced by the parser,
+	// but reachable through the public API) copies with the same one-text-node
+	// shape AddChild would have produced.
+	if ldn.next == nil && (curType != TextNode || ldn.etype != TextNode) {
+		ldn.next = child
+		cdn.prev = last
+		cdn.parent = parent
+		pdn.lastChild = child
+		return nil
+	}
+
+	// Adjacent-Text merge, reached only when curType and ldn.etype are both
+	// TextNode given the sequential single-owner appends copyChildren performs
+	// (pdn.lastChild.next is always nil going into this call). AddSibling on a
+	// childless Text lastChild costs nothing extra — wouldCreateCycle takes its
+	// childless fast exit — so this fallback does not reopen the quadratic cost
+	// the fast path above exists to avoid.
+	if err := last.(MutableNode).AddSibling(child); err != nil { //nolint:forcetypeassert
+		return err
+	}
+	// AddSibling merged child's content into last and left child unlinked;
+	// reproduce addChild's correction so LastChild() still reports the
+	// merged-into node, not the discarded child.
+	if curType == TextNode && ldn.etype == TextNode {
+		pdn.lastChild = last
 	}
 	return nil
 }
