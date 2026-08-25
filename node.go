@@ -119,6 +119,14 @@ type docnode struct {
 // It writes NOTHING else: no child-list link, no sibling pointer, no cycle
 // check. Callers own the slot bookkeeping exactly as they did when they
 // assigned the field directly.
+//
+// A typed-nil parent — a nil *Element stored in a non-nil Node interface —
+// is a caller error and is deliberately NOT guarded here. It passes the
+// parent != nil test and panics in baseDocNode, which is the correct
+// outcome: no safe-API path can produce one, nothing in this repository
+// does, and silently accepting it would record a claim against a node that
+// does not exist. Do not add a nil-guard; that would trade a loud caller
+// error for a quiet corrupt claim count.
 func setParent(child Node, parent Node) {
 	cdn := child.baseDocNode()
 	if old := cdn.parent; old != nil {
