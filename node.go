@@ -92,7 +92,7 @@ type docnode struct {
 	// claimants. It is indifferent to which slot, if any, holds the reciprocal
 	// link: a child-list entry, an [Element] properties entry, a
 	// [Document] intSubset/extSubset, a namespace-axis wrapper and a raw
-	// [UnsafeSetParent] write all count the same. [wouldCreateCycle] reads it as
+	// [unsafeSetParent] write all count the same. [wouldCreateCycle] reads it as
 	// the exact answer to "can the ancestor walk possibly land on this node",
 	// since a walk step arrives at a node only through one of its claimants.
 	claims int32
@@ -112,7 +112,7 @@ type docnode struct {
 // setParent points child's parent pointer at parent and keeps the reciprocal
 // claim counts correct: the node child named before (if any) loses a claimant
 // and parent gains one. It is the SOLE writer of docnode.parent — every
-// insertion, splice, unlink, copy, parser fixup and [UnsafeSetParent] routes
+// insertion, splice, unlink, copy, parser fixup and [unsafeSetParent] routes
 // through it — so docnode.claims is exact by construction rather than
 // re-derived at read time from whichever slots happen to hold a link.
 //
@@ -542,7 +542,7 @@ func (n docnode) LastChild() Node {
 // which is the shape a chain-building insertion loop hands this function over
 // and over. The count is indifferent to which slot holds the reciprocal link,
 // so a child-list entry, an Element attribute, a Document DTD subset, a
-// namespace-axis wrapper and a raw UnsafeSetParent write all keep the guard on
+// namespace-axis wrapper and a raw unsafeSetParent write all keep the guard on
 // the walk without any of them being enumerated here.
 //
 // With claims > 0 the walk is still avoidable when the claim graph BELOW cur —
@@ -601,7 +601,7 @@ const claimReachBudget = 64
 // child-list entry (one whose own parent pointer names the owner) or an entry
 // in an *Element's properties chain. A node whose enumerated claimant count
 // differs from its claims therefore holds a claim link this search cannot
-// follow — an UnsafeSetParent write, a namespace-axis wrapper, a properties
+// follow — an unsafeSetParent write, a namespace-axis wrapper, a properties
 // chain UnsafeSetNextSibling truncated or knotted, a Document DTD subset kept
 // outside the child list — and the search reports exact == false, as it does on
 // running out of budget. A caller that gets exact == false must fall back to
@@ -615,7 +615,7 @@ const claimReachBudget = 64
 // another: an attribute that occupies BOTH the properties chain and the child
 // list (UnsafeAppendChild links it into the list without removing it from the
 // chain) would be counted twice and could make the total match while a real
-// claim link — an UnsafeSetParent write no slot holds — went unfollowed, and
+// claim link — an unsafeSetParent write no slot holds — went unfollowed, and
 // the cycle it closes would be admitted. A repeat inside ONE list needs the
 // same treatment: [siblingCycleGuard] stops a knotted chain within a bounded
 // multiple of the cycle length, so a node can come round more than once before
@@ -1131,7 +1131,7 @@ func addSibling(n MutableNode, cur Node) error {
 	return errors.New("cannot add sibling to nil node")
 }
 
-// UnsafeSetParent sets ONLY n's parent pointer. It performs none of the cycle
+// unsafeSetParent sets ONLY n's parent pointer. It performs none of the cycle
 // detection, auto-unlinking, or reciprocal back-pointer maintenance that
 // AddChild/AddSibling/Replace/UnlinkNode provide, so a misuse leaves the tree
 // inconsistent or cyclic. It exists for low-level tree construction and for
@@ -1144,18 +1144,17 @@ func addSibling(n MutableNode, cur Node) error {
 // a loop through a pointer written here is rejected with ErrCyclicNode just as
 // the same shape built through the safe API is. Clearing a parent pointer
 // (a nil parent) drops the claim again.
-func UnsafeSetParent(n Node, parent Node) {
+func unsafeSetParent(n Node, parent Node) {
 	setParent(n, parent)
 }
 
-// UnsafeSetPrevSibling sets ONLY n's previous-sibling pointer, with the same
-// no-safeguards contract as UnsafeSetParent.
-func UnsafeSetPrevSibling(n Node, prev Node) {
-	n.baseDocNode().prev = prev
-}
-
-// UnsafeSetNextSibling sets ONLY n's next-sibling pointer, with the same
-// no-safeguards contract as UnsafeSetParent.
+// UnsafeSetNextSibling sets ONLY n's next-sibling pointer. It performs none of
+// the cycle detection, auto-unlinking, or reciprocal back-pointer maintenance
+// that AddChild/AddSibling/Replace/UnlinkNode provide, so a misuse leaves the
+// tree inconsistent or cyclic. It exists for low-level tree construction and
+// for tests that must build a deliberately corrupt tree to exercise the
+// traversal cycle guards. Ordinary code MUST use
+// AddChild/AddSibling/UnlinkNode instead.
 func UnsafeSetNextSibling(n Node, next Node) {
 	n.baseDocNode().next = next
 }

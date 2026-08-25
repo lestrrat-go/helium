@@ -143,7 +143,7 @@ var elementContentParentWrites = map[string]bool{
 // rejected here rather than discovered later as a cycle the guard let through.
 //
 // It scans the package's own sources, tests included: a test that corrupts a
-// tree on purpose must corrupt it through UnsafeSetParent, which routes through
+// tree on purpose must corrupt it through unsafeSetParent, which routes through
 // the chokepoint too.
 func TestNoDirectParentAssignment(t *testing.T) {
 	fset := token.NewFileSet()

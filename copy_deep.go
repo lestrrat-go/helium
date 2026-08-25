@@ -151,7 +151,7 @@ func appendCopiedChild(parent MutableNode, child Node) error {
 	// per-process: an operand goes back on the ancestor walk only when
 	// claimsReach cannot certify it enumerated every claim link on that
 	// operand's own claim graph — a claim held in no enumerable slot, or a graph
-	// wider than the search budget. An UnsafeSetParent write elsewhere in the
+	// wider than the search budget. An unsafeSetParent write elsewhere in the
 	// tree leaves this copy's operands answering from the claim counter.)
 	if err := last.(MutableNode).AddSibling(child); err != nil { //nolint:forcetypeassert
 		return err

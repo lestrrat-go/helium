@@ -58,15 +58,15 @@ func TestAddChildDeepChainGrowth(t *testing.T) {
 	require.Nil(t, walker.FirstChild())
 }
 
-// TestUnsafeSetParentClaimantIsRejected pins that the insertion cycle guard
+// TestUnsafeSetParentForTestingClaimantIsRejected pins that the insertion cycle guard
 // rejects a parent-pointer loop whichever way the claimant was written. The
 // guard settles a childless operand from the number of nodes naming it as their
-// parent, and UnsafeSetParent maintains that count exactly as the safe paths do,
+// parent, and the raw parent setter maintains that count exactly as the safe paths do,
 // so a link it wrote into no slot at all still keeps the guard on its ancestor
 // walk. Both shapes must therefore fail with ErrCyclicNode and leave the tree
 // unlinked.
-func TestUnsafeSetParentClaimantIsRejected(t *testing.T) {
-	t.Run("UnsafeSetParent link is rejected", func(t *testing.T) {
+func TestUnsafeSetParentForTestingClaimantIsRejected(t *testing.T) {
+	t.Run("raw parent-setter link is rejected", func(t *testing.T) {
 		doc := newCycleTestDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestUnsafeSetParentClaimantIsRejected(t *testing.T) {
 		// cur becomes parent's parent without being linked into any slot: no
 		// child list, no properties chain, no DTD subset. Only the claim count
 		// records it.
-		helium.UnsafeSetParent(parent, cur)
+		helium.UnsafeSetParentForTesting(parent, cur)
 
 		err = parent.AddChild(cur)
 		require.True(t, errors.Is(err, helium.ErrCyclicNode), "expected ErrCyclicNode, got %v", err)

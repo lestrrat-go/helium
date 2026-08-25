@@ -74,10 +74,10 @@ func threeAttrElement(t *testing.T, doc *Document) (*Element, []*Attribute) {
 //
 // The rows cover both directions the fast exit can get wrong. A row whose
 // operand is claimed through a slot no enumeration can see — a severed, knotted
-// or spliced properties chain, a sibling-list write, a raw UnsafeSetParent —
+// or spliced properties chain, a sibling-list write, a raw unsafeSetParent —
 // must still be REJECTED, because docnode.claims counts that claimant whatever
 // slot does or does not hold it. A row whose operand is NOT claimed at all —
-// an attribute orphaned by UnsafeSetParent, an attribute moved into another
+// an attribute orphaned by unsafeSetParent, an attribute moved into another
 // element, an element whose attribute value merely contains a shared entity —
 // must be ACCEPTED, because the ancestor walk would accept it.
 // cycleDifferentialCases is the adversarial insertion table
@@ -255,7 +255,7 @@ func cycleDifferentialCases() []cycleCase {
 			build: func(t *testing.T) (Node, Node, func() error) {
 				doc := newCycleCaseDocument()
 				e, attrs := threeAttrElement(t, doc)
-				UnsafeSetPrevSibling(attrs[1], attrs[2])
+				attrs[1].baseDocNode().prev = attrs[2]
 				require.True(t, e.RemoveAttribute("a2"))
 				require.Same(t, e, attrs[2].Parent(), "a3 must still name e as its parent, or this row proves nothing")
 				return attrs[2], e, func() error { return attrs[2].AddChild(e) }
@@ -375,19 +375,19 @@ func cycleDifferentialCases() []cycleCase {
 			wantCyclic: true,
 		},
 		{
-			// UnsafeSetParent points parent's parent pointer at cur without
+			// unsafeSetParent points parent's parent pointer at cur without
 			// linking parent into cur's child list, so cur stays a childless
 			// *Element with no attributes and the claim sits in no slot at all.
 			// The write still routes through setParent, so cur is claimed and
 			// the guard takes the ancestor walk.
-			name: "AddChild(UnsafeSetParent-corrupted ancestor)",
+			name: "AddChild(unsafeSetParent-corrupted ancestor)",
 			build: func(t *testing.T) (Node, Node, func() error) {
 				doc := newCycleCaseDocument()
 				parent, err := doc.CreateElement("parent")
 				require.NoError(t, err)
 				cur, err := doc.CreateElement("cur")
 				require.NoError(t, err)
-				UnsafeSetParent(parent, cur)
+				unsafeSetParent(parent, cur)
 				return parent, cur, func() error { return parent.AddChild(cur) }
 			},
 			wantCyclic: true,
@@ -404,13 +404,13 @@ func cycleDifferentialCases() []cycleCase {
 				parent, err := doc.CreateElement("parent")
 				require.NoError(t, err)
 				w := NewNamespaceNodeWrapper(NewNamespace("p", "urn:x"), owner)
-				UnsafeSetParent(parent, w)
+				unsafeSetParent(parent, w)
 				return parent, owner, func() error { return parent.AddChild(owner) }
 			},
 			wantCyclic: true,
 		},
 		{
-			// An attribute ORPHANED by UnsafeSetParent still sits in the
+			// An attribute ORPHANED by unsafeSetParent still sits in the
 			// element's properties chain, but it no longer claims the element,
 			// so the insertion closes no loop and must be accepted.
 			name: "phantomAttr.AddChild(former owner)",
@@ -421,7 +421,7 @@ func cycleDifferentialCases() []cycleCase {
 				require.NoError(t, e.SetAttribute("a1", "1"))
 				attrs := e.Attributes()
 				require.Len(t, attrs, 1)
-				UnsafeSetParent(attrs[0], nil)
+				unsafeSetParent(attrs[0], nil)
 				require.Same(t, attrs[0], e.Attributes()[0], "the phantom must stay in the properties chain, or this row proves nothing")
 				return attrs[0], e, func() error { return attrs[0].AddChild(e) }
 			},
@@ -485,12 +485,12 @@ func cycleDifferentialCases() []cycleCase {
 				// hidden stops claiming r, freeing the slot dup double-counts.
 				elsewhere, err := doc.CreateElement("elsewhere")
 				require.NoError(t, err)
-				UnsafeSetParent(rattrs[1], elsewhere)
+				unsafeSetParent(rattrs[1], elsewhere)
 
 				// x claims r through a pointer no enumeration can reach.
 				x, err := doc.CreateElement("x")
 				require.NoError(t, err)
-				UnsafeSetParent(x, r)
+				unsafeSetParent(x, r)
 				require.EqualValues(t, 3, r.baseDocNode().claims, "r must be claimed by dup, tail and x, or this row proves nothing")
 
 				require.Nil(t, e.FirstChild(), "e must stay childless, or the guard never reaches the claim search")
@@ -550,7 +550,7 @@ func TestWouldCreateCycleDifferential(t *testing.T) {
 // TestWouldCreateCycleFastExitGate pins both halves of the childless-operand
 // fast exit on ONE tree. With nothing claiming cur, the guard exits on the claim
 // count alone and accepts, even though parent's own pointer is about to be
-// overwritten; once UnsafeSetParent points parent at cur, cur is claimed and the
+// overwritten; once unsafeSetParent points parent at cur, cur is claimed and the
 // guard takes the ancestor walk and rejects. Clearing the pointer again drops
 // the claim and restores the fast exit, which the process-wide flag this
 // replaced could never do.
@@ -564,12 +564,12 @@ func TestWouldCreateCycleFastExitGate(t *testing.T) {
 	require.Zero(t, cur.baseDocNode().claims)
 	require.False(t, wouldCreateCycle(parent, cur), "an unclaimed operand must skip the ancestor walk")
 
-	UnsafeSetParent(parent, cur)
+	unsafeSetParent(parent, cur)
 	require.EqualValues(t, 1, cur.baseDocNode().claims)
 	require.True(t, legacyWouldCreateCycle(parent, cur), "the reference guard must reject this shape")
 	require.True(t, wouldCreateCycle(parent, cur), "a claimed operand must go back on the ancestor walk")
 
-	UnsafeSetParent(parent, nil)
+	unsafeSetParent(parent, nil)
 	require.Zero(t, cur.baseDocNode().claims)
 	require.False(t, wouldCreateCycle(parent, cur), "dropping the claim must restore the fast exit")
 }
