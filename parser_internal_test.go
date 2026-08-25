@@ -297,6 +297,28 @@ func testSkipBlankBytesReadError(t *testing.T) {
 	}
 }
 
+// competingNonFillerAttrs is the number of non-filler attributes
+// buildCompetingErrorStartTag puts on the tag (q:b, p:a, r:a). The two xmlns
+// declarations are namespace declarations, not attributes, so they never
+// count toward the len(attrs) that attrDupSetThreshold is compared against.
+const competingNonFillerAttrs = 3
+
+// buildCompetingErrorStartTag builds a start tag carrying BOTH an
+// unbound-prefix attribute (q:b) and, at higher indices, an expanded-name
+// duplicate pair (p:a and r:a, whose prefixes both resolve to urn:x).
+// fillerCount padN attributes sit between the namespace declarations and the
+// three, so the caller can place len(attrs) on either side of
+// attrDupSetThreshold while keeping the logical input identical.
+func buildCompetingErrorStartTag(fillerCount int) string {
+	var b strings.Builder
+	b.WriteString(`<root xmlns:p="urn:x" xmlns:r="urn:x"`)
+	for i := range fillerCount {
+		fmt.Fprintf(&b, " pad%d=\"v%d\"", i, i)
+	}
+	b.WriteString(` q:b="1" p:a="2" r:a="3"/>`)
+	return b.String()
+}
+
 // TestStartTagDuplicateAttributeAboveThreshold pins the start-tag
 // duplicate-detection behaviour of a tag whose attribute count crosses
 // attrDupSetThreshold, where duplicate detection switches from a linear
@@ -383,24 +405,76 @@ func TestStartTagDuplicateAttributeAboveThreshold(t *testing.T) {
 		// that, scanning attributes in document order, the unbound-prefix
 		// namespace error is what today's parser reaches first — the
 		// duplicate collision between p:a and r:a sits at higher indices
-		// and is never reached. Filler attributes push the tag past
-		// attrDupSetThreshold so the two-phase expandedLast path is
-		// exercised; expandedLast must not change which error wins.
-		fillerCount := attrDupSetThreshold
-		var b strings.Builder
-		b.WriteString(`<root xmlns:p="urn:x" xmlns:r="urn:x"`)
-		for i := range fillerCount {
-			fmt.Fprintf(&b, " pad%d=\"v%d\"", i, i)
+		// and is never reached.
+		//
+		// Crossing attrDupSetThreshold must change neither WHICH of the two
+		// competing errors wins, nor its message, nor its position. So the
+		// same logical input is parsed on both sides of the threshold and
+		// every case is pinned all the way down to the reported line and
+		// column.
+		cases := []struct {
+			name        string
+			fillerCount int
+			wantSetPath bool
+		}{
+			// One attribute short of the threshold: expandedLast stays nil
+			// and the original quadratic inner loop decides the outcome.
+			{"below threshold, linear scan", attrDupSetThreshold - competingNonFillerAttrs - 1, false},
+			// Exactly at the threshold: the lowest count at which
+			// expandedLast is built.
+			{"at threshold, expandedLast built", attrDupSetThreshold - competingNonFillerAttrs, true},
+			// Comfortably past the threshold.
+			{"above threshold, expandedLast built", attrDupSetThreshold, true},
 		}
-		b.WriteString(` q:b="1" p:a="2" r:a="3"/>`)
 
-		_, err := NewParser().Parse(t.Context(), []byte(b.String()))
-		require.Error(t, err, "an unbound attribute prefix must be rejected")
+		var first ErrParseError
+		for i, tc := range cases {
+			src := buildCompetingErrorStartTag(tc.fillerCount)
+			require.Equal(t, tc.wantSetPath, tc.fillerCount+competingNonFillerAttrs >= attrDupSetThreshold,
+				"%s: the case must sit on the intended side of attrDupSetThreshold", tc.name)
 
-		var pe ErrParseError
-		require.ErrorAs(t, err, &pe, "the unbound-prefix error must be a helium.ErrParseError")
-		require.Equal(t, ErrorDomainNamespace, pe.Domain,
-			"an unbound prefix reached before the expanded-name duplicate must report the namespace error, not the duplicate error")
+			// The namespace check runs only after the whole start tag has
+			// been consumed, so the error is reported at the tag's "/>"
+			// terminator. Deriving the expected column from the input pins
+			// it exactly without baking in a literal that would shift every
+			// time the filler count changes.
+			term := strings.Index(src, "/>")
+			require.Positive(t, term)
+			wantColumn := term + 1
+			wantSnippet := src[:term]
+
+			_, err := NewParser().Parse(t.Context(), []byte(src))
+			require.Error(t, err, "%s: an unbound attribute prefix must be rejected", tc.name)
+
+			var pe ErrParseError
+			require.ErrorAs(t, err, &pe, "%s: the unbound-prefix error must be a helium.ErrParseError", tc.name)
+			require.Equal(t, ErrorDomainNamespace, pe.Domain,
+				"%s: an unbound prefix reached before the expanded-name duplicate must report the namespace error, not the duplicate error", tc.name)
+			require.Contains(t, err.Error(), "namespace 'q' not found",
+				"%s: the unbound prefix q, not p or r, must be the one reported", tc.name)
+			require.NotNil(t, pe.Err, "%s: the parse error must wrap its underlying cause", tc.name)
+			require.Equal(t, "namespace 'q' not found", pe.Err.Error(),
+				"%s: the wrapped cause pins the message independently of the position suffix", tc.name)
+			require.Equal(t, 1, pe.LineNumber, "%s: the whole document is a single line", tc.name)
+			require.Equal(t, wantColumn, pe.Column,
+				"%s: the error must be reported at the start tag's '/>' terminator", tc.name)
+			require.Equal(t, wantSnippet, pe.Line,
+				"%s: the reported context snippet must be the start tag up to its terminator", tc.name)
+
+			if i == 0 {
+				first = pe
+				continue
+			}
+			// The cross-threshold invariant. Only the absolute column moves
+			// between cases, and only because the filler attributes shift the
+			// terminator's byte offset, which each case already pins exactly
+			// above. Everything else must be identical to the below-threshold
+			// parse.
+			require.Equal(t, first.Domain, pe.Domain, "%s: the threshold must not change the error domain", tc.name)
+			require.Equal(t, first.Level, pe.Level, "%s: the threshold must not change the error level", tc.name)
+			require.Equal(t, first.Err.Error(), pe.Err.Error(), "%s: the threshold must not change the error message", tc.name)
+			require.Equal(t, first.LineNumber, pe.LineNumber, "%s: the threshold must not change the reported line", tc.name)
+		}
 	})
 }
 
