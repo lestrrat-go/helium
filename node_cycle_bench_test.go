@@ -13,6 +13,16 @@ import (
 // attributes to each element before linking it: an element carrying attributes
 // IS claimed by them, so that arm measures the claim search rather than the
 // bare claim-count exit the zero-attribute arm takes.
+//
+// The "before" arm IS reproducible from this repository, and needs no separate
+// baseline file. This benchmark is package helium and calls only API that
+// exists on the base, so extracting the base into a scratch tree
+// (git archive origin/main | tar -x -C <dir>), copying this file in unmodified
+// and running it there yields the before numbers directly. Measured that way
+// at N=800/1600/3200/6400: base attrs=0 1.51/5.75/22.4/89.4 ms and attrs=2
+// 1.59/5.67/23.7/95.3 ms, against 0.12/0.25/0.27/0.62 ms and
+// 0.47/1.01/2.34/5.01 ms here. Wall-clock figures are machine-dependent and
+// vary run to run; the growth rate across N is the load-bearing part.
 func BenchmarkAddChildDeepChain(b *testing.B) {
 	sizes := []int{800, 1600, 3200, 6400}
 
