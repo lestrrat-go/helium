@@ -160,3 +160,109 @@ func TestAddSiblingAttributeInChildList(t *testing.T) {
 	require.Equal(t, parent, attrY.Parent())
 	require.Empty(t, parent.Attributes(), "the property chain must be untouched")
 }
+
+// unlinkedParentClaimTree builds a parent whose child list is [a b] while
+// parent.lastChild records a node that list does not contain. The detour node
+// claims parent through UnsafeSetParent without being linked into the child
+// list, so appending a sibling through it moves lastChild off the chain.
+// It returns the parent, its second (and last reachable) child, and the node
+// lastChild now records.
+func unlinkedParentClaimTree(t *testing.T) (*helium.Element, *helium.Element, *helium.Element) {
+	t.Helper()
+
+	doc := helium.NewDefaultDocument()
+	parent := mustCreateElement(t, doc, "parent")
+	a := mustCreateElement(t, doc, "a")
+	b := mustCreateElement(t, doc, "b")
+	require.NoError(t, parent.AddChild(a))
+	require.NoError(t, parent.AddChild(b))
+
+	claimant := mustCreateElement(t, doc, "claimant")
+	helium.UnsafeSetParent(claimant, parent)
+	recorded := mustCreateElement(t, doc, "recorded")
+	require.NoError(t, claimant.AddSibling(recorded))
+
+	require.Equal(t, recorded, parent.LastChild(), "lastChild records a node outside the child list")
+	require.Equal(t, helium.Node(a), parent.FirstChild())
+	require.Nil(t, b.NextSibling(), "the reachable chain still ends at b")
+
+	return parent, b, recorded
+}
+
+// elementNames collects the names of a parent's reachable children.
+func elementNames(t *testing.T, parent *helium.Element) []string {
+	t.Helper()
+
+	var names []string
+	for child := range helium.Children(parent) {
+		elem, ok := child.(*helium.Element)
+		require.True(t, ok)
+		names = append(names, elem.Name())
+	}
+	return names
+}
+
+// TestAddSiblingUnlinkedParentClaim pins the CURRENT, DELIBERATE behavior of
+// the O(1) tail jump on a tree that is outside its contract: parent.lastChild
+// records a node the parent's child list does not contain, because a raw
+// UnsafeSetParent write put a node under parent without linking it in. The
+// jump appends after that recorded tail, which is exactly where AddChild and
+// UnsafeAppendChild put it on the same tree — all three trust lastChild, and
+// the jump's guards are the strictest of the three.
+//
+// This pins a documented out-of-contract case so the boundary is executable.
+// It is not an endorsement of building a tree this shape: on any tree built
+// through the safe API alone, every append lands at the end of the reachable
+// child list.
+func TestAddSiblingUnlinkedParentClaim(t *testing.T) {
+	t.Parallel()
+
+	t.Run("AddSibling through a non-tail anchor", func(t *testing.T) {
+		t.Parallel()
+
+		parent, b, recorded := unlinkedParentClaimTree(t)
+		doc := parent.OwnerDocument()
+		anchor, ok := parent.FirstChild().(*helium.Element)
+		require.True(t, ok)
+
+		added := mustCreateElement(t, doc, "added")
+		require.NoError(t, anchor.AddSibling(added))
+
+		require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the reachable child list is unchanged")
+		require.Nil(t, b.NextSibling(), "the reachable chain still ends at b")
+		require.Equal(t, added, parent.LastChild(), "lastChild advances to the appended node")
+		require.Equal(t, helium.Node(recorded), added.PrevSibling(), "the append lands after the recorded tail")
+		require.Equal(t, helium.Node(added), recorded.NextSibling())
+		require.Equal(t, parent, added.Parent())
+	})
+
+	t.Run("AddChild reaches the same shape", func(t *testing.T) {
+		t.Parallel()
+
+		parent, b, recorded := unlinkedParentClaimTree(t)
+		doc := parent.OwnerDocument()
+
+		added := mustCreateElement(t, doc, "added")
+		require.NoError(t, parent.AddChild(added))
+
+		require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the reachable child list is unchanged")
+		require.Nil(t, b.NextSibling())
+		require.Equal(t, added, parent.LastChild())
+		require.Equal(t, helium.Node(recorded), added.PrevSibling(), "AddChild trusts the same recorded tail")
+	})
+
+	t.Run("UnsafeAppendChild reaches the same shape", func(t *testing.T) {
+		t.Parallel()
+
+		parent, b, recorded := unlinkedParentClaimTree(t)
+		doc := parent.OwnerDocument()
+
+		added := mustCreateElement(t, doc, "added")
+		require.NoError(t, helium.UnsafeAppendChild(parent, added))
+
+		require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the reachable child list is unchanged")
+		require.Nil(t, b.NextSibling())
+		require.Equal(t, added, parent.LastChild())
+		require.Equal(t, helium.Node(recorded), added.PrevSibling(), "UnsafeAppendChild trusts the same recorded tail")
+	})
+}

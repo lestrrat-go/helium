@@ -873,6 +873,21 @@ func addSibling(n MutableNode, cur Node) error {
 	// children form exactly one chain and lastChild is that chain's tail. Four
 	// guards vouch for it before trusting the jump; any tree the guards cannot
 	// vouch for falls through to the walk below unchanged.
+	//
+	// The jump trusts pdn.lastChild to be the tail of the single chain the
+	// parent's children form. That is the same trust addChild and
+	// appendFastChild (UnsafeAppendChild) already place in lastChild when they
+	// link a new child directly after it, and the guards below are strictly
+	// stronger than theirs: neither of those two checks that lastChild claims
+	// this parent at all. Every tree built through the safe API satisfies that
+	// trust. Two shapes do not: a tree whose parent pointers were written by
+	// UnsafeSetParent, and a tree where a node claims a parent without being a
+	// member of that parent's child list (CopyExtSubset's copied external
+	// subset claims the destination document as its parent and is reachable
+	// only through ExtSubset). Such a tree is outside this fast path's
+	// contract. On one, the append lands after the recorded lastChild — the
+	// same place addChild and UnsafeAppendChild put it — instead of after the
+	// last node reachable by walking from the anchor.
 	if parent := ndn.parent; parent != nil {
 		pdn := parent.baseDocNode()
 		if tail := pdn.lastChild; tail != nil {
@@ -923,6 +938,11 @@ func addSibling(n MutableNode, cur Node) error {
 // inconsistent or cyclic. It exists for low-level tree construction and for
 // tests that must build a deliberately corrupt tree to exercise the traversal
 // cycle guards. Ordinary code MUST use AddChild/AddSibling/UnlinkNode instead.
+//
+// A tree built through it is also outside the contract of the tree-mutation
+// fast paths. AddChild, UnsafeAppendChild, and AddSibling's tail jump all
+// append after the parent's recorded lastChild, and a raw parent write leaves
+// that record disconnected from the chain an anchor reaches.
 func unsafeSetParent(n Node, parent Node) {
 	n.baseDocNode().parent = parent
 }
