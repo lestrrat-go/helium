@@ -61,6 +61,13 @@ type Schema struct {
 	loaderFS          fs.FS
 	loaderBaseDir     string
 	loaderParser      *helium.Parser
+	// substClosures is the precomputed substitution-group closure of every
+	// global element declaration with a non-empty closure, keyed by the head's
+	// QName. nil until buildSubstClosures runs (at the end of compileSchema);
+	// substitutableMembersFor falls back to the uncached walk while it is nil,
+	// so every compile-time caller (which runs before this field is built) is
+	// unaffected. See subst_closure.go.
+	substClosures map[QName]*substClosure
 }
 
 // LookupElement returns the global element declaration for the given name.

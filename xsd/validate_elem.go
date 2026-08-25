@@ -821,10 +821,8 @@ func resolveSubstDecl(child childElem, edecl *ElementDecl, schema *Schema) *Elem
 	if schema != nil {
 		// TRANSITIVE closure so a child matched via a multi-level substitution chain
 		// (h<-m1<-m2) resolves to its actual member declaration, not the head.
-		for _, member := range substitutableMembersFor(edecl, schema) {
-			if matchesDeclDirect(child, member) {
-				return member
-			}
+		if member := substMemberFor(edecl, schema, QName{Local: child.name, NS: child.ns}); member != nil {
+			return member
 		}
 	}
 	return edecl
@@ -853,63 +851,52 @@ func effectiveDeclType(decl *ElementDecl, schema *Schema) *TypeDef {
 	})
 }
 
+// substitutableMembersFor returns the transitive substitution-group closure of
+// edecl: every element declaration validly substitutable for it, block- and
+// derivation-filtered. See subst_closure.go: it consults the schema's
+// precomputed substClosures cache (built once, at the end of compileSchema)
+// through lookupSubstClosure, falling back to the uncached walk
+// (substitutableMembersForUncached) whenever the cache cannot answer
+// authoritatively — in particular for every compile-time caller, since
+// substClosures is nil for the whole of compileSchema.
 func substitutableMembersFor(edecl *ElementDecl, schema *Schema) []*ElementDecl {
-	if edecl == nil || schema == nil || edecl.Block&BlockSubstitution != 0 {
+	c, state := lookupSubstClosure(edecl, schema)
+	switch state {
+	case closureHit:
+		return c.all[:len(c.all):len(c.all)]
+	case closureNone:
 		return nil
+	default:
+		return substitutableMembersForUncached(edecl, schema)
 	}
-	// A substitution group is a property of the GLOBAL head element declaration
-	// (or a ref to it), not of a LOCAL element particle that merely shares the
-	// head's QName. Expand only when this declaration IS the registered global
-	// head, or is a ref (which resolves to the global head); a distinct local
-	// particle admits no substitution members even if it is named like a head.
-	if !edecl.IsRef && schema.elements[edecl.Name] != edecl {
+}
+
+// substMemberFor returns the substitution-group member of edecl's closure
+// whose expanded name matches qn, or nil if none does. It is the lookup
+// behind elemMatchesDeclOrSubst and resolveSubstDecl: matchesDeclDirect is
+// pure expanded-name equality and a closure's members are unique by name (the
+// uncached walk's seen set dedups on QName), so a byName index lookup or an
+// all-scan are exactly equivalent to the linear scans they replace.
+func substMemberFor(edecl *ElementDecl, schema *Schema, qn QName) *ElementDecl {
+	c, state := lookupSubstClosure(edecl, schema)
+	var members []*ElementDecl
+	switch state {
+	case closureHit:
+		if c.byName != nil {
+			return c.byName[qn]
+		}
+		members = c.all
+	case closureNone:
 		return nil
+	default:
+		members = substitutableMembersForUncached(edecl, schema)
 	}
-	type queuedMember struct {
-		member *ElementDecl
-		head   *ElementDecl
-	}
-	headType := effectiveDeclType(edecl, schema)
-	queue := make([]queuedMember, 0, len(schema.substGroups[edecl.Name]))
-	for _, member := range schema.substGroups[edecl.Name] {
-		queue = append(queue, queuedMember{member: member, head: edecl})
-	}
-	seen := map[QName]struct{}{edecl.Name: {}}
-	members := make([]*ElementDecl, 0, len(queue))
-	for len(queue) > 0 {
-		item := queue[0]
-		queue = queue[1:]
-		member := item.member
-		if member == nil {
-			continue
-		}
-		if _, ok := seen[member.Name]; ok {
-			continue
-		}
-		memberType := effectiveDeclType(member, schema)
-		curHeadType := effectiveDeclType(item.head, schema)
-		// The head's EFFECTIVE {disallowed substitutions} unions the head element's
-		// block with its declared TYPE's {prohibited substitutions} (Substitution
-		// Group OK / cvc-elt.4.3), so a member reached by a derivation method the
-		// intermediate OR original head's TYPE blocks is not admitted; the
-		// substitution-specific walk also honors any INTERMEDIATE type's block on the
-		// member's derivation chain.
-		if substTypeDerivationBlocked(memberType, curHeadType, item.head.Block) {
-			continue
-		}
-		if substTypeDerivationBlocked(memberType, headType, edecl.Block) {
-			continue
-		}
-		seen[member.Name] = struct{}{}
-		members = append(members, member)
-		if member.Block&BlockSubstitution != 0 {
-			continue
-		}
-		for _, child := range schema.substGroups[member.Name] {
-			queue = append(queue, queuedMember{member: child, head: member})
+	for _, member := range members {
+		if member.Name == qn {
+			return member
 		}
 	}
-	return members
+	return nil
 }
 
 // tryMatchParticle is like matchParticle but does not write errors.
@@ -1533,11 +1520,26 @@ func wildcardExpected(wc *Wildcard) string {
 // intermediates) with ABSTRACT members removed. An abstract element can never
 // appear in an instance, but a concrete descendant behind an abstract intermediate
 // (h <- abstract m1 <- concrete m2) is still reached. Used by runtime matching
-// (elemMatchesDeclOrSubst) and restriction subsumption (findBaseAllMember). It
-// builds ON TOP of #877's substitutableMembersFor, re-walking no substGroups.
+// (elemMatchesDeclOrSubst) and restriction subsumption (findBaseAllMember).
+//
+// When the cache has an entry, its "concrete" slice is handed out directly
+// (three-index sliced, so a caller's append cannot write into it). Otherwise
+// this filters a FRESH slice out of the uncached "all" result — never a
+// reslice of it, since "all" may itself be a cached slice on loan from
+// substitutableMembersFor.
 func instanceSubstMembers(head *ElementDecl, schema *Schema) []*ElementDecl {
-	all := substitutableMembersFor(head, schema)
-	concrete := all[:0] // substitutableMembersFor returns a fresh slice; reuse it
+	c, state := lookupSubstClosure(head, schema)
+	switch state {
+	case closureHit:
+		return c.concrete[:len(c.concrete):len(c.concrete)]
+	case closureNone:
+		return nil
+	}
+	all := substitutableMembersForUncached(head, schema)
+	if len(all) == 0 {
+		return nil
+	}
+	concrete := make([]*ElementDecl, 0, len(all))
 	for _, m := range all {
 		if !m.Abstract {
 			concrete = append(concrete, m)
@@ -1555,11 +1557,8 @@ func elemMatchesDeclOrSubst(child childElem, edecl *ElementDecl, schema *Schema)
 	// Check the TRANSITIVE instance-admissible substitution-group closure
 	// (abstract members excluded — they can never appear in an instance).
 	if schema != nil {
-		for _, member := range instanceSubstMembers(edecl, schema) {
-			if matchesDeclDirect(child, member) {
-				return true
-			}
-		}
+		member := substMemberFor(edecl, schema, QName{Local: child.name, NS: child.ns})
+		return member != nil && !member.Abstract
 	}
 	return false
 }
