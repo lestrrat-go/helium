@@ -808,18 +808,36 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 // they may treat pdn.lastChild as the tail of the chain an anchor sits on, and
 // before they may advance pdn.lastChild at all.
 //
-// Two pointer comparisons answer every append the tree API performs. An x that
-// IS pdn.firstChild is the chain head by definition. An x that IS pdn.lastChild
-// is on the chain by the invariant every lastChild write in this package
-// maintains: a node becomes lastChild only when it was linked after a node
-// already proven to be on the chain. So both ordinary append workloads — at the
-// tail, and through a fixed early child — stay O(1).
+// Two pointer comparisons answer the two anchors an append most often uses. An
+// x that IS pdn.firstChild is the chain head by definition. An x that IS
+// pdn.lastChild is on the chain by the invariant every lastChild write in this
+// package maintains: a node becomes lastChild only when it was linked after a
+// node already proven to be on the chain. So those two append workloads — at
+// the tail, and through a fixed early child — stay O(1) per call.
 //
-// Otherwise walk prev to the head of x's own chain: x is a member exactly when
-// that head is pdn.firstChild. The walk costs x's distance BEHIND it, never the
-// length of the chain ahead of it, so it can never cost more than the
-// NextSibling() walk it is protecting. siblingCycleGuard bounds it, so a corrupt
-// prev chain terminates instead of spinning.
+// Every OTHER anchor costs a walk: step prev to the head of x's own chain, and
+// x is a member exactly when that head is pdn.firstChild. The walk costs x's
+// distance BEHIND it, never the length of the chain ahead of it, so it can
+// never cost more than the NextSibling() walk it is protecting — but it does
+// grow with the chain, so repeatedly appending through a fixed MIDDLE anchor
+// stays quadratic and merely wins a constant factor. siblingCycleGuard bounds
+// the walk, so a corrupt prev chain terminates instead of spinning.
+//
+// Every prev edge the proof crosses must be RECIPROCAL — the step from head to
+// head.prev is taken only when that prev node points forward at head again.
+// This is what a bare prev walk gets wrong: a raw UnsafeSetPrevSibling write
+// can aim a node that lives on a chain of its OWN at a genuine child of the
+// parent it claims, without that child pointing back. Following the one-way
+// edge would leave x's chain, arrive at pdn.firstChild, and "prove" a
+// membership that does not exist — after which the caller would splice into the
+// parent's real child list and abandon the rest of x's chain. Rejecting the
+// non-reciprocal edge costs one pointer comparison per step, so the walk keeps
+// the bound above. The same check applies to the pdn.lastChild shortcut: the
+// recorded tail is accepted only while its own prev edge still points back at
+// it, so an unsafe write that has since cut the recorded tail out of the chain
+// cannot be taken as proof. That is a single edge, not a walk, so the tail
+// append stays O(1); the invariant above is what carries the rest of the way
+// back to the head.
 func chainMember(pdn, x *docnode) bool {
 	if pdn == nil || x == nil {
 		return false
@@ -832,7 +850,9 @@ func chainMember(pdn, x *docnode) bool {
 		return true
 	}
 	if last := pdn.lastChild; last != nil && last.baseDocNode() == x {
-		return true
+		// x is not firstChild (checked above), so a member here must have a
+		// prev, and that prev must point forward at x again.
+		return reciprocalPrev(x) != nil
 	}
 
 	var g siblingCycleGuard
@@ -841,12 +861,30 @@ func chainMember(pdn, x *docnode) bool {
 		if g.step(head) {
 			return false
 		}
-		prev := head.prev
+		prev := reciprocalPrev(head)
 		if prev == nil {
-			return first.baseDocNode() == head
+			// Either head starts its chain, or its prev edge is one-way. A
+			// one-way edge proves nothing, so only a genuine head may match.
+			return head.prev == nil && first.baseDocNode() == head
 		}
-		head = prev.baseDocNode()
+		head = prev
 	}
+}
+
+// reciprocalPrev returns x's previous sibling when that edge is reciprocal —
+// when the prev node points forward at x again — and nil otherwise. A nil
+// return therefore means "x has no usable prev edge", covering both a genuine
+// chain head and a forged one-way link.
+func reciprocalPrev(x *docnode) *docnode {
+	prev := x.prev
+	if prev == nil {
+		return nil
+	}
+	pdn := prev.baseDocNode()
+	if pdn.next == nil || pdn.next.baseDocNode() != x {
+		return nil
+	}
+	return pdn
 }
 
 func addSibling(n MutableNode, cur Node) error {
@@ -913,7 +951,7 @@ func addSibling(n MutableNode, cur Node) error {
 	//     recorded tail whose next is nil, the recorded tail IS the node the
 	//     NextSibling() walk from the anchor would have found. That is the proof
 	//     the jump needs, and chainMember delivers it in a pointer comparison
-	//     for every append the tree API performs.
+	//     whenever the anchor is the parent's firstChild or its lastChild.
 	//
 	// A node can claim a parent without being a member of its child list — a raw
 	// UnsafeSetParent write, or CopyExtSubset's copied external subset, which
@@ -939,11 +977,21 @@ func addSibling(n MutableNode, cur Node) error {
 		return nil
 	}
 
-	// n is not the tail. Rather than walk NextSibling() from n (O(S) per call,
-	// O(S^2) over S appends through a fixed non-tail anchor), jump straight to
-	// the tail parent.lastChild already records, once the guards prove that
-	// record is the tail of the very chain n sits on. Any tree the guards cannot
-	// vouch for falls through to the walk below unchanged.
+	// n is not the tail. Rather than walk NextSibling() from n — O(S) per call
+	// over the whole chain AHEAD of n — jump straight to the tail
+	// parent.lastChild already records, once the guards prove that record is the
+	// tail of the very chain n sits on. Any tree the guards cannot vouch for
+	// falls through to the walk below unchanged.
+	//
+	// How much this buys depends on the anchor, because the jump costs whatever
+	// chainMember costs. An anchor that IS parent.firstChild or parent.lastChild
+	// is proven by pointer comparison, so appending through it is O(1) per call
+	// and O(S) over S appends, where the walk was O(S^2). An anchor in the
+	// MIDDLE of the chain is proven by walking prev back to the head, so it
+	// stays O(S^2) over S appends; what it gains is a large constant factor,
+	// since the prev walk covers only the chain behind the anchor while the
+	// NextSibling() walk covered the whole chain ahead of it. BenchmarkAddSibling
+	// measures all three shapes.
 	if anchorOnChain {
 		if tail := pdn.lastChild; tail != nil {
 			tdn := tail.baseDocNode()

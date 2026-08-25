@@ -330,3 +330,42 @@ func TestAddSiblingCopiedExternalSubsetClaim(t *testing.T) {
 	require.Equal(t, added, dst.LastChild())
 	requireLastChildOnChain(t, dst)
 }
+
+// TestAddSiblingForgedPrevEdge pins the reciprocity requirement chainMember's
+// prev walk rests on. A raw UnsafeSetPrevSibling write can point a node at a
+// genuine child of the parent it claims WITHOUT that child pointing back, so
+// walking prev alone reaches parent.firstChild and would "prove" a membership
+// that does not exist. The anchor here sits on its own two-node chain, so the
+// append must join THAT chain and leave the parent's real child list and its
+// recorded tail untouched.
+func TestAddSiblingForgedPrevEdge(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDefaultDocument()
+	parent := mustCreateElement(t, doc, "parent")
+	a := mustCreateElement(t, doc, "a")
+	b := mustCreateElement(t, doc, "b")
+	require.NoError(t, parent.AddChild(a))
+	require.NoError(t, parent.AddChild(b))
+
+	// x and y form a detached two-node chain of their own.
+	x := mustCreateElement(t, doc, "x")
+	y := mustCreateElement(t, doc, "y")
+	require.NoError(t, x.AddSibling(y))
+
+	// x now claims parent and points its prev edge at a, but a still points
+	// forward to b: the edge is one-way, so x is not on the parent's chain.
+	helium.UnsafeSetParent(x, parent)
+	helium.UnsafeSetPrevSibling(x, a)
+
+	added := mustCreateElement(t, doc, "added")
+	require.NoError(t, x.AddSibling(added))
+
+	require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the parent's child list is unchanged")
+	require.Equal(t, b, parent.LastChild(), "a forged prev edge must not move lastChild")
+	require.Nil(t, b.NextSibling(), "the reachable chain still ends at b")
+	requireLastChildOnChain(t, parent)
+
+	require.Equal(t, helium.Node(y), added.PrevSibling(), "the append joins the anchor's own chain")
+	require.Equal(t, helium.Node(added), y.NextSibling(), "the anchor's chain keeps its own tail link")
+}
