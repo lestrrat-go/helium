@@ -350,6 +350,77 @@ func TestNamespaceNSRejectsReservedMisuse(t *testing.T) {
 	})
 }
 
+func TestNamespaceShadowRestoredAfterScopeExit(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElementNS("p", "root", "urn:A"))
+	require.NoError(t, w.StartElementNS("p", "c1", "urn:B"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.StartElementNS("p", "c2", "urn:A"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<p:root xmlns:p="urn:A"><p:c1 xmlns:p="urn:B"/><p:c2/></p:root>`, buf.String())
+}
+
+func TestDefaultNamespaceUndeclarationRestoredAfterScopeExit(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElementNS("", "root", "urn:A"))
+	require.NoError(t, w.StartElementNS("", "c1", ""))
+	require.NoError(t, w.StartElementNS("", "g1", ""))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.StartElementNS("", "c2", ""))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root xmlns="urn:A"><c1 xmlns=""><g1/></c1><c2 xmlns=""/></root>`, buf.String())
+}
+
+// TestCopiedWriterHasIndependentNamespaceBindings pins the namespace
+// behavior of a Writer value copied mid-document. Writer is a value type
+// whose fluent methods return copies, so w2 := w1 is a shape the API
+// invites, and each copy must resolve prefixes against the scopes it has
+// open itself. Both copies share one destination, so each case asserts only
+// the output the copy appended after mark.
+func TestCopiedWriterHasIndependentNamespaceBindings(t *testing.T) {
+	t.Parallel()
+
+	t.Run("copy does not see the original's later rebinding", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w1 := stream.NewWriter(&buf)
+		require.NoError(t, w1.StartElementNS("p", "root", "urn:A"))
+		require.NoError(t, w1.WriteElementNS("p", "anchor", "urn:A", ""))
+		w2 := w1 // copied while p is bound to urn:A
+		// w1 rebinds p to urn:B in a scope that w2 does not have open.
+		require.NoError(t, w1.StartElementNS("p", "c1", "urn:B"))
+		mark := buf.Len()
+		// p is still bound to urn:A for w2, so p:c2 needs no declaration.
+		require.NoError(t, w2.StartElementNS("p", "c2", "urn:A"))
+		require.NoError(t, w2.EndElement())
+		require.Equal(t, `<p:c2/>`, buf.String()[mark:])
+	})
+
+	t.Run("copy declares a prefix only the original has bound", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		w1 := stream.NewWriter(&buf)
+		require.NoError(t, w1.StartElementNS("q", "root", "urn:Q"))
+		require.NoError(t, w1.WriteElementNS("q", "anchor", "urn:Q", ""))
+		w2 := w1 // copied while p is unbound
+		// w1 binds p in a scope that w2 does not have open.
+		require.NoError(t, w1.StartElementNS("p", "c1", "urn:A"))
+		mark := buf.Len()
+		// p is unbound in every scope w2 has open, so omitting the
+		// declaration here would leave p:c2 with an undeclared prefix.
+		require.NoError(t, w2.StartElementNS("p", "c2", "urn:A"))
+		require.NoError(t, w2.EndElement())
+		require.Equal(t, `<p:c2 xmlns:p="urn:A"/>`, buf.String()[mark:])
+	})
+}
+
 func TestStartAttributeNSRejectsSameScopeConflict(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer

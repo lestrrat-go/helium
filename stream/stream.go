@@ -52,6 +52,14 @@ type elementEntry struct {
 type nsEntry struct {
 	prefix string
 	uri    string
+
+	// prevURI/prevHad record the binding this declaration shadowed, so
+	// popNSScope can restore w.nsBind[prefix] when the scope closes.
+	// prevHad is false when the prefix was unbound before this
+	// declaration, in which case popNSScope deletes it instead of
+	// restoring prevURI.
+	prevURI string
+	prevHad bool
 }
 
 // nsScope holds namespace declarations for one element level.
@@ -60,12 +68,30 @@ type nsScope struct {
 	emitted int // number of decls already emitted (indices < emitted are done)
 }
 
+// nsBindings is the prefix -> URI index for the declarations currently in
+// scope: a prefix is absent when it is unbound, and present with an empty
+// URI when it has been explicitly undeclared (xmlns=""). seq is the index's
+// revision counter, bumped by whichever Writer last changed it. See
+// Writer.ownNSBind for why the revision matters.
+type nsBindings struct {
+	m   map[string]string
+	seq uint64
+}
+
 // Writer writes XML incrementally to an io.Writer.
 //
 // Writer is not safe for concurrent use by multiple goroutines.
 //
 // The zero value of Writer is not ready to use because it has no output
-// destination. Construct a Writer with NewWriter.
+// destination. Construct a Writer with NewWriter. The fluent configuration
+// methods (Indent, QuoteChar, XMLVersion) return copies and are meant to be
+// called before any write. A copy taken after writing has begun resolves
+// namespace prefixes against the scopes it has open itself, independently of
+// the Writer it was copied from. The two copies still write to the same
+// destination, and they still share the backing storage of their element and
+// namespace scope stacks, so writing through both of them after the copy
+// interleaves their output and can overwrite scopes one of them still has
+// open.
 //
 // (libxml2: xmlTextWriter)
 type Writer struct {
@@ -76,6 +102,8 @@ type Writer struct {
 	state         writerState
 	elemStack     []elementEntry
 	nsStack       []nsScope
+	nsBind        *nsBindings   // in-scope prefix -> URI index; a Writer copy shares it until either copy changes it (ownNSBind)
+	nsSeq         uint64        // revision of nsBind this Writer wrote; it owns nsBind while nsSeq == nsBind.seq
 	stateStack    []writerState // for comment/PI/CDATA nesting
 	err           error         // sticky error
 	depth         int           // current element nesting depth (for indentation)
@@ -400,30 +428,61 @@ func (w *Writer) emitPendingNS() {
 	scope.emitted = len(scope.decls)
 }
 
-// lookupNS checks if the prefix is already bound to the given URI in
-// the current namespace stack.
+// lookupNS reports whether the prefix's current in-scope binding is uri.
+// An inner rebinding shadows an outer one, so this reports false once a
+// closer scope has rebound the prefix to a different URI even if an
+// ancestor scope still declares uri.
 func (w *Writer) lookupNS(prefix, uri string) bool {
-	for _, v := range slices.Backward(w.nsStack) {
-		for _, ns := range v.decls {
-			if ns.prefix == prefix {
-				return ns.uri == uri
-			}
-		}
-	}
-	return false
+	cur, ok := w.ownNSBind()[prefix]
+	return ok && cur == uri
 }
 
 // hasDefaultNSInScope returns true if any ancestor has declared a
 // non-empty default namespace (xmlns="...") that is still in scope.
 func (w *Writer) hasDefaultNSInScope() bool {
-	for _, v := range slices.Backward(w.nsStack) {
-		for _, ns := range v.decls {
-			if ns.prefix == "" {
-				return ns.uri != ""
-			}
+	cur, ok := w.ownNSBind()[""]
+	return ok && cur != ""
+}
+
+// ownNSBind returns the prefix -> URI index for w's open scopes, making w
+// its exclusive owner first.
+//
+// Writer is a value type, so w2 := w1 produces two Writers that point at one
+// nsBindings while each pushes and pops its own nsStack. Only one of them may
+// go on mutating that shared index. nsSeq records the revision this Writer
+// last wrote and nsBindings.seq the revision the index now holds; the two
+// differ exactly when another copy has changed the index since this copy was
+// taken, and that copy's bindings say nothing about this Writer's scopes. w
+// then rebuilds a private index from its own nsStack, which is the
+// authoritative record of the declarations it has open: visiting the scopes
+// outermost-first leaves each prefix bound by its innermost declaration,
+// which is the binding a scan from the innermost scope outward would report.
+//
+// Reads do not claim ownership, so a copy that only reads keeps using the
+// shared index for as long as nobody changes it. Two copies that alternate
+// declarations each rebuild on their turn; that is correctness-first, and the
+// common case of a single writer never rebuilds at all.
+func (w *Writer) ownNSBind() map[string]string {
+	if w.nsBind != nil && w.nsBind.seq == w.nsSeq {
+		return w.nsBind.m
+	}
+	m := make(map[string]string)
+	for _, scope := range w.nsStack {
+		for _, ns := range scope.decls {
+			m[ns.prefix] = ns.uri
 		}
 	}
-	return false
+	w.nsBind = &nsBindings{m: m, seq: 1}
+	w.nsSeq = 1
+	return m
+}
+
+// revNSBind records that w has just changed its namespace-binding index, so
+// that any other Writer copy still pointing at that index rebuilds its own
+// before reading it again.
+func (w *Writer) revNSBind() {
+	w.nsBind.seq++
+	w.nsSeq = w.nsBind.seq
 }
 
 // declareNS adds a namespace declaration to the current element scope
@@ -442,7 +501,34 @@ func (w *Writer) declareNS(prefix, uri string) {
 			return // already declared at this level
 		}
 	}
-	scope.decls = append(scope.decls, nsEntry{prefix: prefix, uri: uri})
+	m := w.ownNSBind()
+	prev, had := m[prefix]
+	scope.decls = append(scope.decls, nsEntry{prefix: prefix, uri: uri, prevURI: prev, prevHad: had})
+	m[prefix] = uri
+	w.revNSBind()
+}
+
+// popNSScope closes the innermost namespace scope, restoring each
+// prefix it declared to the binding that scope's declarations shadowed.
+// Declarations are undone in reverse order, matching the LIFO scope
+// exit that StartElement/EndElement enforce.
+func (w *Writer) popNSScope() {
+	if len(w.nsStack) == 0 {
+		return
+	}
+	scope := w.nsStack[len(w.nsStack)-1]
+	if len(scope.decls) > 0 {
+		m := w.ownNSBind()
+		for _, ns := range slices.Backward(scope.decls) {
+			if ns.prevHad {
+				m[ns.prefix] = ns.prevURI
+				continue
+			}
+			delete(m, ns.prefix)
+		}
+		w.revNSBind()
+	}
+	w.nsStack = w.nsStack[:len(w.nsStack)-1]
 }
 
 // validateNSParts validates the prefix and local name supplied to a
@@ -935,9 +1021,7 @@ func (w *Writer) EndElement() error {
 	}
 
 	// Pop namespace scope
-	if len(w.nsStack) > 0 {
-		w.nsStack = w.nsStack[:len(w.nsStack)-1]
-	}
+	w.popNSScope()
 
 	// Restore state
 	if len(w.elemStack) > 0 {
@@ -980,9 +1064,7 @@ func (w *Writer) FullEndElement() error {
 	w.writeByte('>')
 
 	// Pop namespace scope
-	if len(w.nsStack) > 0 {
-		w.nsStack = w.nsStack[:len(w.nsStack)-1]
-	}
+	w.popNSScope()
 
 	if len(w.elemStack) > 0 {
 		w.state = stateText
