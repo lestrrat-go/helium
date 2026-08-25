@@ -554,3 +554,43 @@ func TestAddSiblingRawWriteBeforeDocumentAdoption(t *testing.T) {
 	require.Equal(t, added, parent.LastChild())
 	require.Nil(t, trailer.NextSibling(), "the off-chain chain is untouched")
 }
+
+// TestAddSiblingDocumentParentGrowth is TestAddSiblingTailGrowth for a *Document
+// parent. A document's child list is an ordinary sibling chain — an XDM document
+// node accepts several element children, plus comments and PIs — so an append
+// through a fixed early child must produce exactly the same list a walk would,
+// and the O(1) append-point resolution applies to it like any other parent.
+func TestAddSiblingDocumentParentGrowth(t *testing.T) {
+	t.Parallel()
+
+	const n = 2000
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	first := doc.CreateComment([]byte("lead"))
+	require.NoError(t, doc.AddChild(first))
+
+	appended := make([]*helium.Comment, n)
+	for i := range n {
+		child := doc.CreateComment([]byte("c"))
+		require.NoError(t, first.AddSibling(child), "append %d", i)
+		appended[i] = child
+	}
+
+	require.Equal(t, helium.Node(first), doc.FirstChild())
+	require.Equal(t, helium.Node(appended[n-1]), doc.LastChild())
+
+	prev := helium.Node(first)
+	for i, child := range appended {
+		require.Equal(t, prev, child.PrevSibling(), "prev symmetry at %d", i)
+		require.Equal(t, helium.Node(child), prev.NextSibling(), "next symmetry at %d", i)
+		require.Equal(t, helium.Node(doc), child.Parent(), "parent at %d", i)
+		prev = child
+	}
+	require.Nil(t, appended[n-1].NextSibling(), "last node must be the true tail")
+
+	count := 0
+	for range helium.Children(doc) {
+		count++
+	}
+	require.Equal(t, n+1, count, "child count including the anchor")
+}

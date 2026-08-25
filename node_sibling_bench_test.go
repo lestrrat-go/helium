@@ -100,6 +100,64 @@ func newSiblingBenchMiddleFixture(b *testing.B, n int) *siblingBenchFixture {
 	return &siblingBenchFixture{anchor: anchor, children: children}
 }
 
+// docSiblingBenchFixture holds the same workload with a *Document as the parent.
+// A document's child list is an ordinary sibling chain, and a document is the one
+// parent that can be handed a node claiming it without being on that chain
+// (CopyExtSubset), so this arm is what shows the O(1) resolution is declined for
+// that CONDITION and not for the type.
+type docSiblingBenchFixture struct {
+	anchor   *helium.Comment
+	children []*helium.Comment
+}
+
+// newDocSiblingBenchFixture builds a document holding a single anchor comment
+// plus n unlinked comments to append through that anchor.
+func newDocSiblingBenchFixture(b *testing.B, n int) *docSiblingBenchFixture {
+	b.Helper()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	anchor := doc.CreateComment([]byte("c0"))
+	if err := doc.AddChild(anchor); err != nil {
+		b.Fatal(err)
+	}
+	children := make([]*helium.Comment, n)
+	for i := range n {
+		children[i] = doc.CreateComment([]byte("c"))
+	}
+	return &docSiblingBenchFixture{anchor: anchor, children: children}
+}
+
+// newDocSiblingBenchMiddleFixture builds a document already holding n comments
+// and anchors on the one at n/2, plus n more to append through it.
+func newDocSiblingBenchMiddleFixture(b *testing.B, n int) *docSiblingBenchFixture {
+	b.Helper()
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	var anchor *helium.Comment
+	for i := range n {
+		child := doc.CreateComment([]byte("c"))
+		if err := doc.AddChild(child); err != nil {
+			b.Fatal(err)
+		}
+		if i == n/2 {
+			anchor = child
+		}
+	}
+	children := make([]*helium.Comment, n)
+	for i := range n {
+		children[i] = doc.CreateComment([]byte("c"))
+	}
+	return &docSiblingBenchFixture{anchor: anchor, children: children}
+}
+
+// appendThroughAnchor appends every prepared comment through the fixed anchor.
+func (f *docSiblingBenchFixture) appendThroughAnchor(b *testing.B) {
+	b.Helper()
+	for _, child := range f.children {
+		if err := f.anchor.AddSibling(child); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // benchAddSiblingNonTail measures n appends through a FIXED first child. After
 // the first append that anchor is no longer the tail, so every later call takes
 // addSibling's non-tail path: the one that jumps to parent.lastChild instead of
@@ -140,6 +198,26 @@ func benchAddSiblingMiddle(b *testing.B, n int) {
 	}
 }
 
+// benchAddSiblingDocNonTail is benchAddSiblingNonTail with a *Document parent.
+func benchAddSiblingDocNonTail(b *testing.B, n int) {
+	for range b.N {
+		b.StopTimer()
+		fixture := newDocSiblingBenchFixture(b, n)
+		b.StartTimer()
+		fixture.appendThroughAnchor(b)
+	}
+}
+
+// benchAddSiblingDocMiddle is benchAddSiblingMiddle with a *Document parent.
+func benchAddSiblingDocMiddle(b *testing.B, n int) {
+	for range b.N {
+		b.StopTimer()
+		fixture := newDocSiblingBenchMiddleFixture(b, n)
+		b.StartTimer()
+		fixture.appendThroughAnchor(b)
+	}
+}
+
 // BenchmarkAddSibling measures appending n siblings at several sizes under three
 // anchoring styles. Only the AddSibling calls are timed; building the document
 // and the elements to append happens with the timer stopped.
@@ -162,6 +240,12 @@ func benchAddSiblingMiddle(b *testing.B, n int) {
 //     What it does buy is a large constant factor over the full sibling walk,
 //     because the prev walk covers only the chain BEHIND the anchor while the
 //     NextSibling() walk covered the whole chain ahead of it.
+//
+// The "docnontail" and "docmiddle" arms repeat the first two with a *Document
+// parent, which is the parent a document-scale append actually uses and which
+// tracks the element arms exactly: the O(1) resolution is declined for the
+// CONDITION that makes a document's tail record untrustworthy (an off-chain
+// child claim, which only CopyExtSubset creates), never for the type.
 func BenchmarkAddSibling(b *testing.B) {
 	sizes := []int{500, 1000, 2000, 4000}
 
@@ -177,6 +261,22 @@ func BenchmarkAddSibling(b *testing.B) {
 		for _, n := range sizes {
 			b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
 				benchAddSiblingMiddle(b, n)
+			})
+		}
+	})
+
+	b.Run("docnontail", func(b *testing.B) {
+		for _, n := range sizes {
+			b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
+				benchAddSiblingDocNonTail(b, n)
+			})
+		}
+	})
+
+	b.Run("docmiddle", func(b *testing.B) {
+		for _, n := range sizes {
+			b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
+				benchAddSiblingDocMiddle(b, n)
 			})
 		}
 	})

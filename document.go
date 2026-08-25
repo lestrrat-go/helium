@@ -113,9 +113,8 @@ type Document struct {
 	// by the raw unsafeSetParent / UnsafeSetNextSibling setters, the only writes
 	// in this package that can leave an ELEMENT claiming a parent it is not a
 	// child of, or forge a sibling edge no guarded path would build. (A DOCUMENT
-	// can be claimed that way without a raw write, by the DTD CopyExtSubset
-	// attaches to it, which is why tailJumpTarget declines a *Document parent
-	// outright rather than relying on this flag for one.)
+	// can be claimed that way without a raw write, by the external subset
+	// CopyExtSubset attaches to it; offChainChildClaim below records that.)
 	//
 	// While it is false, every link in this document was built by the guarded
 	// paths, so lastChild is the final node of the chain that starts at
@@ -130,6 +129,21 @@ type Document struct {
 	// carries the record onto whichever document adopts it. Set by node.go
 	// noteRawLinkWrite / adoptRawLinkWrites; read by tailJumpTarget.
 	rawLinkWrites bool
+
+	// offChainChildClaim records that a node has been given this document as its
+	// parent WITHOUT being linked into the document's child list. CopyExtSubset
+	// is the one path in this package that does it: the copied external subset
+	// claims the destination document and is then reachable only through
+	// ExtSubset. An append through such a subset records its own result as the
+	// document's lastChild, which moves that record off the child list, so
+	// tailJumpTarget must stop resolving an append point from it. A document is
+	// the only parent that can acquire an off-chain claimant without a raw link
+	// write; every other parent's chain can only get one through unsafeSetParent,
+	// which sets rawLinkWrites instead. (CreateInternalSubset also gives a DTD
+	// this document as its parent, but it splices that DTD into the child list,
+	// so it creates no claim.) Set by copy_dtd.go CopyExtSubset; read by
+	// tailJumpTarget.
+	offChainChildClaim bool
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",

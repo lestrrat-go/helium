@@ -928,17 +928,21 @@ func reciprocalPrev(x *docnode) *docnode {
 //     Document.rawLinkWrites records exactly that, so the shortcut is declined
 //     for a document whose links were hand-written.
 //
-// A *Document parent is declined outright, and that is what keeps the whole
-// space down to the three raw setters. A document node's child list is the one
-// chain this package attaches a node to WITHOUT linking it in: CreateInternalSubset
-// and CopyExtSubset both give a DTD the document as its parent, and the copied
-// EXTERNAL subset is reachable only through ExtSubset, never from the child list.
-// An append through such a subset records its own result as the document's tail,
-// which leaves that record off the child list without any raw write at all.
-// Declining costs nothing: a document holds a handful of children — a few PIs and
-// comments, the DTD, the root element — so the walk it falls back to is already
-// O(1) in practice. Every OTHER parent's chain can only acquire an off-chain
-// claimant through unsafeSetParent, which is recorded.
+// The owning document is read through owningDocument, so a *Document parent
+// names ITSELF: a document node holds the trees it owns and its own doc pointer
+// stays nil, which is a fact about how a document is initialized and not a
+// statement about whether its child list can be trusted. A document IS the one
+// parent this package can hand an off-chain claimant without any raw write —
+// CopyExtSubset gives the copied external subset the destination document as its
+// parent and then leaves it reachable only through ExtSubset, never from the
+// child list, so an append through that subset records its own result as the
+// document's tail and moves the record off the child list. That is a condition,
+// not a type, and Document.offChainChildClaim records it: the shortcut is
+// declined for a document that has actually been handed such a claimant, and
+// taken for every other one. (CreateInternalSubset also gives a DTD the document
+// as its parent, but it splices that DTD into the child list, so it creates no
+// claim.) Every parent that is NOT a document can acquire an off-chain claimant
+// only through unsafeSetParent, which is recorded as a raw link write.
 //
 // The remaining reads are cheap confirmations that the record is a usable tail:
 // it must not be the anchor itself, it must genuinely end its chain, and it must
@@ -955,16 +959,14 @@ func tailJumpTarget(parent Node, ndn *docnode) Node {
 	if parent == nil {
 		return nil
 	}
-	// A document node's own doc pointer is nil, so the check below would decline
-	// it too; the explicit test is here so that stays a consequence of the rule
-	// above and not an accident of how *Document is initialized.
-	if _, isDoc := parent.(*Document); isDoc {
+	doc := owningDocument(parent)
+	if doc == nil || doc.rawLinkWrites {
+		return nil
+	}
+	if doc == parent && doc.offChainChildClaim {
 		return nil
 	}
 	pdn := parent.baseDocNode()
-	if pdn.doc == nil || pdn.doc.rawLinkWrites {
-		return nil
-	}
 
 	tail := pdn.lastChild
 	if tail == nil {

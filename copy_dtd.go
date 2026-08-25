@@ -65,6 +65,11 @@ func CopyExtSubset(src, dst *Document) {
 	_ = copyDTDChildren(srcDTD, dstDTD, dst)
 
 	dst.extSubset = dstDTD
+	// dstDTD claims dst as its parent but is deliberately NOT in dst's child
+	// list, so dst now holds a node that can move its recorded lastChild off that
+	// list. Record it: addSibling stops resolving an append point from
+	// dst.lastChild (tailJumpTarget) and walks instead.
+	dst.offChainChildClaim = true
 }
 
 // copyDTDChildren walks src's children in document order, copying each
