@@ -486,3 +486,37 @@ var htmlEndPriority = map[string]int{
 	elemBody:  200,
 	elemHTML:  220,
 }
+
+// endPriorityLevels lists the distinct priority values that appear in
+// htmlEndPriority, in ascending order. endPriorityRank returns an element's
+// index into this array. The two must always list the same values.
+var endPriorityLevels = [...]int{150, 160, 170, 180, 190, 200, 220}
+
+// numEndPriorityLevels is len(endPriorityLevels).
+const numEndPriorityLevels = 7
+
+// endPriorityRank returns name's index into endPriorityLevels, or -1 if name
+// carries the default end priority (not a key of htmlEndPriority). Written as
+// a switch over the eleven names in htmlEndPriority rather than a map lookup
+// because it runs on every stack push: a string switch compiles to a length
+// test plus a binary search, which is cheaper than hashing into a map.
+func endPriorityRank(name string) int {
+	switch name {
+	case elemDiv:
+		return 0
+	case "td", "th":
+		return 1
+	case "tr":
+		return 2
+	case elemThead, elemTbody, elemTfoot:
+		return 3
+	case elemTable:
+		return 4
+	case elemHead, elemBody:
+		return 5
+	case elemHTML:
+		return 6
+	default:
+		return -1
+	}
+}

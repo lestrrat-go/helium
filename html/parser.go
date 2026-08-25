@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -31,6 +30,39 @@ type parser struct {
 	sax       SAXHandler
 	nameStack []string // open element name stack
 	mode      insertMode
+
+	// namePos maps an open element name to the stack indexes it occupies, in
+	// ascending order. The last entry is the topmost occurrence. It lets
+	// hasOnStack answer in O(1) instead of scanning nameStack. Maintained only
+	// in pushName/popName; an emptied entry is deleted so a document that opens
+	// and closes many distinct names does not leave the map growing without
+	// bound.
+	namePos map[string][]int32
+
+	// hiPrioPos[r] holds the stack indexes occupied by elements whose end
+	// priority is endPriorityLevels[r]. Only the above-default priorities
+	// htmlEndPriority defines are tracked; every other element is irrelevant to
+	// htmlAutoCloseOnClose's abort test. Maintained only in pushName/popName.
+	hiPrioPos [numEndPriorityLevels][]int32
+
+	// stackScanSteps counts the open-element-stack positions the
+	// htmlAutoCloseOnClose pre-scan examines over one parse. It is
+	// instrumentation only: no parser code reads it, and it changes neither the
+	// tree, the error sequence, nor recovery. It exists so
+	// TestHTMLAutoCloseOnCloseBlockedGrowth can assert the pre-scan's cost
+	// shape with an exact, machine-independent count instead of wall-clock
+	// time, which is machine-dependent and flakes on a loaded CI runner.
+	//
+	// Contract for any future rewrite of the pre-scan: every open-element-stack
+	// position the pre-scan examines must add one step. The indexed pre-scan
+	// examines the topmost recorded position of the end tag plus the topmost
+	// position of each tracked above-default priority level, so its cost per
+	// end tag is bounded and independent of stack depth; the naive backward
+	// scan it replaced examined one position per stack entry, which made the
+	// total quadratic in stack depth. The growth test also asserts a lower
+	// bound of one step per end tag, so dropping these increments fails the
+	// test instead of silently disabling the guard.
+	stackScanSteps int64
 
 	// sawRoot records that the root <html> element has been opened at least once.
 	// It distinguishes genuine PRE-root whitespace (empty stack, root never
@@ -236,6 +268,7 @@ func newParser(_ context.Context, input []byte, sax SAXHandler, cfg parseConfig)
 		cur:               strcursor.NewUTF8Cursor(bytes.NewReader(normalized)),
 		sax:               sax,
 		mode:              insertInitial,
+		namePos:           make(map[string][]int32),
 		encodingError:     encodingErr,
 		encodingErrorLine: encErrLine,
 		encodingErrorCol:  encErrCol,
@@ -257,6 +290,7 @@ func newParserFromReader(_ context.Context, r io.Reader, sax SAXHandler, cfg par
 		cur:               strcursor.NewUTF8Cursor(wrapped),
 		sax:               sax,
 		mode:              insertInitial,
+		namePos:           make(map[string][]int32),
 		detectedEncoding:  detectedEnc,
 		encodingSanitizer: sanitizer,
 		deferredEncoding:  deferred,
@@ -750,6 +784,13 @@ func (p *parser) currentName() string {
 	return p.nameStack[len(p.nameStack)-1]
 }
 
+// stackDiffCheck, when non-nil, is invoked at the end of pushName and popName
+// with the parser's post-mutation state. It exists solely so an internal test
+// (TestStackIndexesMatchNaive) can assert that namePos/hiPrioPos stay in sync
+// with nameStack after EVERY mutation, not just at parse end. Nil in normal
+// use, so the cost is one nil check per push/pop.
+var stackDiffCheck func(p *parser)
+
 // pushName pushes an element name onto the stack and tracks insert mode.
 func (p *parser) pushName(name string) {
 	if name == elemHTML {
@@ -761,7 +802,15 @@ func (p *parser) pushName(name string) {
 	if p.mode < insertInBody && name == elemBody {
 		p.mode = insertInBody
 	}
+	pos := int32(len(p.nameStack))
 	p.nameStack = append(p.nameStack, name)
+	p.namePos[name] = append(p.namePos[name], pos)
+	if rank := endPriorityRank(name); rank != -1 {
+		p.hiPrioPos[rank] = append(p.hiPrioPos[rank], pos)
+	}
+	if stackDiffCheck != nil {
+		stackDiffCheck(p)
+	}
 }
 
 // popName pops the top element name from the stack.
@@ -771,12 +820,66 @@ func (p *parser) popName() string {
 	}
 	name := p.nameStack[len(p.nameStack)-1]
 	p.nameStack = p.nameStack[:len(p.nameStack)-1]
+
+	// The popped index is always the last entry of the matching namePos slice,
+	// because pushes and pops are LIFO.
+	positions := p.namePos[name]
+	positions = positions[:len(positions)-1]
+	if len(positions) == 0 {
+		delete(p.namePos, name)
+	} else {
+		p.namePos[name] = positions
+	}
+	if rank := endPriorityRank(name); rank != -1 {
+		hp := p.hiPrioPos[rank]
+		p.hiPrioPos[rank] = hp[:len(hp)-1]
+	}
+	if stackDiffCheck != nil {
+		stackDiffCheck(p)
+	}
 	return name
 }
 
 // hasOnStack checks if the given element name is on the open element stack.
 func (p *parser) hasOnStack(name string) bool {
-	return slices.Contains(p.nameStack, name)
+	return len(p.namePos[name]) > 0
+}
+
+// topmostPos returns the stack index of the topmost occurrence of name, or
+// (0, false) if name is not on the stack.
+func (p *parser) topmostPos(name string) (int32, bool) {
+	positions := p.namePos[name]
+	if len(positions) == 0 {
+		return 0, false
+	}
+	p.stackScanSteps++
+	return positions[len(positions)-1], true
+}
+
+// topmostAbovePriority returns the largest stack index occupied by an element
+// whose end priority is strictly greater than pri, and whether any such
+// element exists. It walks the at most numEndPriorityLevels rank slices whose
+// level is greater than pri, so it costs O(numEndPriorityLevels), independent
+// of stack depth.
+func (p *parser) topmostAbovePriority(pri int) (bool, int32) {
+	found := false
+	var at int32
+	for rank, level := range endPriorityLevels {
+		if level <= pri {
+			continue
+		}
+		positions := p.hiPrioPos[rank]
+		if len(positions) == 0 {
+			continue
+		}
+		p.stackScanSteps++
+		top := positions[len(positions)-1]
+		if !found || top > at {
+			found = true
+			at = top
+		}
+	}
+	return found, at
 }
 
 // isMisplacedStructural checks whether a structural element (html/head/body)
@@ -815,18 +918,18 @@ func (p *parser) htmlAutoClose(newTag string) {
 func (p *parser) htmlAutoCloseOnClose(endTag string) {
 	priority := getEndPriority(endTag)
 
-	// Check if the end tag matches anything on the stack
-	found := false
-	for _, v := range slices.Backward(p.nameStack) {
-		if v == endTag {
-			found = true
-			break
-		}
-		if getEndPriority(v) > priority {
-			return
-		}
+	// Equivalent to the naive backward scan that walks down from the top
+	// looking for endTag, aborting as soon as it passes an element whose
+	// priority is greater than endTag's: that loop returns without popping
+	// exactly when the topmost index holding a higher-priority element sits
+	// above the topmost index holding endTag. An element equal to endTag can
+	// never trigger the priority test against its own priority, so the two
+	// conditions cannot fire at the same index.
+	pos, ok := p.topmostPos(endTag)
+	if !ok {
+		return
 	}
-	if !found {
+	if blocked, at := p.topmostAbovePriority(priority); blocked && at > pos {
 		return
 	}
 
