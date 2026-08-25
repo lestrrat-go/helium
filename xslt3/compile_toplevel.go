@@ -713,4 +713,19 @@ func (c *compiler) sortTemplates(_ context.Context) {
 			return i > j
 		})
 	}
+
+	// Build the dispatch index from the now-final sorted order. This must run
+	// AFTER every mode list above is fully sorted: buildTemplateIndex records
+	// each template's POSITION in the sorted slice, and that position is the
+	// only thing a dispatch-time merge (dispatch_index.go candidates) can use
+	// to recover the original scan order — the tiebreak above compares live
+	// slice indices, not a well-defined ordering over the templates
+	// themselves, so the index can only ever inherit the sort's result, never
+	// re-derive it.
+	c.stylesheet.modeIndex = make(map[string]*templateIndex, len(c.stylesheet.modeTemplates))
+	for mode, templates := range c.stylesheet.modeTemplates {
+		if idx := buildTemplateIndex(templates); idx != nil {
+			c.stylesheet.modeIndex[mode] = idx
+		}
+	}
 }

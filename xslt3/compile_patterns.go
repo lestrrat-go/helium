@@ -1602,12 +1602,16 @@ func matchNameTest(_ context.Context, ec *execContext, nt xpath3.NameTest, node 
 		// *:local matches any namespace
 		return nodeLocal == nt.Local
 	}
+	// Resolve through the same shared helper the dispatch index's signature
+	// extractor uses (resolveStaticPatternName in dispatch_index.go), so the
+	// two resolution paths cannot drift apart. During pattern matching
+	// ec.patternNamespaces and ec.xpathDefaultNS hold exactly the pattern's
+	// own p.nsBindings/p.xpathDefaultNS (matchPattern/matchPatternProbe set
+	// them), which is what ec.resolvePrefix already short-circuits to via
+	// resolvePatternPrefix while ec.inPatternMatch is set.
 	expectedURI := ""
-	if nt.Prefix != "" && ec != nil {
-		expectedURI = ec.resolvePrefix(nt.Prefix)
-	} else if nt.Prefix == "" && ec != nil && isElem {
-		// Unprefixed element names use xpath-default-namespace
-		expectedURI = ec.xpathDefaultNS
+	if ec != nil {
+		expectedURI = resolveStaticPatternName(nt, ec.patternNamespaces, ec.xpathDefaultNS, isElem)
 	}
 	if nodeLocal != nt.Local || nodeURI != expectedURI {
 		return false

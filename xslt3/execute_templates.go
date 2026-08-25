@@ -124,11 +124,11 @@ func (ec *execContext) findBestTemplate(ctx context.Context, node helium.Node, m
 	ec.currentNode = node
 	defer func() { ec.currentNode = savedCurrent }()
 
-	best := ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[mode], node)
+	best := ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[mode], ec.stylesheet.modeIndex[mode], node)
 
 	// Also check #all mode templates that might not be registered in this mode
 	if best == nil && mode != modeAll {
-		best = ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[modeAll], node)
+		best = ec.findFirstMatch(ctx, ec.stylesheet.modeTemplates[modeAll], ec.stylesheet.modeIndex[modeAll], node)
 	}
 
 	if best == nil {
@@ -148,14 +148,20 @@ func (ec *execContext) findBestTemplate(ctx context.Context, node helium.Node, m
 	return best, nil
 }
 
-// findFirstMatch returns the first template in the list that matches the node.
+// findFirstMatch returns the first template in the list that matches the
+// node. idx is ec.stylesheet.modeIndex for the same mode templates was drawn
+// from; when non-nil the scan visits only the positions the dispatch index
+// cannot rule out (dispatch_index.go candidates), in the same ascending order
+// a plain scan would find them in. idx == nil (a mode list below
+// templateIndexThreshold, or one Compile never indexed) falls back to
+// scanning every template.
 //
 // Every probe in this scan targets the SAME node, so the node-scoped
 // execContext fields that matchPattern would otherwise save and restore on
 // every call (contextNode, currentNode, contextItem, inPatternMatch,
 // regexGroups) are set once here instead, and each template is tested via
 // matchPatternProbe, which only handles the fields that vary per pattern.
-func (ec *execContext) findFirstMatch(ctx context.Context, templates []*template, node helium.Node) *template {
+func (ec *execContext) findFirstMatch(ctx context.Context, templates []*template, idx *templateIndex, node helium.Node) *template {
 	if len(templates) == 0 {
 		return nil
 	}
@@ -176,6 +182,20 @@ func (ec *execContext) findFirstMatch(ctx context.Context, templates []*template
 		ec.contextItem = savedItem
 		ec.inPatternMatch = savedInPattern
 	}()
+
+	if idx != nil {
+		cur := candidates(idx, node)
+		for {
+			pos, ok := cur.next()
+			if !ok {
+				return nil
+			}
+			tmpl := templates[pos]
+			if tmpl.Match != nil && tmpl.Match.matchPatternProbe(ctx, ec, node) {
+				return tmpl
+			}
+		}
+	}
 
 	for _, tmpl := range templates {
 		if tmpl.Match != nil && tmpl.Match.matchPatternProbe(ctx, ec, node) {
@@ -209,36 +229,108 @@ func (ec *execContext) onMultipleMatchFail(mode string) bool {
 // hasConflictingMatch checks whether there is another template (besides best)
 // that matches the same node with equal import precedence and priority.
 func (ec *execContext) hasConflictingMatch(ctx context.Context, node helium.Node, mode string, best *template) bool {
-	check := func(templates []*template) bool {
-		for _, tmpl := range templates {
-			if tmpl == best {
-				continue
-			}
-			// Templates are sorted: once we see lower precedence/priority we can stop
-			if tmpl.ImportPrec < best.ImportPrec {
-				return false
-			}
-			if tmpl.ImportPrec == best.ImportPrec && tmpl.Priority < best.Priority {
-				return false
-			}
-			// Split union pattern branches originate from the same template
-			// rule and should not be treated as conflicting with each other
-			// (spec bug 30402). They carry a shared non-zero splitOriginID.
-			if tmpl.splitOriginID != 0 && tmpl.splitOriginID == best.splitOriginID {
-				continue
-			}
-			if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
-				return true
-			}
-		}
-		return false
-	}
-
-	if check(ec.stylesheet.modeTemplates[mode]) {
+	if ec.hasConflictingMatchIn(ctx, ec.stylesheet.modeTemplates[mode], ec.stylesheet.modeIndex[mode], node, best) {
 		return true
 	}
 	if mode != modeAll {
-		return check(ec.stylesheet.modeTemplates[modeAll])
+		return ec.hasConflictingMatchIn(ctx, ec.stylesheet.modeTemplates[modeAll], ec.stylesheet.modeIndex[modeAll], node, best)
+	}
+	return false
+}
+
+// conflictCandidateResult classifies one candidate template probed by
+// hasConflictingMatchIn against the current best match.
+type conflictCandidateResult int
+
+const (
+	conflictCandidateNone  conflictCandidateResult = iota // not a conflict; keep scanning
+	conflictCandidateFound                                // a genuine conflicting match
+	// conflictCandidateStop means precedence/priority dropped below best's:
+	// templates are sorted, so no later candidate can conflict either.
+	conflictCandidateStop
+)
+
+// classifyConflictCandidate applies hasConflictingMatchIn's per-candidate
+// rules: skip best itself, stop once precedence/priority drops below best's,
+// skip a sibling split from the same union rule (spec bug 30402, tracked by
+// splitOriginID), and otherwise probe the pattern.
+func classifyConflictCandidate(ctx context.Context, ec *execContext, tmpl, best *template, node helium.Node) conflictCandidateResult {
+	if tmpl == best {
+		return conflictCandidateNone
+	}
+	if tmpl.ImportPrec < best.ImportPrec {
+		return conflictCandidateStop
+	}
+	if tmpl.ImportPrec == best.ImportPrec && tmpl.Priority < best.Priority {
+		return conflictCandidateStop
+	}
+	// Split union pattern branches originate from the same template rule and
+	// should not be treated as conflicting with each other (spec bug 30402).
+	// They carry a shared non-zero splitOriginID.
+	if tmpl.splitOriginID != 0 && tmpl.splitOriginID == best.splitOriginID {
+		return conflictCandidateNone
+	}
+	if tmpl.Match != nil && tmpl.Match.matchPatternProbe(ctx, ec, node) {
+		return conflictCandidateFound
+	}
+	return conflictCandidateNone
+}
+
+// hasConflictingMatchIn scans one mode-template list for a template
+// conflicting with best. idx is that same mode's dispatch index (nil falls
+// back to a plain scan). The index's candidate positions are a subsequence of
+// the sorted list that preserves scan order, so classifyConflictCandidate's
+// precedence/priority early-break stays sound over it: every position the
+// index skips is one signatureAdmits ruled out, which — by
+// TestDispatchIndexSignatureSoundness — cannot match the node at all, so it
+// cannot be the conflict this check is looking for.
+func (ec *execContext) hasConflictingMatchIn(ctx context.Context, templates []*template, idx *templateIndex, node helium.Node, best *template) bool {
+	if len(templates) == 0 {
+		return false
+	}
+	savedGroups := ec.regexGroups
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
+	savedItem := ec.contextItem
+	savedInPattern := ec.inPatternMatch
+	ec.regexGroups = nil
+	ec.contextNode = node
+	ec.currentNode = node
+	ec.contextItem = nil
+	ec.inPatternMatch = true
+	defer func() {
+		ec.regexGroups = savedGroups
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
+		ec.contextItem = savedItem
+		ec.inPatternMatch = savedInPattern
+	}()
+
+	if idx != nil {
+		cur := candidates(idx, node)
+		for {
+			pos, ok := cur.next()
+			if !ok {
+				return false
+			}
+			switch classifyConflictCandidate(ctx, ec, templates[pos], best, node) {
+			case conflictCandidateFound:
+				return true
+			case conflictCandidateStop:
+				return false
+			case conflictCandidateNone:
+			}
+		}
+	}
+
+	for _, tmpl := range templates {
+		switch classifyConflictCandidate(ctx, ec, tmpl, best, node) {
+		case conflictCandidateFound:
+			return true
+		case conflictCandidateStop:
+			return false
+		case conflictCandidateNone:
+		}
 	}
 	return false
 }
