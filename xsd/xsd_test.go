@@ -598,13 +598,7 @@ func TestMultipleAttributeErrors(t *testing.T) {
 
 func TestRedefine(t *testing.T) {
 	t.Parallel()
-	tmpDir := filepath.Join("..", ".tmp", "redefine-test")
-	require.NoError(t, os.MkdirAll(tmpDir, 0o750)) //nolint:gosec // test temp directory
-	t.Cleanup(func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Logf("failed to remove temp dir %s: %v", tmpDir, err)
-		}
-	})
+	tmpDir := t.TempDir()
 
 	writeFile := func(t *testing.T, name, content string) string {
 		t.Helper()
