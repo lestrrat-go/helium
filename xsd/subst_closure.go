@@ -1,5 +1,23 @@
 package xsd
 
+// FROZEN-SCHEMA CONTRACT
+//
+// A *Schema returned by compilation is immutable. Mutating the exported fields
+// of the declarations it owns — an ElementDecl's Block, Type or Abstract, a
+// TypeDef's derivation flags — after Compile returns is unsupported, and this
+// package draws no conclusion about what a Schema does once a caller has done
+// it. Compilation already freezes the resolved XSD version onto the compiled
+// Schema and the Validator applies that frozen version; the substitution-group
+// closure cache in this file rests on the same contract.
+//
+// The closure of every global element declaration is therefore computed ONCE,
+// at the end of compilation (buildSubstClosures, called by compileSchema), and
+// a later read is served from that cache without revalidating the declaration
+// state it was derived from. Mutation the package performs ITSELF is handled
+// where it happens: cloneSchemaSymbolTables nils the cache before
+// mergeHintSchema appends to the symbol tables, and schemaWithInstanceHints
+// rebuilds it from the merged tables.
+
 // substClosureByNameThreshold is the closure size at or above which
 // substClosure builds a byName index. Below it, substMemberFor scans all
 // directly — a linear scan over a handful of pointers is faster than a map
@@ -8,7 +26,8 @@ const substClosureByNameThreshold = 8
 
 // substClosure is the precomputed substitution-group closure of ONE global
 // head element declaration. Immutable once buildSubstClosures returns: no
-// exported *Schema method mutates a compiled schema, so nothing writes to a
+// exported *Schema method mutates a compiled schema, and the frozen-schema
+// contract above bars a caller from doing so, so nothing writes to a
 // substClosure's fields again after it is built.
 type substClosure struct {
 	head *ElementDecl // the registered global declaration for this QName

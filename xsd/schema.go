@@ -38,6 +38,12 @@ const (
 )
 
 // Schema represents a compiled XML Schema.
+//
+// A compiled Schema is immutable. Compilation freezes the resolved XSD version
+// and the substitution-group closures of every global element declaration onto
+// it, and the Validator reads both as given; mutating the exported fields of
+// the declarations a compiled Schema owns is unsupported. See the
+// frozen-schema contract at the top of subst_closure.go.
 // (libxml2: xmlSchema)
 type Schema struct {
 	// version is the effective XSD specification version resolved at compile
