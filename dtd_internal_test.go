@@ -493,3 +493,85 @@ func TestIsMixedElement(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, mixed, "mixed-content element must be reported as mixed")
 }
+
+// AttributesForElement is served from the attrsByElem index, keyed by owning
+// element name in registration order, rather than a full scan of dtd.attributes
+// (a Go map, whose iteration order is randomized per run). This pins down
+// declaration order across both AddAttributeDecl and the parser, across a
+// deep-copied DTD, and the "no declarations" case.
+func TestAttributesForElementIndex(t *testing.T) {
+	t.Run("registration order via AddAttributeDecl", func(t *testing.T) {
+		doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+
+		_, err = dtd.AddAttributeDecl("one", "a", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("two", "x", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("one", "b", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("two", "y", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("one", "c", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+
+		one := dtd.AttributesForElement("one")
+		require.Len(t, one, 3)
+		require.Equal(t, []string{"a", "b", "c"}, []string{one[0].name, one[1].name, one[2].name})
+
+		two := dtd.AttributesForElement("two")
+		require.Len(t, two, 2)
+		require.Equal(t, []string{"x", "y"}, []string{two[0].name, two[1].name})
+	})
+
+	t.Run("registration order via parsed ATTLIST", func(t *testing.T) {
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE one [
+<!ELEMENT one (#PCDATA)>
+<!ATTLIST one a CDATA #IMPLIED>
+<!ATTLIST one b CDATA #IMPLIED>
+<!ATTLIST one c CDATA #IMPLIED>
+]>
+<one/>`
+		doc, err := NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		dtd := doc.IntSubset()
+		require.NotNil(t, dtd)
+
+		got := dtd.AttributesForElement("one")
+		require.Len(t, got, 3)
+		require.Equal(t, []string{"a", "b", "c"}, []string{got[0].name, got[1].name, got[2].name})
+	})
+
+	t.Run("unknown element returns nil", func(t *testing.T) {
+		doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("root", "a", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+
+		require.Nil(t, dtd.AttributesForElement("nonexistent"))
+	})
+
+	t.Run("deep-copied document preserves order", func(t *testing.T) {
+		doc := NewDocument("1.0", "UTF-8", StandaloneExplicitNo)
+		dtd, err := doc.CreateInternalSubset("one", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("one", "a", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("one", "b", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("one", "c", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+
+		cp, err := CopyDoc(doc)
+		require.NoError(t, err)
+		cpDTD := cp.IntSubset()
+		require.NotNil(t, cpDTD)
+
+		got := cpDTD.AttributesForElement("one")
+		require.Len(t, got, 3)
+		require.Equal(t, []string{"a", "b", "c"}, []string{got[0].name, got[1].name, got[2].name})
+	})
+}

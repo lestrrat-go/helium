@@ -78,7 +78,7 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 | PI | `ProcessingInstruction` | docnode | ✗ | data field | ✓ | target, data (Name() returns target). AddChild/AppendText route text into `data`; non-text children rejected |
 | EntityRef | `EntityRef` | node | ✓ (if expanded) | ✓ (if resolved) | ✓ | References Entity by name |
 | Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, expanding, expandedSize |
-| DTD | `DTD` | docnode | ✓ (decls) | — | ✓ | attributes/elements/entities/pentities/notations maps, externalID, systemID |
+| DTD | `DTD` | docnode | ✓ (decls) | — | ✓ | attributes/attrsByElem/elements/entities/pentities/notations maps, externalID, systemID |
 | ElementDecl | `ElementDecl` | docnode | — | — | ✓ | decltype, content (grammar tree), attributes, prefix |
 | AttributeDecl | `AttributeDecl` | docnode | — | — | ✓ | atype, def, defvalue, tree (enumeration), prefix, elem, external (declared in external subset/PE) |
 | Notation | `Notation` | docnode | — | — | ✓ | publicID, systemID |
@@ -97,6 +97,8 @@ A `ProcessingInstruction` stores its content in the `data` string field (mirrors
 - Elements: `name:prefix` (string)
 - Attributes: `attrDeclKey{local, prefix, elem}` (struct, scoped to element)
 - Entities: `name` (flat)
+
+Attribute declarations are ALSO indexed by owning element name, in registration order, in `attrsByElem map[string][]*AttributeDecl` — this is what `AttributesForElement(elem)` reads from (`slices.Clone` of the index slice, so the caller gets a fresh copy and cannot mutate the DTD's own declarations). `registerAttribute` is the single entry point that keeps `attributes` and `attrsByElem` in sync; `copy_dtd.go`'s deep-copy path writes both directly since it does not go through `registerAttribute`.
 
 The QName→(name, prefix) split (`AddElementDecl`/`GetElementDesc`/`AddAttributeDecl`) splits on the FIRST colon but treats a LEADING colon as part of the local name (mirrors libxml2 `xmlSplitQName3`): `:x` keys as `(name=":x", prefix="")`, distinct from the unprefixed `x` (`(name="x", prefix="")`), so a leading-colon element declaration is not a spurious redefinition of the unprefixed one (a leading colon is a legal XML 1.0 Name start character even though it is not a valid QName prefix). The attribute lookup table is keyed by an `attrDeclKey{local, prefix, elem}` struct. A `local + ":" + prefix + ":" + elem` string would collide distinct triples: name `"b:a"` on element `"c:d"` (local `a`, prefix `b`, elem `c:d`) and name `"c:a:b"` on element `"d"` (local `a:b`, prefix `c`, elem `d`) both flatten to `a:b:c:d`; the struct key keeps them distinct, mirroring the parser's `specialAttrKey`.
 

@@ -99,7 +99,12 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 		case AttributeDeclNode:
 			if adecl, ok := AsNode[*AttributeDecl](c); ok {
 				cp := copyAttributeDecl(adecl, dst)
+				// This is the one writer besides registerAttribute; it must keep both
+				// containers in sync since it bypasses registerAttribute (a direct map
+				// write is needed here to overwrite a duplicate key, matching the
+				// source's last-wins semantics for the attributes table).
 				dstDTD.attributes[attrDeclKey{local: adecl.name, prefix: adecl.prefix, elem: adecl.elem}] = cp
+				dstDTD.attrsByElem[adecl.elem] = append(dstDTD.attrsByElem[adecl.elem], cp)
 				_ = dstDTD.AddChild(cp)
 			}
 		case NotationNode:

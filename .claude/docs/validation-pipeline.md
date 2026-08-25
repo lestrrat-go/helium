@@ -873,9 +873,13 @@ qualified form exactly as written — DTD validity is prefix-literal, not
 namespace-aware. The DOCTYPE name is the root element's QName, so the root-name
 check compares `root.Name()` (not the local part). ATTLIST declarations are stored
 under the declared element QName (`AttributeDecl.elem`), so every element-keyed
-lookup passes the instance element's QName: `AttributesForElement(elem.Name())` in
-`validateElementAttributes`, `checkStandaloneExternalDefaults`, and
-`GetElementByID`; `parseStartTag` threads the element QName into `parseAttribute`
+lookup passes the instance element's QName: `validateElementAttributes`,
+`checkStandaloneExternalDefaults`, and `GetElementByID` each read
+`dtd.attrsByElem[elem.Name()]` directly (the same per-element index the exported
+`AttributesForElement(elem)` clones from), so the lookup is O(matching
+declarations) rather than a scan of every declaration in the subset, and DTD
+validation stays linear in document size; `parseStartTag` threads the element
+QName into `parseAttribute`
 for the special-attribute (`attsSpecial`/`attsSpecialExternal`) and attribute-
 default (`attsDefault`) lookups. Attributes are matched by (prefix, local): the
 `attsSpecial`/`attsSpecialExternal` maps key on a `specialAttrKey{elem, attr}`

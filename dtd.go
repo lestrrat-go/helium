@@ -3,6 +3,7 @@ package helium
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -12,12 +13,16 @@ import (
 type DTD struct {
 	docnode
 	attributes map[attrDeclKey]*AttributeDecl
-	elements   map[string]*ElementDecl
-	entities   map[string]*Entity
-	pentities  map[string]*Entity
-	notations  map[string]*Notation
-	externalID string
-	systemID   string
+	// attrsByElem indexes the same declarations as attributes, keyed by owning
+	// element name, in registration order. It lets AttributesForElement serve a
+	// lookup without scanning every declaration in the subset.
+	attrsByElem map[string][]*AttributeDecl
+	elements    map[string]*ElementDecl
+	entities    map[string]*Entity
+	pentities   map[string]*Entity
+	notations   map[string]*Notation
+	externalID  string
+	systemID    string
 }
 
 // attrDeclKey identifies an attribute declaration by its owning element name and
@@ -78,11 +83,12 @@ func (n *Notation) Free() {}
 
 func newDTD() *DTD {
 	dtd := &DTD{
-		attributes: map[attrDeclKey]*AttributeDecl{},
-		elements:   map[string]*ElementDecl{},
-		entities:   map[string]*Entity{},
-		pentities:  map[string]*Entity{},
-		notations:  map[string]*Notation{},
+		attributes:  map[attrDeclKey]*AttributeDecl{},
+		attrsByElem: map[string][]*AttributeDecl{},
+		elements:    map[string]*ElementDecl{},
+		entities:    map[string]*Entity{},
+		pentities:   map[string]*Entity{},
+		notations:   map[string]*Notation{},
 	}
 	dtd.etype = DTDNode
 	return dtd
@@ -357,11 +363,15 @@ func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, de
 }
 
 // registerAttribute records an already-built attribute declaration in the DTD's
-// lookup table, keyed by its name, prefix, and owning element. It does NOT link
-// the declaration into the DTD child list, so it does not serialize on its own;
-// AddAttributeDecl is the public entry point that both registers and links a
-// declaration built from public parameters. It returns an error wrapping
-// ErrDuplicateDeclaration if an attribute with the same key is already declared.
+// lookup table, keyed by its name, prefix, and owning element, and appends it to
+// the per-element index (attrsByElem) that AttributesForElement serves lookups
+// from. It does NOT link the declaration into the DTD child list, so it does not
+// serialize on its own; AddAttributeDecl is the public entry point that both
+// registers and links a declaration built from public parameters. It returns an
+// error wrapping ErrDuplicateDeclaration if an attribute with the same key is
+// already declared. This is the single blessed entry point for populating both
+// containers; the only other writer is copy_dtd.go's deep-copy path, which
+// writes both directly because it does not go through here.
 func (dtd *DTD) registerAttribute(attr *AttributeDecl) error {
 	key := attrDeclKey{local: attr.name, prefix: attr.prefix, elem: attr.elem}
 	_, ok := dtd.attributes[key]
@@ -369,6 +379,7 @@ func (dtd *DTD) registerAttribute(attr *AttributeDecl) error {
 		return fmt.Errorf("duplicate attribute %s declared for element %s: %w", attr.name, attr.elem, ErrDuplicateDeclaration)
 	}
 	dtd.attributes[key] = attr
+	dtd.attrsByElem[attr.elem] = append(dtd.attrsByElem[attr.elem], attr)
 	return nil
 }
 
@@ -415,15 +426,11 @@ func (dtd *DTD) GetElementDesc(name string) (*ElementDecl, bool) {
 	return dtd.LookupElement(name, prefix)
 }
 
-// AttributesForElement returns all attribute declarations for the named element.
+// AttributesForElement returns all attribute declarations for the named
+// element, in declaration order. The result is a copy: mutating the returned
+// slice does not affect the DTD's own declarations.
 func (dtd *DTD) AttributesForElement(elem string) []*AttributeDecl {
-	var result []*AttributeDecl
-	for _, adecl := range dtd.attributes {
-		if adecl.elem == elem {
-			result = append(result, adecl)
-		}
-	}
-	return result
+	return slices.Clone(dtd.attrsByElem[elem])
 }
 
 // AddChild appends cur as the last child of the DTD, detaching it from any

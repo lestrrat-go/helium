@@ -510,7 +510,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 	// Check all declared attributes from both subsets, dedup by QName
 	seen := make(map[string]bool)
 	for _, dtd := range docDTDs(doc) {
-		for _, adecl := range dtd.AttributesForElement(ename) {
+		for _, adecl := range dtd.attrsByElem[ename] {
 			akey := adecl.prefix + ":" + adecl.name
 			aname := adecl.name
 			if adecl.prefix != "" {
@@ -715,7 +715,7 @@ func checkStandaloneExternalDefaults(ctx context.Context, doc *Document, elem *E
 	ename := elem.Name()
 	seen := make(map[string]struct{})
 	for _, dtd := range dtdSubsets(doc) {
-		for _, adecl := range dtd.AttributesForElement(ename) {
+		for _, adecl := range dtd.attrsByElem[ename] {
 			key := adecl.name + ":" + adecl.prefix
 			if _, dup := seen[key]; dup {
 				continue
