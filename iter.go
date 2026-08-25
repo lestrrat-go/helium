@@ -20,7 +20,7 @@ import "iter"
 // the DTD, whose sibling pointers belong to another list) ends the iteration,
 // so Children never spills into another list's siblings. A cyclic sibling
 // pointer — reachable only on a corrupt or hand-built graph, e.g. through the
-// raw [UnsafeSetNextSibling]/[UnsafeSetPrevSibling] link setters — terminates
+// raw [UnsafeSetNextSibling] link setter — terminates
 // the iteration instead of looping forever, yielding the partial set gathered up
 // to that point. The guard is [siblingCycleGuard], so a well-formed list pays no
 // allocation and no per-child bookkeeping; a cyclic one stops within a bounded
