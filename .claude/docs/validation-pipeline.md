@@ -917,10 +917,10 @@ Attribute Default Legal and One ID per Element Type diagnostics.
 
 The deep-copy path (`copy_dtd.go`) rebuilds both sequences from the SOURCE's
 `attrDecls`, translating each source declaration through the original->copy
-correspondence its child walk recorded (`copyAttrDeclOrder`). It does NOT take
-the order from the child list it walks: the child list is the serialization
-order, and relinking a declaration (`AttributeDecl.AddSibling`) moves it there
-without re-registering it, so the two orders come apart. `TestCopyDTDAttrDeclOrder`
+correspondence its child walk recorded (`copyAttrDeclOrder`). The child list it
+walks carries the serialization order, which relinking a declaration
+(`AttributeDecl.AddSibling`) changes without re-registering it, so the two
+orders are independent. `TestCopyDTDAttrDeclOrder`
 (`copy_test.go`) pins the copy against a source whose child list has been
 reordered that way.
 
