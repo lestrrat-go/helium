@@ -230,7 +230,7 @@ func cycleDifferentialCases() []cycleCase {
 				require.NoError(t, e.SetAttribute("a2", "2"))
 				attrs := e.Attributes()
 				require.Len(t, attrs, 2)
-				UnsafeSetNextSibling(attrs[0], nil)
+				unsafeSetNextSibling(attrs[0], nil)
 				return attrs[1], e, func() error { return attrs[1].AddChild(e) }
 			},
 			wantCyclic: true,
@@ -242,7 +242,7 @@ func cycleDifferentialCases() []cycleCase {
 			build: func(t *testing.T) (Node, Node, func() error) {
 				doc := newCycleCaseDocument()
 				e, attrs := threeAttrElement(t, doc)
-				UnsafeSetNextSibling(attrs[0], attrs[0])
+				unsafeSetNextSibling(attrs[0], attrs[0])
 				return attrs[1], e, func() error { return attrs[1].AddChild(e) }
 			},
 			wantCyclic: true,
@@ -275,7 +275,7 @@ func cycleDifferentialCases() []cycleCase {
 				require.NoError(t, e.SetAttribute("a2", "2"))
 				attrs := e.Attributes()
 				require.Len(t, attrs, 2)
-				UnsafeSetNextSibling(attrs[0], nil)
+				unsafeSetNextSibling(attrs[0], nil)
 				stray, err := doc.CreateElement("stray")
 				require.NoError(t, err)
 				require.NoError(t, attrs[1].AddSibling(stray))
@@ -428,7 +428,7 @@ func cycleDifferentialCases() []cycleCase {
 			wantCyclic: false,
 		},
 		{
-			// UnsafeAppendChild moves the attribute's parent to another element
+			// appendFastChild moves the attribute's parent to another element
 			// while leaving it in the first element's properties chain. It is no
 			// longer a claimant of the first element, so the insertion is
 			// accepted.
@@ -442,7 +442,7 @@ func cycleDifferentialCases() []cycleCase {
 				require.NoError(t, e1.SetAttribute("a1", "1"))
 				attrs := e1.Attributes()
 				require.Len(t, attrs, 1)
-				require.NoError(t, UnsafeAppendChild(e2, attrs[0]))
+				require.NoError(t, appendFastChild(e2, attrs[0]))
 				require.Same(t, attrs[0], e1.Attributes()[0], "the attribute must stay in e1's properties chain, or this row proves nothing")
 				return attrs[0], e1, func() error { return attrs[0].AddChild(e1) }
 			},
@@ -452,7 +452,7 @@ func cycleDifferentialCases() []cycleCase {
 			// A claimant counted TWICE must not be allowed to certify that every
 			// claim link was followed. The duplicate is cross-slot: attribute
 			// "dup" sits in r's properties chain AND in r's child list, since
-			// UnsafeAppendChild links it into the list without removing it from
+			// appendFastChild links it into the list without removing it from
 			// the chain. Attribute "hidden" was reparented away, so it no longer
 			// claims r, and x claims r through a pointer no slot holds. Counting
 			// "dup" once per occurrence makes the enumerated total equal r's
@@ -478,7 +478,7 @@ func cycleDifferentialCases() []cycleCase {
 				require.Len(t, rattrs, 3)
 
 				// dup now occupies both of r's enumerable slots at once.
-				require.NoError(t, UnsafeAppendChild(r, rattrs[0]))
+				require.NoError(t, appendFastChild(r, rattrs[0]))
 				require.Same(t, rattrs[0], r.FirstChild(), "dup must be in r's child list, or this row proves nothing")
 				require.Same(t, rattrs[0], r.Attributes()[0], "dup must stay in r's properties chain, or this row proves nothing")
 
@@ -588,7 +588,7 @@ func TestClaimsReachTerminatesOnCyclicChain(t *testing.T) {
 
 	attrs := elem.Attributes()
 	require.Len(t, attrs, 2)
-	UnsafeSetNextSibling(attrs[1], attrs[0])
+	unsafeSetNextSibling(attrs[1], attrs[0])
 
 	other, err := doc.CreateElement("other")
 	require.NoError(t, err)
@@ -614,7 +614,7 @@ func TestClaimsReachTerminatesOnCyclicChain(t *testing.T) {
 }
 
 // TestAddChildCyclicPropertiesChainTerminates hands AddChild an operand whose
-// attribute chain was knotted into a loop through UnsafeSetNextSibling. The
+// attribute chain was knotted into a loop through unsafeSetNextSibling. The
 // operand is childless and claimed, so the guard reads that chain, and the read
 // must terminate on a corrupt chain instead of spinning forever. The insertion
 // itself is unrelated to the loop and must be accepted.
@@ -628,7 +628,7 @@ func TestAddChildCyclicPropertiesChainTerminates(t *testing.T) {
 	attrs := e.Attributes()
 	require.Len(t, attrs, 2)
 	// b -> a closes the properties chain into a loop.
-	UnsafeSetNextSibling(attrs[1], attrs[0])
+	unsafeSetNextSibling(attrs[1], attrs[0])
 
 	parent, err := doc.CreateElement("parent")
 	require.NoError(t, err)

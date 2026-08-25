@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"slices"
+
+	"github.com/lestrrat-go/helium/internal/nodelink"
 )
 
 // AsNode performs a safe type assertion on a [Node], returning the
@@ -602,7 +604,7 @@ const claimReachBudget = 64
 // in an *Element's properties chain. A node whose enumerated claimant count
 // differs from its claims therefore holds a claim link this search cannot
 // follow — an unsafeSetParent write, a namespace-axis wrapper, a properties
-// chain UnsafeSetNextSibling truncated or knotted, a Document DTD subset kept
+// chain unsafeSetNextSibling truncated or knotted, a Document DTD subset kept
 // outside the child list — and the search reports exact == false, as it does on
 // running out of budget. A caller that gets exact == false must fall back to
 // the ancestor walk, which needs no such enumeration.
@@ -613,7 +615,7 @@ const claimReachBudget = 64
 // never reach it on a short enumeration; that is what makes the equality a
 // certificate. Counting occurrences instead would let one node stand in for
 // another: an attribute that occupies BOTH the properties chain and the child
-// list (UnsafeAppendChild links it into the list without removing it from the
+// list (appendFastChild links it into the list without removing it from the
 // chain) would be counted twice and could make the total match while a real
 // claim link — an unsafeSetParent write no slot holds — went unfollowed, and
 // the cycle it closes would be admitted. A repeat inside ONE list needs the
@@ -1148,15 +1150,44 @@ func unsafeSetParent(n Node, parent Node) {
 	setParent(n, parent)
 }
 
-// UnsafeSetNextSibling sets ONLY n's next-sibling pointer. It performs none of
+// unsafeSetNextSibling sets ONLY n's next-sibling pointer. It performs none of
 // the cycle detection, auto-unlinking, or reciprocal back-pointer maintenance
 // that AddChild/AddSibling/Replace/UnlinkNode provide, so a misuse leaves the
 // tree inconsistent or cyclic. It exists for low-level tree construction and
 // for tests that must build a deliberately corrupt tree to exercise the
 // traversal cycle guards. Ordinary code MUST use
 // AddChild/AddSibling/UnlinkNode instead.
-func UnsafeSetNextSibling(n Node, next Node) {
+func unsafeSetNextSibling(n Node, next Node) {
 	n.baseDocNode().next = next
+}
+
+func init() {
+	nodelink.CorruptSelfNextSibling = nodelinkCorruptSelfNextSibling
+	nodelink.CorruptTypedNilNextSibling = nodelinkCorruptTypedNilNextSibling
+}
+
+// nodelinkCorruptSelfNextSibling adapts unsafeSetNextSibling to the untyped
+// internal/nodelink hook, writing n.next = n. It exists only for this module's
+// corrupt-tree test fixtures; see the hook's own documentation.
+func nodelinkCorruptSelfNextSibling(n any) {
+	node, ok := n.(Node)
+	if !ok {
+		return
+	}
+	unsafeSetNextSibling(node, node)
+}
+
+// nodelinkCorruptTypedNilNextSibling adapts unsafeSetNextSibling to the untyped
+// internal/nodelink hook, writing n.next = a typed-nil *Element. It exists only
+// for this module's corrupt-tree test fixtures; see the hook's own
+// documentation.
+func nodelinkCorruptTypedNilNextSibling(n any) {
+	node, ok := n.(Node)
+	if !ok {
+		return
+	}
+	var nilElem *Element
+	unsafeSetNextSibling(node, nilElem)
 }
 
 // UnlinkNode detaches a node from its parent and sibling chain.

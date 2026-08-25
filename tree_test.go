@@ -438,23 +438,23 @@ func TestTreeMutation(t *testing.T) {
 		})
 	})
 
-	// the public UnsafeAppendChild helper across the
-	// empty-parent and non-empty-parent fast paths.
-	t.Run("UnsafeAppendChild", func(t *testing.T) {
+	// Exercise the no-preflight child append across the empty-parent and
+	// non-empty-parent fast paths.
+	t.Run("AppendFastChild", func(t *testing.T) {
 		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
 
 		first, err := doc.CreateElement("first")
 		require.NoError(t, err)
-		require.NoError(t, helium.UnsafeAppendChild(parent, first), "fast-link first child")
+		require.NoError(t, helium.UnsafeAppendChildForTesting(parent, first), "fast-link first child")
 		require.Equal(t, helium.Node(first), parent.FirstChild())
 		require.Equal(t, helium.Node(first), parent.LastChild())
 		require.Equal(t, helium.Node(parent), first.Parent())
 
 		second, err := doc.CreateElement("second")
 		require.NoError(t, err)
-		require.NoError(t, helium.UnsafeAppendChild(parent, second), "fast-link second child")
+		require.NoError(t, helium.UnsafeAppendChildForTesting(parent, second), "fast-link second child")
 		require.Equal(t, helium.Node(second), parent.LastChild())
 		require.Equal(t, helium.Node(second), first.NextSibling())
 		require.Equal(t, helium.Node(first), second.PrevSibling())

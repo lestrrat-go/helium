@@ -514,10 +514,11 @@ func canonicalizeDetachedSubtree(ctx context.Context, method string, root, targe
 	// AddChild/AddSibling/Replace, Create*, SetDocumentElement) rejects nil and
 	// typed-nil up front via isNilNode/ErrNilNode, so a well-formed subtree's
 	// owner-change walk never panics part-way and origDoc is fully restored. A
-	// typed-nil sibling is reachable only through the explicitly-unsafe
-	// helium.UnsafeSet* family, whose contract states a misuse leaves the tree
-	// inconsistent; a caller that corrupts the subtree that way owns the result, so
-	// a partial restore after such a caller-corrupted tree is not a defect here.
+	// typed-nil sibling is not reachable through helium's public API at all: the
+	// raw link setters are package-private, and this module's own corrupt-tree test
+	// fixtures reach them only through internal/nodelink. A caller that somehow
+	// corrupts the subtree that way owns the result, so a partial restore after such
+	// a corrupted tree is not a defect here.
 	root.SetTreeDoc(tmp)
 
 	return canonicalizeSubtree(ctx, method, target, prefixes)
