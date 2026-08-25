@@ -1954,6 +1954,69 @@ func BenchmarkUnmarshalStdlib(b *testing.B) {
 	})
 }
 
+// wideFlatDoc and wideNestedDoc back BenchmarkUnmarshalWideStdlib: a flat
+// slice binding scans decodeElementInto's single-segment element-branch scan
+// directly, while the nested binding scans its multi-segment path branch
+// through one wrapper holding every leaf.
+type wideFlatDoc struct {
+	Items []string `xml:"item"`
+}
+
+type wideNestedDoc struct {
+	Leaves []string `xml:"w>leaf"`
+}
+
+func buildWideFlatXMLStdlib(n int) []byte {
+	var b strings.Builder
+	b.WriteString("<Doc>")
+	for range n {
+		b.WriteString("<item>v</item>")
+	}
+	b.WriteString("</Doc>")
+	return []byte(b.String())
+}
+
+func buildWideNestedXMLStdlib(n int) []byte {
+	var b strings.Builder
+	b.WriteString("<Doc><w>")
+	for range n {
+		b.WriteString("<leaf>v</leaf>")
+	}
+	b.WriteString("</w></Doc>")
+	return []byte(b.String())
+}
+
+// BenchmarkUnmarshalWideStdlib measures decodeElementInto's child-scan cost
+// on documents with many siblings, at sizes large enough to expose quadratic
+// scan behavior: a flat slice binding (single-segment element branch) and a
+// `w>leaf` slice binding with one wrapper holding every leaf (multi-segment
+// path branch, quadratic in both time and allocated bytes).
+func BenchmarkUnmarshalWideStdlib(b *testing.B) {
+	for _, n := range []int{400, 1600} {
+		flat := buildWideFlatXMLStdlib(n)
+		b.Run(fmt.Sprintf("flat/%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				var d wideFlatDoc
+				if err := Unmarshal(flat, &d); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		nested := buildWideNestedXMLStdlib(n)
+		b.Run(fmt.Sprintf("nested/%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				var d wideNestedDoc
+				if err := Unmarshal(nested, &d); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 // golang.org/issue/6556
 func TestStructPointerMarshalStdlib(t *testing.T) {
 	type A struct {

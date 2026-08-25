@@ -103,6 +103,108 @@ func TestUnmarshalDirectChild(t *testing.T) {
 	})
 }
 
+// TestUnmarshalClaimOrderCharacterization pins which child each field claims
+// and in what order, across decodeElementInto's four child-scan paths
+// (single-segment element bindings, the any-element pass, multi-segment path
+// bindings, and their interaction through the shared consumed set). A
+// resuming cursor must claim exactly the same children in exactly the same
+// order as a scan that restarts from the beginning every time, so this is the
+// baseline that a cursor-based rewrite must reproduce byte for byte.
+func TestUnmarshalClaimOrderCharacterization(t *testing.T) {
+	// Two slice fields draining interleaved <a>/<b> children: each field
+	// must claim only its own tag, in document order, regardless of the
+	// other tag's children sitting between its matches.
+	t.Run("interleaved slices", func(t *testing.T) {
+		type Doc struct {
+			As []string `xml:"a"`
+			Bs []string `xml:"b"`
+		}
+		var d Doc
+		in := []byte(`<Doc><a>a1</a><b>b1</b><a>a2</a><b>b2</b><a>a3</a></Doc>`)
+		require.NoError(t, shim.Unmarshal(in, &d))
+		require.Equal(t, []string{"a1", "a2", "a3"}, d.As)
+		require.Equal(t, []string{"b1", "b2"}, d.Bs)
+	})
+
+	// A slice field followed by a `,any` slice field: the any field must
+	// receive exactly the children the first field left behind, in document
+	// order.
+	t.Run("slice then any leftovers", func(t *testing.T) {
+		type Doc struct {
+			As   []string `xml:"a"`
+			Rest []string `xml:",any"`
+		}
+		var d Doc
+		in := []byte(`<Doc><a>a1</a><b>b1</b><a>a2</a><c>c1</c></Doc>`)
+		require.NoError(t, shim.Unmarshal(in, &d))
+		require.Equal(t, []string{"a1", "a2"}, d.As)
+		require.Equal(t, []string{"b1", "c1"}, d.Rest)
+	})
+
+	// A scalar field with several matches: last one wins, matching stdlib.
+	t.Run("scalar last wins", func(t *testing.T) {
+		type Doc struct {
+			Value string `xml:"v"`
+		}
+		var d Doc
+		in := []byte(`<Doc><v>v1</v><v>v2</v><v>v3</v></Doc>`)
+		require.NoError(t, shim.Unmarshal(in, &d))
+		require.Equal(t, "v3", d.Value)
+	})
+
+	// A `w>leaf` path slice where one wrapper holds several leaves and
+	// several wrappers hold one: the claim order must follow the flattened
+	// depth-first document order, not group by wrapper.
+	t.Run("nested path DFS order", func(t *testing.T) {
+		type Doc struct {
+			Leaves []string `xml:"w>leaf"`
+		}
+		var d Doc
+		in := []byte(`<Doc>` +
+			`<w><leaf>l1</leaf><leaf>l2</leaf></w>` +
+			`<w><leaf>l3</leaf></w>` +
+			`<w><leaf>l4</leaf></w>` +
+			`</Doc>`)
+		require.NoError(t, shim.Unmarshal(in, &d))
+		require.Equal(t, []string{"l1", "l2", "l3", "l4"}, d.Leaves)
+	})
+
+	// Two path bindings sharing one wrapper, each namespace-qualified to a
+	// different namespace (an unqualified path sharing the exact same local
+	// path as a qualified one is rejected by validateTagPathConflicts, as it
+	// is by encoding/xml, so this is the sharpest legal variant): the second
+	// binding must still see the leaves the first skipped over for failing
+	// its own namespace check.
+	t.Run("shared wrapper namespace skip", func(t *testing.T) {
+		type Doc struct {
+			NSFirst  []string `xml:"http://example.com/ns1 w>leaf"`
+			NSSecond []string `xml:"http://example.com/ns2 w>leaf"`
+		}
+		var d Doc
+		in := []byte(`<Doc xmlns:n1="http://example.com/ns1" xmlns:n2="http://example.com/ns2">` +
+			`<w><n1:leaf>a1</n1:leaf><n2:leaf>b1</n2:leaf><n1:leaf>a2</n1:leaf></w>` +
+			`</Doc>`)
+		require.NoError(t, shim.Unmarshal(in, &d))
+		require.Equal(t, []string{"a1", "a2"}, d.NSFirst)
+		require.Equal(t, []string{"b1"}, d.NSSecond)
+	})
+
+	// A path binding followed by an any-element pass: once the path binding
+	// claims a leaf under its wrapper, the wrapper must stay marked consumed
+	// so the any pass does not also claim the wrapper element itself.
+	t.Run("path consumes wrapper for any pass", func(t *testing.T) {
+		type Doc struct {
+			Path []string `xml:"w>leaf"`
+			Rest []string `xml:",any"`
+		}
+		var d Doc
+		in := []byte(`<Doc><w><leaf>l1</leaf></w><other>o1</other></Doc>`)
+		require.NoError(t, shim.Unmarshal(in, &d))
+		require.Equal(t, []string{"l1"}, d.Path)
+		require.Equal(t, []string{"o1"}, d.Rest)
+	})
+}
+
 // TestUnmarshalUnsupportedVersionNeedsAReadVersion pins that the shim's
 // unsupported-version verdict, which comes from helium's parse, names a version
 // only when helium actually read and rejected one. A malformed declaration
