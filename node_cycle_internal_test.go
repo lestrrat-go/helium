@@ -170,22 +170,33 @@ func TestWouldCreateCycleDifferential(t *testing.T) {
 			wantCyclic: true,
 		},
 		{
-			// The foreign-link case: an entity reference's child is the shared
-			// Entity node whose parent stays the DTD, so a cycle formed through
-			// it is invisible to the ancestor walk and only childReaches can see
-			// it. Both implementations run that same descent.
+			// The foreign-link case: the reference's only child is the shared
+			// Entity node, whose parent stays the DTD. ent is therefore NOT on
+			// ref's parent chain, so the ancestor walk cannot see that putting
+			// ref under ent closes an ent -> ref -> ent loop; only the child-
+			// pointer descent finds it, and both implementations run that same
+			// descent and reject the insertion.
+			//
+			// The entity MUST be declared in the document's internal subset:
+			// CreateReference links the Entity as the reference's child only
+			// when Document.GetEntity finds the declaration, and GetEntity
+			// searches intSubset/extSubset only. A detached CreateDTD joins
+			// neither, which would leave ref childless and reduce this row to
+			// two unrelated childless nodes. The FirstChild assertion below
+			// keeps that degradation from happening silently.
 			name: "ent.AddChild(ref-with-foreign-child)",
 			build: func(t *testing.T) (Node, Node, func() error) {
 				doc := newCycleCaseDocument()
-				dtd, err := doc.CreateDTD()
+				dtd, err := doc.CreateInternalSubset("root", "", "")
 				require.NoError(t, err)
 				ent, err := dtd.AddEntity("foo", enum.InternalGeneralEntity, "", "", "bar")
 				require.NoError(t, err)
 				ref, err := doc.CreateReference("foo")
 				require.NoError(t, err)
+				require.Same(t, ent, ref.FirstChild(), "the reference must carry the declared entity as its child, or this row proves nothing")
 				return ent, ref, func() error { return ent.AddChild(ref) }
 			},
-			wantCyclic: false,
+			wantCyclic: true,
 		},
 		{
 			name: "plain AddChild",
