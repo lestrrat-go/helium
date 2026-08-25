@@ -465,9 +465,19 @@ func (n docnode) LastChild() Node {
 // the attributes an Element keeps outside its child list, in properties, and
 // the DTD subsets a Document keeps outside its child list, in intSubset /
 // extSubset (CopyExtSubset sets a DTD's parent without linking it as a child).
-// Every other production write of a node's parent field links that node into
-// SOME child list, so a future writer of a parent-without-child link must
-// extend this fast exit's claimant sources to stay sound. When cur is a
+// Every other write of a node's parent field through the SAFE mutation API —
+// AddChild, AddSibling, Replace, SetDocumentElement — links that node into SOME
+// child list, so a future writer of a parent-without-child link in that API must
+// extend this fast exit's claimant sources to stay sound. Two writes OUTSIDE
+// that API set a parent with no child link, and neither is covered here:
+// NewNamespaceNodeWrapper points a namespace-axis wrapper at its owning element
+// (a wrapper is not a MutableNode, so it can never be an insertion parent, and
+// nothing reaches it by walking parent pointers unless UnsafeSetParent puts it
+// on a chain), and UnsafeSetParent writes any parent pointer the caller asks
+// for. A tree whose parent pointers were written by UnsafeSetParent is OUTSIDE
+// this guard's contract, matching that function's own documented disclaimer:
+// the guard rejects every cycle reachable through the safe API, and does not
+// promise to detect one built behind the API's back. When cur is a
 // childless *Element the ancestor walk is skipped in favor of propertiesReach,
 // bounded by cur's own attribute count instead of tree depth — the common case
 // of an element carrying attributes would otherwise stay on the
@@ -933,6 +943,17 @@ func addSibling(n MutableNode, cur Node) error {
 // inconsistent or cyclic. It exists for low-level tree construction and for
 // tests that must build a deliberately corrupt tree to exercise the traversal
 // cycle guards. Ordinary code MUST use AddChild/AddSibling/UnlinkNode instead.
+//
+// A parent pointer written here is invisible to the insertion cycle guard
+// (wouldCreateCycle), which resolves a childless operand from that operand's OWN
+// claimant sources — its child list, an Element's attributes, a Document's DTD
+// subsets — instead of walking parent pointers. A parent this function names
+// gains a claimant that appears in none of them, so a later insertion that
+// closes a loop through such a link can be ACCEPTED where the same insertion on
+// a tree built through the safe API is rejected with ErrCyclicNode. Detecting
+// that is the caller's responsibility: a tree corrupted here is outside the
+// guard's contract, in the same way it is outside every other invariant this
+// function disclaims.
 func UnsafeSetParent(n Node, parent Node) {
 	n.baseDocNode().parent = parent
 }

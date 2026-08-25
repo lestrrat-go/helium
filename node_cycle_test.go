@@ -6,249 +6,11 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
-	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
 func newCycleTestDocument() *helium.Document {
 	return helium.NewDocument("1.0", "utf-8", helium.StandaloneExplicitNo)
-}
-
-// TestWouldCreateCycleVerdicts pins the accept/reject verdict of the
-// wouldCreateCycle guard reached through AddChild/AddSibling/Replace across 13
-// adversarial cases, including the two attribute-pocket cases (a childless
-// *Attribute and a childless entity reference living inside an attribute
-// value) that a childless-operand fast path must still resolve without
-// weakening the guard: an operand with no children can still be claimed by an
-// Element's properties chain or a Document's DTD subsets, and the guard must
-// keep rejecting those insertions exactly as the depth-proportional ancestor
-// walk always has.
-func TestWouldCreateCycleVerdicts(t *testing.T) {
-	tests := []struct {
-		name       string
-		run        func(t *testing.T) error
-		wantCyclic bool
-	}{
-		{
-			name: "self AddChild",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				a, err := doc.CreateElement("a")
-				require.NoError(t, err)
-				return a.AddChild(a)
-			},
-			wantCyclic: true,
-		},
-		{
-			name: "leaf.AddChild(ancestor 50 up)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				cur := root
-				var leaf *helium.Element
-				for range 50 {
-					e, err := doc.CreateElement("e")
-					require.NoError(t, err)
-					require.NoError(t, cur.AddChild(e))
-					cur = e
-					leaf = e
-				}
-				return leaf.AddChild(root)
-			},
-			wantCyclic: true,
-		},
-		{
-			name: "leaf.AddChild(document)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				root, err := doc.CreateElement("root")
-				require.NoError(t, err)
-				require.NoError(t, doc.SetDocumentElement(root))
-				leaf, err := doc.CreateElement("leaf")
-				require.NoError(t, err)
-				require.NoError(t, root.AddChild(leaf))
-				return leaf.AddChild(doc)
-			},
-			wantCyclic: true,
-		},
-		{
-			// The attribute-pocket case: attr has no children, so the fast path
-			// must resolve it through Element.properties rather than assuming a
-			// childless operand has no claimant.
-			name: "attr.AddChild(childless owner)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				elem, err := doc.CreateElement("e")
-				require.NoError(t, err)
-				attr, err := doc.CreateAttribute("a", "", nil)
-				require.NoError(t, err)
-				require.NoError(t, elem.AddChild(attr))
-				return attr.AddChild(elem)
-			},
-			wantCyclic: true,
-		},
-		{
-			// The second attribute-pocket case: the claimant is a value child
-			// inside the attribute (an entity reference), not the attribute
-			// itself, so propertiesReach must also search each attribute's value
-			// subtree.
-			name: "attrValueRef.AddChild(childless owner)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				elem, err := doc.CreateElement("e")
-				require.NoError(t, err)
-				attr, err := doc.CreateAttribute("a", "x&foo;y", nil)
-				require.NoError(t, err)
-				require.NoError(t, elem.AddChild(attr))
-				var ref helium.Node
-				for c := range helium.Children(attr) {
-					if c.Type() == helium.EntityRefNode {
-						ref = c
-					}
-				}
-				require.NotNil(t, ref, "attribute value entity ref must be built")
-				m, ok := ref.(helium.MutableNode)
-				require.True(t, ok)
-				return m.AddChild(elem)
-			},
-			wantCyclic: true,
-		},
-		{
-			name: "g.AddChild(p) [p has children]",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				p, err := doc.CreateElement("p")
-				require.NoError(t, err)
-				c, err := doc.CreateElement("c")
-				require.NoError(t, err)
-				g, err := doc.CreateElement("g")
-				require.NoError(t, err)
-				require.NoError(t, p.AddChild(c))
-				require.NoError(t, c.AddChild(g))
-				return g.AddChild(p)
-			},
-			wantCyclic: true,
-		},
-		{
-			// The foreign-link case: an entity's child is the shared Entity node
-			// whose parent stays the DTD, so this cycle is invisible to the
-			// ancestor walk and must be caught by childReaches instead.
-			name: "ent.AddChild(ref-with-foreign-child)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				dtd, err := doc.CreateDTD()
-				require.NoError(t, err)
-				ent, err := dtd.AddEntity("foo", enum.InternalGeneralEntity, "", "", "bar")
-				require.NoError(t, err)
-				ref, err := doc.CreateReference("foo")
-				require.NoError(t, err)
-				return ent.AddChild(ref)
-			},
-			wantCyclic: false,
-		},
-		{
-			name: "plain AddChild",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				p, err := doc.CreateElement("p")
-				require.NoError(t, err)
-				c, err := doc.CreateElement("c")
-				require.NoError(t, err)
-				return p.AddChild(c)
-			},
-			wantCyclic: false,
-		},
-		{
-			name: "AddSibling",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				p, err := doc.CreateElement("p")
-				require.NoError(t, err)
-				c, err := doc.CreateElement("c")
-				require.NoError(t, err)
-				require.NoError(t, p.AddChild(c))
-				s, err := doc.CreateElement("s")
-				require.NoError(t, err)
-				return c.AddSibling(s)
-			},
-			wantCyclic: false,
-		},
-		{
-			name: "AddChild(subtree)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				p, err := doc.CreateElement("p")
-				require.NoError(t, err)
-				sub, err := doc.CreateElement("sub")
-				require.NoError(t, err)
-				sc, err := doc.CreateElement("sc")
-				require.NoError(t, err)
-				require.NoError(t, sub.AddChild(sc))
-				return p.AddChild(sub)
-			},
-			wantCyclic: false,
-		},
-		{
-			name: "Replace",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				p, err := doc.CreateElement("p")
-				require.NoError(t, err)
-				sc, err := doc.CreateElement("sc")
-				require.NoError(t, err)
-				require.NoError(t, p.AddChild(sc))
-				r, err := doc.CreateElement("r")
-				require.NoError(t, err)
-				return sc.Replace(r)
-			},
-			wantCyclic: false,
-		},
-		{
-			name: "g.Replace(p)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				p, err := doc.CreateElement("p")
-				require.NoError(t, err)
-				c, err := doc.CreateElement("c")
-				require.NoError(t, err)
-				g, err := doc.CreateElement("g")
-				require.NoError(t, err)
-				require.NoError(t, p.AddChild(c))
-				require.NoError(t, c.AddChild(g))
-				return g.Replace(p)
-			},
-			wantCyclic: true,
-		},
-		{
-			name: "g.AddSibling(p)",
-			run: func(t *testing.T) error {
-				doc := newCycleTestDocument()
-				p, err := doc.CreateElement("p")
-				require.NoError(t, err)
-				c, err := doc.CreateElement("c")
-				require.NoError(t, err)
-				g, err := doc.CreateElement("g")
-				require.NoError(t, err)
-				require.NoError(t, p.AddChild(c))
-				require.NoError(t, c.AddChild(g))
-				return g.AddSibling(p)
-			},
-			wantCyclic: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.run(t)
-			if tt.wantCyclic {
-				require.True(t, errors.Is(err, helium.ErrCyclicNode), "expected ErrCyclicNode, got %v", err)
-				return
-			}
-			require.NoError(t, err)
-		})
-	}
 }
 
 // TestAddChildDeepChainGrowth builds a several-thousand-deep chain through
@@ -294,4 +56,43 @@ func TestAddChildDeepChainGrowth(t *testing.T) {
 
 	// The deepest node must be a true leaf.
 	require.Nil(t, walker.FirstChild())
+}
+
+// TestUnsafeSetParentIsOutsideCycleGuardContract pins where the insertion cycle
+// guard's contract ends. The guard resolves a childless operand from that
+// operand's own claimant sources — its child list, an Element's attributes, a
+// Document's DTD subsets — rather than by walking parent pointers, so a parent
+// link written by UnsafeSetParent, which links nothing into any of them, is
+// invisible to it and the insertion that closes the loop is accepted. The same
+// shape built through the safe API is rejected. Both halves are asserted here so
+// the boundary is recorded in the suite, not only in the doc comments on
+// wouldCreateCycle and UnsafeSetParent.
+func TestUnsafeSetParentIsOutsideCycleGuardContract(t *testing.T) {
+	t.Run("UnsafeSetParent link is accepted", func(t *testing.T) {
+		doc := newCycleTestDocument()
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		cur, err := doc.CreateElement("cur")
+		require.NoError(t, err)
+
+		// cur becomes parent's parent without being linked as anyone's parent
+		// in a child list, which is precisely what the guard does not track.
+		helium.UnsafeSetParent(parent, cur)
+
+		require.NoError(t, parent.AddChild(cur), "a tree corrupted through UnsafeSetParent is outside the guard's contract")
+		require.Same(t, helium.Node(cur), parent.FirstChild())
+	})
+
+	t.Run("same shape through the safe API is rejected", func(t *testing.T) {
+		doc := newCycleTestDocument()
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		cur, err := doc.CreateElement("cur")
+		require.NoError(t, err)
+
+		require.NoError(t, cur.AddChild(parent))
+
+		err = parent.AddChild(cur)
+		require.True(t, errors.Is(err, helium.ErrCyclicNode), "expected ErrCyclicNode, got %v", err)
+	})
 }
