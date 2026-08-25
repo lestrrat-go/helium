@@ -20,24 +20,25 @@ import "iter"
 // the DTD, whose sibling pointers belong to another list) ends the iteration,
 // so Children never spills into another list's siblings. A cyclic sibling
 // pointer — reachable only on a corrupt or hand-built graph, e.g. through the
-// raw SetNextSibling/SetPrevSibling link setters — terminates the iteration
-// instead of looping forever, yielding the partial set gathered up to that
-// point. A range-over-func iterator has no error channel, so this truncation is
-// silent; to DETECT a cycle instead of silently stopping at it, traverse with
-// [Walk], which returns [ErrWalkCycle].
+// raw [UnsafeSetNextSibling]/[UnsafeSetPrevSibling] link setters — terminates
+// the iteration instead of looping forever, yielding the partial set gathered up
+// to that point. The guard is [siblingCycleGuard], so a well-formed list pays no
+// allocation and no per-child bookkeeping; a cyclic one stops within a bounded
+// multiple of the cycle length and may therefore yield some of its nodes more
+// than once first. A range-over-func iterator has no error channel, so this
+// truncation is silent; to DETECT a cycle instead of silently stopping at it,
+// traverse with [Walk], which returns [ErrWalkCycle].
 func Children(n Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
 		if isNilNode(n) {
 			return
 		}
 		owner := n.baseDocNode()
-		seen := make(map[*docnode]struct{})
+		var g siblingCycleGuard
 		for child := n.FirstChild(); child != nil; child = nextOwnedChild(owner, child) {
-			cdn := child.baseDocNode()
-			if _, dup := seen[cdn]; dup {
+			if g.step(child.baseDocNode()) {
 				return
 			}
-			seen[cdn] = struct{}{}
 			if !yield(child) {
 				return
 			}
@@ -59,11 +60,13 @@ func Children(n Node) iter.Seq[Node] {
 // carries the set of nodes on the current descent path: it visits a back-edge
 // node but does not descend through it, so a child-pointer cycle terminates
 // cleanly instead of looping, yielding the partial set gathered up to that
-// point. A range-over-func iterator has no error channel, so this truncation is
-// silent; to DETECT a cycle instead of silently stopping at it, traverse with
-// [Walk], which returns [ErrWalkCycle]. A shared DAG node reached on a different
-// path is not on the descent path and is still visited on each occurrence, so
-// DAG traversal is unchanged.
+// point. Each sibling list is bounded by [siblingCycleGuard], with the same
+// allocation-free common path and the same bounded overshoot on a cyclic list
+// that [Children] documents. A range-over-func iterator has no error channel, so
+// this truncation is silent; to DETECT a cycle instead of silently stopping at
+// it, traverse with [Walk], which returns [ErrWalkCycle]. A shared DAG node
+// reached on a different path is not on the descent path and is still visited on
+// each occurrence, so DAG traversal is unchanged.
 func Descendants(n Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
 		if isNilNode(n) {
@@ -75,13 +78,12 @@ func Descendants(n Node) iter.Seq[Node] {
 			pdn := parent.baseDocNode()
 			onPath[pdn] = struct{}{}
 			defer delete(onPath, pdn)
-			seen := make(map[*docnode]struct{})
+			var g siblingCycleGuard
 			for child := parent.FirstChild(); child != nil; child = nextOwnedChild(pdn, child) {
 				cdn := child.baseDocNode()
-				if _, dup := seen[cdn]; dup {
+				if g.step(cdn) {
 					return true
 				}
-				seen[cdn] = struct{}{}
 				if !yield(child) {
 					return false
 				}
@@ -114,22 +116,21 @@ func Descendants(n Node) iter.Seq[Node] {
 //
 // Like [Children], ChildElements advances between siblings using the
 // owned-boundary rule and terminates on a cyclic sibling pointer, yielding the
-// partial set gathered up to that point. A range-over-func iterator has no error
-// channel, so this truncation is silent; to DETECT a cycle instead of silently
-// stopping at it, traverse with [Walk], which returns [ErrWalkCycle].
+// partial set gathered up to that point, with the same bounded overshoot
+// [Children] documents. A range-over-func iterator has no error channel, so this
+// truncation is silent; to DETECT a cycle instead of silently stopping at it,
+// traverse with [Walk], which returns [ErrWalkCycle].
 func ChildElements(n Node) iter.Seq[*Element] {
 	return func(yield func(*Element) bool) {
 		if isNilNode(n) {
 			return
 		}
 		owner := n.baseDocNode()
-		seen := make(map[*docnode]struct{})
+		var g siblingCycleGuard
 		for child := n.FirstChild(); child != nil; child = nextOwnedChild(owner, child) {
-			cdn := child.baseDocNode()
-			if _, dup := seen[cdn]; dup {
+			if g.step(child.baseDocNode()) {
 				return
 			}
-			seen[cdn] = struct{}{}
 			if elem, ok := AsNode[*Element](child); ok {
 				if !yield(elem) {
 					return
@@ -137,4 +138,46 @@ func ChildElements(n Node) iter.Seq[*Element] {
 			}
 		}
 	}
+}
+
+// siblingCycleGuard bounds a sibling-list walk with Brent's cycle detection. A
+// sibling list is a linked list a caller can corrupt into a loop through the
+// Unsafe* link setters, so every enumeration of one needs a termination guard.
+// Brent's algorithm needs three words and no allocation, where a seen-set needs
+// a map and one insert per child on EVERY list, well-formed ones included, for a
+// check that fires only on a corrupt graph.
+//
+// The trade is where the walk stops. A seen set stops at the exact first repeat;
+// Brent stops once the chasing pointer catches the checkpoint, which is within a
+// small multiple of the cycle length, so a corrupt list can yield some of its
+// nodes more than once before terminating. Termination itself is unconditional,
+// which is the property the traversal API actually promises.
+type siblingCycleGuard struct {
+	// tortoise is the checkpoint node the walk is compared against, nil until
+	// the first step seeds it.
+	tortoise *docnode
+	// power is the current checkpoint interval and lam the number of steps
+	// taken since the checkpoint moved.
+	power int
+	lam   int
+}
+
+// step records cur as the next node of the sibling list and reports whether the
+// list has been proven cyclic, in which case the caller must stop.
+func (g *siblingCycleGuard) step(cur *docnode) bool {
+	if g.tortoise == nil {
+		g.tortoise = cur
+		g.power = 1
+		return false
+	}
+	if g.tortoise == cur {
+		return true
+	}
+	g.lam++
+	if g.lam == g.power {
+		g.power *= 2
+		g.lam = 0
+		g.tortoise = cur
+	}
+	return false
 }
