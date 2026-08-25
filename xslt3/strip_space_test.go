@@ -1298,6 +1298,145 @@ func TestStripSpace(t *testing.T) {
 			require.Contains(t, err.Error(), "validation failed")
 		})
 	})
+
+	// TestStripSpaceReorderPinning pins shouldStripWhitespace's behavior across
+	// the reorder that evaluates inheritedXMLSpace LAST (after the schema/rule/DTD
+	// verdict) instead of first. xml:space="preserve" can only ever convert a
+	// strip verdict into a preserve, never the reverse, so these cases must pass
+	// identically before and after the reorder.
+	//
+	// (a)-(c) use DTD element-only content (not xsl:strip-space) to drive the
+	// strip verdict: an explicit xsl:strip-space rule makes the WHOLE source tree
+	// go through the unrelated copyAndStrip pre-copy (strip_space_copy.go)
+	// instead of the runtime shouldStripWhitespace call sites this reorder
+	// touches (applyTemplates / onNoMatchTextOnlyCopy / the apply-templates
+	// selection filter), so they would not exercise this change. All four cases
+	// use xsl:output method="text" with built-in template rules (no xsl:copy-of,
+	// which never consults whitespace stripping at all) so the string-value
+	// output directly reveals which whitespace-only text nodes survived.
+	t.Run("reorder pinning", func(t *testing.T) {
+		const dtdOneChild = `<!DOCTYPE doc [<!ELEMENT doc (n)*><!ELEMENT n (#PCDATA)>]>`
+		const textCopyStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:output method="text"/>
+  <xsl:template match="/">
+    <xsl:apply-templates/>
+  </xsl:template>
+</xsl:stylesheet>`
+
+		// (a) xml:space="preserve" on the element itself beats a DTD element-only
+		// strip verdict.
+		t.Run("xml:space preserve beats DTD element-only content", func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, textCopyStylesheet)
+			source, err := helium.NewParser().Parse(t.Context(),
+				[]byte(dtdOneChild+`<doc xml:space="preserve"> <n>1</n> </doc>`))
+			require.NoError(t, err)
+			out, err := xslt3.TransformString(t.Context(), source, ss)
+			require.NoError(t, err)
+			require.Equal(t, " 1 ", out,
+				"xml:space=\"preserve\" must override a DTD element-only strip verdict")
+		})
+
+		// (b) an inner xml:space="default" re-enables a DTD element-only strip
+		// verdict under an outer xml:space="preserve" ancestor.
+		t.Run("inner xml:space default re-enables stripping", func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, textCopyStylesheet)
+			source, err := helium.NewParser().Parse(t.Context(), []byte(
+				`<!DOCTYPE doc [<!ELEMENT doc (mid)*><!ELEMENT mid (n)*><!ELEMENT n (#PCDATA)>]>`+
+					`<doc xml:space="preserve"> <mid xml:space="default"> <n>1</n> </mid> </doc>`))
+			require.NoError(t, err)
+			out, err := xslt3.TransformString(t.Context(), source, ss)
+			require.NoError(t, err)
+			require.Equal(t, " 1 ", out,
+				"inner xml:space=\"default\" must re-enable the DTD strip verdict despite the outer preserve")
+		})
+
+		// (c) DTD element-only content strips whitespace with NO xsl:strip-space
+		// rules at all, so the reordered function must still reach the DTD check.
+		t.Run("DTD element-only content strips with no strip rules", func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, textCopyStylesheet)
+			source, err := helium.NewParser().Parse(t.Context(),
+				[]byte(dtdOneChild+`<doc> <n>1</n> </doc>`))
+			require.NoError(t, err)
+			out, err := xslt3.TransformString(t.Context(), source, ss)
+			require.NoError(t, err)
+			require.Equal(t, "1", out,
+				"DTD element-only content must strip whitespace with no explicit strip rules")
+		})
+
+		// (d) a schema element-only type strips whitespace despite an explicit
+		// xsl:preserve-space rule covering the element. The schemaLocation
+		// reference makes this go through the schema-validated in-place strip
+		// pre-pass (stripWhitespaceFromNodeInto), so this also pins stripVerdict
+		// as called from change 2.
+		t.Run("schema element-only type strips despite preserve-space", func(t *testing.T) {
+			t.Parallel()
+			const schemaLoc = "mem:/reorder/schema.xsd"
+			ss := compileStylesheetString(t, `<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:preserve-space elements="*"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/">
+    <xsl:apply-templates/>
+  </xsl:template>
+</xsl:stylesheet>`)
+
+			resolver := &exactRuntimeURIResolver{files: map[string]string{schemaLoc: ssaSchema}}
+			source, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<doc xmlns="urn:ssa"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="urn:ssa `+schemaLoc+`"> <n>42</n> </doc>`))
+			require.NoError(t, err)
+			out, err := ss.Transform(source).URIResolver(resolver).Serialize(t.Context())
+			require.NoError(t, err)
+			require.True(t, resolver.askedFor(schemaLoc), "resolver must be asked for the source schema")
+			require.Equal(t, "42", out,
+				"an element-only schema type must strip whitespace despite xsl:preserve-space")
+		})
+
+		// (e) a doc()-loaded tree keeps an inner xml:space="preserve" subtree's
+		// whitespace across more than one nesting level (the pushed-frame
+		// recompute-or-inherit step) while stripping whitespace elsewhere in the
+		// same document. This exercises stripWhitespaceFromNodeInto's threaded
+		// preserve flag, the strip pre-pass body of shouldStripWhitespace.
+		t.Run("doc()-loaded tree keeps a nested xml:space preserve subtree", func(t *testing.T) {
+			t.Parallel()
+			const otherURI = "mem:/reorder/other.xml"
+			resolver := &exactRuntimeURIResolver{files: map[string]string{
+				otherURI: `<outer xml:space="preserve"><mid><inner>   </inner></mid></outer>`,
+			}}
+
+			ctx := t.Context()
+			ssDoc, err := helium.NewParser().Parse(ctx, []byte(`<?xml version="1.0"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="xml" omit-xml-declaration="yes"/>
+  <xsl:template match="/">
+    <result>
+      <local><xsl:copy-of select="/wrap/local"/></local>
+      <remote><xsl:copy-of select="doc('`+otherURI+`')/outer"/></remote>
+    </result>
+  </xsl:template>
+</xsl:stylesheet>`))
+			require.NoError(t, err)
+			ss, err := xslt3.NewCompiler().Compile(ctx, ssDoc)
+			require.NoError(t, err)
+
+			source, err := helium.NewParser().Parse(ctx, []byte(`<wrap><local>   </local></wrap>`))
+			require.NoError(t, err)
+			out, err := ss.Transform(source).URIResolver(resolver).Serialize(ctx)
+			require.NoError(t, err)
+
+			require.Contains(t, out, "<inner>   </inner>",
+				"xml:space=\"preserve\" declared two levels up must still preserve a nested "+
+					"whitespace-only text node in a doc()-loaded tree; got %q", out)
+			require.Contains(t, out, "<local/>",
+				"whitespace in the directly-sourced document must still be stripped; got %q", out)
+		})
+	})
 }
 
 // evalSelection evaluates an XPath expression against the source document and

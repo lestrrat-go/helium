@@ -312,35 +312,40 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 	}
 }
 
-// shouldStripWhitespace returns true if a text node is whitespace-only
-// and its parent element matches a strip-space pattern or has element-only
-// content per its DTD declaration (XDM 3.1 Section 6.7.1).
-func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
+// whitespaceStripParent returns the parent element to evaluate strip/preserve
+// verdicts against for node, and whether node is even a candidate: a
+// whitespace-only text/CDATA node with an element parent. It is the cheap,
+// tree-shape-only preamble shared by shouldStripWhitespace and the strip
+// pre-pass (stripWhitespaceFromNodeInto).
+func whitespaceStripParent(node helium.Node) (*helium.Element, bool) {
 	if normalizeNode(node) == nil {
-		return false
+		return nil, false
 	}
 	// Only strip text/CDATA nodes, not elements or other node types
 	if node.Type() != helium.TextNode && node.Type() != helium.CDATASectionNode {
-		return false
+		return nil, false
 	}
 	content := node.Content()
 	// Check if whitespace-only
 	for _, b := range content {
 		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
-			return false
+			return nil, false
 		}
 	}
 	// Check parent element against strip/preserve space rules
 	parent := node.Parent()
 	if parent == nil || parent.Type() != helium.ElementNode {
-		return false
+		return nil, false
 	}
-	elem, _ := helium.AsNode[*helium.Element](parent)
-	// xml:space="preserve" on the element or an ancestor overrides strip-space.
-	// Walk up to find the nearest xml:space declaration.
-	if inheritedXMLSpace(elem) == lexicon.SpacePreserve {
-		return false
-	}
+	elem, ok := helium.AsNode[*helium.Element](parent)
+	return elem, ok
+}
+
+// stripVerdict reports whether elem's whitespace-only text-node children would
+// be stripped, per the schema classifier, xsl:strip-space/preserve-space rules,
+// and DTD element-only content — everything shouldStripWhitespace decides
+// EXCEPT the xml:space ancestor override, which the caller applies afterward.
+func (ec *execContext) stripVerdict(elem *helium.Element) bool {
 	// A schema type annotation overrides xsl:strip-space / xsl:preserve-space per
 	// XSLT 3.0 §4.4.2: element-only content strips regardless of preserve-space;
 	// simple/mixed content (or an assertion-bearing ancestor) preserves regardless
@@ -364,11 +369,77 @@ func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
 	return hasElementOnlyContent(elem)
 }
 
-// inheritedXMLSpace walks up the ancestor chain to find the nearest
-// xml:space attribute and returns its value ("preserve" or "default").
-// Returns "" if no xml:space is declared on any ancestor.
-func inheritedXMLSpace(elem *helium.Element) string {
+// shouldStripWhitespace returns true if a text node is whitespace-only
+// and its parent element matches a strip-space pattern or has element-only
+// content per its DTD declaration (XDM 3.1 Section 6.7.1).
+//
+// inheritedXMLSpace's ancestor walk runs LAST, after stripVerdict, rather than
+// first: xml:space="preserve" can only ever convert a strip verdict into a
+// preserve, never the reverse, so it cannot change stripVerdict's answer for
+// any node. Deferring it means the common case — no xsl:strip-space, no DTD
+// element-only content, no schema annotations, where stripVerdict is false —
+// never walks the ancestor chain at all.
+func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
+	elem, ok := whitespaceStripParent(node)
+	if !ok {
+		return false
+	}
+	if !ec.stripVerdict(elem) {
+		return false
+	}
+	return !ec.xmlSpacePreserve(elem)
+}
+
+// xmlSpacePreserve is inheritedXMLSpace(elem) == lexicon.SpacePreserve, memoized
+// per transform in ec.xmlSpacePreserveMemo (see the field comment on
+// execContext for the invariant that makes this safe). It targets the
+// retained-whitespace case: xsl:strip-space matches an element, but an
+// xml:space="preserve" ancestor keeps its whitespace, so every whitespace-only
+// text node under that ancestor is re-checked as applyTemplates visits it —
+// without the memo, each check re-walks the full ancestor chain.
+//
+// The walk stops at the first memoized ancestor or the first element with its
+// own xml:space attribute, then backfills every element it passed with that
+// same verdict (correct because xml:space is inherited unchanged down to the
+// first override, so all of them share it).
+func (ec *execContext) xmlSpacePreserve(elem *helium.Element) bool {
+	if v, ok := ec.xmlSpacePreserveMemo[elem]; ok {
+		return v
+	}
+	var chain []*helium.Element
+	preserve := false
 	for n := helium.Node(elem); n != nil; n = n.Parent() {
+		e, ok := n.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if v, ok := ec.xmlSpacePreserveMemo[e]; ok {
+			preserve = v
+			break
+		}
+		if v, ok := e.GetAttribute("xml:space"); ok {
+			preserve = v == lexicon.SpacePreserve
+			chain = append(chain, e)
+			break
+		}
+		chain = append(chain, e)
+	}
+	if ec.xmlSpacePreserveMemo == nil {
+		ec.xmlSpacePreserveMemo = make(map[*helium.Element]bool, len(chain))
+	}
+	for _, e := range chain {
+		ec.xmlSpacePreserveMemo[e] = preserve
+	}
+	return preserve
+}
+
+// inheritedXMLSpace walks up the ancestor chain, starting at node itself, to
+// find the nearest xml:space attribute and returns its value ("preserve" or
+// "default"). Returns "" if no xml:space is declared on node or any ancestor.
+// node need not be an *helium.Element (e.g. the strip pre-pass seeds from a
+// *helium.Document root); non-element nodes are simply skipped while walking.
+func inheritedXMLSpace(node helium.Node) string {
+	for n := node; n != nil; n = n.Parent() {
 		e, ok := n.(*helium.Element)
 		if !ok {
 			continue
@@ -499,32 +570,64 @@ func (ec *execContext) stripWhitespaceFromNode(root helium.Node) {
 	ec.stripWhitespaceFromNodeInto(root, nil)
 }
 
+// stripStackFrame is one entry of stripWhitespaceFromNodeInto's explicit
+// traversal stack: node, plus the xml:space preserve state in effect for
+// node's own children.
+type stripStackFrame struct {
+	node     helium.Node
+	preserve bool
+}
+
 // stripWhitespaceFromNodeInto is stripWhitespaceFromNode with an optional out
 // parameter: when removed is non-nil, every unlinked whitespace-only node is
 // recorded in it. The in-place strip of a schema-validated source copy uses this
 // so a selected node the strip removes can be dropped from the initial match
 // selection.
+//
+// preserve threads the in-scope xml:space state top-down through the stack,
+// mirroring copyAndStrip's childPreserve: it is seeded once from root via
+// inheritedXMLSpace (root can be an element subtree with real ancestors of its
+// own, not always a document root — see execute_transform.go's in-place strip
+// of a schema-validated copy), then recomputed at each pushed element from its
+// own xml:space attribute if it declares one, else inherited from its parent
+// frame. This replaces a per-whitespace-node ancestor walk with one O(1) check
+// per node, and keeps this pre-pass consistent with shouldStripWhitespace
+// (both ultimately consult stripVerdict) without calling it directly.
 func (ec *execContext) stripWhitespaceFromNodeInto(root helium.Node, removed map[helium.Node]struct{}) {
 	// Use an explicit stack to avoid deep recursion on large documents.
-	stack := make([]helium.Node, 0, 32)
-	stack = append(stack, root)
+	stack := make([]stripStackFrame, 0, 32)
+	stack = append(stack, stripStackFrame{node: root, preserve: inheritedXMLSpace(root) == lexicon.SpacePreserve})
 	for len(stack) > 0 {
-		node := stack[len(stack)-1]
+		frame := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		child := node.FirstChild()
+		child := frame.node.FirstChild()
 		for child != nil {
 			next := child.NextSibling()
-			if ec.shouldStripWhitespace(child) {
+			if elem, ok := whitespaceStripParent(child); ok && !frame.preserve && ec.stripVerdict(elem) {
 				if removed != nil {
 					removed[child] = struct{}{}
 				}
 				helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert
 			} else if child.FirstChild() != nil {
-				stack = append(stack, child)
+				stack = append(stack, stripStackFrame{node: child, preserve: childXMLSpacePreserve(child, frame.preserve)})
 			}
 			child = next
 		}
 	}
+}
+
+// childXMLSpacePreserve computes the xml:space preserve state to apply to
+// node's own children: node's own xml:space attribute if it declares one,
+// otherwise the state inherited from its parent frame.
+func childXMLSpacePreserve(node helium.Node, inherited bool) bool {
+	elem, ok := helium.AsNode[*helium.Element](node)
+	if !ok {
+		return inherited
+	}
+	if v, ok := elem.GetAttribute("xml:space"); ok {
+		return v == lexicon.SpacePreserve
+	}
+	return inherited
 }
 
 // selectDefaultNodes returns the default node-set for apply-templates
