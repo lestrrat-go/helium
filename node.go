@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 )
 
 // AsNode performs a safe type assertion on a [Node], returning the
@@ -101,9 +102,10 @@ type node struct {
 	// well-formed chain is a short, self-owned, acyclic list. The hot
 	// attribute-lookup walks (Element.addProperty / HasAttribute / Attributes /
 	// ForEachAttribute) therefore traverse it with a plain NextAttribute loop and
-	// no per-list cycle guard. Whole-tree walks that may be handed an
-	// externally-corrupted chain (setTreeDoc, the serializer) do carry a cheap
-	// per-list seen guard.
+	// no per-list cycle guard. Walks that may be handed an externally-corrupted
+	// chain do carry a cheap per-list guard: setTreeDoc and the serializer use a
+	// seen set, and the insertion cycle guard's propertiesReach uses
+	// siblingCycleGuard.
 	properties *Attribute
 	ns         *Namespace
 	nsDefs     []*Namespace
@@ -468,22 +470,26 @@ func (n docnode) LastChild() Node {
 // Every other write of a node's parent field through the SAFE mutation API —
 // AddChild, AddSibling, Replace, SetDocumentElement — links that node into SOME
 // child list, so a future writer of a parent-without-child link in that API must
-// extend this fast exit's claimant sources to stay sound. Two writes OUTSIDE
-// that API set a parent with no child link, and neither is covered here:
-// NewNamespaceNodeWrapper points a namespace-axis wrapper at its owning element
-// (a wrapper is not a MutableNode, so it can never be an insertion parent, and
-// nothing reaches it by walking parent pointers unless UnsafeSetParent puts it
-// on a chain), and UnsafeSetParent writes any parent pointer the caller asks
-// for. A tree whose parent pointers were written by UnsafeSetParent is OUTSIDE
-// this guard's contract, matching that function's own documented disclaimer:
-// the guard rejects every cycle reachable through the safe API, and does not
-// promise to detect one built behind the API's back. When cur is a
+// extend this fast exit's claimant sources to stay sound. When cur is a
 // childless *Element the ancestor walk is skipped in favor of propertiesReach,
 // bounded by cur's own attribute count instead of tree depth — the common case
 // of an element carrying attributes would otherwise stay on the
 // depth-proportional walk. When cur is a childless *Document with no subset it
 // has no claimant at all. Any other childless cur (Text, Comment, a childless
 // Attribute not reached through an Element, ...) has no claimant either.
+//
+// The two writes OUTSIDE that API set a parent with no child link, and the fast
+// exit answers them by REFUSING TO RUN rather than by enumerating them.
+// [UnsafeSetParent] writes any parent pointer the caller asks for, and raises
+// unsafeParentWrites the first time it names a non-nil parent; while that flag
+// is raised every insertion takes the unconditional ancestor walk, so a claimant
+// written behind the API's back is rejected exactly as it was before this fast
+// exit existed. [NewNamespaceNodeWrapper] points a namespace-axis wrapper at its
+// owning element, which needs no flag of its own: a wrapper is not a MutableNode
+// and no safe path writes a parent pointer AT one, so a wrapper can only sit on
+// an ancestor chain once UnsafeSetParent has put something under it, which
+// raises the flag first. The guard therefore rejects every cycle the public API
+// can build, corrupt trees included.
 func wouldCreateCycle(parent, cur Node) bool {
 	if parent == nil {
 		return false
@@ -493,7 +499,7 @@ func wouldCreateCycle(parent, cur Node) bool {
 	if pdn == cdn {
 		return true
 	}
-	if cdn.firstChild == nil {
+	if cdn.firstChild == nil && !unsafeParentWrites.Load() {
 		switch c := cur.(type) {
 		case *Element:
 			return propertiesReach(c, pdn)
@@ -522,12 +528,26 @@ func wouldCreateCycle(parent, cur Node) bool {
 // when cur is a childless *Element: such an element has no child-list
 // claimant, so its only remaining claimants are its own attributes, and
 // searching them is bounded by cur's attribute count rather than tree depth.
+//
+// The properties chain is a sibling list, and [UnsafeSetNextSibling] can knot
+// one into a loop, so this walk is bounded by [siblingCycleGuard] — the same
+// allocation-free Brent's-algorithm guard childReaches and the traversal
+// iterators use. A guard belongs HERE, unlike on the hot attribute-lookup
+// walks: those run on a chain their own callers just built, while this one runs
+// on whatever chain an insertion operand arrives carrying. Brent stops within a
+// small multiple of the cycle length, so every distinct attribute is still
+// searched before a corrupt chain terminates the walk.
 func propertiesReach(elem *Element, target *docnode) bool {
+	var g siblingCycleGuard
 	for attr := elem.properties; attr != nil; attr = attr.NextAttribute() {
-		if attr.baseDocNode() == target {
+		attrDN := attr.baseDocNode()
+		if g.step(attrDN) {
+			return false
+		}
+		if attrDN == target {
 			return true
 		}
-		if attr.firstChild != nil && childReaches(attr, target) {
+		if attrDN.firstChild != nil && childReaches(attr, target) {
 			return true
 		}
 	}
@@ -944,19 +964,35 @@ func addSibling(n MutableNode, cur Node) error {
 // tests that must build a deliberately corrupt tree to exercise the traversal
 // cycle guards. Ordinary code MUST use AddChild/AddSibling/UnlinkNode instead.
 //
-// A parent pointer written here is invisible to the insertion cycle guard
-// (wouldCreateCycle), which resolves a childless operand from that operand's OWN
-// claimant sources — its child list, an Element's attributes, a Document's DTD
-// subsets — instead of walking parent pointers. A parent this function names
-// gains a claimant that appears in none of them, so a later insertion that
-// closes a loop through such a link can be ACCEPTED where the same insertion on
-// a tree built through the safe API is rejected with ErrCyclicNode. Detecting
-// that is the caller's responsibility: a tree corrupted here is outside the
-// guard's contract, in the same way it is outside every other invariant this
-// function disclaims.
+// A parent pointer written here gains a claimant the insertion cycle guard's
+// childless-operand fast exit cannot see, because that exit resolves an operand
+// from the operand's OWN claimant sources — its child list, an Element's
+// attributes, a Document's DTD subsets — and this write links the node into none
+// of them. Naming a non-nil parent therefore raises unsafeParentWrites, which
+// puts wouldCreateCycle back on its unconditional ancestor walk for the rest of
+// the process: an insertion closing a loop through a link written here is
+// rejected with ErrCyclicNode exactly as it is on a tree built through the safe
+// API. The flag is one-way and never cleared, so the guard stays conservative
+// once a parent pointer has been written behind the API's back; it costs a
+// relaxed load per insertion and stays lowered in a program that never calls
+// this function. Clearing a parent pointer (a nil parent) removes a claimant
+// instead of adding one and leaves the flag alone.
 func UnsafeSetParent(n Node, parent Node) {
 	n.baseDocNode().parent = parent
+	if parent != nil {
+		unsafeParentWrites.Store(true)
+	}
 }
+
+// unsafeParentWrites reports whether [UnsafeSetParent] has written a non-nil
+// parent pointer in this process. It is the one-way switch that keeps
+// wouldCreateCycle's childless-operand fast exit sound: the exit assumes every
+// parent pointer was written alongside a child link, which holds for the whole
+// safe mutation API and fails only for a pointer written through
+// UnsafeSetParent, so the exit is disabled from that write onward. It is never
+// lowered again — a node claimed unsafely can be handed to an insertion at any
+// later point, and nothing tracks when such a claim goes away.
+var unsafeParentWrites atomic.Bool
 
 // UnsafeSetPrevSibling sets ONLY n's previous-sibling pointer, with the same
 // no-safeguards contract as UnsafeSetParent.

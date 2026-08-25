@@ -3,6 +3,7 @@ package helium
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
@@ -45,12 +46,6 @@ type cycleCase struct {
 	name       string
 	build      func(t *testing.T) (Node, Node, func() error)
 	wantCyclic bool
-	// outsideGuardContract marks a case whose tree was built behind the safe
-	// mutation API's back, where the shipping guard deliberately no longer
-	// agrees with the reference implementation. The harness then requires the
-	// verdicts to DIFFER in exactly the documented direction, so a change to
-	// either side still fails this test.
-	outsideGuardContract bool
 }
 
 // TestWouldCreateCycleDifferential runs every adversarial case through BOTH the
@@ -63,8 +58,13 @@ type cycleCase struct {
 // The cases include the two attribute-pocket shapes (a childless *Attribute and
 // a childless entity reference living inside an attribute value) that a
 // childless-operand fast path must still resolve through the Element properties
-// chain, and one case built through UnsafeSetParent, the single shape where the
-// two implementations are documented to differ.
+// chain, and one case built through UnsafeSetParent, whose claimant no fast-path
+// source can see and which the guard therefore answers by taking the
+// unconditional ancestor walk.
+//
+// Every case starts with unsafeParentWrites lowered, so a case that does not
+// corrupt parent pointers itself really does exercise the fast exit no matter
+// what an earlier test in this binary called.
 func TestWouldCreateCycleDifferential(t *testing.T) {
 	tests := []cycleCase{
 		{
@@ -288,13 +288,13 @@ func TestWouldCreateCycleDifferential(t *testing.T) {
 			wantCyclic: true,
 		},
 		{
-			// The documented divergence. UnsafeSetParent points parent's parent
-			// pointer at cur without linking parent into cur's child list, so cur
-			// stays a childless *Element with no attributes: it has no claimant in
-			// any source the fast path consults, and the insertion is accepted
-			// where the unconditional ancestor walk found cur one step up and
-			// rejected it. A tree corrupted this way is outside the guard's
-			// contract, as UnsafeSetParent's own documentation states.
+			// UnsafeSetParent points parent's parent pointer at cur without
+			// linking parent into cur's child list, so cur stays a childless
+			// *Element with no attributes: it has no claimant in any source the
+			// fast exit consults. The write raises unsafeParentWrites, which puts
+			// the guard back on the unconditional ancestor walk, so the walk finds
+			// cur one step up and rejects the insertion exactly as the reference
+			// implementation does.
 			name: "AddChild(UnsafeSetParent-corrupted ancestor)",
 			build: func(t *testing.T) (Node, Node, func() error) {
 				doc := newCycleCaseDocument()
@@ -305,25 +305,18 @@ func TestWouldCreateCycleDifferential(t *testing.T) {
 				UnsafeSetParent(parent, cur)
 				return parent, cur, func() error { return parent.AddChild(cur) }
 			},
-			wantCyclic:           true,
-			outsideGuardContract: true,
+			wantCyclic: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			lowerUnsafeParentWrites(t)
 			parent, cur, insert := tt.build(t)
 
 			legacy := legacyWouldCreateCycle(parent, cur)
 			got := wouldCreateCycle(parent, cur)
 			require.Equal(t, tt.wantCyclic, legacy, "pre-change reference guard verdict")
-
-			if tt.outsideGuardContract {
-				require.True(t, legacy, "the reference guard must reject this shape")
-				require.False(t, got, "the shipping guard's documented divergence must accept this shape")
-				require.NoError(t, insert(), "the accepted insertion must go through")
-				return
-			}
 
 			require.Equal(t, legacy, got, "shipping guard verdict diverges from the pre-change reference implementation")
 			require.Equal(t, tt.wantCyclic, got, "shipping guard verdict")
@@ -335,5 +328,117 @@ func TestWouldCreateCycleDifferential(t *testing.T) {
 			}
 			require.NoError(t, err)
 		})
+	}
+}
+
+// lowerUnsafeParentWrites clears the one-way unsafeParentWrites flag for the
+// duration of one test and restores it afterwards. Production code never lowers
+// the flag; a test needs to, because the flag is process-wide and any earlier
+// test that called UnsafeSetParent would otherwise leave every later case on the
+// unconditional ancestor walk, hiding whether the fast exit still works — which
+// is why BenchmarkAddChildDeepChain calls it too.
+func lowerUnsafeParentWrites(t testing.TB) {
+	t.Helper()
+	prev := unsafeParentWrites.Swap(false)
+	t.Cleanup(func() { unsafeParentWrites.Store(prev) })
+}
+
+// TestWouldCreateCycleFastExitGate pins both halves of the childless-operand
+// fast exit on ONE tree: a parent pointer claiming a childless element, written
+// as a raw field store so the flag's state is set by the test rather than by the
+// write. With the flag lowered the guard takes the fast exit, finds no claimant
+// among the operand's own sources and accepts; with the flag raised — the state
+// UnsafeSetParent leaves behind — it walks parent's ancestor chain and rejects.
+// An implementation that dropped the fast exit fails the first half, and one
+// that ignored the flag fails the second.
+func TestWouldCreateCycleFastExitGate(t *testing.T) {
+	lowerUnsafeParentWrites(t)
+
+	doc := newCycleCaseDocument()
+	parent, err := doc.CreateElement("parent")
+	require.NoError(t, err)
+	cur, err := doc.CreateElement("cur")
+	require.NoError(t, err)
+	parent.baseDocNode().parent = cur
+
+	require.True(t, legacyWouldCreateCycle(parent, cur), "the reference guard must reject this shape")
+	require.False(t, wouldCreateCycle(parent, cur), "a childless operand must skip the ancestor walk while the flag is lowered")
+
+	unsafeParentWrites.Store(true)
+	require.True(t, wouldCreateCycle(parent, cur), "a raised flag must put the guard back on the ancestor walk")
+}
+
+// TestPropertiesReachTerminatesOnCyclicChain pins that the properties-chain
+// search terminates on a chain knotted into a loop, and that it still finds a
+// claimant that sits on the loop rather than bailing out before reaching it.
+func TestPropertiesReachTerminatesOnCyclicChain(t *testing.T) {
+	doc := newCycleCaseDocument()
+	elem, err := doc.CreateElement("e")
+	require.NoError(t, err)
+	require.NoError(t, elem.SetAttribute("a", "1"))
+	require.NoError(t, elem.SetAttribute("b", "2"))
+
+	attrs := elem.Attributes()
+	require.Len(t, attrs, 2)
+	UnsafeSetNextSibling(attrs[1], attrs[0])
+
+	other, err := doc.CreateElement("other")
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	var reachesOther, reachesFirst, reachesLast bool
+	go func() {
+		defer close(done)
+		reachesOther = propertiesReach(elem, other.baseDocNode())
+		reachesFirst = propertiesReach(elem, attrs[0].baseDocNode())
+		reachesLast = propertiesReach(elem, attrs[1].baseDocNode())
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("propertiesReach did not return: the properties walk has no termination guard")
+	}
+
+	require.False(t, reachesOther, "an unrelated node is not a claimant")
+	require.True(t, reachesFirst, "the first attribute is a claimant")
+	require.True(t, reachesLast, "the looping attribute is still searched before the guard stops the walk")
+}
+
+// TestAddChildCyclicPropertiesChainTerminates hands AddChild an operand whose
+// attribute chain was knotted into a loop through UnsafeSetNextSibling. The
+// operand is childless, so the guard resolves it through its properties chain,
+// and that walk must terminate on a corrupt chain instead of spinning forever.
+// The insertion itself is unrelated to the loop and must be accepted.
+//
+// It lowers unsafeParentWrites first: with the flag raised the guard takes its
+// ancestor walk and never reads the properties chain, which would make this a
+// test of nothing.
+func TestAddChildCyclicPropertiesChainTerminates(t *testing.T) {
+	lowerUnsafeParentWrites(t)
+
+	doc := newCycleCaseDocument()
+	e, err := doc.CreateElement("e")
+	require.NoError(t, err)
+	require.NoError(t, e.SetAttribute("a", "1"))
+	require.NoError(t, e.SetAttribute("b", "2"))
+
+	attrs := e.Attributes()
+	require.Len(t, attrs, 2)
+	// b -> a closes the properties chain into a loop.
+	UnsafeSetNextSibling(attrs[1], attrs[0])
+
+	parent, err := doc.CreateElement("parent")
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() { done <- parent.AddChild(e) }()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+		require.Same(t, Node(e), parent.FirstChild())
+	case <-time.After(30 * time.Second):
+		t.Fatal("AddChild did not return: the cycle guard walked a corrupt properties chain without a termination guard")
 	}
 }

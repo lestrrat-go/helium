@@ -58,17 +58,16 @@ func TestAddChildDeepChainGrowth(t *testing.T) {
 	require.Nil(t, walker.FirstChild())
 }
 
-// TestUnsafeSetParentIsOutsideCycleGuardContract pins where the insertion cycle
-// guard's contract ends. The guard resolves a childless operand from that
-// operand's own claimant sources — its child list, an Element's attributes, a
-// Document's DTD subsets — rather than by walking parent pointers, so a parent
-// link written by UnsafeSetParent, which links nothing into any of them, is
-// invisible to it and the insertion that closes the loop is accepted. The same
-// shape built through the safe API is rejected. Both halves are asserted here so
-// the boundary is recorded in the suite, not only in the doc comments on
-// wouldCreateCycle and UnsafeSetParent.
-func TestUnsafeSetParentIsOutsideCycleGuardContract(t *testing.T) {
-	t.Run("UnsafeSetParent link is accepted", func(t *testing.T) {
+// TestUnsafeSetParentClaimantIsRejected pins that the insertion cycle guard
+// rejects a parent-pointer loop whichever way the claimant was written. The
+// guard resolves a childless operand from that operand's own claimant sources —
+// its child list, an Element's attributes, a Document's DTD subsets — instead of
+// walking parent pointers, and a link written by UnsafeSetParent appears in none
+// of them, so UnsafeSetParent raises the flag that puts the guard back on its
+// unconditional ancestor walk. Both shapes must therefore fail with
+// ErrCyclicNode and leave the tree unlinked.
+func TestUnsafeSetParentClaimantIsRejected(t *testing.T) {
+	t.Run("UnsafeSetParent link is rejected", func(t *testing.T) {
 		doc := newCycleTestDocument()
 		parent, err := doc.CreateElement("parent")
 		require.NoError(t, err)
@@ -76,11 +75,12 @@ func TestUnsafeSetParentIsOutsideCycleGuardContract(t *testing.T) {
 		require.NoError(t, err)
 
 		// cur becomes parent's parent without being linked as anyone's parent
-		// in a child list, which is precisely what the guard does not track.
+		// in a child list, the one claimant shape the fast exit cannot see.
 		helium.UnsafeSetParent(parent, cur)
 
-		require.NoError(t, parent.AddChild(cur), "a tree corrupted through UnsafeSetParent is outside the guard's contract")
-		require.Same(t, helium.Node(cur), parent.FirstChild())
+		err = parent.AddChild(cur)
+		require.True(t, errors.Is(err, helium.ErrCyclicNode), "expected ErrCyclicNode, got %v", err)
+		require.Nil(t, parent.FirstChild(), "the rejected insertion must not link cur")
 	})
 
 	t.Run("same shape through the safe API is rejected", func(t *testing.T) {
