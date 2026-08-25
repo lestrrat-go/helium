@@ -189,15 +189,18 @@ API, so it can be copied into an older checkout unchanged.
 
 | Flag | Meaning |
 |------|---------|
-| `-relaxng.differential.out=PATH` | Write the record to PATH. Absent: run a small subset, discard the output |
-| `-relaxng.differential.cases=N` | Randomized grammars (default 20000; `0` runs the golden cross-product only) |
+| `-relaxng.differential.out=PATH` | Write the record to PATH. Absent: discard the output and, unless `cases=0`, run a small subset |
+| `-relaxng.differential.cases=N` | Randomized grammars (default 20000; `0` runs the golden cross-product only, with or without `out`) |
 | `-relaxng.differential.seed=N` | Seed for the randomized grammars (default 1) |
 
 Without flags an ordinary `go test ./relaxng` run walks every eighth golden
 schema plus 200 random grammars in about half a second, and
 `TestGroupBacktrackDifferentialDeterministic` checks that two runs of that
-subset agree byte for byte. The recorded procedure and result for the current
-run live in the header comment of `relaxng/group_backtrack_test.go`.
+subset agree byte for byte. The reduced subset is what the absent `out` flag
+selects for the default case count; `cases=0` turns the randomized half off and
+walks the full golden cross-product either way. The recorded procedure and
+result for the current run live in the header comment of
+`relaxng/group_backtrack_test.go`.
 
 ## Build Tags
 

@@ -32,17 +32,18 @@ import (
 
 var (
 	diffOut = flag.String("relaxng.differential.out", "",
-		"write the group-backtracking differential record to this file; empty runs a small smoke subset and discards the output")
+		"write the group-backtracking differential record to this file; empty discards the output and, unless -relaxng.differential.cases=0 asks for the golden cross-product, runs a small smoke subset")
 	diffCases = flag.Int("relaxng.differential.cases", 20000,
-		"number of randomized group grammars for the differential record")
+		"number of randomized group grammars for the differential record; 0 runs the golden cross-product only")
 	diffSeed = flag.Int64("relaxng.differential.seed", 1,
 		"seed for the randomized group grammars")
 )
 
 // diffSmokeCases and diffSmokeStride shrink the run when no output file is
-// requested: every diffSmokeStride'th golden schema and diffSmokeCases random
-// grammars, small enough for an ordinary `go test ./relaxng` run. A smoke run
-// proves the harness still builds and runs; it is not the record.
+// requested and randomized cases were not turned off: every diffSmokeStride'th
+// golden schema and diffSmokeCases random grammars, small enough for an
+// ordinary `go test ./relaxng` run. A smoke run proves the harness still builds
+// and runs; it is not the record.
 const (
 	diffSmokeCases  = 200
 	diffSmokeStride = 8
@@ -66,8 +67,13 @@ func TestGroupBacktrackDifferential(t *testing.T) {
 	stride := 1
 	out := io.Discard
 	if *diffOut == "" {
-		cases = diffSmokeCases
-		stride = diffSmokeStride
+		// -relaxng.differential.cases=0 means the golden cross-product and
+		// nothing else, whether or not a record is being written, so the smoke
+		// reduction does not apply to it.
+		if cases != 0 {
+			cases = diffSmokeCases
+			stride = diffSmokeStride
+		}
 	} else {
 		f, err := os.Create(*diffOut)
 		require.NoError(t, err)
