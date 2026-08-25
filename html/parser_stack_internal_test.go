@@ -126,9 +126,9 @@ func runStackDiffCheck(t *testing.T, seen map[string]struct{}, input []byte) {
 // pushName/popName mutation asserts that hasOnStack and the
 // htmlAutoCloseOnClose pre-scan give the same answer as a naive linear-scan
 // reference. This is what catches a desync between nameStack and the derived
-// namePos/hiPrioPos indexes; the golden and growth tests only observe the
-// final SAX stream, which a subtly wrong index could still reproduce by
-// accident.
+// namePos/hiPrioPos indexes: the golden tests observe only the final SAX
+// stream, which a subtly wrong index could still reproduce by accident, and
+// the growth test observes only the pre-scan's cost shape.
 func TestStackIndexesMatchNaive(t *testing.T) {
 	seen := map[string]struct{}{}
 	for name := range htmlEndPriority {

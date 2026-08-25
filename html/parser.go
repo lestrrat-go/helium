@@ -45,6 +45,25 @@ type parser struct {
 	// htmlAutoCloseOnClose's abort test. Maintained only in pushName/popName.
 	hiPrioPos [numEndPriorityLevels][]int32
 
+	// stackScanSteps counts the open-element-stack positions the
+	// htmlAutoCloseOnClose pre-scan examines over one parse. It is
+	// instrumentation only: no parser code reads it, and it changes neither the
+	// tree, the error sequence, nor recovery. It exists so
+	// TestHTMLAutoCloseOnCloseBlockedGrowth can assert the pre-scan's cost
+	// shape with an exact, machine-independent count instead of wall-clock
+	// time, which is machine-dependent and flakes on a loaded CI runner.
+	//
+	// Contract for any future rewrite of the pre-scan: every open-element-stack
+	// position the pre-scan examines must add one step. The indexed pre-scan
+	// examines the topmost recorded position of the end tag plus the topmost
+	// position of each tracked above-default priority level, so its cost per
+	// end tag is bounded and independent of stack depth; the naive backward
+	// scan it replaced examined one position per stack entry, which made the
+	// total quadratic in stack depth. The growth test also asserts a lower
+	// bound of one step per end tag, so dropping these increments fails the
+	// test instead of silently disabling the guard.
+	stackScanSteps int64
+
 	// sawRoot records that the root <html> element has been opened at least once.
 	// It distinguishes genuine PRE-root whitespace (empty stack, root never
 	// opened — drop as ignorable) from TRAILING whitespace AFTER the root has
@@ -833,6 +852,7 @@ func (p *parser) topmostPos(name string) (int32, bool) {
 	if len(positions) == 0 {
 		return 0, false
 	}
+	p.stackScanSteps++
 	return positions[len(positions)-1], true
 }
 
@@ -852,6 +872,7 @@ func (p *parser) topmostAbovePriority(pri int) (bool, int32) {
 		if len(positions) == 0 {
 			continue
 		}
+		p.stackScanSteps++
 		top := positions[len(positions)-1]
 		if !found || top > at {
 			found = true
