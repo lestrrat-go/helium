@@ -479,3 +479,54 @@ func TestContentCycleGuard(t *testing.T) {
 	require.Equal(t, []byte("x"), a.Content(),
 		"Content must terminate on the child-pointer back-edge and still aggregate the text sibling")
 }
+
+// The iterators in iter.go read a node's link pointers as docnode FIELDS
+// (owner.firstChild, cdn.parent, cdn.next) where the rest of the API calls
+// FirstChild/Parent/NextSibling. That is sound only while every node type
+// inherits those three accessors from docnode unchanged, so this pins it: a type
+// that declares its own FirstChild/Parent/NextSibling fails here, in CI, without
+// anyone having to read iter.go first. See nextOwnedSibling for why the field
+// read exists and how to undo it.
+//
+// Every type implementing Node belongs in the table. A missing entry is not
+// caught automatically, so add the row when you add the type.
+func TestNodeLinkAccessorsMatchFields(t *testing.T) {
+	doc := NewDefaultDocument()
+	first := doc.CreateText([]byte("first"))
+	up := doc.CreateText([]byte("up"))
+	after := doc.CreateText([]byte("after"))
+
+	for _, tc := range []struct {
+		name string
+		node Node
+	}{
+		{"Element", &Element{}},
+		{"Text", &Text{}},
+		{"Comment", &Comment{}},
+		{"CDATASection", &CDATASection{}},
+		{"ProcessingInstruction", &ProcessingInstruction{}},
+		{"EntityRef", &EntityRef{}},
+		{"Entity", &Entity{}},
+		{"Attribute", &Attribute{}},
+		{"Document", &Document{}},
+		{"DTD", &DTD{}},
+		{"AttributeDecl", &AttributeDecl{}},
+		{"ElementDecl", &ElementDecl{}},
+		{"NamespaceNodeWrapper", &NamespaceNodeWrapper{}},
+		{"XIncludeMarker", &XIncludeMarker{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dn := tc.node.baseDocNode()
+			dn.firstChild = first
+			dn.parent = up
+			dn.next = after
+
+			require.Equal(t, Node(first), tc.node.FirstChild(),
+				"FirstChild must return docnode.firstChild unchanged")
+			require.Equal(t, Node(up), tc.node.Parent(),
+				"Parent must return docnode.parent unchanged")
+			require.Equal(t, Node(after), tc.node.NextSibling(),
+				"NextSibling must return docnode.next unchanged")
+		})
+	}
+}

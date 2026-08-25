@@ -520,6 +520,31 @@ func nextOwnedChild(owner *docnode, child Node) Node {
 	return child.NextSibling()
 }
 
+// nextOwnedSibling returns the next sibling of cdn within owner's child list, or
+// nil when cdn is foreign-owned. It is nextOwnedChild for a caller that already
+// holds the child's *docnode, and applies the identical owned-boundary rule: a
+// foreign child's sibling pointers belong to another list — an entity
+// reference's Entity child is owned by the DTD — so following them would walk
+// out of owner's children.
+//
+// It reads cdn.parent and cdn.next as FIELDS where nextOwnedChild calls Parent()
+// and NextSibling(). Those methods have VALUE receivers on docnode, which is 136
+// bytes, so every interface call copies the struct, and the iterators in iter.go
+// pay that on each child. The field read yields the same value without the copy.
+//
+// This is a SPEED choice and carries no semantics. It holds only while no node
+// type overrides FirstChild/Parent/NextSibling — none does, and
+// TestNodeLinkAccessorsMatchFields pins it. Should one ever need to, this helper
+// and the owner.firstChild reads at the head of each iterator loop return to the
+// method calls with no other change and no difference in behavior.
+func nextOwnedSibling(owner, cdn *docnode) Node {
+	p := cdn.parent
+	if p == nil || p.baseDocNode() != owner {
+		return nil
+	}
+	return cdn.next
+}
+
 // destinationDocument returns the document a node inserted under n would belong
 // to. For a Document receiver that is the document itself; for any other node it
 // is the node's owning document.

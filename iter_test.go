@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -188,6 +189,59 @@ func TestIterators(t *testing.T) {
 			}
 			require.Equal(t, []string{"a", "b"}, names)
 		})
+	})
+
+	// A sibling list corrupted into a ring through the Unsafe* link setters
+	// terminates every iterator instead of looping forever. The guard is Brent's
+	// algorithm, which stops within a bounded multiple of the cycle length rather
+	// than at the exact first repeat, so the assertion is termination and a
+	// bounded yield count, NOT an exact node sequence.
+	t.Run("cyclic sibling list terminates", func(t *testing.T) {
+		t.Parallel()
+
+		for _, ring := range []int{1, 2, 3, 5, 8, 17, 64} {
+			t.Run(strconv.Itoa(ring), func(t *testing.T) {
+				t.Parallel()
+
+				doc := helium.NewDefaultDocument()
+				parent, err := doc.CreateElement("parent")
+				require.NoError(t, err)
+				var kids []*helium.Element
+				for i := range ring {
+					c, err := doc.CreateElement("c" + strconv.Itoa(i))
+					require.NoError(t, err)
+					require.NoError(t, parent.AddChild(c))
+					kids = append(kids, c)
+				}
+				// Close the ring: the last child's next pointer is the first child.
+				helium.UnsafeSetNextSibling(kids[ring-1], kids[0])
+
+				// A guard that never fires would spin forever, so cap every loop
+				// well above the bound and fail rather than hang.
+				limit := 16 * (ring + 1)
+
+				children := 0
+				for range helium.Children(parent) {
+					children++
+					require.Less(t, children, limit, "Children must terminate on a cyclic sibling list")
+				}
+				require.GreaterOrEqual(t, children, ring, "Children must yield the whole list before truncating")
+
+				elements := 0
+				for range helium.ChildElements(parent) {
+					elements++
+					require.Less(t, elements, limit, "ChildElements must terminate on a cyclic sibling list")
+				}
+				require.GreaterOrEqual(t, elements, ring, "ChildElements must yield the whole list before truncating")
+
+				descendants := 0
+				for range helium.Descendants(parent) {
+					descendants++
+					require.Less(t, descendants, limit, "Descendants must terminate on a cyclic sibling list")
+				}
+				require.GreaterOrEqual(t, descendants, ring, "Descendants must yield the whole list before truncating")
+			})
+		}
 	})
 
 	// The iter.go helpers together, including the element-only filter and
