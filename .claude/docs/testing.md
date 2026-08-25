@@ -102,7 +102,7 @@ bug that prompted it.
 | `copy_test.go` | root | `CopyNode`/`CopyDoc`/`CopyDTDInfo`/`CopyExtSubset` deep-copy coverage |
 | `dtd_test.go` | root | DTD data-model: internal-subset accessors, element/attr/notation decls, node wrappers |
 | `valid_test.go` | root | Document-level DTD validation and external-subset lookup |
-| `valid_attr_test.go` | root | Attribute-type, entity-attribute, required/fixed and per-instance attribute validity |
+| `valid_attr_test.go` | root | Attribute-type, entity-attribute, required/fixed and per-instance attribute validity; declaration-order stability of attribute diagnostics |
 | `valid_content_test.go` | root | Content-model and element-content validation |
 | `tree_builder_test.go` | root | SAX-path tree construction (`TreeBuilder`) |
 | `c14n_test.go` | c14n | C14N golden file tests |

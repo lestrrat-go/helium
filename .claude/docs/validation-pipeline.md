@@ -893,6 +893,20 @@ unprefixed/differently-prefixed attribute (and vice-versa). Element declarations
 them up by `elem.LocalName()`+`elem.Prefix()` with NO fallback from a prefixed
 element to an unprefixed declaration (a `<p:r>` requires an `<!ELEMENT p:r>`).
 
+**Attribute-declaration iteration order is declaration order.** `attrsByElem`
+holds each element's declarations in the order they were registered, which is the
+order the `<!ATTLIST>` declarations are read (or, for a tree built through the
+public API, the order of the `AddAttributeDecl` calls). Every consumer inherits
+that order: `AttributesForElement` clones the index slice, and the element-keyed
+readers in `validateElementAttributes`, `checkStandaloneExternalDefaults`, and
+`GetElementByID` range over it directly. The user-visible consequence is that DTD
+validation emits an element's attribute diagnostics in declaration order, so
+repeated runs over the same document produce the same diagnostic sequence and a
+diff or golden over validation output is stable. `TestValidationDiagnosticOrder`
+(`valid_attr_test.go`) pins this: two and six missing `#REQUIRED` attributes must
+be reported in the order declared. The deep-copy path (`copy_dtd.go`) appends in
+source-child order, so a copied DTD preserves it.
+
 **Attribute Value Type — every present attribute must be declared** (§3.1). After
 `validateElementAttributes` checks the declared attributes, it walks the element's
 own attribute chain (`Element.Attributes()`) and reports `no declaration for
