@@ -360,7 +360,7 @@ func (n *Element) spliceOutAttribute(p *Attribute) {
 // property order. The returned slice is a snapshot: appending to or reordering
 // it does not affect the element, though the *Attribute elements still point at
 // the live attribute nodes. Use ForEachAttribute to avoid the slice allocation.
-func (n Element) Attributes() []*Attribute {
+func (n *Element) Attributes() []*Attribute {
 	attrs := []*Attribute{}
 	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
 		attrs = append(attrs, attr)
@@ -373,15 +373,14 @@ func (n Element) Attributes() []*Attribute {
 // If fn returns false, iteration stops early.
 // This avoids the slice allocation of Attributes().
 //
-// No dedicated unit tests: iteration order and early-stop semantics
-// are exercised transitively by XPath attribute-axis and doc-order tests.
+// attr_test.go covers both full iteration and the early-stop path.
 // All current callers always return true; the early-stop path exists as
 // a natural consequence of the iterator pattern.
 //
-// The unchecked type assertion on NextSibling is safe: the properties
-// chain is attribute-only by construction (field typed *Attribute,
-// only *Attribute nodes are ever linked in).
-func (n Element) ForEachAttribute(fn func(*Attribute) bool) {
+// The loop walks the properties chain via NextAttribute() and asserts
+// nothing: the chain is attribute-only by construction (field typed
+// *Attribute, only *Attribute nodes are ever linked in).
+func (n *Element) ForEachAttribute(fn func(*Attribute) bool) {
 	for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
 		if !fn(attr) {
 			return
