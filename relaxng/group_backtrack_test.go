@@ -11,6 +11,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Accept/reject safety evidence for sharing validState.seq instead of copying
+// it. The differential harness that produced these figures is throwaway
+// scaffolding and is deliberately NOT checked in; this record exists so it can
+// be reconstructed.
+//
+// Procedure. Extract the base revision (`git archive 918a7d79 | tar -x -C
+// <scratch>`) and the change (`git archive 96d48bbe | tar -x -C <scratch2>`),
+// drop the SAME throwaway differential test into `relaxng/` in both, run both,
+// and diff the two outputs. The test prints one line per case: the case
+// identity, the verdict (VALID/INVALID), and, when invalid, the exact error
+// text. Comparing error text and not just the verdict is what makes the diff
+// meaningful — a silently reworded diagnostic would otherwise pass unnoticed.
+//
+// Corpus 1, the golden cross-product. Every schema in
+// testdata/libxml2-compat/relaxng/test validated against every instance in the
+// same directory: 105 schemas x 163 instances = 17,115 pairs. Diff: 0 lines
+// (16,588 INVALID, 527 VALID).
+//
+// Corpus 2, randomized group grammars. 20,000 seeded random grammars over
+// three shapes, including a bare <group> under <start>, which is the only shape
+// that reaches the naive backtracker. Diff: 0 lines (18,113 INVALID, 1,887
+// VALID, spanning 926 distinct error texts).
+//
+// Coverage under both corpora together: backtrackGroupFlexible 100%,
+// advanceFlexibleContent 100%, backtrackGroupNaive 100%, advanceFlexibleNaive
+// 88.9%. Both halves of the corpus are load-bearing: the golden cross-product
+// alone leaves the naive backtracker nearly untouched (backtrackGroupNaive
+// 19.4%, advanceFlexibleNaive 0%), because no golden schema puts a bare <group>
+// under <start>. Only the randomized set exercises that path.
+//
+// `go test -race ./relaxng` passes on both revisions.
+
 // manyChildrenDoc builds `<root>` with n `<a/>` children.
 func manyChildrenDoc(n int) string {
 	var d strings.Builder
