@@ -3,6 +3,8 @@ package helium
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -293,4 +295,376 @@ func testSkipBlankBytesReadError(t *testing.T) {
 				"a sticky cursor read error must be surfaced through blankRunErr, not masked as no-blank")
 		})
 	}
+}
+
+// competingNonFillerAttrs is the number of non-filler attributes
+// buildCompetingErrorStartTag puts on the tag (q:b, p:a, r:a). The two xmlns
+// declarations are namespace declarations, not attributes, so they never
+// count toward the len(attrs) that attrDupSetThreshold is compared against.
+const competingNonFillerAttrs = 3
+
+// buildCompetingErrorStartTag builds a start tag carrying BOTH an
+// unbound-prefix attribute (q:b) and, at higher indices, an expanded-name
+// duplicate pair (p:a and r:a, whose prefixes both resolve to urn:x).
+// fillerCount padN attributes sit between the namespace declarations and the
+// three, so the caller can place len(attrs) on either side of
+// attrDupSetThreshold while keeping the logical input identical.
+func buildCompetingErrorStartTag(fillerCount int) string {
+	var b strings.Builder
+	b.WriteString(`<root xmlns:p="urn:x" xmlns:r="urn:x"`)
+	for i := range fillerCount {
+		fmt.Fprintf(&b, " pad%d=\"v%d\"", i, i)
+	}
+	b.WriteString(` q:b="1" p:a="2" r:a="3"/>`)
+	return b.String()
+}
+
+// TestStartTagDuplicateAttributeAboveThreshold pins the start-tag
+// duplicate-detection behaviour of a tag whose attribute count crosses
+// attrDupSetThreshold, where duplicate detection switches from a linear
+// scan to a map-backed set. Attribute counts are derived from
+// attrDupSetThreshold, not hardcoded, so the tests keep exercising the set
+// path if the threshold constant ever changes.
+func TestStartTagDuplicateAttributeAboveThreshold(t *testing.T) {
+	t.Parallel()
+
+	t.Run("qualified name duplicate rejected", func(t *testing.T) {
+		t.Parallel()
+
+		// attrDupSetThreshold+8 distinct local attributes, then one more
+		// repeating the very first name: the duplicate is only discovered
+		// once the map-backed set (built once len(attrs) crosses the
+		// threshold) is consulted.
+		n := attrDupSetThreshold + 8
+		var b strings.Builder
+		b.WriteString("<root")
+		for i := range n {
+			fmt.Fprintf(&b, " a%d=\"v%d\"", i, i)
+		}
+		fmt.Fprintf(&b, " a0=\"dup\"/>")
+
+		_, err := NewParser().Parse(t.Context(), []byte(b.String()))
+		require.Error(t, err, "a start tag with a duplicate qualified name past the threshold must be rejected")
+		require.Contains(t, err.Error(), "duplicate attribute is not allowed")
+	})
+
+	t.Run("all distinct attributes accepted in order", func(t *testing.T) {
+		t.Parallel()
+
+		n := attrDupSetThreshold + 8
+		var b strings.Builder
+		b.WriteString("<root")
+		for i := range n {
+			fmt.Fprintf(&b, " a%d=\"v%d\"", i, i)
+		}
+		b.WriteString("/>")
+
+		doc, err := NewParser().Parse(t.Context(), []byte(b.String()))
+		require.NoError(t, err, "a start tag with N>threshold distinct attributes must be accepted")
+
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+		attrs := root.Attributes()
+		require.Len(t, attrs, n, "all attributes must survive onto the DOM element")
+		for i, a := range attrs {
+			require.Equal(t, fmt.Sprintf("a%d", i), a.Name(), "attribute order must be preserved")
+			require.Equal(t, fmt.Sprintf("v%d", i), a.Value())
+		}
+	})
+
+	t.Run("expanded name duplicate across distinct prefixes rejected", func(t *testing.T) {
+		t.Parallel()
+
+		// p:a and q:a, both bound to the same URI, are the same expanded
+		// name (Namespaces in XML §6.3) even though their qualified names
+		// differ. Filler attributes push the tag past attrDupSetThreshold
+		// so the expandedLast map path is exercised.
+		fillerCount := attrDupSetThreshold + 6
+		var b strings.Builder
+		b.WriteString(`<root xmlns:p="urn:x" xmlns:q="urn:x" p:a="1"`)
+		for i := range fillerCount {
+			fmt.Fprintf(&b, " pad%d=\"v%d\"", i, i)
+		}
+		b.WriteString(` q:a="2"/>`)
+
+		_, err := NewParser().Parse(t.Context(), []byte(b.String()))
+		require.Error(t, err, "distinct prefixes bound to the same URI on the same local name must be rejected")
+		require.Contains(t, err.Error(), "duplicate attribute is not allowed")
+
+		var pe ErrParseError
+		require.ErrorAs(t, err, &pe)
+		require.NotEqual(t, ErrorDomainNamespace, pe.Domain,
+			"the expanded-name duplicate must be reported as a duplicate-attribute error, not a namespace error")
+	})
+
+	t.Run("unbound prefix reported before a later expanded name duplicate", func(t *testing.T) {
+		t.Parallel()
+
+		// q:b's prefix is never declared. It appears before both p:a and
+		// r:a (which share p's URI and so collide on expanded name) so
+		// that, scanning attributes in document order, the unbound-prefix
+		// namespace error is what today's parser reaches first — the
+		// duplicate collision between p:a and r:a sits at higher indices
+		// and is never reached.
+		//
+		// Crossing attrDupSetThreshold must change neither WHICH of the two
+		// competing errors wins, nor its message, nor its position. So the
+		// same logical input is parsed on both sides of the threshold and
+		// every case is pinned all the way down to the reported line and
+		// column.
+		cases := []struct {
+			name        string
+			fillerCount int
+			wantSetPath bool
+		}{
+			// One attribute short of the threshold: expandedLast stays nil
+			// and the original quadratic inner loop decides the outcome.
+			{"below threshold, linear scan", attrDupSetThreshold - competingNonFillerAttrs - 1, false},
+			// Exactly at the threshold: the lowest count at which
+			// expandedLast is built.
+			{"at threshold, expandedLast built", attrDupSetThreshold - competingNonFillerAttrs, true},
+			// Comfortably past the threshold.
+			{"above threshold, expandedLast built", attrDupSetThreshold, true},
+		}
+
+		var first ErrParseError
+		for i, tc := range cases {
+			src := buildCompetingErrorStartTag(tc.fillerCount)
+			require.Equal(t, tc.wantSetPath, tc.fillerCount+competingNonFillerAttrs >= attrDupSetThreshold,
+				"%s: the case must sit on the intended side of attrDupSetThreshold", tc.name)
+
+			// The namespace check runs only after the whole start tag has
+			// been consumed, so the error is reported at the tag's "/>"
+			// terminator. Deriving the expected column from the input pins
+			// it exactly without baking in a literal that would shift every
+			// time the filler count changes.
+			term := strings.Index(src, "/>")
+			require.Positive(t, term)
+			wantColumn := term + 1
+			wantSnippet := src[:term]
+
+			_, err := NewParser().Parse(t.Context(), []byte(src))
+			require.Error(t, err, "%s: an unbound attribute prefix must be rejected", tc.name)
+
+			var pe ErrParseError
+			require.ErrorAs(t, err, &pe, "%s: the unbound-prefix error must be a helium.ErrParseError", tc.name)
+			require.Equal(t, ErrorDomainNamespace, pe.Domain,
+				"%s: an unbound prefix reached before the expanded-name duplicate must report the namespace error, not the duplicate error", tc.name)
+			require.Contains(t, err.Error(), "namespace 'q' not found",
+				"%s: the unbound prefix q, not p or r, must be the one reported", tc.name)
+			require.NotNil(t, pe.Err, "%s: the parse error must wrap its underlying cause", tc.name)
+			require.Equal(t, "namespace 'q' not found", pe.Err.Error(),
+				"%s: the wrapped cause pins the message independently of the position suffix", tc.name)
+			require.Equal(t, 1, pe.LineNumber, "%s: the whole document is a single line", tc.name)
+			require.Equal(t, wantColumn, pe.Column,
+				"%s: the error must be reported at the start tag's '/>' terminator", tc.name)
+			require.Equal(t, wantSnippet, pe.Line,
+				"%s: the reported context snippet must be the start tag up to its terminator", tc.name)
+
+			if i == 0 {
+				first = pe
+				continue
+			}
+			// The cross-threshold invariant. Only the absolute column moves
+			// between cases, and only because the filler attributes shift the
+			// terminator's byte offset, which each case already pins exactly
+			// above. Everything else must be identical to the below-threshold
+			// parse.
+			require.Equal(t, first.Domain, pe.Domain, "%s: the threshold must not change the error domain", tc.name)
+			require.Equal(t, first.Level, pe.Level, "%s: the threshold must not change the error level", tc.name)
+			require.Equal(t, first.Err.Error(), pe.Err.Error(), "%s: the threshold must not change the error message", tc.name)
+			require.Equal(t, first.LineNumber, pe.LineNumber, "%s: the threshold must not change the reported line", tc.name)
+		}
+	})
+}
+
+// TestAddAttributeDefaultAboveThreshold pins addAttributeDefault's
+// duplicate-suppression behaviour once an element type accumulates enough
+// <!ATTLIST> defaults to cross attrDupSetThreshold worth of declarations:
+// each default is applied exactly once, and a repeated declaration for an
+// already-declared attribute keeps the first declaration's value.
+func TestAddAttributeDefaultAboveThreshold(t *testing.T) {
+	t.Parallel()
+
+	n := attrDupSetThreshold + 8
+	var dtd strings.Builder
+	dtd.WriteString("<!DOCTYPE root [\n<!ELEMENT root EMPTY>\n<!ATTLIST root\n")
+	for i := range n {
+		fmt.Fprintf(&dtd, "  a%d CDATA \"v%d\"\n", i, i)
+	}
+	// A repeated declaration for a0 with a different default value: the
+	// first declaration (XML 1.0 §3.3) must win.
+	dtd.WriteString("  a0 CDATA \"ignored\">\n")
+	dtd.WriteString("]>\n<root/>")
+
+	doc, err := NewParser().DefaultDTDAttributes(true).Parse(t.Context(), []byte(dtd.String()))
+	require.NoError(t, err)
+
+	root := doc.DocumentElement()
+	require.NotNil(t, root)
+	attrs := root.Attributes()
+	require.Len(t, attrs, n, "each default must be applied exactly once")
+
+	seen := map[string]struct{}{}
+	for _, a := range attrs {
+		_, dup := seen[a.Name()]
+		require.False(t, dup, "attribute %q applied more than once", a.Name())
+		seen[a.Name()] = struct{}{}
+	}
+
+	a0, ok := findAttribute(attrs, "a0")
+	require.True(t, ok, "a0 must be present")
+	require.Equal(t, "v0", a0.Value(), "the first <!ATTLIST> declaration for a repeated attribute must win")
+}
+
+func findAttribute(attrs []*Attribute, name string) (*Attribute, bool) {
+	for _, a := range attrs {
+		if a.Name() == name {
+			return a, true
+		}
+	}
+	return nil, false
+}
+
+// nsDeclTag builds a start tag carrying n distinct xmlns:pN declarations
+// and, if dup, one more xmlns:p0 repeating the first prefix — a same-element
+// duplicate that must be rejected regardless of parseNsClean.
+func nsDeclTag(n int, dup bool) string {
+	var b strings.Builder
+	b.WriteString("<root")
+	for i := range n {
+		fmt.Fprintf(&b, ` xmlns:p%d="urn:x%d"`, i, i)
+	}
+	if dup {
+		b.WriteString(` xmlns:p0="urn:dup"`)
+	}
+	b.WriteString("/>")
+	return b.String()
+}
+
+// TestNamespaceDeclarationDuplicateAboveThreshold pins the same-element
+// namespace-declaration duplicate check (nsDeclared) once a tag's
+// declaration count crosses attrDupSetThreshold, where the check switches
+// from a linear nsDeclared scan to a map-backed set. CleanNamespaces(true)
+// (parseNsClean) only suppresses a redundant ANCESTOR redeclaration; it must
+// not affect a same-element duplicate either way.
+func TestNamespaceDeclarationDuplicateAboveThreshold(t *testing.T) {
+	t.Parallel()
+
+	n := attrDupSetThreshold + 8
+
+	t.Run("distinct declarations accepted", func(t *testing.T) {
+		t.Parallel()
+
+		doc, err := NewParser().Parse(t.Context(), []byte(nsDeclTag(n, false)))
+		require.NoError(t, err, "n>threshold distinct xmlns declarations must be accepted")
+		root := doc.DocumentElement()
+		require.NotNil(t, root)
+	})
+
+	t.Run("duplicate rejected", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := NewParser().Parse(t.Context(), []byte(nsDeclTag(n, true)))
+		require.Error(t, err, "a same-element duplicate xmlns declaration past the threshold must be rejected")
+		require.Contains(t, err.Error(), "duplicate attribute is not allowed")
+	})
+
+	t.Run("duplicate rejected with CleanNamespaces", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := NewParser().CleanNamespaces(true).Parse(t.Context(), []byte(nsDeclTag(n, true)))
+		require.Error(t, err, "CleanNamespaces must not suppress a same-element duplicate xmlns declaration past the threshold")
+		require.Contains(t, err.Error(), "duplicate attribute is not allowed")
+	})
+}
+
+// newAttributeDefaultCtx builds a parserCtx that is ready to record <!ATTLIST>
+// defaults: init() seeds the lookup tables and doc supplies the owner for the
+// Attribute nodes addAttributeDefault creates.
+func newAttributeDefaultCtx(t *testing.T) *parserCtx {
+	t.Helper()
+
+	pctx := &parserCtx{}
+	require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+	pctx.doc = NewDocument("1.0", "", StandaloneImplicitNo)
+	return pctx
+}
+
+// parserCtx.attsDefaultSeen is allocated lazily, so inheritNestedParserState
+// must MATERIALIZE it before handing it to a nested sub-parse. Plain assignment
+// would copy a nil map whenever the parent has not recorded a default yet; the
+// sub-parse would then allocate a second set of its own and stop seeing the
+// parent's declarations, while both contexts keep appending into the SHARED
+// attsDefault. A repeated <!ATTLIST> default crossing the entity boundary would
+// be applied twice, contradicting XML 1.0 3.3 ("the first declaration is
+// binding").
+func TestInheritNestedAttributeDefaultDedup(t *testing.T) {
+	t.Parallel()
+
+	// A parse that has not yet seen any <!ATTLIST> default holds no set at all.
+	// This is the state the lazy allocation makes reachable, and the one a plain
+	// copy at the inherit seam would silently break.
+	t.Run("parent with no defaults yet still shares one set", func(t *testing.T) {
+		t.Parallel()
+
+		pctx := newAttributeDefaultCtx(t)
+		require.Nil(t, pctx.attsDefaultSeen,
+			"a parse with no <!ATTLIST> default must not allocate the dedup set")
+
+		newctx := newAttributeDefaultCtx(t)
+		newctx.doc = pctx.doc
+		pctx.inheritNestedParserState(newctx)
+
+		require.NotNil(t, pctx.attsDefaultSeen,
+			"the inherit seam must materialize the parent's set before sharing it")
+		require.True(t, sameSpecialAttrSet(pctx.attsDefaultSeen, newctx.attsDefaultSeen),
+			"parent and nested context must hold the SAME dedup set")
+
+		// The nested sub-parse records first; the parent must then see it.
+		newctx.addAttributeDefault("elem", "a", "nested")
+		pctx.addAttributeDefault("elem", "a", "parent")
+
+		require.Len(t, pctx.attsDefault["elem"], 1,
+			"the parent must reject a default the nested sub-parse already recorded")
+		require.Equal(t, "nested", pctx.attsDefault["elem"][0].Value(),
+			"the first declaration is binding")
+	})
+
+	// The reverse direction: a default recorded before the sub-parse starts must
+	// still be visible inside it.
+	t.Run("nested context sees a default the parent recorded", func(t *testing.T) {
+		t.Parallel()
+
+		pctx := newAttributeDefaultCtx(t)
+		pctx.addAttributeDefault("elem", "a", "parent")
+		require.Len(t, pctx.attsDefault["elem"], 1)
+
+		newctx := newAttributeDefaultCtx(t)
+		newctx.doc = pctx.doc
+		pctx.inheritNestedParserState(newctx)
+
+		require.True(t, sameSpecialAttrSet(pctx.attsDefaultSeen, newctx.attsDefaultSeen),
+			"parent and nested context must hold the SAME dedup set")
+
+		newctx.addAttributeDefault("elem", "a", "nested")
+
+		require.Len(t, pctx.attsDefault["elem"], 1,
+			"the nested sub-parse must reject a default the parent already recorded")
+		require.Equal(t, "parent", pctx.attsDefault["elem"][0].Value(),
+			"the first declaration is binding")
+	})
+}
+
+// sameSpecialAttrSet reports whether two maps are the same map value, which is
+// what "shared" means here — equal contents would not prove the sharing.
+func sameSpecialAttrSet(a, b map[specialAttrKey]struct{}) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	probe := specialAttrKey{elem: "\x00sharing-probe", attr: "\x00sharing-probe"}
+	a[probe] = struct{}{}
+	_, ok := b[probe]
+	delete(a, probe)
+	return ok
 }
