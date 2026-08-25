@@ -107,6 +107,24 @@ type Document struct {
 	// would let a later parse overwrite the live node. Set by the tree-insertion
 	// paths (node.go noteCrossDocumentEscape).
 	slabEscaped bool
+
+	// rawLinkWrites records that at least one link pointer in a tree this
+	// document owns was written by hand, outside the guarded child-list splice —
+	// by the exported UnsafeSetParent / UnsafeSetPrevSibling /
+	// UnsafeSetNextSibling setters, the only writes in this package that can
+	// leave an ELEMENT claiming a parent it is not a child of, or forge a sibling
+	// edge no guarded path would build. (A DOCUMENT can be claimed that way
+	// without a raw write, by the DTD that CreateInternalSubset and CopyExtSubset
+	// attach to it, which is why tailJumpTarget declines a *Document parent
+	// outright rather than relying on this flag for one.)
+	//
+	// While it is false, every link in this document was built by the guarded
+	// paths, so lastChild is the final node of the chain that starts at
+	// firstChild and addSibling may resolve its append point from that record in
+	// O(1). Once true it stays true, and addSibling falls back to its sibling
+	// walk for this document, which is what every other tree operation does
+	// unconditionally. Set by node.go noteRawLinkWrite; read by tailJumpTarget.
+	rawLinkWrites bool
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",
