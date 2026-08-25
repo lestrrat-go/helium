@@ -498,6 +498,14 @@ type validationContext struct {
 	// source metadata.
 	allowXSD10LegacyGMonthInstance bool
 	idcDocOrder                    *ixpath.DocOrderCache
+	// idcGathered memoizes collectSubtreeKeyTable's per-occurrence key/unique
+	// evaluations, keyed by the descendant ELEMENT OCCURRENCE (not declaration),
+	// since two occurrences of the same key/unique declaration hold different
+	// values. It is per-run (created fresh by newValidationContext, dropped when
+	// Validate returns) and never invalidated during the run, matching the
+	// document-must-not-mutate assumption idcDocOrder/actualElemType/
+	// assessedElemType/skipContentNodes already make. See gatherIDCTable.
+	idcGathered map[idcOccurrenceKey]*idcTable
 	// edcType is the complex type whose content model is currently being matched.
 	// It is set (and restored) by validateContentByType, so the wildcard
 	// Element-Declarations-Consistent check (validateWildcardElementConsistent) can
