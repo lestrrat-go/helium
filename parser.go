@@ -1190,7 +1190,7 @@ found:
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
 				e.(MutableNode).SetTreeDoc(doc) //nolint:forcetypeassert
-				e.baseDocNode().parent = nil
+				clearParent(e)
 			}
 			return grandchild, nil
 		}

@@ -123,7 +123,7 @@ func appendCopiedChild(parent MutableNode, child Node) error {
 	if last == nil {
 		pdn.firstChild = child
 		pdn.lastChild = child
-		cdn.parent = parent
+		setParent(child, parent)
 		return nil
 	}
 
@@ -137,7 +137,7 @@ func appendCopiedChild(parent MutableNode, child Node) error {
 	if ldn.next == nil && (curType != TextNode || ldn.etype != TextNode) {
 		ldn.next = child
 		cdn.prev = last
-		cdn.parent = parent
+		setParent(child, parent)
 		pdn.lastChild = child
 		return nil
 	}

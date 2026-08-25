@@ -46,7 +46,7 @@ func NewNamespaceNodeWrapper(ns *Namespace, owner Node) *NamespaceNodeWrapper {
 	n := &NamespaceNodeWrapper{ns: ns}
 	n.etype = NamespaceNode
 	n.name = ns.Prefix()
-	n.parent = owner
+	setParent(n, owner)
 	return n
 }
 

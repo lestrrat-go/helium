@@ -71,7 +71,7 @@ func (n *Element) SetAttribute(name, value string) error {
 	t.doc = n.doc
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
-	t.parent = attr
+	setParent(t, attr)
 	n.addProperty(attr)
 	return nil
 }
@@ -133,7 +133,7 @@ func (n *Element) addProperty(attr *Attribute) {
 	p := n.properties
 	if p == nil {
 		n.properties = attr
-		attr.parent = n
+		setParent(attr, n)
 		return
 	}
 
@@ -149,7 +149,7 @@ func (n *Element) addProperty(attr *Attribute) {
 			pdn := p.baseDocNode()
 			attr.prev = pdn.prev
 			attr.next = pdn.next
-			attr.parent = n
+			setParent(attr, n)
 			if prev := pdn.prev; prev != nil {
 				prev.baseDocNode().next = attr
 			}
@@ -160,7 +160,7 @@ func (n *Element) addProperty(attr *Attribute) {
 				n.properties = attr
 			}
 			// Detach old attribute
-			pdn.parent = nil
+			clearParent(p)
 			pdn.prev = nil
 			pdn.next = nil
 			return
@@ -171,7 +171,7 @@ func (n *Element) addProperty(attr *Attribute) {
 
 	last.next = attr
 	attr.prev = last
-	attr.parent = n
+	setParent(attr, n)
 }
 
 // SetAttributeNS creates or replaces the attribute with the given local name
@@ -192,7 +192,7 @@ func (n *Element) SetAttributeNS(localname, value string, ns *Namespace) error {
 	t.doc = n.doc
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
-	t.parent = attr
+	setParent(t, attr)
 	n.addProperty(attr)
 	return nil
 }
@@ -351,7 +351,7 @@ func (n *Element) spliceOutAttribute(p *Attribute) {
 	if n.properties == p {
 		n.properties = p.NextAttribute()
 	}
-	pdn.parent = nil
+	clearParent(p)
 	pdn.prev = nil
 	pdn.next = nil
 }

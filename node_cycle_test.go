@@ -17,9 +17,9 @@ func newCycleTestDocument() *helium.Document {
 // AddChild, exercising the same insertion pattern that made wouldCreateCycle's
 // ancestor walk quadratic, and asserts the resulting chain's shape rather than
 // its timing: every AddChild in the chain must still succeed and land in the
-// correct position. Elements carry two attributes each so the properties-chain
-// fast path (propertiesReach) is exercised on every insertion, not just the
-// zero-attribute case.
+// correct position. Elements carry two attributes each, so each operand IS
+// claimed when it is inserted and the guard settles it through the claim search
+// rather than the bare claim-count exit the attribute-free case takes.
 func TestAddChildDeepChainGrowth(t *testing.T) {
 	const depth = 4000
 
@@ -60,12 +60,11 @@ func TestAddChildDeepChainGrowth(t *testing.T) {
 
 // TestUnsafeSetParentClaimantIsRejected pins that the insertion cycle guard
 // rejects a parent-pointer loop whichever way the claimant was written. The
-// guard resolves a childless operand from that operand's own claimant sources —
-// its child list, an Element's attributes, a Document's DTD subsets — instead of
-// walking parent pointers, and a link written by UnsafeSetParent appears in none
-// of them, so UnsafeSetParent raises the flag that puts the guard back on its
-// unconditional ancestor walk. Both shapes must therefore fail with
-// ErrCyclicNode and leave the tree unlinked.
+// guard settles a childless operand from the number of nodes naming it as their
+// parent, and UnsafeSetParent maintains that count exactly as the safe paths do,
+// so a link it wrote into no slot at all still keeps the guard on its ancestor
+// walk. Both shapes must therefore fail with ErrCyclicNode and leave the tree
+// unlinked.
 func TestUnsafeSetParentClaimantIsRejected(t *testing.T) {
 	t.Run("UnsafeSetParent link is rejected", func(t *testing.T) {
 		doc := newCycleTestDocument()
@@ -74,8 +73,9 @@ func TestUnsafeSetParentClaimantIsRejected(t *testing.T) {
 		cur, err := doc.CreateElement("cur")
 		require.NoError(t, err)
 
-		// cur becomes parent's parent without being linked as anyone's parent
-		// in a child list, the one claimant shape the fast exit cannot see.
+		// cur becomes parent's parent without being linked into any slot: no
+		// child list, no properties chain, no DTD subset. Only the claim count
+		// records it.
 		helium.UnsafeSetParent(parent, cur)
 
 		err = parent.AddChild(cur)

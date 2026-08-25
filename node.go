@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sync/atomic"
 )
 
 // AsNode performs a safe type assertion on a [Node], returning the
@@ -78,16 +77,62 @@ type MutableNode interface {
 
 // docnode is responsible for handling the basic tree-ish operations
 type docnode struct {
-	name          string
-	etype         ElementType
-	firstChild    Node
-	lastChild     Node
-	parent        Node
+	name       string
+	etype      ElementType
+	firstChild Node
+	lastChild  Node
+	// parent is the node's parent pointer. [setParent] and [clearParent] are its
+	// ONLY writers, in production code and in tests alike: every write must be
+	// paired with the reciprocal claims bookkeeping below, and a direct
+	// assignment silently breaks it. TestNoDirectParentAssignment (lint_test.go)
+	// pins that no other write exists.
+	parent Node
+	// claims counts the nodes whose parent pointer names THIS node — its
+	// claimants. It is indifferent to which slot, if any, holds the reciprocal
+	// link: a child-list entry, an [Element] properties entry, a
+	// [Document] intSubset/extSubset, a namespace-axis wrapper and a raw
+	// [UnsafeSetParent] write all count the same. [wouldCreateCycle] reads it as
+	// the exact answer to "can the ancestor walk possibly land on this node",
+	// since a walk step arrives at a node only through one of its claimants.
+	claims int32
+	// line is the 1-based source line, narrowed to int32 so it shares one
+	// 8-byte slot with claims and the claim counter costs no extra bytes per
+	// node. Line/SetLine keep the int-valued API; a source line beyond
+	// 2,147,483,647 is not representable, matching libxml2's own int line
+	// numbers.
+	line          int32
 	next          Node
 	prev          Node
 	doc           *Document
-	line          int
 	entityBaseURI string // non-empty when this node originates from an external parsed entity
+}
+
+// setParent points child's parent pointer at parent and keeps the reciprocal
+// claim counts correct: the node child named before (if any) loses a claimant
+// and parent gains one. It is the SOLE writer of docnode.parent — every
+// insertion, splice, unlink, copy, parser fixup and [UnsafeSetParent] routes
+// through it — so docnode.claims is exact by construction rather than
+// re-derived at read time from whichever slots happen to hold a link.
+//
+// It writes NOTHING else: no child-list link, no sibling pointer, no cycle
+// check. Callers own the slot bookkeeping exactly as they did when they
+// assigned the field directly.
+func setParent(child Node, parent Node) {
+	cdn := child.baseDocNode()
+	if old := cdn.parent; old != nil {
+		old.baseDocNode().claims--
+	}
+	cdn.parent = parent
+	if parent != nil {
+		parent.baseDocNode().claims++
+	}
+}
+
+// clearParent detaches child's parent pointer, dropping the claim it held on
+// its former parent. It is setParent with a nil parent, named separately
+// because the callers that orphan a node read better without a bare nil.
+func clearParent(child Node) {
+	setParent(child, nil)
 }
 
 // node represents a node in a XML tree.
@@ -104,7 +149,7 @@ type node struct {
 	// ForEachAttribute) therefore traverse it with a plain NextAttribute loop and
 	// no per-list cycle guard. Walks that may be handed an externally-corrupted
 	// chain do carry a cheap per-list guard: setTreeDoc and the serializer use a
-	// seen set, and the insertion cycle guard's propertiesReach uses
+	// seen set, and the insertion cycle guard's claimsReach uses
 	// siblingCycleGuard.
 	properties *Attribute
 	ns         *Namespace
@@ -429,11 +474,11 @@ func (n docnode) Type() ElementType {
 }
 
 func (n docnode) Line() int {
-	return n.line
+	return int(n.line)
 }
 
 func (n *docnode) SetLine(line int) {
-	n.line = line
+	n.line = int32(line)
 }
 
 func (n docnode) FirstChild() Node {
@@ -461,35 +506,24 @@ func (n docnode) LastChild() Node {
 // leaves and skips that second descent entirely.
 //
 // The ancestor walk itself only matters when SOMETHING claims cur as its
-// parent — otherwise no node on parent's chain can possibly be cur. A node
-// with an empty child list (cdn.firstChild == nil) cannot be found by walking
-// parent pointers up through a child list, so its only remaining claimants are
-// the attributes an Element keeps outside its child list, in properties, and
-// the DTD subsets a Document keeps outside its child list, in intSubset /
-// extSubset (CopyExtSubset sets a DTD's parent without linking it as a child).
-// Every other write of a node's parent field through the SAFE mutation API —
-// AddChild, AddSibling, Replace, SetDocumentElement — links that node into SOME
-// child list, so a future writer of a parent-without-child link in that API must
-// extend this fast exit's claimant sources to stay sound. When cur is a
-// childless *Element the ancestor walk is skipped in favor of propertiesReach,
-// bounded by cur's own attribute count instead of tree depth — the common case
-// of an element carrying attributes would otherwise stay on the
-// depth-proportional walk. When cur is a childless *Document with no subset it
-// has no claimant at all. Any other childless cur (Text, Comment, a childless
-// Attribute not reached through an Element, ...) has no claimant either.
+// parent. Each step of the walk moves from a node to that node's parent, so the
+// walk lands on cur only by arriving from a node whose parent pointer names
+// cur — a CLAIMANT of cur. docnode.claims counts those exactly, because
+// setParent is the sole writer of docnode.parent, so claims == 0 settles the
+// walk in one field load. That is the whole answer for a freshly built operand,
+// which is the shape a chain-building insertion loop hands this function over
+// and over. The count is indifferent to which slot holds the reciprocal link,
+// so a child-list entry, an Element attribute, a Document DTD subset, a
+// namespace-axis wrapper and a raw UnsafeSetParent write all keep the guard on
+// the walk without any of them being enumerated here.
 //
-// The two writes OUTSIDE that API set a parent with no child link, and the fast
-// exit answers them by REFUSING TO RUN rather than by enumerating them.
-// [UnsafeSetParent] writes any parent pointer the caller asks for, and raises
-// unsafeParentWrites the first time it names a non-nil parent; while that flag
-// is raised every insertion takes the unconditional ancestor walk, so a claimant
-// written behind the API's back is rejected exactly as it was before this fast
-// exit existed. [NewNamespaceNodeWrapper] points a namespace-axis wrapper at its
-// owning element, which needs no flag of its own: a wrapper is not a MutableNode
-// and no safe path writes a parent pointer AT one, so a wrapper can only sit on
-// an ancestor chain once UnsafeSetParent has put something under it, which
-// raises the flag first. The guard therefore rejects every cycle the public API
-// can build, corrupt trees included.
+// With claims > 0 the walk is still avoidable when the claim graph BELOW cur —
+// cur's claimants, their claimants, and so on — can be enumerated in full and
+// searched for parent, which claimsReach does under a small budget. That
+// searches an operand's own attribute pocket instead of the insertion point's
+// depth, and it hands the question back whenever it cannot prove it saw every
+// claim link. Both routes return exactly what the ancestor walk would have
+// returned; they only choose a cheaper way to reach it.
 func wouldCreateCycle(parent, cur Node) bool {
 	if parent == nil {
 		return false
@@ -499,16 +533,14 @@ func wouldCreateCycle(parent, cur Node) bool {
 	if pdn == cdn {
 		return true
 	}
-	if cdn.firstChild == nil && !unsafeParentWrites.Load() {
-		switch c := cur.(type) {
-		case *Element:
-			return propertiesReach(c, pdn)
-		case *Document:
-			if c.intSubset == nil && c.extSubset == nil {
-				return false
-			}
-		default:
+	// A cur WITH children must reach the childReaches descent below, so the
+	// short-circuits are confined to the childless operand.
+	if cdn.firstChild == nil {
+		if cdn.claims == 0 {
 			return false
+		}
+		if found, exact := claimsReach(cur, pdn); exact {
+			return found
 		}
 	}
 	for anc := parent; anc != nil; anc = anc.baseDocNode().parent {
@@ -522,36 +554,94 @@ func wouldCreateCycle(parent, cur Node) bool {
 	return childReaches(cur, pdn)
 }
 
-// propertiesReach reports whether target is one of elem's attributes, or lies
-// inside one of their value subtrees (e.g. an entity reference inside an
-// attribute value). It is wouldCreateCycle's substitute for the ancestor walk
-// when cur is a childless *Element: such an element has no child-list
-// claimant, so its only remaining claimants are its own attributes, and
-// searching them is bounded by cur's attribute count rather than tree depth.
+// claimReachBudget bounds how many links claimsReach inspects before handing
+// the question back to the ancestor walk. The search exists for the ordinary
+// childless operand — an element carrying a handful of attributes, each with a
+// short value subtree — so a small budget covers every real shape while keeping
+// a hand-built pathological pocket from costing more than the walk it replaces.
+const claimReachBudget = 64
+
+// claimsReach searches the claim graph below cur for target: the nodes whose
+// parent pointer names cur, then the nodes whose parent pointer names one of
+// those, and so on. Finding target there means cur sits on target's ancestor
+// chain, which is precisely the question wouldCreateCycle's ancestor walk asks,
+// answered from the operand's side instead of the insertion point's.
 //
-// The properties chain is a sibling list, and [UnsafeSetNextSibling] can knot
-// one into a loop, so this walk is bounded by [siblingCycleGuard] — the same
+// It reports exact == true only when it can prove it followed EVERY claim link
+// on the way. docnode.claims counts a node's claimants exactly, but only a
+// claimant that ALSO occupies a slot the node owns can be enumerated: an owned
+// child-list entry (one whose own parent pointer names the owner) or an entry
+// in an *Element's properties chain. A node whose enumerated claimant count
+// differs from its claims therefore holds a claim link this search cannot
+// follow — an UnsafeSetParent write, a namespace-axis wrapper, a properties
+// chain UnsafeSetNextSibling truncated or knotted, a Document DTD subset kept
+// outside the child list — and the search reports exact == false, as it does on
+// running out of budget. A caller that gets exact == false must fall back to
+// the ancestor walk, which needs no such enumeration.
+//
+// Both sibling enumerations are bounded by [siblingCycleGuard], the same
 // allocation-free Brent's-algorithm guard childReaches and the traversal
-// iterators use. A guard belongs HERE, unlike on the hot attribute-lookup
-// walks: those run on a chain their own callers just built, while this one runs
-// on whatever chain an insertion operand arrives carrying. Brent stops within a
-// small multiple of the cycle length, so every distinct attribute is still
-// searched before a corrupt chain terminates the walk.
-func propertiesReach(elem *Element, target *docnode) bool {
-	var g siblingCycleGuard
-	for attr := elem.properties; attr != nil; attr = attr.NextAttribute() {
-		attrDN := attr.baseDocNode()
-		if g.step(attrDN) {
-			return false
+// iterators use, so a chain knotted into a loop stops the search instead of
+// hanging the insertion.
+func claimsReach(cur Node, target *docnode) (found, exact bool) {
+	budget := claimReachBudget
+	// The pending-node stack is backed by an inline array so an ordinary
+	// operand — an element with a few attributes, each with a short value
+	// subtree — searches without allocating. A wider pocket grows onto the heap
+	// as usual, under the same budget.
+	var backing [8]Node
+	stack := append(backing[:0], cur)
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		dn := n.baseDocNode()
+
+		var seen int32
+		if elem, ok := n.(*Element); ok {
+			var g siblingCycleGuard
+			for attr := elem.properties; attr != nil; attr = attr.NextAttribute() {
+				attrDN := attr.baseDocNode()
+				if g.step(attrDN) || budget <= 0 {
+					return false, false
+				}
+				budget--
+				if attrDN.parent == nil || attrDN.parent.baseDocNode() != dn {
+					continue
+				}
+				if attrDN == target {
+					return true, true
+				}
+				seen++
+				stack = append(stack, attr)
+			}
 		}
-		if attrDN == target {
-			return true
+
+		var g siblingCycleGuard
+		for child := dn.firstChild; child != nil; {
+			cdn := child.baseDocNode()
+			if g.step(cdn) || budget <= 0 {
+				return false, false
+			}
+			budget--
+			// An unowned child is not a claimant, and its next pointer belongs to
+			// another list, so the enumeration of THIS list ends here — short of
+			// dn.claims unless every remaining claimant was already seen.
+			if cdn.parent == nil || cdn.parent.baseDocNode() != dn {
+				break
+			}
+			if cdn == target {
+				return true, true
+			}
+			seen++
+			stack = append(stack, child)
+			child = cdn.next
 		}
-		if attrDN.firstChild != nil && childReaches(attr, target) {
-			return true
+
+		if seen != dn.claims {
+			return false, false
 		}
 	}
-	return false
+	return false, true
 }
 
 // childReachesInlineCap is the number of popped nodes childReachesVisited
@@ -813,7 +903,7 @@ func addChild(n MutableNode, cur Node) error {
 	if l == nil {
 		pdn.firstChild = cur
 		pdn.lastChild = cur
-		cdn.parent = n
+		setParent(cur, n)
 		return nil
 	}
 
@@ -824,7 +914,7 @@ func addChild(n MutableNode, cur Node) error {
 	if ldn.next == nil && (curType != TextNode || ldn.etype != TextNode) {
 		ldn.next = cur
 		cdn.prev = l
-		cdn.parent = n
+		setParent(cur, n)
 		pdn.lastChild = cur
 		return nil
 	}
@@ -929,7 +1019,7 @@ func addSibling(n MutableNode, cur Node) error {
 			idn := iter.baseDocNode()
 			idn.next = cur
 			cdn.prev = iter
-			cdn.parent = ownerElem
+			setParent(cur, ownerElem)
 			return nil
 		}
 	}
@@ -945,7 +1035,7 @@ func addSibling(n MutableNode, cur Node) error {
 			idn.next = cur
 			cdn.prev = iter
 			parent := iter.Parent()
-			cdn.parent = parent
+			setParent(cur, parent)
 			if parent != nil {
 				parent.baseDocNode().lastChild = cur
 			}
@@ -964,35 +1054,15 @@ func addSibling(n MutableNode, cur Node) error {
 // tests that must build a deliberately corrupt tree to exercise the traversal
 // cycle guards. Ordinary code MUST use AddChild/AddSibling/UnlinkNode instead.
 //
-// A parent pointer written here gains a claimant the insertion cycle guard's
-// childless-operand fast exit cannot see, because that exit resolves an operand
-// from the operand's OWN claimant sources — its child list, an Element's
-// attributes, a Document's DTD subsets — and this write links the node into none
-// of them. Naming a non-nil parent therefore raises unsafeParentWrites, which
-// puts wouldCreateCycle back on its unconditional ancestor walk for the rest of
-// the process: an insertion closing a loop through a link written here is
-// rejected with ErrCyclicNode exactly as it is on a tree built through the safe
-// API. The flag is one-way and never cleared, so the guard stays conservative
-// once a parent pointer has been written behind the API's back; it costs a
-// relaxed load per insertion and stays lowered in a program that never calls
-// this function. Clearing a parent pointer (a nil parent) removes a claimant
-// instead of adding one and leaves the flag alone.
+// The one piece of bookkeeping it does keep is the claim count the insertion
+// cycle guard reads: the write goes through setParent, so parent gains a
+// claimant here exactly as it does on the safe paths, and an insertion closing
+// a loop through a pointer written here is rejected with ErrCyclicNode just as
+// the same shape built through the safe API is. Clearing a parent pointer
+// (a nil parent) drops the claim again.
 func UnsafeSetParent(n Node, parent Node) {
-	n.baseDocNode().parent = parent
-	if parent != nil {
-		unsafeParentWrites.Store(true)
-	}
+	setParent(n, parent)
 }
-
-// unsafeParentWrites reports whether [UnsafeSetParent] has written a non-nil
-// parent pointer in this process. It is the one-way switch that keeps
-// wouldCreateCycle's childless-operand fast exit sound: the exit assumes every
-// parent pointer was written alongside a child link, which holds for the whole
-// safe mutation API and fails only for a pointer written through
-// UnsafeSetParent, so the exit is disabled from that write onward. It is never
-// lowered again — a node claimed unsafely can be handed to an insertion at any
-// later point, and nothing tracks when such a claim goes away.
-var unsafeParentWrites atomic.Bool
 
 // UnsafeSetPrevSibling sets ONLY n's previous-sibling pointer, with the same
 // no-safeguards contract as UnsafeSetParent.
@@ -1063,7 +1133,7 @@ func unlinkNode(n Node) {
 		next.baseDocNode().prev = ndn.prev
 	}
 
-	ndn.parent = nil
+	clearParent(n)
 	ndn.prev = nil
 	ndn.next = nil
 }
@@ -1193,7 +1263,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 				pdn.lastChild = cur
 			}
 		}
-		cdn.parent = parent
+		setParent(cur, parent)
 	}
 
 	// Determine the true last replacement node. Operate on baseDocNode() links
@@ -1205,7 +1275,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	for i := 1; i < len(nodes); i++ {
 		c := nodes[i]
 		cn := c.baseDocNode()
-		cn.parent = ldn.parent
+		setParent(c, ldn.parent)
 		cn.prev = last
 		ldn.next = c
 		last = c
@@ -1240,7 +1310,7 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		}
 	}
 	if !replacedIsInserted {
-		ndn.parent = nil
+		clearParent(n)
 		ndn.prev = nil
 		ndn.next = nil
 	}

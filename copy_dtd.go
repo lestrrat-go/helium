@@ -60,7 +60,7 @@ func CopyExtSubset(src, dst *Document) {
 	dstDTD.externalID = srcDTD.externalID
 	dstDTD.systemID = srcDTD.systemID
 	dstDTD.doc = dst
-	dstDTD.parent = dst
+	setParent(dstDTD, dst)
 
 	_ = copyDTDChildren(srcDTD, dstDTD, dst)
 

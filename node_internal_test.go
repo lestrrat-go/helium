@@ -675,7 +675,7 @@ func TestNodeLinkAccessorsMatchFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dn := tc.node.baseDocNode()
 			dn.firstChild = first
-			dn.parent = up
+			setParent(tc.node, up)
 			dn.next = after
 
 			require.Equal(t, Node(first), tc.node.FirstChild(),

@@ -123,7 +123,7 @@ func (pctx *parserCtx) parseReference(ctx context.Context) error {
 				ndn := n.baseDocNode()
 				ndn.next = nil
 				ndn.prev = nil
-				ndn.parent = nil
+				clearParent(n)
 				n.(MutableNode).SetTreeDoc(pctx.doc) //nolint:forcetypeassert
 				_ = ent.AddChild(n)
 				n = next

@@ -31,7 +31,7 @@ func appendFastChild(parent MutableNode, child Node) error {
 	if last == nil {
 		pdn.firstChild = child
 		pdn.lastChild = child
-		cdn.parent = parent
+		setParent(child, parent)
 		return nil
 	}
 
@@ -39,7 +39,7 @@ func appendFastChild(parent MutableNode, child Node) error {
 	if ldn.next == nil {
 		ldn.next = child
 		cdn.prev = last
-		cdn.parent = parent
+		setParent(child, parent)
 		pdn.lastChild = child
 		return nil
 	}
@@ -190,7 +190,7 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 			lastAttr.next = created
 			created.prev = lastAttr
 		}
-		created.parent = e
+		setParent(created, e)
 		lastAttr = created
 
 		if needsAttrDeclLookup {

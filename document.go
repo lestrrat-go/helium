@@ -453,7 +453,7 @@ func (d *Document) CreateAttribute(name, value string, ns *Namespace) (attr *Att
 
 		setFirstChild(attr, n)
 		for n != nil {
-			n.baseDocNode().parent = attr
+			setParent(n, attr)
 			x := n.NextSibling()
 			if x == nil {
 				setLastChild(attr, n)
@@ -527,7 +527,7 @@ func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *At
 	t := d.CreateText([]byte(value))
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
-	t.parent = attr
+	setParent(t, attr)
 	return attr
 }
 
@@ -582,7 +582,7 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 	}
 
 	d.intSubset = cur
-	cur.parent = d
+	setParent(cur, d)
 	cur.doc = d
 
 	// Insert before the root element (matching libxml2's xmlCreateIntSubset).
@@ -1056,7 +1056,7 @@ func (d *Document) stringToNodeList(value string) (ret Node, err error) {
 					}
 					setFirstChild(ent, refchildren)
 					for n := refchildren; n != nil; {
-						n.baseDocNode().parent = ent
+						setParent(n, ent)
 						if x := n.NextSibling(); x != nil {
 							n = x
 						} else {

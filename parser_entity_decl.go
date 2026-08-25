@@ -1041,7 +1041,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
 				e.(MutableNode).SetTreeDoc(pctx.doc) //nolint:forcetypeassert
-				e.baseDocNode().parent = nil
+				clearParent(e)
 				if uri != "" {
 					e.baseDocNode().entityBaseURI = uri
 					if !pctx.options.IsSet(parseNoBaseFix) {
@@ -1161,7 +1161,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 		if grandchild := child.FirstChild(); grandchild != nil {
 			for e := grandchild; e != nil; e = e.NextSibling() {
 				e.(MutableNode).SetTreeDoc(pctx.doc) //nolint:forcetypeassert
-				e.baseDocNode().parent = nil
+				clearParent(e)
 			}
 			return grandchild, nil
 		}
