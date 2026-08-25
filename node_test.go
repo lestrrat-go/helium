@@ -660,10 +660,14 @@ func TestCycleGuards(t *testing.T) {
 // range instead of truncating, which would report a number of the opposite sign
 // to the one that was set.
 func TestSetLineBoundary(t *testing.T) {
+	// set/want are int64 so the out-of-int32 rows are representable in the
+	// table on a 32-bit build too, where an int-typed field would overflow at
+	// compile time and break the whole package's test build. A row outside the
+	// platform's int range is skipped inside the subtest instead.
 	for _, tc := range []struct {
 		name string
-		set  int
-		want int
+		set  int64
+		want int64
 	}{
 		{name: "zero", set: 0, want: 0},
 		{name: "ordinary", set: 42, want: 42},
@@ -675,18 +679,15 @@ func TestSetLineBoundary(t *testing.T) {
 		{name: "min int", set: math.MinInt, want: math.MinInt32},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.set > math.MaxInt32 && math.MaxInt == math.MaxInt32 {
-				t.Skip("int is 32 bits on this platform, so the value is not representable in the API either")
-			}
-			if tc.set < math.MinInt32 && math.MinInt == math.MinInt32 {
+			if tc.set > int64(math.MaxInt) || tc.set < int64(math.MinInt) {
 				t.Skip("int is 32 bits on this platform, so the value is not representable in the API either")
 			}
 			doc := helium.NewDefaultDocument()
 			e, err := doc.CreateElement("e")
 			require.NoError(t, err)
 
-			e.SetLine(tc.set)
-			require.Equal(t, tc.want, e.Line())
+			e.SetLine(int(tc.set))
+			require.Equal(t, tc.want, int64(e.Line()))
 		})
 	}
 }
