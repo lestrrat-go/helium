@@ -149,9 +149,36 @@ func (ec *execContext) findBestTemplate(ctx context.Context, node helium.Node, m
 }
 
 // findFirstMatch returns the first template in the list that matches the node.
+//
+// Every probe in this scan targets the SAME node, so the node-scoped
+// execContext fields that matchPattern would otherwise save and restore on
+// every call (contextNode, currentNode, contextItem, inPatternMatch,
+// regexGroups) are set once here instead, and each template is tested via
+// matchPatternProbe, which only handles the fields that vary per pattern.
 func (ec *execContext) findFirstMatch(ctx context.Context, templates []*template, node helium.Node) *template {
+	if len(templates) == 0 {
+		return nil
+	}
+	savedGroups := ec.regexGroups
+	savedContext := ec.contextNode
+	savedCurrent := ec.currentNode
+	savedItem := ec.contextItem
+	savedInPattern := ec.inPatternMatch
+	ec.regexGroups = nil
+	ec.contextNode = node
+	ec.currentNode = node
+	ec.contextItem = nil
+	ec.inPatternMatch = true
+	defer func() {
+		ec.regexGroups = savedGroups
+		ec.contextNode = savedContext
+		ec.currentNode = savedCurrent
+		ec.contextItem = savedItem
+		ec.inPatternMatch = savedInPattern
+	}()
+
 	for _, tmpl := range templates {
-		if tmpl.Match != nil && tmpl.Match.matchPattern(ctx, ec, node) {
+		if tmpl.Match != nil && tmpl.Match.matchPatternProbe(ctx, ec, node) {
 			return tmpl
 		}
 	}
