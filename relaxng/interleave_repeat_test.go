@@ -80,8 +80,6 @@ func TestInterleaveRepeatableMemberGroup(t *testing.T) {
 // regression would also fail to finish within `go test -timeout`, so it is
 // caught regardless of this assertion.)
 func TestInterleaveRepeatableMemberGroupNotExponential(t *testing.T) {
-	t.Parallel()
-
 	schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start>` +
 		`<element name="root"><interleave>` +
 		`<zeroOrMore><group>` +
@@ -93,7 +91,8 @@ func TestInterleaveRepeatableMemberGroupNotExponential(t *testing.T) {
 	grammar := compileGrammar(t, schema)
 
 	// validateN builds a <root> of n interleaved a/c/b triples, validates it
-	// (which must succeed), and returns how long validation took.
+	// repeatedly, and returns the total validation time. Batching the runs keeps
+	// the timing window above the clock resolution on platforms such as Windows.
 	validateN := func(n int) time.Duration {
 		var docStr strings.Builder
 		docStr.WriteString(`<root>`)
@@ -104,10 +103,13 @@ func TestInterleaveRepeatableMemberGroupNotExponential(t *testing.T) {
 		doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr.String()))
 		require.NoError(t, err)
 
+		const repetitions = 8
 		start := time.Now()
-		verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+		for range repetitions {
+			verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+			require.NoError(t, verr, "interleave of %d group(a,b) pairs with c must validate", n)
+		}
 		elapsed := time.Since(start)
-		require.NoError(t, verr, "interleave of %d group(a,b) pairs with c must validate", n)
 		return elapsed
 	}
 

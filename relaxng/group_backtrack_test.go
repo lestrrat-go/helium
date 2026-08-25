@@ -1,6 +1,7 @@
 package relaxng_test
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,79 @@ import (
 	"github.com/lestrrat-go/helium/relaxng"
 	"github.com/stretchr/testify/require"
 )
+
+// Accept/reject safety evidence for sharing validState.seq instead of copying
+// it. The harness that produced these figures is checked in as
+// group_backtrack_differential_test.go. Apart from two long-standing helpers in
+// relaxng_test.go it touches only the exported API, so the same file runs
+// unchanged on an older checkout, and it prints one line per
+// case: the case identity, the verdict (VALID/INVALID/SCHEMA-ERROR), and the
+// exact error text. Comparing error text and not just the verdict is what makes
+// the diff meaningful — a silently reworded diagnostic would otherwise pass
+// unnoticed.
+//
+// Procedure. Run it from a checkout of this branch
+// (perf-relaxng-group-backtrack) against the merge base of this branch with
+// origin/main. Resolve that base at run time and archive the same object you
+// name as the base: this branch is rebased as main moves, so no hardcoded hash
+// stays correct.
+//
+//	BASE=$(git merge-base HEAD origin/main)
+//	go test ./relaxng -run '^TestGroupBacktrackDifferential$' -timeout 30m \
+//	    -relaxng.differential.out=/tmp/head.txt
+//	mkdir -p /tmp/base
+//	git archive "$BASE" | tar -x -C /tmp/base
+//	cp relaxng/group_backtrack_differential_test.go /tmp/base/relaxng/
+//	go -C /tmp/base test ./relaxng -run '^TestGroupBacktrackDifferential$' \
+//	    -timeout 30m -relaxng.differential.out=/tmp/base.txt
+//	diff /tmp/base.txt /tmp/head.txt
+//
+// Result: the diff is empty and both files hash to sha256
+// 1389c877613206c349dc2c4ebeddce2e4d36ab3df92bb3bd972a738b562c8498. Each run
+// takes well under a minute and writes 36,143 lines.
+//
+// Corpus 1, the golden cross-product. Every schema in
+// testdata/libxml2-compat/relaxng/test validated against every instance in the
+// same directory. 6 of the 105 schemas do not compile and are recorded once
+// each as SCHEMA-ERROR, leaving 99 schemas x 163 instances = 16,137 validated
+// pairs, 16,143 lines in all: 527 VALID, 15,610 INVALID.
+//
+// Corpus 2, randomized group grammars. 20,000 seeded random grammars (seed 1)
+// over three shapes, including a bare <group> under <start>, which is the only
+// shape that reaches the naive backtracker: 2,889 VALID, 17,111 INVALID
+// spanning 184 distinct error texts.
+//
+// 13,451 of the 32,721 INVALID lines carry diagnostic text. The rest are
+// failures the validator reports only through the returned error without
+// emitting anything to the error handler, which is identical on both
+// revisions.
+//
+// Coverage under both corpora together (add -coverprofile to either command
+// above, then `go tool cover -func`): backtrackGroupFlexible 100%,
+// advanceFlexibleContent 100%, backtrackGroupNaive 100%, advanceFlexibleNaive
+// 88.9%. Both halves of the corpus are load-bearing: the golden cross-product
+// alone (add -relaxng.differential.cases=0) leaves the naive backtracker nearly
+// untouched (backtrackGroupNaive 19.4%, advanceFlexibleNaive 0%), because no
+// golden schema puts a bare <group> under <start>. Only the randomized set
+// exercises that path.
+//
+// An ordinary `go test ./relaxng` run needs no flags: the harness then walks
+// every eighth golden schema and 200 random grammars, discards the output, and
+// TestGroupBacktrackDifferentialDeterministic checks that two runs of that
+// subset agree byte for byte.
+//
+// `go test -race ./relaxng` passes on both revisions.
+
+// manyChildrenDoc builds `<root>` with n `<a/>` children.
+func manyChildrenDoc(n int) string {
+	var d strings.Builder
+	d.WriteString(`<root>`)
+	for range n {
+		d.WriteString(`<a/>`)
+	}
+	d.WriteString(`</root>`)
+	return d.String()
+}
 
 // compileGrammar compiles a RELAX NG grammar from a string, failing the test on
 // any compile error.
@@ -224,4 +298,52 @@ func TestMultiFlexibleGroupBacktrackingNotExponential(t *testing.T) {
 
 	require.NoError(t, verr, "group(zeroOrMore(a) x%d, a) over %d elements should validate", N, M)
 	require.Less(t, elapsed, 5*time.Second, "validation must not be exponential (took %s)", elapsed)
+}
+
+// TestGroupBacktrackAllocationBound guards against validState.clone() and its
+// callers deep-copying the whole remaining sibling slice on every repetition.
+// That copy makes both the flexible-group backtracker and the ordinary,
+// no-backtracking zeroOrMore path allocate quadratically or worse in child
+// count. Allocated bytes are asserted rather than wall time: bytes are
+// deterministic across machines and CI load, wall time is not.
+func TestGroupBacktrackAllocationBound(t *testing.T) {
+	a := `<element name="a"><empty/></element>`
+
+	t.Run("flexible group backtracking", func(t *testing.T) {
+		const m = 1600
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><element name="root"><group>` +
+			`<zeroOrMore>` + a + `</zeroOrMore>` + a + `</group></element></start></grammar>`
+		grammar := compileGrammar(t, schema)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(manyChildrenDoc(m)))
+		require.NoError(t, err)
+
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+		runtime.ReadMemStats(&after)
+		require.NoError(t, verr, "group(zeroOrMore(a), a) over %d elements should validate", m)
+
+		delta := after.TotalAlloc - before.TotalAlloc
+		require.Less(t, delta, uint64(100<<20),
+			"validating group(zeroOrMore(a), a) over %d elements allocated %d bytes, want under 100 MB", m, delta)
+	})
+
+	t.Run("plain zeroOrMore, no backtracking", func(t *testing.T) {
+		const m = 16000
+		schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><element name="root">` +
+			`<zeroOrMore>` + a + `</zeroOrMore></element></start></grammar>`
+		grammar := compileGrammar(t, schema)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(manyChildrenDoc(m)))
+		require.NoError(t, err)
+
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
+		runtime.ReadMemStats(&after)
+		require.NoError(t, verr, "zeroOrMore(a) over %d elements should validate", m)
+
+		delta := after.TotalAlloc - before.TotalAlloc
+		require.Less(t, delta, uint64(100<<20),
+			"validating zeroOrMore(a) over %d elements allocated %d bytes, want under 100 MB", m, delta)
+	})
 }
