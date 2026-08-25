@@ -350,6 +350,34 @@ func TestNamespaceNSRejectsReservedMisuse(t *testing.T) {
 	})
 }
 
+func TestNamespaceShadowRestoredAfterScopeExit(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElementNS("p", "root", "urn:A"))
+	require.NoError(t, w.StartElementNS("p", "c1", "urn:B"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.StartElementNS("p", "c2", "urn:A"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<p:root xmlns:p="urn:A"><p:c1 xmlns:p="urn:B"/><p:c2/></p:root>`, buf.String())
+}
+
+func TestDefaultNamespaceUndeclarationRestoredAfterScopeExit(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartElementNS("", "root", "urn:A"))
+	require.NoError(t, w.StartElementNS("", "c1", ""))
+	require.NoError(t, w.StartElementNS("", "g1", ""))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.StartElementNS("", "c2", ""))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndElement())
+	require.Equal(t, `<root xmlns="urn:A"><c1 xmlns=""><g1/></c1><c2 xmlns=""/></root>`, buf.String())
+}
+
 func TestStartAttributeNSRejectsSameScopeConflict(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer

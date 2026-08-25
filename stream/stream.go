@@ -52,6 +52,14 @@ type elementEntry struct {
 type nsEntry struct {
 	prefix string
 	uri    string
+
+	// prevURI/prevHad record the binding this declaration shadowed, so
+	// popNSScope can restore w.nsBind[prefix] when the scope closes.
+	// prevHad is false when the prefix was unbound before this
+	// declaration, in which case popNSScope deletes it instead of
+	// restoring prevURI.
+	prevURI string
+	prevHad bool
 }
 
 // nsScope holds namespace declarations for one element level.
@@ -65,7 +73,11 @@ type nsScope struct {
 // Writer is not safe for concurrent use by multiple goroutines.
 //
 // The zero value of Writer is not ready to use because it has no output
-// destination. Construct a Writer with NewWriter.
+// destination. Construct a Writer with NewWriter. The fluent configuration
+// methods (Indent, QuoteChar, XMLVersion) must be called before any write:
+// a copy taken after writing begins shares its namespace-binding map with
+// the original, so declarations made through one copy become visible to
+// the other.
 //
 // (libxml2: xmlTextWriter)
 type Writer struct {
@@ -76,15 +88,16 @@ type Writer struct {
 	state         writerState
 	elemStack     []elementEntry
 	nsStack       []nsScope
-	stateStack    []writerState // for comment/PI/CDATA nesting
-	err           error         // sticky error
-	depth         int           // current element nesting depth (for indentation)
-	hasOutput     bool          // true after first output has been written
-	wroteNL       bool          // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
-	commentDash   bool          // true if the current comment body ends with '-' (would form '--->' on close)
-	piQuestion    bool          // true if the current PI body ends with '?' (would form '?>' across writes)
-	cdataBrackets int           // count (0,1,2) of trailing ']' in the current CDATA body, to detect ']]>' across writes
-	xml11         bool          // true when serializing XML 1.1: restricted control chars are emitted as decimal character references instead of being rejected
+	nsBind        map[string]string // current in-scope binding per prefix; absent = unbound, present "" = explicitly undeclared (xmlns="")
+	stateStack    []writerState     // for comment/PI/CDATA nesting
+	err           error             // sticky error
+	depth         int               // current element nesting depth (for indentation)
+	hasOutput     bool              // true after first output has been written
+	wroteNL       bool              // true after EndComment/EndPI wrote trailing \n (suppresses writeIndent's \n)
+	commentDash   bool              // true if the current comment body ends with '-' (would form '--->' on close)
+	piQuestion    bool              // true if the current PI body ends with '?' (would form '?>' across writes)
+	cdataBrackets int               // count (0,1,2) of trailing ']' in the current CDATA body, to detect ']]>' across writes
+	xml11         bool              // true when serializing XML 1.1: restricted control chars are emitted as decimal character references instead of being rejected
 }
 
 // NewWriter creates a Writer that writes to w. Configure the Writer
@@ -400,30 +413,20 @@ func (w *Writer) emitPendingNS() {
 	scope.emitted = len(scope.decls)
 }
 
-// lookupNS checks if the prefix is already bound to the given URI in
-// the current namespace stack.
+// lookupNS reports whether the prefix's current in-scope binding is uri.
+// An inner rebinding shadows an outer one, so this reports false once a
+// closer scope has rebound the prefix to a different URI even if an
+// ancestor scope still declares uri.
 func (w *Writer) lookupNS(prefix, uri string) bool {
-	for _, v := range slices.Backward(w.nsStack) {
-		for _, ns := range v.decls {
-			if ns.prefix == prefix {
-				return ns.uri == uri
-			}
-		}
-	}
-	return false
+	cur, ok := w.nsBind[prefix]
+	return ok && cur == uri
 }
 
 // hasDefaultNSInScope returns true if any ancestor has declared a
 // non-empty default namespace (xmlns="...") that is still in scope.
 func (w *Writer) hasDefaultNSInScope() bool {
-	for _, v := range slices.Backward(w.nsStack) {
-		for _, ns := range v.decls {
-			if ns.prefix == "" {
-				return ns.uri != ""
-			}
-		}
-	}
-	return false
+	cur, ok := w.nsBind[""]
+	return ok && cur != ""
 }
 
 // declareNS adds a namespace declaration to the current element scope
@@ -442,7 +445,31 @@ func (w *Writer) declareNS(prefix, uri string) {
 			return // already declared at this level
 		}
 	}
-	scope.decls = append(scope.decls, nsEntry{prefix: prefix, uri: uri})
+	if w.nsBind == nil {
+		w.nsBind = make(map[string]string)
+	}
+	prev, had := w.nsBind[prefix]
+	scope.decls = append(scope.decls, nsEntry{prefix: prefix, uri: uri, prevURI: prev, prevHad: had})
+	w.nsBind[prefix] = uri
+}
+
+// popNSScope closes the innermost namespace scope, restoring each
+// prefix it declared to the binding that scope's declarations shadowed.
+// Declarations are undone in reverse order, matching the LIFO scope
+// exit that StartElement/EndElement enforce.
+func (w *Writer) popNSScope() {
+	if len(w.nsStack) == 0 {
+		return
+	}
+	scope := w.nsStack[len(w.nsStack)-1]
+	for _, ns := range slices.Backward(scope.decls) {
+		if ns.prevHad {
+			w.nsBind[ns.prefix] = ns.prevURI
+			continue
+		}
+		delete(w.nsBind, ns.prefix)
+	}
+	w.nsStack = w.nsStack[:len(w.nsStack)-1]
 }
 
 // validateNSParts validates the prefix and local name supplied to a
@@ -935,9 +962,7 @@ func (w *Writer) EndElement() error {
 	}
 
 	// Pop namespace scope
-	if len(w.nsStack) > 0 {
-		w.nsStack = w.nsStack[:len(w.nsStack)-1]
-	}
+	w.popNSScope()
 
 	// Restore state
 	if len(w.elemStack) > 0 {
@@ -980,9 +1005,7 @@ func (w *Writer) FullEndElement() error {
 	w.writeByte('>')
 
 	// Pop namespace scope
-	if len(w.nsStack) > 0 {
-		w.nsStack = w.nsStack[:len(w.nsStack)-1]
-	}
+	w.popNSScope()
 
 	if len(w.elemStack) > 0 {
 		w.state = stateText
