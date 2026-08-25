@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/nodelink"
 )
 
 // copyAndStrip produces a deep copy of src that is ready for an xsl:strip-space
@@ -18,7 +19,7 @@ import (
 //     own declarations are reproduced verbatim and an element's active namespace
 //     is bound to a declaration already in scope), so no prune pass is needed,
 //   - links children directly into the parent's child slice via
-//     helium.UnsafeAppendChild, bypassing the per-node cycle/duplicate-attribute
+//     nodelink.AppendFastChild, bypassing the per-node cycle/duplicate-attribute
 //     preflight that AddChild runs (the tree is freshly constructed and provably
 //     acyclic and duplicate-free).
 //
@@ -123,7 +124,7 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 		if child == nil {
 			continue
 		}
-		if err := helium.UnsafeAppendChild(dst, child); err != nil {
+		if err := nodelink.AppendFastChild(dst, child); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -220,7 +221,7 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 // copyElement copies an element, reproducing its own namespace declarations
 // verbatim and binding its active namespace to an in-scope declaration without
 // over-declaring it. It then copies attributes and recurses into children using
-// helium.UnsafeAppendChild for direct linkage.
+// nodelink.AppendFastChild for direct linkage.
 func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*helium.Namespace, xmlSpacePreserve bool) (helium.Node, error) {
 	elem, err := sc.dst.CreateElement(src.LocalName())
 	if err != nil {
@@ -323,7 +324,7 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 		if child == nil {
 			continue
 		}
-		if err := helium.UnsafeAppendChild(elem, child); err != nil {
+		if err := nodelink.AppendFastChild(elem, child); err != nil {
 			return nil, err
 		}
 	}

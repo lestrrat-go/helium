@@ -7,6 +7,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/nodelink"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,7 +108,7 @@ func TestMixedFixedCorruptSiblingCycleFailsClosed(t *testing.T) {
 	// ownedNext keeps returning text — an unbounded loop without the guard.
 	text := doc.CreateText([]byte("a"))
 	require.NoError(t, ent.AddChild(text))
-	helium.UnsafeSetNextSibling(text, text)
+	nodelink.CorruptSelfNextSibling(text)
 
 	root, err := doc.CreateElement("root")
 	require.NoError(t, err)

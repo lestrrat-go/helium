@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/nodelink"
 	"github.com/stretchr/testify/require"
 )
 
@@ -158,8 +159,7 @@ func TestComputeAndSetSignatureValueNeverMutatesCallerDoc(t *testing.T) {
 		// have gained the Signature.
 		firstChild := si.FirstChild()
 		require.NotNil(t, firstChild)
-		var nilElem *helium.Element
-		helium.UnsafeSetNextSibling(firstChild, nilElem)
+		nodelink.CorruptTypedNilNextSibling(firstChild)
 
 		require.Panics(t, func() {
 			_ = computeAndSetSignatureValue(t.Context(), cfg, sig, si, sv, doc, rsaKey)
