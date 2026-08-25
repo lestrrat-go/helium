@@ -632,7 +632,10 @@ Pattern-matching engine with backtracking:
 When mandatory group child fails:
 1. Check if element was consumed (structural vs content error)
 2. For each previous flexible child (zeroOrMore/oneOrMore/optional) from nearest to furthest:
-   - Try iteration counts from minimum upward to greedy count
+   - Ascend iteration counts one repetition at a time from a saved boundary
+     (`groupBound`) up to the greedy count, via `advanceFlexibleContent` /
+     `advanceFlexibleNaive`, instead of replaying every repetition from scratch
+     for each candidate count
    - Re-validate remaining children via the group routine (`validateGroupChildren` /
      `validateGroupSeq`) so flexible members in the retry range can themselves
      backtrack — this recovers groups with 2+ flexible members that must each
@@ -648,7 +651,15 @@ node + sequence length, packed `attrUsed`, `suppressDepth>0`, content-vs-naive
 discriminator). A hit reproduces the original call's effect exactly — resulting
 position, attribute usage, appended errors, return value — so memoization is sound
 (no valid document rejected) while collapsing the fan-out to polynomial. Regression
-guard: `TestMultiFlexibleGroupBacktrackingNotExponential`.
+guard: `TestMultiFlexibleGroupBacktrackingNotExponential`. `validState.seq` is only
+ever re-sliced from the front, never written through, so every snapshot taken
+during backtracking — `clone()`, `saveGroupBound`, and the memo entries stored
+here — shares the sibling slice's backing array instead of copying it; only
+`attrUsed` is deep-copied, because that slice is mutated in place. `seqEqual`
+exploits the same fact with an O(1) identity check (equal length plus an
+identical first-element pointer) before falling back to an element-by-element
+comparison. Regression guard for the allocation this avoids:
+`TestGroupBacktrackAllocationBound`.
 
 Two parallel implementations share this strategy. `validateGroupContent` +
 `backtrackGroupFlexible` runs inside element bodies (threads attrs/attrUsed and

@@ -61,7 +61,7 @@ type groupMemoEntry struct {
 }
 
 func (e *groupMemoEntry) apply(state *validState, attrUsed []bool, v *validator) int {
-	state.seq = append([]helium.Node(nil), e.seq...)
+	state.seq = e.seq
 	if attrUsed != nil {
 		copy(attrUsed, e.attrUsed)
 	}
@@ -160,13 +160,21 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 
 // validState tracks the current position during validation.
 type validState struct {
+	// seq is only ever re-sliced from the front (state.seq[1:] / skipIgnored)
+	// and never written through, so it is a suffix of one per-element base
+	// array. Every snapshot below (clone, saveGroupBound, groupMemoEntry) shares
+	// that backing array instead of copying it. Do NOT add a write through this
+	// slice (state.seq[i] = ... or an append that grows in place) without
+	// re-copying everywhere a snapshot is taken — doing so would silently
+	// corrupt every outstanding snapshot and memo entry.
 	seq []helium.Node // remaining siblings to validate
 }
 
 func (s *validState) clone() *validState {
-	return &validState{
-		seq: append([]helium.Node(nil), s.seq...),
-	}
+	// state.seq is only ever re-sliced from the front (state.seq[1:] /
+	// skipIgnored) and never written through, so a snapshot can share the
+	// backing array instead of copying it.
+	return &validState{seq: s.seq}
 }
 
 // validatePattern validates a pattern against the current state.
@@ -835,7 +843,7 @@ func (v *validator) validateGroupChildren(children []*pattern, elem *helium.Elem
 		}
 		v.groupMemo[key] = &groupMemoEntry{
 			result:   result,
-			seq:      append([]helium.Node(nil), state.seq...),
+			seq:      state.seq,
 			attrUsed: append([]bool(nil), attrUsed...),
 			errs:     append([]error(nil), v.pendingErrors[errBase:]...),
 		}
@@ -953,25 +961,12 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 		}
 		var best *btSuccess
 
-		for iter := minIter; ; iter++ {
-			bounds[j].restore(state, attrUsed, v)
-
-			// Run 'iter' iterations of the flexible child.
-			iterOK := true
-			for range iter {
-				savedSt := state.clone()
-				v.suppressDepth++
-				ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
-				v.suppressDepth--
-				if ret != 0 || seqEqual(state.seq, savedSt.seq) {
-					iterOK = false
-					break
-				}
-			}
-			if !iterOK {
-				break // Can't match 'iter' times
-			}
-
+		// Walk the iteration counts upward incrementally: cur is the boundary
+		// after the current count, and one more repetition advances it. Replaying
+		// every repetition from bounds[j] for each count would be quadratic in
+		// the greedy count.
+		cur, curOK := v.advanceFlexibleContent(content, elem, attrs, attrUsed, state, bounds[j], minIter)
+		for curOK {
 			// Check if we've reached the same state as the greedy pass.
 			if seqEqual(state.seq, bounds[j+1].state.seq) &&
 				boolSliceEqual(attrUsed, bounds[j+1].attrUsed) {
@@ -998,6 +993,8 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 			// Restore errors from before retry so failed attempts don't leak errors.
 			v.pendingErrors = v.pendingErrors[:retryLen]
 			v.valid = retryValid
+
+			cur, curOK = v.advanceFlexibleContent(content, elem, attrs, attrUsed, state, cur, 1)
 		}
 
 		if best != nil {
@@ -1012,6 +1009,42 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 		bounds[j].restore(state, attrUsed, v)
 	}
 	return false
+}
+
+// advanceFlexibleContent restores the given boundary and runs n more repetitions
+// of a flexible group child's content from it, returning the boundary that
+// follows them. It reports false when a repetition fails or consumes nothing,
+// which caps the iteration count the backtracker may request. On failure the
+// caller's state is left mid-attempt, exactly as the inline replay left it.
+func (v *validator) advanceFlexibleContent(content *pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState, from groupBound, n int) (groupBound, bool) {
+	from.restore(state, attrUsed, v)
+	for range n {
+		before := state.seq
+		v.suppressDepth++
+		ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
+		v.suppressDepth--
+		if ret != 0 || seqEqual(state.seq, before) {
+			return groupBound{}, false
+		}
+	}
+	return saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid), true
+}
+
+// advanceFlexibleNaive is advanceFlexibleContent for the naive group path, which
+// carries no attribute or element-content context.
+func (v *validator) advanceFlexibleNaive(content *pattern, state *validState, from groupBound, n int) (groupBound, bool) {
+	from.restore(state, nil, v)
+	for range n {
+		before := state.seq
+		v.suppressDepth++
+		ret := v.validatePattern(content, state)
+		v.suppressDepth--
+		if ret != 0 || seqEqual(state.seq, before) {
+			return groupBound{}, false
+		}
+	}
+	return saveGroupBound(state, nil, len(v.pendingErrors), v.valid), true
 }
 
 // isKnownChildElement checks if an element name/ns appears as a child element
@@ -1524,7 +1557,7 @@ func (v *validator) validateGroupSeq(children []*pattern, state *validState) int
 		}
 		v.groupMemo[key] = &groupMemoEntry{
 			result: result,
-			seq:    append([]helium.Node(nil), state.seq...),
+			seq:    state.seq,
 			errs:   append([]error(nil), v.pendingErrors[errBase:]...),
 		}
 	}
@@ -1599,24 +1632,10 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 		var bestErrLen int
 		var bestValid bool
 
-		for iter := minIter; ; iter++ {
-			bounds[j].restore(state, nil, v)
-
-			iterOK := true
-			for range iter {
-				savedSt := state.clone()
-				v.suppressDepth++
-				ret := v.validatePattern(content, state)
-				v.suppressDepth--
-				if ret != 0 || seqEqual(state.seq, savedSt.seq) {
-					iterOK = false
-					break
-				}
-			}
-			if !iterOK {
-				break
-			}
-
+		// Walk the iteration counts upward incrementally (see
+		// backtrackGroupFlexible): cur is the boundary after the current count.
+		cur, curOK := v.advanceFlexibleNaive(content, state, bounds[j], minIter)
+		for curOK {
 			// Stop once we reach the greedy consumption level — that is the
 			// state that already failed.
 			if seqEqual(state.seq, bounds[j+1].state.seq) {
@@ -1637,6 +1656,8 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 			}
 			v.pendingErrors = v.pendingErrors[:retryLen]
 			v.valid = retryValid
+
+			cur, curOK = v.advanceFlexibleNaive(content, state, cur, 1)
 		}
 
 		if bestState != nil {
@@ -2575,6 +2596,13 @@ func boolSliceEqual(a, b []bool) bool {
 func seqEqual(a, b []helium.Node) bool {
 	if len(a) != len(b) {
 		return false
+	}
+	// Sequences in one content scope are suffixes of the same backing array,
+	// so equal length plus an identical first element settles it in O(1). This
+	// is a fast path only: when it does not apply, the loop below still walks
+	// the full slice and returns the same answer it always did.
+	if len(a) == 0 || &a[0] == &b[0] {
+		return true
 	}
 	for i := range a {
 		if a[i] != b[i] {
