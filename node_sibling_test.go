@@ -70,11 +70,11 @@ func TestAddSiblingRepairsStaleLastChild(t *testing.T) {
 
 	// Corrupt parent.lastChild into staleness: link d after c via raw pointer
 	// writes, bypassing AddChild/AddSibling so parent.lastChild is left
-	// pointing at c even though d is now the true tail.
+	// pointing at c even though d is now the true tail. d.prev is left nil —
+	// there is no raw prev setter, and no walk here reads it.
 	d := mustCreateElement(t, doc, "d")
 	helium.UnsafeSetNextSibling(c, d)
-	helium.UnsafeSetPrevSibling(d, c)
-	helium.UnsafeSetParent(d, parent)
+	helium.UnsafeSetParentForTesting(d, parent)
 
 	e := mustCreateElement(t, doc, "e")
 	require.NoError(t, parent.AddChild(e))
@@ -166,7 +166,8 @@ func TestAddSiblingAttributeInChildList(t *testing.T) {
 }
 
 // offChainParentClaimTree builds a parent whose child list is [a b] while a
-// third node claims that parent through UnsafeSetParent without ever being
+// third node claims that parent through the raw parent setter without ever
+// being
 // linked into the child list. A sibling is then appended through that claimant.
 // It returns the parent, its last reachable child, and the trailer that append
 // left behind — which the parent now records as its lastChild even though the
@@ -182,7 +183,7 @@ func offChainParentClaimTree(t *testing.T) (*helium.Element, *helium.Element, *h
 	require.NoError(t, parent.AddChild(b))
 
 	claimant := mustCreateElement(t, doc, "claimant")
-	helium.UnsafeSetParent(claimant, parent)
+	helium.UnsafeSetParentForTesting(claimant, parent)
 	trailer := mustCreateElement(t, doc, "trailer")
 	require.NoError(t, claimant.AddSibling(trailer))
 
@@ -378,7 +379,7 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		require.NoError(t, parent.AddChild(b))
 
 		// b still ends parent's chain, but now claims a different owner.
-		helium.UnsafeSetParent(b, other)
+		helium.UnsafeSetParentForTesting(b, other)
 
 		added := mustCreateElement(t, doc, nameAdded)
 		require.NoError(t, a.AddSibling(added))
@@ -398,14 +399,22 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		a := mustCreateElement(t, doc, "a")
 		b := mustCreateElement(t, doc, "b")
 		require.NoError(t, parent.AddChild(a))
-		require.NoError(t, parent.AddChild(b))
 
+		// x is linked in as a genuine child right after a, then given a chain of
+		// its own, and finally spliced out of parent's chain from the FRONT. That
+		// leaves the prev edge the guarded link installed — x still points back
+		// at a — while a points forward at b instead, so the edge is one-way.
+		// There is no raw prev setter, so this is how the shape is reached.
 		x := mustCreateElement(t, doc, "x")
 		y := mustCreateElement(t, doc, "y")
+		require.NoError(t, parent.AddChild(x))
 		require.NoError(t, x.AddSibling(y))
-		// x claims parent and points back at a, but a still points forward at b.
-		helium.UnsafeSetParent(x, parent)
-		helium.UnsafeSetPrevSibling(x, a)
+		require.NoError(t, parent.AddChild(b))
+		helium.UnsafeSetNextSibling(a, b)
+		helium.UnsafeSetNextSibling(y, nil)
+		helium.UnsafeSetParentForTesting(y, nil)
+		require.Equal(t, helium.Node(a), x.PrevSibling(), "x still points back at a")
+		require.Equal(t, helium.Node(b), a.NextSibling(), "but a points forward at b")
 
 		added := mustCreateElement(t, doc, nameAdded)
 		require.NoError(t, x.AddSibling(added))
@@ -461,7 +470,7 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		// The claimant belongs to another document and is attached nowhere, so
 		// only the parent it claims names the document whose chain is at stake.
 		claimant := mustCreateElement(t, other, "claimant")
-		helium.UnsafeSetParent(claimant, parent)
+		helium.UnsafeSetParentForTesting(claimant, parent)
 		trailer := mustCreateElement(t, doc, "trailer")
 		require.NoError(t, claimant.AddSibling(trailer))
 		require.Equal(t, trailer, parent.LastChild(), "the append records a tail off the child list")
@@ -486,11 +495,11 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		require.NoError(t, parent.AddChild(b))
 
 		// d is linked in by hand after the recorded tail, so parent.lastChild is
-		// stale: b is no longer the end of the chain.
+		// stale: b is no longer the end of the chain. d.prev is left nil — there
+		// is no raw prev setter, and no walk here reads it.
 		d := mustCreateElement(t, doc, "d")
 		helium.UnsafeSetNextSibling(b, d)
-		helium.UnsafeSetPrevSibling(d, b)
-		helium.UnsafeSetParent(d, parent)
+		helium.UnsafeSetParentForTesting(d, parent)
 
 		added := mustCreateElement(t, doc, nameAdded)
 		require.NoError(t, a.AddSibling(added))
