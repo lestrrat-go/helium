@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 )
 
 // AsNode performs a safe type assertion on a [Node], returning the
@@ -198,7 +199,12 @@ func setLastChild(n MutableNode, cur Node) {
 	n.baseDocNode().lastChild = cur
 }
 
+// SetOwnerDocument makes doc this node's owning document. A hand-written link
+// record travels with the node (adoptRawLinkWrites), so a document that adopts a
+// subtree built outside the guarded paths inherits the record instead of
+// starting out trusting its own lastChild.
 func (n *docnode) SetOwnerDocument(doc *Document) {
+	adoptRawLinkWrites(n.doc, doc)
 	n.doc = doc
 }
 
@@ -627,7 +633,14 @@ func destinationDocument(n MutableNode) *Document {
 // instead). A nil owner (a heap-allocated standalone node) has no slab to guard.
 func noteCrossDocumentEscape(dest *Document, cur Node) {
 	curDoc := cur.OwnerDocument()
-	if curDoc == nil || curDoc == dest {
+	if curDoc == dest {
+		return
+	}
+	// A node crossing into dest's tree brings its links with it, so a
+	// hand-written-link record on the document it came from has to travel too:
+	// dest's own lastChild is what the O(1) append-point resolution trusts.
+	adoptRawLinkWrites(curDoc, dest)
+	if curDoc == nil {
 		return
 	}
 	curDoc.slabEscaped = true
@@ -827,17 +840,19 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 //
 // Every prev edge the proof crosses must be RECIPROCAL — the step from head to
 // head.prev is taken only when that prev node points forward at head again.
-// This is what a bare prev walk gets wrong: a raw UnsafeSetPrevSibling write
-// can aim a node that lives on a chain of its OWN at a genuine child of the
-// parent it claims, without that child pointing back. Following the one-way
-// edge would leave x's chain, arrive at pdn.firstChild, and "prove" a
-// membership that does not exist — after which the caller would splice into the
+// This is what a bare prev walk gets wrong. There is no raw prev setter, but a
+// one-way prev edge outlives any splice that cuts a node out of a chain from the
+// FRONT: the node keeps pointing back at a neighbour that no longer points
+// forward at it. Such a node can live on a chain of its OWN while still aiming
+// at a genuine child of the parent it claims. Following the one-way edge would
+// leave x's chain, arrive at pdn.firstChild, and "prove" a membership that does
+// not exist — after which the caller would splice into the
 // parent's real child list and abandon the rest of x's chain. Rejecting the
 // non-reciprocal edge costs one pointer comparison per step, so the walk keeps
 // the bound above. The same check applies to the pdn.lastChild shortcut: the
 // recorded tail is accepted only while its own prev edge still points back at
-// it, so an unsafe write that has since cut the recorded tail out of the chain
-// cannot be taken as proof. That is a single edge, not a walk, so the tail
+// it, so a hand-written link that has since cut the recorded tail out of the
+// chain cannot be taken as proof. That is a single edge, not a walk, so the tail
 // append stays O(1); the invariant above is what carries the rest of the way
 // back to the head.
 func chainMember(pdn, x *docnode) bool {
@@ -923,7 +938,7 @@ func reciprocalPrev(x *docnode) *docnode {
 // Declining costs nothing: a document holds a handful of children — a few PIs and
 // comments, the DTD, the root element — so the walk it falls back to is already
 // O(1) in practice. Every OTHER parent's chain can only acquire an off-chain
-// claimant through UnsafeSetParent, which is recorded.
+// claimant through unsafeSetParent, which is recorded.
 //
 // The remaining reads are cheap confirmations that the record is a usable tail:
 // it must not be the anchor itself, it must genuinely end its chain, and it must
@@ -1134,20 +1149,81 @@ func UnsafeSetNextSibling(n Node, next Node) {
 // three are recorded rather than just the first: a node one document owns may be
 // linked into another's chain (noteCrossDocumentEscape), and it is the chain's
 // document, not the node's, that must stop trusting its own tail record.
+//
+// A write it cannot attribute to ANY document — every node involved is still
+// detached, so all three reads come back nil — is recorded on the package-level
+// orphanRawLinkWrites instead. Nothing else can carry it: the forged link
+// outlives the moment it was made, and the document that eventually adopts the
+// subtree would otherwise start life believing every link in it came from a
+// guarded path. adoptRawLinkWrites is what hands the record on.
 func noteRawLinkWrite(ndn *docnode, operand Node) {
-	markRawLinkWrites(ndn.doc)
+	attributed := markRawLinkWrites(ndn.doc)
 	if parent := ndn.parent; parent != nil {
-		markRawLinkWrites(parent.baseDocNode().doc)
+		attributed = markRawLinkWrites(owningDocument(parent)) && attributed
 	}
 	if !isNilNode(operand) {
-		markRawLinkWrites(operand.baseDocNode().doc)
+		attributed = markRawLinkWrites(owningDocument(operand)) && attributed
+	}
+	if !attributed {
+		orphanRawLinkWrites.Store(true)
 	}
 }
 
-func markRawLinkWrites(doc *Document) {
-	if doc != nil {
-		doc.rawLinkWrites = true
+// markRawLinkWrites records a hand-written link on doc and reports whether there
+// was a document to record it on.
+func markRawLinkWrites(doc *Document) bool {
+	if doc == nil {
+		return false
 	}
+	doc.rawLinkWrites = true
+	return true
+}
+
+// orphanRawLinkWrites records a hand-written link that no document owned at the
+// time it was made. It is package-level because there is nowhere else to put it:
+// a detached node carries no document, and the forged link is still there when a
+// document later adopts the subtree. It is only ever set by the raw setters,
+// which have no non-test callers, so an ordinary program never sets it and every
+// document keeps the O(1) append-point resolution. It is atomic because the
+// documents that read it are otherwise independent and may live in different
+// goroutines.
+var orphanRawLinkWrites atomic.Bool
+
+// adoptRawLinkWrites carries a hand-written-link record forward when a node
+// changes owning document. The record lives on the DOCUMENT, so a subtree that
+// moves between documents would otherwise leave it behind: the destination would
+// trust a lastChild the guarded paths never wrote. A node arriving from NO
+// document is the case orphanRawLinkWrites exists for — the write that forged
+// its links had no document to be recorded on.
+//
+// It errs toward marking. Marking a document that holds no forged link only
+// costs it the O(1) append-point resolution, which is a fallback to the sibling
+// walk every other tree operation performs unconditionally; failing to mark one
+// that does hold a forged link is a wrong tree.
+func adoptRawLinkWrites(from, to *Document) {
+	if to == nil || to.rawLinkWrites || from == to {
+		return
+	}
+	if from == nil {
+		if orphanRawLinkWrites.Load() {
+			to.rawLinkWrites = true
+		}
+		return
+	}
+	if from.rawLinkWrites {
+		to.rawLinkWrites = true
+	}
+}
+
+// owningDocument returns the document whose trees n belongs to. A *Document is
+// its OWN owner — a document node holds the trees it owns and its embedded
+// docnode's doc pointer stays nil — so it must be resolved by type rather than
+// by reading that pointer.
+func owningDocument(n Node) *Document {
+	if doc, ok := n.(*Document); ok {
+		return doc
+	}
+	return n.baseDocNode().doc
 }
 
 // UnlinkNode detaches a node from its parent and sibling chain.
@@ -1676,7 +1752,8 @@ func setListDoc(n Node, doc *Document) {
 			mn.SetTreeDoc(doc)
 			continue
 		}
-		cur.baseDocNode().doc = doc
+		adoptRawLinkWrites(cdn.doc, doc)
+		cdn.doc = doc
 	}
 }
 
@@ -1700,6 +1777,7 @@ func setTreeDoc(n MutableNode, doc *Document) {
 			}
 			seenAttrs[pdn] = struct{}{}
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
+			adoptRawLinkWrites(prop.doc, doc)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
 				setListDoc(child, doc)

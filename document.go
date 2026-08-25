@@ -110,12 +110,11 @@ type Document struct {
 
 	// rawLinkWrites records that at least one link pointer in a tree this
 	// document owns was written by hand, outside the guarded child-list splice —
-	// by the exported UnsafeSetParent / UnsafeSetPrevSibling /
-	// UnsafeSetNextSibling setters, the only writes in this package that can
-	// leave an ELEMENT claiming a parent it is not a child of, or forge a sibling
-	// edge no guarded path would build. (A DOCUMENT can be claimed that way
-	// without a raw write, by the DTD that CreateInternalSubset and CopyExtSubset
-	// attach to it, which is why tailJumpTarget declines a *Document parent
+	// by the raw unsafeSetParent / UnsafeSetNextSibling setters, the only writes
+	// in this package that can leave an ELEMENT claiming a parent it is not a
+	// child of, or forge a sibling edge no guarded path would build. (A DOCUMENT
+	// can be claimed that way without a raw write, by the DTD CopyExtSubset
+	// attaches to it, which is why tailJumpTarget declines a *Document parent
 	// outright rather than relying on this flag for one.)
 	//
 	// While it is false, every link in this document was built by the guarded
@@ -123,7 +122,13 @@ type Document struct {
 	// firstChild and addSibling may resolve its append point from that record in
 	// O(1). Once true it stays true, and addSibling falls back to its sibling
 	// walk for this document, which is what every other tree operation does
-	// unconditionally. Set by node.go noteRawLinkWrite; read by tailJumpTarget.
+	// unconditionally.
+	//
+	// The record follows the TREE, not only the node it was made on: a raw write
+	// on a still-detached subtree has no document to be recorded on at the time,
+	// and a subtree can change owner afterwards, so adoptRawLinkWrites (node.go)
+	// carries the record onto whichever document adopts it. Set by node.go
+	// noteRawLinkWrite / adoptRawLinkWrites; read by tailJumpTarget.
 	rawLinkWrites bool
 }
 

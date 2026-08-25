@@ -509,3 +509,48 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		require.Equal(t, added, parent.LastChild(), "and the stale record is repaired")
 	})
 }
+
+// TestAddSiblingRawWriteBeforeDocumentAdoption covers a raw link write made
+// while every node involved is still document-less. There is no document to
+// record the write on at the time it happens, so the record has to survive the
+// moment a document adopts the subtree — otherwise the adopting document starts
+// life believing every link in it was built by a guarded path, and the O(1) tail
+// resolution trusts a lastChild the guarded paths never wrote.
+//
+// The shape is the ordinary off-chain parent claim, only reached before the
+// tree has an owner: the claimant is given a parent it is not a child of, an
+// append through the claimant moves the parent's recorded tail off the child
+// list, and a later append through a genuine child must still walk to the end of
+// the REACHABLE children. That is what the plain sibling walk does, so this
+// expectation holds for the walk-only implementation too.
+func TestAddSiblingRawWriteBeforeDocumentAdoption(t *testing.T) {
+	t.Parallel()
+
+	// A nil *Document allocates standalone nodes with no owning document.
+	var orphan *helium.Document
+	parent := mustCreateElement(t, orphan, "parent")
+	a := mustCreateElement(t, orphan, "a")
+	b := mustCreateElement(t, orphan, "b")
+	require.NoError(t, parent.AddChild(a))
+	require.NoError(t, parent.AddChild(b))
+
+	claimant := mustCreateElement(t, orphan, "claimant")
+	helium.UnsafeSetParentForTesting(claimant, parent)
+	require.Nil(t, parent.OwnerDocument(), "the write lands while there is no document to record it on")
+
+	doc := helium.NewDefaultDocument()
+	parent.SetTreeDoc(doc)
+	require.Equal(t, doc, parent.OwnerDocument())
+
+	trailer := mustCreateElement(t, doc, "trailer")
+	require.NoError(t, claimant.AddSibling(trailer))
+	require.Equal(t, trailer, parent.LastChild(), "the append records a tail off the child list")
+
+	added := mustCreateElement(t, doc, nameAdded)
+	require.NoError(t, a.AddSibling(added))
+
+	require.Equal(t, []string{"a", "b", nameAdded}, elementNames(t, parent), "the append lands at the end of the reachable chain")
+	require.Equal(t, helium.Node(b), added.PrevSibling())
+	require.Equal(t, added, parent.LastChild())
+	require.Nil(t, trailer.NextSibling(), "the off-chain chain is untouched")
+}
