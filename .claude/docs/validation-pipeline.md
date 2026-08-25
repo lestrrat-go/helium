@@ -659,7 +659,13 @@ here — shares the sibling slice's backing array instead of copying it; only
 exploits the same fact with an O(1) identity check (equal length plus an
 identical first-element pointer) before falling back to an element-by-element
 comparison. Regression guard for the allocation this avoids:
-`TestGroupBacktrackAllocationBound`.
+`TestGroupBacktrackAllocationBound`. Accept/reject evidence that these snapshot
+and backtracking mechanics decide no document differently and word no diagnostic
+differently comes from `relaxng/group_backtrack_differential_test.go`, a
+flag-gated differential harness that emits one verdict-plus-error-text line per
+case for the golden schema cross-product and for seeded random group grammars;
+the recorded procedure and result live in the header comment of
+`relaxng/group_backtrack_test.go`.
 
 Two parallel implementations share this strategy. `validateGroupContent` +
 `backtrackGroupFlexible` runs inside element bodies (threads attrs/attrUsed and

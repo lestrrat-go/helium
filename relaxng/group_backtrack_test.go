@@ -12,34 +12,60 @@ import (
 )
 
 // Accept/reject safety evidence for sharing validState.seq instead of copying
-// it. The differential harness that produced these figures is throwaway
-// scaffolding and is deliberately NOT checked in; this record exists so it can
-// be reconstructed.
+// it. The harness that produced these figures is checked in as
+// group_backtrack_differential_test.go. Apart from two long-standing helpers in
+// relaxng_test.go it touches only the exported API, so the same file runs
+// unchanged on an older checkout, and it prints one line per
+// case: the case identity, the verdict (VALID/INVALID/SCHEMA-ERROR), and the
+// exact error text. Comparing error text and not just the verdict is what makes
+// the diff meaningful — a silently reworded diagnostic would otherwise pass
+// unnoticed.
 //
-// Procedure. Extract the base revision (`git archive 918a7d79 | tar -x -C
-// <scratch>`) and the change (`git archive 96d48bbe | tar -x -C <scratch2>`),
-// drop the SAME throwaway differential test into `relaxng/` in both, run both,
-// and diff the two outputs. The test prints one line per case: the case
-// identity, the verdict (VALID/INVALID), and, when invalid, the exact error
-// text. Comparing error text and not just the verdict is what makes the diff
-// meaningful — a silently reworded diagnostic would otherwise pass unnoticed.
+// Procedure. From a checkout of this branch (perf-relaxng-group-backtrack),
+// against base 4ead44b5, the merge base with main:
+//
+//	go test ./relaxng -run '^TestGroupBacktrackDifferential$' -timeout 30m \
+//	    -relaxng.differential.out=/tmp/head.txt
+//	mkdir -p /tmp/base
+//	git archive 4ead44b5 | tar -x -C /tmp/base
+//	cp relaxng/group_backtrack_differential_test.go /tmp/base/relaxng/
+//	go -C /tmp/base test ./relaxng -run '^TestGroupBacktrackDifferential$' \
+//	    -timeout 30m -relaxng.differential.out=/tmp/base.txt
+//	diff /tmp/base.txt /tmp/head.txt
+//
+// Result: the diff is empty and both files hash to sha256
+// 1389c877613206c349dc2c4ebeddce2e4d36ab3df92bb3bd972a738b562c8498. Each run
+// takes well under a minute and writes 36,143 lines.
 //
 // Corpus 1, the golden cross-product. Every schema in
 // testdata/libxml2-compat/relaxng/test validated against every instance in the
-// same directory: 105 schemas x 163 instances = 17,115 pairs. Diff: 0 lines
-// (16,588 INVALID, 527 VALID).
+// same directory. 6 of the 105 schemas do not compile and are recorded once
+// each as SCHEMA-ERROR, leaving 99 schemas x 163 instances = 16,137 validated
+// pairs, 16,143 lines in all: 527 VALID, 15,610 INVALID.
 //
-// Corpus 2, randomized group grammars. 20,000 seeded random grammars over
-// three shapes, including a bare <group> under <start>, which is the only shape
-// that reaches the naive backtracker. Diff: 0 lines (18,113 INVALID, 1,887
-// VALID, spanning 926 distinct error texts).
+// Corpus 2, randomized group grammars. 20,000 seeded random grammars (seed 1)
+// over three shapes, including a bare <group> under <start>, which is the only
+// shape that reaches the naive backtracker: 2,889 VALID, 17,111 INVALID
+// spanning 184 distinct error texts.
 //
-// Coverage under both corpora together: backtrackGroupFlexible 100%,
+// 13,451 of the 32,721 INVALID lines carry diagnostic text. The rest are
+// failures the validator reports only through the returned error without
+// emitting anything to the error handler, which is identical on both
+// revisions.
+//
+// Coverage under both corpora together (add -coverprofile to either command
+// above, then `go tool cover -func`): backtrackGroupFlexible 100%,
 // advanceFlexibleContent 100%, backtrackGroupNaive 100%, advanceFlexibleNaive
 // 88.9%. Both halves of the corpus are load-bearing: the golden cross-product
-// alone leaves the naive backtracker nearly untouched (backtrackGroupNaive
-// 19.4%, advanceFlexibleNaive 0%), because no golden schema puts a bare <group>
-// under <start>. Only the randomized set exercises that path.
+// alone (add -relaxng.differential.cases=0) leaves the naive backtracker nearly
+// untouched (backtrackGroupNaive 19.4%, advanceFlexibleNaive 0%), because no
+// golden schema puts a bare <group> under <start>. Only the randomized set
+// exercises that path.
+//
+// An ordinary `go test ./relaxng` run needs no flags: the harness then walks
+// every eighth golden schema and 200 random grammars, discards the output, and
+// TestGroupBacktrackDifferentialDeterministic checks that two runs of that
+// subset agree byte for byte.
 //
 // `go test -race ./relaxng` passes on both revisions.
 

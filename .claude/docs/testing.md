@@ -109,6 +109,7 @@ bug that prompted it.
 | `c14n_test.go` | c14n | C14N golden file tests |
 | `xsd_test.go` | xsd | Schema validation golden tests |
 | `relaxng_test.go` | relaxng | RELAX NG golden tests |
+| `group_backtrack_differential_test.go` | relaxng | Flag-gated group-backtracking differential harness |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization and ASCII QName scanner regression coverage |
 
@@ -176,6 +177,27 @@ Run specific test subsets via env vars:
 | `HELIUM_XMLSCHEMA_TEST_FILES` | XSD validation tests |
 | `HELIUM_RELAXNG_TEST_FILES` | RELAX NG tests |
 | `HELIUM_SCHEMATRON_TEST_FILES` | Schematron tests |
+
+## Differential Harnesses
+
+`relaxng/group_backtrack_differential_test.go` compares two revisions on
+accept/reject decisions AND exact error text. It prints one line per case
+(identity, verdict, quoted error text) for the golden RELAX NG schema
+cross-product and for seeded random group grammars, so the same file run on two
+checkouts produces two outputs that can be diffed. It uses only the exported
+API, so it can be copied into an older checkout unchanged.
+
+| Flag | Meaning |
+|------|---------|
+| `-relaxng.differential.out=PATH` | Write the record to PATH. Absent: run a small subset, discard the output |
+| `-relaxng.differential.cases=N` | Randomized grammars (default 20000; `0` runs the golden cross-product only) |
+| `-relaxng.differential.seed=N` | Seed for the randomized grammars (default 1) |
+
+Without flags an ordinary `go test ./relaxng` run walks every eighth golden
+schema plus 200 random grammars in about half a second, and
+`TestGroupBacktrackDifferentialDeterministic` checks that two runs of that
+subset agree byte for byte. The recorded procedure and result for the current
+run live in the header comment of `relaxng/group_backtrack_test.go`.
 
 ## Build Tags
 
