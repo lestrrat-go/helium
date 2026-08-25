@@ -1,6 +1,7 @@
 package helium_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -161,13 +162,11 @@ func TestAddSiblingAttributeInChildList(t *testing.T) {
 	require.Empty(t, parent.Attributes(), "the property chain must be untouched")
 }
 
-// unlinkedParentClaimTree builds a parent whose child list is [a b] while
-// parent.lastChild records a node that list does not contain. The detour node
-// claims parent through UnsafeSetParent without being linked into the child
-// list, so appending a sibling through it moves lastChild off the chain.
-// It returns the parent, its second (and last reachable) child, and the node
-// lastChild now records.
-func unlinkedParentClaimTree(t *testing.T) (*helium.Element, *helium.Element, *helium.Element) {
+// offChainParentClaimTree builds a parent whose child list is [a b] while a
+// third node claims that parent through UnsafeSetParent without ever being
+// linked into the child list. It returns the parent, its last reachable child,
+// and the off-chain claimant.
+func offChainParentClaimTree(t *testing.T) (*helium.Element, *helium.Element, *helium.Element) {
 	t.Helper()
 
 	doc := helium.NewDefaultDocument()
@@ -179,14 +178,30 @@ func unlinkedParentClaimTree(t *testing.T) (*helium.Element, *helium.Element, *h
 
 	claimant := mustCreateElement(t, doc, "claimant")
 	helium.UnsafeSetParent(claimant, parent)
-	recorded := mustCreateElement(t, doc, "recorded")
-	require.NoError(t, claimant.AddSibling(recorded))
+	trailer := mustCreateElement(t, doc, "trailer")
+	require.NoError(t, claimant.AddSibling(trailer))
 
-	require.Equal(t, recorded, parent.LastChild(), "lastChild records a node outside the child list")
+	require.Equal(t, helium.Node(trailer), claimant.NextSibling(), "the append lands after the off-chain anchor")
+	require.Equal(t, parent, trailer.Parent())
 	require.Equal(t, helium.Node(a), parent.FirstChild())
+	require.Equal(t, b, parent.LastChild(), "an off-chain append must not move lastChild off the child list")
 	require.Nil(t, b.NextSibling(), "the reachable chain still ends at b")
+	requireLastChildOnChain(t, parent)
 
-	return parent, b, recorded
+	return parent, b, claimant
+}
+
+// requireLastChildOnChain asserts the invariant addSibling's O(1) tail jump
+// rests on: parent.lastChild is the final node of the chain that starts at
+// parent.firstChild, never a node outside it.
+func requireLastChildOnChain(t *testing.T, parent helium.Node) {
+	t.Helper()
+
+	var last helium.Node
+	for child := range helium.Children(parent) {
+		last = child
+	}
+	require.Equal(t, last, parent.LastChild(), "lastChild must be the tail of the reachable child chain")
 }
 
 // elementNames collects the names of a parent's reachable children.
@@ -202,25 +217,18 @@ func elementNames(t *testing.T, parent *helium.Element) []string {
 	return names
 }
 
-// TestAddSiblingUnlinkedParentClaim pins the CURRENT, DELIBERATE behavior of
-// the O(1) tail jump on a tree that is outside its contract: parent.lastChild
-// records a node the parent's child list does not contain, because a raw
-// UnsafeSetParent write put a node under parent without linking it in. The
-// jump appends after that recorded tail, which is exactly where AddChild and
-// UnsafeAppendChild put it on the same tree — all three trust lastChild, and
-// the jump's guards are the strictest of the three.
-//
-// This pins a documented out-of-contract case so the boundary is executable.
-// It is not an endorsement of building a tree this shape: on any tree built
-// through the safe API alone, every append lands at the end of the reachable
-// child list.
-func TestAddSiblingUnlinkedParentClaim(t *testing.T) {
+// TestAddSiblingOffChainParentClaim covers a node that claims a parent without
+// being a member of that parent's child list. Appending a sibling through such
+// a node must not move parent.lastChild off the child list, and a later append
+// through an on-chain anchor must still land at the end of the REACHABLE child
+// list, never after the off-chain node. All three append entry points agree.
+func TestAddSiblingOffChainParentClaim(t *testing.T) {
 	t.Parallel()
 
 	t.Run("AddSibling through a non-tail anchor", func(t *testing.T) {
 		t.Parallel()
 
-		parent, b, recorded := unlinkedParentClaimTree(t)
+		parent, b, claimant := offChainParentClaimTree(t)
 		doc := parent.OwnerDocument()
 		anchor, ok := parent.FirstChild().(*helium.Element)
 		require.True(t, ok)
@@ -228,41 +236,97 @@ func TestAddSiblingUnlinkedParentClaim(t *testing.T) {
 		added := mustCreateElement(t, doc, "added")
 		require.NoError(t, anchor.AddSibling(added))
 
-		require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the reachable child list is unchanged")
-		require.Nil(t, b.NextSibling(), "the reachable chain still ends at b")
-		require.Equal(t, added, parent.LastChild(), "lastChild advances to the appended node")
-		require.Equal(t, helium.Node(recorded), added.PrevSibling(), "the append lands after the recorded tail")
-		require.Equal(t, helium.Node(added), recorded.NextSibling())
+		require.Equal(t, []string{"a", "b", "added"}, elementNames(t, parent))
+		require.Equal(t, helium.Node(b), added.PrevSibling(), "the append lands after the reachable tail")
+		require.Equal(t, added, parent.LastChild())
 		require.Equal(t, parent, added.Parent())
+		require.Nil(t, claimant.PrevSibling(), "the off-chain chain is untouched")
+		requireLastChildOnChain(t, parent)
 	})
 
 	t.Run("AddChild reaches the same shape", func(t *testing.T) {
 		t.Parallel()
 
-		parent, b, recorded := unlinkedParentClaimTree(t)
+		parent, b, _ := offChainParentClaimTree(t)
 		doc := parent.OwnerDocument()
 
 		added := mustCreateElement(t, doc, "added")
 		require.NoError(t, parent.AddChild(added))
 
-		require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the reachable child list is unchanged")
-		require.Nil(t, b.NextSibling())
+		require.Equal(t, []string{"a", "b", "added"}, elementNames(t, parent))
+		require.Equal(t, helium.Node(b), added.PrevSibling())
 		require.Equal(t, added, parent.LastChild())
-		require.Equal(t, helium.Node(recorded), added.PrevSibling(), "AddChild trusts the same recorded tail")
+		requireLastChildOnChain(t, parent)
 	})
 
 	t.Run("UnsafeAppendChild reaches the same shape", func(t *testing.T) {
 		t.Parallel()
 
-		parent, b, recorded := unlinkedParentClaimTree(t)
+		parent, b, _ := offChainParentClaimTree(t)
 		doc := parent.OwnerDocument()
 
 		added := mustCreateElement(t, doc, "added")
 		require.NoError(t, helium.UnsafeAppendChild(parent, added))
 
-		require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the reachable child list is unchanged")
-		require.Nil(t, b.NextSibling())
+		require.Equal(t, []string{"a", "b", "added"}, elementNames(t, parent))
+		require.Equal(t, helium.Node(b), added.PrevSibling())
 		require.Equal(t, added, parent.LastChild())
-		require.Equal(t, helium.Node(recorded), added.PrevSibling(), "UnsafeAppendChild trusts the same recorded tail")
+		requireLastChildOnChain(t, parent)
 	})
+}
+
+// TestAddSiblingCopiedExternalSubsetClaim reaches the same off-chain parent
+// claim through public, non-Unsafe calls only. CopyExtSubset installs the
+// copied external subset as a *Document's extSubset and gives it that document
+// as its parent, but the external subset is not a member of the document's
+// child list. Appending a sibling through it must therefore leave the
+// document's recorded tail on the child list, so a later append through a
+// genuine child still lands at the end of the reachable children.
+func TestAddSiblingCopiedExternalSubsetClaim(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dtdPath := dir + "/ext.dtd"
+	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (#PCDATA)>`), 0600))
+
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root/>`
+
+	src, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	require.NotNil(t, src.ExtSubset())
+
+	dst := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	comment := dst.CreateComment([]byte("lead"))
+	root := mustCreateElement(t, dst, "root")
+	require.NoError(t, dst.AddChild(comment))
+	require.NoError(t, dst.AddChild(root))
+
+	helium.CopyExtSubset(src, dst)
+	extSubset := dst.ExtSubset()
+	require.NotNil(t, extSubset)
+	require.Equal(t, helium.Node(dst), extSubset.Parent(), "the copied external subset claims the document as its parent")
+
+	// The external subset is not in dst's child list, so appending through it
+	// must not retarget dst.lastChild at the appended node.
+	stray := mustCreateElement(t, dst, "stray")
+	require.NoError(t, extSubset.AddSibling(stray))
+	require.Equal(t, root, dst.LastChild(), "lastChild stays on the document's child list")
+	requireLastChildOnChain(t, dst)
+
+	// A later append through a genuine child must land after root, not after
+	// the off-chain stray.
+	added := mustCreateElement(t, dst, "added")
+	require.NoError(t, comment.AddSibling(added))
+
+	var names []string
+	for child := range helium.Children(dst) {
+		names = append(names, child.Type().String())
+	}
+	require.Equal(t, []string{"CommentNode", "ElementNode", "ElementNode"}, names)
+	require.Equal(t, helium.Node(root), added.PrevSibling(), "the append lands after the reachable tail")
+	require.Equal(t, helium.Node(added), root.NextSibling())
+	require.Equal(t, added, dst.LastChild())
+	requireLastChildOnChain(t, dst)
 }

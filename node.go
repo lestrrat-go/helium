@@ -802,6 +802,53 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 	return nil
 }
 
+// chainMember reports whether x is a member of the single child chain pdn owns:
+// the chain that starts at pdn.firstChild and runs forward through next
+// pointers. It is the reachability proof the tree-mutation paths need before
+// they may treat pdn.lastChild as the tail of the chain an anchor sits on, and
+// before they may advance pdn.lastChild at all.
+//
+// Two pointer comparisons answer every append the tree API performs. An x that
+// IS pdn.firstChild is the chain head by definition. An x that IS pdn.lastChild
+// is on the chain by the invariant every lastChild write in this package
+// maintains: a node becomes lastChild only when it was linked after a node
+// already proven to be on the chain. So both ordinary append workloads — at the
+// tail, and through a fixed early child — stay O(1).
+//
+// Otherwise walk prev to the head of x's own chain: x is a member exactly when
+// that head is pdn.firstChild. The walk costs x's distance BEHIND it, never the
+// length of the chain ahead of it, so it can never cost more than the
+// NextSibling() walk it is protecting. siblingCycleGuard bounds it, so a corrupt
+// prev chain terminates instead of spinning.
+func chainMember(pdn, x *docnode) bool {
+	if pdn == nil || x == nil {
+		return false
+	}
+	first := pdn.firstChild
+	if first == nil {
+		return false
+	}
+	if first.baseDocNode() == x {
+		return true
+	}
+	if last := pdn.lastChild; last != nil && last.baseDocNode() == x {
+		return true
+	}
+
+	var g siblingCycleGuard
+	head := x
+	for {
+		if g.step(head) {
+			return false
+		}
+		prev := head.prev
+		if prev == nil {
+			return first.baseDocNode() == head
+		}
+		head = prev.baseDocNode()
+	}
+}
+
 func addSibling(n MutableNode, cur Node) error {
 	// Reject a nil or typed-nil operand BEFORE any baseDocNode() dereference so
 	// the call returns ErrNilNode instead of panicking and leaves the tree
@@ -854,42 +901,50 @@ func addSibling(n MutableNode, cur Node) error {
 		return err
 	}
 
+	// Resolve ONCE whether the anchor is a member of the child chain its claimed
+	// parent owns. That single fact gates both the O(1) tail jump below and
+	// every parent.lastChild write on this path, and the two uses make each
+	// other sound:
+	//
+	//   - No write here can move parent.lastChild off the parent's child chain,
+	//     so "lastChild is on the chain that starts at firstChild" is an
+	//     invariant every append in this package maintains.
+	//   - Given that invariant, an anchor proven to be on that same chain, and a
+	//     recorded tail whose next is nil, the recorded tail IS the node the
+	//     NextSibling() walk from the anchor would have found. That is the proof
+	//     the jump needs, and chainMember delivers it in a pointer comparison
+	//     for every append the tree API performs.
+	//
+	// A node can claim a parent without being a member of its child list — a raw
+	// UnsafeSetParent write, or CopyExtSubset's copied external subset, which
+	// claims the destination *Document and is reachable only through ExtSubset.
+	// Appending through such a node links after it and leaves lastChild on the
+	// child list, so the reachable children keep their true tail.
+	parent := ndn.parent
+	var pdn *docnode
+	anchorOnChain := false
+	if parent != nil {
+		pdn = parent.baseDocNode()
+		anchorOnChain = chainMember(pdn, ndn)
+	}
+
 	// n is already the tail: link directly without a NextSibling() call.
 	if ndn.next == nil {
 		ndn.next = cur
 		cdn.prev = n
-		parent := ndn.parent
 		cdn.parent = parent
-		if parent != nil {
-			parent.baseDocNode().lastChild = cur
+		if anchorOnChain {
+			pdn.lastChild = cur
 		}
 		return nil
 	}
 
 	// n is not the tail. Rather than walk NextSibling() from n (O(S) per call,
 	// O(S^2) over S appends through a fixed non-tail anchor), jump straight to
-	// the tail parent.lastChild already records for n's parent, when it is
-	// trustworthy for THIS chain. The invariant the jump relies on: a parent's
-	// children form exactly one chain and lastChild is that chain's tail. Four
-	// guards vouch for it before trusting the jump; any tree the guards cannot
+	// the tail parent.lastChild already records, once the guards prove that
+	// record is the tail of the very chain n sits on. Any tree the guards cannot
 	// vouch for falls through to the walk below unchanged.
-	//
-	// The jump trusts pdn.lastChild to be the tail of the single chain the
-	// parent's children form. That is the same trust addChild and
-	// appendFastChild (UnsafeAppendChild) already place in lastChild when they
-	// link a new child directly after it, and the guards below are strictly
-	// stronger than theirs: neither of those two checks that lastChild claims
-	// this parent at all. Every tree built through the safe API satisfies that
-	// trust. Two shapes do not: a tree whose parent pointers were written by
-	// UnsafeSetParent, and a tree where a node claims a parent without being a
-	// member of that parent's child list (CopyExtSubset's copied external
-	// subset claims the destination document as its parent and is reachable
-	// only through ExtSubset). Such a tree is outside this fast path's
-	// contract. On one, the append lands after the recorded lastChild — the
-	// same place addChild and UnsafeAppendChild put it — instead of after the
-	// last node reachable by walking from the anchor.
-	if parent := ndn.parent; parent != nil {
-		pdn := parent.baseDocNode()
+	if anchorOnChain {
 		if tail := pdn.lastChild; tail != nil {
 			tdn := tail.baseDocNode()
 			// tdn.next == nil: the recorded tail must be a genuine tail. This is
@@ -898,9 +953,7 @@ func addSibling(n MutableNode, cur Node) error {
 			// precisely when lastChild.next != nil, so this guard rejects the
 			// jump and the walk below finds and repairs the true tail.
 			// tdn.parent == pdn: the recorded tail must actually claim this
-			// parent, so a tail left behind by a raw pointer write (e.g. a DTD
-			// whose parent is set without linking it into the child list) is
-			// never trusted.
+			// parent.
 			// tdn != ndn: never self-link (redundant given ndn.next != nil
 			// above, but cheap and documents the intent).
 			if tdn != ndn && tdn.next == nil && tdn.parent != nil && tdn.parent.baseDocNode() == pdn {
@@ -919,10 +972,14 @@ func addSibling(n MutableNode, cur Node) error {
 			idn := iter.baseDocNode()
 			idn.next = cur
 			cdn.prev = iter
-			parent := iter.Parent()
-			cdn.parent = parent
-			if parent != nil {
-				parent.baseDocNode().lastChild = cur
+			endParent := iter.Parent()
+			cdn.parent = endParent
+			// Advance lastChild only when the node just linked is provably on
+			// that parent's child chain. The walk started at n and never left
+			// the chain n sits on, so this holds exactly when n was on the
+			// chain of the same parent the walk ended under.
+			if endParent != nil && anchorOnChain && endParent.baseDocNode() == pdn {
+				pdn.lastChild = cur
 			}
 			return nil
 		}
@@ -939,10 +996,11 @@ func addSibling(n MutableNode, cur Node) error {
 // tests that must build a deliberately corrupt tree to exercise the traversal
 // cycle guards. Ordinary code MUST use AddChild/AddSibling/UnlinkNode instead.
 //
-// A tree built through it is also outside the contract of the tree-mutation
-// fast paths. AddChild, UnsafeAppendChild, and AddSibling's tail jump all
-// append after the parent's recorded lastChild, and a raw parent write leaves
-// that record disconnected from the chain an anchor reaches.
+// A node whose parent is set this way claims that parent without being a member
+// of its child list. Every append in this package treats such a node as outside
+// the parent's child chain: AddSibling links after it but leaves the parent's
+// recorded lastChild on the child list, so AddChild, UnsafeAppendChild and
+// AddSibling all keep appending at the end of the reachable children.
 func unsafeSetParent(n Node, parent Node) {
 	n.baseDocNode().parent = parent
 }
@@ -1175,7 +1233,14 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 	// the parent's lastChild must never be retargeted at an attribute.
 	if !attrList && afterN == nil && len(nodes) > 1 {
 		if parent := cdn.parent; parent != nil {
-			parent.baseDocNode().lastChild = last
+			// Advance lastChild only when the spliced-in run is provably on the
+			// parent's child chain: n may have claimed parent without ever being
+			// a member of its child list, and retargeting lastChild at a node
+			// off that chain would break the invariant addSibling's tail jump
+			// relies on.
+			if pdn := parent.baseDocNode(); chainMember(pdn, cdn) {
+				pdn.lastChild = last
+			}
 		}
 	}
 
