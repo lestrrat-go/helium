@@ -124,6 +124,18 @@ type execContext struct {
 	globalContextAbsent          bool                                     // true when global context item is absent (select evaluated to empty)
 	globalContextItem            xpath3.Item                              // explicit global context item (overrides sourceDoc for global var/param eval); nil = use sourceDoc
 	traceWriter                  io.Writer                                // destination for fn:trace output (nil = os.Stderr)
+	// xmlSpacePreserveMemo caches inheritedXMLSpace's ancestor-walk result
+	// (elem -> whether xml:space="preserve" is in scope) for the
+	// retained-whitespace case, where the same element's whitespace-only text
+	// children are re-checked repeatedly (e.g. once by the strip pre-pass, then
+	// again as each is visited by applyTemplates). Safe ONLY because nothing
+	// inside one transform changes an element's in-scope xml:space: the source
+	// is never mutated in place (a private copy is stripped instead), and a
+	// result/temporary tree is memoized only once fully linked into its final
+	// parent — never while still being assembled. A future change that
+	// traverses a tree while it is still being built must clear this map (or
+	// not memoize) at that seam. Lazily allocated; nil means empty.
+	xmlSpacePreserveMemo map[*helium.Element]bool
 
 	// cached base XPath evaluator — rebuilt when invalidation keys change
 	cachedBaseEval                  xpath3.Evaluator
