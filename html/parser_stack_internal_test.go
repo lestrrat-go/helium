@@ -49,9 +49,12 @@ func indexedAutoCloseWouldRun(p *parser, endTag string) bool {
 	return true
 }
 
-// diffCheckAdversarialInputs mirrors the shapes captured in
-// .tmp/html-stack-baseline.txt: absent end tags, blocked end tags, table
-// auto-close, inline mismatch, a stray end tag, and a pre-root end tag.
+// diffCheckAdversarialInputs collects the input shapes that drive
+// htmlAutoCloseOnClose down each of its distinct paths: an end tag with no
+// matching open element, an end tag blocked by a higher-priority element
+// beneath it, table and list auto-close, an inline/block mismatch, a stray
+// end tag past the point where its element was already closed, and an end tag
+// before the root element is open.
 var diffCheckAdversarialInputs = []string{
 	`<html><body><div><div></span>x`,
 	`<html><body><span><div><b><b></span></span>x`,

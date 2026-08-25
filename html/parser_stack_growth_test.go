@@ -146,3 +146,47 @@ func BenchmarkParse(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkBlockedEndTags measures the htmlAutoCloseOnClose worst case that
+// the open-element-stack index targets, using the generator above:
+// blockedEndTagInput(32000) is a 320,023-byte document in which every one of
+// the 32,000 </span> end tags is blocked by the <div> beneath them, so each
+// one triggers a backward pre-scan over the whole stack. BenchmarkParse and
+// BenchmarkParseSAX cannot show this effect, because no file in the golden
+// corpus nests deeply enough for the pre-scan to cost anything.
+//
+// Run it with:
+//
+//	go test ./html -run '^$' -bench BenchmarkBlockedEndTags -count=3
+//
+// To reproduce the before/after, extract the base revision and drop this file
+// into it. This file is written so that only the two helpers reading the
+// stackScanSteps counter (parseStackScanSteps and
+// TestHTMLAutoCloseOnCloseBlockedGrowth) depend on symbols the base lacks; the
+// generator and this benchmark compile and run there unchanged:
+//
+//	mkdir /tmp/htmlbase
+//	git archive origin/main | tar -x -C /tmp/htmlbase
+//	cp html/parser_stack_growth_test.go /tmp/htmlbase/html/
+//	# delete parseStackScanSteps and TestHTMLAutoCloseOnCloseBlockedGrowth
+//	# from the copy: the base has no parser.stackScanSteps field.
+//	cd /tmp/htmlbase && go test ./html -run '^$' -bench BenchmarkBlockedEndTags -count=3
+//
+// Observed on an AMD Ryzen 9 7900X3D (linux/amd64, go1.26.6), three runs each:
+//
+//	base (backward linear scan):  5512, 5652, 5567 ms/op
+//	this branch (indexed stack):     6.94, 6.91, 7.22 ms/op
+//
+// That is a factor of roughly 800. The base measurement is a single iteration
+// per run because one parse already exceeds the default 1s benchtime.
+func BenchmarkBlockedEndTags(b *testing.B) {
+	input := blockedEndTagInput(32000)
+	p := NewParser().SuppressErrors(true).SuppressWarnings(true)
+	ctx := context.Background()
+	b.SetBytes(int64(len(input)))
+	b.ResetTimer()
+	for range b.N {
+		h := SAXCallbacks{}
+		_ = p.ParseWithSAX(ctx, input, &h)
+	}
+}
