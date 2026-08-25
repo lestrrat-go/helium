@@ -29,6 +29,7 @@ func appendFastChild(parent MutableNode, child Node) error {
 
 	last := pdn.lastChild
 	if last == nil {
+		noteOrphanedChildClaim(parent, pdn.firstChild)
 		pdn.firstChild = child
 		pdn.lastChild = child
 		cdn.parent = parent

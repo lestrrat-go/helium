@@ -200,11 +200,11 @@ func setLastChild(n MutableNode, cur Node) {
 }
 
 // SetOwnerDocument makes doc this node's owning document. A hand-written link
-// record travels with the node (adoptRawLinkWrites), so a document that adopts a
+// record travels with the node (adoptUntrustedLinks), so a document that adopts a
 // subtree built outside the guarded paths inherits the record instead of
 // starting out trusting its own lastChild.
 func (n *docnode) SetOwnerDocument(doc *Document) {
-	adoptRawLinkWrites(n.doc, doc)
+	adoptUntrustedLinks(n.doc, doc)
 	n.doc = doc
 }
 
@@ -639,7 +639,7 @@ func noteCrossDocumentEscape(dest *Document, cur Node) {
 	// A node crossing into dest's tree brings its links with it, so a
 	// hand-written-link record on the document it came from has to travel too:
 	// dest's own lastChild is what the O(1) append-point resolution trusts.
-	adoptRawLinkWrites(curDoc, dest)
+	adoptUntrustedLinks(curDoc, dest)
 	if curDoc == nil {
 		return
 	}
@@ -740,6 +740,7 @@ func addChild(n MutableNode, cur Node) error {
 
 	l := pdn.lastChild
 	if l == nil {
+		noteOrphanedChildClaim(n, pdn.firstChild)
 		pdn.firstChild = cur
 		pdn.lastChild = cur
 		cdn.parent = n
@@ -925,7 +926,7 @@ func reciprocalPrev(x *docnode) *docnode {
 //     invariant of the guarded paths — every one of them moves lastChild only to
 //     a node it has just linked onto the chain — so what is checked instead is
 //     that nothing has written a link outside those paths for this document.
-//     Document.rawLinkWrites records exactly that, so the shortcut is declined
+//     Document.untrustedLinks records exactly that, so the shortcut is declined
 //     for a document whose links were hand-written.
 //
 // The owning document is read through owningDocument, so a *Document parent
@@ -960,7 +961,7 @@ func tailJumpTarget(parent Node, ndn *docnode) Node {
 		return nil
 	}
 	doc := owningDocument(parent)
-	if doc == nil || doc.rawLinkWrites {
+	if doc == nil || doc.untrustedLinks {
 		return nil
 	}
 	if doc == parent && doc.offChainChildClaim {
@@ -1154,34 +1155,61 @@ func UnsafeSetNextSibling(n Node, next Node) {
 //
 // A write it cannot attribute to ANY document — every node involved is still
 // detached, so all three reads come back nil — is recorded on the package-level
-// orphanRawLinkWrites instead. Nothing else can carry it: the forged link
+// orphanUntrustedLinks instead. Nothing else can carry it: the forged link
 // outlives the moment it was made, and the document that eventually adopts the
 // subtree would otherwise start life believing every link in it came from a
-// guarded path. adoptRawLinkWrites is what hands the record on.
+// guarded path. adoptUntrustedLinks is what hands the record on.
 func noteRawLinkWrite(ndn *docnode, operand Node) {
-	attributed := markRawLinkWrites(ndn.doc)
+	attributed := markUntrustedLinks(ndn.doc)
 	if parent := ndn.parent; parent != nil {
-		attributed = markRawLinkWrites(owningDocument(parent)) && attributed
+		attributed = markUntrustedLinks(owningDocument(parent)) && attributed
 	}
 	if !isNilNode(operand) {
-		attributed = markRawLinkWrites(owningDocument(operand)) && attributed
+		attributed = markUntrustedLinks(owningDocument(operand)) && attributed
 	}
 	if !attributed {
-		orphanRawLinkWrites.Store(true)
+		orphanUntrustedLinks.Store(true)
 	}
 }
 
-// markRawLinkWrites records a hand-written link on doc and reports whether there
+// noteOrphanedChildClaim records the one off-chain parent claim the GUARDED
+// paths themselves can create. A parent holding a firstChild with NO lastChild
+// is a shape several node builders leave behind — Document.stringToNodeList
+// (which is how an entity referenced from an attribute value gets its expansion)
+// and Document.CreateAttribute both set a firstChild and leave lastChild nil.
+// An append onto such a parent takes the empty-parent branch, which overwrites
+// firstChild: the child that was there is detached from the chain while it goes
+// on claiming this parent, and a later append THROUGH that detached child
+// records its own result as the parent's lastChild, moving that record off the
+// child list.
+//
+// No raw setter is involved, so noteRawLinkWrite never sees it. Record it here,
+// at the moment the claim is created, on the documents that own the parent whose
+// chain is at stake and the child being detached from it. orphan is the parent's
+// firstChild BEFORE the overwrite; a nil one means the parent was genuinely
+// empty and nothing is recorded.
+func noteOrphanedChildClaim(parent Node, orphan Node) {
+	if isNilNode(orphan) {
+		return
+	}
+	attributed := markUntrustedLinks(owningDocument(parent))
+	attributed = markUntrustedLinks(owningDocument(orphan)) && attributed
+	if !attributed {
+		orphanUntrustedLinks.Store(true)
+	}
+}
+
+// markUntrustedLinks records a hand-written link on doc and reports whether there
 // was a document to record it on.
-func markRawLinkWrites(doc *Document) bool {
+func markUntrustedLinks(doc *Document) bool {
 	if doc == nil {
 		return false
 	}
-	doc.rawLinkWrites = true
+	doc.untrustedLinks = true
 	return true
 }
 
-// orphanRawLinkWrites records a hand-written link that no document owned at the
+// orphanUntrustedLinks records a hand-written link that no document owned at the
 // time it was made. It is package-level because there is nowhere else to put it:
 // a detached node carries no document, and the forged link is still there when a
 // document later adopts the subtree. It is only ever set by the raw setters,
@@ -1189,31 +1217,31 @@ func markRawLinkWrites(doc *Document) bool {
 // document keeps the O(1) append-point resolution. It is atomic because the
 // documents that read it are otherwise independent and may live in different
 // goroutines.
-var orphanRawLinkWrites atomic.Bool
+var orphanUntrustedLinks atomic.Bool
 
-// adoptRawLinkWrites carries a hand-written-link record forward when a node
+// adoptUntrustedLinks carries a hand-written-link record forward when a node
 // changes owning document. The record lives on the DOCUMENT, so a subtree that
 // moves between documents would otherwise leave it behind: the destination would
 // trust a lastChild the guarded paths never wrote. A node arriving from NO
-// document is the case orphanRawLinkWrites exists for — the write that forged
+// document is the case orphanUntrustedLinks exists for — the write that forged
 // its links had no document to be recorded on.
 //
 // It errs toward marking. Marking a document that holds no forged link only
 // costs it the O(1) append-point resolution, which is a fallback to the sibling
 // walk every other tree operation performs unconditionally; failing to mark one
 // that does hold a forged link is a wrong tree.
-func adoptRawLinkWrites(from, to *Document) {
-	if to == nil || to.rawLinkWrites || from == to {
+func adoptUntrustedLinks(from, to *Document) {
+	if to == nil || to.untrustedLinks || from == to {
 		return
 	}
 	if from == nil {
-		if orphanRawLinkWrites.Load() {
-			to.rawLinkWrites = true
+		if orphanUntrustedLinks.Load() {
+			to.untrustedLinks = true
 		}
 		return
 	}
-	if from.rawLinkWrites {
-		to.rawLinkWrites = true
+	if from.untrustedLinks {
+		to.untrustedLinks = true
 	}
 }
 
@@ -1754,7 +1782,7 @@ func setListDoc(n Node, doc *Document) {
 			mn.SetTreeDoc(doc)
 			continue
 		}
-		adoptRawLinkWrites(cdn.doc, doc)
+		adoptUntrustedLinks(cdn.doc, doc)
 		cdn.doc = doc
 	}
 }
@@ -1779,7 +1807,7 @@ func setTreeDoc(n MutableNode, doc *Document) {
 			}
 			seenAttrs[pdn] = struct{}{}
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
-			adoptRawLinkWrites(prop.doc, doc)
+			adoptUntrustedLinks(prop.doc, doc)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
 				setListDoc(child, doc)

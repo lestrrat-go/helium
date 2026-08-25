@@ -71,7 +71,7 @@ func TestTailJumpTargetDocumentParent(t *testing.T) {
 		require.NoError(t, err)
 		unsafeSetParent(stray, doc)
 
-		require.True(t, doc.rawLinkWrites)
+		require.True(t, doc.untrustedLinks)
 		require.Nil(t, tailJumpTarget(doc, comment.baseDocNode()))
 	})
 }
@@ -88,10 +88,10 @@ func TestAdoptRawLinkWritesFromOrphan(t *testing.T) {
 	b, err := orphan.CreateElement("b")
 	require.NoError(t, err)
 	UnsafeSetNextSibling(a, b)
-	require.True(t, orphanRawLinkWrites.Load(), "a write no document owned is recorded package-wide")
+	require.True(t, orphanUntrustedLinks.Load(), "a write no document owned is recorded package-wide")
 
 	doc := NewDefaultDocument()
-	require.False(t, doc.rawLinkWrites)
+	require.False(t, doc.untrustedLinks)
 	a.SetTreeDoc(doc)
-	require.True(t, doc.rawLinkWrites, "the adopting document inherits the record")
+	require.True(t, doc.untrustedLinks, "the adopting document inherits the record")
 }

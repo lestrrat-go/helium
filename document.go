@@ -108,13 +108,19 @@ type Document struct {
 	// paths (node.go noteCrossDocumentEscape).
 	slabEscaped bool
 
-	// rawLinkWrites records that at least one link pointer in a tree this
-	// document owns was written by hand, outside the guarded child-list splice —
-	// by the raw unsafeSetParent / UnsafeSetNextSibling setters, the only writes
-	// in this package that can leave an ELEMENT claiming a parent it is not a
-	// child of, or forge a sibling edge no guarded path would build. (A DOCUMENT
-	// can be claimed that way without a raw write, by the external subset
-	// CopyExtSubset attaches to it; offChainChildClaim below records that.)
+	// untrustedLinks records that a tree this document owns holds at least one
+	// link the append fast paths may not reason from: a node claiming a parent it
+	// is not a child of, or a sibling edge no guarded path would build. Two
+	// things produce one. The raw unsafeSetParent / UnsafeSetNextSibling setters
+	// write such a link directly (node.go noteRawLinkWrite). And the guarded
+	// paths themselves produce the first kind on a parent that already holds a
+	// firstChild with NO lastChild — a shape Document.stringToNodeList and
+	// Document.CreateAttribute leave behind — because AddChild then takes its
+	// empty-parent branch and overwrites firstChild, detaching that child while
+	// it goes on claiming the parent (node.go noteOrphanedChildClaim).
+	// (A DOCUMENT can also be claimed without being on its child list, by the
+	// external subset CopyExtSubset attaches to it; offChainChildClaim below
+	// records that, because it needs to decline only for a *Document parent.)
 	//
 	// While it is false, every link in this document was built by the guarded
 	// paths, so lastChild is the final node of the chain that starts at
@@ -125,10 +131,11 @@ type Document struct {
 	//
 	// The record follows the TREE, not only the node it was made on: a raw write
 	// on a still-detached subtree has no document to be recorded on at the time,
-	// and a subtree can change owner afterwards, so adoptRawLinkWrites (node.go)
+	// and a subtree can change owner afterwards, so adoptUntrustedLinks (node.go)
 	// carries the record onto whichever document adopts it. Set by node.go
-	// noteRawLinkWrite / adoptRawLinkWrites; read by tailJumpTarget.
-	rawLinkWrites bool
+	// noteRawLinkWrite / noteOrphanedChildClaim / adoptUntrustedLinks; read by
+	// tailJumpTarget.
+	untrustedLinks bool
 
 	// offChainChildClaim records that a node has been given this document as its
 	// parent WITHOUT being linked into the document's child list. CopyExtSubset
@@ -139,7 +146,7 @@ type Document struct {
 	// tailJumpTarget must stop resolving an append point from it. A document is
 	// the only parent that can acquire an off-chain claimant without a raw link
 	// write; every other parent's chain can only get one through unsafeSetParent,
-	// which sets rawLinkWrites instead. (CreateInternalSubset also gives a DTD
+	// which sets untrustedLinks instead. (CreateInternalSubset also gives a DTD
 	// this document as its parent, but it splices that DTD into the child list,
 	// so it creates no claim.) Set by copy_dtd.go CopyExtSubset; read by
 	// tailJumpTarget.

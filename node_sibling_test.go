@@ -594,3 +594,63 @@ func TestAddSiblingDocumentParentGrowth(t *testing.T) {
 	}
 	require.Equal(t, n+1, count, "child count including the anchor")
 }
+
+// TestAddSiblingOrphanedChildClaim reaches an off-chain parent claim through
+// PUBLIC, non-Unsafe calls only, by way of the one shape the guarded paths
+// themselves can create.
+//
+// Document.stringToNodeList gives an entity referenced from an attribute value a
+// firstChild and no lastChild. AddChild onto such a parent takes its
+// empty-parent branch and overwrites firstChild, which detaches the child that
+// was there while it goes on claiming the entity as its parent. An append
+// through that detached child then records its own result as the entity's
+// lastChild, off the entity's child list — the same shape UnsafeSetParent
+// produces, with no raw setter anywhere.
+//
+// The expectations below are what the plain sibling walk produces, so the whole
+// test passes unchanged against the walk-only implementation: the O(1) tail
+// resolution must decline here, which it does because the claim is recorded when
+// it is created (noteOrphanedChildClaim).
+func TestAddSiblingOrphanedChildClaim(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<!DOCTYPE d [<!ENTITY e "xy">]><d a="&e;"/>`))
+	require.NoError(t, err)
+
+	ent, ok := doc.GetEntity("e")
+	require.True(t, ok)
+	require.NotNil(t, ent.FirstChild(), "the attribute-value expansion is the entity's child")
+	require.Nil(t, ent.LastChild(), "and it was recorded without a lastChild")
+
+	detached, ok := ent.FirstChild().(helium.MutableNode)
+	require.True(t, ok)
+
+	// The empty-parent branch overwrites firstChild, detaching the expansion.
+	q := doc.CreateComment([]byte("q"))
+	require.NoError(t, ent.AddChild(q))
+	require.Equal(t, helium.Node(q), ent.FirstChild())
+	require.Equal(t, helium.Node(ent), detached.Parent(), "the detached child still claims the entity")
+
+	t1 := doc.CreateComment([]byte("t1"))
+	require.NoError(t, q.AddSibling(t1))
+
+	// An append through the detached child moves the entity's recorded tail off
+	// its child list.
+	s := doc.CreateComment([]byte("s"))
+	require.NoError(t, detached.AddSibling(s))
+	require.Equal(t, helium.Node(s), ent.LastChild(), "the append records a tail off the child list")
+
+	// A later append through a genuine child must still land at the end of the
+	// REACHABLE chain, not after the off-chain tail.
+	u := doc.CreateComment([]byte("u"))
+	require.NoError(t, q.AddSibling(u))
+
+	var contents []string
+	for child := range helium.Children(ent) {
+		contents = append(contents, string(child.Content()))
+	}
+	require.Equal(t, []string{"q", "t1", "u"}, contents, "the append lands at the end of the reachable chain")
+	require.Equal(t, helium.Node(t1), u.PrevSibling())
+	require.Equal(t, helium.Node(u), ent.LastChild())
+	require.Nil(t, s.NextSibling(), "the off-chain chain is untouched")
+}
