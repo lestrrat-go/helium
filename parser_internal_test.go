@@ -578,3 +578,93 @@ func TestNamespaceDeclarationDuplicateAboveThreshold(t *testing.T) {
 		require.Contains(t, err.Error(), "duplicate attribute is not allowed")
 	})
 }
+
+// newAttributeDefaultCtx builds a parserCtx that is ready to record <!ATTLIST>
+// defaults: init() seeds the lookup tables and doc supplies the owner for the
+// Attribute nodes addAttributeDefault creates.
+func newAttributeDefaultCtx(t *testing.T) *parserCtx {
+	t.Helper()
+
+	pctx := &parserCtx{}
+	require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+	pctx.doc = NewDocument("1.0", "", StandaloneImplicitNo)
+	return pctx
+}
+
+// parserCtx.attsDefaultSeen is allocated lazily, so inheritNestedParserState
+// must MATERIALIZE it before handing it to a nested sub-parse. Plain assignment
+// would copy a nil map whenever the parent has not recorded a default yet; the
+// sub-parse would then allocate a second set of its own and stop seeing the
+// parent's declarations, while both contexts keep appending into the SHARED
+// attsDefault. A repeated <!ATTLIST> default crossing the entity boundary would
+// be applied twice, contradicting XML 1.0 3.3 ("the first declaration is
+// binding").
+func TestInheritNestedAttributeDefaultDedup(t *testing.T) {
+	t.Parallel()
+
+	// A parse that has not yet seen any <!ATTLIST> default holds no set at all.
+	// This is the state the lazy allocation makes reachable, and the one a plain
+	// copy at the inherit seam would silently break.
+	t.Run("parent with no defaults yet still shares one set", func(t *testing.T) {
+		t.Parallel()
+
+		pctx := newAttributeDefaultCtx(t)
+		require.Nil(t, pctx.attsDefaultSeen,
+			"a parse with no <!ATTLIST> default must not allocate the dedup set")
+
+		newctx := newAttributeDefaultCtx(t)
+		newctx.doc = pctx.doc
+		pctx.inheritNestedParserState(newctx)
+
+		require.NotNil(t, pctx.attsDefaultSeen,
+			"the inherit seam must materialize the parent's set before sharing it")
+		require.True(t, sameSpecialAttrSet(pctx.attsDefaultSeen, newctx.attsDefaultSeen),
+			"parent and nested context must hold the SAME dedup set")
+
+		// The nested sub-parse records first; the parent must then see it.
+		newctx.addAttributeDefault("elem", "a", "nested")
+		pctx.addAttributeDefault("elem", "a", "parent")
+
+		require.Len(t, pctx.attsDefault["elem"], 1,
+			"the parent must reject a default the nested sub-parse already recorded")
+		require.Equal(t, "nested", pctx.attsDefault["elem"][0].Value(),
+			"the first declaration is binding")
+	})
+
+	// The reverse direction: a default recorded before the sub-parse starts must
+	// still be visible inside it.
+	t.Run("nested context sees a default the parent recorded", func(t *testing.T) {
+		t.Parallel()
+
+		pctx := newAttributeDefaultCtx(t)
+		pctx.addAttributeDefault("elem", "a", "parent")
+		require.Len(t, pctx.attsDefault["elem"], 1)
+
+		newctx := newAttributeDefaultCtx(t)
+		newctx.doc = pctx.doc
+		pctx.inheritNestedParserState(newctx)
+
+		require.True(t, sameSpecialAttrSet(pctx.attsDefaultSeen, newctx.attsDefaultSeen),
+			"parent and nested context must hold the SAME dedup set")
+
+		newctx.addAttributeDefault("elem", "a", "nested")
+
+		require.Len(t, pctx.attsDefault["elem"], 1,
+			"the nested sub-parse must reject a default the parent already recorded")
+		require.Equal(t, "parent", pctx.attsDefault["elem"][0].Value(),
+			"the first declaration is binding")
+	})
+}
+
+// sameSpecialAttrSet reports whether two maps are the same map value, which is
+// what "shared" means here — equal contents would not prove the sharing.
+func sameSpecialAttrSet(a, b map[specialAttrKey]struct{}) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	probe := specialAttrKey{elem: "\x00sharing-probe", attr: "\x00sharing-probe"}
+	a[probe] = struct{}{}
+	_, ok := b[probe]
+	delete(a, probe)
+	return ok
+}

@@ -160,6 +160,12 @@ type parserCtx struct {
 	// per-call cost). Append-only for the same reason attsDefault is:
 	// nothing in a duplicate-declared default's semantics ever needs to
 	// invalidate an entry.
+	//
+	// nil until the first <!ATTLIST> default is recorded: it is allocated by
+	// attributeDefaultSeen, so a document with no DTD defaults (the common
+	// case) never pays for a map it cannot use. Probing a nil map is legal,
+	// so only the write path and the nested-sub-parse seam
+	// (inheritNestedParserState) go through that accessor.
 	attsDefaultSeen map[specialAttrKey]struct{}
 	valid           bool
 	hasPERefs       bool
@@ -692,7 +698,9 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
 	ctx.attsSpecial = map[specialAttrKey]enum.AttributeType{}
 	ctx.attsSpecialExternal = map[specialAttrKey]struct{}{}
 	ctx.attsDefault = map[string][]*Attribute{}
-	ctx.attsDefaultSeen = map[specialAttrKey]struct{}{}
+	// Cleared, never allocated: attributeDefaultSeen builds it on the first
+	// <!ATTLIST> default so an ordinary parse allocates no DTD-only map.
+	ctx.attsDefaultSeen = nil
 	ctx.wellFormed = true
 	ctx.spaceTab = ctx.spaceTab[:0]
 	ctx.spaceTab = append(ctx.spaceTab, -1) // initial value before any element

@@ -290,3 +290,43 @@ func TestValidateAttributeValue(t *testing.T) {
 		})
 	}
 }
+
+// noDTDDefaultParseAllocBudget is the measured allocation count of Parser.Parse
+// on a minimal well-formed document with no DTD and no attributes.
+//
+// It exists to pin ONE property: attsDefaultSeen is a DTD-default-only dedup set
+// and must be allocated lazily, on the first <!ATTLIST> default, so a document
+// that declares no DTD never pays for it. Allocating it eagerly in parserCtx.init
+// costs every parse in the program exactly one map, which this budget catches.
+//
+// Treat a failure as a real question about the parse path, not as a number to
+// bump: any increase means the common no-DTD parse acquired a new allocation.
+const noDTDDefaultParseAllocBudget = 27
+
+// A document with no DTD must not allocate the <!ATTLIST> default dedup set.
+func TestParseNoDTDAllocations(t *testing.T) {
+	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
+	// test, and a concurrent allocator would perturb the count anyway.
+
+	src := []byte(`<root/>`)
+	p := helium.NewParser()
+	ctx := t.Context()
+
+	// Warm up first: the very first Parse in the process seeds package-level
+	// lazies (the name lexicon, buffer pools), which AllocsPerRun would
+	// otherwise charge to the measured run.
+	if _, err := p.Parse(ctx, src); err != nil {
+		require.NoError(t, err)
+	}
+
+	var parseErr error
+	allocs := testing.AllocsPerRun(200, func() {
+		_, err := p.Parse(ctx, src)
+		if err != nil && parseErr == nil {
+			parseErr = err
+		}
+	})
+	require.NoError(t, parseErr)
+	require.LessOrEqual(t, int(allocs), noDTDDefaultParseAllocBudget,
+		"parsing a document with no DTD must not allocate DTD-only bookkeeping")
+}

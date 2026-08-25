@@ -545,7 +545,21 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 		attr.SetAType(decl.AType())
 	}
 	ctx.attsDefault[elemName] = append(existing, attr)
-	ctx.attsDefaultSeen[dkey] = struct{}{}
+	ctx.attributeDefaultSeen()[dkey] = struct{}{}
+}
+
+// attributeDefaultSeen returns the (elem, attr) dedup set backing
+// addAttributeDefault, allocating it on first use. Only a caller that WRITES
+// to the set (or that must hand the SAME set to a nested sub-parse, see
+// inheritNestedParserState) needs this; a read probes ctx.attsDefaultSeen
+// directly, because indexing a nil map is legal and reports "not seen".
+// Deferring the allocation to the first <!ATTLIST> default keeps a document
+// with no DTD defaults free of a map it would never write to.
+func (ctx *parserCtx) attributeDefaultSeen() map[specialAttrKey]struct{} {
+	if ctx.attsDefaultSeen == nil {
+		ctx.attsDefaultSeen = map[specialAttrKey]struct{}{}
+	}
+	return ctx.attsDefaultSeen
 }
 
 func (ctx *parserCtx) lookupAttributeDefault(elemName string) ([]*Attribute, bool) {
