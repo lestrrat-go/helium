@@ -791,6 +791,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		if c.errorCount > 0 {
 			return nil, ErrCompilationFailed
 		}
+		c.schema.buildSubstClosures()
 		return c.schema, nil
 	}
 
@@ -1007,6 +1008,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		return nil, ErrCompilationFailed
 	}
 
+	c.schema.buildSubstClosures()
 	return c.schema, nil
 }
 

@@ -59,6 +59,10 @@ func schemaWithInstanceHints(ctx context.Context, base *Schema, doc *helium.Docu
 	if out == nil {
 		return base
 	}
+	// mergeHintSchema appended to out.substGroups, so base's substClosures
+	// (copied by field onto out in cloneSchemaSymbolTables, then nilled there)
+	// would otherwise be stale. Rebuild from the merged symbol tables.
+	out.buildSubstClosures()
 	return out
 }
 
@@ -135,6 +139,11 @@ func cloneSchemaSymbolTables(s *Schema) *Schema {
 	cp.attrGroups = maps.Clone(s.attrGroups)
 	cp.globalAttrs = maps.Clone(s.globalAttrs)
 	cp.substGroups = maps.Clone(s.substGroups)
+	// The struct copy above shares s.substClosures' map header. mergeHintSchema
+	// is about to append to cp.substGroups, which would leave that shared cache
+	// stale (silently serving pre-merge closures). Nil it here; the caller
+	// rebuilds it from the merged symbol tables once merging is done.
+	cp.substClosures = nil
 	return &cp
 }
 

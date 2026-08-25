@@ -38,6 +38,12 @@ const (
 )
 
 // Schema represents a compiled XML Schema.
+//
+// A compiled Schema is immutable. Compilation freezes the resolved XSD version
+// and the substitution-group closures of every global element declaration onto
+// it, and the Validator reads both as given; mutating the exported fields of
+// the declarations a compiled Schema owns is unsupported. See the
+// frozen-schema contract at the top of subst_closure.go.
 // (libxml2: xmlSchema)
 type Schema struct {
 	// version is the effective XSD specification version resolved at compile
@@ -61,6 +67,13 @@ type Schema struct {
 	loaderFS          fs.FS
 	loaderBaseDir     string
 	loaderParser      *helium.Parser
+	// substClosures is the precomputed substitution-group closure of every
+	// global element declaration with a non-empty closure, keyed by the head's
+	// QName. nil until buildSubstClosures runs (at the end of compileSchema);
+	// substitutableMembersFor falls back to the uncached walk while it is nil,
+	// so every compile-time caller (which runs before this field is built) is
+	// unaffected. See subst_closure.go.
+	substClosures map[QName]*substClosure
 }
 
 // LookupElement returns the global element declaration for the given name.
