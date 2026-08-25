@@ -1,6 +1,8 @@
 package helium_test
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -296,5 +298,100 @@ func TestDTDDeclValidation(t *testing.T) {
 <paper/>`)
 			require.NoError(t, err)
 		})
+	})
+}
+
+// enumDefaultAttrPattern captures the attribute name out of an Attribute
+// Default Legal diagnostic.
+var enumDefaultAttrPattern = regexp.MustCompile(`for attribute (\S+) is not among`)
+
+// oneIDElemPattern captures the element name out of a One ID per Element Type
+// diagnostic.
+var oneIDElemPattern = regexp.MustCompile(`element (\S+) has more than one ID attribute`)
+
+// matchedNames returns the first capture group of pat for every error in errs it
+// matches, in emission order, joined with commas so an ordering mismatch reads
+// directly in the failure output. Errors that do not match are ignored.
+func matchedNames(errs []error, pat *regexp.Regexp) string {
+	var names []string
+	for _, e := range errs {
+		m := pat.FindStringSubmatch(e.Error())
+		if m == nil {
+			continue
+		}
+		names = append(names, m[1])
+	}
+	return strings.Join(names, ",")
+}
+
+// The declaration-level validity checks (validateDTDDeclarations,
+// validateOneIDPerElement) iterate the subset's registration-order sequence of
+// attribute declarations, not the attributes map, so a document reports the same
+// diagnostics in the same order on every run. Ranging a Go map instead would
+// rotate the sequence randomly per run, making a golden or a diff over
+// validation output useless.
+//
+// Each case repeats the parse many times: a random order agrees with declaration
+// order once in n! draws, so a handful of iterations already makes a map-order
+// implementation fail with near-certainty.
+func TestDTDDeclDiagnosticOrder(t *testing.T) {
+	t.Parallel()
+
+	const repeats = 50
+
+	// Eight enumerated attributes, each with a default outside its own token set,
+	// so every declaration yields exactly one Attribute Default Legal diagnostic.
+	t.Run("attribute declaration diagnostics", func(t *testing.T) {
+		t.Parallel()
+
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root a1 (p|q) "z">
+<!ATTLIST root a2 (p|q) "z">
+<!ATTLIST root a3 (p|q) "z">
+<!ATTLIST root a4 (p|q) "z">
+<!ATTLIST root a5 (p|q) "z">
+<!ATTLIST root a6 (p|q) "z">
+<!ATTLIST root a7 (p|q) "z">
+<!ATTLIST root a8 (p|q) "z">
+]>
+<root/>`
+
+		const want = "a1,a2,a3,a4,a5,a6,a7,a8"
+		for i := range repeats {
+			errs, err := parseValidatingDTD(t, src)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.Equal(t, want, matchedNames(errs, enumDefaultAttrPattern),
+				"attribute declaration diagnostics must follow declaration order (iteration %d); errs=%v", i, errs)
+		}
+	})
+
+	// Four element types, each over-declaring ID attributes, are reported in the
+	// order of their first ID declaration.
+	t.Run("one ID per element diagnostics", func(t *testing.T) {
+		t.Parallel()
+
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root (alpha,bravo,charlie,delta)>
+<!ELEMENT alpha EMPTY>
+<!ELEMENT bravo EMPTY>
+<!ELEMENT charlie EMPTY>
+<!ELEMENT delta EMPTY>
+<!ATTLIST alpha i1 ID #IMPLIED i2 ID #IMPLIED>
+<!ATTLIST bravo i1 ID #IMPLIED i2 ID #IMPLIED>
+<!ATTLIST charlie i1 ID #IMPLIED i2 ID #IMPLIED>
+<!ATTLIST delta i1 ID #IMPLIED i2 ID #IMPLIED>
+]>
+<root><alpha/><bravo/><charlie/><delta/></root>`
+
+		const want = "alpha,bravo,charlie,delta"
+		for i := range repeats {
+			errs, err := parseValidatingDTD(t, src)
+			require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+			require.Equal(t, want, matchedNames(errs, oneIDElemPattern),
+				"one-ID-per-element diagnostics must follow declaration order (iteration %d); errs=%v", i, errs)
+		}
 	})
 }

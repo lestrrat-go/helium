@@ -13,6 +13,10 @@ import (
 type DTD struct {
 	docnode
 	attributes map[attrDeclKey]*AttributeDecl
+	// attrDecls holds every declaration in attributes in registration order. It
+	// is the subset-wide sequence the declaration-level validity checks iterate,
+	// so their diagnostics come out in declaration order instead of Go map order.
+	attrDecls []*AttributeDecl
 	// attrsByElem indexes the same declarations as attributes, keyed by owning
 	// element name, in registration order. It lets AttributesForElement serve a
 	// lookup without scanning every declaration in the subset.
@@ -364,14 +368,15 @@ func (dtd *DTD) AddAttributeDecl(elem, name string, atype enum.AttributeType, de
 
 // registerAttribute records an already-built attribute declaration in the DTD's
 // lookup table, keyed by its name, prefix, and owning element, and appends it to
-// the per-element index (attrsByElem) that AttributesForElement serves lookups
-// from. It does NOT link the declaration into the DTD child list, so it does not
+// both registration-order sequences: the subset-wide attrDecls and the
+// per-element index (attrsByElem) that AttributesForElement serves lookups from.
+// It does NOT link the declaration into the DTD child list, so it does not
 // serialize on its own; AddAttributeDecl is the public entry point that both
 // registers and links a declaration built from public parameters. It returns an
 // error wrapping ErrDuplicateDeclaration if an attribute with the same key is
-// already declared. This is the single blessed entry point for populating both
-// containers; the only other writer is copy_dtd.go's deep-copy path, which
-// writes both directly because it does not go through here.
+// already declared. This is the single blessed entry point for populating the
+// three containers; the only other writer is copy_dtd.go's deep-copy path, which
+// writes them directly because it does not go through here.
 func (dtd *DTD) registerAttribute(attr *AttributeDecl) error {
 	key := attrDeclKey{local: attr.name, prefix: attr.prefix, elem: attr.elem}
 	_, ok := dtd.attributes[key]
@@ -379,6 +384,7 @@ func (dtd *DTD) registerAttribute(attr *AttributeDecl) error {
 		return fmt.Errorf("duplicate attribute %s declared for element %s: %w", attr.name, attr.elem, ErrDuplicateDeclaration)
 	}
 	dtd.attributes[key] = attr
+	dtd.attrDecls = append(dtd.attrDecls, attr)
 	dtd.attrsByElem[attr.elem] = append(dtd.attrsByElem[attr.elem], attr)
 	return nil
 }

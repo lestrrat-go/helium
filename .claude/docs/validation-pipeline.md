@@ -893,19 +893,36 @@ unprefixed/differently-prefixed attribute (and vice-versa). Element declarations
 them up by `elem.LocalName()`+`elem.Prefix()` with NO fallback from a prefixed
 element to an unprefixed declaration (a `<p:r>` requires an `<!ELEMENT p:r>`).
 
-**Attribute-declaration iteration order is declaration order.** `attrsByElem`
-holds each element's declarations in the order they were registered, which is the
+**Attribute-declaration iteration order is declaration order.** A DTD keeps its
+attribute declarations in two registration-order sequences: `attrsByElem` per
+owning element, and `attrDecls` for the whole subset. Registration order is the
 order the `<!ATTLIST>` declarations are read (or, for a tree built through the
-public API, the order of the `AddAttributeDecl` calls). Every consumer inherits
-that order: `AttributesForElement` clones the index slice, and the element-keyed
-readers in `validateElementAttributes`, `checkStandaloneExternalDefaults`, and
-`GetElementByID` range over it directly. The user-visible consequence is that DTD
-validation emits an element's attribute diagnostics in declaration order, so
-repeated runs over the same document produce the same diagnostic sequence and a
-diff or golden over validation output is stable. `TestValidationDiagnosticOrder`
-(`valid_attr_test.go`) pins this: two and six missing `#REQUIRED` attributes must
-be reported in the order declared. The deep-copy path (`copy_dtd.go`) appends in
-source-child order, so a copied DTD preserves it.
+public API, the order of the `AddAttributeDecl` calls). Every order-sensitive
+consumer reads a sequence, never the `attributes` map, whose Go iteration order
+is randomized per run: `AttributesForElement` clones the index slice; the
+element-keyed readers in `validateElementAttributes`,
+`checkStandaloneExternalDefaults`, and `GetElementByID` range `attrsByElem`
+directly; and the subset-wide declaration-consistency checks
+(`validateDTDDeclarations` and `validateOneIDPerElement`, `valid_dtd_decl.go`)
+range `attrDecls`. `validateOneIDPerElement` also reports its element types in
+the order of each one's first `ID` declaration, so its diagnostics are ordered
+too. The user-visible consequence is that DTD validation emits attribute
+diagnostics in declaration order, so repeated runs over the same document produce
+the same diagnostic sequence and a diff or golden over validation output is
+stable. Two tests pin this by repeating the same parse many times, which a map
+order fails with near-certainty: `TestValidationDiagnosticOrder`
+(`valid_attr_test.go`) over instance-level missing-`#REQUIRED` diagnostics, and
+`TestDTDDeclDiagnosticOrder` (`valid_dtd_decl_test.go`) over declaration-level
+Attribute Default Legal and One ID per Element Type diagnostics.
+
+The deep-copy path (`copy_dtd.go`) rebuilds both sequences from the SOURCE's
+`attrDecls`, translating each source declaration through the original->copy
+correspondence its child walk recorded (`copyAttrDeclOrder`). It does NOT take
+the order from the child list it walks: the child list is the serialization
+order, and relinking a declaration (`AttributeDecl.AddSibling`) moves it there
+without re-registering it, so the two orders come apart. `TestCopyDTDAttrDeclOrder`
+(`copy_test.go`) pins the copy against a source whose child list has been
+reordered that way.
 
 **Attribute Value Type — every present attribute must be declared** (§3.1). After
 `validateElementAttributes` checks the declared attributes, it walks the element's
