@@ -35,13 +35,15 @@ func Children(n Node) iter.Seq[Node] {
 		}
 		owner := n.baseDocNode()
 		var g siblingCycleGuard
-		for child := n.FirstChild(); child != nil; child = nextOwnedChild(owner, child) {
-			if g.step(child.baseDocNode()) {
+		for child := owner.firstChild; child != nil; {
+			cdn := child.baseDocNode()
+			if g.step(cdn) {
 				return
 			}
 			if !yield(child) {
 				return
 			}
+			child = nextOwnedSibling(owner, cdn)
 		}
 	}
 }
@@ -79,7 +81,7 @@ func Descendants(n Node) iter.Seq[Node] {
 			onPath[pdn] = struct{}{}
 			defer delete(onPath, pdn)
 			var g siblingCycleGuard
-			for child := parent.FirstChild(); child != nil; child = nextOwnedChild(pdn, child) {
+			for child := pdn.firstChild; child != nil; {
 				cdn := child.baseDocNode()
 				if g.step(cdn) {
 					return true
@@ -87,12 +89,12 @@ func Descendants(n Node) iter.Seq[Node] {
 				if !yield(child) {
 					return false
 				}
-				if _, cyclic := onPath[cdn]; cyclic {
-					continue
+				if _, cyclic := onPath[cdn]; !cyclic {
+					if !walk(child) {
+						return false
+					}
 				}
-				if !walk(child) {
-					return false
-				}
+				child = nextOwnedSibling(pdn, cdn)
 			}
 			return true
 		}
@@ -127,8 +129,9 @@ func ChildElements(n Node) iter.Seq[*Element] {
 		}
 		owner := n.baseDocNode()
 		var g siblingCycleGuard
-		for child := n.FirstChild(); child != nil; child = nextOwnedChild(owner, child) {
-			if g.step(child.baseDocNode()) {
+		for child := owner.firstChild; child != nil; {
+			cdn := child.baseDocNode()
+			if g.step(cdn) {
 				return
 			}
 			if elem, ok := AsNode[*Element](child); ok {
@@ -136,6 +139,7 @@ func ChildElements(n Node) iter.Seq[*Element] {
 					return
 				}
 			}
+			child = nextOwnedSibling(owner, cdn)
 		}
 	}
 }
