@@ -14,7 +14,7 @@ import (
 // AddChild's child-linking (which merges an adjacent Text-after-Text child,
 // node.go's addChild fast path) and a naive no-preflight fast link (which
 // does not). A source built with two genuinely separate, adjacent Text
-// children — constructed via the explicitly-unsafe UnsafeAppendChild so
+// children — constructed via the explicitly-unsafe no-preflight append so
 // AddChild's own merge never gets a chance to collapse them first — must copy
 // with the same text-node shape and content that an AddChild-built copy
 // produces.
@@ -28,8 +28,8 @@ func TestCopyNodeAdjacentTextMerge(t *testing.T) {
 
 	t1 := doc.CreateText([]byte("hello "))
 	t2 := doc.CreateText([]byte("world"))
-	require.NoError(t, helium.UnsafeAppendChild(root, t1))
-	require.NoError(t, helium.UnsafeAppendChild(root, t2))
+	require.NoError(t, helium.UnsafeAppendChildForTesting(root, t1))
+	require.NoError(t, helium.UnsafeAppendChildForTesting(root, t2))
 
 	// Sanity: confirm the source really has two adjacent Text children, not
 	// one already-merged node.
@@ -99,7 +99,7 @@ func TestCopyNodeCyclicSourceTerminates(t *testing.T) {
 	}
 	// Corrupt the sibling chain into a ring: the last child's next points back
 	// to the first.
-	helium.UnsafeSetNextSibling(kids[len(kids)-1], kids[0])
+	helium.UnsafeSetNextSiblingForTesting(kids[len(kids)-1], kids[0])
 
 	done := make(chan struct{})
 	var cp helium.Node

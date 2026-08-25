@@ -20,7 +20,7 @@ import "iter"
 // the DTD, whose sibling pointers belong to another list) ends the iteration,
 // so Children never spills into another list's siblings. A cyclic sibling
 // pointer — reachable only on a corrupt or hand-built graph, e.g. through the
-// raw [UnsafeSetNextSibling] link setter — terminates
+// raw unsafeSetNextSibling link setter — terminates
 // the iteration instead of looping forever, yielding the partial set gathered up
 // to that point. The guard is [siblingCycleGuard], so a well-formed list pays no
 // allocation and no per-child bookkeeping; a cyclic one stops within a bounded
@@ -146,7 +146,8 @@ func ChildElements(n Node) iter.Seq[*Element] {
 
 // siblingCycleGuard bounds a sibling-list walk with Brent's cycle detection. A
 // sibling list is a linked list a caller can corrupt into a loop through the
-// Unsafe* link setters, so every enumeration of one needs a termination guard.
+// package-private unsafeSet* link setters, so every enumeration of one needs a
+// termination guard.
 // Brent's algorithm needs three words and no allocation, where a seen-set needs
 // a map and one insert per child on EVERY list, well-formed ones included, for a
 // check that fires only on a corrupt graph.

@@ -411,7 +411,7 @@ func TestChildReaches(t *testing.T) {
 			require.NoError(t, parent.AddChild(c))
 
 			// Corrupt the sibling list into a self-cycle: c.next = c.
-			UnsafeSetNextSibling(c, c)
+			unsafeSetNextSibling(c, c)
 
 			outside, err := doc.CreateElement("outside")
 			require.NoError(t, err)
@@ -433,7 +433,7 @@ func TestChildReaches(t *testing.T) {
 			require.NoError(t, parent.AddChild(c2))
 
 			// Close a 2-cycle: c1 -> c2 -> c1.
-			UnsafeSetNextSibling(c2, c1)
+			unsafeSetNextSibling(c2, c1)
 
 			outside, err := doc.CreateElement("outside")
 			require.NoError(t, err)
@@ -517,7 +517,7 @@ func TestChildReaches(t *testing.T) {
 		}
 
 		// Corrupt the sibling list into a ring: last -> first.
-		UnsafeSetNextSibling(children[n-1], children[0])
+		unsafeSetNextSibling(children[n-1], children[0])
 
 		outside, err := doc.CreateElement("outside")
 		require.NoError(t, err)
@@ -602,7 +602,7 @@ func TestWalkCycleGuards(t *testing.T) {
 		require.NoError(t, parent.AddChild(b))
 
 		// Close a 2-cycle in the sibling list: a -> b -> a.
-		UnsafeSetNextSibling(b, a)
+		unsafeSetNextSibling(b, a)
 
 		err = Walk(parent, NodeWalkerFunc(func(Node) error { return nil }))
 		require.ErrorIs(t, err, ErrWalkCycle,
