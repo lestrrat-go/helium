@@ -155,6 +155,20 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 // keys.
 func (vc *validationContext) collectSubtreeKeyTable(ctx context.Context, host *helium.Element, referQN QName) *idcTable {
 	var merged *idcTable
+	vc.appendSubtreeKeys(ctx, host, referQN, &merged)
+	return merged
+}
+
+// appendSubtreeKeys walks host's descendants in DFS order and appends every
+// matching key/unique constraint's key-sequences into the single *merged
+// accumulator, instead of collectSubtreeKeyTable's former level-by-level
+// build-then-copy-upward merge (each level allocated its own *idcTable and the
+// caller re-copied its keys into the parent's, making a nested keyref chain of
+// depth D pay a Θ(D²) copy at every one of its D ancestor hosts). Appending
+// into one accumulator as the walk descends keeps the total copy work linear
+// in the number of contributing key-sequences. DFS order, and therefore key
+// order, is unchanged.
+func (vc *validationContext) appendSubtreeKeys(ctx context.Context, host *helium.Element, referQN QName, merged **idcTable) {
 	for child := range helium.Children(host) {
 		if child.Type() != helium.ElementNode {
 			continue
@@ -169,32 +183,59 @@ func (vc *validationContext) collectSubtreeKeyTable(ctx context.Context, host *h
 				if idc.Kind == IDCKeyRef || idc.QName != referQN {
 					continue
 				}
-				ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
-				// Suppress diagnostics during gathering: this descendant constraint is
-				// ALSO evaluated by its own pass-2 walk, which is the canonical place
-				// any cvc field/key-missing error is reported. Without suppression those
-				// would be double-reported. We only need the key-sequence VALUES here.
-				vc.suppressDepth++
-				table, err := vc.evaluateIDC(ctx, ev, ce, decl, idc)
-				vc.suppressDepth--
-				if err != nil {
+				table := vc.gatherIDCTable(ctx, ce, decl, idc)
+				if table == nil {
 					continue
 				}
-				if merged == nil {
-					merged = &idcTable{idc: idc}
+				if *merged == nil {
+					*merged = &idcTable{idc: idc}
 				}
-				merged.keys = append(merged.keys, table.keys...)
+				(*merged).keys = append((*merged).keys, table.keys...)
 			}
 		}
 		// Recurse so a constraint declared deeper in the subtree also propagates up.
-		if sub := vc.collectSubtreeKeyTable(ctx, ce, referQN); sub != nil {
-			if merged == nil {
-				merged = &idcTable{idc: sub.idc}
-			}
-			merged.keys = append(merged.keys, sub.keys...)
-		}
+		vc.appendSubtreeKeys(ctx, ce, referQN, merged)
 	}
-	return merged
+}
+
+// idcOccurrenceKey identifies one evaluation of one identity-constraint
+// declaration on one element OCCURRENCE (not declaration): two occurrences of
+// the same xs:key/xs:unique declaration (e.g. two repeated "items" elements)
+// hold different values, so the memo must key on the element pointer, never
+// the declaration alone.
+type idcOccurrenceKey struct {
+	elem *helium.Element
+	idc  *IDConstraint
+}
+
+// gatherIDCTable evaluates a descendant key/unique constraint for use by
+// collectSubtreeKeyTable's ancestor keyref gathering, memoizing the result per
+// idcOccurrenceKey on vc.idcGathered so a descendant occurrence reachable from
+// several nested keyref hosts is evaluated at most once per run. Returns nil
+// when evaluation fails (cached as nil, distinguished from "not yet gathered"
+// by the two-value map read).
+//
+// Suppress diagnostics during gathering: this descendant constraint is ALSO
+// evaluated by its own pass-2 walk, which is the canonical place any cvc
+// field/key-missing error is reported. Without suppression those would be
+// double-reported. We only need the key-sequence VALUES here.
+func (vc *validationContext) gatherIDCTable(ctx context.Context, ce *helium.Element, decl *ElementDecl, idc *IDConstraint) *idcTable {
+	key := idcOccurrenceKey{elem: ce, idc: idc}
+	if cached, ok := vc.idcGathered[key]; ok {
+		return cached
+	}
+	ev := xpath1.NewEvaluator().AdditionalNamespaces(idc.Namespaces)
+	vc.suppressDepth++
+	table, err := vc.evaluateIDC(ctx, ev, ce, decl, idc)
+	vc.suppressDepth--
+	if err != nil {
+		table = nil
+	}
+	if vc.idcGathered == nil {
+		vc.idcGathered = make(map[idcOccurrenceKey]*idcTable)
+	}
+	vc.idcGathered[key] = table
+	return table
 }
 
 // idcHostDecl returns the declaration whose identity constraints apply to an
