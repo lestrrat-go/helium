@@ -305,11 +305,19 @@ permits reluctant quantifiers and `(?:…)`. Stray-hyphen character-class ranges
      map[QName]*idcTable` and resolves the occurrence's keyrefs against it after
      every key/unique on the occurrence is evaluated, so a keyref declared before
      its key still resolves) PLUS key/unique tables that PROPAGATE UP from the
-     host's DESCENDANT subtree (`collectSubtreeKeyTable` walks the host's children
-     recursively, gathering — via `idcHostDecl` per descendant — every key/unique of
-     the referenced QName and merging their key-sequences; descendant evaluation is
-     done under `suppressDepth` so cvc field/key-missing diagnostics are reported
-     only once, by that descendant's own pass-2 walk). So a key on a CHILD element
+     host's DESCENDANT subtree (`collectSubtreeKeyTable` delegates to
+     `appendSubtreeKeys`, which walks the host's children recursively, gathering —
+     via `idcHostDecl` per descendant — every key/unique of the referenced QName
+     and appending their key-sequences into a single accumulator as it descends,
+     rather than building and copying a table at each level). Each descendant
+     OCCURRENCE's evaluation (`gatherIDCTable`) is memoized on
+     `validationContext.idcGathered`, keyed by `idcOccurrenceKey{elem, idc}` (the
+     element POINTER, so two occurrences of the same declaration are evaluated
+     independently), so a descendant reachable from several nested keyref hosts is
+     evaluated at most once per run. The memo is confined to this suppressed
+     gathering path: evaluation runs under `suppressDepth` so cvc field/key-missing
+     diagnostics are reported only once, by that descendant's own unsuppressed
+     pass-2 walk, never by the cached gathering call. So a key on a CHILD element
      satisfies a keyref on an ancestor host (bug322411). A keyref whose referenced
      key/unique is declared OUTSIDE the host's subtree — on a SIBLING, or on a
      different occurrence of a repeating host — resolves against an EMPTY key space →
