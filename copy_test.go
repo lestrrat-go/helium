@@ -3,11 +3,177 @@ package helium_test
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
+
+// TestCopyNodeAdjacentTextMerge pins the one real behavior difference between
+// AddChild's child-linking (which merges an adjacent Text-after-Text child,
+// node.go's addChild fast path) and a naive no-preflight fast link (which
+// does not). A source built with two genuinely separate, adjacent Text
+// children — constructed via the explicitly-unsafe UnsafeAppendChild so
+// AddChild's own merge never gets a chance to collapse them first — must copy
+// with the same text-node shape and content that an AddChild-built copy
+// produces.
+func TestCopyNodeAdjacentTextMerge(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(root))
+
+	t1 := doc.CreateText([]byte("hello "))
+	t2 := doc.CreateText([]byte("world"))
+	require.NoError(t, helium.UnsafeAppendChild(root, t1))
+	require.NoError(t, helium.UnsafeAppendChild(root, t2))
+
+	// Sanity: confirm the source really has two adjacent Text children, not
+	// one already-merged node.
+	var srcChildren []helium.Node
+	for c := range helium.Children(root) {
+		srcChildren = append(srcChildren, c)
+	}
+	require.Len(t, srcChildren, 2, "source must have two separate adjacent Text children")
+
+	dst := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	cp, err := helium.CopyNode(root, dst)
+	require.NoError(t, err)
+	cpElem, ok := helium.AsNode[*helium.Element](cp)
+	require.True(t, ok)
+
+	var got []helium.Node
+	for c := range helium.Children(cpElem) {
+		got = append(got, c)
+	}
+
+	// Reference: build the equivalent tree through ordinary AddChild, which
+	// merges the two Text nodes into one, then copy that.
+	refDoc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	refRoot, err := refDoc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, refDoc.AddChild(refRoot))
+	require.NoError(t, refRoot.AddChild(refDoc.CreateText([]byte("hello "))))
+	require.NoError(t, refRoot.AddChild(refDoc.CreateText([]byte("world"))))
+
+	refDst := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	refCp, err := helium.CopyNode(refRoot, refDst)
+	require.NoError(t, err)
+	refCpElem, ok := helium.AsNode[*helium.Element](refCp)
+	require.True(t, ok)
+
+	var want []helium.Node
+	for c := range helium.Children(refCpElem) {
+		want = append(want, c)
+	}
+
+	require.Len(t, want, 1, "AddChild-built copy merges adjacent text into one node")
+	require.Lenf(t, got, len(want), "CopyNode must reproduce AddChild's adjacent-Text merge; got %d text node(s)", len(got))
+	for i := range want {
+		require.Equal(t, want[i].Content(), got[i].Content())
+	}
+}
+
+// TestCopyNodeCyclicSourceTerminates pins that CopyNode still terminates on a
+// source whose sibling chain has been corrupted into a ring. copyChildren
+// iterates the source via Children, whose own per-list cycle guard bounds a
+// corrupt sibling chain; removing AddChild's destination-side preflight must
+// not reopen a hang on the SOURCE side.
+func TestCopyNodeCyclicSourceTerminates(t *testing.T) {
+	t.Parallel()
+
+	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.AddChild(root))
+
+	var kids []*helium.Element
+	for range 5 {
+		c, cerr := doc.CreateElement("c")
+		require.NoError(t, cerr)
+		require.NoError(t, root.AddChild(c))
+		kids = append(kids, c)
+	}
+	// Corrupt the sibling chain into a ring: the last child's next points back
+	// to the first.
+	helium.UnsafeSetNextSibling(kids[len(kids)-1], kids[0])
+
+	done := make(chan struct{})
+	var cp helium.Node
+	var copyErr error
+	go func() {
+		defer close(done)
+		dst := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		cp, copyErr = helium.CopyNode(root, dst)
+	}()
+
+	select {
+	case <-done:
+		require.NoError(t, copyErr)
+		require.NotNil(t, cp)
+	case <-time.After(5 * time.Second):
+		t.Fatal("CopyNode did not terminate on a cyclic source sibling list")
+	}
+}
+
+// TestCopyNodeStructuralEquivalence copies a representative document —
+// nested elements several levels deep, mixed text/comment/CDATA/PI content,
+// attributes, and a predefined-entity reference — and checks the copy
+// serializes byte-identically to the source's own serialization, as a broad
+// safety net over the copier's linking change.
+//
+// This deliberately avoids namespaces and
+// testdata/libxml2-compat/valid/REC-xml-19980210.xml (the tasklist's
+// suggested fixture), both for reasons unrelated to copyChildren's linking
+// strategy that T2 changes: CopyDoc/CopyNode's namespace handling
+// deliberately OVER-DECLARES (see deepCopyOptions.overDeclareNS's doc
+// comment), so a default-namespaced source re-declares "xmlns" on every
+// descendant element in the copy by design, which a byte-identical
+// comparison would wrongly flag; and REC-xml-19980210.xml declares a custom
+// internal general entity ("cellback") used in attribute values —
+// copyAttributes stores an attribute's resolved Value() (see its doc
+// comment), which flattens such a reference to its expansion text on copy,
+// while WriteString(src) reproduces the source's own literal "&cellback;"
+// markup, so the two serializations differ by construction.
+func TestCopyNodeStructuralEquivalence(t *testing.T) {
+	t.Parallel()
+
+	const in = `<?xml version="1.0" encoding="UTF-8"?>
+<doc version="3">
+  <!-- top-level comment -->
+  <section id="s1" kind="intro">
+    <title>Overview &amp; Scope</title>
+    <p>Some <em>mixed</em> content with <![CDATA[raw <not-a-tag> text]]> inside.</p>
+    <?pi-target some data ?>
+    <section id="s1.1">
+      <section id="s1.1.1">
+        <p>Deeply nested paragraph.</p>
+      </section>
+    </section>
+  </section>
+  <section id="s2">
+    <p/>
+    <p>trailing text</p>
+  </section>
+</doc>`
+
+	src, err := helium.NewParser().Parse(t.Context(), []byte(in))
+	require.NoError(t, err)
+
+	orig, err := helium.WriteString(src)
+	require.NoError(t, err)
+
+	cp, err := helium.CopyDoc(src)
+	require.NoError(t, err)
+
+	copied, err := helium.WriteString(cp)
+	require.NoError(t, err)
+
+	require.Equal(t, orig, copied, "a deep copy of a representative document must serialize byte-identically to the source")
+}
 
 func TestCopyNode(t *testing.T) {
 	t.Parallel()
