@@ -1,5 +1,5 @@
 {
-  "generated": "2026-07-25",
+  "generated": "2026-08-25",
   "reference_tag": "v0.8.0",
   "suites": [
     {
@@ -81,7 +81,7 @@
     "v0.5.1": "2026-07-11",
     "v0.6.0": "2026-07-20",
     "v0.7.0": "2026-07-24",
-    "v0.8.0": "2026-07-25"
+    "v0.8.0": "2026-08-25"
   },
   "rows": [
     {
@@ -1796,7 +1796,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "xml",
       "measured": true,
       "partial": false,
@@ -1815,7 +1815,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "xsd10",
       "measured": true,
       "partial": false,
@@ -1834,7 +1834,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "xsd11",
       "measured": true,
       "partial": false,
@@ -1853,7 +1853,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "xslt30",
       "measured": true,
       "partial": false,
@@ -1872,7 +1872,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "qt3",
       "measured": true,
       "partial": false,
@@ -1891,7 +1891,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "xmldsig2ed",
       "measured": true,
       "partial": false,
@@ -1910,7 +1910,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "xmldsig11",
       "measured": true,
       "partial": false,
@@ -1929,7 +1929,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "xmlenc11",
       "measured": true,
       "partial": false,
@@ -1948,7 +1948,7 @@
     },
     {
       "tag": "v0.8.0",
-      "date": "2026-07-25",
+      "date": "2026-08-25",
       "suite": "merlinxmldsig",
       "measured": true,
       "partial": false,

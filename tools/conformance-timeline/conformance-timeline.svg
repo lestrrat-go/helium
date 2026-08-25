@@ -95,7 +95,7 @@
 <text class="sub" x="773.0" y="412" text-anchor="middle">2026-07-24</text>
 <line class="grid" x1="852.0" y1="82" x2="852.0" y2="382"/>
 <text class="tick" x="852.0" y="399" text-anchor="middle">v0.8.0</text>
-<text class="sub" x="852.0" y="412" text-anchor="middle">2026-07-25</text>
+<text class="sub" x="852.0" y="412" text-anchor="middle">2026-08-25</text>
 <line class="axis" x1="62" y1="382" x2="852" y2="382"/>
 <path d="M62.0,138.4 L141.0,131.6 L220.0,126.2 L299.0,122.2 L378.0,118.9 L457.0,115.4 L536.0,83.2 L615.0,83.2 L694.0,83.4 L773.0,83.4 L852.0,83.4" fill="none" stroke="#b5359c" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="62.0" cy="138.4" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
@@ -252,7 +252,7 @@
 <text class="sub" x="773.0" y="688" text-anchor="middle">2026-07-24</text>
 <line class="grid" x1="852.0" y1="448" x2="852.0" y2="658"/>
 <text class="tick" x="852.0" y="675" text-anchor="middle">v0.8.0</text>
-<text class="sub" x="852.0" y="688" text-anchor="middle">2026-07-25</text>
+<text class="sub" x="852.0" y="688" text-anchor="middle">2026-08-25</text>
 <line class="axis" x1="62" y1="658" x2="852" y2="658"/>
 <path d="M536.0,462.0 L615.0,462.0 L694.0,463.8 L773.0,463.8 L852.0,463.8" fill="none" stroke="#b5359c" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="536.0" cy="462.0" r="3.4" fill="#b5359c" stroke="#b5359c" stroke-width="2"/>
