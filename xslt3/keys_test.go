@@ -161,3 +161,64 @@ func TestKey(t *testing.T) {
 		require.Contains(t, result, "<out>1</out>")
 	})
 }
+
+// TestKeyNamespaceNodeMatching pins buildKeyTable's namespace-node indexing
+// behavior against every pattern shape that decides whether a key needs to
+// enumerate in-scope namespace nodes. A guard computed from the pattern
+// source text (mirroring matchesAttributes) would wrongly skip "." and
+// ".[pred]", which match every node including namespace nodes despite their
+// source containing neither "namespace" nor "@". These cases must stay
+// identical whether or not buildKeyTable skips the namespace-node walk.
+func TestKeyNamespaceNodeMatching(t *testing.T) {
+	const srcXML = `<root xmlns:p="urn:p"><a id="x"><b/></a></root>`
+
+	buildStylesheet := func(match string) string {
+		return `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:key name="k" match="` + match + `" use="name()"/>
+  <xsl:template match="/">
+    <out p="{count(key('k','p'))}" xml="{count(key('k','xml'))}" a="{count(key('k','a'))}"/>
+  </xsl:template>
+</xsl:stylesheet>`
+	}
+
+	run := func(t *testing.T, match string) string {
+		t.Helper()
+		ss := compileStylesheetString(t, buildStylesheet(match))
+		src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+		require.NoError(t, err)
+		result, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		return result
+	}
+
+	t.Run("namespace-node() matches every in-scope prefix on every element", func(t *testing.T) {
+		result := run(t, "namespace-node()")
+		require.Contains(t, result, `p="3"`)
+		require.Contains(t, result, `xml="3"`)
+	})
+
+	t.Run("*/namespace::* matches every in-scope prefix on non-root elements", func(t *testing.T) {
+		result := run(t, "*/namespace::*")
+		require.Contains(t, result, `p="3"`)
+		require.Contains(t, result, `xml="3"`)
+	})
+
+	t.Run("dot pattern matches namespace nodes too, the case a source-text guard breaks", func(t *testing.T) {
+		result := run(t, ".")
+		require.Contains(t, result, `p="3"`)
+		require.Contains(t, result, `xml="3"`)
+	})
+
+	t.Run("union of element and namespace-node matches both kinds", func(t *testing.T) {
+		result := run(t, "element()|namespace-node()")
+		require.Contains(t, result, `p="3"`)
+		require.Contains(t, result, `a="1"`)
+	})
+
+	t.Run("element-only pattern never matches a namespace node", func(t *testing.T) {
+		result := run(t, "item")
+		require.Contains(t, result, `p="0"`)
+		require.Contains(t, result, `xml="0"`)
+	})
+}

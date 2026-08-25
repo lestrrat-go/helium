@@ -1030,6 +1030,61 @@ func (p *pattern) matchesAttributes() bool {
 	return strings.Contains(p.source, "@") || strings.Contains(p.source, "attribute")
 }
 
+// matchesNamespaceNodes reports whether the pattern could match a namespace
+// node. A namespace node is only ever selected structurally by a step on the
+// namespace axis (nodeMatchesStep rejects it on every other axis), so a pattern
+// whose alternatives are all paths ending on another axis can never match one.
+// Every other alternative form — "." and ".[p]", a variable or function-call
+// pattern matched by evaluating the expression — is treated as though it could.
+// Key table building uses this to decide whether to enumerate in-scope
+// namespace nodes during the document walk.
+func (p *pattern) matchesNamespaceNodes() bool {
+	for _, alt := range p.Alternatives {
+		// Skipping a neverMatches alternative cannot lose a namespace node:
+		// matchPatternAlt returns false for every node under that same flag,
+		// and key table building matches only through that path. An
+		// alternative skipped here therefore selects nothing anywhere, so this
+		// skip is exactly the matcher's.
+		if alt.neverMatches {
+			continue
+		}
+		if exprMatchesNamespaceNodes(alt.expr) {
+			return true
+		}
+	}
+	return false
+}
+
+// exprMatchesNamespaceNodes is the structural half of matchesNamespaceNodes.
+// It must stay in sync with nodeMatchesStep's namespace-axis check: see the
+// comment there.
+func exprMatchesNamespaceNodes(expr xpath3.Expr) bool {
+	switch e := expr.(type) {
+	case xpath3.LocationPath:
+		return locationPathMatchesNamespaceNodes(e)
+	case *xpath3.LocationPath:
+		return locationPathMatchesNamespaceNodes(*e)
+	case xpath3.RootExpr, *xpath3.RootExpr:
+		return false
+	case xpath3.UnionExpr:
+		return exprMatchesNamespaceNodes(e.Left) || exprMatchesNamespaceNodes(e.Right)
+	case xpath3.PathStepExpr:
+		// Only the right-hand part is tested against the candidate node; the
+		// left part is matched against its ancestors.
+		return exprMatchesNamespaceNodes(e.Right)
+	default:
+		return true
+	}
+}
+
+func locationPathMatchesNamespaceNodes(path xpath3.LocationPath) bool {
+	if len(path.Steps) == 0 {
+		// "/" matches the document node only.
+		return false
+	}
+	return path.Steps[len(path.Steps)-1].Axis == xpath3.AxisNamespace
+}
+
 // matchPatternAlt tests whether a node matches a single pattern alternative.
 // XSLT patterns evaluate by checking if the node would be selected by the
 // equivalent XPath expression when evaluated in the right context.
@@ -1381,6 +1436,10 @@ func nodeMatchesStep(ctx context.Context, ec *execContext, step xpath3.Step, nod
 		return false
 	}
 	// Namespace nodes are only matched by the namespace axis or namespace-node() test.
+	// matchesNamespaceNodes relies on this being the only way a namespace node
+	// can match: widening it (e.g. letting self:: select one) requires updating
+	// matchesNamespaceNodes too, or key table building will silently drop
+	// namespace-node entries.
 	isNS := nodeType == helium.NamespaceNode
 	if isNS != (step.Axis == xpath3.AxisNamespace) {
 		return false
