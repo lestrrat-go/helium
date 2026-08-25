@@ -373,9 +373,9 @@ func (n *Element) Attributes() []*Attribute {
 // If fn returns false, iteration stops early.
 // This avoids the slice allocation of Attributes().
 //
-// attr_test.go covers both full iteration and the early-stop path.
-// All current callers always return true; the early-stop path exists as
-// a natural consequence of the iterator pattern.
+// attr_test.go covers both full iteration and the early-stop path; the
+// nine production call sites all return true, so attr_test.go is the
+// early-stop path's only exercise.
 //
 // The loop walks the properties chain via NextAttribute() and asserts
 // nothing: the chain is attribute-only by construction (field typed
