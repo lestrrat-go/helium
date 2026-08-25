@@ -3,6 +3,7 @@ package helium
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
@@ -325,6 +326,46 @@ func TestSetNamespace(t *testing.T) {
 	})
 }
 
+// buildFlatChildTree creates a root element with totalNodes-1 childless
+// element children (so the whole subtree, root included, holds totalNodes
+// nodes) and returns the root and the last child appended, so a caller can
+// probe childReaches on both sides of the array/map promotion threshold.
+func buildFlatChildTree(t *testing.T, doc *Document, totalNodes int) (root Node, last Node) {
+	t.Helper()
+	r, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	root = r
+	for i := 1; i < totalNodes; i++ {
+		c, err := doc.CreateElement("c")
+		require.NoError(t, err)
+		require.NoError(t, r.AddChild(c))
+		last = c
+	}
+	return root, last
+}
+
+// sendChildReaches runs childReaches and reports the result on done, for use
+// as the background side of runChildReachesWithTimeout.
+func sendChildReaches(done chan<- bool, node Node, target *docnode) {
+	done <- childReaches(node, target)
+}
+
+// runChildReachesWithTimeout calls childReaches on a background goroutine and
+// fails the test rather than hanging forever if a regression breaks
+// termination.
+func runChildReachesWithTimeout(t *testing.T, node Node, target *docnode) bool {
+	t.Helper()
+	done := make(chan bool, 1)
+	go sendChildReaches(done, node, target)
+	select {
+	case got := <-done:
+		return got
+	case <-time.After(5 * time.Second):
+		t.Fatal("childReaches did not terminate")
+		return false
+	}
+}
+
 func TestChildReaches(t *testing.T) {
 	// The child-pointer reachability search has no depth cap: a target reachable
 	// only past the old 4096-node cap is still found. A capped search would fail
@@ -399,6 +440,122 @@ func TestChildReaches(t *testing.T) {
 			require.False(t, childReaches(parent, outside.baseDocNode()),
 				"a target not in the cyclic list must terminate and report false")
 		})
+	})
+
+	// The visited set promotes from a small inline array to a map once the
+	// call pops more than childReachesInlineCap nodes. A target placed after
+	// the crossing point must still be found — a promotion bug that loses the
+	// entries recorded in the array before the map takes over would report a
+	// false negative here.
+	t.Run("threshold crossing", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		total := childReachesInlineCap*3 + 7
+		root, last := buildFlatChildTree(t, doc, total)
+		require.True(t, childReaches(root, last.baseDocNode()),
+			"a target placed after the array/map promotion must still be found")
+
+		outside, err := doc.CreateElement("outside")
+		require.NoError(t, err)
+		require.False(t, childReaches(root, outside.baseDocNode()),
+			"a node outside the subtree must not be reported reachable once the visited set has promoted to a map")
+	})
+
+	// Off-by-one in the promotion boundary is the likely bug: probe exactly
+	// one below, at, and one above childReachesInlineCap.
+	t.Run("exactly at the threshold", func(t *testing.T) {
+		for _, total := range []int{childReachesInlineCap - 1, childReachesInlineCap, childReachesInlineCap + 1} {
+			doc := NewDefaultDocument()
+			root, last := buildFlatChildTree(t, doc, total)
+			require.Truef(t, childReaches(root, last.baseDocNode()),
+				"total=%d: the last child must be found", total)
+
+			outside, err := doc.CreateElement("outside")
+			require.NoError(t, err)
+			require.Falsef(t, childReaches(root, outside.baseDocNode()),
+				"total=%d: a node outside the subtree must not be reported reachable", total)
+		}
+	})
+
+	// A deep chain well beyond the threshold pins the no-depth-cap invariant
+	// together with the promoted (map-backed) visited set, not just the small
+	// inline array exercised by the "no depth cap" case above.
+	t.Run("deep chain beyond the threshold", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		const depth = 500
+		first, err := doc.CreateElement("n0")
+		require.NoError(t, err)
+		prev := first
+		for i := 1; i <= depth; i++ {
+			cur, err := doc.CreateElement("n")
+			require.NoError(t, err)
+			require.NoError(t, prev.AddChild(cur))
+			prev = cur
+		}
+		require.True(t, childReaches(first, prev.baseDocNode()),
+			"a target at the bottom of a 500-node chain must be found")
+
+		outside, err := doc.CreateElement("outside")
+		require.NoError(t, err)
+		require.False(t, childReaches(first, outside.baseDocNode()),
+			"a node outside a 500-node chain must not be reported reachable")
+	})
+
+	// A cyclic sibling list with more members than the visited-set threshold
+	// must still terminate via the allocation-free siblingCycleGuard, not the
+	// (now-promoted) visited set, which only bounds the outer pop loop.
+	t.Run("sibling cycle above the threshold", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		const n = 200
+		children := make([]Node, n)
+		for i := range n {
+			c, err := doc.CreateElement("c")
+			require.NoError(t, err)
+			require.NoError(t, parent.AddChild(c))
+			children[i] = c
+		}
+
+		// Corrupt the sibling list into a ring: last -> first.
+		UnsafeSetNextSibling(children[n-1], children[0])
+
+		outside, err := doc.CreateElement("outside")
+		require.NoError(t, err)
+		require.False(t, runChildReachesWithTimeout(t, parent, outside.baseDocNode()),
+			"a target outside a cyclic sibling list above the threshold must report false, not hang")
+		require.True(t, runChildReachesWithTimeout(t, parent, children[n/2].baseDocNode()),
+			"a node inside a cyclic sibling list above the threshold must still be found")
+	})
+
+	// A shared DAG node reached from two references to one Entity must not be
+	// reported as a cycle: the visited set is per-call and deduplicates on
+	// pop, it is not an active-path set.
+	t.Run("shared entity DAG is not a false cycle", func(t *testing.T) {
+		doc := NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+		require.NoError(t, err)
+
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+
+		ref1, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		ref2, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		require.Equal(t, ent, ref1.FirstChild(), "reference's child is the shared Entity node")
+		require.Equal(t, ent, ref2.FirstChild(), "reference's child is the shared Entity node")
+		require.NoError(t, root.AddChild(ref1))
+		require.NoError(t, root.AddChild(ref2))
+
+		require.True(t, childReaches(root, ent.baseDocNode()),
+			"the shared Entity, reachable through either reference, must be found and not treated as a cycle")
+
+		outside, err := doc.CreateElement("outside")
+		require.NoError(t, err)
+		require.False(t, childReaches(root, outside.baseDocNode()),
+			"a node outside the subtree must not be reported reachable")
 	})
 }
 
