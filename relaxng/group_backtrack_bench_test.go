@@ -67,25 +67,42 @@ func benchDoc(b *testing.B, n int) *helium.Document {
 //	go test ./relaxng -run none -bench BenchmarkGroupBacktrack -benchmem
 //
 // Baseline procedure. This file uses no symbol introduced by this change, so
-// it runs unmodified on the base revision:
+// it runs unmodified on the base revision. Resolve the base at run time and
+// archive the same object you name as the base: this branch is rebased as main
+// moves, so no hardcoded hash stays correct.
 //
-//	git archive origin/main | tar -x -C <scratch>
+//	BASE=$(git merge-base HEAD origin/main)
+//	mkdir -p <scratch>
+//	git archive "$BASE" | tar -x -C <scratch>
 //	cp relaxng/group_backtrack_bench_test.go <scratch>/relaxng/
 //	go test -C <scratch> ./relaxng -run none -bench BenchmarkGroupBacktrack -benchmem -benchtime=1x
 //
 // Use a small -benchtime on the base side: one iteration of the first workload
 // takes seconds and allocates over 20 GB.
 //
-// Measured on linux/amd64, go1.26.6, AMD Ryzen 9 7900X3D, against base
-// ec7cf3f4 (-benchtime=1x on the base side, default -benchtime on this side):
+// B/op and allocs/op are the evidence this change rests on. They are what the
+// change actually removes, and unlike wall clock they do reproduce: across runs
+// the base figures hold to within about 0.1% and the figures on this side to
+// within a few bytes. Measured against the merge base of this branch with
+// origin/main, -benchtime=1x on the base side and the default -benchtime here:
 //
 //	flexible group backtracking, 1600 children
-//	  base: 4341622568 ns/op  23166291560 B/op  1298591 allocs/op
-//	  here:    1090871 ns/op       975732 B/op    11242 allocs/op
+//	  base: 23166291560 B/op  1298591 allocs/op   (~23 GB, ~1.3M allocations)
+//	  here:      975732 B/op    11242 allocs/op   (~976 KB, ~11K allocations)
 //
 //	plain zeroOrMore, 16000 children
-//	  base:  586837773 ns/op   2108558320 B/op    16052 allocs/op
-//	  here:    1450759 ns/op      1190274 B/op       21 allocs/op
+//	  base:  2108558320 B/op    16052 allocs/op   (~2.1 GB)
+//	  here:     1190274 B/op       21 allocs/op   (~1.2 MB)
+//
+// Wall clock is indicative only. On linux/amd64, go1.26.6, AMD Ryzen 9 7900X3D:
+//
+//	flexible group backtracking, 1600 children:  base ~4.3 s/op, here ~1.1 ms/op
+//	plain zeroOrMore, 16000 children:            base ~590 ms/op, here ~1.5 ms/op
+//
+// ns/op is machine-dependent, and a spread of roughly +/-20% across machines and
+// across runs on one machine is expected, so read these as orders of magnitude
+// and not as figures to reproduce digit for digit. The recorded run took its
+// base side at ec7cf3f4, which was the merge base at the time.
 func BenchmarkGroupBacktrack(b *testing.B) {
 	b.Run("flexible group backtracking", func(b *testing.B) {
 		const m = 1600

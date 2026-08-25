@@ -21,13 +21,17 @@ import (
 // the diff meaningful — a silently reworded diagnostic would otherwise pass
 // unnoticed.
 //
-// Procedure. From a checkout of this branch (perf-relaxng-group-backtrack),
-// against base 4ead44b5, the merge base with main:
+// Procedure. Run it from a checkout of this branch
+// (perf-relaxng-group-backtrack) against the merge base of this branch with
+// origin/main. Resolve that base at run time and archive the same object you
+// name as the base: this branch is rebased as main moves, so no hardcoded hash
+// stays correct.
 //
+//	BASE=$(git merge-base HEAD origin/main)
 //	go test ./relaxng -run '^TestGroupBacktrackDifferential$' -timeout 30m \
 //	    -relaxng.differential.out=/tmp/head.txt
 //	mkdir -p /tmp/base
-//	git archive 4ead44b5 | tar -x -C /tmp/base
+//	git archive "$BASE" | tar -x -C /tmp/base
 //	cp relaxng/group_backtrack_differential_test.go /tmp/base/relaxng/
 //	go -C /tmp/base test ./relaxng -run '^TestGroupBacktrackDifferential$' \
 //	    -timeout 30m -relaxng.differential.out=/tmp/base.txt
