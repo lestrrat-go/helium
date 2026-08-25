@@ -631,7 +631,7 @@ func TestContentCycleGuard(t *testing.T) {
 	// advance and caught only by the active-path guard).
 	setFirstChild(b, a)
 	setLastChild(b, a)
-	UnsafeSetParent(a, b)
+	unsafeSetParent(a, b)
 
 	require.Equal(t, []byte("x"), a.Content(),
 		"Content must terminate on the child-pointer back-edge and still aggregate the text sibling")

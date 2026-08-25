@@ -873,24 +873,23 @@ func addSibling(n MutableNode, cur Node) error {
 	return errors.New("cannot add sibling to nil node")
 }
 
-// UnsafeSetParent sets ONLY n's parent pointer. It performs none of the cycle
+// unsafeSetParent sets ONLY n's parent pointer. It performs none of the cycle
 // detection, auto-unlinking, or reciprocal back-pointer maintenance that
 // AddChild/AddSibling/Replace/UnlinkNode provide, so a misuse leaves the tree
 // inconsistent or cyclic. It exists for low-level tree construction and for
 // tests that must build a deliberately corrupt tree to exercise the traversal
 // cycle guards. Ordinary code MUST use AddChild/AddSibling/UnlinkNode instead.
-func UnsafeSetParent(n Node, parent Node) {
+func unsafeSetParent(n Node, parent Node) {
 	n.baseDocNode().parent = parent
 }
 
-// UnsafeSetPrevSibling sets ONLY n's previous-sibling pointer, with the same
-// no-safeguards contract as UnsafeSetParent.
-func UnsafeSetPrevSibling(n Node, prev Node) {
-	n.baseDocNode().prev = prev
-}
-
-// UnsafeSetNextSibling sets ONLY n's next-sibling pointer, with the same
-// no-safeguards contract as UnsafeSetParent.
+// UnsafeSetNextSibling sets ONLY n's next-sibling pointer. It performs none of
+// the cycle detection, auto-unlinking, or reciprocal back-pointer maintenance
+// that AddChild/AddSibling/Replace/UnlinkNode provide, so a misuse leaves the
+// tree inconsistent or cyclic. It exists for low-level tree construction and
+// for tests that must build a deliberately corrupt tree to exercise the
+// traversal cycle guards. Ordinary code MUST use
+// AddChild/AddSibling/UnlinkNode instead.
 func UnsafeSetNextSibling(n Node, next Node) {
 	n.baseDocNode().next = next
 }

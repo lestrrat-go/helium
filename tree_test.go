@@ -460,10 +460,11 @@ func TestTreeMutation(t *testing.T) {
 		require.Equal(t, helium.Node(first), second.PrevSibling())
 	})
 
-	// documents that raw single-pointer linkage
-	// is only reachable through the explicitly-unsafe UnsafeSet* functions, while
-	// the ordinary guarded path (AddChild) rejects the same cycle.
-	t.Run("raw linkage behind the unsafe surface", func(t *testing.T) {
+	// Raw single-pointer parent linkage is package-private: this external test
+	// reaches it only through the export_test.go shim, and no code outside
+	// package helium can form the cycle at all. The ordinary guarded path
+	// (AddChild) rejects that same cycle.
+	t.Run("raw parent linkage is package-private", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		a, err := doc.CreateElement("a")
 		require.NoError(t, err)
@@ -474,8 +475,9 @@ func TestTreeMutation(t *testing.T) {
 		// The guarded path refuses to form a parent cycle.
 		require.Error(t, b.AddChild(a), "AddChild must reject a cycle")
 
-		// The unsafe primitive still builds one when a caller explicitly opts in.
-		helium.UnsafeSetParent(a, b)
+		// The unsafe primitive still builds one for an in-package caller that
+		// explicitly opts in.
+		helium.UnsafeSetParentForTesting(a, b)
 		require.Equal(t, helium.Node(b), a.Parent())
 	})
 }
