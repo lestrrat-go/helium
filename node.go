@@ -457,17 +457,71 @@ func (n docnode) LastChild() Node {
 // walk, so when cur has children we additionally verify parent is not reachable
 // from cur by following CHILD pointers. The parser hot path appends childless
 // leaves and skips that second descent entirely.
+//
+// The ancestor walk itself only matters when SOMETHING claims cur as its
+// parent — otherwise no node on parent's chain can possibly be cur. A node
+// with an empty child list (cdn.firstChild == nil) cannot be found by walking
+// parent pointers up through a child list, so its only remaining claimants are
+// the attributes an Element keeps outside its child list, in properties, and
+// the DTD subsets a Document keeps outside its child list, in intSubset /
+// extSubset (CopyExtSubset sets a DTD's parent without linking it as a child).
+// Every other production write of a node's parent field links that node into
+// SOME child list, so a future writer of a parent-without-child link must
+// extend this fast exit's claimant sources to stay sound. When cur is a
+// childless *Element the ancestor walk is skipped in favor of propertiesReach,
+// bounded by cur's own attribute count instead of tree depth — the common case
+// of an element carrying attributes would otherwise stay on the
+// depth-proportional walk. When cur is a childless *Document with no subset it
+// has no claimant at all. Any other childless cur (Text, Comment, a childless
+// Attribute not reached through an Element, ...) has no claimant either.
 func wouldCreateCycle(parent, cur Node) bool {
+	if parent == nil {
+		return false
+	}
 	cdn := cur.baseDocNode()
-	for anc := parent; anc != nil; anc = anc.Parent() {
+	pdn := parent.baseDocNode()
+	if pdn == cdn {
+		return true
+	}
+	if cdn.firstChild == nil {
+		switch c := cur.(type) {
+		case *Element:
+			return propertiesReach(c, pdn)
+		case *Document:
+			if c.intSubset == nil && c.extSubset == nil {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	for anc := parent; anc != nil; anc = anc.baseDocNode().parent {
 		if anc.baseDocNode() == cdn {
 			return true
 		}
 	}
-	if parent == nil || cdn.firstChild == nil {
+	if cdn.firstChild == nil {
 		return false
 	}
-	return childReaches(cur, parent.baseDocNode())
+	return childReaches(cur, pdn)
+}
+
+// propertiesReach reports whether target is one of elem's attributes, or lies
+// inside one of their value subtrees (e.g. an entity reference inside an
+// attribute value). It is wouldCreateCycle's substitute for the ancestor walk
+// when cur is a childless *Element: such an element has no child-list
+// claimant, so its only remaining claimants are its own attributes, and
+// searching them is bounded by cur's attribute count rather than tree depth.
+func propertiesReach(elem *Element, target *docnode) bool {
+	for attr := elem.properties; attr != nil; attr = attr.NextAttribute() {
+		if attr.baseDocNode() == target {
+			return true
+		}
+		if attr.firstChild != nil && childReaches(attr, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // childReachesInlineCap is the number of popped nodes childReachesVisited
