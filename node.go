@@ -854,6 +854,50 @@ func addSibling(n MutableNode, cur Node) error {
 		return err
 	}
 
+	// n is already the tail: link directly without a NextSibling() call.
+	if ndn.next == nil {
+		ndn.next = cur
+		cdn.prev = n
+		parent := ndn.parent
+		cdn.parent = parent
+		if parent != nil {
+			parent.baseDocNode().lastChild = cur
+		}
+		return nil
+	}
+
+	// n is not the tail. Rather than walk NextSibling() from n (O(S) per call,
+	// O(S^2) over S appends through a fixed non-tail anchor), jump straight to
+	// the tail parent.lastChild already records for n's parent, when it is
+	// trustworthy for THIS chain. The invariant the jump relies on: a parent's
+	// children form exactly one chain and lastChild is that chain's tail. Four
+	// guards vouch for it before trusting the jump; any tree the guards cannot
+	// vouch for falls through to the walk below unchanged.
+	if parent := ndn.parent; parent != nil {
+		pdn := parent.baseDocNode()
+		if tail := pdn.lastChild; tail != nil {
+			tdn := tail.baseDocNode()
+			// tdn.next == nil: the recorded tail must be a genuine tail. This is
+			// what preserves the stale-lastChild repair path addChild and
+			// appendFastChild depend on: they call AddSibling on pdn.lastChild
+			// precisely when lastChild.next != nil, so this guard rejects the
+			// jump and the walk below finds and repairs the true tail.
+			// tdn.parent == pdn: the recorded tail must actually claim this
+			// parent, so a tail left behind by a raw pointer write (e.g. a DTD
+			// whose parent is set without linking it into the child list) is
+			// never trusted.
+			// tdn != ndn: never self-link (redundant given ndn.next != nil
+			// above, but cheap and documents the intent).
+			if tdn != ndn && tdn.next == nil && tdn.parent != nil && tdn.parent.baseDocNode() == pdn {
+				tdn.next = cur
+				cdn.prev = tail
+				cdn.parent = parent
+				pdn.lastChild = cur
+				return nil
+			}
+		}
+	}
+
 	iter := Node(n)
 	for iter != nil {
 		if iter.NextSibling() == nil {
