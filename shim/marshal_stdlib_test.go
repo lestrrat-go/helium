@@ -1991,6 +1991,39 @@ func buildWideNestedXMLStdlib(n int) []byte {
 // scan behavior: a flat slice binding (single-segment element branch) and a
 // `w>leaf` slice binding with one wrapper holding every leaf (multi-segment
 // path branch, quadratic in both time and allocated bytes).
+//
+// Run it with:
+//
+//	go test ./shim -run '^$' -bench '^BenchmarkUnmarshalWideStdlib$' -benchmem -count=3
+//
+// The "before" side is deliberately not checked in as code. Obtain a baseline
+// by extracting the pre-change tree with
+//
+//	git archive origin/main | tar -x -C <dir>
+//
+// (using a commit that precedes the linear child-scan change), copying this
+// file into <dir>/shim/ and running the identical command there. This file
+// compiles unmodified against that tree: it uses only Unmarshal, fmt and
+// strings, all of which predate the change, so `go vet ./shim/` passes in the
+// extracted tree with no edits.
+//
+// Measured that way on an AMD Ryzen 9 7900X3D (linux/amd64, go1.26), per op,
+// as min-max over -count=3:
+//
+//	sub-benchmark    rescanning base            linear child scan
+//	flat/400         616-623us,  433 kB         246-248us,  402 kB
+//	flat/1600        7.58-7.86ms, 1.41 MB       928-976us,  1.28 MB
+//	nested/400       3.35-10.7ms, 4.17 MB       269-272us,  421 kB
+//	nested/1600      66.9-87.6ms, 78.6 MB       0.97-1.04ms, 1.36 MB
+//
+// The shape, not the absolute numbers, is the point: quadratic becomes linear.
+// Growing n from 400 to 1600 (4x the children) costs the base about 12x the
+// time on flat, and about 20x the time plus about 19x the bytes on nested,
+// where a linear scan would cost 4x. The same step costs the linear scan about
+// 3.8x the time and about 3.2x the bytes on both shapes. Wall-clock times are
+// noisy on a loaded machine (the wide base nested/400 spread above is one such
+// outlier), but the byte counts are stable to three digits and show the same
+// quadratic-to-linear change on their own.
 func BenchmarkUnmarshalWideStdlib(b *testing.B) {
 	for _, n := range []int{400, 1600} {
 		flat := buildWideFlatXMLStdlib(n)
