@@ -198,6 +198,29 @@ func TestDTDDeclarations(t *testing.T) {
 		require.NotEqual(t, enum.AttrInvalid, adecl.AType())
 	})
 
+	// AttributesForElement returns a fresh slice on every call: mutating a
+	// previously returned slice must not affect a later call, since the method
+	// hands out a live handle on the DTD's own declarations otherwise.
+	t.Run("returns a fresh slice", func(t *testing.T) {
+		in, err := os.ReadFile("test/att12.xml")
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), in)
+		require.NoError(t, err)
+
+		dtd := doc.IntSubset()
+		require.NotNil(t, dtd)
+
+		got := dtd.AttributesForElement("doc")
+		require.NotEmpty(t, got)
+		want := make([]*helium.AttributeDecl, len(got))
+		copy(want, got)
+
+		got[0] = nil
+
+		again := dtd.AttributesForElement("doc")
+		require.Equal(t, want, again, "a mutation of a previously returned slice must not affect a later call")
+	})
+
 	// the node-interface wrappers on the
 	// DTD, ElementDecl and AttributeDecl node types (AddChild, AppendText,
 	// AddSibling, Replace, SetTreeDoc) plus the Entity AddSibling/Replace wrappers.

@@ -1214,7 +1214,7 @@ func (d *Document) GetElementByID(id string) *Element {
 			if dtd == nil {
 				continue
 			}
-			for _, adecl := range dtd.AttributesForElement(elem.Name()) {
+			for _, adecl := range dtd.attrsByElem[elem.Name()] {
 				if adecl.AType() != enum.AttrID {
 					continue
 				}

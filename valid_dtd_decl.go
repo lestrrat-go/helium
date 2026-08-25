@@ -62,7 +62,10 @@ func validateDTDDeclarations(ctx context.Context, doc *Document, vctx *validCtx)
 		for _, edecl := range dtd.elements {
 			validateNoDuplicateTypes(ctx, edecl, vctx)
 		}
-		for _, adecl := range dtd.attributes {
+		// attrDecls, not the attributes map: a map iterates in a random order, so
+		// the same document would report the same attribute diagnostics in a
+		// different sequence on every run.
+		for _, adecl := range dtd.attrDecls {
 			validateAttributeDeclLegal(ctx, adecl, vctx)
 			validateNotationEnumDeclared(ctx, doc, adecl, vctx)
 			validateNotationNotOnEmptyElement(ctx, doc, adecl, vctx)
@@ -220,17 +223,24 @@ func validateUnparsedEntityNotation(ctx context.Context, doc *Document, name str
 // validateOneIDPerElement implements the One ID per Element Type VC (§3.3.1): an
 // element type may declare at most one attribute of type ID. IDs declared in the
 // internal and external subsets for the same element type are counted together.
+// Element types are counted and reported in declaration order (the order of the
+// first ID declaration for each), so the diagnostics do not vary from run to run.
 func validateOneIDPerElement(ctx context.Context, subsets []*DTD, vctx *validCtx) {
 	counts := make(map[string]int)
+	var order []string
 	for _, dtd := range subsets {
-		for _, adecl := range dtd.attributes {
-			if adecl.atype == enum.AttrID {
-				counts[adecl.elem]++
+		for _, adecl := range dtd.attrDecls {
+			if adecl.atype != enum.AttrID {
+				continue
 			}
+			if counts[adecl.elem] == 0 {
+				order = append(order, adecl.elem)
+			}
+			counts[adecl.elem]++
 		}
 	}
-	for elem, n := range counts {
-		if n > 1 {
+	for _, elem := range order {
+		if counts[elem] > 1 {
 			vctx.addf(ctx, "element %s has more than one ID attribute defined", elem)
 		}
 	}

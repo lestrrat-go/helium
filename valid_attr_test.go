@@ -1,6 +1,8 @@
 package helium_test
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -554,5 +556,86 @@ func TestAttributeValidity(t *testing.T) {
 		require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
 		require.True(t, containsError(collector.Errors(), "no declaration for attribute xml:base"),
 			"authored undeclared xml:base must be flagged; errors=%v", collector.Errors())
+	})
+}
+
+// requiredAttrPattern captures the attribute name out of a
+// "attribute %s is required" validation diagnostic.
+var requiredAttrPattern = regexp.MustCompile(`attribute (\S+) is required`)
+
+// requiredAttrOrder returns the attribute names from the
+// missing-required-attribute diagnostics among errs, in emission order, joined
+// with commas so an ordering mismatch reads directly in the failure output.
+// Diagnostics of any other kind are ignored.
+func requiredAttrOrder(errs []error) string {
+	var names []string
+	for _, e := range errs {
+		m := requiredAttrPattern.FindStringSubmatch(e.Error())
+		if m == nil {
+			continue
+		}
+		names = append(names, m[1])
+	}
+	return strings.Join(names, ",")
+}
+
+// Attribute declarations iterate in declaration order, so the validation
+// diagnostics an element's declarations produce come out in the order the
+// <!ATTLIST> declarations were read. The order is a tested contract, not an
+// artifact: the declarations are served from a per-element index that records
+// registration order, so the diagnostic sequence is reproducible from run to
+// run and a golden or a diff over validation output is stable.
+//
+// Each case repeats the parse so that a single run of the test exercises many
+// independent iterations of the underlying containers.
+func TestValidationDiagnosticOrder(t *testing.T) {
+	t.Parallel()
+
+	const repeats = 50
+
+	// The two-declaration ID case: `first` is declared before `second`, so
+	// `first` is reported before `second`.
+	t.Run("two missing required attributes", func(t *testing.T) {
+		t.Parallel()
+
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root first ID #REQUIRED>
+<!ATTLIST root second ID #REQUIRED>
+]>
+<root/>`
+
+		for i := range repeats {
+			errs := parseValidating(t, src)
+			require.Equal(t, "first,second", requiredAttrOrder(errs),
+				"missing-attribute diagnostics must follow declaration order (iteration %d); errs=%v", i, errs)
+		}
+	})
+
+	// Six declarations make an accidental ordering far less likely to pass by
+	// chance than two would, and mix separate <!ATTLIST> declarations with
+	// several attributes declared inside one.
+	t.Run("six missing required attributes", func(t *testing.T) {
+		t.Parallel()
+
+		const src = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root alpha CDATA #REQUIRED>
+<!ATTLIST root bravo CDATA #REQUIRED
+               charlie CDATA #REQUIRED>
+<!ATTLIST root delta CDATA #REQUIRED>
+<!ATTLIST root echo CDATA #REQUIRED
+               foxtrot CDATA #REQUIRED>
+]>
+<root/>`
+
+		const want = "alpha,bravo,charlie,delta,echo,foxtrot"
+		for i := range repeats {
+			errs := parseValidating(t, src)
+			require.Equal(t, want, requiredAttrOrder(errs),
+				"missing-attribute diagnostics must follow declaration order (iteration %d); errs=%v", i, errs)
+		}
 	})
 }

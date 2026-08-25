@@ -873,9 +873,13 @@ qualified form exactly as written — DTD validity is prefix-literal, not
 namespace-aware. The DOCTYPE name is the root element's QName, so the root-name
 check compares `root.Name()` (not the local part). ATTLIST declarations are stored
 under the declared element QName (`AttributeDecl.elem`), so every element-keyed
-lookup passes the instance element's QName: `AttributesForElement(elem.Name())` in
-`validateElementAttributes`, `checkStandaloneExternalDefaults`, and
-`GetElementByID`; `parseStartTag` threads the element QName into `parseAttribute`
+lookup passes the instance element's QName: `validateElementAttributes`,
+`checkStandaloneExternalDefaults`, and `GetElementByID` each read
+`dtd.attrsByElem[elem.Name()]` directly (the same per-element index the exported
+`AttributesForElement(elem)` clones from), so the lookup is O(matching
+declarations) rather than a scan of every declaration in the subset, and DTD
+validation stays linear in document size; `parseStartTag` threads the element
+QName into `parseAttribute`
 for the special-attribute (`attsSpecial`/`attsSpecialExternal`) and attribute-
 default (`attsDefault`) lookups. Attributes are matched by (prefix, local): the
 `attsSpecial`/`attsSpecialExternal` maps key on a `specialAttrKey{elem, attr}`
@@ -888,6 +892,37 @@ unprefixed/differently-prefixed attribute (and vice-versa). Element declarations
 (`ElementDecl`) are stored split into (local, prefix); `lookupElementDecl` looks
 them up by `elem.LocalName()`+`elem.Prefix()` with NO fallback from a prefixed
 element to an unprefixed declaration (a `<p:r>` requires an `<!ELEMENT p:r>`).
+
+**Attribute-declaration iteration order is declaration order.** A DTD keeps its
+attribute declarations in two registration-order sequences: `attrsByElem` per
+owning element, and `attrDecls` for the whole subset. Registration order is the
+order the `<!ATTLIST>` declarations are read (or, for a tree built through the
+public API, the order of the `AddAttributeDecl` calls). Every order-sensitive
+consumer reads a sequence, never the `attributes` map, whose Go iteration order
+is randomized per run: `AttributesForElement` clones the index slice; the
+element-keyed readers in `validateElementAttributes`,
+`checkStandaloneExternalDefaults`, and `GetElementByID` range `attrsByElem`
+directly; and the subset-wide declaration-consistency checks
+(`validateDTDDeclarations` and `validateOneIDPerElement`, `valid_dtd_decl.go`)
+range `attrDecls`. `validateOneIDPerElement` also reports its element types in
+the order of each one's first `ID` declaration, so its diagnostics are ordered
+too. The user-visible consequence is that DTD validation emits attribute
+diagnostics in declaration order, so repeated runs over the same document produce
+the same diagnostic sequence and a diff or golden over validation output is
+stable. Two tests pin this by repeating the same parse many times, which a map
+order fails with near-certainty: `TestValidationDiagnosticOrder`
+(`valid_attr_test.go`) over instance-level missing-`#REQUIRED` diagnostics, and
+`TestDTDDeclDiagnosticOrder` (`valid_dtd_decl_test.go`) over declaration-level
+Attribute Default Legal and One ID per Element Type diagnostics.
+
+The deep-copy path (`copy_dtd.go`) rebuilds both sequences from the SOURCE's
+`attrDecls`, translating each source declaration through the original->copy
+correspondence its child walk recorded (`copyAttrDeclOrder`). The child list it
+walks carries the serialization order, which relinking a declaration
+(`AttributeDecl.AddSibling`) changes without re-registering it, so the two
+orders are independent. `TestCopyDTDAttrDeclOrder`
+(`copy_test.go`) pins the copy against a source whose child list has been
+reordered that way.
 
 **Attribute Value Type — every present attribute must be declared** (§3.1). After
 `validateElementAttributes` checks the declared attributes, it walks the element's

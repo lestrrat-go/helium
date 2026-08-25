@@ -74,6 +74,10 @@ func CopyExtSubset(src, dst *Document) {
 // (external subset), which differ only in how dstDTD is allocated and where it
 // is attached.
 func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
+	// Correspondence from each source attribute declaration to its copy, so the
+	// copy's registration-order sequences can be rebuilt from the source's.
+	attrCopies := make(map[*AttributeDecl]*AttributeDecl)
+
 	// The DTD owns its declaration children, so Children's owned-boundary advance
 	// equals a raw NextSibling walk here while adding a per-list seen guard, so a
 	// corrupt (cyclic) declaration list terminates instead of spinning.
@@ -99,7 +103,16 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 		case AttributeDeclNode:
 			if adecl, ok := AsNode[*AttributeDecl](c); ok {
 				cp := copyAttributeDecl(adecl, dst)
+				// This is the one writer besides registerAttribute; it must keep every
+				// container in sync since it bypasses registerAttribute (a direct map
+				// write is needed here to overwrite a duplicate key, matching the
+				// source's last-wins semantics for the attributes table). The
+				// registration-order sequences are NOT filled here: the child list is
+				// in serialization order, which a caller can reorder independently of
+				// registration order, so they are rebuilt from the source's own
+				// sequence once every copy exists (copyAttrDeclOrder below).
 				dstDTD.attributes[attrDeclKey{local: adecl.name, prefix: adecl.prefix, elem: adecl.elem}] = cp
+				attrCopies[adecl] = cp
 				_ = dstDTD.AddChild(cp)
 			}
 		case NotationNode:
@@ -115,7 +128,28 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 		}
 	}
 
+	copyAttrDeclOrder(src, dstDTD, attrCopies)
+
 	return nil
+}
+
+// copyAttrDeclOrder fills dstDTD's registration-order sequences (attrDecls and
+// attrsByElem) by walking src's own attrDecls sequence and translating each
+// source declaration through attrCopies. Order therefore comes from the source
+// index, not from the DTD child list the copy walk followed: the two can differ,
+// because relinking a declaration (AttributeDecl.AddSibling) moves it in the
+// child list without re-registering it, and a declaration registered but never
+// linked is absent from the child list altogether. A source declaration with no
+// copy was not in the child list and so has no counterpart to record.
+func copyAttrDeclOrder(src, dstDTD *DTD, attrCopies map[*AttributeDecl]*AttributeDecl) {
+	for _, adecl := range src.attrDecls {
+		cp, ok := attrCopies[adecl]
+		if !ok {
+			continue
+		}
+		dstDTD.attrDecls = append(dstDTD.attrDecls, cp)
+		dstDTD.attrsByElem[adecl.elem] = append(dstDTD.attrsByElem[adecl.elem], cp)
+	}
 }
 
 func copyEntity(src *Entity, doc *Document) *Entity {

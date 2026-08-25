@@ -778,3 +778,70 @@ func TestCopyDTD(t *testing.T) {
 		helium.CopyExtSubset(src, nil)
 	})
 }
+
+// attrDeclNames returns the names of the attribute declarations in decls, so a
+// mismatch reads as a name list in the failure output.
+func attrDeclNames(decls []*helium.AttributeDecl) []string {
+	names := make([]string, len(decls))
+	for i, d := range decls {
+		names[i] = d.Name()
+	}
+	return names
+}
+
+// dtdAttrDecls collects the attribute declarations linked in dtd's child list,
+// in child-list order.
+func dtdAttrDecls(dtd *helium.DTD) []*helium.AttributeDecl {
+	var decls []*helium.AttributeDecl
+	for c := range helium.Children(dtd) {
+		if adecl, ok := helium.AsNode[*helium.AttributeDecl](c); ok {
+			decls = append(decls, adecl)
+		}
+	}
+	return decls
+}
+
+// A DTD records its attribute declarations in registration order (the <!ATTLIST>
+// order), which is what AttributesForElement reports; the DTD child list is a
+// separate, independently mutable ordering that drives serialization. Relinking
+// a declaration (AttributeDecl.AddSibling) moves it in the child list WITHOUT
+// re-registering it, so the two orders come apart. A deep copy must reproduce
+// the source's registration order, not the child-list order it happens to walk.
+func TestCopyDTDAttrDeclOrder(t *testing.T) {
+	t.Parallel()
+
+	const src = `<?xml version="1.0"?>
+<!DOCTYPE root [
+<!ELEMENT root EMPTY>
+<!ATTLIST root a1 CDATA #IMPLIED>
+<!ATTLIST root a2 CDATA #IMPLIED>
+<!ATTLIST root a3 CDATA #IMPLIED>
+<!ATTLIST root a4 CDATA #IMPLIED>
+]>
+<root/>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	dtd := doc.IntSubset()
+	require.NotNil(t, dtd)
+
+	linked := dtdAttrDecls(dtd)
+	require.Equal(t, []string{"a1", "a2", "a3", "a4"}, attrDeclNames(linked))
+
+	// Move a1 to the end of the child list. Registration order is untouched.
+	require.NoError(t, linked[3].AddSibling(linked[0]))
+	require.Equal(t, []string{"a2", "a3", "a4", "a1"}, attrDeclNames(dtdAttrDecls(dtd)),
+		"the child list must now differ from registration order for this test to mean anything")
+	require.Equal(t, []string{"a1", "a2", "a3", "a4"}, attrDeclNames(dtd.AttributesForElement("root")),
+		"relinking a declaration must not change registration order")
+
+	cp, err := helium.CopyDoc(doc)
+	require.NoError(t, err)
+	cpDTD := cp.IntSubset()
+	require.NotNil(t, cpDTD)
+
+	require.Equal(t, attrDeclNames(dtd.AttributesForElement("root")), attrDeclNames(cpDTD.AttributesForElement("root")),
+		"a copied DTD must report the source's registration order")
+	require.Equal(t, []string{"a2", "a3", "a4", "a1"}, attrDeclNames(dtdAttrDecls(cpDTD)),
+		"the copy's child list still follows the source's child list, so serialization round-trips")
+}
