@@ -449,6 +449,56 @@ func cycleDifferentialCases() []cycleCase {
 			wantCyclic: false,
 		},
 		{
+			// A claimant counted TWICE must not be allowed to certify that every
+			// claim link was followed. The duplicate is cross-slot: attribute
+			// "dup" sits in r's properties chain AND in r's child list, since
+			// UnsafeAppendChild links it into the list without removing it from
+			// the chain. Attribute "hidden" was reparented away, so it no longer
+			// claims r, and x claims r through a pointer no slot holds. Counting
+			// "dup" once per occurrence makes the enumerated total equal r's
+			// claim count exactly, which would certify a search that never
+			// followed x's claim link — and the loop e -> x -> r -> q -> e
+			// closes unseen. Counting DISTINCT claimant identities can only
+			// undercount, so the shortfall sends the guard back to the walk.
+			name: "AddChild(ancestor claimed behind a double-counted attribute)",
+			build: func(t *testing.T) (Node, Node, func() error) {
+				doc := newCycleCaseDocument()
+				e, err := doc.CreateElement("e")
+				require.NoError(t, err)
+				require.NoError(t, e.SetAttribute("q", "v"))
+				q := e.Attributes()[0]
+
+				r, err := doc.CreateElement("r")
+				require.NoError(t, err)
+				require.NoError(t, q.AddChild(r))
+				require.NoError(t, r.SetAttribute("dup", "1"))
+				require.NoError(t, r.SetAttribute("hidden", "2"))
+				require.NoError(t, r.SetAttribute("tail", "3"))
+				rattrs := r.Attributes()
+				require.Len(t, rattrs, 3)
+
+				// dup now occupies both of r's enumerable slots at once.
+				require.NoError(t, UnsafeAppendChild(r, rattrs[0]))
+				require.Same(t, rattrs[0], r.FirstChild(), "dup must be in r's child list, or this row proves nothing")
+				require.Same(t, rattrs[0], r.Attributes()[0], "dup must stay in r's properties chain, or this row proves nothing")
+
+				// hidden stops claiming r, freeing the slot dup double-counts.
+				elsewhere, err := doc.CreateElement("elsewhere")
+				require.NoError(t, err)
+				UnsafeSetParent(rattrs[1], elsewhere)
+
+				// x claims r through a pointer no enumeration can reach.
+				x, err := doc.CreateElement("x")
+				require.NoError(t, err)
+				UnsafeSetParent(x, r)
+				require.EqualValues(t, 3, r.baseDocNode().claims, "r must be claimed by dup, tail and x, or this row proves nothing")
+
+				require.Nil(t, e.FirstChild(), "e must stay childless, or the guard never reaches the claim search")
+				return x, e, func() error { return x.AddChild(e) }
+			},
+			wantCyclic: true,
+		},
+		{
 			// No Unsafe call anywhere: an element whose attribute value expands a
 			// declared entity shares that entity's node with the DTD. The shared
 			// entity is reachable from the element by CHILD pointers, but it is

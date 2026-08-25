@@ -147,9 +147,12 @@ func appendCopiedChild(parent MutableNode, child Node) error {
 	// (pdn.lastChild.next is always nil going into this call). AddSibling on a
 	// childless Text lastChild costs nothing extra — wouldCreateCycle takes its
 	// childless fast exit — so this fallback does not reopen the quadratic cost
-	// the fast path above exists to avoid. (A process that has called
-	// UnsafeSetParent puts every insertion back on the ancestor walk, this one
-	// included; that is the whole guard's documented trade, not a copier one.)
+	// the fast path above exists to avoid. (The fast exit is per-operand, not
+	// per-process: an operand goes back on the ancestor walk only when
+	// claimsReach cannot certify it enumerated every claim link on that
+	// operand's own claim graph — a claim held in no enumerable slot, or a graph
+	// wider than the search budget. An UnsafeSetParent write elsewhere in the
+	// tree leaves this copy's operands answering from the claim counter.)
 	if err := last.(MutableNode).AddSibling(child); err != nil { //nolint:forcetypeassert
 		return err
 	}

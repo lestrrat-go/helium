@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 )
 
@@ -97,9 +98,10 @@ type docnode struct {
 	claims int32
 	// line is the 1-based source line, narrowed to int32 so it shares one
 	// 8-byte slot with claims and the claim counter costs no extra bytes per
-	// node. Line/SetLine keep the int-valued API; a source line beyond
-	// 2,147,483,647 is not representable, matching libxml2's own int line
-	// numbers.
+	// node. Line/SetLine keep the int-valued API; the narrowed range
+	// [-2147483648, 2147483647] is the STORED contract, matching libxml2's own
+	// int line numbers, and SetLine CLAMPS to it rather than wrapping an
+	// out-of-range value round to the opposite sign.
 	line          int32
 	next          Node
 	prev          Node
@@ -473,11 +475,29 @@ func (n docnode) Type() ElementType {
 	return n.etype
 }
 
+// Line returns the 1-based source line recorded for the node, or 0 when none
+// was recorded. The value is always within [math.MinInt32, math.MaxInt32] — see
+// SetLine for why.
 func (n docnode) Line() int {
 	return int(n.line)
 }
 
+// SetLine records the node's 1-based source line. The line is stored narrowed
+// to int32 (so it shares an 8-byte struct slot with the parent-claim counter
+// and costs no extra bytes per node), which on a 64-bit platform is narrower
+// than the int the API takes. A value outside [math.MinInt32, math.MaxInt32] is
+// CLAMPED to the nearer end rather than truncated, so Line never reports a
+// number of the opposite sign to the one that was set; every line a parsed or
+// hand-built document can actually carry is far inside that range.
 func (n *docnode) SetLine(line int) {
+	if line > math.MaxInt32 {
+		n.line = math.MaxInt32
+		return
+	}
+	if line < math.MinInt32 {
+		n.line = math.MinInt32
+		return
+	}
 	n.line = int32(line)
 }
 
@@ -579,6 +599,20 @@ const claimReachBudget = 64
 // running out of budget. A caller that gets exact == false must fall back to
 // the ancestor walk, which needs no such enumeration.
 //
+// The comparison counts DISTINCT claimant identities, tracked per owner in
+// [claimantSet]. docnode.claims is the number of distinct nodes whose parent
+// pointer names the owner, so a distinct-identity count can only UNDERCOUNT it,
+// never reach it on a short enumeration; that is what makes the equality a
+// certificate. Counting occurrences instead would let one node stand in for
+// another: an attribute that occupies BOTH the properties chain and the child
+// list (UnsafeAppendChild links it into the list without removing it from the
+// chain) would be counted twice and could make the total match while a real
+// claim link — an UnsafeSetParent write no slot holds — went unfollowed, and
+// the cycle it closes would be admitted. A repeat inside ONE list needs the
+// same treatment: [siblingCycleGuard] stops a knotted chain within a bounded
+// multiple of the cycle length, so a node can come round more than once before
+// it fires.
+//
 // Both sibling enumerations are bounded by [siblingCycleGuard], the same
 // allocation-free Brent's-algorithm guard childReaches and the traversal
 // iterators use, so a chain knotted into a loop stops the search instead of
@@ -591,12 +625,17 @@ func claimsReach(cur Node, target *docnode) (found, exact bool) {
 	// as usual, under the same budget.
 	var backing [8]Node
 	stack := append(backing[:0], cur)
+	// seen holds the claimant identities already counted for the node currently
+	// being enumerated, and is reset as each node comes off the stack. Every
+	// identity it records costs one unit of the shared budget, so it never needs
+	// room for more than claimReachBudget of them.
+	var seen claimantSet
 	for len(stack) > 0 {
 		n := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		dn := n.baseDocNode()
 
-		var seen int32
+		seen.reset()
 		if elem, ok := n.(*Element); ok {
 			var g siblingCycleGuard
 			for attr := elem.properties; attr != nil; attr = attr.NextAttribute() {
@@ -611,7 +650,9 @@ func claimsReach(cur Node, target *docnode) (found, exact bool) {
 				if attrDN == target {
 					return true, true
 				}
-				seen++
+				if !seen.add(attrDN) {
+					continue
+				}
 				stack = append(stack, attr)
 			}
 		}
@@ -632,16 +673,51 @@ func claimsReach(cur Node, target *docnode) (found, exact bool) {
 			if cdn == target {
 				return true, true
 			}
-			seen++
-			stack = append(stack, child)
+			if seen.add(cdn) {
+				stack = append(stack, child)
+			}
 			child = cdn.next
 		}
 
-		if seen != dn.claims {
+		if seen.n != dn.claims {
 			return false, false
 		}
 	}
 	return false, true
+}
+
+// claimantSet is claimsReach's per-owner set of already-counted claimant
+// identities. It is a fixed-size array scanned linearly, sized to the search's
+// whole link budget and reused across owners, so the search allocates nothing
+// and the array is zeroed at most once per call. A linear scan is the right
+// shape here: an ordinary operand's owner has a handful of claimants, and the
+// budget caps the worst case at claimReachBudget entries.
+type claimantSet struct {
+	ids [claimReachBudget]*docnode
+	n   int32
+}
+
+// reset empties the set for the next owner.
+func (s *claimantSet) reset() {
+	s.n = 0
+}
+
+// add records dn and reports whether it was NOT already present. A full set
+// reports false, which undercounts the owner's claimants and so sends the
+// search back to the ancestor walk — the safe direction, and unreachable while
+// every recorded identity costs a unit of the search's budget.
+func (s *claimantSet) add(dn *docnode) bool {
+	for i := range s.n {
+		if s.ids[i] == dn {
+			return false
+		}
+	}
+	if int(s.n) == len(s.ids) {
+		return false
+	}
+	s.ids[s.n] = dn
+	s.n++
+	return true
 }
 
 // childReachesInlineCap is the number of popped nodes childReachesVisited

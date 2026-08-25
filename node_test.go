@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 
@@ -650,4 +651,42 @@ func TestCycleGuards(t *testing.T) {
 		require.Equal(t, []byte("a"), root.Content(),
 			"Content must terminate on a cyclic sibling list instead of looping forever")
 	})
+}
+
+// TestSetLineBoundary pins the narrowed line contract. docnode stores the
+// source line as an int32 so it shares a struct slot with the parent-claim
+// counter, while SetLine/Line keep the int-valued API, so an out-of-range value
+// has to be handled deliberately: SetLine clamps to the nearer end of the int32
+// range instead of truncating, which would report a number of the opposite sign
+// to the one that was set.
+func TestSetLineBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  int
+		want int
+	}{
+		{name: "zero", set: 0, want: 0},
+		{name: "ordinary", set: 42, want: 42},
+		{name: "max int32", set: math.MaxInt32, want: math.MaxInt32},
+		{name: "min int32", set: math.MinInt32, want: math.MinInt32},
+		{name: "one past max int32", set: math.MaxInt32 + 1, want: math.MaxInt32},
+		{name: "one before min int32", set: math.MinInt32 - 1, want: math.MinInt32},
+		{name: "max int", set: math.MaxInt, want: math.MaxInt32},
+		{name: "min int", set: math.MinInt, want: math.MinInt32},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.set > math.MaxInt32 && math.MaxInt == math.MaxInt32 {
+				t.Skip("int is 32 bits on this platform, so the value is not representable in the API either")
+			}
+			if tc.set < math.MinInt32 && math.MinInt == math.MinInt32 {
+				t.Skip("int is 32 bits on this platform, so the value is not representable in the API either")
+			}
+			doc := helium.NewDefaultDocument()
+			e, err := doc.CreateElement("e")
+			require.NoError(t, err)
+
+			e.SetLine(tc.set)
+			require.Equal(t, tc.want, e.Line())
+		})
+	}
 }
