@@ -30,19 +30,27 @@ type fieldBinding struct {
 	name         string
 	nameSpace    string
 	hasNameSpace bool
-	path         []string
-	isAttr       bool
-	isCharData   bool
-	isCData      bool
-	isInnerXML   bool
-	isComment    bool
-	isAny        bool
-	isXMLName    bool
-	omit         bool
-	omitEmpty    bool
-	fieldType    reflect.Type
-	fieldIsPtr   bool
-	fieldExport  bool
+	// matchLocal, matchSpace, and matchHasSpace are parseTagNameSpec(rawName),
+	// precomputed once in parseFieldBinding so the single-segment element
+	// scan (findFrom) never re-parses rawName per candidate child. Derived
+	// from rawName rather than name/nameSpace, which are populated
+	// inconsistently across the tag-parsing branches above.
+	matchLocal    string
+	matchSpace    string
+	matchHasSpace bool
+	path          []string
+	isAttr        bool
+	isCharData    bool
+	isCData       bool
+	isInnerXML    bool
+	isComment     bool
+	isAny         bool
+	isXMLName     bool
+	omit          bool
+	omitEmpty     bool
+	fieldType     reflect.Type
+	fieldIsPtr    bool
+	fieldExport   bool
 }
 
 var fieldBindingCache sync.Map
@@ -170,8 +178,11 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 		return err
 	}
 	children := childElements(elem)
-	consumed := make(map[int]bool)
-	consumedLeaves := make(map[*helium.Element]bool)
+	consumed := make([]bool, len(children))
+	// consumedLeaves stays nil until the first multi-segment path binding
+	// needs it — reads of a nil map are legal, and a childless or path-free
+	// element never allocates it.
+	var consumedLeaves map[*helium.Element]struct{}
 	consumedAttr := make(map[int]bool)
 
 	// Process bindings in two passes: non-any first (to consume specific elements),
@@ -276,11 +287,21 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			isPath := len(binding.path) > 1
 
 			if isPath {
-				// Multi-segment path (e.g., "A>B"): find leaves without
-				// consuming wrapper elements so multiple bindings can share
-				// the same wrapper. Also mark wrappers in consumed so the
-				// any-field pass skips them.
-				wrapperIdx, leaf := findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves)
+				// Multi-segment path (e.g., "A>B"): a resumable DFS scanner
+				// walks the path without consuming wrapper elements, so
+				// multiple bindings can share the same wrapper. It also
+				// marks the top-level wrapper in consumed so the any-field
+				// pass skips it. One scanner per binding: created just
+				// before the first probe, discarded when this binding's
+				// drain finishes — nothing outside this branch keeps it
+				// alive, and nothing during the drain un-marks a consumed
+				// leaf or mutates the tree, so resuming it never misses a
+				// leaf a from-scratch walk would have found.
+				if consumedLeaves == nil {
+					consumedLeaves = make(map[*helium.Element]struct{})
+				}
+				scanner := newPathScanner(children, binding.path, binding.nameSpace, binding.hasNameSpace)
+				wrapperIdx, leaf := scanner.next(consumedLeaves)
 				if leaf == nil {
 					continue
 				}
@@ -295,7 +316,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 					ft = ft.Elem()
 				}
 				if isXMLNameType(ft) {
-					consumedLeaves[leaf] = true
+					consumedLeaves[leaf] = struct{}{}
 					consumed[wrapperIdx] = true
 					setXMLName(field, leaf)
 					continue
@@ -309,32 +330,40 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 
 				if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
-					for wi, leaf := findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves); leaf != nil; wi, leaf = findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves) {
-						consumedLeaves[leaf] = true
-						consumed[wi] = true
+					for leaf != nil {
+						consumedLeaves[leaf] = struct{}{}
+						consumed[wrapperIdx] = true
 						item := reflect.New(field.Type().Elem()).Elem()
 						if err := assignFromElement(item, leaf); err != nil {
 							return err
 						}
 						field.Set(reflect.Append(field, item))
+
+						wrapperIdx, leaf = scanner.next(consumedLeaves)
 					}
 					continue
 				}
 
 				// Scalar field: consume all matches, last one wins (stdlib behavior).
-				for wi, leaf := findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves); leaf != nil; wi, leaf = findPathLeaf(children, binding.path, binding.nameSpace, binding.hasNameSpace, consumedLeaves) {
-					consumedLeaves[leaf] = true
-					consumed[wi] = true
+				for leaf != nil {
+					consumedLeaves[leaf] = struct{}{}
+					consumed[wrapperIdx] = true
 					if err := assignFromElement(field, leaf); err != nil {
 						return err
 					}
+					wrapperIdx, leaf = scanner.next(consumedLeaves)
 				}
 			} else {
-				// Single-segment (direct child match): use consumed set on children.
-				// Use rawName to preserve namespace info for matchElementByTag.
-				path := []string{binding.rawName}
-
-				_, matched := findPath(children, consumed, path)
+				// Single-segment (direct child match): scan with a
+				// per-binding cursor that only ever moves forward. Every
+				// match this binding claims is drained before the next
+				// binding runs, so resuming the scan at the last claimed
+				// index plus one sees exactly what a from-0 rescan would.
+				// The consumed check inside findFrom still applies, since a
+				// child at or after the cursor may already have been
+				// claimed by an earlier binding.
+				cur := 0
+				idx, matched := findFrom(children, consumed, cur, binding.matchLocal, binding.matchSpace, binding.matchHasSpace)
 				if matched == nil {
 					continue
 				}
@@ -349,12 +378,8 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 					ft = ft.Elem()
 				}
 				if isXMLNameType(ft) {
-					idx, m := findPath(children, consumed, path)
-					if m == nil {
-						continue
-					}
 					consumed[idx] = true
-					setXMLName(field, m)
+					setXMLName(field, matched)
 					continue
 				}
 
@@ -366,38 +391,40 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 				}
 
 				if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
-					for {
-						idx, matched := findPath(children, consumed, path)
-						if matched == nil {
-							break
-						}
+					for matched != nil {
 						consumed[idx] = true
+						cur = idx + 1
 
 						item := reflect.New(field.Type().Elem()).Elem()
 						if err := assignFromElement(item, matched); err != nil {
 							return err
 						}
 						field.Set(reflect.Append(field, item))
+
+						idx, matched = findFrom(children, consumed, cur, binding.matchLocal, binding.matchSpace, binding.matchHasSpace)
 					}
 					continue
 				}
 
 				// Scalar field: consume all matches, last one wins (stdlib behavior).
-				for {
-					idx, matched2 := findPath(children, consumed, path)
-					if matched2 == nil {
-						break
-					}
+				for matched != nil {
 					consumed[idx] = true
-					if err := assignFromElement(field, matched2); err != nil {
+					cur = idx + 1
+					if err := assignFromElement(field, matched); err != nil {
 						return err
 					}
+					idx, matched = findFrom(children, consumed, cur, binding.matchLocal, binding.matchSpace, binding.matchHasSpace)
 				}
 			}
 		}
 	}
 
-	// Second pass: process any-tagged bindings on remaining unconsumed elements
+	// Second pass: process any-tagged bindings on remaining unconsumed
+	// elements. A single cursor spans the whole pass, not just one binding:
+	// only this pass writes consumed at this point, so the next unconsumed
+	// index is non-decreasing across every any-binding's drain, exactly as
+	// it is within one binding's own drain.
+	anyCursor := 0
 	for _, binding := range anyBindings {
 		field, ok := fieldByIndexAlloc(target, binding.index)
 		if !ok {
@@ -407,22 +434,28 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			continue
 		}
 		if field.Kind() == reflect.Slice && field.Type().Elem().Kind() != reflect.Uint8 {
-			for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
+			idx, anyElem := nextUnconsumed(children, consumed, anyCursor)
+			for anyElem != nil {
 				consumed[idx] = true
+				anyCursor = idx + 1
 				item := reflect.New(field.Type().Elem()).Elem()
 				if err := assignFromElement(item, anyElem); err != nil {
 					return err
 				}
 				field.Set(reflect.Append(field, item))
+				idx, anyElem = nextUnconsumed(children, consumed, anyCursor)
 			}
 			continue
 		}
 
-		for idx, anyElem := firstUnconsumed(children, consumed); anyElem != nil; idx, anyElem = firstUnconsumed(children, consumed) {
+		idx, anyElem := nextUnconsumed(children, consumed, anyCursor)
+		for anyElem != nil {
 			consumed[idx] = true
+			anyCursor = idx + 1
 			if err := assignFromElement(field, anyElem); err != nil {
 				return err
 			}
+			idx, anyElem = nextUnconsumed(children, consumed, anyCursor)
 		}
 	}
 
@@ -1074,6 +1107,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 		fieldIsPtr:  f.Type.Kind() == reflect.Pointer,
 		fieldExport: f.PkgPath == "",
 	}
+	b.matchSpace, b.matchLocal, b.matchHasSpace = parseTagNameSpec(b.rawName)
 
 	if f.Name == xmlNameField {
 		b.isXMLName = true
@@ -1090,6 +1124,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 			// Explicit xml:"" on XMLName — empty namespace and name
 			b.name = ""
 			b.rawName = ""
+			b.matchSpace, b.matchLocal, b.matchHasSpace = parseTagNameSpec(b.rawName)
 			return b
 		}
 		// If the field type is a struct with an XMLName tag, use that tag
@@ -1097,6 +1132,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 		if xmlNameTag := structXMLNameTag(derefType(f.Type)); xmlNameTag != "" {
 			b.rawName = xmlNameTag
 			b.nameSpace, b.name, b.hasNameSpace = parseTagNameSpec(xmlNameTag)
+			b.matchSpace, b.matchLocal, b.matchHasSpace = parseTagNameSpec(b.rawName)
 		} else {
 			b.name = f.Name
 		}
@@ -1108,6 +1144,7 @@ func parseFieldBinding(f reflect.StructField) fieldBinding {
 	if name != "" {
 		b.rawName = name
 		b.tagPath = name
+		b.matchSpace, b.matchLocal, b.matchHasSpace = parseTagNameSpec(b.rawName)
 
 		// Extract namespace first (e.g., "space x>b" → ns="space", local="x>b")
 		var localPart string
@@ -1275,138 +1312,130 @@ func childElements(elem *helium.Element) []*helium.Element {
 	return result
 }
 
-func firstUnconsumed(children []*helium.Element, consumed map[int]bool) (int, *helium.Element) {
-	for i, child := range children {
+// nextUnconsumed returns the first unconsumed child at or after from. The
+// any-element pass calls it with a cursor that only ever moves forward, so
+// resuming at the cursor instead of restarting at 0 skips only children
+// already known to be consumed.
+func nextUnconsumed(children []*helium.Element, consumed []bool, from int) (int, *helium.Element) {
+	for i := from; i < len(children); i++ {
 		if !consumed[i] {
-			return i, child
+			return i, children[i]
 		}
 	}
 	return -1, nil
 }
 
-// findPathLeaf walks a multi-segment path (e.g., ["A","B","C"]) through the
-// children without consuming wrapper elements. It returns the first unconsumed
-// leaf element matching the full path and the index of the direct child (wrapper)
-// that was traversed. Returns (-1, nil) if no match found.
-// The ns/hasNS parameters apply to the leaf element only (matching stdlib behavior).
-func findPathLeaf(children []*helium.Element, path []string, ns string, hasNS bool, consumedLeaves map[*helium.Element]bool) (int, *helium.Element) {
-	if len(path) == 0 {
-		return -1, nil
-	}
+// pathFrame is one level of a pathScanner's depth-first walk: the sibling
+// list at that level (a wrapper's already-materialized children), the index
+// of the sibling currently being tried, and which path segment this level
+// matches against.
+type pathFrame struct {
+	children []*helium.Element
+	i        int
+	level    int
+}
 
-	wrapperName := path[0]
-	for i, child := range children {
-		if localName(child.Name()) != wrapperName {
+// pathScanner walks a multi-segment path (e.g. ["A","B","C"]) through a
+// parent's children without consuming wrapper elements, so multiple bindings
+// can share the same wrapper. It is the preorder walk findPathLeaf used to
+// perform from scratch on every call, made resumable: next resumes exactly
+// where the previous call left off instead of re-descending from the root,
+// so each wrapper's children are materialized once for the scanner's whole
+// life instead of once per leaf claimed. The ns/hasNS fields apply to the
+// leaf element only, matching stdlib behavior.
+type pathScanner struct {
+	path   []string
+	ns     string
+	hasNS  bool
+	frames []pathFrame
+}
+
+// newPathScanner seeds a scanner over the parent's already-materialized
+// children, ready to walk path from its first segment.
+func newPathScanner(children []*helium.Element, path []string, ns string, hasNS bool) *pathScanner {
+	return &pathScanner{
+		path:  path,
+		ns:    ns,
+		hasNS: hasNS,
+		frames: []pathFrame{
+			{children: children, i: 0, level: 0},
+		},
+	}
+}
+
+// next returns the wrapper index (the position of the top-level path segment
+// among the parent's children) and the next unconsumed, namespace-matching
+// leaf, resuming the walk from where the previous call stopped. It returns
+// (-1, nil) once the whole path has been exhausted, and every call after
+// that returns the same sentinel without rescanning.
+func (s *pathScanner) next(consumedLeaves map[*helium.Element]struct{}) (int, *helium.Element) {
+	for len(s.frames) > 0 {
+		top := &s.frames[len(s.frames)-1]
+		if top.i >= len(top.children) {
+			s.frames = s.frames[:len(s.frames)-1]
+			if len(s.frames) == 0 {
+				return -1, nil
+			}
+			s.frames[len(s.frames)-1].i++
 			continue
 		}
-		if len(path) == 1 {
-			// This is the leaf level
-			if consumedLeaves[child] {
-				continue
-			}
-			if hasNS && child.URI() != ns {
-				continue
-			}
-			return i, child
-		}
-		// Descend into wrapper — find leaf in grandchildren
-		grandchildren := childElements(child)
-		_, leaf := findPathLeafInner(grandchildren, path[1:], ns, hasNS, consumedLeaves)
-		if leaf != nil {
-			return i, leaf
-		}
-	}
 
-	return -1, nil
-}
-
-// findPathLeafInner is the recursive helper for findPathLeaf.
-// It doesn't need to track the wrapper index (only the top level does).
-func findPathLeafInner(children []*helium.Element, path []string, ns string, hasNS bool, consumedLeaves map[*helium.Element]bool) (int, *helium.Element) { //nolint:unparam // int unused but matches findPathLeaf signature
-	if len(path) == 0 {
-		return -1, nil
-	}
-
-	name := path[0]
-	for i, child := range children {
-		if localName(child.Name()) != name {
+		child := top.children[top.i]
+		if localName(child.Name()) != s.path[top.level] {
+			top.i++
 			continue
 		}
-		if len(path) == 1 {
-			if consumedLeaves[child] {
+
+		if top.level == len(s.path)-1 {
+			// Leaf level: the top-level frame's current index is the
+			// wrapper index, no matter how deep this frame is.
+			wrapperIdx := s.frames[0].i
+			top.i++
+			if _, ok := consumedLeaves[child]; ok {
 				continue
 			}
-			if hasNS && child.URI() != ns {
+			if s.hasNS && child.URI() != s.ns {
 				continue
 			}
-			return i, child
+			return wrapperIdx, child
 		}
-		grandchildren := childElements(child)
-		_, leaf := findPathLeafInner(grandchildren, path[1:], ns, hasNS, consumedLeaves)
-		if leaf != nil {
-			return i, leaf
-		}
+
+		// Descend into the matching wrapper to look for the next segment.
+		// The parent frame's index advances only once this child frame is
+		// exhausted, so a leaf found on a later next() call still resumes
+		// inside this same descent.
+		s.frames = append(s.frames, pathFrame{
+			children: childElements(child),
+			i:        0,
+			level:    top.level + 1,
+		})
 	}
 
 	return -1, nil
 }
 
-func findPath(children []*helium.Element, consumed map[int]bool, path []string) (int, *helium.Element) {
-	if len(path) == 0 {
-		return -1, nil
-	}
-
-	for i, child := range children {
+// findFrom scans children for the first unconsumed element matching
+// local/space/hasSpace, starting at index from. Within one binding's drain,
+// each match is consumed before the next probe, and the consumed set never
+// un-marks an index, so resuming at the last claimed index plus one — instead
+// of restarting at 0 — sees exactly the same children a from-0 scan would.
+// The consumed check still applies at and after from, since a child there may
+// already have been claimed by an earlier binding's own drain.
+func findFrom(children []*helium.Element, consumed []bool, from int, local, space string, hasSpace bool) (int, *helium.Element) {
+	for i := from; i < len(children); i++ {
 		if consumed[i] {
 			continue
 		}
-		if !matchElementByTag(child, path[0]) {
+		child := children[i]
+		if localName(child.Name()) != local {
 			continue
 		}
-		if len(path) == 1 {
-			return i, child
+		if hasSpace && child.URI() != space {
+			continue
 		}
-
-		cur := child
-		ok := true
-		for _, name := range path[1:] {
-			next := firstChildByTag(cur, name)
-			if next == nil {
-				ok = false
-				break
-			}
-			cur = next
-		}
-		if ok {
-			return i, cur
-		}
+		return i, child
 	}
-
 	return -1, nil
-}
-
-func firstChildByTag(elem *helium.Element, tag string) *helium.Element {
-	for child := range helium.Children(elem) {
-		ce, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
-		if matchElementByTag(ce, tag) {
-			return ce
-		}
-	}
-	return nil
-}
-
-func matchElementByTag(elem *helium.Element, tag string) bool {
-	space, local, hasSpace := parseTagNameSpec(tag)
-	if localName(elem.Name()) != local {
-		return false
-	}
-	if hasSpace {
-		return elem.URI() == space
-	}
-	return true
 }
 
 func parseTagNameSpec(tag string) (space, local string, hasSpace bool) {
