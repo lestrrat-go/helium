@@ -1811,7 +1811,7 @@
       "denom": 2001,
       "not_enumerated": 0,
       "pass_pct": 99.55,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1830,7 +1830,7 @@
       "denom": 14399,
       "not_enumerated": 0,
       "pass_pct": 99.89,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1849,7 +1849,7 @@
       "denom": 1049,
       "not_enumerated": 0,
       "pass_pct": 99.9,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1868,7 +1868,7 @@
       "denom": 12827,
       "not_enumerated": 0,
       "pass_pct": 100.0,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1887,7 +1887,7 @@
       "denom": 22328,
       "not_enumerated": 0,
       "pass_pct": 99.98,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1906,7 +1906,7 @@
       "denom": 37,
       "not_enumerated": 0,
       "pass_pct": 100.0,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1925,7 +1925,7 @@
       "denom": 33,
       "not_enumerated": 0,
       "pass_pct": 100.0,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1944,7 +1944,7 @@
       "denom": 10,
       "not_enumerated": 0,
       "pass_pct": 100.0,
-      "untagged": true
+      "untagged": false
     },
     {
       "tag": "v0.8.0",
@@ -1963,7 +1963,7 @@
       "denom": 16,
       "not_enumerated": 0,
       "pass_pct": 100.0,
-      "untagged": true
+      "untagged": false
     }
   ]
 }
