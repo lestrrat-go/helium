@@ -145,9 +145,11 @@ func appendCopiedChild(parent MutableNode, child Node) error {
 	// Adjacent-Text merge, reached only when curType and ldn.etype are both
 	// TextNode given the sequential single-owner appends copyChildren performs
 	// (pdn.lastChild.next is always nil going into this call). AddSibling on a
-	// childless Text lastChild costs nothing extra — wouldCreateCycle takes its
-	// childless fast exit — so this fallback does not reopen the quadratic cost
-	// the fast path above exists to avoid.
+	// childless Text lastChild costs nothing extra — wouldCreateCycle settles a
+	// childless operand from its own slots — so this fallback does not reopen
+	// the quadratic cost the fast path above exists to avoid. (A document that
+	// carries an off-chain parent claim declines that exit and walks instead,
+	// which is a correctness requirement of the guard and not a copier concern.)
 	if err := last.(MutableNode).AddSibling(child); err != nil { //nolint:forcetypeassert
 		return err
 	}

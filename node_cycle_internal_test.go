@@ -184,6 +184,40 @@ func cycleCases() []cycleCase {
 			},
 		},
 		{
+			name: "childless operand holding an off-chain parent claim",
+			want: true,
+			build: func(t *testing.T) (Node, Node) {
+				doc, err := NewParser().Parse(t.Context(), []byte(`<!DOCTYPE d [<!ENTITY e "xy">]><d a="&e;"/>`))
+				require.NoError(t, err)
+
+				ent, ok := doc.GetEntity("e")
+				require.True(t, ok)
+				require.NotNil(t, ent.FirstChild(), "the attribute-value expansion is the entity's child")
+				require.Nil(t, ent.LastChild(), "and it was recorded without a lastChild")
+
+				claimant, err := doc.CreateElement("claimant")
+				require.NoError(t, err)
+				expansion, ok := ent.FirstChild().(MutableNode)
+				require.True(t, ok)
+				require.NoError(t, expansion.Replace(claimant))
+				require.Equal(t, Node(ent), claimant.Parent())
+
+				// The append takes the empty-parent branch, which overwrites
+				// firstChild and detaches claimant while it goes on naming the
+				// entity as its parent. Unlinking the replacement empties the
+				// child list again, which is exactly the shape the claimant
+				// search is consulted on.
+				filler := doc.CreateComment([]byte("filler"))
+				require.NoError(t, ent.AddChild(filler))
+				UnlinkNode(filler)
+				require.Nil(t, ent.FirstChild())
+				require.Nil(t, ent.LastChild())
+				require.Equal(t, Node(ent), claimant.Parent(), "the detached child still claims the entity")
+
+				return claimant, ent
+			},
+		},
+		{
 			name: "childless operand with no parent at all",
 			want: false,
 			build: func(t *testing.T) (Node, Node) {

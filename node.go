@@ -463,8 +463,14 @@ func (n docnode) LastChild() Node {
 // (mirroring libxml2). A cycle formed through such a foreign link (e.g.
 // ent.AddChild(ref) where ref's child is ent) is invisible to the ancestor
 // walk, so when cur has children we additionally verify parent is not reachable
-// from cur by following CHILD pointers. The parser hot path appends childless
-// leaves and skips that second descent entirely.
+// from cur by following CHILD pointers.
+//
+// A cur with an EMPTY child list is settled from cur's own claimant slots
+// instead, at a cost bounded by cur's own shape rather than by depth(parent):
+// the parser hot path appends childless leaves, and this is what keeps building
+// a deep chain linear. That shortcut needs every node naming cur as its parent
+// to sit in a slot cur owns, so it is declined for a document carrying an
+// off-chain parent claim (holdsOffChainClaim).
 func wouldCreateCycle(parent, cur Node) bool {
 	cdn := cur.baseDocNode()
 	// Self-insertion is the one loop the claimant search below cannot see. The
@@ -477,10 +483,11 @@ func wouldCreateCycle(parent, cur Node) bool {
 	// of parent's ancestor chain. Both questions the walk answers need some
 	// node X with X.parent == cur — the ancestor walk finds cur only by
 	// stepping from such an X, and the child descent needs cur.firstChild —
-	// and with the child list empty every remaining X sits in a slot cur owns.
-	// Searching those directly costs cur's own attribute count rather than
-	// depth(parent), which is what makes a deep AddChild chain linear.
-	if cdn.firstChild == nil {
+	// and with the child list empty every remaining X sits in a slot cur owns,
+	// SO LONG AS no off-chain parent claim has been made. Searching those slots
+	// directly costs cur's own attribute count rather than depth(parent), which
+	// is what makes a deep AddChild chain linear.
+	if cdn.firstChild == nil && !holdsOffChainClaim(cur) {
 		return claimantReaches(cur, parent)
 	}
 	for anc := parent; anc != nil; anc = anc.Parent() {
@@ -494,12 +501,34 @@ func wouldCreateCycle(parent, cur Node) bool {
 	return childReaches(cur, parent.baseDocNode())
 }
 
+// holdsOffChainClaim reports whether a node may name cur as its parent from
+// outside every slot cur owns, which is the one way the claimant search can
+// miss a claimant and answer false where the ancestor walk answers true.
+//
+// The guarded paths create exactly such a claim themselves: an append onto a
+// parent that holds a firstChild with no lastChild overwrites firstChild, and
+// the child that was there goes on claiming the parent from no slot at all
+// (noteOrphanedChildClaim). Unlinking the replacement then empties the child
+// list again, which is precisely when the claimant search is consulted.
+//
+// The record lives on the owning document, and on unownedOffChainClaim for a
+// claim made while no document owned the nodes. A node with no document must
+// consult that package-level record: its own document field cannot carry what
+// was never written to a document.
+func holdsOffChainClaim(cur Node) bool {
+	doc := owningDocument(cur)
+	if doc == nil {
+		return unownedOffChainClaim.Load()
+	}
+	return doc.offChainClaims
+}
+
 // claimantReaches reports whether parent lies anywhere under a cur that has no
 // child list. Only a node naming cur as its parent can begin such a path, and
-// with cur.firstChild nil every one of them sits in a slot cur itself owns: an
-// element's attributes, or a document's DTD subsets. Each of those subtrees is
-// bounded by the operand's own shape, so the search never grows with the depth
-// of the tree cur is being inserted into.
+// with cur.firstChild nil and no off-chain claim outstanding every one of them
+// sits in a slot cur itself owns: an element's attributes, or a document's DTD
+// subsets. Each of those subtrees is bounded by the operand's own shape, so the
+// search never grows with the depth of the tree cur is being inserted into.
 //
 // A namespace-node wrapper also names its owner without appearing in any of
 // the owner's slots, and is deliberately not consulted here: a wrapper has no

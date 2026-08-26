@@ -301,6 +301,42 @@ func TestNodeConsistency(t *testing.T) {
 			require.NoError(t, parent.AddChild(child))
 			require.ErrorIs(t, child.Replace(parent), helium.ErrCyclicNode)
 		})
+
+		// An operand with an EMPTY child list can still be named as a parent
+		// from outside every slot it owns. Document.stringToNodeList leaves an
+		// entity referenced from an attribute value with a firstChild and no
+		// lastChild; an append onto that shape overwrites firstChild and
+		// detaches the child that was there while the child goes on naming the
+		// entity, and unlinking the replacement empties the child list again.
+		// Adding the entity under its own off-chain claimant would close a
+		// two-node parent-pointer loop, so the guard must refuse it.
+		t.Run("AddChild whose operand is claimed off its child list", func(t *testing.T) {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<!DOCTYPE d [<!ENTITY e "xy">]><d a="&e;"/>`))
+			require.NoError(t, err)
+
+			ent, ok := doc.GetEntity("e")
+			require.True(t, ok)
+			require.NotNil(t, ent.FirstChild(), "the attribute-value expansion is the entity's child")
+			require.Nil(t, ent.LastChild(), "and it was recorded without a lastChild")
+
+			elem, err := doc.CreateElement("claimant")
+			require.NoError(t, err)
+			expansion, ok := ent.FirstChild().(helium.MutableNode)
+			require.True(t, ok)
+			require.NoError(t, expansion.Replace(elem))
+			require.Equal(t, helium.Node(ent), elem.Parent())
+
+			comment := doc.CreateComment([]byte("filler"))
+			require.NoError(t, ent.AddChild(comment))
+			helium.UnlinkNode(comment)
+			require.Nil(t, ent.FirstChild())
+			require.Nil(t, ent.LastChild())
+			require.Equal(t, helium.Node(ent), elem.Parent(), "the detached child still claims the entity")
+
+			require.ErrorIs(t, elem.AddChild(ent), helium.ErrCyclicNode)
+			require.Equal(t, helium.Node(ent), elem.Parent(), "the refused insertion leaves both nodes as they were")
+			require.NotEqual(t, helium.Node(elem), ent.Parent())
+		})
 	})
 }
 
