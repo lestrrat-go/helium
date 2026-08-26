@@ -393,9 +393,11 @@ func cycleDifferentialCases() []cycleCase {
 			wantCyclic: true,
 		},
 		{
-			// A namespace-axis wrapper claims its owning element without any
-			// child link, and something claims the wrapper in turn, so the
-			// element really is on the insertion point's ancestor chain.
+			// Minting a namespace-axis wrapper takes no claim, so this row
+			// forges one: unsafeSetParent points the wrapper at the element
+			// without any child link, and something claims the wrapper in
+			// turn, so the element really is on the insertion point's
+			// ancestor chain.
 			name: "AddChild(ancestor claimed through a namespace wrapper)",
 			build: func(t *testing.T) (Node, Node, func() error) {
 				doc := newCycleCaseDocument()
@@ -404,6 +406,7 @@ func cycleDifferentialCases() []cycleCase {
 				parent, err := doc.CreateElement("parent")
 				require.NoError(t, err)
 				w := NewNamespaceNodeWrapper(NewNamespace("p", "urn:x"), owner)
+				unsafeSetParent(w, owner)
 				unsafeSetParent(parent, w)
 				return parent, owner, func() error { return parent.AddChild(owner) }
 			},
@@ -747,6 +750,41 @@ func TestClaimsStayExactThroughMutationAPI(t *testing.T) {
 	// The unlinked subtree keeps its own internal claims and none on the tree.
 	require.Nil(t, kid.Parent())
 	requireClaimsExact(t, kid)
+}
+
+// TestNamespaceWrapperTakesNoClaim pins that minting namespace-axis wrappers
+// leaves the owning element's claim count at its structural value. The XPath
+// namespace axis builds one wrapper per in-scope prefix on every namespace
+// step and drops them with the query, and nothing ever unlinks a wrapper, so a
+// claim taken here could never be released: each step would leave another one
+// behind and the element would lose the fast exit for the rest of its life.
+func TestNamespaceWrapperTakesNoClaim(t *testing.T) {
+	doc := newCycleCaseDocument()
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(root))
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(child))
+
+	structural := root.baseDocNode().claims
+	require.EqualValues(t, 1, structural, "root's only claimant is its child")
+
+	// Five identical namespace-axis steps over the same element.
+	for range 5 {
+		for _, ns := range []*Namespace{NewNamespace("a", "urn:a"), NewNamespace("b", "urn:b")} {
+			w := NewNamespaceNodeWrapper(ns, root)
+			require.Equal(t, Node(root), w.Parent(), "a wrapper still reports the element it was minted for")
+		}
+	}
+
+	require.Equal(t, structural, root.baseDocNode().claims, "a discarded namespace wrapper must leave no claim behind")
+
+	// The owner is still a legal operand, and the guard answers for it exactly
+	// what the unconditional ancestor walk answers.
+	other, err := doc.CreateElement("other")
+	require.NoError(t, err)
+	require.Equal(t, legacyWouldCreateCycle(other, root), wouldCreateCycle(other, root), "guard verdict diverges from the reference walk")
 }
 
 // TestClaimsReturnToZero pins that a node built up and then torn back down

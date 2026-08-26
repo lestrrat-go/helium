@@ -93,8 +93,8 @@ type docnode struct {
 	// claims counts the nodes whose parent pointer names THIS node — its
 	// claimants. It is indifferent to which slot, if any, holds the reciprocal
 	// link: a child-list entry, an [Element] properties entry, a
-	// [Document] intSubset/extSubset, a namespace-axis wrapper and a raw
-	// [unsafeSetParent] write all count the same. [wouldCreateCycle] reads it as
+	// [Document] intSubset/extSubset and a raw [unsafeSetParent] write all
+	// count the same. [wouldCreateCycle] reads it as
 	// the exact answer to "can the ancestor walk possibly land on this node",
 	// since a walk step arrives at a node only through one of its claimants.
 	claims int32
@@ -543,9 +543,9 @@ func (n docnode) LastChild() Node {
 // walk in one field load. That is the whole answer for a freshly built operand,
 // which is the shape a chain-building insertion loop hands this function over
 // and over. The count is indifferent to which slot holds the reciprocal link,
-// so a child-list entry, an Element attribute, a Document DTD subset, a
-// namespace-axis wrapper and a raw unsafeSetParent write all keep the guard on
-// the walk without any of them being enumerated here.
+// so a child-list entry, an Element attribute, a Document DTD subset and a raw
+// unsafeSetParent write all keep the guard on the walk without any of them
+// being enumerated here.
 //
 // With claims > 0 the walk is still avoidable when the claim graph BELOW cur —
 // cur's claimants, their claimants, and so on — can be enumerated in full and
@@ -603,10 +603,10 @@ const claimReachBudget = 64
 // child-list entry (one whose own parent pointer names the owner) or an entry
 // in an *Element's properties chain. A node whose enumerated claimant count
 // differs from its claims therefore holds a claim link this search cannot
-// follow — an unsafeSetParent write, a namespace-axis wrapper, a properties
-// chain unsafeSetNextSibling truncated or knotted, a Document DTD subset kept
-// outside the child list — and the search reports exact == false, as it does on
-// running out of budget. A caller that gets exact == false must fall back to
+// follow — an unsafeSetParent write, a properties chain unsafeSetNextSibling
+// truncated or knotted, a Document DTD subset kept outside the child list —
+// and the search reports exact == false, as it does on running out of budget.
+// A caller that gets exact == false must fall back to
 // the ancestor walk, which needs no such enumeration.
 //
 // The comparison counts DISTINCT claimant identities, tracked per owner in
