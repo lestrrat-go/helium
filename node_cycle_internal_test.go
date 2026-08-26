@@ -56,6 +56,41 @@ func newCycleChain(t *testing.T, doc *Document, depth int) (Node, Node) {
 	return root, cur
 }
 
+// offChainClaimFixture builds the shape the guarded paths create themselves: a
+// childless entity that a detached element still names as its parent. It
+// returns that element and the entity it claims.
+func offChainClaimFixture(t *testing.T) (*Element, *Entity) {
+	t.Helper()
+
+	doc, err := NewParser().Parse(t.Context(), []byte(`<!DOCTYPE d [<!ENTITY e "xy">]><d a="&e;"/>`))
+	require.NoError(t, err)
+
+	ent, ok := doc.GetEntity("e")
+	require.True(t, ok)
+	require.NotNil(t, ent.FirstChild(), "the attribute-value expansion is the entity's child")
+	require.Nil(t, ent.LastChild(), "and it was recorded without a lastChild")
+
+	claimant, err := doc.CreateElement("claimant")
+	require.NoError(t, err)
+	expansion, ok := ent.FirstChild().(MutableNode)
+	require.True(t, ok)
+	require.NoError(t, expansion.Replace(claimant))
+	require.Equal(t, Node(ent), claimant.Parent())
+
+	// The append takes the empty-parent branch, which overwrites firstChild and
+	// detaches claimant while it goes on naming the entity as its parent.
+	// Unlinking the replacement empties the child list again, which is exactly
+	// the shape the claimant search is consulted on.
+	filler := doc.CreateComment([]byte("filler"))
+	require.NoError(t, ent.AddChild(filler))
+	UnlinkNode(filler)
+	require.Nil(t, ent.FirstChild())
+	require.Nil(t, ent.LastChild())
+	require.Equal(t, Node(ent), claimant.Parent(), "the detached child still claims the entity")
+
+	return claimant, ent
+}
+
 // cycleCases enumerates the configurations the two guards are compared on.
 // Each one is a shape the claimant search must classify from cur's own slots
 // rather than from parent's depth.
@@ -187,34 +222,125 @@ func cycleCases() []cycleCase {
 			name: "childless operand holding an off-chain parent claim",
 			want: true,
 			build: func(t *testing.T) (Node, Node) {
-				doc, err := NewParser().Parse(t.Context(), []byte(`<!DOCTYPE d [<!ENTITY e "xy">]><d a="&e;"/>`))
+				claimant, ent := offChainClaimFixture(t)
+				return claimant, ent
+			},
+		},
+		{
+			name: "document operand whose detached internal subset is the insertion point",
+			want: false,
+			build: func(t *testing.T) (Node, Node) {
+				doc := newCycleDoc(t)
+				dtd, err := doc.CreateInternalSubset("root", "", "")
+				require.NoError(t, err)
+
+				// unlinkNode clears the subset's parent and empties the
+				// document's child list, but leaves Document.intSubset pointing
+				// at it. The subset no longer names the document, so no ancestor
+				// chain runs through it and linking the document under it is not
+				// a cycle.
+				UnlinkNode(dtd)
+				require.Nil(t, doc.FirstChild())
+				require.Nil(t, dtd.Parent())
+				require.Equal(t, dtd, doc.IntSubset())
+
+				return dtd, doc
+			},
+		},
+		{
+			name: "document operand whose off-list internal subset is the insertion point",
+			want: true,
+			build: func(t *testing.T) (Node, Node) {
+				doc := newCycleDoc(t)
+				dtd, err := doc.CreateInternalSubset("root", "", "")
+				require.NoError(t, err)
+
+				// The same shape with the claim intact: the subset is off the
+				// document's child list, so the claimant search is consulted,
+				// and it still names the document, so the chain the ancestor
+				// walk would step is really there.
+				UnlinkNode(dtd)
+				unsafeSetParent(dtd, doc)
+				require.Nil(t, doc.FirstChild())
+
+				return dtd, doc
+			},
+		},
+		{
+			name: "childless operand claimed only through a foreign child of its attribute",
+			want: false,
+			build: func(t *testing.T) (Node, Node) {
+				doc, err := NewParser().Parse(t.Context(), []byte(
+					`<!DOCTYPE root [<!ENTITY e "val">]><root><child a="&e;"/></root>`))
 				require.NoError(t, err)
 
 				ent, ok := doc.GetEntity("e")
 				require.True(t, ok)
-				require.NotNil(t, ent.FirstChild(), "the attribute-value expansion is the entity's child")
-				require.Nil(t, ent.LastChild(), "and it was recorded without a lastChild")
+
+				root := doc.DocumentElement()
+				require.NotNil(t, root)
+				elem, ok := root.FirstChild().(*Element)
+				require.True(t, ok)
+				require.Nil(t, elem.FirstChild())
+
+				// The attribute value expands to an entity reference whose child
+				// is the shared entity, and that entity's parent is the DTD. The
+				// reference does not own it, so it is on no chain of parent
+				// pointers leading down from the element.
+				attrs := elem.Attributes()
+				require.Len(t, attrs, 1)
+				ref := attrs[0].FirstChild()
+				require.Equal(t, EntityRefNode, ref.Type())
+				require.Equal(t, Node(ent), ref.FirstChild())
+				require.Equal(t, DTDNode, ent.Parent().Type())
+
+				return ent, elem
+			},
+		},
+		{
+			name: "document-less operand holding an off-chain parent claim",
+			want: true,
+			build: func(t *testing.T) (Node, Node) {
+				claimant, ent := offChainClaimFixture(t)
+
+				// The claim was recorded on the owning document. Taking that
+				// document away leaves the entity with nowhere document-shaped
+				// to read it from, so the record has to travel with it.
+				ent.SetTreeDoc(nil)
+				require.Nil(t, ent.OwnerDocument())
+				require.Equal(t, Node(ent), claimant.Parent())
+
+				return claimant, ent
+			},
+		},
+		{
+			name: "document operand claimed from its own lastChild alone",
+			want: true,
+			build: func(t *testing.T) (Node, Node) {
+				doc := newCycleDoc(t)
+
+				// CopyExtSubset gives the copy the destination document as its
+				// parent and leaves it off the child list. Appending through it
+				// writes the document's lastChild while firstChild stays nil, so
+				// the appended node claims the document from a slot the claimant
+				// search does not enumerate.
+				src := NewDefaultDocument()
+				srcDTD := newDTD()
+				srcDTD.name = "root"
+				src.extSubset = srcDTD
+				CopyExtSubset(src, doc)
+				ext := doc.ExtSubset()
+				require.Equal(t, Node(doc), ext.Parent())
+				require.Nil(t, doc.FirstChild())
 
 				claimant, err := doc.CreateElement("claimant")
 				require.NoError(t, err)
-				expansion, ok := ent.FirstChild().(MutableNode)
-				require.True(t, ok)
-				require.NoError(t, expansion.Replace(claimant))
-				require.Equal(t, Node(ent), claimant.Parent())
+				require.NoError(t, ext.AddSibling(claimant))
+				require.Equal(t, Node(doc), claimant.Parent())
+				require.Nil(t, doc.FirstChild())
+				require.Equal(t, Node(claimant), doc.LastChild())
 
-				// The append takes the empty-parent branch, which overwrites
-				// firstChild and detaches claimant while it goes on naming the
-				// entity as its parent. Unlinking the replacement empties the
-				// child list again, which is exactly the shape the claimant
-				// search is consulted on.
-				filler := doc.CreateComment([]byte("filler"))
-				require.NoError(t, ent.AddChild(filler))
-				UnlinkNode(filler)
-				require.Nil(t, ent.FirstChild())
-				require.Nil(t, ent.LastChild())
-				require.Equal(t, Node(ent), claimant.Parent(), "the detached child still claims the entity")
-
-				return claimant, ent
+				return claimant, doc
 			},
 		},
 		{

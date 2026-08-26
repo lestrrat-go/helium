@@ -337,6 +337,38 @@ func TestNodeConsistency(t *testing.T) {
 			require.Equal(t, helium.Node(ent), elem.Parent(), "the refused insertion leaves both nodes as they were")
 			require.NotEqual(t, helium.Node(elem), ent.Parent())
 		})
+
+		// A child pointer is not an ancestor edge. An attribute value holding an
+		// entity reference expands to a reference node whose child is the SHARED
+		// entity, and that entity's parent stays the DTD, so the entity is on no
+		// chain of parent pointers running down from the element that carries the
+		// attribute. Linking that element under the entity closes no loop, and the
+		// guard must allow it. This is the only shape here an ordinary parse
+		// produces on its own.
+		t.Run("AddChild whose operand holds a foreign entity child in an attribute", func(t *testing.T) {
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(
+				`<!DOCTYPE root [<!ENTITY e "val">]><root><child a="&e;"/></root>`))
+			require.NoError(t, err)
+
+			ent, ok := doc.GetEntity("e")
+			require.True(t, ok)
+
+			root := doc.DocumentElement()
+			require.NotNil(t, root)
+			elem, ok := root.FirstChild().(*helium.Element)
+			require.True(t, ok)
+			require.Nil(t, elem.FirstChild(), "the element carrying the attribute has no children of its own")
+
+			attrs := elem.Attributes()
+			require.Len(t, attrs, 1)
+			ref := attrs[0].FirstChild()
+			require.Equal(t, helium.EntityRefNode, ref.Type())
+			require.Equal(t, helium.Node(ent), ref.FirstChild(), "the reference's child is the shared entity")
+			require.Equal(t, helium.DTDNode, ent.Parent().Type(), "which the DTD, not the reference, owns")
+
+			require.NoError(t, ent.AddChild(elem))
+			require.Equal(t, helium.Node(ent), elem.Parent())
+		})
 	})
 }
 

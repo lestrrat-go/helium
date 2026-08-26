@@ -468,9 +468,11 @@ func (n docnode) LastChild() Node {
 // A cur with an EMPTY child list is settled from cur's own claimant slots
 // instead, at a cost bounded by cur's own shape rather than by depth(parent):
 // the parser hot path appends childless leaves, and this is what keeps building
-// a deep chain linear. That shortcut needs every node naming cur as its parent
-// to sit in a slot cur owns, so it is declined for a document carrying an
-// off-chain parent claim (holdsOffChainClaim).
+// a deep chain linear. The shortcut rests on one invariant: the search that
+// replaces the walk (claimantReaches) traverses exactly the edges X -> Y for
+// which Y names X as its parent, which is the ancestor walk's own relation read
+// forward, and it is declined outright whenever a node may name cur from
+// outside those edges (holdsOffChainClaim).
 func wouldCreateCycle(parent, cur Node) bool {
 	cdn := cur.baseDocNode()
 	// Self-insertion is the one loop the claimant search below cannot see. The
@@ -514,21 +516,40 @@ func wouldCreateCycle(parent, cur Node) bool {
 // The record lives on the owning document, and on unownedOffChainClaim for a
 // claim made while no document owned the nodes. A node with no document must
 // consult that package-level record: its own document field cannot carry what
-// was never written to a document.
+// was never written to a document, and a node whose document is taken away
+// keeps its claim there (adoptOffChainClaims).
+//
+// A DOCUMENT can also be claimed as a parent from outside its own child list by
+// a copied external subset, which Document.offChainChildClaim records. That
+// record is about the document node itself, so it decides this question only
+// when the document IS the operand; a node the document merely owns is not
+// claimed by it.
 func holdsOffChainClaim(cur Node) bool {
 	doc := owningDocument(cur)
 	if doc == nil {
 		return unownedOffChainClaim.Load()
 	}
-	return doc.offChainClaims
+	if doc.offChainClaims {
+		return true
+	}
+	return doc == cur && doc.offChainChildClaim
 }
 
 // claimantReaches reports whether parent lies anywhere under a cur that has no
-// child list. Only a node naming cur as its parent can begin such a path, and
-// with cur.firstChild nil and no off-chain claim outstanding every one of them
-// sits in a slot cur itself owns: an element's attributes, or a document's DTD
-// subsets. Each of those subtrees is bounded by the operand's own shape, so the
-// search never grows with the depth of the tree cur is being inserted into.
+// child list, following ONLY the edges X -> Y for which Y names X as its
+// parent. That relation is the ancestor walk's own, read forward: the walk
+// finds cur from parent only along a chain of parent pointers, so a descent
+// restricted to the same edges answers the same question.
+//
+// Only a node naming cur as its parent can begin such a chain, and with
+// cur.firstChild nil and no off-chain claim outstanding every one of them sits
+// in a slot cur itself owns: an element's attributes, or a document's DTD
+// subsets. A slot entry that does NOT name cur back is skipped, because no
+// ancestor chain can pass through it: unlinkNode clears a subset's parent while
+// leaving Document.intSubset pointing at it, and the parser installs an
+// external subset without writing its parent at all. Each surviving subtree is
+// bounded by the operand's own shape, so the search never grows with the depth
+// of the tree cur is being inserted into.
 //
 // A namespace-node wrapper also names its owner without appearing in any of
 // the owner's slots, and is deliberately not consulted here: a wrapper has no
@@ -539,22 +560,84 @@ func claimantReaches(cur Node, parent Node) bool {
 	if parent == nil {
 		return false
 	}
+	cdn := cur.baseDocNode()
 	pdn := parent.baseDocNode()
 	switch n := cur.(type) {
 	case *Element:
 		for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
-			if attr.baseDocNode() == pdn || childReaches(attr, pdn) {
+			if !namesParent(attr.baseDocNode(), cdn) {
+				continue
+			}
+			if parentVerifiedReaches(attr, pdn) {
 				return true
 			}
 		}
 	case *Document:
 		for _, sub := range [2]*DTD{n.intSubset, n.extSubset} {
-			if sub == nil {
+			if sub == nil || !namesParent(sub.baseDocNode(), cdn) {
 				continue
 			}
-			if sub.baseDocNode() == pdn || childReaches(sub, pdn) {
+			if parentVerifiedReaches(sub, pdn) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// namesParent reports whether x names owner as its parent. It is the one edge
+// relation the claimant search may traverse, in both directions of use: a slot
+// entry is consulted only when it names the operand, and a child is descended
+// into only when it names the node being expanded.
+func namesParent(x, owner *docnode) bool {
+	p := x.parent
+	return p != nil && p.baseDocNode() == owner
+}
+
+// parentVerifiedReaches reports whether target is reachable from node along
+// child links the child names back — it descends into a child Y of X exactly
+// when Y.parent is X. node itself counts, because the caller has already
+// verified node names the operand.
+//
+// That is what separates it from childReaches, which follows a child pointer
+// whoever the child claims as its parent, and the difference is the point. A
+// FOREIGN child link — an entity reference's child is the shared Entity, whose
+// parent stays the DTD — is a real child pointer but never a step the ancestor
+// walk could take in reverse, so following it here would answer true where the
+// walk answers false. childReaches follows foreign links because it exists to
+// catch a cycle formed THROUGH one; this descent must not, because it stands in
+// for the walk.
+//
+// A foreign child ends no enumeration: its next pointer belongs to another
+// list, so what follows it may name any parent, but every node is tested
+// against the node being expanded before it is descended into, and one that
+// names that node is a genuine claimant however it was reached. Termination
+// comes from the same two bounds childReaches uses — siblingCycleGuard on each
+// sibling enumeration, and the popped-node visited set on the search as a
+// whole.
+func parentVerifiedReaches(node Node, target *docnode) bool {
+	var visited childReachesVisited
+	stack := []Node{node}
+	for len(stack) > 0 {
+		dn := stack[len(stack)-1].baseDocNode()
+		stack = stack[:len(stack)-1]
+		if dn == target {
+			return true
+		}
+		if visited.has(dn) {
+			continue
+		}
+		visited.add(dn)
+		var g siblingCycleGuard
+		for child := dn.firstChild; child != nil; {
+			cdn := child.baseDocNode()
+			if g.step(cdn) {
+				break
+			}
+			if namesParent(cdn, dn) {
+				stack = append(stack, child)
+			}
+			child = cdn.next
 		}
 	}
 	return false
@@ -1116,6 +1199,16 @@ func addSibling(n MutableNode, cur Node) error {
 	// the walk below does. The lastChild write is unconditional there, so it is
 	// unconditional here.
 	if ndn.next == nil {
+		// n ends its own chain, but that chain is not necessarily parent's child
+		// list. A parent that lists NO children cannot be listing n, so cur is
+		// about to name a parent it can be found from only through lastChild —
+		// an off-chain claim, recorded here at the moment it is created so the
+		// cycle guard's claimant search declines a parent whose claimants it can
+		// no longer enumerate. On a parent that does list children this is the
+		// ordinary tail append and records nothing.
+		if parent != nil && parent.baseDocNode().firstChild == nil {
+			noteOrphanedChildClaim(parent, cur)
+		}
 		ndn.next = cur
 		cdn.prev = n
 		cdn.parent = parent
@@ -1188,19 +1281,23 @@ func unsafeSetNextSibling(n Node, next Node) {
 	n.baseDocNode().next = next
 }
 
-// noteOrphanedChildClaim records the off-chain parent claim the GUARDED paths
-// themselves create, which is how an ordinary caller reaches one. A parent
-// holding a firstChild with NO lastChild is a shape Document.stringToNodeList
-// leaves behind on an entity referenced from an attribute value. An append onto
-// such a parent takes the empty-parent branch, which overwrites firstChild: the
-// child that was there is detached from the chain while it goes on claiming this
-// parent, and a later append THROUGH that detached child records its own result
-// as the parent's lastChild, moving that record off the child list.
+// noteOrphanedChildClaim records an off-chain parent claim the GUARDED paths
+// themselves create, which is how an ordinary caller reaches one. Two shapes
+// produce one. A parent holding a firstChild with NO lastChild is a shape
+// Document.stringToNodeList leaves behind on an entity referenced from an
+// attribute value: an append onto such a parent takes the empty-parent branch,
+// which overwrites firstChild, so the child that was there is detached from the
+// chain while it goes on claiming this parent, and a later append THROUGH that
+// detached child records its own result as the parent's lastChild, moving that
+// record off the child list. A parent whose child list is EMPTY cannot be
+// listing the anchor an append or a splice runs through, so the node that
+// operation links claims that parent from lastChild alone (addSibling's tail
+// arm, replaceNode's splice).
 //
 // Record it at the moment the claim is created, on the documents that own the
-// parent whose chain is at stake and the child being detached from it. orphan is
-// the parent's firstChild BEFORE the overwrite; a nil one means the parent was
-// genuinely empty and nothing is recorded.
+// parent whose chain is at stake and the node making the claim. orphan is that
+// node — the parent's firstChild before the overwrite, or the node being linked
+// — and a nil one means there is no claim to record.
 func noteOrphanedChildClaim(parent Node, orphan Node) {
 	if isNilNode(orphan) {
 		return
@@ -1233,15 +1330,31 @@ var unownedOffChainClaim atomic.Bool
 // changes owning document. The record lives on the DOCUMENT, so a subtree that
 // moves between documents would otherwise leave it behind: the destination would
 // trust a lastChild that is not the end of its own child chain. A node arriving
-// from NO document is the case unownedOffChainClaim exists for — the claim had
-// no document to be recorded on when it was made.
+// from NO document is one case unownedOffChainClaim exists for — the claim had
+// no document to be recorded on when it was made — and a node LEAVING every
+// document is the other, since the record would otherwise be dropped.
+//
+// A node leaving every document is the mirror case: the record has nowhere
+// document-shaped to live, so it lands on unownedOffChainClaim, which is what a
+// document-less node reads.
 //
 // It errs toward marking. Marking a document that holds no claim only costs it
-// the O(1) append-point resolution, which is a fallback to the sibling walk
-// every other tree operation performs unconditionally; failing to mark one that
-// does hold a claim is a wrong tree.
+// the O(1) append-point resolution and the cycle guard's claimant search, both
+// of which fall back to a walk every other tree operation performs
+// unconditionally; failing to mark one that does hold a claim is a wrong tree
+// or an accepted cycle.
 func adoptOffChainClaims(from, to *Document) {
-	if to == nil || to.offChainClaims || from == to {
+	if to == nil {
+		// The node is leaving every document, so there is no document left to
+		// carry the record. Mirror it onto the package-level one, which is what
+		// a document-less node reads (holdsOffChainClaim); dropping it here
+		// would leave the claimed node looking unclaimed.
+		if from != nil && from.offChainClaims {
+			unownedOffChainClaim.Store(true)
+		}
+		return
+	}
+	if to.offChainClaims || from == to {
 		return
 	}
 	if from == nil {
@@ -1475,6 +1588,14 @@ func replaceNode(n MutableNode, nodes ...Node) error {
 		}
 		if !attrList {
 			pdn := parent.baseDocNode()
+			// A parent that lists NO children cannot be listing n, so every
+			// replacement names a parent reachable only through lastChild. Record
+			// that off-chain claim where it is created, for the same reason
+			// addSibling does: the cycle guard's claimant search must decline a
+			// parent whose claimants it can no longer enumerate.
+			if pdn.firstChild == nil {
+				noteOrphanedChildClaim(parent, cur)
+			}
 			if pdn.firstChild == n {
 				pdn.firstChild = cur
 			}

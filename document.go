@@ -114,22 +114,29 @@ type Document struct {
 	// Document.stringToNodeList leaves behind on an entity referenced from an
 	// attribute value — because AddChild then takes its empty-parent branch and
 	// overwrites firstChild, detaching that child while it goes on claiming the
-	// parent (node.go noteOrphanedChildClaim). (A DOCUMENT can also be claimed
-	// without being on its child list, by the external subset CopyExtSubset
-	// attaches to it; offChainChildClaim below records that, because it needs to
-	// decline only for a *Document parent.)
+	// parent (node.go noteOrphanedChildClaim). The same call records the claim
+	// addSibling's tail arm and replaceNode's splice create when they hand a node
+	// a parent whose child list is empty. (A DOCUMENT can also be claimed without
+	// being on its child list, by the external subset CopyExtSubset attaches to
+	// it; offChainChildClaim below records that, because it needs to decline only
+	// for a *Document parent.)
 	//
 	// While it is false, every parent in this document has its lastChild at the
 	// end of the chain that starts at its firstChild, so addSibling may resolve
-	// its append point from that record in O(1). Once true it stays true, and
-	// addSibling falls back to its sibling walk for this document, which is what
-	// every other tree operation does unconditionally.
+	// its append point from that record in O(1). It also means every node naming
+	// a parent in this document sits in a slot that parent owns, which is what
+	// lets the cycle guard settle a childless operand from its own slots instead
+	// of walking the insertion point's ancestors. Once true it stays true, and
+	// both fall back to the walk for this document, which is what every other
+	// tree operation does unconditionally.
 	//
 	// The record follows the TREE, not only the node it was made on: a claim on a
 	// still-detached subtree has no document to be recorded on at the time, and a
 	// subtree can change owner afterwards, so adoptOffChainClaims (node.go)
-	// carries the record onto whichever document adopts it. Set by node.go
-	// noteOrphanedChildClaim / adoptOffChainClaims; read by tailJumpTarget.
+	// carries the record onto whichever document adopts it, and onto the
+	// package-level unownedOffChainClaim when the node is moved to no document at
+	// all. Set by node.go noteOrphanedChildClaim / adoptOffChainClaims; read by
+	// tailJumpTarget and holdsOffChainClaim.
 	offChainClaims bool
 
 	// offChainChildClaim records that a node has been given this document as its
@@ -138,12 +145,14 @@ type Document struct {
 	// claims the destination document and is then reachable only through
 	// ExtSubset. An append through such a subset records its own result as the
 	// document's lastChild, which moves that record off the child list, so
-	// tailJumpTarget must stop resolving an append point from it. This is
+	// tailJumpTarget must stop resolving an append point from it and the cycle
+	// guard must stop settling this document from its own slots. This is
 	// separate from offChainClaims above because it must decline only for the
 	// *Document parent that was handed the claimant, not for every parent in the
 	// document. (CreateInternalSubset also gives a DTD this document as its
 	// parent, but it splices that DTD into the child list, so it creates no
-	// claim.) Set by copy_dtd.go CopyExtSubset; read by tailJumpTarget.
+	// claim.) Set by copy_dtd.go CopyExtSubset; read by tailJumpTarget and
+	// holdsOffChainClaim.
 	offChainChildClaim bool
 }
 
