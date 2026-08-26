@@ -467,15 +467,68 @@ func (n docnode) LastChild() Node {
 // leaves and skips that second descent entirely.
 func wouldCreateCycle(parent, cur Node) bool {
 	cdn := cur.baseDocNode()
+	// Self-insertion is the one loop the claimant search below cannot see. The
+	// ancestor walk is inclusive of parent, so parent == cur closes a loop even
+	// when nothing else names cur at all.
+	if parent != nil && parent.baseDocNode() == cdn {
+		return true
+	}
+	// A cur with no child list is settled from its own claimant slots instead
+	// of parent's ancestor chain. Both questions the walk answers need some
+	// node X with X.parent == cur — the ancestor walk finds cur only by
+	// stepping from such an X, and the child descent needs cur.firstChild —
+	// and with the child list empty every remaining X sits in a slot cur owns.
+	// Searching those directly costs cur's own attribute count rather than
+	// depth(parent), which is what makes a deep AddChild chain linear.
+	if cdn.firstChild == nil {
+		return claimantReaches(cur, parent)
+	}
 	for anc := parent; anc != nil; anc = anc.Parent() {
 		if anc.baseDocNode() == cdn {
 			return true
 		}
 	}
-	if parent == nil || cdn.firstChild == nil {
+	if parent == nil {
 		return false
 	}
 	return childReaches(cur, parent.baseDocNode())
+}
+
+// claimantReaches reports whether parent lies anywhere under a cur that has no
+// child list. Only a node naming cur as its parent can begin such a path, and
+// with cur.firstChild nil every one of them sits in a slot cur itself owns: an
+// element's attributes, or a document's DTD subsets. Each of those subtrees is
+// bounded by the operand's own shape, so the search never grows with the depth
+// of the tree cur is being inserted into.
+//
+// A namespace-node wrapper also names its owner without appearing in any of
+// the owner's slots, and is deliberately not consulted here: a wrapper has no
+// AddChild/AddSibling of its own and docnode supplies none, so it can never be
+// an insertion point, and nothing can ever be linked beneath one. No ancestor
+// path this guard walks can pass through a wrapper.
+func claimantReaches(cur Node, parent Node) bool {
+	if parent == nil {
+		return false
+	}
+	pdn := parent.baseDocNode()
+	switch n := cur.(type) {
+	case *Element:
+		for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
+			if attr.baseDocNode() == pdn || childReaches(attr, pdn) {
+				return true
+			}
+		}
+	case *Document:
+		for _, sub := range [2]*DTD{n.intSubset, n.extSubset} {
+			if sub == nil {
+				continue
+			}
+			if sub.baseDocNode() == pdn || childReaches(sub, pdn) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // childReachesInlineCap is the number of popped nodes childReachesVisited
