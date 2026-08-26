@@ -107,6 +107,44 @@ type Document struct {
 	// would let a later parse overwrite the live node. Set by the tree-insertion
 	// paths (node.go noteCrossDocumentEscape).
 	slabEscaped bool
+
+	// offChainClaims records that a tree this document owns holds at least one
+	// node claiming a parent it is not a child of. The guarded paths produce one
+	// on a parent that already holds a firstChild with NO lastChild — a shape
+	// Document.stringToNodeList leaves behind on an entity referenced from an
+	// attribute value — because AddChild then takes its empty-parent branch and
+	// overwrites firstChild, detaching that child while it goes on claiming the
+	// parent (node.go noteOrphanedChildClaim). (A DOCUMENT can also be claimed
+	// without being on its child list, by the external subset CopyExtSubset
+	// attaches to it; offChainChildClaim below records that, because it needs to
+	// decline only for a *Document parent.)
+	//
+	// While it is false, every parent in this document has its lastChild at the
+	// end of the chain that starts at its firstChild, so addSibling may resolve
+	// its append point from that record in O(1). Once true it stays true, and
+	// addSibling falls back to its sibling walk for this document, which is what
+	// every other tree operation does unconditionally.
+	//
+	// The record follows the TREE, not only the node it was made on: a claim on a
+	// still-detached subtree has no document to be recorded on at the time, and a
+	// subtree can change owner afterwards, so adoptOffChainClaims (node.go)
+	// carries the record onto whichever document adopts it. Set by node.go
+	// noteOrphanedChildClaim / adoptOffChainClaims; read by tailJumpTarget.
+	offChainClaims bool
+
+	// offChainChildClaim records that a node has been given this document as its
+	// parent WITHOUT being linked into the document's child list. CopyExtSubset
+	// is the one path in this package that does it: the copied external subset
+	// claims the destination document and is then reachable only through
+	// ExtSubset. An append through such a subset records its own result as the
+	// document's lastChild, which moves that record off the child list, so
+	// tailJumpTarget must stop resolving an append point from it. This is
+	// separate from offChainClaims above because it must decline only for the
+	// *Document parent that was handed the claimant, not for every parent in the
+	// document. (CreateInternalSubset also gives a DTD this document as its
+	// parent, but it splices that DTD into the child list, so it creates no
+	// claim.) Set by copy_dtd.go CopyExtSubset; read by tailJumpTarget.
+	offChainChildClaim bool
 }
 
 // NewDefaultDocument creates a minimal user-built document with version "1.0",
