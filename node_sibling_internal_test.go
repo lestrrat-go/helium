@@ -87,7 +87,7 @@ func TestAdoptRawLinkWritesFromOrphan(t *testing.T) {
 	require.NoError(t, err)
 	b, err := orphan.CreateElement("b")
 	require.NoError(t, err)
-	UnsafeSetNextSibling(a, b)
+	unsafeSetNextSibling(a, b)
 	require.True(t, orphanUntrustedLinks.Load(), "a write no document owned is recorded package-wide")
 
 	doc := NewDefaultDocument()

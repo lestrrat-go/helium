@@ -5,6 +5,7 @@ import (
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/nodelink"
 )
 
 type attrNamespaceCacheEntry struct {
@@ -12,17 +13,31 @@ type attrNamespaceCacheEntry struct {
 	ns     *Namespace
 }
 
-// UnsafeAppendChild links child as the last child of parent without running the
-// cycle-guard and duplicate-attribute preflight that AddChild performs. Like the
-// UnsafeSet* functions, it is an explicitly-unsafe entry point: the CALLER is
-// responsible for passing a child that cannot create a cycle or a duplicate
-// attribute (e.g. a freshly-constructed node in a deep copy), because those
-// safety checks are skipped. Misuse on an arbitrary live tree can corrupt
-// linkage; ordinary code MUST use AddChild instead.
-func UnsafeAppendChild(parent MutableNode, child Node) error {
-	return appendFastChild(parent, child)
+func init() {
+	nodelink.AppendFastChild = nodelinkAppendFastChild
 }
 
+// nodelinkAppendFastChild adapts appendFastChild to the untyped
+// internal/nodelink hook (any in) so a sibling package can link a freshly built
+// child without a public function here or an import cycle.
+func nodelinkAppendFastChild(parent, child any) error {
+	p, ok := parent.(MutableNode)
+	if !ok {
+		return errors.New("parent is not a mutable node")
+	}
+	c, ok := child.(Node)
+	if !ok {
+		return errors.New("child is not a node")
+	}
+	return appendFastChild(p, c)
+}
+
+// appendFastChild links child as the last child of parent without running the
+// cycle-guard and duplicate-attribute preflight that AddChild performs. The
+// CALLER is responsible for passing a child that cannot create a cycle or a
+// duplicate attribute (e.g. a freshly-constructed node in a deep copy), because
+// those safety checks are skipped. Misuse on an arbitrary live tree can corrupt
+// linkage; ordinary code MUST use AddChild instead.
 func appendFastChild(parent MutableNode, child Node) error {
 	pdn := parent.baseDocNode()
 	cdn := child.baseDocNode()

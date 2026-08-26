@@ -214,7 +214,7 @@ func TestIterators(t *testing.T) {
 					kids = append(kids, c)
 				}
 				// Close the ring: the last child's next pointer is the first child.
-				helium.UnsafeSetNextSibling(kids[ring-1], kids[0])
+				helium.UnsafeSetNextSiblingForTesting(kids[ring-1], kids[0])
 
 				// A guard that never fires would spin forever, so cap every loop
 				// well above the bound and fail rather than hang.

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"sync/atomic"
+
+	"github.com/lestrrat-go/helium/internal/nodelink"
 )
 
 // AsNode performs a safe type assertion on a [Node], returning the
@@ -1120,7 +1122,7 @@ func unsafeSetParent(n Node, parent Node) {
 	ndn.parent = parent
 }
 
-// UnsafeSetNextSibling sets ONLY n's next-sibling pointer. It performs none of
+// unsafeSetNextSibling sets ONLY n's next-sibling pointer. It performs none of
 // the cycle detection, auto-unlinking, or reciprocal back-pointer maintenance
 // that AddChild/AddSibling/Replace/UnlinkNode provide, so a misuse leaves the
 // tree inconsistent or cyclic. It exists for low-level tree construction and
@@ -1133,7 +1135,7 @@ func unsafeSetParent(n Node, parent Node) {
 // stops resolving its append point from parent.lastChild for such a document and
 // walks the sibling chain instead, so the tree an append produces is the same
 // one it would produce without the O(1) resolution at all.
-func UnsafeSetNextSibling(n Node, next Node) {
+func unsafeSetNextSibling(n Node, next Node) {
 	ndn := n.baseDocNode()
 	noteRawLinkWrite(ndn, next)
 	ndn.next = next
@@ -1254,6 +1256,35 @@ func owningDocument(n Node) *Document {
 		return doc
 	}
 	return n.baseDocNode().doc
+}
+
+func init() {
+	nodelink.CorruptSelfNextSibling = nodelinkCorruptSelfNextSibling
+	nodelink.CorruptTypedNilNextSibling = nodelinkCorruptTypedNilNextSibling
+}
+
+// nodelinkCorruptSelfNextSibling adapts unsafeSetNextSibling to the untyped
+// internal/nodelink hook, writing n.next = n. It exists only for this module's
+// corrupt-tree test fixtures; see the hook's own documentation.
+func nodelinkCorruptSelfNextSibling(n any) {
+	node, ok := n.(Node)
+	if !ok {
+		return
+	}
+	unsafeSetNextSibling(node, node)
+}
+
+// nodelinkCorruptTypedNilNextSibling adapts unsafeSetNextSibling to the untyped
+// internal/nodelink hook, writing n.next = a typed-nil *Element. It exists only
+// for this module's corrupt-tree test fixtures; see the hook's own
+// documentation.
+func nodelinkCorruptTypedNilNextSibling(n any) {
+	node, ok := n.(Node)
+	if !ok {
+		return
+	}
+	var nilElem *Element
+	unsafeSetNextSibling(node, nilElem)
 }
 
 // UnlinkNode detaches a node from its parent and sibling chain.

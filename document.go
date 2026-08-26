@@ -111,7 +111,7 @@ type Document struct {
 	// untrustedLinks records that a tree this document owns holds at least one
 	// link the append fast paths may not reason from: a node claiming a parent it
 	// is not a child of, or a sibling edge no guarded path would build. Two
-	// things produce one. The raw unsafeSetParent / UnsafeSetNextSibling setters
+	// things produce one. The raw unsafeSetParent / unsafeSetNextSibling setters
 	// write such a link directly (node.go noteRawLinkWrite). And the guarded
 	// paths themselves produce the first kind on a parent that already holds a
 	// firstChild with NO lastChild — a shape Document.stringToNodeList and

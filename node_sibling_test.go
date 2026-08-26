@@ -73,7 +73,7 @@ func TestAddSiblingRepairsStaleLastChild(t *testing.T) {
 	// pointing at c even though d is now the true tail. d.prev is left nil —
 	// there is no raw prev setter, and no walk here reads it.
 	d := mustCreateElement(t, doc, "d")
-	helium.UnsafeSetNextSibling(c, d)
+	helium.UnsafeSetNextSiblingForTesting(c, d)
 	helium.UnsafeSetParentForTesting(d, parent)
 
 	e := mustCreateElement(t, doc, "e")
@@ -216,7 +216,7 @@ func elementNames(t *testing.T, parent *helium.Element) []string {
 // child list. The three append entry points then part company, and each one
 // keeps the position it has always had: AddSibling walks from its anchor and so
 // lands at the end of the REACHABLE child list, while AddChild and
-// UnsafeAppendChild both start from the recorded lastChild and so land after the
+// UnsafeAppendChildForTesting both start from the recorded lastChild and so land after the
 // off-chain node. The O(1) tail resolution changes none of that — it declines
 // for a document with a hand-written link and lets AddSibling walk.
 func TestAddSiblingOffChainParentClaim(t *testing.T) {
@@ -254,17 +254,17 @@ func TestAddSiblingOffChainParentClaim(t *testing.T) {
 		require.Equal(t, added, parent.LastChild())
 	})
 
-	t.Run("UnsafeAppendChild appends after the recorded tail", func(t *testing.T) {
+	t.Run("UnsafeAppendChildForTesting appends after the recorded tail", func(t *testing.T) {
 		t.Parallel()
 
 		parent, _, trailer := offChainParentClaimTree(t)
 		doc := parent.OwnerDocument()
 
 		added := mustCreateElement(t, doc, nameAdded)
-		require.NoError(t, helium.UnsafeAppendChild(parent, added))
+		require.NoError(t, helium.UnsafeAppendChildForTesting(parent, added))
 
 		require.Equal(t, []string{"a", "b"}, elementNames(t, parent), "the reachable child list is unchanged")
-		require.Equal(t, helium.Node(trailer), added.PrevSibling(), "UnsafeAppendChild starts from the recorded tail")
+		require.Equal(t, helium.Node(trailer), added.PrevSibling(), "UnsafeAppendChildForTesting starts from the recorded tail")
 		require.Equal(t, added, parent.LastChild())
 	})
 }
@@ -354,7 +354,7 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		// Cut c out of the chain from the front while leaving it recorded as
 		// parent.lastChild, still claiming parent and still ending its own chain.
 		// Every pointer the O(1) resolution can read still looks healthy.
-		helium.UnsafeSetNextSibling(b, nil)
+		helium.UnsafeSetNextSiblingForTesting(b, nil)
 		require.Equal(t, c, parent.LastChild())
 
 		added := mustCreateElement(t, doc, nameAdded)
@@ -410,8 +410,8 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		require.NoError(t, parent.AddChild(x))
 		require.NoError(t, x.AddSibling(y))
 		require.NoError(t, parent.AddChild(b))
-		helium.UnsafeSetNextSibling(a, b)
-		helium.UnsafeSetNextSibling(y, nil)
+		helium.UnsafeSetNextSiblingForTesting(a, b)
+		helium.UnsafeSetNextSiblingForTesting(y, nil)
 		helium.UnsafeSetParentForTesting(y, nil)
 		require.Equal(t, helium.Node(a), x.PrevSibling(), "x still points back at a")
 		require.Equal(t, helium.Node(b), a.NextSibling(), "but a points forward at b")
@@ -445,7 +445,7 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 
 		// Cut c out of the chain through the foreign node. c stays recorded as
 		// the tail, still claiming parent and still ending its own chain.
-		helium.UnsafeSetNextSibling(foreign, nil)
+		helium.UnsafeSetNextSiblingForTesting(foreign, nil)
 
 		added := mustCreateElement(t, doc, nameAdded)
 		require.NoError(t, a.AddSibling(added))
@@ -498,7 +498,7 @@ func TestAddSiblingCorruptShapesMatchWalk(t *testing.T) {
 		// stale: b is no longer the end of the chain. d.prev is left nil — there
 		// is no raw prev setter, and no walk here reads it.
 		d := mustCreateElement(t, doc, "d")
-		helium.UnsafeSetNextSibling(b, d)
+		helium.UnsafeSetNextSiblingForTesting(b, d)
 		helium.UnsafeSetParentForTesting(d, parent)
 
 		added := mustCreateElement(t, doc, nameAdded)
@@ -604,7 +604,7 @@ func TestAddSiblingDocumentParentGrowth(t *testing.T) {
 // empty-parent branch and overwrites firstChild, which detaches the child that
 // was there while it goes on claiming the entity as its parent. An append
 // through that detached child then records its own result as the entity's
-// lastChild, off the entity's child list — the same shape UnsafeSetParent
+// lastChild, off the entity's child list — the same shape unsafeSetParent
 // produces, with no raw setter anywhere.
 //
 // The expectations below are what the plain sibling walk produces, so the whole
