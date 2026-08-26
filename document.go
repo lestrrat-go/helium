@@ -125,9 +125,12 @@ type Document struct {
 	// end of the chain that starts at its firstChild, so addSibling may resolve
 	// its append point from that record in O(1). It also means every node naming
 	// a parent in this document sits in a slot that parent owns, which is what
-	// lets the cycle guard settle a childless operand from its own slots instead
-	// of walking the insertion point's ancestors. Once true it stays true, and
-	// both fall back to the walk for this document, which is what every other
+	// lets the cycle guard enumerate such a parent's claimants instead of walking
+	// the insertion point's ancestors. The guard reads this record at EVERY node
+	// its claimant search enumerates, not only at the operand, so once true it
+	// declines every hop this document owns — including a hop reached from an
+	// operand another document owns. Once true it stays true, and both fall back
+	// to the walk for the nodes this document owns, which is what every other
 	// tree operation does unconditionally.
 	//
 	// The record follows the TREE, not only the node it was made on: a claim on a
@@ -146,7 +149,8 @@ type Document struct {
 	// ExtSubset. An append through such a subset records its own result as the
 	// document's lastChild, which moves that record off the child list, so
 	// tailJumpTarget must stop resolving an append point from it and the cycle
-	// guard must stop settling this document from its own slots. This is
+	// guard must stop enumerating this document's slots wherever its claimant
+	// search reaches this document, as the operand or as a later hop. This is
 	// separate from offChainClaims above because it must decline only for the
 	// *Document parent that was handed the claimant, not for every parent in the
 	// document. (CreateInternalSubset also gives a DTD this document as its

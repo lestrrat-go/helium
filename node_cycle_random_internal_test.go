@@ -29,23 +29,67 @@ const cycleRandomOps = 120
 // covers far more configurations than one pair per mutation would.
 const cycleRandomPairsPerOp = 4
 
+// cycleRandomDocCount is how many documents each world holds. The
+// off-chain-claim record is per DOCUMENT while the guard's decline is per HOP,
+// so the configurations worth driving are the ones where some documents hold a
+// record and others do not — an operand in an unmarked document whose slot
+// chain descends into a marked one. Two documents lose that asymmetry fast:
+// measured over 400,000 seeds of the earlier two-document world, 31% of seeds
+// ended with BOTH documents marked, and from that point every owned node
+// declines the shortcut and the rest of the seed drives nothing. Several
+// documents keep unmarked ones available for the whole run.
+const cycleRandomDocCount = 5
+
+// cycleRandomRelatedPairOdds is the reciprocal odds that compareGuards draws
+// the operand from the insertion point's own parent chain instead of uniformly
+// from the pool. A uniform pair is almost always unrelated, so the guard's true
+// branch — the one every defect in it has been on — is barely reached; the
+// remaining draws stay uniform so the false verdicts keep their coverage.
+const cycleRandomRelatedPairOdds = 4
+
 // cycleRandomPoolCap bounds the live node pool. It is deliberately SMALL: the
 // interesting configurations are the ones where a randomly drawn pair happens
 // to sit on the same chain, and a small pool makes that far likelier per draw
 // than a large one does.
 const cycleRandomPoolCap = 28
 
-// cycleRandomDefaultSeeds is the seed count the ordinary test run uses. It runs
-// in well under a second, and it is roughly ten times the largest seed any of
-// this guard's known past defects needed: reintroducing them one at a time into
-// the current code, the latest first failure was at seed 371.
+// cycleRandomDefaultSeeds is the seed count the ordinary test run uses. It takes
+// about 1.1s.
+//
+// It is calibrated on MEASURED shape coverage. Seeds-to-failure on defects that
+// are already fixed says nothing about the next one, and a budget justified that
+// way stayed green on a live defect of this guard's central class.
+//
+// Instrumented over these 4000 seeds, the driver makes 1,920,000 guard
+// comparisons. 1,076,610 reach the shortcut's precondition, an operand with no
+// child list, and 663,704 complete the shortcut. The descent expands 319,698
+// non-seed hops; 80,365 of those sit in a document the OPERAND does not belong
+// to, and 2,580 are declined at such a hop. That last population is the whole
+// difference between an off-chain decline read from the operand and the per-hop
+// one [appendClaimants] applies, and it is where every off-chain defect this
+// guard has had has lived.
+//
+// Against a guard that declines from the operand's document alone, this budget
+// finds a mismatch at seed 34, and mismatching seeds arrive at about one in 476
+// (42 in 20,000): 4000 seeds expect 8.4 hits and miss that class with
+// probability about 2 in 10,000.
+//
+// A class an order of magnitude rarer would still pass 4000 seeds, so this is a
+// fast gate and not a proof. cycleRandomSeedsEnv is the soak lane for the rest.
 const cycleRandomDefaultSeeds = 4000
 
 // cycleRandomShortSeeds is the seed count under -short.
 const cycleRandomShortSeeds = 200
 
 // cycleRandomSeedsEnv names the environment variable that overrides the seed
-// count, for a longer soak than the normal suite can afford.
+// count, for a longer soak than the normal suite can afford. The soak lane is
+// 200,000 seeds, which runs in about 59s:
+//
+//	HELIUM_CYCLE_RANDOM_SEEDS=200000 go test -run TestWouldCreateCycleMatchesUnconditionalWalkRandomized -count=1 .
+//
+// At the measured rate of one mismatching seed in 476 for the class the default
+// budget gates, that lane gates a class arriving fifty times more rarely — about
+// one seed in 24,000 — with the same confidence the default gives this one.
 const cycleRandomSeedsEnv = "HELIUM_CYCLE_RANDOM_SEEDS"
 
 // cycleRandomParentCap bounds the parent walk the driver uses to prove a
@@ -100,8 +144,10 @@ func newCycleWorld(t *testing.T, seed uint64) *cycleWorld {
 		`<!DOCTYPE root [<!ENTITY e "val">]><root x="&e;"><child a="&e;"/></root>`))
 	require.NoError(t, err)
 
-	plain := NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
-	w.docs = []*Document{parsed, plain}
+	w.docs = []*Document{parsed}
+	for range cycleRandomDocCount - 1 {
+		w.docs = append(w.docs, NewDocument("1.0", "UTF-8", StandaloneImplicitNo))
+	}
 
 	for _, doc := range w.docs {
 		w.push(doc)
@@ -178,6 +224,53 @@ func (w *cycleWorld) pickDoc() *Document {
 	return w.docs[w.rng.IntN(len(w.docs))]
 }
 
+// pickAnchored returns a random pool node, preferring one that names a parent.
+// A node with no parent settles both guards in one step, so it exercises
+// nothing; the interesting insertion point is the one with a chain above it for
+// the operand to be found on.
+func (w *cycleWorld) pickAnchored() Node {
+	n := w.pick()
+	for range 4 {
+		if !isNilNode(n) && n.baseDocNode().parent != nil {
+			return n
+		}
+		n = w.pick()
+	}
+	return n
+}
+
+// pickAncestor returns a random node on n's parent chain, preferring one whose
+// CHILD LIST IS EMPTY, or nil when n has no ancestors. The walk is capped: a
+// tree the guard has already been fooled into corrupting would otherwise hang
+// here instead of failing in requireNoParentLoop, which is where a loop is
+// meant to be reported.
+//
+// The preference is the shortcut's own precondition. wouldCreateCycle consults
+// the claimant search only for an operand with no child list; every other
+// operand runs the same ancestor walk and child descent the reference does, so
+// the two cannot disagree on it. Drawing childless ancestors is therefore where
+// all of this test's discriminating power is, not a guess about where defects
+// live.
+func (w *cycleWorld) pickAncestor(n Node) Node {
+	if isNilNode(n) {
+		return nil
+	}
+	var chain, childless []Node
+	for anc := n.Parent(); anc != nil && len(chain) < cycleRandomParentCap; anc = anc.Parent() {
+		chain = append(chain, anc)
+		if anc.baseDocNode().firstChild == nil {
+			childless = append(childless, anc)
+		}
+	}
+	if len(childless) > 0 {
+		return childless[w.rng.IntN(len(childless))]
+	}
+	if len(chain) == 0 {
+		return nil
+	}
+	return chain[w.rng.IntN(len(chain))]
+}
+
 // notef records one step so a failure can say how the tree was reached.
 func (w *cycleWorld) notef(format string, args ...any) {
 	w.log = append(w.log, fmt.Sprintf(format, args...))
@@ -198,9 +291,18 @@ func (w *cycleWorld) compareGuards() {
 	var parent Node
 	// A nil insertion point is a real input to the guard, so draw it sometimes.
 	if w.rng.IntN(16) != 0 {
-		parent = w.pick()
+		parent = w.pickAnchored()
 	}
 	cur := w.pick()
+	// The verdict is true exactly when the operand lies on the insertion point's
+	// own parent chain, and a uniformly drawn pair almost never does, so most
+	// draws take the operand from that chain. Every defect this guard has had
+	// was a missed or invented edge on such a chain.
+	if w.rng.IntN(cycleRandomRelatedPairOdds) != 0 {
+		if anc := w.pickAncestor(parent); anc != nil {
+			cur = anc
+		}
+	}
 
 	want := referenceWouldCreateCycle(parent, cur)
 	got := wouldCreateCycle(parent, cur)
@@ -235,7 +337,7 @@ func (w *cycleWorld) requireNoParentLoop(n Node) {
 // the value is in the operations the API REFUSES, because a refusal is the
 // guard firing and the next round checks the tree it left behind.
 func (w *cycleWorld) mutate() {
-	switch w.rng.IntN(12) {
+	switch w.rng.IntN(16) {
 	case 0:
 		w.opCreateElement()
 	case 1:
@@ -256,6 +358,10 @@ func (w *cycleWorld) mutate() {
 		w.opSubsetOrReference()
 	case 11:
 		w.opEmptyChildList()
+	case 12, 13:
+		w.opOffChainClaim()
+	case 14, 15:
+		w.opCrossDocumentLink()
 	}
 }
 
@@ -416,6 +522,107 @@ func (w *cycleWorld) opEmptyChildList() {
 		UnlinkNode(mc)
 		w.push(c)
 	}
+}
+
+// pickOffChainAnchor returns a pool node an append THROUGH would turn into an
+// off-chain parent claim, or nil when the pool holds none. That is exactly
+// addSibling's tail-arm condition: the node ends its own chain, it names a
+// parent, and that parent lists no children at all, so the node the append links
+// can be found from the parent only through lastChild.
+//
+// The predicate is the condition itself rather than the two fixtures that
+// happen to produce it — a parsed entity referenced from an attribute value, and
+// a copied external subset — so a world reaches the claim from whatever shape it
+// built rather than only from the ones seeded into it.
+func (w *cycleWorld) pickOffChainAnchor() MutableNode {
+	var found []MutableNode
+	for _, n := range w.pool {
+		mn, ok := n.(MutableNode)
+		if !ok {
+			continue
+		}
+		dn := n.baseDocNode()
+		if dn.next != nil || dn.parent == nil {
+			continue
+		}
+		if dn.parent.baseDocNode().firstChild != nil {
+			continue
+		}
+		found = append(found, mn)
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	return found[w.rng.IntN(len(found))]
+}
+
+// opOffChainClaim records an off-chain parent claim wherever the world can hold
+// one, and pushes the node that makes it. A claim is what declines the guard's
+// shortcut, so the driver has to be able to create one on demand instead of
+// waiting for a random append to land on the right anchor.
+func (w *cycleWorld) opOffChainClaim() {
+	anchor := w.pickOffChainAnchor()
+	if anchor == nil {
+		return
+	}
+	doc := owningDocument(anchor)
+	if doc == nil {
+		doc = w.pickDoc()
+	}
+	w.next++
+	claimant, err := doc.CreateElement(fmt.Sprintf("k%d", w.next))
+	if err != nil {
+		return
+	}
+	if err := anchor.AddSibling(claimant); err != nil {
+		return
+	}
+	w.notef("off-chain claim %s.AddSibling(%s)", describeCycleNode(anchor), describeCycleNode(claimant))
+	w.push(claimant)
+	w.requireNoParentLoop(claimant)
+}
+
+// opCrossDocumentLink links a node one document owns under an attribute of an
+// element ANOTHER owns, so a claimant search seeded at that element walks
+// straight out of its own document.
+//
+// Paired with opOffChainClaim this is the arrangement the per-hop decline exists
+// for: the claim is recorded on the far document, and the operand's own document
+// says nothing about it. The random mix reaches it only by accident, because the
+// link has to be made before the far document is marked and the claim after, so
+// the driver spells it out.
+func (w *cycleWorld) opCrossDocumentLink() {
+	host := w.pickElement()
+	guest := w.pickOperand()
+	if host == nil || isNilNode(guest) {
+		return
+	}
+	if owningDocument(guest) == owningDocument(host) {
+		return
+	}
+	w.next++
+	name := fmt.Sprintf("x%d", w.next)
+	if err := host.SetAttribute(name, "v"); err != nil {
+		return
+	}
+	var slot MutableNode
+	for _, attr := range host.Attributes() {
+		if attr.Name() == name {
+			slot = attr
+			break
+		}
+	}
+	if slot == nil {
+		return
+	}
+	if err := slot.AddChild(guest); err != nil {
+		return
+	}
+	w.notef("cross-document link %s under %s of %s", describeCycleNode(guest), name, describeCycleNode(host))
+	w.push(slot)
+	w.push(guest)
+	w.requireNoParentLoop(guest)
+	w.requireNoParentLoop(host)
 }
 
 // opSubsetOrReference builds the shapes only DTDs and entities produce: a

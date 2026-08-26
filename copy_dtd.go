@@ -69,8 +69,8 @@ func CopyExtSubset(src, dst *Document) {
 	// list, so dst now holds a node that can move its recorded lastChild off that
 	// list, and one that names dst from outside dst's own child list. Record it:
 	// addSibling stops resolving an append point from dst.lastChild
-	// (tailJumpTarget) and the cycle guard stops settling dst from its own slots
-	// (holdsOffChainClaim); both walk instead.
+	// (tailJumpTarget) and the cycle guard stops enumerating dst's slots wherever
+	// its claimant search reaches dst (holdsOffChainClaim); both walk instead.
 	dst.offChainChildClaim = true
 }
 

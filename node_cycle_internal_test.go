@@ -91,6 +91,54 @@ func offChainClaimFixture(t *testing.T) (*Element, *Entity) {
 	return claimant, ent
 }
 
+// crossDocumentOffChainClaimFixture builds the shape that separates a per-HOP
+// off-chain decline from a per-operand one: the operand's slot chain leaves its
+// own document, and the off-chain claim that hides the last link is recorded on
+// the OTHER document entirely. It returns the claimant and the element the
+// claimant is a parent-pointer descendant of.
+func crossDocumentOffChainClaimFixture(t *testing.T) (*Element, *Element) {
+	t.Helper()
+
+	// far holds an entity referenced from an attribute value, which the parser
+	// records with a firstChild and no lastChild.
+	far, err := NewParser().Parse(t.Context(), []byte(`<!DOCTYPE root [<!ENTITY e "val">]><root x="&e;"/>`))
+	require.NoError(t, err)
+	ent, ok := far.GetEntity("e")
+	require.True(t, ok)
+	expansion, ok := ent.FirstChild().(MutableNode)
+	require.True(t, ok)
+	require.Nil(t, ent.LastChild(), "the expansion was recorded without a lastChild")
+
+	// The operand and its attribute live in a DIFFERENT document, and the entity
+	// is linked under that attribute while both documents are still claim-free,
+	// so no record propagates between them.
+	home := newCycleDoc(t)
+	elem, err := home.CreateElement("elem")
+	require.NoError(t, err)
+	require.NoError(t, elem.SetAttribute("at", "v"))
+	attrs := elem.Attributes()
+	require.Len(t, attrs, 1)
+	require.NoError(t, attrs[0].AddChild(ent))
+	require.Equal(t, Node(attrs[0]), ent.Parent())
+	require.Equal(t, far, owningDocument(ent), "the entity stays in the document that declared it")
+
+	// Appending onto the entity takes the empty-parent branch, which overwrites
+	// firstChild and leaves the expansion claiming the entity from no slot.
+	require.NoError(t, ent.AddChild(far.CreateText([]byte("z"))))
+	require.False(t, home.offChainClaims, "the claim is not recorded on the operand's document")
+	require.True(t, far.offChainClaims, "it is recorded on the document that owns the claimed node")
+
+	// Appending THROUGH that off-chain expansion takes addSibling's tail arm, so
+	// claimant names the entity as its parent from off the entity's child list.
+	claimant, err := far.CreateElement("claimant")
+	require.NoError(t, err)
+	require.NoError(t, expansion.AddSibling(claimant))
+	require.Equal(t, Node(ent), claimant.Parent())
+	require.Nil(t, elem.FirstChild(), "the operand is settled from its slots, not its child list")
+
+	return claimant, elem
+}
+
 // cycleCases enumerates the configurations the two guards are compared on.
 // Each one is a shape the claimant search must classify from cur's own slots
 // rather than from parent's depth.
@@ -397,6 +445,19 @@ func cycleCases() []cycleCase {
 			},
 		},
 		{
+			name: "childless operand reached through a hop another document holds a claim on",
+			want: true,
+			build: func(t *testing.T) (Node, Node) {
+				claimant, elem := crossDocumentOffChainClaimFixture(t)
+
+				// The chain claimant -> entity -> attribute -> elem is real, but
+				// its last link sits in no slot the entity lists. The record that
+				// says so lives on the entity's document, not on the operand's,
+				// so only a decline evaluated at the entity HOP can see it.
+				return claimant, elem
+			},
+		},
+		{
 			name: "childless operand with no parent at all",
 			want: false,
 			build: func(t *testing.T) (Node, Node) {
@@ -474,4 +535,23 @@ func TestClaimantSearchSkipsTheAncestorWalk(t *testing.T) {
 		require.False(t, wouldCreateCycle(probe, withAttr))
 		require.Zero(t, probe.parentCalls, "an attribute-claimed operand is settled from its attribute list")
 	})
+}
+
+// TestCycleGuardRejectsCrossDocumentOffChainClaim drives the same shape through
+// the exported mutation API alone. The operand's slot chain runs out of its own
+// document into one holding an off-chain claim, so a decline that reads only the
+// operand's document lets AddChild close a live parent-pointer loop.
+func TestCycleGuardRejectsCrossDocumentOffChainClaim(t *testing.T) {
+	t.Parallel()
+
+	claimant, elem := crossDocumentOffChainClaimFixture(t)
+
+	require.ErrorIs(t, claimant.AddChild(elem), ErrCyclicNode,
+		"linking an ancestor under its own descendant must be refused")
+
+	steps := 0
+	for anc := Node(elem); anc != nil; anc = anc.Parent() {
+		steps++
+		require.LessOrEqual(t, steps, 8, "the parent walk from the operand must still terminate")
+	}
 }

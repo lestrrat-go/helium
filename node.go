@@ -473,13 +473,25 @@ func (n docnode) LastChild() Node {
 // The shortcut rests on one contract, stated exactly: the search that replaces
 // the walk (claimantReaches) traverses every edge X -> Y for which Y sits in a
 // SLOT X owns and Y names X as its parent, and the shortcut is DECLINED
-// outright whenever a node may name cur from outside those edges. It is not the
-// literal inverse of the parent pointer, because two claims sit in no slot at
-// all. An off-chain claim is one, and holdsOffChainClaim is the decline that
-// covers it. A namespace-node wrapper's claim on its owner is the other, and it
-// needs no decline: a wrapper can never be an insertion point and nothing can
-// be linked beneath one, so no ancestor path this guard walks passes through
-// one. Nothing else names a node as parent from outside that node's slots.
+// outright as soon as ANY node that search enumerates may be named as a parent
+// from outside its own slots.
+//
+// That decline is per HOP, never per operand. [appendClaimants] is the one
+// enumeration of a node's slots and it refuses to enumerate a node whose slots
+// may be incomplete, and every hop of the descent — the seed included — goes
+// through appendClaimants, so the rule "this node's slots are complete" is
+// applied to every node the search touches. It asks nothing about which
+// document holds a claim: a claim recorded on any document declines the hop
+// that document owns, and a hop declined anywhere sends the whole guard back to
+// the unconditional walk.
+//
+// The enumeration is not the literal inverse of the parent pointer, because two
+// claims sit in no slot at all. An off-chain claim is one, and
+// holdsOffChainClaim is the per-node decline that covers it. A namespace-node
+// wrapper's claim on its owner is the other, and it needs no decline: a wrapper
+// can never be an insertion point and nothing can be linked beneath one, so no
+// ancestor path this guard walks passes through one. Nothing else names a node
+// as parent from outside that node's slots.
 func wouldCreateCycle(parent, cur Node) bool {
 	cdn := cur.baseDocNode()
 	// Self-insertion is the one loop the claimant search below cannot see. The
@@ -493,11 +505,16 @@ func wouldCreateCycle(parent, cur Node) bool {
 	// node X with X.parent == cur — the ancestor walk finds cur only by
 	// stepping from such an X, and the child descent needs cur.firstChild —
 	// and with the child list empty every remaining X sits in a slot cur owns,
-	// SO LONG AS no off-chain parent claim has been made. Searching those slots
-	// directly costs cur's own attribute count rather than depth(parent), which
-	// is what makes a deep AddChild chain linear.
-	if cdn.firstChild == nil && !holdsOffChainClaim(cur) {
-		return claimantReaches(cur, parent)
+	// SO LONG AS every node the descent enumerates has complete slots. That is
+	// what claimantReaches reports through settled: an incomplete enumeration
+	// at any hop leaves the question unsettled and falls through to the walk
+	// below. Searching those slots directly costs cur's own attribute count
+	// rather than depth(parent), which is what makes a deep AddChild chain
+	// linear.
+	if cdn.firstChild == nil {
+		if reaches, settled := claimantReaches(cur, parent); settled {
+			return reaches
+		}
 	}
 	for anc := parent; anc != nil; anc = anc.Parent() {
 		if anc.baseDocNode() == cdn {
@@ -510,9 +527,14 @@ func wouldCreateCycle(parent, cur Node) bool {
 	return childReaches(cur, parent.baseDocNode())
 }
 
-// holdsOffChainClaim reports whether a node may name cur as its parent from
-// outside every slot cur owns, which is the one way the claimant search can
-// miss a claimant and answer false where the ancestor walk answers true.
+// holdsOffChainClaim reports whether some node may name n as its parent from
+// outside every slot n owns, which is the one way an enumeration of n's slots
+// can miss a claimant and let the claimant search answer false where the
+// ancestor walk answers true.
+//
+// It is asked about EVERY node the claimant search enumerates, not only the
+// operand: [appendClaimants] consults it before enumerating anything, so a hop
+// whose slots may be incomplete declines the whole shortcut.
 //
 // The guarded paths create exactly such a claim themselves: an append onto a
 // parent that holds a firstChild with no lastChild overwrites firstChild, and
@@ -529,51 +551,62 @@ func wouldCreateCycle(parent, cur Node) bool {
 // A DOCUMENT can also be claimed as a parent from outside its own child list by
 // a copied external subset, which Document.offChainChildClaim records. That
 // record is about the document node itself, so it decides this question only
-// when the document IS the operand; a node the document merely owns is not
-// claimed by it.
+// when the document IS the node being asked about; a node the document merely
+// owns is not claimed by it.
 //
-// The document read here is always the document the record was written on, so
-// a claim held in one document while cur belongs to another is not
-// constructible. Two facts settle it. First, every noteOrphanedChildClaim call
-// site passes the node whose parenthood is claimed as its FIRST argument
-// (appendFastChild in tree_fastpath.go, addChild's empty-parent branch,
-// addSibling's tail arm, replaceNode's splice), and noteOrphanedChildClaim
-// marks owningDocument of that argument — the very node this function is asked
-// about. Second, the two can only drift apart if cur changes document after the
-// claim is made, and every doc-field write that MOVES an existing node runs
-// through SetOwnerDocument, setTreeDoc or setListDoc, each of which calls
+// One fact makes the per-node read sound, and it is the only one the caller
+// needs: a claim on n is recorded on n's OWN document. Every
+// noteOrphanedChildClaim call site passes the node whose parenthood is claimed
+// as its FIRST argument (appendFastChild in tree_fastpath.go, addChild's
+// empty-parent branch, addSibling's tail arm, replaceNode's splice), and
+// noteOrphanedChildClaim marks owningDocument of that argument — the very node
+// this function is asked about. n can change document after the claim is made,
+// and every doc-field write that MOVES an existing node runs through
+// SetOwnerDocument, setTreeDoc or setListDoc, each of which calls
 // adoptOffChainClaims first, so the record lands on the destination document
 // or, when there is no destination, on unownedOffChainClaim
 // (TestOffChainClaimTravelsWithTheNode pins both directions). Every other doc
 // write in the package is a creation site setting the field on a node its
 // caller has just allocated, which can hold no claim yet.
 //
+// Nothing here asks whether a claim and the guard's OPERAND share a document.
+// A descent starting at one document's node walks into nodes other documents
+// own, so the operand's document answers nothing about theirs; the caller
+// instead asks this question again at every hop, about the node it is at.
+//
 // noteOrphanedChildClaim also marks the CLAIMANT's document. That second record
 // is not what this function reads and is not needed for it; it is there so the
 // claimant's own document does not later trust a lastChild the claimant moved.
-func holdsOffChainClaim(cur Node) bool {
-	doc := owningDocument(cur)
+func holdsOffChainClaim(n Node) bool {
+	doc := owningDocument(n)
 	if doc == nil {
 		return unownedOffChainClaim.Load()
 	}
 	if doc.offChainClaims {
 		return true
 	}
-	return doc == cur && doc.offChainChildClaim
+	return doc == n && doc.offChainChildClaim
 }
 
 // claimantReaches reports whether parent lies anywhere under a cur that has no
 // child list, following ONLY the edges X -> Y for which Y sits in a slot X owns
-// and names X as its parent. Those are the ancestor walk's own edges read
-// forward: the walk finds cur from parent only along a chain of parent
+// and names X as its parent, and reports through settled whether the search
+// answered the question at all. Those edges are the ancestor walk's own edges
+// read forward: the walk finds cur from parent only along a chain of parent
 // pointers, so a descent restricted to the same edges answers the same
 // question.
 //
 // Only a node naming cur as its parent can begin such a chain, and with
-// cur.firstChild nil and no off-chain claim outstanding every one of them sits
-// in a slot cur itself owns. [appendClaimants] is the ONE enumeration of those
-// slots, and it seeds the search here and expands every node the search pops,
-// so a slot is never visible at the first hop and invisible at the next.
+// cur.firstChild nil every one of them sits in a slot cur itself owns — unless
+// something names cur from outside those slots. [appendClaimants] is the ONE
+// enumeration of a node's slots AND the one place that condition is checked; it
+// seeds the search here and expands every node the search pops, so a slot is
+// never visible at the first hop and invisible at the next, and a hop whose
+// slots may be incomplete refuses to be enumerated wherever it appears.
+//
+// settled is false for exactly that refusal, at the seed or at any later hop,
+// and reaches is meaningless then: the caller must fall back to the
+// unconditional walk.
 //
 // An operand nothing names at all is settled right here, without allocating a
 // stack: that is the parser hot path, a freshly created childless leaf being
@@ -584,22 +617,33 @@ func holdsOffChainClaim(cur Node) bool {
 // AddChild/AddSibling of its own and docnode supplies none, so it can never be
 // an insertion point, and nothing can ever be linked beneath one. No ancestor
 // path this guard walks can pass through a wrapper.
-func claimantReaches(cur Node, parent Node) bool {
+func claimantReaches(cur Node, parent Node) (reaches bool, settled bool) {
 	if parent == nil {
-		return false
+		return false, true
 	}
-	stack := appendClaimants(nil, cur)
+	stack, ok := appendClaimants(nil, cur)
+	if !ok {
+		return false, false
+	}
 	if len(stack) == 0 {
-		return false
+		return false, true
 	}
 	return parentVerifiedReaches(stack, parent.baseDocNode())
 }
 
 // appendClaimants appends to dst every node that sits in a slot owner owns AND
-// names owner as its parent. It is the SINGLE enumeration of a node's claim
-// slots: [claimantReaches] seeds its search with it and [parentVerifiedReaches]
-// expands every popped node with it, so seed and non-seed hops are the same
-// code and a slot cannot be covered at one hop and skipped at the next.
+// names owner as its parent, and reports whether that enumeration is COMPLETE.
+// It is the SINGLE enumeration of a node's claim slots: [claimantReaches] seeds
+// its search with it and [parentVerifiedReaches] expands every popped node with
+// it, so seed and non-seed hops are the same code and a slot cannot be covered
+// at one hop and skipped at the next.
+//
+// It reports false and enumerates NOTHING for an owner that holdsOffChainClaim
+// reports on, because such an owner may be named as a parent by a node in no
+// slot at all and no list walk here can find it. Pairing the completeness test
+// with the enumeration is what makes the test per hop: a caller cannot reach a
+// node's slots without asking whether they are all of them, so the guard never
+// trusts a hop whose claimants it cannot see, whichever document owns that hop.
 //
 // The slots are an *Element's properties chain, a *Document's internal and
 // external subsets, and — for every node type — the child list. Nothing else in
@@ -620,7 +664,10 @@ func claimantReaches(cur Node, parent Node) bool {
 // chain terminates. A foreign child ends no enumeration: its next pointer
 // belongs to another list, so what follows it may name any parent, and every
 // node is tested against owner before it is kept.
-func appendClaimants(dst []Node, owner Node) []Node {
+func appendClaimants(dst []Node, owner Node) ([]Node, bool) {
+	if holdsOffChainClaim(owner) {
+		return dst, false
+	}
 	odn := owner.baseDocNode()
 	switch n := owner.(type) {
 	case *Element:
@@ -653,7 +700,7 @@ func appendClaimants(dst []Node, owner Node) []Node {
 		}
 		child = cdn.next
 	}
-	return dst
+	return dst, true
 }
 
 // namesParent reports whether x names owner as its parent. It is the one edge
@@ -671,6 +718,12 @@ func namesParent(x, owner *docnode) bool {
 // a slot X owns and Y.parent is X. The caller has already verified that every
 // seed names the operand.
 //
+// settled is false when appendClaimants refuses to enumerate a popped node,
+// which is the same refusal the caller already handled for the seed. Reaching
+// target ends the search first and settles it: every edge taken is an edge the
+// ancestor walk takes in reverse, so a hit is the walk's own answer however
+// many hops remain unexplored.
+//
 // That is what separates it from childReaches, which follows a child pointer
 // whoever the child claims as its parent, and the difference is the point. A
 // FOREIGN child link — an entity reference's child is the shared Entity, whose
@@ -683,22 +736,26 @@ func namesParent(x, owner *docnode) bool {
 // Termination comes from two bounds: the siblingCycleGuard [appendClaimants]
 // puts on each list it walks, and the popped-node visited set here, which
 // admits every node at most once however many slots reached it.
-func parentVerifiedReaches(stack []Node, target *docnode) bool {
+func parentVerifiedReaches(stack []Node, target *docnode) (reaches bool, settled bool) {
 	var visited childReachesVisited
 	for len(stack) > 0 {
 		node := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		dn := node.baseDocNode()
 		if dn == target {
-			return true
+			return true, true
 		}
 		if visited.has(dn) {
 			continue
 		}
 		visited.add(dn)
-		stack = appendClaimants(stack, node)
+		var ok bool
+		stack, ok = appendClaimants(stack, node)
+		if !ok {
+			return false, false
+		}
 	}
-	return false
+	return false, true
 }
 
 // childReachesInlineCap is the number of popped nodes childReachesVisited
