@@ -102,3 +102,34 @@ func TestAdoptOffChainClaimWithoutOwner(t *testing.T) {
 	parent.SetTreeDoc(doc)
 	require.True(t, doc.offChainClaims, "the adopting document inherits the record")
 }
+
+// TestOffChainClaimTravelsWithTheNode pins the half of holdsOffChainClaim's
+// argument that is about MOVEMENT. The record is written on the document owning
+// the node whose parenthood is claimed, and holdsOffChainClaim reads that same
+// node's document back, so the two can only name different documents if the
+// claimed node changes owner afterwards. Both directions of that move carry the
+// record: to another document, and out of every document.
+func TestOffChainClaimTravelsWithTheNode(t *testing.T) {
+	// Not parallel: the out-of-every-document arm reads the package-level flag.
+	src := NewDefaultDocument()
+	claimed, err := src.CreateElement("claimed")
+	require.NoError(t, err)
+
+	// The firstChild-without-lastChild shape: appending onto it detaches the
+	// child that was there while the child goes on claiming this parent.
+	setFirstChild(claimed, src.CreateText([]byte("first")))
+	require.NoError(t, claimed.AddChild(src.CreateComment([]byte("q"))))
+	require.True(t, src.offChainClaims)
+	require.True(t, holdsOffChainClaim(claimed))
+
+	dst := NewDefaultDocument()
+	require.False(t, dst.offChainClaims)
+	claimed.SetOwnerDocument(dst)
+	require.True(t, dst.offChainClaims, "the destination document inherits the record")
+	require.True(t, holdsOffChainClaim(claimed), "the guard still declines the claimed node")
+
+	unownedOffChainClaim.Store(false)
+	claimed.SetOwnerDocument(nil)
+	require.True(t, unownedOffChainClaim.Load(), "leaving every document leaves the record package-wide")
+	require.True(t, holdsOffChainClaim(claimed), "which is what a document-less node reads")
+}

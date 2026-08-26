@@ -344,6 +344,59 @@ func cycleCases() []cycleCase {
 			},
 		},
 		{
+			name: "childless operand claimed through an attribute two hops down",
+			want: true,
+			build: func(t *testing.T) (Node, Node) {
+				doc := newCycleDoc(t)
+				cur, err := doc.CreateElement("cur")
+				require.NoError(t, err)
+				require.NoError(t, cur.SetAttribute("a", "v"))
+				attrs := cur.Attributes()
+				require.Len(t, attrs, 1)
+
+				// The chain leaves the child lists twice: cur is claimed by its
+				// attribute, and the element under that attribute is claimed by
+				// an attribute of its own. A descent that enumerates slots only
+				// at the operand stops at the second hop, where the child list
+				// is empty and the claimant sits in properties.
+				mid, err := doc.CreateElement("mid")
+				require.NoError(t, err)
+				require.NoError(t, attrs[0].AddChild(mid))
+				require.NoError(t, mid.SetAttribute("p", "x"))
+				deep := mid.Attributes()
+				require.Len(t, deep, 1)
+
+				require.Nil(t, cur.FirstChild(), "the operand is settled from its slots, not its child list")
+				return deep[0], cur
+			},
+		},
+		{
+			name: "document operand claimed through an attribute under its internal subset",
+			want: true,
+			build: func(t *testing.T) (Node, Node) {
+				doc := newCycleDoc(t)
+				dtd, err := doc.CreateInternalSubset("root", "", "")
+				require.NoError(t, err)
+
+				// CreateInternalSubset also lists the subset as a child, and the
+				// claimant search is consulted only on an operand whose child
+				// list is empty. Unlink it and restore the claim, so the
+				// document is reachable only through its intSubset slot.
+				UnlinkNode(dtd)
+				unsafeSetParent(dtd, doc)
+				require.Nil(t, doc.FirstChild())
+
+				elem, err := doc.CreateElement("e")
+				require.NoError(t, err)
+				require.NoError(t, dtd.AddChild(elem))
+				require.NoError(t, elem.SetAttribute("a", "v"))
+				attrs := elem.Attributes()
+				require.Len(t, attrs, 1)
+
+				return attrs[0], doc
+			},
+		},
+		{
 			name: "childless operand with no parent at all",
 			want: false,
 			build: func(t *testing.T) (Node, Node) {

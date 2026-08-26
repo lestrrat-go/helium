@@ -369,6 +369,63 @@ func TestNodeConsistency(t *testing.T) {
 			require.NoError(t, ent.AddChild(elem))
 			require.Equal(t, helium.Node(ent), elem.Parent())
 		})
+
+		// The chain from the insertion point up to the operand leaves a child
+		// list at EVERY hop: the operand is claimed by its attribute, and the
+		// element under that attribute is claimed by an attribute of its own.
+		// Both hops are parent edges the ancestor walk steps in reverse, so the
+		// insertion closes a loop and all three guarded entry points must refuse
+		// it.
+		t.Run("guarded insertions whose operand is claimed through a nested attribute", func(t *testing.T) {
+			build := func(t *testing.T) (*helium.Element, *helium.Attribute) {
+				t.Helper()
+
+				doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
+				cur, err := doc.CreateElement("cur")
+				require.NoError(t, err)
+				require.NoError(t, cur.SetAttribute("a", "v"))
+				attrs := cur.Attributes()
+				require.Len(t, attrs, 1)
+
+				mid, err := doc.CreateElement("mid")
+				require.NoError(t, err)
+				require.NoError(t, attrs[0].AddChild(mid))
+				require.NoError(t, mid.SetAttribute("p", "x"))
+				deep := mid.Attributes()
+				require.Len(t, deep, 1)
+
+				require.Nil(t, cur.FirstChild(), "the operand carries no children of its own")
+				require.Equal(t, helium.Node(mid), deep[0].Parent())
+				require.Equal(t, helium.Node(attrs[0]), mid.Parent())
+				require.Equal(t, helium.Node(cur), attrs[0].Parent())
+
+				return cur, deep[0]
+			}
+
+			t.Run("AddChild", func(t *testing.T) {
+				cur, deep := build(t)
+				require.ErrorIs(t, deep.AddChild(cur), helium.ErrCyclicNode)
+				require.Nil(t, cur.Parent(), "the refused insertion leaves the operand unlinked")
+			})
+
+			t.Run("AddSibling", func(t *testing.T) {
+				cur, deep := build(t)
+				sib, err := deep.OwnerDocument().CreateElement("sib")
+				require.NoError(t, err)
+				require.NoError(t, deep.AddChild(sib))
+				require.ErrorIs(t, sib.AddSibling(cur), helium.ErrCyclicNode)
+				require.Nil(t, cur.Parent())
+			})
+
+			t.Run("Replace", func(t *testing.T) {
+				cur, deep := build(t)
+				victim, err := deep.OwnerDocument().CreateElement("victim")
+				require.NoError(t, err)
+				require.NoError(t, deep.AddChild(victim))
+				require.ErrorIs(t, victim.Replace(cur), helium.ErrCyclicNode)
+				require.Nil(t, cur.Parent())
+			})
+		})
 	})
 }
 
