@@ -57,41 +57,48 @@ func TestTailJumpTargetDocumentParent(t *testing.T) {
 		require.Nil(t, tailJumpTarget(doc, comment.baseDocNode()))
 	})
 
-	t.Run("a raw parent claim on the document declines", func(t *testing.T) {
+	t.Run("a document holding an off-chain claim declines", func(t *testing.T) {
 		t.Parallel()
 
 		doc, comment := documentTailFixture(t)
 
-		// The claimed parent IS the document, and the claimant belongs to a
-		// DIFFERENT document, so the only node in the write that names doc is the
-		// operand. A document's own doc pointer is nil, so reaching the record at
-		// all takes resolving the operand's owner by type (owningDocument).
-		other := NewDefaultDocument()
-		stray, err := other.CreateElement("stray")
+		// stringToNodeList leaves an entity referenced from an attribute value
+		// with a firstChild and no lastChild; setFirstChild is the call that does
+		// it. An append onto such a parent detaches that child while the child
+		// goes on claiming the parent. Recording the claim is what stops the
+		// document trusting a lastChild that a later append through the detached
+		// child can move off a child list.
+		claimed, err := doc.CreateElement("claimed")
 		require.NoError(t, err)
-		unsafeSetParent(stray, doc)
+		setFirstChild(claimed, doc.CreateText([]byte("first")))
+		require.NoError(t, claimed.AddChild(doc.CreateComment([]byte("q"))))
 
-		require.True(t, doc.untrustedLinks)
+		require.True(t, doc.offChainClaims)
 		require.Nil(t, tailJumpTarget(doc, comment.baseDocNode()))
 	})
 }
 
-// TestAdoptRawLinkWritesFromOrphan pins the record that no document owned when
-// it was made. A raw write on a fully detached subtree has nowhere to be
-// recorded, so it lands on the package-level orphan flag, and the document that
-// later adopts the subtree must inherit it.
-func TestAdoptRawLinkWritesFromOrphan(t *testing.T) {
-	// Not parallel: it asserts on the package-level orphan flag.
-	var orphan *Document
-	a, err := orphan.CreateElement("a")
+// TestAdoptOffChainClaimWithoutOwner pins the record that no document owned when
+// it was made. An off-chain claim created on a still-detached subtree has
+// nowhere to be recorded, so it lands on the package-level flag, and the
+// document that later adopts the subtree must inherit it.
+func TestAdoptOffChainClaimWithoutOwner(t *testing.T) {
+	// Not parallel: it asserts on the package-level unowned-claim flag.
+	var standalone *Document
+	parent, err := standalone.CreateElement("parent")
 	require.NoError(t, err)
-	b, err := orphan.CreateElement("b")
+	first, err := standalone.CreateElement("first")
 	require.NoError(t, err)
-	unsafeSetNextSibling(a, b)
-	require.True(t, orphanUntrustedLinks.Load(), "a write no document owned is recorded package-wide")
+	later, err := standalone.CreateElement("later")
+	require.NoError(t, err)
+
+	// The firstChild-without-lastChild shape, on nodes no document owns.
+	setFirstChild(parent, first)
+	require.NoError(t, parent.AddChild(later))
+	require.True(t, unownedOffChainClaim.Load(), "a claim no document owned is recorded package-wide")
 
 	doc := NewDefaultDocument()
-	require.False(t, doc.untrustedLinks)
-	a.SetTreeDoc(doc)
-	require.True(t, doc.untrustedLinks, "the adopting document inherits the record")
+	require.False(t, doc.offChainClaims)
+	parent.SetTreeDoc(doc)
+	require.True(t, doc.offChainClaims, "the adopting document inherits the record")
 }

@@ -226,8 +226,9 @@ func benchAddSiblingDocMiddle(b *testing.B, n int) {
 // the O(1) tail jump in addSibling is only reached once chainMember has proven
 // the ANCHOR is on the parent's child chain.
 //
-//   - "tail" always appends at the true tail. The anchor is parent.lastChild,
-//     which chainMember answers in a pointer comparison, so the total is O(n).
+//   - "tail" always appends at the true tail. The anchor's next is nil, so
+//     addSibling links there directly without consulting chainMember at all,
+//     and the total is O(n).
 //   - "nontail" appends through the FIRST child, which stops being the tail
 //     after the first call. The anchor is parent.firstChild, again a pointer
 //     comparison, so the tail jump applies and the total is O(n) — where
