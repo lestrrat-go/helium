@@ -42,7 +42,7 @@ func appendFastChild(parent MutableNode, child Node) error {
 	pdn := parent.baseDocNode()
 	cdn := child.baseDocNode()
 
-	last := pdn.lastChild
+	last := resolveOwnedTail(parent, pdn)
 	if last == nil {
 		noteOrphanedChildClaim(parent, pdn.firstChild)
 		pdn.firstChild = child

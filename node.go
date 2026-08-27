@@ -740,7 +740,7 @@ func addChild(n MutableNode, cur Node) error {
 		return err
 	}
 
-	l := pdn.lastChild
+	l := resolveOwnedTail(n, pdn)
 	if l == nil {
 		noteOrphanedChildClaim(n, pdn.firstChild)
 		pdn.firstChild = cur
@@ -848,6 +848,78 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 // caller would splice into the parent's real child list and abandon the rest of
 // x's chain. Rejecting the non-reciprocal edge costs one pointer comparison per
 // step, so the walk keeps the bound above.
+// resolveOwnedTail returns the node an append onto pdn must link after, or nil
+// when pdn has no child that claims it. It never returns a node pdn does not
+// own, which is what separates it from a bare pdn.lastChild read.
+//
+// The recorded tail and the reachable child list can disagree, and safe API
+// builds both directions of that disagreement. A copied external subset claims
+// the document as its parent while living only in extSubset, so appending
+// through it records a tail that is on no child list and leaves firstChild nil;
+// stringToNodeList materializes an entity's replacement children with
+// firstChild set and lastChild nil. Trusting lastChild alone loses the
+// reachable list in the first shape and discards it in the second, so the
+// record is used only when it proves itself and the list is walked otherwise.
+//
+// Healthy trees take the O(1) route: two pointer comparisons on top of the read
+// the callers already did. Only a tree already carrying a stale record pays the
+// walk, and that walk is the same one addSibling performs, so an append lands
+// in the same place whichever of the two the caller went through.
+func resolveOwnedTail(parent Node, pdn *docnode) Node {
+	// No reachable child list means no owned tail, whatever lastChild records.
+	// This is the copied-external-subset shape: the subset claims the document
+	// as its parent while living only in extSubset, so appending through it
+	// records a tail while firstChild stays nil.
+	if pdn.firstChild == nil {
+		return nil
+	}
+
+	// Trust the recorded tail only when it proves itself AND the owning document
+	// carries no off-chain parent claim. Without that second condition a node
+	// can claim this parent from another chain entirely, and linking behind it
+	// would abandon the reachable list. tailJumpTarget declines on the same
+	// signal, so both append routes degrade together.
+	if l := pdn.lastChild; l != nil {
+		ldn := l.baseDocNode()
+		if ldn.next == nil && ldn.parent != nil && ldn.parent.baseDocNode() == pdn && !holdsOffChainChildClaim(parent) {
+			return l
+		}
+	}
+
+	// The record is unusable, so walk to the last node that still claims pdn,
+	// bounded by the same allocation-free guard the iterators use. This is the
+	// walk addSibling performs, so an append lands in the same place whichever
+	// route the caller took.
+	var g siblingCycleGuard
+	var tail Node
+	for cur := pdn.firstChild; cur != nil; {
+		cdn := cur.baseDocNode()
+		if g.step(cdn) {
+			break
+		}
+		if cdn.parent == nil || cdn.parent.baseDocNode() != pdn {
+			break
+		}
+		tail = cur
+		cur = cdn.next
+	}
+	return tail
+}
+
+// holdsOffChainChildClaim reports whether parent's owning document has recorded
+// a parent claim that sits in no child list, which is the one signal that a
+// self-proving lastChild may still belong to another chain.
+func holdsOffChainChildClaim(parent Node) bool {
+	doc := owningDocument(parent)
+	if doc == nil {
+		return true
+	}
+	if doc.offChainClaims {
+		return true
+	}
+	return doc == parent && doc.offChainChildClaim
+}
+
 func chainMember(pdn, x *docnode) bool {
 	if pdn == nil || x == nil {
 		return false
