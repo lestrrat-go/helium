@@ -49,7 +49,14 @@ type vmInstruction struct {
 type compiledExprRef struct { index int }
 ```
 
-Lowering is structural for non-trivial nodes: recursive children usually become `compiledExprRef` indexes, trivial leaves such as literals or variable refs can stay inline in the parent payload, and hot path forms now use VM-specific payloads instead of AST nodes. `LocationPath` / `PathExpr` lower to `vmLocationPathExpr` / `vmPathExpr` with `vmLocationStep` slices, and the direct-compile fast path can emit `vmLocationPathExpr` directly before lowering child predicate expressions. Common predicates on VM location steps also lower to inline VM predicate payloads for `[N]`, `[position() = N]`, `[@attr]`, and `[@attr = "literal"]`; other predicates stay as lowered `Expr`s. VM execution switches on `vmOpcode` for compiled refs, then reuses existing `eval_*` helpers for language semantics.
+Lowering is structural for non-trivial nodes: recursive children usually become `compiledExprRef` indexes,
+trivial leaves such as literals or variable refs can stay inline in the parent payload, and hot path forms now
+use VM-specific payloads instead of AST nodes. `LocationPath` / `PathExpr` lower to `vmLocationPathExpr` /
+`vmPathExpr` with `vmLocationStep` slices, and the direct-compile fast path can emit `vmLocationPathExpr`
+directly before lowering child predicate expressions. Common predicates on VM location steps also lower to
+inline VM predicate payloads for `[N]`, `[position() = N]`, `[@attr]`, and `[@attr = "literal"]`; other
+predicates stay as lowered `Expr`s. VM execution switches on `vmOpcode` for compiled refs, then reuses
+existing `eval_*` helpers for language semantics.
 
 ## Evaluation Rules by Expr Type
 
@@ -62,7 +69,12 @@ Evaluate each item, concatenate sequences through `appendBoundedSeq` so the aggr
 3. Hot axes (`child`, `attribute`, `self`, `parent`) fuse traversal and node-test filtering directly in `xpath3`, avoiding the generic `TraverseAxis` + extra filtered-slice path
 4. Return merged node-set
 
-**Cancellation:** the fused hot child/attribute loops check `ctx.Err()` once per enumerated node (the attribute path also inside its `ForEachAttribute` callback) so a cancelled context aborts mid-enumeration instead of scanning the whole child/attribute set before the next `countOps` boundary. Generic (non-hot) axes delegate to `ixpath.TraverseAxis(ctx, ...)`, which performs its own in-loop `ctx.Err()` checks; on the namespace axis those checks run inside the `NamespacePrefixesInScope` / `CollectNamespaceNodes` helper loops (outer and inner) so `namespace::*` cancels promptly too.
+**Cancellation:** the fused hot child/attribute loops check `ctx.Err()` once per enumerated node (the
+attribute path also inside its `ForEachAttribute` callback) so a cancelled context aborts mid-enumeration
+instead of scanning the whole child/attribute set before the next `countOps` boundary. Generic (non-hot) axes
+delegate to `ixpath.TraverseAxis(ctx, ...)`, which performs its own in-loop `ctx.Err()` checks; on the
+namespace axis those checks run inside the `NamespacePrefixesInScope` / `CollectNamespaceNodes` helper loops
+(outer and inner) so `namespace::*` cancels promptly too.
 
 ### Predicates
 - Numeric atomic → compare to position (1-based)
@@ -107,7 +119,9 @@ Evaluate start/end as xs:integer → produce sequence of integers. Apply `maxNod
 Evaluate condition → EBV → evaluate Then or Else branch.
 
 ### TryCatchExpr
-Evaluate Try. On `*XPathError`: match code against catch clause codes (`*` = catch-all). Bind `$err:code`, `$err:description`, `$err:value`, `$err:module`, `$err:line-number`, `$err:column-number` in catch scope. `err:` prefix → `http://www.w3.org/2005/xqt-errors`.
+Evaluate Try. On `*XPathError`: match code against catch clause codes (`*` = catch-all). Bind `$err:code`,
+`$err:description`, `$err:value`, `$err:module`, `$err:line-number`, `$err:column-number` in catch scope.
+`err:` prefix → `http://www.w3.org/2005/xqt-errors`.
 
 ### InstanceOfExpr
 Check each item against SequenceType at runtime → boolean.
@@ -158,10 +172,14 @@ Evaluate key/value pairs → keys must atomize to AtomicValue → build MapItem.
 ## Comparison Engine (`compare.go`)
 
 ### General Comparison (`= != < <= > >=`)
-Atomize both → for each pair → type promotion → value compare. True if ANY pair matches. The O(N·M) left×right scan charges one op (via `fnCountOp`) and checks `ctx.Err()` per candidate pair, so a comparison over two large sequences honors `OpLimit` / context cancellation instead of running unbounded.
+Atomize both → for each pair → type promotion → value compare. True if ANY pair matches. The O(N·M) left×right
+scan charges one op (via `fnCountOp`) and checks `ctx.Err()` per candidate pair, so a comparison over two
+large sequences honors `OpLimit` / context cancellation instead of running unbounded.
 
 ### Value Comparison (`eq ne lt le gt ge`)
-Both must be single items. Error (XPTY0004) if sequence length > 1. Operands are atomized with an early stop (`atomizeSingletonOperand`, cap 2) so a multi-item or unbounded-lazy operand raises the cardinality error without materializing the whole sequence.
+Both must be single items. Error (XPTY0004) if sequence length > 1. Operands are atomized with an early stop
+(`atomizeSingletonOperand`, cap 2) so a multi-item or unbounded-lazy operand raises the cardinality error
+without materializing the whole sequence.
 
 ### Node Comparison (`is << >>`)
 Compare node identity or document order.
@@ -319,7 +337,9 @@ and the default xpath3 behavior is unchanged.
 - `evalContext` created fresh per call, discarded after
 - Hot-path node/item rebinding during predicates, path steps, and simple-map evaluation mutates the current `evalContext` temporarily and restores it afterward instead of allocating copied child contexts
 - Default language comes from `WithDefaultLanguage`; built-ins fall back to `"en"` when unset
-- `DocOrderCache` lazy, O(n) build, O(1) lookup: one flat `map[helium.Node]sortKey` covering every indexed document, so a position lookup is a single hash probe with no parent-chain walk. A second map records each document root's registration order, which orders nodes from different trees
+- `DocOrderCache` lazy, O(n) build, O(1) lookup: one flat `map[helium.Node]sortKey` covering every indexed
+  document, so a position lookup is a single hash probe with no parent-chain walk. A second map records each
+  document root's registration order, which orders nodes from different trees
 - Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does not change captured behavior
 
 ## Safety Limits

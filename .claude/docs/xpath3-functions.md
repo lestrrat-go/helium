@@ -104,17 +104,66 @@ to the inline-function parameter/return paths and `coerceFunctionItem`
 ### `functions_node.go`
 `node-name`, `nilled`, `string`, `data`, `base-uri`, `document-uri`, `root`, `path`, `has-children`, `innermost`, `outermost`, `id`, `idref`, `lang`, `local-name`, `name`, `namespace-uri`, `number`, `generate-id`
 
-`fn:nilled` returns the PSVI [nil] property of an element node (`()` for a non-element): true iff the node is in the evaluator's `NilledElements` set (`Evaluator.NilledElements`, populated from `xsd.Validator.NilledElements`), else false. The same set drives two other nilled-aware behaviors: `fn:data` / atomization gives a nilled element the empty typed value `()` (via `typedValueItemCheck`, checked before content-kind), and an `element(name, type)` instance-of test excludes a nilled element while `element(name, type?)` matches it (`eval_path.go` `ElementTest`). Non-schema-aware evaluation leaves the set nil → every element is not-nilled.
+`fn:nilled` returns the PSVI [nil] property of an element node (`()` for a non-element): true iff the node is
+in the evaluator's `NilledElements` set (`Evaluator.NilledElements`, populated from
+`xsd.Validator.NilledElements`), else false. The same set drives two other nilled-aware behaviors: `fn:data` /
+atomization gives a nilled element the empty typed value `()` (via `typedValueItemCheck`, checked before
+content-kind), and an `element(name, type)` instance-of test excludes a nilled element while `element(name,
+type?)` matches it (`eval_path.go` `ElementTest`). Non-schema-aware evaluation leaves the set nil → every
+element is not-nilled.
 
-`fn:id`/`fn:element-with-id` (`idLookup`) resolve is-id nodes from three sources: DTD-declared IDs (`GetElementByID`), type annotations whose name is xs:ID or a subtype (`annotationMatchesIDType`), and the PSVI is-id set supplied via `Evaluator.IDNodes` (`ec.idNodes`). The is-id set is required for cases the type name alone cannot express — a SINGLETON list of xs:ID and a union that selects an xs:ID-derived member (a multi-item list / non-ID union member is not is-id); the xsd validator computes it (`Validator.IDNodes`). `idElementsFromTypeAnnotations` unions annotation-derived and set-derived candidates, then `idNodeResult` maps each is-id node to its result (`fn:id` → the ID element / bearing element; `fn:element-with-id` → that element's parent).
+`fn:id`/`fn:element-with-id` (`idLookup`) resolve is-id nodes from three sources: DTD-declared IDs
+(`GetElementByID`), type annotations whose name is xs:ID or a subtype (`annotationMatchesIDType`), and the
+PSVI is-id set supplied via `Evaluator.IDNodes` (`ec.idNodes`). The is-id set is required for cases the type
+name alone cannot express — a SINGLETON list of xs:ID and a union that selects an xs:ID-derived member (a
+multi-item list / non-ID union member is not is-id); the xsd validator computes it (`Validator.IDNodes`).
+`idElementsFromTypeAnnotations` unions annotation-derived and set-derived candidates, then `idNodeResult` maps
+each is-id node to its result (`fn:id` → the ID element / bearing element; `fn:element-with-id` → that
+element's parent).
 
 ### `functions_string.go`
-`codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`, `substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`, `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`, `tokenize`, `analyze-string` (partial; result DOM built with helium)
+`codepoints-to-string`, `string-to-codepoints`, `compare`, `codepoint-equal`, `concat`, `string-join`,
+`substring`, `string-length`, `normalize-space`, `normalize-unicode`, `upper-case`, `lower-case`, `translate`,
+`contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`,
+`tokenize`, `analyze-string` (partial; result DOM built with helium)
 
 Regex: use Go `regexp` package by default; fall back to `github.com/dlclark/regexp2` for patterns requiring backreferences, character class subtraction, or large quantifiers. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivalents.
-Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay translation/compilation cost. The cache (`regexLRUCache` in `regex_cache.go`) is a bounded LRU with a 1024-entry cap and least-recently-used eviction, so many distinct dynamic patterns cannot grow process memory without limit.
+Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay
+translation/compilation cost. The cache (`regexLRUCache` in `regex_cache.go`) is a bounded LRU with a
+1024-entry cap and least-recently-used eviction, so many distinct dynamic patterns cannot grow process memory
+without limit.
 
-**Resource bounds (XPATH3-102/105).** `string-to-codepoints` charges `fnCountOp` per produced codepoint so a huge input cannot build an item sequence below the node-set cap but above `OpLimit`. `analyze-string` STREAMS its regex matches via `compiledXPathRegex.eachStringSubmatchIndex` (the internal form of the public `Regex.EachSubmatchIndex`), leaving `FindAllStringSubmatchIndex` uncalled: when an op budget is in force it passes `fnRemainingOps(ec)+1` as the match limit and charges `fnCountOp` BEFORE building each match's result nodes, so an input with millions of matches rejects with `ErrOpLimit` (or honors cancellation) without ever materializing the O(matches) index slice. A non-streamable leading-context pattern over an oversized input surfaces `ErrRegexMatchLimit` as-is (errors.Is-compatible); other engine errors map to `FORX0002`. Nested capturing groups produce NESTED `fn:group` elements (F&O 3.1 §5.6.5): `analyzeStringGroupParents` derives each group's parent from the pattern's STATIC parenthesis structure (skipping escapes, XSD character-class subexpressions, and `(?…` non-capturing/modifier groups), not from match positions — `(b)(x?)` (siblings) and `(b(x?))` (nested) yield identical submatch spans, so position-only reconstruction cannot tell them apart. It MUST tokenize the SAME pattern the engine compiles, so it applies the identical preprocessing first: the `q` flag makes the whole pattern a literal (no groups), and the `x` flag runs `stripFreeSpacing` before scanning — otherwise a raw-pattern parse diverges (e.g. `( a \ ) (b) )` with `x` compiles to `(a\)(b))`, group 2 nested in group 1, but the raw form looks like two siblings and would duplicate text). The XPath 3.1 `x` flag (§5.6.1.1) removes unescaped whitespace outside character classes — EXACTLY the four XML whitespace chars `#x9/#xA/#xD/#x20` (`isXPathRegexWhitespace`, deliberately narrower than `unicode.IsSpace`: U+00A0 NBSP and other Unicode spaces stay literal) — and does NOT enable `#` comments (a Perl/Java extension absent from XPath 3.1 — `#` stays literal). That single shared whitespace definition governs BOTH the core regex-compilation stripping (`stripFreeSpacing`, used by fn:matches/replace/tokenize/analyze-string) and analyze-string group derivation. `buildAnalyzeStringMatch` builds the group tree by pattern nesting (`buildAnalyzeStringTreeByPattern`), then `renderAnalyzeStringGroup` distributes the matched substring text so each `fn:group` holds the text of its span not covered by a nested child, in document order. The fundamental invariant is that the `fn:match` string value equals the matched input substring; `buildAnalyzeStringMatch` ENFORCES it via `analyzeStringGroupText`: if the pattern-derived tree's string value ever disagrees with the input (a tokenization edge that would duplicate/drop text), it falls back to `buildAnalyzeStringTreeByPosition` (span-containment nesting, which always tiles the matched substring exactly) and, as a final floor, to a group-less match holding just the text — output whose string value differs from the input is never emitted. The result tree is still `xs:untyped`/untyped attributes (no PSVI type annotation from the built-in analyze-string-result schema).
+**Resource bounds (XPATH3-102/105).** `string-to-codepoints` charges `fnCountOp` per produced codepoint so a
+huge input cannot build an item sequence below the node-set cap but above `OpLimit`. `analyze-string` STREAMS
+its regex matches via `compiledXPathRegex.eachStringSubmatchIndex` (the internal form of the public
+`Regex.EachSubmatchIndex`), leaving `FindAllStringSubmatchIndex` uncalled: when an op budget is in force it
+passes `fnRemainingOps(ec)+1` as the match limit and charges `fnCountOp` BEFORE building each match's result
+nodes, so an input with millions of matches rejects with `ErrOpLimit` (or honors cancellation) without ever
+materializing the O(matches) index slice. A non-streamable leading-context pattern over an oversized input
+surfaces `ErrRegexMatchLimit` as-is (errors.Is-compatible); other engine errors map to `FORX0002`. Nested
+capturing groups produce NESTED `fn:group` elements (F&O 3.1 §5.6.5): `analyzeStringGroupParents` derives each
+group's parent from the pattern's STATIC parenthesis structure (skipping escapes, XSD character-class
+subexpressions, and `(?…` non-capturing/modifier groups), not from match positions — `(b)(x?)` (siblings) and
+`(b(x?))` (nested) yield identical submatch spans, so position-only reconstruction cannot tell them apart. It
+MUST tokenize the SAME pattern the engine compiles, so it applies the identical preprocessing first: the `q`
+flag makes the whole pattern a literal (no groups), and the `x` flag runs `stripFreeSpacing` before scanning —
+otherwise a raw-pattern parse diverges (e.g. `( a \ ) (b) )` with `x` compiles to `(a\)(b))`, group 2 nested
+in group 1, but the raw form looks like two siblings and would duplicate text). The XPath 3.1 `x` flag
+(§5.6.1.1) removes unescaped whitespace outside character classes — EXACTLY the four XML whitespace chars
+`#x9/#xA/#xD/#x20` (`isXPathRegexWhitespace`, deliberately narrower than `unicode.IsSpace`: U+00A0 NBSP and
+other Unicode spaces stay literal) — and does NOT enable `#` comments (a Perl/Java extension absent from XPath
+3.1 — `#` stays literal). That single shared whitespace definition governs BOTH the core regex-compilation
+stripping (`stripFreeSpacing`, used by fn:matches/replace/tokenize/analyze-string) and analyze-string group
+derivation. `buildAnalyzeStringMatch` builds the group tree by pattern nesting
+(`buildAnalyzeStringTreeByPattern`), then `renderAnalyzeStringGroup` distributes the matched substring text so
+each `fn:group` holds the text of its span not covered by a nested child, in document order. The fundamental
+invariant is that the `fn:match` string value equals the matched input substring; `buildAnalyzeStringMatch`
+ENFORCES it via `analyzeStringGroupText`: if the pattern-derived tree's string value ever disagrees with the
+input (a tokenization edge that would duplicate/drop text), it falls back to
+`buildAnalyzeStringTreeByPosition` (span-containment nesting, which always tiles the matched substring
+exactly) and, as a final floor, to a group-less match holding just the text — output whose string value
+differs from the input is never emitted. The result tree is still `xs:untyped`/untyped attributes (no PSVI
+type annotation from the built-in analyze-string-result schema).
 
 ### `functions_numeric.go`
 `abs`, `ceiling`, `floor`, `round`, `round-half-to-even`
@@ -134,7 +183,10 @@ Error/trace: `error` (raises `FOER0000` with optional code/description/value), `
 
 ### `functions_datetime.go`
 Constructors: `dateTime`
-Accessors: `year-from-dateTime`, `month-from-dateTime`, `day-from-dateTime`, `hours-from-dateTime`, `minutes-from-dateTime`, `seconds-from-dateTime`, `timezone-from-dateTime`, (same for date/time variants), `years-from-duration`, `months-from-duration`, `days-from-duration`, `hours-from-duration`, `minutes-from-duration`, `seconds-from-duration`
+Accessors: `year-from-dateTime`, `month-from-dateTime`, `day-from-dateTime`, `hours-from-dateTime`,
+`minutes-from-dateTime`, `seconds-from-dateTime`, `timezone-from-dateTime`, (same for date/time variants),
+`years-from-duration`, `months-from-duration`, `days-from-duration`, `hours-from-duration`,
+`minutes-from-duration`, `seconds-from-duration`
 Formatting: `format-date`, `format-dateTime`, `format-time`
 Misc: `adjust-dateTime-to-timezone`, `adjust-date-to-timezone`, `adjust-time-to-timezone`
 
@@ -474,7 +526,13 @@ readers report a present-empty value as not-found so the caller keeps its defaul
 `json-doc` uses same URI resolution/resource-loading stack as `doc` + `unparsed-text`:
 `WithBaseURI` → relative resolution, `WithURIResolver` → resolver for all schemes, `WithHTTPClient` → opt-in HTTP fetch.
 
-**Secure by default.** With no `URIResolver` and no `HTTPClient`, `fn:doc`, `fn:doc-available`, `fn:json-doc`, `fn:unparsed-text`, `fn:unparsed-text-available`, and `fn:unparsed-text-lines` cannot reach the filesystem or network — they error with `FODC0002` / `FOUT1170`. To allow access, supply a `URIResolver` (e.g. `unparsedtext.FileURIResolver{BaseDir:...}`, `unparsedtext.NewFileResolver(fs.FS)`, or `unparsedtext.NewHTTPResolver(*http.Client)`), or set an explicit `HTTPClient` whose transport/timeouts/redirect policy you control. `fn:doc` parses retrieved bytes with `BlockXXE(true).AllowNetwork(false)` so the returned document cannot pull additional externals.
+**Secure by default.** With no `URIResolver` and no `HTTPClient`, `fn:doc`, `fn:doc-available`, `fn:json-doc`,
+`fn:unparsed-text`, `fn:unparsed-text-available`, and `fn:unparsed-text-lines` cannot reach the filesystem or
+network — they error with `FODC0002` / `FOUT1170`. To allow access, supply a `URIResolver` (e.g.
+`unparsedtext.FileURIResolver{BaseDir:...}`, `unparsedtext.NewFileResolver(fs.FS)`, or
+`unparsedtext.NewHTTPResolver(*http.Client)`), or set an explicit `HTTPClient` whose
+transport/timeouts/redirect policy you control. `fn:doc` parses retrieved bytes with
+`BlockXXE(true).AllowNetwork(false)` so the returned document cannot pull additional externals.
 
 ### `functions_qname.go`
 `QName`, `resolve-QName`, `prefix-from-QName`, `local-name-from-QName`, `namespace-uri-from-QName`, `namespace-uri-for-prefix`, `in-scope-prefixes`
@@ -482,22 +540,55 @@ readers report a present-empty value as not-found so the caller keeps its defaul
 ### `functions_hof.go`
 `for-each`, `filter`, `fold-left`, `fold-right`, `apply`, `function-lookup`, `function-arity`, `function-name`
 
-**Resource bounds.** Accumulating higher-order / map / array built-ins honor the same limits as the evaluator's accumulation sites: per-iteration `ec.countOps` (op limit + context cancellation) and a `maxNodes` length cap (sequence/node-set length → `ErrNodeSetLimit`). Shared helpers `fnMaxNodes(ec)` / `fnCountOp(ctx, ec)` (in `functions_hof.go`) default to `maxNodeSetLength` and stay safe when `ec == nil` (function called outside an evaluation). Covers `for-each`, `for-each-pair`, `filter`, `fold-left`/`fold-right`, `map:for-each`, `map:find`, `array:join`, `array:flat-map`, `array:filter`, `array:for-each`/`for-each-pair`, `array:fold-left`/`fold-right`.
+**Resource bounds.** Accumulating higher-order / map / array built-ins honor the same limits as the
+evaluator's accumulation sites: per-iteration `ec.countOps` (op limit + context cancellation) and a `maxNodes`
+length cap (sequence/node-set length → `ErrNodeSetLimit`). Shared helpers `fnMaxNodes(ec)` / `fnCountOp(ctx,
+ec)` (in `functions_hof.go`) default to `maxNodeSetLength` and stay safe when `ec == nil` (function called
+outside an evaluation). Covers `for-each`, `for-each-pair`, `filter`, `fold-left`/`fold-right`,
+`map:for-each`, `map:find`, `array:join`, `array:flat-map`, `array:filter`, `array:for-each`/`for-each-pair`,
+`array:fold-left`/`fold-right`.
 
-Built-ins that clone or materialize a whole sub-sequence in **one shot**, in place of an item-by-item walk (`array:for-each`, `array:for-each-pair`, `array:join`, `array:flat-map`, `map:find`) additionally charge the sub-sequence length against the op-counter via `fnCountOps(ctx, ec, n)` **before** the bulk `NewArray`/`cloneSequence`/append. This rejects a result/member-list/value that is below `maxNodes` but above `OpLimit` with `ErrOpLimit` — length-only (`maxNodes`) checking would otherwise let it be cloned unbounded. Because `NewArray` clones **each** member sequence, `array:join` and `array:flat-map` charge `seqLen(member)` **per member** (not one op per member): a single member holding many items below `maxNodes` but above `OpLimit` is still rejected.
+Built-ins that clone or materialize a whole sub-sequence in **one shot**, in place of an item-by-item walk
+(`array:for-each`, `array:for-each-pair`, `array:join`, `array:flat-map`, `map:find`) additionally charge the
+sub-sequence length against the op-counter via `fnCountOps(ctx, ec, n)` **before** the bulk
+`NewArray`/`cloneSequence`/append. This rejects a result/member-list/value that is below `maxNodes` but above
+`OpLimit` with `ErrOpLimit` — length-only (`maxNodes`) checking would otherwise let it be cloned unbounded.
+Because `NewArray` clones **each** member sequence, `array:join` and `array:flat-map` charge `seqLen(member)`
+**per member** (not one op per member): a single member holding many items below `maxNodes` but above
+`OpLimit` is still rejected.
 
-Sites that build a result array with one **member** per callback result / matched value (`array:for-each`, `array:for-each-pair`, `map:find`) bound the **member count** independently of the item count: a callback returning an empty sequence (or an empty matched map value) adds zero items but still adds a member, so `len(results)+1 > maxNodes` is checked before each append, otherwise many empty results could build an array with more than `maxNodes` members. `array:flat-map` charges one op per callback-result item up front (including items that are empty arrays whose member expansion appends nothing), so many empty arrays cannot bypass `OpLimit`.
+Sites that build a result array with one **member** per callback result / matched value (`array:for-each`,
+`array:for-each-pair`, `map:find`) bound the **member count** independently of the item count: a callback
+returning an empty sequence (or an empty matched map value) adds zero items but still adds a member, so
+`len(results)+1 > maxNodes` is checked before each append, otherwise many empty results could build an array
+with more than `maxNodes` members. `array:flat-map` charges one op per callback-result item up front
+(including items that are empty arrays whose member expansion appends nothing), so many empty arrays cannot
+bypass `OpLimit`.
 
-The cap must trigger **before** materializing a lazy result, so the bound holds for genuinely lazy inputs (e.g. an `EvalBorrowing` variable bound to a large `NewRangeSequence`, or a `VariableResolver` result) — not only after a slice has already been allocated:
-- Callback-result accumulators (`for-each`, `for-each-pair`, `map:for-each`) use `appendBoundedSeq(dst, src, maxNodes)` (in `eval_operators.go`), which iterates `seqItems(src)` one item at a time and checks `maxNodes` before each append, so a callback returning an unbounded lazy `Sequence` is rejected without ever materializing it. `appendBounded` (the slice-taking variant) is still used where the source is already a materialized slice.
+The cap must trigger **before** materializing a lazy result, so the bound holds for genuinely lazy inputs
+(e.g. an `EvalBorrowing` variable bound to a large `NewRangeSequence`, or a `VariableResolver` result) — not
+only after a slice has already been allocated:
+- Callback-result accumulators (`for-each`, `for-each-pair`, `map:for-each`) use `appendBoundedSeq(dst, src,
+  maxNodes)` (in `eval_operators.go`), which iterates `seqItems(src)` one item at a time and checks `maxNodes`
+  before each append, so a callback returning an unbounded lazy `Sequence` is rejected without ever
+  materializing it. `appendBounded` (the slice-taking variant) is still used where the source is already a
+  materialized slice.
 - Fold accumulators check `seqLen(acc) > maxNodes` after each step; `seqLen` is O(1) on a lazy range, so an oversized lazy accumulator is rejected without materialization.
-- The iterative walkers `array:flatten` and `map:find` (`mapFindIter`) use an explicit stack of `seqCursor` frames (a member/value list + member/item index, in `functions_array.go`) that yields one `Item` per `next()` via `Sequence.Get`, instead of expanding child sequences into temporary `[]Item` slices. This bounds depth (no goroutine-stack recursion) and width (no per-level slice amplification), and stays op-counted and `maxNodes`-bounded. Maps and arrays are eager value types — `NewMap`/`NewArray` clone member/value sequences at construction — so member/value sequences are not lazy in practice; the cursor still avoids the intermediate slice amplification.
+- The iterative walkers `array:flatten` and `map:find` (`mapFindIter`) use an explicit stack of `seqCursor`
+  frames (a member/value list + member/item index, in `functions_array.go`) that yields one `Item` per
+  `next()` via `Sequence.Get`, instead of expanding child sequences into temporary `[]Item` slices. This
+  bounds depth (no goroutine-stack recursion) and width (no per-level slice amplification), and stays
+  op-counted and `maxNodes`-bounded. Maps and arrays are eager value types — `NewMap`/`NewArray` clone
+  member/value sequences at construction — so member/value sequences are not lazy in practice; the cursor
+  still avoids the intermediate slice amplification.
 
 ### `functions_map.go`
 `map:merge`, `map:size`, `map:keys`, `map:contains`, `map:get`, `map:put`, `map:entry`, `map:remove`, `map:for-each`, `map:find`
 
 ### `functions_array.go`
-`array:size`, `array:get`, `array:put`, `array:append`, `array:subarray`, `array:remove`, `array:insert-before`, `array:head`, `array:tail`, `array:reverse`, `array:join`, `array:flat-map`, `array:filter`, `array:fold-left`, `array:fold-right`, `array:for-each`, `array:for-each-pair`, `array:sort`
+`array:size`, `array:get`, `array:put`, `array:append`, `array:subarray`, `array:remove`,
+`array:insert-before`, `array:head`, `array:tail`, `array:reverse`, `array:join`, `array:flat-map`,
+`array:filter`, `array:fold-left`, `array:fold-right`, `array:for-each`, `array:for-each-pair`, `array:sort`
 
 ### `functions_math.go`
 `math:pi`, `math:exp`, `math:exp10`, `math:log`, `math:log10`, `math:pow`, `math:sqrt`, `math:sin`, `math:cos`, `math:tan`, `math:asin`, `math:acos`, `math:atan`, `math:atan2`

@@ -59,7 +59,17 @@ single-quoted attributes parse correctly, and the C14N suite runs with no skips.
 Same-element duplicate namespace declarations are a well-formedness error, as in
 libxml2.
 
-1. **External entity resolution** — limited; requires explicit config. `NewParser` is **secure by default**: `BlockXXE` is on, the `FS` is a deny-all FS, and network is off — so external loading is blocked even when `LoadExternalDTD(true)`/`SubstituteEntities(true)` are set, until `BlockXXE(false)` is also set AND an FS is supplied (`helium.PermissiveFS()` or a confined `fs.FS`). External subsets need `LoadExternalDTD(true)`, and inline expansion of parsed external entities needs `SubstituteEntities(true)`. External DTD subsets are read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset exceeding the cap is rejected with `ErrExternalDTDTooLarge`. The `relaxng.Compiler` mirrors this default: its `include`/`externalRef` fetch `FS` is deny-all by default (opt into host access with `Compiler.FS(helium.PermissiveFS())`), and each target is read under a per-resource byte cap (`relaxng.Compiler.MaxResourceBytes`, 10 MiB default).
+1. **External entity resolution** — limited; requires explicit config. `NewParser` is **secure by default**:
+   `BlockXXE` is on, the `FS` is a deny-all FS, and network is off — so external loading is blocked even when
+   `LoadExternalDTD(true)`/`SubstituteEntities(true)` are set, until `BlockXXE(false)` is also set AND an FS
+   is supplied (`helium.PermissiveFS()` or a confined `fs.FS`). External subsets need `LoadExternalDTD(true)`,
+   and inline expansion of parsed external entities needs `SubstituteEntities(true)`. External DTD subsets are
+   read through a strict byte cap (`MaxExternalDTDSize`, 10 MiB default; overridable via
+   `MaxExternalDTDBytes`) enforced against the actual bytes read — not any advisory `Stat` size — and a subset
+   exceeding the cap is rejected with `ErrExternalDTDTooLarge`. The `relaxng.Compiler` mirrors this default:
+   its `include`/`externalRef` fetch `FS` is deny-all by default (opt into host access with
+   `Compiler.FS(helium.PermissiveFS())`), and each target is read under a per-resource byte cap
+   (`relaxng.Compiler.MaxResourceBytes`, 10 MiB default).
 
 ## Feature Status
 
@@ -143,7 +153,24 @@ libxml2.
 ## Known Issues
 
 - `xinclude/issue733` — DOCTYPE not preserved after XInclude processing
-- DTD element-content validity (VC: Element Valid), character-reference whitespace provenance: whitespace produced by a character reference does NOT match the S nonterminal, so it is not ignorable in element-only content (XML §3.2.1, errata 2e E15). With `SubstituteEntities(true)` the DOM text node is byte-identical to one from literal whitespace, so provenance is reconstructed by a parser flag: `parseReference` marks a `&#N;` delivery (`pctx.charDataFromCharRef`), `TreeBuilder.Characters` stamps the Text node's `fromCharRef` field, and `collectChildElements` (`valid.go`) treats a `fromCharRef` whitespace text node as character data (content-model mismatch). It survives general-entity expansion via the re-parse of the entity replacement text and `replayEntityNode`, distinguishing an entity value of `&#32;` (invalid, `rmt-e2e-15h`) from a literal-space entity value (valid, `rmt-e2e-15e`) or a `&#32;` expanded at DECLARATION time into a literal space (valid, `rmt-e2e-15f`). A direct character reference to a whitespace char in element-only content is likewise invalid (`rmt-e2e-15g`). Separately, a reference is content per XML production [43], so an EMPTY element containing one is invalid even when it expands to nothing (`rmt-e2e-15a`); `parseReference` sets `Element.contentHasReference` and `validateElementContent`'s EMPTY branch reads it. All flags are validity-only — invisible to serialization, C14N, XPath string-value, and node copy. A CDATA section is a distinct node type, so a CDATA section in element-only content — even empty or whitespace-only, never S — IS rejected (`sun/invalid empty`); and an NMTOKENS/IDREFS/ENTITIES token separator is exactly `#x20` (`splitNormalizedTokens`), so a character-reference whitespace char inside a tokenized attribute value is part of the token, making e.g. `abc&#9;xyz` a single invalid NMTOKEN (`rmt-e2e-20`).
+- DTD element-content validity (VC: Element Valid), character-reference whitespace provenance: whitespace
+  produced by a character reference does NOT match the S nonterminal, so it is not ignorable in element-only
+  content (XML §3.2.1, errata 2e E15). With `SubstituteEntities(true)` the DOM text node is byte-identical to
+  one from literal whitespace, so provenance is reconstructed by a parser flag: `parseReference` marks a
+  `&#N;` delivery (`pctx.charDataFromCharRef`), `TreeBuilder.Characters` stamps the Text node's `fromCharRef`
+  field, and `collectChildElements` (`valid.go`) treats a `fromCharRef` whitespace text node as character data
+  (content-model mismatch). It survives general-entity expansion via the re-parse of the entity replacement
+  text and `replayEntityNode`, distinguishing an entity value of `&#32;` (invalid, `rmt-e2e-15h`) from a
+  literal-space entity value (valid, `rmt-e2e-15e`) or a `&#32;` expanded at DECLARATION time into a literal
+  space (valid, `rmt-e2e-15f`). A direct character reference to a whitespace char in element-only content is
+  likewise invalid (`rmt-e2e-15g`). Separately, a reference is content per XML production [43], so an EMPTY
+  element containing one is invalid even when it expands to nothing (`rmt-e2e-15a`); `parseReference` sets
+  `Element.contentHasReference` and `validateElementContent`'s EMPTY branch reads it. All flags are
+  validity-only — invisible to serialization, C14N, XPath string-value, and node copy. A CDATA section is a
+  distinct node type, so a CDATA section in element-only content — even empty or whitespace-only, never S — IS
+  rejected (`sun/invalid empty`); and an NMTOKENS/IDREFS/ENTITIES token separator is exactly `#x20`
+  (`splitNormalizedTokens`), so a character-reference whitespace char inside a tokenized attribute value is
+  part of the token, making e.g. `abc&#9;xyz` a single invalid NMTOKEN (`rmt-e2e-20`).
 - C14N relative namespace URI check uses heuristic (`!strings.Contains(uri, ":")`) not full URI parse
 - HTML attribute deduplication: all kept (libxml2 keeps first)
 - HTML areBlanks heuristic simpler than libxml2's
@@ -158,9 +185,43 @@ These are architectural choices, not bugs:
 - Go interfaces for node types vs xmlNode.type enum switch
 - No global state: explicit context passing
 - Functional options (WithX()) vs bitmask flags
-- XML push parser parses incrementally as chunks arrive; HTML push parser buffers through the initial ~1024-byte charset prescan, then streams only once a streamable encoding is settled (declared/detected charset=utf-8, or a non-UTF-8 head routed to Latin-1). An undeclared input that keeps proving valid UTF-8 stays undecided and buffers (a later non-UTF-8 byte would re-interpret the whole prefix as Latin-1/Windows-1252), but the undecided prefix is BOUNDED at the configured `MaxContentSize` (16 MiB default): each undecided read is capped to the remaining bound so the boundary is chunk-independent. A stream ending with valid UTF-8 at/below the cap is accepted (one-byte EOF probe); if the cap fills and more bytes still follow it fails closed with `ErrContentSizeExceeded` (`html/encoding_reader.go` deferredLatin1Reader).
+- XML push parser parses incrementally as chunks arrive; HTML push parser buffers through the initial
+  ~1024-byte charset prescan, then streams only once a streamable encoding is settled (declared/detected
+  charset=utf-8, or a non-UTF-8 head routed to Latin-1). An undeclared input that keeps proving valid UTF-8
+  stays undecided and buffers (a later non-UTF-8 byte would re-interpret the whole prefix as
+  Latin-1/Windows-1252), but the undecided prefix is BOUNDED at the configured `MaxContentSize` (16 MiB
+  default): each undecided read is capped to the remaining bound so the boundary is chunk-independent. A
+  stream ending with valid UTF-8 at/below the cap is accepted (one-byte EOF probe); if the cap fills and more
+  bytes still follow it fails closed with `ErrContentSizeExceeded` (`html/encoding_reader.go`
+  deferredLatin1Reader).
 - Namespace stack: frame-based visibleNSStack vs flat arrays
-- `xml:id` value normalization: the parser applies tokenized-type (xs:ID) normalization — trim + internal-space collapse — to an `xml:id` attribute even when it is NOT DTD-declared, per the xml:id Recommendation §4 + XML §3.3.3 (so `GetElementByID`/`fn:id`/XPath string-value see the collapsed id). libxml2 normalizes `xml:id` only when it is DTD-declared ID and leaves undeclared-`xml:id` normalization as a documented open issue (it does not do it). This is a DELIBERATE XPath-3.1 / xml:id-§4 conformance choice; it is verified byte-identical on every libxml2-compat / c14n / serialization golden (no parity fixture carries a normalizable-whitespace `xml:id`).
-- Schematron `queryBinding`: helium reads the attribute and refuses a query language binding it does not implement (`ErrUnsupportedQueryBinding`, a fatal compile diagnostic), and evaluates a schema naming `xslt3` or `xpath3` with XPath 3.1. libxml2 ignores the attribute entirely and evaluates every schema as XPath 1.0, so a 2.0-or-later schema silently produces XPath 1.0 answers there. The XPath 1.0 path (an absent attribute, or `xslt`) stays byte-identical to libxml2, and every libxml2-compat schematron golden is unaffected because none of the fixtures carries the attribute.
-- Node-builder colon validation: `Document.CreateElement(name)` and `Document.CreateAttribute(name, ...)` reject a colon in `name` and return an error (the caller supplies a namespaced element/attribute through `Document.CreateElementNS(localname, ns)` / `Element.SetAttributeNS(localname, ...)`). libxml2's `xmlNewNode`/`xmlNewProp` do no validation and let a colon sit in the single name field, producing an unbound prefix that serializes as namespace-ill-formed XML. This is the same namespace-aware strictness the W3C xml-conformance campaign classified as an intentional divergence (colon-in-Name). It changes no parsed-document output: the parser always splits a QName into prefix+local and sets the namespace separately, so every in-tree build/copy call site feeds a bare local name and the rejection never fires.
-- Writer invalid-character default: the `Writer` REJECTS a syntactically valid character or numeric-reference target outside the target XML range (`ErrInvalidXMLChar` / SERE0006) by default, where libxml2 silently replaces it with U+FFFD. `Writer.RejectInvalidChars(false)` restores replacement — as `&#xFFFD;` under `EscapeNonASCII`/US-ASCII output and raw U+FFFD otherwise; reference-less contexts always use raw U+FFFD. Malformed numeric, named, and parameter-entity reference markup always fails with `ErrWriterInvalidName`; it is never repaired. Full DTD Names remain distinct from DOM QNames, entity and notation declarations require NCNames, and enumeration members are checked as distinct Nmtokens or Names before output. A character map is exempt because its replacement string is emitted verbatim (Serialization 3.1 §7). Parsed-document output and serialization goldens remain byte-identical; the divergence only affects malformed in-memory trees.
+- `xml:id` value normalization: the parser applies tokenized-type (xs:ID) normalization — trim +
+  internal-space collapse — to an `xml:id` attribute even when it is NOT DTD-declared, per the xml:id
+  Recommendation §4 + XML §3.3.3 (so `GetElementByID`/`fn:id`/XPath string-value see the collapsed id).
+  libxml2 normalizes `xml:id` only when it is DTD-declared ID and leaves undeclared-`xml:id` normalization as
+  a documented open issue (it does not do it). This is a DELIBERATE XPath-3.1 / xml:id-§4 conformance choice;
+  it is verified byte-identical on every libxml2-compat / c14n / serialization golden (no parity fixture
+  carries a normalizable-whitespace `xml:id`).
+- Schematron `queryBinding`: helium reads the attribute and refuses a query language binding it does not
+  implement (`ErrUnsupportedQueryBinding`, a fatal compile diagnostic), and evaluates a schema naming `xslt3`
+  or `xpath3` with XPath 3.1. libxml2 ignores the attribute entirely and evaluates every schema as XPath 1.0,
+  so a 2.0-or-later schema silently produces XPath 1.0 answers there. The XPath 1.0 path (an absent attribute,
+  or `xslt`) stays byte-identical to libxml2, and every libxml2-compat schematron golden is unaffected because
+  none of the fixtures carries the attribute.
+- Node-builder colon validation: `Document.CreateElement(name)` and `Document.CreateAttribute(name, ...)`
+  reject a colon in `name` and return an error (the caller supplies a namespaced element/attribute through
+  `Document.CreateElementNS(localname, ns)` / `Element.SetAttributeNS(localname, ...)`). libxml2's
+  `xmlNewNode`/`xmlNewProp` do no validation and let a colon sit in the single name field, producing an
+  unbound prefix that serializes as namespace-ill-formed XML. This is the same namespace-aware strictness the
+  W3C xml-conformance campaign classified as an intentional divergence (colon-in-Name). It changes no
+  parsed-document output: the parser always splits a QName into prefix+local and sets the namespace
+  separately, so every in-tree build/copy call site feeds a bare local name and the rejection never fires.
+- Writer invalid-character default: the `Writer` REJECTS a syntactically valid character or numeric-reference
+  target outside the target XML range (`ErrInvalidXMLChar` / SERE0006) by default, where libxml2 silently
+  replaces it with U+FFFD. `Writer.RejectInvalidChars(false)` restores replacement — as `&#xFFFD;` under
+  `EscapeNonASCII`/US-ASCII output and raw U+FFFD otherwise; reference-less contexts always use raw U+FFFD.
+  Malformed numeric, named, and parameter-entity reference markup always fails with `ErrWriterInvalidName`; it
+  is never repaired. Full DTD Names remain distinct from DOM QNames, entity and notation declarations require
+  NCNames, and enumeration members are checked as distinct Nmtokens or Names before output. A character map is
+  exempt because its replacement string is emitted verbatim (Serialization 3.1 §7). Parsed-document output and
+  serialization goldens remain byte-identical; the divergence only affects malformed in-memory trees.

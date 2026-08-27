@@ -141,11 +141,28 @@ catching undeclared prefixes in function calls, type names, etc. before
 evaluation. The same validation runs automatically inside `Evaluate` /
 `EvaluateReuse`.
 
-`Compile()` first tries a direct fast path for simple path-like expressions on the lexer token stream, then falls back to parse+lower through the VM backend on the same lexer if the fast path does not apply. It does not retain the parsed AST on the `Expression`; `AST()` reparses from `source` on demand. `CompileExpr()` keeps the caller-provided AST and lowers it without mutating the input tree.
+`Compile()` first tries a direct fast path for simple path-like expressions on the lexer token stream, then
+falls back to parse+lower through the VM backend on the same lexer if the fast path does not apply. It does
+not retain the parsed AST on the `Expression`; `AST()` reparses from `source` on demand. `CompileExpr()` keeps
+the caller-provided AST and lowers it without mutating the input tree.
 
 `StreamInfo()` returns a snapshot of precomputed streamability properties (axis usage bitmask, downward steps, function names, etc.). Streamability query helpers live in `internal/xpathstream`, not on the xpath3 package.
 
-`StaticReferences(namespaces)` walks the expression's AST (reparsing from `source` when no AST is retained) and reports its FREE variable references (those not bound by an enclosing for/let/quantified binding or inline-function parameter), its type-name references (cast/castable/instance of/treat as, kind-test type annotations, nested array/map/function item types, and path-step node tests), and its function-call callees (FunctionCall including constructor calls and arrow targets, plus NamedFunctionRef). Every type and function name is RESOLVED to a namespace URI using the supplied in-scope `namespaces` (the same bindings `Validate` takes) plus xpath3's predeclared prefixes — handling prefixed, unprefixed (type → default element namespace; function → fn), and braced-URI `Q{uri}local` forms uniformly — and reports each function reference's static ARITY, so a caller does a pure URI+existence check with no name-form handling of its own. It is side-effect free and intended for schema-compile-time analysis (not the eval hot path); the XSD 1.1 conditional-type-assignment compiler uses it to reject an `xs:alternative` @test that references a variable, an unknown/non-built-in type (XPST0008, via `IsKnownXSDType`), or an unknown, wrong-arity, or non-standard (extension) standard-library function / built-in constructor (XPST0017, via `StandardFunctionAcceptsArity`), or a schema-element()/schema-attribute() node test (which references a global declaration outside the CTA static context), which the CTA static context disallows.
+`StaticReferences(namespaces)` walks the expression's AST (reparsing from `source` when no AST is retained)
+and reports its FREE variable references (those not bound by an enclosing for/let/quantified binding or
+inline-function parameter), its type-name references (cast/castable/instance of/treat as, kind-test type
+annotations, nested array/map/function item types, and path-step node tests), and its function-call callees
+(FunctionCall including constructor calls and arrow targets, plus NamedFunctionRef). Every type and function
+name is RESOLVED to a namespace URI using the supplied in-scope `namespaces` (the same bindings `Validate`
+takes) plus xpath3's predeclared prefixes — handling prefixed, unprefixed (type → default element namespace;
+function → fn), and braced-URI `Q{uri}local` forms uniformly — and reports each function reference's static
+ARITY, so a caller does a pure URI+existence check with no name-form handling of its own. It is side-effect
+free and intended for schema-compile-time analysis (not the eval hot path); the XSD 1.1
+conditional-type-assignment compiler uses it to reject an `xs:alternative` @test that references a variable,
+an unknown/non-built-in type (XPST0008, via `IsKnownXSDType`), or an unknown, wrong-arity, or non-standard
+(extension) standard-library function / built-in constructor (XPST0017, via `StandardFunctionAcceptsArity`),
+or a schema-element()/schema-attribute() node test (which references a global declaration outside the CTA
+static context), which the CTA static context disallows.
 
 `DumpVM()` writes a textual disassembly of compiled VM instructions. Use it for debugging or tooling around lowered expressions.
 
@@ -235,7 +252,10 @@ Pass bindings as plain maps: variables via `Evaluator.Variables(map[string]Seque
 `EvalBorrowing` is set. Supply lazy lookups with `Evaluator.VariableResolver` /
 `Evaluator.FunctionResolver`.
 
-**Resource loading is opt-in.** Without an explicit `URIResolver` or `HTTPClient` (`Evaluator.URIResolver` / `Evaluator.HTTPClient`), `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error with `FODC0002` / `FOUT1170` for every URI — there is no implicit `http.DefaultClient` and no implicit `os.ReadFile`. Built-in helpers in `internal/unparsedtext`:
+**Resource loading is opt-in.** Without an explicit `URIResolver` or `HTTPClient` (`Evaluator.URIResolver` /
+`Evaluator.HTTPClient`), `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error
+with `FODC0002` / `FOUT1170` for every URI — there is no implicit `http.DefaultClient` and no implicit
+`os.ReadFile`. Built-in helpers in `internal/unparsedtext`:
 - `FileURIResolver{BaseDir}` — file resolver confined to `BaseDir` (refuses `..` traversal and absolute paths outside it)
 - `NewFileResolver(fs.FS)` — file resolver backed by `io/fs`
 - `NewHTTPResolver(*http.Client)` — http(s) resolver; caller owns transport, timeouts, redirect policy
@@ -276,7 +296,9 @@ storage may be overwritten. Extract everything you need (e.g. via
 across calls with `Result.Copy()`, which returns a deep copy backed by
 independent storage. An `EvalState` is not safe for concurrent use.
 
-`Compile()` uses a direct compile fast path where possible, otherwise lowers parsed AST to VM program using an ownership-taking lowering path that can reuse parsed slices. `CompileExpr()` uses a non-mutating lowering path, with raw AST fallback for unsupported custom Expr implementations.
+`Compile()` uses a direct compile fast path where possible, otherwise lowers parsed AST to VM program using an
+ownership-taking lowering path that can reuse parsed slices. `CompileExpr()` uses a non-mutating lowering
+path, with raw AST fallback for unsupported custom Expr implementations.
 
 ## Errors
 
@@ -320,6 +342,9 @@ func (e *XPathError) Error() string
 func (e *XPathError) Is(target error) bool
 ```
 
-Standard codes: `XPTY0004` (type error), `FOER0000` (general), `FOTY0012` (typed value undefined — fn:data on element-only complex content), `FOTY0013` (atomization context), `FOAR0001` (division by zero), `FOAR0002` (numeric overflow/underflow, e.g. round precision past the non-terminating cap), `FOAY0001` (array index out of bounds), `FOMX0001` (map duplicate key reject).
+Standard codes: `XPTY0004` (type error), `FOER0000` (general), `FOTY0012` (typed value undefined — fn:data on
+element-only complex content), `FOTY0013` (atomization context), `FOAR0001` (division by zero), `FOAR0002`
+(numeric overflow/underflow, e.g. round precision past the non-terminating cap), `FOAY0001` (array index out
+of bounds), `FOMX0001` (map duplicate key reject).
 
 `try-catch` matches `*XPathError` by code. Non-`*XPathError` errors propagate through unchanged.
