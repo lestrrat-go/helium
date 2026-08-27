@@ -8,24 +8,95 @@ All error formatting matches libxml2 output for golden test compatibility.
 
 - **`ErrorLevel`** — `ErrorLevelNone`, `ErrorLevelWarning`, `ErrorLevelError`, `ErrorLevelFatal`
 - **`ErrorDomain`** — `ErrorDomainParser`, `ErrorDomainNamespace`
-- **`ErrorLeveler`** interface — optional interface for errors to report their `ErrorLevel()`; default is `ErrorLevelWarning`. `ErrorCollector`'s level filter (`errorAccumulator.Handle`) reads it via `errors.As`, so a wrapped leveler in the error chain is honored, not only a top-level one
+- **`ErrorLeveler`** interface — optional interface for errors to report their `ErrorLevel()`; default is
+  `ErrorLevelWarning`. `ErrorCollector`'s level filter (`errorAccumulator.Handle`) reads it via `errors.As`,
+  so a wrapped leveler in the error chain is honored, not only a top-level one
 - **`NewLeveledError(msg, level)`** — factory creating error implementing `ErrorLeveler`
-- **`ErrExternalDTDTooLarge`** (`errors.go`) — sentinel returned from the `ExternalSubset` bounded read when a loaded external DTD subset exceeds the byte cap (`MaxExternalDTDBytes` or default `MaxExternalDTDSize`, 10 MiB). Enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`, and checked before any read error; match with `errors.Is`
-- **`ErrInvalidOperation`** (`errors.go`) — sentinel for a DOM mutation the tree state forbids; wrapped via `%w` into a descriptive message, matched with `errors.Is`. Returned by: `Document.SetDocumentElement` when `root` is not an element; and `node.DeclareNamespace(prefix, uri)` / `node.AddNamespaceDecl(ns)` on an ELEMENT node when `prefix` is in use by the element's own name (`n.ns`) or a NON-empty-prefix attribute at a URI DIFFERENT from `uri` — a genuine prefix conflict, left unchanged (the conflict check is element-scoped: a non-element node never serializes `n.ns`, so it never returns this error; this holds whether or not an nsDefs entry already exists; an empty-prefix attribute is not counted, since it never uses the default namespace and the serializer skips it; a same-URI use is not a conflict, a same-URI redeclare is a no-op, and an unused-prefix redeclare collapses the slot, all returning nil; on that collapse `DeclareNamespace` installs a fresh `Namespace` while `AddNamespaceDecl` installs the caller's object, both leaving the replaced object unmodified; `AddNamespaceDecl` applies the same rule and returns the same `%w`-wrapped `ErrInvalidOperation` on a conflict — a nil ns returns `ErrNilNode` instead). These methods do not reconcile a conflict introduced afterward by `SetActiveNamespace`/`SetNamespace`; keeping one `xmlns:prefix` per element across all mutators is a serializer-level concern.
-- **`ErrNodeContentTooLarge`** (`errors.go`) — sentinel returned when a single indivisible content run — a CDATA section (`parseCDataContent`), comment body (`parseComment`), processing-instruction body (`parsePI`), character-data run (`parseCharDataContent`), or attribute value (`parseAttributeValueInternal`) — exceeds the byte cap (`MaxNodeContentSize` or default `DefaultMaxNodeContentSize`, 10 MiB). The cap fires DURING accumulation (the loop scanners check `buf.Len()` each iteration; the char-data fast/fallback scanners pass a `maxBytes` budget into `ScanCharDataSlice`/`ScanCharDataInto`; the attribute-value fast path bounds `ScanSimpleAttrValue` with the same budget and re-checks the exact count, while the slow path routes every write through cap-enforcing `writeAttr*` helpers and decodes entity replacements through a cap-checking `attrEntitySink`) so the parse fails before the whole run is buffered. The SAME cap also bounds a single contiguous run of XML whitespace: `skipBlankRun` (`parser_whitespace.go`) scans blanks in 4 KiB chunks and trips this error once the run exceeds `blankRunLimit()` (= the resolved `maxNodeContent`), so an unbounded whitespace run cannot grow the cursor buffer. This covers the prolog/epilogue/inter-root blank skips (`skipBlanks`/`skipBlankBytes`) AND the blank skips inside the external DTD subset declaration loop and INCLUDE conditional sections (`parser_dtd_subset.go`, which call `skipBlankRun` directly to preserve `%pe;` expansion). `NewParser` applies the default (secure by default); `MaxNodeContentSize(-1)` resolves `maxNodeContent` to `0` and disables BOTH the node-content and the blank-run cap. The streaming SAX char-data path (`CharBufferSize>0`) is exempt — it is already chunked. Match with `errors.Is`
-- **`ErrInvalidOutputVersion`** (`errors.go`) — writer sentinel raised (via `isValidXMLVersion`) when the effective output XML version is not a valid `VersionNum` `'1.' [0-9]+`. A non-empty `OutputVersion` override is validated at the `WriteTo` entry, ahead of the node-type branch, so BOTH a Document and a bare element/fragment fail on a malformed override; a Document's own version (`Document.SetVersion`, used when there is no override) is validated at the `writeDoc` entry. Both checks run BEFORE any output byte (ahead of the transcoding-encoder setup, whose deferred flush would emit a BOM), so a value carrying a quote (markup injection into the version pseudo-attribute) or a malformed/non-`1.x` value emits nothing. Match with `errors.Is`. See `packages.md` for the full serialization-parameter description
-- **`ErrElementDeclNotFound`** (`errors.go`) — sentinel returned by `Document.IsMixedElement` when neither the internal nor the external subset has an element declaration for the given name (or the document has no internal subset). Match with `errors.Is`
-- **`ErrUnsupportedOutputEncoding`** (`errors.go`) — writer sentinel; the `writeDoc`-entry label-well-formedness case rejects a non-empty effective encoding that is not a valid `EncName` (`xmlchar.IsValidEncName`) before any output byte (ahead of the transcoding encoder, so no BOM leaks; guarding the encoding pseudo-attribute against markup injection), layered before the separate US-ASCII/encoder-table transcoding rejects. Full description (all cases) in `packages.md`. Match with `errors.Is`
-- **Writer structural-serialization sentinels** (`errors.go`) — `ErrWriterReservedElementName`, `ErrWriterReservedAttributeName`, `ErrWriterReservedNamespacePrefix`, `ErrWriterInvalidElementName`, `ErrWriterInvalidAttributeName`, `ErrWriterInvalidNamespacePrefix`, `ErrWriterUnboundNamespacePrefix`, `ErrWriterInvalidName`, `ErrWriterInvalidComment`, `ErrWriterInvalidPITarget`, `ErrWriterInvalidPIContent`, `ErrWriterInvalidDTDNode`. `ErrWriterInvalidName` covers malformed numeric-reference markup, EntityValue named/parameter references, DTD enumeration tokens, full DTD Names, and the NCName-only entity and notation declaration names. Each flags a DOM node that cannot be serialized into well-formed XML (`writer.go` raw-name and reference checks, `writer_dtd.go` DTD emission, and the comment/PI guards). `ErrWriterUnboundNamespacePrefix` covers an element or attribute QName whose non-empty prefix resolves to an empty namespace URI (`prefix:local` with no `xmlns:prefix` is not reparseable); the reserved `xml` prefix is exempt — it is implicitly bound to the XML namespace, so it reparses without a declaration. The original human-readable message is preserved and the sentinel appended via `fmt.Errorf("... : %w", …)`, so a caller can distinguish the failure class with `errors.Is`. `WriteTo` runs these checks in an `io.Discard` pass before it calls the supplied writer, so a validation error leaves that writer untouched; a valid second pass keeps I/O errors from that writer unchanged. Full list in `packages.md`
-- **`ErrUnsupportedNormalizationForm`** (`errors.go`) — writer sentinel returned by `Writer.WriteTo` when `Writer.Normalization` was given a value outside `{"", "none", "NFC", "NFD", "NFKC", "NFKD"}`. `Normalization` stores the raw form and defers the check to `WriteTo` (both the Document and bare-element paths), which fails closed before any output byte; an out-of-range form never silently disables normalization. Match with `errors.Is`
+- **`ErrExternalDTDTooLarge`** (`errors.go`) — sentinel returned from the `ExternalSubset` bounded read when a
+  loaded external DTD subset exceeds the byte cap (`MaxExternalDTDBytes` or default `MaxExternalDTDSize`, 10
+  MiB). Enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`, and checked before any
+  read error; match with `errors.Is`
+- **`ErrInvalidOperation`** (`errors.go`) — sentinel for a DOM mutation the tree state forbids; wrapped via
+  `%w` into a descriptive message, matched with `errors.Is`. Returned by: `Document.SetDocumentElement` when
+  `root` is not an element; and `node.DeclareNamespace(prefix, uri)` / `node.AddNamespaceDecl(ns)` on an
+  ELEMENT node when `prefix` is in use by the element's own name (`n.ns`) or a NON-empty-prefix attribute at a
+  URI DIFFERENT from `uri` — a genuine prefix conflict, left unchanged (the conflict check is element-scoped:
+  a non-element node never serializes `n.ns`, so it never returns this error; this holds whether or not an
+  nsDefs entry already exists; an empty-prefix attribute is not counted, since it never uses the default
+  namespace and the serializer skips it; a same-URI use is not a conflict, a same-URI redeclare is a no-op,
+  and an unused-prefix redeclare collapses the slot, all returning nil; on that collapse `DeclareNamespace`
+  installs a fresh `Namespace` while `AddNamespaceDecl` installs the caller's object, both leaving the
+  replaced object unmodified; `AddNamespaceDecl` applies the same rule and returns the same `%w`-wrapped
+  `ErrInvalidOperation` on a conflict — a nil ns returns `ErrNilNode` instead). These methods do not reconcile
+  a conflict introduced afterward by `SetActiveNamespace`/`SetNamespace`; keeping one `xmlns:prefix` per
+  element across all mutators is a serializer-level concern.
+- **`ErrNodeContentTooLarge`** (`errors.go`) — sentinel returned when a single indivisible content run — a
+  CDATA section (`parseCDataContent`), comment body (`parseComment`), processing-instruction body (`parsePI`),
+  character-data run (`parseCharDataContent`), or attribute value (`parseAttributeValueInternal`) — exceeds
+  the byte cap (`MaxNodeContentSize` or default `DefaultMaxNodeContentSize`, 10 MiB). The cap fires DURING
+  accumulation (the loop scanners check `buf.Len()` each iteration; the char-data fast/fallback scanners pass
+  a `maxBytes` budget into `ScanCharDataSlice`/`ScanCharDataInto`; the attribute-value fast path bounds
+  `ScanSimpleAttrValue` with the same budget and re-checks the exact count, while the slow path routes every
+  write through cap-enforcing `writeAttr*` helpers and decodes entity replacements through a cap-checking
+  `attrEntitySink`) so the parse fails before the whole run is buffered. The SAME cap also bounds a single
+  contiguous run of XML whitespace: `skipBlankRun` (`parser_whitespace.go`) scans blanks in 4 KiB chunks and
+  trips this error once the run exceeds `blankRunLimit()` (= the resolved `maxNodeContent`), so an unbounded
+  whitespace run cannot grow the cursor buffer. This covers the prolog/epilogue/inter-root blank skips
+  (`skipBlanks`/`skipBlankBytes`) AND the blank skips inside the external DTD subset declaration loop and
+  INCLUDE conditional sections (`parser_dtd_subset.go`, which call `skipBlankRun` directly to preserve `%pe;`
+  expansion). `NewParser` applies the default (secure by default); `MaxNodeContentSize(-1)` resolves
+  `maxNodeContent` to `0` and disables BOTH the node-content and the blank-run cap. The streaming SAX
+  char-data path (`CharBufferSize>0`) is exempt — it is already chunked. Match with `errors.Is`
+- **`ErrInvalidOutputVersion`** (`errors.go`) — writer sentinel raised (via `isValidXMLVersion`) when the
+  effective output XML version is not a valid `VersionNum` `'1.' [0-9]+`. A non-empty `OutputVersion` override
+  is validated at the `WriteTo` entry, ahead of the node-type branch, so BOTH a Document and a bare
+  element/fragment fail on a malformed override; a Document's own version (`Document.SetVersion`, used when
+  there is no override) is validated at the `writeDoc` entry. Both checks run BEFORE any output byte (ahead of
+  the transcoding-encoder setup, whose deferred flush would emit a BOM), so a value carrying a quote (markup
+  injection into the version pseudo-attribute) or a malformed/non-`1.x` value emits nothing. Match with
+  `errors.Is`. See `packages.md` for the full serialization-parameter description
+- **`ErrElementDeclNotFound`** (`errors.go`) — sentinel returned by `Document.IsMixedElement` when neither the
+  internal nor the external subset has an element declaration for the given name (or the document has no
+  internal subset). Match with `errors.Is`
+- **`ErrUnsupportedOutputEncoding`** (`errors.go`) — writer sentinel; the `writeDoc`-entry
+  label-well-formedness case rejects a non-empty effective encoding that is not a valid `EncName`
+  (`xmlchar.IsValidEncName`) before any output byte (ahead of the transcoding encoder, so no BOM leaks;
+  guarding the encoding pseudo-attribute against markup injection), layered before the separate
+  US-ASCII/encoder-table transcoding rejects. Full description (all cases) in `packages.md`. Match with
+  `errors.Is`
+- **Writer structural-serialization sentinels** (`errors.go`) — `ErrWriterReservedElementName`,
+  `ErrWriterReservedAttributeName`, `ErrWriterReservedNamespacePrefix`, `ErrWriterInvalidElementName`,
+  `ErrWriterInvalidAttributeName`, `ErrWriterInvalidNamespacePrefix`, `ErrWriterUnboundNamespacePrefix`,
+  `ErrWriterInvalidName`, `ErrWriterInvalidComment`, `ErrWriterInvalidPITarget`, `ErrWriterInvalidPIContent`,
+  `ErrWriterInvalidDTDNode`. `ErrWriterInvalidName` covers malformed numeric-reference markup, EntityValue
+  named/parameter references, DTD enumeration tokens, full DTD Names, and the NCName-only entity and notation
+  declaration names. Each flags a DOM node that cannot be serialized into well-formed XML (`writer.go`
+  raw-name and reference checks, `writer_dtd.go` DTD emission, and the comment/PI guards).
+  `ErrWriterUnboundNamespacePrefix` covers an element or attribute QName whose non-empty prefix resolves to an
+  empty namespace URI (`prefix:local` with no `xmlns:prefix` is not reparseable); the reserved `xml` prefix is
+  exempt — it is implicitly bound to the XML namespace, so it reparses without a declaration. The original
+  human-readable message is preserved and the sentinel appended via `fmt.Errorf("... : %w", …)`, so a caller
+  can distinguish the failure class with `errors.Is`. `WriteTo` runs these checks in an `io.Discard` pass
+  before it calls the supplied writer, so a validation error leaves that writer untouched; a valid second pass
+  keeps I/O errors from that writer unchanged. Full list in `packages.md`
+- **`ErrUnsupportedNormalizationForm`** (`errors.go`) — writer sentinel returned by `Writer.WriteTo` when
+  `Writer.Normalization` was given a value outside `{"", "none", "NFC", "NFD", "NFKC", "NFKD"}`.
+  `Normalization` stores the raw form and defers the check to `WriteTo` (both the Document and bare-element
+  paths), which fails closed before any output byte; an out-of-range form never silently disables
+  normalization. Match with `errors.Is`
 
 ### DOM operation sentinels (root package, `errors.go`)
 
 `ErrNilNode`, `ErrInvalidOperation`, and `ErrCyclicNode` back the guarded tree API and are all matchable via `errors.Is`:
 
-- **`ErrNilNode`** — a nil or typed-nil node (including Go's interface nil trap, e.g. the typed-nil `*Element` `Document.DocumentElement()` returns for a rootless doc) reached `AddChild`/`AddSibling`/`Replace`/`Walk`/`CopyNode`/`ParseInNodeContext`/`SetDocumentElement`.
+- **`ErrNilNode`** — a nil or typed-nil node (including Go's interface nil trap, e.g. the typed-nil `*Element`
+  `Document.DocumentElement()` returns for a rootless doc) reached
+  `AddChild`/`AddSibling`/`Replace`/`Walk`/`CopyNode`/`ParseInNodeContext`/`SetDocumentElement`.
 - **`ErrInvalidOperation`** — an unsupported structural op: an empty `Replace()` (matching `Document.Replace`), a non-attribute sibling/replacement of a property attribute, or duplicate replacement operands.
-- **`ErrCyclicNode`** — a `wouldCreateCycle` rejection in `AddChild`/`AddSibling`/`Replace` (inserting a node into itself or a descendant, or replacing a node with an ancestor), plus the identity-checked self-add in `ProcessingInstruction.AddChild` (`pi.AddChild(pi)`); a PI given any other rejected operand — including an ancestor — wraps `ErrInvalidOperation` like the other strict leaves.
+- **`ErrCyclicNode`** — a `wouldCreateCycle` rejection in `AddChild`/`AddSibling`/`Replace` (inserting a node
+  into itself or a descendant, or replacing a node with an ancestor), plus the identity-checked self-add in
+  `ProcessingInstruction.AddChild` (`pi.AddChild(pi)`); a PI given any other rejected operand — including an
+  ancestor — wraps `ErrInvalidOperation` like the other strict leaves.
 
 The `ErrInvalidOperation`/`ErrCyclicNode` mutation sites wrap a descriptive message via `%w`, so the human text is preserved while `errors.Is` still matches.
 
@@ -64,7 +135,21 @@ Implementations:
 - **`NilErrorHandler`** — discards all errors
 - **`ErrorCollector`** — accumulates into slice via `Sink[error]`, filterable by level
 
-**Ownership & lifecycle**: a handler is retained by reference on the component it is set on (root `Parser`; `xinclude` `Processor`; `xsd`/`relaxng`/`schematron` compilers and validators; the `catalog` `Loader`) and shared across every operation run on that configured value. `xslt3` has no `ErrorHandler` of its own — it drives the `xsd` compiler's handler internally. These are immutable-value builders, so setting a handler returns a new value and leaves the original unchanged; there is no in-place replacement. A nil handler is normalized to `NilErrorHandler` (discard) at use time — never a panic. Which errors reach the handler is component-specific: the root `Parser` consults it ONLY during DTD validation (`ValidateDTD`) — well-formedness/namespace errors surface solely as `Parse`'s returned error, not through the handler; the `xinclude` `Processor` delivers non-fatal XInclude warnings (`ErrorLevelWarning`) during `Process`/`ProcessTree`. **Close ownership differs by component.** When a handler also implements `io.Closer`, the root `Parser` (after each DTD-validating `Parse`) and the `xsd`/`relaxng`/`schematron` compilers and validators (after each `Compile`/`Validate`) close it once by calling `closeHandler` at the end of that operation, so a `Closer` handler should not be shared across those operations. The `catalog` `Loader` and the `xinclude` `Processor` do NOT close the handler — they retain it (the `Loader` for lazy delegate/`nextCatalog` loads) and the caller owns its lifecycle, closing it once the resulting value is no longer in use.
+**Ownership & lifecycle**: a handler is retained by reference on the component it is set on (root `Parser`;
+`xinclude` `Processor`; `xsd`/`relaxng`/`schematron` compilers and validators; the `catalog` `Loader`) and
+shared across every operation run on that configured value. `xslt3` has no `ErrorHandler` of its own — it
+drives the `xsd` compiler's handler internally. These are immutable-value builders, so setting a handler
+returns a new value and leaves the original unchanged; there is no in-place replacement. A nil handler is
+normalized to `NilErrorHandler` (discard) at use time — never a panic. Which errors reach the handler is
+component-specific: the root `Parser` consults it ONLY during DTD validation (`ValidateDTD`) —
+well-formedness/namespace errors surface solely as `Parse`'s returned error, not through the handler; the
+`xinclude` `Processor` delivers non-fatal XInclude warnings (`ErrorLevelWarning`) during
+`Process`/`ProcessTree`. **Close ownership differs by component.** When a handler also implements `io.Closer`,
+the root `Parser` (after each DTD-validating `Parse`) and the `xsd`/`relaxng`/`schematron` compilers and
+validators (after each `Compile`/`Validate`) close it once by calling `closeHandler` at the end of that
+operation, so a `Closer` handler should not be shared across those operations. The `catalog` `Loader` and the
+`xinclude` `Processor` do NOT close the handler — they retain it (the `Loader` for lazy delegate/`nextCatalog`
+loads) and the caller owns its lifecycle, closing it once the resulting value is no longer in use.
 
 ## Package-Specific Error Formatting
 
@@ -112,12 +197,42 @@ Context extraction matches libxml2's `xmlParserInputGetWindow`: skip-eol, walk b
 
 #### HTML sentinel errors (`html/sax.go`)
 
-- **`ErrContentSizeExceeded`** (exported) — returned from `parse()` when an over-cap construct blows a hard cap. Wrapped with a descriptive prefix via `fmt.Errorf("... : %w", ErrContentSizeExceeded)`; callers match with `errors.Is`. The error reaches `parse()`'s caller via one of two surfacing paths, both checked at the top of (and after) the main loop: a sub-parser sets `parser.fatalErr` for an in-band content/structural overrun, OR — on the streaming `ParseReader`/push path — the over-cap deferred-encoding reader sets a sticky `capErr` whose bytes propagate up the cursor as `p.cur.Err()`. Returned in these cases:
-  - A comment, bogus comment, or PI (`parseComment`/`parseBogusComment`/`parsePI`) that exceeds `MaxContentSize` before reaching its terminator. These map to a single indivisible SAX event / DOM node, so they cannot be chunked — a hard cap, not a soft chunk size. (Sets `parser.fatalErr`.)
-  - An over-cap UNRESOLVED named-reference literal in normal data-state text OR the RCDATA path (`parseCharRefBounded`/`parseSaturatedCharRefLiteral`): ANY `"&"`-prefixed run that does not resolve to a known entity or legacy prefix, once the literal bytes it would emit (`"&"` + name + optional `";"`) exceed the cap — whether short, semicolon-terminated, or unbounded. Also an over-cap SATURATED ambiguous legacy-prefix run (`&amp` + a tail overflowing the 32-byte lookahead): it is consumed into a cap-bounded spool and hard-fails (emitting nothing) if the run exceeds the cap before its end is reached, because the resolve-vs-literal decision can only be made at the run's end. A SHORT resolvable reference whose run fits the cap is exempt: it is resolved to its value and never charged. (Sets `parser.fatalErr`.)
-  - An over-cap leading-whitespace deferral (`deferPendingWS`) or an over-cap attribute value (`parseQuotedAttrValue`/`parseUnquotedAttrValue`, enforced per byte and covering `&`-led entity and `&#`-led numeric runs) before its significance/terminator is known. (Sets `parser.fatalErr`.)
-  - An over-cap indivisible STRUCTURAL token scan — a tag name (`parseName`), end-tag name, attribute name, PUBLIC/SYSTEM DOCTYPE literal (`parseQuotedString`), or intra-tag whitespace run (`skipWhitespace`). Bounded by the `scanTokenLimit` STRUCTURAL cap, NOT `MaxContentSize`: it is FLOORED at the 16 MiB default (so a tiny `MaxContentSize` never rejects ordinary names like `script`) and grows only when `MaxContentSize` is raised above the floor. `parseStartTag`/`parseEndTag`/`parseDoctype` check `fatalErr` after EACH scanner (skipWhitespace/parseName/parseQuotedString) so an over-cap run on a streaming reader stalled at the boundary surfaces the fatal promptly — returning before any text-fallback drain — instead of issuing another blocking read. (Sets `parser.fatalErr`.)
-  - An UNDECLARED-charset stream (`ParseReader`/push only) whose bytes stay valid UTF-8 past `MaxContentSize` (16 MiB default) without ever revealing their encoding (`html/encoding_reader.go` `deferredLatin1Reader.decide`): the encoding decision cannot be made within the memory bound — a later non-UTF-8 byte would flip the whole document to Windows-1252, EOF would keep it UTF-8 — so the reader fails closed instead of committing to one interpretation. This is NOT routed through `parser.fatalErr`; the reader stores a sticky `capErr` (`fmt.Errorf("... %w", ErrContentSizeExceeded)`) returned from its `Read`, which surfaces as `p.cur.Err()`. A declared-charset stream (incl. declared Latin-1, which `Parse([]byte)` and `ParseReader` decode identically) or one that settles below the cap is unaffected.
+- **`ErrContentSizeExceeded`** (exported) — returned from `parse()` when an over-cap construct blows a hard
+  cap. Wrapped with a descriptive prefix via `fmt.Errorf("... : %w", ErrContentSizeExceeded)`; callers match
+  with `errors.Is`. The error reaches `parse()`'s caller via one of two surfacing paths, both checked at the
+  top of (and after) the main loop: a sub-parser sets `parser.fatalErr` for an in-band content/structural
+  overrun, OR — on the streaming `ParseReader`/push path — the over-cap deferred-encoding reader sets a sticky
+  `capErr` whose bytes propagate up the cursor as `p.cur.Err()`. Returned in these cases:
+  - A comment, bogus comment, or PI (`parseComment`/`parseBogusComment`/`parsePI`) that exceeds
+    `MaxContentSize` before reaching its terminator. These map to a single indivisible SAX event / DOM node,
+    so they cannot be chunked — a hard cap, not a soft chunk size. (Sets `parser.fatalErr`.)
+  - An over-cap UNRESOLVED named-reference literal in normal data-state text OR the RCDATA path
+    (`parseCharRefBounded`/`parseSaturatedCharRefLiteral`): ANY `"&"`-prefixed run that does not resolve to a
+    known entity or legacy prefix, once the literal bytes it would emit (`"&"` + name + optional `";"`) exceed
+    the cap — whether short, semicolon-terminated, or unbounded. Also an over-cap SATURATED ambiguous
+    legacy-prefix run (`&amp` + a tail overflowing the 32-byte lookahead): it is consumed into a cap-bounded
+    spool and hard-fails (emitting nothing) if the run exceeds the cap before its end is reached, because the
+    resolve-vs-literal decision can only be made at the run's end. A SHORT resolvable reference whose run fits
+    the cap is exempt: it is resolved to its value and never charged. (Sets `parser.fatalErr`.)
+  - An over-cap leading-whitespace deferral (`deferPendingWS`) or an over-cap attribute value
+    (`parseQuotedAttrValue`/`parseUnquotedAttrValue`, enforced per byte and covering `&`-led entity and
+    `&#`-led numeric runs) before its significance/terminator is known. (Sets `parser.fatalErr`.)
+  - An over-cap indivisible STRUCTURAL token scan — a tag name (`parseName`), end-tag name, attribute name,
+    PUBLIC/SYSTEM DOCTYPE literal (`parseQuotedString`), or intra-tag whitespace run (`skipWhitespace`).
+    Bounded by the `scanTokenLimit` STRUCTURAL cap, NOT `MaxContentSize`: it is FLOORED at the 16 MiB default
+    (so a tiny `MaxContentSize` never rejects ordinary names like `script`) and grows only when
+    `MaxContentSize` is raised above the floor. `parseStartTag`/`parseEndTag`/`parseDoctype` check `fatalErr`
+    after EACH scanner (skipWhitespace/parseName/parseQuotedString) so an over-cap run on a streaming reader
+    stalled at the boundary surfaces the fatal promptly — returning before any text-fallback drain — instead
+    of issuing another blocking read. (Sets `parser.fatalErr`.)
+  - An UNDECLARED-charset stream (`ParseReader`/push only) whose bytes stay valid UTF-8 past `MaxContentSize`
+    (16 MiB default) without ever revealing their encoding (`html/encoding_reader.go`
+    `deferredLatin1Reader.decide`): the encoding decision cannot be made within the memory bound — a later
+    non-UTF-8 byte would flip the whole document to Windows-1252, EOF would keep it UTF-8 — so the reader
+    fails closed instead of committing to one interpretation. This is NOT routed through `parser.fatalErr`;
+    the reader stores a sticky `capErr` (`fmt.Errorf("... %w", ErrContentSizeExceeded)`) returned from its
+    `Read`, which surfaces as `p.cur.Err()`. A declared-charset stream (incl. declared Latin-1, which
+    `Parse([]byte)` and `ParseReader` decode identically) or one that settles below the cap is unaffected.
 - **`ErrHandlerUnspecified`** (exported) — returned by a `SAXCallbacks` method whose handler is unset (see SAX-callback error routing below; filtered by `handleSAXErr`, never fatal).
 
 #### HTML SAX-callback error routing (`html/parser.go`)
@@ -169,34 +284,114 @@ matches any joined sentinel (see `dynamicErrorCause`).
 
 ### XML Digital Signatures (`xmldsig1/errors.go`)
 
-Per-reference failures use parallel wrapper types so sign and verify report the offending Reference symmetrically. Both hold `Reference int` (0-based index), `URI string`, `Err error`, and `Unwrap()` to the cause so sentinels (`ErrReferenceNotFound`, `ErrUnsupportedTransform`, `ErrDigestMismatch`, …) stay `errors.Is`/`errors.As`-reachable through the wrapper.
+Per-reference failures use parallel wrapper types so sign and verify report the offending Reference
+symmetrically. Both hold `Reference int` (0-based index), `URI string`, `Err error`, and `Unwrap()` to the
+cause so sentinels (`ErrReferenceNotFound`, `ErrUnsupportedTransform`, `ErrDigestMismatch`, …) stay
+`errors.Is`/`errors.As`-reachable through the wrapper.
 
-- `ReferenceError` (signing): adds `Op string` (`"sign"`). Format: `xmldsig1: sign reference N ("URI") failed: <cause>`. Wrapped both in the `processReference` loops of `signEnveloped`/`signEnveloping`/`signDetached` and in the pre-mutation `preflightSignerTransforms` transform-pipeline validation (`transforms.go`), so a rejected pipeline still names its Reference.
+- `ReferenceError` (signing): adds `Op string` (`"sign"`). Format: `xmldsig1: sign reference N ("URI") failed:
+  <cause>`. Wrapped both in the `processReference` loops of `signEnveloped`/`signEnveloping`/`signDetached`
+  and in the pre-mutation `preflightSignerTransforms` transform-pipeline validation (`transforms.go`), so a
+  rejected pipeline still names its Reference.
 - `VerificationError` (verification): `Reference == -1` marks a SignatureValue failure (`xmldsig1: signature value verification failed: <cause>`); otherwise `xmldsig1: reference N ("URI") verification failed: <cause>`.
 
-External-reference resolution sentinels (`errors.go`, `reference_resolver.go`): `ErrReferenceNotFound` is the fail-closed default for an external Reference with no configured `ReferenceResolver`, AND every `FSReferenceResolver` rejection short of the size cap — a scheme URI, a path escaping the root, a leftover fragment, a missing file, and an unparseable external XML resource. `ErrReferenceTooLarge` is returned when an external resource exceeds the resolver's 64 MiB cap. Both wrap via `%w` and are matchable with `errors.Is`. A per-reference external failure still surfaces through `VerificationError` (verify) / `ReferenceError` (sign) with the sentinel reachable via `Unwrap`.
+External-reference resolution sentinels (`errors.go`, `reference_resolver.go`): `ErrReferenceNotFound` is the
+fail-closed default for an external Reference with no configured `ReferenceResolver`, AND every
+`FSReferenceResolver` rejection short of the size cap — a scheme URI, a path escaping the root, a leftover
+fragment, a missing file, and an unparseable external XML resource. `ErrReferenceTooLarge` is returned when an
+external resource exceeds the resolver's 64 MiB cap. Both wrap via `%w` and are matchable with `errors.Is`. A
+per-reference external failure still surfaces through `VerificationError` (verify) / `ReferenceError` (sign)
+with the sentinel reachable via `Unwrap`.
 
-Ordered-transform diagnostics (`transform_pipeline.go` `executeTransformPipeline`) identify the zero-based transform index + algorithm. Static algorithm/parameter/capability failures wrap `ErrUnsupportedTransform` before execution. A first required parse of resolver-supplied octets wraps `ErrReferenceNotFound`; a parse of intermediate transform output wraps `ErrUnsupportedTransform` and names both producer + consumer steps. Invalid Base64 wraps `ErrInvalidSignature`. Context and injected-XSLT errors return unchanged.
+Ordered-transform diagnostics (`transform_pipeline.go` `executeTransformPipeline`) identify the zero-based
+transform index + algorithm. Static algorithm/parameter/capability failures wrap `ErrUnsupportedTransform`
+before execution. A first required parse of resolver-supplied octets wraps `ErrReferenceNotFound`; a parse of
+intermediate transform output wraps `ErrUnsupportedTransform` and names both producer + consumer steps.
+Invalid Base64 wraps `ErrInvalidSignature`. Context and injected-XSLT errors return unchanged.
 
 A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI dereference, transform execution, or key resolution.
 
 ### XML Encryption (`xmlenc1/errors.go`)
 
-`ErrCipherValueBytesExceeded` is returned when an EncryptedData payload exceeds `Decryptor.MaxCipherValueBytes` (default `DefaultMaxCipherValueBytes`, 10 MiB). The parser charges decoded payload bytes before base64 assembly or block decryption, so text or CDATA splitting cannot bypass the limit. Match it with `errors.Is`.
+`ErrCipherValueBytesExceeded` is returned when an EncryptedData payload exceeds
+`Decryptor.MaxCipherValueBytes` (default `DefaultMaxCipherValueBytes`, 10 MiB). The parser charges decoded
+payload bytes before base64 assembly or block decryption, so text or CDATA splitting cannot bypass the limit.
+Match it with `errors.Is`.
 
-`ErrReferenceNotFound` and `ErrAmbiguousReference` are the two reference-resolution sentinels (`reference.go` `resolveSameDocument`), shared by `ds:RetrievalMethod` and `xenc:CipherReference`. `ErrAmbiguousReference` covers a same-document URI matching MORE than one element: resolution collects every match and refuses on a duplicate. Taking the first would let an injected duplicate `Id` choose which key the recipient unwraps or which octets it decrypts (XML Signature Wrapping applied to encryption). `ErrReferenceNotFound` covers a same-document URI matching no element, plus a URI that is not one of the four same-document forms at all — and the two constructs differ there: a non-same-document `ds:RetrievalMethod` URI is refused with NO setting that lifts it (xmlenc-core1 §3.5 mandates only the same-document form, and an external key location steers which key material the recipient trial-decrypts), while a non-same-document `xenc:CipherReference` URI is refused only until the caller sets `Decryptor.CipherReferenceResolver` (§3.3.1 imports xmldsig-core1's model, where §4.4.3.1 makes HTTP dereferencing RECOMMENDED and §4.4.3.2/§4.4.3.3 make the same-document forms MUSTs). `FSReferenceResolver` (`reference_resolver.go`) also wraps `ErrReferenceNotFound` for every URI shape it refuses — a scheme, a fragment, a root escape — and for a resource it cannot open or read. Both sentinels wrap via `%w` and are matched with `errors.Is`. They are raised while the document is READ, so they precede block-algorithm resolution, the AES-CBC opt-in gate, and the `Decryptor.SessionKey` early return: a pre-shared session key does not decrypt past a refused reference. A `ds:RetrievalMethod` whose `Type` this package does not implement is stepped over before any URI is looked at and so reaches neither sentinel; a `Type` of `TypeEncryptedKey` that resolves to a non-`EncryptedKey` element is `ErrMalformedEncrypted`, not a reference error.
+`ErrReferenceNotFound` and `ErrAmbiguousReference` are the two reference-resolution sentinels (`reference.go`
+`resolveSameDocument`), shared by `ds:RetrievalMethod` and `xenc:CipherReference`. `ErrAmbiguousReference`
+covers a same-document URI matching MORE than one element: resolution collects every match and refuses on a
+duplicate. Taking the first would let an injected duplicate `Id` choose which key the recipient unwraps or
+which octets it decrypts (XML Signature Wrapping applied to encryption). `ErrReferenceNotFound` covers a
+same-document URI matching no element, plus a URI that is not one of the four same-document forms at all — and
+the two constructs differ there: a non-same-document `ds:RetrievalMethod` URI is refused with NO setting that
+lifts it (xmlenc-core1 §3.5 mandates only the same-document form, and an external key location steers which
+key material the recipient trial-decrypts), while a non-same-document `xenc:CipherReference` URI is refused
+only until the caller sets `Decryptor.CipherReferenceResolver` (§3.3.1 imports xmldsig-core1's model, where
+§4.4.3.1 makes HTTP dereferencing RECOMMENDED and §4.4.3.2/§4.4.3.3 make the same-document forms MUSTs).
+`FSReferenceResolver` (`reference_resolver.go`) also wraps `ErrReferenceNotFound` for every URI shape it
+refuses — a scheme, a fragment, a root escape — and for a resource it cannot open or read. Both sentinels wrap
+via `%w` and are matched with `errors.Is`. They are raised while the document is READ, so they precede
+block-algorithm resolution, the AES-CBC opt-in gate, and the `Decryptor.SessionKey` early return: a pre-shared
+session key does not decrypt past a refused reference. A `ds:RetrievalMethod` whose `Type` this package does
+not implement is stepped over before any URI is looked at and so reaches neither sentinel; a `Type` of
+`TypeEncryptedKey` that resolves to a non-`EncryptedKey` element is `ErrMalformedEncrypted`, not a reference
+error.
 
-A `xenc:CipherReference` refused for its SHAPE, not for its target, is `ErrMalformedEncrypted`: an absent `@URI` (a present-and-empty one is the valid null URI, not this error), a second `xenc:Transforms`, a transform list over `maxCipherReferenceTransforms`, and a declared `ds:Transform` algorithm other than `NamespaceDSig + "base64"` — that last one wrapping an `*UnsupportedAlgorithmError` whose `Parameter` is `paramCipherReferenceTransform`, so `errors.As` recovers the refused URI. Every algorithm in the list is validated before any is executed. An over-budget resolution is the budget's own sentinel, not a reference error: `ErrCipherValueBytesExceeded` for a payload reference and `ErrEncryptedKeyBytesExceeded` for an `EncryptedKey` one, raised by the `budgetWriter` mid-canonicalization or by charging what a resolver returned.
+A `xenc:CipherReference` refused for its SHAPE, not for its target, is `ErrMalformedEncrypted`: an absent
+`@URI` (a present-and-empty one is the valid null URI, not this error), a second `xenc:Transforms`, a
+transform list over `maxCipherReferenceTransforms`, and a declared `ds:Transform` algorithm other than
+`NamespaceDSig + "base64"` — that last one wrapping an `*UnsupportedAlgorithmError` whose `Parameter` is
+`paramCipherReferenceTransform`, so `errors.As` recovers the refused URI. Every algorithm in the list is
+validated before any is executed. An over-budget resolution is the budget's own sentinel, not a reference
+error: `ErrCipherValueBytesExceeded` for a payload reference and `ErrEncryptedKeyBytesExceeded` for an
+`EncryptedKey` one, raised by the `budgetWriter` mid-canonicalization or by charging what a resolver returned.
 
-`ErrUnsupportedKeyDerivation` is the refusal of an `EncryptedData` that offers its session key ONLY through an `xenc11:DerivedKey` (xmlenc-core1 §3.5.2), which asks the recipient to derive the content key from master key material it already holds. `noCandidateError` (`xmlenc1.go`) is the single wording site: it is reached from the empty-candidate branch of both decrypt terminals, and picks this sentinel over `ErrMissingKey` when `encryptedData.offersDerivedKey` is set. `parseKeyInfoForEncryption` sets that flag for an inline `xenc11:DerivedKey` child and `parseRetrievalMethod` for a `ds:RetrievalMethod` whose `@Type` is `typeDerivedKey`; neither reads the construct any further. The split matters because the two errors ask different things of the caller: `ErrMissingKey` says supply a key, which no caller can act on here, while this names the facility the package lacks. A document ALSO carrying a usable `xenc:EncryptedKey` decrypts under it, and a pre-shared `Decryptor.SessionKey` returns before key resolution runs, so neither reaches the sentinel.
+`ErrUnsupportedKeyDerivation` is the refusal of an `EncryptedData` that offers its session key ONLY through an
+`xenc11:DerivedKey` (xmlenc-core1 §3.5.2), which asks the recipient to derive the content key from master key
+material it already holds. `noCandidateError` (`xmlenc1.go`) is the single wording site: it is reached from
+the empty-candidate branch of both decrypt terminals, and picks this sentinel over `ErrMissingKey` when
+`encryptedData.offersDerivedKey` is set. `parseKeyInfoForEncryption` sets that flag for an inline
+`xenc11:DerivedKey` child and `parseRetrievalMethod` for a `ds:RetrievalMethod` whose `@Type` is
+`typeDerivedKey`; neither reads the construct any further. The split matters because the two errors ask
+different things of the caller: `ErrMissingKey` says supply a key, which no caller can act on here, while this
+names the facility the package lacks. A document ALSO carrying a usable `xenc:EncryptedKey` decrypts under it,
+and a pre-shared `Decryptor.SessionKey` returns before key resolution runs, so neither reaches the sentinel.
 
-`ErrOpaquePayload` is `Decryptor.Decrypt`'s refusal of an `EncryptedData` whose `@Type` declares no XML content — absent, empty, or any URI other than `TypeElement`/`TypeContent`. `decryptElement`'s `@Type` switch raises it through `opaqueTypeError` (`xmlenc1.go`), which has one form for the absent case and one naming the refused URI, both pointing the caller at `Decryptor.DecryptBytes`; that terminal never returns the sentinel, since it does not read `@Type`. The switch sits ahead of block-algorithm resolution, the CBC opt-in gate, and the `Decryptor.SessionKey` early return. It is deliberately NOT `ErrMalformedEncrypted`: such a document is well-formed, and a caller must be able to tell "retry with `DecryptBytes`" from a document to reject outright. `@Type` sits outside the ciphertext and no block algorithm authenticates it, so parsing an absent or unrecognized value as `TypeElement` would let a stripped attribute turn an authenticated opaque octet stream into nodes a caller may graft into its tree (xmlenc-core1 §4.2, §3.1). Match with `errors.Is`.
+`ErrOpaquePayload` is `Decryptor.Decrypt`'s refusal of an `EncryptedData` whose `@Type` declares no XML
+content — absent, empty, or any URI other than `TypeElement`/`TypeContent`. `decryptElement`'s `@Type` switch
+raises it through `opaqueTypeError` (`xmlenc1.go`), which has one form for the absent case and one naming the
+refused URI, both pointing the caller at `Decryptor.DecryptBytes`; that terminal never returns the sentinel,
+since it does not read `@Type`. The switch sits ahead of block-algorithm resolution, the CBC opt-in gate, and
+the `Decryptor.SessionKey` early return. It is deliberately NOT `ErrMalformedEncrypted`: such a document is
+well-formed, and a caller must be able to tell "retry with `DecryptBytes`" from a document to reject outright.
+`@Type` sits outside the ciphertext and no block algorithm authenticates it, so parsing an absent or
+unrecognized value as `TypeElement` would let a stripped attribute turn an authenticated opaque octet stream
+into nodes a caller may graft into its tree (xmlenc-core1 §4.2, §3.1). Match with `errors.Is`.
 
-Block encryption and decryption failures wrap `ErrEncryptionFailed` or `ErrDecryptionFailed` as appropriate. Unsupported block-algorithm URI failures preserve `*UnsupportedAlgorithmError` in the chain, so callers can match the operation sentinel with `errors.Is` and inspect the algorithm with `errors.As`. Both `*UnsupportedAlgorithmError` and `*KeySizeError` carry a leading blank `_ struct{}` field so an unkeyed composite literal cannot compile from another package, which is what lets either field set grow without breaking a caller; keyed construction and `errors.As` recovery are unaffected.
+Block encryption and decryption failures wrap `ErrEncryptionFailed` or `ErrDecryptionFailed` as appropriate.
+Unsupported block-algorithm URI failures preserve `*UnsupportedAlgorithmError` in the chain, so callers can
+match the operation sentinel with `errors.Is` and inspect the algorithm with `errors.As`. Both
+`*UnsupportedAlgorithmError` and `*KeySizeError` carry a leading blank `_ struct{}` field so an unkeyed
+composite literal cannot compile from another package, which is what lets either field set grow without
+breaking a caller; keyed construction and `errors.As` recovery are unaffected.
 
-A nil operand handed to an encrypt terminal wraps BOTH sentinels with `%w`, `ErrEncryptionFailed` first and `helium.ErrNilNode` under it, identically across `EncryptBytes`, `EncryptElement`, and `EncryptContent`. A caller matching the operation sentinel therefore gets the same answer whichever entry point it called, and one matching `ErrNilNode` still learns the operand was nil.
+A nil operand handed to an encrypt terminal wraps BOTH sentinels with `%w`, `ErrEncryptionFailed` first and
+`helium.ErrNilNode` under it, identically across `EncryptBytes`, `EncryptElement`, and `EncryptContent`. A
+caller matching the operation sentinel therefore gets the same answer whichever entry point it called, and one
+matching `ErrNilNode` still learns the operand was nil.
 
-A key-size mismatch (`*KeySizeError`) is bare (no operation sentinel in its chain) only when the key came directly from caller configuration and its length is therefore neither attacker- nor document-influenced: encryption's pre-block `SessionKey` check, and decryption's `Decryptor.SessionKey` check (`decryptElement`/`decryptBytes`), both run before any ciphertext is touched and return `*KeySizeError` unwrapped. Every other decrypt-side key-size mismatch is wrapped in `ErrDecryptionFailed` — reachable via `errors.Is` on the wrapped error, with `*KeySizeError` still reachable via `errors.As` and its message text unchanged — because the length involved is not caller configuration: an RSA-key-transported or AES-key-unwrapped session key can be any length an attacker chooses (the recipient's public key is public), and the KEK-length check ahead of AES key unwrap (`resolveSessionKeyFromEncryptedKey`) is evaluated against a document-declared key-wrap algorithm URI, so an unwrapped error there would disclose the length of the recipient's own configured `KeyEncryptionKey`.
+A key-size mismatch (`*KeySizeError`) is bare (no operation sentinel in its chain) only when the key came
+directly from caller configuration and its length is therefore neither attacker- nor document-influenced:
+encryption's pre-block `SessionKey` check, and decryption's `Decryptor.SessionKey` check
+(`decryptElement`/`decryptBytes`), both run before any ciphertext is touched and return `*KeySizeError`
+unwrapped. Every other decrypt-side key-size mismatch is wrapped in `ErrDecryptionFailed` — reachable via
+`errors.Is` on the wrapped error, with `*KeySizeError` still reachable via `errors.As` and its message text
+unchanged — because the length involved is not caller configuration: an RSA-key-transported or
+AES-key-unwrapped session key can be any length an attacker chooses (the recipient's public key is public),
+and the KEK-length check ahead of AES key unwrap (`resolveSessionKeyFromEncryptedKey`) is evaluated against a
+document-declared key-wrap algorithm URI, so an unwrapped error there would disclose the length of the
+recipient's own configured `KeyEncryptionKey`.
 
 ## Error Accumulation Pattern
 
@@ -204,9 +399,16 @@ A key-size mismatch (`*KeySizeError`) is bare (no operation sentinel in its chai
 
 All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder` accumulation.
 
-- `Compile()` / `CompileFile()` return `(nil, ErrCompilationFailed)` when the schema has one or more fatal diagnostics (`compileSchema` converts `c.errorCount > 0` into the sentinel after linking); the individual diagnostics are still delivered to the `ErrorHandler`. A well-formed schema returns `(schema, nil)`. This prevents callers from validating against an invalid schema. `xslt3` schema-awareness maps the sentinel to `XTSE0220`.
+- `Compile()` / `CompileFile()` return `(nil, ErrCompilationFailed)` when the schema has one or more fatal
+  diagnostics (`compileSchema` converts `c.errorCount > 0` into the sentinel after linking); the individual
+  diagnostics are still delivered to the `ErrorHandler`. A well-formed schema returns `(schema, nil)`. This
+  prevents callers from validating against an invalid schema. `xslt3` schema-awareness maps the sentinel to
+  `XTSE0220`.
 - `Validate()` returns `ErrValidationFailed` when the document is invalid; individual errors go to `ErrorHandler`
-- `Validate()` returns `ErrNilSchema` (Validator has no compiled schema) or `ErrNilDocument` (doc is nil) before touching the document, instead of panicking. Handler setup runs first and `closeHandler()` is deferred, so a closable `ErrorHandler` is closed on every exit path (including the nil guards); a nil `ctx` is normalized to `context.Background()` at entry
+- `Validate()` returns `ErrNilSchema` (Validator has no compiled schema) or `ErrNilDocument` (doc is nil)
+  before touching the document, instead of panicking. Handler setup runs first and `closeHandler()` is
+  deferred, so a closable `ErrorHandler` is closed on every exit path (including the nil guards); a nil `ctx`
+  is normalized to `context.Background()` at entry
 - Errors sent to the handler are `*xsd.ValidationError` (extractable via `errors.As`) wrapped with an `ErrorLeveler` for transport. `ValidationError` fields: `Filename`, `Line`, `Element`, `AttributeName` (empty for element-level errors), `Message`.
 - `reportValidityError` / `reportValidityErrorAttr` on `validationContext` check `suppressDepth > 0` to suppress errors during union member trials
 
@@ -220,9 +422,27 @@ All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder`
 
 ### DTD
 
-`Parse()` with `ValidateDTD(true)` returns `ErrDTDValidationFailed` sentinel on failure, or `ErrNoDTDFound` when the document has neither an internal nor an external subset (VC: Element Declared, XML §3.2; libxml2 `XML_DTD_NO_DTD` "no DTD found!"). `ErrNoDTDFound` is declared as `fmt.Errorf("%w: no DTD found", ErrDTDValidationFailed)`, so `errors.Is` matches BOTH sentinels: a caller checking only `ErrDTDValidationFailed` is unaffected, while one that needs to tell "no DTD to validate against" apart from "document violates its DTD" matches `ErrNoDTDFound`. The distinction is otherwise only visible through the `ErrorHandler`, which defaults to discarding diagnostics. Individual errors go to the parser's `ErrorHandler` as `*DTDValidationError` (`valid.go`), delivered by `validCtx.addf`. `DTDValidationError{Message, Level}` implements `ErrorLeveler` returning `ErrorLevelError`, so a level-filtered `ErrorCollector` classifies each diagnostic at its true severity (not the plain-error warning default); callers recover it via `errors.As`. `.Error()` returns `Message`, which is byte-identical to the old `fmt.Errorf` text (golden/error-string parity).
+`Parse()` with `ValidateDTD(true)` returns `ErrDTDValidationFailed` sentinel on failure, or `ErrNoDTDFound`
+when the document has neither an internal nor an external subset (VC: Element Declared, XML §3.2; libxml2
+`XML_DTD_NO_DTD` "no DTD found!"). `ErrNoDTDFound` is declared as `fmt.Errorf("%w: no DTD found",
+ErrDTDValidationFailed)`, so `errors.Is` matches BOTH sentinels: a caller checking only
+`ErrDTDValidationFailed` is unaffected, while one that needs to tell "no DTD to validate against" apart from
+"document violates its DTD" matches `ErrNoDTDFound`. The distinction is otherwise only visible through the
+`ErrorHandler`, which defaults to discarding diagnostics. Individual errors go to the parser's `ErrorHandler`
+as `*DTDValidationError` (`valid.go`), delivered by `validCtx.addf`. `DTDValidationError{Message, Level}`
+implements `ErrorLeveler` returning `ErrorLevelError`, so a level-filtered `ErrorCollector` classifies each
+diagnostic at its true severity (not the plain-error warning default); callers recover it via `errors.As`.
+`.Error()` returns `Message`, which is byte-identical to the old `fmt.Errorf` text (golden/error-string
+parity).
 
-DTD-construction sites expose matchable sentinels (`errors.go`): `ErrNoInternalSubset` (`Document.InternalSubset()` when the document has no internal subset), `ErrDuplicateDeclaration` (a second `AddElementDecl`/`AddNotation`/`AddAttributeDecl` for an already-declared element, notation, or `(element, attribute)` pair — wrapped via `%w` into a message naming the kind and name), and `ErrInvalidArgument` (a public builder given an out-of-range enum argument — e.g. an `AddAttributeDecl` attribute type or default kind that is not a defined enum value — or a colon in an `AddNotation` notation name, the one name-grammar rule these caller-trusting builders enforce because a notation name is an XML NCName and the parser rejects a colon-bearing `<!NOTATION>` name). Match with `errors.Is`.
+DTD-construction sites expose matchable sentinels (`errors.go`): `ErrNoInternalSubset`
+(`Document.InternalSubset()` when the document has no internal subset), `ErrDuplicateDeclaration` (a second
+`AddElementDecl`/`AddNotation`/`AddAttributeDecl` for an already-declared element, notation, or `(element,
+attribute)` pair — wrapped via `%w` into a message naming the kind and name), and `ErrInvalidArgument` (a
+public builder given an out-of-range enum argument — e.g. an `AddAttributeDecl` attribute type or default kind
+that is not a defined enum value — or a colon in an `AddNotation` notation name, the one name-grammar rule
+these caller-trusting builders enforce because a notation name is an XML NCName and the parser rejects a
+colon-bearing `<!NOTATION>` name). Match with `errors.Is`.
 
 XSD, RelaxNG, Schematron, and DTD all use sentinel error + ErrorHandler pattern.
 

@@ -1,42 +1,237 @@
 # XSD 1.1 — Type System
 
-> Convention: **version-INDEPENDENT** rules run in both 1.0 and 1.1; all others are `Version11`-gated with the 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the governing rule and its conformance evidence. See `xsd11.md` for the index and version-resolution framing.
+> Convention: **version-INDEPENDENT** rules run in both 1.0 and 1.1; all others are `Version11`-gated with the
+> 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the
+> governing rule and its conformance evidence. See `xsd11.md` for the index and version-resolution framing.
 
 - the 1.1-only lexical forms (`+INF` for xs:double/xs:float; year `0000` on the date types — both gated in `internal/xsd/value` via a `value.Version` argument; relaxng is pinned to `value.Version10`);
 - the 1.1 built-in datatypes (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration, xs:anyAtomicType, xs:error);
 - **xs:assert on complex types** (`assert.go`): parsed from complexType/restriction/extension AND simpleContent extension/restriction; pre-compiled via xpath3; evaluated after content validation (EBV false → invalid); inherited down the base chain.
   - `$value`: the element's TYPED simple value for a simpleContent complex type (empty sequence for complex content); an EMPTY element's default/fixed effective value is substituted before typing → `$value` schema-normalized.
-  - Isolated tree: deep copy rooted in NO document, comment/PI stripped → `/`/`//` raises XPDY0050. In-scope namespaces re-declared (incl. an inherited default-namespace prefix "" so `namespace-uri-for-prefix('', .)` resolves); PSVI annotations onto DESCENDANT elements + ALL attributes but NOT the assertion ROOT (type unassigned during its assert → `data(.)` untyped; matches Saxon/conformance tests).
-  - `xpath3.SchemaDeclarations` adapter (`schema_decls.go`, `schemaDecls`, carries the schema version): a NAMED user simple type atomizes through its builtin base; a user `cast`/`castable` validates at the schema version (1.1-only lexical year `0000` castable).
-  - SINGLETON-OPERAND evaluators — `cast`/`castable` (`eval_types.go`), binary arithmetic + unary minus (`eval_arithmetic.go`), range `to` bounds (`eval_operators.go`) — atomize through the typed-value stream via `atomizeSingletonOperand` (caps at two atoms), cardinality on the ATOMIZED result not the raw count, so a list/union typed value expands like `data()`/`$value`; a multi-atom operand is XPTY0004. Fast-paths a single atomic item; function-call args coerce via `coerceToSequenceTypeE` (typed-value-aware atomization through `atomizeStreamCont`+`typedValueItemCheckFor`, cardinality applied after atomization); `instance of`/`treat as` do NOT atomize.
-  - `castable`/`cast` (`xpath3/eval_types.go`) namespace-aware for QName/NOTATION-derived user types: validates via `ValidateCastWithNS`, returns the namespace-RESOLVED value carrying the user type (only when context-free `CastAtomic` fails and SchemaDeclarations present). `(local, ns)` from the ALREADY-RESOLVED target type (`Q{ns}local` via `schemaAnnotationParts`) not the lexical prefix → an UNPREFIXED user type via `xpathDefaultNamespace` resolves. An ALREADY-RESOLVED QName cast SOURCE (prefix declared only on the INSTANCE node) is re-validated by `qnameCastLexical` using the value's OWN URI.
+  - Isolated tree: deep copy rooted in NO document, comment/PI stripped → `/`/`//` raises XPDY0050. In-scope
+    namespaces re-declared (incl. an inherited default-namespace prefix "" so `namespace-uri-for-prefix('',
+    .)` resolves); PSVI annotations onto DESCENDANT elements + ALL attributes but NOT the assertion ROOT (type
+    unassigned during its assert → `data(.)` untyped; matches Saxon/conformance tests).
+  - `xpath3.SchemaDeclarations` adapter (`schema_decls.go`, `schemaDecls`, carries the schema version): a
+    NAMED user simple type atomizes through its builtin base; a user `cast`/`castable` validates at the schema
+    version (1.1-only lexical year `0000` castable).
+  - SINGLETON-OPERAND evaluators — `cast`/`castable` (`eval_types.go`), binary arithmetic + unary minus
+    (`eval_arithmetic.go`), range `to` bounds (`eval_operators.go`) — atomize through the typed-value stream
+    via `atomizeSingletonOperand` (caps at two atoms), cardinality on the ATOMIZED result not the raw count,
+    so a list/union typed value expands like `data()`/`$value`; a multi-atom operand is XPTY0004. Fast-paths a
+    single atomic item; function-call args coerce via `coerceToSequenceTypeE` (typed-value-aware atomization
+    through `atomizeStreamCont`+`typedValueItemCheckFor`, cardinality applied after atomization); `instance
+    of`/`treat as` do NOT atomize.
+  - `castable`/`cast` (`xpath3/eval_types.go`) namespace-aware for QName/NOTATION-derived user types:
+    validates via `ValidateCastWithNS`, returns the namespace-RESOLVED value carrying the user type (only when
+    context-free `CastAtomic` fails and SchemaDeclarations present). `(local, ns)` from the ALREADY-RESOLVED
+    target type (`Q{ns}local` via `schemaAnnotationParts`) not the lexical prefix → an UNPREFIXED user type
+    via `xpathDefaultNamespace` resolves. An ALREADY-RESOLVED QName cast SOURCE (prefix declared only on the
+    INSTANCE node) is re-validated by `qnameCastLexical` using the value's OWN URI.
   - QName/NOTATION atomization (`resolveQNameFromNode`) predeclares `xml` → the XML namespace with no node binding (matching `xsd.resolveLexicalQName`) → `xml:lang`/`xml:space` atomizes.
-  - A list-typed node splits on XSD whitespace ONLY (space/tab/CR/LF via `xsdListFields`; NBSP/other Unicode whitespace NOT separators), each token via `atomizeListTokenAt`. A UNION item type → each token through its value-resolved ACTIVE member (`nodeItemFor` → per-token leaf in `NodeItem.ListItemLeaves` via `resolveActiveUnionLeafForValue`); else `atomizeListToken` on the declared item type — an `xs:QName`/`xs:NOTATION` item type (or user type whose builtin base is one, in `ListItemAtomized`) resolves each token against in-scope namespaces; a NON-QName USER item type (a `Q{...}` name `CastFromString` can't resolve) casts through its `ListItemAtomized` builtin base typed as the user type. So `xs:list itemType="xs:QName"` atomizes and an `xs:int`-derived item type yields numeric atoms for `sum()`.
-  - INLINE ANONYMOUS list/union types are recorded under STABLE SYNTHETIC annotation names (`vc.assertAnnotationName`/`assertRegisterAnon`/`assertAnonTypes`/`assertAnonNames`, ns `urn:x-helium:assert-anon`); `schemaDecls` resolves list-item/union-member metadata from the registered `*TypeDef`. RECURSIVE for ANY variety incl. an inline anonymous ATOMIC (faceted) member, named enclosing or not, so `ValidateCastWithNS` validates the ACTUAL faceted member not a collapsed builtin ancestor. A standalone anonymous ATOMIC node type keeps `xsdTypeName`.
-  - `schemaDecls.IsSubtypeOf` resolves a synthetic anonymous annotation via the registry (`lookupTypeName`, walking bases via `d.typeName`) and treats EVERY simple type as a subtype of `xs:anySimpleType` (even with a nil list/union `BaseType`), so `instance of attribute(v, xs:anySimpleType)` holds.
-  - A UNION node's ACTIVE member is resolved VALUE-DEPENDENTLY: `nodeItemFor` precomputes `NodeItem.ActiveUnionMember` (`*NodeItemUnionMember`, nil when not a union) via `resolveActiveUnionLeaf` — the FIRST declaration-order member the value FULLY validates against: the lexical/value cast (a list member: every token + list structure; an EMPTY zero-token list accepted lexically — `unionMemberCastOK` does NOT reject — leaving a minLength facet to `ValidateCastWithNS`, so an empty list value resolves to the EMPTY list not a later member) AND the member's facets/assertions via `SchemaDeclarations.ValidateCastWithNS`. A union member DESCENDS recursively (mirroring `fixedUnionActiveMember`), terminating via a VISITED-SET cycle guard keyed by union type name (NOT a depth cap). Facet-aware selection matches `$value` (an xs:list member failing a length facet falls through to a later member).
-  - `atomizeUnionItems` (stream + comparison atom paths) atomizes through that leaf: a LIST leaf → per-item atoms; an ATOMIC leaf → one atom TYPED AS THE MEMBER. Eval ctx threads through `nodeItemFor` (not `context.Background()`). Active only with union/list metadata.
-  - The assert evaluator sets `Evaluator.QNameValueNoDefaultNamespace()`: an UNPREFIXED xs:QName/xs:NOTATION VALUE atomizes to NO namespace (XSD value-space; a prefixed value still resolves); under it `castToQName` also skips the default-namespace fallback for an unprefixed cast target. Default xpath3 (flag off) unchanged.
+  - A list-typed node splits on XSD whitespace ONLY (space/tab/CR/LF via `xsdListFields`; NBSP/other Unicode
+    whitespace NOT separators), each token via `atomizeListTokenAt`. A UNION item type → each token through
+    its value-resolved ACTIVE member (`nodeItemFor` → per-token leaf in `NodeItem.ListItemLeaves` via
+    `resolveActiveUnionLeafForValue`); else `atomizeListToken` on the declared item type — an
+    `xs:QName`/`xs:NOTATION` item type (or user type whose builtin base is one, in `ListItemAtomized`)
+    resolves each token against in-scope namespaces; a NON-QName USER item type (a `Q{...}` name
+    `CastFromString` can't resolve) casts through its `ListItemAtomized` builtin base typed as the user type.
+    So `xs:list itemType="xs:QName"` atomizes and an `xs:int`-derived item type yields numeric atoms for
+    `sum()`.
+  - INLINE ANONYMOUS list/union types are recorded under STABLE SYNTHETIC annotation names
+    (`vc.assertAnnotationName`/`assertRegisterAnon`/`assertAnonTypes`/`assertAnonNames`, ns
+    `urn:x-helium:assert-anon`); `schemaDecls` resolves list-item/union-member metadata from the registered
+    `*TypeDef`. RECURSIVE for ANY variety incl. an inline anonymous ATOMIC (faceted) member, named enclosing
+    or not, so `ValidateCastWithNS` validates the ACTUAL faceted member not a collapsed builtin ancestor. A
+    standalone anonymous ATOMIC node type keeps `xsdTypeName`.
+  - `schemaDecls.IsSubtypeOf` resolves a synthetic anonymous annotation via the registry (`lookupTypeName`,
+    walking bases via `d.typeName`) and treats EVERY simple type as a subtype of `xs:anySimpleType` (even with
+    a nil list/union `BaseType`), so `instance of attribute(v, xs:anySimpleType)` holds.
+  - A UNION node's ACTIVE member is resolved VALUE-DEPENDENTLY: `nodeItemFor` precomputes
+    `NodeItem.ActiveUnionMember` (`*NodeItemUnionMember`, nil when not a union) via `resolveActiveUnionLeaf` —
+    the FIRST declaration-order member the value FULLY validates against: the lexical/value cast (a list
+    member: every token + list structure; an EMPTY zero-token list accepted lexically — `unionMemberCastOK`
+    does NOT reject — leaving a minLength facet to `ValidateCastWithNS`, so an empty list value resolves to
+    the EMPTY list not a later member) AND the member's facets/assertions via
+    `SchemaDeclarations.ValidateCastWithNS`. A union member DESCENDS recursively (mirroring
+    `fixedUnionActiveMember`), terminating via a VISITED-SET cycle guard keyed by union type name (NOT a depth
+    cap). Facet-aware selection matches `$value` (an xs:list member failing a length facet falls through to a
+    later member).
+  - `atomizeUnionItems` (stream + comparison atom paths) atomizes through that leaf: a LIST leaf → per-item
+    atoms; an ATOMIC leaf → one atom TYPED AS THE MEMBER. Eval ctx threads through `nodeItemFor` (not
+    `context.Background()`). Active only with union/list metadata.
+  - The assert evaluator sets `Evaluator.QNameValueNoDefaultNamespace()`: an UNPREFIXED xs:QName/xs:NOTATION
+    VALUE atomizes to NO namespace (XSD value-space; a prefixed value still resolves); under it `castToQName`
+    also skips the default-namespace fallback for an unprefixed cast target. Default xpath3 (flag off)
+    unchanged.
   - A self-referential cast (`cast`/`castable as t:T` inside t:T's OWN assertion) is guarded by a per-validation `(type, value)` cast stack in the context (`castGuardKey` in `schema_decls.go`): a repeat fails closed.
-  - An EMPTY DEFAULTED/FIXED DESCENDANT element's schema value is materialized: `validateSimpleContent` records each empty element's effective default/fixed value (plus the DECLARATION namespace context for a QName/NOTATION prefix) in `vc.assertEffectiveValues`; `isolatedAssertTree`/`mapAssertAnnotations` MATERIALIZE it onto the copy (`materializeAssertDefault`/`materializeAssertText` append as text; a QName/NOTATION default declares its prefix from the declaration context, mirroring `materializeQNameAttrValue` collision handling — a prefix bound to a DIFFERENT URI mints a fresh one and rewrites the text), so a defaulted element atomizes its default. The asserted ROOT is excluded (`$value` substitutes it; `data(.)` untyped); defaulted ATTRIBUTES need no handling (`SetAttributeNS` inserts them).
-  - A QName/NOTATION fixed/default in an EMPTY element resolves its prefix against the DECLARATION's namespace context (`ElementDecl.FixedNS`/`DefaultNS` via `effectiveValueNS`) not the instance's, for validation and `$value`; a materialized QName/NOTATION DEFAULT attribute declares its prefix on the element (`materializeQNameAttrValue` whitespace-COLLAPSES before extracting the prefix, resolves a UNION type's ACTIVE member via `fixedUnionActiveMember`, minting a fresh prefix on conflict), so a later xs:assert/IDC atomizes it in schema value space — gated to 1.1; XSD 1.0 inserts the default as authored, no namespace-declaration rewrite (byte-identical serialization).
-- the **xs:assertion simple-type facet** (`assertion_facet.go`): parsed by `parseFacets`, stored on `FacetSet.Assertions`, evaluated at simple-value validation with `$value` bound to the TYPED atomic value — a sequence for a list (each item typed by its active member), a union resolved to its active member FIRST in `buildValueSequence` (a union active on a LIST member yields the list-item sequence, not one untypedAtomic).
-  - SCHEMA-AWARE: `typedAtomic`/`buildValueSequence` thread `vc.schema` into `fixedUnionActiveMember` so a member whose assertion needs `castable as t:T` is selectable; `fixedValueMatches`/`fixedUnionMatches`/`crossMemberValueEqual` also thread `vc.schema` (`c.schema` at compile time) so fixed/enumeration comparisons resolve the active member in the right value space.
-  - A QName/NOTATION lexical resolves against in-scope namespaces into an `xpath3.QNameValue` (built by `buildValueSequence`/`typedAtomic`/`atomicForType`) PRESERVING a NAMED user type's identity (user type name as `TypeName`, builtin cast type as `BaseType`, mirroring `AtomizeItem`/`data()`) across the atomic, QName/NOTATION, list-item, and union-leaf paths, so `$value instance of t:MyInt` holds.
+  - An EMPTY DEFAULTED/FIXED DESCENDANT element's schema value is materialized: `validateSimpleContent`
+    records each empty element's effective default/fixed value (plus the DECLARATION namespace context for a
+    QName/NOTATION prefix) in `vc.assertEffectiveValues`; `isolatedAssertTree`/`mapAssertAnnotations`
+    MATERIALIZE it onto the copy (`materializeAssertDefault`/`materializeAssertText` append as text; a
+    QName/NOTATION default declares its prefix from the declaration context, mirroring
+    `materializeQNameAttrValue` collision handling — a prefix bound to a DIFFERENT URI mints a fresh one and
+    rewrites the text), so a defaulted element atomizes its default. The asserted ROOT is excluded (`$value`
+    substitutes it; `data(.)` untyped); defaulted ATTRIBUTES need no handling (`SetAttributeNS` inserts them).
+  - A QName/NOTATION fixed/default in an EMPTY element resolves its prefix against the DECLARATION's namespace
+    context (`ElementDecl.FixedNS`/`DefaultNS` via `effectiveValueNS`) not the instance's, for validation and
+    `$value`; a materialized QName/NOTATION DEFAULT attribute declares its prefix on the element
+    (`materializeQNameAttrValue` whitespace-COLLAPSES before extracting the prefix, resolves a UNION type's
+    ACTIVE member via `fixedUnionActiveMember`, minting a fresh prefix on conflict), so a later xs:assert/IDC
+    atomizes it in schema value space — gated to 1.1; XSD 1.0 inserts the default as authored, no
+    namespace-declaration rewrite (byte-identical serialization).
+- the **xs:assertion simple-type facet** (`assertion_facet.go`): parsed by `parseFacets`, stored on
+  `FacetSet.Assertions`, evaluated at simple-value validation with `$value` bound to the TYPED atomic value —
+  a sequence for a list (each item typed by its active member), a union resolved to its active member FIRST in
+  `buildValueSequence` (a union active on a LIST member yields the list-item sequence, not one untypedAtomic).
+  - SCHEMA-AWARE: `typedAtomic`/`buildValueSequence` thread `vc.schema` into `fixedUnionActiveMember` so a
+    member whose assertion needs `castable as t:T` is selectable;
+    `fixedValueMatches`/`fixedUnionMatches`/`crossMemberValueEqual` also thread `vc.schema` (`c.schema` at
+    compile time) so fixed/enumeration comparisons resolve the active member in the right value space.
+  - A QName/NOTATION lexical resolves against in-scope namespaces into an `xpath3.QNameValue` (built by
+    `buildValueSequence`/`typedAtomic`/`atomicForType`) PRESERVING a NAMED user type's identity (user type
+    name as `TypeName`, builtin cast type as `BaseType`, mirroring `AtomizeItem`/`data()`) across the atomic,
+    QName/NOTATION, list-item, and union-leaf paths, so `$value instance of t:MyInt` holds.
   - The context item is ABSENT, so `.`/`position()`/`last()` raise a dynamic error → unsatisfied; assertions ANDed along the restriction chain; same SchemaDeclarations adapter.
-  - `validateValue` evaluates these facets, so the COMPILE-TIME throwaway contexts reaching it — the attribute default/fixed check (`checkAttrUseConstraints`, `link_refs.go`) and the facet value-against-base / enumeration / union-member checks (`check_facets.go`) — are built with `schema: c.schema` so a schema-aware cast doesn't fail closed and reject a VALID schema.
-  - The IDC-field `typeAcceptsValue` threads the live validation's `version`/`schema` into its diagnostic-suppressing throwaway context (`vc.typeAcceptsValue`) so IDC union active-member selection and 1.1-only lexical forms (`+INF`, year `0000`, xs:dateTimeStamp) resolve at the schema's real version; only the standalone `TypeDef.Validate` remains on the Version10/nil-schema default — a documented Phase-1 gap.
-  - `xpathDefaultNamespace` on xs:assert/xs:assertion and the root `<xs:schema>`: `resolveXPathDefaultNS` whitespace-COLLAPSES the raw value (element-local OR schema-level) before the empty check and the sentinel switch, so `" ##targetNamespace "` resolves like the sentinel; `##targetNamespace`/`##defaultNamespace`/`##local` resolved, chameleon-include aware; an IMPORTED schema's root value is carried into the import sub-compiler (`compile_imports.go` sets `impC.schemaXPathDefaultNS`) so imported assertions resolve their own default namespace.
-- XSD 1.1 **attribute inheritance** (`finalizeEffectiveAttrs`): a complex type inherits every base attribute use it does not redeclare, for ALL 1.1 derived types — `checkRestrictionAttrs` does not flag a non-redeclared required base attribute as "missing" in 1.1, so the merge enforces the inherited requirement. TOPOLOGICAL across BOTH extension AND restriction derivations: the base is finalized first (memoized, cycle-guarded recursion), then `checkRestrictionAttrs`/`checkExtensionAttrDuplicates` runs against td's OWN declarations and the finalized base, then td inherits — so an extension of a restriction (or vice versa, any depth) reads a complete base attribute set regardless of source order. In 1.1 the extension/restriction passes DEFER all attribute work to `finalizeEffectiveAttrs`. XSD 1.0 also finalizes effective attribute USES topologically across BOTH extension and restriction (`finalizeAttrUses10`, §3.4.2.2), after the extension loop's in-loop attribute snapshot and `checkRestrictionAttrs` (which still runs against each restriction base's OWN declarations, is NOT repeated in the pass, and keeps the historical 1.0 rule that a required base attribute must be explicitly redeclared). The pass folds non-redeclared base uses into restriction types and re-folds any uses a restriction base gained onto extensions that copied a stale snapshot, so an extension of a restriction inherits undeclared grandbase attributes. It also RE-RUNS the ct-props-correct.4 extension check (`checkExtensionAttrDuplicates`) against the FINALIZED base, so an extension that redeclares an attribute its base merely INHERITS is rejected in 1.0 as it is in 1.1 (xmllint rejects both the complexContent and the simpleContent shape). The check compares the extension's OWN uses — `extOwnAttrUses`, snapshotted in the extension loop before the base's uses are folded in — because td.Attributes already carries the base's uses by then, and `extAttrDupReported` keeps a collision the in-loop check already reported from being emitted twice. The in-loop snapshot builds a FRESH slice (`concatAttrUses`): `append(base.Attributes, own...)` would park the derived type's own uses in the base slice's spare capacity, where a sibling derivation's snapshot or this pass's inheriting append then overwrites them. A 1.0 restriction deliberately does NOT inherit the base {attribute wildcard} (complete wildcard from own content only — sunData combined/008).
-- **simpleContent content-type narrowing** (`TypeDef.ContentSimpleType`): derived from a nested `<xs:simpleType>` AND/OR the restriction's direct facets — `parseSimpleContentRestrictionType` COMPOSES them (a restriction of the inline type carrying the sibling facets when both are present, dropping neither). `TypeDef.ContentSimpleType` is built in BOTH versions (`read_types.go`) and each synthetic restriction is RECORDED in `typeDefSources`, so `checkFacetConsistency` runs applicability/value checks in 1.0 as well as 1.1 — an inapplicable direct facet is a compile error in both (e.g. `minLength` on a simpleContent restriction of `xs:anySimpleType` content, whose length facets are inapplicable to the ur-type).
-  - **cos-st-restricts (Derivation Valid, Restriction, Simple)** — version-INDEPENDENT, `checkSimpleContentRestrictionDerivation` (`link_refs.go`, run from `resolveRefs` after `checkSimpleContentBase`): a simpleContent RESTRICTION whose base is a simpleContent complex type must have its derived effective content simple type (`effectiveContentSimpleType(td)`) validly RESTRICT the base's effective content simple type (`effectiveContentSimpleType(base)`). The predicate `simpleContentContentValidlyRestricts` is CONSERVATIVE (accepts by default, rejects only provable widenings of a concrete ATOMIC base): a LIST/UNION derived variety over an atomic base (its primitive base is `xs:anySimpleType`, which does not descend from e.g. `xs:decimal` — W3C particlesZ018), or an atomic derived type whose builtin primitive does not `builtinDerivesFrom` the base's (an `xs:string` base narrowed to an `xs:date` type, or `xs:int` widened back to `xs:integer`). EXEMPTION: when the base's effective content simple type is the simple ur-type `xs:anySimpleType`/`xs:anyType`, ANY derived simple type is valid (§3.16.3 clause 2.2.3) and the check is skipped — so a list restricting an `xs:anySimpleType`-content base is accepted. The conservative default preserves the lenient nested-`<xs:simpleType>` narrowing model (a nested type authored on a shared builtin ancestor of the base content still composes the inherited base facets). Enforced in both 1.0 and 1.1.
-  - The EFFECTIVE content simple type is composed across the WHOLE derivation chain by `effectiveContentSimpleType`, recursing through simpleContent complex types (marked `TypeDef.IsSimpleContent`) to the underlying simpleType/builtin, re-basing a facet-only narrowing on the effective base content type so ancestor and derived facets compose. In XSD 1.1 `validateSimpleContent` validates the instance text against it whenever any chain step has facets/assertions or a non-string builtin (`simpleContentNeedsValidation`), so a restriction enumeration / `xs:float` narrowing is enforced and inherited through further restriction/extension; `$value` uses the same composed type. In XSD 1.0 `validateSimpleContent` validates the text against the declared type `td` (not the narrowed `ContentSimpleType`) but its gate is also `simpleContentNeedsValidation(td)` — which reports a facet ANYWHERE along td's base chain — so a simpleContent EXTENSION of a named faceted simple type enforces that base's facets (minLength/maxLength/etc.) in 1.0 too. (A direct facet on a simpleContent RESTRICTION lives on `ContentSimpleType`, not `td`, so it is compile-checked but not yet instance-enforced in 1.0.)
-  - The assert adapter `schemaDecls` resolves a simpleContent COMPLEX type through `effectiveContentSimpleType` (via `lookupAtomizationType`) in `LookupSchemaType`/`ListItemType`/`UnionMemberTypes`, so `data(c)` on a DESCENDANT element narrowed to `xs:QName`/a list/a union atomizes through the NARROWED content type; `IsSubtypeOf`/`validateCast` keep the raw type (still COMPLEX for node/subtype tests). `UnionMemberTypes` resolves variety and members via `resolveVariety`/`resolveUnionMembers` (walking the base chain) not direct fields, so a synthetic facet-only restriction over a union base still reports union members and resolves the active list member.
-  - A NESTED `<xs:simpleType>` content type is returned as-is (its OWN base chain), so `validateSimpleContent` also validates against `effectiveContentSimpleType(td.BaseType)` whenever `td.ContentSimpleType.BaseType != td` — a nested simpleType RESTRICTS, not REPLACES, the base content type (§3.4.2.2), so an inherited base `maxLength` still rejects an over-long value.
-  - FIXED-value comparison narrows a simpleContent type to its content simple type CENTRALLY inside `fixedValueMatches` (gated `version == Version11`: `td = effectiveContentSimpleType(td)`), consistent for EVERY caller — the runtime non-empty-element fixed check, the attribute fixed checks, and the COMPILE-TIME content-model restriction check (`restriction_particle.go` NameAndTypeOK, base/derived element `fixed` must be value-space equal). A content type restricted to `xs:QName` accepts a different-prefix/same-URI value by QName value-space equality (a non-simpleContent type passes through unchanged; XSD 1.0 keeps the declared-type comparison, byte-identical). The fixed-value narrowing to the content simple type is still 1.1-only; XSD 1.0's fixed comparison uses the declared type's value space (its whiteSpace facet), where `xs:anySimpleType` resolves to whiteSpace="preserve" (`resolveWhiteSpace`), so surrounding whitespace stays significant and a padded value does not match a fixed on an `xs:anySimpleType` element.
-- **conditional type assignment** (`alternative.go`): `<xs:alternative>` on an element declaration selects the governing type via the first @test that holds, else a testless default, else the declared type; xsi:type still takes precedence. Applied at the root AND every per-child match site INCLUDING wildcard-matched lax elements (`validateWildcardChild`) and xs:anyType/lax descendants — CTA selects the governing type FIRST, then the cvc-elt.4.3 derivation-block check and the idc lax-assessment/ID-pass run against the SELECTED type.
-  - Each `<xs:alternative>` may carry an INLINE anonymous `<xs:complexType>`/`<xs:simpleType>` (`parseTypeAlternative`; a present-but-empty `@type` is a governing-type source, so `@type=""` plus an inline type is a conflict and a bare `@type=""` is an invalid QName), `type="xs:error"` (a selected xs:error invalidates the element even through the xsi:nil nilled path), and `@xpathDefaultNamespace` (`effectiveXPathDefaultNS`: locally-present value resolved against the alternative, else inherited from schema-level; affects only unprefixed element name tests).
-  - @test runs against a DETACHED CTA context node (`inherited_attrs.go` `ctaContextNode`): an orphan element with the instance element's own attributes PLUS inheritable attributes from ancestors (`inheritedAttributes`, declaration `inheritable="true"`), its in-scope namespaces, position()=last()=1, an empty `emptyCollectionResolver`, the schema base URI, no children/parent.
-  - A non-default `@type`/inline alternative must be VALIDLY SUBSTITUTABLE for the declared type (`checkAltSubstitutability`, compile time): `strictBuiltinAwareDerivedFrom` (`builtin_hierarchy.go`) accepts a genuine derivation via `isDerivedFrom`, the built-in simple-type hierarchy via `builtinSimpleBase` (1.0 built-ins not BaseType-linked), or the anySimpleType simple-content rule; a union declared type admits any base-chain-resolved member (`resolveVariety`/`resolveUnionMembers`); NO permissive simple-vs-simple fallback. The block check is built-in-aware (`isDerivationBlocked`). Per-document `xpathDefaultNamespace`/base-URI and the `altTypeRefs`/`ctaElems` worklists are saved/restored across include/redefine and seeded onto import sub-compilers (`compile_imports.go`).
-- **union-member element-type restriction** (version-INDEPENDENT, cos-st-derived-ok clause 2.2.4): a complexContent restriction's child element type may be validly derived from a UNION base element type's (transitive) member — `elementTypeValidlyRestricts` (`restriction_particle.go`) falls back to `isXsiTypeDerivedFromDeclared` (`alternative.go`) UNGATED, so narrowing a base element typed `union(xs:decimal, xs:string)` to the member `xs:string` compiles in both 1.0 and 1.1 (W3C addB150 / test93568.xsd, expected-valid with no version qualifier; libxml2 accepts it in 1.0). The member check is strict and recursive (a non-member type deriving from nothing in the union is still rejected).
-- **Simple-type 1.1 edges**: `finalDefault="extension"` reaches a simple type's `{final}` (the simpleType final-default mask in `read_types.go` adds `FinalExtension`, spec bug 2074), so a simpleContent extension of an extension-final simple type is rejected; `checkAnyAtomicTypeUsage` rejects `xs:anyAtomicType` as a user simple type's restriction base / list item type / union member type (W3C bug 11103 — valid as an element/attribute/xsi:type type); `checkAnySimpleTypeUsage` rejects RESTRICTING the simple ur-type `xs:anySimpleType` — as a simpleType restriction base / list item type / union member type, and as a simpleContent complexType RESTRICTION whose effective content simple type (`effectiveContentSimpleType`) is left as `xs:anySimpleType` — per Part 2 §2.4.1 / W3C bug 14559 (valid as an element/attribute/xsi:type type and as the base of a simpleContent EXTENSION). Two arms are **version-INDEPENDENT** (cos-st-restricts requires a restriction base to be atomic/list/union, and libxml2 rejects them in XSD 1.0 too): a simpleType `<xs:restriction>` whose DIRECT base is `xs:anySimpleType`, and a simpleContent `<xs:restriction>` whose DIRECT base is `xs:anySimpleType` AND whose effective content is left as the ur-type (no nested-simpleType/facet narrowing) — W3C stZ005/stZ006/stZ009/stZ011, addB110, invalid in both. The remaining arms stay **Version11-gated** (valid in XSD 1.0): a list item type / union member type of `xs:anySimpleType`, and a simpleContent restriction of a COMPLEX base whose content merely resolves to the ur-type (W3C stZ007/stZ047/stZ055, valid in 1.0, invalid in 1.1). `checkAnySimpleTypeUsage` is called unconditionally (`compile.go`); its item/member/complex-base arms self-gate on `c.version == Version11`, so the 1.0 path is byte-identical apart from the two newly-enforced direct-restriction cases.
+  - `validateValue` evaluates these facets, so the COMPILE-TIME throwaway contexts reaching it — the attribute
+    default/fixed check (`checkAttrUseConstraints`, `link_refs.go`) and the facet value-against-base /
+    enumeration / union-member checks (`check_facets.go`) — are built with `schema: c.schema` so a
+    schema-aware cast doesn't fail closed and reject a VALID schema.
+  - The IDC-field `typeAcceptsValue` threads the live validation's `version`/`schema` into its
+    diagnostic-suppressing throwaway context (`vc.typeAcceptsValue`) so IDC union active-member selection and
+    1.1-only lexical forms (`+INF`, year `0000`, xs:dateTimeStamp) resolve at the schema's real version; only
+    the standalone `TypeDef.Validate` remains on the Version10/nil-schema default — a documented Phase-1 gap.
+  - `xpathDefaultNamespace` on xs:assert/xs:assertion and the root `<xs:schema>`: `resolveXPathDefaultNS`
+    whitespace-COLLAPSES the raw value (element-local OR schema-level) before the empty check and the sentinel
+    switch, so `" ##targetNamespace "` resolves like the sentinel;
+    `##targetNamespace`/`##defaultNamespace`/`##local` resolved, chameleon-include aware; an IMPORTED schema's
+    root value is carried into the import sub-compiler (`compile_imports.go` sets `impC.schemaXPathDefaultNS`)
+    so imported assertions resolve their own default namespace.
+- XSD 1.1 **attribute inheritance** (`finalizeEffectiveAttrs`): a complex type inherits every base attribute
+  use it does not redeclare, for ALL 1.1 derived types — `checkRestrictionAttrs` does not flag a
+  non-redeclared required base attribute as "missing" in 1.1, so the merge enforces the inherited requirement.
+  TOPOLOGICAL across BOTH extension AND restriction derivations: the base is finalized first (memoized,
+  cycle-guarded recursion), then `checkRestrictionAttrs`/`checkExtensionAttrDuplicates` runs against td's OWN
+  declarations and the finalized base, then td inherits — so an extension of a restriction (or vice versa, any
+  depth) reads a complete base attribute set regardless of source order. In 1.1 the extension/restriction
+  passes DEFER all attribute work to `finalizeEffectiveAttrs`. XSD 1.0 also finalizes effective attribute USES
+  topologically across BOTH extension and restriction (`finalizeAttrUses10`, §3.4.2.2), after the extension
+  loop's in-loop attribute snapshot and `checkRestrictionAttrs` (which still runs against each restriction
+  base's OWN declarations, is NOT repeated in the pass, and keeps the historical 1.0 rule that a required base
+  attribute must be explicitly redeclared). The pass folds non-redeclared base uses into restriction types and
+  re-folds any uses a restriction base gained onto extensions that copied a stale snapshot, so an extension of
+  a restriction inherits undeclared grandbase attributes. It also RE-RUNS the ct-props-correct.4 extension
+  check (`checkExtensionAttrDuplicates`) against the FINALIZED base, so an extension that redeclares an
+  attribute its base merely INHERITS is rejected in 1.0 as it is in 1.1 (xmllint rejects both the
+  complexContent and the simpleContent shape). The check compares the extension's OWN uses — `extOwnAttrUses`,
+  snapshotted in the extension loop before the base's uses are folded in — because td.Attributes already
+  carries the base's uses by then, and `extAttrDupReported` keeps a collision the in-loop check already
+  reported from being emitted twice. The in-loop snapshot builds a FRESH slice (`concatAttrUses`):
+  `append(base.Attributes, own...)` would park the derived type's own uses in the base slice's spare capacity,
+  where a sibling derivation's snapshot or this pass's inheriting append then overwrites them. A 1.0
+  restriction deliberately does NOT inherit the base {attribute wildcard} (complete wildcard from own content
+  only — sunData combined/008).
+- **simpleContent content-type narrowing** (`TypeDef.ContentSimpleType`): derived from a nested
+  `<xs:simpleType>` AND/OR the restriction's direct facets — `parseSimpleContentRestrictionType` COMPOSES them
+  (a restriction of the inline type carrying the sibling facets when both are present, dropping neither).
+  `TypeDef.ContentSimpleType` is built in BOTH versions (`read_types.go`) and each synthetic restriction is
+  RECORDED in `typeDefSources`, so `checkFacetConsistency` runs applicability/value checks in 1.0 as well as
+  1.1 — an inapplicable direct facet is a compile error in both (e.g. `minLength` on a simpleContent
+  restriction of `xs:anySimpleType` content, whose length facets are inapplicable to the ur-type).
+  - **cos-st-restricts (Derivation Valid, Restriction, Simple)** — version-INDEPENDENT,
+    `checkSimpleContentRestrictionDerivation` (`link_refs.go`, run from `resolveRefs` after
+    `checkSimpleContentBase`): a simpleContent RESTRICTION whose base is a simpleContent complex type must
+    have its derived effective content simple type (`effectiveContentSimpleType(td)`) validly RESTRICT the
+    base's effective content simple type (`effectiveContentSimpleType(base)`). The predicate
+    `simpleContentContentValidlyRestricts` is CONSERVATIVE (accepts by default, rejects only provable
+    widenings of a concrete ATOMIC base): a LIST/UNION derived variety over an atomic base (its primitive base
+    is `xs:anySimpleType`, which does not descend from e.g. `xs:decimal` — W3C particlesZ018), or an atomic
+    derived type whose builtin primitive does not `builtinDerivesFrom` the base's (an `xs:string` base
+    narrowed to an `xs:date` type, or `xs:int` widened back to `xs:integer`). EXEMPTION: when the base's
+    effective content simple type is the simple ur-type `xs:anySimpleType`/`xs:anyType`, ANY derived simple
+    type is valid (§3.16.3 clause 2.2.3) and the check is skipped — so a list restricting an
+    `xs:anySimpleType`-content base is accepted. The conservative default preserves the lenient
+    nested-`<xs:simpleType>` narrowing model (a nested type authored on a shared builtin ancestor of the base
+    content still composes the inherited base facets). Enforced in both 1.0 and 1.1.
+  - The EFFECTIVE content simple type is composed across the WHOLE derivation chain by
+    `effectiveContentSimpleType`, recursing through simpleContent complex types (marked
+    `TypeDef.IsSimpleContent`) to the underlying simpleType/builtin, re-basing a facet-only narrowing on the
+    effective base content type so ancestor and derived facets compose. In XSD 1.1 `validateSimpleContent`
+    validates the instance text against it whenever any chain step has facets/assertions or a non-string
+    builtin (`simpleContentNeedsValidation`), so a restriction enumeration / `xs:float` narrowing is enforced
+    and inherited through further restriction/extension; `$value` uses the same composed type. In XSD 1.0
+    `validateSimpleContent` validates the text against the declared type `td` (not the narrowed
+    `ContentSimpleType`) but its gate is also `simpleContentNeedsValidation(td)` — which reports a facet
+    ANYWHERE along td's base chain — so a simpleContent EXTENSION of a named faceted simple type enforces that
+    base's facets (minLength/maxLength/etc.) in 1.0 too. (A direct facet on a simpleContent RESTRICTION lives
+    on `ContentSimpleType`, not `td`, so it is compile-checked but not yet instance-enforced in 1.0.)
+  - The assert adapter `schemaDecls` resolves a simpleContent COMPLEX type through
+    `effectiveContentSimpleType` (via `lookupAtomizationType`) in
+    `LookupSchemaType`/`ListItemType`/`UnionMemberTypes`, so `data(c)` on a DESCENDANT element narrowed to
+    `xs:QName`/a list/a union atomizes through the NARROWED content type; `IsSubtypeOf`/`validateCast` keep
+    the raw type (still COMPLEX for node/subtype tests). `UnionMemberTypes` resolves variety and members via
+    `resolveVariety`/`resolveUnionMembers` (walking the base chain) not direct fields, so a synthetic
+    facet-only restriction over a union base still reports union members and resolves the active list member.
+  - A NESTED `<xs:simpleType>` content type is returned as-is (its OWN base chain), so `validateSimpleContent`
+    also validates against `effectiveContentSimpleType(td.BaseType)` whenever `td.ContentSimpleType.BaseType
+    != td` — a nested simpleType RESTRICTS, not REPLACES, the base content type (§3.4.2.2), so an inherited
+    base `maxLength` still rejects an over-long value.
+  - FIXED-value comparison narrows a simpleContent type to its content simple type CENTRALLY inside
+    `fixedValueMatches` (gated `version == Version11`: `td = effectiveContentSimpleType(td)`), consistent for
+    EVERY caller — the runtime non-empty-element fixed check, the attribute fixed checks, and the COMPILE-TIME
+    content-model restriction check (`restriction_particle.go` NameAndTypeOK, base/derived element `fixed`
+    must be value-space equal). A content type restricted to `xs:QName` accepts a different-prefix/same-URI
+    value by QName value-space equality (a non-simpleContent type passes through unchanged; XSD 1.0 keeps the
+    declared-type comparison, byte-identical). The fixed-value narrowing to the content simple type is still
+    1.1-only; XSD 1.0's fixed comparison uses the declared type's value space (its whiteSpace facet), where
+    `xs:anySimpleType` resolves to whiteSpace="preserve" (`resolveWhiteSpace`), so surrounding whitespace
+    stays significant and a padded value does not match a fixed on an `xs:anySimpleType` element.
+- **conditional type assignment** (`alternative.go`): `<xs:alternative>` on an element declaration selects the
+  governing type via the first @test that holds, else a testless default, else the declared type; xsi:type
+  still takes precedence. Applied at the root AND every per-child match site INCLUDING wildcard-matched lax
+  elements (`validateWildcardChild`) and xs:anyType/lax descendants — CTA selects the governing type FIRST,
+  then the cvc-elt.4.3 derivation-block check and the idc lax-assessment/ID-pass run against the SELECTED
+  type.
+  - Each `<xs:alternative>` may carry an INLINE anonymous `<xs:complexType>`/`<xs:simpleType>`
+    (`parseTypeAlternative`; a present-but-empty `@type` is a governing-type source, so `@type=""` plus an
+    inline type is a conflict and a bare `@type=""` is an invalid QName), `type="xs:error"` (a selected
+    xs:error invalidates the element even through the xsi:nil nilled path), and `@xpathDefaultNamespace`
+    (`effectiveXPathDefaultNS`: locally-present value resolved against the alternative, else inherited from
+    schema-level; affects only unprefixed element name tests).
+  - @test runs against a DETACHED CTA context node (`inherited_attrs.go` `ctaContextNode`): an orphan element
+    with the instance element's own attributes PLUS inheritable attributes from ancestors
+    (`inheritedAttributes`, declaration `inheritable="true"`), its in-scope namespaces, position()=last()=1,
+    an empty `emptyCollectionResolver`, the schema base URI, no children/parent.
+  - A non-default `@type`/inline alternative must be VALIDLY SUBSTITUTABLE for the declared type
+    (`checkAltSubstitutability`, compile time): `strictBuiltinAwareDerivedFrom` (`builtin_hierarchy.go`)
+    accepts a genuine derivation via `isDerivedFrom`, the built-in simple-type hierarchy via
+    `builtinSimpleBase` (1.0 built-ins not BaseType-linked), or the anySimpleType simple-content rule; a union
+    declared type admits any base-chain-resolved member (`resolveVariety`/`resolveUnionMembers`); NO
+    permissive simple-vs-simple fallback. The block check is built-in-aware (`isDerivationBlocked`).
+    Per-document `xpathDefaultNamespace`/base-URI and the `altTypeRefs`/`ctaElems` worklists are
+    saved/restored across include/redefine and seeded onto import sub-compilers (`compile_imports.go`).
+- **union-member element-type restriction** (version-INDEPENDENT, cos-st-derived-ok clause 2.2.4): a
+  complexContent restriction's child element type may be validly derived from a UNION base element type's
+  (transitive) member — `elementTypeValidlyRestricts` (`restriction_particle.go`) falls back to
+  `isXsiTypeDerivedFromDeclared` (`alternative.go`) UNGATED, so narrowing a base element typed
+  `union(xs:decimal, xs:string)` to the member `xs:string` compiles in both 1.0 and 1.1 (W3C addB150 /
+  test93568.xsd, expected-valid with no version qualifier; libxml2 accepts it in 1.0). The member check is
+  strict and recursive (a non-member type deriving from nothing in the union is still rejected).
+- **Simple-type 1.1 edges**: `finalDefault="extension"` reaches a simple type's `{final}` (the simpleType
+  final-default mask in `read_types.go` adds `FinalExtension`, spec bug 2074), so a simpleContent extension of
+  an extension-final simple type is rejected; `checkAnyAtomicTypeUsage` rejects `xs:anyAtomicType` as a user
+  simple type's restriction base / list item type / union member type (W3C bug 11103 — valid as an
+  element/attribute/xsi:type type); `checkAnySimpleTypeUsage` rejects RESTRICTING the simple ur-type
+  `xs:anySimpleType` — as a simpleType restriction base / list item type / union member type, and as a
+  simpleContent complexType RESTRICTION whose effective content simple type (`effectiveContentSimpleType`) is
+  left as `xs:anySimpleType` — per Part 2 §2.4.1 / W3C bug 14559 (valid as an element/attribute/xsi:type type
+  and as the base of a simpleContent EXTENSION). Two arms are **version-INDEPENDENT** (cos-st-restricts
+  requires a restriction base to be atomic/list/union, and libxml2 rejects them in XSD 1.0 too): a simpleType
+  `<xs:restriction>` whose DIRECT base is `xs:anySimpleType`, and a simpleContent `<xs:restriction>` whose
+  DIRECT base is `xs:anySimpleType` AND whose effective content is left as the ur-type (no
+  nested-simpleType/facet narrowing) — W3C stZ005/stZ006/stZ009/stZ011, addB110, invalid in both. The
+  remaining arms stay **Version11-gated** (valid in XSD 1.0): a list item type / union member type of
+  `xs:anySimpleType`, and a simpleContent restriction of a COMPLEX base whose content merely resolves to the
+  ur-type (W3C stZ007/stZ047/stZ055, valid in 1.0, invalid in 1.1). `checkAnySimpleTypeUsage` is called
+  unconditionally (`compile.go`); its item/member/complex-base arms self-gate on `c.version == Version11`, so
+  the 1.0 path is byte-identical apart from the two newly-enforced direct-restriction cases.

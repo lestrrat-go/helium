@@ -6,74 +6,437 @@ Go implementation of libxml2. Module: `github.com/lestrrat-go/helium`
 
 XML parsing, DOM tree, serialization. Entry point for all XML processing.
 
-- **NewParser() → Parser** — create fluent builder for XML parsing (clone-on-write value type). **Secure by default** for untrusted input: `BlockXXE` on (no external entity/DTD loading), `AllowNetwork` off, `FS` is a deny-all FS (`internal/iofs.DenyAll` — opens nothing), and element depth is capped at 256 (`MaxDepth`). Entity substitution, external-DTD loading, XInclude, and DTD validation are all off by default. Opt back in explicitly, e.g. `NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS())`.
-  - Flag methods: `RecoverOnError(bool)`, `SubstituteEntities(bool)`, `LoadExternalDTD(bool)`, `DefaultDTDAttributes(bool)`, `ValidateDTD(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `PedanticErrors(bool)`, `StripBlanks(bool)`, `AllowNetwork(bool)` (default false), `CleanNamespaces(bool)`, `MergeCDATA(bool)`, `FixBaseURIs(bool)`, `IgnoreEncoding(bool)`, `BlockXXE(bool)` (default true), `SkipIDs(bool)`, `LenientXMLDecl(bool)`
-  - Per-limit knobs (each takes an int, `0` = default, negative = no limit): `MaxNameLength(int)` (default `DefaultMaxNameLength` 50000), `MaxEntityAmplification(int)` (default `DefaultMaxEntityAmplification` 5; 1 GiB hard ceiling always applies), `MaxContentModelDepth(int)` (default `DefaultMaxContentModelDepth` 128), `MaxNodeContentSize(int)` (default `DefaultMaxNodeContentSize` 10 MiB) — caps a single indivisible content run (CDATA section / comment body / PI body / char-data run / attribute value); the SAME cap also bounds a single contiguous run of XML whitespace (a blank skip — prolog/epilogue/inter-root, and the blank skips inside the external DTD subset and INCLUDE sections), so an unbounded whitespace run cannot grow the cursor buffer; over-cap → `ErrNodeContentTooLarge`, fired during accumulation. A negative value (`MaxNodeContentSize(-1)`) disables BOTH the node-content and the blank-run cap. A streaming SAX consumer with `CharBufferSize > 0` receives char data in bounded chunks and is exempt from the char-data cap (its CDATA/comment/PI runs are still capped)
-  - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)` (default 256; `0` = default, negative = no cap), `MaxExternalDTDBytes(int)` (default `MaxExternalDTDSize` 10 MiB; `0` = default, negative = no cap), `Catalog(CatalogResolver)`, `FS(fs.FS)`, `ErrorHandler(ErrorHandler)`, `XInclude(XIncludeProcessor)`
-  - `Parser.SAXHandler(sax.SAX2Handler)` — sets the handler receiving parse events; the most recent call wins. The default (and what a nil value restores, as with `Parser.FS`) is `NewTreeBuilder()`, so under the default or a nil-restored handler a successful `Parse` returns a built `*Document` and a caller forwarding an optional handler through cannot silently lose all output. To consume events without building a tree, pass a handler that ignores them
-  - `Parser.XInclude(XIncludeProcessor)` — inject an XInclude processor (the `XIncludeProcessor` interface: `Process(context.Context, *Document) (int, error)`, satisfied by `xinclude.Processor`). When set, `Parse`/`ParseReader`/`ParseFile` run it over the built tree so the returned document has `xi:include` elements expanded; if `ValidateDTD` is also set, the expanded tree is validated. Off by default (nil disables). The interface is the dependency-inversion seam: the root package cannot import `xinclude` (which imports `helium`), so the caller builds and injects a configured processor
+- **NewParser() → Parser** — create fluent builder for XML parsing (clone-on-write value type). **Secure by
+  default** for untrusted input: `BlockXXE` on (no external entity/DTD loading), `AllowNetwork` off, `FS` is a
+  deny-all FS (`internal/iofs.DenyAll` — opens nothing), and element depth is capped at 256 (`MaxDepth`).
+  Entity substitution, external-DTD loading, XInclude, and DTD validation are all off by default. Opt back in
+  explicitly, e.g. `NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS())`.
+  - Flag methods: `RecoverOnError(bool)`, `SubstituteEntities(bool)`, `LoadExternalDTD(bool)`,
+    `DefaultDTDAttributes(bool)`, `ValidateDTD(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`,
+    `PedanticErrors(bool)`, `StripBlanks(bool)`, `AllowNetwork(bool)` (default false),
+    `CleanNamespaces(bool)`, `MergeCDATA(bool)`, `FixBaseURIs(bool)`, `IgnoreEncoding(bool)`, `BlockXXE(bool)`
+    (default true), `SkipIDs(bool)`, `LenientXMLDecl(bool)`
+  - Per-limit knobs (each takes an int, `0` = default, negative = no limit): `MaxNameLength(int)` (default
+    `DefaultMaxNameLength` 50000), `MaxEntityAmplification(int)` (default `DefaultMaxEntityAmplification` 5; 1
+    GiB hard ceiling always applies), `MaxContentModelDepth(int)` (default `DefaultMaxContentModelDepth` 128),
+    `MaxNodeContentSize(int)` (default `DefaultMaxNodeContentSize` 10 MiB) — caps a single indivisible content
+    run (CDATA section / comment body / PI body / char-data run / attribute value); the SAME cap also bounds a
+    single contiguous run of XML whitespace (a blank skip — prolog/epilogue/inter-root, and the blank skips
+    inside the external DTD subset and INCLUDE sections), so an unbounded whitespace run cannot grow the
+    cursor buffer; over-cap → `ErrNodeContentTooLarge`, fired during accumulation. A negative value
+    (`MaxNodeContentSize(-1)`) disables BOTH the node-content and the blank-run cap. A streaming SAX consumer
+    with `CharBufferSize > 0` receives char data in bounded chunks and is exempt from the char-data cap (its
+    CDATA/comment/PI runs are still capped)
+  - Config methods: `SAXHandler(sax.SAX2Handler)`, `BaseURI(string)`, `CharBufferSize(int)`, `MaxDepth(int)`
+    (default 256; `0` = default, negative = no cap), `MaxExternalDTDBytes(int)` (default `MaxExternalDTDSize`
+    10 MiB; `0` = default, negative = no cap), `Catalog(CatalogResolver)`, `FS(fs.FS)`,
+    `ErrorHandler(ErrorHandler)`, `XInclude(XIncludeProcessor)`
+  - `Parser.SAXHandler(sax.SAX2Handler)` — sets the handler receiving parse events; the most recent call wins.
+    The default (and what a nil value restores, as with `Parser.FS`) is `NewTreeBuilder()`, so under the
+    default or a nil-restored handler a successful `Parse` returns a built `*Document` and a caller forwarding
+    an optional handler through cannot silently lose all output. To consume events without building a tree,
+    pass a handler that ignores them
+  - `Parser.XInclude(XIncludeProcessor)` — inject an XInclude processor (the `XIncludeProcessor` interface:
+    `Process(context.Context, *Document) (int, error)`, satisfied by `xinclude.Processor`). When set,
+    `Parse`/`ParseReader`/`ParseFile` run it over the built tree so the returned document has `xi:include`
+    elements expanded; if `ValidateDTD` is also set, the expanded tree is validated. Off by default (nil
+    disables). The interface is the dependency-inversion seam: the root package cannot import `xinclude`
+    (which imports `helium`), so the caller builds and injects a configured processor
   - **PermissiveFS() → fs.FS** — returns `internal/iofs.PermissiveRoot` (opens any path via `os.Open`), the public escape hatch for restoring host-filesystem access that `NewParser` does not grant by default
-  - **DirFS(root string) → fs.FS** — returns `internal/iofs.ConfinedDir`, a confined FS that opens external resources only at or below `root`. Refuses a `../`- or absolute-path escape AND an in-root symlink pointing outside `root` (enforced with `os.Root`/`os.OpenRoot`, Go 1.24+ — stronger than `os.DirFS`, which is path-escape-safe but follows an escaping symlink), and rejects a non-`file` URI scheme so it never reaches the network. Unlike a bare `os.DirFS`/`os.Root.FS` passed to `Parser.FS`, it serves an in-root ABSOLUTE name directly (no reliance on the base-relative retry), so `root` may be ANY trusted directory, not only the document's own directory. The internal `ConfinedDir` is the shared implementation behind the CLI's `newConfinedDirFS` (the xslt command's stylesheet-directory FS)
-  - `Parser.FS(fs.FS)` — sets the `fs.FS` used to load external resources referenced by the document: external DTD subsets (`LoadExternalDTD`) and external general entities resolved through `TreeBuilder.ResolveEntity`. The default (and what a nil value restores) is `internal/iofs.DenyAll`, which refuses every open. Pass `helium.PermissiveFS()` (any `os.Open` path) or a confined FS to enable loading; to confine to an arbitrary trusted directory prefer `helium.DirFS(root)` — it serves an in-root absolute name directly (so `root` need not be the document's own directory) and refuses a symlink escape. A bare `os.Root.FS`/`os.DirFS` passed here only enforces `fs.ValidPath`, so an absolute/`file:` SYSTEM id is rejected and only the document-directory base-relative retry (below) recovers it; between the two, `os.Root.FS` refuses a symlink escape whereas `os.DirFS` follows an in-root symlink out of its root (path-escape-safe, not a symlink sandbox). A relative SYSTEM id is resolved against the document's base URI (absolute whenever set — `ParseFile` uses the file's absolute path); the direct entity/DTD paths hand the FS the raw resolved name first (a `file:` URI verbatim, so `PermissiveRoot`/os.Open and a file-URI-keyed FS are unchanged) and, on an `fs.ErrInvalid` rejection from an `fs.ValidPath`-enforcing FS (`os.DirFS`/`os.Root.FS`/`fs.Sub`), retry with the name made relative to the **fixed top-level document base**'s directory (`parserCtx.documentBaseURI`, captured once at parse start; `openExternalResource`/`baseRelativeFSName` in `tree_builder.go`), so a confined FS rooted at the document's directory resolves the reference — including a nested resource in a subdirectory, which relativizes against the document root, not its own moving base. The retry fires **only for an originally-relative reference** (`systemIDRetryEligible` on the SYSTEM id as declared, before URI resolution / catalog mapping): ineligible when the id is absolute, carries a URI scheme, or has a colon anywhere in its first path segment (catching a one-letter RFC 3986 scheme like `x:opaque` and a bare drive letter), so an absolute, `file:`-URI, or otherwise scheme-carrying SYSTEM id is never retried, even one naming an in-root file. The supported confined-FS document base is an **absolute path or `file:` URI**; a relative document base is out of scope (`BuildURI` yields a valid-but-absent relative path that fails with `fs.ErrNotExist`, not `fs.ErrInvalid`, so the retry never fires — `helium.DirFS(root)`, which serves an in-root absolute name directly, is the general fix for an FS rooted elsewhere than the document directory). The retry is a validated `fs.ValidPath` (leading `/` or surviving `..` disqualifies it → blocks `../`/absolute path escape, but does NOT confine symlinks). `openExternalResource` is the single network-guard enforcement point: a network-scheme name is refused (`ErrNetworkAccessForbidden`) before **either** open — primary or retry
-  - `Parser.ErrorHandler(ErrorHandler)` — sets the handler for validation errors produced during DTD validation (`ValidateDTD`); individual errors are delivered as they occur and `Parse` returns `ErrDTDValidationFailed` on failure (or `ErrNoDTDFound`, which wraps it, when the document carries no DTD at all). If the handler is an `io.Closer`, it is closed only after the DTD validation pass runs (i.e. when `ValidateDTD` is enabled and the document was parsed); it is not auto-closed for non-validating parses or for parse errors that abort before validation
-  - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document, error)`, `ParseFile(ctx, string) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node, error)`, `NewPushParser(ctx) → *PushParser`
+  - **DirFS(root string) → fs.FS** — returns `internal/iofs.ConfinedDir`, a confined FS that opens external
+    resources only at or below `root`. Refuses a `../`- or absolute-path escape AND an in-root symlink
+    pointing outside `root` (enforced with `os.Root`/`os.OpenRoot`, Go 1.24+ — stronger than `os.DirFS`, which
+    is path-escape-safe but follows an escaping symlink), and rejects a non-`file` URI scheme so it never
+    reaches the network. Unlike a bare `os.DirFS`/`os.Root.FS` passed to `Parser.FS`, it serves an in-root
+    ABSOLUTE name directly (no reliance on the base-relative retry), so `root` may be ANY trusted directory,
+    not only the document's own directory. The internal `ConfinedDir` is the shared implementation behind the
+    CLI's `newConfinedDirFS` (the xslt command's stylesheet-directory FS)
+  - `Parser.FS(fs.FS)` — sets the `fs.FS` used to load external resources referenced by the document: external
+    DTD subsets (`LoadExternalDTD`) and external general entities resolved through
+    `TreeBuilder.ResolveEntity`. The default (and what a nil value restores) is `internal/iofs.DenyAll`, which
+    refuses every open. Pass `helium.PermissiveFS()` (any `os.Open` path) or a confined FS to enable loading;
+    to confine to an arbitrary trusted directory prefer `helium.DirFS(root)` — it serves an in-root absolute
+    name directly (so `root` need not be the document's own directory) and refuses a symlink escape. A bare
+    `os.Root.FS`/`os.DirFS` passed here only enforces `fs.ValidPath`, so an absolute/`file:` SYSTEM id is
+    rejected and only the document-directory base-relative retry (below) recovers it; between the two,
+    `os.Root.FS` refuses a symlink escape whereas `os.DirFS` follows an in-root symlink out of its root
+    (path-escape-safe, not a symlink sandbox). A relative SYSTEM id is resolved against the document's base
+    URI (absolute whenever set — `ParseFile` uses the file's absolute path); the direct entity/DTD paths hand
+    the FS the raw resolved name first (a `file:` URI verbatim, so `PermissiveRoot`/os.Open and a
+    file-URI-keyed FS are unchanged) and, on an `fs.ErrInvalid` rejection from an `fs.ValidPath`-enforcing FS
+    (`os.DirFS`/`os.Root.FS`/`fs.Sub`), retry with the name made relative to the **fixed top-level document
+    base**'s directory (`parserCtx.documentBaseURI`, captured once at parse start;
+    `openExternalResource`/`baseRelativeFSName` in `tree_builder.go`), so a confined FS rooted at the
+    document's directory resolves the reference — including a nested resource in a subdirectory, which
+    relativizes against the document root, not its own moving base. The retry fires **only for an
+    originally-relative reference** (`systemIDRetryEligible` on the SYSTEM id as declared, before URI
+    resolution / catalog mapping): ineligible when the id is absolute, carries a URI scheme, or has a colon
+    anywhere in its first path segment (catching a one-letter RFC 3986 scheme like `x:opaque` and a bare drive
+    letter), so an absolute, `file:`-URI, or otherwise scheme-carrying SYSTEM id is never retried, even one
+    naming an in-root file. The supported confined-FS document base is an **absolute path or `file:` URI**; a
+    relative document base is out of scope (`BuildURI` yields a valid-but-absent relative path that fails with
+    `fs.ErrNotExist`, not `fs.ErrInvalid`, so the retry never fires — `helium.DirFS(root)`, which serves an
+    in-root absolute name directly, is the general fix for an FS rooted elsewhere than the document
+    directory). The retry is a validated `fs.ValidPath` (leading `/` or surviving `..` disqualifies it →
+    blocks `../`/absolute path escape, but does NOT confine symlinks). `openExternalResource` is the single
+    network-guard enforcement point: a network-scheme name is refused (`ErrNetworkAccessForbidden`) before
+    **either** open — primary or retry
+  - `Parser.ErrorHandler(ErrorHandler)` — sets the handler for validation errors produced during DTD
+    validation (`ValidateDTD`); individual errors are delivered as they occur and `Parse` returns
+    `ErrDTDValidationFailed` on failure (or `ErrNoDTDFound`, which wraps it, when the document carries no DTD
+    at all). If the handler is an `io.Closer`, it is closed only after the DTD validation pass runs (i.e. when
+    `ValidateDTD` is enabled and the document was parsed); it is not auto-closed for non-validating parses or
+    for parse errors that abort before validation
+  - Terminal methods: `Parse(ctx, []byte) → (*Document, error)`, `ParseReader(ctx, io.Reader) → (*Document,
+    error)`, `ParseFile(ctx, string) → (*Document, error)`, `ParseInNodeContext(ctx, Node, []byte) → (Node,
+    error)`, `NewPushParser(ctx) → *PushParser`
   - XML 1.1 literal-character validation — see `parser-internals.md` “XML 1.1 Version-Gated Rules”
 - **NewWriter() → Writer** — create fluent XML writer builder
-  - Writer markup validation: DOM element and attribute names use QNames; DTD element, ATTLIST, content-model, NDATA, named-reference, and NOTATION-list names use full XML Names; entity and notation declarations use NCNames. EntityValue scanning rejects malformed numeric, named, and parsed parameter-entity references. Its numeric-reference parser is shared with `CreateCharRef`; only a syntactically valid target outside the selected XML character range follows `RejectInvalidChars` replacement. External-ID literal validation applies to entity types that emit an external ID; unused IDs stored on internal entities do not affect Writer output. Enumeration members are non-empty, distinct Nmtokens or Names and are checked before output.
-  - Writer validation is atomic: `WriteTo` first runs the complete serialization to `io.Discard`. A validation error returns without calling the supplied writer; valid serialization then runs to the supplied writer, preserving that writer's I/O-error behavior.
-  - Writer methods: `Format(bool)`, `IndentString(string)` (per-level indent used when `Format` is on; an explicit `""` requests newlines with NO indentation, while leaving it unset uses the two-space default), `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`, `AllowPrefixUndeclarations(bool)`, `RejectInvalidChars(bool)` (**default true**: a character invalid in the target XML version — e.g. a C0/C1 control char in XML 1.0 output — fails serialization with `ErrInvalidXMLChar`, the XSLT SERE0006 error; a zero-value `Writer`/`NewWriter()` rejects. `RejectInvalidChars(false)` opts into U+FFFD replacement instead: the `&#xFFFD;` reference under `EscapeNonASCII`/US-ASCII output (matching libxml2), the raw U+FFFD character otherwise — an out-of-range char never serializes as a bogus numeric reference like `&#x1;`. The policy covers every serialization context except the character-map exemption below: text/attribute values (the check is folded into the escape pass ahead of every emission branch, so it adds no extra traversal); the reference-less contexts — comment text, PI data, CDATA-section content, and DTD literals (entity values, external-ID system/public literals, enumeration tokens), each validated via `serializeRefFree`/`dtdLiteral` against the XML 1.0 Char range; every verbatim NAME — the DOCTYPE, `<!ENTITY>`, `<!NOTATION>`, `<!ELEMENT>`/`<!ATTLIST>` and content-model names, the NDATA notation name, element/attribute names, and a named entity reference's name — validated against the XML Name grammar (`checkVerbatimName`/`checkElementName`; the grammar subsumes the char check, so an invalid name is REJECTED in both modes with `ErrWriterInvalidName`, having no U+FFFD form); and numeric character-reference TARGETS — a `CreateCharRef("#N")` node (`writeCharRef`) and a `&#N;` reference inside an entity value (`entityValueLiteral`/`screenCharRefs`) — validated against `isSerializableChar(cp, xml11)`, so version-sensitively (e.g. `&#1;` is invalid for XML 1.0 output but a legal RestrictedChar reference for XML 1.1); an invalid target rejects (default) or has its reference replaced by U+FFFD. In text/attribute values a valid XML 1.1 restricted character is exempt from the char check — it serializes as a decimal character reference in either mode; in a reference-less context it has no character-reference form, so it is rejected/replaced there too (`serializeRefFree` uses `isInCharacterRange`, NOT `isSerializableChar`). A `CharacterMap` is the one exemption: it is applied BEFORE the check (Serialization 3.1 §5.1.11), so a mapped-away invalid character is not rejected — SERE0006 is defined on the serialized result, which no longer contains it — and a replacement string is emitted verbatim per §7. Internally the field is `replaceInvalidChars` so the safe reject behavior is the zero value), plus the serialization-parameter knobs `OutputVersion(string)` (override the effective output XML version — empty keeps the document's version, byte-identical — driving BOTH the declaration text AND the XML 1.1 escaping/undeclaration rules; the effective version must be a valid `VersionNum` `'1.' [0-9]+`, else serialization fails with `ErrInvalidOutputVersion` before any output byte), `OutputEncoding(string)` (override the encoding pseudo-attribute of the XML declaration — empty keeps the document's own encoding, byte-identical; the encoding pseudo-attribute is omitted only when the resulting effective encoding is empty. A non-empty effective encoding must be a well-formed `EncName`, else serialization fails with `ErrUnsupportedOutputEncoding` before any output byte (validated ahead of the transcoding encoder, so no BOM leaks). Affects the **Document serialization path only**: a bare element/fragment carries no declaration, so `asciiOutput` stays off and fragment bytes are byte-identical to output without an override. When set on a `WriteTo`-to-io.Writer Document path the emitted octets are RE-ENCODED to the effective encoding so the bytes agree with the declaration, and an effective encoding the writer cannot emit — one the internal encoder table can't load and that is not UTF-8/US-ASCII — fails with `ErrUnsupportedOutputEncoding`; this hard error is scoped to the override, a document's own unloadable parsed encoding stays declaration-only. An explicit US-ASCII override — matched by ANY IANA alias via `internal/encoding.IsASCII` (`us-ascii`, `ascii`, `csASCII`, `ANSI_X3.4-1968`, `ANSI_X3.4-1986`, `iso-ir-6`, `ISO646-US`, `us`, `IBM367`, `cp367`) — installs no encoder but escapes EVERY non-ASCII character — the full Unicode range, not just the Latin-1 that `EscapeNonASCII` covers — as a numeric character reference (`&#xNNNN;`), so the octets are pure US-ASCII and agree with the declaration. Text and attribute values character-reference fine; ANY other non-ASCII byte reaching the output has no faithful US-ASCII serialization and fails with `ErrUnsupportedOutputEncoding` — a name, comment, CDATA, PI target/data, namespace prefix, DTD-internal name (DOCTYPE, `<!ELEMENT>`/`<!ATTLIST>`/`<!ENTITY>` names, enumeration tokens), a character-map replacement, a DTD external/system/public-ID literal, an entity/notation value/name, or any future raw-write site. Per-site guards give early labelled errors on the common paths and an exhaustive output-writer net (`asciiRejectWriter`) rejects any surviving byte ≥ 0x80. Without an override a document's own US-ASCII encoding stays byte-identical. fn:serialize uses an internal declaration-only mode instead, keeping octets UTF-8 with char-reference escaping — a US-ASCII encoding there still character-references non-ASCII text/attr values, but keeps reference-less content and character-map replacements RAW (the result is a UTF-8 string), so the net and guards key on `asciiOutput && !declOnlyEncoding`), `Standalone(bool)` / `OmitStandalone()` (force the declaration's standalone pseudo-attribute to yes/no, or force its omission, overriding the document's own standalone status), `CharacterMap(map[rune]string)` (substitute a mapped rune with its raw replacement in text/attribute content — XSLT/XQuery Serialization 3.1 §7), `Normalization(string)` (the normalization-form serialization parameter — `"NFC"`/`"NFD"`/`"NFKC"`/`"NFKD"` normalize text-node and attribute-value character content; `""`/`"none"` disable it; ANY OTHER value is an error: `WriteTo` fails with `ErrUnsupportedNormalizationForm` before any output byte, so an out-of-range form never silently disables normalization), `CDATASectionElements(map[string]struct{})` (emit the named elements' direct text children as CDATA), and `SuppressIndentElements(map[string]struct{})` (serialize the named subtrees without indentation even when `Format` is on) — the last two match by EXACT expanded `{uri}local` name
-  - XML 1.1 output: when the effective output version is `"1.1"` — either the serialized document declares version `"1.1"` (`Document.Version() == "1.1"`, set via `Document.SetVersion`) or `OutputVersion("1.1")` overrides it — the writer emits the XML 1.1 **restricted** control characters (`#x1-#x8`, `#xB-#xC`, `#xE-#x1F`, `#x7F-#x84`, `#x86-#x9F`; §2.11, tab/LF/CR excluded) **plus the two end-of-line characters NEL `#x85` and LINE SEPARATOR `#x2028`** (excluded from `RestrictedChar` but normalized to `#xA` on §2.11 input, so they must be char-ref'd to round-trip — the serialization set is `isXML11SerializeAsCharRef` = `isXML11RestrictedChar` ∪ {`#x85`, `#x2028`}) as **decimal** character references (`&#N;`) in text and attribute content instead of hex (`escapeNonASCII`) or U+FFFD replacement/`SERE0006` rejection. Gated on the document version, so XML 1.0 output is byte-identical (the `xml11` branch sits after the `RejectInvalidChars` check and before the `escapeNonASCII` hex branch, so it adds no extra walk; in XML 1.0 NEL/LS are ordinary characters written literally). The `stream.Writer` has the parallel `XMLVersion("1.1")` fluent method (also set by `StartDocument` when the declaration version is `1.1`): its text/attribute validation admits the restricted chars and `writeEscaped` serializes the same `isXML11SerializeAsCharRef` set as decimal refs (comment/PI/CDATA content, which cannot carry a reference, stay strictly rejected)
-  - XML 1.1 DTD literals: `EntityValue` validates and preserves existing named and numeric references, then converts each raw `isXML11SerializeAsCharRef` character to a decimal character reference. It is the one DTD literal grammar that can carry a character reference. Comment text, PI data, CDATA content, and external DTD public/system literals cannot carry one, so `serializeRefFree`/`dtdLiteral` reject XML 1.1 serialization-only characters by default or replace them with raw U+FFFD in replacement mode. XML 1.0 continues to write U+007F, NEL, and LINE SEPARATOR literally in these paths.
+  - Writer markup validation: DOM element and attribute names use QNames; DTD element, ATTLIST, content-model,
+    NDATA, named-reference, and NOTATION-list names use full XML Names; entity and notation declarations use
+    NCNames. EntityValue scanning rejects malformed numeric, named, and parsed parameter-entity references.
+    Its numeric-reference parser is shared with `CreateCharRef`; only a syntactically valid target outside the
+    selected XML character range follows `RejectInvalidChars` replacement. External-ID literal validation
+    applies to entity types that emit an external ID; unused IDs stored on internal entities do not affect
+    Writer output. Enumeration members are non-empty, distinct Nmtokens or Names and are checked before
+    output.
+  - Writer validation is atomic: `WriteTo` first runs the complete serialization to `io.Discard`. A validation
+    error returns without calling the supplied writer; valid serialization then runs to the supplied writer,
+    preserving that writer's I/O-error behavior.
+  - Writer methods: `Format(bool)`, `IndentString(string)` (per-level indent used when `Format` is on; an
+    explicit `""` requests newlines with NO indentation, while leaving it unset uses the two-space default),
+    `SelfCloseEmptyElements(bool)`, `XMLDeclaration(bool)`, `IncludeDTD(bool)`, `EscapeNonASCII(bool)`,
+    `AllowPrefixUndeclarations(bool)`, `RejectInvalidChars(bool)` (**default true**: a character invalid in
+    the target XML version — e.g. a C0/C1 control char in XML 1.0 output — fails serialization with
+    `ErrInvalidXMLChar`, the XSLT SERE0006 error; a zero-value `Writer`/`NewWriter()` rejects.
+    `RejectInvalidChars(false)` opts into U+FFFD replacement instead: the `&#xFFFD;` reference under
+    `EscapeNonASCII`/US-ASCII output (matching libxml2), the raw U+FFFD character otherwise — an out-of-range
+    char never serializes as a bogus numeric reference like `&#x1;`. The policy covers every serialization
+    context except the character-map exemption below: text/attribute values (the check is folded into the
+    escape pass ahead of every emission branch, so it adds no extra traversal); the reference-less contexts —
+    comment text, PI data, CDATA-section content, and DTD literals (entity values, external-ID system/public
+    literals, enumeration tokens), each validated via `serializeRefFree`/`dtdLiteral` against the XML 1.0 Char
+    range; every verbatim NAME — the DOCTYPE, `<!ENTITY>`, `<!NOTATION>`, `<!ELEMENT>`/`<!ATTLIST>` and
+    content-model names, the NDATA notation name, element/attribute names, and a named entity reference's name
+    — validated against the XML Name grammar (`checkVerbatimName`/`checkElementName`; the grammar subsumes the
+    char check, so an invalid name is REJECTED in both modes with `ErrWriterInvalidName`, having no U+FFFD
+    form); and numeric character-reference TARGETS — a `CreateCharRef("#N")` node (`writeCharRef`) and a
+    `&#N;` reference inside an entity value (`entityValueLiteral`/`screenCharRefs`) — validated against
+    `isSerializableChar(cp, xml11)`, so version-sensitively (e.g. `&#1;` is invalid for XML 1.0 output but a
+    legal RestrictedChar reference for XML 1.1); an invalid target rejects (default) or has its reference
+    replaced by U+FFFD. In text/attribute values a valid XML 1.1 restricted character is exempt from the char
+    check — it serializes as a decimal character reference in either mode; in a reference-less context it has
+    no character-reference form, so it is rejected/replaced there too (`serializeRefFree` uses
+    `isInCharacterRange`, NOT `isSerializableChar`). A `CharacterMap` is the one exemption: it is applied
+    BEFORE the check (Serialization 3.1 §5.1.11), so a mapped-away invalid character is not rejected —
+    SERE0006 is defined on the serialized result, which no longer contains it — and a replacement string is
+    emitted verbatim per §7. Internally the field is `replaceInvalidChars` so the safe reject behavior is the
+    zero value), plus the serialization-parameter knobs `OutputVersion(string)` (override the effective output
+    XML version — empty keeps the document's version, byte-identical — driving BOTH the declaration text AND
+    the XML 1.1 escaping/undeclaration rules; the effective version must be a valid `VersionNum` `'1.'
+    [0-9]+`, else serialization fails with `ErrInvalidOutputVersion` before any output byte),
+    `OutputEncoding(string)` (override the encoding pseudo-attribute of the XML declaration — empty keeps the
+    document's own encoding, byte-identical; the encoding pseudo-attribute is omitted only when the resulting
+    effective encoding is empty. A non-empty effective encoding must be a well-formed `EncName`, else
+    serialization fails with `ErrUnsupportedOutputEncoding` before any output byte (validated ahead of the
+    transcoding encoder, so no BOM leaks). Affects the **Document serialization path only**: a bare
+    element/fragment carries no declaration, so `asciiOutput` stays off and fragment bytes are byte-identical
+    to output without an override. When set on a `WriteTo`-to-io.Writer Document path the emitted octets are
+    RE-ENCODED to the effective encoding so the bytes agree with the declaration, and an effective encoding
+    the writer cannot emit — one the internal encoder table can't load and that is not UTF-8/US-ASCII — fails
+    with `ErrUnsupportedOutputEncoding`; this hard error is scoped to the override, a document's own
+    unloadable parsed encoding stays declaration-only. An explicit US-ASCII override — matched by ANY IANA
+    alias via `internal/encoding.IsASCII` (`us-ascii`, `ascii`, `csASCII`, `ANSI_X3.4-1968`, `ANSI_X3.4-1986`,
+    `iso-ir-6`, `ISO646-US`, `us`, `IBM367`, `cp367`) — installs no encoder but escapes EVERY non-ASCII
+    character — the full Unicode range, not just the Latin-1 that `EscapeNonASCII` covers — as a numeric
+    character reference (`&#xNNNN;`), so the octets are pure US-ASCII and agree with the declaration. Text and
+    attribute values character-reference fine; ANY other non-ASCII byte reaching the output has no faithful
+    US-ASCII serialization and fails with `ErrUnsupportedOutputEncoding` — a name, comment, CDATA, PI
+    target/data, namespace prefix, DTD-internal name (DOCTYPE, `<!ELEMENT>`/`<!ATTLIST>`/`<!ENTITY>` names,
+    enumeration tokens), a character-map replacement, a DTD external/system/public-ID literal, an
+    entity/notation value/name, or any future raw-write site. Per-site guards give early labelled errors on
+    the common paths and an exhaustive output-writer net (`asciiRejectWriter`) rejects any surviving byte ≥
+    0x80. Without an override a document's own US-ASCII encoding stays byte-identical. fn:serialize uses an
+    internal declaration-only mode instead, keeping octets UTF-8 with char-reference escaping — a US-ASCII
+    encoding there still character-references non-ASCII text/attr values, but keeps reference-less content and
+    character-map replacements RAW (the result is a UTF-8 string), so the net and guards key on `asciiOutput
+    && !declOnlyEncoding`), `Standalone(bool)` / `OmitStandalone()` (force the declaration's standalone
+    pseudo-attribute to yes/no, or force its omission, overriding the document's own standalone status),
+    `CharacterMap(map[rune]string)` (substitute a mapped rune with its raw replacement in text/attribute
+    content — XSLT/XQuery Serialization 3.1 §7), `Normalization(string)` (the normalization-form serialization
+    parameter — `"NFC"`/`"NFD"`/`"NFKC"`/`"NFKD"` normalize text-node and attribute-value character content;
+    `""`/`"none"` disable it; ANY OTHER value is an error: `WriteTo` fails with
+    `ErrUnsupportedNormalizationForm` before any output byte, so an out-of-range form never silently disables
+    normalization), `CDATASectionElements(map[string]struct{})` (emit the named elements' direct text children
+    as CDATA), and `SuppressIndentElements(map[string]struct{})` (serialize the named subtrees without
+    indentation even when `Format` is on) — the last two match by EXACT expanded `{uri}local` name
+  - XML 1.1 output: when the effective output version is `"1.1"` — either the serialized document declares
+    version `"1.1"` (`Document.Version() == "1.1"`, set via `Document.SetVersion`) or `OutputVersion("1.1")`
+    overrides it — the writer emits the XML 1.1 **restricted** control characters (`#x1-#x8`, `#xB-#xC`,
+    `#xE-#x1F`, `#x7F-#x84`, `#x86-#x9F`; §2.11, tab/LF/CR excluded) **plus the two end-of-line characters NEL
+    `#x85` and LINE SEPARATOR `#x2028`** (excluded from `RestrictedChar` but normalized to `#xA` on §2.11
+    input, so they must be char-ref'd to round-trip — the serialization set is `isXML11SerializeAsCharRef` =
+    `isXML11RestrictedChar` ∪ {`#x85`, `#x2028`}) as **decimal** character references (`&#N;`) in text and
+    attribute content instead of hex (`escapeNonASCII`) or U+FFFD replacement/`SERE0006` rejection. Gated on
+    the document version, so XML 1.0 output is byte-identical (the `xml11` branch sits after the
+    `RejectInvalidChars` check and before the `escapeNonASCII` hex branch, so it adds no extra walk; in XML
+    1.0 NEL/LS are ordinary characters written literally). The `stream.Writer` has the parallel
+    `XMLVersion("1.1")` fluent method (also set by `StartDocument` when the declaration version is `1.1`): its
+    text/attribute validation admits the restricted chars and `writeEscaped` serializes the same
+    `isXML11SerializeAsCharRef` set as decimal refs (comment/PI/CDATA content, which cannot carry a reference,
+    stay strictly rejected)
+  - XML 1.1 DTD literals: `EntityValue` validates and preserves existing named and numeric references, then
+    converts each raw `isXML11SerializeAsCharRef` character to a decimal character reference. It is the one
+    DTD literal grammar that can carry a character reference. Comment text, PI data, CDATA content, and
+    external DTD public/system literals cannot carry one, so `serializeRefFree`/`dtdLiteral` reject XML 1.1
+    serialization-only characters by default or replace them with raw U+FFFD in replacement mode. XML 1.0
+    continues to write U+007F, NEL, and LINE SEPARATOR literally in these paths.
   - Terminal method: `WriteTo(io.Writer, Node) → error`
 - **Write(io.Writer, Node) → error** — serialize node with default settings
 - **WriteString(Node) → (string, error)** — serialize node to string with default settings
 - **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
 - **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** — attribute value lookup by QName or expanded name
 - Element attribute setters (all return only `error`, create-or-replace-in-place by expanded name/QName via `addProperty`, and reject a colon in the name/local name):
-  - **Element.SetAttribute(name, value) / Element.SetAttributeNS(localname, value, ns)** — **LITERAL**: store `value` verbatim as a text child WITHOUT parsing entity references (mirrors libxml2 `xmlSetProp`). `"A&B"` stays the three characters `A&B`; `"&amp;"` stays five characters. The writer escapes on output, so a verbatim `&` round-trips as `&amp;`. An empty value creates an empty text child, distinguishing it from a boolean attribute. This is the default setter — use it for already-literal text (attr values, computed strings, resolved URIs, HTML/parser-resolved values).
-  - **Element.SetParsedAttribute(name, value) / Element.SetParsedAttributeNS(localname, value, ns)** — **PARSED**: parse `value` for entity references into the attribute's child node list via `Document.CreateAttribute` (mirrors libxml2 `xmlNewDocProp`). `"&amp;"` resolves to a single `&`; a malformed reference (e.g. a bare `&` in `"A&B"`) is an error. For callers building the DOM from unresolved attribute source text (the parser's `TreeBuilder` non-`replaceEntities` path).
+  - **Element.SetAttribute(name, value) / Element.SetAttributeNS(localname, value, ns)** — **LITERAL**: store
+    `value` verbatim as a text child WITHOUT parsing entity references (mirrors libxml2 `xmlSetProp`). `"A&B"`
+    stays the three characters `A&B`; `"&amp;"` stays five characters. The writer escapes on output, so a
+    verbatim `&` round-trips as `&amp;`. An empty value creates an empty text child, distinguishing it from a
+    boolean attribute. This is the default setter — use it for already-literal text (attr values, computed
+    strings, resolved URIs, HTML/parser-resolved values).
+  - **Element.SetParsedAttribute(name, value) / Element.SetParsedAttributeNS(localname, value, ns)** —
+    **PARSED**: parse `value` for entity references into the attribute's child node list via
+    `Document.CreateAttribute` (mirrors libxml2 `xmlNewDocProp`). `"&amp;"` resolves to a single `&`; a
+    malformed reference (e.g. a bare `&` in `"A&B"`) is an error. For callers building the DOM from unresolved
+    attribute source text (the parser's `TreeBuilder` non-`replaceEntities` path).
   - **Element.SetBooleanAttribute(name)** — name-only attribute with NO children (distinct from an empty-string value).
 - **Document.CreateAttribute(name, value, ns) → (*Attribute, error)** — builds an attribute node with `value` PARSED into its child list (mirrors `xmlNewDocProp`); backs `SetParsedAttribute`/`SetParsedAttributeNS`. Rejects a colon in `name`.
 - Key types: `Document`, `Element`, `Attribute`, `Namespace`, `DTD`, `Entity`, `Text`, `CDATASection`, `Comment`, `PI`
 - `Node` interface — common for all node types; use ElementType enum to distinguish
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
-- `ErrorHandler` interface — delivers compilation/validation errors (synchronously unless the handler is `Sink`-backed); retained by reference and shared across operations, a nil handler is treated as `NilErrorHandler` (discard). The root `Parser` consults it only during DTD validation (see `Parser.ErrorHandler` above)
+- `ErrorHandler` interface — delivers compilation/validation errors (synchronously unless the handler is
+  `Sink`-backed); retained by reference and shared across operations, a nil handler is treated as
+  `NilErrorHandler` (discard). The root `Parser` consults it only during DTD validation (see
+  `Parser.ErrorHandler` above)
 - `ErrorLeveler` interface — optional `ErrorLevel() ErrorLevel` an error implements to report its severity; `ErrorCollector`'s level filter reads it via `errors.As` (default `ErrorLevelWarning`)
-- `DTDValidationError{Message, Level}` (`valid.go`) — structured DTD-validation diagnostic delivered to the `ErrorHandler` under `ValidateDTD(true)`; implements `ErrorLeveler` returning `ErrorLevelError`, so a level-filtered `ErrorCollector` keeps it. Recover via `errors.As`; `.Error()` returns `Message` (byte-identical to the prior `fmt.Errorf` text)
+- `DTDValidationError{Message, Level}` (`valid.go`) — structured DTD-validation diagnostic delivered to the
+  `ErrorHandler` under `ValidateDTD(true)`; implements `ErrorLeveler` returning `ErrorLevelError`, so a
+  level-filtered `ErrorCollector` keeps it. Recover via `errors.As`; `.Error()` returns `Message`
+  (byte-identical to the prior `fmt.Errorf` text)
 - `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`, `ResolveURI(ctx, uri)`)
 - `ErrNoInternalSubset` — sentinel returned by `Document.InternalSubset()` when the document has no internal DTD subset (`IntSubset()` returns nil for the same condition); match with `errors.Is`
-- `ErrDuplicateDeclaration` — sentinel returned when a DTD declaration collides with an existing one of the same kind and name: a second `AddElementDecl`, `AddNotation`, or `AddAttributeDecl` for an already-declared element, notation, or `(element, attribute)` pair. Wrapped (via `%w`) into a message naming the kind and name; match with `errors.Is`
-- `ErrInvalidArgument` — sentinel returned when a public builder is given an out-of-range enum argument (e.g. an `AddAttributeDecl` attribute type or default kind that is not a defined enum value) OR a colon in a `AddNotation` notation name (a notation name is an XML NCName; the colon is the one name-grammar rule these otherwise caller-trusting builders enforce, because the parser rejects a colon-bearing `<!NOTATION>` name). Wrapped (via `%w`) into a message describing the violation; match with `errors.Is`
+- `ErrDuplicateDeclaration` — sentinel returned when a DTD declaration collides with an existing one of the
+  same kind and name: a second `AddElementDecl`, `AddNotation`, or `AddAttributeDecl` for an already-declared
+  element, notation, or `(element, attribute)` pair. Wrapped (via `%w`) into a message naming the kind and
+  name; match with `errors.Is`
+- `ErrInvalidArgument` — sentinel returned when a public builder is given an out-of-range enum argument (e.g.
+  an `AddAttributeDecl` attribute type or default kind that is not a defined enum value) OR a colon in a
+  `AddNotation` notation name (a notation name is an XML NCName; the colon is the one name-grammar rule these
+  otherwise caller-trusting builders enforce, because the parser rejects a colon-bearing `<!NOTATION>` name).
+  Wrapped (via `%w`) into a message describing the violation; match with `errors.Is`
 - `ErrExternalDTDTooLarge` — sentinel error returned when a loaded external DTD subset exceeds the byte cap; enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`
-- `ErrUnsupportedXMLVersion` — sentinel returned when a document's XML declaration declares a VersionNum outside the 1.x family (e.g. `"0.0"`, `"2.0"`), which XML 1.0 5th ed. makes fatal (§2.8; libxml2 `XML_ERR_UNKNOWN_VERSION`). Wrapped (via `%w`) into a message naming the version, then into `ErrParseError`; match with `errors.Is`. A `1.x` version other than `1.0`/`1.1` warns instead and parses (see `parser-internals.md`)
-- `ErrNodeContentTooLarge` — sentinel returned when a single CDATA/comment/PI/char-data run or attribute value — or a single contiguous run of XML whitespace (a blank skip) — exceeds `MaxNodeContentSize` (or `DefaultMaxNodeContentSize`); match with `errors.Is`
-- `ErrUnsupportedOutputEncoding` — sentinel returned by the writer for an effective `OutputEncoding` that cannot be emitted faithfully, in three cases: (0) the effective encoding is a non-empty label that is NOT a well-formed XML `EncName` (`[A-Za-z] ([A-Za-z0-9._] | '-')*`, checked via `xmlchar.IsValidEncName` at the `writeDoc` entry before any output byte is written, ahead of the transcoding encoder so no BOM leaks) — a label carrying a quote or other illegal character would inject markup into the encoding pseudo-attribute; (1) the encoding is a well-formed label that is not UTF-8/US-ASCII and not loadable by the internal encoder table; (2) the encoding is US-ASCII (any alias) on the octet-producing WriteTo path and a non-ASCII byte reaches the output where no character reference can represent it — text and attribute values are always char-referenced, so ANY OTHER non-ASCII byte fails (names, comment, CDATA, PI, namespace prefix, DTD-internal names, character-map replacement, DTD external/system/public-ID literals, entity/notation value/name), caught by per-site guards plus an exhaustive `asciiRejectWriter` net; fn:serialize's declaration-only mode is excluded (keeps reference-less content raw in its UTF-8 string). The label-well-formedness check (case 0) also fires on a document's OWN encoding (`Document.SetEncoding`), since a malformed EncName cannot be faithfully emitted from any source; the transcoding cases (1)/(2) stay scoped to the override so a document's own unloadable parsed encoding stays declaration-only (default output byte-identical); match with `errors.Is`
-- `ErrInvalidOutputVersion` — sentinel returned by the writer when the effective output XML version (the `OutputVersion` override, or the document's own version via `Document.SetVersion`) is not a valid XML `VersionNum` production `'1.' [0-9]+` (XML §2.8, e.g. `1.0`/`1.1`; a non-`1.x` version like `2.0` is also rejected). The version is emitted raw between the double quotes of the declaration's version pseudo-attribute, so the writer validates it (via `isValidXMLVersion`) before writing any output byte and fails closed on a value carrying a quote/illegal character (markup injection) or a malformed value (unparseable declaration), emitting nothing. A non-empty `OutputVersion` override is validated at the `WriteTo` entry ahead of the node-type branch, so a bare element/fragment is rejected the same as a Document (the override drives the XML 1.1 escaping rules there too); the document's own version is validated at the `writeDoc` entry. Valid `1.x` versions are byte-identical; match with `errors.Is`
-- Writer structural-serialization sentinels (errors.go) — each flags a DOM the writer cannot serialize into well-formed XML and is wrapped with %w for errors.Is: ErrWriterReservedElementName, ErrWriterReservedAttributeName, ErrWriterReservedNamespacePrefix, ErrWriterInvalidElementName, ErrWriterInvalidAttributeName, ErrWriterInvalidNamespacePrefix, ErrWriterUnboundNamespacePrefix, ErrWriterInvalidName, ErrWriterInvalidComment, ErrWriterInvalidPITarget, ErrWriterInvalidPIContent, and ErrWriterInvalidDTDNode. ErrWriterUnboundNamespacePrefix covers a non-empty element or attribute prefix with no namespace URI; ErrWriterInvalidName covers malformed EntityValue markup, DTD Name or NCName grammar failures, and invalid enumeration tokens in either replacement mode; and ErrWriterInvalidDTDNode covers an empty DOCTYPE name, a non-PubidChar public identifier, or a DOCTYPE, external-entity, or notation system literal containing both quote characters. The checks preserve an earlier I/O error.
-- `ErrUnsupportedNormalizationForm` — sentinel returned by `Writer.WriteTo` when `Writer.Normalization` was given a value outside `{"", "none", "NFC", "NFD", "NFKC", "NFKD"}`. `Normalization` stores the raw form and the check is deferred to `WriteTo` (covering both the Document and bare-element paths), which fails closed before any output byte instead of silently disabling normalization; match with `errors.Is`
-- `DefaultMaxNodeContentSize` — default single-construct content byte cap (10 MiB), also bounding a contiguous blank-skip run; used when `MaxNodeContentSize` is unset (0); a negative `MaxNodeContentSize` disables both the node-content and the blank-run cap
+- `ErrUnsupportedXMLVersion` — sentinel returned when a document's XML declaration declares a VersionNum
+  outside the 1.x family (e.g. `"0.0"`, `"2.0"`), which XML 1.0 5th ed. makes fatal (§2.8; libxml2
+  `XML_ERR_UNKNOWN_VERSION`). Wrapped (via `%w`) into a message naming the version, then into `ErrParseError`;
+  match with `errors.Is`. A `1.x` version other than `1.0`/`1.1` warns instead and parses (see
+  `parser-internals.md`)
+- `ErrNodeContentTooLarge` — sentinel returned when a single CDATA/comment/PI/char-data run or attribute value
+  — or a single contiguous run of XML whitespace (a blank skip) — exceeds `MaxNodeContentSize` (or
+  `DefaultMaxNodeContentSize`); match with `errors.Is`
+- `ErrUnsupportedOutputEncoding` — sentinel returned by the writer for an effective `OutputEncoding` that
+  cannot be emitted faithfully, in three cases: (0) the effective encoding is a non-empty label that is NOT a
+  well-formed XML `EncName` (`[A-Za-z] ([A-Za-z0-9._] | '-')*`, checked via `xmlchar.IsValidEncName` at the
+  `writeDoc` entry before any output byte is written, ahead of the transcoding encoder so no BOM leaks) — a
+  label carrying a quote or other illegal character would inject markup into the encoding pseudo-attribute;
+  (1) the encoding is a well-formed label that is not UTF-8/US-ASCII and not loadable by the internal encoder
+  table; (2) the encoding is US-ASCII (any alias) on the octet-producing WriteTo path and a non-ASCII byte
+  reaches the output where no character reference can represent it — text and attribute values are always
+  char-referenced, so ANY OTHER non-ASCII byte fails (names, comment, CDATA, PI, namespace prefix,
+  DTD-internal names, character-map replacement, DTD external/system/public-ID literals, entity/notation
+  value/name), caught by per-site guards plus an exhaustive `asciiRejectWriter` net; fn:serialize's
+  declaration-only mode is excluded (keeps reference-less content raw in its UTF-8 string). The
+  label-well-formedness check (case 0) also fires on a document's OWN encoding (`Document.SetEncoding`), since
+  a malformed EncName cannot be faithfully emitted from any source; the transcoding cases (1)/(2) stay scoped
+  to the override so a document's own unloadable parsed encoding stays declaration-only (default output
+  byte-identical); match with `errors.Is`
+- `ErrInvalidOutputVersion` — sentinel returned by the writer when the effective output XML version (the
+  `OutputVersion` override, or the document's own version via `Document.SetVersion`) is not a valid XML
+  `VersionNum` production `'1.' [0-9]+` (XML §2.8, e.g. `1.0`/`1.1`; a non-`1.x` version like `2.0` is also
+  rejected). The version is emitted raw between the double quotes of the declaration's version
+  pseudo-attribute, so the writer validates it (via `isValidXMLVersion`) before writing any output byte and
+  fails closed on a value carrying a quote/illegal character (markup injection) or a malformed value
+  (unparseable declaration), emitting nothing. A non-empty `OutputVersion` override is validated at the
+  `WriteTo` entry ahead of the node-type branch, so a bare element/fragment is rejected the same as a Document
+  (the override drives the XML 1.1 escaping rules there too); the document's own version is validated at the
+  `writeDoc` entry. Valid `1.x` versions are byte-identical; match with `errors.Is`
+- Writer structural-serialization sentinels (errors.go) — each flags a DOM the writer cannot serialize into
+  well-formed XML and is wrapped with %w for errors.Is: ErrWriterReservedElementName,
+  ErrWriterReservedAttributeName, ErrWriterReservedNamespacePrefix, ErrWriterInvalidElementName,
+  ErrWriterInvalidAttributeName, ErrWriterInvalidNamespacePrefix, ErrWriterUnboundNamespacePrefix,
+  ErrWriterInvalidName, ErrWriterInvalidComment, ErrWriterInvalidPITarget, ErrWriterInvalidPIContent, and
+  ErrWriterInvalidDTDNode. ErrWriterUnboundNamespacePrefix covers a non-empty element or attribute prefix with
+  no namespace URI; ErrWriterInvalidName covers malformed EntityValue markup, DTD Name or NCName grammar
+  failures, and invalid enumeration tokens in either replacement mode; and ErrWriterInvalidDTDNode covers an
+  empty DOCTYPE name, a non-PubidChar public identifier, or a DOCTYPE, external-entity, or notation system
+  literal containing both quote characters. The checks preserve an earlier I/O error.
+- `ErrUnsupportedNormalizationForm` — sentinel returned by `Writer.WriteTo` when `Writer.Normalization` was
+  given a value outside `{"", "none", "NFC", "NFD", "NFKC", "NFKD"}`. `Normalization` stores the raw form and
+  the check is deferred to `WriteTo` (covering both the Document and bare-element paths), which fails closed
+  before any output byte instead of silently disabling normalization; match with `errors.Is`
+- `DefaultMaxNodeContentSize` — default single-construct content byte cap (10 MiB), also bounding a contiguous
+  blank-skip run; used when `MaxNodeContentSize` is unset (0); a negative `MaxNodeContentSize` disables both
+  the node-content and the blank-run cap
 - `MaxExternalDTDSize` — default external-DTD byte cap (10 MiB), used when `MaxExternalDTDBytes` is unset or `0`
 - `Parser.MaxExternalDTDBytes(n int)` — override the external-DTD byte cap (`0` → `MaxExternalDTDSize`; negative disables the cap)
-- `AsNode[T Node](n Node) (T, bool)` — generic safe type assertion for Node types. A typed-nil pointer wrapped in a non-nil `Node` interface (Go's interface nil trap — e.g. the `*Element` `Document.DocumentElement()` returns for a rootless document) reports `(zero, false)`, never `(nil, true)`, so a caller with `ok == true` can always dereference the result. The typed-nil (`isNilNode`) check runs only when the assertion already matched, so ordinary calls do not pay the reflect cost
-- `Document.GetElementByID(id)` — O(1) via hash table, O(n) fallback; nil if no match. In a valid document an ID is unique, so at most one match. Duplicate IDs make a document invalid, not not-well-formed (it still parses with `DocWellFormed` set). If several elements share an ID the table path returns the last-registered element (RegisterID overwrites by call order, NOT necessarily last in document order) and the fallback walk the first — don't rely on either
-- `Document.RegisterID(id, *Element)` / `Document.IDTable() → map[string]*Element` — register an ID->element entry / read the interned ID table (own map, read-only — mutating it corrupts the ID index; nil for API-built docs). `IDTable` lets a derived doc (e.g. an xsl:strip-space copy) rebuild a faithful ID table by translating each entry's element through an original->copy map, preserving the interned table's identity and O(1) fidelity. Re-deriving ids would fall back to the lazy O(n) `GetElementByID` walk (which itself resolves prefixed elements' qualified ATTLIST correctly)
-- `Document.SkipIDs() → bool` / `Document.SetSkipIDs(bool)` — get/set the document's ID-skip state (mirrors the parser `SkipIDs` option). While true, `GetElementByID`/`fn:id` resolve no ids without an O(n) walk, even if an ID table exists; used when producing a derived document (e.g. an xsl:strip-space copy) that must mirror the source's ID semantics
-- `Document.Encoding() → string` vs `Document.RawEncoding() → string` — `Encoding()` returns `"utf8"` when the recorded encoding is empty; `RawEncoding()` returns the recorded value verbatim (empty = none recorded). The serializer emits `encoding="..."` only when the raw encoding is non-empty, so a faithful document copy must propagate `RawEncoding()`, not `Encoding()`
-- `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal. All accept a typed-nil node (e.g. `Document.DocumentElement()` of a rootless doc) without panicking: the iterators (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
+- `AsNode[T Node](n Node) (T, bool)` — generic safe type assertion for Node types. A typed-nil pointer wrapped
+  in a non-nil `Node` interface (Go's interface nil trap — e.g. the `*Element` `Document.DocumentElement()`
+  returns for a rootless document) reports `(zero, false)`, never `(nil, true)`, so a caller with `ok == true`
+  can always dereference the result. The typed-nil (`isNilNode`) check runs only when the assertion already
+  matched, so ordinary calls do not pay the reflect cost
+- `Document.GetElementByID(id)` — O(1) via hash table, O(n) fallback; nil if no match. In a valid document an
+  ID is unique, so at most one match. Duplicate IDs make a document invalid, not not-well-formed (it still
+  parses with `DocWellFormed` set). If several elements share an ID the table path returns the last-registered
+  element (RegisterID overwrites by call order, NOT necessarily last in document order) and the fallback walk
+  the first — don't rely on either
+- `Document.RegisterID(id, *Element)` / `Document.IDTable() → map[string]*Element` — register an ID->element
+  entry / read the interned ID table (own map, read-only — mutating it corrupts the ID index; nil for
+  API-built docs). `IDTable` lets a derived doc (e.g. an xsl:strip-space copy) rebuild a faithful ID table by
+  translating each entry's element through an original->copy map, preserving the interned table's identity and
+  O(1) fidelity. Re-deriving ids would fall back to the lazy O(n) `GetElementByID` walk (which itself resolves
+  prefixed elements' qualified ATTLIST correctly)
+- `Document.SkipIDs() → bool` / `Document.SetSkipIDs(bool)` — get/set the document's ID-skip state (mirrors
+  the parser `SkipIDs` option). While true, `GetElementByID`/`fn:id` resolve no ids without an O(n) walk, even
+  if an ID table exists; used when producing a derived document (e.g. an xsl:strip-space copy) that must
+  mirror the source's ID semantics
+- `Document.Encoding() → string` vs `Document.RawEncoding() → string` — `Encoding()` returns `"utf8"` when the
+  recorded encoding is empty; `RawEncoding()` returns the recorded value verbatim (empty = none recorded). The
+  serializer emits `encoding="..."` only when the raw encoding is non-empty, so a faithful document copy must
+  propagate `RawEncoding()`, not `Encoding()`
+- `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal. All accept a typed-nil node (e.g.
+  `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
+  (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of panicking
-- `CopyDoc(src) → (*Document, error)` / `CopyDTDInfo(src, dst) → error` / `CopyExtSubset(src, dst)` — document-level deep copy: `CopyDoc` is a COMPLETE independent copy — the whole tree, BOTH DTD subsets, and the document-level state a caller relies on (version/encoding/standalone, URL, property flags, SkipIDs, and the interned ID table rebuilt against the copy's own elements; no mutable map or DTD is aliased); `CopyDTDInfo` copies the INTERNAL subset's metadata + entities/elements/attributes/notations into `dst` and RETURNS an error (notably when `dst` already has an internal subset); `CopyExtSubset` gives `dst` its own independent deep copy of the source's EXTERNAL DTD subset (`copy.go` / `copy_dtd.go` / `dtd.go`)
-- No-preflight child linkage and raw single-pointer linkage are package-private: `appendFastChild(parent MutableNode, child Node) → error` (`tree_fastpath.go`) links `child` into `parent`'s child slice bypassing the per-node cycle/duplicate-attribute preflight that `AddChild` runs, and `unsafeSetNextSibling(n, next Node)` / `unsafeSetParent(n, parent Node)` (`node.go`) set ONLY the named pointer with no cycle detection, auto-unlinking, or reciprocal back-pointer maintenance. They are deliberately NOT on the `MutableNode` interface (which exposes only guarded mutation: `AddChild`/`AddSibling`/`Replace`/`AppendText`/`SetLine`/`SetOwnerDocument`/`SetTreeDoc`), so ordinary tree mutation cannot reach them by accident, and there is no public entry point to any of them. Sibling packages in this module reach them through the `internal/nodelink` hooks (`AppendFastChild` for `xslt3`'s strip-space copier; `CorruptSelfNextSibling` and `CorruptTypedNilNextSibling` for the `xsd`/`xmldsig1` corrupt-tree cycle-guard fixtures only); the external `helium_test` package reaches them through the `*ForTesting` wrappers in `export_test.go`. There is no `prev`-pointer setter
-- `Document.SetDocumentElement(root MutableNode) → error` — sets/replaces the document element; `root` must be an element (non-element kind → `ErrInvalidOperation`, nil/typed-nil root or nil receiver → `ErrNilNode`), leaving the document untouched on rejection
-- Element/attribute node builders — `Document.CreateElement(name) → (*Element, error)` and `Document.CreateAttribute(name, value, ns) → (*Attribute, error)` REJECT a colon in `name` (error message points the caller at the namespaced form); `name` is not otherwise checked against the XML Name/NCName grammar. This is a deliberate namespace-aware divergence from libxml2's `xmlNewNode`/`xmlNewProp`, which do no validation — a colon in the single name field yields an unbound prefix that serializes as namespace-ill-formed XML. Supply a namespaced element through `Document.CreateElementNS(localname, ns) → (*Element, error)` (rejects a colon in `localname`, then sets `ns` as the element's active namespace via `SetNamespace`, so `Name()` renders `prefix:localname`); it is the element analogue of the `SetAttribute` / `SetAttributeNS` pairing. A nil receiver allocates a standalone (heap, non-slab) element for either. All in-tree parser/build/copy call sites feed a pre-split local name (the parser splits the QName and sets the namespace via `SetActiveNamespace`), so the rejection never fires on a well-formed parse (`document.go`)
-  <!-- A review finding claimed html/tree.go now routes raw colon-bearing HTML attributes into SetAttribute/SetBooleanAttribute, contradicting the never-fires claim above. It does not: "the rejection" in this bullet is the Document.CreateElement/CreateElementNS/CreateAttribute colon rejection (document.go). html/tree.go:36-69 pre-splits colon-bearing tag names before CreateElementNS, and html/ never calls Document.CreateAttribute. Element.SetAttribute/SetBooleanAttribute perform their own inline colon checks (element.go) and are documented in their own bullet above, which makes no never-fires-on-parse claim. -->
-- DTD content-model builder API — `Document.CreateElementContent(name, etype) → (*ElementContent, error)` builds a leaf (`ElementContentElement`/`ElementContentPCDATA`); `Document.CreateElementContentSeq(c1, c2, occur)` / `Document.CreateElementContentChoice(c1, c2, occur)` build validated sequence (,) / choice (|) interior nodes (both children must be non-nil and structurally complete); `ElementContent.SetOccurrence(occur) → (*ElementContent, error)` sets the once/?/*/+ indicator. `DTD.AddElementDecl(name, typ, content)` rejects a structurally-incomplete model (`validateElementContentModel`) before storing, so serialization can never nil-deref. `DTD.RemoveElement(name, prefix) → *ElementDecl` unlinks the decl from the child list (not just the lookup table) and returns it (`document.go` / `dtd_elem.go` / `dtd.go` / `valid.go`)
-- DTD declaration builders — the `DTD.Add*` family builds a declaration from public parameters, registers it in the lookup table, AND links it into the DTD child list so it serializes: `AddEntity(name, typ, publicID, systemID, content) → (*Entity, error)`, `AddNotation(name, publicID, systemID) → (*Notation, error)`, `AddElementDecl(name, typ, content) → (*ElementDecl, error)`, and `AddAttributeDecl(elem, name, atype, def, defvalue, enumValues Enumeration) → (*AttributeDecl, error)` — the latter builds an `<!ATTLIST>` declaration. Like its siblings it validates only the enum parameters (`atype` a defined `enum.Attr*` value, `def` a defined `enum.AttrDefault*` kind — else `ErrInvalidArgument`) and rejects a duplicate (`ErrDuplicateDeclaration`); it splits `name` into prefix+local on the first colon as `AddElementDecl` does and clones `enumValues` before storing (a later caller mutation cannot corrupt the stored decl). It TRUSTS the caller for well-formed names, default values, and namespace/URI syntax — it does NOT validate them against the parser's Name/URI grammar, character ranges, or cross-declaration validity constraints (those are enforced by `ValidateDTD`), matching how `AddNotation`/`AddEntity`/`AddElementDecl` trust the caller. `AddNotation` is caller-trusting too, with one narrow exception: it rejects a colon in the notation name (`ErrInvalidArgument`), because a notation name is an XML NCName and the parser rejects a colon-bearing `<!NOTATION>` name, so a colon would produce un-reparseable output. The attribute table is keyed by an `attrDeclKey{local, prefix, elem}` struct (not a `local:prefix:elem` string, which would collide distinct triples — mirrors the parser's `specialAttrKey`). The low-level `registerAttribute` (no child-list link) is unexported; callers use `AddAttributeDecl` (`dtd.go`). `registerAttribute` also maintains two registration-order sequences — the per-element index `attrsByElem map[string][]*AttributeDecl` and the subset-wide `attrDecls []*AttributeDecl` — so `AttributesForElement(elem)` is an index lookup rather than a scan of every declaration in the subset, and every declaration-order-sensitive consumer reads a sequence instead of the `attributes` map
-- `node.DeclareNamespace(prefix, uri) → error` / `node.AddNamespaceDecl(*Namespace) → error` (promoted to `*Element` etc.) — do NOT themselves add a second declaration for a prefix in `nsDefs` and never change the node's active namespace/expanded name. `DeclareNamespace` allocates a fresh `*Namespace`; `AddNamespaceDecl` attaches the caller's existing one WITHOUT allocating (a built tree can reuse one `Namespace` as both a declaration and an element's active namespace) and returns `ErrNilNode` for a nil ns. On an ELEMENT node, a prefix in use by the element's own name or a NON-empty-prefix attribute at a URI DIFFERENT from the requested URI is a genuine conflict (checked first, whether or not an nsDefs entry exists — this covers the fresh-append path where the active ns/attr set the prefix but no nsDefs entry does): the tree is left unchanged and both `DeclareNamespace` and `AddNamespaceDecl` return the same `%w`-wrapped `ErrInvalidOperation` (matchable with `errors.Is`). The conflict check is element-scoped: on a non-element node (Text, Comment, CDATASection, …) `n.ns` is never serialized, so there is no conflict and the dedup step below still runs (the node never rejects; `AddNamespaceDecl` installs on case 1/3 and keeps the existing slot on a same-URI no-op). An empty-prefix attribute is NOT counted (it never uses the default namespace and the serializer skips it), so a default-prefix rebind is not blocked by one. Otherwise same-prefix+same-URI is a no-op and a different-URI redeclare COLLAPSES the slot in place, replacing it per method: `DeclareNamespace` installs a FRESH `*Namespace`, `AddNamespaceDecl` installs the CALLER's object; both leave the prior slot object unmutated, so an aliasing `n.ns`/`attr.ns` or a caller-retained handle is unaffected. These methods do NOT reconcile a conflict introduced AFTER declaration by `SetActiveNamespace`/`SetNamespace` (which set the active namespace independently); keeping at most one `xmlns:prefix` per element across ALL mutators is a serializer-level concern, outside their scope. The writer enforces it: `dropConflictingActiveNS` drops any `nsDefs` declaration for the active namespace's prefix at a different URI (generalizing the `xmlns=""` default-namespace precedent; the active binding qualifies the element name, so it wins) and `reconcileNamespaces` keeps a per-element `emitted` prefix set so no prefix is declared twice on one start tag — the first occupant (declarations, then the name, before attributes) wins. No-op for parsed documents. Residual limitation: a NAME needing prefix `p` at URI Y while an ATTRIBUTE needs `p` at URI X is unsatisfiable with one prefix; the writer lets the name win, mis-binding the attribute; it synthesizes no fresh prefix. A caller that rebinds an in-use prefix must clear the use itself — reassign the active namespace (`SetActiveNamespace`/`SetNamespace`) and any prefixed attribute; `RemoveNamespaceByPrefix` alone drops only the nsDefs entry, not the `n.ns`/attribute use, so a rebind still rejects while that use remains. Caller owns any ns passed to `AddNamespaceDecl` and must not share it across independently-mutated nodes
-- `UnlinkNode(n MutableNode)` — detaches `n` from its parent/sibling chain; a nil or typed-nil `n` is a no-op. `node.Replace(...Node) → error` (guarded) rejects an EMPTY replacement set with `ErrInvalidOperation` (matching `Document.Replace`; use `UnlinkNode` to delete), a nil/typed-nil operand with `ErrNilNode`, and a cyclic insertion with `ErrCyclicNode`. The guarded mutation ops (`AddChild`/`AddSibling`/`Replace`) return `ErrCyclicNode` (wrapped via `%w`) when the insertion would create a cycle (into itself, a descendant, or replacing with an ancestor), and `ErrInvalidOperation` for a structural rejection (a non-attribute sibling/replacement of an attribute, duplicate replacement operands). `Parser.ParseInNodeContext` returns `ErrNilNode` for a nil/typed-nil context node
+- `CopyDoc(src) → (*Document, error)` / `CopyDTDInfo(src, dst) → error` / `CopyExtSubset(src, dst)` —
+  document-level deep copy: `CopyDoc` is a COMPLETE independent copy — the whole tree, BOTH DTD subsets, and
+  the document-level state a caller relies on (version/encoding/standalone, URL, property flags, SkipIDs, and
+  the interned ID table rebuilt against the copy's own elements; no mutable map or DTD is aliased);
+  `CopyDTDInfo` copies the INTERNAL subset's metadata + entities/elements/attributes/notations into `dst` and
+  RETURNS an error (notably when `dst` already has an internal subset); `CopyExtSubset` gives `dst` its own
+  independent deep copy of the source's EXTERNAL DTD subset (`copy.go` / `copy_dtd.go` / `dtd.go`)
+- No-preflight child linkage and raw single-pointer linkage are package-private: `appendFastChild(parent
+  MutableNode, child Node) → error` (`tree_fastpath.go`) links `child` into `parent`'s child slice bypassing
+  the per-node cycle/duplicate-attribute preflight that `AddChild` runs, and `unsafeSetNextSibling(n, next
+  Node)` / `unsafeSetParent(n, parent Node)` (`node.go`) set ONLY the named pointer with no cycle detection,
+  auto-unlinking, or reciprocal back-pointer maintenance. They are deliberately NOT on the `MutableNode`
+  interface (which exposes only guarded mutation:
+  `AddChild`/`AddSibling`/`Replace`/`AppendText`/`SetLine`/`SetOwnerDocument`/`SetTreeDoc`), so ordinary tree
+  mutation cannot reach them by accident, and there is no public entry point to any of them. Sibling packages
+  in this module reach them through the `internal/nodelink` hooks (`AppendFastChild` for `xslt3`'s strip-space
+  copier; `CorruptSelfNextSibling` and `CorruptTypedNilNextSibling` for the `xsd`/`xmldsig1` corrupt-tree
+  cycle-guard fixtures only); the external `helium_test` package reaches them through the `*ForTesting`
+  wrappers in `export_test.go`. There is no `prev`-pointer setter
+- `Document.SetDocumentElement(root MutableNode) → error` — sets/replaces the document element; `root` must be
+  an element (non-element kind → `ErrInvalidOperation`, nil/typed-nil root or nil receiver → `ErrNilNode`),
+  leaving the document untouched on rejection
+- Element/attribute node builders — `Document.CreateElement(name) → (*Element, error)` and
+  `Document.CreateAttribute(name, value, ns) → (*Attribute, error)` REJECT a colon in `name` (error message
+  points the caller at the namespaced form); `name` is not otherwise checked against the XML Name/NCName
+  grammar. This is a deliberate namespace-aware divergence from libxml2's `xmlNewNode`/`xmlNewProp`, which do
+  no validation — a colon in the single name field yields an unbound prefix that serializes as
+  namespace-ill-formed XML. Supply a namespaced element through `Document.CreateElementNS(localname, ns) →
+  (*Element, error)` (rejects a colon in `localname`, then sets `ns` as the element's active namespace via
+  `SetNamespace`, so `Name()` renders `prefix:localname`); it is the element analogue of the `SetAttribute` /
+  `SetAttributeNS` pairing. A nil receiver allocates a standalone (heap, non-slab) element for either. All
+  in-tree parser/build/copy call sites feed a pre-split local name (the parser splits the QName and sets the
+  namespace via `SetActiveNamespace`), so the rejection never fires on a well-formed parse (`document.go`)
+  <!-- A review finding claimed html/tree.go now routes raw colon-bearing HTML attributes into
+  SetAttribute/SetBooleanAttribute, contradicting the never-fires claim above. It does not: "the rejection" in
+  this bullet is the Document.CreateElement/CreateElementNS/CreateAttribute colon rejection (document.go).
+  html/tree.go:36-69 pre-splits colon-bearing tag names before CreateElementNS, and html/ never calls
+  Document.CreateAttribute. Element.SetAttribute/SetBooleanAttribute perform their own inline colon checks
+  (element.go) and are documented in their own bullet above, which makes no never-fires-on-parse claim. -->
+- DTD content-model builder API — `Document.CreateElementContent(name, etype) → (*ElementContent, error)`
+  builds a leaf (`ElementContentElement`/`ElementContentPCDATA`); `Document.CreateElementContentSeq(c1, c2,
+  occur)` / `Document.CreateElementContentChoice(c1, c2, occur)` build validated sequence (,) / choice (|)
+  interior nodes (both children must be non-nil and structurally complete);
+  `ElementContent.SetOccurrence(occur) → (*ElementContent, error)` sets the once/?/*/+ indicator.
+  `DTD.AddElementDecl(name, typ, content)` rejects a structurally-incomplete model
+  (`validateElementContentModel`) before storing, so serialization can never nil-deref.
+  `DTD.RemoveElement(name, prefix) → *ElementDecl` unlinks the decl from the child list (not just the lookup
+  table) and returns it (`document.go` / `dtd_elem.go` / `dtd.go` / `valid.go`)
+- DTD declaration builders — the `DTD.Add*` family builds a declaration from public parameters, registers it
+  in the lookup table, AND links it into the DTD child list so it serializes: `AddEntity(name, typ, publicID,
+  systemID, content) → (*Entity, error)`, `AddNotation(name, publicID, systemID) → (*Notation, error)`,
+  `AddElementDecl(name, typ, content) → (*ElementDecl, error)`, and `AddAttributeDecl(elem, name, atype, def,
+  defvalue, enumValues Enumeration) → (*AttributeDecl, error)` — the latter builds an `<!ATTLIST>`
+  declaration. Like its siblings it validates only the enum parameters (`atype` a defined `enum.Attr*` value,
+  `def` a defined `enum.AttrDefault*` kind — else `ErrInvalidArgument`) and rejects a duplicate
+  (`ErrDuplicateDeclaration`); it splits `name` into prefix+local on the first colon as `AddElementDecl` does
+  and clones `enumValues` before storing (a later caller mutation cannot corrupt the stored decl). It TRUSTS
+  the caller for well-formed names, default values, and namespace/URI syntax — it does NOT validate them
+  against the parser's Name/URI grammar, character ranges, or cross-declaration validity constraints (those
+  are enforced by `ValidateDTD`), matching how `AddNotation`/`AddEntity`/`AddElementDecl` trust the caller.
+  `AddNotation` is caller-trusting too, with one narrow exception: it rejects a colon in the notation name
+  (`ErrInvalidArgument`), because a notation name is an XML NCName and the parser rejects a colon-bearing
+  `<!NOTATION>` name, so a colon would produce un-reparseable output. The attribute table is keyed by an
+  `attrDeclKey{local, prefix, elem}` struct (not a `local:prefix:elem` string, which would collide distinct
+  triples — mirrors the parser's `specialAttrKey`). The low-level `registerAttribute` (no child-list link) is
+  unexported; callers use `AddAttributeDecl` (`dtd.go`). `registerAttribute` also maintains two
+  registration-order sequences — the per-element index `attrsByElem map[string][]*AttributeDecl` and the
+  subset-wide `attrDecls []*AttributeDecl` — so `AttributesForElement(elem)` is an index lookup rather than a
+  scan of every declaration in the subset, and every declaration-order-sensitive consumer reads a sequence
+  instead of the `attributes` map
+- `node.DeclareNamespace(prefix, uri) → error` / `node.AddNamespaceDecl(*Namespace) → error` (promoted to
+  `*Element` etc.) — do NOT themselves add a second declaration for a prefix in `nsDefs` and never change the
+  node's active namespace/expanded name. `DeclareNamespace` allocates a fresh `*Namespace`; `AddNamespaceDecl`
+  attaches the caller's existing one WITHOUT allocating (a built tree can reuse one `Namespace` as both a
+  declaration and an element's active namespace) and returns `ErrNilNode` for a nil ns. On an ELEMENT node, a
+  prefix in use by the element's own name or a NON-empty-prefix attribute at a URI DIFFERENT from the
+  requested URI is a genuine conflict (checked first, whether or not an nsDefs entry exists — this covers the
+  fresh-append path where the active ns/attr set the prefix but no nsDefs entry does): the tree is left
+  unchanged and both `DeclareNamespace` and `AddNamespaceDecl` return the same `%w`-wrapped
+  `ErrInvalidOperation` (matchable with `errors.Is`). The conflict check is element-scoped: on a non-element
+  node (Text, Comment, CDATASection, …) `n.ns` is never serialized, so there is no conflict and the dedup step
+  below still runs (the node never rejects; `AddNamespaceDecl` installs on case 1/3 and keeps the existing
+  slot on a same-URI no-op). An empty-prefix attribute is NOT counted (it never uses the default namespace and
+  the serializer skips it), so a default-prefix rebind is not blocked by one. Otherwise same-prefix+same-URI
+  is a no-op and a different-URI redeclare COLLAPSES the slot in place, replacing it per method:
+  `DeclareNamespace` installs a FRESH `*Namespace`, `AddNamespaceDecl` installs the CALLER's object; both
+  leave the prior slot object unmutated, so an aliasing `n.ns`/`attr.ns` or a caller-retained handle is
+  unaffected. These methods do NOT reconcile a conflict introduced AFTER declaration by
+  `SetActiveNamespace`/`SetNamespace` (which set the active namespace independently); keeping at most one
+  `xmlns:prefix` per element across ALL mutators is a serializer-level concern, outside their scope. The
+  writer enforces it: `dropConflictingActiveNS` drops any `nsDefs` declaration for the active namespace's
+  prefix at a different URI (generalizing the `xmlns=""` default-namespace precedent; the active binding
+  qualifies the element name, so it wins) and `reconcileNamespaces` keeps a per-element `emitted` prefix set
+  so no prefix is declared twice on one start tag — the first occupant (declarations, then the name, before
+  attributes) wins. No-op for parsed documents. Residual limitation: a NAME needing prefix `p` at URI Y while
+  an ATTRIBUTE needs `p` at URI X is unsatisfiable with one prefix; the writer lets the name win, mis-binding
+  the attribute; it synthesizes no fresh prefix. A caller that rebinds an in-use prefix must clear the use
+  itself — reassign the active namespace (`SetActiveNamespace`/`SetNamespace`) and any prefixed attribute;
+  `RemoveNamespaceByPrefix` alone drops only the nsDefs entry, not the `n.ns`/attribute use, so a rebind still
+  rejects while that use remains. Caller owns any ns passed to `AddNamespaceDecl` and must not share it across
+  independently-mutated nodes
+- `UnlinkNode(n MutableNode)` — detaches `n` from its parent/sibling chain; a nil or typed-nil `n` is a no-op.
+  `node.Replace(...Node) → error` (guarded) rejects an EMPTY replacement set with `ErrInvalidOperation`
+  (matching `Document.Replace`; use `UnlinkNode` to delete), a nil/typed-nil operand with `ErrNilNode`, and a
+  cyclic insertion with `ErrCyclicNode`. The guarded mutation ops (`AddChild`/`AddSibling`/`Replace`) return
+  `ErrCyclicNode` (wrapped via `%w`) when the insertion would create a cycle (into itself, a descendant, or
+  replacing with an ancestor), and `ErrInvalidOperation` for a structural rejection (a non-attribute
+  sibling/replacement of an attribute, duplicate replacement operands). `Parser.ParseInNodeContext` returns
+  `ErrNilNode` for a nil/typed-nil context node
 - `NodeGetBase(doc, node)` — effective xml:base URI
-- `BuildURI(reference, base)` — resolve a relative reference against a base; a byte-faithful port of libxml2 `xmlBuildURI(URI, base)`, so its argument order is `(reference, base)` (reference FIRST), the reverse of `url.URL.ResolveReference`/RFC 3986. c14n and all in-tree callers depend on this order. `node_base.go`
+- `BuildURI(reference, base)` — resolve a relative reference against a base; a byte-faithful port of libxml2
+  `xmlBuildURI(URI, base)`, so its argument order is `(reference, base)` (reference FIRST), the reverse of
+  `url.URL.ResolveReference`/RFC 3986. c14n and all in-tree callers depend on this order. `node_base.go`
 - `ResolveURI(base, ref) → (string, error)` — conventionally-ordered `(base, reference)` wrapper over `BuildURI`; returns an error when the reference cannot be resolved. Use this in new code instead of `BuildURI`'s reversed order. `node_base.go`
-- Files: `parser.go` (API), `parserctx.go` (context/state), `parser_document.go`, `parser_element.go`, `parser_whitespace.go`, `parser_xml_decl.go`, `parser_encoding.go`, `parser_decl.go`, `parser_content.go`, `parser_dtd_subset.go`, `parser_dtd_element.go`, `parser_dtd_attr.go`, `parser_entity_decl.go`, `parser_entity_ref.go`, `parser_state_gen.go`, `document.go`, `element.go`, `attribute.go`, `node.go`, `node_leaf.go`, `node_namespace.go`, `node_base.go`, `tree_builder.go`, `tree_namespaces.go`, `tree_fastpath.go`, `writer.go`, `writer_escape.go`, `writer_dtd.go`, `writer_xhtml.go`, `copy.go`, `copy_deep.go`, `copy_dtd.go`, `dtd.go`, `dtd_attr.go`, `dtd_elem.go`, `iter.go`, `errorhandler.go`, `resolver.go`, `doc.go`
+- Files: `parser.go` (API), `parserctx.go` (context/state), `parser_document.go`, `parser_element.go`,
+  `parser_whitespace.go`, `parser_xml_decl.go`, `parser_encoding.go`, `parser_decl.go`, `parser_content.go`,
+  `parser_dtd_subset.go`, `parser_dtd_element.go`, `parser_dtd_attr.go`, `parser_entity_decl.go`,
+  `parser_entity_ref.go`, `parser_state_gen.go`, `document.go`, `element.go`, `attribute.go`, `node.go`,
+  `node_leaf.go`, `node_namespace.go`, `node_base.go`, `tree_builder.go`, `tree_namespaces.go`,
+  `tree_fastpath.go`, `writer.go`, `writer_escape.go`, `writer_dtd.go`, `writer_xhtml.go`, `copy.go`,
+  `copy_deep.go`, `copy_dtd.go`, `dtd.go`, `dtd_attr.go`, `dtd_elem.go`, `iter.go`, `errorhandler.go`,
+  `resolver.go`, `doc.go`
 
 ## c14n/
 
@@ -83,7 +446,10 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 - Canonicalizer methods: Comments(), NodeSet([]Node), InclusiveNamespaces([]string), StrictXMLAttributes()
 - Terminal: **Canonicalize(*Document, io.Writer) → error**, **CanonicalizeTo(*Document) → ([]byte, error)**
 - C14N 1.1 xml:base is the lexical join (W3C §2.4 / libxml2 xmlC14NFixupBaseAttr) of in-document xml:base values — no external base URI. See `xmlbase.go` (joinURIReference).
-- StrictXMLAttributes() opts into W3C-strict node-set xml:base/lang/space handling; default matches libxml2 (a rendered element's own excluded xml:* attribute is still emitted — XMLDSig digest interop). Strict mode is also fail-closed on xml:base: a degenerate/un-canonicalizable value (malformed URI, empty-authority "//"/"///"/"urn://") errors out of Canonicalize, where default emits best-effort bytes.
+- StrictXMLAttributes() opts into W3C-strict node-set xml:base/lang/space handling; default matches libxml2 (a
+  rendered element's own excluded xml:* attribute is still emitted — XMLDSig digest interop). Strict mode is
+  also fail-closed on xml:base: a degenerate/un-canonicalizable value (malformed URI, empty-authority
+  "//"/"///"/"urn://") errors out of Canonicalize, where default emits best-effort bytes.
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go`, `sort.go`, `escape.go`
 - Imports: helium
 
@@ -118,20 +484,76 @@ XPath 3.1 expression parsing and evaluation.
   - `Compile(string) → (*Expression, error)` / `MustCompile(string) → *Expression` / `CompileExpr(Expr) → (*Expression, error)` — terminal methods
 - **NewEvaluator(EvaluatorOption) → Evaluator** — create evaluator from a flags bitmask (`DefaultEvaluatorOptions` = clone-on-write; `EvalBorrowing` = setters borrow caller-owned maps/slices without cloning)
   - `Evaluate(ctx, *Expression, Node) → (*Result, error)` — terminal method (`ctx` is cancellation only; config comes from the setters below)
-- **Expression.Validate(map[string]string) → error** — static namespace-prefix validation; **Expression.EvaluateReuse(ctx, *EvalState, Node) → (Result, error)** — low-allocation evaluation; **Expression.DumpVM(io.Writer) → error** — compiled VM instruction dump
-- **Evaluator fluent setters** (each returns an updated copy; maps/slices cloned unless `EvalBorrowing`): `Namespaces(map[string]string)`, `Variables(map[string]Sequence)`, `Functions(byLocal map[string]Function, byQName map[QualifiedName]Function)`, `VariableResolver(VariableResolver)`, `FunctionResolver(FunctionResolver)`, `OpLimit(int)`, `CurrentTime(time.Time)`, `ImplicitTimezone(*time.Location)`, `DefaultLanguage(string)`, `DefaultCollation(string)`, `DefaultDecimalFormat(DecimalFormat)`, `NamedDecimalFormats(map[QualifiedName]DecimalFormat)`, `BaseURI(string)`, `URIResolver(URIResolver)`, `CollectionResolver(CollectionResolver)`, `HTTPClient(*http.Client)`, `Position(int)`, `Size(int)`, `ContextItem(Item)`, `TypeAnnotations(map[helium.Node]string)`, `PreservedIDAnnotations(map[helium.Node]string)`, `IDNodes(map[helium.Node]struct{})` (PSVI is-id node set from `xsd.Validator.IDNodes`; a node here is treated as is-id by `fn:id`/`fn:element-with-id` in addition to those whose type annotation is a subtype of xs:ID — covers a singleton list of xs:ID and a union selecting an xs:ID-derived member), `SchemaDeclarations(SchemaDeclarations)`, `StrictPrefixes()`, `QNameValueNoDefaultNamespace()`, `AllowXML11Chars()`, `DocOrderCache(*DocOrderCache)`, `TraceWriter(io.Writer)`, `Parser(helium.Parser)` (XML parser used by `fn:parse-xml`/`fn:parse-xml-fragment`/`fn:doc`; supplies parse policy — limits, FS, XXE/network; unset → default `helium.NewParser()`)
+- **Expression.Validate(map[string]string) → error** — static namespace-prefix validation;
+  **Expression.EvaluateReuse(ctx, *EvalState, Node) → (Result, error)** — low-allocation evaluation;
+  **Expression.DumpVM(io.Writer) → error** — compiled VM instruction dump
+- **Evaluator fluent setters** (each returns an updated copy; maps/slices cloned unless `EvalBorrowing`):
+  `Namespaces(map[string]string)`, `Variables(map[string]Sequence)`, `Functions(byLocal map[string]Function,
+  byQName map[QualifiedName]Function)`, `VariableResolver(VariableResolver)`,
+  `FunctionResolver(FunctionResolver)`, `OpLimit(int)`, `CurrentTime(time.Time)`,
+  `ImplicitTimezone(*time.Location)`, `DefaultLanguage(string)`, `DefaultCollation(string)`,
+  `DefaultDecimalFormat(DecimalFormat)`, `NamedDecimalFormats(map[QualifiedName]DecimalFormat)`,
+  `BaseURI(string)`, `URIResolver(URIResolver)`, `CollectionResolver(CollectionResolver)`,
+  `HTTPClient(*http.Client)`, `Position(int)`, `Size(int)`, `ContextItem(Item)`,
+  `TypeAnnotations(map[helium.Node]string)`, `PreservedIDAnnotations(map[helium.Node]string)`,
+  `IDNodes(map[helium.Node]struct{})` (PSVI is-id node set from `xsd.Validator.IDNodes`; a node here is
+  treated as is-id by `fn:id`/`fn:element-with-id` in addition to those whose type annotation is a subtype of
+  xs:ID — covers a singleton list of xs:ID and a union selecting an xs:ID-derived member),
+  `SchemaDeclarations(SchemaDeclarations)`, `StrictPrefixes()`, `QNameValueNoDefaultNamespace()`,
+  `AllowXML11Chars()`, `DocOrderCache(*DocOrderCache)`, `TraceWriter(io.Writer)`, `Parser(helium.Parser)` (XML
+  parser used by `fn:parse-xml`/`fn:parse-xml-fragment`/`fn:doc`; supplies parse policy — limits, FS,
+  XXE/network; unset → default `helium.NewParser()`)
 - `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`, `Sequence()`, `StringValue()`, `Copy()`
-- **Reuse:** `Evaluator.NewEvalState(Node) → *EvalState` builds reusable state; `Expression.EvaluateReuse` runs against it. The returned `Result` is valid only until the next `EvaluateReuse` on the same `EvalState` (backing storage is overwritten) — use `Result.Copy()` to retain it. `EvalState` has `SetContextItem`/`SetPosition`/`SetSize` and is NOT concurrency-safe
-- **Evaluator.MaxResourceBytes(int64) → Evaluator** — cap bytes read from a single external resource by fn:unparsed-text(-lines/-available), fn:doc, fn:doc-available, fn:json-doc (0 = default cap, negative = unbounded); over-cap reads in fn:unparsed-text/fn:unparsed-text-lines fail FOUT1170 (fn:unparsed-text-available returns false), while fn:doc/fn:json-doc retrieval failures (incl. over-cap) surface as FODC0002 and fn:doc-available returns false
-- **PredeclaredNamespace(prefix string) → (string, bool)** / **PredeclaredNamespaces() → map[string]string** — XPath 3.0 predeclared static-context prefix bindings (`fn`, `math`, `map`, `array`, `err`, `xs`). `PredeclaredNamespaces` returns a fresh copy of all bindings. Callers must let explicit in-scope namespace declarations override these fallbacks (used by xslt3 to keep compile-time and runtime pattern prefix resolution symmetric)
-- **CompileRegex(pattern, flags string) → (*Regex, error)** — compile an XPath/XML Schema regex (flags `i`/`m`/`s`/`x`/`q`) for reuse by other packages (e.g. xslt3's `xsl:analyze-string`). `*Regex` methods: `MatchString(s) → (bool, error)`; `FindAllSubmatchIndex(s, n) → ([][]int, error)` (all matches, each a flat `(start,end)` index pair per group; `n<0` = unlimited); `EachSubmatchIndex(s, limit int, fn func([]int) bool) → error` — **streams** matches one at a time, calling `fn` per match (slice valid only during the call — copy to retain; unmatched group = `-1,-1`), stopping early when `fn` returns false. The streaming engines never accumulate, so live memory stays bounded regardless of match count and a caller can enforce a match-count budget (or honor a cancelled context) DURING enumeration. Leading-context patterns (e.g. multi-line `^`) can't stream on RE2, so they are matched in one bounded `FindAllStringSubmatchIndex` pass on Go `regexp` (staying linear — no backtracking-ReDoS regression for RE2-compatible patterns like `^(a+)+b`); `limit` (N+1 for a budget of N; `<=0` = uncapped) bounds that pass's allocation to the budget, never to the input match count
+- **Reuse:** `Evaluator.NewEvalState(Node) → *EvalState` builds reusable state; `Expression.EvaluateReuse`
+  runs against it. The returned `Result` is valid only until the next `EvaluateReuse` on the same `EvalState`
+  (backing storage is overwritten) — use `Result.Copy()` to retain it. `EvalState` has
+  `SetContextItem`/`SetPosition`/`SetSize` and is NOT concurrency-safe
+- **Evaluator.MaxResourceBytes(int64) → Evaluator** — cap bytes read from a single external resource by
+  fn:unparsed-text(-lines/-available), fn:doc, fn:doc-available, fn:json-doc (0 = default cap, negative =
+  unbounded); over-cap reads in fn:unparsed-text/fn:unparsed-text-lines fail FOUT1170
+  (fn:unparsed-text-available returns false), while fn:doc/fn:json-doc retrieval failures (incl. over-cap)
+  surface as FODC0002 and fn:doc-available returns false
+- **PredeclaredNamespace(prefix string) → (string, bool)** / **PredeclaredNamespaces() → map[string]string** —
+  XPath 3.0 predeclared static-context prefix bindings (`fn`, `math`, `map`, `array`, `err`, `xs`).
+  `PredeclaredNamespaces` returns a fresh copy of all bindings. Callers must let explicit in-scope namespace
+  declarations override these fallbacks (used by xslt3 to keep compile-time and runtime pattern prefix
+  resolution symmetric)
+- **CompileRegex(pattern, flags string) → (*Regex, error)** — compile an XPath/XML Schema regex (flags
+  `i`/`m`/`s`/`x`/`q`) for reuse by other packages (e.g. xslt3's `xsl:analyze-string`). `*Regex` methods:
+  `MatchString(s) → (bool, error)`; `FindAllSubmatchIndex(s, n) → ([][]int, error)` (all matches, each a flat
+  `(start,end)` index pair per group; `n<0` = unlimited); `EachSubmatchIndex(s, limit int, fn func([]int)
+  bool) → error` — **streams** matches one at a time, calling `fn` per match (slice valid only during the call
+  — copy to retain; unmatched group = `-1,-1`), stopping early when `fn` returns false. The streaming engines
+  never accumulate, so live memory stays bounded regardless of match count and a caller can enforce a
+  match-count budget (or honor a cancelled context) DURING enumeration. Leading-context patterns (e.g.
+  multi-line `^`) can't stream on RE2, so they are matched in one bounded `FindAllStringSubmatchIndex` pass on
+  Go `regexp` (staying linear — no backtracking-ReDoS regression for RE2-compatible patterns like `^(a+)+b`);
+  `limit` (N+1 for a budget of N; `<=0` = uncapped) bounds that pass's allocation to the budget, never to the
+  input match count
 - XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator, simple map, string concat, value/general/node comparisons
 - Built-in functions: 100+ across fn:, math:, map:, array: namespaces
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
-- Runtime: `Compile()` first tries a direct fast path for simple path-like expressions and simple predicate comparisons, otherwise lowers AST to a VM instruction graph while collecting the prefix-validation plan, keeping trivial leaves inline in parent payloads and reusing parsed slices on the owned compile path; `Evaluate()` executes compiled refs by opcode and reuses shared eval helpers for semantics; AST/streamability access reparses from `Expression.source` on demand
-- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `consts.go`, `eval.go`, `eval_path.go`, `eval_operators.go`, `eval_arithmetic.go`, `eval_control.go`, `eval_types.go`, `eval_funcall.go`, `eval_reuse.go`, `evaluator.go`, `vm.go`, `vm_dump.go`, `compile_direct.go`, `compare.go`, `cast.go`, `cast_numeric.go`, `cast_string.go`, `cast_datetime.go`, `types.go`, `float_value.go`, `sequence.go`, `context.go`, `variables.go`, `collation.go`, `regex.go`, `regex_cache.go`, `static_check.go`, `streamability.go`, `node_identity.go`, `uri_resolution.go`, `doc.go`, `errors.go`, `arithmetic_datetime.go`, `parse_ietf_date.go`, `format_datetime.go`, `format_integer.go`, `format_number.go`, `function_library.go`, `function_signatures.go`, `functions.go` (registry + boolean/not/true/false + fn:error/fn:trace), `functions_node.go`, `functions_string.go`, `functions_numeric.go`, `functions_aggregate.go`, `functions_sequence.go`, `functions_datetime.go`, `functions_uri.go`, `functions_qname.go`, `functions_hof.go`, `functions_map.go`, `functions_array.go`, `functions_math.go`, `functions_misc.go`, `functions_json.go`, `functions_json_xml.go`, `functions_serialize.go`, `functions_constructors.go` (XSD typed constructors, incl. xs:error), `functions_unparsed_text.go`
+- Runtime: `Compile()` first tries a direct fast path for simple path-like expressions and simple predicate
+  comparisons, otherwise lowers AST to a VM instruction graph while collecting the prefix-validation plan,
+  keeping trivial leaves inline in parent payloads and reusing parsed slices on the owned compile path;
+  `Evaluate()` executes compiled refs by opcode and reuses shared eval helpers for semantics;
+  AST/streamability access reparses from `Expression.source` on demand
+- Files: `xpath3.go` (API), `parser.go`, `lexer.go`, `expr.go`, `token.go`, `consts.go`, `eval.go`,
+  `eval_path.go`, `eval_operators.go`, `eval_arithmetic.go`, `eval_control.go`, `eval_types.go`,
+  `eval_funcall.go`, `eval_reuse.go`, `evaluator.go`, `vm.go`, `vm_dump.go`, `compile_direct.go`,
+  `compare.go`, `cast.go`, `cast_numeric.go`, `cast_string.go`, `cast_datetime.go`, `types.go`,
+  `float_value.go`, `sequence.go`, `context.go`, `variables.go`, `collation.go`, `regex.go`, `regex_cache.go`,
+  `static_check.go`, `streamability.go`, `node_identity.go`, `uri_resolution.go`, `doc.go`, `errors.go`,
+  `arithmetic_datetime.go`, `parse_ietf_date.go`, `format_datetime.go`, `format_integer.go`,
+  `format_number.go`, `function_library.go`, `function_signatures.go`, `functions.go` (registry +
+  boolean/not/true/false + fn:error/fn:trace), `functions_node.go`, `functions_string.go`,
+  `functions_numeric.go`, `functions_aggregate.go`, `functions_sequence.go`, `functions_datetime.go`,
+  `functions_uri.go`, `functions_qname.go`, `functions_hof.go`, `functions_map.go`, `functions_array.go`,
+  `functions_math.go`, `functions_misc.go`, `functions_json.go`, `functions_json_xml.go`,
+  `functions_serialize.go`, `functions_constructors.go` (XSD typed constructors, incl. xs:error),
+  `functions_unparsed_text.go`
 - Imports: helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence
 
 ## xslt3/
@@ -140,28 +562,204 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 
 - **CompileStylesheet(ctx, *Document) → (*Stylesheet, error)** — convenience compile wrapper
 - **NewCompiler() → Compiler** — builder for stylesheet compilation
-- **Compiler.BaseURI(string) → Compiler** / **Compiler.URIResolver(URIResolver) → Compiler** / **Compiler.PackageResolver(PackageResolver) → Compiler** — compile-time resource/package resolution. Secure by default: `Compiler.URIResolver` is the opt-in for ALL compile-time stylesheet loading — `xsl:import`, `xsl:include`, output-format parameter documents (`xsl:output @parameter-document`), compile-time `fn:transform` `stylesheet-location` (e.g. static-variable evaluation), and compile-time `doc()`/`doc-available()` inside `use-when` (resolved against the module's effective static base, i.e. the module URI with its root `xml:base` folded in — including for an external `xsl:import`/`xsl:include` module's root `use-when`). With no `URIResolver` configured there is no implicit `os.ReadFile`; each of those loads errors out (`xsl:import`/`xsl:include` → "no URIResolver configured"; parameter docs → XTSE0090; `fn:transform` → FOXT0003; use-when `doc-available()` → false). Runtime `fn:transform stylesheet-location` likewise requires the compile-time `URIResolver` carried on the stylesheet.
-- **Compiler.StaticParameters(*Parameters) → Compiler** / **Compiler.SetStaticParameter(string, Sequence) → Compiler** / **Compiler.ClearStaticParameters() → Compiler** / **Compiler.ImportSchemas(...*xsd.Schema) → Compiler** — compile-time static params + schema imports
+- **Compiler.BaseURI(string) → Compiler** / **Compiler.URIResolver(URIResolver) → Compiler** /
+  **Compiler.PackageResolver(PackageResolver) → Compiler** — compile-time resource/package resolution. Secure
+  by default: `Compiler.URIResolver` is the opt-in for ALL compile-time stylesheet loading — `xsl:import`,
+  `xsl:include`, output-format parameter documents (`xsl:output @parameter-document`), compile-time
+  `fn:transform` `stylesheet-location` (e.g. static-variable evaluation), and compile-time
+  `doc()`/`doc-available()` inside `use-when` (resolved against the module's effective static base, i.e. the
+  module URI with its root `xml:base` folded in — including for an external `xsl:import`/`xsl:include`
+  module's root `use-when`). With no `URIResolver` configured there is no implicit `os.ReadFile`; each of
+  those loads errors out (`xsl:import`/`xsl:include` → "no URIResolver configured"; parameter docs → XTSE0090;
+  `fn:transform` → FOXT0003; use-when `doc-available()` → false). Runtime `fn:transform stylesheet-location`
+  likewise requires the compile-time `URIResolver` carried on the stylesheet.
+- **Compiler.StaticParameters(*Parameters) → Compiler** / **Compiler.SetStaticParameter(string, Sequence) →
+  Compiler** / **Compiler.ClearStaticParameters() → Compiler** / **Compiler.ImportSchemas(...*xsd.Schema) →
+  Compiler** — compile-time static params + schema imports
 - **Compiler.MaxResourceBytes(int64) → Compiler** — set the per-resource read cap inherited by invocations (0 = [MaxResourceBytes] default, negative = unbounded, positive = that cap)
-- **Compiler.Parser(helium.Parser) → Compiler** / **Invocation.Parser(helium.Parser) → Invocation** — the parser governing parse policy (limits, FS, XXE/network) for stylesheet, schema, and runtime source/`fn:doc` parsing; **forwarded** into the `xsd.Compiler`s and `xpath3.Evaluator`s the engine builds internally. xslt3 still forces its functional needs (entity substitution; `fn:doc` default-DTD-attributes/base-uri handling). Unset → the hardened default; `Invocation.Parser` overrides the compiler's for that run
-- **Compiler.AllowExternalEntities(bool) → Compiler** — XXE policy for compile-time parses of external stylesheet modules (`xsl:import`/`xsl:include`/`xsl:use-package`, and compile-time `fn:transform` stylesheets). **Default false (XXE BLOCKED): external DTDs / external general entities are NOT loaded or substituted** (parser is `BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)`). Set true to restore the legacy permissive behavior (resolver-mediated external entity loading via `LoadExternalDTD(true).SubstituteEntities(true)`, subject to `MaxResourceBytes`). The compiled value is carried on the `Stylesheet` and inherited by `fn:transform` nested compiles and (unless overridden) by runtime invocations. Serialization parameter documents and imported XSD schemas are always parsed XXE-blocked.
+- **Compiler.Parser(helium.Parser) → Compiler** / **Invocation.Parser(helium.Parser) → Invocation** — the
+  parser governing parse policy (limits, FS, XXE/network) for stylesheet, schema, and runtime source/`fn:doc`
+  parsing; **forwarded** into the `xsd.Compiler`s and `xpath3.Evaluator`s the engine builds internally. xslt3
+  still forces its functional needs (entity substitution; `fn:doc` default-DTD-attributes/base-uri handling).
+  Unset → the hardened default; `Invocation.Parser` overrides the compiler's for that run
+- **Compiler.AllowExternalEntities(bool) → Compiler** — XXE policy for compile-time parses of external
+  stylesheet modules (`xsl:import`/`xsl:include`/`xsl:use-package`, and compile-time `fn:transform`
+  stylesheets). **Default false (XXE BLOCKED): external DTDs / external general entities are NOT loaded or
+  substituted** (parser is `BlockXXE(true).LoadExternalDTD(false).AllowNetwork(false)`). Set true to restore
+  the legacy permissive behavior (resolver-mediated external entity loading via
+  `LoadExternalDTD(true).SubstituteEntities(true)`, subject to `MaxResourceBytes`). The compiled value is
+  carried on the `Stylesheet` and inherited by `fn:transform` nested compiles and (unless overridden) by
+  runtime invocations. Serialization parameter documents and imported XSD schemas are always parsed
+  XXE-blocked.
 - **Compiler.Compile(ctx, *Document) → (*Stylesheet, error)** / **Compiler.MustCompile(ctx, *Document) → *Stylesheet** — terminal compile methods
-- **Transform(ctx, *Document, *Stylesheet) → (*Document, error)** / **TransformToWriter(ctx, *Document, *Stylesheet, io.Writer) → error** / **TransformString(ctx, *Document, *Stylesheet) → (string, error)** — convenience wrappers; nil `*Stylesheet` returns error here
+- **Transform(ctx, *Document, *Stylesheet) → (*Document, error)** / **TransformToWriter(ctx, *Document,
+  *Stylesheet, io.Writer) → error** / **TransformString(ctx, *Document, *Stylesheet) → (string, error)** —
+  convenience wrappers; nil `*Stylesheet` returns error here
 - **Stylesheet.Transform(*Document) → Invocation** / **Stylesheet.ApplyTemplates(*Document) → Invocation** / **Stylesheet.CallTemplate(string) → Invocation** / **Stylesheet.CallFunction(string, ...Sequence) → Invocation** — invocation entrypoints
-- **Invocation.SourceDocument(*Document) → Invocation** / **Mode(string)** / **Selection(Sequence)** *(ApplyTemplates only)* / **GlobalParameters(*Parameters)** / **TunnelParameters(*Parameters)** / **SetParameter(string, Sequence)** / **SetTunnelParameter(string, Sequence)** / **SetInitialTemplateParameter(string, Sequence)** / **SetInitialModeParameter(string, Sequence)** / **MessageHandler(MessageHandler)** / **ResultDocumentHandler(ResultDocumentHandler)** / **RawResultHandler(RawResultHandler)** / **PrimaryItemsHandler(PrimaryItemsHandler)** / **AnnotationHandler(AnnotationHandler)** / **CollectionResolver(xpath3.CollectionResolver)** / **URIResolver(xpath3.URIResolver)** / **HTTPClient(\*http.Client)** / **BaseOutputURI(string)** / **SourceSchemas(...*xsd.Schema)** / **OnMultipleMatch(OnMultipleMatchMode)** / **TraceWriter(io.Writer)** / **GlobalContextSelect(string)** / **MaxResourceBytes(int64)** / **AllowExternalEntities(bool)** — fluent runtime configuration. `GlobalContextSelect` sets an XPath expression (evaluated against the source document after whitespace stripping) that determines the global context item; if it evaluates to an empty sequence the global context item is absent and global variables referencing `.` raise XPDY0002. `AllowExternalEntities` sets the XXE policy for runtime parses of external documents (`fn:doc`/`document()`, `xsl:source-document`, `xsl:merge`, and `fn:transform` stylesheet sources). **Default false (XXE BLOCKED): external DTDs / external general entities are NOT loaded or substituted**; when left unset it inherits the value compiled into the stylesheet (`Compiler.AllowExternalEntities`); set true to restore the legacy permissive behavior for trusted documents. `MaxResourceBytes` caps bytes read from a single runtime external resource: 0 inherits the Compiler/stylesheet cap (then the [MaxResourceBytes] default), negative disables the bound, positive sets that cap. The cap applies to all runtime reads, but the over-cap error differs by layer: XSLT's own loader (`fn:doc`/`document()`, `xsl:source-document`, `xsl:merge`, runtime `xsl:result-document` parameter documents, `xsi:schemaLocation` source schemas, `fn:transform` stylesheet/package sources) fails with [ErrResourceTooLarge], whereas the XPath built-ins `fn:unparsed-text`/`fn:unparsed-text-lines` surface FOUT1170 (`fn:unparsed-text-available` returns false) and `fn:json-doc` surfaces FODC0002 — they honor the cap but do NOT carry the `ErrResourceTooLarge` sentinel. `URIResolver` and `HTTPClient` are the opt-in for runtime resource retrieval — `fn:doc`/`fn:unparsed-text`, plus `xsl:source-document`, `xsl:merge`, and `fn:stream-available`; without them those instructions error (`FODC0002`) or report unavailable per the default-deny model (no implicit `os.ReadFile`).
+- **Invocation.SourceDocument(*Document) → Invocation** / **Mode(string)** / **Selection(Sequence)**
+  *(ApplyTemplates only)* / **GlobalParameters(*Parameters)** / **TunnelParameters(*Parameters)** /
+  **SetParameter(string, Sequence)** / **SetTunnelParameter(string, Sequence)** /
+  **SetInitialTemplateParameter(string, Sequence)** / **SetInitialModeParameter(string, Sequence)** /
+  **MessageHandler(MessageHandler)** / **ResultDocumentHandler(ResultDocumentHandler)** /
+  **RawResultHandler(RawResultHandler)** / **PrimaryItemsHandler(PrimaryItemsHandler)** /
+  **AnnotationHandler(AnnotationHandler)** / **CollectionResolver(xpath3.CollectionResolver)** /
+  **URIResolver(xpath3.URIResolver)** / **HTTPClient(\*http.Client)** / **BaseOutputURI(string)** /
+  **SourceSchemas(...*xsd.Schema)** / **OnMultipleMatch(OnMultipleMatchMode)** / **TraceWriter(io.Writer)** /
+  **GlobalContextSelect(string)** / **MaxResourceBytes(int64)** / **AllowExternalEntities(bool)** — fluent
+  runtime configuration. `GlobalContextSelect` sets an XPath expression (evaluated against the source document
+  after whitespace stripping) that determines the global context item; if it evaluates to an empty sequence
+  the global context item is absent and global variables referencing `.` raise XPDY0002.
+  `AllowExternalEntities` sets the XXE policy for runtime parses of external documents (`fn:doc`/`document()`,
+  `xsl:source-document`, `xsl:merge`, and `fn:transform` stylesheet sources). **Default false (XXE BLOCKED):
+  external DTDs / external general entities are NOT loaded or substituted**; when left unset it inherits the
+  value compiled into the stylesheet (`Compiler.AllowExternalEntities`); set true to restore the legacy
+  permissive behavior for trusted documents. `MaxResourceBytes` caps bytes read from a single runtime external
+  resource: 0 inherits the Compiler/stylesheet cap (then the [MaxResourceBytes] default), negative disables
+  the bound, positive sets that cap. The cap applies to all runtime reads, but the over-cap error differs by
+  layer: XSLT's own loader (`fn:doc`/`document()`, `xsl:source-document`, `xsl:merge`, runtime
+  `xsl:result-document` parameter documents, `xsi:schemaLocation` source schemas, `fn:transform`
+  stylesheet/package sources) fails with [ErrResourceTooLarge], whereas the XPath built-ins
+  `fn:unparsed-text`/`fn:unparsed-text-lines` surface FOUT1170 (`fn:unparsed-text-available` returns false)
+  and `fn:json-doc` surfaces FODC0002 — they honor the cap but do NOT carry the `ErrResourceTooLarge`
+  sentinel. `URIResolver` and `HTTPClient` are the opt-in for runtime resource retrieval —
+  `fn:doc`/`fn:unparsed-text`, plus `xsl:source-document`, `xsl:merge`, and `fn:stream-available`; without
+  them those instructions error (`FODC0002`) or report unavailable per the default-deny model (no implicit
+  `os.ReadFile`).
 - **Invocation.Do(ctx) → (*Document, error)** / **Invocation.Serialize(ctx) → (string, error)** / **Invocation.WriteTo(ctx, io.Writer) → error** / **Invocation.ResolvedOutputDef() → *OutputDef** — terminal execution + resolved primary output metadata
 - **NewParameters() → *Parameters** — mutable XSLT parameter carrier keyed by expanded name
-- **TransformFunction(...TransformOption) → xpath3.Function** — standalone `fn:transform()` for registering on a bare `xpath3.Evaluator` (`Evaluator.Functions(nil, {fn:transform: ...})`), for callers driving xpath3 directly with no outer running stylesheet (e.g. the QT3 harness). Shares its implementation with the in-stylesheet `fn:transform` (`ec.fnTransform` is a thin wrapper over the same `transformFnConfig.run`). Deps the in-stylesheet path inherits from its execution context are supplied explicitly via `TransformOption`: `WithTransformURIResolver(xpath3.URIResolver)` (stylesheet-location reads, nested-compile module loading, and inner `fn:doc`), `WithTransformPackageResolver`, `WithTransformHTTPClient`, `WithTransformBaseURI`, `WithTransformMaxResourceBytes`, `WithTransformAllowExternalEntities`, `WithTransformParser`, `WithTransformImportSchemas`. Handles the `stylesheet-location`, `stylesheet-node`, `stylesheet-text` (inline source), and `package-name` stylesheet-source options. A `stylesheet-node` that is an element node which is not its owner document's document element (a simplified/literal-result stylesheet supplied as a fragment child, or an element nested in a larger tree) is compiled from that element as the stylesheet root: `stylesheetNodeCompileDocument` deep-copies the element into a fresh document so the element itself is the document element. The whole owning document is not compiled, since its document element would be a different node. The `stylesheet-base-uri` map option sets the base URI for resolving relative `xsl:include`/`xsl:import` inside a `stylesheet-text`/`stylesheet-node` (a relative value is itself resolved against the call's static base URI, `WithTransformBaseURI`); it overrides `WithTransformBaseURI` for `stylesheet-text` and the node's own document base URI (`NodeGetBase`) for `stylesheet-node`. Absent the option, `stylesheet-text` falls back to `WithTransformBaseURI` and `stylesheet-node` to the node's document base URI, so a relative include with no usable base fails (XTSE0165). `initial-template` is resolved preserving its namespace (a QName value becomes Clark `{uri}local`), so a namespaced named template resolves. `run` validates the option map before doing work (`validateTransformOptions`, F&O 3.1 §14.8.3): exactly one of `stylesheet-location`/`stylesheet-node`/`stylesheet-text`/`package-name`, at most one of `initial-template`/`initial-mode`/`initial-function`, `source-node` and `initial-match-selection` mutually exclusive, `delivery-format` ∈ {document, serialized, raw}, `xslt-version` numeric, and each param map (`stylesheet-params`/`static-params`/`template-params`/`tunnel-params`) a map keyed by xs:QName — a structural/enum/exclusivity violation is FOXT0002, a mistyped option value is XPTY0004. `requested-properties` is checked against helium's advertised capabilities (`transformCapabilities`): `is-schema-aware`, `supports-serialization`, `supports-backwards-compatibility`, `supports-namespace-axis`, `supports-dynamic-evaluation`, `supports-higher-order-functions` are true and `supports-streaming` is false (DOM-materialization, not streaming); a recognized XSLT-namespace property requested with an unsatisfiable value raises FOXT0006. When `delivery-format` is `serialized`, the `serialization-params` map overrides the principal result's `OutputDef` (`applySerializationParams`: method, indent, omit-xml-declaration, byte-order-mark, undeclare-prefixes, encoding, version, standalone, media-type, doctype-public/system, item-separator). The QName-valued `cdata-section-elements` and `suppress-indentation` params (sequences of xs:QName, whose {uri}local Clark names are extracted via `mergeSerializationQNames`) and the map-valued `use-character-maps` param (a `map(xs:string, xs:string)` merged via `applyUseCharacterMapsParam`) accumulate onto the stylesheet's own `xsl:output` values: the two element-name sets are unioned, and character-map entries are merged with the serialization-params value winning per character. A recognized param present with an empty-sequence value resets it to the serialization default (`resetSerializationParam`). Two bases are kept SEPARATE (F&O 3.1 §14.8). (1) The PRINCIPAL result-map key: a relative `base-output-uri` is resolved ONCE against the fn:transform call's static base URI (`cfg.baseURI` — `ec.effectiveStaticBaseURI()` in-stylesheet, i.e. the call-site base honoring an `xml:base` on the calling template/element, not the bare module URI; or `WithTransformBaseURI` standalone) via `canonicalResultURIKey`; the result map keys the principal by that resolved value when supplied, else by the literal `"output"`. (2) The base for RESOLVING secondary result-document output URIs (`cfg.outputBaseURI`, seeded into `ec.currentOutputURI`): the resolved `base-output-uri` when supplied, else the call's effective static base URI — so secondary result-map keys are absolute whenever ANY base exists, even when `base-output-uri` is omitted. Only when there is genuinely no base at all (no `base-output-uri` AND no static base — e.g. a standalone call with no `WithTransformBaseURI`) does a secondary key remain best-effort relative; the spec cannot require an absolute URI when no base is available. When `base-output-uri` is absent the principal output has no declared URI (no `canonicalPrimaryURI` XTDE1490 reservation). the principal entry is emitted only when the transformation actually wrote principal content, so a stylesheet producing only secondary `xsl:result-document`s has no principal entry (W3C bug 30209, `documentHasChildren`). Each secondary result document is keyed by its fully-resolved absolute output URI. Internally the `ec.resultDocuments`/`resultDocItems`/`resultDocOutputDefs` stores, the XTDE1490 duplicate-detection set (`usedResultURIs`), and `Document.URL` all key on the SAME resolved canonical URI (`dupKey == ec.currentOutputURI`), so a nested `xsl:result-document` resolves against its enclosing document's dynamic output URI (not the top-level base) and two nested documents writing the same relative href under different enclosing URIs never overwrite one another; the `resultDocCollector` reads `Document.URL` to key the result map, so those distinct absolute URIs both survive. The raw href as written is preserved separately (`ec.resultDocHrefs`) solely for the public `ResultDocumentHandler`, which receives it unchanged. `serialized` delivery returns `SerializeResult` output unchanged; direct XML serialization omits helium.Writer's per-document-child terminators and preserves top-level text newlines as result content unless serializer indentation intentionally discards whitespace-only text when indentation is enabled and the result has an element child, while stream paths leave every final byte untouched. A `source-node` that is not a document node is itself the initial match selection (the template matches that element), while the source tree's document root supplies the default global context item. The `global-context-item` option (required type `item()`) determines the context item seen by global variables/parameters independently of the initial match selection: a present-but-empty or multi-item value is `XPTY0004` (`validateTransformGlobalContextItem`); an explicit item (node or atomic/map/array/function) overrides the source-node default and is what gets type-checked against `xsl:global-context-item/@as` (`XTTE0590`) — a non-node item is exposed via `ec.contextItem` scoped to global evaluation only and never leaks into template execution. When the stylesheet declares `xsl:global-context-item use="absent"` the global context item is absent regardless of any supplied option (a global `.` raises `XPDY0002`) — this affects ONLY the global context item (`ec.globalContextAbsent`), NOT the source-node/initial match selection, so a supplied source-node still drives apply-templates normally (no spurious `XTDE0040`); when neither a source-node/initial-match-selection nor an explicit item is supplied the global context item is likewise absent (`cfg.globalContextAbsent` → `XPDY0002` on `.`, and `XTDE3086` if `use="required"`), even though a synthetic empty document is still substituted as the navigable source tree for an initial-template/-function entry. A `post-process` function item (`function(xs:string, item()*) as item()*`) is invoked once per delivered result — the principal `output` entry and each secondary result — with `(result-URI, result-value)` (the principal gets `base-output-uri`, each secondary its href key); its return value replaces the entry's value in the result map, across all three delivery formats (document node, serialized string, raw items).
+- **TransformFunction(...TransformOption) → xpath3.Function** — standalone `fn:transform()` for registering on
+  a bare `xpath3.Evaluator` (`Evaluator.Functions(nil, {fn:transform: ...})`), for callers driving xpath3
+  directly with no outer running stylesheet (e.g. the QT3 harness). Shares its implementation with the
+  in-stylesheet `fn:transform` (`ec.fnTransform` is a thin wrapper over the same `transformFnConfig.run`).
+  Deps the in-stylesheet path inherits from its execution context are supplied explicitly via
+  `TransformOption`: `WithTransformURIResolver(xpath3.URIResolver)` (stylesheet-location reads, nested-compile
+  module loading, and inner `fn:doc`), `WithTransformPackageResolver`, `WithTransformHTTPClient`,
+  `WithTransformBaseURI`, `WithTransformMaxResourceBytes`, `WithTransformAllowExternalEntities`,
+  `WithTransformParser`, `WithTransformImportSchemas`. Handles the `stylesheet-location`, `stylesheet-node`,
+  `stylesheet-text` (inline source), and `package-name` stylesheet-source options. A `stylesheet-node` that is
+  an element node which is not its owner document's document element (a simplified/literal-result stylesheet
+  supplied as a fragment child, or an element nested in a larger tree) is compiled from that element as the
+  stylesheet root: `stylesheetNodeCompileDocument` deep-copies the element into a fresh document so the
+  element itself is the document element. The whole owning document is not compiled, since its document
+  element would be a different node. The `stylesheet-base-uri` map option sets the base URI for resolving
+  relative `xsl:include`/`xsl:import` inside a `stylesheet-text`/`stylesheet-node` (a relative value is itself
+  resolved against the call's static base URI, `WithTransformBaseURI`); it overrides `WithTransformBaseURI`
+  for `stylesheet-text` and the node's own document base URI (`NodeGetBase`) for `stylesheet-node`. Absent the
+  option, `stylesheet-text` falls back to `WithTransformBaseURI` and `stylesheet-node` to the node's document
+  base URI, so a relative include with no usable base fails (XTSE0165). `initial-template` is resolved
+  preserving its namespace (a QName value becomes Clark `{uri}local`), so a namespaced named template
+  resolves. `run` validates the option map before doing work (`validateTransformOptions`, F&O 3.1 §14.8.3):
+  exactly one of `stylesheet-location`/`stylesheet-node`/`stylesheet-text`/`package-name`, at most one of
+  `initial-template`/`initial-mode`/`initial-function`, `source-node` and `initial-match-selection` mutually
+  exclusive, `delivery-format` ∈ {document, serialized, raw}, `xslt-version` numeric, and each param map
+  (`stylesheet-params`/`static-params`/`template-params`/`tunnel-params`) a map keyed by xs:QName — a
+  structural/enum/exclusivity violation is FOXT0002, a mistyped option value is XPTY0004.
+  `requested-properties` is checked against helium's advertised capabilities (`transformCapabilities`):
+  `is-schema-aware`, `supports-serialization`, `supports-backwards-compatibility`, `supports-namespace-axis`,
+  `supports-dynamic-evaluation`, `supports-higher-order-functions` are true and `supports-streaming` is false
+  (DOM-materialization, not streaming); a recognized XSLT-namespace property requested with an unsatisfiable
+  value raises FOXT0006. When `delivery-format` is `serialized`, the `serialization-params` map overrides the
+  principal result's `OutputDef` (`applySerializationParams`: method, indent, omit-xml-declaration,
+  byte-order-mark, undeclare-prefixes, encoding, version, standalone, media-type, doctype-public/system,
+  item-separator). The QName-valued `cdata-section-elements` and `suppress-indentation` params (sequences of
+  xs:QName, whose {uri}local Clark names are extracted via `mergeSerializationQNames`) and the map-valued
+  `use-character-maps` param (a `map(xs:string, xs:string)` merged via `applyUseCharacterMapsParam`)
+  accumulate onto the stylesheet's own `xsl:output` values: the two element-name sets are unioned, and
+  character-map entries are merged with the serialization-params value winning per character. A recognized
+  param present with an empty-sequence value resets it to the serialization default
+  (`resetSerializationParam`). Two bases are kept SEPARATE (F&O 3.1 §14.8). (1) The PRINCIPAL result-map key:
+  a relative `base-output-uri` is resolved ONCE against the fn:transform call's static base URI (`cfg.baseURI`
+  — `ec.effectiveStaticBaseURI()` in-stylesheet, i.e. the call-site base honoring an `xml:base` on the calling
+  template/element, not the bare module URI; or `WithTransformBaseURI` standalone) via
+  `canonicalResultURIKey`; the result map keys the principal by that resolved value when supplied, else by the
+  literal `"output"`. (2) The base for RESOLVING secondary result-document output URIs (`cfg.outputBaseURI`,
+  seeded into `ec.currentOutputURI`): the resolved `base-output-uri` when supplied, else the call's effective
+  static base URI — so secondary result-map keys are absolute whenever ANY base exists, even when
+  `base-output-uri` is omitted. Only when there is genuinely no base at all (no `base-output-uri` AND no
+  static base — e.g. a standalone call with no `WithTransformBaseURI`) does a secondary key remain best-effort
+  relative; the spec cannot require an absolute URI when no base is available. When `base-output-uri` is
+  absent the principal output has no declared URI (no `canonicalPrimaryURI` XTDE1490 reservation). the
+  principal entry is emitted only when the transformation actually wrote principal content, so a stylesheet
+  producing only secondary `xsl:result-document`s has no principal entry (W3C bug 30209,
+  `documentHasChildren`). Each secondary result document is keyed by its fully-resolved absolute output URI.
+  Internally the `ec.resultDocuments`/`resultDocItems`/`resultDocOutputDefs` stores, the XTDE1490
+  duplicate-detection set (`usedResultURIs`), and `Document.URL` all key on the SAME resolved canonical URI
+  (`dupKey == ec.currentOutputURI`), so a nested `xsl:result-document` resolves against its enclosing
+  document's dynamic output URI (not the top-level base) and two nested documents writing the same relative
+  href under different enclosing URIs never overwrite one another; the `resultDocCollector` reads
+  `Document.URL` to key the result map, so those distinct absolute URIs both survive. The raw href as written
+  is preserved separately (`ec.resultDocHrefs`) solely for the public `ResultDocumentHandler`, which receives
+  it unchanged. `serialized` delivery returns `SerializeResult` output unchanged; direct XML serialization
+  omits helium.Writer's per-document-child terminators and preserves top-level text newlines as result content
+  unless serializer indentation intentionally discards whitespace-only text when indentation is enabled and
+  the result has an element child, while stream paths leave every final byte untouched. A `source-node` that
+  is not a document node is itself the initial match selection (the template matches that element), while the
+  source tree's document root supplies the default global context item. The `global-context-item` option
+  (required type `item()`) determines the context item seen by global variables/parameters independently of
+  the initial match selection: a present-but-empty or multi-item value is `XPTY0004`
+  (`validateTransformGlobalContextItem`); an explicit item (node or atomic/map/array/function) overrides the
+  source-node default and is what gets type-checked against `xsl:global-context-item/@as` (`XTTE0590`) — a
+  non-node item is exposed via `ec.contextItem` scoped to global evaluation only and never leaks into template
+  execution. When the stylesheet declares `xsl:global-context-item use="absent"` the global context item is
+  absent regardless of any supplied option (a global `.` raises `XPDY0002`) — this affects ONLY the global
+  context item (`ec.globalContextAbsent`), NOT the source-node/initial match selection, so a supplied
+  source-node still drives apply-templates normally (no spurious `XTDE0040`); when neither a
+  source-node/initial-match-selection nor an explicit item is supplied the global context item is likewise
+  absent (`cfg.globalContextAbsent` → `XPDY0002` on `.`, and `XTDE3086` if `use="required"`), even though a
+  synthetic empty document is still substituted as the navigable source tree for an initial-template/-function
+  entry. A `post-process` function item (`function(xs:string, item()*) as item()*`) is invoked once per
+  delivered result — the principal `output` entry and each secondary result — with `(result-URI,
+  result-value)` (the principal gets `base-output-uri`, each secondary its href key); its return value
+  replaces the entry's value in the result map, across all three delivery formats (document node, serialized
+  string, raw items).
 - `fn:transform` serialized delivery serializes every emitted principal and secondary result. Any result serialization failure raises `FOXT0003`.
 - Key types: `Stylesheet`, `Compiler`, `Invocation`, `Parameters`, `OutputDef`, `URIResolver`, `PackageResolver`, `MessageHandler`, `ResultDocumentHandler`, `RawResultHandler`, `PrimaryItemsHandler`, `AnnotationHandler`, `TransformOption`
-- Resource limits: `MaxResourceBytes` (const, 10 MiB default per-resource read cap) + `ErrResourceTooLarge` (error returned when an external resource exceeds the cap); enforced against actual bytes read, configurable per Compiler/Invocation. The same cap doubles as the xsl:analyze-string match-count ceiling: matches are streamed one at a time (via `xpath3.Regex.EachSubmatchIndex`) and the running count is checked during enumeration, so an empty-matching regex over a large input is rejected with `ErrResourceTooLarge` without allocating memory proportional to the match count
-- Supports: `xsl:template`, `xsl:apply-templates`, `xsl:call-template`, `xsl:param`/`xsl:variable`, `xsl:include`/`xsl:import`, `xsl:sort`, `xsl:number`, `xsl:message`, `xsl:key`, `xsl:output`, `xsl:import-schema`, `xsl:function`, literal result elements, AVTs, `xsl:attribute-set`, `xsl:map`/`xsl:map-entry`, `xsl:source-document`, `xsl:iterate`, `xsl:fork`, `xsl:accumulator`, `xsl:merge`, `xsl:where-populated`, `xsl:try`/`xsl:catch`, `xsl:for-each-group`, `xsl:result-document`, `xsl:next-match`, `xsl:apply-imports`
-- Schema awareness: `xsl:import-schema` compiles XSD schemas, `type=` on `xsl:element`/`xsl:attribute` annotates result nodes, `validation=` on `xsl:copy`/`xsl:copy-of`, `default-validation` stylesheet attribute, `type-available()` function, runtime source validation via `Invocation.SourceSchemas(...)`, annotation callbacks via `AnnotationHandler`
-- Streaming: `xsl:source-document` (DOM-materialization), `xsl:iterate`/`xsl:break`/`xsl:next-iteration`/`xsl:on-completion`, `xsl:fork`, `xsl:accumulator`/`xsl:accumulator-rule`, `xsl:merge`/`xsl:merge-source`/`xsl:merge-key`/`xsl:merge-action`; streamability analysis (XTSE3430) post-compilation pass
-- Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`, `unparsed-entity-uri()`, `unparsed-entity-public-id()`, `type-available()`, `snapshot()`, `copy-of()`, `accumulator-before()`/`accumulator-after()`, `current-merge-group()`/`current-merge-key()`, `transform()`
+- Resource limits: `MaxResourceBytes` (const, 10 MiB default per-resource read cap) + `ErrResourceTooLarge`
+  (error returned when an external resource exceeds the cap); enforced against actual bytes read, configurable
+  per Compiler/Invocation. The same cap doubles as the xsl:analyze-string match-count ceiling: matches are
+  streamed one at a time (via `xpath3.Regex.EachSubmatchIndex`) and the running count is checked during
+  enumeration, so an empty-matching regex over a large input is rejected with `ErrResourceTooLarge` without
+  allocating memory proportional to the match count
+- Supports: `xsl:template`, `xsl:apply-templates`, `xsl:call-template`, `xsl:param`/`xsl:variable`,
+  `xsl:include`/`xsl:import`, `xsl:sort`, `xsl:number`, `xsl:message`, `xsl:key`, `xsl:output`,
+  `xsl:import-schema`, `xsl:function`, literal result elements, AVTs, `xsl:attribute-set`,
+  `xsl:map`/`xsl:map-entry`, `xsl:source-document`, `xsl:iterate`, `xsl:fork`, `xsl:accumulator`, `xsl:merge`,
+  `xsl:where-populated`, `xsl:try`/`xsl:catch`, `xsl:for-each-group`, `xsl:result-document`, `xsl:next-match`,
+  `xsl:apply-imports`
+- Schema awareness: `xsl:import-schema` compiles XSD schemas, `type=` on `xsl:element`/`xsl:attribute`
+  annotates result nodes, `validation=` on `xsl:copy`/`xsl:copy-of`, `default-validation` stylesheet
+  attribute, `type-available()` function, runtime source validation via `Invocation.SourceSchemas(...)`,
+  annotation callbacks via `AnnotationHandler`
+- Streaming: `xsl:source-document` (DOM-materialization),
+  `xsl:iterate`/`xsl:break`/`xsl:next-iteration`/`xsl:on-completion`, `xsl:fork`,
+  `xsl:accumulator`/`xsl:accumulator-rule`, `xsl:merge`/`xsl:merge-source`/`xsl:merge-key`/`xsl:merge-action`;
+  streamability analysis (XTSE3430) post-compilation pass
+- Runtime helpers: `current()`, `document()`, `key()`, `generate-id()`, `system-property()`,
+  `unparsed-entity-uri()`, `unparsed-entity-public-id()`, `type-available()`, `snapshot()`, `copy-of()`,
+  `accumulator-before()`/`accumulator-after()`, `current-merge-group()`/`current-merge-key()`, `transform()`
 - Output methods: `xml`, `html`, `xhtml`, `text`, `json`, `adaptive`
-- Adaptive serialization delegates a singleton element/document item to the XML method. Every XSLT path that delegates a document node to `helium.Writer` uses exact-document mode, so writer-added child terminators never enter serialized output. Comment and processing-instruction items, including top-level primary and secondary `xsl:comment` and `xsl:processing-instruction` output, use the XML writer without a declaration, preserving markup and target-version character validation; character maps and normalization do not change their data. A top-level adaptive markup sequence keeps its item separators outside the DOM while it remains markup-only, so standalone serialization stays declaration-free and applies character maps and normalization to separator character data. If a later non-markup item requires XML fallback, every deferred separator is restored at its original boundary. A quoted string-like atomic delegates character-data processing to the Text method before adaptive quoting, including normalization and character maps.
-- Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder + orchestration), `compile_*.go` (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation), `execute*.go` (runtime), `functions*.go` (built-ins + `fn:transform` bridge), `stylesheet.go`, `invocation.go`, `instruction.go`, `parameters.go`, `options.go`, `dispatch_index.go` (per-mode template dispatch index: buckets templates by node kind/expanded name so `findFirstMatch`/`hasConflictingMatch` skip templates their pattern's terminal step provably cannot match), `output*.go` (`output.go`, `output_xml.go`, `output_html.go`, `output_json.go`, `output_adaptive.go`, `output_charmap.go`), `sort.go`, `types.go`, `avt.go`, `keys.go`, `qname_resolve.go`, `number_words.go`, `source_schema.go`, `schema_constructors.go`, `schema_context.go`, `schema_resolver_fs.go`, `package_*.go`, `streamability*.go`, `errors.go`, `resource_limit.go` (per-resource read cap + `MaxResourceBytes`/`ErrResourceTooLarge`); the XSLT element registry lives in `xslt3/internal/elements` (`elements.go`, `data.go`, see below)
+- Adaptive serialization delegates a singleton element/document item to the XML method. Every XSLT path that
+  delegates a document node to `helium.Writer` uses exact-document mode, so writer-added child terminators
+  never enter serialized output. Comment and processing-instruction items, including top-level primary and
+  secondary `xsl:comment` and `xsl:processing-instruction` output, use the XML writer without a declaration,
+  preserving markup and target-version character validation; character maps and normalization do not change
+  their data. A top-level adaptive markup sequence keeps its item separators outside the DOM while it remains
+  markup-only, so standalone serialization stays declaration-free and applies character maps and normalization
+  to separator character data. If a later non-markup item requires XML fallback, every deferred separator is
+  restored at its original boundary. A quoted string-like atomic delegates character-data processing to the
+  Text method before adaptive quoting, including normalization and character maps.
+- Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder +
+  orchestration), `compile_*.go`
+  (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),
+  `execute*.go` (runtime), `functions*.go` (built-ins + `fn:transform` bridge), `stylesheet.go`,
+  `invocation.go`, `instruction.go`, `parameters.go`, `options.go`, `dispatch_index.go` (per-mode template
+  dispatch index: buckets templates by node kind/expanded name so `findFirstMatch`/`hasConflictingMatch` skip
+  templates their pattern's terminal step provably cannot match), `output*.go` (`output.go`, `output_xml.go`,
+  `output_html.go`, `output_json.go`, `output_adaptive.go`, `output_charmap.go`), `sort.go`, `types.go`,
+  `avt.go`, `keys.go`, `qname_resolve.go`, `number_words.go`, `source_schema.go`, `schema_constructors.go`,
+  `schema_context.go`, `schema_resolver_fs.go`, `package_*.go`, `streamability*.go`, `errors.go`,
+  `resource_limit.go` (per-resource read cap + `MaxResourceBytes`/`ErrResourceTooLarge`); the XSLT element
+  registry lives in `xslt3/internal/elements` (`elements.go`, `data.go`, see below)
 - Imports: helium, xpath3, xsd, html, internal/lexicon, internal/nodelink, internal/sequence, internal/writerctl, xslt3/internal/elements
 - Tests: hand-written unit tests only. The W3C XSLT 3.0 conformance suite lives in the sibling `helium-w3c-tests` module (fetches upstream, depends on this module via a replace directive)
 
@@ -184,28 +782,96 @@ XSLT element registry: metadata for all ~80 recognized XSLT 3.0 elements.
 
 ## xsd/
 
-XML Schema (XSD) compilation and validation. Defaults to XSD 1.0; XSD 1.1 is opt-in via `Compiler.Version(xsd.Version11)` (or a `vc:minVersion="1.1"` hint on the schema root). See the "XSD — Version Toggle" section in CLAUDE.md for what is implemented in 1.1.
+XML Schema (XSD) compilation and validation. Defaults to XSD 1.0; XSD 1.1 is opt-in via
+`Compiler.Version(xsd.Version11)` (or a `vc:minVersion="1.1"` hint on the schema root). See the "XSD — Version
+Toggle" section in CLAUDE.md for what is implemented in 1.1.
 
 - **NewCompiler() → Compiler** — create fluent builder for schema compilation
   - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)`, `Version(Version)` — builder methods (clone-on-write). `Version(Version10|Version11)` selects the XSD spec version (default `Version10`)
-  - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the schema document and all nested `xs:include`/`xs:import`/`xs:redefine` targets; supplies parse policy (limits, FS, XXE/network). Distinct from `FS`, which *fetches* schema bytes; the injected parser governs *parse policy* of those bytes. Unset → default schema parser (`helium.NewParser().SubstituteEntities(true)`) so entity references in schema attribute values are expanded; an explicit parser is used exactly as supplied.
-  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `xs:include`, `xs:import`, and `xs:redefine`. **Secure by default** (mirrors `helium.NewParser`): the default (and what a nil value restores) is a deny-all FS (`internal/iofs.DenyAll`, opens nothing), so an untrusted schema cannot disclose local files or exhaust resources via a hostile `schemaLocation`. Opt into host access with `helium.PermissiveFS()` (any `os.Open` path) or a confined FS. Each nested schema is read through a fixed `maxNestedSchemaSize` byte cap (10 MiB) regardless of FS, so an endless source (e.g. `schemaLocation` → `/dev/zero`) cannot exhaust memory; an over-cap read is fatal (`errSchemaTooLarge`, see `IsFatalSchemaLoad`). Schema-location resolution is URI-aware: when `BaseDir` is a URI (e.g. `https://…` or `file:///…`) a relative include is resolved with RFC 3986 semantics and an absolute-URI include is passed through unchanged, so the name handed to the FS is the canonical nested-schema URI; when `BaseDir` is a local path, names use `filepath.Join` and may be absolute / OS-style (rejected by `fs.ValidPath` FSes like `os.DirFS`/`fstest.MapFS`)
+  - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the schema document and all nested
+    `xs:include`/`xs:import`/`xs:redefine` targets; supplies parse policy (limits, FS, XXE/network). Distinct
+    from `FS`, which *fetches* schema bytes; the injected parser governs *parse policy* of those bytes. Unset
+    → default schema parser (`helium.NewParser().SubstituteEntities(true)`) so entity references in schema
+    attribute values are expanded; an explicit parser is used exactly as supplied.
+  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `xs:include`, `xs:import`, and
+    `xs:redefine`. **Secure by default** (mirrors `helium.NewParser`): the default (and what a nil value
+    restores) is a deny-all FS (`internal/iofs.DenyAll`, opens nothing), so an untrusted schema cannot
+    disclose local files or exhaust resources via a hostile `schemaLocation`. Opt into host access with
+    `helium.PermissiveFS()` (any `os.Open` path) or a confined FS. Each nested schema is read through a fixed
+    `maxNestedSchemaSize` byte cap (10 MiB) regardless of FS, so an endless source (e.g. `schemaLocation` →
+    `/dev/zero`) cannot exhaust memory; an over-cap read is fatal (`errSchemaTooLarge`, see
+    `IsFatalSchemaLoad`). Schema-location resolution is URI-aware: when `BaseDir` is a URI (e.g. `https://…`
+    or `file:///…`) a relative include is resolved with RFC 3986 semantics and an absolute-URI include is
+    passed through unchanged, so the name handed to the FS is the canonical nested-schema URI; when `BaseDir`
+    is a local path, names use `filepath.Join` and may be absolute / OS-style (rejected by `fs.ValidPath` FSes
+    like `os.DirFS`/`fstest.MapFS`)
   - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods; return `(nil, ErrCompilationFailed)` on fatal schema diagnostics
 - **NewValidator(schema) → Validator** — create fluent builder for validation
-  - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)`, `IDNodes(*IDNodes)` — builder methods. `IDNodes` collects the PSVI is-id nodes (XDM 3.1): every attribute/element whose actual validated content is a single xs:ID-derived value — an atomic xs:ID, a SINGLETON list of xs:ID, or a union that SELECTS an xs:ID-derived member. A multi-item list or a non-ID union member is not is-id. Version-independent and runs regardless of `SkipDatatypeIntegrityChecks` (it observes a per-node property, it does not enforce document ID uniqueness). Feeds `xpath3.Evaluator.IDNodes` for `fn:id`/`fn:element-with-id`
+  - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)`,
+    `IDNodes(*IDNodes)` — builder methods. `IDNodes` collects the PSVI is-id nodes (XDM 3.1): every
+    attribute/element whose actual validated content is a single xs:ID-derived value — an atomic xs:ID, a
+    SINGLETON list of xs:ID, or a union that SELECTS an xs:ID-derived member. A multi-item list or a non-ID
+    union member is not is-id. Version-independent and runs regardless of `SkipDatatypeIntegrityChecks` (it
+    observes a per-node property, it does not enforce document ID uniqueness). Feeds
+    `xpath3.Evaluator.IDNodes` for `fn:id`/`fn:element-with-id`
   - `Validate(ctx, *Document) → error` — terminal method
 - **(*TypeDef).Validate(ctx, value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
 - **(*TypeDef).ValidateElement(ctx, elem, schema) → error** — validate an element's content against a type
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
-- **Schema.Declarations() → xpath3.SchemaDeclarations** — an `xpath3.SchemaDeclarations` view over the compiled schema for schema-aware XPath (schema-element/attribute node tests, schema-aware cast/castable, instance-of/subtype tests, substitution-group membership, typed-value atomization of PSVI-annotated nodes). Pair with `xpath3.Evaluator.SchemaDeclarations(...)` and `TypeAnnotations(...)` (fed by `Validator.Annotations`). Borrows the schema read-only; safe to share across concurrent evaluations. Backed by the `schemaDecls` adapter in `schema_decls.go` — the same one used internally for xs:assert evaluation, and the single canonical implementation xslt3's multi-schema `schemaRegistry` (`xslt3/schema_context.go`) delegates its per-schema `SchemaDeclarations` lookups to. The one method xslt3 does NOT delegate is `IsSubtypeOf`: XSLT SequenceType matching treats a simpleContent COMPLEX type as a subtype of its simple content base (so it matches `element(*, T)`), whereas this adapter deliberately excludes a complex type from its simple ancestry (so `instance of element(*, xs:string)` is false for an xs:assert node)
-- **ResolveSchemaURI(ref, base) → (string, error)** / **URIScheme(s) → string** — the single canonical schema-location URI-resolution helper and scheme-detector, shared with `xslt3` so the two layers cannot drift (URI-aware: absolute-URI pass-through, RFC 3986 with `OmitHost` preservation for URI bases, `filepath.Join` + `..`-escape guard for local bases)
-- **FatalSchemaLoader** interface (`FatalSchemaLoad() bool`) — a `Compiler.FS` may return an `Open` error whose chain carries a value satisfying this interface to force an `xs:import` load failure to be FATAL instead of the usual warn-and-continue ("Skipping the import."). `xslt3`'s `schemaResolverFS` uses it so an over-cap nested-import read (`ErrResourceTooLarge`) is not silently skipped; the wrapped chain is preserved so callers can still `errors.Is`/`errors.As` the cause
-- **IsFatalSchemaLoad(err) → bool** — the SINGLE source of truth for "is this a fatal schema-load condition that must abort compilation, as opposed to warn-and-continue or falling back to a pre-compiled schema". Returns true (via `errors.Is`/`errors.As`) for a schema-location `..`-escape, an `xs:import` depth overflow, an `xs:include`/`xs:redefine` depth overflow (`errIncludeDepthExceeded` — otherwise an over-deep include chain inside an IMPORTED schema would be demoted to a warning and silently ignored by `loadImport`), an over-cap nested-schema read (`errSchemaTooLarge`), and any error satisfying `FatalSchemaLoader`. The two xsd import warn-or-continue sites and `xslt3`'s `xsl:import-schema` fallback guard both route through it (xslt3's `isFatalSchemaLoadError` delegates to it, adding the xslt3-package `ErrResourceTooLarge` sentinel), so the classification cannot drift between the layers. The path-escape / depth sentinels stay unexported; this helper is the public surface
-- Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups, import/include/redefine/override, IDC (xs:unique/key/keyref), XSD 1.1 assertions/assertion facets, conditional type assignment, open content, schema default attributes, wildcard algebra, relaxed xs:all, and relaxed wildcard/UPA behavior
-- `ElementDecl.SubstitutionGroup` = first substitution-group head QName for compatibility; `ElementDecl.SubstitutionGroups` = all head QNames. XSD 1.1 `@substitutionGroup` may be XSD-whitespace-separated QName list; XSD 1.0 preserves single-QName behavior. `Schema.SubstGroupMembers(head)` returns the eligible transitive member set after substitution block and derivation filtering.
-- `ErrValidationFailed` — sentinel error returned by `Validate()` when the document is invalid; individual errors delivered via `ErrorHandler`. `Validate()` also returns `ErrNilSchema` (no compiled schema) and `ErrNilDocument` (nil document); a nil `ctx` is normalized to `context.Background()`
+- **Schema.Declarations() → xpath3.SchemaDeclarations** — an `xpath3.SchemaDeclarations` view over the
+  compiled schema for schema-aware XPath (schema-element/attribute node tests, schema-aware cast/castable,
+  instance-of/subtype tests, substitution-group membership, typed-value atomization of PSVI-annotated nodes).
+  Pair with `xpath3.Evaluator.SchemaDeclarations(...)` and `TypeAnnotations(...)` (fed by
+  `Validator.Annotations`). Borrows the schema read-only; safe to share across concurrent evaluations. Backed
+  by the `schemaDecls` adapter in `schema_decls.go` — the same one used internally for xs:assert evaluation,
+  and the single canonical implementation xslt3's multi-schema `schemaRegistry` (`xslt3/schema_context.go`)
+  delegates its per-schema `SchemaDeclarations` lookups to. The one method xslt3 does NOT delegate is
+  `IsSubtypeOf`: XSLT SequenceType matching treats a simpleContent COMPLEX type as a subtype of its simple
+  content base (so it matches `element(*, T)`), whereas this adapter deliberately excludes a complex type from
+  its simple ancestry (so `instance of element(*, xs:string)` is false for an xs:assert node)
+- **ResolveSchemaURI(ref, base) → (string, error)** / **URIScheme(s) → string** — the single canonical
+  schema-location URI-resolution helper and scheme-detector, shared with `xslt3` so the two layers cannot
+  drift (URI-aware: absolute-URI pass-through, RFC 3986 with `OmitHost` preservation for URI bases,
+  `filepath.Join` + `..`-escape guard for local bases)
+- **FatalSchemaLoader** interface (`FatalSchemaLoad() bool`) — a `Compiler.FS` may return an `Open` error
+  whose chain carries a value satisfying this interface to force an `xs:import` load failure to be FATAL
+  instead of the usual warn-and-continue ("Skipping the import."). `xslt3`'s `schemaResolverFS` uses it so an
+  over-cap nested-import read (`ErrResourceTooLarge`) is not silently skipped; the wrapped chain is preserved
+  so callers can still `errors.Is`/`errors.As` the cause
+- **IsFatalSchemaLoad(err) → bool** — the SINGLE source of truth for "is this a fatal schema-load condition
+  that must abort compilation, as opposed to warn-and-continue or falling back to a pre-compiled schema".
+  Returns true (via `errors.Is`/`errors.As`) for a schema-location `..`-escape, an `xs:import` depth overflow,
+  an `xs:include`/`xs:redefine` depth overflow (`errIncludeDepthExceeded` — otherwise an over-deep include
+  chain inside an IMPORTED schema would be demoted to a warning and silently ignored by `loadImport`), an
+  over-cap nested-schema read (`errSchemaTooLarge`), and any error satisfying `FatalSchemaLoader`. The two xsd
+  import warn-or-continue sites and `xslt3`'s `xsl:import-schema` fallback guard both route through it
+  (xslt3's `isFatalSchemaLoadError` delegates to it, adding the xslt3-package `ErrResourceTooLarge` sentinel),
+  so the classification cannot drift between the layers. The path-escape / depth sentinels stay unexported;
+  this helper is the public surface
+- Supports: complex/simple types, sequences, choices, all, groups, attribute groups, substitution groups,
+  import/include/redefine/override, IDC (xs:unique/key/keyref), XSD 1.1 assertions/assertion facets,
+  conditional type assignment, open content, schema default attributes, wildcard algebra, relaxed xs:all, and
+  relaxed wildcard/UPA behavior
+- `ElementDecl.SubstitutionGroup` = first substitution-group head QName for compatibility;
+  `ElementDecl.SubstitutionGroups` = all head QNames. XSD 1.1 `@substitutionGroup` may be
+  XSD-whitespace-separated QName list; XSD 1.0 preserves single-QName behavior.
+  `Schema.SubstGroupMembers(head)` returns the eligible transitive member set after substitution block and
+  derivation filtering.
+- `ErrValidationFailed` — sentinel error returned by `Validate()` when the document is invalid; individual
+  errors delivered via `ErrorHandler`. `Validate()` also returns `ErrNilSchema` (no compiled schema) and
+  `ErrNilDocument` (nil document); a nil `ctx` is normalized to `context.Background()`
 - `ErrCompilationFailed` — sentinel error returned by `Compile()`/`CompileFile()` when the schema has one or more fatal errors; the returned schema is nil and individual diagnostics are delivered via `ErrorHandler`
-- Files: `xsd.go` (API), `doc.go`, `schema.go` (data model), `constants.go`, `compile.go` + `compile_imports.go` (compile orchestration/imports), `resolve_uri.go` (shared schema-location URI resolver `ResolveSchemaURI`/`URIScheme`), `read_types.go` + `read_particles.go` + `read_elements.go` (schema readers), `link_refs.go` + `restriction_particle.go` + `all_subsumption.go` + `substitution_group.go` + `wildcard_algebra.go` + `check_*.go` (`check_element_consistent.go`, `check_elements.go`, `check_facets.go`, `check_upa.go`; reference resolution + constraints), `validate.go` + `validate_elem.go` + `validate_idc.go` + `validate_id.go` (validation flow/content/IDC/ID), `simplevalue_core.go` + `simplevalue_facets.go` (simple-value engine), `assert.go` + `assertion_facet.go` (XSD 1.1 assertions), `alternative.go` (conditional type assignment), `conditional_inclusion.go` (XSD 1.1 conditional inclusion), `opencontent.go` (open content), `override.go` (xs:override), `inherited_attrs.go` (XSD 1.1 inherited attributes), `schema_decls.go` (schema-aware XPath adapter), `errors.go`
+- Files: `xsd.go` (API), `doc.go`, `schema.go` (data model), `constants.go`, `compile.go` +
+  `compile_imports.go` (compile orchestration/imports), `resolve_uri.go` (shared schema-location URI resolver
+  `ResolveSchemaURI`/`URIScheme`), `read_types.go` + `read_particles.go` + `read_elements.go` (schema
+  readers), `link_refs.go` + `restriction_particle.go` + `all_subsumption.go` + `substitution_group.go` +
+  `wildcard_algebra.go` + `check_*.go` (`check_element_consistent.go`, `check_elements.go`, `check_facets.go`,
+  `check_upa.go`; reference resolution + constraints), `validate.go` + `validate_elem.go` + `validate_idc.go`
+  + `validate_id.go` (validation flow/content/IDC/ID), `simplevalue_core.go` + `simplevalue_facets.go`
+  (simple-value engine), `assert.go` + `assertion_facet.go` (XSD 1.1 assertions), `alternative.go`
+  (conditional type assignment), `conditional_inclusion.go` (XSD 1.1 conditional inclusion), `opencontent.go`
+  (open content), `override.go` (xs:override), `inherited_attrs.go` (XSD 1.1 inherited attributes),
+  `schema_decls.go` (schema-aware XPath adapter), `errors.go`
 - Imports: helium, xpath1/, xpath3/ (XSD 1.1 assertions + conditional type assignment), internal/lexicon
 - Status: see `.claude/docs/libxml2-parity.md` for libxml2 golden counts and W3C XSD 1.1 conformance run policy; do not cache branch-specific counts here
 
@@ -217,8 +883,19 @@ RELAX NG schema compilation and validation.
   - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `MaxResourceBytes(int)`, `ErrorHandler(h)` — builder methods (clone-on-write)
   - `Compiler.BaseDir(dir)` — base directory for resolving relative paths in `include` and `externalRef` during compilation
   - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the grammar and its `include`/`externalRef` targets; supplies parse policy (limits, FS, XXE/network), distinct from the fetch `FS`. Unset → default `helium.NewParser()`.
-  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `include` and `externalRef`. **Secure by default**: the default (and what a nil value restores) is a deny-all FS (`internal/iofs.DenyAll`, opens nothing), mirroring `helium.NewParser`, so an untrusted schema cannot read host files via `include`/`externalRef`. Pass `helium.PermissiveFS()` (any `os.Open` path) or a confined FS to opt into loading. Resolution (`resolveHref` in `parse.go`) honors an absolute href as-is first; otherwise it resolves against ancestor `xml:base` via `BuildURI`; only when neither applies does it fall back to `filepath.Join(BaseDir, href)`, and finally to the bare href. The resolved name may thus be absolute / OS-style; FS implementations enforcing `fs.ValidPath` (`os.DirFS`, `fstest.MapFS`) reject them, so a sandboxing FS must accept OS-style names
-  - `Compiler.MaxResourceBytes(int)` — per-resource byte cap on each `include`/`externalRef` target read (`readResource` in `parse.go`, via `internal/iolimit`). Default 10 MiB (`defaultMaxResourceBytes`); `<= 0` restores the default. An over-cap resource fails to load with an "exceeds the maximum resource size" compile error, and is never read in full
+  - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `include` and `externalRef`.
+    **Secure by default**: the default (and what a nil value restores) is a deny-all FS
+    (`internal/iofs.DenyAll`, opens nothing), mirroring `helium.NewParser`, so an untrusted schema cannot read
+    host files via `include`/`externalRef`. Pass `helium.PermissiveFS()` (any `os.Open` path) or a confined FS
+    to opt into loading. Resolution (`resolveHref` in `parse.go`) honors an absolute href as-is first;
+    otherwise it resolves against ancestor `xml:base` via `BuildURI`; only when neither applies does it fall
+    back to `filepath.Join(BaseDir, href)`, and finally to the bare href. The resolved name may thus be
+    absolute / OS-style; FS implementations enforcing `fs.ValidPath` (`os.DirFS`, `fstest.MapFS`) reject them,
+    so a sandboxing FS must accept OS-style names
+  - `Compiler.MaxResourceBytes(int)` — per-resource byte cap on each `include`/`externalRef` target read
+    (`readResource` in `parse.go`, via `internal/iolimit`). Default 10 MiB (`defaultMaxResourceBytes`); `<= 0`
+    restores the default. An over-cap resource fails to load with an "exceeds the maximum resource size"
+    compile error, and is never read in full
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
@@ -237,15 +914,47 @@ RELAX NG schema compilation and validation.
 HTML 4.01 parser producing helium DOM or SAX events.
 
 - **NewParser() → Parser** — create fluent parser builder
-- Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`, `SuppressWarnings(bool)`, `Strict(bool)`, `MaxContentSize(int)` (approximate soft per-chunk cap for normal data-state text and raw-text/RCDATA/plaintext — chunks target this size but an indivisible token, e.g. a whole UTF-8 rune or resolved char-ref, is never split, so a chunk may slightly exceed it; HARD cap for comment/bogus-comment/PI — over-cap fails the parse with `ErrContentSizeExceeded` since those are indivisible nodes; normal data-state and RCDATA char-ref resolution share the same cap-aware path (`parseCharRefBounded`) — it uses a FIXED `maxEntityNameLen` (~32 byte) lookahead independent of the cap, so a SHORT resolvable named reference (known entity or legacy prefix) whose run fits the cap is never rejected for being a small name (`&amp;` resolves under `MaxContentSize(2)`); ANY UNRESOLVED named-reference literal (whether short, semicolon-terminated, or unbounded) fails with `ErrContentSizeExceeded` once the bytes it would emit (`&` + name + optional `;`) exceed the cap; a SATURATED ambiguous legacy-prefix run (`&amp` + a tail that overflows the 32-byte lookahead) is consumed into a cap-bounded spool and HARD-FAILS with `ErrContentSizeExceeded` if it exceeds the cap before its end is reached, emitting nothing — only a within-cap saturated run legacy-resolves; a normal data-state run's LEADING whitespace prefix is deferred (buffer `pendingWS`) until its first non-whitespace byte fixes both whitespace-significance (`StripBlanks`) and implied-`<body>` insertion — so `<html> a` keeps the space and `a` in one run under `<body>`, and `<p> &amp;</p>`/`<p> < b</p>` keep the leading space; that deferred prefix is bounded by the cap and HARD-FAILS with `ErrContentSizeExceeded` (regardless of `StripBlanks`) if it reaches the cap before any non-whitespace byte appears; indivisible STRUCTURAL token scans — tag name, end-tag name, attribute name, PUBLIC/SYSTEM DOCTYPE literal, intra-tag whitespace run (`scanTokenLimit`) — are also HARD-capped with `ErrContentSizeExceeded`, but against a separate cap FLOORED at the 16 MiB default (so small `MaxContentSize` never rejects ordinary names like `script`) that grows only when `MaxContentSize` exceeds the floor; `parseDoctype` checks `fatalErr` after EACH scanner so an over-cap run on a streaming reader fails promptly without a further blocking read; default 16 MiB)
+- Parser methods: `SuppressImplied(bool)`, `StripBlanks(bool)`, `SuppressErrors(bool)`,
+  `SuppressWarnings(bool)`, `Strict(bool)`, `MaxContentSize(int)` (approximate soft per-chunk cap for normal
+  data-state text and raw-text/RCDATA/plaintext — chunks target this size but an indivisible token, e.g. a
+  whole UTF-8 rune or resolved char-ref, is never split, so a chunk may slightly exceed it; HARD cap for
+  comment/bogus-comment/PI — over-cap fails the parse with `ErrContentSizeExceeded` since those are
+  indivisible nodes; normal data-state and RCDATA char-ref resolution share the same cap-aware path
+  (`parseCharRefBounded`) — it uses a FIXED `maxEntityNameLen` (~32 byte) lookahead independent of the cap, so
+  a SHORT resolvable named reference (known entity or legacy prefix) whose run fits the cap is never rejected
+  for being a small name (`&amp;` resolves under `MaxContentSize(2)`); ANY UNRESOLVED named-reference literal
+  (whether short, semicolon-terminated, or unbounded) fails with `ErrContentSizeExceeded` once the bytes it
+  would emit (`&` + name + optional `;`) exceed the cap; a SATURATED ambiguous legacy-prefix run (`&amp` + a
+  tail that overflows the 32-byte lookahead) is consumed into a cap-bounded spool and HARD-FAILS with
+  `ErrContentSizeExceeded` if it exceeds the cap before its end is reached, emitting nothing — only a
+  within-cap saturated run legacy-resolves; a normal data-state run's LEADING whitespace prefix is deferred
+  (buffer `pendingWS`) until its first non-whitespace byte fixes both whitespace-significance (`StripBlanks`)
+  and implied-`<body>` insertion — so `<html> a` keeps the space and `a` in one run under `<body>`, and `<p>
+  &amp;</p>`/`<p> < b</p>` keep the leading space; that deferred prefix is bounded by the cap and HARD-FAILS
+  with `ErrContentSizeExceeded` (regardless of `StripBlanks`) if it reaches the cap before any non-whitespace
+  byte appears; indivisible STRUCTURAL token scans — tag name, end-tag name, attribute name, PUBLIC/SYSTEM
+  DOCTYPE literal, intra-tag whitespace run (`scanTokenLimit`) — are also HARD-capped with
+  `ErrContentSizeExceeded`, but against a separate cap FLOORED at the 16 MiB default (so small
+  `MaxContentSize` never rejects ordinary names like `script`) that grows only when `MaxContentSize` exceeds
+  the floor; `parseDoctype` checks `fatalErr` after EACH scanner so an over-cap run on a streaming reader
+  fails promptly without a further blocking read; default 16 MiB)
 - Terminal: **Parse(ctx, []byte)**, **ParseReader(ctx, io.Reader)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
 - **NewWriter() → Writer** — create fluent writer builder
-- Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`, `EscapeControlChars(bool)`, `NullNamespaceHTMLOnly(bool)` (HTML 4.01 rule: a void element only in the null namespace is minimized; a namespaced one gets an explicit end tag), `CharacterMap(map[rune]string)` (substitute a mapped rune with its raw replacement in text/attribute content — Serialization 3.1 §7 character maps for the html output method; nil/empty is byte-identical)
+- Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`,
+  `EscapeControlChars(bool)`, `NullNamespaceHTMLOnly(bool)` (HTML 4.01 rule: a void element only in the null
+  namespace is minimized; a namespaced one gets an explicit end tag), `CharacterMap(map[rune]string)`
+  (substitute a mapped rune with its raw replacement in text/attribute content — Serialization 3.1 §7
+  character maps for the html output method; nil/empty is byte-identical)
 - Terminal: **WriteTo(io.Writer, Node)**
 - **Write(io.Writer, Node) → error** — serialize with default settings
 - **WriteString(Node) → (string, error)** — serialize to string with default settings
 - Auto-closing, void elements, implicit html/head/body insertion
-- Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8. `ParseReader`/push path: an UNDECLARED stream that keeps proving valid UTF-8 is deferred (buffered) until a non-UTF-8 byte flips the whole prefix to Windows-1252; that undecided prefix is BOUNDED at the configured `MaxContentSize` (16 MiB default), capped chunk-independently — valid UTF-8 ending at/below the cap is accepted (one-byte EOF probe), but the cap filling with more bytes still to come fails closed with `ErrContentSizeExceeded` (`encoding_reader.go`)
+- Encoding: prescan charset=utf-8 → U+FFFD for invalid bytes; otherwise Latin-1/Win-1252→UTF-8.
+  `ParseReader`/push path: an UNDECLARED stream that keeps proving valid UTF-8 is deferred (buffered) until a
+  non-UTF-8 byte flips the whole prefix to Windows-1252; that undecided prefix is BOUNDED at the configured
+  `MaxContentSize` (16 MiB default), capped chunk-independently — valid UTF-8 ending at/below the cap is
+  accepted (one-byte EOF probe), but the cap filling with more bytes still to come fails closed with
+  `ErrContentSizeExceeded` (`encoding_reader.go`)
 - Entity resolution: 2125 WHATWG + 106 legacy HTML4; legacy entities work without `;`
 - Files: `html.go` (API), `parser.go`, `entities.go`, `elements.go`, `dump.go` (serializer), `tree.go` (DOM builder), `sax.go`
 - Imports: helium, sax/
@@ -256,13 +965,32 @@ XInclude 1.0 processing with recursive inclusion and fallback.
 
 - **NewProcessor() → Processor** — create fluent builder
 - Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `MaxIncludeSize(int)`, `MaxIncludeDepth(int)`, `ErrorHandler(helium.ErrorHandler)`, `Parser(helium.Parser)`
-- `Processor.Parser(helium.Parser)` — supplies the **resource limits** (depth/name-length/amplification/content-model-depth) used to parse included documents. XInclude still forces its own loading policy: external-DTD loading is on and the filesystem is confined to the `Resolver`'s sandbox (the injected parser's FS is NOT used for included docs — the `Resolver` is the security boundary). Unset → default `helium.NewParser()` base.
+- `Processor.Parser(helium.Parser)` — supplies the **resource limits**
+  (depth/name-length/amplification/content-model-depth) used to parse included documents. XInclude still
+  forces its own loading policy: external-DTD loading is on and the filesystem is confined to the `Resolver`'s
+  sandbox (the injected parser's FS is NOT used for included docs — the `Resolver` is the security boundary).
+  Unset → default `helium.NewParser()` base.
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
 - `Resolver` interface — custom resource loader; receives the href already resolved against the effective base (base arg is informational only — do NOT re-resolve, or the base directory is double-applied)
-- **Secure by default**: an unset `Resolver` denies all filesystem access (`NewFSResolver(iofs.DenyAll{})`), mirroring `helium.NewParser()`'s deny-all FS — untrusted input cannot disclose local files via `<xi:include>`. Opt in with `Resolver(NewFSResolver(fsys))` (confined `fs.FS`, e.g. `os.Root.FS`) or `Resolver(NewFSResolver(helium.PermissiveFS()))` for historical os.Open passthrough. NOTE: `NewFSResolver(nil)` is still permissive — only the processor's *unset* default is deny-all
+- **Secure by default**: an unset `Resolver` denies all filesystem access (`NewFSResolver(iofs.DenyAll{})`),
+  mirroring `helium.NewParser()`'s deny-all FS — untrusted input cannot disclose local files via
+  `<xi:include>`. Opt in with `Resolver(NewFSResolver(fsys))` (confined `fs.FS`, e.g. `os.Root.FS`) or
+  `Resolver(NewFSResolver(helium.PermissiveFS()))` for historical os.Open passthrough. NOTE:
+  `NewFSResolver(nil)` is still permissive — only the processor's *unset* default is deny-all
 - `Processor.MaxIncludeSize(int)` — per-include byte cap; unset or ≤ 0 uses the default 10 MiB (unexported `defaultMaxIncludeSize`); over-cap reads fail with `ErrIncludeTooLarge`
-- **Aggregate cap (internal, no public knob)**: across the whole expansion the cumulative materialized bytes are bounded at `maxIncludeAggregateMultiplier` (100) × the effective per-include cap (1 GiB by default; proportional, so lowering `MaxIncludeSize` lowers it), and the total spliced-resource count at `maxTotalIncludes` (65536). Counted per occurrence — repeated cache hits included — so many distinct sub-cap includes or one cached resource reused many times both trip it. An xpointer include charges the estimated footprint of each deep-copied selected subtree (`subtreeCopyCost`: `copiedNodeOverhead` per node + leaf content length, measured on the source before copying) against the same aggregate, so a small source whose xpointer selects many overlapping/nested nodes (O(n²) copies) is bounded instead of OOMing — the bytes READ from the source alone would not catch it. Over-aggregate fails with the same `ErrIncludeTooLarge` sentinel as the per-include cap. Guards amplification the per-include cap alone misses
-- `Processor.MaxIncludeDepth(int)` — xi:include nesting-depth cap; unset or ≤ 0 uses the default 40 (unexported `defaultMaxIncludeDepth`); over-cap fails with "maximum include depth exceeded". Bounds nesting only — cyclic includes are caught separately by circular detection
+- **Aggregate cap (internal, no public knob)**: across the whole expansion the cumulative materialized bytes
+  are bounded at `maxIncludeAggregateMultiplier` (100) × the effective per-include cap (1 GiB by default;
+  proportional, so lowering `MaxIncludeSize` lowers it), and the total spliced-resource count at
+  `maxTotalIncludes` (65536). Counted per occurrence — repeated cache hits included — so many distinct sub-cap
+  includes or one cached resource reused many times both trip it. An xpointer include charges the estimated
+  footprint of each deep-copied selected subtree (`subtreeCopyCost`: `copiedNodeOverhead` per node + leaf
+  content length, measured on the source before copying) against the same aggregate, so a small source whose
+  xpointer selects many overlapping/nested nodes (O(n²) copies) is bounded instead of OOMing — the bytes READ
+  from the source alone would not catch it. Over-aggregate fails with the same `ErrIncludeTooLarge` sentinel
+  as the per-include cap. Guards amplification the per-include cap alone misses
+- `Processor.MaxIncludeDepth(int)` — xi:include nesting-depth cap; unset or ≤ 0 uses the default 40
+  (unexported `defaultMaxIncludeDepth`); over-cap fails with "maximum include depth exceeded". Bounds nesting
+  only — cyclic includes are caught separately by circular detection
 - Default `NewFSResolver` converts absolute `file:` hrefs to OS paths via `internal/iofs.FileURIToPath` (non-local hosts rejected)
 - Max URI 2000 chars, circular detection, doc/text caching
 - Files: `xinclude.go`
@@ -285,16 +1013,27 @@ XPointer expression evaluation with scheme cascading.
 
 Schematron schema compilation and validation.
 
-- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.Label(s)` / `.ErrorHandler(h)` / `.Parser(helium.Parser)` / `.QueryBinding(b)` / `.DefaultQueryBinding(b)` → `.Compile(ctx, doc)` or `.CompileFile(ctx, path)`. `Parser` sets the parser used by `CompileFile` (parse policy: limits, FS, XXE/network); unset → default `helium.NewParser()`. `QueryBinding` forces the query language binding and ignores the schema's `queryBinding` attribute; `DefaultQueryBinding` only chooses the fallback for a schema that names none
+- **Compiler** (fluent, clone-on-write): `NewCompiler()` → `.Label(s)` / `.ErrorHandler(h)` /
+  `.Parser(helium.Parser)` / `.QueryBinding(b)` / `.DefaultQueryBinding(b)` → `.Compile(ctx, doc)` or
+  `.CompileFile(ctx, path)`. `Parser` sets the parser used by `CompileFile` (parse policy: limits, FS,
+  XXE/network); unset → default `helium.NewParser()`. `QueryBinding` forces the query language binding and
+  ignores the schema's `queryBinding` attribute; `DefaultQueryBinding` only chooses the fallback for a schema
+  that names none
 - **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Label(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
 - `ErrValidationFailed` — sentinel returned by `Validator.Validate` on validation failure; individual `*ValidationError` delivered to ErrorHandler
 - `ErrNoSchema` — sentinel returned by `Validator.Validate` when the Validator has no compiled schema
 - `ErrCompileFailed` — sentinel returned by `Compiler.Compile`/`CompileFile` when compilation fails
 - `ErrUnsupportedQueryBinding` — sentinel returned by `ParseQueryBinding` and by `Compiler.Compile`/`CompileFile` for a query language binding this package does not implement
-- **QueryBinding** — `QueryBindingUnspecified` / `QueryBindingXPath1` (`xslt`, absent attribute) / `QueryBindingXPath3` (`xslt3`, `xpath3`); `ParseQueryBinding(s)` maps an attribute value (trimmed, case-insensitive), `Schema.QueryBinding()` reports the resolved binding. Every other value is refused, including the unimplemented 2.0 bindings and the names the standard reserves without defining (`xpath`, `xquery`, `stx`, `exslt`)
+- **QueryBinding** — `QueryBindingUnspecified` / `QueryBindingXPath1` (`xslt`, absent attribute) /
+  `QueryBindingXPath3` (`xslt3`, `xpath3`); `ParseQueryBinding(s)` maps an attribute value (trimmed,
+  case-insensitive), `Schema.QueryBinding()` reports the resolved binding. Every other value is refused,
+  including the unimplemented 2.0 bindings and the names the standard reserves without defining (`xpath`,
+  `xquery`, `stx`, `exslt`)
 - Supports: schema, pattern, rule, assert, report, let, name, value-of
 - Variable bindings via `<let>` and `<param>`
-- Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go` (validation), `errors.go` (error types + formatting), `querybinding.go` (binding resolution), `engine.go` (engine/runner/value seam), `engine_xpath1.go` + `engine_xpath3.go` (per-binding engines)
+- Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go`
+  (validation), `errors.go` (error types + formatting), `querybinding.go` (binding resolution), `engine.go`
+  (engine/runner/value seam), `engine_xpath1.go` + `engine_xpath3.go` (per-binding engines)
 - Imports: helium, internal/xpath, xpath1/, xpath3/, internal/xpath1/number
 
 ## catalog/
@@ -307,7 +1046,12 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
 - **Loader.MaxBytes(n) → Loader** — cap catalog file size; exceed → `ErrCatalogTooLarge` (default `MaxCatalogSize`, 10 MiB)
 - **Catalog.Resolve(ctx, pubID, sysID) → string** — resolve external identifier
 - **Catalog.ResolveURI(ctx, uri) → string** — resolve URI reference
-- **Catalog.ResolveResult(ctx, pubID, sysID) → (uri string, broke bool)** / **Catalog.ResolveURIResult(ctx, uri) → (resolved string, broke bool)** — like Resolve/ResolveURI but also report a catalog break (the OASIS/libxml2 "cut" signal: a matching delegate was consulted and every delegate target failed). An exhausted nextCatalog chain is NOT a break — it returns `broke==false`. `broke==true` means "no match, STOP searching"; `broke==false` with `""` means "no match, keep searching". Chain callers (CLI `catalogChain`) honor `broke` to stop falling through to later catalogs
+- **Catalog.ResolveResult(ctx, pubID, sysID) → (uri string, broke bool)** / **Catalog.ResolveURIResult(ctx,
+  uri) → (resolved string, broke bool)** — like Resolve/ResolveURI but also report a catalog break (the
+  OASIS/libxml2 "cut" signal: a matching delegate was consulted and every delegate target failed). An
+  exhausted nextCatalog chain is NOT a break — it returns `broke==false`. `broke==true` means "no match, STOP
+  searching"; `broke==false` with `""` means "no match, keep searching". Chain callers (CLI `catalogChain`)
+  honor `broke` to stop falling through to later catalogs
 - Const `MaxCatalogSize`; sentinel `ErrCatalogTooLarge`
 - Catalog chaining via nextCatalog; URN urn:publicid: support
 - Files: `catalog.go`, `load.go`
@@ -347,42 +1091,418 @@ Generic push parser infrastructure shared by both XML and HTML push parsers.
 
 XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 
-- **NewSigner() → Signer** — create fluent builder for signing (clone-on-write value type). `Signer.Reference` deep-copies the `ReferenceConfig.Transforms` slice (and each transform's internal prefix slice) at ingress, and `clone` re-copies it, so a later mutation of the caller's `Transforms` slice cannot alter a configured Signer or race with signing. `ExcC14NTransform(prefixes...)` copies the prefix varargs and `Prefixes()` returns a copy, so a transform's prefix list is immutable to callers.
+- **NewSigner() → Signer** — create fluent builder for signing (clone-on-write value type). `Signer.Reference`
+  deep-copies the `ReferenceConfig.Transforms` slice (and each transform's internal prefix slice) at ingress,
+  and `clone` re-copies it, so a later mutation of the caller's `Transforms` slice cannot alter a configured
+  Signer or race with signing. `ExcC14NTransform(prefixes...)` copies the prefix varargs and `Prefixes()`
+  returns a copy, so a transform's prefix list is immutable to callers.
   - `SignatureAlgorithm(uri)`, `CanonicalizationMethod(uri)`, `Reference(ReferenceConfig)`, `KeyInfo(KeyInfoBuilder)`, `SignatureID(id)`, `AllowSHA1(bool)` — builder methods
-  - `SignEnveloped(ctx, doc, parent, key)`, `SignEnveloping(ctx, doc, content, key)`, `SignDetached(ctx, doc, key)` — terminal methods. Each honors `ctx` symmetrically with verification: an already-cancelled/expired context short-circuits at the top of the call (before the Signature skeleton is built, any caller content is moved into an `<Object>`, or any canonicalization/crypto runs), and the per-Reference loop re-checks `ctx.Err()` between references, returning the bare context error (an enveloped sign adds no Signature and an enveloping sign moves no content on the cancelled path)
-  - `SignEnveloping` wraps the content nodes in a `<ds:Object>`. A same-document reference (`URI="#id"`) pointing INTO the Signature's own Object content (e.g. a `<ds:Manifest>`/`<ds:SignatureProperties>` carrying an `Id`) resolves and is digested WITHOUT the Signature ever being inserted into the caller's document: reference resolution searches the document and the detached Signature subtree, an in-Object target is canonicalized on its own (the live Signature is moved into a throwaway document only for the c14n walk, rooted under a proxy element that reproduces the target's full inherited canonicalization context — the caller document element's in-scope namespace declarations AND its inherited xml:* attributes, copied per the C14N version to match exactly what helium's own canonicalizer inherits to a node-set apex (Canonical XML 1.0 inherits EVERY xml:* attribute including xml:id; Canonical XML 1.1 inherits only xml:lang/xml:space and lexically joins xml:base, xml:id NOT inherited) — so a reference into the Object verifies under inclusive Canonical XML 1.0 and 1.1 once the Signature is placed under the caller root; exclusive Canonical XML inherits neither namespaces nor xml:* and is unaffected; the proxy is never in the canonicalized node set, and the temporary move is always undone — on normal return, error, or a panic unwinding out of canonicalization), and a document target (`URI="#root"`, even the document element) is digested over its unchanged subtree — byte-identical to a signature with no such internal reference. An id that matches in BOTH the document and the Signature's own Object content is rejected as an ambiguous cross-tree collision (`ErrAmbiguousReference`).
-  - `SignEnveloping` content safety (`sign.go` `signEnveloping` + helpers `contentMovable`/`movedContent`/`restoreMovedContent`/`restoreOneContent`): every `content` entry must be a movable node (`helium.MutableNode`; an ordinary DOM element qualifies). A nil, typed-nil, or read-only entry (e.g. a `NamespaceNodeWrapper`) is rejected up front in a preflight with an indexed error `content[i] is nil or not movable (%T)` wrapping `ErrInvalidSignature`, before any node is moved — never silently dropped. Every content node's pre-move parent, both sibling anchors, and original OwnerDocument are snapshotted BEFORE any node is moved (moving one node changes the live sibling links of the others, so a per-node capture taken at move time would record a stale anchor); the nodes are then moved into the `<Object>` with a non-coalescing splice (`AddChild` for the first node into the empty Object, then `Replace(prev, node)` to place each subsequent node after the previous one) so two adjacent Text content entries are not merged into one node. A `defer` fires on the error/panic path only (a `success` flag skips it on the normal return) to restore every moved node to its exact original position (parent, siblings, order, and OwnerDocument), leaving the caller's DOM byte-identical to before the call. The restore inserts each node before its original next sibling when that sibling is movable (deferring until the anchor is back in place — a right-to-left order that always terminates), else inserts it after its original previous sibling; both are non-coalescing `Replace` splices, so a restored former-last-child Text node is not merged into its previous sibling and a node whose next sibling is read-only still lands in its exact slot. A node whose snapshotted parent is nil is returned to a detached state ONLY when it had no sibling anchors either; a parentless node that still had a saved prev/next sibling is spliced back onto that sibling chain, so a detached-but-sibling-linked chain is restored exactly. After the structural rollback, each moved subtree's original OwnerDocument is restored with `SetTreeDoc` — `canonicalizeDetachedSubtree` rewrites the moved subtree's owners to the signing document, so content that came from a different `helium.Document` is handed back pointing at its original owner (a no-op for content already in the signing document). On success the content stays in the Object (enveloping semantics). This mirrors `canonicalizeDetachedSubtree`'s restore-on-every-failure-exit discipline.
-  - Signing never mutates the caller's document (enveloping content moves excepted, and undone on failure per the bullet above). For a detached Signature (`SignDetached`/`SignEnveloping`, `sigElem.Parent()==nil`), `computeAndSetSignatureValue` (`sign.go`) canonicalizes `<ds:SignedInfo>` through the SAME throwaway-document proxy (`canonicalizeDetachedSubtree`, `transforms.go`) — the proxy reproduces the caller document element's in-scope namespaces + inherited xml:* per C14N version, so the SignedInfo digest is byte-identical to canonicalizing it while attached under `doc.DocumentElement()`, and the temporary move is undone on normal return, error, or panic. Enveloped signing (`SignEnveloped`) canonicalizes SignedInfo in place under the parent it was inserted into. **Placement caveat (inclusive C14N only):** because the proxy carries the SIGNING doc element's inherited context, a detached Signature whose SignedInfo CanonicalizationMethod (or an in-Object Reference) uses INCLUSIVE Canonical XML (`C14N10`/`C14N11`) must be placed by the caller directly under the document element (or an element with the same in-scope namespaces + inherited `xml:*`); placing it under an element that adds in-scope namespace declarations or `xml:*` attributes changes the inclusively-canonicalized bytes and verification fails. Exclusive C14N (the `NewSigner` default) inherits neither and is placement-independent. Documented on the `SignDetached`/`SignEnveloping` godoc + README.
-  - Returned-node lifetime: the detached `ds:Signature` from `SignDetached`/`SignEnveloping` is built from the passed-in `doc`'s slab storage (`buildSignatureSkeleton` uses `doc.CreateElement`), so it is owned by `doc` — but a successful sign leaves it safe to hold past `doc.Free()`. `computeAndSetSignatureValue` canonicalizes `<ds:SignedInfo>` by grafting the live Signature into a throwaway document (`canonicalizeDetachedSubtree`), a cross-document move whose `addChild` preflight runs `noteCrossDocumentEscape` and sets `doc.slabEscaped`. `slabEscaped` is never cleared, so `Document.Free` is already a no-op and never recycles the chunks backing the returned Signature. The Signature therefore stays valid after `doc.Free()` and the caller does NOT need to move it into a destination document first to keep it. The `SignDetached`/`SignEnveloping` godoc states this, and `sign_lifetime_test.go` proves the node survives `doc.Free()` plus slab-pool churn intact.
+  - `SignEnveloped(ctx, doc, parent, key)`, `SignEnveloping(ctx, doc, content, key)`, `SignDetached(ctx, doc,
+    key)` — terminal methods. Each honors `ctx` symmetrically with verification: an already-cancelled/expired
+    context short-circuits at the top of the call (before the Signature skeleton is built, any caller content
+    is moved into an `<Object>`, or any canonicalization/crypto runs), and the per-Reference loop re-checks
+    `ctx.Err()` between references, returning the bare context error (an enveloped sign adds no Signature and
+    an enveloping sign moves no content on the cancelled path)
+  - `SignEnveloping` wraps the content nodes in a `<ds:Object>`. A same-document reference (`URI="#id"`)
+    pointing INTO the Signature's own Object content (e.g. a `<ds:Manifest>`/`<ds:SignatureProperties>`
+    carrying an `Id`) resolves and is digested WITHOUT the Signature ever being inserted into the caller's
+    document: reference resolution searches the document and the detached Signature subtree, an in-Object
+    target is canonicalized on its own (the live Signature is moved into a throwaway document only for the
+    c14n walk, rooted under a proxy element that reproduces the target's full inherited canonicalization
+    context — the caller document element's in-scope namespace declarations AND its inherited xml:*
+    attributes, copied per the C14N version to match exactly what helium's own canonicalizer inherits to a
+    node-set apex (Canonical XML 1.0 inherits EVERY xml:* attribute including xml:id; Canonical XML 1.1
+    inherits only xml:lang/xml:space and lexically joins xml:base, xml:id NOT inherited) — so a reference into
+    the Object verifies under inclusive Canonical XML 1.0 and 1.1 once the Signature is placed under the
+    caller root; exclusive Canonical XML inherits neither namespaces nor xml:* and is unaffected; the proxy is
+    never in the canonicalized node set, and the temporary move is always undone — on normal return, error, or
+    a panic unwinding out of canonicalization), and a document target (`URI="#root"`, even the document
+    element) is digested over its unchanged subtree — byte-identical to a signature with no such internal
+    reference. An id that matches in BOTH the document and the Signature's own Object content is rejected as
+    an ambiguous cross-tree collision (`ErrAmbiguousReference`).
+  - `SignEnveloping` content safety (`sign.go` `signEnveloping` + helpers
+    `contentMovable`/`movedContent`/`restoreMovedContent`/`restoreOneContent`): every `content` entry must be
+    a movable node (`helium.MutableNode`; an ordinary DOM element qualifies). A nil, typed-nil, or read-only
+    entry (e.g. a `NamespaceNodeWrapper`) is rejected up front in a preflight with an indexed error
+    `content[i] is nil or not movable (%T)` wrapping `ErrInvalidSignature`, before any node is moved — never
+    silently dropped. Every content node's pre-move parent, both sibling anchors, and original OwnerDocument
+    are snapshotted BEFORE any node is moved (moving one node changes the live sibling links of the others, so
+    a per-node capture taken at move time would record a stale anchor); the nodes are then moved into the
+    `<Object>` with a non-coalescing splice (`AddChild` for the first node into the empty Object, then
+    `Replace(prev, node)` to place each subsequent node after the previous one) so two adjacent Text content
+    entries are not merged into one node. A `defer` fires on the error/panic path only (a `success` flag skips
+    it on the normal return) to restore every moved node to its exact original position (parent, siblings,
+    order, and OwnerDocument), leaving the caller's DOM byte-identical to before the call. The restore inserts
+    each node before its original next sibling when that sibling is movable (deferring until the anchor is
+    back in place — a right-to-left order that always terminates), else inserts it after its original previous
+    sibling; both are non-coalescing `Replace` splices, so a restored former-last-child Text node is not
+    merged into its previous sibling and a node whose next sibling is read-only still lands in its exact slot.
+    A node whose snapshotted parent is nil is returned to a detached state ONLY when it had no sibling anchors
+    either; a parentless node that still had a saved prev/next sibling is spliced back onto that sibling
+    chain, so a detached-but-sibling-linked chain is restored exactly. After the structural rollback, each
+    moved subtree's original OwnerDocument is restored with `SetTreeDoc` — `canonicalizeDetachedSubtree`
+    rewrites the moved subtree's owners to the signing document, so content that came from a different
+    `helium.Document` is handed back pointing at its original owner (a no-op for content already in the
+    signing document). On success the content stays in the Object (enveloping semantics). This mirrors
+    `canonicalizeDetachedSubtree`'s restore-on-every-failure-exit discipline.
+  - Signing never mutates the caller's document (enveloping content moves excepted, and undone on failure per
+    the bullet above). For a detached Signature (`SignDetached`/`SignEnveloping`, `sigElem.Parent()==nil`),
+    `computeAndSetSignatureValue` (`sign.go`) canonicalizes `<ds:SignedInfo>` through the SAME
+    throwaway-document proxy (`canonicalizeDetachedSubtree`, `transforms.go`) — the proxy reproduces the
+    caller document element's in-scope namespaces + inherited xml:* per C14N version, so the SignedInfo digest
+    is byte-identical to canonicalizing it while attached under `doc.DocumentElement()`, and the temporary
+    move is undone on normal return, error, or panic. Enveloped signing (`SignEnveloped`) canonicalizes
+    SignedInfo in place under the parent it was inserted into. **Placement caveat (inclusive C14N only):**
+    because the proxy carries the SIGNING doc element's inherited context, a detached Signature whose
+    SignedInfo CanonicalizationMethod (or an in-Object Reference) uses INCLUSIVE Canonical XML
+    (`C14N10`/`C14N11`) must be placed by the caller directly under the document element (or an element with
+    the same in-scope namespaces + inherited `xml:*`); placing it under an element that adds in-scope
+    namespace declarations or `xml:*` attributes changes the inclusively-canonicalized bytes and verification
+    fails. Exclusive C14N (the `NewSigner` default) inherits neither and is placement-independent. Documented
+    on the `SignDetached`/`SignEnveloping` godoc + README.
+  - Returned-node lifetime: the detached `ds:Signature` from `SignDetached`/`SignEnveloping` is built from the
+    passed-in `doc`'s slab storage (`buildSignatureSkeleton` uses `doc.CreateElement`), so it is owned by
+    `doc` — but a successful sign leaves it safe to hold past `doc.Free()`. `computeAndSetSignatureValue`
+    canonicalizes `<ds:SignedInfo>` by grafting the live Signature into a throwaway document
+    (`canonicalizeDetachedSubtree`), a cross-document move whose `addChild` preflight runs
+    `noteCrossDocumentEscape` and sets `doc.slabEscaped`. `slabEscaped` is never cleared, so `Document.Free`
+    is already a no-op and never recycles the chunks backing the returned Signature. The Signature therefore
+    stays valid after `doc.Free()` and the caller does NOT need to move it into a destination document first
+    to keep it. The `SignDetached`/`SignEnveloping` godoc states this, and `sign_lifetime_test.go` proves the
+    node survives `doc.Free()` plus slab-pool churn intact.
 - **NewVerifier(KeySource) → Verifier** — create fluent builder for verification (clone-on-write value type)
   - `AllowSHA1(bool)`, `AllowXPointer(bool)`, `LenientKeyInfo(bool)`, `ReferenceResolver(r)`, `ReferenceParser(p)`, `ValidateManifests(bool)`, `XSLTTransformer(t)`, `MaxReferences(n)`, `MaxKeyInfoEntries(n)`, `MaxDecodedBytes(n)` — builder methods
-  - **Parse-time resource caps** (`xmldsig1.go` `verifierConfig` + `verify.go` `verifyBudget`): bound the decode/parse work an unsigned, attacker-controlled Signature can force BEFORE the SignatureValue is checked (many/large `DigestValue`/`SignatureValue`/`X509Certificate` base64 decodes, one `x509.ParseCertificate` per embedded cert). `MaxReferences` (default 1024) caps `ds:Reference` count, `MaxKeyInfoEntries` (default 256) caps `KeyInfo` children + `X509Data` children, `MaxDecodedBytes` (default 10 MiB) caps the running certificate/signature octet total. Exceeding any → `ErrResourceLimitExceeded` (before digesting/crypto). Per builder, `n==0` selects the default and `n<0` disables the cap. The `verifyBudget` also polls `ctx.Err()` inside the KeyInfo/Reference parse loops (not just at their boundaries), so a cancelled ctx/passed deadline stops the parse promptly. `MaxDecodedBytes` has **five** charge sites, four of them DOM-decoded (`verify.go` SignatureValue + DigestValue, `keyinfo.go` X509Certificate, `retrieval_method.go:374` same-document rawX509Certificate) and one not (`retrieval_method.go:318` external rawX509Certificate octets). The DOM-decoded element is NOT necessarily inside `ds:Signature` — a same-document `ds:RetrievalMethod` URI resolves to any element in the document by ID, any local name, any namespace (`retrieval_method_internal_test.go` charges a `ds:SPKIData` this way). **The four DOM-decoded sites are charged BEFORE the value is materialized**, so for them the cap bounds what verification BUILDS, not merely what it keeps: each goes through `verify.go` `decodeBudgeted` → `xmlbase64.DecodeElement`, which walks the element's children once with an `xmlbase64.Counter`, charges `verifyBudget.consume` with the counted `DecodedLen()`, and only then walks them again to build the whitespace-stripped characters (`xmlbase64.AppendStripped`) and decode into a buffer sized at that same count. The lexical text is never joined into one string — xs:base64Binary permits XML whitespace between characters and a value may be spread over any number of text and CDATA children, so the lexical length is attacker-chosen and unrelated to the charge (the parser's per-run `MaxNodeContentSize` bounds one CDATA run, not their sum). `DecodeElement` reads text, CDATA, and entity-reference children and nothing else: a comment/PI contributes no character information item and is skipped, and any other child (an element among them) is refused with an error before the charge, because reading one would aggregate its whole subtree into a buffer no cap approved. An entity reference is read through its first child only — the declared `helium.Entity`, whose `Content()` is a leaf accessor returning the raw replacement literal with no expansion of a nested reference and no recursion — so it costs one copy of that literal, and a replacement that is not base64 (an unexpanded `&inner;`, markup) just fails the decode. Walking the `Entity`'s siblings instead would leave the value entirely: they are the DTD's remaining entity declarations. A CHILDLESS `EntityRef` contributes no characters and is NOT an error: an undeclared general entity is a validity error, not a well-formedness one, once the document has an external subset the parser did not read (or a parameter-entity reference) and is not `standalone="yes"`, so `parser_entity_ref.go` keeps the reference and links no declaration to it — ordinary output for a document any unauthenticated peer can send. `c14n` canonicalizes such a reference by walking the children it does not have, so reading it as nothing is what keeps the base64 reader and the canonicalizer agreeing about one document. An `EntityRef` whose first child is a NON-NIL node that is not an `Entity` is refused; the parser links a reference to its declared `Entity` or to nothing at all, so that shape is reachable only from a caller-built DOM, and refusing it is what holds the bound for one. Because the charge precedes the decode, a value that is both over cap and invalid base64 reports `ErrResourceLimitExceeded`, and the base64 error never surfaces. **The fifth site is the exception**: an external `ds:RetrievalMethod` is fetched by the configured `ReferenceResolver` under the resolver's OWN 64 MiB cap and run through its transforms, and only then charged — so those octets are charged AFTER materialization and are not base64-decoded bytes. The KeyInfo values outside the budget (KeyName, X509SKI, X509SubjectName/IssuerName, the base64 KeyValue families) are not charged at all. The XPath-transform expression is not charged against `MaxDecodedBytes` either; it has its own fixed `maxXPathFilterExpressionBytes` = 8 KiB length ceiling (`verify.go`, applied in `parseXPathTransform` → `ErrResourceLimitExceeded`), bounding the expression where it is read off the document because compiling one costs superlinearly in its LENGTH (a flat predicate chain allocates ~100x its own size) while xpath1's parse-depth bound constrains only nesting. The two compile-failure diagnostics quote at most `maxErrorExpressionBytes` = 128 bytes of the expression (`transforms.go` `truncatedExpression`), so an error string cannot be as large as the expression it names. The two KeyInfo values carried as DECIMAL TEXT, where the rest carry base64, are bounded by fixed digit ceilings instead of by the budget (`keyinfo.go`): `maxX509SerialNumberDigits` = 1024 for `ds:X509SerialNumber` and `maxRFC4050CoordinateDigits` = 1024 for EACH of the RFC 4050 `ECDSAKeyValue` `PublicKey` `X`/`Y` `Value` attributes. `big.Int.SetString` is QUADRATIC in the digit count (1 MiB of digits ≈ 1 s and 2.4 GB of scratch), and both sites are read before the SignatureValue check, so each value is refused with `ErrInvalidKeyInfo` **before** the conversion — a ceiling weighed after it would return the same error having already paid the whole cost, which `keyinfo_decimal_bound_internal_test.go` pins with a TotalAlloc bound on top of the same document written conforming. Both are fixed internal constants with NO builder knob and are deliberately NOT folded into `MaxDecodedBytes`: a byte budget generous enough for real key material still admits a minutes-long conversion, so that knob's value space is the wrong shape for a quadratic cost. Conforming input is nowhere near either ceiling (RFC 5280 §4.1.2.2 caps a serial at 20 octets = ≤49 decimal digits; a P-521 field element = ≤157). The 1.1 `ECKeyValue` `PublicKey` carries a fixed 133-octet cap of its own instead (see the `KeyInfoData` entry below).
-  - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods. `VerifyElement` takes the target element straight from the caller (bypassing `findSignatureElements`), so it applies the same gate itself before any work: a nil `sigElem`, or one that is not local-name `Signature` in the core XML-Signature namespace (`isDSigCoreNS`), is rejected with `ErrInvalidSignature`, so it is never nil-dereferenced or parsed as a ds:Signature.
-  - **Reference static preflight** (`verify.go` `preflightVerifierReferences`): after the Signature is parsed and its weak-algorithm policy is checked, verification validates every parsed transform list and compiles/validates every XPath filter and enabled general XPointer expression before KeyInfo retrieval, key resolution, SignatureValue authentication, or the top-level Reference digest loop. Each parsed Reference caches its ordered transform steps plus any prepared general-XPointer evaluator for execution, so no Reference resolver or XSLT transformer runs when a later Reference has a static XPath failure. Per-reference errors keep their `VerificationError` index and URI. Opt-in Manifest inner references use a separate all-siblings preparation pass and remain advisory.
+  - **Parse-time resource caps** (`xmldsig1.go` `verifierConfig` + `verify.go` `verifyBudget`): bound the
+    decode/parse work an unsigned, attacker-controlled Signature can force BEFORE the SignatureValue is
+    checked (many/large `DigestValue`/`SignatureValue`/`X509Certificate` base64 decodes, one
+    `x509.ParseCertificate` per embedded cert). `MaxReferences` (default 1024) caps `ds:Reference` count,
+    `MaxKeyInfoEntries` (default 256) caps `KeyInfo` children + `X509Data` children, `MaxDecodedBytes`
+    (default 10 MiB) caps the running certificate/signature octet total. Exceeding any →
+    `ErrResourceLimitExceeded` (before digesting/crypto). Per builder, `n==0` selects the default and `n<0`
+    disables the cap. The `verifyBudget` also polls `ctx.Err()` inside the KeyInfo/Reference parse loops (not
+    just at their boundaries), so a cancelled ctx/passed deadline stops the parse promptly. `MaxDecodedBytes`
+    has **five** charge sites, four of them DOM-decoded (`verify.go` SignatureValue + DigestValue,
+    `keyinfo.go` X509Certificate, `retrieval_method.go:374` same-document rawX509Certificate) and one not
+    (`retrieval_method.go:318` external rawX509Certificate octets). The DOM-decoded element is NOT necessarily
+    inside `ds:Signature` — a same-document `ds:RetrievalMethod` URI resolves to any element in the document
+    by ID, any local name, any namespace (`retrieval_method_internal_test.go` charges a `ds:SPKIData` this
+    way). **The four DOM-decoded sites are charged BEFORE the value is materialized**, so for them the cap
+    bounds what verification BUILDS, not merely what it keeps: each goes through `verify.go` `decodeBudgeted`
+    → `xmlbase64.DecodeElement`, which walks the element's children once with an `xmlbase64.Counter`, charges
+    `verifyBudget.consume` with the counted `DecodedLen()`, and only then walks them again to build the
+    whitespace-stripped characters (`xmlbase64.AppendStripped`) and decode into a buffer sized at that same
+    count. The lexical text is never joined into one string — xs:base64Binary permits XML whitespace between
+    characters and a value may be spread over any number of text and CDATA children, so the lexical length is
+    attacker-chosen and unrelated to the charge (the parser's per-run `MaxNodeContentSize` bounds one CDATA
+    run, not their sum). `DecodeElement` reads text, CDATA, and entity-reference children and nothing else: a
+    comment/PI contributes no character information item and is skipped, and any other child (an element among
+    them) is refused with an error before the charge, because reading one would aggregate its whole subtree
+    into a buffer no cap approved. An entity reference is read through its first child only — the declared
+    `helium.Entity`, whose `Content()` is a leaf accessor returning the raw replacement literal with no
+    expansion of a nested reference and no recursion — so it costs one copy of that literal, and a replacement
+    that is not base64 (an unexpanded `&inner;`, markup) just fails the decode. Walking the `Entity`'s
+    siblings instead would leave the value entirely: they are the DTD's remaining entity declarations. A
+    CHILDLESS `EntityRef` contributes no characters and is NOT an error: an undeclared general entity is a
+    validity error, not a well-formedness one, once the document has an external subset the parser did not
+    read (or a parameter-entity reference) and is not `standalone="yes"`, so `parser_entity_ref.go` keeps the
+    reference and links no declaration to it — ordinary output for a document any unauthenticated peer can
+    send. `c14n` canonicalizes such a reference by walking the children it does not have, so reading it as
+    nothing is what keeps the base64 reader and the canonicalizer agreeing about one document. An `EntityRef`
+    whose first child is a NON-NIL node that is not an `Entity` is refused; the parser links a reference to
+    its declared `Entity` or to nothing at all, so that shape is reachable only from a caller-built DOM, and
+    refusing it is what holds the bound for one. Because the charge precedes the decode, a value that is both
+    over cap and invalid base64 reports `ErrResourceLimitExceeded`, and the base64 error never surfaces. **The
+    fifth site is the exception**: an external `ds:RetrievalMethod` is fetched by the configured
+    `ReferenceResolver` under the resolver's OWN 64 MiB cap and run through its transforms, and only then
+    charged — so those octets are charged AFTER materialization and are not base64-decoded bytes. The KeyInfo
+    values outside the budget (KeyName, X509SKI, X509SubjectName/IssuerName, the base64 KeyValue families) are
+    not charged at all. The XPath-transform expression is not charged against `MaxDecodedBytes` either; it has
+    its own fixed `maxXPathFilterExpressionBytes` = 8 KiB length ceiling (`verify.go`, applied in
+    `parseXPathTransform` → `ErrResourceLimitExceeded`), bounding the expression where it is read off the
+    document because compiling one costs superlinearly in its LENGTH (a flat predicate chain allocates ~100x
+    its own size) while xpath1's parse-depth bound constrains only nesting. The two compile-failure
+    diagnostics quote at most `maxErrorExpressionBytes` = 128 bytes of the expression (`transforms.go`
+    `truncatedExpression`), so an error string cannot be as large as the expression it names. The two KeyInfo
+    values carried as DECIMAL TEXT, where the rest carry base64, are bounded by fixed digit ceilings instead
+    of by the budget (`keyinfo.go`): `maxX509SerialNumberDigits` = 1024 for `ds:X509SerialNumber` and
+    `maxRFC4050CoordinateDigits` = 1024 for EACH of the RFC 4050 `ECDSAKeyValue` `PublicKey` `X`/`Y` `Value`
+    attributes. `big.Int.SetString` is QUADRATIC in the digit count (1 MiB of digits ≈ 1 s and 2.4 GB of
+    scratch), and both sites are read before the SignatureValue check, so each value is refused with
+    `ErrInvalidKeyInfo` **before** the conversion — a ceiling weighed after it would return the same error
+    having already paid the whole cost, which `keyinfo_decimal_bound_internal_test.go` pins with a TotalAlloc
+    bound on top of the same document written conforming. Both are fixed internal constants with NO builder
+    knob and are deliberately NOT folded into `MaxDecodedBytes`: a byte budget generous enough for real key
+    material still admits a minutes-long conversion, so that knob's value space is the wrong shape for a
+    quadratic cost. Conforming input is nowhere near either ceiling (RFC 5280 §4.1.2.2 caps a serial at 20
+    octets = ≤49 decimal digits; a P-521 field element = ≤157). The 1.1 `ECKeyValue` `PublicKey` carries a
+    fixed 133-octet cap of its own instead (see the `KeyInfoData` entry below).
+  - `Verify(ctx, doc)`, `VerifyElement(ctx, doc, sigElem)` — terminal methods. `VerifyElement` takes the
+    target element straight from the caller (bypassing `findSignatureElements`), so it applies the same gate
+    itself before any work: a nil `sigElem`, or one that is not local-name `Signature` in the core
+    XML-Signature namespace (`isDSigCoreNS`), is rejected with `ErrInvalidSignature`, so it is never
+    nil-dereferenced or parsed as a ds:Signature.
+  - **Reference static preflight** (`verify.go` `preflightVerifierReferences`): after the Signature is parsed
+    and its weak-algorithm policy is checked, verification validates every parsed transform list and
+    compiles/validates every XPath filter and enabled general XPointer expression before KeyInfo retrieval,
+    key resolution, SignatureValue authentication, or the top-level Reference digest loop. Each parsed
+    Reference caches its ordered transform steps plus any prepared general-XPointer evaluator for execution,
+    so no Reference resolver or XSLT transformer runs when a later Reference has a static XPath failure.
+    Per-reference errors keep their `VerificationError` index and URI. Opt-in Manifest inner references use a
+    separate all-siblings preparation pass and remain advisory.
 - **NewEnvelopedReference() → ReferenceConfig** — WHOLE-DOCUMENT enveloped defaults: empty URI (always resolves to the document element, regardless of the `SignEnveloped` parent) + enveloped-signature transform + ExcC14N + SHA-256
-- **NewEnvelopedReferenceByID(id) → ReferenceConfig** — element-scoped enveloped defaults: `URI="#id"` (covers only the element carrying that id) + enveloped-signature transform + ExcC14N + SHA-256. Correct for signing a specific nested element (e.g. a SAML Assertion by its ID); the id must be recognized as an ID attribute per the package's ID rules
-- Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeyByNameSource(map[string]any)`, `X509CertPoolKeySource(certs...)`, `KeySourceFunc`. `X509CertKeySource(nil)` resolves to `ErrNoKeySource` at `ResolveKey` time (fails closed on a per-request registry miss), so it never panics on `cert.PublicKey`. `KeyByNameSource` maps a `ds:KeyName` to a key: it tries the KeyInfo's `KeyNames` in document order and returns the first present in the map, else `ErrNoKeySource` (a nil KeyInfo or no-match fails closed). `X509CertPoolKeySource` selects a cert from its set by matching the verification-side KeyInfo with selector strength applied across the WHOLE pool, strongest first — every cert is tried for an exact raw-DER `X509Certificates` match, then every cert for `X509SKIs` vs `cert.SubjectKeyId` (both exact/reliable), then `X509IssuerSerials` vs Issuer+Serial, then `X509SubjectNames` vs Subject (the last two best-effort `pkix.Name.String()` comparisons, NOT RFC 2253 canonical), returning the matched cert's `PublicKey` else `ErrNoKeySource`. Pool order only breaks ties within a selector class, so a strong match on a later cert is never masked by a weak match on an earlier one (four named predicates `certMatchesRawDER`/`certMatchesSKI`/`certMatchesIssuerSerial`/`certMatchesSubjectName`). Selecting a cert never establishes trust; the returned key is still subject to the caller's out-of-band trust decision.
-- Key info builders (signing side): `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`. `X509DataKeyInfo()` with zero certificates OR any nil certificate entry fails `BuildKeyInfo`/signing with `ErrInvalidKeyInfo` (empty → a schema-invalid empty `<X509Data>`; a nil entry → would panic on `cert.Raw`); the shared `validate()` check runs in `BuildKeyInfo` and in the `SignEnveloping` preflight, so both are rejected before any caller content is moved into the `<Object>`. `RSAKeyValueKeyInfo()` derives the `RSAKeyValue` from a concrete `*rsa.PrivateKey`/`*rsa.PublicKey` or, matching the signing path, from an opaque `crypto.Signer` whose `Public()` is an `*rsa.PublicKey` (HSM/KMS-backed); any other key or a signer whose public key is not `*rsa.PublicKey` → `ErrKeyMismatch`.
-- **`KeyInfoData` is UNTRUSTED**: it is parsed from the document's `ds:KeyInfo` and handed to `KeySource.ResolveKey` BEFORE the signature is verified, so every field (embedded `X509Certificate`s, `RSA`/`EC`/`DSAKeyValue`, issuer/serial + subject-name selectors) is attacker-controlled and NOT authenticated by the signature. A `KeySource` MUST match it against a trust store / pinned key / validated chain and return a pre-trusted key — NEVER blindly return an embedded cert's public key or a `KeyValue`. It is a *selector* into trusted material, not the key material. `StaticKey`/`X509CertKeySource` ignore `KeyInfoData` (safe default); a custom `KeySource` consulting it owns the trust decision. Documented on the `KeySource`/`KeyInfoData` godoc + README.
-- Parsed `KeyInfoData` (verification input, `keyinfo.go`, namespace-strict): `KeyNames` (`KeyName` opaque label strings, whitespace-trimmed), `X509Certificates` (`X509Certificate`), `X509SKIs` (`X509SKI` → raw DER SubjectKeyIdentifier octets, base64-decoded), `X509IssuerSerials` (`X509IssuerSerial` → `{IssuerName, SerialNumber *big.Int}`, extracted verbatim — no DName canonicalization/matching), `X509SubjectNames` (`X509SubjectName` DN strings), `RSAKeyValue`, `ECKeyValue`, `DSAKeyValue` (`{P,Q,G,Y *big.Int}`). `ECKeyValue` is populated from EITHER the XML-Signature 1.1 `ECKeyValue` (`xmldsig11#`; `NamedCurve@URI` + base64 EC point) OR the RFC 4050 legacy `ECDSAKeyValue` (`xmldsig-more#`; `DomainParameters/NamedCurve@URN` + `PublicKey/X`,`/Y` DECIMAL `Value` attributes, on-curve validated) — parse-only, RFC 4050 emission is not supported. A KeySource turns `ECKeyValue`/`DSAKeyValue`/`RSAKeyValue`/`X509*`/`KeyNames` into the actual verification key. Unknown curve / partial or malformed key material (including bad `X509SKI` base64) → `ErrInvalidKeyInfo` (before key resolution). The four base64 KeyInfo values — `X509SKI`, `RSAKeyValue`'s `Modulus`/`Exponent`, the 1.1 `ECKeyValue`'s `PublicKey`, and `DSAKeyValue`'s `P`/`Q`/`G`/`Y` — are read as CHARACTER DATA through `keyinfo.go` `decodeKeyInfoValue` → `xmlbase64.DecodeElement`, the same reader `DigestValue`/`SignatureValue`/`X509Certificate` use: text, CDATA and a one-hop entity reference are read, a comment or PI is skipped (neither contributes a character information item, so a commented value still decodes and an otherwise valid signature still verifies), and any other child is refused. None of the four is charged to the `verifyBudget`; the `ECKeyValue` `PublicKey` instead carries a fixed `keyinfo.go` `maxECPublicKeyBytes` = 133 decoded-octet cap, applied by its `DecodeElement` charge so an oversized point is refused before it is built. The curve set forces that cap, so it is arithmetic and not policy — a SEC1 uncompressed point is 65 octets on P-256, 97 on P-384, 133 on P-521 and `elliptic.Unmarshal` accepts nothing else — and it is the maximum across all three curves because `NamedCurve` may follow `PublicKey` in document order, so there may be no selected curve to size the value by (`ErrInvalidKeyInfo`).
-- `ds:RetrievalMethod` resolution (`retrieval_method.go`, `resolveRetrievalMethods` invoked from `verifySignature` after `parseKeyInfo`, before key resolution): a second, resolution-aware pass dereferences each core-namespace `RetrievalMethod` child of `KeyInfo` and appends retrieved certificates to `KeyInfoData.X509Certificates`. Before dereferencing any child, it parses + statically validates every direct pipeline and every reachable transform-free same-document RetrievalMethod chain, so resolver/XSLT callbacks run only after all reachable document-resident XPath expressions pass validation. Same-document targets use the XSW-hardened `resolveReference`; external URIs use the configured `ReferenceResolver` after base joining and size checks. An optional single core-namespace `ds:Transforms` is parsed through `parseRetrievalTransforms`/`parseTransformList` and executed by the shared `executeTransformPipeline`: same-document targets start as node-sets, external targets as octets, and repeated node-set/octet transitions are valid. `maxRetrievalTransformSteps` bounds the list before dereference or execution; over-cap → `ErrResourceLimitExceeded`. Enveloped transforms are always rejected for RetrievalMethod; unknown algorithms, invalid parameters, absent/typed-nil XSLT transformers, and a second `Transforms` fail closed. A transform-free same-document RetrievalMethod still interprets the resolved element directly, including recursive RetrievalMethod links. `TypeRawX509Certificate` → `x509.ParseCertificate`; `TypeX509Data` → locked-down reparse + `parseX509Data`; any other/absent Type → `ErrInvalidKeyInfo`. A resolved-but-invalid resource is `ErrInvalidKeyInfo`, while a resource that cannot be dereferenced is `ErrReferenceNotFound`. Recursive links use `maxRetrievalMethodDepth`=5 plus a visited-URI set. Retrieved material consumes the normal `verifyBudget`, and parsing never establishes trust. `Verifier.LenientKeyInfo(true)` skips only an unresolvable RetrievalMethod; resolved-but-invalid material remains fatal.
+- **NewEnvelopedReferenceByID(id) → ReferenceConfig** — element-scoped enveloped defaults: `URI="#id"` (covers
+  only the element carrying that id) + enveloped-signature transform + ExcC14N + SHA-256. Correct for signing
+  a specific nested element (e.g. a SAML Assertion by its ID); the id must be recognized as an ID attribute
+  per the package's ID rules
+- Key sources: `StaticKey(key)`, `X509CertKeySource(cert)`, `KeyByNameSource(map[string]any)`,
+  `X509CertPoolKeySource(certs...)`, `KeySourceFunc`. `X509CertKeySource(nil)` resolves to `ErrNoKeySource` at
+  `ResolveKey` time (fails closed on a per-request registry miss), so it never panics on `cert.PublicKey`.
+  `KeyByNameSource` maps a `ds:KeyName` to a key: it tries the KeyInfo's `KeyNames` in document order and
+  returns the first present in the map, else `ErrNoKeySource` (a nil KeyInfo or no-match fails closed).
+  `X509CertPoolKeySource` selects a cert from its set by matching the verification-side KeyInfo with selector
+  strength applied across the WHOLE pool, strongest first — every cert is tried for an exact raw-DER
+  `X509Certificates` match, then every cert for `X509SKIs` vs `cert.SubjectKeyId` (both exact/reliable), then
+  `X509IssuerSerials` vs Issuer+Serial, then `X509SubjectNames` vs Subject (the last two best-effort
+  `pkix.Name.String()` comparisons, NOT RFC 2253 canonical), returning the matched cert's `PublicKey` else
+  `ErrNoKeySource`. Pool order only breaks ties within a selector class, so a strong match on a later cert is
+  never masked by a weak match on an earlier one (four named predicates
+  `certMatchesRawDER`/`certMatchesSKI`/`certMatchesIssuerSerial`/`certMatchesSubjectName`). Selecting a cert
+  never establishes trust; the returned key is still subject to the caller's out-of-band trust decision.
+- Key info builders (signing side): `X509DataKeyInfo(certs...)`, `RSAKeyValueKeyInfo()`. `X509DataKeyInfo()`
+  with zero certificates OR any nil certificate entry fails `BuildKeyInfo`/signing with `ErrInvalidKeyInfo`
+  (empty → a schema-invalid empty `<X509Data>`; a nil entry → would panic on `cert.Raw`); the shared
+  `validate()` check runs in `BuildKeyInfo` and in the `SignEnveloping` preflight, so both are rejected before
+  any caller content is moved into the `<Object>`. `RSAKeyValueKeyInfo()` derives the `RSAKeyValue` from a
+  concrete `*rsa.PrivateKey`/`*rsa.PublicKey` or, matching the signing path, from an opaque `crypto.Signer`
+  whose `Public()` is an `*rsa.PublicKey` (HSM/KMS-backed); any other key or a signer whose public key is not
+  `*rsa.PublicKey` → `ErrKeyMismatch`.
+- **`KeyInfoData` is UNTRUSTED**: it is parsed from the document's `ds:KeyInfo` and handed to
+  `KeySource.ResolveKey` BEFORE the signature is verified, so every field (embedded `X509Certificate`s,
+  `RSA`/`EC`/`DSAKeyValue`, issuer/serial + subject-name selectors) is attacker-controlled and NOT
+  authenticated by the signature. A `KeySource` MUST match it against a trust store / pinned key / validated
+  chain and return a pre-trusted key — NEVER blindly return an embedded cert's public key or a `KeyValue`. It
+  is a *selector* into trusted material, not the key material. `StaticKey`/`X509CertKeySource` ignore
+  `KeyInfoData` (safe default); a custom `KeySource` consulting it owns the trust decision. Documented on the
+  `KeySource`/`KeyInfoData` godoc + README.
+- Parsed `KeyInfoData` (verification input, `keyinfo.go`, namespace-strict): `KeyNames` (`KeyName` opaque
+  label strings, whitespace-trimmed), `X509Certificates` (`X509Certificate`), `X509SKIs` (`X509SKI` → raw DER
+  SubjectKeyIdentifier octets, base64-decoded), `X509IssuerSerials` (`X509IssuerSerial` → `{IssuerName,
+  SerialNumber *big.Int}`, extracted verbatim — no DName canonicalization/matching), `X509SubjectNames`
+  (`X509SubjectName` DN strings), `RSAKeyValue`, `ECKeyValue`, `DSAKeyValue` (`{P,Q,G,Y *big.Int}`).
+  `ECKeyValue` is populated from EITHER the XML-Signature 1.1 `ECKeyValue` (`xmldsig11#`; `NamedCurve@URI` +
+  base64 EC point) OR the RFC 4050 legacy `ECDSAKeyValue` (`xmldsig-more#`; `DomainParameters/NamedCurve@URN`
+  + `PublicKey/X`,`/Y` DECIMAL `Value` attributes, on-curve validated) — parse-only, RFC 4050 emission is not
+  supported. A KeySource turns `ECKeyValue`/`DSAKeyValue`/`RSAKeyValue`/`X509*`/`KeyNames` into the actual
+  verification key. Unknown curve / partial or malformed key material (including bad `X509SKI` base64) →
+  `ErrInvalidKeyInfo` (before key resolution). The four base64 KeyInfo values — `X509SKI`, `RSAKeyValue`'s
+  `Modulus`/`Exponent`, the 1.1 `ECKeyValue`'s `PublicKey`, and `DSAKeyValue`'s `P`/`Q`/`G`/`Y` — are read as
+  CHARACTER DATA through `keyinfo.go` `decodeKeyInfoValue` → `xmlbase64.DecodeElement`, the same reader
+  `DigestValue`/`SignatureValue`/`X509Certificate` use: text, CDATA and a one-hop entity reference are read, a
+  comment or PI is skipped (neither contributes a character information item, so a commented value still
+  decodes and an otherwise valid signature still verifies), and any other child is refused. None of the four
+  is charged to the `verifyBudget`; the `ECKeyValue` `PublicKey` instead carries a fixed `keyinfo.go`
+  `maxECPublicKeyBytes` = 133 decoded-octet cap, applied by its `DecodeElement` charge so an oversized point
+  is refused before it is built. The curve set forces that cap, so it is arithmetic and not policy — a SEC1
+  uncompressed point is 65 octets on P-256, 97 on P-384, 133 on P-521 and `elliptic.Unmarshal` accepts nothing
+  else — and it is the maximum across all three curves because `NamedCurve` may follow `PublicKey` in document
+  order, so there may be no selected curve to size the value by (`ErrInvalidKeyInfo`).
+- `ds:RetrievalMethod` resolution (`retrieval_method.go`, `resolveRetrievalMethods` invoked from
+  `verifySignature` after `parseKeyInfo`, before key resolution): a second, resolution-aware pass dereferences
+  each core-namespace `RetrievalMethod` child of `KeyInfo` and appends retrieved certificates to
+  `KeyInfoData.X509Certificates`. Before dereferencing any child, it parses + statically validates every
+  direct pipeline and every reachable transform-free same-document RetrievalMethod chain, so resolver/XSLT
+  callbacks run only after all reachable document-resident XPath expressions pass validation. Same-document
+  targets use the XSW-hardened `resolveReference`; external URIs use the configured `ReferenceResolver` after
+  base joining and size checks. An optional single core-namespace `ds:Transforms` is parsed through
+  `parseRetrievalTransforms`/`parseTransformList` and executed by the shared `executeTransformPipeline`:
+  same-document targets start as node-sets, external targets as octets, and repeated node-set/octet
+  transitions are valid. `maxRetrievalTransformSteps` bounds the list before dereference or execution;
+  over-cap → `ErrResourceLimitExceeded`. Enveloped transforms are always rejected for RetrievalMethod; unknown
+  algorithms, invalid parameters, absent/typed-nil XSLT transformers, and a second `Transforms` fail closed. A
+  transform-free same-document RetrievalMethod still interprets the resolved element directly, including
+  recursive RetrievalMethod links. `TypeRawX509Certificate` → `x509.ParseCertificate`; `TypeX509Data` →
+  locked-down reparse + `parseX509Data`; any other/absent Type → `ErrInvalidKeyInfo`. A resolved-but-invalid
+  resource is `ErrInvalidKeyInfo`, while a resource that cannot be dereferenced is `ErrReferenceNotFound`.
+  Recursive links use `maxRetrievalMethodDepth`=5 plus a visited-URI set. Retrieved material consumes the
+  normal `verifyBudget`, and parsing never establishes trust. `Verifier.LenientKeyInfo(true)` skips only an
+  unresolvable RetrievalMethod; resolved-but-invalid material remains fatal.
 - Transforms: `Enveloped()`, `C14NTransform(uri)`, `ExcC14NTransform(prefixes...)`
-- **External-reference resolution (opt-in, `reference_resolver.go`)**: `ReferenceResolver.ResolveReference(ctx, uri)` supplies raw octets for a URI outside the four same-document forms. `Verifier.ReferenceResolver` / `Signer.ReferenceResolver` configure it; nil stays fail-closed with `ErrReferenceNotFound`. Verification validates the complete transform list against octet input BEFORE URI joining or resolver invocation, so an unknown algorithm, malformed XPath, or unavailable XSLT transformer cannot trigger external I/O. The URI is joined against `doc.URL()` through `helium.ResolveURI`, and every internal resolver call passes through `resolveReferenceOctets`, which enforces `maxReferenceBytes`=64 MiB. `externalReferenceDigestInput` starts the shared ordered executor with those octets. An empty transform list stays raw; a node-set-requiring step parses through `Verifier.ReferenceParser` / `Signer.ReferenceParser`, including after an intermediate Base64, C14N, or XSLT result. The default parser is locked down (`helium.NewParser()`: XXE blocked, no FS, no network). Enveloped transforms are invalid on external input. Sign and verify share the same executor and conversions; signing supports Base64 but rejects XPath/XSLT because it cannot emit their parameters. `VerifiedReference.External` marks resolver-satisfied references, and coverage helpers never attribute them to document elements. `FSReferenceResolver(fsys)` serves only contained slash paths, rejects schemes/fragments/escapes, performs no network access, and applies the 64 MiB cap; `LimitReferenceResolver` composes a lower per-resource cap around the built-in resolver or any custom resolver, applying the cap while the built-in FS resolver reads and checking arbitrary custom results after return. No HTTP resolver is shipped; a network implementation owns request, aggregate-byte, and availability policy.
-- **Manifest inner-reference validation (opt-in, `manifest.go`)**: a top-level `ds:Reference` whose `Type` is `TypeManifest` (`http://www.w3.org/2000/09/xmldsig#Manifest`) points at a `ds:Manifest` carrying its own `ds:Reference` list (XMLDSig core §5.1). The signature commits ONLY to the Manifest's own bytes — the top-level Manifest reference's digest over the `ds:Manifest` subtree is checked exactly like any other reference — so `Verify` never depends on the inner references. `Verifier.ValidateManifests(true)` opts in to walking them: after the top-level Manifest reference verifies, every direct core-namespace inner `ds:Reference` is parsed + statically prepared before any is executed. A preparation failure prevents every resolver/XSLT callback for that Manifest; the failing `ManifestReference` carries the error, and each otherwise prepared peer carries an advisory error wrapping the same cause. After a successful complete preparation pass, each inner Reference is resolved + transformed + digested through the SAME `canonicalizeReference`+`computeDigest`+`digestEqual` path (`validateManifestReference`), and the per-reference outcome is recorded in `VerifyResult.Manifests` (`[]ManifestResult{Reference *VerifiedReference, Element *helium.Element, References []ManifestReference}`; `ManifestReference{URI, DigestAlgorithm string, Element *helium.Element, Valid bool, Err error}`). Results are ADVISORY: a failed inner digest (`ErrDigestMismatch`), an unsupported inner transform (`ErrUnsupportedTransform`), or an unresolved external inner reference (`ErrReferenceNotFound`) is folded into that inner `ManifestReference`'s `Valid:false`/`Err` and NEVER fails `Verify`, and inner references never contribute to `Covers`/`SignedElement` — coverage is never attributed through a Manifest (preserving the XSW guarantee). Only ONE level is walked (a Manifest nested in a Manifest is digested but not recursively expanded), bounding the work; the walk re-checks `ctx.Err()` per inner reference. Default is FALSE → `VerifyResult.Manifests` is nil and no inner references are walked, byte-identical to before; it is opt-in because inner references may pull unsupported transforms or external URIs. `VerifiedReference.Type` (the top-level `Type` attribute, parsed by `parseReferenceElement`) is reported regardless of the toggle.
-- Same-document reference resolution (`referenceURIForm`/`resolveReference`, `transforms.go`) is fail-closed to four forms (XMLDSig core §4.3.3.2-3): `URI=""` and `#xpointer(/)` select the whole document; `#id` and `#xpointer(id('id'))` select the element with that id. The two `#xpointer` forms' node-sets INCLUDE comment nodes; the bare `""`/`#id` forms EXCLUDE them. Every other URI — an external reference, or any other `#xpointer(...)` scheme — is rejected with `ErrReferenceNotFound`. An attribute is recognized as an ID when it is DTD/schema-declared ID-typed (`enum.AttrID`), `xml:id`, or the `id` token in the casings `Id`/`ID`/`id`; this name set is FROZEN in `domutil.FindElementsByID` — distinct tokens (`wsu:Id`, SAML `AssertionID`) are not recognized by name; such documents must carry ID typing via schema. `>1` match (across the document and any enveloping Object content) → `ErrAmbiguousReference`.
-- **General XPointer resolution (opt-in, verify-only, `transforms.go`)**: `Verifier.AllowXPointer(true)` extends same-document resolution to an XPointer framework URI — zero+ `xmlns(prefix=uri)` scheme parts then one `xpointer(<expr>)` (`parseGeneralXPointer`, respecting balanced parens and `^(`/`^)`/`^^` circumflex escaping). Default OFF: a general XPointer stays fail-closed as an external reference, so the four-form default is byte-identical. When on, `prepareGeneralXPointer` statically validates the `xpointer()` XPath on the shared bounded evaluator with the document element's in-scope namespaces overlaid by the `xmlns()` overrides (`xpointerNamespaces`), so an unresolved variable/function/prefix fails as `ErrReferenceNotFound` before evaluation. `resolvePreparedGeneralXPointerTarget` then evaluates the expression and enforces a SINGLE element apex (`singleElementApex`, the XSW defense): empty → `ErrReferenceNotFound`, a multi-element or non-element node-set → `ErrAmbiguousReference`. An id() selector NEVER reaches xpath1's built-in id() (`Document.GetElementByID`, which resolves a duplicate id to the last-registered element — an XSW bypass): a whole-expression `id('X')` selector in any whitespace spelling (`id('X')`, `id ('X')`, `id( "X" )`; `parseXPointerIDSelector`) resolves through the duplicate-detecting `domutil.FindElementsByID` (`ErrAmbiguousReference` on a duplicate), and ANY other id() use — a wrapping paren, a predicate, a path step (`expressionReferencesID`) — is rejected fail-closed as `ErrReferenceNotFound` and never reaches the built-in. The selected element is fed into the existing subtree canonicalization path (comments included). `here()` is NOT registered for a URI-borne XPointer, so `xpointer(here())` fails closed with `ErrHereUnavailable` (preserved as a matchable sentinel through the general-XPointer error path).
-- Comment membership is a property of the reference FORM, not the c14n method: `effectiveC14NMethod` (`transforms.go`) downgrades a `#WithComments` canonicalization to its plain variant when the form excludes comments, so a bare `#id`/`""` reference never emits comments even under a `#WithComments` c14n, while the `#xpointer` forms carry them through. Sign and verify apply this identically so a roundtrip stays symmetric.
-- Reference transforms run in declared order through `executeTransformPipeline` (`transform_pipeline.go`) over a tagged `transformValue` (`nodeSetValue` or octets). Contracts: C14N requires node-set and returns octets; XPath/enveloped require and return node-set; Base64 and XSLT return octets, with XSLT requiring octets. The executor parses octets through the configured reference parser when a node-set is required and converts node-sets with inclusive C14N 1.0 when octets are required or at finalization. Repeated transitions and repeated C14N/XSLT/Base64 steps are valid. Base64 has the XMLDSig §6.6.2 exception: node-set input is derived from remaining text-node values instead of generic C14N. The initial same-document node-set stays lazy so bare C14N, enveloped+C14N, whole-document, subtree, and detached/enveloping paths retain their exact specialized canonicalizers. Materialization preserves owning-document, URI comment-membership, namespace-node, XPath, and `here()` semantics. Two node-set collectors exist (`transforms.go`) and the difference is load-bearing. `collectCanonicalizationNodes` builds the set that goes straight to c14n (`canonicalizeSubtree`, so SignedInfo, every unmaterialized Reference selection, the detached/enveloped paths, and the XSLT stylesheet serialization): it is mode-aware and LINEAR — an element carries the bindings it changes relative to its parent, plus the in-scope default namespace, plus (exclusive C14N only) its own prefix and its attributes' prefixes, while the subtree root carries the whole axis. Inclusive C14N compares a namespace node against the nearest rendered ANCESTOR'S SET, so an inherited binding must be absent there; exclusive C14N renders nothing for a visibly-utilized prefix missing from the element's own set, so those must stay — applying the inclusive rule to the exclusive path emits undeclared prefixes. `collectSubtreeNodes` keeps the COMPLETE in-scope namespace axis per element (quadratic) and is used only where an XPath filter transform may narrow the set: the filter is evaluated once per node, namespace nodes included, and may drop an interior element while keeping its descendants. Both walks poll `ctx`. `transforms_nodeset_internal_test.go` is the byte-equivalence gate: it canonicalizes the package fixtures, the W3C interop vectors, the c14n suite documents, and a seeded generated corpus both ways in all six methods with and without a PrefixList, and requires identical octets. `here()` is unavailable with `ErrHereUnavailable` for initial octets or after an octet boundary reparses into a different document; complete-list validation rejects that chain before resolver or transform callbacks run. Enveloped removal uses original node identity and is rejected on external/RetrievalMethod input or after an octet boundary. `validateTransformSteps` scans the complete list and statically validates every XPath expression before execution, so unknown algorithms, missing or malformed parameters, unavailable XSLT, unknown XPath functions, unbound XPath QName prefixes, unavailable `here()`, and invalid enveloped placement fail before an injected transform runs. XPath uses `newDSigXPathEvaluator` with namespaces, `hereFunction`, and `defaultXPathOpLimit`=100M. Base64 signing works through the exported `Transform` interface; XPath/XSLT signing stays rejected because `ReferenceConfig` cannot carry or emit their required child content. `ec:InclusiveNamespaces` is threaded through explicit exclusive-C14N steps; unknown C14N/SignatureMethod parameters fail closed.
-- Algorithms: RSA-SHA1/SHA224/SHA256/SHA384/SHA512, ECDSA-SHA1/SHA224/SHA256/SHA384/SHA512, HMAC-SHA1/SHA224/SHA256/SHA384/SHA512, Ed25519. ECDSA curves P-256/P-384/P-521 (P-521 via the `urn:oid:1.3.132.0.35` NamedCurve in ECKeyValue KeyInfo; signing/verifying is curve-agnostic via `curveKeySize`)
-- **DSA-SHA1 (`AlgDSASHA1`, `xmldsig#dsa-sha1`) is verify-only legacy interop** (`verifyDSA`, `algorithms.go`): SHA-1-weak (rejected on verify without `Verifier.AllowSHA1(true)`, exactly like rsa-sha1). Accepts a `*dsa.PublicKey` — from a parsed `DSAKeyValue` or an `x509`-parsed DSA certificate. `SignatureValue` is the XML-DSig fixed-width `r||s`, each half left-padded to Q's byte length; `verifyDSA` requires the total length to be EXACTLY `2*ceil(Q.BitLen()/8)` (a nil/zero Q or any other length → `ErrVerificationFailed`), closing a malleability gap where accepting any even length and splitting at the midpoint would silently reinterpret a mis-padded `r||s`. SIGNING DSA is NOT supported: `signBytes` rejects the DSA URI with a clear `ErrUnsupportedAlgorithm` ("DSA signing is not supported"), which names the missing feature outright. `crypto/dsa` is deprecated-but-standard; used verify-only.
-- Signing keys: a concrete `*rsa.PrivateKey`/`*ecdsa.PrivateKey`/`ed25519.PrivateKey`, any `crypto.Signer` whose `Public()` is one of those types (HSM/KMS/PKCS#11-backed), or `[]byte` for HMAC. `signRSA`/`signECDSA`/`signEd25519` (`algorithms.go`) take the concrete fast path and fall back to `crypto.Signer` (RSA: `Sign` with a `crypto.Hash` opts → identical PKCS1v15 bytes; ECDSA: DER `Sign` output run through `ecdsaDERToRaw`; Ed25519: `Sign` with `crypto.Hash(0)` over the raw message). A `crypto.Signer` whose public-key type does not match the algorithm → `ErrKeyMismatch`.
+- **External-reference resolution (opt-in, `reference_resolver.go`)**:
+  `ReferenceResolver.ResolveReference(ctx, uri)` supplies raw octets for a URI outside the four same-document
+  forms. `Verifier.ReferenceResolver` / `Signer.ReferenceResolver` configure it; nil stays fail-closed with
+  `ErrReferenceNotFound`. Verification validates the complete transform list against octet input BEFORE URI
+  joining or resolver invocation, so an unknown algorithm, malformed XPath, or unavailable XSLT transformer
+  cannot trigger external I/O. The URI is joined against `doc.URL()` through `helium.ResolveURI`, and every
+  internal resolver call passes through `resolveReferenceOctets`, which enforces `maxReferenceBytes`=64 MiB.
+  `externalReferenceDigestInput` starts the shared ordered executor with those octets. An empty transform list
+  stays raw; a node-set-requiring step parses through `Verifier.ReferenceParser` / `Signer.ReferenceParser`,
+  including after an intermediate Base64, C14N, or XSLT result. The default parser is locked down
+  (`helium.NewParser()`: XXE blocked, no FS, no network). Enveloped transforms are invalid on external input.
+  Sign and verify share the same executor and conversions; signing supports Base64 but rejects XPath/XSLT
+  because it cannot emit their parameters. `VerifiedReference.External` marks resolver-satisfied references,
+  and coverage helpers never attribute them to document elements. `FSReferenceResolver(fsys)` serves only
+  contained slash paths, rejects schemes/fragments/escapes, performs no network access, and applies the 64 MiB
+  cap; `LimitReferenceResolver` composes a lower per-resource cap around the built-in resolver or any custom
+  resolver, applying the cap while the built-in FS resolver reads and checking arbitrary custom results after
+  return. No HTTP resolver is shipped; a network implementation owns request, aggregate-byte, and availability
+  policy.
+- **Manifest inner-reference validation (opt-in, `manifest.go`)**: a top-level `ds:Reference` whose `Type` is
+  `TypeManifest` (`http://www.w3.org/2000/09/xmldsig#Manifest`) points at a `ds:Manifest` carrying its own
+  `ds:Reference` list (XMLDSig core §5.1). The signature commits ONLY to the Manifest's own bytes — the
+  top-level Manifest reference's digest over the `ds:Manifest` subtree is checked exactly like any other
+  reference — so `Verify` never depends on the inner references. `Verifier.ValidateManifests(true)` opts in to
+  walking them: after the top-level Manifest reference verifies, every direct core-namespace inner
+  `ds:Reference` is parsed + statically prepared before any is executed. A preparation failure prevents every
+  resolver/XSLT callback for that Manifest; the failing `ManifestReference` carries the error, and each
+  otherwise prepared peer carries an advisory error wrapping the same cause. After a successful complete
+  preparation pass, each inner Reference is resolved + transformed + digested through the SAME
+  `canonicalizeReference`+`computeDigest`+`digestEqual` path (`validateManifestReference`), and the
+  per-reference outcome is recorded in `VerifyResult.Manifests` (`[]ManifestResult{Reference
+  *VerifiedReference, Element *helium.Element, References []ManifestReference}`; `ManifestReference{URI,
+  DigestAlgorithm string, Element *helium.Element, Valid bool, Err error}`). Results are ADVISORY: a failed
+  inner digest (`ErrDigestMismatch`), an unsupported inner transform (`ErrUnsupportedTransform`), or an
+  unresolved external inner reference (`ErrReferenceNotFound`) is folded into that inner `ManifestReference`'s
+  `Valid:false`/`Err` and NEVER fails `Verify`, and inner references never contribute to
+  `Covers`/`SignedElement` — coverage is never attributed through a Manifest (preserving the XSW guarantee).
+  Only ONE level is walked (a Manifest nested in a Manifest is digested but not recursively expanded),
+  bounding the work; the walk re-checks `ctx.Err()` per inner reference. Default is FALSE →
+  `VerifyResult.Manifests` is nil and no inner references are walked, byte-identical to before; it is opt-in
+  because inner references may pull unsupported transforms or external URIs. `VerifiedReference.Type` (the
+  top-level `Type` attribute, parsed by `parseReferenceElement`) is reported regardless of the toggle.
+- Same-document reference resolution (`referenceURIForm`/`resolveReference`, `transforms.go`) is fail-closed
+  to four forms (XMLDSig core §4.3.3.2-3): `URI=""` and `#xpointer(/)` select the whole document; `#id` and
+  `#xpointer(id('id'))` select the element with that id. The two `#xpointer` forms' node-sets INCLUDE comment
+  nodes; the bare `""`/`#id` forms EXCLUDE them. Every other URI — an external reference, or any other
+  `#xpointer(...)` scheme — is rejected with `ErrReferenceNotFound`. An attribute is recognized as an ID when
+  it is DTD/schema-declared ID-typed (`enum.AttrID`), `xml:id`, or the `id` token in the casings
+  `Id`/`ID`/`id`; this name set is FROZEN in `domutil.FindElementsByID` — distinct tokens (`wsu:Id`, SAML
+  `AssertionID`) are not recognized by name; such documents must carry ID typing via schema. `>1` match
+  (across the document and any enveloping Object content) → `ErrAmbiguousReference`.
+- **General XPointer resolution (opt-in, verify-only, `transforms.go`)**: `Verifier.AllowXPointer(true)`
+  extends same-document resolution to an XPointer framework URI — zero+ `xmlns(prefix=uri)` scheme parts then
+  one `xpointer(<expr>)` (`parseGeneralXPointer`, respecting balanced parens and `^(`/`^)`/`^^` circumflex
+  escaping). Default OFF: a general XPointer stays fail-closed as an external reference, so the four-form
+  default is byte-identical. When on, `prepareGeneralXPointer` statically validates the `xpointer()` XPath on
+  the shared bounded evaluator with the document element's in-scope namespaces overlaid by the `xmlns()`
+  overrides (`xpointerNamespaces`), so an unresolved variable/function/prefix fails as `ErrReferenceNotFound`
+  before evaluation. `resolvePreparedGeneralXPointerTarget` then evaluates the expression and enforces a
+  SINGLE element apex (`singleElementApex`, the XSW defense): empty → `ErrReferenceNotFound`, a multi-element
+  or non-element node-set → `ErrAmbiguousReference`. An id() selector NEVER reaches xpath1's built-in id()
+  (`Document.GetElementByID`, which resolves a duplicate id to the last-registered element — an XSW bypass): a
+  whole-expression `id('X')` selector in any whitespace spelling (`id('X')`, `id ('X')`, `id( "X" )`;
+  `parseXPointerIDSelector`) resolves through the duplicate-detecting `domutil.FindElementsByID`
+  (`ErrAmbiguousReference` on a duplicate), and ANY other id() use — a wrapping paren, a predicate, a path
+  step (`expressionReferencesID`) — is rejected fail-closed as `ErrReferenceNotFound` and never reaches the
+  built-in. The selected element is fed into the existing subtree canonicalization path (comments included).
+  `here()` is NOT registered for a URI-borne XPointer, so `xpointer(here())` fails closed with
+  `ErrHereUnavailable` (preserved as a matchable sentinel through the general-XPointer error path).
+- Comment membership is a property of the reference FORM, not the c14n method: `effectiveC14NMethod`
+  (`transforms.go`) downgrades a `#WithComments` canonicalization to its plain variant when the form excludes
+  comments, so a bare `#id`/`""` reference never emits comments even under a `#WithComments` c14n, while the
+  `#xpointer` forms carry them through. Sign and verify apply this identically so a roundtrip stays symmetric.
+- Reference transforms run in declared order through `executeTransformPipeline` (`transform_pipeline.go`) over
+  a tagged `transformValue` (`nodeSetValue` or octets). Contracts: C14N requires node-set and returns octets;
+  XPath/enveloped require and return node-set; Base64 and XSLT return octets, with XSLT requiring octets. The
+  executor parses octets through the configured reference parser when a node-set is required and converts
+  node-sets with inclusive C14N 1.0 when octets are required or at finalization. Repeated transitions and
+  repeated C14N/XSLT/Base64 steps are valid. Base64 has the XMLDSig §6.6.2 exception: node-set input is
+  derived from remaining text-node values instead of generic C14N. The initial same-document node-set stays
+  lazy so bare C14N, enveloped+C14N, whole-document, subtree, and detached/enveloping paths retain their exact
+  specialized canonicalizers. Materialization preserves owning-document, URI comment-membership,
+  namespace-node, XPath, and `here()` semantics. Two node-set collectors exist (`transforms.go`) and the
+  difference is load-bearing. `collectCanonicalizationNodes` builds the set that goes straight to c14n
+  (`canonicalizeSubtree`, so SignedInfo, every unmaterialized Reference selection, the detached/enveloped
+  paths, and the XSLT stylesheet serialization): it is mode-aware and LINEAR — an element carries the bindings
+  it changes relative to its parent, plus the in-scope default namespace, plus (exclusive C14N only) its own
+  prefix and its attributes' prefixes, while the subtree root carries the whole axis. Inclusive C14N compares
+  a namespace node against the nearest rendered ANCESTOR'S SET, so an inherited binding must be absent there;
+  exclusive C14N renders nothing for a visibly-utilized prefix missing from the element's own set, so those
+  must stay — applying the inclusive rule to the exclusive path emits undeclared prefixes.
+  `collectSubtreeNodes` keeps the COMPLETE in-scope namespace axis per element (quadratic) and is used only
+  where an XPath filter transform may narrow the set: the filter is evaluated once per node, namespace nodes
+  included, and may drop an interior element while keeping its descendants. Both walks poll `ctx`.
+  `transforms_nodeset_internal_test.go` is the byte-equivalence gate: it canonicalizes the package fixtures,
+  the W3C interop vectors, the c14n suite documents, and a seeded generated corpus both ways in all six
+  methods with and without a PrefixList, and requires identical octets. `here()` is unavailable with
+  `ErrHereUnavailable` for initial octets or after an octet boundary reparses into a different document;
+  complete-list validation rejects that chain before resolver or transform callbacks run. Enveloped removal
+  uses original node identity and is rejected on external/RetrievalMethod input or after an octet boundary.
+  `validateTransformSteps` scans the complete list and statically validates every XPath expression before
+  execution, so unknown algorithms, missing or malformed parameters, unavailable XSLT, unknown XPath
+  functions, unbound XPath QName prefixes, unavailable `here()`, and invalid enveloped placement fail before
+  an injected transform runs. XPath uses `newDSigXPathEvaluator` with namespaces, `hereFunction`, and
+  `defaultXPathOpLimit`=100M. Base64 signing works through the exported `Transform` interface; XPath/XSLT
+  signing stays rejected because `ReferenceConfig` cannot carry or emit their required child content.
+  `ec:InclusiveNamespaces` is threaded through explicit exclusive-C14N steps; unknown C14N/SignatureMethod
+  parameters fail closed.
+- Algorithms: RSA-SHA1/SHA224/SHA256/SHA384/SHA512, ECDSA-SHA1/SHA224/SHA256/SHA384/SHA512,
+  HMAC-SHA1/SHA224/SHA256/SHA384/SHA512, Ed25519. ECDSA curves P-256/P-384/P-521 (P-521 via the
+  `urn:oid:1.3.132.0.35` NamedCurve in ECKeyValue KeyInfo; signing/verifying is curve-agnostic via
+  `curveKeySize`)
+- **DSA-SHA1 (`AlgDSASHA1`, `xmldsig#dsa-sha1`) is verify-only legacy interop** (`verifyDSA`,
+  `algorithms.go`): SHA-1-weak (rejected on verify without `Verifier.AllowSHA1(true)`, exactly like rsa-sha1).
+  Accepts a `*dsa.PublicKey` — from a parsed `DSAKeyValue` or an `x509`-parsed DSA certificate.
+  `SignatureValue` is the XML-DSig fixed-width `r||s`, each half left-padded to Q's byte length; `verifyDSA`
+  requires the total length to be EXACTLY `2*ceil(Q.BitLen()/8)` (a nil/zero Q or any other length →
+  `ErrVerificationFailed`), closing a malleability gap where accepting any even length and splitting at the
+  midpoint would silently reinterpret a mis-padded `r||s`. SIGNING DSA is NOT supported: `signBytes` rejects
+  the DSA URI with a clear `ErrUnsupportedAlgorithm` ("DSA signing is not supported"), which names the missing
+  feature outright. `crypto/dsa` is deprecated-but-standard; used verify-only.
+- Signing keys: a concrete `*rsa.PrivateKey`/`*ecdsa.PrivateKey`/`ed25519.PrivateKey`, any `crypto.Signer`
+  whose `Public()` is one of those types (HSM/KMS/PKCS#11-backed), or `[]byte` for HMAC.
+  `signRSA`/`signECDSA`/`signEd25519` (`algorithms.go`) take the concrete fast path and fall back to
+  `crypto.Signer` (RSA: `Sign` with a `crypto.Hash` opts → identical PKCS1v15 bytes; ECDSA: DER `Sign` output
+  run through `ecdsaDERToRaw`; Ed25519: `Sign` with `crypto.Hash(0)` over the raw message). A `crypto.Signer`
+  whose public-key type does not match the algorithm → `ErrKeyMismatch`.
 - Digests: SHA-1, SHA-224, SHA-256, SHA-384, SHA-512
 - **SHA-1 rejected by default** (rsa-sha1/ecdsa-sha1/hmac-sha1/sha1) on both sign and verify → `ErrWeakAlgorithm`; opt in with `Signer.AllowSHA1(true)` / `Verifier.AllowSHA1(true)` for legacy interop. SHA-224+ unaffected.
-- Errors: `ErrNoKeySource` sentinel — returned by verify when no usable KeySource is configured (nil cfg, untyped-nil, or typed-nil KeySource/func); `ErrWeakAlgorithm` — SHA-1 used without opt-in; `ErrReferenceNotFound` also covers a nil-resolver external reference and every `FSReferenceResolver` rejection short of the size cap (scheme URI, escaping path, leftover fragment, missing file); `ErrReferenceTooLarge` — an external reference resource exceeds the resolver's 64 MiB cap; `ErrResourceLimitExceeded` — a pre-SignatureValue resource cap described above is exceeded; `ErrHereUnavailable` — the XPath `here()` function invoked with no bearing node (signing path, URI-borne XPointer)
-- Per-reference failures are symmetric across sign and verify: signing wraps each failing Reference in `*ReferenceError{Op:"sign", Reference, URI, Err}` (`errors.go`, wrapped in the `processReference` loops of `signEnveloped`/`signEnveloping`/`signDetached` and in the pre-mutation `preflightSignerTransforms` transform-pipeline check), verification wraps each in `*VerificationError{Reference, URI, Err}` (`Reference == -1` marks a SignatureValue failure). Both `Unwrap()` to the cause, so a sentinel like `ErrReferenceNotFound`/`ErrUnsupportedTransform` stays `errors.Is`-matchable and the failing reference's index+URI is reachable via `errors.As`. The verify-side weak-digest preflight (`preflightParsedWeakAlgorithms`) also wraps a per-reference `ErrWeakAlgorithm` in `*VerificationError` carrying the failing reference's index+URI, symmetric with the sign-side preflight's `*ReferenceError`. A malformed ECDSA/DSA `SignatureValue` length on verify is classified as `ErrVerificationFailed` (not an untyped error), so `errors.Is(err, ErrVerificationFailed)` holds.
-- **XSLT transform (opt-in, verify-only, `xslt_transform.go`)**: `XSLTTransformer.TransformXSLT(ctx, stylesheet, input)` is the injected seam, configured through clone-on-write `Verifier.XSLTTransformer`. Nil and typed-nil values fail with `ErrUnsupportedTransform`. Each XSLT step receives the current pipeline octets, which may be raw resolver data or output from Base64, C14N, or an earlier XSLT; its output feeds the next step or digest, and one Reference may call the transformer multiple times. A later node-set step reparses the output through `ReferenceParser`. Both arguments are attacker-controlled, so the implementation owns compute, memory, output, URI, I/O, and XXE policy. Signing rejects XSLT because it cannot emit the stylesheet. Production `xmldsig1` does not import `xslt3`; the opt-in `xmldsig1/transform.XSLT` adapter does.
-- **`xmldsig1/transform` package** (`transform.XSLT`): a ready `XSLTTransformer` backed by `xslt3`, kept OUT of `xmldsig1` so the core keeps its minimal dependency set and its fail-closed default. It is the only member — every other transform (c14n/base64/XPath/enveloped) is native, so there is no `transform.C14N`; the package name names the domain (injected xmldsig1 transforms), not a family. The zero value `transform.XSLT{}` is usable, parses stylesheet+input with helium's locked-down parser (XXE/DTD/network blocked), relies on the caller's `ctx` deadline for a time bound, and returns complete output without an output-size cap or transform-step budget. Use it for interoperability testing or controlled profiles; a production boundary accepting attacker-controlled XSLT supplies a transformer with those limits. Passing it to `Verifier.XSLTTransformer` is the explicit point where the embedder accepts running attacker-controlled XSLT; helium never runs XSLT on its own. xslt3 disables helium.Writer's per-document-child terminators on the direct XML path; the adapter retains explicit top-level text content as result content, including non-indented newline cases and non-UTF-8 XML output, except when serializer indentation intentionally discards whitespace-only text because indentation is enabled and the result has an element child; it does not promise byte-for-byte preservation of serializer-added document-child terminators.
-- Files: `xmldsig1.go` (API), `constants.go`, `algorithms.go`, `weak_algorithm.go`, `sign.go`, `verify.go`, `transforms.go`, `transform_pipeline.go` (ordered Reference transform executor), `manifest.go` (opt-in Manifest inner-reference validation), `xslt_transform.go` (XSLT transform seam: `XSLTTransformer` + `parseXSLTTransform`), `reference_resolver.go` (external-reference resolver API + FSReferenceResolver), `keyinfo.go`, `retrieval_method.go` (ds:RetrievalMethod dereferencing), `errors.go`
+- Errors: `ErrNoKeySource` sentinel — returned by verify when no usable KeySource is configured (nil cfg,
+  untyped-nil, or typed-nil KeySource/func); `ErrWeakAlgorithm` — SHA-1 used without opt-in;
+  `ErrReferenceNotFound` also covers a nil-resolver external reference and every `FSReferenceResolver`
+  rejection short of the size cap (scheme URI, escaping path, leftover fragment, missing file);
+  `ErrReferenceTooLarge` — an external reference resource exceeds the resolver's 64 MiB cap;
+  `ErrResourceLimitExceeded` — a pre-SignatureValue resource cap described above is exceeded;
+  `ErrHereUnavailable` — the XPath `here()` function invoked with no bearing node (signing path, URI-borne
+  XPointer)
+- Per-reference failures are symmetric across sign and verify: signing wraps each failing Reference in
+  `*ReferenceError{Op:"sign", Reference, URI, Err}` (`errors.go`, wrapped in the `processReference` loops of
+  `signEnveloped`/`signEnveloping`/`signDetached` and in the pre-mutation `preflightSignerTransforms`
+  transform-pipeline check), verification wraps each in `*VerificationError{Reference, URI, Err}` (`Reference
+  == -1` marks a SignatureValue failure). Both `Unwrap()` to the cause, so a sentinel like
+  `ErrReferenceNotFound`/`ErrUnsupportedTransform` stays `errors.Is`-matchable and the failing reference's
+  index+URI is reachable via `errors.As`. The verify-side weak-digest preflight
+  (`preflightParsedWeakAlgorithms`) also wraps a per-reference `ErrWeakAlgorithm` in `*VerificationError`
+  carrying the failing reference's index+URI, symmetric with the sign-side preflight's `*ReferenceError`. A
+  malformed ECDSA/DSA `SignatureValue` length on verify is classified as `ErrVerificationFailed` (not an
+  untyped error), so `errors.Is(err, ErrVerificationFailed)` holds.
+- **XSLT transform (opt-in, verify-only, `xslt_transform.go`)**: `XSLTTransformer.TransformXSLT(ctx,
+  stylesheet, input)` is the injected seam, configured through clone-on-write `Verifier.XSLTTransformer`. Nil
+  and typed-nil values fail with `ErrUnsupportedTransform`. Each XSLT step receives the current pipeline
+  octets, which may be raw resolver data or output from Base64, C14N, or an earlier XSLT; its output feeds the
+  next step or digest, and one Reference may call the transformer multiple times. A later node-set step
+  reparses the output through `ReferenceParser`. Both arguments are attacker-controlled, so the implementation
+  owns compute, memory, output, URI, I/O, and XXE policy. Signing rejects XSLT because it cannot emit the
+  stylesheet. Production `xmldsig1` does not import `xslt3`; the opt-in `xmldsig1/transform.XSLT` adapter
+  does.
+- **`xmldsig1/transform` package** (`transform.XSLT`): a ready `XSLTTransformer` backed by `xslt3`, kept OUT
+  of `xmldsig1` so the core keeps its minimal dependency set and its fail-closed default. It is the only
+  member — every other transform (c14n/base64/XPath/enveloped) is native, so there is no `transform.C14N`; the
+  package name names the domain (injected xmldsig1 transforms), not a family. The zero value
+  `transform.XSLT{}` is usable, parses stylesheet+input with helium's locked-down parser (XXE/DTD/network
+  blocked), relies on the caller's `ctx` deadline for a time bound, and returns complete output without an
+  output-size cap or transform-step budget. Use it for interoperability testing or controlled profiles; a
+  production boundary accepting attacker-controlled XSLT supplies a transformer with those limits. Passing it
+  to `Verifier.XSLTTransformer` is the explicit point where the embedder accepts running attacker-controlled
+  XSLT; helium never runs XSLT on its own. xslt3 disables helium.Writer's per-document-child terminators on
+  the direct XML path; the adapter retains explicit top-level text content as result content, including
+  non-indented newline cases and non-UTF-8 XML output, except when serializer indentation intentionally
+  discards whitespace-only text because indentation is enabled and the result has an element child; it does
+  not promise byte-for-byte preservation of serializer-added document-child terminators.
+- Files: `xmldsig1.go` (API), `constants.go`, `algorithms.go`, `weak_algorithm.go`, `sign.go`, `verify.go`,
+  `transforms.go`, `transform_pipeline.go` (ordered Reference transform executor), `manifest.go` (opt-in
+  Manifest inner-reference validation), `xslt_transform.go` (XSLT transform seam: `XSLTTransformer` +
+  `parseXSLTTransform`), `reference_resolver.go` (external-reference resolver API + FSReferenceResolver),
+  `keyinfo.go`, `retrieval_method.go` (ds:RetrievalMethod dereferencing), `errors.go`
 - Imports: helium, c14n/, xpath1/ (XPath filter transform)
 
 ## xmlenc1/
@@ -390,52 +1510,536 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
 
 - **NewEncryptor() → Encryptor** — create fluent builder for encryption (clone-on-write value type)
-  - `BlockAlgorithm(uri)`, `AllowLegacyCBC(bool)`, `KeyTransportAlgorithm(uri)`, `RecipientPublicKey(key)`, `RecipientECPublicKey(key)`, `SessionKey(key)`, `KeyWrapAlgorithm(uri)`, `KeyEncryptionKey(kek)`, `OAEPDigest(uri)`, `OAEPMGF(uri)`, `OAEPParams(params)`, `KeyDerivationParams(params)` — builder methods. Every setter taking octets (`SessionKey`, `OAEPParams`, `KeyEncryptionKey`, and `KeyDerivationParams`' five OtherInfo fields) copies them at ingress, so a later mutation of the caller's array cannot alter a configured Encryptor
-  - `EncryptElement(ctx, elem)`, `EncryptContent(ctx, elem)`, `EncryptBytes(ctx, doc, plaintext)` — terminal methods; the last encrypts arbitrary octets, emits no `@Type` (xmlenc-core1 §3.1), and returns a **detached** element without touching the tree. Callers recover that payload with `DecryptBytes`, which returns opaque or application-defined plaintext octets without interpreting `@Type`. `Decrypt` parses only `TypeElement` and `TypeContent` and refuses every other `@Type` — absent, empty, or unrecognized — with `ErrOpaquePayload` (`opaqueTypeError`, `xmlenc1.go`), because `@Type` is outside the ciphertext and unauthenticated even under GCM: defaulting it to `TypeElement` would let a stripped attribute turn an opaque octet stream into parsed nodes a caller may graft into its tree (xmlenc-core1 §4.2, §3.1). The gate sits ahead of block-algorithm resolution, the CBC opt-in, and the `SessionKey` early return
+  - `BlockAlgorithm(uri)`, `AllowLegacyCBC(bool)`, `KeyTransportAlgorithm(uri)`, `RecipientPublicKey(key)`,
+    `RecipientECPublicKey(key)`, `SessionKey(key)`, `KeyWrapAlgorithm(uri)`, `KeyEncryptionKey(kek)`,
+    `OAEPDigest(uri)`, `OAEPMGF(uri)`, `OAEPParams(params)`, `KeyDerivationParams(params)` — builder methods.
+    Every setter taking octets (`SessionKey`, `OAEPParams`, `KeyEncryptionKey`, and `KeyDerivationParams`'
+    five OtherInfo fields) copies them at ingress, so a later mutation of the caller's array cannot alter a
+    configured Encryptor
+  - `EncryptElement(ctx, elem)`, `EncryptContent(ctx, elem)`, `EncryptBytes(ctx, doc, plaintext)` — terminal
+    methods; the last encrypts arbitrary octets, emits no `@Type` (xmlenc-core1 §3.1), and returns a
+    **detached** element without touching the tree. Callers recover that payload with `DecryptBytes`, which
+    returns opaque or application-defined plaintext octets without interpreting `@Type`. `Decrypt` parses only
+    `TypeElement` and `TypeContent` and refuses every other `@Type` — absent, empty, or unrecognized — with
+    `ErrOpaquePayload` (`opaqueTypeError`, `xmlenc1.go`), because `@Type` is outside the ciphertext and
+    unauthenticated even under GCM: defaulting it to `TypeElement` would let a stripped attribute turn an
+    opaque octet stream into parsed nodes a caller may graft into its tree (xmlenc-core1 §4.2, §3.1). The gate
+    sits ahead of block-algorithm resolution, the CBC opt-in, and the `SessionKey` early return
 - **NewDecryptor() → Decryptor** — create fluent builder for decryption
-  - `PrivateKey(key)`, `ECPrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)`, `BlockAlgorithm(uri)`, `AllowUnauthenticatedCBC(bool)`, `StrictPKCS7Padding(bool)`, `MaxEncryptedKeys(n)`, `MaxEncryptedKeyBytes(n)`, `MaxCipherValueBytes(n)`, `CipherReferenceResolver(r)` — builder methods
+  - `PrivateKey(key)`, `ECPrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)`, `BlockAlgorithm(uri)`,
+    `AllowUnauthenticatedCBC(bool)`, `StrictPKCS7Padding(bool)`, `MaxEncryptedKeys(n)`,
+    `MaxEncryptedKeyBytes(n)`, `MaxCipherValueBytes(n)`, `CipherReferenceResolver(r)` — builder methods
   - `Decrypt(ctx, elem)`, `DecryptBytes(ctx, elem)` — terminal methods; the latter returns binary plaintext without XML parsing
-- **ReferenceResolver** (`reference_resolver.go`) — single-method interface `ResolveReference(ctx, uri) (io.ReadCloser, error)` supplying the octet STREAM of an EXTERNAL `xenc:CipherReference`, plus **FSReferenceResolver(fsys, root)**, the only implementation shipped. `uri` is always the JOINED, document-space URI, so a resolver never joins. The package reads the stream (`readBoundedReference`) under the decrypt's remaining budget and the caller's ctx, and it closes every stream a resolver hands over: on completion, over-budget, and cancellation alike, and equally when `ResolveReference` itself returns a stream alongside an error — so the bound and the cancellation hold for a caller-written resolver too. Unlike `xmldsig1.ReferenceResolver`, which returns `[]byte`, so one value does NOT satisfy both; NEITHER package imports the other
-- Zero values are usable: `Encryptor{}`/`Decryptor{}` behave as `NewEncryptor()`/`NewDecryptor()` with nothing configured (`config()` substitutes defaults for a nil `cfg`, mirroring `clone()` and xmldsig1's `Signer.config()`), so a terminal returns `ErrMissingConfig`/`ErrMissingKey` instead of panicking
-- Every encryption and decryption terminal observes `ctx` before and between payload stages, and the rule is uniform across all five: **a live cancellation wins over a stage's own error, and every input-sized walk observes the context as it goes**. `context.go` owns both halves and holds the only two decision points, so no site re-decides them. `abort(ctx, err)` returns the context's error when the context is done and exactly `err` otherwise, and every error return of a ctx-carrying function goes through it — a stage runs to completion once entered (a serialization, a session-key validation, a block encryption or decryption, a key unwrap, a marshal, a plaintext parse), so a cancellation landing inside one is observable only after it returns, and its own error would otherwise be reported as the reason the operation failed. Because a live context returns `err` unchanged, CBC's collapse of every failure to `ErrDecryptionFailed` is untouched and no padding oracle appears. `eachSibling(ctx, first, fn)` walks a node and its following siblings, polling per node (chosen over a stride: the poll is one guarded read against per-node work that serializes a subtree or steps a DOM, and a stride would make the bound depend on a constant nobody can derive from the input); every walk whose length the caller, the ciphertext, or the document chooses runs through it — `serializeChildren`' walk over the caller's subtree, `finishDecrypt`'s two shape walks over the parsed plaintext (`nodeCollector.appendNode` for TypeContent, `appendElementNode` for TypeElement), every sibling walk in `parse.go`. `eachChildElement(ctx, elem, fn)` (`context.go`) is the parse path's form of the same walk: it hands `fn` each ELEMENT child and skips every other child kind, delegating the poll to `eachSibling` so a walk that reads only elements still observes the context at the rate the document writes children. No parse-path value is collected from every child kind any more: the two values that were, an `EncryptedKey`'s `CarriedKeyName` and an `ECKeyValue`'s `dsig11:PublicKey`, are respectively not read at all and read through `decodeBoundedBase64`'s bounded `eachSibling` walk, so `context.go` carries no whole-subtree join and no aggregation reproduction. `TestDecryptObservesContextPerPublicKeyChild` (`context_test.go`) pins that walk the same way `TestDecryptObservesContextPerCipherValueChild` does, over the flat shape alone, since a `dsig11:PublicKey` walk refuses an element child outright and so has no descendant list to observe. The candidate loops of `decryptElement`/`decryptBytes` are identical in shape: each polls at the loop top and routes a failed candidate through `abort` before retaining it, so a cancellation is reported as the context error while `ErrDecryptionFailed` stays reserved for a genuine decrypt failure, and `Decrypt` and `DecryptBytes` return the same verdict for the same cancellation timing (`TestCancellationVerdictIsTheSameFromEveryTerminal`, `context_test.go`, drives one fixture through every terminal to pin that). The tree-mutation commit point in `encrypt` — `elem.Replace`/`removeChildren`/`elem.AddChild` — is deliberately neither a poll site nor an `abort` site: past it the caller's tree is being rewritten, and reporting a cancellation would say nothing happened when children are already unlinked. A nil `ctx` is treated as uncancelled (`contextErr` returns nil for it), so a terminal runs to completion instead of panicking. The parse stage is inside the rule, not beside it: every function from `parseEncryptedData` down takes `ctx` as its first parameter, walks children through `eachChildElement`/`eachSibling`, and routes its error returns through `abort`. Nothing else bounds how long that stage runs — a comment or processing-instruction child of a `CipherValue` is skipped as character data and charged against neither `MaxEncryptedKeyBytes` nor `MaxCipherValueBytes`, so the number of them a document may carry is unbounded, and the per-child poll is what answers a caller who cancels while they are read (`TestDecryptObservesContextPerCipherValueChild`, `context_test.go`, pins the per-child poll and the cancellation together, both measured against the same document, with no poll count written down). The boundary inside `parse.go` is trip count, not depth: `parseConcatKDFParams`' five-element field table is not a poll site because its trip count is five whatever the document says, and the leaf helpers a walk calls per child (`base64CharacterData`, `parseConcatKDFHexAttribute`, `ecdhCurveForURI`) take no `ctx` because the walk that calls them already polled and `abort`s what they return. `ParseEncryptedDataForTest` (`export_test.go`) parses under `context.Background()`, so a parser-only test sees the parse's own verdict
+- **ReferenceResolver** (`reference_resolver.go`) — single-method interface `ResolveReference(ctx, uri)
+  (io.ReadCloser, error)` supplying the octet STREAM of an EXTERNAL `xenc:CipherReference`, plus
+  **FSReferenceResolver(fsys, root)**, the only implementation shipped. `uri` is always the JOINED,
+  document-space URI, so a resolver never joins. The package reads the stream (`readBoundedReference`) under
+  the decrypt's remaining budget and the caller's ctx, and it closes every stream a resolver hands over: on
+  completion, over-budget, and cancellation alike, and equally when `ResolveReference` itself returns a stream
+  alongside an error — so the bound and the cancellation hold for a caller-written resolver too. Unlike
+  `xmldsig1.ReferenceResolver`, which returns `[]byte`, so one value does NOT satisfy both; NEITHER package
+  imports the other
+- Zero values are usable: `Encryptor{}`/`Decryptor{}` behave as `NewEncryptor()`/`NewDecryptor()` with nothing
+  configured (`config()` substitutes defaults for a nil `cfg`, mirroring `clone()` and xmldsig1's
+  `Signer.config()`), so a terminal returns `ErrMissingConfig`/`ErrMissingKey` instead of panicking
+- Every encryption and decryption terminal observes `ctx` before and between payload stages, and the rule is
+  uniform across all five: **a live cancellation wins over a stage's own error, and every input-sized walk
+  observes the context as it goes**. `context.go` owns both halves and holds the only two decision points, so
+  no site re-decides them. `abort(ctx, err)` returns the context's error when the context is done and exactly
+  `err` otherwise, and every error return of a ctx-carrying function goes through it — a stage runs to
+  completion once entered (a serialization, a session-key validation, a block encryption or decryption, a key
+  unwrap, a marshal, a plaintext parse), so a cancellation landing inside one is observable only after it
+  returns, and its own error would otherwise be reported as the reason the operation failed. Because a live
+  context returns `err` unchanged, CBC's collapse of every failure to `ErrDecryptionFailed` is untouched and
+  no padding oracle appears. `eachSibling(ctx, first, fn)` walks a node and its following siblings, polling
+  per node (chosen over a stride: the poll is one guarded read against per-node work that serializes a subtree
+  or steps a DOM, and a stride would make the bound depend on a constant nobody can derive from the input);
+  every walk whose length the caller, the ciphertext, or the document chooses runs through it —
+  `serializeChildren`' walk over the caller's subtree, `finishDecrypt`'s two shape walks over the parsed
+  plaintext (`nodeCollector.appendNode` for TypeContent, `appendElementNode` for TypeElement), every sibling
+  walk in `parse.go`. `eachChildElement(ctx, elem, fn)` (`context.go`) is the parse path's form of the same
+  walk: it hands `fn` each ELEMENT child and skips every other child kind, delegating the poll to
+  `eachSibling` so a walk that reads only elements still observes the context at the rate the document writes
+  children. No parse-path value is collected from every child kind any more: the two values that were, an
+  `EncryptedKey`'s `CarriedKeyName` and an `ECKeyValue`'s `dsig11:PublicKey`, are respectively not read at all
+  and read through `decodeBoundedBase64`'s bounded `eachSibling` walk, so `context.go` carries no
+  whole-subtree join and no aggregation reproduction. `TestDecryptObservesContextPerPublicKeyChild`
+  (`context_test.go`) pins that walk the same way `TestDecryptObservesContextPerCipherValueChild` does, over
+  the flat shape alone, since a `dsig11:PublicKey` walk refuses an element child outright and so has no
+  descendant list to observe. The candidate loops of `decryptElement`/`decryptBytes` are identical in shape:
+  each polls at the loop top and routes a failed candidate through `abort` before retaining it, so a
+  cancellation is reported as the context error while `ErrDecryptionFailed` stays reserved for a genuine
+  decrypt failure, and `Decrypt` and `DecryptBytes` return the same verdict for the same cancellation timing
+  (`TestCancellationVerdictIsTheSameFromEveryTerminal`, `context_test.go`, drives one fixture through every
+  terminal to pin that). The tree-mutation commit point in `encrypt` —
+  `elem.Replace`/`removeChildren`/`elem.AddChild` — is deliberately neither a poll site nor an `abort` site:
+  past it the caller's tree is being rewritten, and reporting a cancellation would say nothing happened when
+  children are already unlinked. A nil `ctx` is treated as uncancelled (`contextErr` returns nil for it), so a
+  terminal runs to completion instead of panicking. The parse stage is inside the rule, not beside it: every
+  function from `parseEncryptedData` down takes `ctx` as its first parameter, walks children through
+  `eachChildElement`/`eachSibling`, and routes its error returns through `abort`. Nothing else bounds how long
+  that stage runs — a comment or processing-instruction child of a `CipherValue` is skipped as character data
+  and charged against neither `MaxEncryptedKeyBytes` nor `MaxCipherValueBytes`, so the number of them a
+  document may carry is unbounded, and the per-child poll is what answers a caller who cancels while they are
+  read (`TestDecryptObservesContextPerCipherValueChild`, `context_test.go`, pins the per-child poll and the
+  cancellation together, both measured against the same document, with no poll count written down). The
+  boundary inside `parse.go` is trip count, not depth: `parseConcatKDFParams`' five-element field table is not
+  a poll site because its trip count is five whatever the document says, and the leaf helpers a walk calls per
+  child (`base64CharacterData`, `parseConcatKDFHexAttribute`, `ecdhCurveForURI`) take no `ctx` because the
+  walk that calls them already polled and `abort`s what they return. `ParseEncryptedDataForTest`
+  (`export_test.go`) parses under `context.Background()`, so a parser-only test sees the parse's own verdict
 - `Decrypt` does **not** mutate the tree (unlike `EncryptElement`/`EncryptContent`, which splice `EncryptedData` in): `elem` stays put and the returned nodes are detached; reinsertion is the caller's call
-- A **non-empty** `Decryptor.SessionKey` is an EARLY RETURN, not a key preference: `decryptElement`/`decryptBytes` use it and return before candidate selection, per-candidate validation, and per-candidate key resolution in `resolveSessionKeyFromEncryptedKey`. The `MaxEncryptedKeys` cap sits ahead of that return and still applies. Both builders gate on `len(sessionKey) > 0`, so an empty or nil slice counts as not set on either side
-- An `EncryptedData` with **no `EncryptionMethod`** decrypts only when the caller states the block algorithm out of band with `Decryptor.BlockAlgorithm(uri)` — W3C xmlenc-core1 §3.1/§3.2 leave the element optional and require the recipient to know the algorithm already, and §4.4 step 1 admits obtaining it out of band. `resolveDecryptBlockAlgorithm` (`xmlenc1.go`) is the single resolution and both `decryptElement` and `decryptBytes` call it ahead of everything that reads the algorithm. The match is STRICT, so the setter can only narrow what a decrypt accepts: absent + unset → `ErrMalformedEncrypted` naming the setter; absent + set → the caller's URI; present + unset → the document's URI; present + set + different → `ErrConflictingBlockAlgorithm` naming both. A document never overrides a caller who stated the algorithm, which would be algorithm confusion. A present `EncryptionMethod` always carries a non-empty `Algorithm` — `parseEncryptionMethod` (`parse.go`) refuses an empty one as `ErrMalformedEncrypted` at the parse gate, ahead of any resolution — so the caller's URI is only ever matched against a real declaration. The resolved URI is the one bound everywhere downstream: the CBC opt-in gate, the AEAD additional data of the two 2001-namespace GCM identifiers, `validateKeySize` on the session key, and the AES key-wrap ciphertext length
-- `EncryptedKey.Recipient` is **parse-only** — populated when reading, never serialized when encrypting. `EncryptedKey.CarriedKeyName` is declared as part of the parsed shape and filled by nothing: `parseEncryptedKey` steps over the `xenc:CarriedKeyName` element, and encrypting never writes one. No decrypt path consults the name and no exported function or method takes or returns an `EncryptedKey`, so no caller can observe it; reading it would cost an unbounded copy of attacker-supplied metadata, since the name is joined from every child at every depth that join reaches and charged against neither `MaxEncryptedKeyBytes` nor `MaxCipherValueBytes`, so a document may spread one over as many CDATA sections as it likes and defeat the XML parser's per-node content cap. `TestCarriedKeyNameIsNotRead` (`parse_test.go`) pins both halves: a document carrying one still parses (the element is skipped, the `EncryptedKey` around it is still a candidate, the field stays zero) and still decrypts, and a 4 MiB name costs a SUCCESSFUL `SessionKey` decrypt no more than the same document without one — measured as a `TotalAlloc` delta across the decrypt of an already-parsed document
-- Parse enforces at-most-one cardinality on every xenc/dsig11 schema singleton it reads — `EncryptionMethod` and `CipherData` per `EncryptedData`/`EncryptedKey`, `ds:KeyInfo` per `EncryptedType`, and `NamedCurve`/`PublicKey` per `dsig11:ECKeyValue` — rejecting a second occurrence with `ErrMalformedEncrypted` (`parse.go`), so a duplicate can never silently overwrite the first
-- `Decryptor.MaxEncryptedKeys(n)` caps trial-decrypted `<EncryptedKey>` candidates (DoS guard): zero → `DefaultMaxEncryptedKeys` (100), negative → unlimited; over-cap fails with `ErrTooManyEncryptedKeys` before the excess candidate is appended to the retained list or any candidate crypto runs. `parseKeyInfoForEncryption` enforces the effective limit while parsing, before the excess candidate's structure is validated or its ciphertext is charged to the `MaxEncryptedKeyBytes` budget; `checkEncryptedKeyCap` is the shared error/count implementation. Both `decryptElement` and `decryptBytes` pass the cap into parsing before consulting configured keys, so it holds in every key configuration. Per-candidate branch dispatch — which of the three decrypt keys a candidate uses and what it costs — is implemented in `resolveSessionKeyFromEncryptedKey` (ECDH-ES in `decryptECDHSessionKey`) and stated by the `Decryptor.MaxEncryptedKeys` godoc. The candidate loop's own `ctx` observation is stated by the cancellation bullet above
-- `Decryptor.MaxEncryptedKeyBytes(n)` caps the TOTAL decoded `<EncryptedKey>` ciphertext of one EncryptedData (memory-amplification guard): zero → `DefaultMaxEncryptedKeyBytes` (64 KiB), negative → unlimited; over-budget fails with `ErrEncryptedKeyBytesExceeded`. It is a separate sentinel from `ErrTooManyEncryptedKeys` because the two bound different things (a count vs a size) and different setters raise them. The budget is threaded into the parse path — `newEncryptedKeyBudget(cfg)` in `decryptElement`/`decryptBytes` → `parseEncryptedData` → `parseKeyInfoForEncryption` → `parseEncryptedKey` → `parseCipherData` — and `decodeCipherValue` (`parse.go`) charges `encryptedKeyBudget.charge` (`xmlenc1.go`) BEFORE anything is built from the value, so an over-budget CipherValue is rejected without being assembled or decoded (the base64 text itself is already in the caller's DOM). It walks the CipherValue's children twice: an `xmlbase64.Counter` counts them, and only after the charge is accepted does a second walk build the whitespace-stripped characters through `xmlbase64.AppendStripped` and decode them with `base64.StdEncoding.Decode` into a buffer sized at the counted `DecodedLen()` — the charged count itself, and not `encoding/base64`'s own padding-blind `DecodedLen`. The stripped characters are handed to the decoder as bytes, so nothing copies them into a string. The lexical text is never joined into one string — xs:base64Binary allows XML whitespace between characters and the value may be spread over any number of text and CDATA children, so the lexical length is attacker-chosen and unrelated to the charge; what is held is bounded by the budget (stripped characters ≤ 4/3 of it, decoded bytes exactly the charged count) and the peak is the largest single child. `Counter` (`internal/xmlbase64`) owns the count and fails closed: exact for base64 the decoder accepts, and never below what a rejected decode allocates — it deducts padding only from a value whose whole lexical shape is otherwise decodable, so neither malformed padding nor a body outside the base64 alphabet can walk a value past the budget. It carries the character count, the padding count, and the decodable-shape flag ACROSS children, so the count is that of the concatenation — counting each child alone and summing would report 0 for every sub-quantum child and bypass the budget entirely. `parseCipherData` receives `payloadCipherValueBudget` for the EncryptedData's own CipherValue, while EncryptedKey ciphertext uses `encryptedKeyBudget`. The budget is charged while parsing for retained candidates only; the candidate cap rejects an excess candidate before the budget, and both checks hold ahead of the `SessionKey` early return
-- `xenc:OAEPparams` is bounded by `maxOAEPParamsBytes` (1024, `parse.go`), which owns the rationale; over-limit fails with an error wrapping `ErrMalformedEncrypted`. `decodeBoundedBase64(ctx, elem, valueName, maxBytes, invalidPhrase)` (`parse.go`) is the single implementation for every xs:base64Binary value this package holds to a FIXED ceiling — the OAEPparams label and an ECDH-ES `dsig11:PublicKey` — and runs from `parseEncryptionMethod`, so it covers BOTH OAEPparams call sites — the `EncryptedData`'s own `EncryptionMethod` (whose decoded label nothing ever reads) and each `EncryptedKey`'s — and both are reached while the document is read, ahead of key resolution and the `SessionKey` early return; an EncryptedKey beyond the candidate cap is not retained. The walk is leaf-only and single-pass. `base64CharacterData` (`parse.go`) classifies each child through `helium.AsNode`: `*helium.Text`/`*helium.CDATASection` contribute their content; a `*helium.EntityRef` contributes ONE hop — its `FirstChild()` asserted to `*helium.Entity`, whose `Content()` is a leaf accessor returning the declared replacement literal without recursing (a CHILDLESS `EntityRef` contributes NO characters and no error: per XML 1.0 "Entity Declared" an undeclared general entity is only fatal under `standalone="yes"` or with neither an external subset nor a parameter-entity reference, so a non-validating parse of a document with either one keeps the reference as an `EntityRef` with no `Entity` under it — a normal parser output, and one `c14n` also treats as empty since it canonicalizes an `EntityRef` by walking its children; an `EntityRef` whose first child is NON-NIL and not an `*Entity` is reachable only in a caller-built tree and is refused; and the `Entity`'s `NextSibling()` is never followed because it is the next DTD declaration, not part of the value), so an entity whose replacement is itself a reference or markup contributes that literal text and the `Counter` marks the value undecodable; `*helium.Comment`/`*helium.ProcessingInstruction` are skipped (reading a comment would splice its text into the base64); and ANY other child kind is refused with `ErrMalformedEncrypted` — an element answers `Content()` by aggregating its whole subtree, so reading one would spend that subtree's text before a limit measured in decoded octets could look at it, and a subtree of whitespace decodes to nothing so the limit would never fire. `decodeBoundedBase64` reads each child exactly once, folding it into an `xmlbase64.Counter` and appending the whitespace-stripped characters through `xmlbase64.AppendStripped`, and stops as soon as the kept characters pass its local char ceiling `(maxBytes+2)/3*4` (the most any acceptable value can hold, and what sizes the character buffer — stopping there is always early, never a different verdict, and the exact `Counter.DecodedLen` test still runs after the walk). The decode is `base64.StdEncoding.Decode` into a buffer sized at that counted `DecodedLen()`, so the stripped characters are never copied into a string and the buffer is exact for a value the decoder accepts, sized by that count instead of `encoding/base64`'s padding-blind estimate. So the lexical text is never joined into one string and what the parse RETAINS is sized by the limit alone. `valueName` names the value in the size and child-kind refusals and `invalidPhrase` in the decoder's, so each caller's wording stays its own (`TestBoundedBase64ErrorsNameTheirOwnValue`, `parse_test.go`, pins that for both callers across all three refusals). What is NOT bounded is the copy `Content()` hands out per child: a DOM offers no read-only view of a node's bytes, so weighing a value costs one copy of its lexical text. That copy is the floor and the walk pays it exactly once — total allocation is one times the lexical length plus fixed overhead, which `TestOAEPParamsAllocation` (`parse_test.go`) pins. The limit is a fixed internal constant with no public knob and is deliberately NOT the `MaxEncryptedKeyBytes` budget: an `EncryptedData`-side label is not `EncryptedKey` ciphertext, and charging it would change what that setter documents itself as covering. Neither existing knob substitutes — the candidate count is checked before each append, and the XML parser's `MaxNodeContentSize` bounds one indivisible content run, which CDATA-splitting defeats. The limit is a POLICY ceiling, not a conformance boundary — xenc-schema types `OAEPparams` as `xs:base64Binary` with no length facet and RFC 8017 bounds the label only at its hash's input limit, so a larger label is conforming and rejected anyway — and it is symmetric: `resolveEncryptConfig` (`xmlenc1.go`) charges `Encryptor.OAEPParams` against the same `maxOAEPParamsBytes` and fails with an error wrapping `ErrEncryptionFailed`, gated on `hasKeyTransport` because key transport is the only mechanism that writes a label, so a label over the limit is neither written nor parsed back and no self-produced ciphertext is un-decryptable. `TestEncryptorOAEPParamsBound` (`keytransport_test.go`) pins the encrypt-side boundary against `MaxOAEPParamsBytesForTest`
-- `Decryptor.MaxCipherValueBytes(n)` caps the decoded ciphertext in the EncryptedData payload's `CipherValue`, independently from the cumulative `EncryptedKey` ciphertext budget: zero selects `DefaultMaxCipherValueBytes` (10 MiB), and a negative value removes the cap. `parseEncryptedData` sends the payload through its own budget before it is assembled or decoded, so split text/CDATA nodes cannot bypass it. An over-budget payload fails with `ErrCipherValueBytesExceeded` before block decryption, candidate selection, or a `SessionKey` return.
-- AES key unwrap is length-bound: `aesKeyUnwrap(kek, ciphertext, keySize)` requires `len(ciphertext) == keySize+8` exactly (RFC 3394 §2.2.2), rejecting with `ErrKeyUnwrapFailed` before the six unwrap rounds. `keySize` is the session-key length of the declared block algorithm, resolved once per decrypt via `keySizeForAlgorithm(paramBlockAlgorithm, alg)` ahead of the candidate loop and threaded through `resolveSessionKeyFromEncryptedKey` into both the plain key-wrap and the ECDH-ES (`decryptECDHSessionKey`) branches. The post-recovery `validateKeySize` in `blockDecrypt` still binds a key that arrived by RSA key transport, whose length is not visible until the private-key decrypt
-- Block encryption: AES-128/256-CBC, XML Encryption 1.1 AES-128/192/256-GCM (`AES128GCM11`/`AES192GCM11`/`AES256GCM11`), and AES-128/256-GCM in the 2001 xmlenc namespace (`AES128GCM`/`AES256GCM`). The 1.1 GCM form uses the standard IV || ciphertext || authentication-tag encoding without additional authenticated data, which is the only AES-GCM xmlenc-core1 §5.2 defines. The two 2001-namespace GCM identifiers are defined by NO XML Security specification, and `blockEncrypt`/`blockDecrypt` bind the `EncryptionMethod/@Algorithm` URI into the AEAD additional authenticated data for those two alone — a package-specific measure against an algorithm substitution on the wire, which no specification requires, and a second reason a document carrying one decrypts here and nowhere else. Both stay exported and reachable through `Encryptor.BlockAlgorithm`, and `Decryptor` accepts them with that AAD binding, so every document this package has emitted still decrypts
-- Secure by default: unset `BlockAlgorithm` → `DefaultBlockAlgorithm`, which is `AES256GCM11` — authenticated AES-256-GCM under the standard XML Encryption 1.1 identifier, so what a caller who configures nothing emits is what a conforming peer recognizes. Selecting a CBC block algorithm for **encryption** requires `Encryptor.AllowLegacyCBC(true)`, else `ErrCBCEncryptionRequiresOptIn`. **Decryption** of CBC requires `Decryptor.AllowUnauthenticatedCBC(true)`, else `ErrCBCRequiresOptIn`
-- CBC unpadding follows xmlenc-core1 §5.2.1 by default: the final octet names the padding length N, `unpadConstantTime` (`block.go`) checks only that N names between one octet and one whole block, and the N-1 octets ahead of it are ARBITRARY and unread. PKCS#7 (every padding octet equals N) is a strict subset, selected by `Decryptor.StrictPKCS7Padding(true)` and carried down the decrypt path as the `cbcPadding` policy type (`cbcPaddingXMLEnc` is the zero value, `cbcPaddingPKCS7` the opt-in) through `decryptCipherValue`/`finishDecrypt` → `blockDecrypt` → `decryptCBC`. The strict rule refuses conforming third-party ciphertext, so it suits only a caller controlling both ends; `pkcs7Pad` writes all-N padding, valid under both, so a document this package produced decrypts either way. A refused padding reports the same `ErrDecryptionFailed` as every other CBC failure. `TestInteropRetrievalMethod` (`interop_test.go`) decrypts the merlin `aes256-cbc` vector end to end as the third-party evidence, and pins its refusal under the opt-in
-- Three mechanisms protect the session key — RSA key transport (`KeyTransportAlgorithm` + `RecipientPublicKey`), ECDH-ES key agreement (`KeyWrapAlgorithm` + `RecipientECPublicKey`), AES key wrap (`KeyWrapAlgorithm` + `KeyEncryptionKey`) — and `conflictingKeyProtection` (`xmlenc1.go`) rejects any pair of them with `ErrConflictingKeyConfig`, since `encryptPlaintext` emits one `<EncryptedKey>` and would silently discard the loser of its transport → agreement → wrap dispatch. The two transport pairs name both algorithm URIs; the agreement-vs-wrap pair names the two setters instead, because both mechanisms share the same `KeyWrapAlgorithm` URI. A `SessionKey` alongside a single mechanism is fine — it supplies the key that mechanism protects
-- `resolveEncryptConfig` decides the payload-independent parts of an `Encryptor`'s configuration — the effective block algorithm and its supported-URI check, the CBC opt-in, presence of a key source, the key-protection conflicts, the RSA-OAEP URI/digest/MGF checks, the RSA-OAEP label size, the key-wrap URI (`validateKeyWrapAlgorithm`, charged to whichever of key agreement and key wrap is in use), the ECDH-ES ConcatKDF parameters (`validateEncryptConcatKDFParams` (`key_agreement.go`): the OtherInfo budget then the digest URI, over the set `effectiveKDFParams` returns, so an empty `DigestMethod` is weighed as the SHA-256 default with no OtherInfo and the caller's discarded fields are never measured), and the ECDH-ES recipient key — and every entry point calls it before any payload work, so a plaintext that fails to serialize never masks those checks, and none of them costs anything proportional to the payload (`TestEncryptConfigRejectionAllocatesNoPayload`, `xmlenc1_test.go`). Session-key length is bound later, inside `encryptPlaintext`
-- Key transport: RSA-OAEP (1.0 + 1.1 with configurable SHA-1/224/256/384/512 digest and MGF; SHA-224 uses the XMLDSig-more digest URI and the XML Encryption 1.1 `mgf1sha224` URI; the OAEP label digest and the MGF1 hash may differ, via `rsa.EncryptOAEPWithOptions`/`OAEPOptions` — requires Go ≥ 1.26)
-- Key wrapping: AES-128/192/256-KeyWrap (RFC 3394). `validateKeyWrapAlgorithm` (`keywrap.go`) is the encrypt-side gate for `Encryptor.KeyWrapAlgorithm` and holds BOTH mechanisms that read it — key agreement, which derives the KEK, and key wrap, which is handed one — to those three URIs, since either declares that URI on the `EncryptedKey` it emits while protecting the session key with `aesKeyWrap`. Anything else, a block-cipher URI above all, would declare an algorithm that did not produce the `CipherValue` — an RFC 3394 wrap under an AES-GCM identifier, which nothing reads back, this package included — and the KEK-length binding cannot stand in for the check, because `keySizeForAlgorithm` answers a length for the block-cipher URIs too. `resolveEncryptConfig` applies it ahead of any payload work and `encryptECDHSessionKey` applies it again on its own way in
-- Key agreement: XML Encryption 1.1 ECDH-ES on P-256, P-384, and P-521 with ConcatKDF using SHA-1/224/256/384/512, in **both** directions — `Decryptor.ECPrivateKey` decrypts, `Encryptor.RecipientECPublicKey` + `KeyWrapAlgorithm` encrypt (the KEK is derived, so `KeyEncryptionKey` belongs to the AES key wrap mechanism). SHA-224 uses the XMLDSig-more digest URI. Each encryption generates a fresh ephemeral key pair; `Encryptor.KeyDerivationParams` sets the ConcatKDF parameters (`effectiveKDFParams`) and its godoc owns the empty-`DigestMethod` fallback. `resolveEncryptConfig` (`xmlenc1.go`) decides the key protection before any entry point serializes plaintext, generates a session key, or block encrypts, so an unusable recipient key costs nothing proportional to the payload; `ecdhRecipientKey` is its single gate for the recipient key and rejects a key with unset coordinates (which `crypto/ecdsa` would otherwise dereference), a curve with no `crypto/ecdh` form, and a curve with no `dsig11:NamedCurve` URI. An EC public key without a `KeyWrapAlgorithm` does not select key agreement, so its curve is never resolved. `serialize.go` emits the `xenc:AgreementMethod` subtree (`KeyDerivationMethod`/`ConcatKDFParams`/`OriginatorKeyInfo` → `ds:KeyValue` → `dsig11:ECKeyValue`); ConcatKDF OtherInfo attributes are hexBinary bit strings whose first octet is the unused-bit count
-- The five ConcatKDF OtherInfo fields are capped **cumulatively** at `maxConcatKDFOtherInfoBytes` (4096, `key_agreement.go`), which owns the rationale; over-budget parameters fail with an error wrapping `ErrMalformedEncrypted`. `checkConcatKDFOtherInfoBudget` is the single implementation and runs at four points, each ahead of any work sized by the fields: `parseConcatKDFParams` applies it to wire data at the first point that holds all five fields, so an oversized document never reaches ECDH or key unwrap; `resolveEncryptConfig` applies it through `validateEncryptConcatKDFParams` to an `Encryptor`'s effective set, so an oversized set is refused before the plaintext is serialized or block encrypted and the error carries `ErrEncryptionFailed` alongside the shared `ErrMalformedEncrypted`; `deriveConcatKDF` applies it before resolving the digest, so a set that is both over budget and names an unsupported digest still fails on the size; and `concatKDFOtherInfo` applies it immediately before packing, which is what makes the limit hold for a caller-built DOM or a caller-built `ConcatKDFParams` that this package never parsed. The one parameter set never measured is an `Encryptor`'s with an empty `DigestMethod`: `effectiveKDFParams` replaces it wholesale with the SHA-256 default carrying empty OtherInfo, so the caller's fields are discarded before any derivation instead of checked, and the encryption succeeds with no OtherInfo on the wire (`ConcatKDFParams`' godoc states this carve-out). The check measures each field against the budget REMAINING instead of summing the five, because the fields may all alias one slice and their sum can wrap `int` on a 32-bit build; the packing's own `len(value)*8`/`totalBits` arithmetic is wrap-free only because the check runs ahead of it. `parseConcatKDFHexAttribute` additionally rules an attribute out from its hex length alone, before `hex.DecodeString` allocates for it, since one field can never exceed the whole set's budget. Nothing else in the package bounds these fields — the XML parser's `MaxNodeContentSize` is a caller-adjustable attribute-value cap, not a ConcatKDF limit
-- `concatKDFOtherInfo` packs the five bit strings into the single bit string ConcatKDF hashes. A field landing on an octet boundary is moved with `copy()` plus at most one masked trailing octet; a field straddling a boundary (only reachable when some earlier field's bit length is not a multiple of eight) falls back to moving one bit at a time, bounded by the OtherInfo budget. Both paths produce identical bytes — `TestConcatKDFOtherInfoMatchesPerBitPacking` pins the production packing against a verbatim per-bit reference over fixed and randomized shapes, because a divergence here silently changes the derived KEK and breaks interoperability
-- Key sizes are bound to the declared algorithm URI on encrypt and decrypt (incl. after unwrap/key transport); mismatch → `KeySizeError`. On encrypt this binds the key actually used: a **non-empty** `Encryptor.SessionKey` of the wrong length is rejected, while an empty or nil one is replaced by a freshly generated key of the right length and never reaches the check (with no key-protection mechanism configured at all, that case is `ErrMissingConfig`). `KeySizeError`'s `Key` field names the offending key ("session key"/"key-encryption key"). `UnsupportedAlgorithmError.Parameter` likewise names the slot that rejected the URI ("block algorithm", "MGF algorithm", ...); both are diagnostic text — match on the type and `Algorithm`
-- `ErrUnsupportedKeyDerivation` (`errors.go`) is raised by `noCandidateError` (`xmlenc1.go`, the single wording site both decrypt terminals share) when key resolution found NO candidate and `encryptedData.offersDerivedKey` is set — i.e. the `ds:KeyInfo` offered the session key only through an `xenc11:DerivedKey`, inline or named by a `ds:RetrievalMethod` `Type` of `#DerivedKey`. It is deliberately not `ErrMissingKey`: no key the caller supplies can decrypt such a document, so the error must name the missing facility instead of sending the caller to audit its key configuration. A document that ALSO carries a usable `xenc:EncryptedKey` decrypts under it (the flag is consulted only on an empty candidate list), and a pre-shared `Decryptor.SessionKey` never reaches it at all
-- `UnsupportedAlgorithmError` and `KeySizeError` each carry a leading blank `_ struct{}` field, so an unkeyed composite literal cannot compile from another package (`implicit assignment to unexported field _`). That is what lets either field set GROW without breaking a caller: nobody can have written the positional form a new field would invalidate. Keyed literals, field reads, and `errors.As` recovery are unaffected; `api_freeze_test.go` pins the guard structurally, so it holds however the field is spelled
-- All three encrypt terminals report a nil operand identically: `ErrEncryptionFailed` wrapped FIRST, then `helium.ErrNilNode` (both with `%w`), so a caller matching the operation sentinel catches it whichever entry point it called and one matching `ErrNilNode` still learns which operand was nil. `EncryptBytes` names the missing document in its message; `encrypt` (shared by `EncryptElement`/`EncryptContent`) names the missing element
-- Error chains: `ErrMissingKey` names the key kind the candidate needs, the algorithm URI the document declared for it (the `EncryptionMethod` URI for RSA key transport and AES key wrap, the `AgreementMethod` URI for ECDH-ES key agreement), and the `Decryptor` setter that supplies the key; `ErrTooManyEncryptedKeys` carries the candidate count and effective limit; a failed AES key unwrap wraps `ErrKeyUnwrapFailed` in `ErrDecryptionFailed`, matching the RSA key-transport path. There is no padding sentinel: CBC collapses nearly every failure to `ErrDecryptionFailed`, message included, so no padding oracle exists; the one exception is a wrong-length pre-shared `Decryptor.SessionKey`, whose length the caller configures and an attacker cannot influence, so a mismatch is reported as a bare `KeySizeError` instead
-- Multi-recipient: `EncryptedData.EncryptedKeys []*EncryptedKey` holds one EncryptedKey per recipient; absent a session key, decrypt tries each candidate through full block decryption + plaintext validation (a bogus prepended key cannot mask the real one). `EncryptedData.EncryptedKey` is the **deprecated** single-key field — `EncryptedKeys` wins when non-empty, else the single field is treated as a one-element list; parse populates both
-- An ECDH-ES originator key's `dsig11:PublicKey` is bounded by `maxECPublicKeyBytes` (133, `parse.go`), which owns the rationale; over-limit fails with an error wrapping `ErrMalformedEncrypted`. `decodeBoundedBase64` (`parse.go`, the same bounded walk the OAEPparams label goes through) reads it, called from `parseECKeyValue` with value name `ECKeyValue PublicKey` and decode-error phrase `invalid ECKeyValue base64`, so it is reached while the document is read — ahead of the key resolution and the `SessionKey` early return; an `EncryptedKey` beyond the candidate cap is never parsed, so its `dsig11:PublicKey` is never read. Unlike the OAEPparams and ConcatKDF ceilings the value is NOT a policy choice: `dsig11:PublicKey` carries a SEC1 uncompressed point, 65 octets on P-256, 97 on P-384 and 133 on P-521, and `crypto/ecdh` refuses the compressed form and every over-length input on all three, so an over-133-octet value is rejected by `curve.NewPublicKey` whatever it holds and the limit only moves that verdict ahead of materializing it. It is the maximum across ALL THREE curves, and the selected curve's own size cannot serve, because `dsig11:ECKeyValue` puts no order on its children: `dsig11:NamedCurve` may follow `dsig11:PublicKey`, and a document with no `NamedCurve` at all still has its `PublicKey` read before the missing-curve error, so at the moment the value is weighed there may be no curve to weigh it by. The walk is leaf-only and single-pass through `eachSibling` over EVERY child kind, classifying children with `base64CharacterData`, folding each into an `xmlbase64.Counter`, appending through `xmlbase64.AppendStripped`, stopping as soon as the kept characters pass the char ceiling `(maxECPublicKeyBytes+2)/3*4` = 180 and applying the exact `Counter.DecodedLen` test afterwards. `internal/xmlbase64.DecodeElement` is deliberately NOT used: it takes no `context.Context` and would drop the per-child cancellation poll. So the lexical text is never joined into one string and what the parse retains is sized by the limit alone; the one cost still following the document is the per-child `Content()` copy, paid exactly once, which `TestECPublicKeyAllocation` (`parse_test.go`) pins at 1x for both a refused and an accepted value. `TestECPublicKeyBound` covers the three curves (including the 133-byte P-521 boundary), both child orders, whitespace-wrapped and CDATA-split values, and the two child-kind rules
-- `CipherValue`, `OAEPparams`, and an ECDH-ES `dsig11:PublicKey` use `base64CharacterData` (`parse.go`): text, CDATA, and one-hop entity-reference data contribute to the base64 value; comments and processing instructions are ignored; every other child, including an element, is rejected before its subtree can be read.
-- Same-document `ds:RetrievalMethod` (§3.5, REQUIRED) is implemented and always on: `parseKeyInfoForEncryption` (`parse.go`) takes an `xenc:EncryptedKey` child and a `ds:RetrievalMethod` child in DOCUMENT ORDER, so a reference-supplied candidate lands at the reference's position in `EncryptedKeys`, wherever that falls among the inline ones (the list is tried in order, so ordering decides which key a multi-candidate document is decrypted under). `parseRetrievalMethod` (`parse.go`) branches on `@Type` FIRST: `typeDerivedKey` (§3.5.2) and any foreign URI are stepped over with no error, no candidate slot, and no URI lookup, and `typeDerivedKey` additionally sets `encryptedData.offersDerivedKey`; `TypeEncryptedKey` must name an `xenc:EncryptedKey` and naming anything else is `ErrMalformedEncrypted`; an absent `@Type` resolves and then uses the target only if it IS an `xenc:EncryptedKey`. `retainEncryptedKey` (`parse.go`) is the SINGLE retention point both branches call — the inline `xenc:EncryptedKey` child and a resolved `ds:RetrievalMethod` target alike — and its three steps run in a fixed order: the visited-set dedup FIRST, then `checkEncryptedKeyCap`, then `parseEncryptedKey`. So an element a document offers BOTH ways, in either order, is one candidate: the peak charge equals the final candidate count exactly, a repeat offer charges nothing and is never trial-decrypted twice, and a reference that retains nothing costs one probe of the id index built once per decrypt. Resolution itself is `reference.go`: `refScope` carries the root, the base URI, and a lazily built id index, and nothing about what has been made of an answer — the visited set of taken candidates sits on `parseState` (`parse.go`), whose `markVisited` `retainEncryptedKey` alone calls; `referenceURIForm` recognizes the four same-document forms XMLDSig core §4.4.3.2-3 defines (`""`, `#id`, `#xpointer(/)`, `#xpointer(id('id'))`) and fails everything else closed; `resolveSameDocument` builds the index once per decrypt through `domutil.BuildIDIndex` (whose ctx-observing walk polls per node and whose FROZEN ID-name rule xmldsig1 shares, so the two cannot disagree about which element carries an id), returning `ErrReferenceNotFound` on zero matches and `ErrAmbiguousReference` on more than one — XML Signature Wrapping applied to encryption. The scope root is the TOPMOST ELEMENT ancestor of the `EncryptedData`, not `OwnerDocument().DocumentElement()`, so a detached `EncryptedData` resolves within its own subtree. A non-same-document URI is `ErrReferenceNotFound` with no setting to lift it, since §3.5 mandates only the same-document form. The `visited` set is DEDUPLICATION for the many ways one element can be offered — the several references §3.5.3 permits, and a reference plus the inline child it names in either order, all yielding one candidate, charged and trial-decrypted once — and is NOT a loop guard: `parseEncryptedKey` reads only `EncryptionMethod`, `CipherData`, and `ds:KeyInfo`→`AgreementMethod` and never looks for a `RetrievalMethod`, so resolution is one step deep BY CONSTRUCTION and §6.5's `A → B → A` cycle is not expressible. All of this runs while the document is READ, so it precedes the `Decryptor.SessionKey` early return: a pre-shared session key does not decrypt past a refused reference, though a skipped foreign `@Type` costs it nothing. `Encryptor` emits no `ds:RetrievalMethod`; §3.5 requires support for reading one, not for writing one
-- `xenc:CipherReference` (§3.3.1, REQUIRED) is implemented. `parseCipherData` (`parse.go`) settles the CipherData choice cardinality in a FIRST walk that reads no member, and only then turns the single member it found into octets — so a document offering two members is refused for offering two whatever they hold, and a schema-invalid document never turns into a dereference. `resolveCipherReference` (`reference.go`) owns the four outcomes: an ABSENT `@URI` is `ErrMalformedEncrypted` (the schema marks it required) while a PRESENT-and-empty one is the valid null URI; a same-document URI with no transform converts the node-set to octets by Canonical XML 1.0 without comments (`canonicalizeCipherReferenceNodeSet`, writing through `newBudgetWriter`, which bounds canonical OUTPUT OCTETS and never the work producing them — c14n's own per-element namespace-visibility scan costs elements times in-scope declarations and can run long while emitting almost nothing — and which also polls the caller's context on every write, the only place a WHOLE-DOCUMENT form (`URI=""` or `#xpointer(/)`) ever observes cancellation, since that form has no node-set collector stage ahead of it; the budget is charged once, with the final total, after the write completes); a same-document URI whose first transform is `#base64` hands the target to `decodeCipherReferenceNodeSet` unchanged; and any other URI is external. The list is a pipeline — the first transform consumes the dereferenced value and every one after it decodes the octets the one before produced (`decodeBase64Octets`, uncharged because base64 only shrinks what was already charged). The whole-document forms naming the document element canonicalize the DOCUMENT (top-level PIs included, per xmldsig-core1 §4.4.3.2); every other form canonicalizes the named element's subtree as the node-set `appendSubtreeNodes` builds (node, in-scope namespace axis, attribute axis, `helium.Children` descent). The result is NEVER re-parsed as a document, so a self-naming reference is inert, terminating at whatever those octets decrypt to, and there is no depth to bound. `parseCipherReferenceTransforms` accepts at most one `xenc:Transforms` (the xenc namespace on the wrapper, `ds:Transform` children), caps the list at `maxCipherReferenceTransforms` (4) as it collects, and validates EVERY declared algorithm before any is executed, accepting only `NamespaceDSig + "base64"` — an unsupported one is `ErrMalformedEncrypted` wrapping an `*UnsupportedAlgorithmError` with `Parameter: paramCipherReferenceTransform`. Refusing XPath and XSLT is conforming: §3.3.1 marks the Transform feature and the particular algorithms OPTIONAL, and either would evaluate a document-chosen expression over an unauthenticated document. An external URI is joined with `helium.ResolveURI` (`joinReferenceURI`) against the base in force AT THE `CipherReference` ELEMENT — `helium.NodeGetBase(elem.OwnerDocument(), elem)`, so `xml:base` between the EncryptedData and the reference counts and a file-parsed document contributes its own URL — and dereferenced through `Decryptor.CipherReferenceResolver`; with none configured it is `ErrReferenceNotFound`, the DEFAULT, because §3.3.1 imports xmldsig-core1's model where §4.4.3.1 makes HTTP dereferencing RECOMMENDED while §4.4.3.2/§4.4.3.3 make the same-document forms MUSTs. Resolution returns a NON-NIL slice even for zero octets, because `parseEncryptedData` reads a nil `CipherValue` as "no CipherData at all". All of it runs while the document is READ, so it precedes block-algorithm resolution, the AES-CBC opt-in gate, and the `SessionKey` early return. `serialize.go` emits only a `CipherValue`; §3.3.1 requires support for reading a `CipherReference`, not for writing one. `parseKeyInfoForEncryption` drops the remaining `ds:KeyInfo` children with no error: `ds:KeyName` (§3.5, RECOMMENDED), `xenc11:DerivedKey` (§3.5.2), which it records on `encryptedData.offersDerivedKey`, and an `xenc:AgreementMethod` in the `EncryptedData`-level `ds:KeyInfo` position §5.6 defines for it — §3.5 marks that OPTIONAL, the same grade as `ds:KeyValue`, so an `EncryptedData` offering its session key only that way carries no candidate and fails with `ErrMissingKey`. The `EncryptedKey`-level position IS read, by `parseAgreementMethodForKeyInfo`, which is how this package performs ECDH-ES key agreement
-<!-- Refutation of a review finding that this bullet still lists only completion, over-budget and cancellation as the close paths, omitting the stream-plus-error case. Checked against this file's bytes at this commit: the bullet below reads "the stream is CLOSED on completion, over-budget, and cancellation alike, and equally when `ResolveReference` itself returns a stream alongside an error", the same clause the ReferenceResolver summary bullet earlier in this section and the `ReferenceResolver` godoc in `xmlenc1/reference_resolver.go` carry, so no stale three-path statement exists here. `grep -n '^- .*alongside an error' .claude/docs/packages.md` prints exactly those two xmlenc1 bullets and nothing else; the `^- ` anchor confines the match to bullet lines, so this comment's own quotation of the clause is not among the results and the count cannot be changed by the comment stating it. The remaining ReferenceResolver close text earlier in this file belongs to `xmldsig1`, whose resolver returns `[]byte` and has no stream to close. -->
-- `ReferenceResolver` + `FSReferenceResolver` (`reference_resolver.go`) inherit `xmldsig1`'s rejection rules and are consulted ONLY for an external CipherReference URI: a URI carrying an RFC 3986 scheme (`uriHasScheme`, Windows drive letter included), a leftover fragment, or a path escaping the root after `path.Clean` + `fs.ValidPath` (`fsNameFromURI`) is refused, every refusal wrapping `ErrReferenceNotFound`. NO HTTP resolver ships — network dereferencing is SSRF and availability risk the caller must own. `FSReferenceResolver(fsys, root)` takes a declared document-space root: `relativizeToRoot` strips it (matched at a segment boundary, with a trailing slash) so an IN-root absolute URI resolves as the remainder below it, while a URI outside the root passes through unchanged and then meets the same containment checks an empty root applies — declaring a root only ever widens, and only within the named space. There is no new size constant: `readBoundedReference` reads `remaining()+1` bytes off the decrypt's own budget (`MaxCipherValueBytes` for a payload reference, `MaxEncryptedKeyBytes` for a key one), so an over-budget resource is never buffered in full and the budget's own sentinel refuses it. The read runs on a goroutine selected against `ctx.Done()` (a blocked `Read` cannot be polled out of) with a per-Read ctx poll, and the stream is CLOSED on completion, over-budget, and cancellation alike, and equally when `ResolveReference` itself returns a stream alongside an error — closing is what releases a blocked read. That makes the bound and the cancellation properties of the INTERFACE, so they hold for any resolver a caller writes; what the package cannot constrain is a resolver buffering internally or blocking inside `ResolveReference`. A resolver returning a nil stream with a nil error is refused as `ErrReferenceNotFound`. `xmlenc1.ReferenceResolver` returns `io.ReadCloser` while `xmldsig1.ReferenceResolver` returns `[]byte`, so one value does NOT satisfy both, and NEITHER package imports the other
-- xmlenc-core1 is implemented except where the package deliberately departs from it, and each departure is named with its reason. Triple DES (`#tripledes-cbc`, §5.2.2 REQUIRED; `#kw-tripledes`, §5.7.1 REQUIRED) is REFUSED, not pending — a 64-bit block cipher is subject to Sweet32 (CVE-2016-2183) and NIST SP 800-131A Rev. 2 disallows TDEA encryption after 2023; the specification marks it REQUIRED because it predates that retirement, and this package follows the retirement, so neither URI will be implemented: block encryption and key wrapping are AES-only, and either URI fails with an error matching the relevant operation sentinel while preserving a typed `*UnsupportedAlgorithmError`, with the two exceptions the README's conformance scope states: `#tripledes-cbc` on an `EncryptedData` carrying no `<EncryptedKey>` and no `SessionKey` reports `ErrMissingKey` from the earlier `len(keys) == 0` check, and `#kw-tripledes` is never reached under a non-empty `SessionKey`, which decrypts past it. `AES192CBC` is likewise absent but §5.2.3 marks it OPTIONAL, so it is not a conformance gap
-- The committed `xmlenc1/summary-xmlenc11.md` snapshot (10 pass / 0 skip / 0 fail, generator output — never hand-edit it) exercises key protection only: six ECDH-ES ConcatKDF vectors on EC-P256/P384/P521 and four rsa-oaep vectors on RSA-2048/3072/4096, all of them AES-GCM. It is evidence for no CBC block algorithm, for the refused Triple DES algorithms, for no `ds:RetrievalMethod`, for no `xenc:CipherReference`, and it is not the merlin corpus. The 1.1 interop corpus holds no Triple DES vector, so the ten are the suite in full and nothing is skipped. `xmlenc1/README.md`'s "Conformance scope" section is the user-facing statement of all of this
-- NO third-party interop vector covers `xenc:CipherReference` at any level of transform support: the only one in the Santuario corpus needs BOTH an XPath transform and `aes192-cbc`, neither of which this package implements. Do not add a skip entry implying a vector is being passed over — there is no runnable vector to run
-- `xmlenc1/testdata/interop/` holds the one third-party `ds:RetrievalMethod` vector, `encrypt-element-aes256-cbc-retrieved-kw-aes256.xml` from the Baltimore/Merlin examples in the Apache Santuario corpus, run by `TestInteropRetrievalMethod` (`interop_test.go`) under the published key-encryption key `abcdefghijklmnopqrstuvwxyz012345` (the corpus name "jed"). It is asserted as far as this package decrypts it: the reference resolves and the session key unwraps, pinned by the error being `ErrDecryptionFailed` with neither `ErrMissingKey`/`ErrReferenceNotFound` nor `ErrKeyUnwrapFailed` in the chain. The block decryption then fails on the padding, which is a property of the vector and NOT of the reference — xmlenc-core1 §5.2.1 pads with N-1 ARBITRARY octets plus a final octet N, while `pkcs7UnpadConstantTime` (`block.go`) requires every padding octet to equal N — so this vector cannot yield plaintext until the CBC path accepts §5.2.1 padding
-- The xmlenc-core1 wire structs (`types.go`) are UNEXPORTED — `encryptedData`, `encryptedKey`, `encryptionMethod`, `agreementMethod`, `keyDerivationMethod`, `ecKeyValue`. No exported function, method, or variable takes or returns one, so they are not API and no field of any of them is a compatibility promise. `ConcatKDFParams` is the one wire-adjacent struct that stays exported, because `Encryptor.KeyDerivationParams` takes it. `export_test.go` declares one exported alias per struct (`EncryptedData = encryptedData` and so on), compiled only under test, so the external `xmlenc1_test` package can still assemble and inspect a wire shape directly. The fields those tests read stay exported on the unexported struct; the two nothing outside the package reads, `encryptedKey.recipient` and `ecKeyValue.curve`, are unexported as well
-- Files: `xmlenc1.go` (API), `context.go` (cancellation helpers), `constants.go`, `block.go`, `keytransport.go`, `keywrap.go`, `key_agreement.go`, `reference.go` (same-document `ds:RetrievalMethod` and `xenc:CipherReference` resolution), `reference_resolver.go` (`ReferenceResolver`, `FSReferenceResolver`, URI joining), `types.go`, `serialize.go`, `parse.go`, `errors.go`
+- A **non-empty** `Decryptor.SessionKey` is an EARLY RETURN, not a key preference:
+  `decryptElement`/`decryptBytes` use it and return before candidate selection, per-candidate validation, and
+  per-candidate key resolution in `resolveSessionKeyFromEncryptedKey`. The `MaxEncryptedKeys` cap sits ahead
+  of that return and still applies. Both builders gate on `len(sessionKey) > 0`, so an empty or nil slice
+  counts as not set on either side
+- An `EncryptedData` with **no `EncryptionMethod`** decrypts only when the caller states the block algorithm
+  out of band with `Decryptor.BlockAlgorithm(uri)` — W3C xmlenc-core1 §3.1/§3.2 leave the element optional and
+  require the recipient to know the algorithm already, and §4.4 step 1 admits obtaining it out of band.
+  `resolveDecryptBlockAlgorithm` (`xmlenc1.go`) is the single resolution and both `decryptElement` and
+  `decryptBytes` call it ahead of everything that reads the algorithm. The match is STRICT, so the setter can
+  only narrow what a decrypt accepts: absent + unset → `ErrMalformedEncrypted` naming the setter; absent + set
+  → the caller's URI; present + unset → the document's URI; present + set + different →
+  `ErrConflictingBlockAlgorithm` naming both. A document never overrides a caller who stated the algorithm,
+  which would be algorithm confusion. A present `EncryptionMethod` always carries a non-empty `Algorithm` —
+  `parseEncryptionMethod` (`parse.go`) refuses an empty one as `ErrMalformedEncrypted` at the parse gate,
+  ahead of any resolution — so the caller's URI is only ever matched against a real declaration. The resolved
+  URI is the one bound everywhere downstream: the CBC opt-in gate, the AEAD additional data of the two
+  2001-namespace GCM identifiers, `validateKeySize` on the session key, and the AES key-wrap ciphertext length
+- `EncryptedKey.Recipient` is **parse-only** — populated when reading, never serialized when encrypting.
+  `EncryptedKey.CarriedKeyName` is declared as part of the parsed shape and filled by nothing:
+  `parseEncryptedKey` steps over the `xenc:CarriedKeyName` element, and encrypting never writes one. No
+  decrypt path consults the name and no exported function or method takes or returns an `EncryptedKey`, so no
+  caller can observe it; reading it would cost an unbounded copy of attacker-supplied metadata, since the name
+  is joined from every child at every depth that join reaches and charged against neither
+  `MaxEncryptedKeyBytes` nor `MaxCipherValueBytes`, so a document may spread one over as many CDATA sections
+  as it likes and defeat the XML parser's per-node content cap. `TestCarriedKeyNameIsNotRead`
+  (`parse_test.go`) pins both halves: a document carrying one still parses (the element is skipped, the
+  `EncryptedKey` around it is still a candidate, the field stays zero) and still decrypts, and a 4 MiB name
+  costs a SUCCESSFUL `SessionKey` decrypt no more than the same document without one — measured as a
+  `TotalAlloc` delta across the decrypt of an already-parsed document
+- Parse enforces at-most-one cardinality on every xenc/dsig11 schema singleton it reads — `EncryptionMethod`
+  and `CipherData` per `EncryptedData`/`EncryptedKey`, `ds:KeyInfo` per `EncryptedType`, and
+  `NamedCurve`/`PublicKey` per `dsig11:ECKeyValue` — rejecting a second occurrence with
+  `ErrMalformedEncrypted` (`parse.go`), so a duplicate can never silently overwrite the first
+- `Decryptor.MaxEncryptedKeys(n)` caps trial-decrypted `<EncryptedKey>` candidates (DoS guard): zero →
+  `DefaultMaxEncryptedKeys` (100), negative → unlimited; over-cap fails with `ErrTooManyEncryptedKeys` before
+  the excess candidate is appended to the retained list or any candidate crypto runs.
+  `parseKeyInfoForEncryption` enforces the effective limit while parsing, before the excess candidate's
+  structure is validated or its ciphertext is charged to the `MaxEncryptedKeyBytes` budget;
+  `checkEncryptedKeyCap` is the shared error/count implementation. Both `decryptElement` and `decryptBytes`
+  pass the cap into parsing before consulting configured keys, so it holds in every key configuration.
+  Per-candidate branch dispatch — which of the three decrypt keys a candidate uses and what it costs — is
+  implemented in `resolveSessionKeyFromEncryptedKey` (ECDH-ES in `decryptECDHSessionKey`) and stated by the
+  `Decryptor.MaxEncryptedKeys` godoc. The candidate loop's own `ctx` observation is stated by the cancellation
+  bullet above
+- `Decryptor.MaxEncryptedKeyBytes(n)` caps the TOTAL decoded `<EncryptedKey>` ciphertext of one EncryptedData
+  (memory-amplification guard): zero → `DefaultMaxEncryptedKeyBytes` (64 KiB), negative → unlimited;
+  over-budget fails with `ErrEncryptedKeyBytesExceeded`. It is a separate sentinel from
+  `ErrTooManyEncryptedKeys` because the two bound different things (a count vs a size) and different setters
+  raise them. The budget is threaded into the parse path — `newEncryptedKeyBudget(cfg)` in
+  `decryptElement`/`decryptBytes` → `parseEncryptedData` → `parseKeyInfoForEncryption` → `parseEncryptedKey` →
+  `parseCipherData` — and `decodeCipherValue` (`parse.go`) charges `encryptedKeyBudget.charge` (`xmlenc1.go`)
+  BEFORE anything is built from the value, so an over-budget CipherValue is rejected without being assembled
+  or decoded (the base64 text itself is already in the caller's DOM). It walks the CipherValue's children
+  twice: an `xmlbase64.Counter` counts them, and only after the charge is accepted does a second walk build
+  the whitespace-stripped characters through `xmlbase64.AppendStripped` and decode them with
+  `base64.StdEncoding.Decode` into a buffer sized at the counted `DecodedLen()` — the charged count itself,
+  and not `encoding/base64`'s own padding-blind `DecodedLen`. The stripped characters are handed to the
+  decoder as bytes, so nothing copies them into a string. The lexical text is never joined into one string —
+  xs:base64Binary allows XML whitespace between characters and the value may be spread over any number of text
+  and CDATA children, so the lexical length is attacker-chosen and unrelated to the charge; what is held is
+  bounded by the budget (stripped characters ≤ 4/3 of it, decoded bytes exactly the charged count) and the
+  peak is the largest single child. `Counter` (`internal/xmlbase64`) owns the count and fails closed: exact
+  for base64 the decoder accepts, and never below what a rejected decode allocates — it deducts padding only
+  from a value whose whole lexical shape is otherwise decodable, so neither malformed padding nor a body
+  outside the base64 alphabet can walk a value past the budget. It carries the character count, the padding
+  count, and the decodable-shape flag ACROSS children, so the count is that of the concatenation — counting
+  each child alone and summing would report 0 for every sub-quantum child and bypass the budget entirely.
+  `parseCipherData` receives `payloadCipherValueBudget` for the EncryptedData's own CipherValue, while
+  EncryptedKey ciphertext uses `encryptedKeyBudget`. The budget is charged while parsing for retained
+  candidates only; the candidate cap rejects an excess candidate before the budget, and both checks hold ahead
+  of the `SessionKey` early return
+- `xenc:OAEPparams` is bounded by `maxOAEPParamsBytes` (1024, `parse.go`), which owns the rationale;
+  over-limit fails with an error wrapping `ErrMalformedEncrypted`. `decodeBoundedBase64(ctx, elem, valueName,
+  maxBytes, invalidPhrase)` (`parse.go`) is the single implementation for every xs:base64Binary value this
+  package holds to a FIXED ceiling — the OAEPparams label and an ECDH-ES `dsig11:PublicKey` — and runs from
+  `parseEncryptionMethod`, so it covers BOTH OAEPparams call sites — the `EncryptedData`'s own
+  `EncryptionMethod` (whose decoded label nothing ever reads) and each `EncryptedKey`'s — and both are reached
+  while the document is read, ahead of key resolution and the `SessionKey` early return; an EncryptedKey
+  beyond the candidate cap is not retained. The walk is leaf-only and single-pass. `base64CharacterData`
+  (`parse.go`) classifies each child through `helium.AsNode`: `*helium.Text`/`*helium.CDATASection` contribute
+  their content; a `*helium.EntityRef` contributes ONE hop — its `FirstChild()` asserted to `*helium.Entity`,
+  whose `Content()` is a leaf accessor returning the declared replacement literal without recursing (a
+  CHILDLESS `EntityRef` contributes NO characters and no error: per XML 1.0 "Entity Declared" an undeclared
+  general entity is only fatal under `standalone="yes"` or with neither an external subset nor a
+  parameter-entity reference, so a non-validating parse of a document with either one keeps the reference as
+  an `EntityRef` with no `Entity` under it — a normal parser output, and one `c14n` also treats as empty since
+  it canonicalizes an `EntityRef` by walking its children; an `EntityRef` whose first child is NON-NIL and not
+  an `*Entity` is reachable only in a caller-built tree and is refused; and the `Entity`'s `NextSibling()` is
+  never followed because it is the next DTD declaration, not part of the value), so an entity whose
+  replacement is itself a reference or markup contributes that literal text and the `Counter` marks the value
+  undecodable; `*helium.Comment`/`*helium.ProcessingInstruction` are skipped (reading a comment would splice
+  its text into the base64); and ANY other child kind is refused with `ErrMalformedEncrypted` — an element
+  answers `Content()` by aggregating its whole subtree, so reading one would spend that subtree's text before
+  a limit measured in decoded octets could look at it, and a subtree of whitespace decodes to nothing so the
+  limit would never fire. `decodeBoundedBase64` reads each child exactly once, folding it into an
+  `xmlbase64.Counter` and appending the whitespace-stripped characters through `xmlbase64.AppendStripped`, and
+  stops as soon as the kept characters pass its local char ceiling `(maxBytes+2)/3*4` (the most any acceptable
+  value can hold, and what sizes the character buffer — stopping there is always early, never a different
+  verdict, and the exact `Counter.DecodedLen` test still runs after the walk). The decode is
+  `base64.StdEncoding.Decode` into a buffer sized at that counted `DecodedLen()`, so the stripped characters
+  are never copied into a string and the buffer is exact for a value the decoder accepts, sized by that count
+  instead of `encoding/base64`'s padding-blind estimate. So the lexical text is never joined into one string
+  and what the parse RETAINS is sized by the limit alone. `valueName` names the value in the size and
+  child-kind refusals and `invalidPhrase` in the decoder's, so each caller's wording stays its own
+  (`TestBoundedBase64ErrorsNameTheirOwnValue`, `parse_test.go`, pins that for both callers across all three
+  refusals). What is NOT bounded is the copy `Content()` hands out per child: a DOM offers no read-only view
+  of a node's bytes, so weighing a value costs one copy of its lexical text. That copy is the floor and the
+  walk pays it exactly once — total allocation is one times the lexical length plus fixed overhead, which
+  `TestOAEPParamsAllocation` (`parse_test.go`) pins. The limit is a fixed internal constant with no public
+  knob and is deliberately NOT the `MaxEncryptedKeyBytes` budget: an `EncryptedData`-side label is not
+  `EncryptedKey` ciphertext, and charging it would change what that setter documents itself as covering.
+  Neither existing knob substitutes — the candidate count is checked before each append, and the XML parser's
+  `MaxNodeContentSize` bounds one indivisible content run, which CDATA-splitting defeats. The limit is a
+  POLICY ceiling, not a conformance boundary — xenc-schema types `OAEPparams` as `xs:base64Binary` with no
+  length facet and RFC 8017 bounds the label only at its hash's input limit, so a larger label is conforming
+  and rejected anyway — and it is symmetric: `resolveEncryptConfig` (`xmlenc1.go`) charges
+  `Encryptor.OAEPParams` against the same `maxOAEPParamsBytes` and fails with an error wrapping
+  `ErrEncryptionFailed`, gated on `hasKeyTransport` because key transport is the only mechanism that writes a
+  label, so a label over the limit is neither written nor parsed back and no self-produced ciphertext is
+  un-decryptable. `TestEncryptorOAEPParamsBound` (`keytransport_test.go`) pins the encrypt-side boundary
+  against `MaxOAEPParamsBytesForTest`
+- `Decryptor.MaxCipherValueBytes(n)` caps the decoded ciphertext in the EncryptedData payload's `CipherValue`,
+  independently from the cumulative `EncryptedKey` ciphertext budget: zero selects
+  `DefaultMaxCipherValueBytes` (10 MiB), and a negative value removes the cap. `parseEncryptedData` sends the
+  payload through its own budget before it is assembled or decoded, so split text/CDATA nodes cannot bypass
+  it. An over-budget payload fails with `ErrCipherValueBytesExceeded` before block decryption, candidate
+  selection, or a `SessionKey` return.
+- AES key unwrap is length-bound: `aesKeyUnwrap(kek, ciphertext, keySize)` requires `len(ciphertext) ==
+  keySize+8` exactly (RFC 3394 §2.2.2), rejecting with `ErrKeyUnwrapFailed` before the six unwrap rounds.
+  `keySize` is the session-key length of the declared block algorithm, resolved once per decrypt via
+  `keySizeForAlgorithm(paramBlockAlgorithm, alg)` ahead of the candidate loop and threaded through
+  `resolveSessionKeyFromEncryptedKey` into both the plain key-wrap and the ECDH-ES (`decryptECDHSessionKey`)
+  branches. The post-recovery `validateKeySize` in `blockDecrypt` still binds a key that arrived by RSA key
+  transport, whose length is not visible until the private-key decrypt
+- Block encryption: AES-128/256-CBC, XML Encryption 1.1 AES-128/192/256-GCM
+  (`AES128GCM11`/`AES192GCM11`/`AES256GCM11`), and AES-128/256-GCM in the 2001 xmlenc namespace
+  (`AES128GCM`/`AES256GCM`). The 1.1 GCM form uses the standard IV || ciphertext || authentication-tag
+  encoding without additional authenticated data, which is the only AES-GCM xmlenc-core1 §5.2 defines. The two
+  2001-namespace GCM identifiers are defined by NO XML Security specification, and
+  `blockEncrypt`/`blockDecrypt` bind the `EncryptionMethod/@Algorithm` URI into the AEAD additional
+  authenticated data for those two alone — a package-specific measure against an algorithm substitution on the
+  wire, which no specification requires, and a second reason a document carrying one decrypts here and nowhere
+  else. Both stay exported and reachable through `Encryptor.BlockAlgorithm`, and `Decryptor` accepts them with
+  that AAD binding, so every document this package has emitted still decrypts
+- Secure by default: unset `BlockAlgorithm` → `DefaultBlockAlgorithm`, which is `AES256GCM11` — authenticated
+  AES-256-GCM under the standard XML Encryption 1.1 identifier, so what a caller who configures nothing emits
+  is what a conforming peer recognizes. Selecting a CBC block algorithm for **encryption** requires
+  `Encryptor.AllowLegacyCBC(true)`, else `ErrCBCEncryptionRequiresOptIn`. **Decryption** of CBC requires
+  `Decryptor.AllowUnauthenticatedCBC(true)`, else `ErrCBCRequiresOptIn`
+- CBC unpadding follows xmlenc-core1 §5.2.1 by default: the final octet names the padding length N,
+  `unpadConstantTime` (`block.go`) checks only that N names between one octet and one whole block, and the N-1
+  octets ahead of it are ARBITRARY and unread. PKCS#7 (every padding octet equals N) is a strict subset,
+  selected by `Decryptor.StrictPKCS7Padding(true)` and carried down the decrypt path as the `cbcPadding`
+  policy type (`cbcPaddingXMLEnc` is the zero value, `cbcPaddingPKCS7` the opt-in) through
+  `decryptCipherValue`/`finishDecrypt` → `blockDecrypt` → `decryptCBC`. The strict rule refuses conforming
+  third-party ciphertext, so it suits only a caller controlling both ends; `pkcs7Pad` writes all-N padding,
+  valid under both, so a document this package produced decrypts either way. A refused padding reports the
+  same `ErrDecryptionFailed` as every other CBC failure. `TestInteropRetrievalMethod` (`interop_test.go`)
+  decrypts the merlin `aes256-cbc` vector end to end as the third-party evidence, and pins its refusal under
+  the opt-in
+- Three mechanisms protect the session key — RSA key transport (`KeyTransportAlgorithm` +
+  `RecipientPublicKey`), ECDH-ES key agreement (`KeyWrapAlgorithm` + `RecipientECPublicKey`), AES key wrap
+  (`KeyWrapAlgorithm` + `KeyEncryptionKey`) — and `conflictingKeyProtection` (`xmlenc1.go`) rejects any pair
+  of them with `ErrConflictingKeyConfig`, since `encryptPlaintext` emits one `<EncryptedKey>` and would
+  silently discard the loser of its transport → agreement → wrap dispatch. The two transport pairs name both
+  algorithm URIs; the agreement-vs-wrap pair names the two setters instead, because both mechanisms share the
+  same `KeyWrapAlgorithm` URI. A `SessionKey` alongside a single mechanism is fine — it supplies the key that
+  mechanism protects
+- `resolveEncryptConfig` decides the payload-independent parts of an `Encryptor`'s configuration — the
+  effective block algorithm and its supported-URI check, the CBC opt-in, presence of a key source, the
+  key-protection conflicts, the RSA-OAEP URI/digest/MGF checks, the RSA-OAEP label size, the key-wrap URI
+  (`validateKeyWrapAlgorithm`, charged to whichever of key agreement and key wrap is in use), the ECDH-ES
+  ConcatKDF parameters (`validateEncryptConcatKDFParams` (`key_agreement.go`): the OtherInfo budget then the
+  digest URI, over the set `effectiveKDFParams` returns, so an empty `DigestMethod` is weighed as the SHA-256
+  default with no OtherInfo and the caller's discarded fields are never measured), and the ECDH-ES recipient
+  key — and every entry point calls it before any payload work, so a plaintext that fails to serialize never
+  masks those checks, and none of them costs anything proportional to the payload
+  (`TestEncryptConfigRejectionAllocatesNoPayload`, `xmlenc1_test.go`). Session-key length is bound later,
+  inside `encryptPlaintext`
+- Key transport: RSA-OAEP (1.0 + 1.1 with configurable SHA-1/224/256/384/512 digest and MGF; SHA-224 uses the
+  XMLDSig-more digest URI and the XML Encryption 1.1 `mgf1sha224` URI; the OAEP label digest and the MGF1 hash
+  may differ, via `rsa.EncryptOAEPWithOptions`/`OAEPOptions` — requires Go ≥ 1.26)
+- Key wrapping: AES-128/192/256-KeyWrap (RFC 3394). `validateKeyWrapAlgorithm` (`keywrap.go`) is the
+  encrypt-side gate for `Encryptor.KeyWrapAlgorithm` and holds BOTH mechanisms that read it — key agreement,
+  which derives the KEK, and key wrap, which is handed one — to those three URIs, since either declares that
+  URI on the `EncryptedKey` it emits while protecting the session key with `aesKeyWrap`. Anything else, a
+  block-cipher URI above all, would declare an algorithm that did not produce the `CipherValue` — an RFC 3394
+  wrap under an AES-GCM identifier, which nothing reads back, this package included — and the KEK-length
+  binding cannot stand in for the check, because `keySizeForAlgorithm` answers a length for the block-cipher
+  URIs too. `resolveEncryptConfig` applies it ahead of any payload work and `encryptECDHSessionKey` applies it
+  again on its own way in
+- Key agreement: XML Encryption 1.1 ECDH-ES on P-256, P-384, and P-521 with ConcatKDF using
+  SHA-1/224/256/384/512, in **both** directions — `Decryptor.ECPrivateKey` decrypts,
+  `Encryptor.RecipientECPublicKey` + `KeyWrapAlgorithm` encrypt (the KEK is derived, so `KeyEncryptionKey`
+  belongs to the AES key wrap mechanism). SHA-224 uses the XMLDSig-more digest URI. Each encryption generates
+  a fresh ephemeral key pair; `Encryptor.KeyDerivationParams` sets the ConcatKDF parameters
+  (`effectiveKDFParams`) and its godoc owns the empty-`DigestMethod` fallback. `resolveEncryptConfig`
+  (`xmlenc1.go`) decides the key protection before any entry point serializes plaintext, generates a session
+  key, or block encrypts, so an unusable recipient key costs nothing proportional to the payload;
+  `ecdhRecipientKey` is its single gate for the recipient key and rejects a key with unset coordinates (which
+  `crypto/ecdsa` would otherwise dereference), a curve with no `crypto/ecdh` form, and a curve with no
+  `dsig11:NamedCurve` URI. An EC public key without a `KeyWrapAlgorithm` does not select key agreement, so its
+  curve is never resolved. `serialize.go` emits the `xenc:AgreementMethod` subtree
+  (`KeyDerivationMethod`/`ConcatKDFParams`/`OriginatorKeyInfo` → `ds:KeyValue` → `dsig11:ECKeyValue`);
+  ConcatKDF OtherInfo attributes are hexBinary bit strings whose first octet is the unused-bit count
+- The five ConcatKDF OtherInfo fields are capped **cumulatively** at `maxConcatKDFOtherInfoBytes` (4096,
+  `key_agreement.go`), which owns the rationale; over-budget parameters fail with an error wrapping
+  `ErrMalformedEncrypted`. `checkConcatKDFOtherInfoBudget` is the single implementation and runs at four
+  points, each ahead of any work sized by the fields: `parseConcatKDFParams` applies it to wire data at the
+  first point that holds all five fields, so an oversized document never reaches ECDH or key unwrap;
+  `resolveEncryptConfig` applies it through `validateEncryptConcatKDFParams` to an `Encryptor`'s effective
+  set, so an oversized set is refused before the plaintext is serialized or block encrypted and the error
+  carries `ErrEncryptionFailed` alongside the shared `ErrMalformedEncrypted`; `deriveConcatKDF` applies it
+  before resolving the digest, so a set that is both over budget and names an unsupported digest still fails
+  on the size; and `concatKDFOtherInfo` applies it immediately before packing, which is what makes the limit
+  hold for a caller-built DOM or a caller-built `ConcatKDFParams` that this package never parsed. The one
+  parameter set never measured is an `Encryptor`'s with an empty `DigestMethod`: `effectiveKDFParams` replaces
+  it wholesale with the SHA-256 default carrying empty OtherInfo, so the caller's fields are discarded before
+  any derivation instead of checked, and the encryption succeeds with no OtherInfo on the wire
+  (`ConcatKDFParams`' godoc states this carve-out). The check measures each field against the budget REMAINING
+  instead of summing the five, because the fields may all alias one slice and their sum can wrap `int` on a
+  32-bit build; the packing's own `len(value)*8`/`totalBits` arithmetic is wrap-free only because the check
+  runs ahead of it. `parseConcatKDFHexAttribute` additionally rules an attribute out from its hex length
+  alone, before `hex.DecodeString` allocates for it, since one field can never exceed the whole set's budget.
+  Nothing else in the package bounds these fields — the XML parser's `MaxNodeContentSize` is a
+  caller-adjustable attribute-value cap, not a ConcatKDF limit
+- `concatKDFOtherInfo` packs the five bit strings into the single bit string ConcatKDF hashes. A field landing
+  on an octet boundary is moved with `copy()` plus at most one masked trailing octet; a field straddling a
+  boundary (only reachable when some earlier field's bit length is not a multiple of eight) falls back to
+  moving one bit at a time, bounded by the OtherInfo budget. Both paths produce identical bytes —
+  `TestConcatKDFOtherInfoMatchesPerBitPacking` pins the production packing against a verbatim per-bit
+  reference over fixed and randomized shapes, because a divergence here silently changes the derived KEK and
+  breaks interoperability
+- Key sizes are bound to the declared algorithm URI on encrypt and decrypt (incl. after unwrap/key transport);
+  mismatch → `KeySizeError`. On encrypt this binds the key actually used: a **non-empty**
+  `Encryptor.SessionKey` of the wrong length is rejected, while an empty or nil one is replaced by a freshly
+  generated key of the right length and never reaches the check (with no key-protection mechanism configured
+  at all, that case is `ErrMissingConfig`). `KeySizeError`'s `Key` field names the offending key ("session
+  key"/"key-encryption key"). `UnsupportedAlgorithmError.Parameter` likewise names the slot that rejected the
+  URI ("block algorithm", "MGF algorithm", ...); both are diagnostic text — match on the type and `Algorithm`
+- `ErrUnsupportedKeyDerivation` (`errors.go`) is raised by `noCandidateError` (`xmlenc1.go`, the single
+  wording site both decrypt terminals share) when key resolution found NO candidate and
+  `encryptedData.offersDerivedKey` is set — i.e. the `ds:KeyInfo` offered the session key only through an
+  `xenc11:DerivedKey`, inline or named by a `ds:RetrievalMethod` `Type` of `#DerivedKey`. It is deliberately
+  not `ErrMissingKey`: no key the caller supplies can decrypt such a document, so the error must name the
+  missing facility instead of sending the caller to audit its key configuration. A document that ALSO carries
+  a usable `xenc:EncryptedKey` decrypts under it (the flag is consulted only on an empty candidate list), and
+  a pre-shared `Decryptor.SessionKey` never reaches it at all
+- `UnsupportedAlgorithmError` and `KeySizeError` each carry a leading blank `_ struct{}` field, so an unkeyed
+  composite literal cannot compile from another package (`implicit assignment to unexported field _`). That is
+  what lets either field set GROW without breaking a caller: nobody can have written the positional form a new
+  field would invalidate. Keyed literals, field reads, and `errors.As` recovery are unaffected;
+  `api_freeze_test.go` pins the guard structurally, so it holds however the field is spelled
+- All three encrypt terminals report a nil operand identically: `ErrEncryptionFailed` wrapped FIRST, then
+  `helium.ErrNilNode` (both with `%w`), so a caller matching the operation sentinel catches it whichever entry
+  point it called and one matching `ErrNilNode` still learns which operand was nil. `EncryptBytes` names the
+  missing document in its message; `encrypt` (shared by `EncryptElement`/`EncryptContent`) names the missing
+  element
+- Error chains: `ErrMissingKey` names the key kind the candidate needs, the algorithm URI the document
+  declared for it (the `EncryptionMethod` URI for RSA key transport and AES key wrap, the `AgreementMethod`
+  URI for ECDH-ES key agreement), and the `Decryptor` setter that supplies the key; `ErrTooManyEncryptedKeys`
+  carries the candidate count and effective limit; a failed AES key unwrap wraps `ErrKeyUnwrapFailed` in
+  `ErrDecryptionFailed`, matching the RSA key-transport path. There is no padding sentinel: CBC collapses
+  nearly every failure to `ErrDecryptionFailed`, message included, so no padding oracle exists; the one
+  exception is a wrong-length pre-shared `Decryptor.SessionKey`, whose length the caller configures and an
+  attacker cannot influence, so a mismatch is reported as a bare `KeySizeError` instead
+- Multi-recipient: `EncryptedData.EncryptedKeys []*EncryptedKey` holds one EncryptedKey per recipient; absent
+  a session key, decrypt tries each candidate through full block decryption + plaintext validation (a bogus
+  prepended key cannot mask the real one). `EncryptedData.EncryptedKey` is the **deprecated** single-key field
+  — `EncryptedKeys` wins when non-empty, else the single field is treated as a one-element list; parse
+  populates both
+- An ECDH-ES originator key's `dsig11:PublicKey` is bounded by `maxECPublicKeyBytes` (133, `parse.go`), which
+  owns the rationale; over-limit fails with an error wrapping `ErrMalformedEncrypted`. `decodeBoundedBase64`
+  (`parse.go`, the same bounded walk the OAEPparams label goes through) reads it, called from
+  `parseECKeyValue` with value name `ECKeyValue PublicKey` and decode-error phrase `invalid ECKeyValue
+  base64`, so it is reached while the document is read — ahead of the key resolution and the `SessionKey`
+  early return; an `EncryptedKey` beyond the candidate cap is never parsed, so its `dsig11:PublicKey` is never
+  read. Unlike the OAEPparams and ConcatKDF ceilings the value is NOT a policy choice: `dsig11:PublicKey`
+  carries a SEC1 uncompressed point, 65 octets on P-256, 97 on P-384 and 133 on P-521, and `crypto/ecdh`
+  refuses the compressed form and every over-length input on all three, so an over-133-octet value is rejected
+  by `curve.NewPublicKey` whatever it holds and the limit only moves that verdict ahead of materializing it.
+  It is the maximum across ALL THREE curves, and the selected curve's own size cannot serve, because
+  `dsig11:ECKeyValue` puts no order on its children: `dsig11:NamedCurve` may follow `dsig11:PublicKey`, and a
+  document with no `NamedCurve` at all still has its `PublicKey` read before the missing-curve error, so at
+  the moment the value is weighed there may be no curve to weigh it by. The walk is leaf-only and single-pass
+  through `eachSibling` over EVERY child kind, classifying children with `base64CharacterData`, folding each
+  into an `xmlbase64.Counter`, appending through `xmlbase64.AppendStripped`, stopping as soon as the kept
+  characters pass the char ceiling `(maxECPublicKeyBytes+2)/3*4` = 180 and applying the exact
+  `Counter.DecodedLen` test afterwards. `internal/xmlbase64.DecodeElement` is deliberately NOT used: it takes
+  no `context.Context` and would drop the per-child cancellation poll. So the lexical text is never joined
+  into one string and what the parse retains is sized by the limit alone; the one cost still following the
+  document is the per-child `Content()` copy, paid exactly once, which `TestECPublicKeyAllocation`
+  (`parse_test.go`) pins at 1x for both a refused and an accepted value. `TestECPublicKeyBound` covers the
+  three curves (including the 133-byte P-521 boundary), both child orders, whitespace-wrapped and CDATA-split
+  values, and the two child-kind rules
+- `CipherValue`, `OAEPparams`, and an ECDH-ES `dsig11:PublicKey` use `base64CharacterData` (`parse.go`): text,
+  CDATA, and one-hop entity-reference data contribute to the base64 value; comments and processing
+  instructions are ignored; every other child, including an element, is rejected before its subtree can be
+  read.
+- Same-document `ds:RetrievalMethod` (§3.5, REQUIRED) is implemented and always on:
+  `parseKeyInfoForEncryption` (`parse.go`) takes an `xenc:EncryptedKey` child and a `ds:RetrievalMethod` child
+  in DOCUMENT ORDER, so a reference-supplied candidate lands at the reference's position in `EncryptedKeys`,
+  wherever that falls among the inline ones (the list is tried in order, so ordering decides which key a
+  multi-candidate document is decrypted under). `parseRetrievalMethod` (`parse.go`) branches on `@Type` FIRST:
+  `typeDerivedKey` (§3.5.2) and any foreign URI are stepped over with no error, no candidate slot, and no URI
+  lookup, and `typeDerivedKey` additionally sets `encryptedData.offersDerivedKey`; `TypeEncryptedKey` must
+  name an `xenc:EncryptedKey` and naming anything else is `ErrMalformedEncrypted`; an absent `@Type` resolves
+  and then uses the target only if it IS an `xenc:EncryptedKey`. `retainEncryptedKey` (`parse.go`) is the
+  SINGLE retention point both branches call — the inline `xenc:EncryptedKey` child and a resolved
+  `ds:RetrievalMethod` target alike — and its three steps run in a fixed order: the visited-set dedup FIRST,
+  then `checkEncryptedKeyCap`, then `parseEncryptedKey`. So an element a document offers BOTH ways, in either
+  order, is one candidate: the peak charge equals the final candidate count exactly, a repeat offer charges
+  nothing and is never trial-decrypted twice, and a reference that retains nothing costs one probe of the id
+  index built once per decrypt. Resolution itself is `reference.go`: `refScope` carries the root, the base
+  URI, and a lazily built id index, and nothing about what has been made of an answer — the visited set of
+  taken candidates sits on `parseState` (`parse.go`), whose `markVisited` `retainEncryptedKey` alone calls;
+  `referenceURIForm` recognizes the four same-document forms XMLDSig core §4.4.3.2-3 defines (`""`, `#id`,
+  `#xpointer(/)`, `#xpointer(id('id'))`) and fails everything else closed; `resolveSameDocument` builds the
+  index once per decrypt through `domutil.BuildIDIndex` (whose ctx-observing walk polls per node and whose
+  FROZEN ID-name rule xmldsig1 shares, so the two cannot disagree about which element carries an id),
+  returning `ErrReferenceNotFound` on zero matches and `ErrAmbiguousReference` on more than one — XML
+  Signature Wrapping applied to encryption. The scope root is the TOPMOST ELEMENT ancestor of the
+  `EncryptedData`, not `OwnerDocument().DocumentElement()`, so a detached `EncryptedData` resolves within its
+  own subtree. A non-same-document URI is `ErrReferenceNotFound` with no setting to lift it, since §3.5
+  mandates only the same-document form. The `visited` set is DEDUPLICATION for the many ways one element can
+  be offered — the several references §3.5.3 permits, and a reference plus the inline child it names in either
+  order, all yielding one candidate, charged and trial-decrypted once — and is NOT a loop guard:
+  `parseEncryptedKey` reads only `EncryptionMethod`, `CipherData`, and `ds:KeyInfo`→`AgreementMethod` and
+  never looks for a `RetrievalMethod`, so resolution is one step deep BY CONSTRUCTION and §6.5's `A → B → A`
+  cycle is not expressible. All of this runs while the document is READ, so it precedes the
+  `Decryptor.SessionKey` early return: a pre-shared session key does not decrypt past a refused reference,
+  though a skipped foreign `@Type` costs it nothing. `Encryptor` emits no `ds:RetrievalMethod`; §3.5 requires
+  support for reading one, not for writing one
+- `xenc:CipherReference` (§3.3.1, REQUIRED) is implemented. `parseCipherData` (`parse.go`) settles the
+  CipherData choice cardinality in a FIRST walk that reads no member, and only then turns the single member it
+  found into octets — so a document offering two members is refused for offering two whatever they hold, and a
+  schema-invalid document never turns into a dereference. `resolveCipherReference` (`reference.go`) owns the
+  four outcomes: an ABSENT `@URI` is `ErrMalformedEncrypted` (the schema marks it required) while a
+  PRESENT-and-empty one is the valid null URI; a same-document URI with no transform converts the node-set to
+  octets by Canonical XML 1.0 without comments (`canonicalizeCipherReferenceNodeSet`, writing through
+  `newBudgetWriter`, which bounds canonical OUTPUT OCTETS and never the work producing them — c14n's own
+  per-element namespace-visibility scan costs elements times in-scope declarations and can run long while
+  emitting almost nothing — and which also polls the caller's context on every write, the only place a
+  WHOLE-DOCUMENT form (`URI=""` or `#xpointer(/)`) ever observes cancellation, since that form has no node-set
+  collector stage ahead of it; the budget is charged once, with the final total, after the write completes); a
+  same-document URI whose first transform is `#base64` hands the target to `decodeCipherReferenceNodeSet`
+  unchanged; and any other URI is external. The list is a pipeline — the first transform consumes the
+  dereferenced value and every one after it decodes the octets the one before produced (`decodeBase64Octets`,
+  uncharged because base64 only shrinks what was already charged). The whole-document forms naming the
+  document element canonicalize the DOCUMENT (top-level PIs included, per xmldsig-core1 §4.4.3.2); every other
+  form canonicalizes the named element's subtree as the node-set `appendSubtreeNodes` builds (node, in-scope
+  namespace axis, attribute axis, `helium.Children` descent). The result is NEVER re-parsed as a document, so
+  a self-naming reference is inert, terminating at whatever those octets decrypt to, and there is no depth to
+  bound. `parseCipherReferenceTransforms` accepts at most one `xenc:Transforms` (the xenc namespace on the
+  wrapper, `ds:Transform` children), caps the list at `maxCipherReferenceTransforms` (4) as it collects, and
+  validates EVERY declared algorithm before any is executed, accepting only `NamespaceDSig + "base64"` — an
+  unsupported one is `ErrMalformedEncrypted` wrapping an `*UnsupportedAlgorithmError` with `Parameter:
+  paramCipherReferenceTransform`. Refusing XPath and XSLT is conforming: §3.3.1 marks the Transform feature
+  and the particular algorithms OPTIONAL, and either would evaluate a document-chosen expression over an
+  unauthenticated document. An external URI is joined with `helium.ResolveURI` (`joinReferenceURI`) against
+  the base in force AT THE `CipherReference` ELEMENT — `helium.NodeGetBase(elem.OwnerDocument(), elem)`, so
+  `xml:base` between the EncryptedData and the reference counts and a file-parsed document contributes its own
+  URL — and dereferenced through `Decryptor.CipherReferenceResolver`; with none configured it is
+  `ErrReferenceNotFound`, the DEFAULT, because §3.3.1 imports xmldsig-core1's model where §4.4.3.1 makes HTTP
+  dereferencing RECOMMENDED while §4.4.3.2/§4.4.3.3 make the same-document forms MUSTs. Resolution returns a
+  NON-NIL slice even for zero octets, because `parseEncryptedData` reads a nil `CipherValue` as "no CipherData
+  at all". All of it runs while the document is READ, so it precedes block-algorithm resolution, the AES-CBC
+  opt-in gate, and the `SessionKey` early return. `serialize.go` emits only a `CipherValue`; §3.3.1 requires
+  support for reading a `CipherReference`, not for writing one. `parseKeyInfoForEncryption` drops the
+  remaining `ds:KeyInfo` children with no error: `ds:KeyName` (§3.5, RECOMMENDED), `xenc11:DerivedKey`
+  (§3.5.2), which it records on `encryptedData.offersDerivedKey`, and an `xenc:AgreementMethod` in the
+  `EncryptedData`-level `ds:KeyInfo` position §5.6 defines for it — §3.5 marks that OPTIONAL, the same grade
+  as `ds:KeyValue`, so an `EncryptedData` offering its session key only that way carries no candidate and
+  fails with `ErrMissingKey`. The `EncryptedKey`-level position IS read, by `parseAgreementMethodForKeyInfo`,
+  which is how this package performs ECDH-ES key agreement
+<!-- Refutation of a review finding that this bullet still lists only completion, over-budget and cancellation
+as the close paths, omitting the stream-plus-error case. Checked against this file's bytes at this commit: the
+bullet below reads "the stream is CLOSED on completion, over-budget, and cancellation alike, and equally when
+`ResolveReference` itself returns a stream alongside an error", the same clause the ReferenceResolver summary
+bullet earlier in this section and the `ReferenceResolver` godoc in `xmlenc1/reference_resolver.go` carry, so
+no stale three-path statement exists here. `grep -n '^- .*alongside an error' .claude/docs/packages.md` prints
+exactly those two xmlenc1 bullets and nothing else; the `^- ` anchor confines the match to bullet lines, so
+this comment's own quotation of the clause is not among the results and the count cannot be changed by the
+comment stating it. The remaining ReferenceResolver close text earlier in this file belongs to `xmldsig1`,
+whose resolver returns `[]byte` and has no stream to close. -->
+- `ReferenceResolver` + `FSReferenceResolver` (`reference_resolver.go`) inherit `xmldsig1`'s rejection rules
+  and are consulted ONLY for an external CipherReference URI: a URI carrying an RFC 3986 scheme
+  (`uriHasScheme`, Windows drive letter included), a leftover fragment, or a path escaping the root after
+  `path.Clean` + `fs.ValidPath` (`fsNameFromURI`) is refused, every refusal wrapping `ErrReferenceNotFound`.
+  NO HTTP resolver ships — network dereferencing is SSRF and availability risk the caller must own.
+  `FSReferenceResolver(fsys, root)` takes a declared document-space root: `relativizeToRoot` strips it
+  (matched at a segment boundary, with a trailing slash) so an IN-root absolute URI resolves as the remainder
+  below it, while a URI outside the root passes through unchanged and then meets the same containment checks
+  an empty root applies — declaring a root only ever widens, and only within the named space. There is no new
+  size constant: `readBoundedReference` reads `remaining()+1` bytes off the decrypt's own budget
+  (`MaxCipherValueBytes` for a payload reference, `MaxEncryptedKeyBytes` for a key one), so an over-budget
+  resource is never buffered in full and the budget's own sentinel refuses it. The read runs on a goroutine
+  selected against `ctx.Done()` (a blocked `Read` cannot be polled out of) with a per-Read ctx poll, and the
+  stream is CLOSED on completion, over-budget, and cancellation alike, and equally when `ResolveReference`
+  itself returns a stream alongside an error — closing is what releases a blocked read. That makes the bound
+  and the cancellation properties of the INTERFACE, so they hold for any resolver a caller writes; what the
+  package cannot constrain is a resolver buffering internally or blocking inside `ResolveReference`. A
+  resolver returning a nil stream with a nil error is refused as `ErrReferenceNotFound`.
+  `xmlenc1.ReferenceResolver` returns `io.ReadCloser` while `xmldsig1.ReferenceResolver` returns `[]byte`, so
+  one value does NOT satisfy both, and NEITHER package imports the other
+- xmlenc-core1 is implemented except where the package deliberately departs from it, and each departure is
+  named with its reason. Triple DES (`#tripledes-cbc`, §5.2.2 REQUIRED; `#kw-tripledes`, §5.7.1 REQUIRED) is
+  REFUSED, not pending — a 64-bit block cipher is subject to Sweet32 (CVE-2016-2183) and NIST SP 800-131A Rev.
+  2 disallows TDEA encryption after 2023; the specification marks it REQUIRED because it predates that
+  retirement, and this package follows the retirement, so neither URI will be implemented: block encryption
+  and key wrapping are AES-only, and either URI fails with an error matching the relevant operation sentinel
+  while preserving a typed `*UnsupportedAlgorithmError`, with the two exceptions the README's conformance
+  scope states: `#tripledes-cbc` on an `EncryptedData` carrying no `<EncryptedKey>` and no `SessionKey`
+  reports `ErrMissingKey` from the earlier `len(keys) == 0` check, and `#kw-tripledes` is never reached under
+  a non-empty `SessionKey`, which decrypts past it. `AES192CBC` is likewise absent but §5.2.3 marks it
+  OPTIONAL, so it is not a conformance gap
+- The committed `xmlenc1/summary-xmlenc11.md` snapshot (10 pass / 0 skip / 0 fail, generator output — never
+  hand-edit it) exercises key protection only: six ECDH-ES ConcatKDF vectors on EC-P256/P384/P521 and four
+  rsa-oaep vectors on RSA-2048/3072/4096, all of them AES-GCM. It is evidence for no CBC block algorithm, for
+  the refused Triple DES algorithms, for no `ds:RetrievalMethod`, for no `xenc:CipherReference`, and it is not
+  the merlin corpus. The 1.1 interop corpus holds no Triple DES vector, so the ten are the suite in full and
+  nothing is skipped. `xmlenc1/README.md`'s "Conformance scope" section is the user-facing statement of all of
+  this
+- NO third-party interop vector covers `xenc:CipherReference` at any level of transform support: the only one
+  in the Santuario corpus needs BOTH an XPath transform and `aes192-cbc`, neither of which this package
+  implements. Do not add a skip entry implying a vector is being passed over — there is no runnable vector to
+  run
+- `xmlenc1/testdata/interop/` holds the one third-party `ds:RetrievalMethod` vector,
+  `encrypt-element-aes256-cbc-retrieved-kw-aes256.xml` from the Baltimore/Merlin examples in the Apache
+  Santuario corpus, run by `TestInteropRetrievalMethod` (`interop_test.go`) under the published key-encryption
+  key `abcdefghijklmnopqrstuvwxyz012345` (the corpus name "jed"). It is asserted as far as this package
+  decrypts it: the reference resolves and the session key unwraps, pinned by the error being
+  `ErrDecryptionFailed` with neither `ErrMissingKey`/`ErrReferenceNotFound` nor `ErrKeyUnwrapFailed` in the
+  chain. The block decryption then fails on the padding, which is a property of the vector and NOT of the
+  reference — xmlenc-core1 §5.2.1 pads with N-1 ARBITRARY octets plus a final octet N, while
+  `pkcs7UnpadConstantTime` (`block.go`) requires every padding octet to equal N — so this vector cannot yield
+  plaintext until the CBC path accepts §5.2.1 padding
+- The xmlenc-core1 wire structs (`types.go`) are UNEXPORTED — `encryptedData`, `encryptedKey`,
+  `encryptionMethod`, `agreementMethod`, `keyDerivationMethod`, `ecKeyValue`. No exported function, method, or
+  variable takes or returns one, so they are not API and no field of any of them is a compatibility promise.
+  `ConcatKDFParams` is the one wire-adjacent struct that stays exported, because
+  `Encryptor.KeyDerivationParams` takes it. `export_test.go` declares one exported alias per struct
+  (`EncryptedData = encryptedData` and so on), compiled only under test, so the external `xmlenc1_test`
+  package can still assemble and inspect a wire shape directly. The fields those tests read stay exported on
+  the unexported struct; the two nothing outside the package reads, `encryptedKey.recipient` and
+  `ecKeyValue.curve`, are unexported as well
+- Files: `xmlenc1.go` (API), `context.go` (cancellation helpers), `constants.go`, `block.go`,
+  `keytransport.go`, `keywrap.go`, `key_agreement.go`, `reference.go` (same-document `ds:RetrievalMethod` and
+  `xenc:CipherReference` resolution), `reference_resolver.go` (`ReferenceResolver`, `FSReferenceResolver`, URI
+  joining), `types.go`, `serialize.go`, `parse.go`, `errors.go`
 - Imports: helium, c14n
 
 ## shim/
@@ -539,7 +2143,11 @@ String cursor for character-by-character parsing.
 
 ## internal/unparsedtext/
 
-Shared resource loading for `fn:doc`, `fn:doc-available`, `fn:json-doc`, `fn:unparsed-text`, `fn:unparsed-text-available`, `fn:unparsed-text-lines`. Secure by default: with no `URIResolver` and no `HTTPClient`, every retrieval errors out (no implicit `http.DefaultClient`, no implicit `os.ReadFile`). Constructors: `NewHTTPResolver(*http.Client)`, `NewFileResolver(fs.FS)`; `FileURIResolver{BaseDir}` refuses `..` traversal outside `BaseDir`.
+Shared resource loading for `fn:doc`, `fn:doc-available`, `fn:json-doc`, `fn:unparsed-text`,
+`fn:unparsed-text-available`, `fn:unparsed-text-lines`. Secure by default: with no `URIResolver` and no
+`HTTPClient`, every retrieval errors out (no implicit `http.DefaultClient`, no implicit `os.ReadFile`).
+Constructors: `NewHTTPResolver(*http.Client)`, `NewFileResolver(fs.FS)`; `FileURIResolver{BaseDir}` refuses
+`..` traversal outside `BaseDir`.
 
 - Files: `unparsedtext.go`
 - Imports: `internal/encoding`, `internal/lexicon`
@@ -568,7 +2176,11 @@ Generic bitset operations for bitmask types.
 Parser option bitset type and constants. Bit positions match libxml2's XML_PARSE_* constants.
 
 - **Option** — int-based bitset type for parser flags
-- Constants: `Recover`, `NoEnt`, `DTDLoad`, `DTDAttr`, `DTDValid`, `NoError`, `NoWarning`, `Pedantic`, `NoBlanks`, `XInclude`, `NoNet`, `NoDict`, `NsClean`, `NoCDATA`, `NoXIncNode`, `Compact`, `NoBaseFix`, `IgnoreEnc`, `BigLines`, `NoXXE`, `NoUnzip`, `NoSysCatalog`, `CatalogPI`, `SkipIDs`, `LenientXMLDecl` (the `Huge`/`XML_PARSE_HUGE` bit is retired — replaced by the `Parser` per-limit knobs `MaxNameLength`/`MaxEntityAmplification`/`MaxContentModelDepth`)
+- Constants: `Recover`, `NoEnt`, `DTDLoad`, `DTDAttr`, `DTDValid`, `NoError`, `NoWarning`, `Pedantic`,
+  `NoBlanks`, `XInclude`, `NoNet`, `NoDict`, `NsClean`, `NoCDATA`, `NoXIncNode`, `Compact`, `NoBaseFix`,
+  `IgnoreEnc`, `BigLines`, `NoXXE`, `NoUnzip`, `NoSysCatalog`, `CatalogPI`, `SkipIDs`, `LenientXMLDecl` (the
+  `Huge`/`XML_PARSE_HUGE` bit is retired — replaced by the `Parser` per-limit knobs
+  `MaxNameLength`/`MaxEntityAmplification`/`MaxContentModelDepth`)
 - Methods: `Set(Option)`, `Clear(Option)`, `IsSet(Option) → bool`
 - Files: `options.go`
 - Imports: internal/bitset

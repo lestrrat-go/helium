@@ -216,8 +216,19 @@ result for the current run live in the header comment of
 - Bound fuzz input sizes early. Return on oversize inputs.
 - Prefer in-memory stubs over filesystem/network access.
 - Parse/compile/validate/transform fuzz targets MUST tolerate invalid intermediate inputs by returning early instead of asserting.
-- `xmlenc1`'s `FuzzDecrypt` puts FIXED RSA, EC, and AES key material on one `Decryptor` (all three are settable together) and leaves `SessionKey` unset, so the input alone selects which key-protection path runs — RSA-OAEP, ECDH-ES, or AES key wrap — and every branch is reachable from the one target. The keys are fixed, because a crasher written under `testdata/fuzz` must reproduce across runs.
-- The `xslt3` targets time each input's parse+compile (and transform) inline and fail via `t.Errorf` when it crosses `slowInputThreshold()` (`fuzz_test.go` `flagIfSlow`), so the fuzzing engine persists the exact bytes as a crasher. Go's own worker already turns a genuine hang into a crasher via a 10s deadlock detector (`internal/fuzz` `worker.go`), so this targets the slow-but-finite input (a few seconds) that 10s net misses — the input that drags run throughput toward the fuzztime deadline and surfaces only as an unactionable `context deadline exceeded` with no reproducer. The threshold MUST stay below Go's 10s worker deadline to fire first; it defaults to 5s (ample headroom over any legitimate compile, so no false trips under CI scheduler jitter) and is overridable via `HELIUM_FUZZ_SLOW_INPUT` (a Go duration). Timing inline (not in a child goroutine) keeps panics on `testing`'s normal minimizable-crasher path.
+- `xmlenc1`'s `FuzzDecrypt` puts FIXED RSA, EC, and AES key material on one `Decryptor` (all three are
+  settable together) and leaves `SessionKey` unset, so the input alone selects which key-protection path runs
+  — RSA-OAEP, ECDH-ES, or AES key wrap — and every branch is reachable from the one target. The keys are
+  fixed, because a crasher written under `testdata/fuzz` must reproduce across runs.
+- The `xslt3` targets time each input's parse+compile (and transform) inline and fail via `t.Errorf` when it
+  crosses `slowInputThreshold()` (`fuzz_test.go` `flagIfSlow`), so the fuzzing engine persists the exact bytes
+  as a crasher. Go's own worker already turns a genuine hang into a crasher via a 10s deadlock detector
+  (`internal/fuzz` `worker.go`), so this targets the slow-but-finite input (a few seconds) that 10s net misses
+  — the input that drags run throughput toward the fuzztime deadline and surfaces only as an unactionable
+  `context deadline exceeded` with no reproducer. The threshold MUST stay below Go's 10s worker deadline to
+  fire first; it defaults to 5s (ample headroom over any legitimate compile, so no false trips under CI
+  scheduler jitter) and is overridable via `HELIUM_FUZZ_SLOW_INPUT` (a Go duration). Timing inline (not in a
+  child goroutine) keeps panics on `testing`'s normal minimizable-crasher path.
 
 ## Fuzz CI
 
@@ -268,15 +279,31 @@ result for the current run live in the header comment of
 
 ### 4. QT3 Tests (XPath 3.1) — moved out of this module
 
-The W3C QT3 (XPath/XQuery 3.1) conformance suite lives in the **sibling `github.com/lestrrat-go/helium-w3c-tests` module**, not here. That module owns the generator (`internal/suites/qt3`), the harness and generated per-category case tables (`xpath3/qt3_*_gen_test.go`, run via one `TestQT3W3C`), the on-demand-fetched context/resource fixtures plus the committed curated overlay (`fixtures/qt3ts`), and the skip/expectation metadata (`expectations/qt3.json`); it `replace`s `helium => ../helium` and uses a local `go.work`. Run it from there: `go run ./cmd/w3cgen fetch qt3 && go run ./cmd/w3cgen generate qt3 && go run ./cmd/w3ctest qt3`. Helium keeps only the xpath3 **unit** tests.
+The W3C QT3 (XPath/XQuery 3.1) conformance suite lives in the **sibling
+`github.com/lestrrat-go/helium-w3c-tests` module**, not here. That module owns the generator
+(`internal/suites/qt3`), the harness and generated per-category case tables (`xpath3/qt3_*_gen_test.go`, run
+via one `TestQT3W3C`), the on-demand-fetched context/resource fixtures plus the committed curated overlay
+(`fixtures/qt3ts`), and the skip/expectation metadata (`expectations/qt3.json`); it `replace`s `helium =>
+../helium` and uses a local `go.work`. Run it from there: `go run ./cmd/w3cgen fetch qt3 && go run
+./cmd/w3cgen generate qt3 && go run ./cmd/w3ctest qt3`. Helium keeps only the xpath3 **unit** tests.
 
 ### 5. W3C XSLT 3.0 Tests — moved out of this module
 
-The W3C XSLT 3.0 conformance suite lives in the **sibling `github.com/lestrrat-go/helium-w3c-tests` module**, not here. That module owns the generator (`internal/suites/xslt30`), the harness and generated per-category case tables (`xslt3/xslt30_*_gen_test.go`, run via one `TestXSLT30W3C`), the on-demand-fetched fixtures plus the committed curated overlay (`fixtures/xslt30`), and the skip/expectation metadata (`expectations/xslt30.json`); it `replace`s `helium => ../helium` and uses a local `go.work`. Run it from there: `go run ./cmd/w3cgen fetch xslt30 && go run ./cmd/w3cgen generate xslt30 && go run ./cmd/w3ctest xslt30`. Helium keeps only the xslt3 **unit** tests.
+The W3C XSLT 3.0 conformance suite lives in the **sibling `github.com/lestrrat-go/helium-w3c-tests` module**,
+not here. That module owns the generator (`internal/suites/xslt30`), the harness and generated per-category
+case tables (`xslt3/xslt30_*_gen_test.go`, run via one `TestXSLT30W3C`), the on-demand-fetched fixtures plus
+the committed curated overlay (`fixtures/xslt30`), and the skip/expectation metadata
+(`expectations/xslt30.json`); it `replace`s `helium => ../helium` and uses a local `go.work`. Run it from
+there: `go run ./cmd/w3cgen fetch xslt30 && go run ./cmd/w3cgen generate xslt30 && go run ./cmd/w3ctest
+xslt30`. Helium keeps only the xslt3 **unit** tests.
 
 ### 6. W3C XML Schema Test Suite (XSTS) — moved out of this module
 
-The heavyweight W3C XML Schema (XSD 1.1) conformance suite lives in the **sibling `github.com/lestrrat-go/helium-w3c-tests` module**, not here. That module owns the generated tests, the on-demand-fetched fixtures, and the skip/expectation metadata (`expectations/xsd11.json`); it `replace`s `helium => ../helium` and uses a local `go.work` to test against an in-progress branch. Run it from there: `go run ./cmd/w3cgen fetch xsd11 && go run ./cmd/w3cgen generate xsd11 && go test ./...`.
+The heavyweight W3C XML Schema (XSD 1.1) conformance suite lives in the **sibling
+`github.com/lestrrat-go/helium-w3c-tests` module**, not here. That module owns the generated tests, the
+on-demand-fetched fixtures, and the skip/expectation metadata (`expectations/xsd11.json`); it `replace`s
+`helium => ../helium` and uses a local `go.work` to test against an in-progress branch. Run it from there: `go
+run ./cmd/w3cgen fetch xsd11 && go run ./cmd/w3cgen generate xsd11 && go test ./...`.
 
 Helium keeps only the **unit regression** `xsd/union_cycle_overflow_test.go` (cyclic simpleType must error, not stack-overflow), guarding the in-tree fix (`baseChain` in `simplevalue_core.go`, `checkCircularSimpleTypes` in `check_facets.go`).
 

@@ -50,12 +50,45 @@ type NodeItemUnionMember struct {
 
 - `TypeAnnotation` → schema-aware node type annotation (`xs:*` or `Q{ns}local`)
 - `AtomizedType` → built-in base type used when atomizing schema-derived node types
-- `ListItemType` → item type name for a list-typed node; `ListItemAtomized` → that item type's built-in base (e.g. `xs:QName` for a QName-derived list item), so list-token atomization (`atomizeListToken`) can resolve QName/NOTATION items namespace-aware; `UnionMemberTypes` → member type names for a union-typed node
-- `ActiveUnionMember` → the value-dependent ACTIVE LEAF member of a union node (the first direct member the value FULLY validates against — lexical/value cast AND facets/list-length via `SchemaDeclarations.ValidateCastWithNS`; when that member is itself a union, resolution descends recursively to the nested leaf, matching the `$value` selection), or nil. A list leaf expands to per-item atoms; an atomic leaf yields a single atom typed as that member. The `NodeItemUnionMember` it points at is immutable (shared across clones)
-- `ListItemLeaves` → populated only when a list node's ITEM type is a UNION: the per-token ACTIVE union leaf (resolved value-dependently in `nodeItemFor` via `resolveActiveUnionLeafForValue`, one entry per token in document order). `atomizeListTokenAt(i, …)` atomizes token `i` through `ListItemLeaves[i]` when present, so `xs:list itemType="<union>"` atomizes each token by its own active member (agreeing with `$value`) instead of forcing every token through one static base; nil/short slice falls back to `atomizeListToken` on the declared item type
+- `ListItemType` → item type name for a list-typed node; `ListItemAtomized` → that item type's built-in base
+  (e.g. `xs:QName` for a QName-derived list item), so list-token atomization (`atomizeListToken`) can resolve
+  QName/NOTATION items namespace-aware; `UnionMemberTypes` → member type names for a union-typed node
+- `ActiveUnionMember` → the value-dependent ACTIVE LEAF member of a union node (the first direct member the
+  value FULLY validates against — lexical/value cast AND facets/list-length via
+  `SchemaDeclarations.ValidateCastWithNS`; when that member is itself a union, resolution descends recursively
+  to the nested leaf, matching the `$value` selection), or nil. A list leaf expands to per-item atoms; an
+  atomic leaf yields a single atom typed as that member. The `NodeItemUnionMember` it points at is immutable
+  (shared across clones)
+- `ListItemLeaves` → populated only when a list node's ITEM type is a UNION: the per-token ACTIVE union leaf
+  (resolved value-dependently in `nodeItemFor` via `resolveActiveUnionLeafForValue`, one entry per token in
+  document order). `atomizeListTokenAt(i, …)` atomizes token `i` through `ListItemLeaves[i]` when present, so
+  `xs:list itemType="<union>"` atomizes each token by its own active member (agreeing with `$value`) instead
+  of forcing every token through one static base; nil/short slice falls back to `atomizeListToken` on the
+  declared item type
 - `QNameNoDefaultNS` → set from `Evaluator.QNameValueNoDefaultNamespace()`; when true an UNPREFIXED QName/NOTATION value atomizes to no namespace (XSD value-space semantics) instead of the node's default namespace
 
-`resolveQNameFromNode` predeclares the `xml` prefix (→ the XML namespace) without requiring a binding on any node, matching `xsd.resolveLexicalQName`, so an xs:QName value such as `xml:lang`/`xml:space` atomizes correctly. List-typed node atomization splits on XSD whitespace ONLY (`xsdListFields`: space/tab/CR/LF — NOT NBSP/other Unicode whitespace, matching XSD list tokenization and the validation/`$value` paths) and atomizes each token via `atomizeListToken` (used by both `atomizeStream` and the value-comparison atom iterator). When the item type's built-in base is `xs:QName`/`xs:NOTATION` it resolves each token against the node's in-scope namespaces (preserving the user/list-item type name and its built-in base); a NON-QName USER item type (a `Q{...}` name `CastFromString` can't resolve) is cast through its `ListItemAtomized` built-in base and typed as the user type with that base, so a list whose item type derives from xs:int yields numeric atoms usable by `sum()`. A UNION-typed node is atomized through its precomputed ACTIVE LEAF member (`ActiveUnionMember`, resolved by `resolveActiveUnionLeaf` in `nodeItemFor` with FULL schema-aware validation — cast validity AND facets/list-length/assertions via `SchemaDeclarations.ValidateCastWithNS`, the ctx threaded through `nodeItemFor`): `atomizeUnionItems` (used by both the stream and comparison paths) expands a LIST leaf to per-item atoms (via `atomizeListTokenAt`, so when the leaf's list item type is ITSELF a UNION the per-token active leaves carried on `NodeItemUnionMember.ListItemLeaves` — precomputed in `resolveActiveUnionLeafRec` — type each token by its own active member, matching `$value`) and yields an ATOMIC leaf as a single atom typed as that member. Resolution descends recursively through NESTED unions to the leaf (mirroring `fixedUnionActiveMember`), so `data()` and `$value` agree for `Outer=union(Inner,…)` / `Inner=union(IntList,…)`. Because selection is full validation, a member that casts but fails its own facets (e.g. an xs:list with `xs:length=2` against `"1 2 3"`) is correctly skipped — matching the `$value` path. All of this only activates when `ActiveUnionMember`/`ListItemType` are populated (schema-aware atomization), so non-schema-aware xpath3/xslt3 behavior is unchanged.
+`resolveQNameFromNode` predeclares the `xml` prefix (→ the XML namespace) without requiring a binding on any
+node, matching `xsd.resolveLexicalQName`, so an xs:QName value such as `xml:lang`/`xml:space` atomizes
+correctly. List-typed node atomization splits on XSD whitespace ONLY (`xsdListFields`: space/tab/CR/LF — NOT
+NBSP/other Unicode whitespace, matching XSD list tokenization and the validation/`$value` paths) and atomizes
+each token via `atomizeListToken` (used by both `atomizeStream` and the value-comparison atom iterator). When
+the item type's built-in base is `xs:QName`/`xs:NOTATION` it resolves each token against the node's in-scope
+namespaces (preserving the user/list-item type name and its built-in base); a NON-QName USER item type (a
+`Q{...}` name `CastFromString` can't resolve) is cast through its `ListItemAtomized` built-in base and typed
+as the user type with that base, so a list whose item type derives from xs:int yields numeric atoms usable by
+`sum()`. A UNION-typed node is atomized through its precomputed ACTIVE LEAF member (`ActiveUnionMember`,
+resolved by `resolveActiveUnionLeaf` in `nodeItemFor` with FULL schema-aware validation — cast validity AND
+facets/list-length/assertions via `SchemaDeclarations.ValidateCastWithNS`, the ctx threaded through
+`nodeItemFor`): `atomizeUnionItems` (used by both the stream and comparison paths) expands a LIST leaf to
+per-item atoms (via `atomizeListTokenAt`, so when the leaf's list item type is ITSELF a UNION the per-token
+active leaves carried on `NodeItemUnionMember.ListItemLeaves` — precomputed in `resolveActiveUnionLeafRec` —
+type each token by its own active member, matching `$value`) and yields an ATOMIC leaf as a single atom typed
+as that member. Resolution descends recursively through NESTED unions to the leaf (mirroring
+`fixedUnionActiveMember`), so `data()` and `$value` agree for `Outer=union(Inner,…)` /
+`Inner=union(IntList,…)`. Because selection is full validation, a member that casts but fails its own facets
+(e.g. an xs:list with `xs:length=2` against `"1 2 3"`) is correctly skipped — matching the `$value` path. All
+of this only activates when `ActiveUnionMember`/`ListItemType` are populated (schema-aware atomization), so
+non-schema-aware xpath3/xslt3 behavior is unchanged.
 
 ## AtomicValue
 
@@ -107,9 +140,24 @@ Produced by: inline functions, named refs (`fn#2`), partial application.
 Immutable. `Put` returns new map (copy-on-write).
 Construction + outward-facing accessors clone `Sequence` values via `cloneSequence`. Caller mutation MUST NOT change stored contents.
 
-KEYS are cloned too: every map ingress (`newSingleEntryMap`, `NewMap`, `Put`, `MergeMaps`, `MapBuilder.Add`) clones the `AtomicValue` key via `cloneMapKey` (an O(1) single-atomic copy reusing `deepCloneAtomicValue`), and outward-facing `Keys`/`ForEach` return cloned keys. This stops a pointer-backed key (e.g. `xs:integer` backed by `*big.Int`) from being mutated after insertion — single-entry maps recompute the stored key in `Get`, so a mutated key would otherwise silently change the map's key. Public `ForEach` clones both key and value; trusted internal read-only/bounded/lazy callers use the private no-clone `forEach0`/`keys0`/`get0`/`entries0` accessors (caller must not mutate, and clones once at the call-site egress).
+KEYS are cloned too: every map ingress (`newSingleEntryMap`, `NewMap`, `Put`, `MergeMaps`, `MapBuilder.Add`)
+clones the `AtomicValue` key via `cloneMapKey` (an O(1) single-atomic copy reusing `deepCloneAtomicValue`),
+and outward-facing `Keys`/`ForEach` return cloned keys. This stops a pointer-backed key (e.g. `xs:integer`
+backed by `*big.Int`) from being mutated after insertion — single-entry maps recompute the stored key in
+`Get`, so a mutated key would otherwise silently change the map's key. Public `ForEach` clones both key and
+value; trusted internal read-only/bounded/lazy callers use the private no-clone
+`forEach0`/`keys0`/`get0`/`entries0` accessors (caller must not mutate, and clones once at the call-site
+egress).
 
-`cloneSequence` (`types.go`) is a **deep** clone of each item, not a shallow slice copy: pointer/slice-backed `AtomicValue` payloads (`*big.Int`, `*big.Rat`, `*FloatValue`, `[]byte`, and a `Duration`'s `*big.Rat` fields) are duplicated so mutating the caller's original payload cannot reach the stored value. It does NOT recurse into nested `MapItem`/`ArrayItem` items: those are immutable (all mutators are copy-on-write) and every value they hold was already deep-cloned at its own ingress, so they are shared by value — this keeps incremental construction of a depth-N nested structure at O(N), where recursing would cost O(N²) and preserves the OpLimit/maxNodes resource bounds (charged once per inserted value, not per nesting level). Immutable atomic payloads (int64, string, bool, float64, time.Time, QNameValue, by-value Duration without rationals) are returned as the original boxed item to avoid an interface re-allocation per item.
+`cloneSequence` (`types.go`) is a **deep** clone of each item, not a shallow slice copy: pointer/slice-backed
+`AtomicValue` payloads (`*big.Int`, `*big.Rat`, `*FloatValue`, `[]byte`, and a `Duration`'s `*big.Rat` fields)
+are duplicated so mutating the caller's original payload cannot reach the stored value. It does NOT recurse
+into nested `MapItem`/`ArrayItem` items: those are immutable (all mutators are copy-on-write) and every value
+they hold was already deep-cloned at its own ingress, so they are shared by value — this keeps incremental
+construction of a depth-N nested structure at O(N), where recursing would cost O(N²) and preserves the
+OpLimit/maxNodes resource bounds (charged once per inserted value, not per nesting level). Immutable atomic
+payloads (int64, string, bool, float64, time.Time, QNameValue, by-value Duration without rationals) are
+returned as the original boxed item to avoid an interface re-allocation per item.
 
 ```go
 type MapItem struct {
@@ -207,11 +255,42 @@ Per XPath 3.1 Section 2.6.2:
 
 The same flatten-arrays / error-on-function-or-map rule governs the `||` string-concatenation path (`concatToString`, `eval_operators.go`): array operands flatten to their atomized members, only function and map items raise `FOTY0014`.
 
-The typed-value atomizer (`atomizeTypedValue`, `functions_node.go`) applies a per-item pre-check (`typedValueItemCheck` / `typedValueItemCheckFor`, an `atomizeItemCheck`) that selects a typed-value ACTION per XDM 3.1 §5.15. **Nilled** elements come first: an element in the evaluator's `NilledElements` set has no typed value → the item is SKIPPED (typed value `()`), regardless of its content kind. Then, when the active `SchemaDeclarations` also implements the optional `ContentTypeKindProvider` (reached by type assertion; the xsd adapter `schemaDecls` implements it) and the annotation resolves, an element node's complex content kind selects: **element-only** content has no typed value → error `FOTY0012`; **empty** content has typed value `()` → SKIPPED (no atoms, no error); **mixed** content still atomizes to `xs:untypedAtomic` and simple/simpleContent to its typed value. The content-kind check (`checkContentKindItem`, returning `(skip, err)`) is INTERLEAVED with atomization — threaded into `atomizeStreamCont` as an optional per-item pre-check — so it walks items in the SAME encounter order and with the SAME array recursion as atomization: the FIRST offending item wins (a map/function atomized earlier still raises `FOTY0013` before a later element-only element is reached), and element-only / empty nodes nested inside arrays are handled.
+The typed-value atomizer (`atomizeTypedValue`, `functions_node.go`) applies a per-item pre-check
+(`typedValueItemCheck` / `typedValueItemCheckFor`, an `atomizeItemCheck`) that selects a typed-value ACTION
+per XDM 3.1 §5.15. **Nilled** elements come first: an element in the evaluator's `NilledElements` set has no
+typed value → the item is SKIPPED (typed value `()`), regardless of its content kind. Then, when the active
+`SchemaDeclarations` also implements the optional `ContentTypeKindProvider` (reached by type assertion; the
+xsd adapter `schemaDecls` implements it) and the annotation resolves, an element node's complex content kind
+selects: **element-only** content has no typed value → error `FOTY0012`; **empty** content has typed value
+`()` → SKIPPED (no atoms, no error); **mixed** content still atomizes to `xs:untypedAtomic` and
+simple/simpleContent to its typed value. The content-kind check (`checkContentKindItem`, returning `(skip,
+err)`) is INTERLEAVED with atomization — threaded into `atomizeStreamCont` as an optional per-item pre-check —
+so it walks items in the SAME encounter order and with the SAME array recursion as atomization: the FIRST
+offending item wins (a map/function atomized earlier still raises `FOTY0013` before a later element-only
+element is reached), and element-only / empty nodes nested inside arrays are handled.
 
-This check backs both `fn:data` AND the atomization that occurs when coercing a value to an atomic-typed value: the **function-signature coercion** (`coerceToSequenceTypeE`, `eval_types.go` — the atomization of a node arg against an atomic parameter type such as `xs:string?`, using its explicit `ec` via `typedValueItemCheckFor`, since the fnContext is not yet stashed in `ctx` at coercion time) and the `xs:string?` function-conversion helpers (`coerceAtomizedString` / `seqToStringErr`, for functions with no registered signature, and the `||` `concatToString` path, via `typedValueItemCheck(ctx)`). So atomizing an element-only-typed node as any atomic-coerced argument raises `FOTY0012` for ALL callers (per XDM, an element-only node has no typed value) — e.g. `string-length(.)`/`normalize-space(.)`/`upper-case(.)` over such a node (QT3 `fn-string-length-23`/`fn-normalize-space-24`). Cardinality is still applied AFTER atomization (arrays flatten first), so an `xs:string?` parameter given `([], "x")` coerces to the single `"x"`, not `XPTY0004`. Non-schema-aware nodes and every other `AtomizeItem` caller (comparisons, casts) are unaffected — with no nilled set AND no provider the check is nil and the atomizers are byte-identical to plain `AtomizeSequence` / `atomizeStream`.
+This check backs both `fn:data` AND the atomization that occurs when coercing a value to an atomic-typed
+value: the **function-signature coercion** (`coerceToSequenceTypeE`, `eval_types.go` — the atomization of a
+node arg against an atomic parameter type such as `xs:string?`, using its explicit `ec` via
+`typedValueItemCheckFor`, since the fnContext is not yet stashed in `ctx` at coercion time) and the
+`xs:string?` function-conversion helpers (`coerceAtomizedString` / `seqToStringErr`, for functions with no
+registered signature, and the `||` `concatToString` path, via `typedValueItemCheck(ctx)`). So atomizing an
+element-only-typed node as any atomic-coerced argument raises `FOTY0012` for ALL callers (per XDM, an
+element-only node has no typed value) — e.g. `string-length(.)`/`normalize-space(.)`/`upper-case(.)` over such
+a node (QT3 `fn-string-length-23`/`fn-normalize-space-24`). Cardinality is still applied AFTER atomization
+(arrays flatten first), so an `xs:string?` parameter given `([], "x")` coerces to the single `"x"`, not
+`XPTY0004`. Non-schema-aware nodes and every other `AtomizeItem` caller (comparisons, casts) are unaffected —
+with no nilled set AND no provider the check is nil and the atomizers are byte-identical to plain
+`AtomizeSequence` / `atomizeStream`.
 
-**dm:string-value (schema-aware whitespace stripping).** `evalContext.nodeStringValue` (`functions_node.go`) computes an element/document node's string value and, in a schema-aware run (`ContentTypeKindProvider` + `typeAnnotations` present), strips INSIGNIFICANT whitespace: a whitespace-only text- or CDATA-section-node child of an element whose annotation resolves to ELEMENT-ONLY complex content is not part of the string value (XDM 3.1 PSVI construction), so `fn:string` / `fn:string-length` / `fn:normalize-space` with no argument (which use the string value) see only the child element string values. Used by `contextStringValue` and `fn:string`'s node argument. Without a provider/annotations, or for a non-element-only element, it is byte-identical to `ixpath.StringValue` — non-schema-aware runs and mixed/simple content are unchanged.
+**dm:string-value (schema-aware whitespace stripping).** `evalContext.nodeStringValue` (`functions_node.go`)
+computes an element/document node's string value and, in a schema-aware run (`ContentTypeKindProvider` +
+`typeAnnotations` present), strips INSIGNIFICANT whitespace: a whitespace-only text- or CDATA-section-node
+child of an element whose annotation resolves to ELEMENT-ONLY complex content is not part of the string value
+(XDM 3.1 PSVI construction), so `fn:string` / `fn:string-length` / `fn:normalize-space` with no argument
+(which use the string value) see only the child element string values. Used by `contextStringValue` and
+`fn:string`'s node argument. Without a provider/annotations, or for a non-element-only element, it is
+byte-identical to `ixpath.StringValue` — non-schema-aware runs and mixed/simple content are unchanged.
 
 ## SequenceType (used in `instance of`, `cast as`, etc.)
 
