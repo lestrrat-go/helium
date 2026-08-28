@@ -285,9 +285,10 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   answers `false` in a type assertion, so an ordinary append pays nothing for the check.
   `TestTailJumpTargetDocumentParent` (`node_sibling_internal_test.go`) pins all three outcomes, including that
   a claim on the document leaves every element in it resolving in O(1), and
-  `TestAppendCostIsLinearBesideAnOffChainClaim` (`node_owned_tail_test.go`) pins the SHAPE of the cost:
-  doubling the appends onto a clean element beside a claim roughly doubles the time rather than quadrupling
-  it. `tailJumpTarget` then makes three cheap confirmations that the record is usable (`tail != anchor`,
+  `TestAppendCostIsLinearBesideAnOffChainClaim` (`node_sibling_internal_test.go`) appends through counted
+  element wrappers beside a document claim and requires zero `NextSibling` calls, so a document-wide fallback
+  fails deterministically. `tailJumpTarget` then makes three cheap confirmations that the record is usable
+  (`tail != anchor`,
   `tail.next == nil`, `tail.parent` is this parent); they cannot fail on a parent holding no recorded claim,
   and are kept because a tree may span documents
   (`noteCrossDocumentEscape`) while the record does not, so an uncovered corner degrades to the walk instead of

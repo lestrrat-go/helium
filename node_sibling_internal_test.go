@@ -25,6 +25,45 @@ func documentTailFixture(t *testing.T) (*Document, *Comment) {
 	return doc, comment
 }
 
+// nextSiblingCountingElement records every fallback sibling-walk step made
+// through it. Its AddSibling override keeps the wrapper as addSibling's anchor
+// so virtual NextSibling calls remain observable to the test.
+type nextSiblingCountingElement struct {
+	*Element
+	nextSiblingCalls *int
+}
+
+func (n *nextSiblingCountingElement) AddSibling(cur Node) error {
+	return addSibling(n, cur)
+}
+
+func (n *nextSiblingCountingElement) NextSibling() Node {
+	(*n.nextSiblingCalls)++
+	return n.Element.NextSibling()
+}
+
+func newNextSiblingCountingElement(t *testing.T, doc *Document, nextSiblingCalls *int) *nextSiblingCountingElement {
+	t.Helper()
+
+	elem, err := doc.CreateElement("child")
+	require.NoError(t, err)
+	return &nextSiblingCountingElement{
+		Element:          elem,
+		nextSiblingCalls: nextSiblingCalls,
+	}
+}
+
+func documentWithOffChainClaim() *Document {
+	src := NewDefaultDocument()
+	srcDTD := newDTD()
+	srcDTD.name = "root"
+	src.extSubset = srcDTD
+
+	doc := NewDefaultDocument()
+	CopyExtSubset(src, doc)
+	return doc
+}
+
 // TestTailJumpTargetDocumentParent pins which *Document parents may resolve an
 // append point from their own lastChild. A document is not excluded by TYPE: it
 // is excluded by the one CONDITION that makes its record untrustworthy, which is
@@ -82,6 +121,59 @@ func TestTailJumpTargetDocumentParent(t *testing.T) {
 		require.NoError(t, elem.AddChild(trail))
 
 		require.Equal(t, Node(trail), tailJumpTarget(elem, lead.baseDocNode()))
+	})
+}
+
+// TestAppendCostIsLinearBesideAnOffChainClaim guards the per-parent scope of
+// off-chain child claims without measuring elapsed time. CopyExtSubset gives the
+// document such a claim, but an element it owns must still append through its
+// first child without calling NextSibling. A document-wide claim would force the
+// fallback walk on every append and make the counter nonzero.
+func TestAppendCostIsLinearBesideAnOffChainClaim(t *testing.T) {
+	t.Parallel()
+
+	t.Run("counter observes a required fallback walk", func(t *testing.T) {
+		doc := documentWithOffChainClaim()
+		require.True(t, holdsOffChainChildClaim(doc))
+
+		nextSiblingCalls := 0
+		anchor := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		tail := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		require.NoError(t, doc.AddChild(anchor))
+		require.NoError(t, doc.AddChild(tail))
+
+		nextSiblingCalls = 0
+		appended := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		require.NoError(t, anchor.AddSibling(appended))
+		require.Positive(t, nextSiblingCalls,
+			"a parent with an off-chain claim must walk instead of trusting its recorded tail")
+		require.Equal(t, Node(appended), doc.LastChild())
+	})
+
+	t.Run("another parent keeps constant-time tail resolution", func(t *testing.T) {
+		doc := documentWithOffChainClaim()
+		require.True(t, holdsOffChainChildClaim(doc))
+
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(parent))
+		require.False(t, holdsOffChainChildClaim(parent))
+
+		nextSiblingCalls := 0
+		anchor := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		require.NoError(t, parent.AddChild(anchor))
+
+		const appendCount = 256
+		var last Node = anchor
+		for range appendCount {
+			child := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+			require.NoError(t, anchor.AddSibling(child))
+			last = child
+		}
+
+		require.Equal(t, last, parent.LastChild())
+		require.Zero(t, nextSiblingCalls,
+			"appending through the first child must resolve the recorded tail without walking siblings")
 	})
 }
 
