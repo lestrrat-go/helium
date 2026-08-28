@@ -85,11 +85,11 @@ func TestTailJumpTargetDocumentParent(t *testing.T) {
 	})
 }
 
-// TestAppendKeepsAForeignChildList pins the shape that has a firstChild claiming
-// nobody, on nodes no document owns. resolveOwnedTail finds no tail this parent
-// owns, and the append must still join the list the parent reaches instead of
-// deciding the parent is empty and overwriting it.
-func TestAppendKeepsAForeignChildList(t *testing.T) {
+// TestAppendReplacesAForeignChildList pins the shape that has a firstChild
+// claiming nobody, on nodes no document owns. resolveOwnedTail finds no tail
+// this parent owns, so the append must start an owned list without changing the
+// foreign node's sibling links.
+func TestAppendReplacesAForeignChildList(t *testing.T) {
 	t.Parallel()
 
 	var standalone *Document
@@ -105,7 +105,8 @@ func TestAppendKeepsAForeignChildList(t *testing.T) {
 	setFirstChild(parent, first)
 	require.NoError(t, parent.AddChild(later))
 
-	require.Equal(t, Node(first), parent.FirstChild(), "the existing child must survive")
+	require.Equal(t, Node(later), parent.FirstChild(), "the appended child starts the owned list")
 	require.Equal(t, Node(later), parent.LastChild())
-	require.Equal(t, Node(later), first.NextSibling(), "the append joins the list it found")
+	require.Equal(t, Node(parent), later.Parent())
+	require.Nil(t, first.NextSibling(), "the foreign node's sibling links stay unchanged")
 }

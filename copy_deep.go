@@ -119,7 +119,7 @@ func appendCopiedChild(parent MutableNode, child Node) error {
 	pdn := parent.baseDocNode()
 	cdn := child.baseDocNode()
 
-	last := resolveOwnedTail(parent, pdn, cdn)
+	last := resolveOwnedTail(parent, pdn)
 	if last == nil {
 		pdn.firstChild = child
 		pdn.lastChild = child

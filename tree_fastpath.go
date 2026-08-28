@@ -42,10 +42,9 @@ func appendFastChild(parent MutableNode, child Node) error {
 	pdn := parent.baseDocNode()
 	cdn := child.baseDocNode()
 
-	// A nil tail means parent has no child list at all. resolveOwnedTail never
-	// returns nil for a parent that already holds children, so this branch
-	// cannot overwrite an existing list.
-	last := resolveOwnedTail(parent, pdn, cdn)
+	// A nil tail means parent has no child it owns. Install child as the owned
+	// list rather than linking through a foreign head's sibling chain.
+	last := resolveOwnedTail(parent, pdn)
 	if last == nil {
 		pdn.firstChild = child
 		pdn.lastChild = child

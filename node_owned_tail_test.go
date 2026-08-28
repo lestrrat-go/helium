@@ -116,41 +116,46 @@ func TestAddChildResolvesAnOwnedTail(t *testing.T) {
 			"a node must never become its own previous sibling")
 	})
 
-	// The same EntityRef shape, with a DIFFERENT node appended. No child on the
-	// reference's list claims the reference, so no owned tail exists — but the
-	// list is not empty, and the append must join it. Treating "no owned tail"
-	// as "empty parent" overwrites firstChild and drops the Entity with no
-	// error returned.
-	t.Run("a foreign first child survives an append", func(t *testing.T) {
+	// The same EntityRef shape, with a DIFFERENT node appended. The reference's
+	// shared Entity child still belongs to the DTD, so its sibling links must not
+	// be used as an append point for the reference.
+	t.Run("a foreign first child is not an append anchor", func(t *testing.T) {
 		t.Parallel()
 
 		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 		dtd, err := doc.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
-		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+		ent, err := dtd.AddEntity("e1", enum.InternalGeneralEntity, "", "", "x")
 		require.NoError(t, err)
+		next, err := dtd.AddEntity("e2", enum.InternalGeneralEntity, "", "", "y")
+		require.NoError(t, err)
+		dtdChildren := []helium.Node{ent, next}
+		require.Equal(t, dtdChildren, collectChildren(dtd))
 
-		ref, err := doc.CreateReference("e")
+		ref, err := doc.CreateReference("e1")
 		require.NoError(t, err)
 		require.Equal(t, helium.Node(ent), ref.FirstChild())
 
 		comment := doc.CreateComment([]byte("added"))
 		require.NoError(t, ref.AddChild(comment))
 
-		require.Equal(t, helium.Node(ent), ref.FirstChild(),
-			"the entity the reference already held must not be discarded")
+		require.Equal(t, helium.Node(ref), comment.Parent(),
+			"the appended node must belong to the requested parent")
+		require.Equal(t, helium.Node(comment), ref.FirstChild())
 		require.Equal(t, helium.Node(comment), ref.LastChild())
-
-		// Walk the raw sibling links rather than Children: the Entity claims the
-		// DTD, so the owned-boundary rule ends the Children iteration at it.
-		var children []helium.Node
-		for child := ref.FirstChild(); child != nil; child = child.NextSibling() {
-			children = append(children, child)
-		}
-		require.Len(t, children, 2, "the reference must hold both children")
-		require.Equal(t, helium.Node(ent), children[0])
-		require.Equal(t, helium.Node(comment), children[1])
+		require.Equal(t, dtdChildren, collectChildren(dtd),
+			"appending to the reference must not change the DTD declaration chain")
+		require.Equal(t, helium.Node(next), ent.NextSibling())
+		require.Equal(t, helium.Node(ent), next.PrevSibling())
 	})
+}
+
+func collectChildren(parent helium.Node) []helium.Node {
+	var children []helium.Node
+	for child := range helium.Children(parent) {
+		children = append(children, child)
+	}
+	return children
 }
 
 // appendChildren times n AddChild calls onto a freshly created element in doc.

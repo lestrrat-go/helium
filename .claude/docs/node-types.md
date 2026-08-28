@@ -305,28 +305,26 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   because the `properties` membership test already costs that walk. A node can claim a parent without being a
   member of that parent's child list — `CopyExtSubset`'s copied external subset, or a package-private
   `unsafeSetParent` write. An append through such a node records its own result as the parent's `lastChild`,
-  moving that record off the child list. All three append entry points then land at the end of the REACHABLE
-  children: `AddSibling` walks from its anchor, and `AddChild`, `appendFastChild` and `appendCopiedChild` reach
-  the same node through `resolveOwnedTail` (`node.go`). It returns nil ONLY when `parent.firstChild` is nil,
-  whatever `lastChild` records, so the empty-parent branch of its callers — the one that OVERWRITES
-  `firstChild` — is reachable only for a parent that is genuinely empty and can never discard a child list. It
-  trusts the record when that node claims this parent, has no `next`, AND this parent holds no off-chain claim
-  (the same signal `tailJumpTarget` declines on, read through `holdsOffChainChildClaim`); otherwise it walks
-  the child list under a `siblingCycleGuard` to the last node still claiming the parent, and when NOTHING on
-  that list claims the parent it returns the list's head instead, so the append joins the existing children
-  rather than replacing them. The node about to be appended is excluded from that head fallback: the callers
-  unlink it first, so a `firstChild` that IS the operand leaves a list of one node with nothing to preserve,
-  and returning it would build a self-link. That is what keeps an append in the same place whichever entry
-  point the caller used, and it is why a stale record is repaired rather than followed: trusting `lastChild`
-  alone loses the reachable list when `firstChild` is nil (the `CopyExtSubset` shape), discards it when
-  `lastChild` is nil (the `stringToNodeList` shape), and discards it again when `firstChild` claims another
-  parent (the `CreateReference` shape, where the shared `Entity` keeps the `DTD`).
+  moving that record off the child list. `AddSibling` walks from its anchor, while `AddChild`,
+  `appendFastChild` and `appendCopiedChild` resolve the last OWNED child through `resolveOwnedTail`
+  (`node.go`). The resolver trusts the recorded tail when that node claims this parent, has no `next`, AND
+  this parent holds no off-chain claim (the same signal `tailJumpTarget` declines on, read through
+  `holdsOffChainChildClaim`); otherwise it walks the child list under a `siblingCycleGuard` to the last node
+  still claiming the parent. It returns nil when `parent.firstChild` is nil OR when the first child is foreign
+  and no owned tail exists. The callers then install the appended node as a new owned child list. They NEVER
+  use a foreign head as an `AddSibling` anchor: an entity reference's shared `Entity` child keeps the `DTD` as
+  its parent, so the Entity's sibling links belong to the DTD declaration list and must remain unchanged when
+  the reference receives a child. A stale owned record is repaired rather than followed: the
+  `CopyExtSubset` shape has no reachable first child, and the `stringToNodeList` shape has an owned child list
+  but no recorded tail. The `CreateReference` shape has only a foreign first child, so the new owned list
+  replaces the reference's pointer to that shared Entity without changing the DTD chain.
   `TestAddChildResolvesAnOwnedTail` (`node_owned_tail_test.go`) pins all four reachable shapes, and
   `TestAddSiblingOffChainParentClaim`, `TestAddSiblingCopiedExternalSubsetClaim` and
   `TestAddSiblingCorruptShapesMatchWalk` (`node_sibling_test.go`) pin the sibling side; every expectation in
   the last of those holds for the walk-only implementation too, which is what makes it a differential check.
-  `TestAppendKeepsAForeignChildList` (`node_sibling_internal_test.go`) pins the same survival rule on nodes no
-  document owns. The raw setters record NOTHING, so a tree corrupted through them is outside this agreement —
+  `TestAppendReplacesAForeignChildList` (`node_sibling_internal_test.go`) pins the same ownership boundary on
+  nodes no document owns. The raw setters record NOTHING, so a tree corrupted through them is outside this
+  agreement —
   they already document the tree as inconsistent afterwards, and no importer and no production path can reach
   them.
 - `replaceNode(old, new)` — swap in same position. Attribute-aware: replacing an `Attribute` updates the

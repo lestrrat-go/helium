@@ -731,10 +731,10 @@ func addChild(n MutableNode, cur Node) error {
 		return err
 	}
 
-	// A nil tail means pdn has no child list at all, so this branch installs the
-	// first one. resolveOwnedTail never returns nil for a parent that already
-	// holds children, which is what keeps an existing list from being dropped.
-	l := resolveOwnedTail(n, pdn, cdn)
+	// A nil tail means pdn has no child it owns. Install cur as the owned child
+	// list instead of linking through a foreign head whose sibling links belong
+	// to another parent.
+	l := resolveOwnedTail(n, pdn)
 	if l == nil {
 		pdn.firstChild = cur
 		pdn.lastChild = cur
@@ -812,11 +812,8 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 }
 
 // resolveOwnedTail returns the node an append onto pdn must link after, or nil
-// when pdn has NO child list at all. A nil return means exactly one thing —
-// pdn.firstChild is nil — so the callers' empty-parent branch, which overwrites
-// firstChild, can never run on a parent that already holds children. It never
-// returns a node pdn does not own from a chain pdn does not reach, which is
-// what separates it from a bare pdn.lastChild read.
+// when pdn has no child it owns. It never returns a node pdn does not own from
+// a chain pdn does not reach, which separates it from a bare pdn.lastChild read.
 //
 // The recorded tail and the reachable child list can disagree, and safe API
 // builds every direction of that disagreement. A copied external subset claims
@@ -825,31 +822,23 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 // stringToNodeList materializes an entity's replacement children with
 // firstChild set and lastChild nil; CreateReference installs the DTD's shared
 // Entity as the reference's firstChild while that Entity goes on claiming the
-// DTD. Trusting lastChild alone loses the reachable list in the first shape and
-// discards it in the second, so the record is used only when it proves itself
-// and the list is walked otherwise.
+// DTD. Trusting lastChild alone loses the reachable list in the first shape,
+// discards it in the second, and crosses into the DTD chain in the third. The
+// record is used only when it proves itself, and the owned list is walked
+// otherwise.
 //
 // The walk stops at the first node that does not claim pdn, because the chain
 // beyond such a node belongs to whichever parent it does claim and an append
-// must not run off into it. When the walk stops on the very FIRST node it
-// yields no owned tail at all, and the head of the list pdn reaches is returned
-// instead: that node is still the anchor the existing children hang off, so an
-// append lands behind it exactly as a bare lastChild read used to, and the
-// children can never be dropped. Deciding the parent is empty in that case is
-// what silently discarded them.
-//
-// cdn is the node about to be appended, and it is excluded from that head
-// fallback. The callers run their preflight first, which unlinks cdn from
-// wherever it was, so a pdn whose firstChild is cdn reaches a list of exactly
-// one node — cdn itself — and there is nothing left to preserve. Returning it
-// would link cdn after itself, which is the self-link the callers must never
-// build.
+// must not run off into it. When the first node is foreign, there is no owned
+// append anchor. Returning that foreign head would let AddSibling follow and
+// mutate its owner's sibling chain, so the caller replaces the non-owned child
+// pointer with a new owned list.
 //
 // Healthy trees take the O(1) route: two pointer comparisons on top of the read
 // the callers already did. Only a tree already carrying a stale record pays the
-// walk, and that walk is the same one addSibling performs, so an append lands
-// in the same place whichever of the two the caller went through.
-func resolveOwnedTail(parent Node, pdn, cdn *docnode) Node {
+// walk. An owned tail matches the node addSibling would reach; a foreign head
+// returns nil so the caller never delegates into another parent's chain.
+func resolveOwnedTail(parent Node, pdn *docnode) Node {
 	// No child list means no tail to link after, whatever lastChild records.
 	// This is the copied-external-subset shape: the subset claims the document
 	// as its parent while living only in extSubset, so appending through it
@@ -872,9 +861,9 @@ func resolveOwnedTail(parent Node, pdn, cdn *docnode) Node {
 	}
 
 	// The record is unusable, so walk to the last node that still claims pdn,
-	// bounded by the same allocation-free guard the iterators use. This is the
-	// walk addSibling performs, so an append lands in the same place whichever
-	// route the caller took.
+	// bounded by the same allocation-free guard the iterators use. If the first
+	// node is foreign, the walk returns nil instead of delegating AddSibling into
+	// that node's owning chain.
 	var g siblingCycleGuard
 	var tail Node
 	for cur := first; cur != nil; {
@@ -887,16 +876,6 @@ func resolveOwnedTail(parent Node, pdn, cdn *docnode) Node {
 		}
 		tail = cur
 		cur = cdn.next
-	}
-	if tail == nil {
-		// Nothing on the list claims pdn, so pdn owns no tail — but it does hold
-		// children, and the append must join them rather than replace them. The
-		// one exception is a list that is the operand itself: it holds nothing to
-		// preserve, and linking after it would be a self-link.
-		if first.baseDocNode() == cdn {
-			return nil
-		}
-		return first
 	}
 	return tail
 }
