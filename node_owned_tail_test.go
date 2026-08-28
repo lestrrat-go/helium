@@ -3,11 +3,14 @@ package helium_test
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
+
+const appendCostRuns = 7
 
 // TestAddChildResolvesAnOwnedTail drives the shapes that safe API can build in
 // which a parent's recorded lastChild is not the last node that actually claims
@@ -146,6 +149,82 @@ func TestAddChildResolvesAnOwnedTail(t *testing.T) {
 		require.Equal(t, helium.Node(next), ent.NextSibling())
 		require.Equal(t, helium.Node(ent), next.PrevSibling())
 	})
+}
+
+// TestAppendCostIsLinearBesideAnOffChainClaim guards the per-parent scope of
+// off-chain child claims. CopyExtSubset gives the document such a claim, but an
+// element the document owns must still resolve appends through its first child
+// from the element's own last-child record. If the claim were read per document,
+// every append after the first would walk the growing sibling list and doubling
+// the workload would quadruple the cost.
+func TestAppendCostIsLinearBesideAnOffChainClaim(t *testing.T) {
+	const (
+		small    = 4000
+		large    = 8000
+		maxRatio = 3.2
+	)
+
+	src := documentWithExternalSubset(t)
+	smallCost := bestAppendCostBesideOffChainClaim(t, src, small)
+	largeCost := bestAppendCostBesideOffChainClaim(t, src, large)
+	ratio := float64(largeCost) / float64(smallCost)
+
+	t.Logf("append cost beside off-chain claim: n=%d -> %s, n=%d -> %s, ratio=%.2f",
+		small, smallCost, large, largeCost, ratio)
+	require.LessOrEqual(t, ratio, maxRatio,
+		"append cost looks quadratic: doubling a linear workload should stay below a %.1fx cost increase", maxRatio)
+}
+
+func documentWithExternalSubset(t *testing.T) *helium.Document {
+	t.Helper()
+
+	dtdPath := t.TempDir() + "/ext.dtd"
+	require.NoError(t, os.WriteFile(dtdPath, []byte(`<!ELEMENT root (#PCDATA)>`), 0600))
+	xml := `<?xml version="1.0"?>
+<!DOCTYPE root SYSTEM "` + dtdPath + `">
+<root/>`
+	doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(helium.PermissiveFS()).Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	require.NotNil(t, doc.ExtSubset())
+	return doc
+}
+
+func bestAppendCostBesideOffChainClaim(t *testing.T, src *helium.Document, n int) time.Duration {
+	t.Helper()
+
+	best := time.Duration(-1)
+	for range appendCostRuns {
+		doc := helium.NewDefaultDocument()
+		helium.CopyExtSubset(src, doc)
+		require.Equal(t, helium.Node(doc), doc.ExtSubset().Parent())
+
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(parent))
+		anchor, err := doc.CreateElement("anchor")
+		require.NoError(t, err)
+		require.NoError(t, parent.AddChild(anchor))
+
+		children := make([]*helium.Element, n)
+		for i := range n {
+			children[i], err = doc.CreateElement("child")
+			require.NoError(t, err)
+		}
+
+		start := time.Now()
+		for _, child := range children {
+			if err = anchor.AddSibling(child); err != nil {
+				break
+			}
+		}
+		elapsed := time.Since(start)
+		require.NoError(t, err)
+		require.Equal(t, helium.Node(children[n-1]), parent.LastChild())
+		if best < 0 || elapsed < best {
+			best = elapsed
+		}
+	}
+	return best
 }
 
 func collectChildren(parent helium.Node) []helium.Node {
