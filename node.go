@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sync/atomic"
 
 	"github.com/lestrrat-go/helium/internal/nodelink"
 )
@@ -201,12 +200,8 @@ func setLastChild(n MutableNode, cur Node) {
 	n.baseDocNode().lastChild = cur
 }
 
-// SetOwnerDocument makes doc this node's owning document. An off-chain-claim
-// record travels with the node (adoptOffChainClaims), so a document that adopts a
-// subtree holding such a claim inherits the record instead of starting out
-// trusting its own lastChild.
+// SetOwnerDocument makes doc this node's owning document.
 func (n *docnode) SetOwnerDocument(doc *Document) {
-	adoptOffChainClaims(n.doc, doc)
 	n.doc = doc
 }
 
@@ -638,10 +633,6 @@ func noteCrossDocumentEscape(dest *Document, cur Node) {
 	if curDoc == dest {
 		return
 	}
-	// A node crossing into dest's tree brings its links with it, so an
-	// off-chain-claim record on the document it came from has to travel too:
-	// dest's own lastChild is what the O(1) append-point resolution trusts.
-	adoptOffChainClaims(curDoc, dest)
 	if curDoc == nil {
 		return
 	}
@@ -740,9 +731,11 @@ func addChild(n MutableNode, cur Node) error {
 		return err
 	}
 
-	l := resolveOwnedTail(n, pdn)
+	// A nil tail means pdn has no child list at all, so this branch installs the
+	// first one. resolveOwnedTail never returns nil for a parent that already
+	// holds children, which is what keeps an existing list from being dropped.
+	l := resolveOwnedTail(n, pdn, cdn)
 	if l == nil {
-		noteOrphanedChildClaim(n, pdn.firstChild)
 		pdn.firstChild = cur
 		pdn.lastChild = cur
 		cdn.parent = n
@@ -818,6 +811,115 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 	return nil
 }
 
+// resolveOwnedTail returns the node an append onto pdn must link after, or nil
+// when pdn has NO child list at all. A nil return means exactly one thing —
+// pdn.firstChild is nil — so the callers' empty-parent branch, which overwrites
+// firstChild, can never run on a parent that already holds children. It never
+// returns a node pdn does not own from a chain pdn does not reach, which is
+// what separates it from a bare pdn.lastChild read.
+//
+// The recorded tail and the reachable child list can disagree, and safe API
+// builds every direction of that disagreement. A copied external subset claims
+// the document as its parent while living only in extSubset, so appending
+// through it records a tail that is on no child list and leaves firstChild nil;
+// stringToNodeList materializes an entity's replacement children with
+// firstChild set and lastChild nil; CreateReference installs the DTD's shared
+// Entity as the reference's firstChild while that Entity goes on claiming the
+// DTD. Trusting lastChild alone loses the reachable list in the first shape and
+// discards it in the second, so the record is used only when it proves itself
+// and the list is walked otherwise.
+//
+// The walk stops at the first node that does not claim pdn, because the chain
+// beyond such a node belongs to whichever parent it does claim and an append
+// must not run off into it. When the walk stops on the very FIRST node it
+// yields no owned tail at all, and the head of the list pdn reaches is returned
+// instead: that node is still the anchor the existing children hang off, so an
+// append lands behind it exactly as a bare lastChild read used to, and the
+// children can never be dropped. Deciding the parent is empty in that case is
+// what silently discarded them.
+//
+// cdn is the node about to be appended, and it is excluded from that head
+// fallback. The callers run their preflight first, which unlinks cdn from
+// wherever it was, so a pdn whose firstChild is cdn reaches a list of exactly
+// one node — cdn itself — and there is nothing left to preserve. Returning it
+// would link cdn after itself, which is the self-link the callers must never
+// build.
+//
+// Healthy trees take the O(1) route: two pointer comparisons on top of the read
+// the callers already did. Only a tree already carrying a stale record pays the
+// walk, and that walk is the same one addSibling performs, so an append lands
+// in the same place whichever of the two the caller went through.
+func resolveOwnedTail(parent Node, pdn, cdn *docnode) Node {
+	// No child list means no tail to link after, whatever lastChild records.
+	// This is the copied-external-subset shape: the subset claims the document
+	// as its parent while living only in extSubset, so appending through it
+	// records a tail while firstChild stays nil.
+	first := pdn.firstChild
+	if first == nil {
+		return nil
+	}
+
+	// Trust the recorded tail only when it proves itself AND this parent has not
+	// been handed a child that claims it from off its child list. Without that
+	// second condition a node can claim this parent from another chain entirely,
+	// and linking behind it would abandon the reachable list. tailJumpTarget
+	// declines on the same signal, so both append routes degrade together.
+	if l := pdn.lastChild; l != nil {
+		ldn := l.baseDocNode()
+		if ldn.next == nil && ldn.parent != nil && ldn.parent.baseDocNode() == pdn && !holdsOffChainChildClaim(parent) {
+			return l
+		}
+	}
+
+	// The record is unusable, so walk to the last node that still claims pdn,
+	// bounded by the same allocation-free guard the iterators use. This is the
+	// walk addSibling performs, so an append lands in the same place whichever
+	// route the caller took.
+	var g siblingCycleGuard
+	var tail Node
+	for cur := first; cur != nil; {
+		cdn := cur.baseDocNode()
+		if g.step(cdn) {
+			break
+		}
+		if cdn.parent == nil || cdn.parent.baseDocNode() != pdn {
+			break
+		}
+		tail = cur
+		cur = cdn.next
+	}
+	if tail == nil {
+		// Nothing on the list claims pdn, so pdn owns no tail — but it does hold
+		// children, and the append must join them rather than replace them. The
+		// one exception is a list that is the operand itself: it holds nothing to
+		// preserve, and linking after it would be a self-link.
+		if first.baseDocNode() == cdn {
+			return nil
+		}
+		return first
+	}
+	return tail
+}
+
+// holdsOffChainChildClaim reports whether THIS parent has been handed a child
+// that claims it while sitting on no child list of its own, which is the one
+// signal that a self-proving lastChild may still belong to another chain. The
+// record is per-PARENT: a claim on one parent says nothing about any other
+// parent, including every other parent in the same document, so it must never
+// be read from the owning document.
+//
+// The only claimant safe API creates is the external subset CopyExtSubset
+// copies, which is given the destination document as its parent and left
+// reachable only through ExtSubset. The claimed parent is that *Document
+// itself, and Document.offChainChildClaim records it. (CreateInternalSubset
+// also gives a DTD the document as its parent, but it splices that DTD into the
+// child list, so it creates no claim.) Every other parent answers false in a
+// type assertion, so an ordinary append pays nothing for the check.
+func holdsOffChainChildClaim(parent Node) bool {
+	doc, ok := parent.(*Document)
+	return ok && doc.offChainChildClaim
+}
+
 // chainMember reports whether x is a member of the single child chain pdn owns:
 // the chain that starts at pdn.firstChild and runs forward through next
 // pointers. It answers ONE question, about the anchor of an append: may
@@ -848,78 +950,6 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 // caller would splice into the parent's real child list and abandon the rest of
 // x's chain. Rejecting the non-reciprocal edge costs one pointer comparison per
 // step, so the walk keeps the bound above.
-// resolveOwnedTail returns the node an append onto pdn must link after, or nil
-// when pdn has no child that claims it. It never returns a node pdn does not
-// own, which is what separates it from a bare pdn.lastChild read.
-//
-// The recorded tail and the reachable child list can disagree, and safe API
-// builds both directions of that disagreement. A copied external subset claims
-// the document as its parent while living only in extSubset, so appending
-// through it records a tail that is on no child list and leaves firstChild nil;
-// stringToNodeList materializes an entity's replacement children with
-// firstChild set and lastChild nil. Trusting lastChild alone loses the
-// reachable list in the first shape and discards it in the second, so the
-// record is used only when it proves itself and the list is walked otherwise.
-//
-// Healthy trees take the O(1) route: two pointer comparisons on top of the read
-// the callers already did. Only a tree already carrying a stale record pays the
-// walk, and that walk is the same one addSibling performs, so an append lands
-// in the same place whichever of the two the caller went through.
-func resolveOwnedTail(parent Node, pdn *docnode) Node {
-	// No reachable child list means no owned tail, whatever lastChild records.
-	// This is the copied-external-subset shape: the subset claims the document
-	// as its parent while living only in extSubset, so appending through it
-	// records a tail while firstChild stays nil.
-	if pdn.firstChild == nil {
-		return nil
-	}
-
-	// Trust the recorded tail only when it proves itself AND the owning document
-	// carries no off-chain parent claim. Without that second condition a node
-	// can claim this parent from another chain entirely, and linking behind it
-	// would abandon the reachable list. tailJumpTarget declines on the same
-	// signal, so both append routes degrade together.
-	if l := pdn.lastChild; l != nil {
-		ldn := l.baseDocNode()
-		if ldn.next == nil && ldn.parent != nil && ldn.parent.baseDocNode() == pdn && !holdsOffChainChildClaim(parent) {
-			return l
-		}
-	}
-
-	// The record is unusable, so walk to the last node that still claims pdn,
-	// bounded by the same allocation-free guard the iterators use. This is the
-	// walk addSibling performs, so an append lands in the same place whichever
-	// route the caller took.
-	var g siblingCycleGuard
-	var tail Node
-	for cur := pdn.firstChild; cur != nil; {
-		cdn := cur.baseDocNode()
-		if g.step(cdn) {
-			break
-		}
-		if cdn.parent == nil || cdn.parent.baseDocNode() != pdn {
-			break
-		}
-		tail = cur
-		cur = cdn.next
-	}
-	return tail
-}
-
-// holdsOffChainChildClaim reports whether parent's owning document has recorded
-// a parent claim that sits in no child list, which is the one signal that a
-// self-proving lastChild may still belong to another chain.
-func holdsOffChainChildClaim(parent Node) bool {
-	doc := owningDocument(parent)
-	if doc == nil {
-		return true
-	}
-	if doc.offChainClaims {
-		return true
-	}
-	return doc == parent && doc.offChainChildClaim
-}
-
 func chainMember(pdn, x *docnode) bool {
 	if pdn == nil || x == nil {
 		return false
@@ -984,44 +1014,39 @@ func reciprocalPrev(x *docnode) *docnode {
 //     pointer an unbounded distance forward from firstChild. It holds as an
 //     invariant of the guarded paths — every one of them moves lastChild only to
 //     a node it has just linked onto the chain — so what is checked instead is
-//     that no node in this document claims a parent it is not a child of.
-//     Document.offChainClaims records exactly that, so the shortcut is declined
-//     for a document that holds such a claim.
+//     that THIS parent has not been handed a child that claims it from off its
+//     child list. holdsOffChainChildClaim answers that, and the shortcut is
+//     declined for a parent that has.
 //
-// The owning document is read through owningDocument, so a *Document parent
-// names ITSELF: a document node holds the trees it owns and its own doc pointer
-// stays nil, which is a fact about how a document is initialized and not a
-// statement about whether its child list can be trusted. A document is claimed
-// off-chain by CopyExtSubset, which gives the copied external subset the
-// destination document as its parent and then leaves it reachable only through
-// ExtSubset, never from the child list, so an append through that subset records
-// its own result as the document's tail and moves the record off the child list.
-// That is a condition, not a type, and Document.offChainChildClaim records it:
-// the shortcut is declined for a document that has actually been handed such a
-// claimant, and taken for every other one. (CreateInternalSubset also gives a
-// DTD the document as its parent, but it splices that DTD into the child list,
-// so it creates no claim.)
+// The claim is read per-PARENT, never per-document: the parent whose chain is at
+// stake is the only one whose lastChild record the claim can invalidate, so a
+// claim on one parent must not cost every other parent in the same document its
+// O(1) resolution. The one parent safe API hands such a claimant is a *Document,
+// through CopyExtSubset, which gives the copied external subset the destination
+// document as its parent and then leaves it reachable only through ExtSubset,
+// never from the child list, so an append through that subset records its own
+// result as the document's tail and moves the record off the child list. That is
+// a condition, not a type: the shortcut is declined for a document that has
+// actually been handed such a claimant, and taken for every other parent,
+// documents included. resolveOwnedTail declines on the same signal, so both
+// append routes degrade together.
 //
 // The remaining reads are cheap confirmations that the record is a usable tail:
 // it must not be the anchor itself, it must genuinely end its chain, and it must
-// claim this very parent. On a document holding no off-chain claim they cannot
-// fail, and they are kept anyway because the record is per-DOCUMENT while a tree
-// is not: a cross-document node move (noteCrossDocumentEscape) leaves one
-// document's chain holding nodes another document owns, and these three
-// comparisons are what makes a claim that slipped past the record degrade to the
-// walk instead of splicing onto the wrong node. They also keep the
-// stale-lastChild repair path addChild and appendFastChild depend on: they call
-// AddSibling on parent.lastChild precisely when that node's next is non-nil, so
-// the shortcut declines and the walk finds and repairs the true tail.
+// claim this very parent. On a parent holding no off-chain claim they cannot
+// fail, and they are kept anyway because a tree may span documents: a
+// cross-document node move (noteCrossDocumentEscape) leaves one document's chain
+// holding nodes another document owns, and these three comparisons are what
+// makes a claim that slipped past the record degrade to the walk instead of
+// splicing onto the wrong node. They also keep the stale-lastChild repair path
+// addChild and appendFastChild depend on: they call AddSibling on
+// parent.lastChild precisely when that node's next is non-nil, so the shortcut
+// declines and the walk finds and repairs the true tail.
 func tailJumpTarget(parent Node, ndn *docnode) Node {
 	if parent == nil {
 		return nil
 	}
-	doc := owningDocument(parent)
-	if doc == nil || doc.offChainClaims {
-		return nil
-	}
-	if doc == parent && doc.offChainChildClaim {
+	if holdsOffChainChildClaim(parent) {
 		return nil
 	}
 	pdn := parent.baseDocNode()
@@ -1176,84 +1201,6 @@ func unsafeSetParent(n Node, parent Node) {
 // AddChild/AddSibling/UnlinkNode instead.
 func unsafeSetNextSibling(n Node, next Node) {
 	n.baseDocNode().next = next
-}
-
-// noteOrphanedChildClaim records the off-chain parent claim the GUARDED paths
-// themselves create, which is how an ordinary caller reaches one. A parent
-// holding a firstChild with NO lastChild is a shape Document.stringToNodeList
-// leaves behind on an entity referenced from an attribute value. An append onto
-// such a parent takes the empty-parent branch, which overwrites firstChild: the
-// child that was there is detached from the chain while it goes on claiming this
-// parent, and a later append THROUGH that detached child records its own result
-// as the parent's lastChild, moving that record off the child list.
-//
-// Record it at the moment the claim is created, on the documents that own the
-// parent whose chain is at stake and the child being detached from it. orphan is
-// the parent's firstChild BEFORE the overwrite; a nil one means the parent was
-// genuinely empty and nothing is recorded.
-func noteOrphanedChildClaim(parent Node, orphan Node) {
-	if isNilNode(orphan) {
-		return
-	}
-	attributed := markOffChainClaim(owningDocument(parent))
-	attributed = markOffChainClaim(owningDocument(orphan)) && attributed
-	if !attributed {
-		unownedOffChainClaim.Store(true)
-	}
-}
-
-// markOffChainClaim records an off-chain parent claim on doc and reports whether
-// there was a document to record it on.
-func markOffChainClaim(doc *Document) bool {
-	if doc == nil {
-		return false
-	}
-	doc.offChainClaims = true
-	return true
-}
-
-// unownedOffChainClaim records an off-chain parent claim that no document owned
-// at the time it was made. It is package-level because there is nowhere else to
-// put it: a detached node carries no document, and the claim is still there when
-// a document later adopts the subtree. It is atomic because the documents that
-// read it are otherwise independent and may live in different goroutines.
-var unownedOffChainClaim atomic.Bool
-
-// adoptOffChainClaims carries an off-chain-claim record forward when a node
-// changes owning document. The record lives on the DOCUMENT, so a subtree that
-// moves between documents would otherwise leave it behind: the destination would
-// trust a lastChild that is not the end of its own child chain. A node arriving
-// from NO document is the case unownedOffChainClaim exists for — the claim had
-// no document to be recorded on when it was made.
-//
-// It errs toward marking. Marking a document that holds no claim only costs it
-// the O(1) append-point resolution, which is a fallback to the sibling walk
-// every other tree operation performs unconditionally; failing to mark one that
-// does hold a claim is a wrong tree.
-func adoptOffChainClaims(from, to *Document) {
-	if to == nil || to.offChainClaims || from == to {
-		return
-	}
-	if from == nil {
-		if unownedOffChainClaim.Load() {
-			to.offChainClaims = true
-		}
-		return
-	}
-	if from.offChainClaims {
-		to.offChainClaims = true
-	}
-}
-
-// owningDocument returns the document whose trees n belongs to. A *Document is
-// its OWN owner — a document node holds the trees it owns and its embedded
-// docnode's doc pointer stays nil — so it must be resolved by type rather than
-// by reading that pointer.
-func owningDocument(n Node) *Document {
-	if doc, ok := n.(*Document); ok {
-		return doc
-	}
-	return n.baseDocNode().doc
 }
 
 func init() {
@@ -1811,7 +1758,6 @@ func setListDoc(n Node, doc *Document) {
 			mn.SetTreeDoc(doc)
 			continue
 		}
-		adoptOffChainClaims(cdn.doc, doc)
 		cdn.doc = doc
 	}
 }
@@ -1836,7 +1782,6 @@ func setTreeDoc(n MutableNode, doc *Document) {
 			}
 			seenAttrs[pdn] = struct{}{}
 			// if prop.atype == XML_ATTRIBUTE_ID; xmlRemoveID(tree->doc, prop)
-			adoptOffChainClaims(prop.doc, doc)
 			prop.doc = doc
 			if child := prop.firstChild; child != nil {
 				setListDoc(child, doc)

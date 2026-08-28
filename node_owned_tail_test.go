@@ -1,8 +1,10 @@
 package helium_test
 
 import (
+	"math"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
@@ -113,4 +115,107 @@ func TestAddChildResolvesAnOwnedTail(t *testing.T) {
 		require.NotEqual(t, helium.Node(ent), ent.PrevSibling(),
 			"a node must never become its own previous sibling")
 	})
+
+	// The same EntityRef shape, with a DIFFERENT node appended. No child on the
+	// reference's list claims the reference, so no owned tail exists — but the
+	// list is not empty, and the append must join it. Treating "no owned tail"
+	// as "empty parent" overwrites firstChild and drops the Entity with no
+	// error returned.
+	t.Run("a foreign first child survives an append", func(t *testing.T) {
+		t.Parallel()
+
+		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "x")
+		require.NoError(t, err)
+
+		ref, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		require.Equal(t, helium.Node(ent), ref.FirstChild())
+
+		comment := doc.CreateComment([]byte("added"))
+		require.NoError(t, ref.AddChild(comment))
+
+		require.Equal(t, helium.Node(ent), ref.FirstChild(),
+			"the entity the reference already held must not be discarded")
+		require.Equal(t, helium.Node(comment), ref.LastChild())
+
+		// Walk the raw sibling links rather than Children: the Entity claims the
+		// DTD, so the owned-boundary rule ends the Children iteration at it.
+		var children []helium.Node
+		for child := ref.FirstChild(); child != nil; child = child.NextSibling() {
+			children = append(children, child)
+		}
+		require.Len(t, children, 2, "the reference must hold both children")
+		require.Equal(t, helium.Node(ent), children[0])
+		require.Equal(t, helium.Node(comment), children[1])
+	})
+}
+
+// appendChildren times n AddChild calls onto a freshly created element in doc.
+// The element is well formed and holds no stale record of its own, so the cost
+// is entirely the cost of resolving the append point.
+func appendChildren(t *testing.T, doc *helium.Document, n int) time.Duration {
+	t.Helper()
+
+	host, err := doc.CreateElement("host")
+	require.NoError(t, err)
+	children := make([]*helium.Comment, n)
+	for i := range children {
+		children[i] = doc.CreateComment([]byte("c"))
+	}
+
+	start := time.Now()
+	for _, child := range children {
+		if err := host.AddChild(child); err != nil {
+			require.NoError(t, err)
+		}
+	}
+	return time.Since(start)
+}
+
+// TestAppendCostIsLinearBesideAnOffChainClaim pins the SCOPE of the off-chain
+// claim record. A parent that has been handed a child claiming it from off its
+// child list cannot trust its own lastChild, but every OTHER parent still can,
+// including every other parent in the same document. Reading the record from the
+// owning document instead of from the parent makes one claim anywhere turn every
+// later append in that document into a walk of the whole child list, which is
+// quadratic over N appends.
+//
+// The assertion is a SHAPE, not a time: doubling the number of appends must
+// roughly double the cost (ratio near 2), not quadruple it (ratio near 4). A
+// loaded machine moves both measurements together, and the best of several
+// attempts is taken so a single scheduling stall cannot fail the test.
+func TestAppendCostIsLinearBesideAnOffChainClaim(t *testing.T) {
+	// Not parallel: it measures elapsed time.
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<!DOCTYPE r [<!ENTITY e "x">]><r/>`))
+	require.NoError(t, err)
+
+	// The sequence that used to record a document-wide claim: the reference's
+	// firstChild is the DTD's shared Entity, which claims the DTD and not the
+	// reference, so the append finds no tail the reference owns.
+	ref, err := doc.CreateReference("e")
+	require.NoError(t, err)
+	require.NoError(t, ref.AddChild(doc.CreateComment([]byte("stray"))))
+
+	const n = 8000
+	appendChildren(t, doc, n) // warm up allocator and caches
+
+	best := math.Inf(1)
+	for range 3 {
+		single := appendChildren(t, doc, n)
+		double := appendChildren(t, doc, 2*n)
+		if single <= 0 {
+			continue
+		}
+		if ratio := float64(double) / float64(single); ratio < best {
+			best = ratio
+		}
+	}
+
+	require.Less(t, best, 3.0,
+		"doubling the appends must roughly double the cost, not quadruple it; "+
+			"a ratio near 4 means every append is walking the whole child list")
 }

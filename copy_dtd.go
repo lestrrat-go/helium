@@ -67,8 +67,10 @@ func CopyExtSubset(src, dst *Document) {
 	dst.extSubset = dstDTD
 	// dstDTD claims dst as its parent but is deliberately NOT in dst's child
 	// list, so dst now holds a node that can move its recorded lastChild off that
-	// list. Record it: addSibling stops resolving an append point from
-	// dst.lastChild (tailJumpTarget) and walks instead.
+	// list. Record it on dst, the parent that was handed the claimant: appends
+	// onto dst itself stop resolving their point from dst.lastChild
+	// (tailJumpTarget, resolveOwnedTail) and walk instead, while every element
+	// dst owns keeps its own O(1) resolution.
 	dst.offChainChildClaim = true
 }
 
