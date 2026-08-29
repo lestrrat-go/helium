@@ -217,14 +217,7 @@ func collectDocumentNodesLimited(ctx context.Context, doc *helium.Document, maxN
 	for c := range helium.Children(doc) {
 		switch c.Type() {
 		case helium.ElementNode:
-			remaining := maxNodes
-			if remaining > 0 {
-				remaining -= len(set.nodes)
-				if remaining == 0 {
-					return nil, checkXPathFilterNodeLimit(ctx, maxNodes+1, maxNodes)
-				}
-			}
-			sub, err := collectSubtreeNodesLimited(ctx, c, remaining)
+			sub, err := collectSubtreeNodesLimitedAtOffset(ctx, c, maxNodes, len(set.nodes))
 			if err != nil {
 				return nil, err
 			}
@@ -779,7 +772,13 @@ func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, err
 // namespace-node wrapper. Rejecting a namespace-heavy input therefore does not
 // first materialize the work being bounded.
 func collectSubtreeNodesLimited(ctx context.Context, n helium.Node, maxNodes int) ([]helium.Node, error) {
-	c := &subtreeCollector{nodeSet: nodeSet{maxNodes: maxNodes}, fullAxis: true}
+	return collectSubtreeNodesLimitedAtOffset(ctx, n, maxNodes, 0)
+}
+
+// collectSubtreeNodesLimitedAtOffset applies the absolute maxNodes cap after
+// accounting for nodeOffset members already collected outside the subtree.
+func collectSubtreeNodesLimitedAtOffset(ctx context.Context, n helium.Node, maxNodes, nodeOffset int) ([]helium.Node, error) {
+	c := &subtreeCollector{nodeSet: nodeSet{maxNodes: maxNodes, nodeOffset: nodeOffset}, fullAxis: true}
 	if err := c.collect(ctx, n); err != nil {
 		return nil, err
 	}
@@ -891,8 +890,9 @@ func (p *ctxPoll) charge(ctx context.Context, n int) error {
 // element's or a whole subtree's worth of work inside one unpolled span.
 type nodeSet struct {
 	ctxPoll
-	nodes    []helium.Node
-	maxNodes int
+	nodes      []helium.Node
+	maxNodes   int // Absolute cap reported to the caller.
+	nodeOffset int // Members collected before this node set.
 }
 
 func (s *nodeSet) add(ctx context.Context, n helium.Node) error {
@@ -913,10 +913,14 @@ func (s *nodeSet) addNamespace(ctx context.Context, ns *helium.Namespace, elem *
 }
 
 func (s *nodeSet) beforeAdd(ctx context.Context, n int) error {
-	if s.maxNodes <= 0 || n <= s.maxNodes-len(s.nodes) {
+	if s.maxNodes <= 0 {
 		return nil
 	}
-	return checkXPathFilterNodeLimit(ctx, len(s.nodes)+n, s.maxNodes)
+	remaining := s.maxNodes - s.nodeOffset
+	if remaining >= len(s.nodes) && n <= remaining-len(s.nodes) {
+		return nil
+	}
+	return xpathFilterNodeLimitExceeded(ctx, s.maxNodes)
 }
 
 // addAll appends nodes a poll interval at a time, so the span between two polls
@@ -944,13 +948,17 @@ func (s *nodeSet) addAll(ctx context.Context, nodes []helium.Node) error {
 }
 
 func checkXPathFilterNodeLimit(ctx context.Context, members, maxNodes int) error {
+	if maxNodes > 0 && members > maxNodes {
+		return xpathFilterNodeLimitExceeded(ctx, maxNodes)
+	}
+	return ctx.Err()
+}
+
+func xpathFilterNodeLimitExceeded(ctx context.Context, maxNodes int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if maxNodes > 0 && members > maxNodes {
-		return fmt.Errorf("%w: XPath filter input exceeds %d node-set members", ErrResourceLimitExceeded, maxNodes)
-	}
-	return nil
+	return fmt.Errorf("%w: XPath filter input exceeds %d node-set members", ErrResourceLimitExceeded, maxNodes)
 }
 
 func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
@@ -1007,7 +1015,7 @@ func (c *subtreeCollector) seedRootBinding(ctx context.Context, ns *helium.Names
 	if _, exists := c.scope[prefix]; !exists {
 		// The root itself is the one pending member not represented in scope.
 		if c.maxNodes > 0 {
-			if err := checkXPathFilterNodeLimit(ctx, len(c.nodes)+1+len(c.scope)+1, c.maxNodes); err != nil {
+			if err := c.beforeAdd(ctx, 1+len(c.scope)+1); err != nil {
 				return err
 			}
 		}
@@ -1030,7 +1038,7 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 		if !root {
 			remaining := -1
 			if c.maxNodes > 0 {
-				remaining = c.maxNodes - len(c.nodes)
+				remaining = c.maxNodes - c.nodeOffset - len(c.nodes)
 			}
 			var err error
 			changed, err = c.enter(ctx, elem, remaining)
@@ -1135,7 +1143,7 @@ func (c *subtreeCollector) enter(ctx context.Context, elem *helium.Element, rema
 		prefix := ns.Prefix()
 		if prefix != lexicon.PrefixXML && !seen.contains(prefix) {
 			if remaining >= 0 && pendingMembers >= remaining {
-				return checkXPathFilterNodeLimit(ctx, len(c.nodes)+pendingMembers+1, c.maxNodes)
+				return c.beforeAdd(ctx, pendingMembers+1)
 			}
 			if err := c.charge(ctx, 1); err != nil {
 				return err

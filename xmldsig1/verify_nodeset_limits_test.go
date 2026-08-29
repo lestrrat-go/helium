@@ -341,6 +341,20 @@ func TestVerifyXPathFilterNodeLimit(t *testing.T) {
 		require.False(t, ks.called, "the XPath input limit must fire before key resolution")
 	})
 
+	t.Run("whole document reports absolute limit after leading comment", func(t *testing.T) {
+		const absoluteLimit = 2
+		src := strings.Replace(xpathFilterRetrievalDoc(0, 0),
+			`<ds:RetrievalMethod URI="#bulk"`, `<ds:RetrievalMethod URI=""`, 1)
+		doc := mustParseXML(t, `<!--leading-->`+src)
+		ks := &recordingKeySource{key: &key.PublicKey}
+		_, err := xmldsig1.NewVerifier(ks).
+			MaxXPathFilterNodes(absoluteLimit).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+		require.Contains(t, err.Error(), fmt.Sprintf("exceeds %d node-set members", absoluteLimit))
+		require.False(t, ks.called, "the XPath input limit must fire before key resolution")
+	})
+
 	t.Run("cancelled context wins", func(t *testing.T) {
 		doc := mustParseXML(t, src)
 		ctx, cancel := context.WithCancel(t.Context())

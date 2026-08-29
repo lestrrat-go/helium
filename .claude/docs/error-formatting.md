@@ -341,6 +341,9 @@ parser error. `errors.Is` therefore matches `context.Canceled` or `context.Deadl
 for context, while `errors.As` still recovers a non-context `helium.ErrParseError`; the malformed-resource
 wording is unchanged.
 
+An XPath filter node-set limit error names the caller-configured absolute `MaxXPathFilterNodes` cap, including
+whole-document collections that count leading comments or processing instructions before the document element.
+
 ### XML Encryption (`xmlenc1/errors.go`)
 
 `ErrCipherValueBytesExceeded` is returned when an EncryptedData payload exceeds
