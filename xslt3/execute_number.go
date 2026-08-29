@@ -712,6 +712,10 @@ func formatBigNumberList(bigNums []*big.Int, format string, groupSep string, gro
 func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSize int, lang string, ordinal string) string {
 	runes := []rune(token)
 	firstRune := runes[0]
+	// Roman numbering falls back to plain decimal outside its bounded range.
+	if token == "i" || token == "I" {
+		return num.String()
+	}
 
 	// Non-ASCII digit system (e.g., Arabic-Indic ٠)
 	if firstRune > 127 && unicode.IsDigit(firstRune) {
@@ -720,6 +724,11 @@ func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSiz
 			s = applyGroupingSeparator(s, groupSep, groupSize)
 		}
 		return s
+	}
+	// Non-ASCII number tokens use a bounded ordinal system. A number beyond
+	// that range falls back to plain decimal without a numeric ordinal suffix.
+	if firstRune > 127 && unicode.IsNumber(firstRune) {
+		return num.String()
 	}
 
 	// Default: decimal with optional grouping and min-width

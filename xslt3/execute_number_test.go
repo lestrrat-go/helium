@@ -54,6 +54,20 @@ func TestExecNumberStartAt(t *testing.T) {
 			ordinal: ordinalYes,
 			want:    "2147483648th",
 		},
+		{
+			name:    "Roman ordinal fallback above signed 32-bit range",
+			startAt: "2147483648",
+			format:  "I",
+			ordinal: ordinalYes,
+			want:    "2147483648",
+		},
+		{
+			name:    "Unicode ordinal fallback above signed 32-bit range",
+			startAt: "2147483648",
+			format:  "①",
+			ordinal: ordinalYes,
+			want:    "2147483648",
+		},
 	}
 
 	for _, testCase := range testCases {
