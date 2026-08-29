@@ -427,6 +427,10 @@ func isAlphanumeric(r rune) bool {
 }
 
 func formatSingleNumber(num int, token string, groupSep string, groupSize int, lang string, ordinal string) string {
+	if formatted, ok := formatWordNumber(int64(num), token, lang, ordinal); ok {
+		return formatted
+	}
+
 	switch token {
 	case "a":
 		return toLowerAlpha(num)
@@ -436,12 +440,6 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 		return strings.ToLower(toRoman(num))
 	case "I":
 		return toRoman(num)
-	case "w":
-		return numberToWordsLang(num, "lower", lang, ordinal)
-	case "W":
-		return numberToWordsLang(num, "upper", lang, ordinal)
-	case "Ww":
-		return numberToWordsLang(num, "title", lang, ordinal)
 	default:
 		runes := []rune(token)
 		firstRune := runes[0]
@@ -480,6 +478,19 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 			s += numericOrdinalSuffix(num, lang)
 		}
 		return s
+	}
+}
+
+func formatWordNumber(num int64, token string, lang string, ordinal string) (string, bool) {
+	switch token {
+	case "w":
+		return numberToWordsLang(num, "lower", lang, ordinal), true
+	case "W":
+		return numberToWordsLang(num, "upper", lang, ordinal), true
+	case "Ww":
+		return numberToWordsLang(num, "title", lang, ordinal), true
+	default:
+		return "", false
 	}
 }
 
@@ -619,11 +630,16 @@ func formatBigNumberList(bigNums []*big.Int, format string, groupSep string, gro
 		if tokIdx >= len(tokens) {
 			tokIdx = len(tokens) - 1
 		}
-		// If the number fits in an int, use the standard formatter for full
-		// support of roman numerals, alphabetic, words, etc.
+		// Word formatting supports every int64 value on every architecture.
+		// Other non-decimal formats still require a native int.
 		if num.IsInt64() {
-			n := int(num.Int64())
-			if int64(n) == num.Int64() {
+			n64 := num.Int64()
+			if formatted, ok := formatWordNumber(n64, tokens[tokIdx].format, lang, ordinal); ok {
+				buf.WriteString(formatted)
+				continue
+			}
+			n := int(n64)
+			if int64(n) == n64 {
 				buf.WriteString(formatSingleNumber(n, tokens[tokIdx].format, groupSep, groupSize, lang, ordinal))
 				continue
 			}
@@ -871,7 +887,7 @@ func ordinalRangeLength(r rune) int {
 }
 
 // numberToWords converts a number to English words.
-func numberToWords(n int, upper bool) string { //nolint:unparam // upper always false but kept for XSLT number-to-words spec
+func numberToWords(n int64, upper bool) string { //nolint:unparam // upper always false but kept for XSLT number-to-words spec
 	if n == 0 {
 		if upper {
 			return "ZERO"
@@ -882,23 +898,23 @@ func numberToWords(n int, upper bool) string { //nolint:unparam // upper always 
 		"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"}
 	var tens = []string{"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"}
 
-	var words func(int) string
-	words = func(n int) string {
+	var words func(int64) string
+	words = func(n int64) string {
 		if n < 0 {
 			return "minus " + words(-n)
 		}
 		if n < 20 {
-			return ones[n]
+			return ones[int(n)]
 		}
 		if n < 100 {
-			w := tens[n/10]
+			w := tens[int(n/10)]
 			if n%10 != 0 {
-				w += " " + ones[n%10]
+				w += " " + ones[int(n%10)]
 			}
 			return w
 		}
 		if n < 1000 {
-			w := ones[n/100] + " hundred"
+			w := ones[int(n/100)] + " hundred"
 			if n%100 != 0 {
 				w += " and " + words(n%100)
 			}
@@ -911,21 +927,21 @@ func numberToWords(n int, upper bool) string { //nolint:unparam // upper always 
 			}
 			return w
 		}
-		if n < 1000000000 {
+		if n < numberBillion {
 			w := words(n/1000000) + " million"
 			if n%1000000 != 0 {
 				w += " " + words(n%1000000)
 			}
 			return w
 		}
-		if n < 1000000000000 {
-			w := words(n/1000000000) + " billion"
-			if n%1000000000 != 0 {
-				w += " " + words(n%1000000000)
+		if n < numberTrillion {
+			w := words(n/numberBillion) + " billion"
+			if n%numberBillion != 0 {
+				w += " " + words(n%numberBillion)
 			}
 			return w
 		}
-		return strconv.Itoa(n)
+		return strconv.FormatInt(n, 10)
 	}
 	result := words(n)
 	if upper {
