@@ -68,9 +68,17 @@ type transformRuntime struct {
 	xsltTransformer XSLTTransformer
 	signature       *helium.Element
 
-	allowEnveloped bool
-	signing        bool
-	external       bool
+	allowEnveloped      bool
+	signing             bool
+	external            bool
+	maxXPathFilterNodes int
+}
+
+func (r transformRuntime) xpathFilterNodeLimit() int {
+	if r.maxXPathFilterNodes == 0 {
+		return defaultMaxXPathFilterNodes
+	}
+	return r.maxXPathFilterNodes
 }
 
 func newNodeSetTransformValue(nodes *nodeSetValue) transformValue {
@@ -317,7 +325,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 			}
 			value = newOctetTransformValue(octets)
 		case TransformXPath:
-			nodes, err := materializeNodeSet(ctx, value.nodes)
+			nodes, err := materializeNodeSet(ctx, value.nodes, runtime.xpathFilterNodeLimit())
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -325,7 +333,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 			if hereNode != nil && hereNode.OwnerDocument() != nodes.doc {
 				hereNode = nil
 			}
-			filtered, err := applyXPathFilter(ctx, nodes.nodes, xpathFilter{expr: contract.xpath, ns: step.xpathNS, hereNode: hereNode})
+			filtered, err := applyXPathFilter(ctx, nodes.nodes, xpathFilter{expr: contract.xpath, ns: step.xpathNS, hereNode: hereNode}, runtime.xpathFilterNodeLimit())
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -374,7 +382,7 @@ func convertTransformValue(ctx context.Context, runtime transformRuntime, value 
 			}
 			return transformValue{}, fmt.Errorf("%w: octet input cannot be parsed for transform %d (%s): %v", ErrUnsupportedTransform, consumerIndex, consumerAlgorithm, err)
 		}
-		docNodes, err := collectConvertedDocumentNodes(ctx, doc, consumerAlgorithm)
+		docNodes, err := collectConvertedDocumentNodes(ctx, doc, consumerAlgorithm, runtime.xpathFilterNodeLimit())
 		if err != nil {
 			return transformValue{}, err
 		}
@@ -391,17 +399,20 @@ func convertTransformValue(ctx context.Context, runtime transformRuntime, value 
 	}
 }
 
-func materializeNodeSet(ctx context.Context, value *nodeSetValue) (*nodeSetValue, error) {
+func materializeNodeSet(ctx context.Context, value *nodeSetValue, maxXPathFilterNodes int) (*nodeSetValue, error) {
 	if value == nil || value.doc == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
 	}
 	if value.materialized {
+		if err := checkXPathFilterNodeLimit(ctx, len(value.nodes), maxXPathFilterNodes); err != nil {
+			return nil, err
+		}
 		return value, nil
 	}
 	if value.origin == nil || value.origin.target == nil {
 		return nil, fmt.Errorf("%w: transform node-set has no reference origin", ErrUnsupportedTransform)
 	}
-	nodes, err := originNodes(ctx, value.origin)
+	nodes, err := originNodes(ctx, value.origin, maxXPathFilterNodes)
 	if err != nil {
 		return nil, err
 	}
@@ -428,11 +439,11 @@ func materializeNodeSet(ctx context.Context, value *nodeSetValue) (*nodeSetValue
 // filter drops nodes one at a time and may keep an element whose parent it
 // dropped — so every element carries its complete namespace axis here
 // (collectSubtreeNodes), in place of the reduced canonicalization set.
-func originNodes(ctx context.Context, origin *referenceNodeSetOrigin) ([]helium.Node, error) {
+func originNodes(ctx context.Context, origin *referenceNodeSetOrigin, maxXPathFilterNodes int) ([]helium.Node, error) {
 	if origin.wholeDoc {
-		return collectDocumentNodes(ctx, origin.doc)
+		return collectDocumentNodesLimited(ctx, origin.doc, maxXPathFilterNodes)
 	}
-	return collectSubtreeNodes(ctx, origin.target)
+	return collectSubtreeNodesLimited(ctx, origin.target, maxXPathFilterNodes)
 }
 
 // removeCommentNodes drops every comment from a node-set, implementing the

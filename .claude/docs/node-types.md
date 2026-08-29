@@ -46,10 +46,12 @@ Element has THREE namespace-related fields:
 `Element.Namespaces()` returns a cloned slice, so callers cannot replace or
 append entries in the element's `nsDefs`. Namespace lookup does not clone that
 slice: `LookupNSByPrefix`/`LookupNSByHref` scan the raw declarations in-package,
-and sibling packages use the read-only `internal/nslookup` hooks through
-`internal/domutil`. Both lookup forms preserve nearest-ancestor shadowing and
-empty-URI undeclarations. The bare internal lookup does not synthesize the
-implicit `xml` binding; the public `LookupNSByPrefix`/`LookupNSByHref` APIs do.
+and sibling packages use the read-only lookup and indexed-declaration hooks
+through `internal/nslookup` and `internal/domutil`. The indexed accessor reads
+one declaration without cloning the complete slice, so capped consumers can
+stop early. Both lookup forms preserve nearest-ancestor shadowing and empty-URI
+undeclarations. The bare internal lookup does not synthesize the implicit `xml`
+binding; the public `LookupNSByPrefix`/`LookupNSByHref` APIs do.
 
 ## Attribute Storage
 

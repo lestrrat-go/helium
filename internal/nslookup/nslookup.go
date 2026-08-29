@@ -16,3 +16,8 @@ var PrefixURI func(start any, prefix string) (string, bool)
 // declaration matching uri. It returns a *helium.Namespace as any, plus whether
 // a declaration was found. It does not synthesize the implicit xml binding.
 var ByURI func(start any, uri string) (any, bool)
+
+// DeclarationAt returns one namespace declaration from a helium element by
+// index. It lets sibling packages stop before traversing or copying declarations
+// beyond their own resource limits.
+var DeclarationAt func(elem any, index int) (any, bool)

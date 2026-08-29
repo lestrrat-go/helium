@@ -141,9 +141,10 @@ func prepareRetrievalMethod(ctx context.Context, cfg *verifierConfig, doc *heliu
 		}
 		_, _, _, sameDocument := referenceURIForm(uri)
 		runtime := transformRuntime{
-			parser:          cfg.parser(),
-			xsltTransformer: cfg.xsltTransformer,
-			external:        !sameDocument,
+			parser:              cfg.parser(),
+			xsltTransformer:     cfg.xsltTransformer,
+			external:            !sameDocument,
+			maxXPathFilterNodes: cfg.maxXPathFilterNodesLimit(),
 		}
 		initialKind := transformValueOctets
 		if sameDocument {
@@ -202,9 +203,10 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	steps := state.steps
 	_, wholeDoc, includeComments, sameDocument := referenceURIForm(uri)
 	runtime := transformRuntime{
-		parser:          cfg.parser(),
-		xsltTransformer: cfg.xsltTransformer,
-		external:        !sameDocument,
+		parser:              cfg.parser(),
+		xsltTransformer:     cfg.xsltTransformer,
+		external:            !sameDocument,
+		maxXPathFilterNodes: cfg.maxXPathFilterNodesLimit(),
 	}
 
 	// An external URI (not one of the four same-document forms) is dereferenced

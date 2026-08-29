@@ -209,11 +209,15 @@ func canonicalizeNodeSetMode(mode c14n.Mode, comments bool, nodes []helium.Node,
 // when a transform needs explicit node membership. The materializer removes
 // comments for a comment-excluding Reference form before applying that transform.
 func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
-	var set nodeSet
+	return collectDocumentNodesLimited(ctx, doc, -1)
+}
+
+func collectDocumentNodesLimited(ctx context.Context, doc *helium.Document, maxNodes int) ([]helium.Node, error) {
+	set := nodeSet{maxNodes: maxNodes}
 	for c := range helium.Children(doc) {
 		switch c.Type() {
 		case helium.ElementNode:
-			sub, err := collectSubtreeNodes(ctx, c)
+			sub, err := collectSubtreeNodesLimitedAtOffset(ctx, c, maxNodes, len(set.nodes))
 			if err != nil {
 				return nil, err
 			}
@@ -240,12 +244,12 @@ func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.N
 // Those two are the only node-set consumers a parse can feed: validateTransformSteps
 // rejects an enveloped-signature transform after an octet boundary, and base64
 // consumes a node-set through its own text-only conversion.
-func collectConvertedDocumentNodes(ctx context.Context, doc *helium.Document, consumerAlgorithm string) ([]helium.Node, error) {
+func collectConvertedDocumentNodes(ctx context.Context, doc *helium.Document, consumerAlgorithm string, maxXPathFilterNodes int) ([]helium.Node, error) {
 	mode, _, err := resolveC14NMode(consumerAlgorithm)
 	if err != nil {
 		// Not one of the six canonicalization URIs, so the consumer is the XPath
 		// filter and the set it is evaluated over must carry every namespace node.
-		return collectDocumentNodes(ctx, doc)
+		return collectDocumentNodesLimited(ctx, doc, maxXPathFilterNodes)
 	}
 	return collectCanonicalizationDocumentNodes(ctx, doc, mode)
 }
@@ -288,6 +292,11 @@ func collectCanonicalizationDocumentNodes(ctx context.Context, doc *helium.Docum
 // same-document reference — while still finite, so a legitimate signature is
 // never rejected for exceeding it.
 const defaultXPathOpLimit = 100_000_000
+
+// defaultMaxXPathFilterNodes bounds the complete XPath namespace-axis node set
+// collected before one XMLDSig XPath filter is evaluated. Unlike the reduced
+// canonicalization set, this set can grow quadratically with a small document.
+const defaultMaxXPathFilterNodes = 65_536
 
 // hereFunction implements the XMLDSig here() function (core §6.6.3.1): it returns
 // a node-set containing the single element that bears the XPath expression — the
@@ -379,7 +388,12 @@ func compileXPathFilterExpression(expr string, eval xpath1.Evaluator) (*xpath1.E
 // execution starts. An evaluation error is fail-closed as
 // ErrUnsupportedTransform while retaining the evaluator error, so a reference
 // never digests an unfiltered node-set and callers can still detect cancellation.
-func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) ([]helium.Node, error) {
+func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter, maxNodes int) ([]helium.Node, error) {
+	if maxNodes > 0 && len(nodes) > maxNodes {
+		if err := checkXPathFilterNodeLimit(ctx, len(nodes), maxNodes); err != nil {
+			return nil, err
+		}
+	}
 	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
 	kept := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
@@ -749,7 +763,22 @@ func resolveC14NMode(method string) (c14n.Mode, bool, error) {
 // A node set that goes straight to c14n unfiltered is built by
 // collectCanonicalizationNodes, which is linear in the document.
 func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, error) {
-	c := &subtreeCollector{fullAxis: true}
+	return collectSubtreeNodesLimited(ctx, n, -1)
+}
+
+// collectSubtreeNodesLimited is collectSubtreeNodes with a member cap. It
+// checks the cap before recording inherited root bindings, before growing a
+// child's scope past its remaining member budget, or before allocating a
+// namespace-node wrapper. Rejecting a namespace-heavy input therefore does not
+// first materialize the work being bounded.
+func collectSubtreeNodesLimited(ctx context.Context, n helium.Node, maxNodes int) ([]helium.Node, error) {
+	return collectSubtreeNodesLimitedAtOffset(ctx, n, maxNodes, 0)
+}
+
+// collectSubtreeNodesLimitedAtOffset applies the absolute maxNodes cap after
+// accounting for nodeOffset members already collected outside the subtree.
+func collectSubtreeNodesLimitedAtOffset(ctx context.Context, n helium.Node, maxNodes, nodeOffset int) ([]helium.Node, error) {
+	c := &subtreeCollector{nodeSet: nodeSet{maxNodes: maxNodes, nodeOffset: nodeOffset}, fullAxis: true}
 	if err := c.collect(ctx, n); err != nil {
 		return nil, err
 	}
@@ -861,12 +890,37 @@ func (p *ctxPoll) charge(ctx context.Context, n int) error {
 // element's or a whole subtree's worth of work inside one unpolled span.
 type nodeSet struct {
 	ctxPoll
-	nodes []helium.Node
+	nodes      []helium.Node
+	maxNodes   int // Absolute cap reported to the caller.
+	nodeOffset int // Members collected before this node set.
 }
 
 func (s *nodeSet) add(ctx context.Context, n helium.Node) error {
+	if err := s.beforeAdd(ctx, 1); err != nil {
+		return err
+	}
 	s.nodes = append(s.nodes, n)
 	return s.charge(ctx, 1)
+}
+
+// addNamespace checks the member cap before allocating the wrapper it adds.
+func (s *nodeSet) addNamespace(ctx context.Context, ns *helium.Namespace, elem *helium.Element) error {
+	if err := s.beforeAdd(ctx, 1); err != nil {
+		return err
+	}
+	s.nodes = append(s.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
+	return s.charge(ctx, 1)
+}
+
+func (s *nodeSet) beforeAdd(ctx context.Context, n int) error {
+	if s.maxNodes <= 0 {
+		return nil
+	}
+	remaining := s.maxNodes - s.nodeOffset
+	if remaining >= len(s.nodes) && n <= remaining-len(s.nodes) {
+		return nil
+	}
+	return xpathFilterNodeLimitExceeded(ctx, s.maxNodes)
 }
 
 // addAll appends nodes a poll interval at a time, so the span between two polls
@@ -878,6 +932,9 @@ func (s *nodeSet) add(ctx context.Context, n helium.Node) error {
 // members, while growing once leaves the copy within a percent of it at every
 // size.
 func (s *nodeSet) addAll(ctx context.Context, nodes []helium.Node) error {
+	if err := s.beforeAdd(ctx, len(nodes)); err != nil {
+		return err
+	}
 	s.nodes = slices.Grow(s.nodes, len(nodes))
 	for len(nodes) > 0 {
 		n := min(len(nodes), ctxPollInterval)
@@ -890,6 +947,20 @@ func (s *nodeSet) addAll(ctx context.Context, nodes []helium.Node) error {
 	return nil
 }
 
+func checkXPathFilterNodeLimit(ctx context.Context, members, maxNodes int) error {
+	if maxNodes > 0 && members > maxNodes {
+		return xpathFilterNodeLimitExceeded(ctx, maxNodes)
+	}
+	return ctx.Err()
+}
+
+func xpathFilterNodeLimitExceeded(ctx context.Context, maxNodes int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fmt.Errorf("%w: XPath filter input exceeds %d node-set members", ErrResourceLimitExceeded, maxNodes)
+}
+
 func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
 	// A context already cancelled when the walk starts stops it before any node
 	// is collected; the periodic poll below covers one cancelled while it runs.
@@ -898,19 +969,66 @@ func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
 	}
 	c.scope = make(map[string]*helium.Namespace)
 	if elem, ok := helium.AsNode[*helium.Element](n); ok {
-		// Seed the scope with the subtree root's own in-scope axis, so bindings
-		// declared ABOVE the root are carried in. Every deeper element updates
-		// this map incrementally instead of walking its ancestors again. The
-		// seeding is charged like an emission: the root goes on to emit one
-		// namespace node per binding seeded here, so the two are the same size.
-		for prefix, ns := range domutil.InScopeNamespaces(elem, true) {
-			c.scope[prefix] = ns
-			if err := c.charge(ctx, 1); err != nil {
-				return err
-			}
+		if err := c.seedRootScope(ctx, elem); err != nil {
+			return err
 		}
 	}
 	return c.walk(ctx, n, true)
+}
+
+// seedRootScope collects the subtree root's in-scope namespace axis. Bindings
+// declared above the root must be carried in, but each distinct binding will
+// become a namespace-node member after the root itself is added. Enforce that
+// future cost before growing scope, so a small member limit cannot first build
+// an arbitrarily large inherited-binding map.
+func (c *subtreeCollector) seedRootScope(ctx context.Context, elem *helium.Element) error {
+	var chain []*helium.Element
+	for n := helium.Node(elem); n != nil; n = n.Parent() {
+		if anc, ok := helium.AsNode[*helium.Element](n); ok {
+			chain = append(chain, anc)
+		}
+	}
+
+	for _, anc := range slices.Backward(chain) {
+		for i := 0; ; i++ {
+			ns, ok := domutil.NamespaceDeclarationAt(anc, i)
+			if !ok {
+				break
+			}
+			if err := c.seedRootBinding(ctx, ns); err != nil {
+				return err
+			}
+		}
+		if ns := anc.Namespace(); ns != nil {
+			prefix := ns.Prefix()
+			if _, ok := c.scope[prefix]; !ok {
+				if err := c.seedRootBinding(ctx, ns); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *subtreeCollector) seedRootBinding(ctx context.Context, ns *helium.Namespace) error {
+	prefix := ns.Prefix()
+	if prefix == lexicon.PrefixXML {
+		return nil
+	}
+	if _, exists := c.scope[prefix]; !exists {
+		// The root itself is the one pending member not represented in scope.
+		if c.maxNodes > 0 {
+			if err := c.beforeAdd(ctx, 1+len(c.scope)+1); err != nil {
+				return err
+			}
+		}
+		if err := c.charge(ctx, 1); err != nil {
+			return err
+		}
+	}
+	c.scope[prefix] = ns
+	return nil
 }
 
 func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) error {
@@ -922,15 +1040,26 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 	var changed []nsBinding
 	if isElem {
 		if !root {
-			changed = c.enter(elem)
+			remaining := -1
+			if c.maxNodes > 0 {
+				remaining = c.maxNodes - c.nodeOffset - len(c.nodes)
+			}
+			var err error
+			changed, err = c.enter(ctx, elem, remaining)
+			if err != nil {
+				return err
+			}
 		}
 		if err := c.appendNamespaceNodes(ctx, elem, root, changed); err != nil {
 			return err
 		}
-		for _, attr := range elem.Attributes() {
-			if err := c.add(ctx, attr); err != nil {
-				return err
-			}
+		var attrErr error
+		elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+			attrErr = c.add(ctx, attr)
+			return attrErr == nil
+		})
+		if attrErr != nil {
+			return attrErr
 		}
 	}
 
@@ -1004,22 +1133,50 @@ func (s *prefixSet) add(prefix string) {
 }
 
 // enter applies elem's namespace declarations to the running scope and returns
-// the bindings it replaced, one entry per prefix touched. The rule matches
-// domutil.InScopeNamespaces exactly — declarations first, then the element's own
-// active namespace when nothing already binds its prefix — so the incremental
-// scope equals the ancestor-chain walk that function performs.
-func (c *subtreeCollector) enter(elem *helium.Element) []nsBinding {
+// the bindings it replaced, one entry per prefix touched. It charges each new
+// non-xml prefix before growing the scope: that prefix can become a namespace
+// node, so remaining bounds the work even when the eventual node-set append
+// would reject it. A negative remaining value leaves the member count unlimited.
+//
+// The binding rule matches domutil.InScopeNamespaces exactly — declarations
+// first, then the element's own active namespace when nothing already binds its
+// prefix — so the incremental scope equals the ancestor-chain walk that function
+// performs.
+func (c *subtreeCollector) enter(ctx context.Context, elem *helium.Element, remaining int) ([]nsBinding, error) {
 	var seen prefixSet
 	var changed []nsBinding
-	for _, ns := range elem.Namespaces() {
+	pendingMembers := 0
+	bind := func(ns *helium.Namespace) error {
+		prefix := ns.Prefix()
+		if prefix != lexicon.PrefixXML && !seen.contains(prefix) {
+			if remaining >= 0 && pendingMembers >= remaining {
+				return c.beforeAdd(ctx, pendingMembers+1)
+			}
+			if err := c.charge(ctx, 1); err != nil {
+				return err
+			}
+			pendingMembers++
+		}
 		changed = c.bind(ns, changed, &seen)
+		return nil
+	}
+	for i := 0; ; i++ {
+		ns, ok := domutil.NamespaceDeclarationAt(elem, i)
+		if !ok {
+			break
+		}
+		if err := bind(ns); err != nil {
+			return nil, err
+		}
 	}
 	if ns := elem.Namespace(); ns != nil {
 		if _, ok := c.scope[ns.Prefix()]; !ok {
-			changed = c.bind(ns, changed, &seen)
+			if err := bind(ns); err != nil {
+				return nil, err
+			}
 		}
 	}
-	return changed
+	return changed, nil
 }
 
 // bind records the binding prefix had before ns replaced it, unless this element
@@ -1064,7 +1221,7 @@ func (c *subtreeCollector) appendNamespaceNodes(ctx context.Context, elem *heliu
 			if prefix == lexicon.PrefixXML {
 				continue
 			}
-			if err := c.add(ctx, helium.NewNamespaceNodeWrapper(ns, elem)); err != nil {
+			if err := c.addNamespace(ctx, ns, elem); err != nil {
 				return err
 			}
 		}
@@ -1134,7 +1291,7 @@ func (c *subtreeCollector) emitNamespace(ctx context.Context, elem *helium.Eleme
 		return nil
 	}
 	emitted.add(prefix)
-	return c.add(ctx, helium.NewNamespaceNodeWrapper(ns, elem))
+	return c.addNamespace(ctx, ns, elem)
 }
 
 // referenceURIForm classifies a same-document Reference URI into the node-set

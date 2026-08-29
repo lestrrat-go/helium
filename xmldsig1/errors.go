@@ -48,18 +48,20 @@ var (
 	// memory during verification.
 	ErrReferenceTooLarge = errors.New("xmldsig1: external reference exceeds size cap")
 
-	// ErrResourceLimitExceeded is returned when an attacker-controlled Signature
-	// element exceeds one of the Verifier's parse-time resource caps before the
-	// SignatureValue is checked: too many ds:Reference elements
+	// ErrResourceLimitExceeded is returned when attacker-controlled signature
+	// processing exceeds one of the Verifier's resource caps: too many
+	// ds:Reference elements
 	// ([Verifier.MaxReferences]), too many KeyInfo entries
 	// ([Verifier.MaxKeyInfoEntries]), or too many total certificate and signature
 	// octets — the DigestValue/SignatureValue/X509Certificate values plus
 	// whatever a ds:RetrievalMethod in KeyInfo pulls in
-	// ([Verifier.MaxDecodedBytes]). It also covers two fixed pre-verification
-	// caps: a ds:RetrievalMethod transform list past its step cap, and a
+	// ([Verifier.MaxDecodedBytes]), or an XPath filter input node-set past
+	// [Verifier.MaxXPathFilterNodes]. It also covers two fixed pre-verification
+	// caps: a ds:RetrievalMethod transform list past its step cap and a
 	// ds:Transform/XPath filter expression past its length ceiling. The caps have
-	// conservative defaults and bound the decode/parse/transform work an unsigned
-	// document can force before verification rejects it. A base64 value decoded
+	// conservative defaults and bound the decode, parse, and transform work an
+	// unsigned document can force before verification rejects it. A base64 value
+	// decoded
 	// off the document is charged against [Verifier.MaxDecodedBytes] before it is
 	// decoded, so a value that is both over the cap and invalid base64 reports
 	// this error, and never the base64 one.

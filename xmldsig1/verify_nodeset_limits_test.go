@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xmldsig1"
 	"github.com/stretchr/testify/require"
 )
@@ -64,13 +65,23 @@ func namespaceHeavyDoc(decls, pad int, signedInfoPad bool) string {
 func verifyAllocatedBytes(t *testing.T, verifier xmldsig1.Verifier, src string) uint64 {
 	t.Helper()
 	doc := mustParseXML(t, src)
+	allocated, err := verifyDocumentAllocatedBytes(t, verifier, doc)
+	require.Error(t, err)
+	return allocated
+}
+
+func verifyDocumentAllocatedBytes(
+	t *testing.T,
+	verifier xmldsig1.Verifier,
+	doc *helium.Document,
+) (uint64, error) {
+	t.Helper()
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 	_, err := verifier.Verify(t.Context(), doc)
 	runtime.ReadMemStats(&after)
-	require.Error(t, err)
-	return after.TotalAlloc - before.TotalAlloc
+	return after.TotalAlloc - before.TotalAlloc, err
 }
 
 // TestVerifyNamespaceHeavyDocument bounds the memory an unsigned,
@@ -266,6 +277,232 @@ func xpathFilterRetrievalDoc(decls, pad int) string {
 		1)
 }
 
+// xpathFilterInheritedTargetDoc keeps the large namespace axis on the selected
+// target's ancestor, outside ds:Signature. This isolates the allocation needed
+// to seed the RetrievalMethod selection from unrelated signature namespace
+// processing.
+func xpathFilterInheritedTargetDoc(decls int) string {
+	var b strings.Builder
+	b.WriteString(`<root><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo>`)
+	b.WriteString(`<ds:CanonicalizationMethod Algorithm="` + xmldsig1.C14N10 + `"/>`)
+	b.WriteString(`<ds:SignatureMethod Algorithm="` + xmldsig1.AlgRSASHA256 + `"/>`)
+	b.WriteString(`<ds:Reference URI=""><ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>`)
+	b.WriteString(`<ds:DigestValue>AAAA</ds:DigestValue></ds:Reference></ds:SignedInfo>`)
+	b.WriteString(`<ds:SignatureValue>AAAA</ds:SignatureValue><ds:KeyInfo>`)
+	b.WriteString(`<ds:RetrievalMethod URI="#bulk" Type="` + xmldsig1.TypeRawX509Certificate + `">`)
+	b.WriteString(`<ds:Transforms><ds:Transform Algorithm="` + xmldsig1.TransformXPath + `">`)
+	b.WriteString(`<ds:XPath>true()</ds:XPath></ds:Transform></ds:Transforms>`)
+	b.WriteString(`</ds:RetrievalMethod></ds:KeyInfo></ds:Signature><scope`)
+	for i := range decls {
+		fmt.Fprintf(&b, ` xmlns:p%d="urn:example:ns:%d"`, i, i)
+	}
+	b.WriteString(`><bulk Id="bulk"/></scope></root>`)
+	return b.String()
+}
+
+// xpathFilterChildDeclarationDoc puts the namespace-heavy input on a child of
+// the selected subtree. The target element and its Id attribute consume two
+// members; the child consumes the third, leaving no budget for its declarations.
+func xpathFilterChildDeclarationDoc(decls int) string {
+	var child strings.Builder
+	child.WriteString(`<wide`)
+	for i := range decls {
+		fmt.Fprintf(&child, ` xmlns:p%d="urn:example:ns:%d"`, i, i)
+	}
+	child.WriteString(`/>`)
+
+	return strings.Replace(xpathFilterRetrievalDoc(0, 0),
+		`<bulk Id="bulk"></bulk>`, `<bulk Id="bulk">`+child.String()+`</bulk>`, 1)
+}
+
+// xpathFilterWholeDocumentAttributeDoc puts the attribute-heavy input on the
+// document element and makes the RetrievalMethod select the whole document.
+// The document element consumes the one-member budget before its attributes
+// are visited, while the empty URI avoids an unrelated ID-attribute scan.
+func xpathFilterWholeDocumentAttributeDoc(attrs int) string {
+	var root strings.Builder
+	root.WriteString(`<root`)
+	for i := range attrs {
+		fmt.Fprintf(&root, ` a%d="%d"`, i, i)
+	}
+	root.WriteString(`>`)
+
+	src := strings.Replace(xpathFilterRetrievalDoc(0, 0), `<root>`, root.String(), 1)
+	return strings.Replace(src, `<ds:RetrievalMethod URI="#bulk"`, `<ds:RetrievalMethod URI=""`, 1)
+}
+
+// xpathFilterRetrievalMembers is the exact number of members in the <bulk>
+// subtree's XPath input node-set: the bulk element, its Id attribute and
+// inherited namespace axis, then each child element, attribute, and complete
+// namespace axis.
+func xpathFilterRetrievalMembers(decls, pad int) int {
+	return 2 + decls + pad*(decls+2)
+}
+
+func TestVerifyXPathFilterNodeLimit(t *testing.T) {
+	const (
+		decls = 3
+		pad   = 4
+	)
+	key := generateRSAKey(t)
+	src := xpathFilterRetrievalDoc(decls, pad)
+	limit := xpathFilterRetrievalMembers(decls, pad)
+
+	t.Run("exact boundary", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			MaxXPathFilterNodes(limit).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+		require.NotErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+	})
+
+	t.Run("one member over", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		ks := &recordingKeySource{key: &key.PublicKey}
+		_, err := xmldsig1.NewVerifier(ks).
+			MaxXPathFilterNodes(limit-1).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+		require.Contains(t, err.Error(), fmt.Sprintf("exceeds %d node-set members", limit-1))
+		require.False(t, ks.called, "the XPath input limit must fire before key resolution")
+	})
+
+	t.Run("whole document reports absolute limit after leading comment", func(t *testing.T) {
+		const absoluteLimit = 2
+		src := strings.Replace(xpathFilterRetrievalDoc(0, 0),
+			`<ds:RetrievalMethod URI="#bulk"`, `<ds:RetrievalMethod URI=""`, 1)
+		doc := mustParseXML(t, `<!--leading-->`+src)
+		ks := &recordingKeySource{key: &key.PublicKey}
+		_, err := xmldsig1.NewVerifier(ks).
+			MaxXPathFilterNodes(absoluteLimit).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+		require.Contains(t, err.Error(), fmt.Sprintf("exceeds %d node-set members", absoluteLimit))
+		require.False(t, ks.called, "the XPath input limit must fire before key resolution")
+	})
+
+	t.Run("cancelled context wins", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			MaxXPathFilterNodes(limit-1).
+			Verify(ctx, doc)
+		require.ErrorIs(t, err, context.Canceled)
+		require.NotErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+	})
+}
+
+// TestVerifyXPathFilterNodeLimitAllocation keeps the default bound tied to its
+// purpose: this compact namespace-heavy document would otherwise materialize
+// over 1.6 million namespace-axis members before authentication. The default
+// refuses it after 65,536 members without allocating the rejected wrapper.
+func TestVerifyXPathFilterNodeLimitAllocation(t *testing.T) {
+	const maxVerifyAllocation = 32 << 20
+
+	key := generateRSAKey(t)
+	src := xpathFilterRetrievalDoc(800, 2000)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	for _, candidate := range []xmldsig1.Verifier{verifier, verifier.MaxXPathFilterNodes(0)} {
+		doc := mustParseXML(t, src)
+		_, err := candidate.Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+	}
+
+	allocated := verifyAllocatedBytes(t, verifier, src)
+	t.Logf("default XPath input limit allocated %d bytes for a %d-byte fixture", allocated, len(src))
+	require.Less(t, allocated, uint64(maxVerifyAllocation),
+		"verifying a %d-byte namespace-heavy document allocated %d bytes", len(src), allocated)
+}
+
+// TestVerifyXPathFilterNodeLimitBoundsInheritedScope pins that the member cap
+// applies while the subtree root's inherited namespace scope is seeded. With a
+// one-member limit, the root consumes the entire budget, so verification must
+// reject the first namespace without building a map of every declaration.
+func TestVerifyXPathFilterNodeLimitBoundsInheritedScope(t *testing.T) {
+	const (
+		smallDecls       = 8
+		largeDecls       = 200_000
+		maxScalingGrowth = 256 << 10
+	)
+
+	key := generateRSAKey(t)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		MaxXPathFilterNodes(1)
+	measure := func(decls int) uint64 {
+		doc := mustParseXML(t, xpathFilterInheritedTargetDoc(decls))
+		allocated, err := verifyDocumentAllocatedBytes(t, verifier, doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+		return allocated
+	}
+
+	small := measure(smallDecls)
+	large := measure(largeDecls)
+	t.Logf("limited inherited namespace scope allocated %d bytes for %d declarations and %d bytes for %d",
+		small, smallDecls, large, largeDecls)
+	require.LessOrEqual(t, large, small+uint64(maxScalingGrowth),
+		"declarations beyond the member cap must not add allocation proportional to their count")
+}
+
+// TestVerifyXPathFilterNodeLimitBoundsChildDeclarations pins that a child
+// cannot allocate scope bookkeeping for declarations that exceed the remaining
+// member budget. The DOM is parsed before the allocation measurement, so the
+// bound covers verification and not storage already owned by the input tree.
+func TestVerifyXPathFilterNodeLimitBoundsChildDeclarations(t *testing.T) {
+	const (
+		smallDecls       = 8
+		largeDecls       = 200_000
+		maxScalingGrowth = 256 << 10
+	)
+
+	key := generateRSAKey(t)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		MaxXPathFilterNodes(3)
+	measure := func(decls int) uint64 {
+		doc := mustParseXML(t, xpathFilterChildDeclarationDoc(decls))
+		allocated, err := verifyDocumentAllocatedBytes(t, verifier, doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+		return allocated
+	}
+
+	small := measure(smallDecls)
+	large := measure(largeDecls)
+	t.Logf("limited child namespace scope allocated %d bytes for %d declarations and %d bytes for %d",
+		small, smallDecls, large, largeDecls)
+	require.LessOrEqual(t, large, small+uint64(maxScalingGrowth),
+		"declarations beyond the member cap must not add allocation proportional to their count")
+}
+
+// TestVerifyXPathFilterNodeLimitBoundsWholeDocumentAttributes pins that the member
+// cap stops attribute iteration before the complete property list is traversed
+// or copied. The larger fixture exceeds the one-member limit by five orders of
+// magnitude, but verification allocation remains close to the small fixture.
+func TestVerifyXPathFilterNodeLimitBoundsWholeDocumentAttributes(t *testing.T) {
+	const (
+		smallAttrs       = 8
+		largeAttrs       = 200_000
+		maxScalingGrowth = 256 << 10
+	)
+
+	key := generateRSAKey(t)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		MaxXPathFilterNodes(1)
+	measure := func(attrs int) uint64 {
+		doc := mustParseXML(t, xpathFilterWholeDocumentAttributeDoc(attrs))
+		allocated, err := verifyDocumentAllocatedBytes(t, verifier, doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+		return allocated
+	}
+
+	small := measure(smallAttrs)
+	large := measure(largeAttrs)
+	t.Logf("limited document-element attributes allocated %d bytes for %d attributes and %d bytes for %d",
+		small, smallAttrs, large, largeAttrs)
+	require.LessOrEqual(t, large, small+uint64(maxScalingGrowth),
+		"attributes beyond the member cap must not add allocation proportional to their count")
+}
+
 // TestVerifyDeadlineDuringNodeSetConstruction pins that a deadline stops node-set
 // construction while it runs, well before the whole set is built. The
 // document costs seconds of work to canonicalize, so a deadline an order of
@@ -277,7 +514,9 @@ func TestVerifyDeadlineDuringNodeSetConstruction(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).Verify(ctx, doc)
+	_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		MaxXPathFilterNodes(-1).
+		Verify(ctx, doc)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 

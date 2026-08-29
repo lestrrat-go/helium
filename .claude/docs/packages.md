@@ -420,9 +420,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   callers cannot replace or append entries in the element's private `nsDefs`.
   `LookupNSByPrefix` and `LookupNSByHref` scan the raw declarations without
   cloning while preserving nearest-ancestor shadowing and the public implicit
-  `xml` binding. Sibling-package bare lookups run through `internal/domutil` and
-  `internal/nslookup`; they preserve undeclarations and intentionally do not
-  synthesize `xml`.
+  `xml` binding. Sibling-package bare lookups and indexed declaration reads run
+  through `internal/domutil` and `internal/nslookup`; the lookups preserve
+  undeclarations and intentionally do not synthesize `xml`.
 - `UnlinkNode(n MutableNode)` — detaches `n` from its parent/sibling chain; a nil or typed-nil `n` is a no-op.
   `node.Replace(...Node) → error` (guarded) rejects an EMPTY replacement set with `ErrInvalidOperation`
   (matching `Document.Replace`; use `UnlinkNode` to delete), a nil/typed-nil operand with `ErrNilNode`, and a
@@ -1182,15 +1182,22 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
     to keep it. The `SignDetached`/`SignEnveloping` godoc states this, and `sign_lifetime_test.go` proves the
     node survives `doc.Free()` plus slab-pool churn intact.
 - **NewVerifier(KeySource) → Verifier** — create fluent builder for verification (clone-on-write value type)
-  - `AllowSHA1(bool)`, `AllowXPointer(bool)`, `LenientKeyInfo(bool)`, `ReferenceResolver(r)`, `ReferenceParser(p)`, `ValidateManifests(bool)`, `XSLTTransformer(t)`, `MaxReferences(n)`, `MaxKeyInfoEntries(n)`, `MaxDecodedBytes(n)` — builder methods
-  - **Parse-time resource caps** (`xmldsig1.go` `verifierConfig` + `verify.go` `verifyBudget`): bound the
-    decode/parse work an unsigned, attacker-controlled Signature can force BEFORE the SignatureValue is
-    checked (many/large `DigestValue`/`SignatureValue`/`X509Certificate` base64 decodes, one
-    `x509.ParseCertificate` per embedded cert). `MaxReferences` (default 1024) caps `ds:Reference` count,
+  - `AllowSHA1(bool)`, `AllowXPointer(bool)`, `LenientKeyInfo(bool)`, `ReferenceResolver(r)`,
+    `ReferenceParser(p)`, `ValidateManifests(bool)`, `XSLTTransformer(t)`, `MaxReferences(n)`,
+    `MaxKeyInfoEntries(n)`, `MaxDecodedBytes(n)`, `MaxXPathFilterNodes(n)` — builder methods
+  - **Verification resource caps** (`xmldsig1.go` `verifierConfig`, `verify.go` `verifyBudget`,
+    `transforms.go` `nodeSet`): bound the decode, parse, and transform work an unsigned,
+    attacker-controlled Signature can force before the SignatureValue is checked. `MaxReferences`
+    (default 1024) caps `ds:Reference` count,
     `MaxKeyInfoEntries` (default 256) caps `KeyInfo` children + `X509Data` children, `MaxDecodedBytes`
-    (default 10 MiB) caps the running certificate/signature octet total. Exceeding any →
-    `ErrResourceLimitExceeded` (before digesting/crypto). Per builder, `n==0` selects the default and `n<0`
-    disables the cap. The `verifyBudget` also polls `ctx.Err()` inside the KeyInfo/Reference parse loops (not
+    (default 10 MiB) caps the running certificate/signature octet total, and `MaxXPathFilterNodes`
+    (default 65,536) caps the complete node-set members collected and evaluated by one XPath filter,
+    including every element's full in-scope namespace axis. Exceeding any →
+    `ErrResourceLimitExceeded`. Per builder, `n==0` selects the default and `n<0` disables the cap. The
+    XPath limit is checked before the over-limit member is added or evaluation begins; namespace declaration
+    and attribute iteration stop at the boundary without copying the complete over-limit collection.
+    `ctx.Err()` takes priority when cancellation and the boundary coincide. The `verifyBudget` also polls
+    `ctx.Err()` inside the KeyInfo/Reference parse loops (not
     just at their boundaries), so a cancelled ctx/passed deadline stops the parse promptly. `MaxDecodedBytes`
     has **five** charge sites, four of them DOM-decoded (`verify.go` SignatureValue + DigestValue,
     `keyinfo.go` X509Certificate, `retrieval_method.go:374` same-document rawX509Certificate) and one not
@@ -1227,7 +1234,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
     `ReferenceResolver` under the resolver's OWN 64 MiB cap and run through its transforms, and only then
     charged — so those octets are charged AFTER materialization and are not base64-decoded bytes. The KeyInfo
     values outside the budget (KeyName, X509SKI, X509SubjectName/IssuerName, the base64 KeyValue families) are
-    not charged at all. The XPath-transform expression is not charged against `MaxDecodedBytes` either; it has
+    not charged at all. The XPath-transform expression and node-set members are not charged against
+    `MaxDecodedBytes`; the expression has
     its own fixed `maxXPathFilterExpressionBytes` = 8 KiB length ceiling (`verify.go`, applied in
     `parseXPathTransform` → `ErrResourceLimitExceeded`), bounding the expression where it is read off the
     document because compiling one costs superlinearly in its LENGTH (a flat predicate chain allocates ~100x
@@ -2200,11 +2208,12 @@ Generic bitset operations for bitmask types.
 
 ## internal/nslookup/
 
-Read-only bridge for namespace declaration lookup. Package helium installs the
-prefix and URI lookup hooks during init; sibling packages use them through
-`internal/domutil` to search the private `nsDefs` storage without cloning it or
-adding a public raw-slice accessor. The bridge imports nothing, so helium can
-register the hooks without an import cycle.
+Read-only bridge for namespace declaration access. Package helium installs the
+prefix and URI lookup hooks plus an indexed declaration hook during init;
+sibling packages use them through `internal/domutil` to read the private
+`nsDefs` storage without cloning it or adding a public raw-slice accessor. The
+bridge imports nothing, so helium can register the hooks without an import
+cycle.
 
 - Files: `nslookup.go`
 - Imports: none
@@ -2215,7 +2224,8 @@ Shared DOM/QName helpers used by processing packages. Namespace lookup uses
 `internal/nslookup` to scan private declaration storage without cloning it;
 `LookupNSPrefixURI` and `LookupNSURI` preserve nearest-ancestor shadowing and
 empty-URI undeclarations, and neither synthesizes the implicit `xml` binding.
-`Element.Namespaces()` remains the public defensive-copy accessor.
+`NamespaceDeclarationAt` reads one declaration without cloning the containing
+slice. `Element.Namespaces()` remains the public defensive-copy accessor.
 
 - Files: `domutil.go`, `id.go`
 - Imports: helium, enum, internal/lexicon, internal/nslookup, internal/xmlchar

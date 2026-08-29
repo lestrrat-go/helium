@@ -310,6 +310,54 @@ func TestNodeSetCollectionCost(t *testing.T) {
 	}
 }
 
+// cancelOnErrContext cancels itself on a selected Err call. That makes a
+// cancellation at a collector poll deterministic without coupling the test to
+// scheduler timing.
+type cancelOnErrContext struct {
+	done     chan struct{}
+	cancelAt int
+	calls    int
+}
+
+func (*cancelOnErrContext) Deadline() (time.Time, bool) {
+	return time.Time{}, false
+}
+
+func (c *cancelOnErrContext) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *cancelOnErrContext) Err() error {
+	c.calls++
+	if c.calls == c.cancelAt {
+		close(c.done)
+	}
+	select {
+	case <-c.done:
+		return context.Canceled
+	default:
+		return nil
+	}
+}
+
+func (*cancelOnErrContext) Value(any) any {
+	return nil
+}
+
+// TestNodeSetCollectionCancellationDuringChildScope pins that namespace scope
+// entry polls while it binds a child's declarations. The first Err call starts
+// collection; the second comes from the periodic poll inside the dense child.
+func TestNodeSetCollectionCancellationDuringChildScope(t *testing.T) {
+	root := costDocument(t, declDenseDoc(costDeclarations))
+	ctx := &cancelOnErrContext{done: make(chan struct{}), cancelAt: 2}
+	c := &subtreeCollector{fullAxis: true}
+
+	err := c.collect(ctx, root)
+	require.ErrorIs(t, err, context.Canceled)
+	require.LessOrEqual(t, len(c.scope), ctxPollInterval,
+		"collector bound %d child declarations before observing cancellation", len(c.scope))
+}
+
 // emissionPrefixes is how many prefixes the emission-cost documents put in scope
 // and carry on attributes, and emissionOwnDeclarations is how many declarations
 // of its own the CONTROL document's element adds on top.
