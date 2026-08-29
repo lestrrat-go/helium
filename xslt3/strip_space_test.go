@@ -816,6 +816,39 @@ func TestStripSpace(t *testing.T) {
 		require.Same(t, cp, cpEntity.OwnerDocument())
 	})
 
+	t.Run("copy preserves entity declaration identity", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{"ext.dtd": {Data: []byte(`<!ENTITY payload "EXTERNAL">`)}}
+		src, err := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "ext.dtd"><root/>`))
+		require.NoError(t, err)
+
+		srcExternal, found := src.ExtSubset().LookupEntity("payload")
+		require.True(t, found)
+		ref, err := src.CreateReference("payload")
+		require.NoError(t, err)
+		require.Same(t, srcExternal, ref.FirstChild())
+		require.NoError(t, src.DocumentElement().AddChild(ref))
+
+		_, err = src.IntSubset().AddEntity(
+			"payload", enum.InternalGeneralEntity, "", "", "INTERNAL",
+		)
+		require.NoError(t, err)
+		require.Same(t, srcExternal, ref.FirstChild())
+
+		cp, err := xslt3.CopyAndStripForTest(src)
+		require.NoError(t, err)
+		cpExternal, found := cp.ExtSubset().LookupEntity("payload")
+		require.True(t, found)
+		cpRef := cp.DocumentElement().FirstChild()
+		require.Same(t, cpExternal, cpRef.FirstChild())
+		require.Equal(t, "EXTERNAL", string(cpRef.Content()))
+	})
+
 	t.Run("copy resolves an internal entity reference to an external declaration", func(t *testing.T) {
 		t.Parallel()
 

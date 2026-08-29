@@ -86,11 +86,18 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// independent external subset while keeping ID resolution identical. The
 	// combined copy registers both subsets before resolving entity replacement
 	// trees, so references across the subset boundary retain their expansion.
-	if err := helium.CopyDTDSubsets(src, dst); err != nil {
+	entityCopies, err := helium.CopyDTDSubsets(src, dst)
+	if err != nil {
 		return nil, nil, err
 	}
 
-	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve, schemaWS: schemaWS}
+	sc := &stripCopier{
+		dst:          dst,
+		strip:        strip,
+		preserve:     preserve,
+		schemaWS:     schemaWS,
+		entityCopies: entityCopies,
+	}
 	// When rebuilding the ID table, record source-element->copy-element so the
 	// source's ID entries can be translated onto the copy after the walk.
 	if rebuildIDs {
@@ -160,6 +167,9 @@ type stripCopier struct {
 	// elemMap, when non-nil, records source-element->copy-element correspondence so
 	// the copy's ID table can be rebuilt by translating the source's ID entries.
 	elemMap map[*helium.Element]*helium.Element
+	// entityCopies binds a copied EntityRef to the copy of its actual source
+	// declaration, even when the other DTD subset contains the same name.
+	entityCopies map[*helium.Entity]*helium.Entity
 }
 
 // record stores the original->copy mapping when a node map is being built and
@@ -202,6 +212,16 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 	case helium.ProcessingInstructionNode:
 		return sc.record(src, sc.dst.CreatePI(src.Name(), string(src.Content()))), nil
 	case helium.EntityRefNode:
+		if srcEntity, ok := helium.AsNode[*helium.Entity](src.FirstChild()); ok {
+			if dstEntity := sc.entityCopies[srcEntity]; dstEntity != nil {
+				cp, err := sc.dst.CreateCharRef(src.Name())
+				if err != nil {
+					return nil, err
+				}
+				nodelink.BindEntityReference(cp, dstEntity)
+				return sc.record(src, cp), nil
+			}
+		}
 		cp, err := sc.dst.CreateReference(src.Name())
 		if err != nil {
 			return nil, err

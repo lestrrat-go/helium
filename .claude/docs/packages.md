@@ -317,7 +317,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
   panicking. A copied `EntityRef` resolves only against `targetDoc`'s declarations: a matching declaration installs
   the destination-owned shared `Entity` child, while an absent declaration leaves the reference childless
-- `CopyDoc(src) → (*Document, error)` / `CopyDTDSubsets(src, dst) → error` /
+- `CopyDoc(src) → (*Document, error)` /
+  `CopyDTDSubsets(src, dst) → (map[*Entity]*Entity, error)` /
   `CopyDTDInfo(src, dst) → error` / `CopyExtSubset(src, dst)` —
   document-level deep copy: `CopyDoc` is a COMPLETE independent copy — the whole tree, BOTH DTD subsets, and
   the document-level state a caller relies on (version/encoding/standalone, URL, property flags, SkipIDs, and
@@ -325,8 +326,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   DTD entity copies include their independent parsed replacement subtrees, so copied references retain the source's
   string-value and canonical form without aliasing source nodes; `CopyDoc` and `CopyDTDSubsets` carry each source
   entity declaration's identity into its copy, so a copied reference binds to the copy of its actual declaration even
-  when the internal and external subsets contain the same name; `CopyDTDSubsets` registers BOTH subsets' declarations
-  before copying replacement trees, so references across the subset boundary bind to destination-owned entities;
+  when the internal and external subsets contain the same name; `CopyDTDSubsets` returns that source-to-copy entity
+  correspondence for callers that copy document content separately, and registers BOTH subsets' declarations before
+  copying replacement trees, so references across the subset boundary bind to destination-owned entities;
   `CopyDTDInfo` copies the INTERNAL subset's metadata +
   entities/elements/attributes/notations into `dst` and
   RETURNS an error (notably when `dst` already has an internal subset); `CopyExtSubset` gives `dst` its own
@@ -339,9 +341,10 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   interface (which exposes only guarded mutation:
   `AddChild`/`AddSibling`/`Replace`/`AppendText`/`SetLine`/`SetOwnerDocument`/`SetTreeDoc`), so ordinary tree
   mutation cannot reach them by accident, and there is no public entry point to any of them. Sibling packages
-  in this module reach them through the `internal/nodelink` hooks (`AppendFastChild` for `xslt3`'s strip-space
-  copier; `CorruptSelfNextSibling` and `CorruptTypedNilNextSibling` for the `xsd`/`xmldsig1` corrupt-tree
-  cycle-guard fixtures only); the external `helium_test` package reaches them through the `*ForTesting`
+  in this module reach them through the `internal/nodelink` hooks (`AppendFastChild` and
+  `BindEntityReference` for `xslt3`'s strip-space copier; `CorruptSelfNextSibling` and
+  `CorruptTypedNilNextSibling` for the `xsd`/`xmldsig1` corrupt-tree cycle-guard fixtures only); the external
+  `helium_test` package reaches them through the `*ForTesting`
   wrappers in `export_test.go`. There is no `prev`-pointer setter
 - `Document.SetDocumentElement(root MutableNode) → error` — sets/replaces the document element; `root` must be
   an element (non-element kind → `ErrInvalidOperation`, nil/typed-nil root or nil receiver → `ErrNilNode`),

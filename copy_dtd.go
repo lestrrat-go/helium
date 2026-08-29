@@ -45,12 +45,13 @@ func copyDTD(src *DTD, dst *Document) error {
 // CopyDTDSubsets deep-copies both DTD subsets from src into dst. It registers
 // every declaration before copying entity replacement trees, then binds each
 // copied reference to the copy of its actual source declaration across the
-// internal/external subset boundary. A nil src or dst is a no-op. It returns an
-// error when the internal subset cannot be installed or a replacement tree
-// cannot be linked safely.
-func CopyDTDSubsets(src, dst *Document) error {
-	_, err := copyDTDSubsets(src, dst, true)
-	return err
+// internal/external subset boundary. The returned map carries the same
+// source-declaration-to-copy correspondence for callers that copy document
+// content separately. A nil src or dst is a no-op and returns an empty map. It
+// returns an error when the internal subset cannot be installed or a replacement
+// tree cannot be linked safely.
+func CopyDTDSubsets(src, dst *Document) (map[*Entity]*Entity, error) {
+	return copyDTDSubsets(src, dst, true)
 }
 
 func copyDTDSubsets(

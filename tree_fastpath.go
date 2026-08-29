@@ -15,6 +15,7 @@ type attrNamespaceCacheEntry struct {
 
 func init() {
 	nodelink.AppendFastChild = nodelinkAppendFastChild
+	nodelink.BindEntityReference = nodelinkBindEntityReference
 }
 
 // nodelinkAppendFastChild adapts appendFastChild to the untyped
@@ -30,6 +31,18 @@ func nodelinkAppendFastChild(parent, child any) error {
 		return errors.New("child is not a node")
 	}
 	return appendFastChild(p, c)
+}
+
+// nodelinkBindEntityReference adapts bindEntityReference to the untyped
+// internal/nodelink hook so a sibling-package copier can retain declaration
+// identity without adding a public mutation API.
+func nodelinkBindEntityReference(ref, entity any) {
+	r, refOK := ref.(*EntityRef)
+	e, entityOK := entity.(*Entity)
+	if !refOK || !entityOK {
+		return
+	}
+	bindEntityReference(r, e)
 }
 
 // appendFastChild links child as the last child of parent without running the

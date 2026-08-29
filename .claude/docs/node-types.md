@@ -201,9 +201,10 @@ walk. The fallback walk consults ID-typed ATTLIST declarations by their raw qual
 it correctly resolves a prefixed element's qualified ATTLIST (`<!ATTLIST a:item eid ID>`) — but rebuilding
 from the source table is still preferred for identity and cost fidelity. `CopyDoc` also DEEP-COPIES the
 source's external subset (via `CopyDTDSubsets`), so the copy's fallback walk sees the same ID-typed ATTLIST
-decls as the source. `helium.CopyDTDSubsets(src, dst *Document)` registers declarations from BOTH subsets
-before copying entity replacement trees, so each reference across the subset boundary binds to the copy of
-its actual source declaration. `helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external
+decls as the source. `helium.CopyDTDSubsets(src, dst *Document)` returns the source-to-copy entity declaration
+correspondence and registers declarations from BOTH subsets before copying entity replacement trees, so each
+reference across the subset boundary binds to the copy of its actual source declaration.
+`helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external
 subset into
 `dst` (independent `*DTD`; mutating one never affects the other); `CopyDTDInfo`, by contrast, copies only the
 internal subset and links it into the document tree (and returns an error when `dst` already has one).
@@ -354,7 +355,8 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
 - `appendFastChild(parent, child)` (`tree_fastpath.go`) — package-private no-preflight append: links child as
   last child WITHOUT the cycle-guard / duplicate-attr checks. The caller guarantees an acyclic, dup-free child
   (deep copies, freshly-built trees). Ordinary code uses `AddChild`. It backs the parser's fast SAX path
-  in-package; `xslt3`'s strip-space copier reaches it through the `internal/nodelink` hook `AppendFastChild`,
+  in-package; `xslt3`'s strip-space copier reaches it through the `internal/nodelink` hook `AppendFastChild`
+  and reaches `bindEntityReference` through `BindEntityReference`,
   and the external `helium_test` package through `UnsafeAppendChildForTesting` in `export_test.go`.
 - `appendCopiedChild(parent, child)` (`copy_deep.go`) — the deep-copy core's own no-preflight link, used by
   `copyChildren` in place of `AddChild`. It mirrors `addChild`'s linking rules exactly, INCLUDING the
