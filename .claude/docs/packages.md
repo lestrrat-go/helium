@@ -1334,6 +1334,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   recursive RetrievalMethod links. `TypeRawX509Certificate` → `x509.ParseCertificate`; `TypeX509Data` →
   locked-down reparse + `parseX509Data`; any other/absent Type → `ErrInvalidKeyInfo`. A resolved-but-invalid
   resource is `ErrInvalidKeyInfo`, while a resource that cannot be dereferenced is `ErrReferenceNotFound`.
+  A failed external X509Data reparse also preserves the parser error in the chain, so context cancellation or
+  deadline expiry and a structured `*helium.ErrParseError` remain matchable alongside `ErrInvalidKeyInfo`.
   Recursive links use `maxRetrievalMethodDepth`=5 plus a visited-URI set. Retrieved material consumes the
   normal `verifyBudget`, and parsing never establishes trust. `Verifier.LenientKeyInfo(true)` skips only an
   unresolvable RetrievalMethod; resolved-but-invalid material remains fatal.

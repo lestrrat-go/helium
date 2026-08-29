@@ -363,7 +363,7 @@ func parseRetrievalDoc(ctx context.Context, cfg *verifierConfig, octets []byte) 
 	parser := cfg.parser()
 	extDoc, err := parser.Parse(ctx, octets)
 	if err != nil {
-		return nil, fmt.Errorf("%w: cannot parse RetrievalMethod resource as XML: %v", ErrInvalidKeyInfo, err)
+		return nil, fmt.Errorf("%w: cannot parse RetrievalMethod resource as XML: %w", ErrInvalidKeyInfo, err)
 	}
 	return extDoc, nil
 }
