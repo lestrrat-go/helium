@@ -307,7 +307,7 @@ func TestRetrievalMethod(t *testing.T) {
 	} {
 		t.Run("XPath S accepts "+tc.name, func(t *testing.T) {
 			sessionKey, kek := newKeys(t)
-			uri := "#xpointer(" + tc.ws + "id(" + tc.ws + "'k'" + tc.ws + ")" + tc.ws + ")"
+			uri := "#xpointer(" + tc.ws + "id" + tc.ws + "(" + tc.ws + "'k'" + tc.ws + ")" + tc.ws + ")"
 			elem := retrievalDoc(t, sessionKey,
 				retrievalMethodXML(xmlenc1.TypeEncryptedKey, uri),
 				`<ds:KeyInfo>`+wrappedKeyXML(t, "k", kek, sessionKey, "")+`</ds:KeyInfo>`)

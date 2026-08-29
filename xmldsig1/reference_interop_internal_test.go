@@ -74,7 +74,7 @@ func TestReferenceURIForm(t *testing.T) {
 		{name: "line feed", ws: "\n"},
 	} {
 		t.Run("XPath S accepts "+tc.name, func(t *testing.T) {
-			uri := "#xpointer(" + tc.ws + "id(" + tc.ws + "'e1ID'" + tc.ws + ")" + tc.ws + ")"
+			uri := "#xpointer(" + tc.ws + "id" + tc.ws + "(" + tc.ws + "'e1ID'" + tc.ws + ")" + tc.ws + ")"
 			id, wholeDoc, includeComments, ok := referenceURIForm(uri)
 			require.True(t, ok)
 			require.False(t, wholeDoc)

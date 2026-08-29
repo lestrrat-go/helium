@@ -1404,11 +1404,13 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   through `VerificationError`; empty → `ErrReferenceNotFound`, and a multi-element or non-element node-set →
   `ErrAmbiguousReference`. An id() selector NEVER reaches xpath1's built-in id()
   (`Document.GetElementByID`, which resolves a duplicate id to the last-registered element — an XSW bypass): a
-  whole-expression `id('X')` selector in any whitespace spelling (`id('X')`, `id ('X')`, `id( "X" )`;
+  whole-expression `id('X')` selector in any XML S spelling (`id('X')`, `id ('X')`, `id( "X" )`;
   `parseXPointerIDSelector`) resolves through the duplicate-detecting `domutil.FindElementsByID`
   (`ErrAmbiguousReference` on a duplicate), and ANY other id() use — a wrapping paren, a predicate, a path
   step (`expressionReferencesID`) — is rejected fail-closed as `ErrReferenceNotFound` and never reaches the
-  built-in. The selected element is fed into the existing subtree canonicalization path (comments included).
+  built-in. Before compilation, non-XML-S Unicode whitespace outside quoted XPath literals is rejected, while
+  the same characters inside literals remain data. The selected element is fed into the existing subtree
+  canonicalization path (comments included).
   `here()` is NOT registered for a URI-borne XPointer, so `xpointer(here())` fails closed with
   `ErrHereUnavailable` (preserved as a matchable sentinel through the general-XPointer error path).
 - Comment membership is a property of the reference FORM, not the c14n method: `effectiveC14NMethod`

@@ -356,6 +356,48 @@ func TestGeneralXPointerResolution(t *testing.T) {
 		require.ErrorIs(t, err, ErrAmbiguousReference)
 	})
 
+	t.Run("non-XML-S whitespace cannot bypass duplicate detection", func(t *testing.T) {
+		const xml = `<root><a xml:id="dup">A</a><b xml:id="dup">B</b></root>`
+		doc := mustParse(t, xml)
+		ref := xpointerRef("#xpointer(id\u00a0('dup'))")
+		cfg := &verifierConfig{allowXPointer: true}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+
+	t.Run("non-XML-S whitespace does not reach the XPath compiler", func(t *testing.T) {
+		doc := mustParse(t, `<root><a/></root>`)
+		ref := xpointerRef("#xpointer(\u00a0/root/a\u00a0)")
+		cfg := &verifierConfig{allowXPointer: true}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+
+	t.Run("non-XML-S whitespace in a quoted literal is preserved", func(t *testing.T) {
+		doc := mustParse(t, `<root><a value="&#160;"/></root>`)
+		ref := xpointerRef("#xpointer(//a[@value='\u00a0'])")
+		cfg := &verifierConfig{allowXPointer: true}
+		target, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.NoError(t, err)
+		require.Equal(t, findLocal(doc.DocumentElement(), "a"), target)
+	})
+
+	for _, tc := range []struct {
+		name string
+		uri  string
+	}{
+		{name: "xmlns prefix boundary", uri: "#xmlns(\u00a0p=urn:t)xpointer(//p:a)"},
+		{name: "xmlns namespace boundary", uri: "#xmlns(p=urn:t\u00a0)xpointer(//p:a)"},
+	} {
+		t.Run("rejects non-XML-S at "+tc.name, func(t *testing.T) {
+			doc := mustParse(t, `<root xmlns="urn:t"><a/></root>`)
+			ref := xpointerRef(tc.uri)
+			cfg := &verifierConfig{allowXPointer: true}
+			_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+			require.ErrorIs(t, err, ErrReferenceNotFound)
+		})
+	}
+
 	// Unicode whitespace outside XPath S must remain part of the expression and
 	// fail parsing or strict id-selector recognition instead of selecting an ID.
 	for _, tc := range []struct {

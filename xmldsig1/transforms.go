@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/c14n"
@@ -1187,15 +1188,20 @@ func referenceURIForm(uri string) (string, bool, bool, bool) {
 	return "", false, false, false
 }
 
-// parseXPointerID matches the XPointer id() form id('X') or id("X") and returns
-// the quoted id. Anything else (a bare argument, a nested call, an unbalanced or
-// mismatched quote) is rejected so only the two SHOULD-support schemes resolve.
+// parseXPointerID matches the XPointer id() form id('X') or id("X"), allowing
+// XML S before the opening parenthesis, and returns the quoted id. Anything else
+// (a bare argument, a nested call, an unbalanced or mismatched quote) is rejected
+// so only the two SHOULD-support schemes resolve.
 func parseXPointerID(expr string) (string, bool) {
-	if !strings.HasPrefix(expr, "id(") || !strings.HasSuffix(expr, ")") {
+	if !strings.HasPrefix(expr, "id") {
+		return "", false
+	}
+	rest := strings.TrimLeft(expr[len("id"):], " \t\r\n")
+	if !strings.HasPrefix(rest, "(") || !strings.HasSuffix(rest, ")") {
 		return "", false
 	}
 	// XPath S contains only space, tab, carriage return, and line feed.
-	arg := strings.Trim(expr[len("id("):len(expr)-1], " \t\r\n")
+	arg := strings.Trim(rest[1:len(rest)-1], " \t\r\n")
 	if len(arg) < 2 {
 		return "", false
 	}
@@ -1320,11 +1326,12 @@ func parseXmlnsPart(data string) (string, string, bool) {
 	if !ok {
 		return "", "", false
 	}
-	prefix := strings.TrimSpace(rawPrefix)
+	// XPointer's xmlns() scheme uses XML S, not all Unicode whitespace.
+	prefix := strings.Trim(rawPrefix, " \t\r\n")
 	if prefix == "" {
 		return "", "", false
 	}
-	return prefix, strings.TrimSpace(rawNS), true
+	return prefix, strings.Trim(rawNS, " \t\r\n"), true
 }
 
 // unescapeXPointerData reverses the XPointer framework circumflex escaping in a
@@ -1417,6 +1424,9 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // Every remaining expression is statically validated with the merged namespace
 // context, the shared operation limit, and here() disabled (nil bearing node).
 func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
+	if containsNonXMLSWhitespaceOutsideLiteral(expr) {
+		return nil, fmt.Errorf("%w: invalid XPointer expression %q", ErrReferenceNotFound, expr)
+	}
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {
 			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q", ErrReferenceNotFound, expr)
@@ -1439,6 +1449,29 @@ func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, e
 		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
 	}
 	return &preparedGeneralXPointer{compiled: compiled, eval: eval}, nil
+}
+
+// containsNonXMLSWhitespaceOutsideLiteral reports whitespace that xpath1's
+// lexer would accept even though XPath 1.0 permits only XML S between tokens.
+// Whitespace inside a quoted string is data and remains untouched.
+func containsNonXMLSWhitespaceOutsideLiteral(expr string) bool {
+	var quote rune
+	for _, r := range expr {
+		if quote != 0 {
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+		if r == '\'' || r == '"' {
+			quote = r
+			continue
+		}
+		if unicode.IsSpace(r) && r != ' ' && r != '\t' && r != '\r' && r != '\n' {
+			return true
+		}
+	}
+	return false
 }
 
 func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Document, prepared *preparedGeneralXPointer) (*helium.Element, error) {
