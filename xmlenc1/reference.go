@@ -129,7 +129,8 @@ func referenceURIForm(uri string) (string, bool, bool) {
 	if !strings.HasSuffix(frag, ")") {
 		return "", false, false
 	}
-	expr := strings.TrimSpace(frag[len("xpointer(") : len(frag)-1])
+	// XPath S contains only space, tab, carriage return, and line feed.
+	expr := strings.Trim(frag[len("xpointer("):len(frag)-1], " \t\r\n")
 	if expr == "/" {
 		return "", true, true
 	}
@@ -146,7 +147,8 @@ func parseXPointerID(expr string) (string, bool) {
 	if !strings.HasPrefix(expr, "id(") || !strings.HasSuffix(expr, ")") {
 		return "", false
 	}
-	arg := strings.TrimSpace(expr[len("id(") : len(expr)-1])
+	// XPath S contains only space, tab, carriage return, and line feed.
+	arg := strings.Trim(expr[len("id("):len(expr)-1], " \t\r\n")
 	if len(arg) < 2 {
 		return "", false
 	}

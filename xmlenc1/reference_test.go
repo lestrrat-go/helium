@@ -296,6 +296,65 @@ func TestRetrievalMethod(t *testing.T) {
 		requireSecret(t, nodes)
 	})
 
+	for _, tc := range []struct {
+		name string
+		ws   string
+	}{
+		{name: "space", ws: " "},
+		{name: "tab", ws: "&#x9;"},
+		{name: "carriage return", ws: "&#xD;"},
+		{name: "line feed", ws: "&#xA;"},
+	} {
+		t.Run("XPath S accepts "+tc.name, func(t *testing.T) {
+			sessionKey, kek := newKeys(t)
+			uri := "#xpointer(" + tc.ws + "id(" + tc.ws + "'k'" + tc.ws + ")" + tc.ws + ")"
+			elem := retrievalDoc(t, sessionKey,
+				retrievalMethodXML(xmlenc1.TypeEncryptedKey, uri),
+				`<ds:KeyInfo>`+wrappedKeyXML(t, "k", kek, sessionKey, "")+`</ds:KeyInfo>`)
+			nodes, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+			require.NoError(t, err)
+			requireSecret(t, nodes)
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		ws   string
+	}{
+		{name: "no-break space", ws: "\u00a0"},
+		{name: "next line", ws: "\u0085"},
+		{name: "line separator", ws: "\u2028"},
+		{name: "ideographic space", ws: "\u3000"},
+	} {
+		t.Run("rejects "+tc.name+" around the expression", func(t *testing.T) {
+			sessionKey, kek := newKeys(t)
+			uri := "#xpointer(" + tc.ws + "id('k')" + tc.ws + ")"
+			elem := retrievalDoc(t, sessionKey,
+				retrievalMethodXML(xmlenc1.TypeEncryptedKey, uri),
+				`<ds:KeyInfo>`+wrappedKeyXML(t, "k", kek, sessionKey, "")+`</ds:KeyInfo>`)
+			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+		})
+		t.Run("rejects "+tc.name+" around the id argument", func(t *testing.T) {
+			sessionKey, kek := newKeys(t)
+			uri := "#xpointer(id(" + tc.ws + "'k'" + tc.ws + "))"
+			elem := retrievalDoc(t, sessionKey,
+				retrievalMethodXML(xmlenc1.TypeEncryptedKey, uri),
+				`<ds:KeyInfo>`+wrappedKeyXML(t, "k", kek, sessionKey, "")+`</ds:KeyInfo>`)
+			_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+			require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+		})
+	}
+
+	t.Run("quoted id whitespace is preserved", func(t *testing.T) {
+		sessionKey, kek := newKeys(t)
+		elem := retrievalDoc(t, sessionKey,
+			retrievalMethodXML(xmlenc1.TypeEncryptedKey, "#xpointer(id(' key '))"),
+			`<ds:KeyInfo>`+wrappedKeyXML(t, "key", kek, sessionKey, "")+`</ds:KeyInfo>`)
+		_, err := xmlenc1.NewDecryptor().KeyEncryptionKey(kek).Decrypt(t.Context(), elem)
+		require.ErrorIs(t, err, xmlenc1.ErrReferenceNotFound)
+	})
+
 	// xmlenc-core1 §3.5.3 permits several RetrievalMethods, and two naming the
 	// same EncryptedKey describe one key: it must be trial-decrypted once and
 	// charged once, not once per reference.
