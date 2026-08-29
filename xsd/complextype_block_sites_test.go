@@ -56,7 +56,7 @@ func TestComplexTypeBlock_SubstitutionGroup(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		ver  xsd.Version
-	}{{"xsd10", xsd.Version10}, {"xsd11", xsd.Version11}} {
+	}{{testLabelXSD10, xsd.Version10}, {testLabelXSD11, xsd.Version11}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Run("head TYPE block=extension rejects extension-derived member", func(t *testing.T) {
 				require.ErrorIs(t, compileValidate(t, tc.ver, `block="extension"`), xsd.ErrValidationFailed)
@@ -216,7 +216,7 @@ func TestComplexTypeBlock_SubstitutionIntermediate(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		ver  xsd.Version
-	}{{"xsd10", xsd.Version10}, {"xsd11", xsd.Version11}} {
+	}{{testLabelXSD10, xsd.Version10}, {testLabelXSD11, xsd.Version11}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Run("intermediate TYPE block=extension rejects member", func(t *testing.T) {
 				require.ErrorIs(t, compileValidate(t, tc.ver, `block="extension"`), xsd.ErrValidationFailed)
@@ -318,7 +318,7 @@ func TestComplexTypeBlock_ParticleRestriction(t *testing.T) {
 </xs:schema>`
 	}
 
-	t.Run("xsd11", func(t *testing.T) {
+	t.Run(testLabelXSD11, func(t *testing.T) {
 		t.Run("base TYPE block=restriction rejects retyping restriction", func(t *testing.T) {
 			_, _, cerr := compileV11(t, schemaFor(`block="restriction"`))
 			require.Error(t, cerr)
@@ -328,7 +328,7 @@ func TestComplexTypeBlock_ParticleRestriction(t *testing.T) {
 			require.NoError(t, cerr)
 		})
 	})
-	t.Run("xsd10", func(t *testing.T) {
+	t.Run(testLabelXSD10, func(t *testing.T) {
 		t.Run("base TYPE block=restriction rejects retyping restriction", func(t *testing.T) {
 			_, cerr := compileV10(t, schemaFor(`block="restriction"`))
 			require.Error(t, cerr)

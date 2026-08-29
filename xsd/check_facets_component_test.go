@@ -26,8 +26,8 @@ func TestFacetComponentLabels(t *testing.T) {
 		name string
 		v11  bool
 	}{
-		{"xsd10", false},
-		{"xsd11", true},
+		{testLabelXSD10, false},
+		{testLabelXSD11, true},
 	} {
 		t.Run("notation complex/"+version.name, func(t *testing.T) {
 			t.Parallel()
@@ -93,8 +93,8 @@ func TestFacetComponentLabels(t *testing.T) {
 		name string
 		v11  bool
 	}{
-		{"xsd10", false},
-		{"xsd11", true},
+		{testLabelXSD10, false},
+		{testLabelXSD11, true},
 	} {
 		t.Run("anySimpleType complex/"+version.name, func(t *testing.T) {
 			t.Parallel()

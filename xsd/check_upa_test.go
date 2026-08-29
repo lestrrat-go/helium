@@ -552,8 +552,8 @@ func TestUPAComponentLabels(t *testing.T) {
 			name string
 			v11  bool
 		}{
-			{"xsd10", false},
-			{"xsd11", true},
+			{testLabelXSD10, false},
+			{testLabelXSD11, true},
 		} {
 			t.Run(tc.name+"/"+version.name, func(t *testing.T) {
 				t.Parallel()
