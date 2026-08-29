@@ -116,7 +116,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 	// secondary, so present-empty ≡ whitespace-only.
 	if local && c.filename != "" && c.ncnameCompanionUsable(ctx, elem, elemComplexType) {
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-			elem.LocalName(), componentLocalComplexType,
+			elem.LocalName(), component,
 			"A local complexType definition must not have a 'name' attribute."))
 	}
 
@@ -186,7 +186,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 			return
 		}
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
-			elem.LocalName(), componentLocalComplexType, what))
+			elem.LocalName(), component, what))
 	}
 
 	for child := range helium.Children(elem) {

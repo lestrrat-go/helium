@@ -61,6 +61,21 @@ func TestUnresolvedTypeRefElementKind(t *testing.T) {
 		require.Contains(t, errs, "element simpleType:",
 			"a simple type's unresolved base ref must report element simpleType; got: %q", errs)
 	})
+
+	t.Run("global complexType reports its name", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:simpleContent>
+      <xs:restriction base="xs:anyAtomicType"/>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:schema>`
+		errs := compileErrors(t, schemaXML)
+		require.Contains(t, errs,
+			"element complexType: Schemas parser error : complex type 'T': The QName value "+
+				"'{http://www.w3.org/2001/XMLSchema}anyAtomicType' does not resolve to a(n) type definition.")
+	})
 }
 
 // TestUnresolvedTypeRefImportSource verifies that an unresolved type reference in

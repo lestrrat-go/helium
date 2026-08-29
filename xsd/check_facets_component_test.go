@@ -134,3 +134,33 @@ func TestFacetComponentLabels(t *testing.T) {
 			"local simple type: It is an error for the value of 'minInclusive' to be greater than the value of 'maxInclusive'.")
 	})
 }
+
+func TestCircularComplexTypeComponentLabels(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:complexContent><xs:extension base="U"/></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="U">
+    <xs:complexContent><xs:extension base="T"/></xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+	for _, version := range []struct {
+		name string
+		v11  bool
+	}{
+		{testLabelXSD10, false},
+		{testLabelXSD11, true},
+	} {
+		t.Run(version.name, func(t *testing.T) {
+			t.Parallel()
+			errs := compileSchemaErrorsVersion(t, schema, version.v11)
+			for _, name := range []string{"T", "U"} {
+				require.Contains(t, errs,
+					"element complexType: Schemas parser error : complex type '"+name+"': "+
+						"Circular definition of the simple type")
+			}
+		})
+	}
+}

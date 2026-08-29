@@ -2535,12 +2535,10 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 		elemKind = elemSimpleType
 	}
 	component := owner.Name.Local
-	if component == "" || src.isLocal {
-		if elemKind == elemComplexType {
-			component = componentLocalComplexType
-		} else {
-			component = componentLocalSimpleType
-		}
+	if owner.IsComplex {
+		component = complexTypeComponent(owner, src)
+	} else if component == "" || src.isLocal {
+		component = componentLocalSimpleType
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, elemKind, component, msg))

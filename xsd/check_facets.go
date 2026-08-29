@@ -544,11 +544,12 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 	}
 }
 
-// checkCircularSimpleTypes reports a schema error for any simple type that
+// checkCircularSimpleTypes reports a schema error for any type definition that
 // participates in a circular definition: a union whose memberTypes reference it
-// (transitively), a list whose itemType reaches it, or a restriction whose base
-// chain returns to it (XSD §3.16.6.3 / cos-no-circular-unions and the general
-// "no circular type definitions" rule). Such a schema is invalid, and several
+// (transitively), a list whose itemType reaches it, or a restriction/complex-type
+// derivation whose base chain returns to it (XSD §3.16.6.3 /
+// cos-no-circular-unions and the general "no circular type definitions" rule).
+// Such a schema is invalid, and several
 // variety-walking compile checks (and resolveVariety/resolveItemType base
 // walks) would otherwise recurse forever on it; reporting it here surfaces the
 // real error before those walks run. It returns true when at least one circular
@@ -587,10 +588,14 @@ func (c *compiler) checkCircularSimpleTypes(ctx context.Context) bool {
 		}
 		found = true
 		component := e.td.Name.Local
-		if component == "" || e.src.isLocal {
+		elemKind := elemSimpleType
+		if e.td.IsComplex {
+			elemKind = elemComplexType
+			component = complexTypeComponent(e.td, e.src)
+		} else if component == "" || e.src.isLocal {
 			component = componentLocalSimpleType
 		}
-		c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, "simpleType", component,
+		c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, elemKind, component,
 			"Circular definition of the simple type; a type must not be a member, item, or base type of itself."))
 	}
 	return found
@@ -621,11 +626,11 @@ func simpleTypeReachesSelf(start *TypeDef) bool {
 	return walk(start)
 }
 
-// simpleTypeNeighbors returns the non-builtin simple types that td directly
+// simpleTypeNeighbors returns the non-builtin type definitions that td directly
 // depends on: its union member types, its list item type, and its restriction
 // base type (only when that base is a user-defined, non-builtin type). Builtin
 // XSD types are leaves and are never returned, so the walk stays within the
-// user-declared simple-type graph.
+// user-declared type graph. The base edge may connect complex types.
 func simpleTypeNeighbors(td *TypeDef) []*TypeDef {
 	if td == nil {
 		return nil
