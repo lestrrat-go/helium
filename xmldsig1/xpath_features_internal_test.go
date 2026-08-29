@@ -356,6 +356,33 @@ func TestGeneralXPointerResolution(t *testing.T) {
 		require.ErrorIs(t, err, ErrAmbiguousReference)
 	})
 
+	// Unicode whitespace outside XPath S must remain part of the expression and
+	// fail parsing or strict id-selector recognition instead of selecting an ID.
+	for _, tc := range []struct {
+		name string
+		uri  string
+	}{
+		{"U+00A0 around selector", "#xpointer(\u00a0id('a')\u00a0)"},
+		{"U+0085 around selector", "#xpointer(\u0085id('a')\u0085)"},
+		{"U+2028 around selector", "#xpointer(\u2028id('a')\u2028)"},
+		{"U+3000 around selector", "#xpointer(\u3000id('a')\u3000)"},
+		{"U+00A0 around argument", "#xpointer(id(\u00a0'a'\u00a0))"},
+		{"U+0085 around argument", "#xpointer(id(\u0085'a'\u0085))"},
+		{"U+2028 around argument", "#xpointer(id(\u2028'a'\u2028))"},
+		{"U+3000 around argument", "#xpointer(id(\u3000'a'\u3000))"},
+	} {
+		t.Run(tc.name+" fails closed", func(t *testing.T) {
+			doc := mustParse(t, `<root><a Id="a"/></root>`)
+			ref := xpointerRef(tc.uri)
+			cfg := &verifierConfig{allowXPointer: true}
+			target, canonical, external, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+			require.ErrorIs(t, err, ErrReferenceNotFound)
+			require.Nil(t, target)
+			require.Nil(t, canonical)
+			require.False(t, external)
+		})
+	}
+
 	// Any id() use that is not the whole-expression selector (a wrapping paren, a
 	// predicate) cannot be routed through domutil.FindElementsByID, so it is rejected
 	// fail-closed and never reaches the built-in id() — under duplicate xml:id
