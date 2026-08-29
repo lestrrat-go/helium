@@ -42,6 +42,12 @@ func TestExecNumberStartAt(t *testing.T) {
 			want:    "minus 9223372036854775808th",
 		},
 		{
+			name:    "minimum signed 64-bit integer with Unicode digits",
+			startAt: "-9223372036854775808",
+			format:  "٠",
+			want:    "-٩٢٢٣٣٧٢٠٣٦٨٥٤٧٧٥٨٠٨",
+		},
+		{
 			name:    "alphabetic above signed 32-bit range",
 			startAt: "2147483648",
 			format:  "a",

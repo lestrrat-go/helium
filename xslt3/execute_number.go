@@ -795,10 +795,14 @@ func digitZeroOf(r rune) rune {
 // formatWithDigitSystem formats a number using a decimal digit system
 // starting at the given zero codepoint.
 func formatWithDigitSystem(num int, zero rune, minWidth int) string {
-	if num < 0 {
-		return "-" + formatWithDigitSystem(-num, zero, minWidth)
+	negative := num < 0
+	var magnitude uint
+	if negative {
+		magnitude = uint(-(num + 1)) + 1
+	} else {
+		magnitude = uint(num)
 	}
-	if num == 0 {
+	if magnitude == 0 {
 		s := string(zero)
 		for len([]rune(s)) < minWidth {
 			s = string(zero) + s
@@ -806,15 +810,18 @@ func formatWithDigitSystem(num int, zero rune, minWidth int) string {
 		return s
 	}
 	var runes []rune
-	n := num
-	for n > 0 {
-		runes = append([]rune{zero + rune(n%10)}, runes...)
-		n /= 10
+	for magnitude > 0 {
+		runes = append([]rune{zero + rune(magnitude%10)}, runes...)
+		magnitude /= 10
 	}
 	for len(runes) < minWidth {
 		runes = append([]rune{zero}, runes...)
 	}
-	return string(runes)
+	formatted := string(runes)
+	if negative {
+		return "-" + formatted
+	}
+	return formatted
 }
 
 // ordinalSystem describes a Unicode numbering system with potentially
