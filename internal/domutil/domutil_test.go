@@ -2,12 +2,228 @@ package domutil_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/stretchr/testify/require"
 )
+
+var namespaceLookupSink string
+var namespaceLookupNSSink *helium.Namespace
+
+func TestLookupNSPrefixURI(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nearest declarations shadow ancestors", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<root xmlns="urn:outer" xmlns:p="urn:p-outer"><child xmlns="urn:inner" xmlns:p="urn:p-inner"><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
+
+		uri, found := domutil.LookupNSPrefixURI(leaf, "")
+		require.True(t, found)
+		require.Equal(t, "urn:inner", uri)
+
+		uri, found = domutil.LookupNSPrefixURI(leaf, "p")
+		require.True(t, found)
+		require.Equal(t, "urn:p-inner", uri)
+	})
+
+	t.Run("undeclarations stop the ancestor walk", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<?xml version="1.1"?><root xmlns="urn:outer" xmlns:p="urn:p"><child xmlns="" xmlns:p=""><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
+
+		for _, prefix := range []string{"", "p"} {
+			uri, found := domutil.LookupNSPrefixURI(leaf, prefix)
+			require.True(t, found, "prefix %q", prefix)
+			require.Empty(t, uri, "prefix %q", prefix)
+		}
+	})
+
+	t.Run("xml is not implicitly declared", func(t *testing.T) {
+		doc := helium.NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+
+		_, found := domutil.LookupNSPrefixURI(root, "xml")
+		require.False(t, found)
+
+		require.NoError(t, root.DeclareNamespace("xml", "http://www.w3.org/XML/1998/namespace"))
+		uri, found := domutil.LookupNSPrefixURI(root, "xml")
+		require.True(t, found)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", uri)
+	})
+
+	t.Run("CleanNamespaces controls retained declarations", func(t *testing.T) {
+		const input = `<root xmlns:p="urn:p"><child xmlns:p="urn:p"><leaf/></child></root>`
+		for _, clean := range []bool{false, true} {
+			doc, err := helium.NewParser().CleanNamespaces(clean).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			root := doc.DocumentElement()
+			child := root.FirstChild().(*helium.Element)
+			leaf := child.FirstChild().(*helium.Element)
+			require.True(t, root.RemoveNamespaceByPrefix("p"))
+
+			uri, found := domutil.LookupNSPrefixURI(leaf, "p")
+			if clean {
+				require.False(t, found)
+				continue
+			}
+			require.True(t, found)
+			require.Equal(t, "urn:p", uri)
+		}
+	})
+
+	t.Run("non-element start uses its element ancestor", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns:p="urn:p">text</root>`))
+		require.NoError(t, err)
+
+		uri, found := domutil.LookupNSPrefixURI(doc.DocumentElement().FirstChild(), "p")
+		require.True(t, found)
+		require.Equal(t, "urn:p", uri)
+	})
+}
+
+func TestLookupNSPrefixURIAllocationScaling(t *testing.T) {
+	measure := func(width int) float64 {
+		doc := helium.NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(root))
+
+		for i := range width {
+			require.NoError(t, root.DeclareNamespace(fmt.Sprintf("p%d", i), fmt.Sprintf("urn:%d", i)))
+		}
+		children := make([]*helium.Element, 0, width)
+		for i := range width {
+			child, err := doc.CreateElement(fmt.Sprintf("child%d", i))
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(child))
+			children = append(children, child)
+		}
+		prefix := fmt.Sprintf("p%d", width-1)
+
+		return testing.AllocsPerRun(20, func() {
+			for _, child := range children {
+				uri, found := domutil.LookupNSPrefixURI(child, prefix)
+				if !found {
+					panic("namespace not found")
+				}
+				namespaceLookupSink = uri
+			}
+		})
+	}
+
+	small := measure(64)
+	large := measure(512)
+	t.Logf("namespace lookup allocations: width=64 %.0f, width=512 %.0f", small, large)
+	require.LessOrEqual(t, large, small*2+1,
+		"an eightfold wider namespace table and child list must keep lookup allocations constant")
+}
+
+func TestLookupNSURI(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nearest declaration wins", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<root xmlns:q="urn:shared"><child xmlns:p="urn:shared"><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
+
+		ns, found := domutil.LookupNSURI(leaf, "urn:shared")
+		require.True(t, found)
+		require.Equal(t, "p", ns.Prefix(), "the nearest declaration must win")
+
+		_, found = domutil.LookupNSURI(leaf, "http://www.w3.org/XML/1998/namespace")
+		require.False(t, found, "the bare declaration lookup must not synthesize xml")
+	})
+
+	t.Run("nearer prefix rebind hides ancestor URI", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<root xmlns:p="urn:target"><child xmlns:p="urn:other"><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
+
+		uri, found := domutil.LookupNSPrefixURI(leaf, "p")
+		require.True(t, found)
+		require.Equal(t, "urn:other", uri)
+
+		ns, found := domutil.LookupNSURI(leaf, "urn:target")
+		require.False(t, found)
+		require.Nil(t, ns)
+		require.Nil(t, helium.LookupNSByHref(leaf, "urn:target"))
+	})
+
+	t.Run("nearer prefix undeclaration hides ancestor URI", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<?xml version="1.1"?><root xmlns:p="urn:target"><child xmlns:p=""><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
+
+		uri, found := domutil.LookupNSPrefixURI(leaf, "p")
+		require.True(t, found)
+		require.Empty(t, uri)
+
+		ns, found := domutil.LookupNSURI(leaf, "urn:target")
+		require.False(t, found)
+		require.Nil(t, ns)
+		require.Nil(t, helium.LookupNSByHref(leaf, "urn:target"))
+	})
+}
+
+func TestLookupNSURIAllocations(t *testing.T) {
+	for _, width := range []int{64, 512} {
+		t.Run(fmt.Sprintf("width %d", width), func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			for i := range width {
+				require.NoError(t, root.DeclareNamespace(fmt.Sprintf("p%d", i), fmt.Sprintf("urn:%d", i)))
+			}
+			leaf, err := doc.CreateElement("leaf")
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(leaf))
+			target := fmt.Sprintf("urn:%d", width-1)
+
+			internalAllocs := testing.AllocsPerRun(20, func() {
+				ns, found := domutil.LookupNSURI(leaf, target)
+				if !found {
+					panic("namespace not found")
+				}
+				namespaceLookupNSSink = ns
+			})
+			publicAllocs := testing.AllocsPerRun(20, func() {
+				ns := helium.LookupNSByHref(leaf, target)
+				if ns == nil {
+					panic("namespace not found")
+				}
+				namespaceLookupNSSink = ns
+			})
+
+			require.Zero(t, internalAllocs, "internal URI lookup must not allocate")
+			require.Zero(t, publicAllocs, "public URI lookup must not allocate")
+		})
+	}
+}
 
 // TestFindElementsByID pins the FROZEN ID-name rule FindElementsByID and
 // BuildIDIndex share: a DTD/schema-declared ID-typed attribute, xml:id, and

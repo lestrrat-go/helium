@@ -416,6 +416,13 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `RemoveNamespaceByPrefix` alone drops only the nsDefs entry, not the `n.ns`/attribute use, so a rebind still
   rejects while that use remains. Caller owns any ns passed to `AddNamespaceDecl` and must not share it across
   independently-mutated nodes
+- `Element.Namespaces() → []*Namespace` returns a fresh slice on every call, so
+  callers cannot replace or append entries in the element's private `nsDefs`.
+  `LookupNSByPrefix` and `LookupNSByHref` scan the raw declarations without
+  cloning while preserving nearest-ancestor shadowing and the public implicit
+  `xml` binding. Sibling-package bare lookups run through `internal/domutil` and
+  `internal/nslookup`; they preserve undeclarations and intentionally do not
+  synthesize `xml`.
 - `UnlinkNode(n MutableNode)` — detaches `n` from its parent/sibling chain; a nil or typed-nil `n` is a no-op.
   `node.Replace(...Node) → error` (guarded) rejects an EMPTY replacement set with `ErrInvalidOperation`
   (matching `Document.Replace`; use `UnlinkNode` to delete), a nil/typed-nil operand with `ErrNilNode`, and a
@@ -875,7 +882,8 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
   (conditional type assignment), `conditional_inclusion.go` (XSD 1.1 conditional inclusion), `opencontent.go`
   (open content), `override.go` (xs:override), `inherited_attrs.go` (XSD 1.1 inherited attributes),
   `schema_decls.go` (schema-aware XPath adapter), `errors.go`
-- Imports: helium, xpath1/, xpath3/ (XSD 1.1 assertions + conditional type assignment), internal/lexicon
+- Imports: helium, xpath1/, xpath3/ (XSD 1.1 assertions + conditional type assignment), internal/domutil,
+  internal/lexicon
 - Status: see `.claude/docs/libxml2-parity.md` for libxml2 golden counts and W3C XSD 1.1 conformance run policy; do not cache branch-specific counts here
 
 ## relaxng/
@@ -2180,6 +2188,28 @@ Generic bitset operations for bitmask types.
 
 - **Set[T](*T, T)** / **IsSet[T](T, T) → bool**
 - Files: `bitset.go`
+
+## internal/nslookup/
+
+Read-only bridge for namespace declaration lookup. Package helium installs the
+prefix and URI lookup hooks during init; sibling packages use them through
+`internal/domutil` to search the private `nsDefs` storage without cloning it or
+adding a public raw-slice accessor. The bridge imports nothing, so helium can
+register the hooks without an import cycle.
+
+- Files: `nslookup.go`
+- Imports: none
+
+## internal/domutil/
+
+Shared DOM/QName helpers used by processing packages. Namespace lookup uses
+`internal/nslookup` to scan private declaration storage without cloning it;
+`LookupNSPrefixURI` and `LookupNSURI` preserve nearest-ancestor shadowing and
+empty-URI undeclarations, and neither synthesizes the implicit `xml` binding.
+`Element.Namespaces()` remains the public defensive-copy accessor.
+
+- Files: `domutil.go`, `id.go`
+- Imports: helium, enum, internal/lexicon, internal/nslookup, internal/xmlchar
 
 ## internal/parser/
 
