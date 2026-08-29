@@ -1851,7 +1851,7 @@ func checkIDCNameTestPrefix(nt xpath1.NameTest, namespaces map[string]string) er
 		return nil
 	}
 	if _, ok := namespaces[nt.Prefix]; !ok {
-		return fmt.Errorf("the prefix '%s' is not bound to a namespace", nt.Prefix)
+		return fmt.Errorf("the prefix '%s' is not bound to a namespace", lexer.DiagnosticExcerpt(nt.Prefix))
 	}
 	return nil
 }

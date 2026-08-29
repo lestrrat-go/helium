@@ -41,6 +41,17 @@ func TestIDCXPathDiagnosticExcerpt(t *testing.T) {
 		require.GreaterOrEqual(t, large.allocated, small.allocated)
 		require.Less(t, large.allocated-small.allocated, uint64(5<<19))
 	})
+
+	t.Run("long unbound prefix is bounded", func(t *testing.T) {
+		prefix := strings.Repeat("界", (1<<20)/len("界"))
+		_, errs, err := compileWith(t, xsd.Version10, schema(prefix+":item"))
+
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		require.LessOrEqual(t, len(errs), 2048)
+		require.True(t, utf8.ValidString(errs))
+		require.Contains(t, errs, "[truncated]")
+		require.Contains(t, errs, "is not bound to a namespace")
+	})
 }
 
 type xsdCompileMeasurement struct {
