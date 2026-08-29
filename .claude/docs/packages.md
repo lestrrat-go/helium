@@ -316,7 +316,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
   panicking. A nil `targetDoc` creates a standalone copy. A copied named `EntityRef` resolves only against a
-  non-nil `targetDoc`'s declarations: a matching declaration installs the destination-owned shared `Entity` child,
+  non-nil `targetDoc`'s declarations: a bound source reference first resolves in the corresponding destination
+  internal or external subset, preserving subset identity when both declare the same name, then falls back to
+  ordinary destination name lookup. A matching declaration installs the destination-owned shared `Entity` child,
   while an absent declaration or nil target leaves the reference childless. A numeric character reference always
   remains bare
 - `CopyDoc(src) → (*Document, error)` /

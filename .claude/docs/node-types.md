@@ -374,8 +374,10 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   in `dc.dst` and has never been linked as an owned child. The `EntityRefNode` branch uses the active entity
   correspondence when its source reference is bound to a declaration included in the copy. With an active
   correspondence, an unbound source reference stays bare even when the copied DTD has a declaration with the
-  same name; standalone `CopyNode` instead uses destination name lookup. Numeric character references always
-  stay bare. A declared reference carries the destination DTD's shared `Entity` child, and that declaration
+  same name; standalone `CopyNode` first resolves a bound reference in the corresponding destination subset,
+  preserving internal/external identity when both subsets declare the same name, then falls back to ordinary
+  destination name lookup. Numeric character references always stay bare. A declared reference carries the
+  destination DTD's shared `Entity` child, and that declaration
   graph is disjoint from the fresh document subtree and cannot reach the new parent. Within a DTD entity's
   parsed replacement subtree, the same direct link is sound between fresh nodes. Each completed top-level
   replacement child is attached to its destination `Entity` through the same direct linker only after

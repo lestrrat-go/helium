@@ -55,9 +55,11 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 // enclosing copy includes the source reference's actual declaration,
 // entityCopies binds the reference to that declaration's copy. A document copy
 // keeps an unbound source reference unbound even when the copied DTD has a
-// declaration with the same name. Other callers retain the name-based targetDoc
-// lookup used by CopyNode. Numeric character references always remain bare. No
-// path aliases the source DTD or invents a destination declaration.
+// declaration with the same name. CopyNode first looks in the corresponding
+// destination subset for a bound source reference, then falls back to the
+// destination's ordinary name lookup. Numeric character references always
+// remain bare. No path aliases the source DTD or invents a destination
+// declaration.
 func copyEntityReference(
 	src Node,
 	targetDoc *Document,
@@ -71,7 +73,11 @@ func copyEntityReference(
 		return targetDoc.CreateCharRef(name)
 	}
 	if srcEntity, ok := AsNode[*Entity](src.FirstChild()); ok {
-		if dstEntity := entityCopies[srcEntity]; dstEntity != nil {
+		dstEntity := entityCopies[srcEntity]
+		if entityCopies == nil {
+			dstEntity = correspondingSubsetEntity(src, srcEntity, targetDoc)
+		}
+		if dstEntity != nil {
 			ref, err := targetDoc.CreateCharRef(name)
 			if err != nil {
 				return nil, err
@@ -84,6 +90,32 @@ func copyEntityReference(
 		return targetDoc.CreateCharRef(name)
 	}
 	return targetDoc.CreateReference(name)
+}
+
+// correspondingSubsetEntity finds the same-name destination declaration in
+// the subset that owns srcEntity. It preserves a bound reference's subset
+// identity when both destination subsets declare the same name.
+func correspondingSubsetEntity(src Node, srcEntity *Entity, targetDoc *Document) *Entity {
+	sourceDoc := src.OwnerDocument()
+	if sourceDoc == nil {
+		return nil
+	}
+
+	var targetSubset *DTD
+	switch srcEntity.Parent() {
+	case sourceDoc.intSubset:
+		targetSubset = targetDoc.intSubset
+	case sourceDoc.extSubset:
+		targetSubset = targetDoc.extSubset
+	default:
+		return nil
+	}
+	if targetSubset == nil {
+		return nil
+	}
+
+	dstEntity, _ := targetSubset.LookupEntity(src.Name())
+	return dstEntity
 }
 
 // CopyDoc creates a complete deep copy of a document: its children, its internal

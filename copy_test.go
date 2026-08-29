@@ -480,6 +480,41 @@ func TestCopyEntityReference(t *testing.T) {
 		require.Equal(t, "EXTERNAL", string(copiedRef.Content()))
 	})
 
+	t.Run("element copy preserves declaration subset identity", func(t *testing.T) {
+		fsys := fstest.MapFS{"entities.dtd": {Data: []byte(`<!ENTITY payload "EXTERNAL">`)}}
+		source, parseErr := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "entities.dtd"><root/>`))
+		require.NoError(t, parseErr)
+
+		sourceExternal, found := source.ExtSubset().LookupEntity("payload")
+		require.True(t, found)
+		ref, createErr := source.CreateReference("payload")
+		require.NoError(t, createErr)
+		require.Same(t, sourceExternal, ref.FirstChild())
+		require.NoError(t, source.DocumentElement().AddChild(ref))
+
+		_, addErr := source.IntSubset().AddEntity(
+			"payload", enum.InternalGeneralEntity, "", "", "INTERNAL",
+		)
+		require.NoError(t, addErr)
+		require.Same(t, sourceExternal, ref.FirstChild())
+
+		destination := helium.NewDefaultDocument()
+		_, copyErr := helium.CopyDTDSubsets(source, destination)
+		require.NoError(t, copyErr)
+		copiedRoot, copyErr := helium.CopyNode(source.DocumentElement(), destination)
+		require.NoError(t, copyErr)
+
+		destinationExternal, found := destination.ExtSubset().LookupEntity("payload")
+		require.True(t, found)
+		copiedRef := copiedRoot.FirstChild()
+		require.Same(t, destinationExternal, copiedRef.FirstChild())
+		require.Equal(t, "EXTERNAL", string(copiedRef.Content()))
+	})
+
 	t.Run("document copy preserves replacement declaration identity", func(t *testing.T) {
 		fsys := fstest.MapFS{
 			"entities.dtd": {Data: []byte(`<!ENTITY payload "EXTERNAL"><!ENTITY holder "&payload;">`)},
