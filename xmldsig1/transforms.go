@@ -774,8 +774,9 @@ func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, err
 }
 
 // collectSubtreeNodesLimited is collectSubtreeNodes with a member cap. It
-// checks the cap before allocating each namespace-node wrapper, so rejecting a
-// namespace-heavy input does not first materialize the work being bounded.
+// checks the cap before recording inherited root bindings or allocating their
+// namespace-node wrappers, so rejecting a namespace-heavy input does not first
+// materialize the work being bounded.
 func collectSubtreeNodesLimited(ctx context.Context, n helium.Node, maxNodes int) ([]helium.Node, error) {
 	c := &subtreeCollector{nodeSet: nodeSet{maxNodes: maxNodes}, fullAxis: true}
 	if err := c.collect(ctx, n); err != nil {
@@ -959,19 +960,62 @@ func (c *subtreeCollector) collect(ctx context.Context, n helium.Node) error {
 	}
 	c.scope = make(map[string]*helium.Namespace)
 	if elem, ok := helium.AsNode[*helium.Element](n); ok {
-		// Seed the scope with the subtree root's own in-scope axis, so bindings
-		// declared ABOVE the root are carried in. Every deeper element updates
-		// this map incrementally instead of walking its ancestors again. The
-		// seeding is charged like an emission: the root goes on to emit one
-		// namespace node per binding seeded here, so the two are the same size.
-		for prefix, ns := range domutil.InScopeNamespaces(elem, true) {
-			c.scope[prefix] = ns
-			if err := c.charge(ctx, 1); err != nil {
-				return err
-			}
+		if err := c.seedRootScope(ctx, elem); err != nil {
+			return err
 		}
 	}
 	return c.walk(ctx, n, true)
+}
+
+// seedRootScope collects the subtree root's in-scope namespace axis. Bindings
+// declared above the root must be carried in, but each distinct binding will
+// become a namespace-node member after the root itself is added. Enforce that
+// future cost before growing scope, so a small member limit cannot first build
+// an arbitrarily large inherited-binding map.
+func (c *subtreeCollector) seedRootScope(ctx context.Context, elem *helium.Element) error {
+	var chain []*helium.Element
+	for n := helium.Node(elem); n != nil; n = n.Parent() {
+		if anc, ok := helium.AsNode[*helium.Element](n); ok {
+			chain = append(chain, anc)
+		}
+	}
+
+	for _, anc := range slices.Backward(chain) {
+		for _, ns := range anc.Namespaces() {
+			if err := c.seedRootBinding(ctx, ns); err != nil {
+				return err
+			}
+		}
+		if ns := anc.Namespace(); ns != nil {
+			prefix := ns.Prefix()
+			if _, ok := c.scope[prefix]; !ok {
+				if err := c.seedRootBinding(ctx, ns); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *subtreeCollector) seedRootBinding(ctx context.Context, ns *helium.Namespace) error {
+	prefix := ns.Prefix()
+	if prefix == lexicon.PrefixXML {
+		return nil
+	}
+	if _, exists := c.scope[prefix]; !exists {
+		// The root itself is the one pending member not represented in scope.
+		if c.maxNodes > 0 {
+			if err := checkXPathFilterNodeLimit(ctx, len(c.nodes)+1+len(c.scope)+1, c.maxNodes); err != nil {
+				return err
+			}
+		}
+		if err := c.charge(ctx, 1); err != nil {
+			return err
+		}
+	}
+	c.scope[prefix] = ns
+	return nil
 }
 
 func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) error {

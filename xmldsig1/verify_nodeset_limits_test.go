@@ -266,6 +266,29 @@ func xpathFilterRetrievalDoc(decls, pad int) string {
 		1)
 }
 
+// xpathFilterInheritedTargetDoc keeps the large namespace axis on the selected
+// target's ancestor, outside ds:Signature. This isolates the allocation needed
+// to seed the RetrievalMethod selection from unrelated signature namespace
+// processing.
+func xpathFilterInheritedTargetDoc(decls int) string {
+	var b strings.Builder
+	b.WriteString(`<root><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo>`)
+	b.WriteString(`<ds:CanonicalizationMethod Algorithm="` + xmldsig1.C14N10 + `"/>`)
+	b.WriteString(`<ds:SignatureMethod Algorithm="` + xmldsig1.AlgRSASHA256 + `"/>`)
+	b.WriteString(`<ds:Reference URI=""><ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>`)
+	b.WriteString(`<ds:DigestValue>AAAA</ds:DigestValue></ds:Reference></ds:SignedInfo>`)
+	b.WriteString(`<ds:SignatureValue>AAAA</ds:SignatureValue><ds:KeyInfo>`)
+	b.WriteString(`<ds:RetrievalMethod URI="#bulk" Type="` + xmldsig1.TypeRawX509Certificate + `">`)
+	b.WriteString(`<ds:Transforms><ds:Transform Algorithm="` + xmldsig1.TransformXPath + `">`)
+	b.WriteString(`<ds:XPath>true()</ds:XPath></ds:Transform></ds:Transforms>`)
+	b.WriteString(`</ds:RetrievalMethod></ds:KeyInfo></ds:Signature><scope`)
+	for i := range decls {
+		fmt.Fprintf(&b, ` xmlns:p%d="urn:example:ns:%d"`, i, i)
+	}
+	b.WriteString(`><bulk Id="bulk"/></scope></root>`)
+	return b.String()
+}
+
 // xpathFilterRetrievalMembers is the exact number of members in the <bulk>
 // subtree's XPath input node-set: the bulk element, its Id attribute and
 // inherited namespace axis, then each child element, attribute, and complete
@@ -335,6 +358,30 @@ func TestVerifyXPathFilterNodeLimitAllocation(t *testing.T) {
 	t.Logf("default XPath input limit allocated %d bytes for a %d-byte fixture", allocated, len(src))
 	require.Less(t, allocated, uint64(maxVerifyAllocation),
 		"verifying a %d-byte namespace-heavy document allocated %d bytes", len(src), allocated)
+}
+
+// TestVerifyXPathFilterNodeLimitBoundsInheritedScope pins that the member cap
+// applies while the subtree root's inherited namespace scope is seeded. With a
+// one-member limit, the root consumes the entire budget, so verification must
+// reject the first namespace without building a map of every declaration.
+func TestVerifyXPathFilterNodeLimitBoundsInheritedScope(t *testing.T) {
+	const (
+		decls               = 20_000
+		maxVerifyAllocation = 2 << 20
+	)
+
+	key := generateRSAKey(t)
+	src := xpathFilterInheritedTargetDoc(decls)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		MaxXPathFilterNodes(1)
+	doc := mustParseXML(t, src)
+	_, err := verifier.Verify(t.Context(), doc)
+	require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+
+	allocated := verifyAllocatedBytes(t, verifier, src)
+	t.Logf("limited inherited namespace scope allocated %d bytes for %d declarations", allocated, decls)
+	require.Less(t, allocated, uint64(maxVerifyAllocation),
+		"verifying a document with %d inherited declarations allocated %d bytes", decls, allocated)
 }
 
 // TestVerifyDeadlineDuringNodeSetConstruction pins that a deadline stops node-set
