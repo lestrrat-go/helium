@@ -271,6 +271,34 @@ func TestFinalOnComplexType(t *testing.T) {
 	})
 }
 
+func TestFinalOnSimpleTypeComponentLabel(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="Base" final="restriction">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="Derived">
+    <xs:restriction base="Base"/>
+  </xs:simpleType>
+</xs:schema>`
+	for _, version := range []struct {
+		name string
+		v11  bool
+	}{
+		{testLabelXSD10, false},
+		{testLabelXSD11, true},
+	} {
+		t.Run(version.name, func(t *testing.T) {
+			t.Parallel()
+			errs := compileSchemaErrorsVersion(t, schema, version.v11)
+			require.Contains(t, errs,
+				"Derived: Derivation by restriction is forbidden by the base type 'Base'.")
+			require.NotContains(t, errs, "complex type 'Derived'")
+		})
+	}
+}
+
 func TestFinalOnSubstGroupHead(t *testing.T) {
 	t.Run("final=extension on head blocks extension-derived member", func(t *testing.T) {
 		t.Parallel()

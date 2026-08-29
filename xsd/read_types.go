@@ -100,6 +100,10 @@ func (c *compiler) recordAttrGroupRef(td *TypeDef, qn QName, src attrGroupRefUse
 func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, local bool) (*TypeDef, error) {
 	td := &TypeDef{IsComplex: true}
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
+	component := componentLocalComplexType
+	if !local {
+		component = "complex type '" + collapsedAttr(elem, attrName) + "'"
+	}
 
 	// A LOCAL (anonymous/inline) xs:complexType — one whose parent is an element
 	// or an xs:alternative — must NOT carry a @name (XSD Structures §3.4.2:
@@ -129,7 +133,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 			if hasAttr(elem, ba) {
 				if v := getAttr(elem, ba); !isValidFinal(v) {
 					c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-						elem.LocalName(), componentLocalComplexType,
+						elem.LocalName(), component,
 						"The value '"+v+"' of attribute '"+ba+"' is not valid. Expected is '(#all | List of (extension | restriction))'."))
 				}
 			}

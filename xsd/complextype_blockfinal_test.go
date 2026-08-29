@@ -103,3 +103,53 @@ func TestComplexTypeBlockFinalValue(t *testing.T) {
 		}
 	})
 }
+
+func TestComplexTypeBlockFinalComponentLabel(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []struct {
+		name string
+		v11  bool
+	}{
+		{testLabelXSD10, false},
+		{testLabelXSD11, true},
+	} {
+		t.Run(version.name, func(t *testing.T) {
+			t.Parallel()
+			for _, tc := range []struct {
+				name string
+				body string
+				want string
+			}{
+				{
+					"global block",
+					`<xs:complexType name="T" block="bogus"/>`,
+					"complex type 'T': The value 'bogus' of attribute 'block'",
+				},
+				{
+					"global final",
+					`<xs:complexType name="T" final="bogus"/>`,
+					"complex type 'T': The value 'bogus' of attribute 'final'",
+				},
+				{
+					"local block",
+					`<xs:element name="root"><xs:complexType block="bogus"/></xs:element>`,
+					"local complex type: The value 'bogus' of attribute 'block'",
+				},
+				{
+					"local final",
+					`<xs:element name="root"><xs:complexType final="bogus"/></xs:element>`,
+					"local complex type: The value 'bogus' of attribute 'final'",
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+					schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+						tc.body + `</xs:schema>`
+					errs := compileSchemaErrorsVersion(t, schema, version.v11)
+					require.Contains(t, errs, tc.want)
+				})
+			}
+		})
+	}
+}
