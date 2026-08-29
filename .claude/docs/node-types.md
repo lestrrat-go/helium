@@ -244,7 +244,8 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   and is rejected with a `%w`-wrapped `ErrInvalidOperation`. A non-attribute child takes the ordinary
   child-list path (a `*Document` accepts multiple element children — it is an XDM document node, not a
   well-formed-document constraint; single-root enforcement lives in `SetDocumentElement`, mirroring libxml2's
-  `xmlDocSetRootElement`).
+  `xmlDocSetRootElement`). Re-adding the exact ordinary-child node already stored as this parent's foreign
+  `firstChild` or `lastChild` is a successful no-op; the node remains linked to its real owner's chain.
 - `addSibling(node, sibling)` — append to end of siblings. The tree an append leaves behind is always the one
   the plain `NextSibling()` walk from the anchor produces, INCLUDING every `parent.lastChild` write, which is
   unconditional exactly as it is in that walk. What changes is how the append point is REACHED: the generic
@@ -271,13 +272,16 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   quadratic over N appends. A parent holding a `firstChild` with NO `lastChild` — the shape
   `Document.stringToNodeList` leaves behind on an entity referenced from an attribute value — does not reach
   the empty-parent branch of `addChild`/`appendFastChild`, because `resolveOwnedTail` walks that child list and
-  returns its true tail, so the append joins the list instead of overwriting `firstChild`; neither does a
-  parent whose `firstChild` claims someone else, which keeps its list too. The guarded paths therefore detach
-  no child from a chain it goes on claiming, and create no claim of their own. A `*Document` parent is NOT
-  declined by type: a document's child list is an ordinary sibling chain that an append walks exactly like any
-  other. A document IS the one parent safe API hands such a claimant, through `CopyExtSubset`, which gives the
-  copied EXTERNAL subset the destination document as its parent and then leaves it reachable only through
-  `ExtSubset`, never from the child list, so an append through that subset records a tail off the child list.
+  returns its true tail, so the append joins the list instead of overwriting `firstChild`. A parent whose
+  `firstChild` claims someone else has no owned tail: `resolveOwnedTail` returns nil, so appending a different
+  node replaces that foreign pointer without changing the foreign owner's chain. Re-adding the stored foreign
+  endpoint itself is a no-op before auto-unlink, so it also leaves both links unchanged. The guarded paths
+  therefore detach no child from a chain it goes on claiming, and create no claim of their own. A `*Document`
+  parent is NOT declined by type: a document's child list is an ordinary sibling chain that an append walks
+  exactly like any other. A document IS the one parent safe API hands such a claimant, through `CopyExtSubset`,
+  which gives the copied EXTERNAL subset the destination document as its parent and then leaves it reachable
+  only through `ExtSubset`, never from the child list, so an append through that subset records a tail off the
+  child list.
   That is a CONDITION, not a type, and `Document.offChainChildClaim` (`document.go`, set by `CopyExtSubset`)
   records it on that document as the claimed PARENT, so it declines only for appends onto the document node
   itself and never for the elements that document owns. (`CreateInternalSubset` also gives a `DTD` the document
@@ -318,7 +322,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   the reference receives a child. A stale owned record is repaired rather than followed: the
   `CopyExtSubset` shape has no reachable first child, and the `stringToNodeList` shape has an owned child list
   but no recorded tail. The `CreateReference` shape has only a foreign first child, so the new owned list
-  replaces the reference's pointer to that shared Entity without changing the DTD chain.
+  replaces the reference's pointer to that shared Entity without changing the DTD chain. Re-adding that same
+  stored Entity is handled before resolution as a successful no-op, leaving the Entity on the DTD chain and
+  as the reference's foreign child.
   `TestAddChildResolvesAnOwnedTail` (`node_owned_tail_test.go`) pins all four reachable shapes, and
   `TestAddSiblingOffChainParentClaim`, `TestAddSiblingCopiedExternalSubsetClaim` and
   `TestAddSiblingCorruptShapesMatchWalk` (`node_sibling_test.go`) pin the sibling side; every expectation in
@@ -444,8 +450,10 @@ stops within a small multiple of the cycle length, so on a corrupt sibling list 
 the stack more than once — harmless, since the popped-node visited set deduplicates the extra pushes on pop,
 and termination is unconditional either way. The childless-cur fast path (the parser hot path appends fresh
 leaves) skips the search entirely, so plain parsing is unaffected; it only runs for a subtree/entity-ref
-insertion. addChild/addSibling auto-unlink an already-linked incoming node before relinking so it never lives
-in two places; rejection leaves the tree untouched. The shared guard + auto-unlink is factored into
+insertion. `addChild`/`addSibling` auto-unlink an already-linked incoming node before relinking so it never
+lives in two places. `addChild` instead returns a successful no-op when the incoming node is already stored as
+the parent's foreign first or last child, because unlinking it would damage its real owner's chain. Rejection
+leaves the tree untouched. The shared guard + auto-unlink is factored into
 `addChildPreflight`/`addSiblingPreflight`. Leaf `AddChild`/`AddSibling` overrides that take a content-merge
 fast path (Text, Comment, and ProcessingInstruction — whose `AddChild` merges a Text/CDATA operand's content
 into the PI data string) run the matching preflight BEFORE merging, so

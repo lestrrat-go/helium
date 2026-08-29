@@ -727,6 +727,18 @@ func addChild(n MutableNode, cur Node) error {
 	pdn := n.baseDocNode()
 	cdn := cur.baseDocNode()
 
+	// CreateReference stores the DTD-owned Entity as both child endpoints while
+	// leaving the Entity's parent and sibling links on the DTD declaration list.
+	// Re-adding that same stored foreign endpoint is already represented on n, so
+	// treat it as a no-op. Auto-unlinking it would remove the declaration from its
+	// real owner before resolveOwnedTail could recognize the foreign child list.
+	foreignParent := cdn.parent != nil && cdn.parent.baseDocNode() != pdn
+	isFirstChild := pdn.firstChild != nil && pdn.firstChild.baseDocNode() == cdn
+	isLastChild := pdn.lastChild != nil && pdn.lastChild.baseDocNode() == cdn
+	if foreignParent && (isFirstChild || isLastChild) {
+		return nil
+	}
+
 	if err := addChildPreflight(n, cur); err != nil {
 		return err
 	}
@@ -832,7 +844,9 @@ func addSiblingPreflight(n MutableNode, cur Node) error {
 // must not run off into it. When the first node is foreign, there is no owned
 // append anchor. Returning that foreign head would let AddSibling follow and
 // mutate its owner's sibling chain, so the caller replaces the non-owned child
-// pointer with a new owned list.
+// pointer with a new owned list. addChild handles the one different case before
+// calling this resolver: re-adding that stored foreign endpoint is a no-op, so
+// its real owner's chain and the foreign child pointer both stay unchanged.
 //
 // Healthy trees take the O(1) route: two pointer comparisons on top of the read
 // the callers already did. Only a tree already carrying a stale record pays the

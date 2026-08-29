@@ -91,27 +91,44 @@ func TestAddChildResolvesAnOwnedTail(t *testing.T) {
 	})
 
 	// CreateReference hands the EntityRef the DTD's shared Entity as its child
-	// while that Entity's parent stays the DTD. Appending the Entity into its own
-	// reference must not link it after itself.
+	// while that Entity's parent stays the DTD. Re-adding that same Entity is a
+	// successful no-op that must preserve both views of the shared node.
 	t.Run("operand is the parent's own foreign child", func(t *testing.T) {
 		t.Parallel()
 
 		doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneImplicitNo)
 		dtd, err := doc.CreateInternalSubset("root", "", "")
 		require.NoError(t, err)
-		ent, err := dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "val")
+		ent, err := dtd.AddEntity("e1", enum.InternalGeneralEntity, "", "", "x")
+		require.NoError(t, err)
+		next, err := dtd.AddEntity("e2", enum.InternalGeneralEntity, "", "", "y")
+		require.NoError(t, err)
+		dtdChildren := []helium.Node{ent, next}
+		require.Equal(t, dtdChildren, collectChildren(dtd))
+		before, err := helium.WriteString(dtd)
 		require.NoError(t, err)
 
-		ref, err := doc.CreateReference("e")
+		ref, err := doc.CreateReference("e1")
 		require.NoError(t, err)
 		require.Equal(t, helium.Node(ent), ref.FirstChild())
+		require.Equal(t, helium.Node(ent), ref.LastChild())
 
-		_ = ref.AddChild(ent)
+		require.NoError(t, ref.AddChild(ent), "re-adding the stored foreign child is a no-op")
 
-		require.NotEqual(t, helium.Node(ent), ent.NextSibling(),
-			"a node must never become its own next sibling")
-		require.NotEqual(t, helium.Node(ent), ent.PrevSibling(),
-			"a node must never become its own previous sibling")
+		require.Equal(t, dtdChildren, collectChildren(dtd),
+			"the DTD declaration chain must remain intact")
+		require.Equal(t, helium.Node(dtd), ent.Parent(),
+			"the shared Entity must remain owned by the DTD")
+		require.Equal(t, []helium.Node{ent}, collectChildren(ref),
+			"the reference must retain its shared Entity child")
+		require.Equal(t, helium.Node(ent), ref.FirstChild())
+		require.Equal(t, helium.Node(ent), ref.LastChild())
+		require.Equal(t, helium.Node(next), ent.NextSibling())
+		require.Equal(t, helium.Node(ent), next.PrevSibling())
+
+		after, err := helium.WriteString(dtd)
+		require.NoError(t, err)
+		require.Equal(t, before, after, "DTD serialization must retain both declarations")
 	})
 
 	// The same EntityRef shape, with a DIFFERENT node appended. The reference's
