@@ -366,18 +366,20 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   as it is attached, so linking a deep chain one level at a time costs the sum of all subtree sizes. Skipping
   the preflight is sound here — never elsewhere — because every node `copyNode` returns is freshly allocated
   in `dc.dst` and has never been linked as an owned child. The `EntityRefNode` branch uses the active entity
-  correspondence when its declaration is part of the copy, then falls back to destination name lookup; a
-  declared reference carries the destination DTD's shared `Entity` child, and that declaration graph is disjoint
-  from the fresh document subtree and cannot reach the new parent. Within a DTD entity's parsed replacement
-  subtree, the same direct link is sound between fresh nodes. Each completed top-level replacement child is
-  attached to its destination `Entity` through the same direct linker only after `copyDTDReplacements`
-  validates the complete prospective declaration graph once with shared visit state. The shared state visits
-  each node once across chained declarations while retaining cycle rejection.
+  correspondence when its source reference is bound to a declaration included in the copy. With an active
+  correspondence, an unbound source reference stays bare even when the copied DTD has a declaration with the
+  same name; standalone `CopyNode` instead uses destination name lookup. Numeric character references always
+  stay bare. A declared reference carries the destination DTD's shared `Entity` child, and that declaration
+  graph is disjoint from the fresh document subtree and cannot reach the new parent. Within a DTD entity's
+  parsed replacement subtree, the same direct link is sound between fresh nodes. Each completed top-level
+  replacement child is attached to its destination `Entity` through the same direct linker only after
+  `copyDTDReplacements` validates the complete prospective declaration graph once with shared visit state.
+  The shared state visits each node once across chained declarations while retaining cycle rejection.
   `appendCopiedChild`
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior
   for that unrelated caller too. `CopyDoc` builds both DTD subsets before the fresh document child list so
-  copied references bind to the copies of their actual source declarations, but records the external subset's
+  bound references bind to the copies of their actual source declarations, but records the external subset's
   off-chain claim only after the child list is complete. Each document-level append can therefore use the recorded
   owned tail instead of walking the growing child list.
 - `DeclareNamespace(prefix, uri)` / `AddNamespaceDecl(ns)` — do NOT themselves add a second declaration for a

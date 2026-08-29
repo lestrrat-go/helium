@@ -3,6 +3,7 @@ package helium
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // CopyNode creates a deep copy of src, owned by targetDoc.
@@ -51,20 +52,23 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 
 // copyEntityReference creates a fresh reference owned by targetDoc. When the
 // enclosing copy includes the source reference's actual declaration,
-// entityCopies binds the reference to that declaration's copy. Other callers
-// retain the name-based targetDoc lookup used by CopyNode. No path aliases the
-// source DTD or invents a destination declaration.
+// entityCopies binds the reference to that declaration's copy. A document copy
+// keeps an unbound source reference unbound even when the copied DTD has a
+// declaration with the same name. Other callers retain the name-based targetDoc
+// lookup used by CopyNode. Numeric character references always remain bare. No
+// path aliases the source DTD or invents a destination declaration.
 func copyEntityReference(
 	src Node,
 	targetDoc *Document,
 	entityCopies map[*Entity]*Entity,
 ) (*EntityRef, error) {
-	if targetDoc == nil {
-		return targetDoc.CreateCharRef(src.Name())
+	name := src.Name()
+	if strings.HasPrefix(name, "#") {
+		return targetDoc.CreateCharRef(name)
 	}
 	if srcEntity, ok := AsNode[*Entity](src.FirstChild()); ok {
 		if dstEntity := entityCopies[srcEntity]; dstEntity != nil {
-			ref, err := targetDoc.CreateCharRef(src.Name())
+			ref, err := targetDoc.CreateCharRef(name)
 			if err != nil {
 				return nil, err
 			}
@@ -72,17 +76,20 @@ func copyEntityReference(
 			return ref, nil
 		}
 	}
-	return targetDoc.CreateReference(src.Name())
+	if entityCopies != nil {
+		return targetDoc.CreateCharRef(name)
+	}
+	return targetDoc.CreateReference(name)
 }
 
 // CopyDoc creates a complete deep copy of a document: its children, its internal
 // AND external DTD subsets, and the document-level state a caller reasonably
 // relies on (the XML-declaration version/encoding/standalone, the base URI, the
 // property flags, the ID-skip state, and the interned ID table). The copy is
-// fully independent — the external subset is deep-copied, each entity reference
-// binds to the copy of its actual source declaration, and the ID table is rebuilt
-// against the copy's own elements. No mutable map or DTD is aliased between src
-// and the result. Mutating one document never affects the other.
+// fully independent — the external subset is deep-copied, each bound entity
+// reference binds to the copy of its actual source declaration, and the ID table
+// is rebuilt against the copy's own elements. No mutable map or DTD is aliased
+// between src and the result. Mutating one document never affects the other.
 func CopyDoc(src *Document) (*Document, error) {
 	if src == nil {
 		return nil, fmt.Errorf("helium: cannot copy nil document")

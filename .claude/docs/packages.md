@@ -315,8 +315,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
   (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
-  panicking. A copied `EntityRef` resolves only against `targetDoc`'s declarations: a matching declaration installs
-  the destination-owned shared `Entity` child, while an absent declaration leaves the reference childless
+  panicking. A copied named `EntityRef` resolves only against `targetDoc`'s declarations: a matching declaration
+  installs the destination-owned shared `Entity` child, while an absent declaration leaves the reference childless.
+  A numeric character reference always remains bare
 - `CopyDoc(src) → (*Document, error)` /
   `CopyDTDSubsets(src, dst) → (map[*Entity]*Entity, error)` /
   `CopyDTDInfo(src, dst) → error` / `CopyExtSubset(src, dst)` —
@@ -325,10 +326,12 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   the interned ID table rebuilt against the copy's own elements; no mutable map or DTD is aliased);
   DTD entity copies include their independent parsed replacement subtrees, so copied references retain the source's
   string-value and canonical form without aliasing source nodes; `CopyDoc` and `CopyDTDSubsets` carry each source
-  entity declaration's identity into its copy, so a copied reference binds to the copy of its actual declaration even
-  when the internal and external subsets contain the same name; `CopyDTDSubsets` returns that source-to-copy entity
-  correspondence for callers that copy document content separately, and registers BOTH subsets' declarations before
-  copying replacement trees, so references across the subset boundary bind to destination-owned entities;
+  entity declaration's identity into its copy, so a bound copied reference binds to the copy of its actual declaration
+  even when the internal and external subsets contain the same name. `CopyDoc` keeps a childless source reference
+  childless even when its copied DTD contains a declaration with the same name. `CopyDTDSubsets` returns that
+  source-to-copy entity correspondence for callers that copy document content separately, and registers BOTH
+  subsets' declarations before copying replacement trees, so references across the subset boundary bind to
+  destination-owned entities;
   `CopyDTDInfo` copies the INTERNAL subset's metadata +
   entities/elements/attributes/notations into `dst` and
   RETURNS an error (notably when `dst` already has an internal subset); `CopyExtSubset` gives `dst` its own

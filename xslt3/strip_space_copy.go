@@ -222,7 +222,9 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 				return sc.record(src, cp), nil
 			}
 		}
-		cp, err := sc.dst.CreateReference(src.Name())
+		// This copier has already copied the source DTD. Preserve an unbound
+		// source reference as bare instead of resolving it against that DTD.
+		cp, err := sc.dst.CreateCharRef(src.Name())
 		if err != nil {
 			return nil, err
 		}

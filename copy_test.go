@@ -362,6 +362,24 @@ func TestCopyEntityReference(t *testing.T) {
 		require.Nil(t, copied.FirstChild())
 	})
 
+	t.Run("numeric reference ignores a same-name destination declaration", func(t *testing.T) {
+		numeric, createErr := src.CreateCharRef("#65")
+		require.NoError(t, createErr)
+
+		dst := helium.NewDefaultDocument()
+		dtd, createErr := dst.CreateInternalSubset("root", "", "")
+		require.NoError(t, createErr)
+		_, createErr = dtd.AddEntity(
+			"#65", enum.InternalGeneralEntity, "", "", "WRONG",
+		)
+		require.NoError(t, createErr)
+
+		copied, copyErr := helium.CopyNode(numeric, dst)
+		require.NoError(t, copyErr)
+		require.Nil(t, copied.FirstChild())
+		require.Empty(t, copied.Content())
+	})
+
 	t.Run("document copy shares only its own repeated declaration", func(t *testing.T) {
 		copied, copyErr := helium.CopyDoc(src)
 		require.NoError(t, copyErr)
@@ -378,6 +396,31 @@ func TestCopyEntityReference(t *testing.T) {
 		require.Same(t, copied, first.OwnerDocument())
 		require.Same(t, copied, second.OwnerDocument())
 		require.Same(t, copied, dstEntity.OwnerDocument())
+	})
+
+	t.Run("document copy preserves a childless late reference", func(t *testing.T) {
+		source := helium.NewDefaultDocument()
+		_, createErr := source.CreateInternalSubset("root", "", "")
+		require.NoError(t, createErr)
+		root, createErr := source.CreateElement("root")
+		require.NoError(t, createErr)
+		require.NoError(t, source.AddChild(root))
+
+		ref, createErr := source.CreateCharRef("payload")
+		require.NoError(t, createErr)
+		require.NoError(t, root.AddChild(ref))
+		_, createErr = source.IntSubset().AddEntity(
+			"payload", enum.InternalGeneralEntity, "", "", "PAYLOAD",
+		)
+		require.NoError(t, createErr)
+		require.Nil(t, ref.FirstChild())
+
+		copied, copyErr := helium.CopyDoc(source)
+		require.NoError(t, copyErr)
+		copiedRef := copied.DocumentElement().FirstChild()
+		require.Equal(t, helium.EntityRefNode, copiedRef.Type())
+		require.Nil(t, copiedRef.FirstChild())
+		require.Empty(t, copiedRef.Content())
 	})
 
 	t.Run("document copy resolves an external declaration", func(t *testing.T) {

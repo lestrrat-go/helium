@@ -816,6 +816,36 @@ func TestStripSpace(t *testing.T) {
 		require.Same(t, cp, cpEntity.OwnerDocument())
 	})
 
+	t.Run("copy preserves a childless late entity reference", func(t *testing.T) {
+		t.Parallel()
+
+		src := helium.NewDefaultDocument()
+		_, err := src.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		root, err := src.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, src.AddChild(root))
+		ref, err := src.CreateCharRef("payload")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(ref))
+		_, err = src.IntSubset().AddEntity(
+			"payload", enum.InternalGeneralEntity, "", "", "PAYLOAD",
+		)
+		require.NoError(t, err)
+		require.Nil(t, ref.FirstChild())
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/"><xsl:value-of select="/root"/></xsl:template>
+</xsl:stylesheet>`
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		out, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		require.Empty(t, out)
+	})
+
 	t.Run("copy preserves entity declaration identity", func(t *testing.T) {
 		t.Parallel()
 
