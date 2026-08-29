@@ -150,10 +150,11 @@ func TestDecryptBlockAlgorithm(t *testing.T) {
 		require.Len(t, nodes, 1)
 	})
 
-	// Legacy-namespace GCM binds the algorithm URI into the AEAD additional
-	// authenticated data. The resolved URI must feed that same slot, so a
-	// legacy ciphertext opens under its own URI and fails under any other.
-	t.Run("legacy GCM binds the resolved URI as additional data", func(t *testing.T) {
+	// Helium's nonstandard 2001-namespace GCM compatibility extension binds the
+	// algorithm URI into the AEAD additional authenticated data. The resolved URI
+	// must feed that same slot, so its ciphertext opens under its own URI and fails
+	// under any other.
+	t.Run("Helium's 2001-namespace GCM extension binds the resolved URI as additional data", func(t *testing.T) {
 		sessionKey := randKey(t, 32)
 		elem := encryptedDataWithoutEncryptionMethod(t, xmlenc1.AES256GCM, sessionKey, []byte(plaintext))
 

@@ -39,8 +39,8 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   document's is used when none is set, and a pair that disagrees fails with
   `ErrConflictingBlockAlgorithm`. A document can therefore never override a
   caller who stated the algorithm out of band. Whichever URI the resolution
-  returns is what the CBC opt-in, the legacy GCM additional authenticated data,
-  and every key-length binding act on.
+  returns is what the CBC opt-in, Helium's nonstandard 2001-namespace GCM
+  additional authenticated data, and every key-length binding act on.
 - AES-CBC is unauthenticated and vulnerable to padding-oracle attacks
   (Jager/Somorovsky 2011).
   - **Encryption:** selecting a CBC `BlockAlgorithm` requires
