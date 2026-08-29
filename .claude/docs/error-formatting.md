@@ -307,7 +307,10 @@ Ordered-transform diagnostics (`transform_pipeline.go` `executeTransformPipeline
 transform index + algorithm. Static algorithm/parameter/capability failures wrap `ErrUnsupportedTransform`
 before execution. A first required parse of resolver-supplied octets wraps `ErrReferenceNotFound`; a parse of
 intermediate transform output wraps `ErrUnsupportedTransform` and names both producer + consumer steps.
-Invalid Base64 wraps `ErrInvalidSignature`. Context and injected-XSLT errors return unchanged.
+Invalid Base64 wraps `ErrInvalidSignature`. `ErrHereUnavailable` returns unchanged from XPath evaluation;
+every other XPath evaluation failure wraps both `ErrUnsupportedTransform` and the evaluator error, so
+`context.Canceled`, `context.DeadlineExceeded`, and XPath sentinels remain matchable through the outer
+`VerificationError`. Other context and injected-XSLT errors return unchanged.
 
 A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI dereference, transform execution, or key resolution.
 

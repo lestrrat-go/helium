@@ -374,7 +374,8 @@ func compileXPathFilterExpression(expr string, eval xpath1.Evaluator) (*xpath1.E
 // evaluator (namespaces, here(), and the OpLimit security bound). Expressions are
 // compiled and statically validated during complete-list validation, before
 // execution starts. An evaluation error is fail-closed as
-// ErrUnsupportedTransform so a reference never digests an unfiltered node-set.
+// ErrUnsupportedTransform while retaining the evaluator error, so a reference
+// never digests an unfiltered node-set and callers can still detect cancellation.
 func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) ([]helium.Node, error) {
 	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
 	kept := make([]helium.Node, 0, len(nodes))
@@ -388,7 +389,7 @@ func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) (
 			if errors.Is(err, ErrHereUnavailable) {
 				return nil, err
 			}
-			return nil, fmt.Errorf("%w: XPath transform evaluation failed: %v", ErrUnsupportedTransform, err)
+			return nil, fmt.Errorf("%w: XPath transform evaluation failed: %w", ErrUnsupportedTransform, err)
 		}
 		if r.Bool {
 			kept = append(kept, n)
