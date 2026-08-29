@@ -796,6 +796,11 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 
 	var toOutput []nsSortEntry
 	for prefix, uri := range utilized {
+		// The predefined xml binding is implicit and never rendered as a
+		// namespace declaration, even when an xml-prefixed name visibly utilizes it.
+		if prefix == lexicon.PrefixXML {
+			continue
+		}
 		if c.nsStack.needsOutput(prefix, uri) {
 			toOutput = append(toOutput, nsSortEntry{prefix: prefix, uri: uri})
 			c.nsStack.add(prefix, uri)
