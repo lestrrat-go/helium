@@ -816,6 +816,30 @@ func TestStripSpace(t *testing.T) {
 		require.Same(t, cp, cpEntity.OwnerDocument())
 	})
 
+	t.Run("copy resolves an internal entity reference to an external declaration", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{"ext.dtd": {Data: []byte(`<!ENTITY external "EXTERNAL">`)}}
+		const source = `<!DOCTYPE root SYSTEM "ext.dtd" [<!ENTITY internal "&external;">]><root>&internal;</root>`
+		doc, err := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/"><xsl:value-of select="/root"/></xsl:template>
+</xsl:stylesheet>`
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		out, err := xslt3.TransformString(t.Context(), doc, ss)
+		require.NoError(t, err)
+		require.Equal(t, "EXTERNAL", out)
+	})
+
 	// TestStripSpacePreservesExternalDTDIDs verifies that running a transform whose
 	// stylesheet declares xsl:strip-space keeps id()/GetElementByID working for IDs
 	// declared in an EXTERNAL DTD subset.

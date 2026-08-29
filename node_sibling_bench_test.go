@@ -246,7 +246,7 @@ func benchAddSiblingDocMiddle(b *testing.B, n int) {
 // parent, which is the parent a document-scale append actually uses and which
 // tracks the element arms exactly: the O(1) resolution is declined for the
 // CONDITION that makes a document's tail record untrustworthy (an off-chain
-// child claim, which only CopyExtSubset creates), never for the type.
+// child claim, which the DTD-subset copy paths create), never for the type.
 func BenchmarkAddSibling(b *testing.B) {
 	sizes := []int{500, 1000, 2000, 4000}
 

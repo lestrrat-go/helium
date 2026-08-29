@@ -86,19 +86,17 @@ func CopyDoc(src *Document) (*Document, error) {
 	// resolve to destination-owned declarations. The external subset's off-chain
 	// parent claim is recorded after the child list is built to retain O(1)
 	// document appends.
-	if dtd := src.intSubset; dtd != nil {
-		if err := copyDTD(dtd, dst); err != nil {
-			return nil, err
-		}
+	if err := copyDTDSubsets(src, dst, false); err != nil {
+		return nil, err
 	}
-	copyExtSubset(src, dst, false)
 
 	// Copy all document children (the DTD was already handled) through the shared
-	// core in over-declare / AddChild mode, reproducing the historical behavior.
+	// core in over-declare mode, reproducing the historical behavior.
 	// onCopy records the source->copy element correspondence so the ID table can be
 	// rebuilt against the copy's own elements, aliasing nothing in the source map.
-	// Build this fresh child list before CopyExtSubset records its off-chain claim
-	// on dst; otherwise every append must walk the growing list to recover its tail.
+	// Build this fresh child list before the DTD-subset copy records its off-chain
+	// claim on dst; otherwise every append must walk the growing list to recover
+	// its tail.
 	var onCopy func(src, cp Node)
 	var corr elemCorrespondence
 	if len(src.ids) > 0 {

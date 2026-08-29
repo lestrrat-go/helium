@@ -397,6 +397,63 @@ func TestCopyEntityReference(t *testing.T) {
 		require.Same(t, dstEntity, ref.FirstChild())
 		require.Same(t, copied, dstEntity.OwnerDocument())
 	})
+
+	t.Run("document copy resolves an internal reference to an external declaration", func(t *testing.T) {
+		fsys := fstest.MapFS{"entities.dtd": {Data: []byte(`<!ENTITY external "EXTERNAL">`)}}
+		source, parseErr := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(
+				`<!DOCTYPE root SYSTEM "entities.dtd" [<!ENTITY internal "&external;">]><root>&internal;</root>`))
+		require.NoError(t, parseErr)
+
+		copied, copyErr := helium.CopyDoc(source)
+		require.NoError(t, copyErr)
+		internal, found := copied.IntSubset().LookupEntity("internal")
+		require.True(t, found)
+		external, found := copied.ExtSubset().LookupEntity("external")
+		require.True(t, found)
+		ref := internal.FirstChild()
+		require.Equal(t, helium.EntityRefNode, ref.Type())
+		require.Same(t, external, ref.FirstChild())
+		require.Equal(t, "EXTERNAL", string(ref.Content()))
+	})
+}
+
+func TestCopyDTDReplacementCopyRunsOneDeepCyclePreflight(t *testing.T) {
+	const depth = 256
+
+	src := helium.NewDefaultDocument()
+	dtd, err := src.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+	entity, err := dtd.AddEntity("payload", enum.InternalGeneralEntity, "", "", "")
+	require.NoError(t, err)
+	root, err := src.CreateElement("n")
+	require.NoError(t, err)
+	require.NoError(t, entity.AddChild(root))
+	parent := root
+	for range depth - 1 {
+		child, createErr := src.CreateElement("n")
+		require.NoError(t, createErr)
+		require.NoError(t, parent.AddChild(child))
+		parent = child
+	}
+
+	normalAllocs := testing.AllocsPerRun(5, func() {
+		dst := helium.NewDefaultDocument()
+		_, copyErr := helium.CopyNode(root, dst)
+		require.NoError(t, copyErr)
+	})
+	dtdAllocs := testing.AllocsPerRun(5, func() {
+		dst := helium.NewDefaultDocument()
+		require.NoError(t, helium.CopyDTDInfo(src, dst))
+	})
+
+	// Both paths allocate the same fresh element chain. The DTD path may add only
+	// fixed declaration bookkeeping and one completed-subtree cycle preflight.
+	// Running a preflight at every nested link adds roughly depth map allocations.
+	require.Less(t, dtdAllocs-normalAllocs, 64.0)
 }
 
 func TestCopyDoc(t *testing.T) {

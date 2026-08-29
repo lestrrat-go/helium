@@ -72,15 +72,7 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	srcIDs := src.IDTable()
 	rebuildIDs := !src.SkipIDs() && len(srcIDs) > 0
 
-	// Deep-copy the internal DTD subset first (metadata + entities/elements/
-	// attributes/notations), matching helium.CopyDoc's ordering so the copy
-	// round-trips identically.
-	if err := helium.CopyDTDInfo(src, dst); err != nil {
-		return nil, nil, err
-	}
-
-	// Carry over the source's EXTERNAL DTD subset too. CopyDTDInfo (like
-	// helium.CopyDoc) only handles the internal subset, but GetElementByID's lazy
+	// Carry over both DTD subsets. GetElementByID's lazy
 	// tree walk consults BOTH subsets for ID-typed attribute declarations. The
 	// copy drops the source ID table (it points at the source's elements), so id()
 	// on the copy falls back to that walk; without the external subset, IDs
@@ -90,9 +82,13 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// Deep-copy the external subset, sharing no pointer: the copy
 	// document can be exposed to user code via raw-result capture, and *DTD has
 	// mutators, so an aliased external subset would let a handler mutating the
-	// copy's ExtSubset corrupt the source. CopyExtSubset gives the copy its own
-	// independent external subset while keeping ID resolution identical.
-	helium.CopyExtSubset(src, dst)
+	// copy's ExtSubset corrupt the source. CopyDTDSubsets gives the copy its own
+	// independent external subset while keeping ID resolution identical. The
+	// combined copy registers both subsets before resolving entity replacement
+	// trees, so references across the subset boundary retain their expansion.
+	if err := helium.CopyDTDSubsets(src, dst); err != nil {
+		return nil, nil, err
+	}
 
 	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve, schemaWS: schemaWS}
 	// When rebuilding the ID table, record source-element->copy-element so the

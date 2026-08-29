@@ -9,21 +9,12 @@ import (
 // single set of "speed/shape primitives" that every deep-copy site in the tree
 // layer is expressed through: the leaf-node copy switch, the attribute copy
 // loop, and the namespace binding all live in one place and are selected by
-// these knobs. Child-linking normally uses appendCopiedChild (see its doc
-// comment). DTD entity replacement trees opt into AddChild's cycle preflight
-// because their copied EntityRef nodes can point into the copied declaration
-// graph.
+// these knobs. Child-linking uses appendCopiedChild (see its doc comment).
 //
 // The defaults (the zero value) select the general helium.CopyDoc/CopyNode
 // shape: over-declared namespaces, no filtering, no mapping. Callers that want
 // the faster shape opt in.
 type deepCopyOptions struct {
-	// preflightLinks selects MutableNode.AddChild instead of the direct copy-only
-	// linker. DTD entity replacement trees use it because their EntityRef nodes
-	// share destination declaration children and can therefore form graph edges
-	// outside the freshly allocated replacement subtree.
-	preflightLinks bool
-
 	// overDeclareNS selects the namespace-declaration strategy for elements.
 	//
 	// When true (the historical helium.CopyDoc behavior), every element
@@ -91,12 +82,6 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 		if child == nil {
 			continue
 		}
-		if dc.opts.preflightLinks {
-			if err := parent.AddChild(child); err != nil {
-				return err
-			}
-			continue
-		}
 		if err := appendCopiedChild(parent, child); err != nil {
 			return err
 		}
@@ -118,8 +103,9 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 // owned by dc.dst that has never been linked as an owned child. EntityRefNode
 // may carry the destination DTD's shared Entity declaration child, but that
 // declaration graph is disjoint from the fresh document subtree and therefore
-// cannot reach its new parent. DTD entity replacement trees use preflightLinks
-// instead because references there can point within the declaration graph.
+// cannot reach its new parent. DTD entity replacement trees use this linker
+// only between fresh nodes; their completed top-level children are attached to
+// the destination Entity through AddChild's cycle preflight.
 // Do NOT call this on a node from outside the copier: an arbitrary
 // caller-supplied child has no such guarantee.
 func appendCopiedChild(parent MutableNode, child Node) error {

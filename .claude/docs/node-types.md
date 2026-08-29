@@ -200,8 +200,11 @@ elements corresponding exactly to the source's, and at O(1). Re-deriving them wo
 walk. The fallback walk consults ID-typed ATTLIST declarations by their raw qualified name (prefix+local), so
 it correctly resolves a prefixed element's qualified ATTLIST (`<!ATTLIST a:item eid ID>`) — but rebuilding
 from the source table is still preferred for identity and cost fidelity. `CopyDoc` also DEEP-COPIES the
-source's external subset (via `CopyExtSubset`), so the copy's fallback walk sees the same ID-typed ATTLIST
-decls as the source. `helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external subset into
+source's external subset (via `CopyDTDSubsets`), so the copy's fallback walk sees the same ID-typed ATTLIST
+decls as the source. `helium.CopyDTDSubsets(src, dst *Document)` registers declarations from BOTH subsets
+before copying entity replacement trees, so a reference across the subset boundary resolves to the copy's
+destination-owned declaration. `helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external
+subset into
 `dst` (independent `*DTD`; mutating one never affects the other); `CopyDTDInfo`, by contrast, copies only the
 internal subset and links it into the document tree (and returns an error when `dst` already has one).
 
@@ -288,11 +291,12 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   endpoint itself is a no-op before auto-unlink, so it also leaves both links unchanged. The guarded paths
   therefore detach no child from a chain it goes on claiming, and create no claim of their own. A `*Document`
   parent is NOT declined by type: a document's child list is an ordinary sibling chain that an append walks
-  exactly like any other. A document IS the one parent safe API hands such a claimant, through `CopyExtSubset`,
+  exactly like any other. A document IS the one parent safe API hands such a claimant, through the DTD-subset
+  copy paths,
   which gives the copied EXTERNAL subset the destination document as its parent and then leaves it reachable
   only through `ExtSubset`, never from the child list, so an append through that subset records a tail off the
   child list.
-  That is a CONDITION, not a type, and `Document.offChainChildClaim` (`document.go`, set by `CopyExtSubset`)
+  That is a CONDITION, not a type, and `Document.offChainChildClaim` (`document.go`, set by `copy_dtd.go`)
   records it on that document as the claimed PARENT, so it declines only for appends onto the document node
   itself and never for the elements that document owns. (`CreateInternalSubset` also gives a `DTD` the document
   as its parent, but it splices that `DTD` into the child list, so it creates no claim.) Every other parent
@@ -361,8 +365,10 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   the preflight is sound here — never elsewhere — because every node `copyNode` returns is freshly allocated
   in `dc.dst` and has never been linked as an owned child. The `EntityRefNode` branch uses `CreateReference`, so
   a declared reference carries the destination DTD's shared `Entity` child; that declaration graph is disjoint
-  from the fresh document subtree and cannot reach the new parent. Copying a DTD entity's parsed replacement
-  subtree uses ordinary `AddChild` instead, because its references can point within the declaration graph.
+  from the fresh document subtree and cannot reach the new parent. Within a DTD entity's parsed replacement
+  subtree, the same direct link is sound between fresh nodes. Each completed top-level replacement child is
+  attached to its destination `Entity` through ordinary `AddChild`, because its references can point within
+  the declaration graph and require one cycle preflight.
   `appendCopiedChild`
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior
@@ -518,7 +524,8 @@ scan, never a raw `NextSibling()` walk, so a hang cannot precede the `Walk`-base
 with one exception: `addSibling`'s fallback walk (above) is a raw, unbounded `NextSibling()` walk, so calling
 `AddSibling` through a node whose sibling list is cyclic hangs forever. The document root-element scans
 (`Document.DocumentElement`/`SetDocumentElement`/`CreateInternalSubset`) and the deep-copy (`copyChildren`,
-`copyDTDChildren`) and serializer child descents iterate the SOURCE through `Children` (bounding a corrupt
+`copyDTDDeclarations`, `copyDTDReplacements`) and serializer child descents iterate the SOURCE through
+`Children` (bounding a corrupt
 source sibling list); `copyChildren` links each copied child into the destination via `appendCopiedChild`
 (above), not `Children`; `setListDoc` (the `SetTreeDoc` sibling walker) and the serializer's attribute-chain
 walk each carry a per-list seen guard (the latter also terminates a non-`*Attribute` successor that would
