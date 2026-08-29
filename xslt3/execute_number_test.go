@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const ordinalYes = "yes"
+
 func TestExecNumberStartAt(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -36,7 +38,7 @@ func TestExecNumberStartAt(t *testing.T) {
 		{
 			name:    "minimum signed 64-bit ordinal in words",
 			startAt: "-9223372036854775808",
-			ordinal: "yes",
+			ordinal: ordinalYes,
 			want:    "minus 9223372036854775808th",
 		},
 		{
@@ -49,7 +51,7 @@ func TestExecNumberStartAt(t *testing.T) {
 			name:    "numeric ordinal above signed 32-bit range",
 			startAt: "2147483648",
 			format:  "1",
-			ordinal: "yes",
+			ordinal: ordinalYes,
 			want:    "2147483648th",
 		},
 	}
@@ -131,13 +133,13 @@ func TestFormatBigNumberListWordTokens(t *testing.T) {
 		{
 			name:    "ordinal at trillion",
 			number:  numberTrillion,
-			ordinal: "yes",
+			ordinal: ordinalYes,
 			want:    "one trillionth",
 		},
 		{
 			name:    "ordinal above trillion",
 			number:  numberTrillion + 1,
-			ordinal: "yes",
+			ordinal: ordinalYes,
 			want:    "one trillion first",
 		},
 		{
@@ -148,7 +150,7 @@ func TestFormatBigNumberListWordTokens(t *testing.T) {
 		{
 			name:    "minimum signed 64-bit ordinal",
 			number:  minInt64,
-			ordinal: "yes",
+			ordinal: ordinalYes,
 			want:    "minus 9223372036854775808th",
 		},
 	}
