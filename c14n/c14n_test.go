@@ -582,6 +582,36 @@ func TestEntityReferenceReplacementReservedXMLPrefixAttr(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPredefinedXMLNamespaceOmitted(t *testing.T) {
+	t.Parallel()
+
+	const src = `<r xml:base="sub/" xml:lang="en" xml:space="preserve"><xml:e/></r>`
+	const want = `<r xml:base="sub/" xml:lang="en" xml:space="preserve"><xml:e></xml:e></r>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	nodes := evaluateNodeSet(t, doc, "//. | //@* | //namespace::*", nil)
+
+	for _, mode := range []c14n.Mode{c14n.C14N10, c14n.C14N11, c14n.ExclusiveC14N10} {
+		whole, err := c14n.NewCanonicalizer(mode).CanonicalizeTo(doc)
+		require.NoError(t, err, "mode %d", mode)
+		require.Equal(t, want, string(whole), "whole document, mode %d", mode)
+		require.NotContains(t, string(whole), "xmlns:xml", "whole document, mode %d", mode)
+
+		selected, err := c14n.NewCanonicalizer(mode).NodeSet(nodes).CanonicalizeTo(doc)
+		require.NoError(t, err, "mode %d", mode)
+		require.Equal(t, string(whole), string(selected), "whole tree node set, mode %d", mode)
+	}
+
+	canon := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).InclusiveNamespaces([]string{"xml"})
+	whole, err := canon.CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, want, string(whole))
+	selected, err := canon.NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, string(whole), string(selected))
+}
+
 func TestEntityReferenceReplacementReservedXMLPrefixElementName(t *testing.T) {
 	t.Parallel()
 	// An entity-replacement element whose NAME uses the reserved "xml" prefix is

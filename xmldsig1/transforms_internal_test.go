@@ -212,6 +212,36 @@ func TestCanonicalizeSubtreeKeepsNamespaceDecls(t *testing.T) {
 	})
 }
 
+func TestExclusiveC14NEquivalentDocumentReferencesMatch(t *testing.T) {
+	const src = `<r Id="r" xml:base="sub/" xml:lang="en" xml:space="preserve"><child/></r>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	cfg := &signerConfig{}
+	reference := ReferenceConfig{
+		DigestAlgorithm: DigestSHA256,
+		Transforms:      []Transform{ExcC14NTransform()},
+	}
+
+	reference.URI = ""
+	whole, err := signReferenceOctets(t.Context(), cfg, doc, nil, reference, nil)
+	require.NoError(t, err)
+
+	reference.URI = "#r"
+	selected, err := signReferenceOctets(t.Context(), cfg, doc, nil, reference, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, string(selected), string(whole))
+	require.NotContains(t, string(whole), "xmlns:xml")
+
+	wholeDigest, err := computeDigest(DigestSHA256, whole, false)
+	require.NoError(t, err)
+	selectedDigest, err := computeDigest(DigestSHA256, selected, false)
+	require.NoError(t, err)
+	require.Equal(t, selectedDigest, wholeDigest)
+}
+
 // dtdEntityDecl returns the DTD entity-declaration node named name, or nil.
 func dtdEntityDecl(doc *helium.Document, name string) helium.Node {
 	for c := range helium.Children(doc) {
