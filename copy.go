@@ -6,7 +6,8 @@ import (
 	"strings"
 )
 
-// CopyNode creates a deep copy of src, owned by targetDoc.
+// CopyNode creates a deep copy of src, owned by targetDoc. A nil targetDoc
+// creates a standalone copy.
 // Supports Element, Text, Comment, CDATASection, PI, and EntityRef nodes.
 //
 // A nil or typed-nil src (e.g. the *Element that Document.DocumentElement
@@ -64,6 +65,9 @@ func copyEntityReference(
 ) (*EntityRef, error) {
 	name := src.Name()
 	if strings.HasPrefix(name, "#") {
+		return targetDoc.CreateCharRef(name)
+	}
+	if targetDoc == nil {
 		return targetDoc.CreateCharRef(name)
 	}
 	if srcEntity, ok := AsNode[*Entity](src.FirstChild()); ok {

@@ -16,6 +16,18 @@ type attrNamespaceCacheEntry struct {
 func init() {
 	nodelink.AppendFastChild = nodelinkAppendFastChild
 	nodelink.BindEntityReference = nodelinkBindEntityReference
+	nodelink.Unlink = nodelinkUnlink
+}
+
+// nodelinkUnlink adapts unlinkNode to the untyped internal/nodelink hook so a
+// sibling-package copier can detach any copied node, including a sealed
+// non-MutableNode, without adding a public mutation API.
+func nodelinkUnlink(n any) {
+	node, ok := n.(Node)
+	if !ok {
+		return
+	}
+	unlinkNode(node)
 }
 
 // nodelinkAppendFastChild adapts appendFastChild to the untyped

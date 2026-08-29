@@ -6,7 +6,7 @@
 // cycle and duplicate-attribute preflight that helium.MutableNode.AddChild
 // runs, and binds copied entity references to the copy of their exact source
 // declaration. The cycle-guard tests in xsd and xmldsig1 build deliberately
-// corrupt sibling chains. Package helium installs all four hooks in its init.
+// corrupt sibling chains. Package helium installs all five hooks in its init.
 //
 // Hooks are typed with any, in place of helium.Node, to avoid an import cycle:
 // package helium imports this package to register them, so this package must
@@ -27,6 +27,11 @@ var AppendFastChild func(parent, child any) error
 // entity stays owned by its DTD; only ref's shared-child pointers and cached
 // content are updated. Package helium installs it in init.
 var BindEntityReference func(ref, entity any)
+
+// Unlink detaches a helium.Node, passed as any, from its parent and sibling
+// chain. Unlike helium.UnlinkNode, it also accepts sealed non-MutableNode types
+// produced by a copier. Package helium installs it in init.
+var Unlink func(n any)
 
 // CorruptSelfNextSibling writes n.next = n, making the node its own next
 // sibling. It is a raw pointer write with no cycle detection and no reciprocal

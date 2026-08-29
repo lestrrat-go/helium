@@ -355,8 +355,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
 - `appendFastChild(parent, child)` (`tree_fastpath.go`) — package-private no-preflight append: links child as
   last child WITHOUT the cycle-guard / duplicate-attr checks. The caller guarantees an acyclic, dup-free child
   (deep copies, freshly-built trees). Ordinary code uses `AddChild`. It backs the parser's fast SAX path
-  in-package; `xslt3`'s strip-space copier reaches it through the `internal/nodelink` hook `AppendFastChild`
-  and reaches `bindEntityReference` through `BindEntityReference`,
+  in-package; `xslt3`'s strip-space copier reaches it through the `internal/nodelink` hook `AppendFastChild`,
+  reaches `bindEntityReference` through `BindEntityReference`, and reaches the sealed-node-capable
+  `unlinkNode` through `Unlink`,
   and the external `helium_test` package through `UnsafeAppendChildForTesting` in `export_test.go`.
 - `appendCopiedChild(parent, child)` (`copy_deep.go`) — the deep-copy core's own no-preflight link, used by
   `copyChildren` in place of `AddChild`. It mirrors `addChild`'s linking rules exactly, INCLUDING the

@@ -362,6 +362,14 @@ func TestCopyEntityReference(t *testing.T) {
 		require.Nil(t, copied.FirstChild())
 	})
 
+	t.Run("nil destination creates a childless standalone reference", func(t *testing.T) {
+		copied, copyErr := helium.CopyNode(srcFirst, nil)
+		require.NoError(t, copyErr)
+		require.Equal(t, helium.EntityRefNode, copied.Type())
+		require.Nil(t, copied.OwnerDocument())
+		require.Nil(t, copied.FirstChild())
+	})
+
 	t.Run("numeric reference ignores a same-name destination declaration", func(t *testing.T) {
 		numeric, createErr := src.CreateCharRef("#65")
 		require.NoError(t, createErr)

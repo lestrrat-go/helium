@@ -315,9 +315,10 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
   (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
-  panicking. A copied named `EntityRef` resolves only against `targetDoc`'s declarations: a matching declaration
-  installs the destination-owned shared `Entity` child, while an absent declaration leaves the reference childless.
-  A numeric character reference always remains bare
+  panicking. A nil `targetDoc` creates a standalone copy. A copied named `EntityRef` resolves only against a
+  non-nil `targetDoc`'s declarations: a matching declaration installs the destination-owned shared `Entity` child,
+  while an absent declaration or nil target leaves the reference childless. A numeric character reference always
+  remains bare
 - `CopyDoc(src) → (*Document, error)` /
   `CopyDTDSubsets(src, dst) → (map[*Entity]*Entity, error)` /
   `CopyDTDInfo(src, dst) → error` / `CopyExtSubset(src, dst)` —
@@ -344,8 +345,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   interface (which exposes only guarded mutation:
   `AddChild`/`AddSibling`/`Replace`/`AppendText`/`SetLine`/`SetOwnerDocument`/`SetTreeDoc`), so ordinary tree
   mutation cannot reach them by accident, and there is no public entry point to any of them. Sibling packages
-  in this module reach them through the `internal/nodelink` hooks (`AppendFastChild` and
-  `BindEntityReference` for `xslt3`'s strip-space copier; `CorruptSelfNextSibling` and
+  in this module reach them through the `internal/nodelink` hooks (`AppendFastChild`, `BindEntityReference`, and
+  `Unlink` for `xslt3`'s strip-space copier; `CorruptSelfNextSibling` and
   `CorruptTypedNilNextSibling` for the `xsd`/`xmldsig1` corrupt-tree cycle-guard fixtures only); the external
   `helium_test` package reaches them through the `*ForTesting`
   wrappers in `export_test.go`. There is no `prev`-pointer setter
