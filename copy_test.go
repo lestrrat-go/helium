@@ -318,7 +318,12 @@ func TestCopyNode(t *testing.T) {
 func TestCopyEntityReference(t *testing.T) {
 	t.Parallel()
 
-	const srcXML = `<!DOCTYPE root [<!ENTITY payload "QUJD">]><root>&payload;&payload;</root>`
+	const (
+		srcXML            = `<!DOCTYPE root [<!ENTITY payload "QUJD">]><root>&payload;&payload;</root>`
+		entitiesDTDPath   = "entities.dtd"
+		externalDoctype   = `<!DOCTYPE root SYSTEM "` + entitiesDTDPath + `">`
+		externalIntSubset = `<!DOCTYPE root SYSTEM "` + entitiesDTDPath + `" [<!ENTITY internal "&external;">]>`
+	)
 	src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
 	require.NoError(t, err)
 
@@ -432,12 +437,12 @@ func TestCopyEntityReference(t *testing.T) {
 	})
 
 	t.Run("document copy resolves an external declaration", func(t *testing.T) {
-		fsys := fstest.MapFS{"entities.dtd": {Data: []byte(`<!ENTITY payload "QUJD">`)}}
+		fsys := fstest.MapFS{entitiesDTDPath: {Data: []byte(`<!ENTITY payload "QUJD">`)}}
 		external, parseErr := helium.NewParser().
 			BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
-			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "entities.dtd"><root>&payload;</root>`))
+			Parse(t.Context(), []byte(externalDoctype+`<root>&payload;</root>`))
 		require.NoError(t, parseErr)
 
 		copied, copyErr := helium.CopyDoc(external)
@@ -450,12 +455,12 @@ func TestCopyEntityReference(t *testing.T) {
 	})
 
 	t.Run("document copy preserves declaration identity", func(t *testing.T) {
-		fsys := fstest.MapFS{"entities.dtd": {Data: []byte(`<!ENTITY payload "EXTERNAL">`)}}
+		fsys := fstest.MapFS{entitiesDTDPath: {Data: []byte(`<!ENTITY payload "EXTERNAL">`)}}
 		source, parseErr := helium.NewParser().
 			BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
-			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "entities.dtd"><root/>`))
+			Parse(t.Context(), []byte(externalDoctype+`<root/>`))
 		require.NoError(t, parseErr)
 
 		sourceExternal, found := source.ExtSubset().LookupEntity("payload")
@@ -481,12 +486,12 @@ func TestCopyEntityReference(t *testing.T) {
 	})
 
 	t.Run("element copy preserves declaration subset identity", func(t *testing.T) {
-		fsys := fstest.MapFS{"entities.dtd": {Data: []byte(`<!ENTITY payload "EXTERNAL">`)}}
+		fsys := fstest.MapFS{entitiesDTDPath: {Data: []byte(`<!ENTITY payload "EXTERNAL">`)}}
 		source, parseErr := helium.NewParser().
 			BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
-			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "entities.dtd"><root/>`))
+			Parse(t.Context(), []byte(externalDoctype+`<root/>`))
 		require.NoError(t, parseErr)
 
 		sourceExternal, found := source.ExtSubset().LookupEntity("payload")
@@ -517,13 +522,13 @@ func TestCopyEntityReference(t *testing.T) {
 
 	t.Run("document copy preserves replacement declaration identity", func(t *testing.T) {
 		fsys := fstest.MapFS{
-			"entities.dtd": {Data: []byte(`<!ENTITY payload "EXTERNAL"><!ENTITY holder "&payload;">`)},
+			entitiesDTDPath: {Data: []byte(`<!ENTITY payload "EXTERNAL"><!ENTITY holder "&payload;">`)},
 		}
 		source, parseErr := helium.NewParser().
 			BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
-			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "entities.dtd"><root>&holder;</root>`))
+			Parse(t.Context(), []byte(externalDoctype+`<root>&holder;</root>`))
 		require.NoError(t, parseErr)
 
 		sourceExternal, found := source.ExtSubset().LookupEntity("payload")
@@ -550,13 +555,12 @@ func TestCopyEntityReference(t *testing.T) {
 	})
 
 	t.Run("document copy resolves an internal reference to an external declaration", func(t *testing.T) {
-		fsys := fstest.MapFS{"entities.dtd": {Data: []byte(`<!ENTITY external "EXTERNAL">`)}}
+		fsys := fstest.MapFS{entitiesDTDPath: {Data: []byte(`<!ENTITY external "EXTERNAL">`)}}
 		source, parseErr := helium.NewParser().
 			BlockXXE(false).
 			LoadExternalDTD(true).
 			FS(fsys).
-			Parse(t.Context(), []byte(
-				`<!DOCTYPE root SYSTEM "entities.dtd" [<!ENTITY internal "&external;">]><root>&internal;</root>`))
+			Parse(t.Context(), []byte(externalIntSubset+`<root>&internal;</root>`))
 		require.NoError(t, parseErr)
 
 		copied, copyErr := helium.CopyDoc(source)
