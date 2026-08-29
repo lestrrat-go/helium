@@ -1572,31 +1572,51 @@ func (n *node) prefixConflictsInUse(prefix, uri string) bool {
 // most one xmlns:prefix per element across all mutators is a serializer-level
 // concern, outside this method's scope.
 func (n *node) DeclareNamespace(prefix, uri string) error {
+	return n.declareNamespace(prefix, uri, nil)
+}
+
+// declareNamespace is DeclareNamespace with an optional prefix-to-slot index.
+// Bulk builders use the index after a declaration list becomes wide; public
+// one-at-a-time mutation keeps the allocation-free linear scan above.
+func (n *node) declareNamespace(prefix, uri string, slots map[string]int) error {
 	if n.prefixConflictsInUse(prefix, uri) {
 		return fmt.Errorf("cannot rebind namespace prefix %q while it is in use on this element: %w", prefix, ErrInvalidOperation)
 	}
-	for i, ns := range n.nsDefs {
-		if ns == nil {
-			continue
+	if slots != nil {
+		if i, ok := slots[prefix]; ok {
+			return n.replaceNamespaceDeclaration(i, prefix, uri)
 		}
-		if ns.Prefix() != prefix {
-			continue
+	} else {
+		for i, ns := range n.nsDefs {
+			if ns == nil || ns.Prefix() != prefix {
+				continue
+			}
+			return n.replaceNamespaceDeclaration(i, prefix, uri)
 		}
-		if ns.URI() == uri {
-			return nil
-		}
-		fresh, err := n.doc.CreateNamespace(prefix, uri)
-		if err != nil {
-			return err
-		}
-		n.nsDefs[i] = fresh
-		return nil
 	}
 	ns, err := n.doc.CreateNamespace(prefix, uri)
 	if err != nil {
 		return err
 	}
+	if slots != nil {
+		slots[prefix] = len(n.nsDefs)
+	}
 	n.nsDefs = append(n.nsDefs, ns)
+	return nil
+}
+
+func (n *node) replaceNamespaceDeclaration(i int, prefix, uri string) error {
+	ns := n.nsDefs[i]
+	if ns != nil {
+		if ns.URI() == uri {
+			return nil
+		}
+	}
+	fresh, err := n.doc.CreateNamespace(prefix, uri)
+	if err != nil {
+		return err
+	}
+	n.nsDefs[i] = fresh
 	return nil
 }
 

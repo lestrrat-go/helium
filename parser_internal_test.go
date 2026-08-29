@@ -579,6 +579,106 @@ func TestNamespaceDeclarationDuplicateAboveThreshold(t *testing.T) {
 	})
 }
 
+type wrappedTreeBuilder struct {
+	*TreeBuilder
+}
+
+func parseWithWrappedTreeBuilder(ctx context.Context, src string, clean bool) (*Document, error) {
+	return NewParser().
+		CleanNamespaces(clean).
+		SAXHandler(&wrappedTreeBuilder{TreeBuilder: NewTreeBuilder()}).
+		Parse(ctx, []byte(src))
+}
+
+// TestNamespaceDeclarationBuilderThreshold compares the parser's direct DOM
+// path with the generic SAX TreeBuilder path around the point where bulk
+// namespace declaration switches to its prefix index.
+func TestNamespaceDeclarationBuilderThreshold(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		n    int
+	}{
+		{"below threshold", attrDupSetThreshold - 1},
+		{"at threshold", attrDupSetThreshold},
+		{"above threshold", attrDupSetThreshold + 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := nsDeclTag(tc.n, false)
+			fastDoc, fastErr := NewParser().Parse(t.Context(), []byte(src))
+			saxDoc, saxErr := parseWithWrappedTreeBuilder(t.Context(), src, false)
+			require.NoError(t, fastErr)
+			require.NoError(t, saxErr)
+
+			fastNS := fastDoc.DocumentElement().Namespaces()
+			saxNS := saxDoc.DocumentElement().Namespaces()
+			require.Len(t, fastNS, tc.n)
+			require.Len(t, saxNS, tc.n)
+			for i := range tc.n {
+				wantPrefix := fmt.Sprintf("p%d", i)
+				wantURI := fmt.Sprintf("urn:x%d", i)
+				require.Equal(t, wantPrefix, fastNS[i].Prefix(), "fast path declaration order at index %d", i)
+				require.Equal(t, wantURI, fastNS[i].URI(), "fast path declaration URI at index %d", i)
+				require.Equal(t, wantPrefix, saxNS[i].Prefix(), "SAX path declaration order at index %d", i)
+				require.Equal(t, wantURI, saxNS[i].URI(), "SAX path declaration URI at index %d", i)
+			}
+
+			for _, clean := range []bool{false, true} {
+				dupSrc := nsDeclTag(tc.n, true)
+				_, fastErr = NewParser().CleanNamespaces(clean).Parse(t.Context(), []byte(dupSrc))
+				_, saxErr = parseWithWrappedTreeBuilder(t.Context(), dupSrc, clean)
+				require.Error(t, fastErr)
+				require.EqualError(t, saxErr, fastErr.Error(),
+					"TreeBuilder selection and CleanNamespaces=%t must not change the duplicate diagnostic", clean)
+			}
+		})
+	}
+}
+
+func TestNamespaceDeclarationUndeclarationBuilderParity(t *testing.T) {
+	t.Parallel()
+
+	const xml10 = `<?xml version="1.0"?><root xmlns:p="urn:x"><child xmlns:p=""/></root>`
+	_, fastErr := NewParser().Parse(t.Context(), []byte(xml10))
+	_, saxErr := parseWithWrappedTreeBuilder(t.Context(), xml10, false)
+	require.Error(t, fastErr)
+	require.EqualError(t, saxErr, fastErr.Error(),
+		"the generic TreeBuilder path must preserve the XML 1.0 prefix-undeclaration diagnostic")
+
+	const xml11 = `<?xml version="1.1"?><root xmlns:p="urn:x"><child xmlns:p=""/></root>`
+	fastDoc, fastErr := NewParser().Parse(t.Context(), []byte(xml11))
+	saxDoc, saxErr := parseWithWrappedTreeBuilder(t.Context(), xml11, false)
+	require.NoError(t, fastErr)
+	require.NoError(t, saxErr)
+	for _, doc := range []*Document{fastDoc, saxDoc} {
+		child := doc.DocumentElement().FirstChild()
+		elem, ok := child.(*Element)
+		require.True(t, ok)
+		require.Len(t, elem.Namespaces(), 1)
+		require.Equal(t, "p", elem.Namespaces()[0].Prefix())
+		require.Empty(t, elem.Namespaces()[0].URI())
+	}
+}
+
+func BenchmarkParseWideNamespaceDeclarations(b *testing.B) {
+	for _, n := range []int{attrDupSetThreshold, attrDupSetThreshold * 8, attrDupSetThreshold * 64} {
+		src := []byte(nsDeclTag(n, false))
+		b.Run(fmt.Sprintf("declarations_%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(src)))
+			for b.Loop() {
+				if _, err := NewParser().Parse(b.Context(), src); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 // newAttributeDefaultCtx builds a parserCtx that is ready to record <!ATTLIST>
 // defaults: init() seeds the lookup tables and doc supplies the owner for the
 // Attribute nodes addAttributeDefault creates.

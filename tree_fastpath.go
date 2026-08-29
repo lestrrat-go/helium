@@ -156,10 +156,8 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 	}
 
 	if nbNs > 0 {
-		for _, ns := range pctx.nsTab.Peek(nbNs) {
-			if err := e.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
-				return err
-			}
+		if err := declareNamespaces(e, pctx.nsTab.Peek(nbNs)); err != nil {
+			return err
 		}
 	}
 
