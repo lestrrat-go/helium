@@ -28,24 +28,44 @@ func TestIDCXPathDiagnosticExcerpt(t *testing.T) {
 	})
 
 	t.Run("long multibyte selector is bounded", func(t *testing.T) {
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(schema("1 "+strings.Repeat("界", (1<<20)/len("界")))))
-		require.NoError(t, err)
-		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		compiler := xsd.NewCompiler().Version(xsd.Version10).Label("test.xsd").ErrorHandler(collector)
+		small := measureXSDCompile(t, schema("1 "+strings.Repeat("界", (1<<19)/len("界"))))
+		large := measureXSDCompile(t, schema("1 "+strings.Repeat("界", (1<<20)/len("界"))))
 
-		var compileErr error
-		allocated := xsdCompileAllocatedBytes(t, func() {
-			_, compileErr = compiler.Compile(t.Context(), doc)
-		})
-		require.NoError(t, collector.Close())
-		errs := compileErrorsString(collector.Errors())
-
-		require.ErrorIs(t, compileErr, xsd.ErrCompilationFailed)
-		require.LessOrEqual(t, len(errs), 2048)
-		require.True(t, utf8.ValidString(errs))
-		require.Contains(t, errs, "[truncated]")
-		require.Less(t, allocated, uint64(4<<20))
+		require.ErrorIs(t, small.compileErr, xsd.ErrCompilationFailed)
+		require.ErrorIs(t, large.compileErr, xsd.ErrCompilationFailed)
+		require.LessOrEqual(t, len(large.diagnostic), 2048)
+		require.True(t, utf8.ValidString(large.diagnostic))
+		require.Contains(t, large.diagnostic, "[truncated]")
+		// The differential removes fixed compiler and race-runtime allocations.
+		// Reintroducing the source-sized diagnostic copies exceeds this bound.
+		require.GreaterOrEqual(t, large.allocated, small.allocated)
+		require.Less(t, large.allocated-small.allocated, uint64(5<<19))
 	})
+}
+
+type xsdCompileMeasurement struct {
+	allocated  uint64
+	compileErr error
+	diagnostic string
+}
+
+func measureXSDCompile(t *testing.T, schemaXML string) xsdCompileMeasurement {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	compiler := xsd.NewCompiler().Version(xsd.Version10).Label("test.xsd").ErrorHandler(collector)
+
+	var compileErr error
+	allocated := xsdCompileAllocatedBytes(t, func() {
+		_, compileErr = compiler.Compile(t.Context(), doc)
+	})
+	require.NoError(t, collector.Close())
+	return xsdCompileMeasurement{
+		allocated:  allocated,
+		compileErr: compileErr,
+		diagnostic: compileErrorsString(collector.Errors()),
+	}
 }
 
 func xsdCompileAllocatedBytes(t *testing.T, fn func()) uint64 {
