@@ -545,6 +545,56 @@ func TestGeneralXPointerDiagnosticExcerpt(t *testing.T) {
 		require.Contains(t, err.Error(), "[truncated]")
 		require.Less(t, allocated, uint64(1<<20))
 	})
+
+	t.Run("long missing id is bounded", func(t *testing.T) {
+		id := strings.Repeat("a", 1<<20)
+		ref := parsedReference{uri: "#xpointer(id ('" + id + "'))"}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.LessOrEqual(t, len(err.Error()), 1024)
+		require.True(t, utf8.ValidString(err.Error()))
+		require.Contains(t, err.Error(), "[truncated]")
+	})
+
+	t.Run("long duplicate id is bounded", func(t *testing.T) {
+		id := strings.Repeat("a", 1<<20)
+		duplicateDoc := mustParse(t, `<root><a/><b/></root>`)
+		require.NoError(t, findLocal(duplicateDoc.DocumentElement(), "a").SetAttribute("Id", id))
+		require.NoError(t, findLocal(duplicateDoc.DocumentElement(), "b").SetAttribute("Id", id))
+		ref := parsedReference{uri: "#xpointer(id ('" + id + "'))"}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, duplicateDoc, nil, ref)
+
+		require.ErrorIs(t, err, ErrAmbiguousReference)
+		require.LessOrEqual(t, len(err.Error()), 1024)
+		require.True(t, utf8.ValidString(err.Error()))
+		require.Contains(t, err.Error(), "[truncated]")
+	})
+
+	t.Run("public Verify bounds the URI wrapper", func(t *testing.T) {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		uri := "#xpointer(1 " + strings.Repeat("a", 1<<20) + ")"
+		verifyDoc := mustParse(t, `<root><ds:Signature xmlns:ds="`+NamespaceDSig+`">`+
+			`<ds:SignedInfo>`+
+			`<ds:CanonicalizationMethod Algorithm="`+ExcC14N10+`"/>`+
+			`<ds:SignatureMethod Algorithm="`+AlgRSASHA256+`"/>`+
+			`<ds:Reference URI="`+uri+`">`+
+			`<ds:DigestMethod Algorithm="`+DigestSHA256+`"/>`+
+			`<ds:DigestValue>AA==</ds:DigestValue>`+
+			`</ds:Reference></ds:SignedInfo>`+
+			`<ds:SignatureValue>AA==</ds:SignatureValue>`+
+			`</ds:Signature></root>`)
+
+		_, err = NewVerifier(StaticKey(&key.PublicKey)).AllowXPointer(true).Verify(t.Context(), verifyDoc)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.LessOrEqual(t, len(err.Error()), 1024)
+		require.True(t, utf8.ValidString(err.Error()))
+		require.Contains(t, err.Error(), "[truncated]")
+		var verifyErr *VerificationError
+		require.ErrorAs(t, err, &verifyErr)
+		require.Equal(t, uri, verifyErr.URI)
+	})
 }
 
 func generalXPointerAllocatedBytes(t *testing.T, fn func()) uint64 {

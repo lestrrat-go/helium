@@ -1487,7 +1487,9 @@ include/redefine, else `c.filename` — for an import sub-compiler that is the i
 location), and `checkKeyRefRefers` reports with `idc.Source`+`idc.Line` in place of the top-level compiler's
 filename, so an IMPORTED keyref's dangling-refer error cites the imported schema (where its line number is
 meaningful), not the importing schema. At validation time, an IDC whose selector/field XPath fails to evaluate
-is reported as a validity error (`Failed to evaluate identity-constraint '…'`), not swallowed.
+is reported as a validity error (`Failed to evaluate identity-constraint '…'`), not swallowed. Every runtime
+field-XPath diagnostic uses `lexer.DiagnosticExcerpt`, including compile/evaluate failures, non-simple nodes,
+and multi-member node sets, so a valid long expression cannot make validation output grow with its source.
 
 **Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
 - **Host declaration resolution** (`idcHostDecl`): the declaration whose IDCs apply

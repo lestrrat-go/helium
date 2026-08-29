@@ -74,7 +74,7 @@ func Compile(expr string) (*Expression, error) {
 		case "xmlns":
 			prefix, _, ok := parseXmlnsBody(p.body)
 			if !ok {
-				return nil, fmt.Errorf("xpointer: invalid xmlns() body %q", p.body)
+				return nil, fmt.Errorf("xpointer: invalid xmlns() body %q", lexer.DiagnosticExcerpt(p.body))
 			}
 			if err := validateXmlnsPrefix(prefix); err != nil {
 				return nil, err
@@ -171,7 +171,8 @@ func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p x
 		// UTF-8) as syntax errors, resolving silently to no node,
 		// which would let XInclude unlink the include node.
 		if !xmlchar.IsValidNCName(p.body) {
-			return nil, fmt.Errorf("xpointer: invalid shorthand pointer %q (not an NCName)", p.body)
+			return nil, fmt.Errorf("xpointer: invalid shorthand pointer %q (not an NCName)",
+				lexer.DiagnosticExcerpt(p.body))
 		}
 		elem := doc.GetElementByID(p.body)
 		if elem == nil {
@@ -179,7 +180,7 @@ func (e *Expression) evaluatePart(ctx context.Context, doc *helium.Document, p x
 		}
 		return []helium.Node{elem}, nil
 	default:
-		return nil, fmt.Errorf("%w: %s", errUnknownScheme, p.scheme)
+		return nil, fmt.Errorf("%w: %s", errUnknownScheme, lexer.DiagnosticExcerpt(p.scheme))
 	}
 }
 
@@ -223,7 +224,7 @@ func Evaluate(ctx context.Context, doc *helium.Document, expr string) ([]helium.
 // during evaluation (see isXmlnsNoOp).
 func validateXmlnsPrefix(prefix string) error {
 	if !xmlchar.IsValidNCName(prefix) {
-		return fmt.Errorf("xpointer: invalid xmlns() prefix %q (not an NCName)", prefix)
+		return fmt.Errorf("xpointer: invalid xmlns() prefix %q (not an NCName)", lexer.DiagnosticExcerpt(prefix))
 	}
 	return nil
 }
@@ -326,7 +327,8 @@ func parseParts(expr string) ([]xptrPart, error) {
 		// scheme (e.g. "foo(...)") is still a valid QName and continues to
 		// cascade as an unknown scheme during evaluation.
 		if scheme != "" && !xmlchar.IsValidQName(scheme) {
-			return nil, fmt.Errorf("xpointer: invalid scheme name %q (not a QName)", scheme)
+			return nil, fmt.Errorf("xpointer: invalid scheme name %q (not a QName)",
+				lexer.DiagnosticExcerpt(scheme))
 		}
 
 		// A non-scheme trailing token is only valid as the entire pointer on
@@ -344,7 +346,8 @@ func parseParts(expr string) ([]xptrPart, error) {
 			if body == ")" {
 				break
 			}
-			return nil, fmt.Errorf("xpointer: trailing non-scheme text %q is not allowed after scheme-based parts", body)
+			return nil, fmt.Errorf("xpointer: trailing non-scheme text %q is not allowed after scheme-based parts",
+				lexer.DiagnosticExcerpt(body))
 		}
 
 		parts = append(parts, xptrPart{scheme: scheme, body: body})
@@ -397,7 +400,7 @@ func parseScheme(expr string) (scheme, body, remaining string, err error) {
 		}
 	}
 
-	return "", "", "", fmt.Errorf("xpointer: unbalanced parentheses in %q", expr)
+	return "", "", "", fmt.Errorf("xpointer: unbalanced parentheses in %q", lexer.DiagnosticExcerpt(expr))
 }
 
 // evaluateElement handles the element() scheme.
@@ -422,7 +425,8 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 	// zero). An empty segment anywhere else is a trailing/doubled slash and is a
 	// syntax error.
 	if parts[0] != "" && !xmlchar.IsValidNCName(parts[0]) {
-		return nil, fmt.Errorf("xpointer: invalid element() id %q (not an NCName)", parts[0])
+		return nil, fmt.Errorf("xpointer: invalid element() id %q (not an NCName)",
+			lexer.DiagnosticExcerpt(parts[0]))
 	}
 	childIndexes := make([]int, 0, len(parts)-1)
 	for _, part := range parts[1:] {
@@ -430,7 +434,8 @@ func evaluateElement(doc *helium.Document, body string) ([]helium.Node, error) {
 			return nil, fmt.Errorf("xpointer: empty child-sequence segment in element() scheme (trailing or doubled %q)", "/")
 		}
 		if !isChildIndex(part) {
-			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme (must match [1-9][0-9]*)", part)
+			return nil, fmt.Errorf("xpointer: invalid child index %q in element() scheme (must match [1-9][0-9]*)",
+				lexer.DiagnosticExcerpt(part))
 		}
 		idx, err := childIndexValue(part)
 		if err != nil {
@@ -491,7 +496,8 @@ func isChildIndex(s string) bool {
 func childIndexValue(s string) (int, error) {
 	idx, err := strconv.Atoi(s)
 	if err != nil {
-		return 0, fmt.Errorf("xpointer: child index %q in element() scheme is out of range", s)
+		return 0, fmt.Errorf("xpointer: child index %q in element() scheme is out of range",
+			lexer.DiagnosticExcerpt(s))
 	}
 	return idx, nil
 }

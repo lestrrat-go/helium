@@ -1486,11 +1486,13 @@ func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Docum
 		matches := domutil.FindElementsByID(doc.DocumentElement(), prepared.id)
 		switch len(matches) {
 		case 0:
-			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, prepared.id)
+			return nil, fmt.Errorf("%w: xpointer(id(%q))",
+				ErrReferenceNotFound, lexer.DiagnosticExcerpt(prepared.id))
 		case 1:
 			return matches[0], nil
 		default:
-			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, prepared.id, len(matches))
+			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements",
+				ErrAmbiguousReference, lexer.DiagnosticExcerpt(prepared.id), len(matches))
 		}
 	}
 
@@ -1641,7 +1643,8 @@ func effectiveC14NMethod(method string, includeComments bool) string {
 func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
 	id, wholeDoc, _, ok := referenceURIForm(uri)
 	if !ok {
-		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, uri)
+		return nil, fmt.Errorf("%w: unsupported reference URI: %s",
+			ErrReferenceNotFound, lexer.DiagnosticExcerpt(uri))
 	}
 	if wholeDoc {
 		return doc.DocumentElement(), nil
@@ -1667,10 +1670,11 @@ func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Nod
 	}
 	switch len(matches) {
 	case 0:
-		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
+		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, lexer.DiagnosticExcerpt(uri))
 	case 1:
 		return matches[0], nil
 	default:
-		return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
+		return nil, fmt.Errorf("%w: %s (matched %d elements)",
+			ErrAmbiguousReference, lexer.DiagnosticExcerpt(uri), len(matches))
 	}
 }

@@ -1258,8 +1258,9 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
     key resolution, SignatureValue authentication, or the top-level Reference digest loop. Each parsed
     Reference caches its ordered transform steps plus any prepared general-XPointer evaluator for execution,
     so no Reference resolver or XSLT transformer runs when a later Reference has a static XPath failure.
-    Per-reference errors keep their `VerificationError` index and URI. Opt-in Manifest inner references use a
-    separate all-siblings preparation pass and remain advisory.
+    Per-reference errors keep their `VerificationError` index and complete URI fields, while `Error()` renders
+    the URI through `lexer.DiagnosticExcerpt`. Opt-in Manifest inner references use a separate all-siblings
+    preparation pass and remain advisory.
 - **NewEnvelopedReference() → ReferenceConfig** — WHOLE-DOCUMENT enveloped defaults: empty URI (always resolves to the document element, regardless of the `SignEnveloped` parent) + enveloped-signature transform + ExcC14N + SHA-256
 - **NewEnvelopedReferenceByID(id) → ReferenceConfig** — element-scoped enveloped defaults: `URI="#id"` (covers
   only the element carrying that id) + enveloped-signature transform + ExcC14N + SHA-256. Correct for signing
@@ -1408,8 +1409,9 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   (`Document.GetElementByID`, which resolves a duplicate id to the last-registered element — an XSW bypass): a
   whole-expression `id('X')` selector in any XML S spelling (`id('X')`, `id ('X')`, `id( "X" )`;
   `parseXPointerIDSelector`) resolves through the duplicate-detecting `domutil.FindElementsByID`
-  (`ErrAmbiguousReference` on a duplicate), and ANY other id() use — a wrapping paren, a predicate, a path
-  step (`expressionReferencesID`) — is rejected fail-closed as `ErrReferenceNotFound` and never reaches the
+  (`ErrAmbiguousReference` on a duplicate); zero-match and duplicate diagnostics render the id through
+  `lexer.DiagnosticExcerpt`. ANY other id() use — a wrapping paren, a predicate, a path step
+  (`expressionReferencesID`) — is rejected fail-closed as `ErrReferenceNotFound` and never reaches the
   built-in. Before compilation, non-XML-S Unicode whitespace outside quoted XPath literals is rejected, while
   the same characters inside literals remain data. The selected element is fed into the existing subtree
   canonicalization path (comments included).
@@ -1492,7 +1494,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   transform-pipeline check), verification wraps each in `*VerificationError{Reference, URI, Err}` (`Reference
   == -1` marks a SignatureValue failure). Both `Unwrap()` to the cause, so a sentinel like
   `ErrReferenceNotFound`/`ErrUnsupportedTransform` stays `errors.Is`-matchable and the failing reference's
-  index+URI is reachable via `errors.As`. The verify-side weak-digest preflight
+  index+complete URI is reachable via `errors.As`; `Error()` renders only a bounded valid-UTF-8 URI excerpt,
+  and same-document/nil-resolver causes bound any URI they repeat. The verify-side weak-digest preflight
   (`preflightParsedWeakAlgorithms`) also wraps a per-reference `ErrWeakAlgorithm` in `*VerificationError`
   carrying the failing reference's index+URI, symmetric with the sign-side preflight's `*ReferenceError`. A
   malformed ECDSA/DSA `SignatureValue` length on verify is classified as `ErrVerificationFailed` (not an

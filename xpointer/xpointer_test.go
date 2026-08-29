@@ -67,6 +67,11 @@ func TestCompileDiagnosticExcerpt(t *testing.T) {
 		require.ErrorIs(t, err, xpath1.ErrUnexpectedToken)
 	})
 
+	t.Run("short unbalanced wording is unchanged", func(t *testing.T) {
+		_, err := xpointer.Compile("xpath1(/root")
+		require.EqualError(t, err, `xpointer: unbalanced parentheses in "xpath1(/root"`)
+	})
+
 	t.Run("long multibyte body is bounded", func(t *testing.T) {
 		body := "1 " + strings.Repeat("界", 1<<19)
 		input := "xpath1(" + body + ")"
@@ -81,6 +86,23 @@ func TestCompileDiagnosticExcerpt(t *testing.T) {
 		require.Contains(t, err.Error(), "[truncated]")
 		require.Less(t, allocated, uint64(1<<20))
 	})
+
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{name: "long unbalanced ASCII body is bounded", body: strings.Repeat("a", 1<<20)},
+		{name: "long unbalanced multibyte body is bounded", body: strings.Repeat("界", 1<<19)},
+		{name: "long unbalanced invalid UTF-8 body is bounded", body: strings.Repeat("\xff", 1<<20)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := xpointer.Compile("xpath1(" + test.body)
+			require.Error(t, err)
+			require.LessOrEqual(t, len(err.Error()), 1024)
+			require.True(t, utf8.ValidString(err.Error()))
+			require.Contains(t, err.Error(), "[truncated]")
+		})
+	}
 }
 
 func xpointerCompileAllocatedBytes(t *testing.T, fn func()) uint64 {

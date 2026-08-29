@@ -10,6 +10,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 // isNilInterface reports whether v is effectively nil. A plain `v == nil` only
@@ -474,7 +475,8 @@ func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *
 // Reference's transform pipeline (see externalReferenceDigestInput).
 func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, ref parsedReference) ([]byte, error) {
 	if cfg.referenceResolver == nil {
-		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, ref.uri)
+		return nil, fmt.Errorf("%w: unsupported reference URI: %s",
+			ErrReferenceNotFound, lexer.DiagnosticExcerpt(ref.uri))
 	}
 
 	prepared := ref.prepared

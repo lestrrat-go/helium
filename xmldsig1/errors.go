@@ -3,6 +3,8 @@ package xmldsig1
 import (
 	"errors"
 	"fmt"
+
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 var (
@@ -123,7 +125,8 @@ type ReferenceError struct {
 }
 
 func (e *ReferenceError) Error() string {
-	return fmt.Sprintf("xmldsig1: %s reference %d (%q) failed: %v", e.Op, e.Reference, e.URI, e.Err)
+	return fmt.Sprintf("xmldsig1: %s reference %d (%q) failed: %v",
+		e.Op, e.Reference, lexer.DiagnosticExcerpt(e.URI), e.Err)
 }
 
 func (e *ReferenceError) Unwrap() error {
@@ -145,7 +148,8 @@ func (e *VerificationError) Error() string {
 	if e.Reference < 0 {
 		return fmt.Sprintf("xmldsig1: signature value verification failed: %v", e.Err)
 	}
-	return fmt.Sprintf("xmldsig1: reference %d (%q) verification failed: %v", e.Reference, e.URI, e.Err)
+	return fmt.Sprintf("xmldsig1: reference %d (%q) verification failed: %v",
+		e.Reference, lexer.DiagnosticExcerpt(e.URI), e.Err)
 }
 
 func (e *VerificationError) Unwrap() error {
