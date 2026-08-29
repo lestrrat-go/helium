@@ -359,14 +359,17 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   depth: bottom-up child-linking through `AddChild` runs `childReaches` over each already-built child subtree
   as it is attached, so linking a deep chain one level at a time costs the sum of all subtree sizes. Skipping
   the preflight is sound here — never elsewhere — because every node `copyNode` returns is freshly allocated
-  in `dc.dst` and has never been linked anywhere: `CreateCharRef` (the `EntityRefNode` branch) creates a
-  childless `EntityRef` with no shared-Entity foreign link, unlike `CreateReference`, so a copied subtree can
-  never carry the one production foreign-link source `wouldCreateCycle` exists to catch. `appendCopiedChild`
+  in `dc.dst` and has never been linked as an owned child. The `EntityRefNode` branch uses `CreateReference`, so
+  a declared reference carries the destination DTD's shared `Entity` child; that declaration graph is disjoint
+  from the fresh document subtree and cannot reach the new parent. Copying a DTD entity's parsed replacement
+  subtree uses ordinary `AddChild` instead, because its references can point within the declaration graph.
+  `appendCopiedChild`
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior
-  for that unrelated caller too. `CopyDoc` builds the fresh document child list before `CopyExtSubset` records
-  its off-chain claim on the destination document, so each document-level append can use the recorded owned
-  tail instead of walking the growing child list.
+  for that unrelated caller too. `CopyDoc` builds both DTD subsets before the fresh document child list so
+  copied references resolve against destination declarations, but records the external subset's off-chain claim
+  only after the child list is complete. Each document-level append can therefore use the recorded owned tail
+  instead of walking the growing child list.
 - `DeclareNamespace(prefix, uri)` / `AddNamespaceDecl(ns)` — do NOT themselves add a second declaration for a
   prefix in `nsDefs`, and NEVER touch the node's active namespace (`n.ns`) or expanded name.
   `DeclareNamespace` allocates a fresh `*Namespace`; `AddNamespaceDecl` attaches the caller's existing object

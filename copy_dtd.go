@@ -47,6 +47,10 @@ func copyDTD(src *DTD, dst *Document) error {
 // the document — it is referenced only via ExtSubset — so the copy is not added
 // to dst's child list. If src has no external subset this is a no-op.
 func CopyExtSubset(src, dst *Document) {
+	copyExtSubset(src, dst, true)
+}
+
+func copyExtSubset(src, dst *Document, recordOffChainClaim bool) {
 	if src == nil || dst == nil {
 		return
 	}
@@ -71,7 +75,9 @@ func CopyExtSubset(src, dst *Document) {
 	// onto dst itself stop resolving their point from dst.lastChild
 	// (tailJumpTarget, resolveOwnedTail) and walk instead, while every element
 	// dst owns keeps its own O(1) resolution.
-	dst.offChainChildClaim = true
+	if recordOffChainClaim {
+		dst.offChainChildClaim = true
+	}
 }
 
 // copyDTDChildren walks src's children in document order, copying each
@@ -84,6 +90,7 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 	// Correspondence from each source attribute declaration to its copy, so the
 	// copy's registration-order sequences can be rebuilt from the source's.
 	attrCopies := make(map[*AttributeDecl]*AttributeDecl)
+	entityCopies := make(map[*Entity]*Entity)
 
 	// The DTD owns its declaration children, so Children's owned-boundary advance
 	// equals a raw NextSibling walk here while adding a per-list seen guard, so a
@@ -99,6 +106,7 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 				default:
 					dstDTD.entities[ent.name] = cp
 				}
+				entityCopies[ent] = cp
 				_ = dstDTD.AddChild(cp)
 			}
 		case ElementDeclNode:
@@ -136,6 +144,20 @@ func copyDTDChildren(src, dstDTD *DTD, dst *Document) error {
 	}
 
 	copyAttrDeclOrder(src, dstDTD, attrCopies)
+
+	// EntityRef nodes share their declaration's parsed replacement subtree.
+	// Copy it only after every declaration has been registered, so nested and
+	// forward references resolve to destination-owned Entity nodes.
+	dc := &deepCopier{dst: dst, opts: deepCopyOptions{overDeclareNS: true, preflightLinks: true}}
+	for c := range Children(src) {
+		ent, ok := AsNode[*Entity](c)
+		if !ok {
+			continue
+		}
+		if err := dc.copyChildren(ent, entityCopies[ent], nil, nil); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

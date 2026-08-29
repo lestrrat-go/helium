@@ -798,6 +798,24 @@ func TestStripSpace(t *testing.T) {
 		require.True(t, foundID, "copy's external subset must contain the ID-typed attribute declaration")
 	})
 
+	t.Run("copy preserves declared entity references", func(t *testing.T) {
+		t.Parallel()
+
+		const source = `<!DOCTYPE root [<!ENTITY payload "QUJD">]><root>&payload;&payload;</root>`
+		src, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		cp, err := xslt3.CopyAndStripForTest(src)
+		require.NoError(t, err)
+		cpEntity, found := cp.IntSubset().LookupEntity("payload")
+		require.True(t, found)
+		first := cp.DocumentElement().FirstChild()
+		second := first.NextSibling()
+		require.Same(t, cpEntity, first.FirstChild())
+		require.Same(t, cpEntity, second.FirstChild())
+		require.Same(t, cp, cpEntity.OwnerDocument())
+	})
+
 	// TestStripSpacePreservesExternalDTDIDs verifies that running a transform whose
 	// stylesheet declares xsl:strip-space keeps id()/GetElementByID working for IDs
 	// declared in an EXTERNAL DTD subset.

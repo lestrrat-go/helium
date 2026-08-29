@@ -206,7 +206,7 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 	case helium.ProcessingInstructionNode:
 		return sc.record(src, sc.dst.CreatePI(src.Name(), string(src.Content()))), nil
 	case helium.EntityRefNode:
-		cp, err := sc.dst.CreateCharRef(src.Name())
+		cp, err := sc.dst.CreateReference(src.Name())
 		if err != nil {
 			return nil, err
 		}

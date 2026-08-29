@@ -314,12 +314,16 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal. All accept a typed-nil node (e.g.
   `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
   (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
-- `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of panicking
+- `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
+  panicking. A copied `EntityRef` resolves only against `targetDoc`'s declarations: a matching declaration installs
+  the destination-owned shared `Entity` child, while an absent declaration leaves the reference childless
 - `CopyDoc(src) → (*Document, error)` / `CopyDTDInfo(src, dst) → error` / `CopyExtSubset(src, dst)` —
   document-level deep copy: `CopyDoc` is a COMPLETE independent copy — the whole tree, BOTH DTD subsets, and
   the document-level state a caller relies on (version/encoding/standalone, URL, property flags, SkipIDs, and
   the interned ID table rebuilt against the copy's own elements; no mutable map or DTD is aliased);
-  `CopyDTDInfo` copies the INTERNAL subset's metadata + entities/elements/attributes/notations into `dst` and
+  DTD entity copies include their independent parsed replacement subtrees, so copied references retain the source's
+  string-value and canonical form without aliasing source nodes; `CopyDTDInfo` copies the INTERNAL subset's metadata +
+  entities/elements/attributes/notations into `dst` and
   RETURNS an error (notably when `dst` already has an internal subset); `CopyExtSubset` gives `dst` its own
   independent deep copy of the source's EXTERNAL DTD subset (`copy.go` / `copy_dtd.go` / `dtd.go`)
 - No-preflight child linkage and raw single-pointer linkage are package-private: `appendFastChild(parent

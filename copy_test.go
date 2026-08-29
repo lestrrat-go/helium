@@ -3,6 +3,7 @@ package helium_test
 import (
 	"os"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/lestrrat-go/helium"
@@ -311,6 +312,90 @@ func TestCopyNode(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, xml, `xmlns="http://docbook.org/ns/docbook"`)
 		})
+	})
+}
+
+func TestCopyEntityReference(t *testing.T) {
+	t.Parallel()
+
+	const srcXML = `<!DOCTYPE root [<!ENTITY payload "QUJD">]><root>&payload;&payload;</root>`
+	src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+	require.NoError(t, err)
+
+	srcFirst := src.DocumentElement().FirstChild()
+	require.Equal(t, helium.EntityRefNode, srcFirst.Type())
+	srcEntity, ok := helium.AsNode[*helium.Entity](srcFirst.FirstChild())
+	require.True(t, ok)
+	require.Same(t, src.IntSubset(), srcEntity.Parent())
+	require.NotNil(t, srcEntity.FirstChild(), "the parser must materialize replacement content on the declaration")
+
+	t.Run("direct copy resolves the destination declaration", func(t *testing.T) {
+		dst := helium.NewDefaultDocument()
+		require.NoError(t, helium.CopyDTDInfo(src, dst))
+
+		copied, copyErr := helium.CopyNode(srcFirst, dst)
+		require.NoError(t, copyErr)
+		dstEntity, found := dst.IntSubset().LookupEntity("payload")
+		require.True(t, found)
+		require.Same(t, dstEntity, copied.FirstChild())
+		require.NotSame(t, srcEntity, copied.FirstChild())
+		require.Same(t, dst, copied.OwnerDocument())
+		require.Same(t, dst, copied.FirstChild().OwnerDocument())
+		require.NotSame(t, srcEntity.FirstChild(), dstEntity.FirstChild())
+		require.Equal(t, srcEntity.FirstChild().Content(), dstEntity.FirstChild().Content())
+		require.NoError(t, dstEntity.FirstChild().(helium.MutableNode).AppendText([]byte("copy")))
+		require.Equal(t, []byte("QUJD"), srcEntity.FirstChild().Content())
+		require.Equal(t, []byte("QUJDcopy"), dstEntity.FirstChild().Content())
+	})
+
+	t.Run("missing destination declaration stays childless", func(t *testing.T) {
+		dst := helium.NewDefaultDocument()
+		copied, copyErr := helium.CopyNode(srcFirst, dst)
+		require.NoError(t, copyErr)
+		require.Nil(t, copied.FirstChild())
+
+		undeclared, createErr := src.CreateReference("missing")
+		require.NoError(t, createErr)
+		require.Nil(t, undeclared.FirstChild())
+		copied, copyErr = helium.CopyNode(undeclared, dst)
+		require.NoError(t, copyErr)
+		require.Nil(t, copied.FirstChild())
+	})
+
+	t.Run("document copy shares only its own repeated declaration", func(t *testing.T) {
+		copied, copyErr := helium.CopyDoc(src)
+		require.NoError(t, copyErr)
+		dstEntity, found := copied.IntSubset().LookupEntity("payload")
+		require.True(t, found)
+		require.NotSame(t, srcEntity, dstEntity)
+
+		first := copied.DocumentElement().FirstChild()
+		second := first.NextSibling()
+		require.Equal(t, helium.EntityRefNode, first.Type())
+		require.Equal(t, helium.EntityRefNode, second.Type())
+		require.Same(t, dstEntity, first.FirstChild())
+		require.Same(t, dstEntity, second.FirstChild())
+		require.Same(t, copied, first.OwnerDocument())
+		require.Same(t, copied, second.OwnerDocument())
+		require.Same(t, copied, dstEntity.OwnerDocument())
+	})
+
+	t.Run("document copy resolves an external declaration", func(t *testing.T) {
+		fsys := fstest.MapFS{"entities.dtd": {Data: []byte(`<!ENTITY payload "QUJD">`)}}
+		external, parseErr := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "entities.dtd"><root>&payload;</root>`))
+		require.NoError(t, parseErr)
+
+		copied, copyErr := helium.CopyDoc(external)
+		require.NoError(t, copyErr)
+		dstEntity, found := copied.ExtSubset().LookupEntity("payload")
+		require.True(t, found)
+		ref := copied.DocumentElement().FirstChild()
+		require.Same(t, dstEntity, ref.FirstChild())
+		require.Same(t, copied, dstEntity.OwnerDocument())
 	})
 }
 

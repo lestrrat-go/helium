@@ -39,7 +39,7 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	case ProcessingInstructionNode:
 		return targetDoc.CreatePI(src.Name(), string(src.Content())), nil
 	case EntityRefNode:
-		return targetDoc.CreateCharRef(src.Name())
+		return copyEntityReference(src, targetDoc)
 	case NamespaceNode:
 		// Namespace nodes are virtual; return a new wrapper with the same data.
 		ns := NewNamespace(src.Name(), string(src.Content()))
@@ -47,6 +47,17 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	default:
 		return nil, fmt.Errorf("helium: cannot copy node of type %s", src.Type())
 	}
+}
+
+// copyEntityReference creates a fresh reference and resolves it only against
+// declarations owned by targetDoc. It therefore preserves declared replacement
+// semantics without aliasing the source DTD or inventing a destination
+// declaration. The nil receiver behavior matches the other leaf constructors.
+func copyEntityReference(src Node, targetDoc *Document) (*EntityRef, error) {
+	if targetDoc == nil {
+		return targetDoc.CreateCharRef(src.Name())
+	}
+	return targetDoc.CreateReference(src.Name())
 }
 
 // CopyDoc creates a complete deep copy of a document: its children, its internal
@@ -71,12 +82,16 @@ func CopyDoc(src *Document) (*Document, error) {
 	dst.properties = src.properties
 	dst.idsSkip = src.idsSkip
 
-	// Deep-copy DTD (metadata + entities, elements, attributes, notations).
+	// Deep-copy both DTD subsets before document content so EntityRef copies can
+	// resolve to destination-owned declarations. The external subset's off-chain
+	// parent claim is recorded after the child list is built to retain O(1)
+	// document appends.
 	if dtd := src.intSubset; dtd != nil {
 		if err := copyDTD(dtd, dst); err != nil {
 			return nil, err
 		}
 	}
+	copyExtSubset(src, dst, false)
 
 	// Copy all document children (the DTD was already handled) through the shared
 	// core in over-declare / AddChild mode, reproducing the historical behavior.
@@ -95,10 +110,9 @@ func CopyDoc(src *Document) (*Document, error) {
 		return nil, err
 	}
 
-	// Deep-copy the external subset too (independent *DTD, not aliased). The lazy
-	// GetElementByID fallback consults it for ID-typed ATTLIST declarations, so a
-	// copy that dropped it would resolve fewer ids than the source.
-	CopyExtSubset(src, dst)
+	if dst.extSubset != nil {
+		dst.offChainChildClaim = true
+	}
 
 	// Rebuild the interned ID table by translating each source entry's element
 	// through the source->copy correspondence, so id()/GetElementByID on the copy

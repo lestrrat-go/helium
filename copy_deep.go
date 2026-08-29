@@ -9,15 +9,21 @@ import (
 // single set of "speed/shape primitives" that every deep-copy site in the tree
 // layer is expressed through: the leaf-node copy switch, the attribute copy
 // loop, and the namespace binding all live in one place and are selected by
-// these knobs. Child-linking is NOT one of these knobs: copyChildren always
-// links through appendCopiedChild (see its doc comment), which every
-// deep-copy site can share safely because copyNode never returns a node that
-// is already linked or that carries a foreign child link.
+// these knobs. Child-linking normally uses appendCopiedChild (see its doc
+// comment). DTD entity replacement trees opt into AddChild's cycle preflight
+// because their copied EntityRef nodes can point into the copied declaration
+// graph.
 //
-// The defaults (the zero value) reproduce the historical helium.CopyDoc/CopyNode
-// behavior EXACTLY: over-declared namespaces, no filtering, no mapping.
-// Callers that want the faster shape opt in.
+// The defaults (the zero value) select the general helium.CopyDoc/CopyNode
+// shape: over-declared namespaces, no filtering, no mapping. Callers that want
+// the faster shape opt in.
 type deepCopyOptions struct {
+	// preflightLinks selects MutableNode.AddChild instead of the direct copy-only
+	// linker. DTD entity replacement trees use it because their EntityRef nodes
+	// share destination declaration children and can therefore form graph edges
+	// outside the freshly allocated replacement subtree.
+	preflightLinks bool
+
 	// overDeclareNS selects the namespace-declaration strategy for elements.
 	//
 	// When true (the historical helium.CopyDoc behavior), every element
@@ -85,6 +91,12 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 		if child == nil {
 			continue
 		}
+		if dc.opts.preflightLinks {
+			if err := parent.AddChild(child); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := appendCopiedChild(parent, child); err != nil {
 			return err
 		}
@@ -101,20 +113,15 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 // children, so linking a deep tree bottom-up through AddChild re-walks a
 // growing subtree at every level.
 //
-// This is safe ONLY for a child that copyNode just returned. Every copyNode
-// branch allocates a brand-new node owned by dc.dst that has never been
-// linked anywhere: TextNode/CDATASectionNode/CommentNode/
-// ProcessingInstructionNode create fresh leaf nodes; EntityRefNode calls
-// dc.dst.CreateCharRef, which creates a childless EntityRef with no shared
-// Entity child (unlike CreateReference, whose EntityRef DOES carry a foreign
-// child link — CreateCharRef never installs one); ElementNode recurses through
-// copyElement, itself built only from fresh nodes; and the default branch
-// delegates to CopyNode, which for every node type it supports likewise
-// returns a freshly allocated, unlinked node. None of these can already be
-// linked into a tree or carry a foreign child link, so wouldCreateCycle could
-// never have found anything for such a child — the preflight is pure
-// overhead here. Do NOT call this on a node from outside the copier: an
-// arbitrary caller-supplied child has no such guarantee.
+// This is safe ONLY for a child that copyNode just returned while copying a
+// normal document or element tree. Every branch allocates a brand-new node
+// owned by dc.dst that has never been linked as an owned child. EntityRefNode
+// may carry the destination DTD's shared Entity declaration child, but that
+// declaration graph is disjoint from the fresh document subtree and therefore
+// cannot reach its new parent. DTD entity replacement trees use preflightLinks
+// instead because references there can point within the declaration graph.
+// Do NOT call this on a node from outside the copier: an arbitrary
+// caller-supplied child has no such guarantee.
 func appendCopiedChild(parent MutableNode, child Node) error {
 	pdn := parent.baseDocNode()
 	cdn := child.baseDocNode()
@@ -195,7 +202,7 @@ func (dc *deepCopier) copyNode(src Node, parent *Element, inScope map[string]*Na
 		if dc.filtered(src, parent, parentState) {
 			return nil, nil //nolint:nilnil // omitted by filter
 		}
-		cp, err := dc.dst.CreateCharRef(src.Name())
+		cp, err := copyEntityReference(src, dc.dst)
 		if err != nil {
 			return nil, err
 		}
