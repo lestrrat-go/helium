@@ -526,23 +526,27 @@ func hasElementOnlyContent(elem *helium.Element) bool {
 // is resolved at compile time (nt.URI / nt.HasURI), using the namespace context
 // in scope at the declaration, so no runtime binding map is consulted here.
 func matchSpaceNameTest(nt nameTest, elem *helium.Element) bool {
+	return matchSpaceExpandedName(nt, elem.LocalName(), elem.URI())
+}
+
+func matchSpaceExpandedName(nt nameTest, local, uri string) bool {
 	if nt.Local == "*" && nt.Prefix == "" && !nt.HasURI {
 		return true // "*" matches all
 	}
 	if nt.Prefix == "*" {
 		// "*:NCName" matches elements with given local name in any namespace
-		return elem.LocalName() == nt.Local
+		return local == nt.Local
 	}
 	if nt.Local == "*" {
 		// "prefix:*" matches elements in the resolved namespace
-		return nt.HasURI && elem.URI() == nt.URI
+		return nt.HasURI && uri == nt.URI
 	}
 	// Named test: namespace URI was resolved at compile time.
 	if nt.HasURI {
-		return elem.LocalName() == nt.Local && elem.URI() == nt.URI
+		return local == nt.Local && uri == nt.URI
 	}
 	// "local" with no namespace binding matches the local name in no namespace.
-	return elem.LocalName() == nt.Local && elem.URI() == ""
+	return local == nt.Local && uri == ""
 }
 
 // nameTestPriority returns the priority of a nameTest for conflict resolution.

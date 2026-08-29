@@ -46,6 +46,41 @@ func TestStripSpace(t *testing.T) {
 		require.Equal(t, "X|   X   ", out)
 	})
 
+	t.Run("entity replacement uses each reference namespace", func(t *testing.T) {
+		t.Parallel()
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:one="urn:one" xmlns:two="urn:two" version="3.0">
+  <xsl:strip-space elements="one:a"/>
+  <xsl:preserve-space elements="two:a"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/">
+    <xsl:value-of select="/root/direct-one"/><xsl:text>|</xsl:text>
+    <xsl:value-of select="/root/direct-two"/><xsl:text>;</xsl:text>
+    <xsl:value-of select="/root/nested-one"/><xsl:text>|</xsl:text>
+    <xsl:value-of select="/root/nested-two"/>
+  </xsl:template>
+</xsl:stylesheet>`
+		const source = `<!DOCTYPE root [
+<!ENTITY payload "<p:a>   </p:a>">
+<!ENTITY outer "<wrapper>&payload;</wrapper>">
+]><root>` +
+			`<direct-one xmlns:p="urn:one">&payload;</direct-one>` +
+			`<direct-two xmlns:p="urn:two">&payload;</direct-two>` +
+			`<nested-one xmlns:p="urn:one">&outer;</nested-one>` +
+			`<nested-two xmlns:p="urn:two">&outer;</nested-two>` +
+			`</root>`
+
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		out, err := xslt3.TransformString(t.Context(), doc, ss)
+		require.NoError(t, err)
+		require.Equal(t, "|   ;|   ", out)
+	})
+
 	// TestStripSpaceImportPrecedence verifies that a conflicting strip-space /
 	// preserve-space NameTest across an import boundary is resolved by import
 	// precedence (the importing module wins), raising no false XTSE0270,
