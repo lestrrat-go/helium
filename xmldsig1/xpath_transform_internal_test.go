@@ -82,7 +82,8 @@ func TestXPathTransformThroughPipeline(t *testing.T) {
 	require.NotContains(t, string(canonical), "DROPVAL", "dropped subtree must be filtered out")
 	require.NotContains(t, string(canonical), "t:drop", "dropped element must be filtered out")
 
-	_, _, _, err = canonicalizeReference(t.Context(), &verifierConfig{maxXPathFilterNodes: 1}, doc, nil, ref)
+	limitedTarget, _, _, err := canonicalizeReference(t.Context(), &verifierConfig{maxXPathFilterNodes: 1}, doc, nil, ref)
+	require.Nil(t, limitedTarget)
 	require.ErrorIs(t, err, ErrResourceLimitExceeded,
 		"the configured XPath member cap must reach an ordinary same-document Reference")
 }
