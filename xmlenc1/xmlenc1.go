@@ -1194,7 +1194,7 @@ func decryptBytes(ctx context.Context, cfg *decryptConfig, elem *helium.Element)
 		}
 	}
 
-	keys := ed.effectiveEncryptedKeys()
+	keys := ed.EncryptedKeys
 
 	if len(cfg.sessionKey) > 0 {
 		// The caller supplied the session key directly, so its length is
@@ -1339,7 +1339,7 @@ func decryptElement(ctx context.Context, cfg *decryptConfig, elem *helium.Elemen
 		}
 	}
 
-	keys := ed.effectiveEncryptedKeys()
+	keys := ed.EncryptedKeys
 
 	// A pre-shared session key, when configured, returns here — before
 	// candidate selection, per-candidate validation, and per-candidate key

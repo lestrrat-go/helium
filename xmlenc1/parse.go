@@ -130,12 +130,6 @@ func parseEncryptedData(ctx context.Context, elem *helium.Element, ps *parseStat
 		return nil, abort(ctx, fmt.Errorf("%w: missing CipherData/CipherValue", ErrMalformedEncrypted))
 	}
 
-	// Populate the deprecated single EncryptedKey field with the first
-	// candidate so callers reading it keep working.
-	if len(ed.EncryptedKeys) > 0 {
-		ed.EncryptedKey = ed.EncryptedKeys[0]
-	}
-
 	return ed, nil
 }
 
