@@ -21,8 +21,8 @@ func TestLookupNSPrefixURI(t *testing.T) {
 		))
 		require.NoError(t, err)
 
-		child := doc.DocumentElement().FirstChild().(*helium.Element) //nolint:forcetypeassert
-		leaf := child.FirstChild().(*helium.Element)                  //nolint:forcetypeassert
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
 
 		uri, found := domutil.LookupNSPrefixURI(leaf, "")
 		require.True(t, found)
@@ -39,8 +39,8 @@ func TestLookupNSPrefixURI(t *testing.T) {
 		))
 		require.NoError(t, err)
 
-		child := doc.DocumentElement().FirstChild().(*helium.Element) //nolint:forcetypeassert
-		leaf := child.FirstChild().(*helium.Element)                  //nolint:forcetypeassert
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
 
 		for _, prefix := range []string{"", "p"} {
 			uri, found := domutil.LookupNSPrefixURI(leaf, prefix)
@@ -70,8 +70,8 @@ func TestLookupNSPrefixURI(t *testing.T) {
 			require.NoError(t, err)
 
 			root := doc.DocumentElement()
-			child := root.FirstChild().(*helium.Element) //nolint:forcetypeassert
-			leaf := child.FirstChild().(*helium.Element) //nolint:forcetypeassert
+			child := root.FirstChild().(*helium.Element)
+			leaf := child.FirstChild().(*helium.Element)
 			require.True(t, root.RemoveNamespaceByPrefix("p"))
 
 			uri, found := domutil.LookupNSPrefixURI(leaf, "p")
@@ -138,8 +138,8 @@ func TestLookupNSURI(t *testing.T) {
 		`<root xmlns:q="urn:shared"><child xmlns:p="urn:shared"><leaf/></child></root>`,
 	))
 	require.NoError(t, err)
-	child := doc.DocumentElement().FirstChild().(*helium.Element) //nolint:forcetypeassert
-	leaf := child.FirstChild().(*helium.Element)                  //nolint:forcetypeassert
+	child := doc.DocumentElement().FirstChild().(*helium.Element)
+	leaf := child.FirstChild().(*helium.Element)
 
 	ns, found := domutil.LookupNSURI(leaf, "urn:shared")
 	require.True(t, found)
