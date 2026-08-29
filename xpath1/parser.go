@@ -371,11 +371,12 @@ func (p *parser) parseFunctionCall(prefix, name string) (Expr, error) {
 		}
 	}
 	if p.lexer.Peek().Type != TokenRParen {
+		name = lexer.DiagnosticExcerpt(name)
 		displayName := name
 		if prefix != "" {
-			displayName = prefix + ":" + name
+			prefix = lexer.DiagnosticExcerpt(prefix)
+			displayName = lexer.DiagnosticExcerpt(prefix + ":" + name)
 		}
-		displayName = lexer.DiagnosticExcerpt(displayName)
 		return nil, fmt.Errorf("%w: ')' in function call %s but got %s", ErrExpectedToken, displayName, p.lexer.Peek())
 	}
 	p.lexer.Next()

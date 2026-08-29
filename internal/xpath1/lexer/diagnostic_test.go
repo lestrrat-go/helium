@@ -36,9 +36,16 @@ func TestDiagnosticExcerpt(t *testing.T) {
 	})
 
 	t.Run("invalid UTF-8 is replaced", func(t *testing.T) {
-		got := lexer.DiagnosticExcerpt(string([]byte{'a', 0xff, 'b'}))
-		require.Equal(t, "a\uFFFDb", got)
+		got := lexer.DiagnosticExcerpt(string([]byte{'a', 0xff, 0xff, 'b'}))
+		require.Equal(t, "a\uFFFD\uFFFDb", got)
 		require.True(t, utf8.ValidString(got))
+	})
+
+	t.Run("invalid UTF-8 input is bounded", func(t *testing.T) {
+		got := lexer.DiagnosticExcerpt(strings.Repeat("\xff", 1<<20))
+		require.LessOrEqual(t, len(got), lexer.DiagnosticExcerptByteLimit)
+		require.True(t, utf8.ValidString(got))
+		require.Contains(t, got, "[truncated]")
 	})
 }
 

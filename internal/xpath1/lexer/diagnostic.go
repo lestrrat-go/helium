@@ -14,11 +14,21 @@ const diagnosticTruncationMarker = "...[truncated]"
 // DiagnosticExcerpt returns a bounded, valid UTF-8 excerpt for diagnostics.
 // Valid UTF-8 strings within DiagnosticExcerptByteLimit are returned unchanged.
 func DiagnosticExcerpt(s string) string {
-	s = strings.ToValidUTF8(s, "\uFFFD")
-	if len(s) <= DiagnosticExcerptByteLimit {
-		return s
-	}
+	var excerpt strings.Builder
+	excerpt.Grow(DiagnosticExcerptByteLimit)
+	for len(s) > 0 {
+		r, size := utf8.DecodeRuneInString(s)
+		s = s[size:]
 
+		if excerpt.Len()+utf8.RuneLen(r) > DiagnosticExcerptByteLimit {
+			return truncateDiagnosticExcerpt(excerpt.String())
+		}
+		excerpt.WriteRune(r)
+	}
+	return excerpt.String()
+}
+
+func truncateDiagnosticExcerpt(s string) string {
 	end := DiagnosticExcerptByteLimit - len(diagnosticTruncationMarker)
 	for !utf8.RuneStart(s[end]) {
 		end--
