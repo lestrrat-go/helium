@@ -21,9 +21,35 @@ import (
 // public verification tests reach the general-XPointer evaluator instead of
 // stopping at an earlier context check.
 type xpointerEvalErrorContext struct {
-	context.Context
-	err   error
-	armed bool
+	deadline    time.Time
+	hasDeadline bool
+	done        <-chan struct{}
+	value       func(any) any
+	err         error
+	armed       bool
+}
+
+func newXPointerEvalErrorContext(parent context.Context, err error) *xpointerEvalErrorContext {
+	deadline, hasDeadline := parent.Deadline()
+	return &xpointerEvalErrorContext{
+		deadline:    deadline,
+		hasDeadline: hasDeadline,
+		done:        parent.Done(),
+		value:       parent.Value,
+		err:         err,
+	}
+}
+
+func (c *xpointerEvalErrorContext) Deadline() (time.Time, bool) {
+	return c.deadline, c.hasDeadline
+}
+
+func (c *xpointerEvalErrorContext) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *xpointerEvalErrorContext) Value(key any) any {
+	return c.value(key)
 }
 
 func (c *xpointerEvalErrorContext) Err() error {
@@ -153,7 +179,7 @@ func TestGeneralXPointerVerifyRoundTrip(t *testing.T) {
 		for _, entry := range entries {
 			for _, contextError := range contextErrors {
 				t.Run(entry.name+"/"+contextError.name, func(t *testing.T) {
-					ctx := &xpointerEvalErrorContext{Context: t.Context(), err: contextError.err}
+					ctx := newXPointerEvalErrorContext(t.Context(), contextError.err)
 					err := entry.verify(ctx)
 					require.ErrorIs(t, err, ErrReferenceNotFound)
 					require.ErrorIs(t, err, contextError.err)
