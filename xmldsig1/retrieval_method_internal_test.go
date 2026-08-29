@@ -72,20 +72,27 @@ func (s *abortingRetrievalParserSAX) StartElementNS(
 }
 
 type retrievalParseDeadlineContext struct {
-	context.Context
-	done    chan struct{}
-	expired atomic.Bool
+	parentDeadline func() (time.Time, bool)
+	parentErr      func() error
+	parentValue    func(any) any
+	done           chan struct{}
+	expired        atomic.Bool
 }
 
 func newRetrievalParseDeadlineContext(parent context.Context) *retrievalParseDeadlineContext {
-	return &retrievalParseDeadlineContext{Context: parent, done: make(chan struct{})}
+	return &retrievalParseDeadlineContext{
+		parentDeadline: parent.Deadline,
+		parentErr:      parent.Err,
+		parentValue:    parent.Value,
+		done:           make(chan struct{}),
+	}
 }
 
 func (c *retrievalParseDeadlineContext) Deadline() (time.Time, bool) {
 	if c.expired.Load() {
 		return time.Unix(0, 0), true
 	}
-	return c.Context.Deadline()
+	return c.parentDeadline()
 }
 
 func (c *retrievalParseDeadlineContext) Done() <-chan struct{} {
@@ -96,7 +103,11 @@ func (c *retrievalParseDeadlineContext) Err() error {
 	if c.expired.Load() {
 		return context.DeadlineExceeded
 	}
-	return c.Context.Err()
+	return c.parentErr()
+}
+
+func (c *retrievalParseDeadlineContext) Value(key any) any {
+	return c.parentValue(key)
 }
 
 func (c *retrievalParseDeadlineContext) expire() {
