@@ -136,10 +136,8 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 		}
 	}
 
-	for _, ns := range namespaces {
-		if err := e.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
-			return err
-		}
+	if err := declareNamespaces(e, namespaces); err != nil {
+		return err
 	}
 
 	for _, attr := range attrs {
@@ -221,6 +219,26 @@ func (t *TreeBuilder) StartElementNS(ctxif context.Context, localname, prefix, u
 
 	ctx.elem = e
 
+	return nil
+}
+
+type namespaceDeclaration interface {
+	Prefix() string
+	URI() string
+}
+
+// declareNamespaces preserves DeclareNamespace's collapse and conflict rules
+// while avoiding a complete nsDefs scan for each entry in a wide SAX batch.
+func declareNamespaces[T namespaceDeclaration](e *Element, namespaces []T) error {
+	var slots map[string]int
+	if len(namespaces) >= attrDupSetThreshold {
+		slots = make(map[string]int, len(namespaces))
+	}
+	for _, ns := range namespaces {
+		if err := e.declareNamespace(ns.Prefix(), ns.URI(), slots); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

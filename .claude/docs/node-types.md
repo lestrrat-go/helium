@@ -399,7 +399,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   mis-binds the attribute. Synthesizing a fresh prefix to preserve both faithfully would need
   `xmlReconciliateNs`-style prefix generation, out of scope here. `AddNamespaceDecl(nil)` returns `ErrNilNode`
   and leaves `nsDefs` unchanged (a nil declaration is rejected, not appended); the dedup scan still skips any
-  nil `nsDefs` slot injected by an in-package field write.
+  nil `nsDefs` slot injected by an in-package field write. Tree construction preserves these rules through
+  the private `declareNamespace` core; `declareNamespaces` supplies a prefix-to-slot index for a wide SAX
+  declaration batch, while public one-at-a-time calls retain the allocation-free linear scan.
 - `UnlinkNode(n)` — detach a `MutableNode` from parent and siblings (delegates to the internal `unlinkNode(Node)`)
 - `unlinkNode(n)` — internal detach that works for ANY sealed node via `baseDocNode()`, including
   non-`MutableNode` nodes like `NamespaceNodeWrapper`. Attribute-aware: an `Attribute` under an `*Element` is

@@ -225,7 +225,11 @@ fire `Reference`). Each invariant lives at its function:
 
 Parent selection: DTD subset → add to DTD; no current element → add to document; else → append as child.
 
-DOM fast path: when the default parser builds a DOM, start-tag attribute/ID/child linking bypasses generic duplicate-checking setters where parser invariants already guarantee the `xmlAddChild` preconditions. Public DOM shape is preserved.
+DOM fast path: when the default parser builds a DOM, start-tag attribute/ID/child linking bypasses generic
+duplicate-checking setters where parser invariants already guarantee the `xmlAddChild` preconditions. Both
+the direct path and `TreeBuilder.StartElementNS` bulk-declare namespaces through `declareNamespaces`: it uses
+the allocation-free `DeclareNamespace` scan below `attrDupSetThreshold` and a prefix-to-slot index at or above
+it. Declaration order, prefix-collapse behavior, and public DOM shape are preserved.
 
 ## Hardening / Resource-Bound Pointers
 
