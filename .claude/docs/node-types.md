@@ -43,6 +43,14 @@ Element has THREE namespace-related fields:
 
 `NamespaceNodeWrapper` wraps Namespace for XPath: adds docnode linkage. `Name()` = prefix, `Content()` = URI. Read-only (AddChild/AddSibling are no-ops).
 
+`Element.Namespaces()` returns a cloned slice, so callers cannot replace or
+append entries in the element's `nsDefs`. Namespace lookup does not clone that
+slice: `LookupNSByPrefix`/`LookupNSByHref` scan the raw declarations in-package,
+and sibling packages use the read-only `internal/nslookup` hooks through
+`internal/domutil`. Both lookup forms preserve nearest-ancestor shadowing and
+empty-URI undeclarations. The bare internal lookup does not synthesize the
+implicit `xml` binding; the public `LookupNSByPrefix`/`LookupNSByHref` APIs do.
+
 ## Attribute Storage
 
 Attributes are a **linked list via next/prev** on the Element, NOT children:

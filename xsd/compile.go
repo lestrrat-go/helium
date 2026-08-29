@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -1465,18 +1466,8 @@ func findDocumentElement(doc *helium.Document) *helium.Element {
 // returned declaration's prefix is reused when inserting a qualified default
 // attribute so the inserted node mirrors the document's own prefix binding.
 func inScopeNamespace(elem *helium.Element, href string) *helium.Namespace {
-	var node helium.Node = elem
-	for node != nil {
-		if e, ok := node.(*helium.Element); ok {
-			for _, ns := range e.Namespaces() {
-				if ns.URI() == href {
-					return ns
-				}
-			}
-		}
-		node = node.Parent()
-	}
-	return nil
+	ns, _ := domutil.LookupNSURI(elem, href)
+	return ns
 }
 
 func collectNSContext(elem *helium.Element) map[string]string {

@@ -1,5 +1,5 @@
 // Package domutil hosts small DOM/QName helpers shared by several helium
-// processing packages (c14n, xmldsig1, xmlenc1, xpath1, xpath3, xslt3). It may
+// processing packages (c14n, xmldsig1, xmlenc1, xpath1, xpath3, xsd, xslt3). It may
 // import the helium root package; the root never imports it back, so there is
 // no import cycle.
 package domutil
@@ -10,6 +10,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/nslookup"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
@@ -99,18 +100,21 @@ func InScopeNamespaces(e *helium.Element, dropXML bool) map[string]*helium.Names
 // bool reports whether a binding was found. start may be any node (or nil);
 // non-element nodes in the chain are skipped.
 func LookupNSPrefixURI(start helium.Node, prefix string) (string, bool) {
-	for n := start; n != nil; n = n.Parent() {
-		el, ok := n.(*helium.Element)
-		if !ok {
-			continue
-		}
-		for _, ns := range el.Namespaces() {
-			if ns.Prefix() == prefix {
-				return ns.URI(), true
-			}
-		}
+	return nslookup.PrefixURI(start, prefix)
+}
+
+// LookupNSURI walks start and its ancestors for the nearest namespace
+// declaration matching uri. Unlike helium.LookupNSByHref it does not
+// synthesize the implicit XML namespace declaration. The bool reports whether
+// a declaration was found. start may be any node (or nil); non-element nodes
+// in the chain are skipped.
+func LookupNSURI(start helium.Node, uri string) (*helium.Namespace, bool) {
+	raw, found := nslookup.ByURI(start, uri)
+	if !found {
+		return nil, false
 	}
-	return "", false
+	ns, ok := raw.(*helium.Namespace)
+	return ns, ok
 }
 
 // SplitLexicalQName trims surrounding whitespace from s, splits it at the first
