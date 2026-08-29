@@ -1459,7 +1459,7 @@ func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Docum
 		if errors.Is(err, ErrHereUnavailable) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%w: XPointer evaluation failed: %v", ErrReferenceNotFound, err)
+		return nil, fmt.Errorf("%w: XPointer evaluation failed: %w", ErrReferenceNotFound, err)
 	}
 	return singleElementApex(nodes)
 }

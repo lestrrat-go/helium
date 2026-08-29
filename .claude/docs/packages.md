@@ -1389,8 +1389,10 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   the shared bounded evaluator with the document element's in-scope namespaces overlaid by the `xmlns()`
   overrides (`xpointerNamespaces`), so an unresolved variable/function/prefix fails as `ErrReferenceNotFound`
   before evaluation. `resolvePreparedGeneralXPointerTarget` then evaluates the expression and enforces a
-  SINGLE element apex (`singleElementApex`, the XSW defense): empty → `ErrReferenceNotFound`, a multi-element
-  or non-element node-set → `ErrAmbiguousReference`. An id() selector NEVER reaches xpath1's built-in id()
+  SINGLE element apex (`singleElementApex`, the XSW defense): an evaluation failure wraps both
+  `ErrReferenceNotFound` and the evaluator cause, so context cancellation/deadline identity remains matchable
+  through `VerificationError`; empty → `ErrReferenceNotFound`, and a multi-element or non-element node-set →
+  `ErrAmbiguousReference`. An id() selector NEVER reaches xpath1's built-in id()
   (`Document.GetElementByID`, which resolves a duplicate id to the last-registered element — an XSW bypass): a
   whole-expression `id('X')` selector in any whitespace spelling (`id('X')`, `id ('X')`, `id( "X" )`;
   `parseXPointerIDSelector`) resolves through the duplicate-detecting `domutil.FindElementsByID`

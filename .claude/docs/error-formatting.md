@@ -303,6 +303,11 @@ external resource exceeds the resolver's 64 MiB cap. Both wrap via `%w` and are 
 per-reference external failure still surfaces through `VerificationError` (verify) / `ReferenceError` (sign)
 with the sentinel reachable via `Unwrap`.
 
+General-XPointer evaluation failures (`transforms.go` `resolvePreparedGeneralXPointerTarget`) wrap both
+`ErrReferenceNotFound` and the XPath evaluator error with `%w`. Cancellation and deadline errors therefore
+remain matchable through the public `VerificationError` wrapper while keeping the reference-resolution
+classification and wording. The URI-borne `here()` case returns `ErrHereUnavailable` unchanged.
+
 Ordered-transform diagnostics (`transform_pipeline.go` `executeTransformPipeline`) identify the zero-based
 transform index + algorithm. Static algorithm/parameter/capability failures wrap `ErrUnsupportedTransform`
 before execution. A first required parse of resolver-supplied octets wraps `ErrReferenceNotFound`; a parse of
