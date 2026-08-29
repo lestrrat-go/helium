@@ -1860,9 +1860,7 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   attacker cannot influence, so a mismatch is reported as a bare `KeySizeError` instead
 - Multi-recipient: `EncryptedData.EncryptedKeys []*EncryptedKey` holds one EncryptedKey per recipient; absent
   a session key, decrypt tries each candidate through full block decryption + plaintext validation (a bogus
-  prepended key cannot mask the real one). `EncryptedData.EncryptedKey` is the **deprecated** single-key field
-  — `EncryptedKeys` wins when non-empty, else the single field is treated as a one-element list; parse
-  populates both
+  prepended key cannot mask the real one)
 - An ECDH-ES originator key's `dsig11:PublicKey` is bounded by `maxECPublicKeyBytes` (133, `parse.go`), which
   owns the rationale; over-limit fails with an error wrapping `ErrMalformedEncrypted`. `decodeBoundedBase64`
   (`parse.go`, the same bounded walk the OAEPparams label goes through) reads it, called from

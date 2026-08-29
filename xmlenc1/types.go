@@ -55,13 +55,6 @@ type encryptedData struct {
 	// block encryption URI (AES-CBC or AES-GCM). Decryption needs it, so
 	// an EncryptedData without one fails with [ErrMalformedEncrypted].
 	EncryptionMethod *encryptionMethod
-	// EncryptedKey is the first EncryptedKey candidate, kept for backward
-	// compatibility with callers written against the old single-key field.
-	//
-	// Deprecated: use EncryptedKeys. When both are set, EncryptedKeys takes
-	// precedence and this field is ignored; when only this field is set it
-	// is treated as a single-element EncryptedKeys.
-	EncryptedKey *encryptedKey
 	// EncryptedKeys holds every EncryptedKey candidate found in KeyInfo
 	// (one per recipient). Decryption tries each in turn, so a
 	// multi-recipient document, or one with a bogus EncryptedKey
@@ -86,20 +79,6 @@ type encryptedData struct {
 	// carries a usable EncryptedKey decrypts under it, so this is consulted
 	// only when the candidate list came out empty.
 	offersDerivedKey bool
-}
-
-// effectiveEncryptedKeys returns the EncryptedKey candidates to use,
-// reconciling the EncryptedKeys slice with the deprecated single
-// EncryptedKey field: EncryptedKeys wins when non-empty; otherwise the
-// deprecated field, if set, is treated as a single-element list.
-func (ed *encryptedData) effectiveEncryptedKeys() []*encryptedKey {
-	if len(ed.EncryptedKeys) > 0 {
-		return ed.EncryptedKeys
-	}
-	if ed.EncryptedKey != nil {
-		return []*encryptedKey{ed.EncryptedKey}
-	}
-	return nil
 }
 
 // encryptedKey represents the <EncryptedKey> element: the session key of an
