@@ -401,7 +401,11 @@ even when a pre-shared `SessionKey` is configured. A present empty value is the
 valid null same-document URI. After that presence check, a `Type` this package
 does not implement — a `#DerivedKey` (§3.5.2), or any type from another
 specification — is stepped over before its URI is resolved, so it costs nothing,
-cannot fail a decrypt, and a pre-shared `SessionKey` decrypts past it. A `Type` of
+cannot itself fail a decrypt. Once the block algorithm resolves and any AES-CBC
+opt-in passes, a pre-shared `SessionKey` decrypts past it. Without an
+`EncryptionMethod` or `Decryptor.BlockAlgorithm`, the document instead fails
+with `ErrMalformedEncrypted`; AES-CBC without `AllowUnauthenticatedCBC(true)`
+fails with `ErrCBCRequiresOptIn`, even with a `SessionKey`. A `Type` of
 `#EncryptedKey` naming something that is not an `xenc:EncryptedKey` is a
 contradiction inside the document and fails with `ErrMalformedEncrypted`; a
 reference with no `Type` at all is resolved, and its target used only if it is
@@ -418,10 +422,12 @@ that is where ECDH-ES carries the sender's ephemeral key, and so is an
 `xenc:AgreementMethod` inside an `xenc:EncryptedKey`'s own `ds:KeyInfo`,
 which this package DOES read — that is how it does ECDH-ES key agreement.
 An `EncryptedData` whose own `ds:KeyInfo` carries only the outer,
-`EncryptedData`-level form fails decryption with `ErrMissingKey`, and still
-decrypts under a pre-shared
-[`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key), the same
-as any other document with no readable key candidate.
+`EncryptedData`-level form reaches `ErrMissingKey` only after the block algorithm
+resolves and any AES-CBC opt-in passes. A pre-shared
+[`Decryptor.SessionKey`](#decrypting-with-a-pre-shared-session-key) then decrypts
+past it, as it does for any other document with no readable key candidate; the
+same earlier gates can instead return `ErrMalformedEncrypted` or
+`ErrCBCRequiresOptIn` regardless of that key.
 
 An `xenc:KeySize` child of `EncryptionMethod` is read and checked, but it is
 never used as a key length: every algorithm URI this package implements
