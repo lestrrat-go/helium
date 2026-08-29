@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath1"
@@ -516,6 +517,45 @@ func TestGeneralXPointerEvaluationErrorIdentity(t *testing.T) {
 		require.ErrorIs(t, err, ErrReferenceNotFound)
 		require.ErrorIs(t, err, xpath1.ErrNotNodeSet)
 	})
+}
+
+func TestGeneralXPointerDiagnosticExcerpt(t *testing.T) {
+	doc := mustParse(t, `<root/>`)
+	cfg := &verifierConfig{allowXPointer: true}
+
+	t.Run("short wording is unchanged", func(t *testing.T) {
+		ref := parsedReference{uri: "#xpointer(1 foo)"}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.EqualError(t, err,
+			`xmldsig1: reference URI not resolved: invalid XPointer expression "1 foo": `+
+				`xpath: unexpected token: Name("foo") after expression`)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+
+	t.Run("long multibyte expression is bounded", func(t *testing.T) {
+		ref := parsedReference{uri: "#xpointer(1 " + strings.Repeat("界", 1<<19) + ")"}
+		var err error
+		allocated := generalXPointerAllocatedBytes(t, func() {
+			_, _, _, err = canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		})
+
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.LessOrEqual(t, len(err.Error()), 1024)
+		require.True(t, utf8.ValidString(err.Error()))
+		require.Contains(t, err.Error(), "[truncated]")
+		require.Less(t, allocated, uint64(1<<20))
+	})
+}
+
+func generalXPointerAllocatedBytes(t *testing.T, fn func()) uint64 {
+	t.Helper()
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	fn()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }
 
 func TestGeneralXPointerValidatesBeforeXSLT(t *testing.T) {

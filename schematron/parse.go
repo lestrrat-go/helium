@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 const (
@@ -168,7 +169,8 @@ func (sp *schemaParser) compileRule(compileCtx context.Context, elem *helium.Ele
 
 	compiled, err := sp.engine.compile(xpathExpr)
 	if err != nil {
-		sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element rule: Failed to compile context expression '%s': %s\n", ctxExpr, err), helium.ErrorLevelFatal))
+		sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element rule: Failed to compile context expression '%s': %s\n",
+			lexer.DiagnosticExcerpt(ctxExpr), err), helium.ErrorLevelFatal))
 		return nil
 	}
 
@@ -250,7 +252,8 @@ func (sp *schemaParser) compileTest(compileCtx context.Context, elem *helium.Ele
 
 	compiled, err := sp.engine.compile(testExpr)
 	if err != nil {
-		sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element %s: Failed to compile test expression '%s': %s\n", testTypeName(typ), testExpr, err), helium.ErrorLevelFatal))
+		sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element %s: Failed to compile test expression '%s': %s\n",
+			testTypeName(typ), lexer.DiagnosticExcerpt(testExpr), err), helium.ErrorLevelFatal))
 		return nil
 	}
 
@@ -300,7 +303,8 @@ func (sp *schemaParser) parseMessageElement(compileCtx context.Context, childEle
 		}
 		compiled, err := sp.engine.compile(path)
 		if err != nil {
-			sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element name: Failed to compile path '%s': %s\n", path, err), helium.ErrorLevelFatal))
+			sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element name: Failed to compile path '%s': %s\n",
+				lexer.DiagnosticExcerpt(path), err), helium.ErrorLevelFatal))
 			return append(parts, namePart{path: path})
 		}
 		return append(parts, namePart{path: path, expr: compiled})
@@ -315,7 +319,8 @@ func (sp *schemaParser) parseMessageElement(compileCtx context.Context, childEle
 			// Report the compile error through the handler (mirroring the
 			// <name path="..."> case and compileTest), then still add the
 			// part so the message structure is preserved.
-			sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element value-of: Failed to compile select expression '%s': %s\n", sel, err), helium.ErrorLevelFatal))
+			sp.eh.Handle(compileCtx, helium.NewLeveledError(fmt.Sprintf("element value-of: Failed to compile select expression '%s': %s\n",
+				lexer.DiagnosticExcerpt(sel), err), helium.ErrorLevelFatal))
 			return append(parts, valueOfPart{sel: sel})
 		}
 		return append(parts, valueOfPart{sel: sel, expr: compiled})

@@ -1453,7 +1453,9 @@ permits reluctant quantifiers and `(?:…)`. Stray-hyphen character-class ranges
 (`[^a-d-b-c]`) are a known remaining false-accept, deferred.
 
 **Compile-time IDC checks:** a malformed `xs:selector`/`xs:field` `@xpath` is a fatal schema parser error
-(`parseIDConstraint` → `reportIDCXPathError`). A silently-dropped `xpath1.Compile` failure would disable the
+(`parseIDConstraint` → `reportIDCXPathError`). The quoted source uses `lexer.DiagnosticExcerpt`, so the
+ErrorHandler diagnostic stays bounded and valid UTF-8 while short wording stays unchanged. A silently-dropped
+`xpath1.Compile` failure would disable the
 whole constraint. A structurally malformed IDC declaration is likewise fatal (`parseIDConstraint` →
 `reportIDCStructureError`, src-identity-constraint): a missing required `@name` (`The attribute 'name' is
 required but missing.`, drops the constraint), a missing `<selector>` child (`A child element is missing.`,
@@ -2114,6 +2116,9 @@ Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri
 `ErrorLevelFatal` diagnostic is emitted (no pattern, pattern with no rule, rule with no test, etc.),
 `Compile`/`CompileFile` return `ErrCompileFailed` with a **nil** `*Schema` — even when no error handler is
 configured, so a broken schema can never validate as success.
+
+Compilation errors that quote a rule context, assert/report test, name path, or value-of select bound the
+source through `lexer.DiagnosticExcerpt`; diagnostics stay valid UTF-8 and short wording stays unchanged.
 
 ### Validate: Document + Schema → Errors
 

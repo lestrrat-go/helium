@@ -883,7 +883,7 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
   (open content), `override.go` (xs:override), `inherited_attrs.go` (XSD 1.1 inherited attributes),
   `schema_decls.go` (schema-aware XPath adapter), `errors.go`
 - Imports: helium, xpath1/, xpath3/ (XSD 1.1 assertions + conditional type assignment), internal/domutil,
-  internal/lexicon
+  internal/lexicon, internal/xpath1/lexer
 - Status: see `.claude/docs/libxml2-parity.md` for libxml2 golden counts and W3C XSD 1.1 conformance run policy; do not cache branch-specific counts here
 
 ## relaxng/
@@ -1018,7 +1018,7 @@ XPointer expression evaluation with scheme cascading.
 - `ErrNilExpression` — sentinel returned by `Expression.Evaluate` when the receiver is nil or an uncompiled (zero-value) `Expression`
 - `ErrNilDocument` — sentinel returned by `Expression.Evaluate`/`Evaluate` when the document is nil
 - Files: `xpointer.go`
-- Imports: helium, xpath1/, internal/xmlchar/
+- Imports: helium, xpath1/, internal/xpath1/lexer, internal/xmlchar/
 
 ## schematron/
 
@@ -1045,7 +1045,7 @@ Schematron schema compilation and validation.
 - Files: `schematron.go` (API + config), `schema.go` (data model), `parse.go` (compilation), `validate.go`
   (validation), `errors.go` (error types + formatting), `querybinding.go` (binding resolution), `engine.go`
   (engine/runner/value seam), `engine_xpath1.go` + `engine_xpath3.go` (per-binding engines)
-- Imports: helium, internal/xpath, xpath1/, xpath3/, internal/xpath1/number
+- Imports: helium, internal/xpath, xpath1/, xpath3/, internal/xpath1/lexer, internal/xpath1/number
 
 ## catalog/
 
@@ -1525,7 +1525,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   Manifest inner-reference validation), `xslt_transform.go` (XSLT transform seam: `XSLTTransformer` +
   `parseXSLTTransform`), `reference_resolver.go` (external-reference resolver API + FSReferenceResolver),
   `keyinfo.go`, `retrieval_method.go` (ds:RetrievalMethod dereferencing), `errors.go`
-- Imports: helium, c14n/, xpath1/ (XPath filter transform)
+- Imports: helium, c14n/, xpath1/ (XPath filter transform), internal/xpath1/lexer
 
 ## xmlenc1/
 

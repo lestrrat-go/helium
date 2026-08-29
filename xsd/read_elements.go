@@ -11,6 +11,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -1654,7 +1655,8 @@ func (c *compiler) reportIDCXPathError(ctx context.Context, kind string, line in
 	if kind == elemField {
 		noun = "field"
 	}
-	msg := fmt.Sprintf("The %s XPath '%s' is not a valid %s expression: %s.", noun, xpath, noun, cause)
+	msg := fmt.Sprintf("The %s XPath '%s' is not a valid %s expression: %s.",
+		noun, lexer.DiagnosticExcerpt(xpath), noun, cause)
 	c.schemaError(ctx,
 		schemaParserErrorAttr(src, line, kind, kind, attrXPath, msg))
 }

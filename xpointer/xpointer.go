@@ -11,6 +11,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 	"github.com/lestrrat-go/helium/xpath1"
 )
 
@@ -66,7 +67,8 @@ func Compile(expr string) (*Expression, error) {
 		case "xpointer", "xpath1":
 			c, cerr := xpath1.Compile(p.body)
 			if cerr != nil {
-				return nil, fmt.Errorf("xpointer: XPath compilation failed in %s(%s): %w", p.scheme, p.body, cerr)
+				return nil, fmt.Errorf("xpointer: XPath compilation failed in %s(%s): %w",
+					p.scheme, lexer.DiagnosticExcerpt(p.body), cerr)
 			}
 			compiled[i] = c
 		case "xmlns":

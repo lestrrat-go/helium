@@ -10,15 +10,15 @@ xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/
                   → xpath1 (via xpointer)
                   → internal/xmlchar (via xpointer)
                   (helium.Parser.XInclude injects an xinclude.Processor through the helium.XIncludeProcessor interface — dependency inversion keeps this edge one-way; helium does NOT import xinclude)
-xpath1         → helium, internal/lexicon, internal/domutil
+xpath1         → helium, internal/lexicon, internal/domutil, internal/xpath1/lexer
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil, internal/writerctl
 xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, internal/writerctl, xslt3/internal/elements
-xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs
+xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, internal/xpath1/lexer, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
-schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/number
-xpointer       → helium, xpath1, internal/xmlchar
+schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/lexer, internal/xpath1/number
+xpointer       → helium, xpath1, internal/xpath1/lexer, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil
-xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil, internal/xmlbase64, internal/xmlchar
+xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil, internal/xpath1/lexer, internal/xmlbase64, internal/xmlchar
 xmldsig1/transform → helium, xmldsig1, xslt3  (opt-in xslt3-backed XSLTTransformer; kept out of xmldsig1 so the core never imports xslt3)
 xmlenc1        → helium, c14n, internal/domutil, internal/xmlbase64  (c14n converts the node-set a same-document xenc:CipherReference names into octets; c14n imports neither xmlenc1 nor xmldsig1, so the edge is one-way)
 html           → helium, sax, push, internal/xmlchar
@@ -37,6 +37,7 @@ push → (none)
 internal/heliumtest → (none)
 internal/sequence → (none)
 internal/strcursor → (none)
+internal/xpath1/lexer → (none)
 internal/unparsedtext → internal/xmlchar, internal/uripath, internal/iofs
 internal/catalog → internal/uripath
 internal/uripath → (none)
@@ -52,7 +53,9 @@ test           → helium
 ```
 
 ## Leaf packages (no helium deps)
-sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil, internal/encoding, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence, internal/strcursor, internal/writerctl, internal/xsdregex, internal/uripath
+sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil,
+internal/encoding, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence, internal/strcursor,
+internal/writerctl, internal/xpath1/lexer, internal/xsdregex, internal/uripath
 
 ## Core layer
 helium (root) → sax, enum, internal/*
@@ -61,10 +64,16 @@ helium (root) → sax, enum, internal/*
 c14n, xpath1, xpath3, html, catalog, relaxng, stream
 
 ## Security layer (depends on processing)
-xmldsig1 (root + c14n + xpath1 + internal/lexicon + internal/xmlchar; xpath1 backs the XPath filter transform), xmlenc1 (root + c14n; c14n converts the node-set a same-document xenc:CipherReference names into octets)
+xmldsig1 (root + c14n + xpath1 + internal/lexicon + internal/xpath1/lexer + internal/xmlchar; xpath1 backs the XPath filter
+transform), xmlenc1 (root + c14n; c14n converts the node-set a same-document xenc:CipherReference names into
+octets)
 
 ## Composition layer (depends on processing)
-xsd (root + xpath1 + xpath3 + internal/lexicon), xpointer (root + xpath1 + internal/xmlchar), schematron (root + xpath1 + xpath3 + internal/xpath + internal/xpath1/number; xpath1 backs the XPath 1.0 queryBinding, xpath3 the XPath 3.1 one), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)
+xsd (root + xpath1 + xpath3 + internal/lexicon + internal/xpath1/lexer), xpointer (root + xpath1 +
+internal/xpath1/lexer + internal/xmlchar), schematron (root + xpath1 + xpath3 + internal/xpath +
+internal/xpath1/lexer + internal/xpath1/number; xpath1 backs the XPath 1.0 queryBinding, xpath3 the XPath 3.1
+one), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 +
+xsd + html + internal/elements), shim (root + stream)
 
 ## Application layer
 internal/cli/heliumcmd (CLI implementation)

@@ -1,9 +1,13 @@
 package xpointer_test
 
 import (
+	"runtime"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/lestrrat-go/helium/xpointer"
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +57,41 @@ func TestCompile_ReportsXPathSyntaxErrorEarly(t *testing.T) {
 	t.Parallel()
 	_, err := xpointer.Compile("xpath1(///)")
 	require.Error(t, err, "compile should reject malformed xpath1 body")
+}
+
+func TestCompileDiagnosticExcerpt(t *testing.T) {
+	t.Run("short wording is unchanged", func(t *testing.T) {
+		_, err := xpointer.Compile("xpath1(1 foo)")
+		require.EqualError(t, err,
+			`xpointer: XPath compilation failed in xpath1(1 foo): xpath: unexpected token: Name("foo") after expression`)
+		require.ErrorIs(t, err, xpath1.ErrUnexpectedToken)
+	})
+
+	t.Run("long multibyte body is bounded", func(t *testing.T) {
+		body := "1 " + strings.Repeat("界", 1<<19)
+		input := "xpath1(" + body + ")"
+		var err error
+		allocated := xpointerCompileAllocatedBytes(t, func() {
+			_, err = xpointer.Compile(input)
+		})
+
+		require.ErrorIs(t, err, xpath1.ErrUnexpectedToken)
+		require.LessOrEqual(t, len(err.Error()), 1024)
+		require.True(t, utf8.ValidString(err.Error()))
+		require.Contains(t, err.Error(), "[truncated]")
+		require.Less(t, allocated, uint64(1<<20))
+	})
+}
+
+func xpointerCompileAllocatedBytes(t *testing.T, fn func()) uint64 {
+	t.Helper()
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	fn()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }
 
 func TestParseFragmentID(t *testing.T) {

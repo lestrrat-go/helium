@@ -153,12 +153,15 @@ loads) and the caller owns its lifecycle, closing it once the resulting value is
 
 ## Package-Specific Error Formatting
 
-### XPath 1.0 (`xpath1`)
+### XPath expression excerpts (`internal/xpath1/lexer/diagnostic.go`)
 
-Diagnostics bound each caller-controlled token, QName, namespace prefix, namespace URI, variable name, or
-expression excerpt to 128 bytes, including a `...[truncated]` marker. Excerpts end on a UTF-8 rune boundary;
-invalid UTF-8 is replaced before formatting. Short valid excerpts retain their existing wording, and wrapped
-sentinels such as `ErrUnexpectedToken` and `ErrUnknownNamespacePrefix` remain matchable with `errors.Is`.
+`lexer.DiagnosticExcerpt` bounds each caller-controlled token, QName, namespace prefix, namespace URI,
+variable name, or expression excerpt to 128 bytes, including a `...[truncated]` marker. Excerpts end on a UTF-8
+rune boundary; invalid UTF-8 is replaced before formatting. Short valid excerpts retain their wording.
+`xpath1` uses it for its own diagnostics. `xpointer` XPath-scheme compilation, `xmldsig1` general-XPointer
+preparation, XSD identity-constraint selector/field compilation, and Schematron context/test/name/value-of
+compilation use the same helper before reinserting source expressions. Wrapped sentinels remain matchable via
+the package's existing error chain.
 
 ### XSD (`xsd/errors.go`)
 
