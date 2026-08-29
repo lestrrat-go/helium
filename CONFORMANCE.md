@@ -4,6 +4,11 @@
 
 Every tagged release measured **unmodified** against *today's* W3C suites (reference: `v0.8.0`). See [tools/conformance-timeline](tools/conformance-timeline/README.md) for the method.
 
+The columns cover test corpora with different breadth; see each owning package README's conformance section for
+[XML](README.md#w3c-conformance-suites), [XSD](xsd/README.md#conformance), [XSLT](xslt3/README.md#conformance),
+[XPath](xpath3/README.md#conformance), [XML Signature](xmldsig1/README.md#w3c-interop-conformance), and
+[XML Encryption](xmlenc1/README.md#w3c-interop-conformance).
+
 ![conformance by release](tools/conformance-timeline/conformance-timeline.svg)
 
 ## Score by release
