@@ -495,7 +495,9 @@ func (c *compiler) checkEnumQNameAndNotation(ctx context.Context) {
 		}
 
 		component := td.Name.Local
-		if component == "" || e.src.isLocal {
+		if td.IsComplex {
+			component = complexTypeComponent(td, e.src)
+		} else if component == "" || e.src.isLocal {
 			component = componentLocalSimpleType
 		}
 
@@ -1045,7 +1047,9 @@ func (c *compiler) checkAnyAtomicTypeUsage(ctx context.Context) {
 	for _, e := range entries {
 		td := e.td
 		component := td.Name.Local
-		if component == "" || e.src.isLocal {
+		if td.IsComplex {
+			component = complexTypeComponent(td, e.src)
+		} else if component == "" || e.src.isLocal {
 			component = componentLocalSimpleType
 		}
 		report := func(role string) {
@@ -1194,11 +1198,10 @@ func (c *compiler) checkAnySimpleTypeUsage(ctx context.Context) {
 			elemKind = elemSimpleType
 		}
 		component := td.Name.Local
-		if component == "" || e.src.isLocal {
+		if td.IsComplex {
+			component = complexTypeComponent(td, e.src)
+		} else if component == "" || e.src.isLocal {
 			component = componentLocalSimpleType
-			if td.IsComplex {
-				component = componentLocalComplexType
-			}
 		}
 		report := func(role string) {
 			c.schemaError(ctx, schemaComponentError(c.filename, e.src.line, elemKind, component,

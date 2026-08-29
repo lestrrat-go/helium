@@ -177,6 +177,9 @@ package's existing error chain.
 | `schemaElemDeclError()` | `{file}:{line}: element element: Schemas parser error : element decl. '{name}': {msg}\n` |
 | `schemaElemDeclErrorAttr()` | `{file}:{line}: element element: Schemas parser error : element decl. '{name}', attribute '{attr}': {msg}\n` |
 
+`complexTypeComponent(td, src)` owns complex-type component labels: a global definition is
+`complex type 'name'`; an anonymous/local definition is `local complex type`.
+
 ### RELAX NG (`relaxng/errors.go`)
 
 | Function | Format |

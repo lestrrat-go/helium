@@ -528,3 +528,50 @@ func TestElementConsistent(t *testing.T) {
 		}
 	})
 }
+
+func TestElementConsistentComponentLabels(t *testing.T) {
+	t.Parallel()
+
+	const global = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:sequence>
+      <xs:element name="a" type="xs:int"/>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>`
+	const local = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name   string
+		schema string
+		want   string
+	}{
+		{
+			"global",
+			global,
+			"complex type 'T': Two elements with the same name 'a' and namespace '', " +
+				"but different type definitions, appear in the content model.",
+		},
+		{
+			"local",
+			local,
+			"local complex type: Two elements with the same name 'a' and namespace '', " +
+				"but different type definitions, appear in the content model.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Contains(t, compileSchemaErrorsVersion(t, tc.schema, false), tc.want)
+		})
+	}
+}

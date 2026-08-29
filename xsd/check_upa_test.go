@@ -518,6 +518,51 @@ func TestUPADeterminism(t *testing.T) {
 	})
 }
 
+func TestUPAComponentLabels(t *testing.T) {
+	t.Parallel()
+
+	const global = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="T">
+    <xs:choice>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="a" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+</xs:schema>`
+	const local = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="a" type="xs:string"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+	for _, tc := range []struct {
+		name   string
+		schema string
+		want   string
+	}{
+		{"global", global, "complex type 'T': The content model is not determinist."},
+		{"local", local, "local complex type: The content model is not determinist."},
+	} {
+		for _, version := range []struct {
+			name string
+			v11  bool
+		}{
+			{"xsd10", false},
+			{"xsd11", true},
+		} {
+			t.Run(tc.name+"/"+version.name, func(t *testing.T) {
+				t.Parallel()
+				require.Contains(t, compileSchemaErrorsVersion(t, tc.schema, version.v11), tc.want)
+			})
+		}
+	}
+}
+
 // TestUPAFiniteCountedRepetitionInstance verifies that a deterministic counted
 // model `a{2}, a` not only compiles cleanly but also validates an instance with
 // three `a` children (xmllint accepts this schema + instance).

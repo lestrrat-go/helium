@@ -193,7 +193,8 @@ func TestFinalDefault(t *testing.T) {
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
 		_, errs := compileWithErrors(t, schemaXML)
-		require.Contains(t, errs, "Derivation by restriction is forbidden")
+		require.Contains(t, errs,
+			"complex type 'derivedType': Derivation by restriction is forbidden by the base type 'baseType'.")
 	})
 
 	t.Run("finalDefault=extension produces compile error for extension derivation", func(t *testing.T) {
@@ -217,7 +218,8 @@ func TestFinalDefault(t *testing.T) {
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
 		_, errs := compileWithErrors(t, schemaXML)
-		require.Contains(t, errs, "Derivation by extension is forbidden")
+		require.Contains(t, errs,
+			"complex type 'derivedType': Derivation by extension is forbidden by the base type 'baseType'.")
 	})
 }
 

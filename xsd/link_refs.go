@@ -3639,19 +3639,12 @@ func (c *compiler) checkFinalOnTypes(ctx context.Context) {
 		// Check base type final for extension/restriction derivation.
 		if td.BaseType != nil && td.BaseType.Final != 0 {
 			baseFinal := td.BaseType.Final
+			component := complexTypeComponent(td, src)
 			if td.Derivation == DerivationExtension && baseFinal&FinalExtension != 0 {
-				component := td.Name.Local
-				if src.isLocal {
-					component = componentLocalComplexType
-				}
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by extension is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
 			}
 			if td.Derivation == DerivationRestriction && baseFinal&FinalRestriction != 0 {
-				component := td.Name.Local
-				if src.isLocal {
-					component = componentLocalComplexType
-				}
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by restriction is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
 			}
