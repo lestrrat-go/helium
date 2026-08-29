@@ -81,35 +81,29 @@ func TestApplyXPathFilterEvaluationError(t *testing.T) {
 	doc := mustParse(t, `<root/>`)
 	compiled := xpath1.MustCompile("boolean(true())")
 
-	canceledCtx, cancel := context.WithCancel(t.Context())
-	cancel()
-	deadlineCtx, deadlineCancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
-	t.Cleanup(deadlineCancel)
-
 	tests := []struct {
-		name    string
-		ctx     context.Context
-		expr    *xpath1.Expression
-		cause   error
-		wantErr string
+		name       string
+		contextErr error
+		expr       *xpath1.Expression
+		cause      error
+		wantErr    string
 	}{
 		{
-			name:    "canceled context",
-			ctx:     canceledCtx,
-			expr:    compiled,
-			cause:   context.Canceled,
-			wantErr: "xmldsig1: unsupported transform: XPath transform evaluation failed: context canceled",
+			name:       "canceled context",
+			contextErr: context.Canceled,
+			expr:       compiled,
+			cause:      context.Canceled,
+			wantErr:    "xmldsig1: unsupported transform: XPath transform evaluation failed: context canceled",
 		},
 		{
-			name:    "expired deadline",
-			ctx:     deadlineCtx,
-			expr:    compiled,
-			cause:   context.DeadlineExceeded,
-			wantErr: "xmldsig1: unsupported transform: XPath transform evaluation failed: context deadline exceeded",
+			name:       "expired deadline",
+			contextErr: context.DeadlineExceeded,
+			expr:       compiled,
+			cause:      context.DeadlineExceeded,
+			wantErr:    "xmldsig1: unsupported transform: XPath transform evaluation failed: context deadline exceeded",
 		},
 		{
 			name:    "ordinary evaluator error",
-			ctx:     t.Context(),
 			cause:   xpath1.ErrNilExpression,
 			wantErr: "xmldsig1: unsupported transform: XPath transform evaluation failed: xpath: nil or uncompiled expression",
 		},
@@ -117,8 +111,19 @@ func TestApplyXPathFilterEvaluationError(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctx := t.Context()
+			switch test.contextErr {
+			case context.Canceled:
+				canceledCtx, cancel := context.WithCancel(t.Context())
+				cancel()
+				ctx = canceledCtx
+			case context.DeadlineExceeded:
+				deadlineCtx, deadlineCancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+				t.Cleanup(deadlineCancel)
+				ctx = deadlineCtx
+			}
 			kept, err := applyXPathFilter(
-				test.ctx,
+				ctx,
 				[]helium.Node{doc.DocumentElement()},
 				xpathFilter{expr: test.expr},
 			)
@@ -135,8 +140,19 @@ func TestApplyXPathFilterEvaluationError(t *testing.T) {
 }
 
 type xpathEvaluationErrorContext struct {
-	context.Context
 	err error
+}
+
+func (xpathEvaluationErrorContext) Deadline() (time.Time, bool) {
+	return time.Time{}, false
+}
+
+func (xpathEvaluationErrorContext) Done() <-chan struct{} {
+	return nil
+}
+
+func (xpathEvaluationErrorContext) Value(any) any {
+	return nil
 }
 
 func (c xpathEvaluationErrorContext) Err() error {
@@ -144,7 +160,7 @@ func (c xpathEvaluationErrorContext) Err() error {
 	if ok && strings.HasSuffix(filepath.ToSlash(file), "/xpath1/eval.go") {
 		return c.err
 	}
-	return c.Context.Err()
+	return nil
 }
 
 func TestVerifyXPathFilterCancellationErrorChain(t *testing.T) {
@@ -174,7 +190,7 @@ func TestVerifyXPathFilterCancellationErrorChain(t *testing.T) {
 	require.NoError(t, transform.AddChild(xpathElem))
 	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
 
-	ctx := xpathEvaluationErrorContext{Context: t.Context(), err: context.Canceled}
+	ctx := xpathEvaluationErrorContext{err: context.Canceled}
 	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(ctx, doc)
 	require.ErrorIs(t, err, ErrUnsupportedTransform)
 	require.ErrorIs(t, err, context.Canceled)
