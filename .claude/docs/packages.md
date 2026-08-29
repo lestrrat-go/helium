@@ -1995,8 +1995,8 @@ whose resolver returns `[]byte` and has no stream to close. -->
   resolver returning a nil stream with a nil error is refused as `ErrReferenceNotFound`.
   `xmlenc1.ReferenceResolver` returns `io.ReadCloser` while `xmldsig1.ReferenceResolver` returns `[]byte`, so
   one value does NOT satisfy both, and NEITHER package imports the other
-- xmlenc-core1 is implemented except where the package deliberately departs from it, and each departure is
-  named with its reason. Triple DES (`#tripledes-cbc`, §5.2.2 REQUIRED; `#kw-tripledes`, §5.7.1 REQUIRED) is
+- `xmlenc1/README.md`'s "Conformance scope" names the package's conformance exceptions and optional
+  limitations. Triple DES (`#tripledes-cbc`, §5.2.2 REQUIRED; `#kw-tripledes`, §5.7.1 REQUIRED) is
   REFUSED, not pending — a 64-bit block cipher is subject to Sweet32 (CVE-2016-2183) and NIST SP 800-131A Rev.
   2 disallows TDEA encryption after 2023; the specification marks it REQUIRED because it predates that
   retirement, and this package follows the retirement, so neither URI will be implemented: block encryption

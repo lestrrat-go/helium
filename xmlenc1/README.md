@@ -274,10 +274,9 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
 
 ## Conformance scope
 
-This package implements W3C xmlenc-core1, and where it deliberately departs
-from the specification it names the departure and the reason for it. One
-algorithm the specification marks REQUIRED is refused, and the refusal is
-deliberate and permanent:
+This package implements W3C xmlenc-core1 with the conformance exceptions and
+optional limitations documented below. Triple DES is the one REQUIRED
+algorithm it refuses, and that refusal is deliberate and permanent:
 
 - **Triple DES** — `#tripledes-cbc` (§5.2.2, REQUIRED) and `#kw-tripledes`
   (§5.7.1, REQUIRED) — refused deliberately, and this package will not
