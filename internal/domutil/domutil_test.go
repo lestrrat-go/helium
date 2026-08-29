@@ -11,6 +11,7 @@ import (
 )
 
 var namespaceLookupSink string
+var namespaceLookupNSSink *helium.Namespace
 
 func TestLookupNSPrefixURI(t *testing.T) {
 	t.Parallel()
@@ -185,6 +186,43 @@ func TestLookupNSURI(t *testing.T) {
 		require.Nil(t, ns)
 		require.Nil(t, helium.LookupNSByHref(leaf, "urn:target"))
 	})
+}
+
+func TestLookupNSURIAllocations(t *testing.T) {
+	for _, width := range []int{64, 512} {
+		t.Run(fmt.Sprintf("width %d", width), func(t *testing.T) {
+			doc := helium.NewDefaultDocument()
+			root, err := doc.CreateElement("root")
+			require.NoError(t, err)
+			require.NoError(t, doc.AddChild(root))
+
+			for i := range width {
+				require.NoError(t, root.DeclareNamespace(fmt.Sprintf("p%d", i), fmt.Sprintf("urn:%d", i)))
+			}
+			leaf, err := doc.CreateElement("leaf")
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(leaf))
+			target := fmt.Sprintf("urn:%d", width-1)
+
+			internalAllocs := testing.AllocsPerRun(20, func() {
+				ns, found := domutil.LookupNSURI(leaf, target)
+				if !found {
+					panic("namespace not found")
+				}
+				namespaceLookupNSSink = ns
+			})
+			publicAllocs := testing.AllocsPerRun(20, func() {
+				ns := helium.LookupNSByHref(leaf, target)
+				if ns == nil {
+					panic("namespace not found")
+				}
+				namespaceLookupNSSink = ns
+			})
+
+			require.Zero(t, internalAllocs, "internal URI lookup must not allocate")
+			require.Zero(t, publicAllocs, "public URI lookup must not allocate")
+		})
+	}
 }
 
 // TestFindElementsByID pins the FROZEN ID-name rule FindElementsByID and

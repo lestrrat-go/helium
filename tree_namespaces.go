@@ -32,7 +32,6 @@ func namespaceByPrefix(start Node, prefix string) (*Namespace, bool) {
 // declaration or undeclaration hides every ancestor binding for the same
 // prefix, even when the nearer URI does not match.
 func namespaceByURI(start Node, uri string) (*Namespace, bool) {
-	seenPrefixes := make(map[string]struct{})
 	for node := start; !isNilNode(node); node = node.Parent() {
 		el, ok := node.(*Element)
 		if !ok {
@@ -42,12 +41,11 @@ func namespaceByURI(start Node, uri string) (*Namespace, bool) {
 			if ns == nil {
 				continue
 			}
-			prefix := ns.Prefix()
-			if _, seen := seenPrefixes[prefix]; seen {
+			if ns.URI() != uri {
 				continue
 			}
-			seenPrefixes[prefix] = struct{}{}
-			if ns.URI() == uri {
+			active, found := namespaceByPrefix(start, ns.Prefix())
+			if found && active == ns {
 				return ns, true
 			}
 		}
