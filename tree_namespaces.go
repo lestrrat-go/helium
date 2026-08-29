@@ -8,6 +8,17 @@ import (
 func init() {
 	nslookup.PrefixURI = namespacePrefixURI
 	nslookup.ByURI = namespaceByURIHook
+	nslookup.DeclarationAt = namespaceDeclarationAt
+}
+
+// namespaceDeclarationAt exposes one raw declaration through the internal
+// bridge without copying the containing slice.
+func namespaceDeclarationAt(elem any, index int) (any, bool) {
+	el, ok := elem.(*Element)
+	if !ok || isNilNode(el) || index < 0 || index >= len(el.nsDefs) {
+		return nil, false
+	}
+	return el.nsDefs[index], true
 }
 
 // namespaceByPrefix walks raw namespace declarations without cloning each

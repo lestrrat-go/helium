@@ -420,9 +420,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   callers cannot replace or append entries in the element's private `nsDefs`.
   `LookupNSByPrefix` and `LookupNSByHref` scan the raw declarations without
   cloning while preserving nearest-ancestor shadowing and the public implicit
-  `xml` binding. Sibling-package bare lookups run through `internal/domutil` and
-  `internal/nslookup`; they preserve undeclarations and intentionally do not
-  synthesize `xml`.
+  `xml` binding. Sibling-package bare lookups and indexed declaration reads run
+  through `internal/domutil` and `internal/nslookup`; the lookups preserve
+  undeclarations and intentionally do not synthesize `xml`.
 - `UnlinkNode(n MutableNode)` — detaches `n` from its parent/sibling chain; a nil or typed-nil `n` is a no-op.
   `node.Replace(...Node) → error` (guarded) rejects an EMPTY replacement set with `ErrInvalidOperation`
   (matching `Document.Replace`; use `UnlinkNode` to delete), a nil/typed-nil operand with `ErrNilNode`, and a
@@ -1194,7 +1194,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
     (default 65,536) caps the complete node-set members collected and evaluated by one XPath filter,
     including every element's full in-scope namespace axis. Exceeding any →
     `ErrResourceLimitExceeded`. Per builder, `n==0` selects the default and `n<0` disables the cap. The
-    XPath limit is checked before the over-limit namespace wrapper is allocated and before evaluation;
+    XPath limit is checked before the over-limit member is added or evaluation begins; namespace declaration
+    and attribute iteration stop at the boundary without copying the complete over-limit collection.
     `ctx.Err()` takes priority when cancellation and the boundary coincide. The `verifyBudget` also polls
     `ctx.Err()` inside the KeyInfo/Reference parse loops (not
     just at their boundaries), so a cancelled ctx/passed deadline stops the parse promptly. `MaxDecodedBytes`
@@ -2207,11 +2208,12 @@ Generic bitset operations for bitmask types.
 
 ## internal/nslookup/
 
-Read-only bridge for namespace declaration lookup. Package helium installs the
-prefix and URI lookup hooks during init; sibling packages use them through
-`internal/domutil` to search the private `nsDefs` storage without cloning it or
-adding a public raw-slice accessor. The bridge imports nothing, so helium can
-register the hooks without an import cycle.
+Read-only bridge for namespace declaration access. Package helium installs the
+prefix and URI lookup hooks plus an indexed declaration hook during init;
+sibling packages use them through `internal/domutil` to read the private
+`nsDefs` storage without cloning it or adding a public raw-slice accessor. The
+bridge imports nothing, so helium can register the hooks without an import
+cycle.
 
 - Files: `nslookup.go`
 - Imports: none
@@ -2222,7 +2224,8 @@ Shared DOM/QName helpers used by processing packages. Namespace lookup uses
 `internal/nslookup` to scan private declaration storage without cloning it;
 `LookupNSPrefixURI` and `LookupNSURI` preserve nearest-ancestor shadowing and
 empty-URI undeclarations, and neither synthesizes the implicit `xml` binding.
-`Element.Namespaces()` remains the public defensive-copy accessor.
+`NamespaceDeclarationAt` reads one declaration without cloning the containing
+slice. `Element.Namespaces()` remains the public defensive-copy accessor.
 
 - Files: `domutil.go`, `id.go`
 - Imports: helium, enum, internal/lexicon, internal/nslookup, internal/xmlchar

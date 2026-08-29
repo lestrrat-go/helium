@@ -117,6 +117,18 @@ func LookupNSURI(start helium.Node, uri string) (*helium.Namespace, bool) {
 	return ns, ok
 }
 
+// NamespaceDeclarationAt returns one namespace declaration from e by index.
+// It reads the element's private declaration storage without cloning the whole
+// slice, so callers with a resource cap can stop before visiting the remainder.
+func NamespaceDeclarationAt(e *helium.Element, index int) (*helium.Namespace, bool) {
+	raw, found := nslookup.DeclarationAt(e, index)
+	if !found {
+		return nil, false
+	}
+	ns, ok := raw.(*helium.Namespace)
+	return ns, ok
+}
+
 // SplitLexicalQName trims surrounding whitespace from s, splits it at the first
 // ':' into prefix and local, and validates each part as an NCName. It is
 // error-code free: callers map a failure to whatever XPath error code

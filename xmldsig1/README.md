@@ -534,9 +534,11 @@ needs its own axis. The node set and its evaluations can therefore be quadratic
 in the document. `MaxXPathFilterNodes` bounds the members collected and
 evaluated by one filter while preserving the complete standards-required axis
 for every accepted input. The limit is checked before the over-limit namespace
-wrapper is allocated and before evaluation begins. It applies to same-document
-References, external or intermediate octets parsed for a later XPath transform,
-Manifest inner references, and `ds:RetrievalMethod` transforms.
+wrapper is allocated and before evaluation begins. Namespace declaration and
+attribute iteration stop at the boundary without copying the complete
+over-limit collection. The limit applies to same-document References, external
+or intermediate octets parsed for a later XPath transform, Manifest inner
+references, and `ds:RetrievalMethod` transforms.
 
 Both collection and per-node evaluation also poll `ctx`. A context error wins
 when cancellation coincides with the member boundary. Keep the default finite

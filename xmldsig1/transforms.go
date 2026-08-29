@@ -990,7 +990,11 @@ func (c *subtreeCollector) seedRootScope(ctx context.Context, elem *helium.Eleme
 	}
 
 	for _, anc := range slices.Backward(chain) {
-		for _, ns := range anc.Namespaces() {
+		for i := 0; ; i++ {
+			ns, ok := domutil.NamespaceDeclarationAt(anc, i)
+			if !ok {
+				break
+			}
 			if err := c.seedRootBinding(ctx, ns); err != nil {
 				return err
 			}
@@ -1049,10 +1053,13 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 		if err := c.appendNamespaceNodes(ctx, elem, root, changed); err != nil {
 			return err
 		}
-		for _, attr := range elem.Attributes() {
-			if err := c.add(ctx, attr); err != nil {
-				return err
-			}
+		var attrErr error
+		elem.ForEachAttribute(func(attr *helium.Attribute) bool {
+			attrErr = c.add(ctx, attr)
+			return attrErr == nil
+		})
+		if attrErr != nil {
+			return attrErr
 		}
 	}
 
@@ -1153,7 +1160,11 @@ func (c *subtreeCollector) enter(ctx context.Context, elem *helium.Element, rema
 		changed = c.bind(ns, changed, &seen)
 		return nil
 	}
-	for _, ns := range elem.Namespaces() {
+	for i := 0; ; i++ {
+		ns, ok := domutil.NamespaceDeclarationAt(elem, i)
+		if !ok {
+			break
+		}
 		if err := bind(ns); err != nil {
 			return nil, err
 		}
