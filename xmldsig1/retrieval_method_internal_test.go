@@ -57,6 +57,11 @@ type abortingRetrievalParserSAX struct {
 	starts int
 }
 
+type unavailableRetrievalParserSAX struct {
+	*helium.TreeBuilder
+	starts int
+}
+
 func (s *abortingRetrievalParserSAX) StartElementNS(
 	ctx context.Context,
 	localname, prefix, uri string,
@@ -69,6 +74,22 @@ func (s *abortingRetrievalParserSAX) StartElementNS(
 		s.abort()
 	}
 	return err
+}
+
+func (s *unavailableRetrievalParserSAX) StartElementNS(
+	ctx context.Context,
+	localname, prefix, uri string,
+	namespaces []sax.Namespace,
+	attrs []sax.Attribute,
+) error {
+	s.starts++
+	if err := s.TreeBuilder.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs); err != nil {
+		return err
+	}
+	if s.starts == 2 {
+		return ErrReferenceNotFound
+	}
+	return nil
 }
 
 type retrievalParseDeadlineContext struct {
@@ -765,6 +786,28 @@ func TestRetrievalMethodLenientKeyInfo(t *testing.T) {
 
 		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+	})
+
+	t.Run("resolved parser error sharing unavailable sentinel still fails hard when lenient", func(t *testing.T) {
+		const resource = `<ds:X509Data xmlns:ds="` + NamespaceDSig + `"><child/></ds:X509Data>`
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="keyinfo/data.xml" Type="`+
+			TypeX509Data+`"/></ds:KeyInfo>`)
+		handler := &unavailableRetrievalParserSAX{TreeBuilder: helium.NewTreeBuilder()}
+		parser := helium.NewParser().SAXHandler(handler)
+		resolver := &countingReferenceResolver{octets: []byte(resource)}
+		cfg := &verifierConfig{
+			lenientKeyInfo:    true,
+			referenceParser:   &parser,
+			referenceResolver: resolver,
+		}
+		inlineCert := &x509.Certificate{Raw: []byte("inline certificate")}
+		data := &KeyInfoData{X509Certificates: []*x509.Certificate{inlineCert}}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.EqualValues(t, 1, resolver.calls.Load())
+		require.Equal(t, []*x509.Certificate{inlineCert}, data.X509Certificates)
 	})
 
 	t.Run("unsupported Type still fails hard when lenient", func(t *testing.T) {
