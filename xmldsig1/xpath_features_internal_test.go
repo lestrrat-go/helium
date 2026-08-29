@@ -382,6 +382,14 @@ func TestGeneralXPointerResolution(t *testing.T) {
 		require.Equal(t, findLocal(doc.DocumentElement(), "a"), target)
 	})
 
+	t.Run("malformed unused xmlns prefix is rejected", func(t *testing.T) {
+		doc := mustParse(t, `<root/>`)
+		ref := xpointerRef("#xmlns(\u00a0p=urn:t)xpointer(/root)")
+		cfg := &verifierConfig{allowXPointer: true}
+		_, _, _, err := canonicalizeReference(t.Context(), cfg, doc, nil, ref)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+
 	for _, tc := range []struct {
 		name string
 		uri  string

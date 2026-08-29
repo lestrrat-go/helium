@@ -211,7 +211,9 @@ By default a `Reference` URI is resolved fail-closed to the four same-document
 forms above. `Verifier.AllowXPointer(true)` additionally resolves a general
 XPointer framework URI — zero or more `xmlns(prefix=uri)` scheme parts followed
 by one `xpointer(<expr>)` part, for example
-`#xmlns(a=urn:x)xpointer(//a:Target)`. It stays fail-closed by default: with
+`#xmlns(a=urn:x)xpointer(//a:Target)`. Each `xmlns()` prefix must be an XML
+NCName; a malformed binding cannot select a same-document target even when the
+XPath does not use it. It stays fail-closed by default: with
 `AllowXPointer` off, a general XPointer URI is treated as an external reference
 and, without a `ReferenceResolver`, rejected with `ErrReferenceNotFound`, so
 default verification is unchanged.

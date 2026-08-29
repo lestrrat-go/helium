@@ -13,6 +13,7 @@ import (
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath1"
 
 	helium "github.com/lestrrat-go/helium"
@@ -1320,7 +1321,7 @@ func nextSchemePart(s string) (string, string, string, bool) {
 }
 
 // parseXmlnsPart splits an xmlns() scheme part's data "prefix=uri" into its
-// prefix and namespace URI. A missing "=" or an empty prefix is malformed.
+// prefix and namespace URI. A missing "=" or an invalid NCName prefix is malformed.
 func parseXmlnsPart(data string) (string, string, bool) {
 	rawPrefix, rawNS, ok := strings.Cut(data, "=")
 	if !ok {
@@ -1328,7 +1329,7 @@ func parseXmlnsPart(data string) (string, string, bool) {
 	}
 	// XPointer's xmlns() scheme uses XML S, not all Unicode whitespace.
 	prefix := strings.Trim(rawPrefix, " \t\r\n")
-	if prefix == "" {
+	if !xmlchar.IsValidNCName(prefix) {
 		return "", "", false
 	}
 	return prefix, strings.Trim(rawNS, " \t\r\n"), true

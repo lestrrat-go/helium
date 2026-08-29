@@ -1394,8 +1394,10 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
 - **General XPointer resolution (opt-in, verify-only, `transforms.go`)**: `Verifier.AllowXPointer(true)`
   extends same-document resolution to an XPointer framework URI — zero+ `xmlns(prefix=uri)` scheme parts then
   one `xpointer(<expr>)` (`parseGeneralXPointer`, respecting balanced parens and `^(`/`^)`/`^^` circumflex
-  escaping). Default OFF: a general XPointer stays fail-closed as an external reference, so the four-form
-  default is byte-identical. When on, `prepareGeneralXPointer` statically validates the `xpointer()` XPath on
+  escaping). Each `xmlns()` prefix must be an XML NCName; a malformed binding cannot select a same-document
+  target even when the XPath does not use it. Default OFF: a general XPointer stays fail-closed as an external
+  reference, so the four-form default is byte-identical. When on, `prepareGeneralXPointer` statically validates
+  the `xpointer()` XPath on
   the shared bounded evaluator with the document element's in-scope namespaces overlaid by the `xmlns()`
   overrides (`xpointerNamespaces`), so an unresolved variable/function/prefix fails as `ErrReferenceNotFound`
   before evaluation. `resolvePreparedGeneralXPointerTarget` then evaluates the expression and enforces a
