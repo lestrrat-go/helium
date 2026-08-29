@@ -348,7 +348,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   never carry the one production foreign-link source `wouldCreateCycle` exists to catch. `appendCopiedChild`
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior
-  for that unrelated caller too.
+  for that unrelated caller too. `CopyDoc` builds the fresh document child list before `CopyExtSubset` records
+  its off-chain claim on the destination document, so each document-level append can use the recorded owned
+  tail instead of walking the growing child list.
 - `DeclareNamespace(prefix, uri)` / `AddNamespaceDecl(ns)` — do NOT themselves add a second declaration for a
   prefix in `nsDefs`, and NEVER touch the node's active namespace (`n.ns`) or expanded name.
   `DeclareNamespace` allocates a fresh `*Namespace`; `AddNamespaceDecl` attaches the caller's existing object

@@ -78,15 +78,12 @@ func CopyDoc(src *Document) (*Document, error) {
 		}
 	}
 
-	// Deep-copy the external subset too (independent *DTD, not aliased). The lazy
-	// GetElementByID fallback consults it for ID-typed ATTLIST declarations, so a
-	// copy that dropped it would resolve fewer ids than the source.
-	CopyExtSubset(src, dst)
-
 	// Copy all document children (the DTD was already handled) through the shared
 	// core in over-declare / AddChild mode, reproducing the historical behavior.
 	// onCopy records the source->copy element correspondence so the ID table can be
 	// rebuilt against the copy's own elements, aliasing nothing in the source map.
+	// Build this fresh child list before CopyExtSubset records its off-chain claim
+	// on dst; otherwise every append must walk the growing list to recover its tail.
 	var onCopy func(src, cp Node)
 	var corr elemCorrespondence
 	if len(src.ids) > 0 {
@@ -97,6 +94,11 @@ func CopyDoc(src *Document) (*Document, error) {
 	if err := dc.copyChildren(src, dst, nil, nil); err != nil {
 		return nil, err
 	}
+
+	// Deep-copy the external subset too (independent *DTD, not aliased). The lazy
+	// GetElementByID fallback consults it for ID-typed ATTLIST declarations, so a
+	// copy that dropped it would resolve fewer ids than the source.
+	CopyExtSubset(src, dst)
 
 	// Rebuild the interned ID table by translating each source entry's element
 	// through the source->copy correspondence, so id()/GetElementByID on the copy
