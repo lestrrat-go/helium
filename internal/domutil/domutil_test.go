@@ -134,19 +134,57 @@ func TestLookupNSPrefixURIAllocationScaling(t *testing.T) {
 func TestLookupNSURI(t *testing.T) {
 	t.Parallel()
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(
-		`<root xmlns:q="urn:shared"><child xmlns:p="urn:shared"><leaf/></child></root>`,
-	))
-	require.NoError(t, err)
-	child := doc.DocumentElement().FirstChild().(*helium.Element)
-	leaf := child.FirstChild().(*helium.Element)
+	t.Run("nearest declaration wins", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<root xmlns:q="urn:shared"><child xmlns:p="urn:shared"><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
 
-	ns, found := domutil.LookupNSURI(leaf, "urn:shared")
-	require.True(t, found)
-	require.Equal(t, "p", ns.Prefix(), "the nearest declaration must win")
+		ns, found := domutil.LookupNSURI(leaf, "urn:shared")
+		require.True(t, found)
+		require.Equal(t, "p", ns.Prefix(), "the nearest declaration must win")
 
-	_, found = domutil.LookupNSURI(leaf, "http://www.w3.org/XML/1998/namespace")
-	require.False(t, found, "the bare declaration lookup must not synthesize xml")
+		_, found = domutil.LookupNSURI(leaf, "http://www.w3.org/XML/1998/namespace")
+		require.False(t, found, "the bare declaration lookup must not synthesize xml")
+	})
+
+	t.Run("nearer prefix rebind hides ancestor URI", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<root xmlns:p="urn:target"><child xmlns:p="urn:other"><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
+
+		uri, found := domutil.LookupNSPrefixURI(leaf, "p")
+		require.True(t, found)
+		require.Equal(t, "urn:other", uri)
+
+		ns, found := domutil.LookupNSURI(leaf, "urn:target")
+		require.False(t, found)
+		require.Nil(t, ns)
+		require.Nil(t, helium.LookupNSByHref(leaf, "urn:target"))
+	})
+
+	t.Run("nearer prefix undeclaration hides ancestor URI", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(
+			`<?xml version="1.1"?><root xmlns:p="urn:target"><child xmlns:p=""><leaf/></child></root>`,
+		))
+		require.NoError(t, err)
+		child := doc.DocumentElement().FirstChild().(*helium.Element)
+		leaf := child.FirstChild().(*helium.Element)
+
+		uri, found := domutil.LookupNSPrefixURI(leaf, "p")
+		require.True(t, found)
+		require.Empty(t, uri)
+
+		ns, found := domutil.LookupNSURI(leaf, "urn:target")
+		require.False(t, found)
+		require.Nil(t, ns)
+		require.Nil(t, helium.LookupNSByHref(leaf, "urn:target"))
+	})
 }
 
 // TestFindElementsByID pins the FROZEN ID-name rule FindElementsByID and

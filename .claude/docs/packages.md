@@ -2203,7 +2203,7 @@ register the hooks without an import cycle.
 ## internal/domutil/
 
 Shared DOM/QName helpers used by processing packages. Namespace lookup uses
-`internal/nslookup` to scan private declaration storage without allocating;
+`internal/nslookup` to scan private declaration storage without cloning it;
 `LookupNSPrefixURI` and `LookupNSURI` preserve nearest-ancestor shadowing and
 empty-URI undeclarations, and neither synthesizes the implicit `xml` binding.
 `Element.Namespaces()` remains the public defensive-copy accessor.

@@ -28,15 +28,26 @@ func namespaceByPrefix(start Node, prefix string) (*Namespace, bool) {
 	return nil, false
 }
 
-// namespaceByURI is the URI counterpart to namespaceByPrefix.
+// namespaceByURI is the URI counterpart to namespaceByPrefix. A nearer
+// declaration or undeclaration hides every ancestor binding for the same
+// prefix, even when the nearer URI does not match.
 func namespaceByURI(start Node, uri string) (*Namespace, bool) {
+	seenPrefixes := make(map[string]struct{})
 	for node := start; !isNilNode(node); node = node.Parent() {
 		el, ok := node.(*Element)
 		if !ok {
 			continue
 		}
 		for _, ns := range el.nsDefs {
-			if ns != nil && ns.URI() == uri {
+			if ns == nil {
+				continue
+			}
+			prefix := ns.Prefix()
+			if _, seen := seenPrefixes[prefix]; seen {
+				continue
+			}
+			seenPrefixes[prefix] = struct{}{}
+			if ns.URI() == uri {
 				return ns, true
 			}
 		}
