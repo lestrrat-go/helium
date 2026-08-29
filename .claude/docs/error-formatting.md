@@ -355,8 +355,10 @@ the empty-candidate branch of both decrypt terminals, and picks this sentinel ov
 `xenc11:DerivedKey` child and `parseRetrievalMethod` for a `ds:RetrievalMethod` whose `@Type` is
 `typeDerivedKey`; neither reads the construct any further. The split matters because the two errors ask
 different things of the caller: `ErrMissingKey` says supply a key, which no caller can act on here, while this
-names the facility the package lacks. A document ALSO carrying a usable `xenc:EncryptedKey` decrypts under it,
-and a pre-shared `Decryptor.SessionKey` returns before key resolution runs, so neither reaches the sentinel.
+names the facility the package lacks. Once block-algorithm resolution and any AES-CBC opt-in pass, a document
+ALSO carrying a usable `xenc:EncryptedKey` decrypts under it, and a pre-shared `Decryptor.SessionKey` returns
+before key resolution runs, so neither reaches the sentinel. Those earlier gates can instead return
+`ErrMalformedEncrypted` or `ErrCBCRequiresOptIn`.
 
 `ErrOpaquePayload` is `Decryptor.Decrypt`'s refusal of an `EncryptedData` whose `@Type` declares no XML
 content — absent, empty, or any URI other than `TypeElement`/`TypeContent`. `decryptElement`'s `@Type` switch

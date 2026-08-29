@@ -1835,9 +1835,11 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   `encryptedData.offersDerivedKey` is set — i.e. the `ds:KeyInfo` offered the session key only through an
   `xenc11:DerivedKey`, inline or named by a `ds:RetrievalMethod` `Type` of `#DerivedKey`. It is deliberately
   not `ErrMissingKey`: no key the caller supplies can decrypt such a document, so the error must name the
-  missing facility instead of sending the caller to audit its key configuration. A document that ALSO carries
-  a usable `xenc:EncryptedKey` decrypts under it (the flag is consulted only on an empty candidate list), and
-  a pre-shared `Decryptor.SessionKey` never reaches it at all
+  missing facility instead of sending the caller to audit its key configuration. Once block-algorithm
+  resolution and any AES-CBC opt-in pass, a document that ALSO carries a usable `xenc:EncryptedKey` decrypts
+  under it (the flag is consulted only on an empty candidate list), and a pre-shared `Decryptor.SessionKey`
+  never reaches the sentinel at all; those earlier gates can instead return `ErrMalformedEncrypted` or
+  `ErrCBCRequiresOptIn`
 - `UnsupportedAlgorithmError` and `KeySizeError` each carry a leading blank `_ struct{}` field, so an unkeyed
   composite literal cannot compile from another package (`implicit assignment to unexported field _`). That is
   what lets either field set GROW without breaking a caller: nobody can have written the positional form a new
@@ -1963,8 +1965,10 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   (§3.5.2), which it records on `encryptedData.offersDerivedKey`, and an `xenc:AgreementMethod` in the
   `EncryptedData`-level `ds:KeyInfo` position §5.6 defines for it — §3.5 marks that OPTIONAL, the same grade
   as `ds:KeyValue`, so an `EncryptedData` offering its session key only that way carries no candidate and
-  fails with `ErrMissingKey`. The `EncryptedKey`-level position IS read, by `parseAgreementMethodForKeyInfo`,
-  which is how this package performs ECDH-ES key agreement
+  reaches `ErrMissingKey` only after block-algorithm resolution and any AES-CBC opt-in pass; a pre-shared
+  `Decryptor.SessionKey` then bypasses that key-resolution outcome. Those earlier gates can instead return
+  `ErrMalformedEncrypted` or `ErrCBCRequiresOptIn` regardless of that key. The `EncryptedKey`-level position
+  IS read, by `parseAgreementMethodForKeyInfo`, which is how this package performs ECDH-ES key agreement
 <!-- Refutation of a review finding that this bullet still lists only completion, over-budget and cancellation
 as the close paths, omitting the stream-plus-error case. Checked against this file's bytes at this commit: the
 bullet below reads "the stream is CLOSED on completion, over-budget, and cancellation alike, and equally when
