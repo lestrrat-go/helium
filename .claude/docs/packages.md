@@ -1433,8 +1433,11 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   `validateTransformSteps` scans the complete list and statically validates every XPath expression before
   execution, so unknown algorithms, missing or malformed parameters, unavailable XSLT, unknown XPath
   functions, unbound XPath QName prefixes, unavailable `here()`, and invalid enveloped placement fail before
-  an injected transform runs. XPath uses `newDSigXPathEvaluator` with namespaces, `hereFunction`, and
-  `defaultXPathOpLimit`=100M. Base64 signing works through the exported `Transform` interface; XPath/XSLT
+  an injected transform runs. A runtime XPath evaluation failure wraps both `ErrUnsupportedTransform` and the
+  evaluator error, so cancellation, deadline, and XPath sentinels remain matchable through the outer
+  `VerificationError`; `ErrHereUnavailable` remains direct. XPath uses `newDSigXPathEvaluator` with
+  namespaces, `hereFunction`, and `defaultXPathOpLimit`=100M. Base64 signing works through the exported
+  `Transform` interface; XPath/XSLT
   signing stays rejected because `ReferenceConfig` cannot carry or emit their required child content.
   `ec:InclusiveNamespaces` is threaded through explicit exclusive-C14N steps; unknown C14N/SignatureMethod
   parameters fail closed.

@@ -152,7 +152,10 @@ XPath → C14N 1.1 → XSLT → XPath → C14N 1.1, multiple XSLT steps, and a s
 canonicalization. Base64's node-set text conversion is its one algorithm-specific
 exception to the generic C14N conversion. Unknown algorithms and unusable
 parameters fail with `ErrUnsupportedTransform` before any injected transformer
-runs. An enveloped transform is limited to the original same-document node-set;
+runs. A runtime XPath evaluation failure wraps both `ErrUnsupportedTransform`
+and the evaluator error, so cancellation and deadline errors remain matchable
+through the reference wrapper. `ErrHereUnavailable` remains direct. An
+enveloped transform is limited to the original same-document node-set;
 it fails after an octet boundary because the containing Signature's node identity
 cannot be reconstructed from serialized markup. XPath and XSLT remain
 verify-only because the signing API cannot emit their required child content.

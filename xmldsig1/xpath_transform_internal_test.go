@@ -5,11 +5,16 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,6 +75,116 @@ func TestXPathTransformThroughPipeline(t *testing.T) {
 	require.Contains(t, string(canonical), "KEEPVAL", "kept subtree must survive the XPath filter")
 	require.NotContains(t, string(canonical), "DROPVAL", "dropped subtree must be filtered out")
 	require.NotContains(t, string(canonical), "t:drop", "dropped element must be filtered out")
+}
+
+func TestApplyXPathFilterEvaluationError(t *testing.T) {
+	doc := mustParse(t, `<root/>`)
+	compiled := xpath1.MustCompile("boolean(true())")
+
+	canceledCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+	deadlineCtx, deadlineCancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	t.Cleanup(deadlineCancel)
+
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		expr    *xpath1.Expression
+		cause   error
+		wantErr string
+	}{
+		{
+			name:    "canceled context",
+			ctx:     canceledCtx,
+			expr:    compiled,
+			cause:   context.Canceled,
+			wantErr: "xmldsig1: unsupported transform: XPath transform evaluation failed: context canceled",
+		},
+		{
+			name:    "expired deadline",
+			ctx:     deadlineCtx,
+			expr:    compiled,
+			cause:   context.DeadlineExceeded,
+			wantErr: "xmldsig1: unsupported transform: XPath transform evaluation failed: context deadline exceeded",
+		},
+		{
+			name:    "ordinary evaluator error",
+			ctx:     t.Context(),
+			cause:   xpath1.ErrNilExpression,
+			wantErr: "xmldsig1: unsupported transform: XPath transform evaluation failed: xpath: nil or uncompiled expression",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			kept, err := applyXPathFilter(
+				test.ctx,
+				[]helium.Node{doc.DocumentElement()},
+				xpathFilter{expr: test.expr},
+			)
+			require.Nil(t, kept)
+			require.EqualError(t, err, test.wantErr)
+			require.ErrorIs(t, err, ErrUnsupportedTransform)
+			require.ErrorIs(t, err, test.cause)
+
+			var multiUnwrapper interface{ Unwrap() []error }
+			require.ErrorAs(t, err, &multiUnwrapper)
+			require.Len(t, multiUnwrapper.Unwrap(), 2)
+		})
+	}
+}
+
+type xpathEvaluationErrorContext struct {
+	context.Context
+	err error
+}
+
+func (c xpathEvaluationErrorContext) Err() error {
+	_, file, _, ok := runtime.Caller(1)
+	if ok && strings.HasSuffix(filepath.ToSlash(file), "/xpath1/eval.go") {
+		return c.err
+	}
+	return c.Context.Err()
+}
+
+func TestVerifyXPathFilterCancellationErrorChain(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	doc := mustParse(t, `<root><data Id="target">content</data></root>`)
+
+	sigElem, err := NewSigner().
+		SignatureAlgorithm(AlgRSASHA256).
+		Reference(ReferenceConfig{
+			URI:             "#target",
+			DigestAlgorithm: DigestSHA256,
+			Transforms:      []Transform{C14NTransform(C14N10)},
+		}).
+		SignDetached(t.Context(), doc, key)
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(sigElem))
+
+	signedInfo := findChild(t, sigElem, "SignedInfo")
+	reference := findChild(t, signedInfo, "Reference")
+	transform := findChild(t, findChild(t, reference, "Transforms"), "Transform")
+	require.NoError(t, transform.SetAttribute("Algorithm", TransformXPath))
+	xpathElem, err := doc.CreateElement("XPath")
+	require.NoError(t, err)
+	require.NoError(t, xpathElem.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, xpathElem.AddChild(doc.CreateText([]byte("true()"))))
+	require.NoError(t, transform.AddChild(xpathElem))
+	reSignSignedInfo(t, doc, sigElem, signedInfo, nil, key)
+
+	ctx := xpathEvaluationErrorContext{Context: t.Context(), err: context.Canceled}
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).Verify(ctx, doc)
+	require.ErrorIs(t, err, ErrUnsupportedTransform)
+	require.ErrorIs(t, err, context.Canceled)
+	var referenceErr *VerificationError
+	require.ErrorAs(t, err, &referenceErr)
+	require.Equal(t, 0, referenceErr.Reference)
+	require.Equal(t, "#target", referenceErr.URI)
+
+	var multiUnwrapper interface{ Unwrap() []error }
+	require.ErrorAs(t, err, &multiUnwrapper)
 }
 
 func TestVerifyPreflightsAllReferencesBeforeXSLT(t *testing.T) {
