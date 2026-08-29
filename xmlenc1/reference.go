@@ -129,7 +129,8 @@ func referenceURIForm(uri string) (string, bool, bool) {
 	if !strings.HasSuffix(frag, ")") {
 		return "", false, false
 	}
-	expr := strings.TrimSpace(frag[len("xpointer(") : len(frag)-1])
+	// XPath S contains only space, tab, carriage return, and line feed.
+	expr := strings.Trim(frag[len("xpointer("):len(frag)-1], " \t\r\n")
 	if expr == "/" {
 		return "", true, true
 	}
@@ -139,14 +140,20 @@ func referenceURIForm(uri string) (string, bool, bool) {
 	return "", false, false
 }
 
-// parseXPointerID matches the XPointer id() form id('X') or id("X") and returns
-// the quoted id. Anything else (a bare argument, a nested call, an unbalanced or
-// mismatched quote) is rejected so only the two SHOULD-support schemes resolve.
+// parseXPointerID matches the XPointer id() form id('X') or id("X"), allowing
+// XML S before the opening parenthesis, and returns the quoted id. Anything else
+// (a bare argument, a nested call, an unbalanced or mismatched quote) is rejected
+// so only the two SHOULD-support schemes resolve.
 func parseXPointerID(expr string) (string, bool) {
-	if !strings.HasPrefix(expr, "id(") || !strings.HasSuffix(expr, ")") {
+	if !strings.HasPrefix(expr, "id") {
 		return "", false
 	}
-	arg := strings.TrimSpace(expr[len("id(") : len(expr)-1])
+	rest := strings.TrimLeft(expr[len("id"):], " \t\r\n")
+	if !strings.HasPrefix(rest, "(") || !strings.HasSuffix(rest, ")") {
+		return "", false
+	}
+	// XPath S contains only space, tab, carriage return, and line feed.
+	arg := strings.Trim(rest[1:len(rest)-1], " \t\r\n")
 	if len(arg) < 2 {
 		return "", false
 	}

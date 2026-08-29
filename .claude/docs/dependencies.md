@@ -18,7 +18,7 @@ relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, in
 schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/number
 xpointer       → helium, xpath1, internal/xmlchar
 c14n           → helium, internal/lexicon, internal/domutil
-xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil, internal/xmlbase64
+xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil, internal/xmlbase64, internal/xmlchar
 xmldsig1/transform → helium, xmldsig1, xslt3  (opt-in xslt3-backed XSLTTransformer; kept out of xmldsig1 so the core never imports xslt3)
 xmlenc1        → helium, c14n, internal/domutil, internal/xmlbase64  (c14n converts the node-set a same-document xenc:CipherReference names into octets; c14n imports neither xmlenc1 nor xmldsig1, so the edge is one-way)
 html           → helium, sax, push, internal/xmlchar
@@ -61,7 +61,7 @@ helium (root) → sax, enum, internal/*
 c14n, xpath1, xpath3, html, catalog, relaxng, stream
 
 ## Security layer (depends on processing)
-xmldsig1 (root + c14n + xpath1 + internal/lexicon; xpath1 backs the XPath filter transform), xmlenc1 (root + c14n; c14n converts the node-set a same-document xenc:CipherReference names into octets)
+xmldsig1 (root + c14n + xpath1 + internal/lexicon + internal/xmlchar; xpath1 backs the XPath filter transform), xmlenc1 (root + c14n; c14n converts the node-set a same-document xenc:CipherReference names into octets)
 
 ## Composition layer (depends on processing)
 xsd (root + xpath1 + xpath3 + internal/lexicon), xpointer (root + xpath1 + internal/xmlchar), schematron (root + xpath1 + xpath3 + internal/xpath + internal/xpath1/number; xpath1 backs the XPath 1.0 queryBinding, xpath3 the XPath 3.1 one), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 + xsd + html + internal/elements), shim (root + stream)

@@ -7,11 +7,13 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/xpath1"
 
 	helium "github.com/lestrrat-go/helium"
@@ -1176,7 +1178,8 @@ func referenceURIForm(uri string) (string, bool, bool, bool) {
 	if !strings.HasSuffix(frag, ")") {
 		return "", false, false, false
 	}
-	expr := strings.TrimSpace(frag[len("xpointer(") : len(frag)-1])
+	// XPath S contains only space, tab, carriage return, and line feed.
+	expr := strings.Trim(frag[len("xpointer("):len(frag)-1], " \t\r\n")
 	if expr == "/" {
 		return "", true, true, true
 	}
@@ -1186,14 +1189,20 @@ func referenceURIForm(uri string) (string, bool, bool, bool) {
 	return "", false, false, false
 }
 
-// parseXPointerID matches the XPointer id() form id('X') or id("X") and returns
-// the quoted id. Anything else (a bare argument, a nested call, an unbalanced or
-// mismatched quote) is rejected so only the two SHOULD-support schemes resolve.
+// parseXPointerID matches the XPointer id() form id('X') or id("X"), allowing
+// XML S before the opening parenthesis, and returns the quoted id. Anything else
+// (a bare argument, a nested call, an unbalanced or mismatched quote) is rejected
+// so only the two SHOULD-support schemes resolve.
 func parseXPointerID(expr string) (string, bool) {
-	if !strings.HasPrefix(expr, "id(") || !strings.HasSuffix(expr, ")") {
+	if !strings.HasPrefix(expr, "id") {
 		return "", false
 	}
-	arg := strings.TrimSpace(expr[len("id(") : len(expr)-1])
+	rest := strings.TrimLeft(expr[len("id"):], " \t\r\n")
+	if !strings.HasPrefix(rest, "(") || !strings.HasSuffix(rest, ")") {
+		return "", false
+	}
+	// XPath S contains only space, tab, carriage return, and line feed.
+	arg := strings.Trim(rest[1:len(rest)-1], " \t\r\n")
 	if len(arg) < 2 {
 		return "", false
 	}
@@ -1258,7 +1267,8 @@ func parseGeneralXPointer(uri string) (map[string]string, string, bool) {
 				return nil, "", false
 			}
 			haveXPointer = true
-			expr = strings.TrimSpace(unescapeXPointerData(data))
+			// XPath S contains only space, tab, carriage return, and line feed.
+			expr = strings.Trim(unescapeXPointerData(data), " \t\r\n")
 		default:
 			// Any other scheme (element(), xpath1(), ...) is unsupported.
 			return nil, "", false
@@ -1274,9 +1284,9 @@ func parseGeneralXPointer(uri string) (map[string]string, string, bool) {
 // nextSchemePart reads one "scheme(data)" pointer part from the front of s,
 // respecting the XPointer framework's balanced-parenthesis and "^" escape rules
 // inside the data, and returns the scheme name, the raw (still-escaped) data, and
-// the remaining string after the closing ")". Leading whitespace between parts is
-// skipped. It fails (ok=false) on a missing/empty scheme name, a scheme name
-// carrying whitespace or parens, or unbalanced parentheses.
+// the remaining string after the closing ")". Leading XPath S whitespace between
+// parts is skipped. It fails (ok=false) on a missing/empty scheme name, a scheme
+// name carrying XPath S whitespace or parens, or unbalanced parentheses.
 func nextSchemePart(s string) (string, string, string, bool) {
 	s = strings.TrimLeft(s, " \t\r\n")
 	open := strings.IndexByte(s, '(')
@@ -1311,17 +1321,18 @@ func nextSchemePart(s string) (string, string, string, bool) {
 }
 
 // parseXmlnsPart splits an xmlns() scheme part's data "prefix=uri" into its
-// prefix and namespace URI. A missing "=" or an empty prefix is malformed.
+// prefix and namespace URI. A missing "=" or an invalid NCName prefix is malformed.
 func parseXmlnsPart(data string) (string, string, bool) {
 	rawPrefix, rawNS, ok := strings.Cut(data, "=")
 	if !ok {
 		return "", "", false
 	}
-	prefix := strings.TrimSpace(rawPrefix)
-	if prefix == "" {
+	// XPointer's xmlns() scheme uses XML S, not all Unicode whitespace.
+	prefix := strings.Trim(rawPrefix, " \t\r\n")
+	if !xmlchar.IsValidNCName(prefix) {
 		return "", "", false
 	}
-	return prefix, strings.TrimSpace(rawNS), true
+	return prefix, strings.Trim(rawNS, " \t\r\n"), true
 }
 
 // unescapeXPointerData reverses the XPointer framework circumflex escaping in a
@@ -1407,13 +1418,16 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // through Document.GetElementByID, whose ID table overwrites on collision so a
 // duplicate id silently resolves to a single element (an XML Signature Wrapping
 // bypass). Instead, an expression whose whole value is an id('X') selector — in
-// ANY whitespace spelling (id('X'), id ('X'), id( "X" )) — resolves through the
-// duplicate-detecting domutil.FindElementsByID, and ANY other use of id() (a
-// parenthesized or embedded id() call the selector parser cannot reduce to a
-// single literal id) is rejected fail-closed, and never reaches the built-in.
+// ANY XPath S whitespace spelling (id('X'), id ('X'), id( "X" )) — resolves
+// through the duplicate-detecting domutil.FindElementsByID. ANY other use of
+// id() (a parenthesized or embedded id() call the selector parser cannot reduce
+// to a single literal id) is rejected fail-closed and never reaches the built-in.
 // Every remaining expression is statically validated with the merged namespace
 // context, the shared operation limit, and here() disabled (nil bearing node).
 func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
+	if containsNonXMLSWhitespaceOutsideLiteral(expr) {
+		return nil, fmt.Errorf("%w: invalid XPointer expression %q", ErrReferenceNotFound, expr)
+	}
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {
 			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q", ErrReferenceNotFound, expr)
@@ -1436,6 +1450,29 @@ func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, e
 		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
 	}
 	return &preparedGeneralXPointer{compiled: compiled, eval: eval}, nil
+}
+
+// containsNonXMLSWhitespaceOutsideLiteral reports whitespace that xpath1's
+// lexer would accept even though XPath 1.0 permits only XML S between tokens.
+// Whitespace inside a quoted string is data and remains untouched.
+func containsNonXMLSWhitespaceOutsideLiteral(expr string) bool {
+	var quote rune
+	for _, r := range expr {
+		if quote != 0 {
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+		if r == '\'' || r == '"' {
+			quote = r
+			continue
+		}
+		if unicode.IsSpace(r) && r != ' ' && r != '\t' && r != '\r' && r != '\n' {
+			return true
+		}
+	}
+	return false
 }
 
 func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Document, prepared *preparedGeneralXPointer) (*helium.Element, error) {
@@ -1465,15 +1502,16 @@ func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Docum
 }
 
 // parseXPointerIDSelector recognizes a whole-expression id() selector in any
-// whitespace spelling — id('X'), id ("X"), id( 'X' ), with optional surrounding
-// whitespace. isIDCall reports that the trimmed expression IS a top-level
-// id(...) call; ok additionally reports that it cleanly reduces to a single
-// quoted id literal, returned in the first result. A general-XPointer id()
+// XPath S whitespace spelling — id('X'), id ("X"), id( 'X' ), with optional
+// surrounding XPath S whitespace. isIDCall reports that the trimmed expression
+// IS a top-level id(...) call; ok additionally reports that it cleanly reduces
+// to a single quoted id literal, returned in the first result. A general-XPointer id()
 // selector is ALWAYS routed through the duplicate-detecting domutil.FindElementsByID
 // (never xpath1's built-in id()), so an id() call that is not a clean single
 // literal is reported as isIDCall && !ok for the caller to reject fail-closed.
 func parseXPointerIDSelector(expr string) (string, bool, bool) {
-	s := strings.TrimSpace(expr)
+	// XPath S contains only space, tab, carriage return, and line feed.
+	s := strings.Trim(expr, " \t\r\n")
 	if !strings.HasPrefix(s, "id") {
 		return "", false, false
 	}
@@ -1488,7 +1526,7 @@ func parseXPointerIDSelector(expr string) (string, bool, bool) {
 		// id('x')[1]. It IS an id() call, but not a clean selector.
 		return "", true, false
 	}
-	arg := strings.TrimSpace(rest[1 : len(rest)-1])
+	arg := strings.Trim(rest[1:len(rest)-1], " \t\r\n")
 	if len(arg) < 2 {
 		return "", true, false
 	}
@@ -1507,8 +1545,8 @@ func parseXPointerIDSelector(expr string) (string, bool, bool) {
 
 // expressionReferencesID reports whether an XPath expression invokes the id()
 // function anywhere outside a string literal — an id name token immediately
-// followed (modulo whitespace) by "(". The general-XPointer resolver uses it to
-// fail closed on any id() use it does not itself resolve through the
+// followed (modulo XPath S whitespace) by "(". The general-XPointer resolver
+// uses it to fail closed on any id() use it does not itself resolve through the
 // duplicate-detecting domutil.FindElementsByID, since xpath1's built-in id()
 // (Document.GetElementByID) resolves a duplicate id to a single element.
 func expressionReferencesID(expr string) bool {

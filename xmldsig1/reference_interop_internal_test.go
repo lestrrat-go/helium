@@ -63,6 +63,53 @@ func TestReferenceURIForm(t *testing.T) {
 			require.Equal(t, exp.id, id, "id")
 		})
 	}
+
+	for _, tc := range []struct {
+		name string
+		ws   string
+	}{
+		{name: "space", ws: " "},
+		{name: "tab", ws: "\t"},
+		{name: "carriage return", ws: "\r"},
+		{name: "line feed", ws: "\n"},
+	} {
+		t.Run("XPath S accepts "+tc.name, func(t *testing.T) {
+			uri := "#xpointer(" + tc.ws + "id" + tc.ws + "(" + tc.ws + "'e1ID'" + tc.ws + ")" + tc.ws + ")"
+			id, wholeDoc, includeComments, ok := referenceURIForm(uri)
+			require.True(t, ok)
+			require.False(t, wholeDoc)
+			require.True(t, includeComments)
+			require.Equal(t, "e1ID", id)
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		ws   string
+	}{
+		{name: "no-break space", ws: "\u00a0"},
+		{name: "next line", ws: "\u0085"},
+		{name: "line separator", ws: "\u2028"},
+		{name: "ideographic space", ws: "\u3000"},
+	} {
+		t.Run("rejects "+tc.name+" around the expression", func(t *testing.T) {
+			_, _, _, ok := referenceURIForm("#xpointer(" + tc.ws + "id('e1ID')" + tc.ws + ")")
+			require.False(t, ok)
+		})
+		t.Run("rejects "+tc.name+" around the id argument", func(t *testing.T) {
+			_, _, _, ok := referenceURIForm("#xpointer(id(" + tc.ws + "'e1ID'" + tc.ws + "))")
+			require.False(t, ok)
+		})
+	}
+
+	t.Run("quoted id whitespace is preserved", func(t *testing.T) {
+		const want = "\u00a0 e1ID \u3000"
+		id, wholeDoc, includeComments, ok := referenceURIForm("#xpointer(id('" + want + "'))")
+		require.True(t, ok)
+		require.False(t, wholeDoc)
+		require.True(t, includeComments)
+		require.Equal(t, want, id)
+	})
 }
 
 // TestXPointerReferenceDigests locks the same-document Reference URI forms and

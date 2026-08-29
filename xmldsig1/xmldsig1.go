@@ -549,6 +549,9 @@ func (v Verifier) MaxDecodedBytes(n int) Verifier {
 // and, without a [ReferenceResolver], rejected with [ErrReferenceNotFound], so
 // default verification is byte-identical.
 //
+// Each xmlns() prefix must be an XML NCName. A malformed binding cannot select a
+// same-document target even when the XPath expression does not use it.
+//
 // When enabled, every top-level xpointer() expression is compiled and statically
 // validated during the all-Reference preflight before any Reference resolver or
 // transformer runs. Its prepared bounded XPath 1.0 evaluator is reused during
