@@ -314,18 +314,34 @@ func TestNodeSetCollectionCost(t *testing.T) {
 // cancellation at a collector poll deterministic without coupling the test to
 // scheduler timing.
 type cancelOnErrContext struct {
-	context.Context
-	cancel   context.CancelFunc
+	done     chan struct{}
 	cancelAt int
 	calls    int
+}
+
+func (*cancelOnErrContext) Deadline() (time.Time, bool) {
+	return time.Time{}, false
+}
+
+func (c *cancelOnErrContext) Done() <-chan struct{} {
+	return c.done
 }
 
 func (c *cancelOnErrContext) Err() error {
 	c.calls++
 	if c.calls == c.cancelAt {
-		c.cancel()
+		close(c.done)
 	}
-	return c.Context.Err()
+	select {
+	case <-c.done:
+		return context.Canceled
+	default:
+		return nil
+	}
+}
+
+func (*cancelOnErrContext) Value(any) any {
+	return nil
 }
 
 // TestNodeSetCollectionCancellationDuringChildScope pins that namespace scope
@@ -333,9 +349,7 @@ func (c *cancelOnErrContext) Err() error {
 // collection; the second comes from the periodic poll inside the dense child.
 func TestNodeSetCollectionCancellationDuringChildScope(t *testing.T) {
 	root := costDocument(t, declDenseDoc(costDeclarations))
-	base, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	ctx := &cancelOnErrContext{Context: base, cancel: cancel, cancelAt: 2}
+	ctx := &cancelOnErrContext{done: make(chan struct{}), cancelAt: 2}
 	c := &subtreeCollector{fullAxis: true}
 
 	err := c.collect(ctx, root)
