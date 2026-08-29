@@ -14,6 +14,7 @@ import (
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 	"github.com/lestrrat-go/helium/xpath1"
 
 	helium "github.com/lestrrat-go/helium"
@@ -1426,11 +1427,13 @@ func singleElementApex(nodes []helium.Node) (*helium.Element, error) {
 // context, the shared operation limit, and here() disabled (nil bearing node).
 func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, expr string) (*preparedGeneralXPointer, error) {
 	if containsNonXMLSWhitespaceOutsideLiteral(expr) {
-		return nil, fmt.Errorf("%w: invalid XPointer expression %q", ErrReferenceNotFound, expr)
+		return nil, fmt.Errorf("%w: invalid XPointer expression %q",
+			ErrReferenceNotFound, lexer.DiagnosticExcerpt(expr))
 	}
 	if id, isIDCall, ok := parseXPointerIDSelector(expr); isIDCall {
 		if !ok {
-			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q", ErrReferenceNotFound, expr)
+			return nil, fmt.Errorf("%w: unsupported XPointer id() selector %q",
+				ErrReferenceNotFound, lexer.DiagnosticExcerpt(expr))
 		}
 		return &preparedGeneralXPointer{id: id, idSelector: true}, nil
 	}
@@ -1438,16 +1441,19 @@ func prepareGeneralXPointer(doc *helium.Document, overrides map[string]string, e
 		// id() appears somewhere other than as the whole-expression selector
 		// handled above (a wrapping paren, a predicate, a path step). xpath1's
 		// built-in id() cannot be trusted under duplicate ids, so fail closed.
-		return nil, fmt.Errorf("%w: unsupported XPointer id() use %q", ErrReferenceNotFound, expr)
+		return nil, fmt.Errorf("%w: unsupported XPointer id() use %q",
+			ErrReferenceNotFound, lexer.DiagnosticExcerpt(expr))
 	}
 
 	compiled, err := xpath1.Compile(expr)
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
+		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v",
+			ErrReferenceNotFound, lexer.DiagnosticExcerpt(expr), err)
 	}
 	eval := newDSigXPathEvaluator(xpointerNamespaces(doc, overrides), nil, defaultXPathOpLimit)
 	if err := eval.Validate(compiled); err != nil {
-		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v", ErrReferenceNotFound, expr, err)
+		return nil, fmt.Errorf("%w: invalid XPointer expression %q: %v",
+			ErrReferenceNotFound, lexer.DiagnosticExcerpt(expr), err)
 	}
 	return &preparedGeneralXPointer{compiled: compiled, eval: eval}, nil
 }
@@ -1480,11 +1486,13 @@ func resolvePreparedGeneralXPointerTarget(ctx context.Context, doc *helium.Docum
 		matches := domutil.FindElementsByID(doc.DocumentElement(), prepared.id)
 		switch len(matches) {
 		case 0:
-			return nil, fmt.Errorf("%w: xpointer(id(%q))", ErrReferenceNotFound, prepared.id)
+			return nil, fmt.Errorf("%w: xpointer(id(%q))",
+				ErrReferenceNotFound, lexer.DiagnosticExcerpt(prepared.id))
 		case 1:
 			return matches[0], nil
 		default:
-			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements", ErrAmbiguousReference, prepared.id, len(matches))
+			return nil, fmt.Errorf("%w: xpointer id %q matched %d elements",
+				ErrAmbiguousReference, lexer.DiagnosticExcerpt(prepared.id), len(matches))
 		}
 	}
 
@@ -1635,7 +1643,8 @@ func effectiveC14NMethod(method string, includeComments bool) string {
 func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
 	id, wholeDoc, _, ok := referenceURIForm(uri)
 	if !ok {
-		return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, uri)
+		return nil, fmt.Errorf("%w: unsupported reference URI: %s",
+			ErrReferenceNotFound, lexer.DiagnosticExcerpt(uri))
 	}
 	if wholeDoc {
 		return doc.DocumentElement(), nil
@@ -1661,10 +1670,11 @@ func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Nod
 	}
 	switch len(matches) {
 	case 0:
-		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, uri)
+		return nil, fmt.Errorf("%w: %s", ErrReferenceNotFound, lexer.DiagnosticExcerpt(uri))
 	case 1:
 		return matches[0], nil
 	default:
-		return nil, fmt.Errorf("%w: %s (matched %d elements)", ErrAmbiguousReference, uri, len(matches))
+		return nil, fmt.Errorf("%w: %s (matched %d elements)",
+			ErrAmbiguousReference, lexer.DiagnosticExcerpt(uri), len(matches))
 	}
 }

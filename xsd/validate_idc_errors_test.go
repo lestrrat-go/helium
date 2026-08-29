@@ -1,12 +1,36 @@
 package xsd_test
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
+
+func TestIDCFieldValidationDiagnosticExcerpt(t *testing.T) {
+	field := "a|b|" + strings.Repeat("n", 1<<20)
+	schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+		`<xs:element name="root"><xs:complexType><xs:sequence>` +
+		`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/>` +
+		`</xs:sequence></xs:complexType><xs:unique name="u">` +
+		`<xs:selector xpath="."/><xs:field xpath="` + field + `"/>` +
+		`</xs:unique></xs:element></xs:schema>`
+
+	schema, compileErrs, err := compileWith(t, xsd.Version10, schemaXML)
+	require.NoError(t, err, compileErrs)
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a>x</a><b>y</b></root>`))
+	require.NoError(t, err)
+	var diagnostics string
+	err = validateWithOutput(t, xsd.NewValidator(schema), doc, &diagnostics)
+
+	require.ErrorIs(t, err, xsd.ErrValidationFailed)
+	require.LessOrEqual(t, len(diagnostics), 2048)
+	require.True(t, utf8.ValidString(diagnostics))
+	require.Contains(t, diagnostics, "[truncated]")
+}
 
 // TestIDCMalformedXPath covers the case where an identity constraint's selector
 // or field XPath is not a valid XPath expression. Previously the compile error

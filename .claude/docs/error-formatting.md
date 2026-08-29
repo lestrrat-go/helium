@@ -153,6 +153,17 @@ loads) and the caller owns its lifecycle, closing it once the resulting value is
 
 ## Package-Specific Error Formatting
 
+### XPath expression excerpts (`internal/xpath1/lexer/diagnostic.go`)
+
+`lexer.DiagnosticExcerpt` bounds each caller-controlled token, QName, namespace prefix, namespace URI,
+variable name, or expression excerpt to 128 bytes, including a `...[truncated]` marker. Excerpts end on a UTF-8
+rune boundary; invalid UTF-8 is replaced before formatting. Short valid excerpts retain their wording.
+`xpath1` uses it for its own diagnostics. `xpointer` syntax and XPath-scheme diagnostics, `xmldsig1`
+general-XPointer preparation/resolution and per-reference URI rendering, XSD identity-constraint
+selector/field compilation and runtime field diagnostics, and Schematron context/test/name/value-of
+compilation use the same helper before reinserting source values. Wrapped sentinels remain matchable via the
+package's existing error chain.
+
 ### XSD (`xsd/errors.go`)
 
 | Function | Format |
@@ -289,11 +300,17 @@ symmetrically. Both hold `Reference int` (0-based index), `URI string`, `Err err
 cause so sentinels (`ErrReferenceNotFound`, `ErrUnsupportedTransform`, `ErrDigestMismatch`, …) stay
 `errors.Is`/`errors.As`-reachable through the wrapper.
 
-- `ReferenceError` (signing): adds `Op string` (`"sign"`). Format: `xmldsig1: sign reference N ("URI") failed:
-  <cause>`. Wrapped both in the `processReference` loops of `signEnveloped`/`signEnveloping`/`signDetached`
-  and in the pre-mutation `preflightSignerTransforms` transform-pipeline validation (`transforms.go`), so a
-  rejected pipeline still names its Reference.
-- `VerificationError` (verification): `Reference == -1` marks a SignatureValue failure (`xmldsig1: signature value verification failed: <cause>`); otherwise `xmldsig1: reference N ("URI") verification failed: <cause>`.
+- `ReferenceError` (signing): adds `Op string` (`"sign"`). Format: `xmldsig1: sign reference N ("URI excerpt")
+  failed: <cause>`. Wrapped both in the `processReference` loops of
+  `signEnveloped`/`signEnveloping`/`signDetached` and in the pre-mutation `preflightSignerTransforms`
+  transform-pipeline validation (`transforms.go`), so a rejected pipeline still names its Reference.
+- `VerificationError` (verification): `Reference == -1` marks a SignatureValue failure (`xmldsig1: signature
+  value verification failed: <cause>`); otherwise `xmldsig1: reference N ("URI excerpt") verification
+  failed: <cause>`.
+
+The wrapper structs retain the complete `URI` for programmatic inspection. Their `Error()` methods render a
+bounded valid-UTF-8 excerpt, and same-document/general-XPointer resolution errors apply the same bound before
+wrapping so the cause cannot repeat the complete URI.
 
 External-reference resolution sentinels (`errors.go`, `reference_resolver.go`): `ErrReferenceNotFound` is the
 fail-closed default for an external Reference with no configured `ReferenceResolver`, AND every

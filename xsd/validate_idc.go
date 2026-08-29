@@ -10,6 +10,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 	"github.com/lestrrat-go/helium/internal/xsd/value"
 	"github.com/lestrrat-go/helium/xpath1"
 )
@@ -319,7 +320,8 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					// marking the field absent silently drops the selected node from
 					// the constraint, so a unique/keyref could miss a duplicate or a
 					// dangling reference. Surface it like the selector path.
-					return nil, fmt.Errorf("xsd: IDC field XPath %q failed to compile: %w", fieldXPath, compErr)
+					return nil, fmt.Errorf("xsd: IDC field XPath %q failed to compile: %w",
+						lexer.DiagnosticExcerpt(fieldXPath), compErr)
 				}
 				fieldResult, err = fieldEv.Evaluate(ctx, compiled, node)
 			}
@@ -327,7 +329,8 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 				// A field XPath that compiles but fails at evaluation (e.g. an
 				// unknown function) must likewise surface as an error, and is never
 				// treated as an absent field.
-				return nil, fmt.Errorf("xsd: IDC field XPath %q failed to evaluate: %w", fieldXPath, err)
+				return nil, fmt.Errorf("xsd: IDC field XPath %q failed to evaluate: %w",
+					lexer.DiagnosticExcerpt(fieldXPath), err)
 			}
 
 			var value string
@@ -365,7 +368,7 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					if entry.elem != nil {
 						idcName := idcDisplayName(idc, vc.schema)
 						msg := fmt.Sprintf("The XPath '%s' of a field of %s identity-constraint '%s' evaluates to a node whose type is not simple.",
-							fieldXPath, idcKindName(idc.Kind), idcName)
+							lexer.DiagnosticExcerpt(fieldXPath), idcKindName(idc.Kind), idcName)
 						vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemDisplayName(entry.elem), msg)
 					}
 					table.fieldType = true
@@ -381,7 +384,7 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 					if entry.elem != nil {
 						idcName := idcDisplayName(idc, vc.schema)
 						msg := fmt.Sprintf("The XPath '%s' of a field of %s identity-constraint '%s' evaluates to a node-set with more than one member.",
-							fieldXPath, idcKindName(idc.Kind), idcName)
+							lexer.DiagnosticExcerpt(fieldXPath), idcKindName(idc.Kind), idcName)
 						vc.reportValidityError(ctx, vc.filename, entry.elem.Line(), elemDisplayName(entry.elem), msg)
 					}
 					table.fieldError = true

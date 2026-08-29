@@ -10,6 +10,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 	"github.com/lestrrat-go/helium/internal/xpath1/number"
 )
 
@@ -743,11 +744,11 @@ func evalUnaryExpr(ctx context.Context, ec *evalContext, e UnaryExpr) (*Result, 
 
 func evalVariableExpr(ec *evalContext, e VariableExpr) (*Result, error) {
 	if ec.variables == nil {
-		return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
+		return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, lexer.DiagnosticExcerpt(e.Name))
 	}
 	v, ok := ec.variables[e.Name]
 	if !ok {
-		return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
+		return nil, fmt.Errorf("%w: $%s", ErrUndefinedVariable, lexer.DiagnosticExcerpt(e.Name))
 	}
 	switch val := v.(type) {
 	case []helium.Node:
@@ -773,7 +774,8 @@ func evalVariableExpr(ec *evalContext, e VariableExpr) (*Result, error) {
 	case bool:
 		return &Result{Type: BooleanResult, Bool: val}, nil
 	default:
-		return nil, fmt.Errorf("%w: $%s is %T", ErrUnsupportedVariableType, e.Name, v)
+		return nil, fmt.Errorf("%w: $%s is %T", ErrUnsupportedVariableType,
+			lexer.DiagnosticExcerpt(e.Name), v)
 	}
 }
 

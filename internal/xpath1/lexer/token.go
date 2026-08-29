@@ -94,7 +94,7 @@ type Token struct {
 
 func (t Token) String() string {
 	if t.Value != "" {
-		return fmt.Sprintf("%s(%q)", t.Type, t.Value)
+		return fmt.Sprintf("%s(%q)", t.Type, DiagnosticExcerpt(t.Value))
 	}
 	return t.Type.String()
 }

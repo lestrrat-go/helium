@@ -43,6 +43,10 @@
     tolerated), and a name-test prefix unbound in the SELECTOR/FIELD element's OWN in-scope namespaces
     (`collectNSContext(ce)`; `xml` always bound; compile-time scope per selector/field element,
     `idc.Namespaces` runtime unchanged).
+    `reportIDCXPathError` bounds the quoted `@xpath` through `lexer.DiagnosticExcerpt`; malformed expressions
+    cannot make the ErrorHandler diagnostic grow with the source attribute, and short wording stays unchanged.
+    `evaluateIDC` applies the same bound to every runtime field-XPath diagnostic, including compile/evaluate
+    failures, non-simple selected nodes, and multi-member node sets.
   - Known remaining IDC gap (still accepted): a `fixed` value on a repeating `xs:ID` attribute.
 - **identity-constraint field-node classification** (cvc-identity-constraint.3 / XSD 1.1 §3.11.4):
   `evaluateIDC` (`validate_idc.go`) classifies each `xs:key`/`xs:unique`/`xs:keyref` `<xs:field>` result node

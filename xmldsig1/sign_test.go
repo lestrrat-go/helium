@@ -3,7 +3,9 @@ package xmldsig1_test
 import (
 	"context"
 	"crypto/elliptic"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xmldsig1"
@@ -296,6 +298,27 @@ func TestSign(t *testing.T) {
 			})
 		_, err := signer.SignDetached(t.Context(), doc, key)
 		require.ErrorIs(t, err, xmldsig1.ErrReferenceNotFound)
+	})
+
+	t.Run("long XPointer URI diagnostic is bounded", func(t *testing.T) {
+		key := generateRSAKey(t)
+		doc := mustParseXML(t, samlAssertion)
+		uri := "#xpointer(id('" + strings.Repeat("a", 1<<20) + "'))"
+		signer := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgRSASHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             uri,
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+			})
+
+		_, err := signer.SignDetached(t.Context(), doc, key)
+		require.ErrorIs(t, err, xmldsig1.ErrReferenceNotFound)
+		require.LessOrEqual(t, len(err.Error()), 1024)
+		require.True(t, utf8.ValidString(err.Error()))
+		require.Contains(t, err.Error(), "[truncated]")
+		var refErr *xmldsig1.ReferenceError
+		require.ErrorAs(t, err, &refErr)
+		require.Equal(t, uri, refErr.URI)
 	})
 
 	// A per-reference signing failure must identify WHICH reference failed

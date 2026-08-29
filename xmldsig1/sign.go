@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 func signEnveloped(ctx context.Context, cfg *signerConfig, doc *helium.Document, parent *helium.Element, key any) error {
@@ -562,7 +563,8 @@ func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Doc
 	// An external reference is dereferenced only through a configured resolver.
 	if _, _, _, ok := referenceURIForm(ref.URI); !ok {
 		if cfg.referenceResolver == nil {
-			return nil, fmt.Errorf("%w: unsupported reference URI: %s", ErrReferenceNotFound, ref.URI)
+			return nil, fmt.Errorf("%w: unsupported reference URI: %s",
+				ErrReferenceNotFound, lexer.DiagnosticExcerpt(ref.URI))
 		}
 		steps := transformSteps(ref)
 		joined, err := joinReferenceURI(doc.URL(), ref.URI)
