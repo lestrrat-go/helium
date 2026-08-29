@@ -172,6 +172,13 @@ def render_md(data, path, svg_rel):
     L.append(f"Every tagged release measured **unmodified** against *today's* W3C suites "
              f"(reference: `{ref}`). See "
              f"[tools/conformance-timeline](tools/conformance-timeline/README.md) for the method.\n")
+    L.append("The columns cover test corpora with different breadth; see each owning package README's "
+             "conformance section for\n"
+             "[XML](README.md#w3c-conformance-suites), [XSD](xsd/README.md#conformance), "
+             "[XSLT](xslt3/README.md#conformance),\n"
+             "[XPath](xpath3/README.md#conformance), "
+             "[XML Signature](xmldsig1/README.md#w3c-interop-conformance), and\n"
+             "[XML Encryption](xmlenc1/README.md#w3c-interop-conformance).\n")
     L.append(f"![conformance by release]({svg_rel})\n")
 
     L.append("## Score by release\n")
