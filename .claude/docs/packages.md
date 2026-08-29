@@ -323,8 +323,10 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   the document-level state a caller relies on (version/encoding/standalone, URL, property flags, SkipIDs, and
   the interned ID table rebuilt against the copy's own elements; no mutable map or DTD is aliased);
   DTD entity copies include their independent parsed replacement subtrees, so copied references retain the source's
-  string-value and canonical form without aliasing source nodes; `CopyDTDSubsets` registers BOTH subsets' declarations
-  before copying replacement trees, so references across the subset boundary resolve to destination-owned entities;
+  string-value and canonical form without aliasing source nodes; `CopyDoc` and `CopyDTDSubsets` carry each source
+  entity declaration's identity into its copy, so a copied reference binds to the copy of its actual declaration even
+  when the internal and external subsets contain the same name; `CopyDTDSubsets` registers BOTH subsets' declarations
+  before copying replacement trees, so references across the subset boundary bind to destination-owned entities;
   `CopyDTDInfo` copies the INTERNAL subset's metadata +
   entities/elements/attributes/notations into `dst` and
   RETURNS an error (notably when `dst` already has an internal subset); `CopyExtSubset` gives `dst` its own

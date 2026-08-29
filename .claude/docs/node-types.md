@@ -202,8 +202,8 @@ it correctly resolves a prefixed element's qualified ATTLIST (`<!ATTLIST a:item 
 from the source table is still preferred for identity and cost fidelity. `CopyDoc` also DEEP-COPIES the
 source's external subset (via `CopyDTDSubsets`), so the copy's fallback walk sees the same ID-typed ATTLIST
 decls as the source. `helium.CopyDTDSubsets(src, dst *Document)` registers declarations from BOTH subsets
-before copying entity replacement trees, so a reference across the subset boundary resolves to the copy's
-destination-owned declaration. `helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external
+before copying entity replacement trees, so each reference across the subset boundary binds to the copy of
+its actual source declaration. `helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external
 subset into
 `dst` (independent `*DTD`; mutating one never affects the other); `CopyDTDInfo`, by contrast, copies only the
 internal subset and links it into the document tree (and returns an error when `dst` already has one).
@@ -363,8 +363,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   depth: bottom-up child-linking through `AddChild` runs `childReaches` over each already-built child subtree
   as it is attached, so linking a deep chain one level at a time costs the sum of all subtree sizes. Skipping
   the preflight is sound here — never elsewhere — because every node `copyNode` returns is freshly allocated
-  in `dc.dst` and has never been linked as an owned child. The `EntityRefNode` branch uses `CreateReference`, so
-  a declared reference carries the destination DTD's shared `Entity` child; that declaration graph is disjoint
+  in `dc.dst` and has never been linked as an owned child. The `EntityRefNode` branch uses the active entity
+  correspondence when its declaration is part of the copy, then falls back to destination name lookup; a
+  declared reference carries the destination DTD's shared `Entity` child, and that declaration graph is disjoint
   from the fresh document subtree and cannot reach the new parent. Within a DTD entity's parsed replacement
   subtree, the same direct link is sound between fresh nodes. Each completed top-level replacement child is
   attached to its destination `Entity` through the same direct linker only after `copyDTDReplacements`
@@ -374,9 +375,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior
   for that unrelated caller too. `CopyDoc` builds both DTD subsets before the fresh document child list so
-  copied references resolve against destination declarations, but records the external subset's off-chain claim
-  only after the child list is complete. Each document-level append can therefore use the recorded owned tail
-  instead of walking the growing child list.
+  copied references bind to the copies of their actual source declarations, but records the external subset's
+  off-chain claim only after the child list is complete. Each document-level append can therefore use the recorded
+  owned tail instead of walking the growing child list.
 - `DeclareNamespace(prefix, uri)` / `AddNamespaceDecl(ns)` — do NOT themselves add a second declaration for a
   prefix in `nsDefs`, and NEVER touch the node's active namespace (`n.ns`) or expanded name.
   `DeclareNamespace` allocates a fresh `*Namespace`; `AddNamespaceDecl` attaches the caller's existing object

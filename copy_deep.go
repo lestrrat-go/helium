@@ -48,6 +48,10 @@ type deepCopyOptions struct {
 	// bookkeeping such as the strip-space node map and ID-table rebuild.
 	onCopy func(src, cp Node)
 
+	// entityCopies binds a copied EntityRef to the copy of its actual source
+	// declaration when a document or DTD copy includes that declaration.
+	entityCopies map[*Entity]*Entity
+
 	// afterElementAttrs, when non-nil, is invoked for each copied element AFTER
 	// its attributes have been copied (but before its children), with the source
 	// and copy elements. strip-space uses it to map attribute correspondence,
@@ -101,11 +105,12 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 // This is safe ONLY for a child that copyNode just returned while copying a
 // normal document or element tree. Every branch allocates a brand-new node
 // owned by dc.dst that has never been linked as an owned child. EntityRefNode
-// may carry the destination DTD's shared Entity declaration child, but that
-// declaration graph is disjoint from the fresh document subtree and therefore
-// cannot reach its new parent. DTD entity replacement trees use this linker
-// between fresh nodes and for their completed top-level children only after one
-// shared-state validation has proved the prospective declaration graph acyclic.
+// may carry a copied or name-resolved destination DTD declaration child, but
+// that declaration graph is disjoint from the fresh document subtree and
+// therefore cannot reach its new parent. DTD entity replacement trees use this
+// linker between fresh nodes and for their completed top-level children only
+// after one shared-state validation has proved the prospective declaration graph
+// acyclic.
 // Do NOT call this on a node from outside the copier: an arbitrary
 // caller-supplied child has no such guarantee.
 func appendCopiedChild(parent MutableNode, child Node) error {
@@ -188,7 +193,7 @@ func (dc *deepCopier) copyNode(src Node, parent *Element, inScope map[string]*Na
 		if dc.filtered(src, parent, parentState) {
 			return nil, nil //nolint:nilnil // omitted by filter
 		}
-		cp, err := copyEntityReference(src, dc.dst)
+		cp, err := copyEntityReference(src, dc.dst, dc.opts.entityCopies)
 		if err != nil {
 			return nil, err
 		}

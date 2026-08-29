@@ -34,25 +34,32 @@ func copyDTD(src *DTD, dst *Document) error {
 	if err != nil {
 		return err
 	}
-	state, err := copyDTDDeclarations(src, dstDTD, dst)
+	entityCopies := make(map[*Entity]*Entity)
+	state, err := copyDTDDeclarations(src, dstDTD, dst, entityCopies)
 	if err != nil {
 		return err
 	}
-	return copyDTDReplacements(state, dst)
+	return copyDTDReplacements(state, dst, entityCopies)
 }
 
 // CopyDTDSubsets deep-copies both DTD subsets from src into dst. It registers
-// every declaration before copying entity replacement trees, so references can
-// resolve across the internal/external subset boundary. A nil src or dst is a
-// no-op. It returns an error when the internal subset cannot be installed or a
-// replacement tree cannot be linked safely.
+// every declaration before copying entity replacement trees, then binds each
+// copied reference to the copy of its actual source declaration across the
+// internal/external subset boundary. A nil src or dst is a no-op. It returns an
+// error when the internal subset cannot be installed or a replacement tree
+// cannot be linked safely.
 func CopyDTDSubsets(src, dst *Document) error {
-	return copyDTDSubsets(src, dst, true)
+	_, err := copyDTDSubsets(src, dst, true)
+	return err
 }
 
-func copyDTDSubsets(src, dst *Document, recordOffChainClaim bool) error {
+func copyDTDSubsets(
+	src, dst *Document,
+	recordOffChainClaim bool,
+) (map[*Entity]*Entity, error) {
+	entityCopies := make(map[*Entity]*Entity)
 	if src == nil || dst == nil {
-		return nil
+		return entityCopies, nil
 	}
 
 	var states []dtdCopyState
@@ -61,20 +68,20 @@ func copyDTDSubsets(src, dst *Document, recordOffChainClaim bool) error {
 			src.intSubset.name, src.intSubset.externalID, src.intSubset.systemID,
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		state, err := copyDTDDeclarations(src.intSubset, dstDTD, dst)
+		state, err := copyDTDDeclarations(src.intSubset, dstDTD, dst, entityCopies)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		states = append(states, state)
 	}
 
 	if src.extSubset != nil {
 		dstDTD := newExternalSubsetCopy(src.extSubset, dst)
-		state, err := copyDTDDeclarations(src.extSubset, dstDTD, dst)
+		state, err := copyDTDDeclarations(src.extSubset, dstDTD, dst, entityCopies)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		dst.extSubset = dstDTD
 		if recordOffChainClaim {
@@ -84,12 +91,12 @@ func copyDTDSubsets(src, dst *Document, recordOffChainClaim bool) error {
 	}
 
 	for _, state := range states {
-		if err := copyDTDReplacements(state, dst); err != nil {
-			return err
+		if err := copyDTDReplacements(state, dst, entityCopies); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return entityCopies, nil
 }
 
 // CopyExtSubset deep-copies src's external DTD subset into dst, installing it as
@@ -116,7 +123,8 @@ func copyExtSubset(src, dst *Document, recordOffChainClaim bool) {
 	}
 
 	dstDTD := newExternalSubsetCopy(srcDTD, dst)
-	state, err := copyDTDDeclarations(srcDTD, dstDTD, dst)
+	entityCopies := make(map[*Entity]*Entity)
+	state, err := copyDTDDeclarations(srcDTD, dstDTD, dst, entityCopies)
 	if err != nil {
 		return
 	}
@@ -125,7 +133,7 @@ func copyExtSubset(src, dst *Document, recordOffChainClaim bool) {
 	if recordOffChainClaim {
 		dst.offChainChildClaim = true
 	}
-	if err := copyDTDReplacements(state, dst); err != nil {
+	if err := copyDTDReplacements(state, dst, entityCopies); err != nil {
 		return
 	}
 	// dstDTD claims dst as its parent but is deliberately NOT in dst's child
@@ -146,11 +154,9 @@ func newExternalSubsetCopy(srcDTD *DTD, dst *Document) *DTD {
 	return dstDTD
 }
 
-// dtdCopyState keeps the source-to-copy entity correspondence between the
-// declaration and replacement-tree phases.
+// dtdCopyState keeps the source subset needed by the replacement-tree phase.
 type dtdCopyState struct {
-	src          *DTD
-	entityCopies map[*Entity]*Entity
+	src *DTD
 }
 
 // copyDTDDeclarations walks src's children in document order, copying each
@@ -158,12 +164,14 @@ type dtdCopyState struct {
 // dstDTD's lookup maps and as a child (so serialization round-trips
 // identically). Replacement trees are copied separately after all applicable
 // subsets have completed this phase.
-func copyDTDDeclarations(src, dstDTD *DTD, dst *Document) (dtdCopyState, error) {
+func copyDTDDeclarations(
+	src, dstDTD *DTD,
+	dst *Document,
+	entityCopies map[*Entity]*Entity,
+) (dtdCopyState, error) {
 	// Correspondence from each source attribute declaration to its copy, so the
 	// copy's registration-order sequences can be rebuilt from the source's.
 	attrCopies := make(map[*AttributeDecl]*AttributeDecl)
-	entityCopies := make(map[*Entity]*Entity)
-
 	// The DTD owns its declaration children, so Children's owned-boundary advance
 	// equals a raw NextSibling walk here while adding a per-list seen guard, so a
 	// corrupt (cyclic) declaration list terminates instead of spinning.
@@ -228,25 +236,35 @@ func copyDTDDeclarations(src, dstDTD *DTD, dst *Document) (dtdCopyState, error) 
 	}
 
 	copyAttrDeclOrder(src, dstDTD, attrCopies)
-	return dtdCopyState{src: src, entityCopies: entityCopies}, nil
+	return dtdCopyState{src: src}, nil
 }
 
 // copyDTDReplacements copies each entity's parsed replacement tree after every
 // declaration needed by the operation has been registered. It validates the
 // completed declaration graph with shared visit state before linking any fresh
 // replacement roots, so both validation and linking are linear in graph size.
-func copyDTDReplacements(state dtdCopyState, dst *Document) error {
+func copyDTDReplacements(
+	state dtdCopyState,
+	dst *Document,
+	entityCopies map[*Entity]*Entity,
+) error {
 	// EntityRef nodes share their declaration's parsed replacement subtree.
 	// Copy it only after every declaration has been registered, so nested and
-	// forward references resolve to destination-owned Entity nodes.
-	dc := &deepCopier{dst: dst, opts: deepCopyOptions{overDeclareNS: true}}
+	// forward references bind to the destination copy of that same declaration.
+	dc := &deepCopier{
+		dst: dst,
+		opts: deepCopyOptions{
+			overDeclareNS: true,
+			entityCopies:  entityCopies,
+		},
+	}
 	var replacements []dtdReplacementCopy
 	for c := range Children(state.src) {
 		ent, ok := AsNode[*Entity](c)
 		if !ok {
 			continue
 		}
-		dstEnt := state.entityCopies[ent]
+		dstEnt := entityCopies[ent]
 		replacementCopy := dtdReplacementCopy{entity: dstEnt}
 		for replacement := range Children(ent) {
 			child, err := dc.copyNode(replacement, nil, nil, nil)

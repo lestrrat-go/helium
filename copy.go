@@ -39,7 +39,7 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	case ProcessingInstructionNode:
 		return targetDoc.CreatePI(src.Name(), string(src.Content())), nil
 	case EntityRefNode:
-		return copyEntityReference(src, targetDoc)
+		return copyEntityReference(src, targetDoc, nil)
 	case NamespaceNode:
 		// Namespace nodes are virtual; return a new wrapper with the same data.
 		ns := NewNamespace(src.Name(), string(src.Content()))
@@ -49,13 +49,28 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 	}
 }
 
-// copyEntityReference creates a fresh reference and resolves it only against
-// declarations owned by targetDoc. It therefore preserves declared replacement
-// semantics without aliasing the source DTD or inventing a destination
-// declaration. The nil receiver behavior matches the other leaf constructors.
-func copyEntityReference(src Node, targetDoc *Document) (*EntityRef, error) {
+// copyEntityReference creates a fresh reference owned by targetDoc. When the
+// enclosing copy includes the source reference's actual declaration,
+// entityCopies binds the reference to that declaration's copy. Other callers
+// retain the name-based targetDoc lookup used by CopyNode. No path aliases the
+// source DTD or invents a destination declaration.
+func copyEntityReference(
+	src Node,
+	targetDoc *Document,
+	entityCopies map[*Entity]*Entity,
+) (*EntityRef, error) {
 	if targetDoc == nil {
 		return targetDoc.CreateCharRef(src.Name())
+	}
+	if srcEntity, ok := AsNode[*Entity](src.FirstChild()); ok {
+		if dstEntity := entityCopies[srcEntity]; dstEntity != nil {
+			ref, err := targetDoc.CreateCharRef(src.Name())
+			if err != nil {
+				return nil, err
+			}
+			bindEntityReference(ref, dstEntity)
+			return ref, nil
+		}
 	}
 	return targetDoc.CreateReference(src.Name())
 }
@@ -64,9 +79,10 @@ func copyEntityReference(src Node, targetDoc *Document) (*EntityRef, error) {
 // AND external DTD subsets, and the document-level state a caller reasonably
 // relies on (the XML-declaration version/encoding/standalone, the base URI, the
 // property flags, the ID-skip state, and the interned ID table). The copy is
-// fully independent — the external subset is deep-copied and the ID table is
-// rebuilt against the copy's own elements, so no mutable map or DTD is aliased
-// between src and the result. Mutating one document never affects the other.
+// fully independent — the external subset is deep-copied, each entity reference
+// binds to the copy of its actual source declaration, and the ID table is rebuilt
+// against the copy's own elements. No mutable map or DTD is aliased between src
+// and the result. Mutating one document never affects the other.
 func CopyDoc(src *Document) (*Document, error) {
 	if src == nil {
 		return nil, fmt.Errorf("helium: cannot copy nil document")
@@ -83,10 +99,11 @@ func CopyDoc(src *Document) (*Document, error) {
 	dst.idsSkip = src.idsSkip
 
 	// Deep-copy both DTD subsets before document content so EntityRef copies can
-	// resolve to destination-owned declarations. The external subset's off-chain
-	// parent claim is recorded after the child list is built to retain O(1)
-	// document appends.
-	if err := copyDTDSubsets(src, dst, false); err != nil {
+	// bind to the copy of their actual source declaration. The external subset's
+	// off-chain parent claim is recorded after the child list is built to retain
+	// O(1) document appends.
+	entityCopies, err := copyDTDSubsets(src, dst, false)
+	if err != nil {
 		return nil, err
 	}
 
@@ -103,7 +120,14 @@ func CopyDoc(src *Document) (*Document, error) {
 		corr.m = make(map[*Element]*Element, len(src.ids))
 		onCopy = corr.record
 	}
-	dc := &deepCopier{dst: dst, opts: deepCopyOptions{overDeclareNS: true, onCopy: onCopy}}
+	dc := &deepCopier{
+		dst: dst,
+		opts: deepCopyOptions{
+			overDeclareNS: true,
+			onCopy:        onCopy,
+			entityCopies:  entityCopies,
+		},
+	}
 	if err := dc.copyChildren(src, dst, nil, nil); err != nil {
 		return nil, err
 	}

@@ -433,15 +433,19 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 
 	ent, ok := d.GetEntity(n.name)
 	if ok {
-		n.content = []byte(ent.content)
-		// Original code says:
-		// The parent pointer in entity is a DTD pointer and thus is NOT
-		// updated.  Not sure if this is 100% correct.
-		setFirstChild(n, ent)
-		setLastChild(n, ent)
+		bindEntityReference(n, ent)
 	}
 
 	return n, nil
+}
+
+func bindEntityReference(ref *EntityRef, ent *Entity) {
+	ref.content = []byte(ent.content)
+	// Original code says:
+	// The parent pointer in entity is a DTD pointer and thus is NOT
+	// updated.  Not sure if this is 100% correct.
+	setFirstChild(ref, ent)
+	setLastChild(ref, ent)
 }
 
 // CreateAttribute builds an attribute node named name, with value parsed into
