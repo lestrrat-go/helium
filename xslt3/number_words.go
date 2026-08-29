@@ -14,7 +14,15 @@ const (
 	germanOnePrefix       = "ein"
 	numberBillion   int64 = 1_000_000_000
 	numberTrillion  int64 = 1_000_000_000_000
+	minInt64              = -1 << 63
 )
+
+func minInt64MagnitudeString(n int64) (string, bool) {
+	if n != minInt64 {
+		return "", false
+	}
+	return strconv.FormatUint(uint64(1)<<63, 10), true
+}
 
 // numberToWordsLang converts a number to words in the given language and case.
 // caseMode is "lower", "upper", or "title".
@@ -98,6 +106,9 @@ func englishOrdinal(n int64) string {
 	if n == 0 {
 		return "zeroth"
 	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "minus " + magnitude + "th"
+	}
 	if n < 0 {
 		return "minus " + englishOrdinal(-n)
 	}
@@ -177,6 +188,9 @@ func englishTensOrdinal(n int64) string {
 func germanCardinal(n int64) string {
 	if n == 0 {
 		return "null"
+	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "minus " + magnitude
 	}
 	if n < 0 {
 		return "minus " + germanCardinal(-n)
@@ -331,6 +345,9 @@ func italianCardinal(n int64) string {
 	if n == 0 {
 		return "zero"
 	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "meno " + magnitude
+	}
 	if n < 0 {
 		return "meno " + italianCardinal(-n)
 	}
@@ -426,6 +443,9 @@ func italianOrdinal(n int64, ordinal string) string {
 func frenchCardinal(n int64) string {
 	if n == 0 {
 		return "zéro"
+	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "moins " + magnitude
 	}
 	if n < 0 {
 		return "moins " + frenchCardinal(-n)

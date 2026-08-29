@@ -453,9 +453,9 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 
 	switch token {
 	case "a":
-		return toLowerAlpha(num)
+		return toLowerAlpha(int64(num))
 	case "A":
-		return toUpperAlpha(num)
+		return toUpperAlpha(int64(num))
 	case "i":
 		return strings.ToLower(toRoman(num))
 	case "I":
@@ -481,7 +481,7 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 		// Non-ASCII letter: alphabetic numbering from that codepoint
 		// (e.g., α = U+03B1 for Greek lowercase: α, β, γ, ..., ω, αα, αβ, ...)
 		if firstRune > 127 && unicode.IsLetter(firstRune) {
-			return formatWithAlphaSystem(num, firstRune)
+			return formatWithAlphaSystem(int64(num), firstRune)
 		}
 
 		// ASCII numeric format: determine minimum width from token (e.g., "001" = width 3)
@@ -514,6 +514,21 @@ func formatWordNumber(num int64, token string, lang string, ordinal string) (str
 	}
 }
 
+func formatAlphabeticNumber(num int64, token string) (string, bool) {
+	switch token {
+	case "a":
+		return toLowerAlpha(num), true
+	case "A":
+		return toUpperAlpha(num), true
+	}
+
+	runes := []rune(token)
+	if len(runes) > 0 && runes[0] > 127 && unicode.IsLetter(runes[0]) {
+		return formatWithAlphaSystem(num, runes[0]), true
+	}
+	return "", false
+}
+
 // numericOrdinalSuffix returns the suffix for a numeric ordinal (e.g., "st", "nd", "rd", "th").
 func numericOrdinalSuffix(num int, _ string) string {
 	// Default to English ordinal suffixes
@@ -522,6 +537,23 @@ func numericOrdinalSuffix(num int, _ string) string {
 		return "th"
 	}
 	switch num % 10 {
+	case 1:
+		return "st"
+	case 2:
+		return "nd"
+	case 3:
+		return "rd"
+	default:
+		return "th"
+	}
+}
+
+func numericOrdinalSuffixBig(num *big.Int, _ string) string {
+	n := new(big.Int).Rem(num, big.NewInt(100)).Int64()
+	if n >= 11 && n <= 13 {
+		return "th"
+	}
+	switch n % 10 {
 	case 1:
 		return "st"
 	case 2:
@@ -548,9 +580,9 @@ var knownAlphabetLengths = map[rune]int{
 // formatWithAlphaSystem formats using alphabetic numbering (like a-z but with
 // non-ASCII letters). Wraps at the end of the alphabet:
 // α=1, β=2, ..., ω=25, αα=26, αβ=27, etc.
-func formatWithAlphaSystem(num int, start rune) string {
+func formatWithAlphaSystem(num int64, start rune) string {
 	if num <= 0 {
-		return strconv.Itoa(num)
+		return strconv.FormatInt(num, 10)
 	}
 
 	// Use known alphabet length if available, otherwise detect
@@ -565,7 +597,7 @@ func formatWithAlphaSystem(num int, start rune) string {
 		}
 	}
 	if seqLen == 0 {
-		return strconv.Itoa(num)
+		return strconv.FormatInt(num, 10)
 	}
 
 	// Convert to base-N alphabetic representation (1-based, like a=1, b=2, ..., z=26, aa=27)
@@ -573,8 +605,8 @@ func formatWithAlphaSystem(num int, start rune) string {
 	n := num
 	for n > 0 {
 		n-- // convert to 0-based
-		result = append([]rune{start + rune(n%seqLen)}, result...)
-		n /= seqLen
+		result = append([]rune{start + rune(n%int64(seqLen))}, result...)
+		n /= int64(seqLen)
 	}
 	return string(result)
 }
@@ -650,11 +682,15 @@ func formatBigNumberList(bigNums []*big.Int, format string, groupSep string, gro
 		if tokIdx >= len(tokens) {
 			tokIdx = len(tokens) - 1
 		}
-		// Word formatting supports every int64 value on every architecture.
-		// Other non-decimal formats still require a native int.
+		// Word and alphabetic formatting support every int64 value on every architecture.
+		// The remaining non-decimal formats require a native int.
 		if num.IsInt64() {
 			n64 := num.Int64()
 			if formatted, ok := formatWordNumber(n64, tokens[tokIdx].format, lang, ordinal); ok {
+				buf.WriteString(formatted)
+				continue
+			}
+			if formatted, ok := formatAlphabeticNumber(n64, tokens[tokIdx].format); ok {
 				buf.WriteString(formatted)
 				continue
 			}
@@ -665,7 +701,7 @@ func formatBigNumberList(bigNums []*big.Int, format string, groupSep string, gro
 			}
 		}
 		// Large number: only decimal digit formatting is meaningful
-		buf.WriteString(formatBigSingleNumber(num, tokens[tokIdx].format, groupSep, groupSize))
+		buf.WriteString(formatBigSingleNumber(num, tokens[tokIdx].format, groupSep, groupSize, lang, ordinal))
 	}
 	buf.WriteString(suffix)
 	return buf.String()
@@ -673,7 +709,7 @@ func formatBigNumberList(bigNums []*big.Int, format string, groupSep string, gro
 
 // formatBigSingleNumber formats a *big.Int using a decimal format token.
 // Supports ASCII digits with grouping and non-ASCII digit systems.
-func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSize int) string {
+func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSize int, lang string, ordinal string) string {
 	runes := []rune(token)
 	firstRune := runes[0]
 
@@ -694,6 +730,9 @@ func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSiz
 	}
 	if groupSep != "" && groupSize > 0 {
 		s = applyGroupingSeparator(s, groupSep, groupSize)
+	}
+	if ordinal != "" {
+		s += numericOrdinalSuffixBig(num, lang)
 	}
 	return s
 }
@@ -914,6 +953,13 @@ func numberToWords(n int64, upper bool) string { //nolint:unparam // upper alway
 		}
 		return "zero"
 	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		result := "minus " + magnitude
+		if upper {
+			return strings.ToUpper(result)
+		}
+		return result
+	}
 	var ones = []string{"", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
 		"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"}
 	var tens = []string{"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"}
@@ -994,9 +1040,9 @@ func applyGroupingSeparator(s string, sep string, size int) string {
 	return string(result)
 }
 
-func toLowerAlpha(n int) string {
+func toLowerAlpha(n int64) string {
 	if n <= 0 {
-		return strconv.Itoa(n)
+		return strconv.FormatInt(n, 10)
 	}
 	var buf []byte
 	for n > 0 {
@@ -1007,7 +1053,7 @@ func toLowerAlpha(n int) string {
 	return string(buf)
 }
 
-func toUpperAlpha(n int) string {
+func toUpperAlpha(n int64) string {
 	return strings.ToUpper(toLowerAlpha(n))
 }
 

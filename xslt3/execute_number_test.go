@@ -12,6 +12,8 @@ func TestExecNumberStartAt(t *testing.T) {
 	testCases := []struct {
 		name    string
 		startAt string
+		format  string
+		ordinal string
 		want    string
 	}{
 		{
@@ -26,13 +28,45 @@ func TestExecNumberStartAt(t *testing.T) {
 			want: "two billion one hundred and forty seven million four hundred and eighty three thousand " +
 				"six hundred and forty eight",
 		},
+		{
+			name:    "minimum signed 64-bit integer in words",
+			startAt: "-9223372036854775808",
+			want:    "minus 9223372036854775808",
+		},
+		{
+			name:    "minimum signed 64-bit ordinal in words",
+			startAt: "-9223372036854775808",
+			ordinal: "yes",
+			want:    "minus 9223372036854775808th",
+		},
+		{
+			name:    "alphabetic above signed 32-bit range",
+			startAt: "2147483648",
+			format:  "a",
+			want:    "fxshrxx",
+		},
+		{
+			name:    "numeric ordinal above signed 32-bit range",
+			startAt: "2147483648",
+			format:  "1",
+			ordinal: "yes",
+			want:    "2147483648th",
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			format := testCase.format
+			if format == "" {
+				format = "w"
+			}
+			ordinal := ""
+			if testCase.ordinal != "" {
+				ordinal = ` ordinal="` + testCase.ordinal + `"`
+			}
 			stylesheet := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
 <xsl:output method="text"/>
-<xsl:template match="/"><xsl:number value="1" start-at="` + testCase.startAt + `" format="w"/></xsl:template>
+<xsl:template match="/"><xsl:number value="1" start-at="` + testCase.startAt + `" format="` + format + `"` + ordinal + `/></xsl:template>
 </xsl:stylesheet>`
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
 			require.NoError(t, err)
@@ -105,6 +139,17 @@ func TestFormatBigNumberListWordTokens(t *testing.T) {
 			number:  numberTrillion + 1,
 			ordinal: "yes",
 			want:    "one trillion first",
+		},
+		{
+			name:   "minimum signed 64-bit integer",
+			number: minInt64,
+			want:   "minus 9223372036854775808",
+		},
+		{
+			name:    "minimum signed 64-bit ordinal",
+			number:  minInt64,
+			ordinal: "yes",
+			want:    "minus 9223372036854775808th",
 		},
 	}
 
