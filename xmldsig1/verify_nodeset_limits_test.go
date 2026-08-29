@@ -266,6 +266,77 @@ func xpathFilterRetrievalDoc(decls, pad int) string {
 		1)
 }
 
+// xpathFilterRetrievalMembers is the exact number of members in the <bulk>
+// subtree's XPath input node-set: the bulk element, its Id attribute and
+// inherited namespace axis, then each child element, attribute, and complete
+// namespace axis.
+func xpathFilterRetrievalMembers(decls, pad int) int {
+	return 2 + decls + pad*(decls+2)
+}
+
+func TestVerifyXPathFilterNodeLimit(t *testing.T) {
+	const (
+		decls = 3
+		pad   = 4
+	)
+	key := generateRSAKey(t)
+	src := xpathFilterRetrievalDoc(decls, pad)
+	limit := xpathFilterRetrievalMembers(decls, pad)
+
+	t.Run("exact boundary", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			MaxXPathFilterNodes(limit).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrInvalidKeyInfo)
+		require.NotErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+	})
+
+	t.Run("one member over", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		ks := &recordingKeySource{key: &key.PublicKey}
+		_, err := xmldsig1.NewVerifier(ks).
+			MaxXPathFilterNodes(limit-1).
+			Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+		require.Contains(t, err.Error(), fmt.Sprintf("exceeds %d node-set members", limit-1))
+		require.False(t, ks.called, "the XPath input limit must fire before key resolution")
+	})
+
+	t.Run("cancelled context wins", func(t *testing.T) {
+		doc := mustParseXML(t, src)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+			MaxXPathFilterNodes(limit-1).
+			Verify(ctx, doc)
+		require.ErrorIs(t, err, context.Canceled)
+		require.NotErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+	})
+}
+
+// TestVerifyXPathFilterNodeLimitAllocation keeps the default bound tied to its
+// purpose: this compact namespace-heavy document would otherwise materialize
+// over 1.6 million namespace-axis members before authentication. The default
+// refuses it after 65,536 members without allocating the rejected wrapper.
+func TestVerifyXPathFilterNodeLimitAllocation(t *testing.T) {
+	const maxVerifyAllocation = 32 << 20
+
+	key := generateRSAKey(t)
+	src := xpathFilterRetrievalDoc(800, 2000)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
+	for _, candidate := range []xmldsig1.Verifier{verifier, verifier.MaxXPathFilterNodes(0)} {
+		doc := mustParseXML(t, src)
+		_, err := candidate.Verify(t.Context(), doc)
+		require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+	}
+
+	allocated := verifyAllocatedBytes(t, verifier, src)
+	t.Logf("default XPath input limit allocated %d bytes for a %d-byte fixture", allocated, len(src))
+	require.Less(t, allocated, uint64(maxVerifyAllocation),
+		"verifying a %d-byte namespace-heavy document allocated %d bytes", len(src), allocated)
+}
+
 // TestVerifyDeadlineDuringNodeSetConstruction pins that a deadline stops node-set
 // construction while it runs, well before the whole set is built. The
 // document costs seconds of work to canonicalize, so a deadline an order of
@@ -277,7 +348,9 @@ func TestVerifyDeadlineDuringNodeSetConstruction(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).Verify(ctx, doc)
+	_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		MaxXPathFilterNodes(-1).
+		Verify(ctx, doc)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 

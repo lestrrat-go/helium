@@ -305,11 +305,12 @@ type verifierConfig struct {
 	// xsltTransformer applies the XSLT transform. nil (the default) keeps the XSLT
 	// transform fail-closed with ErrUnsupportedTransform.
 	xsltTransformer XSLTTransformer
-	// Parse-time resource caps (see the default* constants). Zero selects the
+	// Resource caps (see the default* constants). Zero selects the
 	// default; negative disables the cap.
-	maxReferences     int
-	maxKeyInfoEntries int
-	maxDecodedBytes   int
+	maxReferences       int
+	maxKeyInfoEntries   int
+	maxDecodedBytes     int
+	maxXPathFilterNodes int
 	// allowXPointer opts into resolving a general XPointer Reference URI (an
 	// xmlns()*xpointer(expr) framework form) beyond the four safe same-document
 	// forms. Default false keeps a general XPointer fail-closed as an external
@@ -352,6 +353,15 @@ func (cfg *verifierConfig) maxDecodedBytesLimit() int {
 		return defaultMaxDecodedBytes
 	}
 	return cfg.maxDecodedBytes
+}
+
+// maxXPathFilterNodesLimit returns the effective cap on the number of members
+// in one XPath filter transform's input node-set, defaulting when unset.
+func (cfg *verifierConfig) maxXPathFilterNodesLimit() int {
+	if cfg.maxXPathFilterNodes == 0 {
+		return defaultMaxXPathFilterNodes
+	}
+	return cfg.maxXPathFilterNodes
 }
 
 // parser returns the parser used for every octets-to-node-set transform
@@ -537,6 +547,24 @@ func (v Verifier) MaxKeyInfoEntries(n int) Verifier {
 func (v Verifier) MaxDecodedBytes(n int) Verifier {
 	v = v.clone()
 	v.cfg.maxDecodedBytes = n
+	return v
+}
+
+// MaxXPathFilterNodes caps the number of members in one XPath filter
+// transform's input node-set. The count includes elements, attributes, text,
+// comments, processing instructions, and each element's complete in-scope
+// namespace axis. Exceeding the cap returns [ErrResourceLimitExceeded] before
+// the over-limit member is collected or any member is evaluated.
+//
+// This limit applies to XPath transforms on ordinary References, Manifest
+// references, external content parsed after an octet transform, and
+// ds:RetrievalMethod. RetrievalMethod processing can run before the
+// SignatureValue is authenticated, so callers should keep a finite limit for
+// untrusted documents. Zero (the default) selects the built-in cap of 65,536
+// members; a negative value disables the cap.
+func (v Verifier) MaxXPathFilterNodes(n int) Verifier {
+	v = v.clone()
+	v.cfg.maxXPathFilterNodes = n
 	return v
 }
 

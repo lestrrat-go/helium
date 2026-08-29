@@ -449,20 +449,20 @@ source: [examples/xmldsig1_sha1_optin_example_test.go](https://github.com/lestrr
 An attacker-controlled, unsigned document can force verification to do
 substantial decode/parse work *before* the `SignatureValue` is ever checked:
 many or large `DigestValue`/`SignatureValue`/`X509Certificate` values to
-base64-decode, and one `x509.ParseCertificate` per embedded certificate. To
-bound that work the `Verifier` enforces three parse-time caps, each with a
-conservative default that sits well above any legitimate signature so existing
-documents verify unchanged:
+base64-decode, one `x509.ParseCertificate` per embedded certificate, and a
+namespace-heavy XPath filter input to collect and evaluate. To bound that work
+the `Verifier` enforces four resource caps. Their defaults preserve the package's
+interop vectors while bounding hostile work:
 
 | Builder | Bounds | Default |
 |---------|--------|---------|
 | `Verifier.MaxReferences(n)` | number of `ds:Reference` elements | 1024 |
 | `Verifier.MaxKeyInfoEntries(n)` | `KeyInfo` children + `X509Data` children | 256 |
 | `Verifier.MaxDecodedBytes(n)` | running total of certificate and signature octets | 10 MiB |
+| `Verifier.MaxXPathFilterNodes(n)` | members in one XPath filter input node-set | 65,536 |
 
-Exceeding a cap fails with `ErrResourceLimitExceeded` before any Reference is
-digested or the signature is checked. For each builder, `n == 0` selects the
-default and a negative `n` disables that cap.
+Exceeding a cap fails with `ErrResourceLimitExceeded`. For each builder,
+`n == 0` selects the default and a negative `n` disables that cap.
 
 `MaxDecodedBytes` charges five sites. Four are base64 values decoded straight
 off the document — the Signature's own `DigestValue`, `SignatureValue`, and
@@ -530,21 +530,19 @@ canonical octets in every supported method, Exclusive C14N and its
 The one node set that does carry the complete axis is the input to an `XPath`
 filter transform. That transform is evaluated once per node — namespace nodes
 included — and may keep an element whose parent it drops, so every element there
-needs its own axis; the node set, and the one evaluation per member, are
-quadratic in the document. That is the transform's own data model, not a choice
-this package makes, and it is where a deadline earns its keep: nothing caps that
-node set's size, and both the walk that builds it and the per-node evaluation
-poll the context, so a `ctx` deadline bounds the work at roughly the rate times
-the deadline instead of running to completion. The walk charges its poll per
-collected node-set MEMBER — every element, attribute, and namespace node — and
-not per tree node walked, so an element that repeats the whole axis cannot carry
-a document's worth of members past a poll: what a passed deadline may still cost
-is one poll interval of members, whatever the document's shape.
+needs its own axis. The node set and its evaluations can therefore be quadratic
+in the document. `MaxXPathFilterNodes` bounds the members collected and
+evaluated by one filter while preserving the complete standards-required axis
+for every accepted input. The limit is checked before the over-limit namespace
+wrapper is allocated and before evaluation begins. It applies to same-document
+References, external or intermediate octets parsed for a later XPath transform,
+Manifest inner references, and `ds:RetrievalMethod` transforms.
 
-Pass one when verifying documents from untrusted sources. A Reference's
-transforms run only *after* the `SignatureValue` has verified, but a
-`ds:RetrievalMethod`'s transforms run before it, so a RetrievalMethod carrying
-an XPath filter transform reaches that quadratic node set without a key or a
+Both collection and per-node evaluation also poll `ctx`. A context error wins
+when cancellation coincides with the member boundary. Keep the default finite
+for untrusted documents: a Reference's transforms run only after the
+`SignatureValue` has verified, but a `ds:RetrievalMethod`'s transforms run
+before it, so a RetrievalMethod can reach the XPath node set without a key or a
 valid signature.
 
 RetrievalMethod transforms have a separate fixed `maxRetrievalTransformSteps`

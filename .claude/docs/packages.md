@@ -1182,15 +1182,21 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
     to keep it. The `SignDetached`/`SignEnveloping` godoc states this, and `sign_lifetime_test.go` proves the
     node survives `doc.Free()` plus slab-pool churn intact.
 - **NewVerifier(KeySource) → Verifier** — create fluent builder for verification (clone-on-write value type)
-  - `AllowSHA1(bool)`, `AllowXPointer(bool)`, `LenientKeyInfo(bool)`, `ReferenceResolver(r)`, `ReferenceParser(p)`, `ValidateManifests(bool)`, `XSLTTransformer(t)`, `MaxReferences(n)`, `MaxKeyInfoEntries(n)`, `MaxDecodedBytes(n)` — builder methods
-  - **Parse-time resource caps** (`xmldsig1.go` `verifierConfig` + `verify.go` `verifyBudget`): bound the
-    decode/parse work an unsigned, attacker-controlled Signature can force BEFORE the SignatureValue is
-    checked (many/large `DigestValue`/`SignatureValue`/`X509Certificate` base64 decodes, one
-    `x509.ParseCertificate` per embedded cert). `MaxReferences` (default 1024) caps `ds:Reference` count,
+  - `AllowSHA1(bool)`, `AllowXPointer(bool)`, `LenientKeyInfo(bool)`, `ReferenceResolver(r)`,
+    `ReferenceParser(p)`, `ValidateManifests(bool)`, `XSLTTransformer(t)`, `MaxReferences(n)`,
+    `MaxKeyInfoEntries(n)`, `MaxDecodedBytes(n)`, `MaxXPathFilterNodes(n)` — builder methods
+  - **Verification resource caps** (`xmldsig1.go` `verifierConfig`, `verify.go` `verifyBudget`,
+    `transforms.go` `nodeSet`): bound the decode, parse, and transform work an unsigned,
+    attacker-controlled Signature can force before the SignatureValue is checked. `MaxReferences`
+    (default 1024) caps `ds:Reference` count,
     `MaxKeyInfoEntries` (default 256) caps `KeyInfo` children + `X509Data` children, `MaxDecodedBytes`
-    (default 10 MiB) caps the running certificate/signature octet total. Exceeding any →
-    `ErrResourceLimitExceeded` (before digesting/crypto). Per builder, `n==0` selects the default and `n<0`
-    disables the cap. The `verifyBudget` also polls `ctx.Err()` inside the KeyInfo/Reference parse loops (not
+    (default 10 MiB) caps the running certificate/signature octet total, and `MaxXPathFilterNodes`
+    (default 65,536) caps the complete node-set members collected and evaluated by one XPath filter,
+    including every element's full in-scope namespace axis. Exceeding any →
+    `ErrResourceLimitExceeded`. Per builder, `n==0` selects the default and `n<0` disables the cap. The
+    XPath limit is checked before the over-limit namespace wrapper is allocated and before evaluation;
+    `ctx.Err()` takes priority when cancellation and the boundary coincide. The `verifyBudget` also polls
+    `ctx.Err()` inside the KeyInfo/Reference parse loops (not
     just at their boundaries), so a cancelled ctx/passed deadline stops the parse promptly. `MaxDecodedBytes`
     has **five** charge sites, four of them DOM-decoded (`verify.go` SignatureValue + DigestValue,
     `keyinfo.go` X509Certificate, `retrieval_method.go:374` same-document rawX509Certificate) and one not
@@ -1227,7 +1233,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
     `ReferenceResolver` under the resolver's OWN 64 MiB cap and run through its transforms, and only then
     charged — so those octets are charged AFTER materialization and are not base64-decoded bytes. The KeyInfo
     values outside the budget (KeyName, X509SKI, X509SubjectName/IssuerName, the base64 KeyValue families) are
-    not charged at all. The XPath-transform expression is not charged against `MaxDecodedBytes` either; it has
+    not charged at all. The XPath-transform expression and node-set members are not charged against
+    `MaxDecodedBytes`; the expression has
     its own fixed `maxXPathFilterExpressionBytes` = 8 KiB length ceiling (`verify.go`, applied in
     `parseXPathTransform` → `ErrResourceLimitExceeded`), bounding the expression where it is read off the
     document because compiling one costs superlinearly in its LENGTH (a flat predicate chain allocates ~100x

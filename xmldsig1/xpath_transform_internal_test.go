@@ -43,6 +43,12 @@ func TestXPathTransformDefCanDigest(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, digestEqual(computed, ref.digestValue),
 		"defCan-1 XPath+c14n11 digest must match the signed DigestValue")
+
+	limited := *cfg
+	limited.maxXPathFilterNodes = 1
+	_, err = resolveExternalReference(t.Context(), &limited, doc, ref)
+	require.ErrorIs(t, err, ErrResourceLimitExceeded,
+		"the configured XPath member cap must reach an external document parsed after an octet boundary")
 }
 
 // TestXPathTransformThroughPipeline drives a same-document Reference carrying an
@@ -75,6 +81,10 @@ func TestXPathTransformThroughPipeline(t *testing.T) {
 	require.Contains(t, string(canonical), "KEEPVAL", "kept subtree must survive the XPath filter")
 	require.NotContains(t, string(canonical), "DROPVAL", "dropped subtree must be filtered out")
 	require.NotContains(t, string(canonical), "t:drop", "dropped element must be filtered out")
+
+	_, _, _, err = canonicalizeReference(t.Context(), &verifierConfig{maxXPathFilterNodes: 1}, doc, nil, ref)
+	require.ErrorIs(t, err, ErrResourceLimitExceeded,
+		"the configured XPath member cap must reach an ordinary same-document Reference")
 }
 
 func TestApplyXPathFilterEvaluationError(t *testing.T) {
@@ -126,6 +136,7 @@ func TestApplyXPathFilterEvaluationError(t *testing.T) {
 				ctx,
 				[]helium.Node{doc.DocumentElement()},
 				xpathFilter{expr: test.expr},
+				defaultMaxXPathFilterNodes,
 			)
 			require.Nil(t, kept)
 			require.EqualError(t, err, test.wantErr)

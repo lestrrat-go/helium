@@ -209,11 +209,22 @@ func canonicalizeNodeSetMode(mode c14n.Mode, comments bool, nodes []helium.Node,
 // when a transform needs explicit node membership. The materializer removes
 // comments for a comment-excluding Reference form before applying that transform.
 func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.Node, error) {
-	var set nodeSet
+	return collectDocumentNodesLimited(ctx, doc, -1)
+}
+
+func collectDocumentNodesLimited(ctx context.Context, doc *helium.Document, maxNodes int) ([]helium.Node, error) {
+	set := nodeSet{maxNodes: maxNodes}
 	for c := range helium.Children(doc) {
 		switch c.Type() {
 		case helium.ElementNode:
-			sub, err := collectSubtreeNodes(ctx, c)
+			remaining := maxNodes
+			if remaining > 0 {
+				remaining -= len(set.nodes)
+				if remaining == 0 {
+					return nil, checkXPathFilterNodeLimit(ctx, maxNodes+1, maxNodes)
+				}
+			}
+			sub, err := collectSubtreeNodesLimited(ctx, c, remaining)
 			if err != nil {
 				return nil, err
 			}
@@ -240,12 +251,12 @@ func collectDocumentNodes(ctx context.Context, doc *helium.Document) ([]helium.N
 // Those two are the only node-set consumers a parse can feed: validateTransformSteps
 // rejects an enveloped-signature transform after an octet boundary, and base64
 // consumes a node-set through its own text-only conversion.
-func collectConvertedDocumentNodes(ctx context.Context, doc *helium.Document, consumerAlgorithm string) ([]helium.Node, error) {
+func collectConvertedDocumentNodes(ctx context.Context, doc *helium.Document, consumerAlgorithm string, maxXPathFilterNodes int) ([]helium.Node, error) {
 	mode, _, err := resolveC14NMode(consumerAlgorithm)
 	if err != nil {
 		// Not one of the six canonicalization URIs, so the consumer is the XPath
 		// filter and the set it is evaluated over must carry every namespace node.
-		return collectDocumentNodes(ctx, doc)
+		return collectDocumentNodesLimited(ctx, doc, maxXPathFilterNodes)
 	}
 	return collectCanonicalizationDocumentNodes(ctx, doc, mode)
 }
@@ -288,6 +299,11 @@ func collectCanonicalizationDocumentNodes(ctx context.Context, doc *helium.Docum
 // same-document reference — while still finite, so a legitimate signature is
 // never rejected for exceeding it.
 const defaultXPathOpLimit = 100_000_000
+
+// defaultMaxXPathFilterNodes bounds the complete XPath namespace-axis node set
+// collected before one XMLDSig XPath filter is evaluated. Unlike the reduced
+// canonicalization set, this set can grow quadratically with a small document.
+const defaultMaxXPathFilterNodes = 65_536
 
 // hereFunction implements the XMLDSig here() function (core §6.6.3.1): it returns
 // a node-set containing the single element that bears the XPath expression — the
@@ -379,7 +395,12 @@ func compileXPathFilterExpression(expr string, eval xpath1.Evaluator) (*xpath1.E
 // execution starts. An evaluation error is fail-closed as
 // ErrUnsupportedTransform while retaining the evaluator error, so a reference
 // never digests an unfiltered node-set and callers can still detect cancellation.
-func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter) ([]helium.Node, error) {
+func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter, maxNodes int) ([]helium.Node, error) {
+	if maxNodes > 0 && len(nodes) > maxNodes {
+		if err := checkXPathFilterNodeLimit(ctx, len(nodes), maxNodes); err != nil {
+			return nil, err
+		}
+	}
 	eval := newDSigXPathEvaluator(f.ns, f.hereNode, defaultXPathOpLimit)
 	kept := make([]helium.Node, 0, len(nodes))
 	for _, n := range nodes {
@@ -749,7 +770,14 @@ func resolveC14NMode(method string) (c14n.Mode, bool, error) {
 // A node set that goes straight to c14n unfiltered is built by
 // collectCanonicalizationNodes, which is linear in the document.
 func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, error) {
-	c := &subtreeCollector{fullAxis: true}
+	return collectSubtreeNodesLimited(ctx, n, -1)
+}
+
+// collectSubtreeNodesLimited is collectSubtreeNodes with a member cap. It
+// checks the cap before allocating each namespace-node wrapper, so rejecting a
+// namespace-heavy input does not first materialize the work being bounded.
+func collectSubtreeNodesLimited(ctx context.Context, n helium.Node, maxNodes int) ([]helium.Node, error) {
+	c := &subtreeCollector{nodeSet: nodeSet{maxNodes: maxNodes}, fullAxis: true}
 	if err := c.collect(ctx, n); err != nil {
 		return nil, err
 	}
@@ -861,12 +889,32 @@ func (p *ctxPoll) charge(ctx context.Context, n int) error {
 // element's or a whole subtree's worth of work inside one unpolled span.
 type nodeSet struct {
 	ctxPoll
-	nodes []helium.Node
+	nodes    []helium.Node
+	maxNodes int
 }
 
 func (s *nodeSet) add(ctx context.Context, n helium.Node) error {
+	if err := s.beforeAdd(ctx, 1); err != nil {
+		return err
+	}
 	s.nodes = append(s.nodes, n)
 	return s.charge(ctx, 1)
+}
+
+// addNamespace checks the member cap before allocating the wrapper it adds.
+func (s *nodeSet) addNamespace(ctx context.Context, ns *helium.Namespace, elem *helium.Element) error {
+	if err := s.beforeAdd(ctx, 1); err != nil {
+		return err
+	}
+	s.nodes = append(s.nodes, helium.NewNamespaceNodeWrapper(ns, elem))
+	return s.charge(ctx, 1)
+}
+
+func (s *nodeSet) beforeAdd(ctx context.Context, n int) error {
+	if s.maxNodes <= 0 || n <= s.maxNodes-len(s.nodes) {
+		return nil
+	}
+	return checkXPathFilterNodeLimit(ctx, len(s.nodes)+n, s.maxNodes)
 }
 
 // addAll appends nodes a poll interval at a time, so the span between two polls
@@ -878,6 +926,9 @@ func (s *nodeSet) add(ctx context.Context, n helium.Node) error {
 // members, while growing once leaves the copy within a percent of it at every
 // size.
 func (s *nodeSet) addAll(ctx context.Context, nodes []helium.Node) error {
+	if err := s.beforeAdd(ctx, len(nodes)); err != nil {
+		return err
+	}
 	s.nodes = slices.Grow(s.nodes, len(nodes))
 	for len(nodes) > 0 {
 		n := min(len(nodes), ctxPollInterval)
@@ -886,6 +937,16 @@ func (s *nodeSet) addAll(ctx context.Context, nodes []helium.Node) error {
 			return err
 		}
 		nodes = nodes[n:]
+	}
+	return nil
+}
+
+func checkXPathFilterNodeLimit(ctx context.Context, members, maxNodes int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if maxNodes > 0 && members > maxNodes {
+		return fmt.Errorf("%w: XPath filter input exceeds %d node-set members", ErrResourceLimitExceeded, maxNodes)
 	}
 	return nil
 }
@@ -1064,7 +1125,7 @@ func (c *subtreeCollector) appendNamespaceNodes(ctx context.Context, elem *heliu
 			if prefix == lexicon.PrefixXML {
 				continue
 			}
-			if err := c.add(ctx, helium.NewNamespaceNodeWrapper(ns, elem)); err != nil {
+			if err := c.addNamespace(ctx, ns, elem); err != nil {
 				return err
 			}
 		}
@@ -1134,7 +1195,7 @@ func (c *subtreeCollector) emitNamespace(ctx context.Context, elem *helium.Eleme
 		return nil
 	}
 	emitted.add(prefix)
-	return c.add(ctx, helium.NewNamespaceNodeWrapper(ns, elem))
+	return c.addNamespace(ctx, ns, elem)
 }
 
 // referenceURIForm classifies a same-document Reference URI into the node-set

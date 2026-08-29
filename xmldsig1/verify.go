@@ -351,10 +351,11 @@ func prepareReferenceForVerification(cfg *verifierConfig, doc *helium.Document, 
 	}
 
 	runtime := transformRuntime{
-		parser:          cfg.parser(),
-		xsltTransformer: cfg.xsltTransformer,
-		allowEnveloped:  allowEnveloped,
-		external:        initialKind == transformValueOctets,
+		parser:              cfg.parser(),
+		xsltTransformer:     cfg.xsltTransformer,
+		allowEnveloped:      allowEnveloped,
+		external:            initialKind == transformValueOctets,
+		maxXPathFilterNodes: cfg.maxXPathFilterNodesLimit(),
 	}
 	if _, err := validateTransformSteps(runtime, initialKind, steps); err != nil {
 		return nil, err
@@ -429,10 +430,11 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 // URI forms and the general XPointer resolver.
 func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, steps []transformStep) ([]byte, error) {
 	runtime := transformRuntime{
-		parser:          cfg.parser(),
-		xsltTransformer: cfg.xsltTransformer,
-		signature:       sigElem,
-		allowEnveloped:  true,
+		parser:              cfg.parser(),
+		xsltTransformer:     cfg.xsltTransformer,
+		signature:           sigElem,
+		allowEnveloped:      true,
+		maxXPathFilterNodes: cfg.maxXPathFilterNodesLimit(),
 	}
 	initial := newReferenceNodeSetValue(doc, target, sigElem, wholeDoc, includeComments, nil)
 	return executeTransformPipeline(ctx, runtime, initial, steps)
@@ -488,9 +490,10 @@ func resolveExternalReference(ctx context.Context, cfg *verifierConfig, doc *hel
 		}
 	}
 	runtime := transformRuntime{
-		parser:          cfg.parser(),
-		xsltTransformer: cfg.xsltTransformer,
-		external:        true,
+		parser:              cfg.parser(),
+		xsltTransformer:     cfg.xsltTransformer,
+		external:            true,
+		maxXPathFilterNodes: cfg.maxXPathFilterNodesLimit(),
 	}
 
 	joined, err := joinReferenceURI(doc.URL(), ref.uri)

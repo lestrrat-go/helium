@@ -186,9 +186,12 @@ The `xmldsig1` package supports narrow, explicit same-document verification
 profiles when the application pins its trusted key or certificate source and
 checks `VerifyResult.Covers` before consuming a signed element. External
 references and XSLT remain opt-in advanced features with caller-owned resource
-and execution policy. The `xmlenc1` package uses authenticated AES-GCM by
-default and refuses retired Triple DES algorithms. Callers should still review
-their deployment's security and compliance requirements.
+and execution policy. XPath filter inputs retain the complete namespace axis
+required by XMLDSig and are capped at 65,536 members by default; callers can
+tune this with `Verifier.MaxXPathFilterNodes`. The `xmlenc1` package uses
+authenticated AES-GCM by default and refuses retired Triple DES algorithms.
+Callers should still review their deployment's security and compliance
+requirements.
 
 # `encoding/xml` compatibility
 
