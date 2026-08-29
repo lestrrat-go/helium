@@ -242,6 +242,53 @@ func TestExclusiveC14NEquivalentDocumentReferencesMatch(t *testing.T) {
 	require.Equal(t, selectedDigest, wholeDigest)
 }
 
+func TestResolveReferenceOverlappingRoots(t *testing.T) {
+	doc := mustParse(t, `<root><branch><target Id=" target "/></branch></root>`)
+	root := doc.DocumentElement()
+	branch := findLocal(root, "branch")
+	target := findLocal(root, "target")
+	require.NotNil(t, branch)
+	require.NotNil(t, target)
+
+	t.Run("document element repeated as extra root", func(t *testing.T) {
+		got, err := resolveReference(doc, "#target", root)
+		require.NoError(t, err)
+		require.Same(t, target, got)
+	})
+
+	t.Run("nested extra root overlaps document", func(t *testing.T) {
+		got, err := resolveReference(doc, "#target", branch)
+		require.NoError(t, err)
+		require.Same(t, target, got)
+	})
+
+	t.Run("repeated extra roots count once", func(t *testing.T) {
+		got, err := resolveReference(doc, "#target", branch, branch, target)
+		require.NoError(t, err)
+		require.Same(t, target, got)
+	})
+
+	t.Run("detached root remains searchable", func(t *testing.T) {
+		detached, err := doc.CreateElement("detached")
+		require.NoError(t, err)
+		require.NoError(t, detached.SetAttribute("Id", "detached"))
+
+		got, err := resolveReference(doc, "#detached", detached)
+		require.NoError(t, err)
+		require.Same(t, detached, got)
+	})
+
+	t.Run("distinct matches across domains remain ambiguous", func(t *testing.T) {
+		detached, err := doc.CreateElement("duplicate")
+		require.NoError(t, err)
+		require.NoError(t, detached.SetAttribute("Id", "target"))
+
+		_, err = resolveReference(doc, "#target", detached)
+		require.ErrorIs(t, err, ErrAmbiguousReference)
+		require.Contains(t, err.Error(), "matched 2 elements")
+	})
+}
+
 // dtdEntityDecl returns the DTD entity-declaration node named name, or nil.
 func dtdEntityDecl(doc *helium.Document, name string) helium.Node {
 	for c := range helium.Children(doc) {

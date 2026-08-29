@@ -1583,15 +1583,17 @@ func effectiveC14NMethod(method string, includeComments bool) string {
 // For a whole-document form (URI="" or "#xpointer(/)"), returns the document
 // element. For an element form ("#id" or "#xpointer(id('id'))"), returns the
 // unique element with that id, searched across the document tree and any
-// extraRoots. An enveloping signature passes its own (detached) Signature
-// element as an extra root so a reference into its own <Object> content resolves
-// before the Signature is placed in a document. If more than one element matches
-// the id — in either tree, or one in each — returns ErrAmbiguousReference. This
-// is the primary defense against XML Signature Wrapping (XSW) attacks where an
-// attacker injects a duplicate-ID element containing malicious content, and it
-// also rejects an id that collides between the document and the Signature's own
-// Object content. Any unsupported URI (an external reference, or an unrecognized
-// #xpointer(...) scheme) stays fail-closed as ErrReferenceNotFound.
+// extraRoots. Overlapping search roots count each element once by pointer
+// identity. An enveloping signature passes its own (detached) Signature element
+// as an extra root so a reference into its own <Object> content resolves before
+// the Signature is placed in a document. If more than one distinct element
+// matches the id — in either tree, or one in each — returns
+// ErrAmbiguousReference. This is the primary defense against XML Signature
+// Wrapping (XSW) attacks where an attacker injects a duplicate-ID element
+// containing malicious content, and it also rejects an id that collides between
+// the document and the Signature's own Object content. Any unsupported URI (an
+// external reference, or an unrecognized #xpointer(...) scheme) stays
+// fail-closed as ErrReferenceNotFound.
 func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Node) (*helium.Element, error) {
 	id, wholeDoc, _, ok := referenceURIForm(uri)
 	if !ok {
@@ -1603,10 +1605,21 @@ func resolveReference(doc *helium.Document, uri string, extraRoots ...helium.Nod
 	// Walk each tree once and collect every candidate. We accept matches from
 	// any of: a DTD/schema-declared ID-typed attribute, xml:id, or the "id"
 	// attribute token in the casings "Id", "ID", or "id". We refuse to resolve
-	// the reference if more than one element matches.
-	matches := domutil.FindElementsByID(doc.DocumentElement(), id)
+	// the reference if more than one distinct element matches.
+	var matches []*helium.Element
+	seen := make(map[*helium.Element]struct{})
+	collect := func(root helium.Node) {
+		for _, match := range domutil.FindElementsByID(root, id) {
+			if _, ok := seen[match]; ok {
+				continue
+			}
+			seen[match] = struct{}{}
+			matches = append(matches, match)
+		}
+	}
+	collect(doc.DocumentElement())
 	for _, root := range extraRoots {
-		matches = append(matches, domutil.FindElementsByID(root, id)...)
+		collect(root)
 	}
 	switch len(matches) {
 	case 0:

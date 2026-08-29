@@ -106,6 +106,46 @@ func TestSignEnveloping_ReferenceIntoOwnObject(t *testing.T) {
 	require.NoError(t, err, "signature covering a reference into its own Object must verify")
 }
 
+func TestSignEnvelopingReferenceSearchDomains(t *testing.T) {
+	const key = "reference-search-domains"
+
+	t.Run("detached Object target resolves", func(t *testing.T) {
+		doc := mustParseXML(t, `<root/>`)
+		payload, err := doc.CreateElement("Payload")
+		require.NoError(t, err)
+		require.NoError(t, payload.SetAttribute("Id", "inside"))
+
+		sig, err := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgHMACSHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#inside",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			SignEnveloping(t.Context(), doc, []helium.Node{payload}, []byte(key))
+		require.NoError(t, err)
+		require.NotNil(t, sig)
+	})
+
+	t.Run("distinct document and Object targets are ambiguous", func(t *testing.T) {
+		doc := mustParseXML(t, `<root><DocumentTarget Id="duplicate"/></root>`)
+		payload, err := doc.CreateElement("ObjectTarget")
+		require.NoError(t, err)
+		require.NoError(t, payload.SetAttribute("Id", "duplicate"))
+
+		sig, err := xmldsig1.NewSigner().
+			SignatureAlgorithm(xmldsig1.AlgHMACSHA256).
+			Reference(xmldsig1.ReferenceConfig{
+				URI:             "#duplicate",
+				DigestAlgorithm: xmldsig1.DigestSHA256,
+				Transforms:      []xmldsig1.Transform{xmldsig1.ExcC14NTransform()},
+			}).
+			SignEnveloping(t.Context(), doc, []helium.Node{payload}, []byte(key))
+		require.ErrorIs(t, err, xmldsig1.ErrAmbiguousReference)
+		require.Nil(t, sig)
+	})
+}
+
 // Parity guard for #1220: an enveloping reference to the document element
 // (URI="#root", where root IS the document element) must be digested over
 // root's own subtree, unchanged — the Signature is never inserted into the
