@@ -255,8 +255,8 @@ func copyDTDReplacements(
 	dc := &deepCopier{
 		dst: dst,
 		opts: deepCopyOptions{
-			overDeclareNS: true,
-			entityCopies:  entityCopies,
+			entityReplacementNS: true,
+			entityCopies:        entityCopies,
 		},
 	}
 	var replacements []dtdReplacementCopy

@@ -203,7 +203,12 @@ from the source table is still preferred for identity and cost fidelity. `CopyDo
 source's external subset (via `CopyDTDSubsets`), so the copy's fallback walk sees the same ID-typed ATTLIST
 decls as the source. `helium.CopyDTDSubsets(src, dst *Document)` returns the source-to-copy entity declaration
 correspondence and registers declarations from BOTH subsets before copying entity replacement trees, so each
-reference across the subset boundary binds to the copy of its actual source declaration.
+reference across the subset boundary binds to the copy of its actual source declaration. Copied replacement
+elements reproduce only their own namespace declarations; an active prefix cached by the parser stays name
+metadata without becoming a declaration, so C14N resolves it from each EntityRef site's namespace context.
+The xslt3 strip-space copy keeps the copied DTD declaration unchanged and binds each document reference to a
+private replacement view keyed by its containing element and inherited `xml:space` state. This
+lets top-level replacement whitespace follow each reference site's rules without changing another reference.
 `helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external
 subset into
 `dst` (independent `*DTD`; mutating one never affects the other); `CopyDTDInfo`, by contrast, copies only the
@@ -356,8 +361,8 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   last child WITHOUT the cycle-guard / duplicate-attr checks. The caller guarantees an acyclic, dup-free child
   (deep copies, freshly-built trees). Ordinary code uses `AddChild`. It backs the parser's fast SAX path
   in-package; `xslt3`'s strip-space copier reaches it through the `internal/nodelink` hook `AppendFastChild`,
-  reaches `bindEntityReference` through `BindEntityReference`, and reaches the sealed-node-capable
-  `unlinkNode` through `Unlink`,
+  reaches `bindEntityReference` through `BindEntityReference`, and creates private context-specific entity
+  views through `CloneEntityReferenceBinding`,
   and the external `helium_test` package through `UnsafeAppendChildForTesting` in `export_test.go`.
 - `appendCopiedChild(parent, child)` (`copy_deep.go`) — the deep-copy core's own no-preflight link, used by
   `copyChildren` in place of `AddChild`. It mirrors `addChild`'s linking rules exactly, INCLUDING the

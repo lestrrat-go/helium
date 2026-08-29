@@ -31,6 +31,13 @@ type deepCopyOptions struct {
 	// degenerate source whose active namespace is not in scope anywhere.
 	overDeclareNS bool
 
+	// entityReplacementNS preserves an entity replacement element's own nsDefs
+	// and active prefix metadata without declaring the parser-cached active
+	// namespace. Canonicalization resolves that prefix at each EntityRef site;
+	// declaring the cached URI here would freeze the first site's binding into
+	// every copied reference.
+	entityReplacementNS bool
+
 	// omit, when non-nil, decides whether a node is dropped from the copy. It is
 	// the generalized node-filter predicate: strip-space passes a
 	// whitespace-omit filter; the general copy passes nil (copy everything). It
@@ -289,10 +296,29 @@ func (dc *deepCopier) copyElement(src *Element, inScope map[string]*Namespace, p
 // child namespace scope (only meaningful in exact mode; nil in over-declare
 // mode, which does not track scope).
 func (dc *deepCopier) bindNamespaces(src, elem *Element, inScope map[string]*Namespace) (map[string]*Namespace, error) {
+	if dc.opts.entityReplacementNS {
+		return nil, dc.bindNamespacesEntityReplacement(src, elem)
+	}
 	if dc.opts.overDeclareNS {
 		return nil, dc.bindNamespacesOverDeclare(src, elem)
 	}
 	return dc.bindNamespacesExact(src, elem, inScope)
+}
+
+// bindNamespacesEntityReplacement preserves declarations physically present in
+// replacement text and keeps the active prefix/URI only as name metadata. The
+// active binding remains undeclared so consumers can resolve it from each
+// EntityRef site's namespace context.
+func (dc *deepCopier) bindNamespacesEntityReplacement(src, elem *Element) error {
+	for _, ns := range src.Namespaces() {
+		if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
+			return err
+		}
+	}
+	if ns := src.Namespace(); ns != nil {
+		return elem.SetActiveNamespace(ns.Prefix(), ns.URI())
+	}
+	return nil
 }
 
 // bindNamespacesOverDeclare reproduces the historical helium.copyElement

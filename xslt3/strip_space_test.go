@@ -21,6 +21,31 @@ import (
 const importedModuleURI = "mem:/imported.xsl"
 
 func TestStripSpace(t *testing.T) {
+	t.Run("entity replacement uses each reference context", func(t *testing.T) {
+		t.Parallel()
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/">
+    <xsl:value-of select="/root/strip"/>
+    <xsl:text>|</xsl:text>
+    <xsl:value-of select="/root/keep"/>
+  </xsl:template>
+</xsl:stylesheet>`
+		const source = `<!DOCTYPE root [<!ENTITY payload "   <a>X</a>   ">]>` +
+			`<root><strip>&payload;</strip><keep xml:space="preserve">&payload;</keep></root>`
+
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		out, err := xslt3.TransformString(t.Context(), doc, ss)
+		require.NoError(t, err)
+		require.Equal(t, "X|   X   ", out)
+	})
+
 	// TestStripSpaceImportPrecedence verifies that a conflicting strip-space /
 	// preserve-space NameTest across an import boundary is resolved by import
 	// precedence (the importing module wins), raising no false XTSE0270,

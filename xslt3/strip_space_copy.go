@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 
@@ -112,10 +113,6 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 		sc.nodeMap = make(map[helium.Node]helium.Node)
 		sc.nodeMap[src] = dst
 	}
-	if err := sc.copyEntityReplacementTrees(); err != nil {
-		return nil, nil, err
-	}
-
 	// Copy document-level children in source order, skipping the DTD (already
 	// handled above). The document root has no element parent and no inherited
 	// namespace scope.
@@ -123,7 +120,7 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 		if c.Type() == helium.DTDNode {
 			continue
 		}
-		child, err := sc.copyNode(c, nil, nil, false)
+		child, err := sc.copyNode(c, nil, nil, false, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -173,6 +170,18 @@ type stripCopier struct {
 	// entityCopies binds a copied EntityRef to the copy of its actual source
 	// declaration, even when the other DTD subset contains the same name.
 	entityCopies map[*helium.Entity]*helium.Entity
+	// replacementCopies stores context-specific private entity views. The shared
+	// DTD declaration stays byte-faithful; each view applies whitespace rules from
+	// the reference's containing element and inherited xml:space state. Replacement
+	// names keep prefix metadata without declaring a site binding, so equal
+	// whitespace contexts can share a view across namespace scopes.
+	replacementCopies map[entityReplacementContext]*helium.Entity
+}
+
+type entityReplacementContext struct {
+	entity           *helium.Entity
+	parent           *helium.Element
+	xmlSpacePreserve bool
 }
 
 // record stores the original->copy mapping when a node map is being built and
@@ -192,14 +201,20 @@ func (sc *stripCopier) record(src, cp helium.Node) helium.Node {
 //
 // Returns (nil, nil) when the node is a whitespace-only text/CDATA node that
 // strip-space removes.
-func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope map[string]*helium.Namespace, xmlSpacePreserve bool) (helium.Node, error) {
+func (sc *stripCopier) copyNode(
+	src helium.Node,
+	parent *helium.Element,
+	inScope map[string]*helium.Namespace,
+	xmlSpacePreserve bool,
+	entityReplacement bool,
+) (helium.Node, error) {
 	switch src.Type() {
 	case helium.ElementNode:
 		elem, ok := helium.AsNode[*helium.Element](src)
 		if !ok {
 			return nil, nil //nolint:nilnil // a nil node with no error means "omit from copy"
 		}
-		return sc.copyElement(elem, inScope, xmlSpacePreserve)
+		return sc.copyElement(elem, inScope, xmlSpacePreserve, entityReplacement)
 	case helium.TextNode:
 		if !xmlSpacePreserve && sc.stripText(src, parent) {
 			return nil, nil //nolint:nilnil // omitted whitespace-only node
@@ -228,7 +243,13 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 				if err != nil {
 					return nil, err
 				}
-				nodelink.BindEntityReference(cp, dstEntity)
+				if len(sc.strip) == 0 && sc.schemaWS == nil {
+					nodelink.BindEntityReference(cp, dstEntity)
+				} else if err := sc.bindContextualEntityReplacement(
+					cp, srcEntity, dstEntity, parent, inScope, xmlSpacePreserve,
+				); err != nil {
+					return nil, err
+				}
 				return sc.record(src, cp), nil
 			}
 		}
@@ -246,44 +267,46 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 	}
 }
 
-// copyEntityReplacementTrees rebuilds each copied declaration's replacement
-// children through the active strip copier. References in both the DTD and the
-// document still bind to the one destination-owned declaration from
-// entityCopies; only its replacement subtree is replaced.
-func (sc *stripCopier) copyEntityReplacementTrees() error {
-	if len(sc.strip) == 0 && sc.schemaWS == nil {
+// bindContextualEntityReplacement binds ref to a private entity view whose
+// replacement children are copied under the reference site's whitespace
+// context. Equal whitespace contexts share one view; different containing
+// elements or inherited states never rewrite the document's shared declaration.
+func (sc *stripCopier) bindContextualEntityReplacement(
+	ref *helium.EntityRef,
+	srcEntity, dstEntity *helium.Entity,
+	parent *helium.Element,
+	inScope map[string]*helium.Namespace,
+	xmlSpacePreserve bool,
+) error {
+	key := entityReplacementContext{
+		entity:           srcEntity,
+		parent:           parent,
+		xmlSpacePreserve: xmlSpacePreserve,
+	}
+	if entity := sc.replacementCopies[key]; entity != nil {
+		nodelink.BindEntityReference(ref, entity)
 		return nil
 	}
 
-	type replacementCopy struct {
-		entity   *helium.Entity
-		children []helium.Node
+	private, ok := nodelink.CloneEntityReferenceBinding(ref, dstEntity).(*helium.Entity)
+	if !ok {
+		return fmt.Errorf("xslt3: could not create a private entity replacement for %q", ref.Name())
 	}
-	replacements := make([]replacementCopy, 0, len(sc.entityCopies))
-	for srcEntity, dstEntity := range sc.entityCopies {
-		replacement := replacementCopy{entity: dstEntity}
-		for child := range helium.Children(srcEntity) {
-			cp, err := sc.copyNode(child, nil, nil, false)
-			if err != nil {
-				return err
-			}
-			if cp != nil {
-				replacement.children = append(replacement.children, cp)
-			}
-		}
-		replacements = append(replacements, replacement)
+	if sc.replacementCopies == nil {
+		sc.replacementCopies = make(map[entityReplacementContext]*helium.Entity)
 	}
+	sc.replacementCopies[key] = private
 
-	for _, replacement := range replacements {
-		for child := replacement.entity.FirstChild(); child != nil; {
-			next := child.NextSibling()
-			nodelink.Unlink(child)
-			child = next
+	for child := range helium.Children(srcEntity) {
+		cp, err := sc.copyNode(child, parent, inScope, xmlSpacePreserve, true)
+		if err != nil {
+			return err
 		}
-		for _, child := range replacement.children {
-			if err := nodelink.AppendFastChild(replacement.entity, child); err != nil {
-				return err
-			}
+		if cp == nil {
+			continue
+		}
+		if err := nodelink.AppendFastChild(private, cp); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -293,7 +316,12 @@ func (sc *stripCopier) copyEntityReplacementTrees() error {
 // verbatim and binding its active namespace to an in-scope declaration without
 // over-declaring it. It then copies attributes and recurses into children using
 // nodelink.AppendFastChild for direct linkage.
-func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*helium.Namespace, xmlSpacePreserve bool) (helium.Node, error) {
+func (sc *stripCopier) copyElement(
+	src *helium.Element,
+	inScope map[string]*helium.Namespace,
+	xmlSpacePreserve bool,
+	entityReplacement bool,
+) (helium.Node, error) {
 	elem, err := sc.dst.CreateElement(src.LocalName())
 	if err != nil {
 		return nil, err
@@ -330,23 +358,32 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 	if ns := src.Namespace(); ns != nil && ns.URI() != "" {
 		active := childScope[ns.Prefix()]
 		if active == nil || active.URI() != ns.URI() {
-			// No in-scope declaration matches (degenerate source); declare it here
-			// to keep the copy serializable, mirroring helium.CopyDoc's fallback.
-			decl, err := sc.dst.CreateNamespace(ns.Prefix(), ns.URI())
-			if err != nil {
-				return nil, err
+			if entityReplacement {
+				if err := elem.SetActiveNamespace(ns.Prefix(), ns.URI()); err != nil {
+					return nil, err
+				}
+				active = nil
+			} else {
+				// No in-scope declaration matches (degenerate source); declare it here
+				// to keep the copy serializable, mirroring helium.CopyDoc's fallback.
+				decl, err := sc.dst.CreateNamespace(ns.Prefix(), ns.URI())
+				if err != nil {
+					return nil, err
+				}
+				if err := elem.AddNamespaceDecl(decl); err != nil {
+					return nil, err
+				}
+				if childScope == nil || len(ownDecls) == 0 {
+					childScope = make(map[string]*helium.Namespace, len(inScope)+1)
+					maps.Copy(childScope, inScope)
+				}
+				childScope[ns.Prefix()] = decl
+				active = decl
 			}
-			if err := elem.AddNamespaceDecl(decl); err != nil {
-				return nil, err
-			}
-			if childScope == nil || len(ownDecls) == 0 {
-				childScope = make(map[string]*helium.Namespace, len(inScope)+1)
-				maps.Copy(childScope, inScope)
-			}
-			childScope[ns.Prefix()] = decl
-			active = decl
 		}
-		elem.SetNamespace(active)
+		if active != nil {
+			elem.SetNamespace(active)
+		}
 	}
 
 	// Copy attributes, preserving namespace information. Use the literal setters
@@ -388,7 +425,7 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 	}
 
 	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
-		child, err := sc.copyNode(c, src, childScope, childPreserve)
+		child, err := sc.copyNode(c, src, childScope, childPreserve, entityReplacement)
 		if err != nil {
 			return nil, err
 		}

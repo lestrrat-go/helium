@@ -346,7 +346,7 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `AddChild`/`AddSibling`/`Replace`/`AppendText`/`SetLine`/`SetOwnerDocument`/`SetTreeDoc`), so ordinary tree
   mutation cannot reach them by accident, and there is no public entry point to any of them. Sibling packages
   in this module reach them through the `internal/nodelink` hooks (`AppendFastChild`, `BindEntityReference`, and
-  `Unlink` for `xslt3`'s strip-space copier; `CorruptSelfNextSibling` and
+  `CloneEntityReferenceBinding` for `xslt3`'s strip-space copier; `CorruptSelfNextSibling` and
   `CorruptTypedNilNextSibling` for the `xsd`/`xmldsig1` corrupt-tree cycle-guard fixtures only); the external
   `helium_test` package reaches them through the `*ForTesting`
   wrappers in `export_test.go`. There is no `prev`-pointer setter

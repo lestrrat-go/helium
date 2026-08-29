@@ -23,9 +23,13 @@ func TestCopyAndStrip(t *testing.T) {
 
 		first := cp.DocumentElement().FirstChild()
 		second := first.NextSibling()
-		require.Same(t, cpEntity, first.FirstChild())
-		require.Same(t, cpEntity, second.FirstChild())
-		require.Nil(t, cpEntity.FirstChild().FirstChild())
+		firstEntity, ok := helium.AsNode[*helium.Entity](first.FirstChild())
+		require.True(t, ok)
+		require.NotSame(t, cpEntity, firstEntity)
+		require.Same(t, firstEntity, second.FirstChild())
+		require.Nil(t, firstEntity.FirstChild().FirstChild())
+		require.NotNil(t, cpEntity.FirstChild().FirstChild(),
+			"the shared DTD declaration must stay byte-faithful")
 	})
 
 	t.Run("whitespace-only entity uses reference parent", func(t *testing.T) {
