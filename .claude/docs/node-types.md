@@ -367,8 +367,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   a declared reference carries the destination DTD's shared `Entity` child; that declaration graph is disjoint
   from the fresh document subtree and cannot reach the new parent. Within a DTD entity's parsed replacement
   subtree, the same direct link is sound between fresh nodes. Each completed top-level replacement child is
-  attached to its destination `Entity` through ordinary `AddChild`, because its references can point within
-  the declaration graph and require one cycle preflight.
+  attached to its destination `Entity` through the same direct linker only after `copyDTDReplacements`
+  validates the complete prospective declaration graph once with shared visit state. The shared state visits
+  each node once across chained declarations while retaining cycle rejection.
   `appendCopiedChild`
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior

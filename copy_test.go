@@ -421,7 +421,7 @@ func TestCopyEntityReference(t *testing.T) {
 	})
 }
 
-func TestCopyDTDReplacementCopyRunsOneDeepCyclePreflight(t *testing.T) {
+func TestCopyDTDReplacementCopyRunsOneGraphValidation(t *testing.T) {
 	const depth = 256
 
 	src := helium.NewDefaultDocument()
@@ -451,9 +451,27 @@ func TestCopyDTDReplacementCopyRunsOneDeepCyclePreflight(t *testing.T) {
 	})
 
 	// Both paths allocate the same fresh element chain. The DTD path may add only
-	// fixed declaration bookkeeping and one completed-subtree cycle preflight.
+	// fixed declaration bookkeeping and one shared-state graph validation.
 	// Running a preflight at every nested link adds roughly depth map allocations.
 	require.Less(t, dtdAllocs-normalAllocs, 64.0)
+}
+
+func TestCopyDTDReplacementCopyRejectsACycle(t *testing.T) {
+	src := helium.NewDefaultDocument()
+	dtd, err := src.CreateInternalSubset("root", "", "")
+	require.NoError(t, err)
+	entity, err := dtd.AddEntity("loop", enum.InternalGeneralEntity, "", "", "")
+	require.NoError(t, err)
+	ref, err := src.CreateReference("loop")
+	require.NoError(t, err)
+	require.NoError(t, helium.UnsafeAppendChildForTesting(entity, ref))
+
+	dst := helium.NewDefaultDocument()
+	err = helium.CopyDTDInfo(src, dst)
+	require.ErrorIs(t, err, helium.ErrCyclicNode)
+	copied, ok := dst.IntSubset().LookupEntity("loop")
+	require.True(t, ok)
+	require.Nil(t, copied.FirstChild(), "cycle rejection must happen before replacement roots are linked")
 }
 
 func TestCopyDoc(t *testing.T) {

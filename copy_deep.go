@@ -104,8 +104,8 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 // may carry the destination DTD's shared Entity declaration child, but that
 // declaration graph is disjoint from the fresh document subtree and therefore
 // cannot reach its new parent. DTD entity replacement trees use this linker
-// only between fresh nodes; their completed top-level children are attached to
-// the destination Entity through AddChild's cycle preflight.
+// between fresh nodes and for their completed top-level children only after one
+// shared-state validation has proved the prospective declaration graph acyclic.
 // Do NOT call this on a node from outside the copier: an arbitrary
 // caller-supplied child has no such guarantee.
 func appendCopiedChild(parent MutableNode, child Node) error {

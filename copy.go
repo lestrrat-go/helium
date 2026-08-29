@@ -26,8 +26,8 @@ func CopyNode(src Node, targetDoc *Document) (Node, error) {
 			return nil, fmt.Errorf("helium: unexpected ElementNode type %T", src)
 		}
 		// The general copy path over-declares namespaces (load-bearing for
-		// streaming's fixNamespacesAfterCopy) and links with the preflighted
-		// AddChild, copying every node. See deepCopyOptions for the knobs.
+		// streaming's fixNamespacesAfterCopy) and uses the copier-only direct
+		// linker. See deepCopyOptions for the knobs.
 		dc := &deepCopier{dst: targetDoc, opts: deepCopyOptions{overDeclareNS: true}}
 		return dc.copyElement(elem, nil, nil)
 	case TextNode:

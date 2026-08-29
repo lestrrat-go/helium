@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -231,20 +232,22 @@ func copyDTDDeclarations(src, dstDTD *DTD, dst *Document) (dtdCopyState, error) 
 }
 
 // copyDTDReplacements copies each entity's parsed replacement tree after every
-// declaration needed by the operation has been registered. Links within each
-// fresh replacement child bypass the cycle scan; attaching that completed child
-// to its destination declaration retains the full AddChild preflight.
+// declaration needed by the operation has been registered. It validates the
+// completed declaration graph with shared visit state before linking any fresh
+// replacement roots, so both validation and linking are linear in graph size.
 func copyDTDReplacements(state dtdCopyState, dst *Document) error {
 	// EntityRef nodes share their declaration's parsed replacement subtree.
 	// Copy it only after every declaration has been registered, so nested and
 	// forward references resolve to destination-owned Entity nodes.
 	dc := &deepCopier{dst: dst, opts: deepCopyOptions{overDeclareNS: true}}
+	var replacements []dtdReplacementCopy
 	for c := range Children(state.src) {
 		ent, ok := AsNode[*Entity](c)
 		if !ok {
 			continue
 		}
 		dstEnt := state.entityCopies[ent]
+		replacementCopy := dtdReplacementCopy{entity: dstEnt}
 		for replacement := range Children(ent) {
 			child, err := dc.copyNode(replacement, nil, nil, nil)
 			if err != nil {
@@ -253,13 +256,149 @@ func copyDTDReplacements(state dtdCopyState, dst *Document) error {
 			if child == nil {
 				continue
 			}
-			if err := dstEnt.AddChild(child); err != nil {
+			replacementCopy.children = append(replacementCopy.children, child)
+		}
+		replacements = append(replacements, replacementCopy)
+	}
+
+	validator := newDTDReplacementGraphValidator(replacements)
+	if validator.hasCycle() {
+		return fmt.Errorf("%w: cannot copy a cyclic DTD entity replacement graph", ErrCyclicNode)
+	}
+
+	for _, replacement := range replacements {
+		for _, child := range replacement.children {
+			if err := appendCopiedChild(replacement.entity, child); err != nil {
 				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+type dtdReplacementCopy struct {
+	entity   *Entity
+	children []Node
+}
+
+const (
+	dtdReplacementVisitActive uint8 = iota + 1
+	dtdReplacementVisitDone
+)
+
+// dtdReplacementGraphValidator checks the prospective declaration graph before
+// its detached replacement roots are linked. states is shared across every
+// declaration root, so a chain reached from many entities is visited once.
+type dtdReplacementGraphValidator struct {
+	roots        []*Entity
+	replacements map[*docnode][]Node
+	states       map[*docnode]uint8
+	visits       int
+}
+
+func newDTDReplacementGraphValidator(replacements []dtdReplacementCopy) *dtdReplacementGraphValidator {
+	v := &dtdReplacementGraphValidator{
+		roots:        make([]*Entity, 0, len(replacements)),
+		replacements: make(map[*docnode][]Node, len(replacements)),
+		states:       make(map[*docnode]uint8),
+	}
+	for _, replacement := range replacements {
+		v.roots = append(v.roots, replacement.entity)
+		v.replacements[replacement.entity.baseDocNode()] = replacement.children
+	}
+	return v
+}
+
+type dtdReplacementGraphFrame struct {
+	node           Node
+	entered        bool
+	hasReplacement bool
+	replacements   []Node
+	replacementPos int
+	nextChild      Node
+	siblingGuard   siblingCycleGuard
+}
+
+// hasCycle reports whether any replacement child can reach an entity that is
+// already active on the same child-pointer path. The explicit stack keeps deep
+// declaration chains safe, while the shared done state bounds work to one visit
+// per node across all entity roots.
+func (v *dtdReplacementGraphValidator) hasCycle() bool {
+	for _, entity := range v.roots {
+		if v.states[entity.baseDocNode()] == dtdReplacementVisitDone {
+			continue
+		}
+		if v.hasCycleFrom(entity) {
+			return true
+		}
+	}
+	return false
+}
+
+func (v *dtdReplacementGraphValidator) hasCycleFrom(root Node) bool {
+	stack := []dtdReplacementGraphFrame{{node: root}}
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		dn := top.node.baseDocNode()
+		if !top.entered {
+			if v.states[dn] == dtdReplacementVisitActive {
+				return true
+			}
+			if v.states[dn] == dtdReplacementVisitDone {
+				stack = stack[:len(stack)-1]
+				continue
+			}
+			v.states[dn] = dtdReplacementVisitActive
+			v.visits++
+			top.entered = true
+			top.replacements, top.hasReplacement = v.replacements[dn]
+			if !top.hasReplacement {
+				top.nextChild = dn.firstChild
+			}
+		}
+
+		child, cycle := top.takeChild(dn)
+		if cycle {
+			return true
+		}
+		if child == nil {
+			v.states[dn] = dtdReplacementVisitDone
+			stack = stack[:len(stack)-1]
+			continue
+		}
+		cdn := child.baseDocNode()
+		if v.states[cdn] == dtdReplacementVisitActive {
+			return true
+		}
+		if v.states[cdn] == dtdReplacementVisitDone {
+			continue
+		}
+		stack = append(stack, dtdReplacementGraphFrame{node: child})
+	}
+	return false
+}
+
+func (f *dtdReplacementGraphFrame) takeChild(owner *docnode) (Node, bool) {
+	if f.hasReplacement {
+		if f.replacementPos >= len(f.replacements) {
+			return nil, false
+		}
+		child := f.replacements[f.replacementPos]
+		f.replacementPos++
+		return child, false
+	}
+
+	child := f.nextChild
+	if child == nil {
+		return nil, false
+	}
+	cdn := child.baseDocNode()
+	if f.siblingGuard.step(cdn) {
+		return nil, true
+	}
+	f.nextChild = nextOwnedSibling(owner, cdn)
+	return child, false
 }
 
 // copyAttrDeclOrder fills dstDTD's registration-order sequences (attrDecls and
