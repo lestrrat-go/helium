@@ -3,7 +3,6 @@ package xslt3
 import (
 	"context"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -557,10 +556,8 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 		}
 		// Validate static start-at: must be a space-separated list of integers
 		if !strings.Contains(sa, "{") {
-			for part := range strings.FieldsSeq(sa) {
-				if _, err := strconv.Atoi(part); err != nil {
-					return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:number/@start-at", sa)
-				}
+			if _, ok := parseStartAt(sa); !ok {
+				return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:number/@start-at", sa)
 			}
 		}
 		inst.StartAt = avt

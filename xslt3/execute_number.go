@@ -126,17 +126,20 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 		if err != nil {
 			return err
 		}
-		// start-at can be a space-separated list of integers, one per level
-		saParts := strings.Fields(saStr)
+		startAt, ok := parseStartAt(saStr)
+		if !ok {
+			return dynamicError(errCodeXTDE0030,
+				"%q is not a valid value for xsl:number/@start-at", saStr)
+		}
+		one := big.NewInt(1)
 		for i, n := range bigNums {
-			offset := 0
-			if i < len(saParts) {
-				offset, _ = strconv.Atoi(saParts[i])
-			} else if len(saParts) > 0 {
-				offset, _ = strconv.Atoi(saParts[len(saParts)-1])
+			offset := startAt[len(startAt)-1]
+			if i < len(startAt) {
+				offset = startAt[i]
 			}
 			// start-at shifts numbering: number = number + startAt - 1
-			bigNums[i] = new(big.Int).Add(n, big.NewInt(int64(offset-1)))
+			bigNums[i] = new(big.Int).Add(n, offset)
+			bigNums[i].Sub(bigNums[i], one)
 		}
 	}
 
@@ -192,6 +195,23 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 	formatted := formatBigNumberList(bigNums, format, groupSep, groupSize, lang, ordinal)
 	text := ec.resultDoc.CreateText([]byte(formatted))
 	return ec.addNode(text)
+}
+
+func parseStartAt(value string) ([]*big.Int, bool) {
+	parts := strings.Fields(value)
+	if len(parts) == 0 {
+		return nil, false
+	}
+
+	numbers := make([]*big.Int, len(parts))
+	for i, part := range parts {
+		n, ok := new(big.Int).SetString(part, 10)
+		if !ok {
+			return nil, false
+		}
+		numbers[i] = n
+	}
+	return numbers, true
 }
 
 // numberNodeMatches tests if a node matches the count pattern.

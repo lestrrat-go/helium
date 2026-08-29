@@ -4,8 +4,65 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
 )
+
+func TestExecNumberStartAt(t *testing.T) {
+	testCases := []struct {
+		name    string
+		startAt string
+		want    string
+	}{
+		{
+			name:    "static integer above signed 32-bit range",
+			startAt: "2147483648",
+			want: "two billion one hundred and forty seven million four hundred and eighty three thousand " +
+				"six hundred and forty eight",
+		},
+		{
+			name:    "dynamic integer above signed 32-bit range",
+			startAt: "{2147483648}",
+			want: "two billion one hundred and forty seven million four hundred and eighty three thousand " +
+				"six hundred and forty eight",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stylesheet := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:output method="text"/>
+<xsl:template match="/"><xsl:number value="1" start-at="` + testCase.startAt + `" format="w"/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
+			require.NoError(t, err)
+			ss, err := NewCompiler().Compile(t.Context(), doc)
+			require.NoError(t, err)
+
+			source, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+			require.NoError(t, err)
+			got, err := ss.Transform(source).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, testCase.want, got)
+		})
+	}
+
+	t.Run("invalid dynamic value raises XTDE0030", func(t *testing.T) {
+		stylesheet := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:output method="text"/>
+<xsl:template match="/"><xsl:number value="1" start-at="{'invalid'}"/></xsl:template>
+</xsl:stylesheet>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(stylesheet))
+		require.NoError(t, err)
+		ss, err := NewCompiler().Compile(t.Context(), doc)
+		require.NoError(t, err)
+
+		source, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
+		require.NoError(t, err)
+		_, err = ss.Transform(source).Serialize(t.Context())
+		require.ErrorContains(t, err, errCodeXTDE0030)
+	})
+}
 
 func TestFormatBigNumberListWordTokens(t *testing.T) {
 	testCases := []struct {
