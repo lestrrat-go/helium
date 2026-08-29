@@ -289,6 +289,21 @@ func xpathFilterInheritedTargetDoc(decls int) string {
 	return b.String()
 }
 
+// xpathFilterChildDeclarationDoc puts the namespace-heavy input on a child of
+// the selected subtree. The target element and its Id attribute consume two
+// members; the child consumes the third, leaving no budget for its declarations.
+func xpathFilterChildDeclarationDoc(decls int) string {
+	var child strings.Builder
+	child.WriteString(`<wide`)
+	for i := range decls {
+		fmt.Fprintf(&child, ` xmlns:p%d="urn:example:ns:%d"`, i, i)
+	}
+	child.WriteString(`/>`)
+
+	return strings.Replace(xpathFilterRetrievalDoc(0, 0),
+		`<bulk Id="bulk"></bulk>`, `<bulk Id="bulk">`+child.String()+`</bulk>`, 1)
+}
+
 // xpathFilterRetrievalMembers is the exact number of members in the <bulk>
 // subtree's XPath input node-set: the bulk element, its Id attribute and
 // inherited namespace axis, then each child element, attribute, and complete
@@ -382,6 +397,30 @@ func TestVerifyXPathFilterNodeLimitBoundsInheritedScope(t *testing.T) {
 	t.Logf("limited inherited namespace scope allocated %d bytes for %d declarations", allocated, decls)
 	require.Less(t, allocated, uint64(maxVerifyAllocation),
 		"verifying a document with %d inherited declarations allocated %d bytes", decls, allocated)
+}
+
+// TestVerifyXPathFilterNodeLimitBoundsChildDeclarations pins that a child
+// cannot allocate scope bookkeeping for declarations that exceed the remaining
+// member budget. The DOM is parsed before the allocation measurement, so the
+// bound covers verification and not storage already owned by the input tree.
+func TestVerifyXPathFilterNodeLimitBoundsChildDeclarations(t *testing.T) {
+	const (
+		decls               = 20_000
+		maxVerifyAllocation = 1 << 20
+	)
+
+	key := generateRSAKey(t)
+	src := xpathFilterChildDeclarationDoc(decls)
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
+		MaxXPathFilterNodes(3)
+	doc := mustParseXML(t, src)
+	_, err := verifier.Verify(t.Context(), doc)
+	require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+
+	allocated := verifyAllocatedBytes(t, verifier, src)
+	t.Logf("limited child namespace scope allocated %d bytes for %d declarations", allocated, decls)
+	require.Less(t, allocated, uint64(maxVerifyAllocation),
+		"verifying a child with %d declarations allocated %d bytes", decls, allocated)
 }
 
 // TestVerifyDeadlineDuringNodeSetConstruction pins that a deadline stops node-set

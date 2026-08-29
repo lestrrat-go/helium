@@ -774,9 +774,10 @@ func collectSubtreeNodes(ctx context.Context, n helium.Node) ([]helium.Node, err
 }
 
 // collectSubtreeNodesLimited is collectSubtreeNodes with a member cap. It
-// checks the cap before recording inherited root bindings or allocating their
-// namespace-node wrappers, so rejecting a namespace-heavy input does not first
-// materialize the work being bounded.
+// checks the cap before recording inherited root bindings, before growing a
+// child's scope past its remaining member budget, or before allocating a
+// namespace-node wrapper. Rejecting a namespace-heavy input therefore does not
+// first materialize the work being bounded.
 func collectSubtreeNodesLimited(ctx context.Context, n helium.Node, maxNodes int) ([]helium.Node, error) {
 	c := &subtreeCollector{nodeSet: nodeSet{maxNodes: maxNodes}, fullAxis: true}
 	if err := c.collect(ctx, n); err != nil {
@@ -1027,7 +1028,15 @@ func (c *subtreeCollector) walk(ctx context.Context, n helium.Node, root bool) e
 	var changed []nsBinding
 	if isElem {
 		if !root {
-			changed = c.enter(elem)
+			remaining := -1
+			if c.maxNodes > 0 {
+				remaining = c.maxNodes - len(c.nodes)
+			}
+			var err error
+			changed, err = c.enter(ctx, elem, remaining)
+			if err != nil {
+				return err
+			}
 		}
 		if err := c.appendNamespaceNodes(ctx, elem, root, changed); err != nil {
 			return err
@@ -1109,22 +1118,46 @@ func (s *prefixSet) add(prefix string) {
 }
 
 // enter applies elem's namespace declarations to the running scope and returns
-// the bindings it replaced, one entry per prefix touched. The rule matches
-// domutil.InScopeNamespaces exactly — declarations first, then the element's own
-// active namespace when nothing already binds its prefix — so the incremental
-// scope equals the ancestor-chain walk that function performs.
-func (c *subtreeCollector) enter(elem *helium.Element) []nsBinding {
+// the bindings it replaced, one entry per prefix touched. It charges each new
+// non-xml prefix before growing the scope: that prefix can become a namespace
+// node, so remaining bounds the work even when the eventual node-set append
+// would reject it. A negative remaining value leaves the member count unlimited.
+//
+// The binding rule matches domutil.InScopeNamespaces exactly — declarations
+// first, then the element's own active namespace when nothing already binds its
+// prefix — so the incremental scope equals the ancestor-chain walk that function
+// performs.
+func (c *subtreeCollector) enter(ctx context.Context, elem *helium.Element, remaining int) ([]nsBinding, error) {
 	var seen prefixSet
 	var changed []nsBinding
-	for _, ns := range elem.Namespaces() {
+	pendingMembers := 0
+	bind := func(ns *helium.Namespace) error {
+		prefix := ns.Prefix()
+		if prefix != lexicon.PrefixXML && !seen.contains(prefix) {
+			if remaining >= 0 && pendingMembers >= remaining {
+				return checkXPathFilterNodeLimit(ctx, len(c.nodes)+pendingMembers+1, c.maxNodes)
+			}
+			if err := c.charge(ctx, 1); err != nil {
+				return err
+			}
+			pendingMembers++
+		}
 		changed = c.bind(ns, changed, &seen)
+		return nil
+	}
+	for _, ns := range elem.Namespaces() {
+		if err := bind(ns); err != nil {
+			return nil, err
+		}
 	}
 	if ns := elem.Namespace(); ns != nil {
 		if _, ok := c.scope[ns.Prefix()]; !ok {
-			changed = c.bind(ns, changed, &seen)
+			if err := bind(ns); err != nil {
+				return nil, err
+			}
 		}
 	}
-	return changed
+	return changed, nil
 }
 
 // bind records the binding prefix had before ns replaced it, unless this element
