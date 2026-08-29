@@ -1,15 +1,42 @@
 package xmldsig1
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
+
+// xpointerEvalErrorContext stays live until xpath1 begins evaluating an
+// expression, then reports err for that call and every later poll. This lets the
+// public verification tests reach the general-XPointer evaluator instead of
+// stopping at an earlier context check.
+type xpointerEvalErrorContext struct {
+	context.Context
+	err   error
+	armed bool
+}
+
+func (c *xpointerEvalErrorContext) Err() error {
+	if c.armed {
+		return c.err
+	}
+	_, file, _, ok := runtime.Caller(1)
+	if !ok || !strings.HasSuffix(filepath.ToSlash(file), "/xpath1/eval.go") {
+		return nil
+	}
+	c.armed = true
+	return c.err
+}
 
 // setElementText replaces elem's children with a single text node holding s.
 func setElementText(t *testing.T, doc *helium.Document, elem *helium.Element, s string) {
@@ -93,6 +120,51 @@ func TestGeneralXPointerVerifyRoundTrip(t *testing.T) {
 	t.Run("rejected without AllowXPointer", func(t *testing.T) {
 		_, err := NewVerifier(StaticKey(&key.PublicKey)).Verify(t.Context(), doc)
 		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+
+	t.Run("context errors survive public wrappers", func(t *testing.T) {
+		verifier := NewVerifier(StaticKey(&key.PublicKey)).AllowXPointer(true)
+		entries := []struct {
+			name   string
+			verify func(context.Context) error
+		}{
+			{
+				name: "Verify",
+				verify: func(ctx context.Context) error {
+					_, err := verifier.Verify(ctx, doc)
+					return err
+				},
+			},
+			{
+				name: "VerifyElement",
+				verify: func(ctx context.Context) error {
+					_, err := verifier.VerifyElement(ctx, doc, sig)
+					return err
+				},
+			},
+		}
+		contextErrors := []struct {
+			name string
+			err  error
+		}{
+			{name: "canceled", err: context.Canceled},
+			{name: "deadline", err: context.DeadlineExceeded},
+		}
+		for _, entry := range entries {
+			for _, contextError := range contextErrors {
+				t.Run(entry.name+"/"+contextError.name, func(t *testing.T) {
+					ctx := &xpointerEvalErrorContext{Context: t.Context(), err: contextError.err}
+					err := entry.verify(ctx)
+					require.ErrorIs(t, err, ErrReferenceNotFound)
+					require.ErrorIs(t, err, contextError.err)
+					var verifyErr *VerificationError
+					require.ErrorAs(t, err, &verifyErr)
+					require.Equal(t, 0, verifyErr.Reference)
+					require.Equal(t, xpointerURI, verifyErr.URI)
+					require.True(t, ctx.armed)
+				})
+			}
+		}
 	})
 }
 
@@ -295,6 +367,51 @@ func TestGeneralXPointerResolution(t *testing.T) {
 		// external reference and, with no resolver, fails closed.
 		_, _, _, err := canonicalizeReference(t.Context(), &verifierConfig{}, doc, nil, ref)
 		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+}
+
+func TestGeneralXPointerEvaluationErrorIdentity(t *testing.T) {
+	doc := mustParse(t, `<root><target/></root>`)
+	prepare := func(t *testing.T, expr string) *preparedGeneralXPointer {
+		t.Helper()
+		prepared, err := prepareGeneralXPointer(doc, nil, expr)
+		require.NoError(t, err)
+		return prepared
+	}
+
+	t.Run("canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := resolvePreparedGeneralXPointerTarget(ctx, doc, prepare(t, "//target"))
+		require.EqualError(t, err,
+			"xmldsig1: reference URI not resolved: XPointer evaluation failed: context canceled")
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("deadline", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+		defer cancel()
+		_, err := resolvePreparedGeneralXPointerTarget(ctx, doc, prepare(t, "//target"))
+		require.EqualError(t, err,
+			"xmldsig1: reference URI not resolved: XPointer evaluation failed: context deadline exceeded")
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("ordinary no-match", func(t *testing.T) {
+		_, err := resolvePreparedGeneralXPointerTarget(t.Context(), doc, prepare(t, "//missing"))
+		require.EqualError(t, err,
+			"xmldsig1: reference URI not resolved: XPointer selected an empty node-set")
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+	})
+
+	t.Run("ordinary XPath error", func(t *testing.T) {
+		_, err := resolvePreparedGeneralXPointerTarget(t.Context(), doc, prepare(t, "true()"))
+		require.EqualError(t, err,
+			"xmldsig1: reference URI not resolved: XPointer evaluation failed: xpath: result is not a node-set")
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.ErrorIs(t, err, xpath1.ErrNotNodeSet)
 	})
 }
 
