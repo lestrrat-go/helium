@@ -2,6 +2,8 @@ package helium_test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -29,6 +31,32 @@ func buildChainTree(b *testing.B, n int) *helium.Element {
 		prev = cur
 	}
 	return root
+}
+
+// buildDocumentWithExternalSubset builds the public-API shape that makes the
+// document's last-child record untrustworthy: CopyExtSubset installs a DTD that
+// claims the document as its parent while remaining outside its child list.
+func buildDocumentWithExternalSubset(b *testing.B, n int) *helium.Document {
+	b.Helper()
+
+	dtdPath := filepath.Join(b.TempDir(), "ext.dtd")
+	if err := os.WriteFile(dtdPath, []byte(`<!ELEMENT root ANY>`), 0600); err != nil {
+		b.Fatal(err)
+	}
+	dtdSource, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+		FS(helium.PermissiveFS()).Parse(b.Context(), []byte(`<!DOCTYPE root SYSTEM "`+dtdPath+`"><root/>`))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	doc := helium.NewDefaultDocument()
+	for range n {
+		if err := doc.AddChild(doc.CreateComment([]byte("x"))); err != nil {
+			b.Fatal(err)
+		}
+	}
+	helium.CopyExtSubset(dtdSource, doc)
+	return doc
 }
 
 // buildFlatTree builds a document whose root has n childless element
@@ -92,4 +120,21 @@ func BenchmarkCopyNode(b *testing.B) {
 			})
 		}
 	})
+}
+
+// BenchmarkCopyDocExternalSubset measures CopyDoc's document-child build when
+// the source carries an external subset. CopyDoc must build the fresh child list
+// before copying the subset, so doubling the reachable children stays linear.
+func BenchmarkCopyDocExternalSubset(b *testing.B) {
+	for _, n := range []int{2000, 4000, 8000} {
+		b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
+			src := buildDocumentWithExternalSubset(b, n)
+			b.ResetTimer()
+			for range b.N {
+				if _, err := helium.CopyDoc(src); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }

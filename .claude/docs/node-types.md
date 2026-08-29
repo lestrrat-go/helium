@@ -244,81 +244,96 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   and is rejected with a `%w`-wrapped `ErrInvalidOperation`. A non-attribute child takes the ordinary
   child-list path (a `*Document` accepts multiple element children — it is an XDM document node, not a
   well-formed-document constraint; single-root enforcement lives in `SetDocumentElement`, mirroring libxml2's
-  `xmlDocSetRootElement`).
+  `xmlDocSetRootElement`). Re-adding the exact ordinary-child node already stored as this parent's foreign
+  `firstChild` or `lastChild` is a successful no-op; the node remains linked to its real owner's chain.
 - `addSibling(node, sibling)` — append to end of siblings. The tree an append leaves behind is always the one
   the plain `NextSibling()` walk from the anchor produces, INCLUDING every `parent.lastChild` write, which is
   unconditional exactly as it is in that walk. What changes is how the append point is REACHED: the generic
   child-list branch resolves it from `parent.lastChild` without walking whenever `tailJumpTarget` (`node.go`)
   can prove that record is the very node the walk would have found, and otherwise walks. The proof needs two
-  facts. (1) The ANCHOR is a member of the chain `parent` owns — `chainMember` (`node.go`) answers in a
-  pointer comparison when the anchor is `parent.firstChild`, and otherwise walks `prev` to the head of the
-  anchor's own chain and compares it against `parent.firstChild`. (An anchor that is `parent.lastChild` never
-  reaches `chainMember`: `tailJumpTarget` has already declined, because the anchor and the recorded tail are
-  the same node.) That walk is bounded by the anchor's distance BEHIND it, never by the chain ahead of it, so
-  it can never cost more than the `NextSibling()` walk it replaces; it carries a `siblingCycleGuard` so a
-  corrupt `prev` chain terminates instead of spinning, and it crosses only RECIPROCAL `prev` edges
-  (`reciprocalPrev` — the `prev` node points forward at the node again), so a one-way edge cannot carry it out
-  of the anchor's own chain. There is no raw `prev` setter, but a one-way `prev` edge survives whenever a node
-  is spliced out of a chain from the FRONT, so the check is not hypothetical. (2) `parent.lastChild` is the
-  final node of that same chain. NO local read can establish (2): two trees can have pointer-identical
-  neighborhoods around `parent` and `lastChild` and differ only in a `next` pointer an unbounded distance
-  forward from `firstChild`. It holds instead as an INVARIANT of the guarded paths, each of which moves
-  `lastChild` only to a node it has just linked onto the chain, so what is checked is that this document holds
-  no node claiming a parent it is not a child of: `Document.offChainClaims` (`document.go`).
-  `noteOrphanedChildClaim` records the one such claim the GUARDED paths create, which is how an ordinary
-  caller reaches one: a parent holding a `firstChild` with NO `lastChild` — the shape
-  `Document.stringToNodeList` leaves behind on an entity referenced from an attribute value — makes
-  `addChild`/`appendFastChild` take their empty-parent branch, which OVERWRITES `firstChild` and detaches the
-  child that was there while it goes on claiming the parent. An append through that detached child then moves
-  the parent's recorded tail off the child list. Recording the claim at the moment it is created is what keeps
-  the later append byte-identical to the walk. Each claim is recorded on the document owning the parent whose
-  chain is at stake and on the document owning the detached child, each resolved through `owningDocument` so a
-  `*Document` names ITSELF (a document node's own `doc` pointer is nil because it IS the owner). Once set it
-  stays set, and appends for that document walk — which is what every other tree operation does
-  unconditionally. The record FOLLOWS THE TREE, not only the document it was first made on, because a subtree
-  can change owning document afterwards, and a claim made on a still-DETACHED subtree has no document to be
-  recorded on at all. `adoptOffChainClaims` (`node.go`) carries it across every change of owner —
-  `docnode.SetOwnerDocument`, `setTreeDoc`'s attribute write, `setListDoc`'s direct write, and
-  `noteCrossDocumentEscape` — and the unattributable case lands on the package-level `unownedOffChainClaim`
-  (an `atomic.Bool`), which a document inherits when it adopts a subtree that arrives owning no document. That
-  global is the ONE package-wide part; the flag itself stays per-DOCUMENT, because one claim must not slow
-  every other document in the process. `TestAdoptOffChainClaimWithoutOwner` (`node_sibling_internal_test.go`)
-  pins the unowned case. A `*Document` parent is NOT declined by type. Its owning document is read through
-  `owningDocument`, so it names itself, and a document's child list is an ordinary sibling chain that an
-  append walks exactly like any other. A document is claimed off-chain by `CopyExtSubset`, which gives the
-  copied EXTERNAL subset the destination document as its parent and then leaves it reachable only through
-  `ExtSubset`, never from the child list, so an append through that subset records a tail off the child list.
+  facts. (1) The ANCHOR is a member of the chain `parent` owns — `chainMember` (`node.go`) answers in a pointer
+  comparison when the anchor is `parent.firstChild`, and otherwise walks `prev` to the head of the anchor's own
+  chain and compares it against `parent.firstChild`. (An anchor that is `parent.lastChild` never reaches
+  `chainMember`: `tailJumpTarget` has already declined, because the anchor and the recorded tail are the same
+  node.) That walk is bounded by the anchor's distance BEHIND it, never by the chain ahead of it, so it can
+  never cost more than the `NextSibling()` walk it replaces; it carries a `siblingCycleGuard` so a corrupt
+  `prev` chain terminates instead of spinning, and it crosses only RECIPROCAL `prev` edges (`reciprocalPrev` —
+  the `prev` node points forward at the node again), so a one-way edge cannot carry it out of the anchor's own
+  chain. There is no raw `prev` setter, but a one-way `prev` edge survives whenever a node is spliced out of a
+  chain from the FRONT, so the check is not hypothetical. (2) `parent.lastChild` is the final node of that same
+  chain. NO local read can establish (2): two trees can have pointer-identical neighborhoods around `parent` and
+  `lastChild` and differ only in a `next` pointer an unbounded distance forward from `firstChild`. It holds
+  instead as an INVARIANT of the guarded paths, each of which moves `lastChild` only to a node it has just
+  linked onto the chain, so what is checked is that THIS parent has not been handed a child claiming it from
+  off its child list, through `holdsOffChainChildClaim` (`node.go`). The record is per-PARENT: the parent whose
+  chain is at stake is the only one whose `lastChild` a claimant can invalidate, so a claim on one parent must
+  never cost every other parent in the same document its O(1) resolution — reading it from the owning document
+  makes one claim anywhere turn every later append in that document into a full child-list walk, which is
+  quadratic over N appends. A parent holding a `firstChild` with NO `lastChild` — the shape
+  `Document.stringToNodeList` leaves behind on an entity referenced from an attribute value — does not reach
+  the empty-parent branch of `addChild`/`appendFastChild`, because `resolveOwnedTail` walks that child list and
+  returns its true tail, so the append joins the list instead of overwriting `firstChild`. A parent whose
+  `firstChild` claims someone else has no owned tail: `resolveOwnedTail` returns nil, so appending a different
+  node replaces that foreign pointer without changing the foreign owner's chain. Re-adding the stored foreign
+  endpoint itself is a no-op before auto-unlink, so it also leaves both links unchanged. The guarded paths
+  therefore detach no child from a chain it goes on claiming, and create no claim of their own. A `*Document`
+  parent is NOT declined by type: a document's child list is an ordinary sibling chain that an append walks
+  exactly like any other. A document IS the one parent safe API hands such a claimant, through `CopyExtSubset`,
+  which gives the copied EXTERNAL subset the destination document as its parent and then leaves it reachable
+  only through `ExtSubset`, never from the child list, so an append through that subset records a tail off the
+  child list.
   That is a CONDITION, not a type, and `Document.offChainChildClaim` (`document.go`, set by `CopyExtSubset`)
-  records it separately from `offChainClaims` so it declines only for the `*Document` parent handed the
-  claimant, not for every parent in that document. (`CreateInternalSubset` also gives a `DTD` the document as
-  its parent, but it splices that `DTD` into the child list, so it creates no claim.)
-  `TestTailJumpTargetDocumentParent` (`node_sibling_internal_test.go`) pins all three outcomes.
-  `tailJumpTarget` then makes three cheap confirmations that the record is usable (`tail != anchor`,
-  `tail.next == nil`, `tail.parent` is this parent); they cannot fail on a document holding no recorded claim,
-  and are kept because a tree may span documents (`noteCrossDocumentEscape`) while the record does not, so an
-  uncovered corner degrades to the walk instead of splicing onto the wrong node. They also keep the
-  stale-`lastChild` repair path `addChild`/`appendFastChild` depend on: they call `AddSibling` on
-  `parent.lastChild` precisely when that node's `next` is non-nil, so the resolution declines and the walk
-  finds and repairs the true tail. WHAT THE O(1) RESOLUTION IS WORTH DEPENDS ON THE ANCHOR: appending through
-  `parent.firstChild`, or at the true tail (where the anchor's `next` is nil and `addSibling` links directly
-  without consulting `tailJumpTarget` at all), is O(1) per call and LINEAR over N appends (105µs vs 49.5ms at
-  N=4000, a ~470x win), while appending through a MIDDLE anchor stays QUADRATIC — `chainMember`'s `prev` walk
-  grows with the chain — and gains a ~3.8x constant factor instead (26.5ms vs 99.6ms at N=4000).
-  `BenchmarkAddSibling` (`node_sibling_bench_test.go`) measures five arms: `tail`, `nontail` (= first child)
-  and `middle` on an `*Element` parent, plus `docnontail` and `docmiddle` on a `*Document` parent, which track
-  the element arms to within noise. The attribute-chain branch (an anchor genuinely reachable from its owning
-  `*Element`'s `properties` chain) resolves its tail by walking, bounded by the attribute count, because the
-  `properties` membership test already costs that walk. A node can claim a parent without being a member of
-  that parent's child list — the detached-child shape above, `CopyExtSubset`'s copied external subset, or a
-  package-private `unsafeSetParent` write. An append through such a node records its own result as the
-  parent's `lastChild`, moving that record off the child list, after which `AddSibling` (which walks from its
-  anchor) lands at the end of the REACHABLE children while `AddChild` and `UnsafeAppendChild` (which start
-  from the record) land after the off-chain node. `TestAddSiblingOffChainParentClaim`,
-  `TestAddSiblingCopiedExternalSubsetClaim` and `TestAddSiblingCorruptShapesMatchWalk`
-  (`node_sibling_test.go`) pin those shapes; every expectation in them holds for the walk-only implementation
-  too, which is what makes them a differential check. The raw setters record NOTHING, so a tree corrupted
-  through them is outside this agreement — they already document the tree as inconsistent afterwards, and no
-  importer and no production path can reach them.
+  records it on that document as the claimed PARENT, so it declines only for appends onto the document node
+  itself and never for the elements that document owns. (`CreateInternalSubset` also gives a `DTD` the document
+  as its parent, but it splices that `DTD` into the child list, so it creates no claim.) Every other parent
+  answers `false` in a type assertion, so an ordinary append pays nothing for the check.
+  `TestTailJumpTargetDocumentParent` (`node_sibling_internal_test.go`) pins all three outcomes, including that
+  a claim on the document leaves every element in it resolving in O(1), and
+  `TestAppendCostIsLinearBesideAnOffChainClaim` (`node_sibling_internal_test.go`) appends through counted
+  element wrappers beside a document claim and requires zero `NextSibling` calls, so a document-wide fallback
+  fails deterministically. `tailJumpTarget` then makes three cheap confirmations that the record is usable
+  (`tail != anchor`,
+  `tail.next == nil`, `tail.parent` is this parent); they cannot fail on a parent holding no recorded claim,
+  and are kept because a tree may span documents
+  (`noteCrossDocumentEscape`) while the record does not, so an uncovered corner degrades to the walk instead of
+  splicing onto the wrong node. They also keep the stale-`lastChild` repair path `addChild`/`appendFastChild`
+  depend on: they call `AddSibling` on `parent.lastChild` precisely when that node's `next` is non-nil, so the
+  resolution declines and the walk finds and repairs the true tail. WHAT THE O(1) RESOLUTION IS WORTH DEPENDS ON
+  THE ANCHOR: appending through `parent.firstChild`, or at the true tail (where the anchor's `next` is nil and
+  `addSibling` links directly without consulting `tailJumpTarget` at all), is O(1) per call and LINEAR over N
+  appends (105µs vs 49.5ms at N=4000, a ~470x win), while appending through a MIDDLE anchor stays QUADRATIC —
+  `chainMember`'s `prev` walk grows with the chain — and gains a ~3.8x constant factor instead (26.5ms vs 99.6ms
+  at N=4000). `BenchmarkAddSibling` (`node_sibling_bench_test.go`) measures five arms: `tail`, `nontail` (=
+  first child) and `middle` on an `*Element` parent, plus `docnontail` and `docmiddle` on a `*Document` parent,
+  which track the element arms to within noise. The attribute-chain branch (an anchor genuinely reachable from
+  its owning `*Element`'s `properties` chain) resolves its tail by walking, bounded by the attribute count,
+  because the `properties` membership test already costs that walk. A node can claim a parent without being a
+  member of that parent's child list — `CopyExtSubset`'s copied external subset, or a package-private
+  `unsafeSetParent` write. An append through such a node records its own result as the parent's `lastChild`,
+  moving that record off the child list. `AddSibling` walks from its anchor, while `AddChild`,
+  `appendFastChild` and `appendCopiedChild` resolve the last OWNED child through `resolveOwnedTail`
+  (`node.go`). The resolver trusts the recorded tail when that node claims this parent, has no `next`, AND
+  this parent holds no off-chain claim (the same signal `tailJumpTarget` declines on, read through
+  `holdsOffChainChildClaim`); otherwise it walks the child list under a `siblingCycleGuard` to the last node
+  still claiming the parent. It returns nil when `parent.firstChild` is nil OR when the first child is foreign
+  and no owned tail exists. The callers then install the appended node as a new owned child list. They NEVER
+  use a foreign head as an `AddSibling` anchor: an entity reference's shared `Entity` child keeps the `DTD` as
+  its parent, so the Entity's sibling links belong to the DTD declaration list and must remain unchanged when
+  the reference receives a child. A stale owned record is repaired rather than followed: the
+  `CopyExtSubset` shape has no reachable first child, and the `stringToNodeList` shape has an owned child list
+  but no recorded tail. The `CreateReference` shape has only a foreign first child, so the new owned list
+  replaces the reference's pointer to that shared Entity without changing the DTD chain. Re-adding that same
+  stored Entity is handled before resolution as a successful no-op, leaving the Entity on the DTD chain and
+  as the reference's foreign child.
+  `TestAddChildResolvesAnOwnedTail` (`node_owned_tail_test.go`) pins all four reachable shapes, and
+  `TestAddSiblingOffChainParentClaim`, `TestAddSiblingCopiedExternalSubsetClaim` and
+  `TestAddSiblingCorruptShapesMatchWalk` (`node_sibling_test.go`) pin the sibling side; every expectation in
+  the last of those holds for the walk-only implementation too, which is what makes it a differential check.
+  `TestAppendReplacesAForeignChildList` (`node_sibling_internal_test.go`) pins the same ownership boundary on
+  nodes no document owns. The raw setters record NOTHING, so a tree corrupted through them is outside this
+  agreement —
+  they already document the tree as inconsistent afterwards, and no importer and no production path can reach
+  them.
 - `replaceNode(old, new)` — swap in same position. Attribute-aware: replacing an `Attribute` updates the
   owning `Element.properties` head/chain (NOT `firstChild`/`lastChild`), and an attribute may only be replaced
   by attribute node(s) (non-attribute replacement is rejected)
@@ -339,7 +354,9 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   never carry the one production foreign-link source `wouldCreateCycle` exists to catch. `appendCopiedChild`
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior
-  for that unrelated caller too.
+  for that unrelated caller too. `CopyDoc` builds the fresh document child list before `CopyExtSubset` records
+  its off-chain claim on the destination document, so each document-level append can use the recorded owned
+  tail instead of walking the growing child list.
 - `DeclareNamespace(prefix, uri)` / `AddNamespaceDecl(ns)` — do NOT themselves add a second declaration for a
   prefix in `nsDefs`, and NEVER touch the node's active namespace (`n.ns`) or expanded name.
   `DeclareNamespace` allocates a fresh `*Namespace`; `AddNamespaceDecl` attaches the caller's existing object
@@ -433,8 +450,10 @@ stops within a small multiple of the cycle length, so on a corrupt sibling list 
 the stack more than once — harmless, since the popped-node visited set deduplicates the extra pushes on pop,
 and termination is unconditional either way. The childless-cur fast path (the parser hot path appends fresh
 leaves) skips the search entirely, so plain parsing is unaffected; it only runs for a subtree/entity-ref
-insertion. addChild/addSibling auto-unlink an already-linked incoming node before relinking so it never lives
-in two places; rejection leaves the tree untouched. The shared guard + auto-unlink is factored into
+insertion. `addChild`/`addSibling` auto-unlink an already-linked incoming node before relinking so it never
+lives in two places. `addChild` instead returns a successful no-op when the incoming node is already stored as
+the parent's foreign first or last child, because unlinking it would damage its real owner's chain. Rejection
+leaves the tree untouched. The shared guard + auto-unlink is factored into
 `addChildPreflight`/`addSiblingPreflight`. Leaf `AddChild`/`AddSibling` overrides that take a content-merge
 fast path (Text, Comment, and ProcessingInstruction — whose `AddChild` merges a Text/CDATA operand's content
 into the PI data string) run the matching preflight BEFORE merging, so

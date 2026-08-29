@@ -773,6 +773,11 @@ func TestCopyDTD(t *testing.T) {
 		helium.CopyExtSubset(src, dst)
 		require.NotNil(t, dst.ExtSubset(), "external subset copied")
 
+		copiedDoc, err := helium.CopyDoc(src)
+		require.NoError(t, err)
+		require.NotNil(t, copiedDoc.DocumentElement(), "document children copied")
+		require.NotNil(t, copiedDoc.ExtSubset(), "external subset copied with the document")
+
 		// nil arguments are a no-op.
 		helium.CopyExtSubset(nil, dst)
 		helium.CopyExtSubset(src, nil)

@@ -25,6 +25,45 @@ func documentTailFixture(t *testing.T) (*Document, *Comment) {
 	return doc, comment
 }
 
+// nextSiblingCountingElement records every fallback sibling-walk step made
+// through it. Its AddSibling override keeps the wrapper as addSibling's anchor
+// so virtual NextSibling calls remain observable to the test.
+type nextSiblingCountingElement struct {
+	*Element
+	nextSiblingCalls *int
+}
+
+func (n *nextSiblingCountingElement) AddSibling(cur Node) error {
+	return addSibling(n, cur)
+}
+
+func (n *nextSiblingCountingElement) NextSibling() Node {
+	(*n.nextSiblingCalls)++
+	return n.Element.NextSibling()
+}
+
+func newNextSiblingCountingElement(t *testing.T, doc *Document, nextSiblingCalls *int) *nextSiblingCountingElement {
+	t.Helper()
+
+	elem, err := doc.CreateElement("child")
+	require.NoError(t, err)
+	return &nextSiblingCountingElement{
+		Element:          elem,
+		nextSiblingCalls: nextSiblingCalls,
+	}
+}
+
+func documentWithOffChainClaim() *Document {
+	src := NewDefaultDocument()
+	srcDTD := newDTD()
+	srcDTD.name = "root"
+	src.extSubset = srcDTD
+
+	doc := NewDefaultDocument()
+	CopyExtSubset(src, doc)
+	return doc
+}
+
 // TestTailJumpTargetDocumentParent pins which *Document parents may resolve an
 // append point from their own lastChild. A document is not excluded by TYPE: it
 // is excluded by the one CONDITION that makes its record untrustworthy, which is
@@ -57,33 +96,94 @@ func TestTailJumpTargetDocumentParent(t *testing.T) {
 		require.Nil(t, tailJumpTarget(doc, comment.baseDocNode()))
 	})
 
-	t.Run("a document holding an off-chain claim declines", func(t *testing.T) {
+	t.Run("a claim on one parent leaves every other parent resolving", func(t *testing.T) {
 		t.Parallel()
 
 		doc, comment := documentTailFixture(t)
 
-		// stringToNodeList leaves an entity referenced from an attribute value
-		// with a firstChild and no lastChild; setFirstChild is the call that does
-		// it. An append onto such a parent detaches that child while the child
-		// goes on claiming the parent. Recording the claim is what stops the
-		// document trusting a lastChild that a later append through the detached
-		// child can move off a child list.
-		claimed, err := doc.CreateElement("claimed")
-		require.NoError(t, err)
-		setFirstChild(claimed, doc.CreateText([]byte("first")))
-		require.NoError(t, claimed.AddChild(doc.CreateComment([]byte("q"))))
+		src := NewDefaultDocument()
+		srcDTD := newDTD()
+		srcDTD.name = "root"
+		src.extSubset = srcDTD
+		CopyExtSubset(src, doc)
+		require.Nil(t, tailJumpTarget(doc, comment.baseDocNode()),
+			"the parent handed the claimant declines")
 
-		require.True(t, doc.offChainClaims)
-		require.Nil(t, tailJumpTarget(doc, comment.baseDocNode()))
+		// The claimant was handed to the DOCUMENT. Every element the document
+		// owns still has its lastChild at the end of its own chain, so each keeps
+		// its O(1) resolution: a claim on one parent must never cost the others.
+		elem, err := doc.CreateElement("elem")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(elem))
+		lead := doc.CreateComment([]byte("lead"))
+		trail := doc.CreateComment([]byte("trail"))
+		require.NoError(t, elem.AddChild(lead))
+		require.NoError(t, elem.AddChild(trail))
+
+		require.Equal(t, Node(trail), tailJumpTarget(elem, lead.baseDocNode()))
 	})
 }
 
-// TestAdoptOffChainClaimWithoutOwner pins the record that no document owned when
-// it was made. An off-chain claim created on a still-detached subtree has
-// nowhere to be recorded, so it lands on the package-level flag, and the
-// document that later adopts the subtree must inherit it.
-func TestAdoptOffChainClaimWithoutOwner(t *testing.T) {
-	// Not parallel: it asserts on the package-level unowned-claim flag.
+// TestAppendCostIsLinearBesideAnOffChainClaim guards the per-parent scope of
+// off-chain child claims without measuring elapsed time. CopyExtSubset gives the
+// document such a claim, but an element it owns must still append through its
+// first child without calling NextSibling. A document-wide claim would force the
+// fallback walk on every append and make the counter nonzero.
+func TestAppendCostIsLinearBesideAnOffChainClaim(t *testing.T) {
+	t.Parallel()
+
+	t.Run("counter observes a required fallback walk", func(t *testing.T) {
+		doc := documentWithOffChainClaim()
+		require.True(t, holdsOffChainChildClaim(doc))
+
+		nextSiblingCalls := 0
+		anchor := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		tail := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		require.NoError(t, doc.AddChild(anchor))
+		require.NoError(t, doc.AddChild(tail))
+
+		nextSiblingCalls = 0
+		appended := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		require.NoError(t, anchor.AddSibling(appended))
+		require.Positive(t, nextSiblingCalls,
+			"a parent with an off-chain claim must walk instead of trusting its recorded tail")
+		require.Equal(t, Node(appended), doc.LastChild())
+	})
+
+	t.Run("another parent keeps constant-time tail resolution", func(t *testing.T) {
+		doc := documentWithOffChainClaim()
+		require.True(t, holdsOffChainChildClaim(doc))
+
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		require.NoError(t, doc.AddChild(parent))
+		require.False(t, holdsOffChainChildClaim(parent))
+
+		nextSiblingCalls := 0
+		anchor := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+		require.NoError(t, parent.AddChild(anchor))
+
+		const appendCount = 256
+		var last Node = anchor
+		for range appendCount {
+			child := newNextSiblingCountingElement(t, doc, &nextSiblingCalls)
+			require.NoError(t, anchor.AddSibling(child))
+			last = child
+		}
+
+		require.Equal(t, last, parent.LastChild())
+		require.Zero(t, nextSiblingCalls,
+			"appending through the first child must resolve the recorded tail without walking siblings")
+	})
+}
+
+// TestAppendReplacesAForeignChildList pins the shape that has a firstChild
+// claiming nobody, on nodes no document owns. resolveOwnedTail finds no tail
+// this parent owns, so the append must start an owned list without changing the
+// foreign node's sibling links.
+func TestAppendReplacesAForeignChildList(t *testing.T) {
+	t.Parallel()
+
 	var standalone *Document
 	parent, err := standalone.CreateElement("parent")
 	require.NoError(t, err)
@@ -92,13 +192,13 @@ func TestAdoptOffChainClaimWithoutOwner(t *testing.T) {
 	later, err := standalone.CreateElement("later")
 	require.NoError(t, err)
 
-	// The firstChild-without-lastChild shape, on nodes no document owns.
+	// The firstChild-without-lastChild shape: first claims no parent at all, so
+	// nothing on parent's list claims parent.
 	setFirstChild(parent, first)
 	require.NoError(t, parent.AddChild(later))
-	require.True(t, unownedOffChainClaim.Load(), "a claim no document owned is recorded package-wide")
 
-	doc := NewDefaultDocument()
-	require.False(t, doc.offChainClaims)
-	parent.SetTreeDoc(doc)
-	require.True(t, doc.offChainClaims, "the adopting document inherits the record")
+	require.Equal(t, Node(later), parent.FirstChild(), "the appended child starts the owned list")
+	require.Equal(t, Node(later), parent.LastChild())
+	require.Equal(t, Node(parent), later.Parent())
+	require.Nil(t, first.NextSibling(), "the foreign node's sibling links stay unchanged")
 }
