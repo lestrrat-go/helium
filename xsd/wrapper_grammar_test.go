@@ -1,10 +1,98 @@
 package xsd_test
 
 import (
+	"fmt"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
+
+func TestComplexTypeGrammarDiagnosticComponent(t *testing.T) {
+	t.Parallel()
+
+	defects := []struct {
+		name    string
+		body    string
+		message string
+	}{
+		{
+			name:    "mixed conflict",
+			body:    ` mixed="true"><xs:complexContent mixed="false"><xs:extension base="xs:anyType"/></xs:complexContent>`,
+			message: "must not conflict",
+		},
+		{
+			name:    "missing wrapper derivation",
+			body:    `><xs:complexContent/>`,
+			message: "must have exactly one 'restriction' or 'extension'",
+		},
+		{
+			name:    "complex content stray child",
+			body:    `><xs:complexContent><xs:extension base="xs:anyType"><xs:element name="bad"/></xs:extension></xs:complexContent>`,
+			message: "not allowed in a 'extension' derivation",
+		},
+		{
+			name:    "simple content stray child",
+			body:    `><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent>`,
+			message: "not allowed in a 'simpleContent' derivation",
+		},
+	}
+	versions := []struct {
+		name    string
+		version xsd.Version
+	}{
+		{name: "XSD 1.0", version: xsd.Version10},
+		{name: "XSD 1.1", version: xsd.Version11},
+	}
+	owners := []struct {
+		name      string
+		open      string
+		close     string
+		component string
+	}{
+		{
+			name:      "global",
+			open:      `<xs:complexType name="G"`,
+			close:     `</xs:complexType>`,
+			component: "complex type 'G'",
+		},
+		{
+			name:      "local",
+			open:      `<xs:element name="root"><xs:complexType`,
+			close:     `</xs:complexType></xs:element>`,
+			component: "local complex type",
+		},
+	}
+
+	for _, version := range versions {
+		for _, owner := range owners {
+			for _, defect := range defects {
+				version, owner, defect := version, owner, defect
+				t.Run(fmt.Sprintf("%s %s %s", version.name, owner.name, defect.name), func(t *testing.T) {
+					t.Parallel()
+					schemaXML := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+						owner.open + defect.body + owner.close + `</xs:schema>`
+					doc, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+					require.NoError(t, err)
+					collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+					_, _ = xsd.NewCompiler().
+						Version(version.version).
+						Label("test.xsd").
+						ErrorHandler(collector).
+						Compile(t.Context(), doc)
+					require.NoError(t, collector.Close())
+					errors := compileErrorsString(collector.Errors())
+					require.Contains(t, errors, owner.component+":")
+					require.Contains(t, errors, defect.message)
+					if owner.name == "global" {
+						require.NotContains(t, errors, "local complex type:")
+					}
+				})
+			}
+		}
+	}
+}
 
 // TestComplexContentGrammar exercises the full XSD 1.1 (annotation?, (restriction
 // | extension)) content model of <xs:complexContent>: exactly one derivation,
