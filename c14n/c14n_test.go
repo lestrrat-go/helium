@@ -34,6 +34,56 @@ func readExpected(t *testing.T, path string) []byte {
 	return data
 }
 
+func TestCanonicalizeCopiedEntityReferences(t *testing.T) {
+	t.Parallel()
+
+	const srcXML = `<!DOCTYPE root [<!ENTITY item "<p:item xmlns:p='urn:item'>A&amp;B</p:item>">]>` +
+		`<root xmlns:p="urn:item">&item;&item;</root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+	require.NoError(t, err)
+	copied, err := helium.CopyDoc(doc)
+	require.NoError(t, err)
+
+	canonicalizer := c14n.NewCanonicalizer(c14n.C14N10)
+	want, err := canonicalizer.CanonicalizeTo(doc)
+	require.NoError(t, err)
+	got, err := canonicalizer.CanonicalizeTo(copied)
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(got))
+	require.Equal(t,
+		`<root xmlns:p="urn:item"><p:item>A&amp;B</p:item><p:item>A&amp;B</p:item></root>`,
+		string(got),
+	)
+}
+
+func TestCanonicalizeCopiedEntityReferencesUsesEachReferenceSite(t *testing.T) {
+	t.Parallel()
+
+	const srcXML = `<!DOCTYPE r [<!ENTITY x "<p:x/>">]>` +
+		`<r><a xmlns:p="urn:one">&x;</a><b xmlns:p="urn:two">&x;</b></r>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+	require.NoError(t, err)
+	copied, err := helium.CopyDoc(doc)
+	require.NoError(t, err)
+	copiedEntity, found := copied.IntSubset().LookupEntity("x")
+	require.True(t, found)
+	replacement, ok := helium.AsNode[*helium.Element](copiedEntity.FirstChild())
+	require.True(t, ok)
+	require.Empty(t, replacement.Namespaces())
+	require.Equal(t, "p", replacement.Prefix())
+
+	canonicalizer := c14n.NewCanonicalizer(c14n.C14N10)
+	want, err := canonicalizer.CanonicalizeTo(doc)
+	require.NoError(t, err)
+	got, err := canonicalizer.CanonicalizeTo(copied)
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(got))
+	require.Equal(t,
+		`<r><a xmlns:p="urn:one"><p:x></p:x></a><b xmlns:p="urn:two"><p:x></p:x></b></r>`,
+		string(got),
+	)
+}
+
 // parseXPathFile parses a .xpath file and returns the XPath expression
 // string and namespace bindings.
 func parseXPathFile(t *testing.T, path string) (string, map[string]string) {

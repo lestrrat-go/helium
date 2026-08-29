@@ -200,8 +200,17 @@ elements corresponding exactly to the source's, and at O(1). Re-deriving them wo
 walk. The fallback walk consults ID-typed ATTLIST declarations by their raw qualified name (prefix+local), so
 it correctly resolves a prefixed element's qualified ATTLIST (`<!ATTLIST a:item eid ID>`) — but rebuilding
 from the source table is still preferred for identity and cost fidelity. `CopyDoc` also DEEP-COPIES the
-source's external subset (via `CopyExtSubset`), so the copy's fallback walk sees the same ID-typed ATTLIST
-decls as the source. `helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external subset into
+source's external subset (via `CopyDTDSubsets`), so the copy's fallback walk sees the same ID-typed ATTLIST
+decls as the source. `helium.CopyDTDSubsets(src, dst *Document)` returns the source-to-copy entity declaration
+correspondence and registers declarations from BOTH subsets before copying entity replacement trees, so each
+reference across the subset boundary binds to the copy of its actual source declaration. Copied replacement
+elements reproduce only their own namespace declarations; an active prefix cached by the parser stays name
+metadata without becoming a declaration, so C14N resolves it from each EntityRef site's namespace context.
+The xslt3 strip-space copy keeps the copied DTD declaration unchanged and binds each document reference to a
+private replacement view keyed by its containing element and inherited `xml:space` state. This
+lets top-level replacement whitespace follow each reference site's rules without changing another reference.
+`helium.CopyExtSubset(src, dst *Document)` DEEP-COPIES the source's external
+subset into
 `dst` (independent `*DTD`; mutating one never affects the other); `CopyDTDInfo`, by contrast, copies only the
 internal subset and links it into the document tree (and returns an error when `dst` already has one).
 
@@ -288,11 +297,12 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   endpoint itself is a no-op before auto-unlink, so it also leaves both links unchanged. The guarded paths
   therefore detach no child from a chain it goes on claiming, and create no claim of their own. A `*Document`
   parent is NOT declined by type: a document's child list is an ordinary sibling chain that an append walks
-  exactly like any other. A document IS the one parent safe API hands such a claimant, through `CopyExtSubset`,
+  exactly like any other. A document IS the one parent safe API hands such a claimant, through the DTD-subset
+  copy paths,
   which gives the copied EXTERNAL subset the destination document as its parent and then leaves it reachable
   only through `ExtSubset`, never from the child list, so an append through that subset records a tail off the
   child list.
-  That is a CONDITION, not a type, and `Document.offChainChildClaim` (`document.go`, set by `CopyExtSubset`)
+  That is a CONDITION, not a type, and `Document.offChainChildClaim` (`document.go`, set by `copy_dtd.go`)
   records it on that document as the claimed PARENT, so it declines only for appends onto the document node
   itself and never for the elements that document owns. (`CreateInternalSubset` also gives a `DTD` the document
   as its parent, but it splices that `DTD` into the child list, so it creates no claim.) Every other parent
@@ -351,6 +361,8 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   last child WITHOUT the cycle-guard / duplicate-attr checks. The caller guarantees an acyclic, dup-free child
   (deep copies, freshly-built trees). Ordinary code uses `AddChild`. It backs the parser's fast SAX path
   in-package; `xslt3`'s strip-space copier reaches it through the `internal/nodelink` hook `AppendFastChild`,
+  reaches `bindEntityReference` through `BindEntityReference`, and creates private context-specific entity
+  views through `CloneEntityReferenceBinding`,
   and the external `helium_test` package through `UnsafeAppendChildForTesting` in `export_test.go`.
 - `appendCopiedChild(parent, child)` (`copy_deep.go`) — the deep-copy core's own no-preflight link, used by
   `copyChildren` in place of `AddChild`. It mirrors `addChild`'s linking rules exactly, INCLUDING the
@@ -359,14 +371,25 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   depth: bottom-up child-linking through `AddChild` runs `childReaches` over each already-built child subtree
   as it is attached, so linking a deep chain one level at a time costs the sum of all subtree sizes. Skipping
   the preflight is sound here — never elsewhere — because every node `copyNode` returns is freshly allocated
-  in `dc.dst` and has never been linked anywhere: `CreateCharRef` (the `EntityRefNode` branch) creates a
-  childless `EntityRef` with no shared-Entity foreign link, unlike `CreateReference`, so a copied subtree can
-  never carry the one production foreign-link source `wouldCreateCycle` exists to catch. `appendCopiedChild`
+  in `dc.dst` and has never been linked as an owned child. The `EntityRefNode` branch uses the active entity
+  correspondence when its source reference is bound to a declaration included in the copy. With an active
+  correspondence, an unbound source reference stays bare even when the copied DTD has a declaration with the
+  same name; standalone `CopyNode` first resolves a bound reference in the corresponding destination subset,
+  preserving internal/external identity when both subsets declare the same name, then falls back to ordinary
+  destination name lookup. Numeric character references always stay bare. A declared reference carries the
+  destination DTD's shared `Entity` child, and that declaration
+  graph is disjoint from the fresh document subtree and cannot reach the new parent. Within a DTD entity's
+  parsed replacement subtree, the same direct link is sound between fresh nodes. Each completed top-level
+  replacement child is attached to its destination `Entity` through the same direct linker only after
+  `copyDTDReplacements` validates the complete prospective declaration graph once with shared visit state.
+  The shared state visits each node once across chained declarations while retaining cycle rejection.
+  `appendCopiedChild`
   is distinct from `appendFastChild` — it is not used outside the copier — because `appendFastChild` also
   backs `xslt3`'s strip-space copier, and widening its linking rule to add a merge check would change behavior
-  for that unrelated caller too. `CopyDoc` builds the fresh document child list before `CopyExtSubset` records
-  its off-chain claim on the destination document, so each document-level append can use the recorded owned
-  tail instead of walking the growing child list.
+  for that unrelated caller too. `CopyDoc` builds both DTD subsets before the fresh document child list so
+  bound references bind to the copies of their actual source declarations, but records the external subset's
+  off-chain claim only after the child list is complete. Each document-level append can therefore use the recorded
+  owned tail instead of walking the growing child list.
 - `DeclareNamespace(prefix, uri)` / `AddNamespaceDecl(ns)` — do NOT themselves add a second declaration for a
   prefix in `nsDefs`, and NEVER touch the node's active namespace (`n.ns`) or expanded name.
   `DeclareNamespace` allocates a fresh `*Namespace`; `AddNamespaceDecl` attaches the caller's existing object
@@ -515,7 +538,8 @@ scan, never a raw `NextSibling()` walk, so a hang cannot precede the `Walk`-base
 with one exception: `addSibling`'s fallback walk (above) is a raw, unbounded `NextSibling()` walk, so calling
 `AddSibling` through a node whose sibling list is cyclic hangs forever. The document root-element scans
 (`Document.DocumentElement`/`SetDocumentElement`/`CreateInternalSubset`) and the deep-copy (`copyChildren`,
-`copyDTDChildren`) and serializer child descents iterate the SOURCE through `Children` (bounding a corrupt
+`copyDTDDeclarations`, `copyDTDReplacements`) and serializer child descents iterate the SOURCE through
+`Children` (bounding a corrupt
 source sibling list); `copyChildren` links each copied child into the destination via `appendCopiedChild`
 (above), not `Children`; `setListDoc` (the `SetTreeDoc` sibling walker) and the serializer's attribute-chain
 walk each carry a per-list seen guard (the latter also terminates a non-`*Attribute` successor that would

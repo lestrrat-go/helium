@@ -901,9 +901,9 @@ func resolveOwnedTail(parent Node, pdn *docnode) Node {
 // parent, including every other parent in the same document, so it must never
 // be read from the owning document.
 //
-// The only claimant safe API creates is the external subset CopyExtSubset
-// copies, which is given the destination document as its parent and left
-// reachable only through ExtSubset. The claimed parent is that *Document
+// The only claimant safe API creates is an external subset copied through
+// CopyExtSubset or CopyDTDSubsets. It is given the destination document as its
+// parent and left reachable only through ExtSubset. The claimed parent is that *Document
 // itself, and Document.offChainChildClaim records it. (CreateInternalSubset
 // also gives a DTD the document as its parent, but it splices that DTD into the
 // child list, so it creates no claim.) Every other parent answers false in a
@@ -1015,8 +1015,8 @@ func reciprocalPrev(x *docnode) *docnode {
 // stake is the only one whose lastChild record the claim can invalidate, so a
 // claim on one parent must not cost every other parent in the same document its
 // O(1) resolution. The one parent safe API hands such a claimant is a *Document,
-// through CopyExtSubset, which gives the copied external subset the destination
-// document as its parent and then leaves it reachable only through ExtSubset,
+// through the DTD-subset copy paths, which give the copied external subset the
+// destination document as its parent and then leave it reachable only through ExtSubset,
 // never from the child list, so an append through that subset records its own
 // result as the document's tail and moves the record off the child list. That is
 // a condition, not a type: the shortcut is declined for a document that has

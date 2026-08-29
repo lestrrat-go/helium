@@ -9,14 +9,11 @@ import (
 // single set of "speed/shape primitives" that every deep-copy site in the tree
 // layer is expressed through: the leaf-node copy switch, the attribute copy
 // loop, and the namespace binding all live in one place and are selected by
-// these knobs. Child-linking is NOT one of these knobs: copyChildren always
-// links through appendCopiedChild (see its doc comment), which every
-// deep-copy site can share safely because copyNode never returns a node that
-// is already linked or that carries a foreign child link.
+// these knobs. Child-linking uses appendCopiedChild (see its doc comment).
 //
-// The defaults (the zero value) reproduce the historical helium.CopyDoc/CopyNode
-// behavior EXACTLY: over-declared namespaces, no filtering, no mapping.
-// Callers that want the faster shape opt in.
+// The defaults (the zero value) select the general helium.CopyDoc/CopyNode
+// shape: over-declared namespaces, no filtering, no mapping. Callers that want
+// the faster shape opt in.
 type deepCopyOptions struct {
 	// overDeclareNS selects the namespace-declaration strategy for elements.
 	//
@@ -34,6 +31,13 @@ type deepCopyOptions struct {
 	// degenerate source whose active namespace is not in scope anywhere.
 	overDeclareNS bool
 
+	// entityReplacementNS preserves an entity replacement element's own nsDefs
+	// and active prefix metadata without declaring the parser-cached active
+	// namespace. Canonicalization resolves that prefix at each EntityRef site;
+	// declaring the cached URI here would freeze the first site's binding into
+	// every copied reference.
+	entityReplacementNS bool
+
 	// omit, when non-nil, decides whether a node is dropped from the copy. It is
 	// the generalized node-filter predicate: strip-space passes a
 	// whitespace-omit filter; the general copy passes nil (copy everything). It
@@ -50,6 +54,10 @@ type deepCopyOptions struct {
 	// omitted), with the source node and its fresh copy. It backs caller-side
 	// bookkeeping such as the strip-space node map and ID-table rebuild.
 	onCopy func(src, cp Node)
+
+	// entityCopies binds a copied EntityRef to the copy of its actual source
+	// declaration when a document or DTD copy includes that declaration.
+	entityCopies map[*Entity]*Entity
 
 	// afterElementAttrs, when non-nil, is invoked for each copied element AFTER
 	// its attributes have been copied (but before its children), with the source
@@ -101,20 +109,17 @@ func (dc *deepCopier) copyChildren(src Node, parent MutableNode, inScope map[str
 // children, so linking a deep tree bottom-up through AddChild re-walks a
 // growing subtree at every level.
 //
-// This is safe ONLY for a child that copyNode just returned. Every copyNode
-// branch allocates a brand-new node owned by dc.dst that has never been
-// linked anywhere: TextNode/CDATASectionNode/CommentNode/
-// ProcessingInstructionNode create fresh leaf nodes; EntityRefNode calls
-// dc.dst.CreateCharRef, which creates a childless EntityRef with no shared
-// Entity child (unlike CreateReference, whose EntityRef DOES carry a foreign
-// child link — CreateCharRef never installs one); ElementNode recurses through
-// copyElement, itself built only from fresh nodes; and the default branch
-// delegates to CopyNode, which for every node type it supports likewise
-// returns a freshly allocated, unlinked node. None of these can already be
-// linked into a tree or carry a foreign child link, so wouldCreateCycle could
-// never have found anything for such a child — the preflight is pure
-// overhead here. Do NOT call this on a node from outside the copier: an
-// arbitrary caller-supplied child has no such guarantee.
+// This is safe ONLY for a child that copyNode just returned while copying a
+// normal document or element tree. Every branch allocates a brand-new node
+// owned by dc.dst that has never been linked as an owned child. EntityRefNode
+// may carry a copied or name-resolved destination DTD declaration child, but
+// that declaration graph is disjoint from the fresh document subtree and
+// therefore cannot reach its new parent. DTD entity replacement trees use this
+// linker between fresh nodes and for their completed top-level children only
+// after one shared-state validation has proved the prospective declaration graph
+// acyclic.
+// Do NOT call this on a node from outside the copier: an arbitrary
+// caller-supplied child has no such guarantee.
 func appendCopiedChild(parent MutableNode, child Node) error {
 	pdn := parent.baseDocNode()
 	cdn := child.baseDocNode()
@@ -195,7 +200,7 @@ func (dc *deepCopier) copyNode(src Node, parent *Element, inScope map[string]*Na
 		if dc.filtered(src, parent, parentState) {
 			return nil, nil //nolint:nilnil // omitted by filter
 		}
-		cp, err := dc.dst.CreateCharRef(src.Name())
+		cp, err := copyEntityReference(src, dc.dst, dc.opts.entityCopies)
 		if err != nil {
 			return nil, err
 		}
@@ -291,10 +296,29 @@ func (dc *deepCopier) copyElement(src *Element, inScope map[string]*Namespace, p
 // child namespace scope (only meaningful in exact mode; nil in over-declare
 // mode, which does not track scope).
 func (dc *deepCopier) bindNamespaces(src, elem *Element, inScope map[string]*Namespace) (map[string]*Namespace, error) {
+	if dc.opts.entityReplacementNS {
+		return nil, dc.bindNamespacesEntityReplacement(src, elem)
+	}
 	if dc.opts.overDeclareNS {
 		return nil, dc.bindNamespacesOverDeclare(src, elem)
 	}
 	return dc.bindNamespacesExact(src, elem, inScope)
+}
+
+// bindNamespacesEntityReplacement preserves declarations physically present in
+// replacement text and keeps the active prefix/URI only as name metadata. The
+// active binding remains undeclared so consumers can resolve it from each
+// EntityRef site's namespace context.
+func (dc *deepCopier) bindNamespacesEntityReplacement(src, elem *Element) error {
+	for _, ns := range src.Namespaces() {
+		if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
+			return err
+		}
+	}
+	if ns := src.Namespace(); ns != nil {
+		return elem.SetActiveNamespace(ns.Prefix(), ns.URI())
+	}
+	return nil
 }
 
 // bindNamespacesOverDeclare reproduces the historical helium.copyElement

@@ -242,6 +242,52 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 	})
 }
 
+func TestDecryptCopiedDeclaredEntityCipherValue(t *testing.T) {
+	t.Parallel()
+
+	sessionKey := []byte("0123456789abcdef0123456789abcdef")
+	doc := mustParseXML(t, `<secret>copy-safe</secret>`)
+	_, err := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM).
+		SessionKey(sessionKey).
+		EncryptElement(t.Context(), doc.DocumentElement())
+	require.NoError(t, err)
+
+	encryptedXML, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	const cipherOpen = `<xenc:CipherValue>`
+	cipherStart := strings.Index(encryptedXML, cipherOpen)
+	require.NotEqual(t, -1, cipherStart)
+	cipherStart += len(cipherOpen)
+	require.GreaterOrEqual(t, len(encryptedXML)-cipherStart, 4)
+	quantum := encryptedXML[cipherStart : cipherStart+4]
+	encryptedXML = encryptedXML[:cipherStart] + `&quantum;` + encryptedXML[cipherStart+4:]
+	rootStart := strings.Index(encryptedXML, `<xenc:EncryptedData`)
+	require.NotEqual(t, -1, rootStart)
+	encryptedXML = encryptedXML[:rootStart] +
+		`<!DOCTYPE xenc:EncryptedData [<!ENTITY quantum "` + quantum + `">]>` +
+		encryptedXML[rootStart:]
+
+	parsed := mustParseXML(t, encryptedXML)
+	copied, err := helium.CopyDoc(parsed)
+	require.NoError(t, err)
+
+	for name, candidate := range map[string]*helium.Document{"original": parsed, "copy": copied} {
+		t.Run(name, func(t *testing.T) {
+			encryptedData := findEncryptedData(t, candidate)
+			require.NotNil(t, encryptedData)
+			nodes, decryptErr := xmlenc1.NewDecryptor().
+				SessionKey(sessionKey).
+				Decrypt(t.Context(), encryptedData)
+			require.NoError(t, decryptErr)
+			require.Len(t, nodes, 1)
+			plaintext, writeErr := helium.WriteString(nodes[0])
+			require.NoError(t, writeErr)
+			require.Equal(t, `<secret>copy-safe</secret>`, plaintext)
+		})
+	}
+}
+
 // The default block algorithm is what a caller who configures nothing puts on
 // the wire, so it must be an identifier a standards-conforming peer
 // recognizes. W3C xmlenc-core1 §5.2 defines AES-GCM only in the XML

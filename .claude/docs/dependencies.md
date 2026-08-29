@@ -27,9 +27,13 @@ stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
 helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs, internal/writerctl, internal/nodelink, internal/nslookup
                   (helium installs hooks in internal/writerctl in init so xpath3 fn:serialize can enable declaration-only encoding and xslt3 can omit document-child terminators without public methods; the writerctl package imports nothing, so the edge is one-way)
-                  (helium installs hooks in internal/nodelink in init so xslt3's strip-space copier can link a freshly built child without AddChild's preflight, and the xsd/xmldsig1 corrupt-tree cycle-guard tests can write a raw next-sibling pointer, all without public functions in helium; the nodelink package imports nothing, so the edge is one-way)
-                  (helium installs hooks in internal/nslookup in init so internal/domutil can search or read raw namespace declarations one at a time
-                  without cloning Element.Namespaces or exposing the mutable nsDefs slice; the nslookup package imports nothing, so the edge is one-way)
+                  (helium installs hooks in internal/nodelink in init so xslt3's strip-space copier can link a
+                  freshly built child without AddChild's preflight and bind an EntityRef to its copied declaration;
+                  the xsd/xmldsig1 corrupt-tree cycle-guard tests can write a raw next-sibling pointer; all hooks avoid
+                  public mutation functions in helium; the nodelink package imports nothing, so the edge is one-way)
+                  (helium installs hooks in internal/nslookup in init so internal/domutil can search or read raw
+                  namespace declarations one at a time without cloning Element.Namespaces or exposing the mutable
+                  nsDefs slice; the nslookup package imports nothing, so the edge is one-way)
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)

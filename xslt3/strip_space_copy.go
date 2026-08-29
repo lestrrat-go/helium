@@ -1,8 +1,10 @@
 package xslt3
 
 import (
+	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -72,15 +74,7 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	srcIDs := src.IDTable()
 	rebuildIDs := !src.SkipIDs() && len(srcIDs) > 0
 
-	// Deep-copy the internal DTD subset first (metadata + entities/elements/
-	// attributes/notations), matching helium.CopyDoc's ordering so the copy
-	// round-trips identically.
-	if err := helium.CopyDTDInfo(src, dst); err != nil {
-		return nil, nil, err
-	}
-
-	// Carry over the source's EXTERNAL DTD subset too. CopyDTDInfo (like
-	// helium.CopyDoc) only handles the internal subset, but GetElementByID's lazy
+	// Carry over both DTD subsets. GetElementByID's lazy
 	// tree walk consults BOTH subsets for ID-typed attribute declarations. The
 	// copy drops the source ID table (it points at the source's elements), so id()
 	// on the copy falls back to that walk; without the external subset, IDs
@@ -90,11 +84,22 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 	// Deep-copy the external subset, sharing no pointer: the copy
 	// document can be exposed to user code via raw-result capture, and *DTD has
 	// mutators, so an aliased external subset would let a handler mutating the
-	// copy's ExtSubset corrupt the source. CopyExtSubset gives the copy its own
-	// independent external subset while keeping ID resolution identical.
-	helium.CopyExtSubset(src, dst)
+	// copy's ExtSubset corrupt the source. CopyDTDSubsets gives the copy its own
+	// independent external subset while keeping ID resolution identical. The
+	// combined copy registers both subsets before resolving entity replacement
+	// trees, so references across the subset boundary retain their expansion.
+	entityCopies, err := helium.CopyDTDSubsets(src, dst)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	sc := &stripCopier{dst: dst, strip: strip, preserve: preserve, schemaWS: schemaWS}
+	sc := &stripCopier{
+		dst:          dst,
+		strip:        strip,
+		preserve:     preserve,
+		schemaWS:     schemaWS,
+		entityCopies: entityCopies,
+	}
 	// When rebuilding the ID table, record source-element->copy-element so the
 	// source's ID entries can be translated onto the copy after the walk.
 	if rebuildIDs {
@@ -109,7 +114,6 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 		sc.nodeMap = make(map[helium.Node]helium.Node)
 		sc.nodeMap[src] = dst
 	}
-
 	// Copy document-level children in source order, skipping the DTD (already
 	// handled above). The document root has no element parent and no inherited
 	// namespace scope.
@@ -117,7 +121,7 @@ func copyAndStrip(src *helium.Document, strip, preserve []nameTest, buildNodeMap
 		if c.Type() == helium.DTDNode {
 			continue
 		}
-		child, err := sc.copyNode(c, nil, nil, false)
+		child, err := sc.copyNode(c, nil, nil, false, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -164,6 +168,21 @@ type stripCopier struct {
 	// elemMap, when non-nil, records source-element->copy-element correspondence so
 	// the copy's ID table can be rebuilt by translating the source's ID entries.
 	elemMap map[*helium.Element]*helium.Element
+	// entityCopies binds a copied EntityRef to the copy of its actual source
+	// declaration, even when the other DTD subset contains the same name.
+	entityCopies map[*helium.Entity]*helium.Entity
+	// replacementCopies stores context-specific private entity views. The shared
+	// DTD declaration stays byte-faithful; each view applies whitespace rules from
+	// the reference's containing element, inherited xml:space state, and namespace
+	// scope. Replacement names are resolved against that site-specific scope.
+	replacementCopies map[entityReplacementContext]*helium.Entity
+}
+
+type entityReplacementContext struct {
+	entity           *helium.Entity
+	parent           *helium.Element
+	namespaceContext string
+	xmlSpacePreserve bool
 }
 
 // record stores the original->copy mapping when a node map is being built and
@@ -183,21 +202,27 @@ func (sc *stripCopier) record(src, cp helium.Node) helium.Node {
 //
 // Returns (nil, nil) when the node is a whitespace-only text/CDATA node that
 // strip-space removes.
-func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope map[string]*helium.Namespace, xmlSpacePreserve bool) (helium.Node, error) {
+func (sc *stripCopier) copyNode(
+	src helium.Node,
+	parent *helium.Element,
+	inScope map[string]*helium.Namespace,
+	xmlSpacePreserve bool,
+	entityReplacement bool,
+) (helium.Node, error) {
 	switch src.Type() {
 	case helium.ElementNode:
 		elem, ok := helium.AsNode[*helium.Element](src)
 		if !ok {
 			return nil, nil //nolint:nilnil // a nil node with no error means "omit from copy"
 		}
-		return sc.copyElement(elem, inScope, xmlSpacePreserve)
+		return sc.copyElement(elem, inScope, xmlSpacePreserve, entityReplacement)
 	case helium.TextNode:
-		if !xmlSpacePreserve && sc.stripText(src, parent) {
+		if !xmlSpacePreserve && sc.stripText(src, parent, inScope, entityReplacement) {
 			return nil, nil //nolint:nilnil // omitted whitespace-only node
 		}
 		return sc.record(src, sc.dst.CreateText(slices.Clone(src.Content()))), nil
 	case helium.CDATASectionNode:
-		if !xmlSpacePreserve && sc.stripText(src, parent) {
+		if !xmlSpacePreserve && sc.stripText(src, parent, inScope, entityReplacement) {
 			return nil, nil //nolint:nilnil // omitted whitespace-only node
 		}
 		return sc.record(src, sc.dst.CreateCDATASection(slices.Clone(src.Content()))), nil
@@ -206,6 +231,32 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 	case helium.ProcessingInstructionNode:
 		return sc.record(src, sc.dst.CreatePI(src.Name(), string(src.Content()))), nil
 	case helium.EntityRefNode:
+		// A whitespace-only replacement is a text node in the expanded XDM tree.
+		// Strip it using the reference's containing element and xml:space context;
+		// the shared declaration graph cannot carry a per-reference parent.
+		if _, ok := helium.AsNode[*helium.Entity](src.FirstChild()); ok &&
+			len(src.Content()) > 0 && !xmlSpacePreserve &&
+			sc.stripText(src, parent, inScope, entityReplacement) {
+			return nil, nil //nolint:nilnil // omitted whitespace-only replacement
+		}
+		if srcEntity, ok := helium.AsNode[*helium.Entity](src.FirstChild()); ok {
+			if dstEntity := sc.entityCopies[srcEntity]; dstEntity != nil {
+				cp, err := sc.dst.CreateCharRef(src.Name())
+				if err != nil {
+					return nil, err
+				}
+				if len(sc.strip) == 0 && sc.schemaWS == nil {
+					nodelink.BindEntityReference(cp, dstEntity)
+				} else if err := sc.bindContextualEntityReplacement(
+					cp, srcEntity, dstEntity, parent, inScope, xmlSpacePreserve,
+				); err != nil {
+					return nil, err
+				}
+				return sc.record(src, cp), nil
+			}
+		}
+		// This copier has already copied the source DTD. Preserve an unbound
+		// source reference as bare instead of resolving it against that DTD.
 		cp, err := sc.dst.CreateCharRef(src.Name())
 		if err != nil {
 			return nil, err
@@ -218,11 +269,78 @@ func (sc *stripCopier) copyNode(src helium.Node, parent *helium.Element, inScope
 	}
 }
 
+// bindContextualEntityReplacement binds ref to a private entity view whose
+// replacement children are copied under the reference site's whitespace
+// context. Equal whitespace contexts share one view; different containing
+// elements or inherited states never rewrite the document's shared declaration.
+func (sc *stripCopier) bindContextualEntityReplacement(
+	ref *helium.EntityRef,
+	srcEntity, dstEntity *helium.Entity,
+	parent *helium.Element,
+	inScope map[string]*helium.Namespace,
+	xmlSpacePreserve bool,
+) error {
+	key := entityReplacementContext{
+		entity:           srcEntity,
+		parent:           parent,
+		namespaceContext: namespaceContextKey(inScope),
+		xmlSpacePreserve: xmlSpacePreserve,
+	}
+	if entity := sc.replacementCopies[key]; entity != nil {
+		nodelink.BindEntityReference(ref, entity)
+		return nil
+	}
+
+	private, ok := nodelink.CloneEntityReferenceBinding(ref, dstEntity).(*helium.Entity)
+	if !ok {
+		return fmt.Errorf("xslt3: could not create a private entity replacement for %q", ref.Name())
+	}
+	if sc.replacementCopies == nil {
+		sc.replacementCopies = make(map[entityReplacementContext]*helium.Entity)
+	}
+	sc.replacementCopies[key] = private
+
+	for child := range helium.Children(srcEntity) {
+		cp, err := sc.copyNode(child, parent, inScope, xmlSpacePreserve, true)
+		if err != nil {
+			return err
+		}
+		if cp == nil {
+			continue
+		}
+		if err := nodelink.AppendFastChild(private, cp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// namespaceContextKey returns a stable identity for the effective prefix bindings
+// at an entity reference site. XML names and namespace URIs cannot contain NUL,
+// so NUL separators keep the sorted prefix/URI sequence unambiguous.
+func namespaceContextKey(inScope map[string]*helium.Namespace) string {
+	var b strings.Builder
+	for _, prefix := range slices.Sorted(maps.Keys(inScope)) {
+		b.WriteString(prefix)
+		b.WriteByte(0)
+		if ns := inScope[prefix]; ns != nil {
+			b.WriteString(ns.URI())
+		}
+		b.WriteByte(0)
+	}
+	return b.String()
+}
+
 // copyElement copies an element, reproducing its own namespace declarations
 // verbatim and binding its active namespace to an in-scope declaration without
 // over-declaring it. It then copies attributes and recurses into children using
 // nodelink.AppendFastChild for direct linkage.
-func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*helium.Namespace, xmlSpacePreserve bool) (helium.Node, error) {
+func (sc *stripCopier) copyElement(
+	src *helium.Element,
+	inScope map[string]*helium.Namespace,
+	xmlSpacePreserve bool,
+	entityReplacement bool,
+) (helium.Node, error) {
 	elem, err := sc.dst.CreateElement(src.LocalName())
 	if err != nil {
 		return nil, err
@@ -253,10 +371,23 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 		}
 	}
 
-	// Bind the active namespace to a declaration in scope on the copy. The source
-	// tree is well-formed, so a matching (prefix, URI) declaration always exists
-	// either on this element or an ancestor; reuse it instead of declaring anew.
-	if ns := src.Namespace(); ns != nil && ns.URI() != "" {
+	// Entity replacement names are shared by the source DTD, but their prefixes
+	// resolve at each reference site. Bind them from the current site scope instead
+	// of retaining the namespace URI recorded on the shared source replacement.
+	if entityReplacement {
+		prefix := src.Prefix()
+		if prefix == lexicon.PrefixXML {
+			if err := elem.SetActiveNamespace(prefix, lexicon.NamespaceXML); err != nil {
+				return nil, err
+			}
+		} else if active := childScope[prefix]; active != nil && active.URI() != "" {
+			elem.SetNamespace(active)
+		}
+	} else if ns := src.Namespace(); ns != nil && ns.URI() != "" {
+		// Bind the active namespace to a declaration in scope on the copy. The
+		// source tree is well-formed, so a matching (prefix, URI) declaration always
+		// exists either on this element or an ancestor; reuse it instead of declaring
+		// anew.
 		active := childScope[ns.Prefix()]
 		if active == nil || active.URI() != ns.URI() {
 			// No in-scope declaration matches (degenerate source); declare it here
@@ -317,7 +448,7 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 	}
 
 	for c := src.FirstChild(); c != nil; c = c.NextSibling() {
-		child, err := sc.copyNode(c, src, childScope, childPreserve)
+		child, err := sc.copyNode(c, src, childScope, childPreserve, entityReplacement)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +469,12 @@ func (sc *stripCopier) copyElement(src *helium.Element, inScope map[string]*heli
 // in, and xml:space inheritance is already handled by the caller via the
 // xmlSpacePreserve flag, so only the element's strip/preserve match and DTD
 // element-only content are evaluated here.
-func (sc *stripCopier) stripText(src helium.Node, parent *helium.Element) bool {
+func (sc *stripCopier) stripText(
+	src helium.Node,
+	parent *helium.Element,
+	inScope map[string]*helium.Namespace,
+	entityReplacement bool,
+) bool {
 	if parent == nil {
 		return false
 	}
@@ -355,7 +491,11 @@ func (sc *stripCopier) stripText(src helium.Node, parent *helium.Element) bool {
 	case schemaWSPreserve:
 		return false
 	}
-	if isElementStrippedBy(parent, sc.strip, sc.preserve) {
+	uri := parent.URI()
+	if entityReplacement {
+		uri = replacementElementURI(parent, inScope)
+	}
+	if isElementStrippedBy(parent.LocalName(), uri, sc.strip, sc.preserve) {
 		return true
 	}
 	// A copyAndStrip call with no strip rules AND no schema classifier is a PURE
@@ -370,16 +510,27 @@ func (sc *stripCopier) stripText(src helium.Node, parent *helium.Element) bool {
 	return hasElementOnlyContent(parent)
 }
 
+func replacementElementURI(elem *helium.Element, inScope map[string]*helium.Namespace) string {
+	prefix := elem.Prefix()
+	if prefix == lexicon.PrefixXML {
+		return lexicon.NamespaceXML
+	}
+	if ns := inScope[prefix]; ns != nil {
+		return ns.URI()
+	}
+	return ""
+}
+
 // isElementStrippedBy is the exec-context-free form of execContext.isElementStripped:
 // it resolves the most authoritative matching strip rule and checks whether a
 // preserve rule of at least equal authority overrides it.
-func isElementStrippedBy(elem *helium.Element, strip, preserve []nameTest) bool {
+func isElementStrippedBy(local, uri string, strip, preserve []nameTest) bool {
 	if len(strip) == 0 {
 		return false
 	}
 	stripPrec, stripPriority, stripped := -1, -1, false
 	for _, nt := range strip {
-		if !matchSpaceNameTest(nt, elem) {
+		if !matchSpaceExpandedName(nt, local, uri) {
 			continue
 		}
 		if !stripped || rankSpaceRule(nt) > packSpaceRank(stripPrec, stripPriority) {
@@ -393,7 +544,7 @@ func isElementStrippedBy(elem *helium.Element, strip, preserve []nameTest) bool 
 	}
 	stripRank := packSpaceRank(stripPrec, stripPriority)
 	for _, nt := range preserve {
-		if matchSpaceNameTest(nt, elem) && rankSpaceRule(nt) >= stripRank {
+		if matchSpaceExpandedName(nt, local, uri) && rankSpaceRule(nt) >= stripRank {
 			return false
 		}
 	}

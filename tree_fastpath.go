@@ -15,6 +15,8 @@ type attrNamespaceCacheEntry struct {
 
 func init() {
 	nodelink.AppendFastChild = nodelinkAppendFastChild
+	nodelink.BindEntityReference = nodelinkBindEntityReference
+	nodelink.CloneEntityReferenceBinding = nodelinkCloneEntityReferenceBinding
 }
 
 // nodelinkAppendFastChild adapts appendFastChild to the untyped
@@ -30,6 +32,33 @@ func nodelinkAppendFastChild(parent, child any) error {
 		return errors.New("child is not a node")
 	}
 	return appendFastChild(p, c)
+}
+
+// nodelinkBindEntityReference adapts bindEntityReference to the untyped
+// internal/nodelink hook so a sibling-package copier can retain declaration
+// identity without adding a public mutation API.
+func nodelinkBindEntityReference(ref, entity any) {
+	r, refOK := ref.(*EntityRef)
+	e, entityOK := entity.(*Entity)
+	if !refOK || !entityOK {
+		return
+	}
+	bindEntityReference(r, e)
+}
+
+// nodelinkCloneEntityReferenceBinding gives the strip-space copier a private
+// entity replacement view for one reference context. The document's DTD keeps
+// its shared declaration unchanged; the private entity carries the declaration
+// metadata and receives context-filtered replacement children from the caller.
+func nodelinkCloneEntityReferenceBinding(ref, entity any) any {
+	r, refOK := ref.(*EntityRef)
+	e, entityOK := entity.(*Entity)
+	if !refOK || !entityOK {
+		return nil
+	}
+	cp := copyEntity(e, r.OwnerDocument())
+	bindEntityReference(r, cp)
+	return cp
 }
 
 // appendFastChild links child as the last child of parent without running the

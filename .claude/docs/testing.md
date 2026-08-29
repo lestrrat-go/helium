@@ -99,7 +99,7 @@ bug that prompted it.
 | `node_leaf_test.go` | root | Text/Comment/CDATA/PI/Entity/Notation node methods and guards |
 | `node_namespace_test.go` | root | `DeclareNamespace` collapse and namespace lookup |
 | `tree_test.go` | root | Base URIs, tree mutation, `Walk`, node accessors |
-| `copy_test.go` | root | `CopyNode`/`CopyDoc`/`CopyDTDInfo`/`CopyExtSubset` deep-copy coverage; DTD attribute-declaration order fidelity |
+| `copy_test.go` | root | `CopyNode`/`CopyDoc`/`CopyDTDSubsets`/`CopyDTDInfo`/`CopyExtSubset` deep-copy coverage; DTD attribute-declaration order fidelity |
 | `dtd_test.go` | root | DTD data-model: internal-subset accessors, element/attr/notation decls, node wrappers |
 | `valid_test.go` | root | Document-level DTD validation and external-subset lookup |
 | `valid_dtd_decl_test.go` | root | DTD declaration-consistency VCs and declaration-order stability of their diagnostics |

@@ -21,6 +21,66 @@ import (
 const importedModuleURI = "mem:/imported.xsl"
 
 func TestStripSpace(t *testing.T) {
+	t.Run("entity replacement uses each reference context", func(t *testing.T) {
+		t.Parallel()
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/">
+    <xsl:value-of select="/root/strip"/>
+    <xsl:text>|</xsl:text>
+    <xsl:value-of select="/root/keep"/>
+  </xsl:template>
+</xsl:stylesheet>`
+		const source = `<!DOCTYPE root [<!ENTITY payload "   <a>X</a>   ">]>` +
+			`<root><strip>&payload;</strip><keep xml:space="preserve">&payload;</keep></root>`
+
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		out, err := xslt3.TransformString(t.Context(), doc, ss)
+		require.NoError(t, err)
+		require.Equal(t, "X|   X   ", out)
+	})
+
+	t.Run("entity replacement uses each reference namespace", func(t *testing.T) {
+		t.Parallel()
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:one="urn:one" xmlns:two="urn:two" version="3.0">
+  <xsl:strip-space elements="one:a"/>
+  <xsl:preserve-space elements="two:a"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/">
+    <xsl:value-of select="/root/direct-one"/><xsl:text>|</xsl:text>
+    <xsl:value-of select="/root/direct-two"/><xsl:text>;</xsl:text>
+    <xsl:value-of select="/root/nested-one"/><xsl:text>|</xsl:text>
+    <xsl:value-of select="/root/nested-two"/>
+  </xsl:template>
+</xsl:stylesheet>`
+		const source = `<!DOCTYPE root [
+<!ENTITY payload "<p:a>   </p:a>">
+<!ENTITY outer "<wrapper>&payload;</wrapper>">
+]><root>` +
+			`<direct-one xmlns:p="urn:one">&payload;</direct-one>` +
+			`<direct-two xmlns:p="urn:two">&payload;</direct-two>` +
+			`<nested-one xmlns:p="urn:one">&outer;</nested-one>` +
+			`<nested-two xmlns:p="urn:two">&outer;</nested-two>` +
+			`</root>`
+
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		out, err := xslt3.TransformString(t.Context(), doc, ss)
+		require.NoError(t, err)
+		require.Equal(t, "|   ;|   ", out)
+	})
+
 	// TestStripSpaceImportPrecedence verifies that a conflicting strip-space /
 	// preserve-space NameTest across an import boundary is resolved by import
 	// precedence (the importing module wins), raising no false XTSE0270,
@@ -796,6 +856,111 @@ func TestStripSpace(t *testing.T) {
 			}
 		}
 		require.True(t, foundID, "copy's external subset must contain the ID-typed attribute declaration")
+	})
+
+	t.Run("copy preserves declared entity references", func(t *testing.T) {
+		t.Parallel()
+
+		const source = `<!DOCTYPE root [<!ENTITY payload "QUJD">]><root>&payload;&payload;</root>`
+		src, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		cp, err := xslt3.CopyAndStripForTest(src)
+		require.NoError(t, err)
+		cpEntity, found := cp.IntSubset().LookupEntity("payload")
+		require.True(t, found)
+		first := cp.DocumentElement().FirstChild()
+		second := first.NextSibling()
+		require.Same(t, cpEntity, first.FirstChild())
+		require.Same(t, cpEntity, second.FirstChild())
+		require.Same(t, cp, cpEntity.OwnerDocument())
+	})
+
+	t.Run("copy preserves a childless late entity reference", func(t *testing.T) {
+		t.Parallel()
+
+		src := helium.NewDefaultDocument()
+		_, err := src.CreateInternalSubset("root", "", "")
+		require.NoError(t, err)
+		root, err := src.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, src.AddChild(root))
+		ref, err := src.CreateCharRef("payload")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(ref))
+		_, err = src.IntSubset().AddEntity(
+			"payload", enum.InternalGeneralEntity, "", "", "PAYLOAD",
+		)
+		require.NoError(t, err)
+		require.Nil(t, ref.FirstChild())
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/"><xsl:value-of select="/root"/></xsl:template>
+</xsl:stylesheet>`
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		out, err := xslt3.TransformString(t.Context(), src, ss)
+		require.NoError(t, err)
+		require.Empty(t, out)
+	})
+
+	t.Run("copy preserves entity declaration identity", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{"ext.dtd": {Data: []byte(`<!ENTITY payload "EXTERNAL">`)}}
+		src, err := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(`<!DOCTYPE root SYSTEM "ext.dtd"><root/>`))
+		require.NoError(t, err)
+
+		srcExternal, found := src.ExtSubset().LookupEntity("payload")
+		require.True(t, found)
+		ref, err := src.CreateReference("payload")
+		require.NoError(t, err)
+		require.Same(t, srcExternal, ref.FirstChild())
+		require.NoError(t, src.DocumentElement().AddChild(ref))
+
+		_, err = src.IntSubset().AddEntity(
+			"payload", enum.InternalGeneralEntity, "", "", "INTERNAL",
+		)
+		require.NoError(t, err)
+		require.Same(t, srcExternal, ref.FirstChild())
+
+		cp, err := xslt3.CopyAndStripForTest(src)
+		require.NoError(t, err)
+		cpExternal, found := cp.ExtSubset().LookupEntity("payload")
+		require.True(t, found)
+		cpRef := cp.DocumentElement().FirstChild()
+		require.Same(t, cpExternal, cpRef.FirstChild())
+		require.Equal(t, "EXTERNAL", string(cpRef.Content()))
+	})
+
+	t.Run("copy resolves an internal entity reference to an external declaration", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{"ext.dtd": {Data: []byte(`<!ENTITY external "EXTERNAL">`)}}
+		const source = `<!DOCTYPE root SYSTEM "ext.dtd" [<!ENTITY internal "&external;">]><root>&internal;</root>`
+		doc, err := helium.NewParser().
+			BlockXXE(false).
+			LoadExternalDTD(true).
+			FS(fsys).
+			Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+
+		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:strip-space elements="*"/>
+  <xsl:output method="text"/>
+  <xsl:template match="/"><xsl:value-of select="/root"/></xsl:template>
+</xsl:stylesheet>`
+		ss, err := xslt3.NewCompiler().Compile(t.Context(), mustParse(t, stylesheet))
+		require.NoError(t, err)
+		out, err := xslt3.TransformString(t.Context(), doc, ss)
+		require.NoError(t, err)
+		require.Equal(t, "EXTERNAL", out)
 	})
 
 	// TestStripSpacePreservesExternalDTDIDs verifies that running a transform whose

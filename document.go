@@ -109,8 +109,8 @@ type Document struct {
 	slabEscaped bool
 
 	// offChainChildClaim records that a node has been given this document as its
-	// parent WITHOUT being linked into the document's child list. CopyExtSubset
-	// is the one path in this package that does it: the copied external subset
+	// parent WITHOUT being linked into the document's child list. The DTD-subset
+	// copy paths do it when copying an external subset: the copied subset
 	// claims the destination document and is then reachable only through
 	// ExtSubset. An append through such a subset records its own result as the
 	// document's lastChild, which moves that record off the child list, so the
@@ -121,7 +121,7 @@ type Document struct {
 	// never for the elements the document owns, whose own lastChild records the
 	// claimant says nothing about. (CreateInternalSubset also gives a DTD this
 	// document as its parent, but it splices that DTD into the child list, so it
-	// creates no claim.) Set by copy_dtd.go CopyExtSubset; read through
+	// creates no claim.) Set by copy_dtd.go; read through
 	// node.go holdsOffChainChildClaim by tailJumpTarget and resolveOwnedTail.
 	offChainChildClaim bool
 }
@@ -433,15 +433,19 @@ func (d *Document) CreateReference(name string) (*EntityRef, error) {
 
 	ent, ok := d.GetEntity(n.name)
 	if ok {
-		n.content = []byte(ent.content)
-		// Original code says:
-		// The parent pointer in entity is a DTD pointer and thus is NOT
-		// updated.  Not sure if this is 100% correct.
-		setFirstChild(n, ent)
-		setLastChild(n, ent)
+		bindEntityReference(n, ent)
 	}
 
 	return n, nil
+}
+
+func bindEntityReference(ref *EntityRef, ent *Entity) {
+	ref.content = []byte(ent.content)
+	// Original code says:
+	// The parent pointer in entity is a DTD pointer and thus is NOT
+	// updated.  Not sure if this is 100% correct.
+	setFirstChild(ref, ent)
+	setLastChild(ref, ent)
 }
 
 // CreateAttribute builds an attribute node named name, with value parsed into
