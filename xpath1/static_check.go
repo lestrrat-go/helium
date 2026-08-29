@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 func validateStaticExpr(expr Expr, cfg *evalConfig, depth int) error {
@@ -30,7 +31,7 @@ func validateStaticExpr(expr Expr, cfg *evalConfig, depth int) error {
 				return nil
 			}
 		}
-		return fmt.Errorf("%w: $%s", ErrUndefinedVariable, e.Name)
+		return fmt.Errorf("%w: $%s", ErrUndefinedVariable, lexer.DiagnosticExcerpt(e.Name))
 	case FunctionCall:
 		if err := validateStaticFunction(e, cfg); err != nil {
 			return err
@@ -68,7 +69,7 @@ func validateStaticLocationPath(path *LocationPath, cfg *evalConfig, depth int) 
 	for _, step := range path.Steps {
 		if test, ok := step.NodeTest.(NameTest); ok && test.Prefix != "" {
 			if !staticNameTestPrefixDefined(test.Prefix, cfg) {
-				return fmt.Errorf("%w: %s", ErrUnknownNamespacePrefix, test.Prefix)
+				return fmt.Errorf("%w: %s", ErrUnknownNamespacePrefix, lexer.DiagnosticExcerpt(test.Prefix))
 			}
 		}
 		if err := validateStaticPredicates(step.Predicates, cfg, depth); err != nil {
@@ -104,18 +105,19 @@ func validateStaticFunction(call FunctionCall, cfg *evalConfig) error {
 		if cfg != nil && cfg.functions != nil && cfg.functions[call.Name] != nil {
 			return nil
 		}
-		return fmt.Errorf("%w: %s", ErrUnknownFunction, call.Name)
+		return fmt.Errorf("%w: %s", ErrUnknownFunction, lexer.DiagnosticExcerpt(call.Name))
 	}
 
 	if cfg == nil || cfg.namespaces == nil {
-		return fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, call.Prefix)
+		return fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, lexer.DiagnosticExcerpt(call.Prefix))
 	}
 	uri, ok := cfg.namespaces[call.Prefix]
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, call.Prefix)
+		return fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, lexer.DiagnosticExcerpt(call.Prefix))
 	}
 	if cfg.functionsNS != nil && cfg.functionsNS[QualifiedName{URI: uri, Name: call.Name}] != nil {
 		return nil
 	}
-	return fmt.Errorf("%w: {%s}%s", ErrUnknownFunction, uri, call.Name)
+	return fmt.Errorf("%w: {%s}%s", ErrUnknownFunction,
+		lexer.DiagnosticExcerpt(uri), lexer.DiagnosticExcerpt(call.Name))
 }

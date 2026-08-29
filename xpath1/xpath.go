@@ -337,7 +337,7 @@ func (Compiler) Compile(expr string) (*Expression, error) {
 func (c Compiler) MustCompile(expr string) *Expression {
 	e, err := c.Compile(expr)
 	if err != nil {
-		panic("xpath: Compile(" + expr + "): " + err.Error())
+		panic("xpath: Compile(" + lexer.DiagnosticExcerpt(expr) + "): " + err.Error())
 	}
 	return e
 }

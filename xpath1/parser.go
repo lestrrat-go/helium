@@ -341,7 +341,13 @@ func (p *parser) parseParenExpr() (Expr, error) {
 func parseNumberLiteral(s string) (NumberExpr, error) {
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil && !errors.Is(err, strconv.ErrRange) {
-		return NumberExpr{}, fmt.Errorf("invalid number %q: %w", s, err)
+		var numErr *strconv.NumError
+		if errors.As(err, &numErr) {
+			safeErr := *numErr
+			safeErr.Num = lexer.DiagnosticExcerpt(safeErr.Num)
+			err = &safeErr
+		}
+		return NumberExpr{}, fmt.Errorf("invalid number %q: %w", lexer.DiagnosticExcerpt(s), err)
 	}
 	return NumberExpr{Value: v}, nil
 }
@@ -369,6 +375,7 @@ func (p *parser) parseFunctionCall(prefix, name string) (Expr, error) {
 		if prefix != "" {
 			displayName = prefix + ":" + name
 		}
+		displayName = lexer.DiagnosticExcerpt(displayName)
 		return nil, fmt.Errorf("%w: ')' in function call %s but got %s", ErrExpectedToken, displayName, p.lexer.Peek())
 	}
 	p.lexer.Next()
@@ -495,7 +502,7 @@ func (p *parser) parseStep() (Step, error) {
 				axis = a
 				p.lexer.Next() // consume '::'
 			} else {
-				return Step{}, fmt.Errorf("%w: %q", ErrUnknownAxis, tok.Value)
+				return Step{}, fmt.Errorf("%w: %q", ErrUnknownAxis, lexer.DiagnosticExcerpt(tok.Value))
 			}
 		} else {
 			p.lexer.Backup() // not an axis, put name back
@@ -609,7 +616,7 @@ func (p *parser) parseQNameTest(prefix string) (NodeTest, error) {
 		p.lexer.Next()
 		return NameTest{Prefix: prefix, Local: next.Value}, nil
 	}
-	return nil, fmt.Errorf("%w: name or '*' after '%s:'", ErrExpectedToken, prefix)
+	return nil, fmt.Errorf("%w: name or '*' after '%s:'", ErrExpectedToken, lexer.DiagnosticExcerpt(prefix))
 }
 
 // parsePredicate parses → '[' Expr ']'.

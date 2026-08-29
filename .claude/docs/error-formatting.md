@@ -153,6 +153,13 @@ loads) and the caller owns its lifecycle, closing it once the resulting value is
 
 ## Package-Specific Error Formatting
 
+### XPath 1.0 (`xpath1`)
+
+Diagnostics bound each caller-controlled token, QName, namespace prefix, namespace URI, variable name, or
+expression excerpt to 128 bytes, including a `...[truncated]` marker. Excerpts end on a UTF-8 rune boundary;
+invalid UTF-8 is replaced before formatting. Short valid excerpts retain their existing wording, and wrapped
+sentinels such as `ErrUnexpectedToken` and `ErrUnknownNamespacePrefix` remain matchable with `errors.Is`.
+
 ### XSD (`xsd/errors.go`)
 
 | Function | Format |

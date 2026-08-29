@@ -9,6 +9,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
 )
 
 // sentinel errors for XPath built-in function argument validation.
@@ -115,7 +116,7 @@ func evalFunctionCall(ctx context.Context, ec *evalContext, fc FunctionCall) (*R
 		fn = ec.functions[fc.Name]
 	}
 	if fn == nil {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownFunction, fc.Name)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFunction, lexer.DiagnosticExcerpt(fc.Name))
 	}
 
 	return callResolvedFn(ctx, ec, fn, fc.Args)
@@ -143,18 +144,19 @@ func callResolvedFn(ctx context.Context, ec *evalContext, fn Function, exprs []E
 
 func evalNamespacedFunctionCall(ctx context.Context, ec *evalContext, fc FunctionCall) (*Result, error) {
 	if ec.namespaces == nil {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, fc.Prefix)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, lexer.DiagnosticExcerpt(fc.Prefix))
 	}
 	uri, ok := ec.namespaces[fc.Prefix]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, fc.Prefix)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFunctionNamespace, lexer.DiagnosticExcerpt(fc.Prefix))
 	}
 	var fn Function
 	if ec.functionsNS != nil {
 		fn = ec.functionsNS[QualifiedName{URI: uri, Name: fc.Name}]
 	}
 	if fn == nil {
-		return nil, fmt.Errorf("%w: {%s}%s", ErrUnknownFunction, uri, fc.Name)
+		return nil, fmt.Errorf("%w: {%s}%s", ErrUnknownFunction,
+			lexer.DiagnosticExcerpt(uri), lexer.DiagnosticExcerpt(fc.Name))
 	}
 
 	return callResolvedFn(ctx, ec, fn, fc.Args)
