@@ -4,7 +4,7 @@ import "testing"
 
 func TestFrenchCardinalTens(t *testing.T) {
 	cases := []struct {
-		n    int
+		n    int64
 		want string
 	}{
 		{40, "quarante"},

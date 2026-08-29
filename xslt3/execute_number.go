@@ -126,17 +126,20 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 		if err != nil {
 			return err
 		}
-		// start-at can be a space-separated list of integers, one per level
-		saParts := strings.Fields(saStr)
+		startAt, ok := parseStartAt(saStr)
+		if !ok {
+			return dynamicError(errCodeXTDE0030,
+				"%q is not a valid value for xsl:number/@start-at", saStr)
+		}
+		one := big.NewInt(1)
 		for i, n := range bigNums {
-			offset := 0
-			if i < len(saParts) {
-				offset, _ = strconv.Atoi(saParts[i])
-			} else if len(saParts) > 0 {
-				offset, _ = strconv.Atoi(saParts[len(saParts)-1])
+			offset := startAt[len(startAt)-1]
+			if i < len(startAt) {
+				offset = startAt[i]
 			}
 			// start-at shifts numbering: number = number + startAt - 1
-			bigNums[i] = new(big.Int).Add(n, big.NewInt(int64(offset-1)))
+			bigNums[i] = new(big.Int).Add(n, offset)
+			bigNums[i].Sub(bigNums[i], one)
 		}
 	}
 
@@ -192,6 +195,23 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 	formatted := formatBigNumberList(bigNums, format, groupSep, groupSize, lang, ordinal)
 	text := ec.resultDoc.CreateText([]byte(formatted))
 	return ec.addNode(text)
+}
+
+func parseStartAt(value string) ([]*big.Int, bool) {
+	parts := strings.Fields(value)
+	if len(parts) == 0 {
+		return nil, false
+	}
+
+	numbers := make([]*big.Int, len(parts))
+	for i, part := range parts {
+		n, ok := new(big.Int).SetString(part, 10)
+		if !ok {
+			return nil, false
+		}
+		numbers[i] = n
+	}
+	return numbers, true
 }
 
 // numberNodeMatches tests if a node matches the count pattern.
@@ -427,21 +447,19 @@ func isAlphanumeric(r rune) bool {
 }
 
 func formatSingleNumber(num int, token string, groupSep string, groupSize int, lang string, ordinal string) string {
+	if formatted, ok := formatWordNumber(int64(num), token, lang, ordinal); ok {
+		return formatted
+	}
+
 	switch token {
 	case "a":
-		return toLowerAlpha(num)
+		return toLowerAlpha(int64(num))
 	case "A":
-		return toUpperAlpha(num)
+		return toUpperAlpha(int64(num))
 	case "i":
 		return strings.ToLower(toRoman(num))
 	case "I":
 		return toRoman(num)
-	case "w":
-		return numberToWordsLang(num, "lower", lang, ordinal)
-	case "W":
-		return numberToWordsLang(num, "upper", lang, ordinal)
-	case "Ww":
-		return numberToWordsLang(num, "title", lang, ordinal)
 	default:
 		runes := []rune(token)
 		firstRune := runes[0]
@@ -463,7 +481,7 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 		// Non-ASCII letter: alphabetic numbering from that codepoint
 		// (e.g., α = U+03B1 for Greek lowercase: α, β, γ, ..., ω, αα, αβ, ...)
 		if firstRune > 127 && unicode.IsLetter(firstRune) {
-			return formatWithAlphaSystem(num, firstRune)
+			return formatWithAlphaSystem(int64(num), firstRune)
 		}
 
 		// ASCII numeric format: determine minimum width from token (e.g., "001" = width 3)
@@ -483,6 +501,34 @@ func formatSingleNumber(num int, token string, groupSep string, groupSize int, l
 	}
 }
 
+func formatWordNumber(num int64, token string, lang string, ordinal string) (string, bool) {
+	switch token {
+	case "w":
+		return numberToWordsLang(num, "lower", lang, ordinal), true
+	case "W":
+		return numberToWordsLang(num, "upper", lang, ordinal), true
+	case "Ww":
+		return numberToWordsLang(num, "title", lang, ordinal), true
+	default:
+		return "", false
+	}
+}
+
+func formatAlphabeticNumber(num int64, token string) (string, bool) {
+	switch token {
+	case "a":
+		return toLowerAlpha(num), true
+	case "A":
+		return toUpperAlpha(num), true
+	}
+
+	runes := []rune(token)
+	if len(runes) > 0 && runes[0] > 127 && unicode.IsLetter(runes[0]) {
+		return formatWithAlphaSystem(num, runes[0]), true
+	}
+	return "", false
+}
+
 // numericOrdinalSuffix returns the suffix for a numeric ordinal (e.g., "st", "nd", "rd", "th").
 func numericOrdinalSuffix(num int, _ string) string {
 	// Default to English ordinal suffixes
@@ -491,6 +537,23 @@ func numericOrdinalSuffix(num int, _ string) string {
 		return "th"
 	}
 	switch num % 10 {
+	case 1:
+		return "st"
+	case 2:
+		return "nd"
+	case 3:
+		return "rd"
+	default:
+		return "th"
+	}
+}
+
+func numericOrdinalSuffixBig(num *big.Int, _ string) string {
+	n := new(big.Int).Rem(num, big.NewInt(100)).Int64()
+	if n >= 11 && n <= 13 {
+		return "th"
+	}
+	switch n % 10 {
 	case 1:
 		return "st"
 	case 2:
@@ -517,9 +580,9 @@ var knownAlphabetLengths = map[rune]int{
 // formatWithAlphaSystem formats using alphabetic numbering (like a-z but with
 // non-ASCII letters). Wraps at the end of the alphabet:
 // α=1, β=2, ..., ω=25, αα=26, αβ=27, etc.
-func formatWithAlphaSystem(num int, start rune) string {
+func formatWithAlphaSystem(num int64, start rune) string {
 	if num <= 0 {
-		return strconv.Itoa(num)
+		return strconv.FormatInt(num, 10)
 	}
 
 	// Use known alphabet length if available, otherwise detect
@@ -534,7 +597,7 @@ func formatWithAlphaSystem(num int, start rune) string {
 		}
 	}
 	if seqLen == 0 {
-		return strconv.Itoa(num)
+		return strconv.FormatInt(num, 10)
 	}
 
 	// Convert to base-N alphabetic representation (1-based, like a=1, b=2, ..., z=26, aa=27)
@@ -542,8 +605,8 @@ func formatWithAlphaSystem(num int, start rune) string {
 	n := num
 	for n > 0 {
 		n-- // convert to 0-based
-		result = append([]rune{start + rune(n%seqLen)}, result...)
-		n /= seqLen
+		result = append([]rune{start + rune(n%int64(seqLen))}, result...)
+		n /= int64(seqLen)
 	}
 	return string(result)
 }
@@ -619,17 +682,26 @@ func formatBigNumberList(bigNums []*big.Int, format string, groupSep string, gro
 		if tokIdx >= len(tokens) {
 			tokIdx = len(tokens) - 1
 		}
-		// If the number fits in an int, use the standard formatter for full
-		// support of roman numerals, alphabetic, words, etc.
+		// Word and alphabetic formatting support every int64 value on every architecture.
+		// The remaining non-decimal formats require a native int.
 		if num.IsInt64() {
-			n := int(num.Int64())
-			if int64(n) == num.Int64() {
+			n64 := num.Int64()
+			if formatted, ok := formatWordNumber(n64, tokens[tokIdx].format, lang, ordinal); ok {
+				buf.WriteString(formatted)
+				continue
+			}
+			if formatted, ok := formatAlphabeticNumber(n64, tokens[tokIdx].format); ok {
+				buf.WriteString(formatted)
+				continue
+			}
+			n := int(n64)
+			if int64(n) == n64 {
 				buf.WriteString(formatSingleNumber(n, tokens[tokIdx].format, groupSep, groupSize, lang, ordinal))
 				continue
 			}
 		}
 		// Large number: only decimal digit formatting is meaningful
-		buf.WriteString(formatBigSingleNumber(num, tokens[tokIdx].format, groupSep, groupSize))
+		buf.WriteString(formatBigSingleNumber(num, tokens[tokIdx].format, groupSep, groupSize, lang, ordinal))
 	}
 	buf.WriteString(suffix)
 	return buf.String()
@@ -637,9 +709,13 @@ func formatBigNumberList(bigNums []*big.Int, format string, groupSep string, gro
 
 // formatBigSingleNumber formats a *big.Int using a decimal format token.
 // Supports ASCII digits with grouping and non-ASCII digit systems.
-func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSize int) string {
+func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSize int, lang string, ordinal string) string {
 	runes := []rune(token)
 	firstRune := runes[0]
+	// Roman numbering falls back to plain decimal outside its bounded range.
+	if token == "i" || token == "I" {
+		return num.String()
+	}
 
 	// Non-ASCII digit system (e.g., Arabic-Indic ٠)
 	if firstRune > 127 && unicode.IsDigit(firstRune) {
@@ -648,6 +724,11 @@ func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSiz
 			s = applyGroupingSeparator(s, groupSep, groupSize)
 		}
 		return s
+	}
+	// Non-ASCII number tokens use a bounded ordinal system. A number beyond
+	// that range falls back to plain decimal without a numeric ordinal suffix.
+	if firstRune > 127 && unicode.IsNumber(firstRune) {
+		return num.String()
 	}
 
 	// Default: decimal with optional grouping and min-width
@@ -658,6 +739,9 @@ func formatBigSingleNumber(num *big.Int, token string, groupSep string, groupSiz
 	}
 	if groupSep != "" && groupSize > 0 {
 		s = applyGroupingSeparator(s, groupSep, groupSize)
+	}
+	if ordinal != "" {
+		s += numericOrdinalSuffixBig(num, lang)
 	}
 	return s
 }
@@ -711,10 +795,14 @@ func digitZeroOf(r rune) rune {
 // formatWithDigitSystem formats a number using a decimal digit system
 // starting at the given zero codepoint.
 func formatWithDigitSystem(num int, zero rune, minWidth int) string {
-	if num < 0 {
-		return "-" + formatWithDigitSystem(-num, zero, minWidth)
+	negative := num < 0
+	var magnitude uint
+	if negative {
+		magnitude = uint(-(num + 1)) + 1
+	} else {
+		magnitude = uint(num)
 	}
-	if num == 0 {
+	if magnitude == 0 {
 		s := string(zero)
 		for len([]rune(s)) < minWidth {
 			s = string(zero) + s
@@ -722,15 +810,18 @@ func formatWithDigitSystem(num int, zero rune, minWidth int) string {
 		return s
 	}
 	var runes []rune
-	n := num
-	for n > 0 {
-		runes = append([]rune{zero + rune(n%10)}, runes...)
-		n /= 10
+	for magnitude > 0 {
+		runes = append([]rune{zero + rune(magnitude%10)}, runes...)
+		magnitude /= 10
 	}
 	for len(runes) < minWidth {
 		runes = append([]rune{zero}, runes...)
 	}
-	return string(runes)
+	formatted := string(runes)
+	if negative {
+		return "-" + formatted
+	}
+	return formatted
 }
 
 // ordinalSystem describes a Unicode numbering system with potentially
@@ -871,34 +962,41 @@ func ordinalRangeLength(r rune) int {
 }
 
 // numberToWords converts a number to English words.
-func numberToWords(n int, upper bool) string { //nolint:unparam // upper always false but kept for XSLT number-to-words spec
+func numberToWords(n int64, upper bool) string { //nolint:unparam // upper always false but kept for XSLT number-to-words spec
 	if n == 0 {
 		if upper {
 			return "ZERO"
 		}
 		return "zero"
 	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		result := "minus " + magnitude
+		if upper {
+			return strings.ToUpper(result)
+		}
+		return result
+	}
 	var ones = []string{"", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
 		"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"}
 	var tens = []string{"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"}
 
-	var words func(int) string
-	words = func(n int) string {
+	var words func(int64) string
+	words = func(n int64) string {
 		if n < 0 {
 			return "minus " + words(-n)
 		}
 		if n < 20 {
-			return ones[n]
+			return ones[int(n)]
 		}
 		if n < 100 {
-			w := tens[n/10]
+			w := tens[int(n/10)]
 			if n%10 != 0 {
-				w += " " + ones[n%10]
+				w += " " + ones[int(n%10)]
 			}
 			return w
 		}
 		if n < 1000 {
-			w := ones[n/100] + " hundred"
+			w := ones[int(n/100)] + " hundred"
 			if n%100 != 0 {
 				w += " and " + words(n%100)
 			}
@@ -911,21 +1009,21 @@ func numberToWords(n int, upper bool) string { //nolint:unparam // upper always 
 			}
 			return w
 		}
-		if n < 1000000000 {
+		if n < numberBillion {
 			w := words(n/1000000) + " million"
 			if n%1000000 != 0 {
 				w += " " + words(n%1000000)
 			}
 			return w
 		}
-		if n < 1000000000000 {
-			w := words(n/1000000000) + " billion"
-			if n%1000000000 != 0 {
-				w += " " + words(n%1000000000)
+		if n < numberTrillion {
+			w := words(n/numberBillion) + " billion"
+			if n%numberBillion != 0 {
+				w += " " + words(n%numberBillion)
 			}
 			return w
 		}
-		return strconv.Itoa(n)
+		return strconv.FormatInt(n, 10)
 	}
 	result := words(n)
 	if upper {
@@ -958,9 +1056,9 @@ func applyGroupingSeparator(s string, sep string, size int) string {
 	return string(result)
 }
 
-func toLowerAlpha(n int) string {
+func toLowerAlpha(n int64) string {
 	if n <= 0 {
-		return strconv.Itoa(n)
+		return strconv.FormatInt(n, 10)
 	}
 	var buf []byte
 	for n > 0 {
@@ -971,7 +1069,7 @@ func toLowerAlpha(n int) string {
 	return string(buf)
 }
 
-func toUpperAlpha(n int) string {
+func toUpperAlpha(n int64) string {
 	return strings.ToUpper(toLowerAlpha(n))
 }
 

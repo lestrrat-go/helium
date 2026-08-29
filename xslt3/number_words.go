@@ -10,14 +10,24 @@ import (
 // ones-table and in special-case logic that switches to the prefix form "ein"
 // when followed by another component.
 const (
-	germanOne       = "eins"
-	germanOnePrefix = "ein"
+	germanOne             = "eins"
+	germanOnePrefix       = "ein"
+	numberBillion   int64 = 1_000_000_000
+	numberTrillion  int64 = 1_000_000_000_000
+	minInt64              = -1 << 63
 )
+
+func minInt64MagnitudeString(n int64) (string, bool) {
+	if n != minInt64 {
+		return "", false
+	}
+	return strconv.FormatUint(uint64(1)<<63, 10), true
+}
 
 // numberToWordsLang converts a number to words in the given language and case.
 // caseMode is "lower", "upper", or "title".
 // ordinal is the ordinal hint (e.g., "yes", "%spellout-ordinal-masculine").
-func numberToWordsLang(n int, caseMode string, lang string, ordinal string) string {
+func numberToWordsLang(n int64, caseMode string, lang string, ordinal string) string {
 	// Normalize language tag to base language
 	baseLang := strings.ToLower(lang)
 	if idx := strings.IndexAny(baseLang, "-_"); idx >= 0 {
@@ -61,7 +71,7 @@ func toTitleCase(s string) string {
 }
 
 // numberToCardinalWords returns a cardinal number word in the given language.
-func numberToCardinalWords(n int, lang string) string {
+func numberToCardinalWords(n int64, lang string) string {
 	switch lang {
 	case "de":
 		return germanCardinal(n)
@@ -75,7 +85,7 @@ func numberToCardinalWords(n int, lang string) string {
 }
 
 // numberToOrdinalWords returns an ordinal number word in the given language.
-func numberToOrdinalWords(n int, lang string, ordinal string) string {
+func numberToOrdinalWords(n int64, lang string, ordinal string) string {
 	switch lang {
 	case "de":
 		return germanOrdinal(n, ordinal)
@@ -92,23 +102,26 @@ func numberToOrdinalWords(n int, lang string, ordinal string) string {
 // English ordinals
 // ============================================================
 
-func englishOrdinal(n int) string {
+func englishOrdinal(n int64) string {
 	if n == 0 {
 		return "zeroth"
+	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "minus " + magnitude + "th"
 	}
 	if n < 0 {
 		return "minus " + englishOrdinal(-n)
 	}
 	// For compound numbers, only the last component is ordinal
-	if n >= 1000000000000 {
-		q, r := n/1000000000000, n%1000000000000
+	if n >= numberTrillion {
+		q, r := n/numberTrillion, n%numberTrillion
 		if r == 0 {
 			return numberToWords(q, false) + " trillionth"
 		}
 		return numberToWords(q, false) + " trillion " + englishOrdinal(r)
 	}
-	if n >= 1000000000 {
-		q, r := n/1000000000, n%1000000000
+	if n >= numberBillion {
+		q, r := n/numberBillion, n%numberBillion
 		if r == 0 {
 			return numberToWords(q, false) + " billionth"
 		}
@@ -146,35 +159,38 @@ func englishOrdinal(n int) string {
 	return englishOnesOrdinal(n)
 }
 
-func englishOnesOrdinal(n int) string {
+func englishOnesOrdinal(n int64) string {
 	ords := []string{
 		"zeroth", "first", "second", "third", "fourth", "fifth",
 		"sixth", "seventh", "eighth", "ninth", "tenth",
 		"eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth",
 		"sixteenth", "seventeenth", "eighteenth", "nineteenth",
 	}
-	if n >= 0 && n < len(ords) {
-		return ords[n]
+	if n >= 0 && n < int64(len(ords)) {
+		return ords[int(n)]
 	}
-	return strconv.Itoa(n) + "th"
+	return strconv.FormatInt(n, 10) + "th"
 }
 
-func englishTensOrdinal(n int) string {
+func englishTensOrdinal(n int64) string {
 	ords := []string{"", "", "twentieth", "thirtieth", "fortieth", "fiftieth",
 		"sixtieth", "seventieth", "eightieth", "ninetieth"}
-	if n >= 0 && n < len(ords) {
-		return ords[n]
+	if n >= 0 && n < int64(len(ords)) {
+		return ords[int(n)]
 	}
-	return strconv.Itoa(n*10) + "th"
+	return strconv.FormatInt(n*10, 10) + "th"
 }
 
 // ============================================================
 // German
 // ============================================================
 
-func germanCardinal(n int) string {
+func germanCardinal(n int64) string {
 	if n == 0 {
 		return "null"
+	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "minus " + magnitude
 	}
 	if n < 0 {
 		return "minus " + germanCardinal(-n)
@@ -184,20 +200,20 @@ func germanCardinal(n int) string {
 	tens := []string{"", "", "zwanzig", "dreißig", "vierzig", "fünfzig", "sechzig", "siebzig", "achtzig", "neunzig"}
 
 	if n < 20 {
-		return ones[n]
+		return ones[int(n)]
 	}
 	if n < 100 {
 		if n%10 == 0 {
-			return tens[n/10]
+			return tens[int(n/10)]
 		}
-		o := ones[n%10]
+		o := ones[int(n%10)]
 		if o == germanOne {
 			o = germanOnePrefix
 		}
-		return o + "und" + tens[n/10]
+		return o + "und" + tens[int(n/10)]
 	}
 	if n < 1000 {
-		w := ones[n/100]
+		w := ones[int(n/100)]
 		if w == germanOne {
 			w = germanOnePrefix
 		}
@@ -221,7 +237,7 @@ func germanCardinal(n int) string {
 		}
 		return w
 	}
-	if n < 1000000000 {
+	if n < numberBillion {
 		q := n / 1000000
 		w := ""
 		if q == 1 {
@@ -234,10 +250,10 @@ func germanCardinal(n int) string {
 		}
 		return w
 	}
-	return strconv.Itoa(n)
+	return strconv.FormatInt(n, 10)
 }
 
-func germanOrdinal(n int, ordinal string) string {
+func germanOrdinal(n int64, ordinal string) string {
 	if n <= 0 {
 		return germanCardinal(n)
 	}
@@ -257,7 +273,7 @@ func germanOrdinal(n int, ordinal string) string {
 // germanOrdinalStem returns the ordinal stem for n, ready for suffix attachment.
 // Irregular stems: erst, dritt, siebt, acht.
 // Regular: cardinal + "t" (1-19) or cardinal + "st" (20+).
-func germanOrdinalStem(n int) string {
+func germanOrdinalStem(n int64) string {
 	// Handle compound numbers recursively: only the last component is ordinal
 	if n >= 1000000 {
 		q := n / 1000000
@@ -292,7 +308,7 @@ func germanOrdinalStem(n int) string {
 		q := n / 100
 		r := n % 100
 		ones := []string{"", germanOne, "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun"}
-		w := ones[q]
+		w := ones[int(q)]
 		if w == germanOne {
 			w = germanOnePrefix
 		}
@@ -325,9 +341,12 @@ func germanOrdinalStem(n int) string {
 // Italian
 // ============================================================
 
-func italianCardinal(n int) string {
+func italianCardinal(n int64) string {
 	if n == 0 {
 		return "zero"
+	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "meno " + magnitude
 	}
 	if n < 0 {
 		return "meno " + italianCardinal(-n)
@@ -338,10 +357,10 @@ func italianCardinal(n int) string {
 	tens := []string{"", "", "venti", "trenta", "quaranta", "cinquanta", "sessanta", "settanta", "ottanta", "novanta"}
 
 	if n < 20 {
-		return ones[n]
+		return ones[int(n)]
 	}
 	if n < 100 {
-		t := tens[n/10]
+		t := tens[int(n/10)]
 		o := n % 10
 		if o == 0 {
 			return t
@@ -350,7 +369,7 @@ func italianCardinal(n int) string {
 		if o == 1 || o == 8 {
 			t = t[:len(t)-1]
 		}
-		return t + ones[o]
+		return t + ones[int(o)]
 	}
 	if n < 1000 {
 		q := n / 100
@@ -358,7 +377,7 @@ func italianCardinal(n int) string {
 		if q == 1 {
 			w = "cento"
 		} else {
-			w = ones[q] + "cento"
+			w = ones[int(q)] + "cento"
 		}
 		r := n % 100
 		if r != 0 {
@@ -380,10 +399,10 @@ func italianCardinal(n int) string {
 		}
 		return w
 	}
-	return strconv.Itoa(n)
+	return strconv.FormatInt(n, 10)
 }
 
-func italianOrdinal(n int, ordinal string) string {
+func italianOrdinal(n int64, ordinal string) string {
 	if n <= 0 {
 		return italianCardinal(n)
 	}
@@ -396,11 +415,11 @@ func italianOrdinal(n int, ordinal string) string {
 		if feminine {
 			ords := []string{"", "prima", "seconda", "terza", "quarta", "quinta",
 				"sesta", "settima", "ottava", "nona", "decima"}
-			return ords[n]
+			return ords[int(n)]
 		}
 		ords := []string{"", "primo", "secondo", "terzo", "quarto", "quinto",
 			"sesto", "settimo", "ottavo", "nono", "decimo"}
-		return ords[n]
+		return ords[int(n)]
 	}
 
 	// Regular Italian ordinals: cardinal stem + -esimo/-esima
@@ -421,9 +440,12 @@ func italianOrdinal(n int, ordinal string) string {
 // French
 // ============================================================
 
-func frenchCardinal(n int) string {
+func frenchCardinal(n int64) string {
 	if n == 0 {
 		return "zéro"
+	}
+	if magnitude, ok := minInt64MagnitudeString(n); ok {
+		return "moins " + magnitude
 	}
 	if n < 0 {
 		return "moins " + frenchCardinal(-n)
@@ -433,7 +455,7 @@ func frenchCardinal(n int) string {
 		"dix", "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"}
 
 	if n < 20 {
-		return ones[n]
+		return ones[int(n)]
 	}
 	if n < 100 {
 		tens := []string{"", "", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"}
@@ -447,7 +469,7 @@ func frenchCardinal(n int) string {
 			if t == 8 {
 				return "quatre-vingts"
 			}
-			return tens[t]
+			return tens[int(t)]
 		}
 		sep := "-"
 		if o == 1 && t != 8 && t != 9 {
@@ -456,7 +478,7 @@ func frenchCardinal(n int) string {
 		if o == 11 && t == 7 {
 			sep = " et "
 		}
-		return tens[t] + sep + ones[o]
+		return tens[int(t)] + sep + ones[int(o)]
 	}
 	if n < 1000 {
 		q := n / 100
@@ -464,7 +486,7 @@ func frenchCardinal(n int) string {
 		if q == 1 {
 			w = "cent"
 		} else {
-			w = ones[q] + " cent"
+			w = ones[int(q)] + " cent"
 		}
 		r := n % 100
 		if r == 0 && q > 1 {
@@ -489,10 +511,10 @@ func frenchCardinal(n int) string {
 		}
 		return w
 	}
-	return strconv.Itoa(n)
+	return strconv.FormatInt(n, 10)
 }
 
-func frenchOrdinal(n int, _ string) string {
+func frenchOrdinal(n int64, _ string) string {
 	if n == 1 {
 		return "premier"
 	}
