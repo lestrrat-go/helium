@@ -63,7 +63,7 @@ func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *ver
 		visited := make(map[string]struct{})
 		err := prepareRetrievalMethod(ctx, cfg, doc, elem, prepared, visited, 0)
 		if err != nil {
-			if cfg.lenientKeyInfo && errors.Is(err, ErrReferenceNotFound) {
+			if shouldSkipRetrievalMethod(cfg, err) {
 				continue
 			}
 			return err
@@ -93,12 +93,22 @@ func resolveRetrievalMethods(ctx context.Context, budget *verifyBudget, cfg *ver
 		// ErrUnsupportedTransform, ErrRetrievalMethodLoop, ErrReferenceTooLarge,
 		// ErrAmbiguousReference) and still fails closed here even under leniency —
 		// a corrupt hint is an error, not a missing one.
-		if cfg.lenientKeyInfo && errors.Is(err, ErrReferenceNotFound) {
+		if shouldSkipRetrievalMethod(cfg, err) {
 			continue
 		}
 		return err
 	}
 	return nil
+}
+
+// shouldSkipRetrievalMethod reports whether lenient KeyInfo handling may ignore
+// an unavailable RetrievalMethod. A resolved parse failure may preserve a
+// nested ErrReferenceNotFound from a caller-supplied parser while also wrapping
+// ErrInvalidKeyInfo; resolved-but-invalid material must remain fatal.
+func shouldSkipRetrievalMethod(cfg *verifierConfig, err error) bool {
+	return cfg.lenientKeyInfo &&
+		errors.Is(err, ErrReferenceNotFound) &&
+		!errors.Is(err, ErrInvalidKeyInfo)
 }
 
 // prepareRetrievalMethod parses and statically validates one RetrievalMethod
@@ -363,7 +373,7 @@ func parseRetrievalDoc(ctx context.Context, cfg *verifierConfig, octets []byte) 
 	parser := cfg.parser()
 	extDoc, err := parser.Parse(ctx, octets)
 	if err != nil {
-		return nil, fmt.Errorf("%w: cannot parse RetrievalMethod resource as XML: %v", ErrInvalidKeyInfo, err)
+		return nil, fmt.Errorf("%w: cannot parse RetrievalMethod resource as XML: %w", ErrInvalidKeyInfo, err)
 	}
 	return extDoc, nil
 }

@@ -319,6 +319,11 @@ every other XPath evaluation failure wraps both `ErrUnsupportedTransform` and th
 
 A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI dereference, transform execution, or key resolution.
 
+An external RetrievalMethod X509Data resource that fails XML parsing wraps both `ErrInvalidKeyInfo` and the
+parser error. `errors.Is` therefore matches `context.Canceled` or `context.DeadlineExceeded` when parsing stops
+for context, while `errors.As` still recovers a non-context `helium.ErrParseError`; the malformed-resource
+wording is unchanged.
+
 ### XML Encryption (`xmlenc1/errors.go`)
 
 `ErrCipherValueBytesExceeded` is returned when an EncryptedData payload exceeds

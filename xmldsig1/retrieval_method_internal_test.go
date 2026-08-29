@@ -18,6 +18,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,6 +49,92 @@ type capturingReferenceResolver struct {
 	calls  atomic.Int32
 	octets []byte
 	uri    string
+}
+
+type abortingRetrievalParserSAX struct {
+	*helium.TreeBuilder
+	abort  func()
+	starts int
+}
+
+type unavailableRetrievalParserSAX struct {
+	*helium.TreeBuilder
+	starts int
+}
+
+func (s *abortingRetrievalParserSAX) StartElementNS(
+	ctx context.Context,
+	localname, prefix, uri string,
+	namespaces []sax.Namespace,
+	attrs []sax.Attribute,
+) error {
+	s.starts++
+	err := s.TreeBuilder.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs)
+	if s.starts == 2 {
+		s.abort()
+	}
+	return err
+}
+
+func (s *unavailableRetrievalParserSAX) StartElementNS(
+	ctx context.Context,
+	localname, prefix, uri string,
+	namespaces []sax.Namespace,
+	attrs []sax.Attribute,
+) error {
+	s.starts++
+	if err := s.TreeBuilder.StartElementNS(ctx, localname, prefix, uri, namespaces, attrs); err != nil {
+		return err
+	}
+	if s.starts == 2 {
+		return ErrReferenceNotFound
+	}
+	return nil
+}
+
+type retrievalParseDeadlineContext struct {
+	parentDeadline func() (time.Time, bool)
+	parentErr      func() error
+	parentValue    func(any) any
+	done           chan struct{}
+	expired        atomic.Bool
+}
+
+func newRetrievalParseDeadlineContext(parent context.Context) *retrievalParseDeadlineContext {
+	return &retrievalParseDeadlineContext{
+		parentDeadline: parent.Deadline,
+		parentErr:      parent.Err,
+		parentValue:    parent.Value,
+		done:           make(chan struct{}),
+	}
+}
+
+func (c *retrievalParseDeadlineContext) Deadline() (time.Time, bool) {
+	if c.expired.Load() {
+		return time.Unix(0, 0), true
+	}
+	return c.parentDeadline()
+}
+
+func (c *retrievalParseDeadlineContext) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *retrievalParseDeadlineContext) Err() error {
+	if c.expired.Load() {
+		return context.DeadlineExceeded
+	}
+	return c.parentErr()
+}
+
+func (c *retrievalParseDeadlineContext) Value(key any) any {
+	return c.parentValue(key)
+}
+
+func (c *retrievalParseDeadlineContext) expire() {
+	if c.expired.CompareAndSwap(false, true) {
+		close(c.done)
+	}
 }
 
 func (r *capturingReferenceResolver) ResolveReference(_ context.Context, uri string) ([]byte, error) {
@@ -701,6 +788,28 @@ func TestRetrievalMethodLenientKeyInfo(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidKeyInfo)
 	})
 
+	t.Run("resolved parser error sharing unavailable sentinel still fails hard when lenient", func(t *testing.T) {
+		const resource = `<ds:X509Data xmlns:ds="` + NamespaceDSig + `"><child/></ds:X509Data>`
+		doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="keyinfo/data.xml" Type="`+
+			TypeX509Data+`"/></ds:KeyInfo>`)
+		handler := &unavailableRetrievalParserSAX{TreeBuilder: helium.NewTreeBuilder()}
+		parser := helium.NewParser().SAXHandler(handler)
+		resolver := &countingReferenceResolver{octets: []byte(resource)}
+		cfg := &verifierConfig{
+			lenientKeyInfo:    true,
+			referenceParser:   &parser,
+			referenceResolver: resolver,
+		}
+		inlineCert := &x509.Certificate{Raw: []byte("inline certificate")}
+		data := &KeyInfoData{X509Certificates: []*x509.Certificate{inlineCert}}
+
+		err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.ErrorIs(t, err, ErrReferenceNotFound)
+		require.EqualValues(t, 1, resolver.calls.Load())
+		require.Equal(t, []*x509.Certificate{inlineCert}, data.X509Certificates)
+	})
+
 	t.Run("unsupported Type still fails hard when lenient", func(t *testing.T) {
 		_, der := selfSignedCert(t)
 		certB64 := base64.StdEncoding.EncodeToString(der)
@@ -721,12 +830,76 @@ func TestRetrievalMethodLenientKeyInfo(t *testing.T) {
 // Verifier.LenientKeyInfo, non-skippable — leniency only skips the genuinely
 // unavailable case.
 func TestResolveRetrievalMethodResolvedButNotXML(t *testing.T) {
-	fsys := fstest.MapFS{"keyinfo/data.xml": {Data: []byte("this is not <well-formed> xml")}}
+	const malformedResource = "this is not <well-formed> xml"
+	fsys := fstest.MapFS{"keyinfo/data.xml": {Data: []byte(malformedResource)}}
 	doc := mustParse(t, `<ds:KeyInfo xmlns:ds="`+NamespaceDSig+`"><ds:RetrievalMethod URI="keyinfo/data.xml" Type="`+TypeX509Data+`"/></ds:KeyInfo>`)
 	cfg := &verifierConfig{referenceResolver: FSReferenceResolver(fsys)}
 	data := &KeyInfoData{}
 
 	err := resolveRetrievalMethods(t.Context(), newVerifyBudget(cfg), cfg, doc, doc.DocumentElement(), data)
 	require.ErrorIs(t, err, ErrInvalidKeyInfo)
+	var parseErr helium.ErrParseError
+	require.ErrorAs(t, err, &parseErr)
+	_, directParseErr := cfg.parser().Parse(t.Context(), []byte(malformedResource))
+	require.Equal(t,
+		fmt.Sprintf("%v: cannot parse RetrievalMethod resource as XML: %v", ErrInvalidKeyInfo, directParseErr),
+		err.Error(),
+	)
+	require.NotErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, context.DeadlineExceeded)
 	require.Empty(t, data.X509Certificates)
+}
+
+func TestParseRetrievalDocPreservesContextError(t *testing.T) {
+	const resource = `<ds:X509Data xmlns:ds="` + NamespaceDSig + `"><first/><second/></ds:X509Data>`
+
+	t.Run("canceled mid-parse", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		handler := &abortingRetrievalParserSAX{TreeBuilder: helium.NewTreeBuilder(), abort: cancel}
+		parser := helium.NewParser().SAXHandler(handler)
+
+		doc, err := parseRetrievalDoc(ctx, &verifierConfig{referenceParser: &parser}, []byte(resource))
+		require.Nil(t, doc)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Contains(t, err.Error(), "cannot parse RetrievalMethod resource as XML: context canceled")
+	})
+
+	t.Run("deadline expires mid-parse", func(t *testing.T) {
+		ctx := newRetrievalParseDeadlineContext(t.Context())
+		handler := &abortingRetrievalParserSAX{TreeBuilder: helium.NewTreeBuilder(), abort: ctx.expire}
+		parser := helium.NewParser().SAXHandler(handler)
+
+		doc, err := parseRetrievalDoc(ctx, &verifierConfig{referenceParser: &parser}, []byte(resource))
+		require.Nil(t, doc)
+		require.ErrorIs(t, err, ErrInvalidKeyInfo)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.Contains(t, err.Error(), "cannot parse RetrievalMethod resource as XML: context deadline exceeded")
+	})
+}
+
+func TestVerifyPreservesRetrievalMethodParseCancellation(t *testing.T) {
+	const resource = `<ds:X509Data xmlns:ds="` + NamespaceDSig + `"><first/><second/></ds:X509Data>`
+	doc := mustParse(t, `<root><ds:Signature xmlns:ds="`+NamespaceDSig+`">`+
+		`<ds:SignedInfo><ds:CanonicalizationMethod Algorithm="`+ExcC14N10+`"/>`+
+		`<ds:SignatureMethod Algorithm="`+AlgRSASHA256+`"/>`+
+		`<ds:Reference URI=""><ds:DigestMethod Algorithm="`+DigestSHA256+`"/>`+
+		`<ds:DigestValue>AA==</ds:DigestValue></ds:Reference></ds:SignedInfo>`+
+		`<ds:SignatureValue>AA==</ds:SignatureValue><ds:KeyInfo>`+
+		`<ds:RetrievalMethod URI="keyinfo/data.xml" Type="`+TypeX509Data+`"/>`+
+		`</ds:KeyInfo></ds:Signature></root>`)
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	handler := &abortingRetrievalParserSAX{TreeBuilder: helium.NewTreeBuilder(), abort: cancel}
+	parser := helium.NewParser().SAXHandler(handler)
+	resolver := &countingReferenceResolver{octets: []byte(resource)}
+
+	_, err = NewVerifier(StaticKey(&key.PublicKey)).
+		ReferenceResolver(resolver).
+		ReferenceParser(parser).
+		Verify(ctx, doc)
+	require.ErrorIs(t, err, ErrInvalidKeyInfo)
+	require.ErrorIs(t, err, context.Canceled)
+	require.EqualValues(t, 1, resolver.calls.Load())
 }
