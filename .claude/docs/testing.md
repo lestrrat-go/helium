@@ -49,8 +49,11 @@ testdata/libxml2-compat/
 
 ### Package Naming
 
-- **`*_test.go`** (external `xxx_test` package) — golden file comparison, SAX events, serialization. Preferred for all new tests.
-- **`*_internal_test.go`** (internal `xxx` package) — tests needing unexported access. In the root package there is one per production area: `dtd_internal_test.go`, `node_internal_test.go`, `parser_internal_test.go`, `writer_internal_test.go`.
+- **`*_test.go`** (external `xxx_test` package) — golden file comparison, SAX events, serialization. Preferred for all
+  new tests.
+- **`*_internal_test.go`** (internal `xxx` package) — tests needing unexported access. In the root package there is one
+  per production area: `dtd_internal_test.go`, `node_internal_test.go`, `parser_internal_test.go`,
+  `writer_internal_test.go`.
 
 ### Test Shape
 
@@ -122,7 +125,8 @@ bug that prompted it.
 - Write comments for users, not maintainers. Explain visible behavior, required context, and why API calls matter.
 - Prefer `func Example_*()` + deterministic `// Output:` blocks when behavior is stable.
 - Keep shared setup/helpers in `*_helpers_test.go` so example bodies stay easy to read.
-- CLI examples call importable entrypoints (e.g. `internal/cli/heliumcmd.Execute`) directly. Do NOT spawn subprocesses unless behavior requires it.
+- CLI examples call importable entrypoints (e.g. `internal/cli/heliumcmd.Execute`) directly. Do NOT spawn subprocesses
+  unless behavior requires it.
 - Do NOT use `examples/` for scratch programs, golden fixtures, or temporary experiments.
 
 ## Test Helpers
@@ -210,12 +214,14 @@ result for the current run live in the header comment of
 ## Fuzzing
 
 - Public-package fuzz coverage lives in package-local `fuzz_test.go` files.
-- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xmlenc1`, `xslt3`.
+- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`,
+  `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xmlenc1`, `xslt3`.
 - `shim` intentionally excluded from repo fuzz matrix.
 - `enum` + `sax` intentionally excluded from direct fuzzing → constants/interface-only surface.
 - Bound fuzz input sizes early. Return on oversize inputs.
 - Prefer in-memory stubs over filesystem/network access.
-- Parse/compile/validate/transform fuzz targets MUST tolerate invalid intermediate inputs by returning early instead of asserting.
+- Parse/compile/validate/transform fuzz targets MUST tolerate invalid intermediate inputs by returning early instead of
+  asserting.
 - `xmlenc1`'s `FuzzDecrypt` puts FIXED RSA, EC, and AES key material on one `Decryptor` (all three are
   settable together) and leaves `SessionKey` unset, so the input alone selects which key-protection path runs
   — RSA-OAEP, ECDH-ES, or AES key wrap — and every branch is reachable from the one target. The keys are
@@ -232,16 +238,23 @@ result for the current run live in the header comment of
 
 ## Fuzz CI
 
-- Each matrix job restores newest Go fuzz corpus for same `go.mod`/package/ref, then falls back to same `go.mod`/package across refs.
+- Each matrix job restores newest Go fuzz corpus for same `go.mod`/package/ref, then falls back to same `go.mod`/package
+  across refs.
 - Each matrix job saves its corpus under an immutable run/attempt key after success or failure.
-- Pull requests run NO fuzzing — `ci.yml` is normal test/build/lint/vuln verification only, so PR turnaround stays fast and deterministic (live fuzzing is nondeterministic and cannot gate a PR without flaking).
+- Pull requests run NO fuzzing — `ci.yml` is normal test/build/lint/vuln verification only, so PR turnaround stays fast
+  and deterministic (live fuzzing is nondeterministic and cannot gate a PR without flaking).
 - `fuzz.yml` runs fuzzing OFF the PR path, always non-gating:
-  - on every `push` to `main` (in practice, each PR merge) → short `60s` per target, for a prompt signal attributed to the pushed commit.
+  - on every `push` to `main` (in practice, each PR merge) → short `60s` per target, for a prompt signal attributed to
+    the pushed commit.
   - on the weekly `schedule` → deep `5m` per target.
   - on manual `workflow_dispatch` → its `fuzz-time` input (default `5m`).
-- Fuzz targets are discovered per package via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`; each target writes a separate log and retains its raw `go test` status.
-- Every nonzero raw status or log-capture failure uploads target log + metadata (`package`, target, Go version, fuzz budget, raw/log statuses, classification) as a diagnostic artifact; log-capture failures fail the job.
-- Only Go coordinator failures matching the complete deadline-only signature are warnings ([golang/go#75804](https://github.com/golang/go/issues/75804)); any extra diagnostic, panic, worker hang, source failure, or crashing input fails the job.
+- Fuzz targets are discovered per package via `go test ./<pkg>/ -list '^Fuzz' -run '^$'`; each target writes a separate
+  log and retains its raw `go test` status.
+- Every nonzero raw status or log-capture failure uploads target log + metadata (`package`, target, Go version, fuzz
+  budget, raw/log statuses, classification) as a diagnostic artifact; log-capture failures fail the job.
+- Only Go coordinator failures matching the complete deadline-only signature are warnings
+  ([golang/go#75804](https://github.com/golang/go/issues/75804)); any extra diagnostic, panic, worker hang, source
+  failure, or crashing input fails the job.
 - Go-written crashing corpus files are uploaded separately for real failures; fuzz artifacts are not committed.
 
 ## Common Test Patterns
@@ -305,7 +318,9 @@ on-demand-fetched fixtures, and the skip/expectation metadata (`expectations/xsd
 `helium => ../helium` and uses a local `go.work` to test against an in-progress branch. Run it from there: `go
 run ./cmd/w3cgen fetch xsd11 && go run ./cmd/w3cgen generate xsd11 && go test ./...`.
 
-Helium keeps only the **unit regression** `xsd/union_cycle_overflow_test.go` (cyclic simpleType must error, not stack-overflow), guarding the in-tree fix (`baseChain` in `simplevalue_core.go`, `checkCircularSimpleTypes` in `check_facets.go`).
+Helium keeps only the **unit regression** `xsd/union_cycle_overflow_test.go` (cyclic simpleType must error, not
+stack-overflow), guarding the in-tree fix (`baseChain` in `simplevalue_core.go`, `checkCircularSimpleTypes` in
+`check_facets.go`).
 
 ## Skip Maps
 

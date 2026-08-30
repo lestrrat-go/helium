@@ -1,10 +1,14 @@
 # XSD 1.1 Implementation State — Index
 
-Detailed feature-by-feature state of the XSD 1.1 opt-in path (`Compiler.Version(xsd.Version11)`). This is the current implementation surface, not a changelog. **Read the relevant sub-doc below before working in that area of `xsd/`.**
+Detailed feature-by-feature state of the XSD 1.1 opt-in path (`Compiler.Version(xsd.Version11)`). This is the current
+implementation surface, not a changelog. **Read the relevant sub-doc below before working in that area of `xsd/`.**
 
-Version-resolution rules and the `SkipDatatypeIntegrityChecks` contract that gate everything below live in `CLAUDE.md` → "XSD — Version Toggle".
+Version-resolution rules and the `SkipDatatypeIntegrityChecks` contract that gate everything below live in `CLAUDE.md` →
+"XSD — Version Toggle".
 
-Convention across all sub-docs: **version-INDEPENDENT** rules run in both 1.0 and 1.1; all others are `Version11`-gated with the 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the governing rule and its conformance evidence.
+Convention across all sub-docs: **version-INDEPENDENT** rules run in both 1.0 and 1.1; all others are `Version11`-gated
+with the 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the
+governing rule and its conformance evidence.
 
 XSD 1.1 is fully implemented. The committed W3C conformance snapshot reports
 **1,049 pass / 0 skip / 0 fail** in `xsd/summary-xsd11.md`. Sub-docs by area:

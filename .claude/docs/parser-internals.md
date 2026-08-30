@@ -83,7 +83,8 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
   nested reparse while `Entity.Content()` remains decoded
 
 ### SAX & Tree Building
-- `sax` (sax.SAX2Handler) — callbacks (default: TreeBuilder; `Parser.SAXHandler(nil)` restores that default, so this is never nil at parse time)
+- `sax` (sax.SAX2Handler) — callbacks (default: TreeBuilder; `Parser.SAXHandler(nil)` restores that default, so this is
+  never nil at parse time)
 - `doc *Document` — parsed document; `elem *Element` — current element
 
 ### DTD & Entities
@@ -147,18 +148,24 @@ from the invariant charset (default IBM-037); ASCII-compatible parses the decl a
   different Unicode family than a consumed BOM is fatal `ErrEncodingBOMMismatch` (§4.3.3; stricter than
   libxml2). Reads `pctx.declaredEncoding` (recorded unconditionally at the leaf EncName parsers), so it fires
   under `IgnoreEncoding`/`LenientXMLDecl`.
-- Strict fixed-width decode — `withStrictDecode` (`internal/encoding/strict.go`): malformed UTF-16/32/UCS-2/4 → fatal `ErrInvalidEncodedChar`; surfaced via `UTF8Cursor.Err()` at the document-end gate.
+- Strict fixed-width decode — `withStrictDecode` (`internal/encoding/strict.go`): malformed UTF-16/32/UCS-2/4 → fatal
+  `ErrInvalidEncodedChar`; surfaced via `UTF8Cursor.Err()` at the document-end gate.
 - Strict US-ASCII decode — `asciiEncoding` (`internal/encoding/ascii.go`): any byte ≥ 0x80 → fatal `ErrInvalidASCII`.
 
 ## File Responsibilities
 
-Each file's functions carry the spec citations (XML/Namespaces clauses, W3C test IDs) and libxml2-parity notes in their doc comments; below is the ownership map.
+Each file's functions carry the spec citations (XML/Namespaces clauses, W3C test IDs) and libxml2-parity notes in their
+doc comments; below is the ownership map.
 
-- `parserctx.go` — parser context, input/cursor stack, SAX dispatch, location/error reporting (`errorAtLevel` blank-run/cursor-error preference)
+- `parserctx.go` — parser context, input/cursor stack, SAX dispatch, location/error reporting (`errorAtLevel`
+  blank-run/cursor-error preference)
 - `parser_document.go` — top-level pipeline (`parseDocument`, `parseContent`, recovery re-sync)
-- `parser_element.go` — recursive element parsing; `parseStartTag` enforces P40/P44 inter-attribute whitespace + Namespaces §3 prefix-binding/reserved-URI WFCs (`validateDefaultNamespaceDecl`)
-- `parser_xml_decl.go` / `parser_decl.go` — XML/Text declaration parsing; EncodingDecl [80]/EncName [81] enforcement (`parseEncodingName`, `parseEncodingDeclFromCursor`); name/QName helpers
-- `parser_dtd_*` — DTD handling by declaration kind; `parseExternalID` found-bool (empty-vs-absent ExternalID); NotationDecl [82] / EntityDef [73] mandatory-body enforcement
+- `parser_element.go` — recursive element parsing; `parseStartTag` enforces P40/P44 inter-attribute whitespace +
+  Namespaces §3 prefix-binding/reserved-URI WFCs (`validateDefaultNamespaceDecl`)
+- `parser_xml_decl.go` / `parser_decl.go` — XML/Text declaration parsing; EncodingDecl [80]/EncName [81] enforcement
+  (`parseEncodingName`, `parseEncodingDeclFromCursor`); name/QName helpers
+- `parser_dtd_*` — DTD handling by declaration kind; `parseExternalID` found-bool (empty-vs-absent ExternalID);
+  NotationDecl [82] / EntityDef [73] mandatory-body enforcement
 - `parser_entity_decl.go` — entity declaration bodies, balanced-chunk parsing
 - `parser_entity_ref.go` — references, char refs, replay, amplification checks
 
@@ -168,8 +175,10 @@ Flow: `parseReference()` → `parseEntityRef()` → `entityCheck()` → parse co
 / `parseExternalEntityPrivate`) → deliver to SAX (expand + replay node children when `replaceEntities`, else
 fire `Reference`). Each invariant lives at its function:
 
-- Amplification guard — `entityCheck` / `entityCheckBytes` (`parser_entity_ref.go`); external content read through `io.LimitReader` (`externalEntityMaxBytes` 10 MiB) charged raw-only to avoid double-counting the fixed cost
-- WFC Entity Declared under standalone="yes" (§4.1/§2.9) — `getEntity` / `undeclaredEntityValidityError` (`parser_entity_ref.go`)
+- Amplification guard — `entityCheck` / `entityCheckBytes` (`parser_entity_ref.go`); external content read through
+  `io.LimitReader` (`externalEntityMaxBytes` 10 MiB) charged raw-only to avoid double-counting the fixed cost
+- WFC Entity Declared under standalone="yes" (§4.1/§2.9) — `getEntity` / `undeclaredEntityValidityError`
+  (`parser_entity_ref.go`)
 - Balanced replacement text (WFC §4.3.2) — `parseBalancedChunkInternal` → `ErrEntityNotWellBalanced`; nested
   internal-entity parsing inherits the parent effective XML version, and its lexical replacement form retains
   XML 1.1 restricted-character-reference origin so XML 1.1 validates a reference separately from a raw literal
@@ -192,13 +201,17 @@ fire `Reference`). Each invariant lives at its function:
   check (`isValidXMLVersion`) is stricter than the grammar: the family check alone would pass a non-VersionNum
   like `1.x` (it has the `1.` prefix) and the grammar alone would pass `2.0`. A path enforcing only one of the
   two reopens the accept-then-fail-to-serialize gap
-- Character-reference provenance (element-content validity, §3.2.1 E15) — `charDataFromCharRef` flag in `parseReference`; `fromCharRef` node field (see `node-types.md`)
+- Character-reference provenance (element-content validity, §3.2.1 E15) — `charDataFromCharRef` flag in
+  `parseReference`; `fromCharRef` node field (see `node-types.md`)
 - Parameter entity refs — `parsePEReference` (`parser_dtd_subset.go`): charges the PE's OWN replacement bytes
   (not post-expansion), `padPEContent` §4.4.8; external PE load via `loadExternalParameterEntityContent`
   (XXE-gated, base-URI- and TextDecl-version-scoped, active-PE recursion guard)
-- PE references inside/adjacent to markup decls (external subset) — `skipBlanksPE` (`parser_whitespace.go`) + `dtdRefetch`; boundary violations → `ErrEntityBoundary` (VC Proper Declaration/Group/PE Nesting)
+- PE references inside/adjacent to markup decls (external subset) — `skipBlanksPE` (`parser_whitespace.go`) +
+  `dtdRefetch`; boundary violations → `ErrEntityBoundary` (VC Proper Declaration/Group/PE Nesting)
 - WFC PEs in Internal Subset (§2.8) — `expandEntityValueForRefCheck` `%` branch → `ErrPEReferenceInInternalSubset`
-- Attribute-value entity WFCs (No External Ref / No `<` / Entity Declared) — `checkEntityInAttValue` / `lookupGeneralEntity`, memoized via `entWFCValidated`/`entWFCChecked`; DTD defaults re-scanned by `validateAttributeDefaultsWFC`
+- Attribute-value entity WFCs (No External Ref / No `<` / Entity Declared) — `checkEntityInAttValue` /
+  `lookupGeneralEntity`, memoized via `entWFCValidated`/`entWFCChecked`; DTD defaults re-scanned by
+  `validateAttributeDefaultsWFC`
 - `decodeEntities()` — SubstitutionType None(0)/Ref(1)/PERef(2)/Both(3); recursion capped at depth > 40
 
 ## Tree Builder (SAX→DOM)
@@ -247,7 +260,9 @@ the negative-sentinel option disables the cap for trusted input.
 - **Blank-run cap** (`skipBlankRun`/`blankRunLimit`, `parser_whitespace.go`) — the same cap bounds a
   contiguous whitespace run in 4 KiB chunks; sticky `blankRunErr`, preferred by `errorAtLevel`. DTD
   subset/INCLUDE loops call `skipBlankRun` directly (not `skipBlanks`, which consumes `%pe;` unexpanded).
-- **Character buffering** (`deliverCharacters`, `CharBufferSize`) — UTF-8-boundary-respecting chunking; bounded streaming-SAX char-data path `parseCharDataChunkedSAX` (no DOM built) with a documented over-budget blank-run reclassification policy.
+- **Character buffering** (`deliverCharacters`, `CharBufferSize`) — UTF-8-boundary-respecting chunking; bounded
+  streaming-SAX char-data path `parseCharDataChunkedSAX` (no DOM built) with a documented over-budget blank-run
+  reclassification policy.
 - **UTF-8 fast paths** — `parseQName`/`parseNCName`/`parseAttributeValueInternal` try
   `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the
   cursor buffer, invalidating borrowed slices), and use `AdvanceFast()` when the run is proven newline-free.
@@ -279,9 +294,11 @@ char-ref) re-check `ctx.Err()` and disambiguate exhaustion from a sticky cursor 
 
 ## Push Parser
 
-Both push parsers use the `push` package (`push.Parser[T]`): a background goroutine reading a thread-safe stream via `ParseReader`; `pp.Push(chunk)` / `doc, err := pp.Close()`.
+Both push parsers use the `push` package (`push.Parser[T]`): a background goroutine reading a thread-safe stream via
+`ParseReader`; `pp.Push(chunk)` / `doc, err := pp.Close()`.
 
-- **XML** (`parser.go` + `push/`) — progressive from the first byte; stream `Read` returns available bytes without waiting to fill, context-aware wait (see Context Cancellation)
+- **XML** (`parser.go` + `push/`) — progressive from the first byte; stream `Read` returns available bytes without
+  waiting to fill, context-aware wait (see Context Cancellation)
 - **HTML** (`html/html.go` + `push/`) — progressive only AFTER the 1024-byte (or EOF) charset prescan
   (`wrapReaderForHTML`, `html/encoding_reader.go`) and once a streamable encoding is settled; an undeclared
   valid-UTF-8 stream defers to EOF/Close (`deferredLatin1Reader`, bounded by `contentLimit()`, fail-closed at
@@ -294,14 +311,19 @@ Both push parsers use the `push` package (`push.Parser[T]`): a background gorout
 
 ## HTML Content Bounding (`html/parser.go`, `html/options.go`)
 
-`Parser.MaxContentSize` (`parseConfig.maxContentSize`, effective via `contentLimit()`, 16 MiB default). Two meanings; rationale at each function:
+`Parser.MaxContentSize` (`parseConfig.maxContentSize`, effective via `contentLimit()`, 16 MiB default). Two meanings;
+rationale at each function:
 
 - **Soft cap (chunkable)**: normal data-state text (`parseCharacters`), raw-text (`parseRawContent`), RCDATA
   (`parseRCDATAContent`), plaintext (`parsePlaintext`) — chunk boundaries never split a rune
   (`clampTextChunkToRune`, `peekRuneToken`); a section over the cap still parses, in multiple chunks
-- **Hard cap (indivisible)**: comments/bogus comments/PIs (`parseComment`/`parseBogusComment`/`parsePI`) → `fatalErr` wrapping `ErrContentSizeExceeded`
-- **Hard cap (tag-level tokens)**: `parseName`/`parseAttrName`/`skipWhitespace` bound `PeekAt` growth against `scanTokenLimit()` (floored at 16 MiB so a small `MaxContentSize` never rejects `script`)
-- **Leading-whitespace deferral** — `emitCharacters` + `pendingWS`/`deferPendingWS`: significance (`StripBlanks`) + implied-`<body>` insertion are decided at the first non-whitespace byte; `pendingWS` bounded by `contentLimit()`, fail-closed
+- **Hard cap (indivisible)**: comments/bogus comments/PIs (`parseComment`/`parseBogusComment`/`parsePI`) → `fatalErr`
+  wrapping `ErrContentSizeExceeded`
+- **Hard cap (tag-level tokens)**: `parseName`/`parseAttrName`/`skipWhitespace` bound `PeekAt` growth against
+  `scanTokenLimit()` (floored at 16 MiB so a small `MaxContentSize` never rejects `script`)
+- **Leading-whitespace deferral** — `emitCharacters` + `pendingWS`/`deferPendingWS`: significance (`StripBlanks`) +
+  implied-`<body>` insertion are decided at the first non-whitespace byte; `pendingWS` bounded by `contentLimit()`,
+  fail-closed
 - **Char-ref bounding** — `parseCharRefBounded` (shared by normal data + RCDATA): fixed 32-byte name
   lookahead; unresolved-literal / ambiguous-legacy-prefix work charged against the cap;
   `consumeNumericCharRefBounded` (saturating digit run), `parseSaturatedCharRefLiteral` (bounded spool, no
@@ -323,7 +345,8 @@ attr exists). Explicit namespace declarations always win over ATTLIST defaults.
 - **RecoverOnError** — on a recoverable error in `parseContent()`: save `recoverErr`, `disableSAX=true`,
   `skipToRecoverPoint()` (advance to next `<`), continue, return partial document + saved error. Applies to
   genuine parse errors only — NOT context cancellation (above).
-- **StopParser(ctx)** — `stopped=true`, `instate=psEOF`; returns the parsed-so-far document + nil error (partial document, unlike cancellation's nil document + context error).
+- **StopParser(ctx)** — `stopped=true`, `instate=psEOF`; returns the parsed-so-far document + nil error (partial
+  document, unlike cancellation's nil document + context error).
 
 ## Key Parser Fluent Method Effects
 

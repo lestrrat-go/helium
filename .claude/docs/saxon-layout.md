@@ -221,7 +221,8 @@ Other: `boolean`, `anyURI`, `base64Binary`, `hexBinary`, `NOTATION`
 
 ### Axes (in `AxisInfo.java`)
 
-13 XPath axes: `child`, `descendant`, `parent`, `ancestor`, `following-sibling`, `preceding-sibling`, `following`, `preceding`, `attribute`, `namespace`, `self`, `descendant-or-self`, `ancestor-or-self`
+13 XPath axes: `child`, `descendant`, `parent`, `ancestor`, `following-sibling`, `preceding-sibling`, `following`,
+`preceding`, `attribute`, `namespace`, `self`, `descendant-or-self`, `ancestor-or-self`
 
 ### Name Handling
 

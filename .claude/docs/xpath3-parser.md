@@ -4,7 +4,9 @@
 
 ### Inherited from xpath1
 
-`EOF`, `Number`, `String`, `Name`, `Star`, `VariableRef`, `Slash`, `SlashSlash`, `Pipe`, `Plus`, `Minus`, `Equals`, `NotEquals`, `Less`, `LessEq`, `Greater`, `GreaterEq`, `And`, `Or`, `Mod`, `Div`, `LParen`, `RParen`, `LBracket`, `RBracket`, `At`, `ColonColon`, `Comma`, `Dot`, `DotDot`, `Colon`
+`EOF`, `Number`, `String`, `Name`, `Star`, `VariableRef`, `Slash`, `SlashSlash`, `Pipe`, `Plus`, `Minus`, `Equals`,
+`NotEquals`, `Less`, `LessEq`, `Greater`, `GreaterEq`, `And`, `Or`, `Mod`, `Div`, `LParen`, `RParen`, `LBracket`,
+`RBracket`, `At`, `ColonColon`, `Comma`, `Dot`, `DotDot`, `Colon`
 
 ### New in XPath 3.1
 
@@ -56,7 +58,10 @@
 
 Same one-pass approach as `xpath1/lexer.go`. All tokens emitted to `[]Token` upfront.
 
-Keyword disambiguation: `and`, `or`, `div`, `mod`, `idiv`, `intersect`, `except`, `to`, `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `union`, `instance`, `cast`, `castable`, `treat`, `as`, `in`, `return`, `satisfies`, `then`, `else`, `some`, `every`, `for`, `let`, `where`, `if`, `try`, `catch`, `stable`, `ascending`, `descending` are operators/keywords ONLY when preceded by a value-producing token. Otherwise → `Name`.
+Keyword disambiguation: `and`, `or`, `div`, `mod`, `idiv`, `intersect`, `except`, `to`, `eq`, `ne`, `lt`, `le`, `gt`,
+`ge`, `union`, `instance`, `cast`, `castable`, `treat`, `as`, `in`, `return`, `satisfies`, `then`, `else`, `some`,
+`every`, `for`, `let`, `where`, `if`, `try`, `catch`, `stable`, `ascending`, `descending` are operators/keywords ONLY
+when preceded by a value-producing token. Otherwise → `Name`.
 
 ## Parser (`parser.go`)
 
@@ -64,7 +69,8 @@ Recursive descent. Parse depth limit: 200.
 
 Entry: `Parse(input string) (Expr, error)` → `parseExpression()`.
 
-Step detection and path continuation use `PeekAt`-based lookahead so the hot path can classify separators, axis specifiers, and QName-vs-function-call ambiguities without advancing and backing up the lexer cursor.
+Step detection and path continuation use `PeekAt`-based lookahead so the hot path can classify separators, axis
+specifiers, and QName-vs-function-call ambiguities without advancing and backing up the lexer cursor.
 
 ### Precedence (low → high)
 
@@ -100,14 +106,20 @@ Step detection and path continuation use `PeekAt`-based lookahead so the hot pat
 
 ### Special Parses
 
-- **Named function ref**: `fn:upper-case#1` → `NamedFunctionRef{Prefix:"fn", Name:"upper-case", Arity:1}`. Detected when `Hash` follows name in `parsePrimaryExpr`.
-- **Inline function**: `function($x as xs:integer) as xs:boolean { $x > 0 }` → `InlineFunctionExpr`. Body delimited by `{ }`.
-- **Partial application**: `substring(?, 2)` → `FunctionCall{Args:[PlaceholderExpr{}, NumberExpr{2}]}`. Evaluator detects placeholders → returns `FunctionItem`.
+- **Named function ref**: `fn:upper-case#1` → `NamedFunctionRef{Prefix:"fn", Name:"upper-case", Arity:1}`. Detected when
+  `Hash` follows name in `parsePrimaryExpr`.
+- **Inline function**: `function($x as xs:integer) as xs:boolean { $x > 0 }` → `InlineFunctionExpr`. Body delimited by
+  `{ }`.
+- **Partial application**: `substring(?, 2)` → `FunctionCall{Args:[PlaceholderExpr{}, NumberExpr{2}]}`. Evaluator
+  detects placeholders → returns `FunctionItem`.
 - **Map constructor**: `map { "key": "value" }` → `MapConstructorExpr`.
 - **Array (square)**: `[1, 2, 3]` → `ArrayConstructorExpr{SquareBracket:true}`. Each expr = one member.
 - **Array (curly)**: `array { 1, 2, 3 }` → `ArrayConstructorExpr{SquareBracket:false}`. Single sequence.
 - **FLWOR**: `for`/`let` clauses collected until `return`. `for` and `let` can interleave.
-- **Sequence types**: `parseSequenceType` → `parseItemType` → `parseKindTest`. Kind tests: `node()`, `element(name, type)`, `attribute(name, type)`, `document-node(element(...))`, `text()`, `comment()`, `processing-instruction(target)`, `namespace-node()`, `schema-element(name)`, `schema-attribute(name)`, `function(*)`, `map(*)`, `array(*)`, `item()`.
+- **Sequence types**: `parseSequenceType` → `parseItemType` → `parseKindTest`. Kind tests: `node()`, `element(name,
+  type)`, `attribute(name, type)`, `document-node(element(...))`, `text()`, `comment()`,
+  `processing-instruction(target)`, `namespace-node()`, `schema-element(name)`, `schema-attribute(name)`, `function(*)`,
+  `map(*)`, `array(*)`, `item()`.
 
 ## AST Nodes (`expr.go`)
 

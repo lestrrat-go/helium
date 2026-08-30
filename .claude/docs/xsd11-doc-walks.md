@@ -4,7 +4,8 @@
 > 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the
 > governing rule and its conformance evidence. See `xsd11.md` for the index and version-resolution framing.
 
-- **document-wide xs:ID/xs:IDREF/xs:IDREFS validation** (`validate_id.go`): a third validation walk, run in BOTH XSD 1.0 and 1.1 (cvc-id is version-INDEPENDENT), enforcing ID uniqueness and IDREF referential integrity.
+- **document-wide xs:ID/xs:IDREF/xs:IDREFS validation** (`validate_id.go`): a third validation walk, run in BOTH XSD 1.0
+  and 1.1 (cvc-id is version-INDEPENDENT), enforcing ID uniqueness and IDREF referential integrity.
   - Ownership: an attribute ID belongs to its element, an element-content ID to its PARENT. On the DOCUMENT
     ROOT an element-content ID has no parent, denoting NO element — `idOwner` nil, `recordID` skips it, the
     value never enters the table, any xs:IDREF to it dangles (W3C idIDREF s3_3_4ii26/ii27).
@@ -26,7 +27,8 @@
     finalized). `attrUseIsIDType` counts iff the resolved type is atomic (`resolveVariety ==
     TypeVarietyAtomic`) with builtin base xs:ID; a list of xs:ID or a union with an xs:ID member does NOT
     count. Gated to Version10.
-  - DEFERRED gap: the full "wild IDs" rule, where a declared ID attribute use plus a wildcard-admitted global ID attribute is invalid even with the declared use absent.
+  - DEFERRED gap: the full "wild IDs" rule, where a declared ID attribute use plus a wildcard-admitted global ID
+    attribute is invalid even with the declared use absent.
   - list/union values decompose to atomic ID/IDREF leaves via the active-member resolver. Element-content
     collection is SKIPPED when the element has CHILD ELEMENTS (`hasChildElement`; simple content forbids them,
     so pass 1 already rejected it structurally; `elemTextContent` ignores children, and a default/fixed must

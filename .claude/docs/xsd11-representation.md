@@ -376,7 +376,8 @@
   (minLength ≤ length ≤ maxLength). So `xs:IDREFS` restricted to `length=5`,`minLength=1` is permitted (own 1
   == inherited intrinsic 1), while a fresh tighter bound — `length=5`,`minLength=2` (own 2 ≠ 1) or base
   `maxLength=10` restated as `length=5`,`maxLength=8` (own 8 ≠ 10) — stays an error.
-- **complexType `@block`/`@final` enum** (version-INDEPENDENT): `parseComplexType` (`read_types.go`, via `isValidFinal`) rejects a `<xs:complexType>` `@block`/`@final` not drawn from `{#all, extension, restriction}`.
+- **complexType `@block`/`@final` enum** (version-INDEPENDENT): `parseComplexType` (`read_types.go`, via `isValidFinal`)
+  rejects a `<xs:complexType>` `@block`/`@final` not drawn from `{#all, extension, restriction}`.
 - **content-model group reference representation** (§3.8.2, version-INDEPENDENT): `checkContentModelGroupRef`
   (`read_particles.go`) enforces that an `<xs:group>` particle in a content model is a REFERENCE — content
   `(annotation?)` with only `@ref`; a `@name`, a missing `@ref`, or any non-annotation element child is a
@@ -406,7 +407,8 @@
   (src-import.1.1), and a no-`@namespace` import in a schema lacking a `targetNamespace` (src-import.1.2); the
   invalid import is reported and skipped. `Compile` (`compile.go`) also rejects an empty schema
   `targetNamespace=""`.
-- **local complexType `@name` prohibition** (version-INDEPENDENT): `parseComplexType` (`read_types.go`, `local` flag) rejects a `@name` on an inline (non-top-level) `<xs:complexType>`.
+- **local complexType `@name` prohibition** (version-INDEPENDENT): `parseComplexType` (`read_types.go`, `local` flag)
+  rejects a `@name` on an inline (non-top-level) `<xs:complexType>`.
 - **required `@schemaLocation`** (src-include.1/src-redefine.1 §4.2.3, version-INDEPENDENT): `processIncludes`
   (`compile_imports.go`) treats an ABSENT `@schemaLocation` on `<xs:include>`/`<xs:redefine>` as a fatal
   schema-representation error, distinct from a present-but-unresolvable location hint (a warning).

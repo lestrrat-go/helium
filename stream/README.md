@@ -63,5 +63,6 @@ func Example_stream_basic() {
   // <greeting>hello world</greeting>
 }
 ```
-source: [examples/stream_basic_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/stream_basic_example_test.go)
+source:
+[examples/stream_basic_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/stream_basic_example_test.go)
 <!-- END INCLUDE -->

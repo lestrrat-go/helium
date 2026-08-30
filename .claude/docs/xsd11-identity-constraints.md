@@ -23,8 +23,10 @@
   (`hasAttr`, so empty-but-present `name=""`/`refer=""` is still rejected); `refer` is rejected for EVERY
   kind, not just keyref.
 - **identity-constraint structural rules** (version-INDEPENDENT — BOTH XSD 1.0 and 1.1):
-  - `parseIDConstraint` (`read_elements.go`) rejects a constraint `@name` that is not a valid `xs:NCName` (`xmlchar.IsValidNCName`, so `a:b`/`1foo` fail) and a `@refer` on a non-keyref (key/unique).
-  - `checkKeyRefRefers` (`compile.go`) rejects a keyref whose `{fields}` cardinality differs from the referenced key/unique's.
+  - `parseIDConstraint` (`read_elements.go`) rejects a constraint `@name` that is not a valid `xs:NCName`
+    (`xmlchar.IsValidNCName`, so `a:b`/`1foo` fail) and a `@refer` on a non-keyref (key/unique).
+  - `checkKeyRefRefers` (`compile.go`) rejects a keyref whose `{fields}` cardinality differs from the referenced
+    key/unique's.
   - `checkIDConstraintPlacement` (`check_idc.go`, a DOM walk over the entry document and every
     included/imported/redefined/overridden document) enforces schema-for-schemas placement:
     `xs:key`/`xs:unique`/`xs:keyref` valid ONLY as a child of an `xs:element` declaration (elsewhere — top
@@ -59,7 +61,9 @@
   declared use, typed OR untyped; a default/fixed insertion; a strict/lax wildcard WITH a matching global) and
   `validateWildcardAttr`, so an UNTYPED assessed attribute ({type definition} = xs:anySimpleType) is assessed
   though it records no `*TypeDef`. A field node is:
-  - **GOVERNED** (contributes its typed value): an assessed attribute (always simple; untyped = xs:anySimpleType) OR an assessed element whose type is simple (`!IsComplex`) or complex with SIMPLE content (`ContentType == ContentTypeSimple`).
+  - **GOVERNED** (contributes its typed value): an assessed attribute (always simple; untyped = xs:anySimpleType) OR an
+    assessed element whose type is simple (`!IsComplex`) or complex with SIMPLE content (`ContentType ==
+    ContentTypeSimple`).
   - **VIOLATION** (a cvc-identity-constraint.3 non-simple error): an assessed COMPLEX element with
     element-only/mixed/empty content (idG006/idK012) — BOTH versions — OR, in XSD 1.0 (no skipped-node
     relaxation), ANY unassessed/unresolved node (idZ015: a skip/lax-without-global-admitted attribute, an

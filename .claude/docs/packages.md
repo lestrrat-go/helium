@@ -42,7 +42,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
     elements expanded; if `ValidateDTD` is also set, the expanded tree is validated. Off by default (nil
     disables). The interface is the dependency-inversion seam: the root package cannot import `xinclude`
     (which imports `helium`), so the caller builds and injects a configured processor
-  - **PermissiveFS() → fs.FS** — returns `internal/iofs.PermissiveRoot` (opens any path via `os.Open`), the public escape hatch for restoring host-filesystem access that `NewParser` does not grant by default
+  - **PermissiveFS() → fs.FS** — returns `internal/iofs.PermissiveRoot` (opens any path via `os.Open`), the public
+    escape hatch for restoring host-filesystem access that `NewParser` does not grant by default
   - **DirFS(root string) → fs.FS** — returns `internal/iofs.ConfinedDir`, a confined FS that opens external
     resources only at or below `root`. Refuses a `../`- or absolute-path escape AND an in-root symlink
     pointing outside `root` (enforced with `os.Root`/`os.OpenRoot`, Go 1.24+ — stronger than `os.DirFS`, which
@@ -194,9 +195,12 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   - Terminal method: `WriteTo(io.Writer, Node) → error`
 - **Write(io.Writer, Node) → error** — serialize node with default settings
 - **WriteString(Node) → (string, error)** — serialize node to string with default settings
-- **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
-- **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** — attribute value lookup by QName or expanded name
-- Element attribute setters (all return only `error`, create-or-replace-in-place by expanded name/QName via `addProperty`, and reject a colon in the name/local name):
+- **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in
+  matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
+- **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** —
+  attribute value lookup by QName or expanded name
+- Element attribute setters (all return only `error`, create-or-replace-in-place by expanded name/QName via
+  `addProperty`, and reject a colon in the name/local name):
   - **Element.SetAttribute(name, value) / Element.SetAttributeNS(localname, value, ns)** — **LITERAL**: store
     `value` verbatim as a text child WITHOUT parsing entity references (mirrors libxml2 `xmlSetProp`). `"A&B"`
     stays the three characters `A&B`; `"&amp;"` stays five characters. The writer escapes on output, so a
@@ -209,7 +213,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
     malformed reference (e.g. a bare `&` in `"A&B"`) is an error. For callers building the DOM from unresolved
     attribute source text (the parser's `TreeBuilder` non-`replaceEntities` path).
   - **Element.SetBooleanAttribute(name)** — name-only attribute with NO children (distinct from an empty-string value).
-- **Document.CreateAttribute(name, value, ns) → (*Attribute, error)** — builds an attribute node with `value` PARSED into its child list (mirrors `xmlNewDocProp`); backs `SetParsedAttribute`/`SetParsedAttributeNS`. Rejects a colon in `name`.
+- **Document.CreateAttribute(name, value, ns) → (*Attribute, error)** — builds an attribute node with `value` PARSED
+  into its child list (mirrors `xmlNewDocProp`); backs `SetParsedAttribute`/`SetParsedAttributeNS`. Rejects a colon in
+  `name`.
 - Key types: `Document`, `Element`, `Attribute`, `Namespace`, `DTD`, `Entity`, `Text`, `CDATASection`, `Comment`, `PI`
 - `Node` interface — common for all node types; use ElementType enum to distinguish
 - Parse flags configured via fluent methods on Parser (internal bitset, not public)
@@ -217,13 +223,16 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `Sink`-backed); retained by reference and shared across operations, a nil handler is treated as
   `NilErrorHandler` (discard). The root `Parser` consults it only during DTD validation (see
   `Parser.ErrorHandler` above)
-- `ErrorLeveler` interface — optional `ErrorLevel() ErrorLevel` an error implements to report its severity; `ErrorCollector`'s level filter reads it via `errors.As` (default `ErrorLevelWarning`)
+- `ErrorLeveler` interface — optional `ErrorLevel() ErrorLevel` an error implements to report its severity;
+  `ErrorCollector`'s level filter reads it via `errors.As` (default `ErrorLevelWarning`)
 - `DTDValidationError{Message, Level}` (`valid.go`) — structured DTD-validation diagnostic delivered to the
   `ErrorHandler` under `ValidateDTD(true)`; implements `ErrorLeveler` returning `ErrorLevelError`, so a
   level-filtered `ErrorCollector` keeps it. Recover via `errors.As`; `.Error()` returns `Message`
   (byte-identical to the prior `fmt.Errorf` text)
-- `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`, `ResolveURI(ctx, uri)`)
-- `ErrNoInternalSubset` — sentinel returned by `Document.InternalSubset()` when the document has no internal DTD subset (`IntSubset()` returns nil for the same condition); match with `errors.Is`
+- `CatalogResolver` interface — public interface for custom catalog resolvers (`Resolve(ctx, pubID, sysID)`,
+  `ResolveURI(ctx, uri)`)
+- `ErrNoInternalSubset` — sentinel returned by `Document.InternalSubset()` when the document has no internal DTD subset
+  (`IntSubset()` returns nil for the same condition); match with `errors.Is`
 - `ErrDuplicateDeclaration` — sentinel returned when a DTD declaration collides with an existing one of the
   same kind and name: a second `AddElementDecl`, `AddNotation`, or `AddAttributeDecl` for an already-declared
   element, notation, or `(element, attribute)` pair. Wrapped (via `%w`) into a message naming the kind and
@@ -233,7 +242,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `AddNotation` notation name (a notation name is an XML NCName; the colon is the one name-grammar rule these
   otherwise caller-trusting builders enforce, because the parser rejects a colon-bearing `<!NOTATION>` name).
   Wrapped (via `%w`) into a message describing the violation; match with `errors.Is`
-- `ErrExternalDTDTooLarge` — sentinel error returned when a loaded external DTD subset exceeds the byte cap; enforced against actual bytes read, never the advisory `fs.FileInfo.Size()`
+- `ErrExternalDTDTooLarge` — sentinel error returned when a loaded external DTD subset exceeds the byte cap; enforced
+  against actual bytes read, never the advisory `fs.FileInfo.Size()`
 - `ErrUnsupportedXMLVersion` — sentinel returned when a document's XML declaration declares a VersionNum
   outside the 1.x family (e.g. `"0.0"`, `"2.0"`), which XML 1.0 5th ed. makes fatal (§2.8; libxml2
   `XML_ERR_UNKNOWN_VERSION`). Wrapped (via `%w`) into a message naming the version, then into `ErrParseError`;
@@ -286,7 +296,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   blank-skip run; used when `MaxNodeContentSize` is unset (0); a negative `MaxNodeContentSize` disables both
   the node-content and the blank-run cap
 - `MaxExternalDTDSize` — default external-DTD byte cap (10 MiB), used when `MaxExternalDTDBytes` is unset or `0`
-- `Parser.MaxExternalDTDBytes(n int)` — override the external-DTD byte cap (`0` → `MaxExternalDTDSize`; negative disables the cap)
+- `Parser.MaxExternalDTDBytes(n int)` — override the external-DTD byte cap (`0` → `MaxExternalDTDSize`; negative
+  disables the cap)
 - `AsNode[T Node](n Node) (T, bool)` — generic safe type assertion for Node types. A typed-nil pointer wrapped
   in a non-nil `Node` interface (Go's interface nil trap — e.g. the `*Element` `Document.DocumentElement()`
   returns for a rootless document) reports `(zero, false)`, never `(nil, true)`, so a caller with `ok == true`
@@ -453,7 +464,9 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - `BuildURI(reference, base)` — resolve a relative reference against a base; a byte-faithful port of libxml2
   `xmlBuildURI(URI, base)`, so its argument order is `(reference, base)` (reference FIRST), the reverse of
   `url.URL.ResolveReference`/RFC 3986. c14n and all in-tree callers depend on this order. `node_base.go`
-- `ResolveURI(base, ref) → (string, error)` — conventionally-ordered `(base, reference)` wrapper over `BuildURI`; returns an error when the reference cannot be resolved. Use this in new code instead of `BuildURI`'s reversed order. `node_base.go`
+- `ResolveURI(base, ref) → (string, error)` — conventionally-ordered `(base, reference)` wrapper over `BuildURI`;
+  returns an error when the reference cannot be resolved. Use this in new code instead of `BuildURI`'s reversed order.
+  `node_base.go`
 - Files: `parser.go` (API), `parserctx.go` (context/state), `parser_document.go`, `parser_element.go`,
   `parser_whitespace.go`, `parser_xml_decl.go`, `parser_encoding.go`, `parser_decl.go`, `parser_content.go`,
   `parser_dtd_subset.go`, `parser_dtd_element.go`, `parser_dtd_attr.go`, `parser_entity_decl.go`,
@@ -478,7 +491,8 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
   rendered element's own excluded xml:* attribute is still emitted — XMLDSig digest interop). Strict mode is
   also fail-closed on xml:base: a degenerate/un-canonicalizable value (malformed URI, empty-authority
   "//"/"///"/"urn://") errors out of Canonicalize, where default emits best-effort bytes.
-- Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go`, `sort.go`, `escape.go`
+- Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go`, `sort.go`,
+  `escape.go`
 - Imports: helium
 
 ## xpath1/
@@ -488,19 +502,25 @@ XPath 1.0 expression parsing and evaluation.
 - **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **NewEvaluator() → Evaluator** — create clone-on-write evaluation configuration
-  - `Namespaces`, `Variables`, `Function`, `FunctionNS`, `OpLimit` — configure namespace, variable, extension-function, and operation-limit state
-  - `Validate(*Expression) → error` — statically require every variable, function name, and QName prefix to resolve against the evaluator configuration without evaluating the expression
+  - `Namespaces`, `Variables`, `Function`, `FunctionNS`, `OpLimit` — configure namespace, variable, extension-function,
+    and operation-limit state
+  - `Validate(*Expression) → error` — statically require every variable, function name, and QName prefix to resolve
+    against the evaluator configuration without evaluating the expression
   - `Evaluate(ctx, *Expression, Node) → (*Result, error)` — evaluate with the configured state
 - **Find(ctx, Node, string) → ([]Node, error)** — convenience: compile+evaluate→node-set
 - **Evaluate(ctx, Node, string) → (*Result, error)** — convenience: compile+evaluate
-- **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n) → context.Context** — attach XPath evaluation settings to `context.Context`
-- **WithFunction(ctx, name, fn) → context.Context** / **WithFunctionNS(ctx, uri, name, fn) → context.Context** — register custom functions on `context.Context`
-- **WithFunctions(ctx, fns) → context.Context** / **WithFunctionsNS(ctx, fns) → context.Context** — bulk function registration
+- **WithNamespaces(ctx, ns) → context.Context** / **WithVariables(ctx, vars) → context.Context** / **WithOpLimit(ctx, n)
+  → context.Context** — attach XPath evaluation settings to `context.Context`
+- **WithFunction(ctx, name, fn) → context.Context** / **WithFunctionNS(ctx, uri, name, fn) → context.Context** —
+  register custom functions on `context.Context`
+- **WithFunctions(ctx, fns) → context.Context** / **WithFunctionsNS(ctx, fns) → context.Context** — bulk function
+  registration
 - `Result` types: NodeSetResult, BooleanResult, NumberResult, StringResult
 - `FunctionContext` — read-only custom-function evaluation state; retrieve via `GetFunctionContext(ctx)`
 - Merge helpers: `WithAdditionalNamespaces(ctx, ns)`, `WithAdditionalVariables(ctx, vars)`
 - Limits: recursion 5000, node-set 10M, configurable op limit
-- Robustness: `eval` and axis-iteration loops honor `ctx.Err()` so a cancelled context aborts promptly; `Evaluate` on a nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
+- Robustness: `eval` and axis-iteration loops honor `ctx.Err()` so a cancelled context aborts promptly; `Evaluate` on a
+  nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
 - Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
 - Imports: helium
 
@@ -509,9 +529,12 @@ XPath 1.0 expression parsing and evaluation.
 XPath 3.1 expression parsing and evaluation.
 
 - **NewCompiler() → Compiler** — create fluent builder for expression compilation
-  - `Compile(string) → (*Expression, error)` / `MustCompile(string) → *Expression` / `CompileExpr(Expr) → (*Expression, error)` — terminal methods
-- **NewEvaluator(EvaluatorOption) → Evaluator** — create evaluator from a flags bitmask (`DefaultEvaluatorOptions` = clone-on-write; `EvalBorrowing` = setters borrow caller-owned maps/slices without cloning)
-  - `Evaluate(ctx, *Expression, Node) → (*Result, error)` — terminal method (`ctx` is cancellation only; config comes from the setters below)
+  - `Compile(string) → (*Expression, error)` / `MustCompile(string) → *Expression` / `CompileExpr(Expr) → (*Expression,
+    error)` — terminal methods
+- **NewEvaluator(EvaluatorOption) → Evaluator** — create evaluator from a flags bitmask (`DefaultEvaluatorOptions` =
+  clone-on-write; `EvalBorrowing` = setters borrow caller-owned maps/slices without cloning)
+  - `Evaluate(ctx, *Expression, Node) → (*Result, error)` — terminal method (`ctx` is cancellation only; config comes
+    from the setters below)
 - **Expression.Validate(map[string]string) → error** — static namespace-prefix validation;
   **Expression.EvaluateReuse(ctx, *EvalState, Node) → (Result, error)** — low-allocation evaluation;
   **Expression.DumpVM(io.Writer) → error** — compiled VM instruction dump
@@ -531,7 +554,8 @@ XPath 3.1 expression parsing and evaluation.
   `AllowXML11Chars()`, `DocOrderCache(*DocOrderCache)`, `TraceWriter(io.Writer)`, `Parser(helium.Parser)` (XML
   parser used by `fn:parse-xml`/`fn:parse-xml-fragment`/`fn:doc`; supplies parse policy — limits, FS,
   XXE/network; unset → default `helium.NewParser()`)
-- `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`, `Sequence()`, `StringValue()`, `Copy()`
+- `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`,
+  `Sequence()`, `StringValue()`, `Copy()`
 - **Reuse:** `Evaluator.NewEvalState(Node) → *EvalState` builds reusable state; `Expression.EvaluateReuse`
   runs against it. The returned `Result` is valid only until the next `EvaluateReuse` on the same `EvalState`
   (backing storage is overwritten) — use `Result.Copy()` to retain it. `EvalState` has
@@ -558,7 +582,8 @@ XPath 3.1 expression parsing and evaluation.
   Go `regexp` (staying linear — no backtracking-ReDoS regression for RE2-compatible patterns like `^(a+)+b`);
   `limit` (N+1 for a budget of N; `<=0` = uncapped) bounds that pass's allocation to the budget, never to the
   input match count
-- XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator, simple map, string concat, value/general/node comparisons
+- XPath 3.1 features: FLWOR, quantified, if-then-else, try-catch, maps, arrays, inline functions, HOFs, arrow operator,
+  simple map, string concat, value/general/node comparisons
 - Built-in functions: 100+ across fn:, math:, map:, array: namespaces
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
@@ -582,7 +607,8 @@ XPath 3.1 expression parsing and evaluation.
   `functions_math.go`, `functions_misc.go`, `functions_json.go`, `functions_json_xml.go`,
   `functions_serialize.go`, `functions_constructors.go` (XSD typed constructors, incl. xs:error),
   `functions_unparsed_text.go`
-- Imports: helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence
+- Imports: helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor,
+  internal/sequence
 
 ## xslt3/
 
@@ -604,7 +630,8 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
 - **Compiler.StaticParameters(*Parameters) → Compiler** / **Compiler.SetStaticParameter(string, Sequence) →
   Compiler** / **Compiler.ClearStaticParameters() → Compiler** / **Compiler.ImportSchemas(...*xsd.Schema) →
   Compiler** — compile-time static params + schema imports
-- **Compiler.MaxResourceBytes(int64) → Compiler** — set the per-resource read cap inherited by invocations (0 = [MaxResourceBytes] default, negative = unbounded, positive = that cap)
+- **Compiler.MaxResourceBytes(int64) → Compiler** — set the per-resource read cap inherited by invocations (0 =
+  [MaxResourceBytes] default, negative = unbounded, positive = that cap)
 - **Compiler.Parser(helium.Parser) → Compiler** / **Invocation.Parser(helium.Parser) → Invocation** — the
   parser governing parse policy (limits, FS, XXE/network) for stylesheet, schema, and runtime source/`fn:doc`
   parsing; **forwarded** into the `xsd.Compiler`s and `xpath3.Evaluator`s the engine builds internally. xslt3
@@ -619,11 +646,14 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   carried on the `Stylesheet` and inherited by `fn:transform` nested compiles and (unless overridden) by
   runtime invocations. Serialization parameter documents and imported XSD schemas are always parsed
   XXE-blocked.
-- **Compiler.Compile(ctx, *Document) → (*Stylesheet, error)** / **Compiler.MustCompile(ctx, *Document) → *Stylesheet** — terminal compile methods
+- **Compiler.Compile(ctx, *Document) → (*Stylesheet, error)** / **Compiler.MustCompile(ctx, *Document) → *Stylesheet** —
+  terminal compile methods
 - **Transform(ctx, *Document, *Stylesheet) → (*Document, error)** / **TransformToWriter(ctx, *Document,
   *Stylesheet, io.Writer) → error** / **TransformString(ctx, *Document, *Stylesheet) → (string, error)** —
   convenience wrappers; nil `*Stylesheet` returns error here
-- **Stylesheet.Transform(*Document) → Invocation** / **Stylesheet.ApplyTemplates(*Document) → Invocation** / **Stylesheet.CallTemplate(string) → Invocation** / **Stylesheet.CallFunction(string, ...Sequence) → Invocation** — invocation entrypoints
+- **Stylesheet.Transform(*Document) → Invocation** / **Stylesheet.ApplyTemplates(*Document) → Invocation** /
+  **Stylesheet.CallTemplate(string) → Invocation** / **Stylesheet.CallFunction(string, ...Sequence) → Invocation** —
+  invocation entrypoints
 - **Invocation.SourceDocument(*Document) → Invocation** / **Mode(string)** / **Selection(Sequence)**
   *(ApplyTemplates only)* / **GlobalParameters(*Parameters)** / **TunnelParameters(*Parameters)** /
   **SetParameter(string, Sequence)** / **SetTunnelParameter(string, Sequence)** /
@@ -653,7 +683,9 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `fn:doc`/`fn:unparsed-text`, plus `xsl:source-document`, `xsl:merge`, and `fn:stream-available`; without
   them those instructions error (`FODC0002`) or report unavailable per the default-deny model (no implicit
   `os.ReadFile`).
-- **Invocation.Do(ctx) → (*Document, error)** / **Invocation.Serialize(ctx) → (string, error)** / **Invocation.WriteTo(ctx, io.Writer) → error** / **Invocation.ResolvedOutputDef() → *OutputDef** — terminal execution + resolved primary output metadata
+- **Invocation.Do(ctx) → (*Document, error)** / **Invocation.Serialize(ctx) → (string, error)** /
+  **Invocation.WriteTo(ctx, io.Writer) → error** / **Invocation.ResolvedOutputDef() → *OutputDef** — terminal execution
+  + resolved primary output metadata
 - **NewParameters() → *Parameters** — mutable XSLT parameter carrier keyed by expanded name
 - **TransformFunction(...TransformOption) → xpath3.Function** — standalone `fn:transform()` for registering on
   a bare `xpath3.Evaluator` (`Evaluator.Functions(nil, {fn:transform: ...})`), for callers driving xpath3
@@ -740,8 +772,11 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   result-value)` (the principal gets `base-output-uri`, each secondary its href key); its return value
   replaces the entry's value in the result map, across all three delivery formats (document node, serialized
   string, raw items).
-- `fn:transform` serialized delivery serializes every emitted principal and secondary result. Any result serialization failure raises `FOXT0003`.
-- Key types: `Stylesheet`, `Compiler`, `Invocation`, `Parameters`, `OutputDef`, `URIResolver`, `PackageResolver`, `MessageHandler`, `ResultDocumentHandler`, `RawResultHandler`, `PrimaryItemsHandler`, `AnnotationHandler`, `TransformOption`
+- `fn:transform` serialized delivery serializes every emitted principal and secondary result. Any result serialization
+  failure raises `FOXT0003`.
+- Key types: `Stylesheet`, `Compiler`, `Invocation`, `Parameters`, `OutputDef`, `URIResolver`, `PackageResolver`,
+  `MessageHandler`, `ResultDocumentHandler`, `RawResultHandler`, `PrimaryItemsHandler`, `AnnotationHandler`,
+  `TransformOption`
 - Resource limits: `MaxResourceBytes` (const, 10 MiB default per-resource read cap) + `ErrResourceTooLarge`
   (error returned when an external resource exceeds the cap); enforced against actual bytes read, configurable
   per Compiler/Invocation. The same cap doubles as the xsl:analyze-string match-count ceiling: matches are
@@ -788,8 +823,10 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `schema_context.go`, `schema_resolver_fs.go`, `package_*.go`, `streamability*.go`, `errors.go`,
   `resource_limit.go` (per-resource read cap + `MaxResourceBytes`/`ErrResourceTooLarge`); the XSLT element
   registry lives in `xslt3/internal/elements` (`elements.go`, `data.go`, see below)
-- Imports: helium, xpath3, xsd, html, internal/lexicon, internal/nodelink, internal/sequence, internal/writerctl, xslt3/internal/elements
-- Tests: hand-written unit tests only. The W3C XSLT 3.0 conformance suite lives in the sibling `helium-w3c-tests` module (fetches upstream, depends on this module via a replace directive)
+- Imports: helium, xpath3, xsd, html, internal/lexicon, internal/nodelink, internal/sequence, internal/writerctl,
+  xslt3/internal/elements
+- Tests: hand-written unit tests only. The W3C XSLT 3.0 conformance suite lives in the sibling `helium-w3c-tests` module
+  (fetches upstream, depends on this module via a replace directive)
 
 ## xslt3/internal/elements/
 
@@ -815,7 +852,8 @@ XML Schema (XSD) compilation and validation. Defaults to XSD 1.0; XSD 1.1 is opt
 Toggle" section in CLAUDE.md for what is implemented in 1.1.
 
 - **NewCompiler() → Compiler** — create fluent builder for schema compilation
-  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)`, `Version(Version)` — builder methods (clone-on-write). `Version(Version10|Version11)` selects the XSD spec version (default `Version10`)
+  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `ErrorHandler(h)`, `Version(Version)` — builder methods
+    (clone-on-write). `Version(Version10|Version11)` selects the XSD spec version (default `Version10`)
   - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the schema document and all nested
     `xs:include`/`xs:import`/`xs:redefine` targets; supplies parse policy (limits, FS, XXE/network). Distinct
     from `FS`, which *fetches* schema bytes; the injected parser governs *parse policy* of those bytes. Unset
@@ -833,7 +871,8 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
     passed through unchanged, so the name handed to the FS is the canonical nested-schema URI; when `BaseDir`
     is a local path, names use `filepath.Join` and may be absolute / OS-style (rejected by `fs.ValidPath` FSes
     like `os.DirFS`/`fstest.MapFS`)
-  - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods; return `(nil, ErrCompilationFailed)` on fatal schema diagnostics
+  - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods;
+    return `(nil, ErrCompilationFailed)` on fatal schema diagnostics
 - **NewValidator(schema) → Validator** — create fluent builder for validation
   - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)`,
     `IDNodes(*IDNodes)` — builder methods. `IDNodes` collects the PSVI is-id nodes (XDM 3.1): every
@@ -843,7 +882,8 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
     observes a per-node property, it does not enforce document ID uniqueness). Feeds
     `xpath3.Evaluator.IDNodes` for `fn:id`/`fn:element-with-id`
   - `Validate(ctx, *Document) → error` — terminal method
-- **(*TypeDef).Validate(ctx, value, nsMap) → error** — validate a lexical value against a simple type; nsMap (prefix→URI) may be nil
+- **(*TypeDef).Validate(ctx, value, nsMap) → error** — validate a lexical value against a simple type; nsMap
+  (prefix→URI) may be nil
 - **(*TypeDef).ValidateElement(ctx, elem, schema) → error** — validate an element's content against a type
 - `Schema.LookupElement(local, ns)`, `Schema.LookupType(local, ns)`, `Schema.NamedTypes()`, `Schema.TargetNamespace()`
 - **Schema.Declarations() → xpath3.SchemaDeclarations** — an `xpath3.SchemaDeclarations` view over the
@@ -888,7 +928,8 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
 - `ErrValidationFailed` — sentinel error returned by `Validate()` when the document is invalid; individual
   errors delivered via `ErrorHandler`. `Validate()` also returns `ErrNilSchema` (no compiled schema) and
   `ErrNilDocument` (nil document); a nil `ctx` is normalized to `context.Background()`
-- `ErrCompilationFailed` — sentinel error returned by `Compile()`/`CompileFile()` when the schema has one or more fatal errors; the returned schema is nil and individual diagnostics are delivered via `ErrorHandler`
+- `ErrCompilationFailed` — sentinel error returned by `Compile()`/`CompileFile()` when the schema has one or more fatal
+  errors; the returned schema is nil and individual diagnostics are delivered via `ErrorHandler`
 - Files: `xsd.go` (API), `doc.go`, `schema.go` (data model), `constants.go`, `compile.go` +
   `compile_imports.go` (compile orchestration/imports), `resolve_uri.go` (shared schema-location URI resolver
   `ResolveSchemaURI`/`URIScheme`), `read_types.go` + `read_particles.go` + `read_elements.go` (schema
@@ -902,16 +943,21 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
   `schema_decls.go` (schema-aware XPath adapter), `errors.go`
 - Imports: helium, xpath1/, xpath3/ (XSD 1.1 assertions + conditional type assignment), internal/domutil,
   internal/lexicon, internal/xpath1/lexer
-- Status: see `.claude/docs/libxml2-parity.md` for libxml2 golden counts and W3C XSD 1.1 conformance run policy; do not cache branch-specific counts here
+- Status: see `.claude/docs/libxml2-parity.md` for libxml2 golden counts and W3C XSD 1.1 conformance run policy; do not
+  cache branch-specific counts here
 
 ## relaxng/
 
 RELAX NG schema compilation and validation.
 
 - **NewCompiler() → Compiler** — create fluent builder for grammar compilation
-  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `MaxResourceBytes(int)`, `ErrorHandler(h)` — builder methods (clone-on-write)
-  - `Compiler.BaseDir(dir)` — base directory for resolving relative paths in `include` and `externalRef` during compilation
-  - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the grammar and its `include`/`externalRef` targets; supplies parse policy (limits, FS, XXE/network), distinct from the fetch `FS`. Unset → default `helium.NewParser()`.
+  - `Label(name)`, `BaseDir(dir)`, `FS(fs.FS)`, `MaxResourceBytes(int)`, `ErrorHandler(h)` — builder methods
+    (clone-on-write)
+  - `Compiler.BaseDir(dir)` — base directory for resolving relative paths in `include` and `externalRef` during
+    compilation
+  - `Compiler.Parser(helium.Parser)` — sets the parser used to parse the grammar and its `include`/`externalRef`
+    targets; supplies parse policy (limits, FS, XXE/network), distinct from the fetch `FS`. Unset → default
+    `helium.NewParser()`.
   - `Compiler.FS(fs.FS)` — sets the `fs.FS` used to load schemas referenced by `include` and `externalRef`.
     **Secure by default**: the default (and what a nil value restores) is a deny-all FS
     (`internal/iofs.DenyAll`, opens nothing), mirroring `helium.NewParser`, so an untrusted schema cannot read
@@ -929,13 +975,16 @@ RELAX NG schema compilation and validation.
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
   - `Validate(ctx, *Document) → error` — terminal method
-- Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list, mixed, notAllowed
+- Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list,
+  mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
 - Group backtracking for greedy pattern over-consumption
 - `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
 - `ValidationError{Filename, Line, Element, Message}` — per-error structured type
-- Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go` (compile checks), `validate.go` (engine), `errors.go` (error types + formatting)
-- Imports: helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
+- Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go`
+  (compile checks), `validate.go` (engine), `errors.go` (error types + formatting)
+- Imports: helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex,
+  internal/xmlchar, internal/uripath
 - Status: 159/159 golden tests passing
 
 ## html/
@@ -967,7 +1016,8 @@ HTML 4.01 parser producing helium DOM or SAX events.
   `MaxContentSize` never rejects ordinary names like `script`) that grows only when `MaxContentSize` exceeds
   the floor; `parseDoctype` checks `fatalErr` after EACH scanner so an over-cap run on a streaming reader
   fails promptly without a further blocking read; default 16 MiB)
-- Terminal: **Parse(ctx, []byte)**, **ParseReader(ctx, io.Reader)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx, []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
+- Terminal: **Parse(ctx, []byte)**, **ParseReader(ctx, io.Reader)**, **ParseFile(ctx, path)**, **ParseWithSAX(ctx,
+  []byte, SAXHandler)**, **NewPushParser(ctx)**, **NewSAXPushParser(ctx, SAXHandler)**
 - **NewWriter() → Writer** — create fluent writer builder
 - Writer methods: `DefaultDTD(bool)`, `Format(bool)`, `PreserveCase(bool)`, `EscapeURIAttributes(bool)`,
   `EscapeControlChars(bool)`, `NullNamespaceHTMLOnly(bool)` (HTML 4.01 rule: a void element only in the null
@@ -985,7 +1035,8 @@ HTML 4.01 parser producing helium DOM or SAX events.
   accepted (one-byte EOF probe), but the cap filling with more bytes still to come fails closed with
   `ErrContentSizeExceeded` (`encoding_reader.go`)
 - Entity resolution: 2125 WHATWG + 106 legacy HTML4; legacy entities work without `;`
-- Files: `html.go` (API), `parser.go`, `entities.go`, `elements.go`, `dump.go` (serializer), `tree.go` (DOM builder), `sax.go`
+- Files: `html.go` (API), `parser.go`, `entities.go`, `elements.go`, `dump.go` (serializer), `tree.go` (DOM builder),
+  `sax.go`
 - Imports: helium, sax/
 
 ## xinclude/
@@ -993,20 +1044,23 @@ HTML 4.01 parser producing helium DOM or SAX events.
 XInclude 1.0 processing with recursive inclusion and fallback.
 
 - **NewProcessor() → Processor** — create fluent builder
-- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`, `MaxIncludeSize(int)`, `MaxIncludeDepth(int)`, `ErrorHandler(helium.ErrorHandler)`, `Parser(helium.Parser)`
+- Processor methods: `NoXIncludeMarkers()`, `NoBaseFixup()`, `Resolver(Resolver)`, `BaseURI(string)`,
+  `MaxIncludeSize(int)`, `MaxIncludeDepth(int)`, `ErrorHandler(helium.ErrorHandler)`, `Parser(helium.Parser)`
 - `Processor.Parser(helium.Parser)` — supplies the **resource limits**
   (depth/name-length/amplification/content-model-depth) used to parse included documents. XInclude still
   forces its own loading policy: external-DTD loading is on and the filesystem is confined to the `Resolver`'s
   sandbox (the injected parser's FS is NOT used for included docs — the `Resolver` is the security boundary).
   Unset → default `helium.NewParser()` base.
 - Terminal: **Process(ctx, *Document) → (int, error)**, **ProcessTree(ctx, Node) → (int, error)**
-- `Resolver` interface — custom resource loader; receives the href already resolved against the effective base (base arg is informational only — do NOT re-resolve, or the base directory is double-applied)
+- `Resolver` interface — custom resource loader; receives the href already resolved against the effective base (base arg
+  is informational only — do NOT re-resolve, or the base directory is double-applied)
 - **Secure by default**: an unset `Resolver` denies all filesystem access (`NewFSResolver(iofs.DenyAll{})`),
   mirroring `helium.NewParser()`'s deny-all FS — untrusted input cannot disclose local files via
   `<xi:include>`. Opt in with `Resolver(NewFSResolver(fsys))` (confined `fs.FS`, e.g. `os.Root.FS`) or
   `Resolver(NewFSResolver(helium.PermissiveFS()))` for historical os.Open passthrough. NOTE:
   `NewFSResolver(nil)` is still permissive — only the processor's *unset* default is deny-all
-- `Processor.MaxIncludeSize(int)` — per-include byte cap; unset or ≤ 0 uses the default 10 MiB (unexported `defaultMaxIncludeSize`); over-cap reads fail with `ErrIncludeTooLarge`
+- `Processor.MaxIncludeSize(int)` — per-include byte cap; unset or ≤ 0 uses the default 10 MiB (unexported
+  `defaultMaxIncludeSize`); over-cap reads fail with `ErrIncludeTooLarge`
 - **Aggregate cap (internal, no public knob)**: across the whole expansion the cumulative materialized bytes
   are bounded at `maxIncludeAggregateMultiplier` (100) × the effective per-include cap (1 GiB by default;
   proportional, so lowering `MaxIncludeSize` lowers it), and the total spliced-resource count at
@@ -1020,7 +1074,8 @@ XInclude 1.0 processing with recursive inclusion and fallback.
 - `Processor.MaxIncludeDepth(int)` — xi:include nesting-depth cap; unset or ≤ 0 uses the default 40
   (unexported `defaultMaxIncludeDepth`); over-cap fails with "maximum include depth exceeded". Bounds nesting
   only — cyclic includes are caught separately by circular detection
-- Default `NewFSResolver` converts absolute `file:` hrefs to OS paths via `internal/iofs.FileURIToPath` (non-local hosts rejected)
+- Default `NewFSResolver` converts absolute `file:` hrefs to OS paths via `internal/iofs.FileURIToPath` (non-local hosts
+  rejected)
 - Max URI 2000 chars, circular detection, doc/text caching
 - Files: `xinclude.go`
 - Imports: helium, xpointer/, internal/encoding/, internal/iofs/, internal/lexicon/
@@ -1032,8 +1087,10 @@ XPointer expression evaluation with scheme cascading.
 - **Evaluate(ctx, *Document, string) → ([]Node, error)**
 - Schemes: xpointer(), xpath1() → XPath; element(/1/2/3) → child-sequence; xmlns() → ns binding; shorthand → ID lookup
 - Multiple scheme parts left-to-right; first non-empty result wins
-- `Compile(string) → (*Expression, error)` + `Expression.Evaluate(ctx, *Document) → ([]Node, error)` for reuse across documents
-- `ErrNilExpression` — sentinel returned by `Expression.Evaluate` when the receiver is nil or an uncompiled (zero-value) `Expression`
+- `Compile(string) → (*Expression, error)` + `Expression.Evaluate(ctx, *Document) → ([]Node, error)` for reuse across
+  documents
+- `ErrNilExpression` — sentinel returned by `Expression.Evaluate` when the receiver is nil or an uncompiled (zero-value)
+  `Expression`
 - `ErrNilDocument` — sentinel returned by `Expression.Evaluate`/`Evaluate` when the document is nil
 - Files: `xpointer.go`
 - Imports: helium, xpath1/, internal/xpath1/lexer, internal/xmlchar/
@@ -1048,11 +1105,14 @@ Schematron schema compilation and validation.
   XXE/network); unset → default `helium.NewParser()`. `QueryBinding` forces the query language binding and
   ignores the schema's `queryBinding` attribute; `DefaultQueryBinding` only chooses the fallback for a schema
   that names none
-- **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Label(s)` / `.Quiet()` / `.ErrorHandler(h)` → `.Validate(ctx, doc)`
-- `ErrValidationFailed` — sentinel returned by `Validator.Validate` on validation failure; individual `*ValidationError` delivered to ErrorHandler
+- **Validator** (fluent, clone-on-write): `NewValidator(schema)` → `.Label(s)` / `.Quiet()` / `.ErrorHandler(h)` →
+  `.Validate(ctx, doc)`
+- `ErrValidationFailed` — sentinel returned by `Validator.Validate` on validation failure; individual `*ValidationError`
+  delivered to ErrorHandler
 - `ErrNoSchema` — sentinel returned by `Validator.Validate` when the Validator has no compiled schema
 - `ErrCompileFailed` — sentinel returned by `Compiler.Compile`/`CompileFile` when compilation fails
-- `ErrUnsupportedQueryBinding` — sentinel returned by `ParseQueryBinding` and by `Compiler.Compile`/`CompileFile` for a query language binding this package does not implement
+- `ErrUnsupportedQueryBinding` — sentinel returned by `ParseQueryBinding` and by `Compiler.Compile`/`CompileFile` for a
+  query language binding this package does not implement
 - **QueryBinding** — `QueryBindingUnspecified` / `QueryBindingXPath1` (`xslt`, absent attribute) /
   `QueryBindingXPath3` (`xslt3`, `xpath3`); `ParseQueryBinding(s)` maps an attribute value (trimmed,
   case-insensitive), `Schema.QueryBinding()` reports the resolved binding. Every other value is refused,
@@ -1072,7 +1132,8 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
 - **Load(ctx, path) → (*Catalog, error)** — convenience wrapper around `NewLoader().Load`
 - **NewLoader() → Loader** — fluent value-style loader; methods return updated copies
 - **Loader.ErrorHandler(h) → Loader** — deliver parse warnings to a handler
-- **Loader.MaxBytes(n) → Loader** — cap catalog file size; exceed → `ErrCatalogTooLarge` (default `MaxCatalogSize`, 10 MiB)
+- **Loader.MaxBytes(n) → Loader** — cap catalog file size; exceed → `ErrCatalogTooLarge` (default `MaxCatalogSize`, 10
+  MiB)
 - **Catalog.Resolve(ctx, pubID, sysID) → string** — resolve external identifier
 - **Catalog.ResolveURI(ctx, uri) → string** — resolve URI reference
 - **Catalog.ResolveResult(ctx, pubID, sysID) → (uri string, broke bool)** / **Catalog.ResolveURIResult(ctx,
@@ -1092,7 +1153,8 @@ Streaming XML writer (no DOM needed).
 
 - **NewWriter(io.Writer, ...Option) → *Writer**
 - Options: WithIndent(string), WithQuoteChar(byte)
-- Methods: StartDocument/EndDocument, StartElement/EndElement, WriteAttribute, WriteString (escaped), WriteRaw (unescaped), WriteComment, WritePI, WriteCDATA, StartDTD/EndDTD, WriteDTDElement/Entity/Attlist/Notation, Flush
+- Methods: StartDocument/EndDocument, StartElement/EndElement, WriteAttribute, WriteString (escaped), WriteRaw
+  (unescaped), WriteComment, WritePI, WriteCDATA, StartDTD/EndDTD, WriteDTDElement/Entity/Attlist/Notation, Flush
 - State machine: tracks open elements, namespace scopes, self-close optimization
 - Files: `stream.go` (single ~1100 line file)
 - Imports: internal/encoding/, internal/xmlchar/
@@ -1101,8 +1163,10 @@ Streaming XML writer (no DOM needed).
 
 SAX2 event-driven parsing interface definitions.
 
-- `SAX2Handler` interface — callbacks: StartDocument, EndDocument, StartElement, EndElement, Characters, Comment, PI, CData, DTD events, entity/notation/element/attribute declarations
-- `WithDocumentLocator(ctx, loc)` / `GetDocumentLocator(ctx)` — attach or read the current document locator on callback `context.Context`
+- `SAX2Handler` interface — callbacks: StartDocument, EndDocument, StartElement, EndElement, Characters, Comment, PI,
+  CData, DTD events, entity/notation/element/attribute declarations
+- `WithDocumentLocator(ctx, loc)` / `GetDocumentLocator(ctx)` — attach or read the current document locator on callback
+  `context.Context`
 - Files: `sax.go`
 - Imports: helium (node types)
 
@@ -1125,7 +1189,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   and `clone` re-copies it, so a later mutation of the caller's `Transforms` slice cannot alter a configured
   Signer or race with signing. `ExcC14NTransform(prefixes...)` copies the prefix varargs and `Prefixes()`
   returns a copy, so a transform's prefix list is immutable to callers.
-  - `SignatureAlgorithm(uri)`, `CanonicalizationMethod(uri)`, `Reference(ReferenceConfig)`, `KeyInfo(KeyInfoBuilder)`, `SignatureID(id)`, `AllowSHA1(bool)` — builder methods
+  - `SignatureAlgorithm(uri)`, `CanonicalizationMethod(uri)`, `Reference(ReferenceConfig)`, `KeyInfo(KeyInfoBuilder)`,
+    `SignatureID(id)`, `AllowSHA1(bool)` — builder methods
   - `SignEnveloped(ctx, doc, parent, key)`, `SignEnveloping(ctx, doc, content, key)`, `SignDetached(ctx, doc,
     key)` — terminal methods. Each honors `ctx` symmetrically with verification: an already-cancelled/expired
     context short-circuits at the top of the call (before the Signature skeleton is built, any caller content
@@ -1287,7 +1352,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
     Per-reference errors keep their `VerificationError` index and complete URI fields, while `Error()` renders
     the URI through `lexer.DiagnosticExcerpt`. Opt-in Manifest inner references use a separate all-siblings
     preparation pass and remain advisory.
-- **NewEnvelopedReference() → ReferenceConfig** — WHOLE-DOCUMENT enveloped defaults: empty URI (always resolves to the document element, regardless of the `SignEnveloped` parent) + enveloped-signature transform + ExcC14N + SHA-256
+- **NewEnvelopedReference() → ReferenceConfig** — WHOLE-DOCUMENT enveloped defaults: empty URI (always resolves to the
+  document element, regardless of the `SignEnveloped` parent) + enveloped-signature transform + ExcC14N + SHA-256
 - **NewEnvelopedReferenceByID(id) → ReferenceConfig** — element-scoped enveloped defaults: `URI="#id"` (covers
   only the element carrying that id) + enveloped-signature transform + ExcC14N + SHA-256. Correct for signing
   a specific nested element (e.g. a SAML Assertion by its ID); the id must be recognized as an ID attribute
@@ -1505,7 +1571,8 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   run through `ecdsaDERToRaw`; Ed25519: `Sign` with `crypto.Hash(0)` over the raw message). A `crypto.Signer`
   whose public-key type does not match the algorithm → `ErrKeyMismatch`.
 - Digests: SHA-1, SHA-224, SHA-256, SHA-384, SHA-512
-- **SHA-1 rejected by default** (rsa-sha1/ecdsa-sha1/hmac-sha1/sha1) on both sign and verify → `ErrWeakAlgorithm`; opt in with `Signer.AllowSHA1(true)` / `Verifier.AllowSHA1(true)` for legacy interop. SHA-224+ unaffected.
+- **SHA-1 rejected by default** (rsa-sha1/ecdsa-sha1/hmac-sha1/sha1) on both sign and verify → `ErrWeakAlgorithm`; opt
+  in with `Signer.AllowSHA1(true)` / `Verifier.AllowSHA1(true)` for legacy interop. SHA-224+ unaffected.
 - Errors: `ErrNoKeySource` sentinel — returned by verify when no usable KeySource is configured (nil cfg,
   untyped-nil, or typed-nil KeySource/func); `ErrWeakAlgorithm` — SHA-1 used without opt-in;
   `ErrReferenceNotFound` also covers a nil-resolver external reference and every `FSReferenceResolver`
@@ -1580,7 +1647,8 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   - `PrivateKey(key)`, `ECPrivateKey(key)`, `KeyEncryptionKey(kek)`, `SessionKey(key)`, `BlockAlgorithm(uri)`,
     `AllowUnauthenticatedCBC(bool)`, `StrictPKCS7Padding(bool)`, `MaxEncryptedKeys(n)`,
     `MaxEncryptedKeyBytes(n)`, `MaxCipherValueBytes(n)`, `CipherReferenceResolver(r)` — builder methods
-  - `Decrypt(ctx, elem)`, `DecryptBytes(ctx, elem)` — terminal methods; the latter returns binary plaintext without XML parsing
+  - `Decrypt(ctx, elem)`, `DecryptBytes(ctx, elem)` — terminal methods; the latter returns binary plaintext without XML
+    parsing
 - **ReferenceResolver** (`reference_resolver.go`) — single-method interface `ResolveReference(ctx, uri)
   (io.ReadCloser, error)` supplying the octet STREAM of an EXTERNAL `xenc:CipherReference`, plus
   **FSReferenceResolver(fsys, root)**, the only implementation shipped. `uri` is always the JOINED,
@@ -1639,7 +1707,8 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   child (`base64CharacterData`, `parseConcatKDFHexAttribute`, `ecdhCurveForURI`) take no `ctx` because the
   walk that calls them already polled and `abort`s what they return. `ParseEncryptedDataForTest`
   (`export_test.go`) parses under `context.Background()`, so a parser-only test sees the parse's own verdict
-- `Decrypt` does **not** mutate the tree (unlike `EncryptElement`/`EncryptContent`, which splice `EncryptedData` in): `elem` stays put and the returned nodes are detached; reinsertion is the caller's call
+- `Decrypt` does **not** mutate the tree (unlike `EncryptElement`/`EncryptContent`, which splice `EncryptedData` in):
+  `elem` stays put and the returned nodes are detached; reinsertion is the caller's call
 - A **non-empty** `Decryptor.SessionKey` is an EARLY RETURN, not a key preference:
   `decryptElement`/`decryptBytes` use it and return before candidate selection, per-candidate validation, and
   per-candidate key resolution in `resolveSessionKeyFromEncryptedKey`. The `MaxEncryptedKeys` cap sits ahead
@@ -2099,11 +2168,13 @@ whose resolver returns `[]byte` and has no stream to close. -->
 
 Drop-in replacement for encoding/xml backed by helium parser.
 
-- **NewDecoder(ctx, io.Reader) → *Decoder** / **NewTokenDecoder(ctx, TokenReader) → *Decoder** / **NewEncoder(io.Writer) → *Encoder**
+- **NewDecoder(ctx, io.Reader) → *Decoder** / **NewTokenDecoder(ctx, TokenReader) → *Decoder** / **NewEncoder(io.Writer)
+  → *Encoder**
 - **Marshal(v) → ([]byte, error)** / **Unmarshal([]byte, v) → error**
 - API mirrors encoding/xml; strict mode only; undeclared namespace prefixes rejected
 - Known differences: empty elements self-closed, xmlns before regular attrs, InputOffset approximate
-- Files: `api.go`, `decoder.go`, `directive.go` (prolog scanner), `encoder.go`, `marshal.go`, `unmarshal.go`, `types.go`, `namespace.go`, `escape.go`, `compat_errors.go`, `doc.go`
+- Files: `api.go`, `decoder.go`, `directive.go` (prolog scanner), `encoder.go`, `marshal.go`, `unmarshal.go`,
+  `types.go`, `namespace.go`, `escape.go`, `compat_errors.go`, `doc.go`
 - Imports: helium, stream/, internal/encoding/, internal/xmlchar/
 
 ## sink/
@@ -2111,7 +2182,8 @@ Drop-in replacement for encoding/xml backed by helium parser.
 Generic channel-based async event sink.
 
 - **New[T](ctx, Handler[T], ...Option) → *Sink[T]** — nil handler is replaced with a no-op (delivery never panics)
-- **Sink.Handle(ctx, T)** — async send (blocks if buffer full); re-entrant call from within a Handler is best-effort non-blocking
+- **Sink.Handle(ctx, T)** — async send (blocks if buffer full); re-entrant call from within a Handler is best-effort
+  non-blocking
 - **Sink.Close()** — drain and stop; self-close from within a Handler returns immediately (no deadlock)
 - WithBufferSize(n) — default 256; negative values clamped to 0 (unbuffered)
 - Nil-safe: Handle() on nil *Sink is no-op
@@ -2129,7 +2201,8 @@ the same typed constants without redefining parallel enum sets.
 - `AttributeType` — CDATA, ID, IDREF, IDREFS, ENTITY, ENTITIES, NMTOKEN, NMTOKENS, ENUMERATION, NOTATION
 - `AttributeDefault` — REQUIRED, IMPLIED, FIXED
 - `ElementType` — UNDEFINED, EMPTY, ANY, MIXED, ELEMENT
-- `EntityType` — InternalGeneralEntity, ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity, InternalParameterEntity, ExternalParameterEntity, InternalPredefinedEntity
+- `EntityType` — InternalGeneralEntity, ExternalGeneralParsedEntity, ExternalGeneralUnparsedEntity,
+  InternalParameterEntity, ExternalParameterEntity, InternalPredefinedEntity
 - Files: `enum.go`
 - Imports: none
 
@@ -2158,7 +2231,8 @@ Shared spec vocabulary strings reused across packages.
 - XML vocabulary: common prefixes + attribute/value names such as `xml:base`
 - Catalog vocabulary: OASIS catalog element names, attribute names, `prefer` values
 - XSLT vocabulary: `XSLTElement*` constants for all XSLT element local names
-- Streamability helpers: `IsFnNamespacePrefix`, `StreamFnLocalName` (shared by xpath3/xslt3/xpathstream; normalizes EQName `Q{...}local` fn calls)
+- Streamability helpers: `IsFnNamespacePrefix`, `StreamFnLocalName` (shared by xpath3/xslt3/xpathstream; normalizes
+  EQName `Q{...}local` fn calls)
 - Files: `ns.go`, `xml.go`, `catalog.go`, `xslt.go`, `fn.go`
 - Imports: none
 
@@ -2207,12 +2281,14 @@ Constructors: `NewHTTPResolver(*http.Client)`, `NewFileResolver(fs.FS)`; `FileUR
 
 ## internal/xpathstream/
 
-Streamability analysis helpers for XPath 3.1 expressions. Moved from xpath3 public API to reduce exported surface. Used by xslt3 streaming analysis.
+Streamability analysis helpers for XPath 3.1 expressions. Moved from xpath3 public API to reduce exported surface. Used
+by xslt3 streaming analysis.
 
 - **WalkExpr(Expr, func(Expr) bool)** — AST walker
 - **ExprHasDownwardStep / ExprUsesUpwardAxis / ExprUsesPrecedingAxis / ExprUsesDescendantOrSelf** — axis queries
 - **ExprUsesFunction / ExprUsesContextItem / ExprHasUpThenDownNavigation** — expression property queries
-- **PredicateIsNonMotionless / PredicateIsNonMotionlessWithStep / ExprTreeHasNonMotionlessPredicate** — predicate analysis
+- **PredicateIsNonMotionless / PredicateIsNonMotionlessWithStep / ExprTreeHasNonMotionlessPredicate** — predicate
+  analysis
 - **CountDownwardSelections** — downward selection counter
 - Files: `xpathstream.go`
 - Imports: xpath3
@@ -2264,7 +2340,8 @@ Parser option bitset type and constants. Bit positions match libxml2's XML_PARSE
 
 ## internal/xmlchar/
 
-XML 1.0 character classification and name validation. Single source of truth for the NCName/QName/Name productions, plus XML Char range, encoding-name, and PI-target validation shared across packages.
+XML 1.0 character classification and name validation. Single source of truth for the NCName/QName/Name productions, plus
+XML Char range, encoding-name, and PI-target validation shared across packages.
 
 - **IsChar(rune) → bool** — XML 1.0 Char production (legal document character)
 - **IsNCNameStartChar(rune) → bool** — XML 1.0 NCName start character production
@@ -2282,18 +2359,23 @@ XML 1.0 character classification and name validation. Single source of truth for
 XSD builtin value validation and comparison, extracted from `xsd/`.
 
 - **Version10 / Version11** — lexical-rule selector for version-sensitive builtins
-- **ValidateBuiltin(value, builtinLocal string, version Version) error** — validate value against an XSD builtin type lexical space under XSD 1.0 or 1.1 rules
+- **ValidateBuiltin(value, builtinLocal string, version Version) error** — validate value against an XSD builtin type
+  lexical space under XSD 1.0 or 1.1 rules
 - **Compare(a, b, builtinLocal string) (int, bool)** — type-aware comparison (-1/0/+1, ok)
 - **CompareDecimal(a, b string) int** — decimal comparison via math/big.Rat (-2 on error)
-- **CompareFloatFacetBound(a, b, builtinLocal string) (int, bool)** — float/double bound comparison ordering NaN as equal-to-NaN and greater-than-finite (schema-consistency check)
+- **CompareFloatFacetBound(a, b, builtinLocal string) (int, bool)** — float/double bound comparison ordering NaN as
+  equal-to-NaN and greater-than-finite (schema-consistency check)
 - **CanonicalKey(s, builtinLocal string) (string, bool)** — canonical value-space key (e.g. for enumeration de-dup)
 - **WhiteSpace(builtinLocal string) string** — the type's XSD whiteSpace facet ("preserve"/"replace"/"collapse")
 - **Normalize(s, builtinLocal string) string** — apply the type's whiteSpace facet to a lexical value
 - **IsFloatNaN(s string) bool** — reports whether a float/double lexical is NaN
 - **XSDFields(s string) []string** — split on XSD list whitespace
 - **Orderable(builtinLocal string) bool** — whether the primitive value space is ordered (range facets may apply)
-- **IsDecimalFamily(builtinLocal string) bool** — whether the type is xs:decimal or a derived integer (digit facets may apply)
-- **LengthApplicable(builtinLocal string) bool** — whether length/minLength/maxLength facets apply and CONSTRAIN the value (string-derived, binary, anyURI, QName, NOTATION — enforced per XSD 1.0/libxml2 parity); shared by relaxng and xsd
+- **IsDecimalFamily(builtinLocal string) bool** — whether the type is xs:decimal or a derived integer (digit facets may
+  apply)
+- **LengthApplicable(builtinLocal string) bool** — whether length/minLength/maxLength facets apply and CONSTRAIN the
+  value (string-derived, binary, anyURI, QName, NOTATION — enforced per XSD 1.0/libxml2 parity); shared by relaxng and
+  xsd
 - **CountTotalDigits(value string) int** — significant total-digit count for the totalDigits facet
 - **CountFractionDigits(value string) int** — significant fraction-digit count for the fractionDigits facet
 - Files: `validate.go`, `compare.go`, `facets.go`
@@ -2327,14 +2409,21 @@ Importable implementation behind `helium` CLI. Used by `cmd/helium` wrapper and 
 
 - Entry points: `Execute(ctx, args)`, context mutators `WithIO(ctx, stdin, stdout, stderr)`, `WithStdinTTY(ctx, bool)`
 - Subcommands: `lint`, `xpath`, `xsd validate`, `relaxng validate`, `schematron validate`, `xslt`
-- Context behavior: when stdio carriers are absent, defaults to `os.Stdin`, `os.Stdout`, `os.Stderr`, and TTY detection from `os.Stdin`
+- Context behavior: when stdio carriers are absent, defaults to `os.Stdin`, `os.Stdout`, `os.Stderr`, and TTY detection
+  from `os.Stdin`
 - Lint behavior: parse args, detect stdin/TTY, process XML, run XInclude/XSD/XPath/C14N, emit xmllint-style exit codes
-- XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware result output for xpath1/xpath3
-- RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via `relaxng.NewValidator().Validate`, return schema/validation exit codes
-- Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `schematron.NewValidator(schema).Validate`, return schema/validation exit codes
-- XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via `xsd.NewValidator(schema).Validate`, return schema/validation exit codes
-- XSLT behavior: compile stylesheet from mandatory positional path, parse XML input(s), transform via `ss.Transform(doc).WriteTo`, supports `--param`/`--stringparam`/`--output`/`--noout`
-- Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`, `xsd_validate.go`, `xslt.go`
+- XPath behavior: mandatory positional expr, default engine `3`, `--engine 1|3`, XML from file args or stdin, type-aware
+  result output for xpath1/xpath3
+- RELAX NG behavior: compile grammar from mandatory positional schema path, parse XML input(s), validate via
+  `relaxng.NewValidator().Validate`, return schema/validation exit codes
+- Schematron behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via
+  `schematron.NewValidator(schema).Validate`, return schema/validation exit codes
+- XSD behavior: compile schema from mandatory positional schema path, parse XML input(s), validate via
+  `xsd.NewValidator(schema).Validate`, return schema/validation exit codes
+- XSLT behavior: compile stylesheet from mandatory positional path, parse XML input(s), transform via
+  `ss.Transform(doc).WriteTo`, supports `--param`/`--stringparam`/`--output`/`--noout`
+- Files: `cli.go`, `exitcode.go`, `lint.go`, `xpath.go`, `relaxng_validate.go`, `schematron_validate.go`,
+  `xsd_validate.go`, `xslt.go`
 - Imports: helium, c14n/, relaxng/, schematron/, xsd/, xslt3/, xinclude/, xpath1/, xpath3/, catalog/, internal/cliutil/
 
 ## cmd/helium/

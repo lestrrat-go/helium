@@ -102,7 +102,8 @@ to the inline-function parameter/return paths and `coerceFunctionItem`
 ## Functions by File
 
 ### `functions_node.go`
-`node-name`, `nilled`, `string`, `data`, `base-uri`, `document-uri`, `root`, `path`, `has-children`, `innermost`, `outermost`, `id`, `idref`, `lang`, `local-name`, `name`, `namespace-uri`, `number`, `generate-id`
+`node-name`, `nilled`, `string`, `data`, `base-uri`, `document-uri`, `root`, `path`, `has-children`, `innermost`,
+`outermost`, `id`, `idref`, `lang`, `local-name`, `name`, `namespace-uri`, `number`, `generate-id`
 
 `fn:nilled` returns the PSVI [nil] property of an element node (`()` for a non-element): true iff the node is
 in the evaluator's `NilledElements` set (`Evaluator.NilledElements`, populated from
@@ -127,7 +128,8 @@ element's parent).
 `contains`, `starts-with`, `ends-with`, `substring-before`, `substring-after`, `matches`, `replace`,
 `tokenize`, `analyze-string` (partial; result DOM built with helium)
 
-Regex: use Go `regexp` package by default; fall back to `github.com/dlclark/regexp2` for patterns requiring backreferences, character class subtraction, or large quantifiers. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivalents.
+Regex: use Go `regexp` package by default; fall back to `github.com/dlclark/regexp2` for patterns requiring
+backreferences, character class subtraction, or large quantifiers. Map XPath flags (`i`,`m`,`s`,`x`) to Go equivalents.
 Compiled regexes are cached by pattern + flags pair so repeated literal calls do not repay
 translation/compilation cost. The cache (`regexLRUCache` in `regex_cache.go`) is a bounded LRU with a
 1024-entry cap and least-recently-used eviction, so many distinct dynamic patterns cannot grow process memory
@@ -179,7 +181,8 @@ Error/trace: `error` (raises `FOER0000` with optional code/description/value), `
 `count`, `avg`, `max`, `min`, `sum`, `distinct-values`
 
 ### `functions_sequence.go`
-`empty`, `exists`, `head`, `tail`, `insert-before`, `remove`, `reverse`, `subsequence`, `unordered`, `zero-or-one`, `one-or-more`, `exactly-one`, `deep-equal`, `index-of`
+`empty`, `exists`, `head`, `tail`, `insert-before`, `remove`, `reverse`, `subsequence`, `unordered`, `zero-or-one`,
+`one-or-more`, `exactly-one`, `deep-equal`, `index-of`
 
 ### `functions_datetime.go`
 Constructors: `dateTime`
@@ -535,7 +538,8 @@ transport/timeouts/redirect policy you control. `fn:doc` parses retrieved bytes 
 `BlockXXE(true).AllowNetwork(false)` so the returned document cannot pull additional externals.
 
 ### `functions_qname.go`
-`QName`, `resolve-QName`, `prefix-from-QName`, `local-name-from-QName`, `namespace-uri-from-QName`, `namespace-uri-for-prefix`, `in-scope-prefixes`
+`QName`, `resolve-QName`, `prefix-from-QName`, `local-name-from-QName`, `namespace-uri-from-QName`,
+`namespace-uri-for-prefix`, `in-scope-prefixes`
 
 ### `functions_hof.go`
 `for-each`, `filter`, `fold-left`, `fold-right`, `apply`, `function-lookup`, `function-arity`, `function-name`
@@ -573,7 +577,8 @@ only after a slice has already been allocated:
   before each append, so a callback returning an unbounded lazy `Sequence` is rejected without ever
   materializing it. `appendBounded` (the slice-taking variant) is still used where the source is already a
   materialized slice.
-- Fold accumulators check `seqLen(acc) > maxNodes` after each step; `seqLen` is O(1) on a lazy range, so an oversized lazy accumulator is rejected without materialization.
+- Fold accumulators check `seqLen(acc) > maxNodes` after each step; `seqLen` is O(1) on a lazy range, so an oversized
+  lazy accumulator is rejected without materialization.
 - The iterative walkers `array:flatten` and `map:find` (`mapFindIter`) use an explicit stack of `seqCursor`
   frames (a member/value list + member/item index, in `functions_array.go`) that yields one `Item` per
   `next()` via `Sequence.Get`, instead of expanding child sequences into temporary `[]Item` slices. This
@@ -583,7 +588,8 @@ only after a slice has already been allocated:
   still avoids the intermediate slice amplification.
 
 ### `functions_map.go`
-`map:merge`, `map:size`, `map:keys`, `map:contains`, `map:get`, `map:put`, `map:entry`, `map:remove`, `map:for-each`, `map:find`
+`map:merge`, `map:size`, `map:keys`, `map:contains`, `map:get`, `map:put`, `map:entry`, `map:remove`, `map:for-each`,
+`map:find`
 
 ### `functions_array.go`
 `array:size`, `array:get`, `array:put`, `array:append`, `array:subarray`, `array:remove`,
@@ -591,12 +597,14 @@ only after a slice has already been allocated:
 `array:filter`, `array:fold-left`, `array:fold-right`, `array:for-each`, `array:for-each-pair`, `array:sort`
 
 ### `functions_math.go`
-`math:pi`, `math:exp`, `math:exp10`, `math:log`, `math:log10`, `math:pow`, `math:sqrt`, `math:sin`, `math:cos`, `math:tan`, `math:asin`, `math:acos`, `math:atan`, `math:atan2`
+`math:pi`, `math:exp`, `math:exp10`, `math:log`, `math:log10`, `math:pow`, `math:sqrt`, `math:sin`, `math:cos`,
+`math:tan`, `math:asin`, `math:acos`, `math:atan`, `math:atan2`
 
 All delegate to Go `math` package.
 
 ### `functions_misc.go`
-`static-base-uri`, `default-collation`, `available-environment-variables`, `environment-variable`, `current-dateTime`, `current-date`, `current-time`, `implicit-timezone`, `generate-id`
+`static-base-uri`, `default-collation`, `available-environment-variables`, `environment-variable`, `current-dateTime`,
+`current-date`, `current-time`, `implicit-timezone`, `generate-id`
 
 ### `format_number.go`
 `format-number` (full ICU-style decimal format patterns)

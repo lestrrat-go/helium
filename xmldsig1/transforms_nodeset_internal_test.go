@@ -503,8 +503,9 @@ var deadlineOverrunBudget = ctxPollInterval*10*time.Microsecond + deadlineClockS
 // deadline pass until the next tick, and time.Since quantizes the elapsed
 // reading at that same tick, so two ticks — about 31 ms — is what the platform
 // can charge on its own. A budget under one tick measures the interrupt period
-// and not the collector, and no amount of promptness can meet it. Thirty-two
-// milliseconds covers both ticks.
+// and not the collector, and no amount of promptness can meet it. Forty
+// milliseconds covers both ticks and ordinary scheduler handoff on hosted
+// Windows runners.
 //
 // Everywhere else the monotonic clock is nanosecond-resolution
 // (clock_gettime, mach_absolute_time) and the runtime wakes off epoll or
@@ -513,7 +514,7 @@ var deadlineOverrunBudget = ctxPollInterval*10*time.Microsecond + deadlineClockS
 // scheduler noise and nothing else.
 func deadlineClockSlack() time.Duration {
 	if runtime.GOOS == "windows" {
-		return 32 * time.Millisecond
+		return 40 * time.Millisecond
 	}
 	return 10 * time.Millisecond
 }

@@ -46,5 +46,6 @@ func Example_xpath_find() {
   //   book: XML
 }
 ```
-source: [examples/xpath_find_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpath_find_example_test.go)
+source:
+[examples/xpath_find_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpath_find_example_test.go)
 <!-- END INCLUDE -->

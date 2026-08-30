@@ -17,7 +17,8 @@ Fields:
   line       int         # source line number
 ```
 
-Methods: `FirstChild()`, `LastChild()`, `NextSibling()`, `PrevSibling()`, `Parent()`, `Content()` (aggregates children), `Type()`, `Name()`, `LocalName()`, `Line()`, `OwnerDocument()`
+Methods: `FirstChild()`, `LastChild()`, `NextSibling()`, `PrevSibling()`, `Parent()`, `Content()` (aggregates children),
+`Type()`, `Name()`, `LocalName()`, `Line()`, `OwnerDocument()`
 
 ### `node` — extends docnode with content and namespaces
 
@@ -30,7 +31,8 @@ Fields:
   nsDefs     []*Namespace  # all namespace declarations on this element
 ```
 
-Methods: `DeclareNamespace(prefix, uri)`, `SetActiveNamespace(prefix, uri)`, `Namespace()`, `Namespaces()`, `Prefix()`, `URI()`, `Name()` (qualifies with prefix: `prefix:localname`)
+Methods: `DeclareNamespace(prefix, uri)`, `SetActiveNamespace(prefix, uri)`, `Namespace()`, `Namespaces()`, `Prefix()`,
+`URI()`, `Name()` (qualifies with prefix: `prefix:localname`)
 
 ## Namespace Storage (critical)
 
@@ -41,7 +43,8 @@ Element has THREE namespace-related fields:
 
 `Namespace` is NOT a tree node — lightweight struct: `{etype, href, prefix, context}`. No parent/child/sibling links.
 
-`NamespaceNodeWrapper` wraps Namespace for XPath: adds docnode linkage. `Name()` = prefix, `Content()` = URI. Read-only (AddChild/AddSibling are no-ops).
+`NamespaceNodeWrapper` wraps Namespace for XPath: adds docnode linkage. `Name()` = prefix, `Content()` = URI. Read-only
+(AddChild/AddSibling are no-ops).
 
 `Element.Namespaces()` returns a cloned slice, so callers cannot replace or
 append entries in the element's `nsDefs`. Namespace lookup does not clone that
@@ -108,7 +111,8 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 ## Key Behaviors
 
 ### Text Node Consolidation
-`Text.AddSibling(Text)` → content merged instead of creating sibling. Prevents whitespace node bloat. Mirrors libxml2 TEXT consolidation.
+`Text.AddSibling(Text)` → content merged instead of creating sibling. Prevents whitespace node bloat. Mirrors libxml2
+TEXT consolidation.
 
 ### PI Content Is A String, Not Children
 A `ProcessingInstruction` stores its content in the `data` string field (mirrors libxml2's XML_PI_NODE, whose
@@ -248,7 +252,8 @@ any other node `rawContent` falls back to `Content()`. PI/EntityRef/Entity/Names
 returned string-derived copies and are unaffected.
 
 ### Predefined Entities
-5 unexported singletons: `entityLT`, `entityGT`, `entityAmpersand`, `entityApostrophe`, `entityQuote` (resolved by name through `resolvePredefinedEntity`). Type `InternalPredefinedEntity`. Cannot be redeclared.
+5 unexported singletons: `entityLT`, `entityGT`, `entityAmpersand`, `entityApostrophe`, `entityQuote` (resolved by name
+through `resolvePredefinedEntity`). Type `InternalPredefinedEntity`. Cannot be redeclared.
 
 ### NamespaceDeclNode Special Case
 Skipped in `setTreeDoc()` — sentinel type rarely instantiated.

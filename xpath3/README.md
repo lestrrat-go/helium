@@ -102,5 +102,6 @@ func Example_xpath3_find() {
   //   book: XML
 }
 ```
-source: [examples/xpath3_find_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpath3_find_example_test.go)
+source:
+[examples/xpath3_find_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpath3_find_example_test.go)
 <!-- END INCLUDE -->

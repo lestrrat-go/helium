@@ -45,5 +45,6 @@ func Example_xpointer_evaluate() {
   // section: second
 }
 ```
-source: [examples/xpointer_evaluate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpointer_evaluate_example_test.go)
+source:
+[examples/xpointer_evaluate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xpointer_evaluate_example_test.go)
 <!-- END INCLUDE -->
