@@ -1,6 +1,7 @@
 # Validation Pipeline
 
-Three validation engines: XSD (grammar-based), RELAX NG (pattern-based), Schematron (rule-based). All follow compile→validate pattern.
+Three validation engines: XSD (grammar-based), RELAX NG (pattern-based), Schematron (rule-based). All follow
+compile→validate pattern.
 
 ## XSD
 
@@ -1771,7 +1772,8 @@ mode, so the libxml2-compat goldens stay byte-identical. ID/IDREF members inside
 union ARE covered: `collectIDFromValue`'s union branch resolves the active member
 (`unionActiveMember`) and recurses to the atomic ID/IDREF leaf (and `idFamilyType`
 recurses into union members), so a duplicate union xs:ID across owners and a
-dangling union xs:IDREF both fail. `xs:ENTITY`/`xs:ENTITIES` value-space validity is enforced by the separate `validateEntities` pass (`validate_entity.go`), not this one. NOTE: this skip-exclusion is for the
+dangling union xs:IDREF both fail. `xs:ENTITY`/`xs:ENTITIES` value-space validity is enforced by the separate
+`validateEntities` pass (`validate_entity.go`), not this one. NOTE: this skip-exclusion is for the
 ID/IDREF DATATYPE pass only; pass-2 IDC selectors (`xs:key`/`xs:unique`) still
 match skip-content nodes by XPath — helium deliberately includes skip-matched
 nodes in an ancestor IDC (see `TestIDCFieldSkipWildcardSelectedSelf`), so the
@@ -1816,8 +1818,10 @@ Files: `relaxng/relaxng.go` (API), `parse.go` (compiler), `validate.go` (engine)
 ### Compile: Document → Grammar
 
 1. **Find root** — `<grammar>` or bare pattern (e.g., `<element>`)
-2. **Parse grammar content** — process `<start>`, `<define>` elements; handle `combine="choice"/"interleave"`; support `<div>` containers
-3. **Parse patterns** (recursive) — element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, parentRef, data, value, list, mixed, text, empty, notAllowed
+2. **Parse grammar content** — process `<start>`, `<define>` elements; handle `combine="choice"/"interleave"`; support
+   `<div>` containers
+3. **Parse patterns** (recursive) — element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref,
+   parentRef, data, value, list, mixed, text, empty, notAllowed
 4. **Resolve references (scoped)** — each `<grammar>` (including nested ones) gets its own lexical
    `grammarScope` with a `defines` table and a `parent` link. Every `<ref>`/`<parentRef>` node is recorded
    with the scope it was parsed in (`compiler.pendingRefs`); after the whole tree is parsed,
@@ -1833,7 +1837,8 @@ Files: `relaxng/relaxng.go` (API), `parse.go` (compiler), `validate.go` (engine)
    only inside a removed component are never recorded in `pendingRefs` and so never trigger a spurious fatal
    unresolved-ref. The override names are also `delete`d from the scope after parsing (to clear any entry
    leaked by a nested `<include>`) before the overrides are applied.
-5. **Check reference cycles** — `checkRefCycles` walks each define body across every scope, following `pattern.resolved` (cycle set keyed by define-pattern POINTER, not name); element patterns break the chain
+5. **Check reference cycles** — `checkRefCycles` walks each define body across every scope, following `pattern.resolved`
+   (cycle set keyed by define-pattern POINTER, not name); element patterns break the chain
 6. **Rule checks** — compile-time semantic validation (`checkPattern` also follows `pattern.resolved`; visited
    set keyed by `{define pattern, ruleFlags}` so a define reached under a new ancestor context — e.g. once
    normally and once under `<list>` — is re-checked in each context)
@@ -1873,12 +1878,16 @@ Pattern-matching engine with backtracking:
    - **Attribute**: match against instance attrs
    - **Group**: sequential with backtracking
    - **Choice**: try alternatives, prefer branches making progress
-   - **Interleave**: unordered member-by-member matching; a repeatable member-group (zeroOrMore/oneOrMore of group) restarts its members each iteration so a sibling branch can consume elements between group members across iterations
+   - **Interleave**: unordered member-by-member matching; a repeatable member-group (zeroOrMore/oneOrMore of group)
+     restarts its members each iteration so a sibling branch can consume elements between group members across
+     iterations
    - **ZeroOrMore/OneOrMore/Optional**: repetition with suppressed errors
-   - **Ref/ParentRef**: follow the compile-time-resolved `pattern.resolved` scoped pointer and recurse (no by-name lookup)
+   - **Ref/ParentRef**: follow the compile-time-resolved `pattern.resolved` scoped pointer and recurse (no by-name
+     lookup)
    - **Data/Value**: type checking
    - **List**: split text, validate items
-3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate content, check all attrs+content consumed
+3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate
+   content, check all attrs+content consumed
 
 ### Backtracking Strategy (`backtrackGroupFlexible` / `backtrackGroupNaive`)
 
@@ -2055,7 +2064,9 @@ nameClass { kind (ncName|ncAnyName|ncNsName|ncChoice), name, ns, left/right, exc
 
 ## Schematron
 
-Files: `schematron/schematron.go` (API), `parse.go` (compiler), `validate.go` (engine), `schema.go` (model), `querybinding.go` (query language binding), `engine.go` + `engine_xpath1.go` + `engine_xpath3.go` (query language engines)
+Files: `schematron/schematron.go` (API), `parse.go` (compiler), `validate.go` (engine), `schema.go` (model),
+`querybinding.go` (query language binding), `engine.go` + `engine_xpath1.go` + `engine_xpath3.go` (query language
+engines)
 
 ### Query language bindings
 
@@ -2076,8 +2087,10 @@ namespace-bound `runner`, whose `evaluate` returns a `value`. The `value` interf
 conversions — `nodeSet`, `effectiveBoolean`, `stringValue`, `nodeName` — so compilation and validation never
 name a concrete XPath package. Differences that matter:
 
-- `effectiveBoolean` cannot fail under XPath 1.0. Under XPath 3.1 a sequence of more than one item starting with an atomic value raises FORG0006, which is reported and treated as a false test.
-- `stringValue` (`<value-of>`) takes the string-value of the first node under XPath 1.0, and joins every atomized item with a single space under XPath 3.1 (the XSLT 2.0-and-later rule).
+- `effectiveBoolean` cannot fail under XPath 1.0. Under XPath 3.1 a sequence of more than one item starting with an
+  atomic value raises FORG0006, which is reported and treated as a false test.
+- `stringValue` (`<value-of>`) takes the string-value of the first node under XPath 1.0, and joins every atomized item
+  with a single space under XPath 3.1 (the XSLT 2.0-and-later rule).
 - `<let>` binds an XPath 1.0 object under the 1.0 binding, and a whole sequence under 3.1.
 
 Rule contexts go through `contextToXPath` in both bindings, so a context that is an XSLT match pattern but not
@@ -2097,11 +2110,14 @@ document mutated between two `Validate` calls is re-indexed.
 Three-phase parsing (after the binding is resolved):
 1. **Phase 1: Title** — optional `<title>`
 2. **Phase 2: Namespace declarations** — all `<ns prefix="x" uri="...">` → `schema.namespaces` map
-3. **Phase 3: Patterns** — `<pattern>` → `<rule context="xpath">` → `<let>`, `<assert test="xpath">`, `<report test="xpath">`
+3. **Phase 3: Patterns** — `<pattern>` → `<rule context="xpath">` → `<let>`, `<assert test="xpath">`, `<report
+   test="xpath">`
 
-Message content parsed into `[]messagePart`: text literals, `<name path="..."/>` (element name), `<value-of select="..."/>` (XPath value).
+Message content parsed into `[]messagePart`: text literals, `<name path="..."/>` (element name), `<value-of
+select="..."/>` (XPath value).
 
-**Namespace gating:** structural elements are only recognized when in the detected Schematron namespace (`isSchematronElement`/`elementInNamespace`). Foreign-namespaced elements are handled differently depending on position:
+**Namespace gating:** structural elements are only recognized when in the detected Schematron namespace
+(`isSchematronElement`/`elementInNamespace`). Foreign-namespaced elements are handled differently depending on position:
 - **Required structural position → fatal/rejected.** Where a specific Schematron element is expected (e.g. a
   `<rule>` under `<pattern>`, checked via `isSchematronElement(elem, schNS, "rule")` in `compilePattern`), a
   foreign element like `<x:rule>` does NOT satisfy the requirement and is rejected with a fatal `Expecting a
@@ -2112,7 +2128,9 @@ Message content parsed into `[]messagePart`: text literals, `<name path="..."/>`
   `<x:assert>` inside a `<rule>` is not executed; likewise foreign `<name>`/`<value-of>` inside message
   content (`parseMessageElement`) are ignored, not interpolated.
 
-Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as Schematron.
+Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read
+unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as
+Schematron.
 
 **Fatal compile errors:** `compileSchema` wraps the configured handler in a `fatalTrackingHandler`. If any
 `ErrorLevelFatal` diagnostic is emitted (no pattern, pattern with no rule, rule with no test, etc.),
@@ -2124,11 +2142,13 @@ source through `lexer.DiagnosticExcerpt`; diagnostics stay valid UTF-8 and short
 
 ### Validate: Document + Schema → Errors
 
-`Validate` returns `ErrNoSchema` (typed) when the Validator has no compiled schema (`NewValidator(nil)` or zero-value), guarding against a nil-deref panic.
+`Validate` returns `ErrNoSchema` (typed) when the Validator has no compiled schema (`NewValidator(nil)` or zero-value),
+guarding against a nil-deref panic.
 
 1. Create XPath context with schema's namespaces
 2. For each pattern/rule: evaluate `contextExpr` against document root → node set
-   - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document invalid (the rule's assertions can't be checked, so it is not silently skipped)
+   - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document
+     invalid (the rule's assertions can't be checked, so it is not silently skipped)
    - **First-match-only (ISO Schematron):** within a pattern, each node is processed by only the FIRST rule
      whose context matches it. A per-pattern `map[helium.Node]bool` (reset each pattern) skips nodes already
      claimed by an earlier rule. Scope is per pattern, so a later pattern still fires for the same node.

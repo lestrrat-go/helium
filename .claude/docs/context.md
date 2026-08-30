@@ -18,11 +18,14 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 - Keep payload type, option type, constructor, accessor, helper pair unexported by default.
 - Prefer exported direct mutators on `context.Context` over exporting payload type or option type.
 - If callers only need to set package-scoped values, export helpers like `WithX(ctx, value) context.Context`.
-- Export initializer only when external callers must attach package payload before calling API that accepts `context.Context`.
-- Export accessor only when external callers or sibling packages must inspect/merge payload already attached to `context.Context`.
+- Export initializer only when external callers must attach package payload before calling API that accepts
+  `context.Context`.
+- Export accessor only when external callers or sibling packages must inspect/merge payload already attached to
+  `context.Context`.
 - Export payload type only when exported accessor returns it or callers must mutate/read it directly.
 - If helper is internal execution plumbing, keep it unexported even when read side exists elsewhere.
-- If any part must be exported, use descriptive names. NEVER export bare `Context`, `NewContext`, `GetContext`, `ContextOption`.
+- If any part must be exported, use descriptive names. NEVER export bare `Context`, `NewContext`, `GetContext`,
+  `ContextOption`.
 
 ## Carrier Pattern
 
@@ -66,10 +69,15 @@ Module-wide rules for Go `context.Context` + package-specific payload objects.
 ## Current Repo Pattern
 
 - `xpath1` now uses direct mutators such as `WithNamespaces(ctx, ns)` and `WithAdditionalVariables(ctx, vars)`.
-- `xpath1` keeps `FunctionContext` + `GetFunctionContext(ctx)` public because custom function implementations need read-only evaluation state.
+- `xpath1` keeps `FunctionContext` + `GetFunctionContext(ctx)` public because custom function implementations need
+  read-only evaluation state.
 - `xpath1` hides its eval-config carrier and getter.
-- `xpath3` does NOT carry evaluation config on `context.Context`. It uses value-receiver fluent setters on the `Evaluator` value returned by `NewEvaluator` (`Namespaces`, `Variables`, `OpLimit`, `DefaultLanguage`, `URIResolver`, etc.; each returns an updated copy); `Evaluate`/`EvaluateReuse` accept a `context.Context` for cancellation/deadlines only. See `xpath3-api.md`.
-- `xpath3` internal function-evaluation state already follows unexported helper pattern: `withFnContext` + `getFnContext`.
+- `xpath3` does NOT carry evaluation config on `context.Context`. It uses value-receiver fluent setters on the
+  `Evaluator` value returned by `NewEvaluator` (`Namespaces`, `Variables`, `OpLimit`, `DefaultLanguage`, `URIResolver`,
+  etc.; each returns an updated copy); `Evaluate`/`EvaluateReuse` accept a `context.Context` for cancellation/deadlines
+  only. See `xpath3-api.md`.
+- `xpath3` internal function-evaluation state already follows unexported helper pattern: `withFnContext` +
+  `getFnContext`.
 - Future refactors should prefer `WithX(ctx, value)` style mutators when callers do not need raw payload access.
 - Treat public carrier/accessor APIs as exception driven by caller need, not default style.
 

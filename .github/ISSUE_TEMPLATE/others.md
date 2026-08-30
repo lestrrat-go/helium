@@ -9,7 +9,8 @@ assignees: ''
 
 **Contribution Guidelines**
 
-Before filing an issue, please read [CONTRIBUTING.md](https://github.com/lestrrat-go/helium/blob/main/.github/CONTRIBUTING.md).
+Before filing an issue, please read
+[CONTRIBUTING.md](https://github.com/lestrrat-go/helium/blob/main/.github/CONTRIBUTING.md).
 
 **Context**
 

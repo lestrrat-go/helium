@@ -59,7 +59,8 @@ test           → helium
 
 ## Leaf packages (no helium deps)
 sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil,
-internal/encoding, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence, internal/strcursor,
+internal/encoding, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence,
+internal/strcursor,
 internal/writerctl, internal/xpath1/lexer, internal/xsdregex, internal/uripath
 
 ## Core layer
@@ -69,7 +70,8 @@ helium (root) → sax, enum, internal/*
 c14n, xpath1, xpath3, html, catalog, relaxng, stream
 
 ## Security layer (depends on processing)
-xmldsig1 (root + c14n + xpath1 + internal/lexicon + internal/xpath1/lexer + internal/xmlchar; xpath1 backs the XPath filter
+xmldsig1 (root + c14n + xpath1 + internal/lexicon + internal/xpath1/lexer + internal/xmlchar; xpath1 backs the XPath
+filter
 transform), xmlenc1 (root + c14n; c14n converts the node-set a same-document xenc:CipherReference names into
 octets)
 

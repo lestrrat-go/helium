@@ -4,10 +4,14 @@
 > 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the
 > governing rule and its conformance evidence. See `xsd11.md` for the index and version-resolution framing.
 
-- the 1.1-only lexical forms (`+INF` for xs:double/xs:float; year `0000` on the date types — both gated in `internal/xsd/value` via a `value.Version` argument; relaxng is pinned to `value.Version10`);
+- the 1.1-only lexical forms (`+INF` for xs:double/xs:float; year `0000` on the date types — both gated in
+  `internal/xsd/value` via a `value.Version` argument; relaxng is pinned to `value.Version10`);
 - the 1.1 built-in datatypes (xs:dateTimeStamp, xs:dayTimeDuration, xs:yearMonthDuration, xs:anyAtomicType, xs:error);
-- **xs:assert on complex types** (`assert.go`): parsed from complexType/restriction/extension AND simpleContent extension/restriction; pre-compiled via xpath3; evaluated after content validation (EBV false → invalid); inherited down the base chain.
-  - `$value`: the element's TYPED simple value for a simpleContent complex type (empty sequence for complex content); an EMPTY element's default/fixed effective value is substituted before typing → `$value` schema-normalized.
+- **xs:assert on complex types** (`assert.go`): parsed from complexType/restriction/extension AND simpleContent
+  extension/restriction; pre-compiled via xpath3; evaluated after content validation (EBV false → invalid); inherited
+  down the base chain.
+  - `$value`: the element's TYPED simple value for a simpleContent complex type (empty sequence for complex content); an
+    EMPTY element's default/fixed effective value is substituted before typing → `$value` schema-normalized.
   - Isolated tree: deep copy rooted in NO document, comment/PI stripped → `/`/`//` raises XPDY0050. In-scope
     namespaces re-declared (incl. an inherited default-namespace prefix "" so `namespace-uri-for-prefix('',
     .)` resolves); PSVI annotations onto DESCENDANT elements + ALL attributes but NOT the assertion ROOT (type
@@ -28,7 +32,8 @@
     target type (`Q{ns}local` via `schemaAnnotationParts`) not the lexical prefix → an UNPREFIXED user type
     via `xpathDefaultNamespace` resolves. An ALREADY-RESOLVED QName cast SOURCE (prefix declared only on the
     INSTANCE node) is re-validated by `qnameCastLexical` using the value's OWN URI.
-  - QName/NOTATION atomization (`resolveQNameFromNode`) predeclares `xml` → the XML namespace with no node binding (matching `xsd.resolveLexicalQName`) → `xml:lang`/`xml:space` atomizes.
+  - QName/NOTATION atomization (`resolveQNameFromNode`) predeclares `xml` → the XML namespace with no node binding
+    (matching `xsd.resolveLexicalQName`) → `xml:lang`/`xml:space` atomizes.
   - A list-typed node splits on XSD whitespace ONLY (space/tab/CR/LF via `xsdListFields`; NBSP/other Unicode
     whitespace NOT separators), each token via `atomizeListTokenAt`. A UNION item type → each token through
     its value-resolved ACTIVE member (`nodeItemFor` → per-token leaf in `NodeItem.ListItemLeaves` via
@@ -64,7 +69,8 @@
     VALUE atomizes to NO namespace (XSD value-space; a prefixed value still resolves); under it `castToQName`
     also skips the default-namespace fallback for an unprefixed cast target. Default xpath3 (flag off)
     unchanged.
-  - A self-referential cast (`cast`/`castable as t:T` inside t:T's OWN assertion) is guarded by a per-validation `(type, value)` cast stack in the context (`castGuardKey` in `schema_decls.go`): a repeat fails closed.
+  - A self-referential cast (`cast`/`castable as t:T` inside t:T's OWN assertion) is guarded by a per-validation `(type,
+    value)` cast stack in the context (`castGuardKey` in `schema_decls.go`): a repeat fails closed.
   - An EMPTY DEFAULTED/FIXED DESCENDANT element's schema value is materialized: `validateSimpleContent`
     records each empty element's effective default/fixed value (plus the DECLARATION namespace context for a
     QName/NOTATION prefix) in `vc.assertEffectiveValues`; `isolatedAssertTree`/`mapAssertAnnotations`
@@ -92,7 +98,8 @@
     `buildValueSequence`/`typedAtomic`/`atomicForType`) PRESERVING a NAMED user type's identity (user type
     name as `TypeName`, builtin cast type as `BaseType`, mirroring `AtomizeItem`/`data()`) across the atomic,
     QName/NOTATION, list-item, and union-leaf paths, so `$value instance of t:MyInt` holds.
-  - The context item is ABSENT, so `.`/`position()`/`last()` raise a dynamic error → unsatisfied; assertions ANDed along the restriction chain; same SchemaDeclarations adapter.
+  - The context item is ABSENT, so `.`/`position()`/`last()` raise a dynamic error → unsatisfied; assertions ANDed along
+    the restriction chain; same SchemaDeclarations adapter.
   - `validateValue` evaluates these facets, so the COMPILE-TIME throwaway contexts reaching it — the attribute
     default/fixed check (`checkAttrUseConstraints`, `link_refs.go`) and the facet value-against-base /
     enumeration / union-member checks (`check_facets.go`) — are built with `schema: c.schema` so a

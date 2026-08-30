@@ -87,18 +87,21 @@ All error formatting matches libxml2 output for golden test compatibility.
 
 ### DOM operation sentinels (root package, `errors.go`)
 
-`ErrNilNode`, `ErrInvalidOperation`, and `ErrCyclicNode` back the guarded tree API and are all matchable via `errors.Is`:
+`ErrNilNode`, `ErrInvalidOperation`, and `ErrCyclicNode` back the guarded tree API and are all matchable via
+`errors.Is`:
 
 - **`ErrNilNode`** — a nil or typed-nil node (including Go's interface nil trap, e.g. the typed-nil `*Element`
   `Document.DocumentElement()` returns for a rootless doc) reached
   `AddChild`/`AddSibling`/`Replace`/`Walk`/`CopyNode`/`ParseInNodeContext`/`SetDocumentElement`.
-- **`ErrInvalidOperation`** — an unsupported structural op: an empty `Replace()` (matching `Document.Replace`), a non-attribute sibling/replacement of a property attribute, or duplicate replacement operands.
+- **`ErrInvalidOperation`** — an unsupported structural op: an empty `Replace()` (matching `Document.Replace`), a
+  non-attribute sibling/replacement of a property attribute, or duplicate replacement operands.
 - **`ErrCyclicNode`** — a `wouldCreateCycle` rejection in `AddChild`/`AddSibling`/`Replace` (inserting a node
   into itself or a descendant, or replacing a node with an ancestor), plus the identity-checked self-add in
   `ProcessingInstruction.AddChild` (`pi.AddChild(pi)`); a PI given any other rejected operand — including an
   ancestor — wraps `ErrInvalidOperation` like the other strict leaves.
 
-The `ErrInvalidOperation`/`ErrCyclicNode` mutation sites wrap a descriptive message via `%w`, so the human text is preserved while `errors.Is` still matches.
+The `ErrInvalidOperation`/`ErrCyclicNode` mutation sites wrap a descriptive message via `%w`, so the human text is
+preserved while `errors.Is` still matches.
 
 ### ErrParseError (root package, `errors.go`)
 
@@ -247,16 +250,21 @@ Context extraction matches libxml2's `xmlParserInputGetWindow`: skip-eol, walk b
     the reader stores a sticky `capErr` (`fmt.Errorf("... %w", ErrContentSizeExceeded)`) returned from its
     `Read`, which surfaces as `p.cur.Err()`. A declared-charset stream (incl. declared Latin-1, which
     `Parse([]byte)` and `ParseReader` decode identically) or one that settles below the cap is unaffected.
-- **`ErrHandlerUnspecified`** (exported) — returned by a `SAXCallbacks` method whose handler is unset (see SAX-callback error routing below; filtered by `handleSAXErr`, never fatal).
+- **`ErrHandlerUnspecified`** (exported) — returned by a `SAXCallbacks` method whose handler is unset (see SAX-callback
+  error routing below; filtered by `handleSAXErr`, never fatal).
 
 #### HTML SAX-callback error routing (`html/parser.go`)
 
-When a SAX callback (e.g. `InternalSubset`, `StartElement`, `Characters`) returns a non-nil error other than `ErrHandlerUnspecified`, `handleSAXErr` forwards it through one of two paths:
+When a SAX callback (e.g. `InternalSubset`, `StartElement`, `Characters`) returns a non-nil error other than
+`ErrHandlerUnspecified`, `handleSAXErr` forwards it through one of two paths:
 
-- Default (`Parser.Strict(false)`): wrapped as a warning and delivered to the SAX `Warning(err)` slot (via `emitWarning`, gated by `cfg.noWarning`). The parser continues — HTML's libxml2-style tolerance.
-- `Parser.Strict(true)`: captured in `parser.fatalSAXErr` and returned from `parse()` after the parser reaches a stable state. `ErrHandlerUnspecified` is filtered in both modes.
+- Default (`Parser.Strict(false)`): wrapped as a warning and delivered to the SAX `Warning(err)` slot (via
+  `emitWarning`, gated by `cfg.noWarning`). The parser continues — HTML's libxml2-style tolerance.
+- `Parser.Strict(true)`: captured in `parser.fatalSAXErr` and returned from `parse()` after the parser reaches a stable
+  state. `ErrHandlerUnspecified` is filtered in both modes.
 
-This is distinct from `emitError` (parser-detected malformed input → `Error(err)` slot, gated by `cfg.noError`), which has been the existing convention for tokenization/structure errors.
+This is distinct from `emitError` (parser-detected malformed input → `Error(err)` slot, gated by `cfg.noError`), which
+has been the existing convention for tokenization/structure errors.
 
 ### XSLT 3.0 (`xslt3/errors.go`)
 
@@ -283,10 +291,12 @@ matches any joined sentinel (see `dynamicErrorCause`).
 | `dynamicErrorCause(code, cause, fmt, args...)` | Like `dynamicError` but `Cause = errors.Join(ErrDynamicError, cause)` so a distinguishable sentinel (e.g. `ErrResourceTooLarge`) stays observable via `errors.Is` |
 
 **Sentinel errors** (exported):
-- `ErrStaticError`, `ErrDynamicError`, `ErrCircularRef`, `ErrNoTemplate`, `ErrTerminated`, `ErrInvalidOutput`, `ErrResourceTooLarge`
+- `ErrStaticError`, `ErrDynamicError`, `ErrCircularRef`, `ErrNoTemplate`, `ErrTerminated`, `ErrInvalidOutput`,
+  `ErrResourceTooLarge`
 
 **Internal sentinels**:
-- `errNilStylesheet` — returned by convenience wrappers (`Transform`, `TransformString`, `TransformToWriter`) when `*Stylesheet` is nil; prevents nil-pointer panic
+- `errNilStylesheet` — returned by convenience wrappers (`Transform`, `TransformString`, `TransformToWriter`) when
+  `*Stylesheet` is nil; prevents nil-pointer panic
 
 **Error code checker**: `isXSLTError(err, code) → bool` — unwraps and matches `XSLTError.Code`.
 
@@ -337,7 +347,8 @@ every other XPath evaluation failure wraps both `ErrUnsupportedTransform` and th
 `context.Canceled`, `context.DeadlineExceeded`, and XPath sentinels remain matchable through the outer
 `VerificationError`. Other context and injected-XSLT errors return unchanged.
 
-A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI dereference, transform execution, or key resolution.
+A RetrievalMethod transform list exceeding `maxRetrievalTransformSteps` wraps `ErrResourceLimitExceeded` before URI
+dereference, transform execution, or key resolution.
 
 An external RetrievalMethod X509Data resource that fails XML parsing wraps both `ErrInvalidKeyInfo` and the
 parser error. `errors.Is` therefore matches `context.Canceled` or `context.DeadlineExceeded` when parsing stops
@@ -447,16 +458,21 @@ All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder`
   before touching the document, instead of panicking. Handler setup runs first and `closeHandler()` is
   deferred, so a closable `ErrorHandler` is closed on every exit path (including the nil guards); a nil `ctx`
   is normalized to `context.Background()` at entry
-- Errors sent to the handler are `*xsd.ValidationError` (extractable via `errors.As`) wrapped with an `ErrorLeveler` for transport. `ValidationError` fields: `Filename`, `Line`, `Element`, `AttributeName` (empty for element-level errors), `Message`.
-- `reportValidityError` / `reportValidityErrorAttr` on `validationContext` check `suppressDepth > 0` to suppress errors during union member trials
+- Errors sent to the handler are `*xsd.ValidationError` (extractable via `errors.As`) wrapped with an `ErrorLeveler` for
+  transport. `ValidationError` fields: `Filename`, `Line`, `Element`, `AttributeName` (empty for element-level errors),
+  `Message`.
+- `reportValidityError` / `reportValidityErrorAttr` on `validationContext` check `suppressDepth > 0` to suppress errors
+  during union member trials
 
 ### RelaxNG
 
-`Validate()` returns `ErrValidationFailed` sentinel on failure. Individual errors buffered internally during validation (for backtracking), flushed to `ErrorHandler` at the end.
+`Validate()` returns `ErrValidationFailed` sentinel on failure. Individual errors buffered internally during validation
+(for backtracking), flushed to `ErrorHandler` at the end.
 
 ### Schematron
 
-`Validate()` returns `ErrValidationFailed` sentinel on failure. Individual `*ValidationError` errors go to `ErrorHandler`. `Quiet()` suppresses error delivery to the handler.
+`Validate()` returns `ErrValidationFailed` sentinel on failure. Individual `*ValidationError` errors go to
+`ErrorHandler`. `Quiet()` suppresses error delivery to the handler.
 
 ### DTD
 
@@ -487,7 +503,8 @@ XSD, RelaxNG, Schematron, and DTD all use sentinel error + ErrorHandler pattern.
 ### XSD Validation Error Helpers (`xsd/validate.go`)
 
 - `reportValidityError(file, line, elemName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
-- `reportValidityErrorAttr(file, line, elemName, attrName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth > 0`)
+- `reportValidityErrorAttr(file, line, elemName, attrName, msg)` — sends to ErrorHandler (suppressed when `suppressDepth
+  > 0`)
 
 ### XSD Internal Types (`xsd/validate.go`)
 
@@ -495,8 +512,10 @@ XSD, RelaxNG, Schematron, and DTD all use sentinel error + ErrorHandler pattern.
 
 ### TypeDef Validation Methods (`xsd/validate.go`)
 
-- `(*TypeDef).Validate(ctx context.Context, value string, nsMap map[string]string) error` — validates a lexical value against a simple type; uses `NilErrorHandler` (pass/fail only)
-- `(*TypeDef).ValidateElement(ctx context.Context, elem *helium.Element, schema *Schema) error` — validates an element's content against the type; uses internal `validationErrors` collector for error messages
+- `(*TypeDef).Validate(ctx context.Context, value string, nsMap map[string]string) error` — validates a lexical value
+  against a simple type; uses `NilErrorHandler` (pass/fail only)
+- `(*TypeDef).ValidateElement(ctx context.Context, elem *helium.Element, schema *Schema) error` — validates an element's
+  content against the type; uses internal `validationErrors` collector for error messages
 
 ## Compilation vs Validation Errors
 

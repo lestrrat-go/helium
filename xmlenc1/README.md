@@ -474,7 +474,8 @@ one without `AllowUnauthenticatedCBC(true)` with `ErrCBCRequiresOptIn`,
 whatever its `ds:KeyInfo` holds. It does not arise at all when the caller
 supplies the key as a pre-shared `SessionKey`, whose early return precedes key
 resolution;
-`xenc:CarriedKeyName` (§3.5.1), which the parse steps over unread; and `xenc:EncryptionProperties` (§3.7), which is advisory metadata.
+`xenc:CarriedKeyName` (§3.5.1), which the parse steps over unread; and `xenc:EncryptionProperties` (§3.7), which is
+advisory metadata.
 
 ## Choosing how the session key is protected
 
@@ -601,7 +602,8 @@ func Example_xmlenc1_encrypt_decrypt() {
   // true
 }
 ```
-source: [examples/xmlenc1_encrypt_decrypt_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmlenc1_encrypt_decrypt_example_test.go)
+source:
+[examples/xmlenc1_encrypt_decrypt_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmlenc1_encrypt_decrypt_example_test.go)
 <!-- END INCLUDE -->
 
 ## W3C interop conformance

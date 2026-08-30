@@ -146,7 +146,8 @@ falls back to parse+lower through the VM backend on the same lexer if the fast p
 not retain the parsed AST on the `Expression`; `AST()` reparses from `source` on demand. `CompileExpr()` keeps
 the caller-provided AST and lowers it without mutating the input tree.
 
-`StreamInfo()` returns a snapshot of precomputed streamability properties (axis usage bitmask, downward steps, function names, etc.). Streamability query helpers live in `internal/xpathstream`, not on the xpath3 package.
+`StreamInfo()` returns a snapshot of precomputed streamability properties (axis usage bitmask, downward steps, function
+names, etc.). Streamability query helpers live in `internal/xpathstream`, not on the xpath3 package.
 
 `StaticReferences(namespaces)` walks the expression's AST (reparsing from `source` when no AST is retained)
 and reports its FREE variable references (those not bound by an enclosing for/let/quantified binding or
@@ -164,7 +165,8 @@ an unknown/non-built-in type (XPST0008, via `IsKnownXSDType`), or an unknown, wr
 or a schema-element()/schema-attribute() node test (which references a global declaration outside the CTA
 static context), which the CTA static context disallows.
 
-`DumpVM()` writes a textual disassembly of compiled VM instructions. Use it for debugging or tooling around lowered expressions.
+`DumpVM()` writes a textual disassembly of compiled VM instructions. Use it for debugging or tooling around lowered
+expressions.
 
 ## Result
 
@@ -256,11 +258,13 @@ Pass bindings as plain maps: variables via `Evaluator.Variables(map[string]Seque
 `Evaluator.HTTPClient`), `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error
 with `FODC0002` / `FOUT1170` for every URI — there is no implicit `http.DefaultClient` and no implicit
 `os.ReadFile`. Built-in helpers in `internal/unparsedtext`:
-- `FileURIResolver{BaseDir}` — file resolver confined to `BaseDir` (refuses `..` traversal and absolute paths outside it)
+- `FileURIResolver{BaseDir}` — file resolver confined to `BaseDir` (refuses `..` traversal and absolute paths outside
+  it)
 - `NewFileResolver(fs.FS)` — file resolver backed by `io/fs`
 - `NewHTTPResolver(*http.Client)` — http(s) resolver; caller owns transport, timeouts, redirect policy
 
-User functions supplied via `Evaluator.Functions` take precedence over built-ins: the resolver checks user-registered functions before the built-in registry, so a user function CAN override a built-in in the `fn:` namespace.
+User functions supplied via `Evaluator.Functions` take precedence over built-ins: the resolver checks user-registered
+functions before the built-in registry, so a user function CAN override a built-in in the `fn:` namespace.
 
 ## Low-allocation reuse
 

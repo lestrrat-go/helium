@@ -43,5 +43,6 @@ func Example_html_parse() {
   // Hello
 }
 ```
-source: [examples/html_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/html_parse_example_test.go)
+source:
+[examples/html_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/html_parse_example_test.go)
 <!-- END INCLUDE -->

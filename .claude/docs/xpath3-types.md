@@ -65,7 +65,8 @@ type NodeItemUnionMember struct {
   `xs:list itemType="<union>"` atomizes each token by its own active member (agreeing with `$value`) instead
   of forcing every token through one static base; nil/short slice falls back to `atomizeListToken` on the
   declared item type
-- `QNameNoDefaultNS` → set from `Evaluator.QNameValueNoDefaultNamespace()`; when true an UNPREFIXED QName/NOTATION value atomizes to no namespace (XSD value-space semantics) instead of the node's default namespace
+- `QNameNoDefaultNS` → set from `Evaluator.QNameValueNoDefaultNamespace()`; when true an UNPREFIXED QName/NOTATION value
+  atomizes to no namespace (XSD value-space semantics) instead of the node's default namespace
 
 `resolveQNameFromNode` predeclares the `xml` prefix (→ the XML namespace) without requiring a binding on any
 node, matching `xsd.resolveLexicalQName`, so an xs:QName value such as `xml:lang`/`xml:space` atomizes
@@ -138,7 +139,8 @@ Produced by: inline functions, named refs (`fn#2`), partial application.
 ## MapItem
 
 Immutable. `Put` returns new map (copy-on-write).
-Construction + outward-facing accessors clone `Sequence` values via `cloneSequence`. Caller mutation MUST NOT change stored contents.
+Construction + outward-facing accessors clone `Sequence` values via `cloneSequence`. Caller mutation MUST NOT change
+stored contents.
 
 KEYS are cloned too: every map ingress (`newSingleEntryMap`, `NewMap`, `Put`, `MergeMaps`, `MapBuilder.Add`)
 clones the `AtomicValue` key via `cloneMapKey` (an O(1) single-atomic copy reusing `deepCloneAtomicValue`),
@@ -253,7 +255,8 @@ Per XPath 3.1 Section 2.6.2:
 - Array → flattened to the atomization of its members (recursively); a function or map member raises `FOTY0013`
 - Function/map → error `FOTY0013`
 
-The same flatten-arrays / error-on-function-or-map rule governs the `||` string-concatenation path (`concatToString`, `eval_operators.go`): array operands flatten to their atomized members, only function and map items raise `FOTY0014`.
+The same flatten-arrays / error-on-function-or-map rule governs the `||` string-concatenation path (`concatToString`,
+`eval_operators.go`): array operands flatten to their atomized members, only function and map items raise `FOTY0014`.
 
 The typed-value atomizer (`atomizeTypedValue`, `functions_node.go`) applies a per-item pre-check
 (`typedValueItemCheck` / `typedValueItemCheckFor`, an `atomizeItemCheck`) that selects a typed-value ACTION

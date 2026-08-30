@@ -4,7 +4,9 @@
 > 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the
 > governing rule and its conformance evidence. See `xsd11.md` for the index and version-resolution framing.
 
-- **UPA weakening** (`check_upa.go` `entriesOverlap`: in 1.1 an element competing with a wildcard is not a cos-nonambig violation — the element wins). Element-over-wildcard precedence is enforced at validation, gated `vc.version == Version11`:
+- **UPA weakening** (`check_upa.go` `entriesOverlap`: in 1.1 an element competing with a wildcard is not a cos-nonambig
+  violation — the element wins). Element-over-wildcard precedence is enforced at validation, gated `vc.version ==
+  Version11`:
   - CHOICE (`validate_elem.go` `matchChoice`/`tryMatchChoice`): a branch consuming the current child via an
     element leaf AS ITS FIRST CONSUMING TERM beats one consuming it via a wildcard, regardless of declaration
     order/nesting. Classifier `particleConsumesViaElement` →

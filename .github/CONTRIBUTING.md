@@ -28,7 +28,8 @@ The following is a set of guidelines that we ask you to follow when you contribu
 
 # Please Be Nice
 
-[Main source; if wordings differ, the main source supersedes this copy](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
+[Main source; if wordings differ, the main source supersedes this
+copy](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
 
 Please be nice when you contact us.
 
@@ -48,19 +49,24 @@ We are willing to help, but only as long as you are being nice to us.
 
 # Please Read The Examples First
 
-[Main source; if wordings differ, the main source supersedes this copy](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
+[Main source; if wordings differ, the main source supersedes this
+copy](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
 
 On most of the projects that we provide, we have example test code available,
-most likely in the [`examples/`](../examples) directory. Before asking questions or filing issues, please make sure to take a look at the examples.
+most likely in the [`examples/`](../examples) directory. Before asking questions or filing issues, please make sure to
+take a look at the examples.
 
-Specifically for Go projects, please first look for files with names `*_example_test.go`, which contain the runnable example code.
+Specifically for Go projects, please first look for files with names `*_example_test.go`, which contain the runnable
+example code.
 
-If the examples do not solve your problems, feel free to proceed with your report. If there are missing examples or inaccuracies, please do not hesitate to contact us.
+If the examples do not solve your problems, feel free to proceed with your report. If there are missing examples or
+inaccuracies, please do not hesitate to contact us.
 
 
 # Please Use Correct Medium (GitHub Issues / Discussions)
 
-[Main source; this is a specialized version copied from the main source](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
+[Main source; this is a specialized version copied from the main
+source](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
 
 This project uses [GitHub Issues](https://github.com/lestrrat-go/helium/issues) to deal with technical issues
 including bug reports, proposing new API, and otherwise issues that are directly actionable.
@@ -70,7 +76,8 @@ questions/discussions should be posted to [GitHub Discussions](https://github.co
 
 # Please Include (Pseudo)code for Any Technical Issues
 
-[Main source; if wordings differ, the main source supersedes this copy](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
+[Main source; if wordings differ, the main source supersedes this
+copy](https://github.com/lestrrat-go/contributions/blob/main/Contributions.md)
 
 Your report should contain clear, concise description of the issue that you are facing.
 However, at the same time please always include (pseudo)code in report.
@@ -95,7 +102,9 @@ Please help us help you by providing us with a reproducible code.
 # Reviewer/Reviewee Guidelines
 
 If you are curious about what what gets reviewed and why some decisions
-are made the way they are, please read [this document](https://github.com/lestrrat-go/contributions/blob/main/Reviews.md) to get some insight into the thinking process.
+are made the way they are, please read [this
+document](https://github.com/lestrrat-go/contributions/blob/main/Reviews.md) to get some insight into the thinking
+process.
 
 # Brown M&M Clause
 

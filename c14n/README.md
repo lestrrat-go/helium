@@ -47,5 +47,6 @@ func Example_c14n_canonicalize() {
   // <root a="1" b="2"><child></child></root>
 }
 ```
-source: [examples/c14n_canonicalize_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/c14n_canonicalize_example_test.go)
+source:
+[examples/c14n_canonicalize_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/c14n_canonicalize_example_test.go)
 <!-- END INCLUDE -->

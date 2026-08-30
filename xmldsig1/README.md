@@ -85,7 +85,8 @@ func Example_xmldsig1_sign_verify() {
   // signature valid
 }
 ```
-source: [examples/xmldsig1_sign_verify_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmldsig1_sign_verify_example_test.go)
+source:
+[examples/xmldsig1_sign_verify_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmldsig1_sign_verify_example_test.go)
 <!-- END INCLUDE -->
 
 ## Reference processing
@@ -435,7 +436,8 @@ func Example_xmldsig1_sha1_optin() {
   // legacy SHA-1 signature valid
 }
 ```
-source: [examples/xmldsig1_sha1_optin_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmldsig1_sha1_optin_example_test.go)
+source:
+[examples/xmldsig1_sha1_optin_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmldsig1_sha1_optin_example_test.go)
 <!-- END INCLUDE -->
 
 > **Note (breaking default change):** earlier versions accepted SHA-1

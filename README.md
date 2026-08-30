@@ -1,7 +1,8 @@
 # helium
 
 [![CI](https://github.com/lestrrat-go/helium/actions/workflows/ci.yml/badge.svg)](https://github.com/lestrrat-go/helium/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/lestrrat-go/helium.svg)](https://pkg.go.dev/github.com/lestrrat-go/helium)
+[![Go
+Reference](https://pkg.go.dev/badge/github.com/lestrrat-go/helium.svg)](https://pkg.go.dev/github.com/lestrrat-go/helium)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lestrrat-go/helium)
 
 Helium is a fast XML toolkit for Go covering XML parsing, SAX2-style streaming,
@@ -59,7 +60,8 @@ func Example_helium_parse() {
   // <root><child>hello</child></root>
 }
 ```
-source: [examples/helium_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/helium_parse_example_test.go)
+source:
+[examples/helium_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/helium_parse_example_test.go)
 <!-- END INCLUDE -->
 
 # Packages
@@ -223,7 +225,8 @@ stdlib token benchmark on all three corpora, it now edges past libxml2 on the
 medium corpus, and it is clearly ahead on the largest corpus.
 
 Benchmarks parse real-world XML files of varying sizes (AMD Ryzen 9 7900X3D,
-Go 1.26.1, `go test -run '^$' -bench 'Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$' -benchmem -count=5 -tags libxml2bench ./bench`,
+Go 1.26.1, `go test -run '^$' -bench 'Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$' -benchmem -count=5 -tags
+libxml2bench ./bench`,
 median shown):
 
 | File | Helium | `encoding/xml` | libxml2 (cgo) |
@@ -246,10 +249,14 @@ go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
 
 # Current status
 
-* **Implemented:** XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG, Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
-* **Scoped production support:** W3C XML Digital Signatures 1.1 (`xmldsig1`) for explicit same-document verification profiles. External references and XSLT are opt-in advanced features with caller-owned resource and execution policy.
-* **Scoped production support:** W3C XML Encryption 1.1 (`xmlenc1`) with a documented security exception for retired cryptography. Triple DES is refused, so block encryption and key wrapping are AES only.
-* **CLI:** the `helium` command provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron validate` subcommands.
+* **Implemented:** XML/HTML parsing, DOM building, SAX2, XPath 1.0, XPath 3.1, Basic XSLT 3.0, XInclude, C14N, RELAX NG,
+  Schematron, XSD, XML Catalog, streaming XML writer, and `encoding/xml` compatibility (`shim` package).
+* **Scoped production support:** W3C XML Digital Signatures 1.1 (`xmldsig1`) for explicit same-document verification
+  profiles. External references and XSLT are opt-in advanced features with caller-owned resource and execution policy.
+* **Scoped production support:** W3C XML Encryption 1.1 (`xmlenc1`) with a documented security exception for retired
+  cryptography. Triple DES is refused, so block encryption and key wrapping are AES only.
+* **CLI:** the `helium` command provides `lint`, `xpath`, `xslt`, `xsd validate`, `relaxng validate`, and `schematron
+  validate` subcommands.
 
 Some edge cases and parity gaps are still being iterated on; contributions and issue reports are welcome.
 
@@ -280,7 +287,9 @@ expected-failure (documented known gap) breakdowns where applicable.
 
 ## Scope
 
-XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards-compatible processing (XSLT 1.0 semantics + XPath 1.0 compatibility mode, enabled per element when the effective version is below 2.0) is implemented and in scope; only XSLT 1.0/2.0 *syntax* support is out of scope.
+XSLT support is intentionally scoped to Basic XSLT 3.0. Backwards-compatible processing (XSLT 1.0 semantics + XPath 1.0
+compatibility mode, enabled per element when the effective version is below 2.0) is implemented and in scope; only XSLT
+1.0/2.0 *syntax* support is out of scope.
 
 # For coding agents
 
@@ -319,7 +328,8 @@ please open a GitHub Discussion first.
 
 If this project is useful to you or your company, please consider sponsoring:
 
-[![Sponsor lestrrat](https://img.shields.io/badge/Sponsor-lestrrat-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/lestrrat)
+[![Sponsor
+lestrrat](https://img.shields.io/badge/Sponsor-lestrrat-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/lestrrat)
 
 Sponsorship funds continued maintenance, conformance work, and support for the
 people who rely on this library. Both individual and corporate sponsorships are

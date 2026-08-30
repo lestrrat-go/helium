@@ -40,7 +40,8 @@ func Example_shim_marshal() {
   // <person><name>Alice</name><age>30</age></person>
 }
 ```
-source: [examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/shim_marshal_example_test.go)
+source:
+[examples/shim_marshal_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/shim_marshal_example_test.go)
 <!-- END INCLUDE -->
 
 ## Notes
