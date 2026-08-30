@@ -11,7 +11,8 @@ import (
 )
 
 func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Element) error {
-	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named complexType missing name", componentLocalComplexType, true)
+	component := globalComplexTypeComponent(collapsedAttr(elem, attrName))
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named complexType missing name", component, true)
 	if err != nil || !ok {
 		return err
 	}
@@ -102,7 +103,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
 	component := componentLocalComplexType
 	if !local {
-		component = "complex type '" + collapsedAttr(elem, attrName) + "'"
+		component = globalComplexTypeComponent(collapsedAttr(elem, attrName))
 	}
 
 	// A LOCAL (anonymous/inline) xs:complexType — one whose parent is an element

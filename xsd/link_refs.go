@@ -1532,7 +1532,11 @@ func complexTypeComponent(td *TypeDef, src typeDefSource) string {
 	if src.isLocal {
 		return componentLocalComplexType
 	}
-	return "complex type '" + td.Name.Local + "'"
+	return globalComplexTypeComponent(td.Name.Local)
+}
+
+func globalComplexTypeComponent(name string) string {
+	return "complex type '" + name + "'"
 }
 
 // checkDuplicateAttrUses reports duplicate attribute uses (by expanded QName)

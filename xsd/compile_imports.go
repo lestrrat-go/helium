@@ -1553,7 +1553,7 @@ func (c *compiler) validateComponentChildName(ctx context.Context, elem *helium.
 		msg := "The value '" + name + "' of attribute 'name' is not a valid 'xs:NCName'."
 		switch {
 		case isXSDElement(elem, elemComplexType):
-			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalComplexType, msg))
+			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), globalComplexTypeComponent(name), msg))
 		case isXSDElement(elem, elemSimpleType):
 			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(), elem.LocalName(), componentLocalSimpleType, msg))
 		default:
