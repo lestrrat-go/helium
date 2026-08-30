@@ -57,8 +57,7 @@ func Example_schematron_validate() {
   // Output:
 }
 ```
-source:
-[examples/schematron_validate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/schematron_validate_example_test.go)
+source: [examples/schematron_validate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/schematron_validate_example_test.go)
 <!-- END INCLUDE -->
 
 ## Query language bindings
@@ -172,6 +171,5 @@ func Example_schematron_query_binding() {
   // schematron: unsupported query language binding "xslt2" (supported: xslt, xslt3, xpath3)
 }
 ```
-source:
-[examples/schematron_query_binding_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/schematron_query_binding_example_test.go)
+source: [examples/schematron_query_binding_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/schematron_query_binding_example_test.go)
 <!-- END INCLUDE -->

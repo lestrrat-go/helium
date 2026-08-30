@@ -155,8 +155,7 @@ func Example_xinclude_process() {
   // </doc>
 }
 ```
-source:
-[examples/xinclude_process_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xinclude_process_example_test.go)
+source: [examples/xinclude_process_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xinclude_process_example_test.go)
 <!-- END INCLUDE -->
 
 ## Options

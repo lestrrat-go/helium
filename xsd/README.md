@@ -106,6 +106,5 @@ func Example_xsd_validate() {
   // Output:
 }
 ```
-source:
-[examples/xsd_validate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xsd_validate_example_test.go)
+source: [examples/xsd_validate_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xsd_validate_example_test.go)
 <!-- END INCLUDE -->
