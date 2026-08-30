@@ -71,12 +71,14 @@ func (c *compiler) checkElementConsistent(ctx context.Context) {
 		if source == "" {
 			source = c.filename
 		}
-		c.checkContentModelConsistent(ctx, ct.td.ContentModel, source, ct.src.line, c.complexTypeComponent(ct.td, ct.src))
+		component := complexTypeComponent(ct.td, ct.src)
+		c.checkContentModelConsistent(ctx, ct.td.ContentModel, source, ct.src.line, component)
 		// The type's EFFECTIVE open-content wildcard can also resolve a same-named
 		// declared local element to a global (interleave moves an extra occurrence to
 		// the open partition; suffix matches a trailing one), so it participates in the
 		// type-table EDC exactly like a content-model wildcard.
-		c.checkWildcardElementConsistent(ctx, ct.td.ContentModel, ct.td.OpenContent, source, ct.src.line, "complexType", c.complexTypeComponent(ct.td, ct.src))
+		c.checkWildcardElementConsistent(ctx, ct.td.ContentModel, ct.td.OpenContent, source, ct.src.line,
+			"complexType", component)
 	}
 
 	// Run the same consistency check over standalone named model group
@@ -253,15 +255,6 @@ func (c *compiler) collectModelGroupParticles(mg *ModelGroup) (map[QName][]*Elem
 	}
 	walk(mg)
 	return elems, wildcards
-}
-
-// complexTypeComponent returns the diagnostic component label for a complex
-// type, matching the wording used by the other cos/derivation checks.
-func (c *compiler) complexTypeComponent(td *TypeDef, src typeDefSource) string {
-	if src.isLocal {
-		return componentLocalComplexType
-	}
-	return td.Name.Local
 }
 
 // checkContentModelConsistent collects every element declaration reachable in mg

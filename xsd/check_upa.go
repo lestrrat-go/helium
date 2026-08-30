@@ -16,11 +16,7 @@ func (c *compiler) checkUPA(ctx context.Context, td *TypeDef, src typeDefSource)
 		return
 	}
 	if !modelGroupIsDeterministic(td.ContentModel, c.schema) {
-		component := componentLocalComplexType
-		if !src.isLocal {
-			component = td.Name.Local
-		}
-		c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component,
+		c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", complexTypeComponent(td, src),
 			"The content model is not determinist."))
 	}
 }

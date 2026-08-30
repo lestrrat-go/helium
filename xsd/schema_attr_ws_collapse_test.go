@@ -1114,12 +1114,29 @@ func TestDirectTopLevelNamedComponentCollapseEmptyName(t *testing.T) {
 					require.Nil(t, schema)
 					require.Equal(t, 1, strings.Count(errs, wantNCName),
 						"version=%v: direct %s name=%q must emit exactly one invalid-NCName diagnostic; got: %s", v, tc.name, val, errs)
+					if tc.name == complexTypeName {
+						require.Contains(t, errs, "complex type '': The value '",
+							"version=%v: a global complexType must use its collapsed name in the component label; got: %s", v, errs)
+					}
 					errsByValue = append(errsByValue, errs)
 				}
 				require.Equal(t, errsByValue[0], errsByValue[1],
 					"version=%v: direct %s present-empty and whitespace-only @name must emit identical diagnostics", v, tc.name)
 			}
 		})
+	}
+}
+
+func TestGlobalComplexTypeInvalidNameComponentLabel(t *testing.T) {
+	t.Parallel()
+
+	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:complexType name="bad:name"/></xs:schema>`
+	const want = "complex type 'bad:name': The value 'bad:name' of attribute 'name' is not a valid 'xs:NCName'."
+
+	for _, v := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		_, errs, cerr := compileWith(t, v, schemaXML)
+		require.ErrorIs(t, cerr, xsd.ErrCompilationFailed)
+		require.Contains(t, errs, want, "version=%v: a global declaration must not use the local complex-type label", v)
 	}
 }
 
@@ -1246,6 +1263,10 @@ func TestComponentChildNameKeyedDispatchValidity(t *testing.T) {
 					require.Nil(t, schema)
 					require.Contains(t, errs, wantNCName,
 						"version=%v: name=%q must emit an invalid-NCName diagnostic; got: %s", v, bad, errs)
+					if strings.HasSuffix(tc.name, "complexType") {
+						require.Contains(t, errs, "complex type '"+strings.TrimSpace(bad)+"': The value '",
+							"version=%v: a %s complexType must use its collapsed name in the component label; got: %s", v, tc.wrapper, errs)
+					}
 				}
 
 				// Present-empty ("") and whitespace-only ("   ") emit byte-identical

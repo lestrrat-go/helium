@@ -56,7 +56,7 @@ func TestComplexTypeBlockXsiType(t *testing.T) {
 	for _, v := range []struct {
 		name string
 		ver  xsd.Version
-	}{{"xsd10", xsd.Version10}, {"xsd11", xsd.Version11}} {
+	}{{testLabelXSD10, xsd.Version10}, {testLabelXSD11, xsd.Version11}} {
 		t.Run(v.name, func(t *testing.T) {
 			t.Run("type block=extension rejects xsi:type extension", func(t *testing.T) {
 				require.ErrorIs(t, compileValidate(t, v.ver, `block="extension"`), xsd.ErrValidationFailed)

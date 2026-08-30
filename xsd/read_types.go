@@ -11,7 +11,8 @@ import (
 )
 
 func (c *compiler) parseNamedComplexType(ctx context.Context, elem *helium.Element) error {
-	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named complexType missing name", componentLocalComplexType, true)
+	component := globalComplexTypeComponent(collapsedAttr(elem, attrName))
+	name, ok, err := c.readRequiredTopLevelNCName(ctx, elem, "xsd: named complexType missing name", component, true)
 	if err != nil || !ok {
 		return err
 	}
@@ -100,6 +101,10 @@ func (c *compiler) recordAttrGroupRef(td *TypeDef, qn QName, src attrGroupRefUse
 func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, local bool) (*TypeDef, error) {
 	td := &TypeDef{IsComplex: true}
 	c.recordTypeDefSource(td, elem.Line(), true, elem.LocalName())
+	component := componentLocalComplexType
+	if !local {
+		component = globalComplexTypeComponent(collapsedAttr(elem, attrName))
+	}
 
 	// A LOCAL (anonymous/inline) xs:complexType — one whose parent is an element
 	// or an xs:alternative — must NOT carry a @name (XSD Structures §3.4.2:
@@ -112,7 +117,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 	// secondary, so present-empty ≡ whitespace-only.
 	if local && c.filename != "" && c.ncnameCompanionUsable(ctx, elem, elemComplexType) {
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-			elem.LocalName(), componentLocalComplexType,
+			elem.LocalName(), component,
 			"A local complexType definition must not have a 'name' attribute."))
 	}
 
@@ -129,7 +134,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 			if hasAttr(elem, ba) {
 				if v := getAttr(elem, ba); !isValidFinal(v) {
 					c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-						elem.LocalName(), componentLocalComplexType,
+						elem.LocalName(), component,
 						"The value '"+v+"' of attribute '"+ba+"' is not valid. Expected is '(#all | List of (extension | restriction))'."))
 				}
 			}
@@ -182,7 +187,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 			return
 		}
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
-			elem.LocalName(), componentLocalComplexType, what))
+			elem.LocalName(), component, what))
 	}
 
 	for child := range helium.Children(elem) {
@@ -311,7 +316,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 				continue
 			}
 			contentWrapperChild = ce.LocalName()
-			if err := c.parseComplexContent(ctx, ce, td); err != nil {
+			if err := c.parseComplexContent(ctx, ce, td, component); err != nil {
 				return nil, err
 			}
 		case isXSDElement(ce, elemSimpleContent):
@@ -340,7 +345,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 				continue
 			}
 			contentWrapperChild = ce.LocalName()
-			c.parseSimpleContent(ctx, ce, td)
+			c.parseSimpleContent(ctx, ce, td, component)
 		case isXSDElement(ce, elemAttribute):
 			if contentWrapperChild != "" {
 				reportExtraContent(ce, fmt.Sprintf("The attribute declaration '%s' is not allowed together with '%s'; attributes must be declared inside the wrapper's restriction or extension.", ce.LocalName(), contentWrapperChild))
@@ -478,7 +483,7 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 	return td, nil
 }
 
-func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element, td *TypeDef, component string) error {
 	// XSD 1.1: <xs:complexContent> may carry its own @mixed. The effective
 	// mixedness is complexType/@mixed OR complexContent/@mixed; if BOTH are present
 	// and disagree it is a schema error (a complexType mixed="true" with
@@ -492,7 +497,7 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 		ctMixed := td.ContentType == ContentTypeMixed
 		if ctMixed && !ccMixed && c.filename != "" {
 			c.schemaError(ctx, schemaComponentError(c.diagSource(), elem.Line(),
-				elem.LocalName(), componentLocalComplexType,
+				elem.LocalName(), component,
 				"The 'mixed' attribute on 'complexType' and 'complexContent' must not conflict."))
 		}
 		if ccMixed {
@@ -505,11 +510,11 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 	// it in both XSD 1.0 and 1.1. For a VALID wrapper (one derivation) the dispatch
 	// is identical to the old lenient loop; only zero/second/stray/trailing children
 	// (all invalid per the spec) are now rejected instead of silently tolerated.
-	return c.parseDerivationWrapper(ctx, elem, func(ce *helium.Element, kind DerivationKind) error {
+	return c.parseDerivationWrapper(ctx, elem, component, func(ce *helium.Element, kind DerivationKind) error {
 		if kind == DerivationRestriction {
-			return c.parseRestriction(ctx, ce, td)
+			return c.parseRestriction(ctx, ce, td, component)
 		}
-		return c.parseExtension(ctx, ce, td)
+		return c.parseExtension(ctx, ce, td, component)
 	})
 }
 
@@ -523,13 +528,13 @@ func (c *compiler) parseComplexContent(ctx context.Context, elem *helium.Element
 // for a valid wrapper (one derivation) the dispatch is identical to the old lenient
 // loops, so only the invalid forms are newly rejected in 1.0. Centralizing it keeps
 // the complexContent and simpleContent wrappers from diverging.
-func (c *compiler) parseDerivationWrapper(ctx context.Context, wrapper *helium.Element, dispatch func(ce *helium.Element, kind DerivationKind) error) error {
+func (c *compiler) parseDerivationWrapper(ctx context.Context, wrapper *helium.Element, component string, dispatch func(ce *helium.Element, kind DerivationKind) error) error {
 	report := func(ce *helium.Element, what string) {
 		if c.filename == "" {
 			return
 		}
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
-			wrapper.LocalName(), componentLocalComplexType, what))
+			wrapper.LocalName(), component, what))
 	}
 	var derivationSeen bool
 	var annotationSeen bool
@@ -573,16 +578,16 @@ func (c *compiler) parseDerivationWrapper(ctx context.Context, wrapper *helium.E
 	return nil
 }
 
-func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+func (c *compiler) parseRestriction(ctx context.Context, elem *helium.Element, td *TypeDef, component string) error {
 	td.Derivation = DerivationRestriction
 	c.recordDerivationBaseRef(ctx, elem, td)
-	return c.parseComplexContentDerivationBody(ctx, elem, td, DerivationRestriction)
+	return c.parseComplexContentDerivationBody(ctx, elem, td, DerivationRestriction, component)
 }
 
-func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td *TypeDef) error {
+func (c *compiler) parseExtension(ctx context.Context, elem *helium.Element, td *TypeDef, component string) error {
 	td.Derivation = DerivationExtension
 	c.recordDerivationBaseRef(ctx, elem, td)
-	return c.parseComplexContentDerivationBody(ctx, elem, td, DerivationExtension)
+	return c.parseComplexContentDerivationBody(ctx, elem, td, DerivationExtension, component)
 }
 
 // recordDerivationBaseRef resolves the @base reference of a complexContent
@@ -613,7 +618,7 @@ func (c *compiler) recordDerivationBaseRef(ctx context.Context, elem *helium.Ele
 // reject stray children) run in BOTH XSD 1.0 and 1.1. openContent/assert are 1.1
 // constructs (their cases stay Version11-gated) so a 1.0 schema carrying one is a
 // stray child, which is genuinely invalid in 1.0.
-func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *helium.Element, td *TypeDef, kind DerivationKind) error {
+func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *helium.Element, td *TypeDef, kind DerivationKind, component string) error {
 	strict := true
 	var contentModelChild string
 	var directAttrChild string
@@ -628,7 +633,7 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 			return
 		}
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), ce.Line(),
-			elem.LocalName(), componentLocalComplexType, what))
+			elem.LocalName(), component, what))
 	}
 
 	for child := range helium.Children(elem) {
@@ -814,7 +819,7 @@ func (c *compiler) parseComplexContentDerivationBody(ctx context.Context, elem *
 	return nil
 }
 
-func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element, td *TypeDef) {
+func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element, td *TypeDef, component string) {
 	td.ContentType = ContentTypeSimple
 	td.IsSimpleContent = true
 	// XSD 3.4.2: the <xs:simpleContent> content model is (annotation?, (restriction
@@ -823,8 +828,8 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 	// annotation only before it, nothing else (e.g. a direct trailing <xs:openContent>
 	// is rejected). For a VALID wrapper (one derivation) the dispatch is identical to
 	// the old lenient loop; only zero/second/stray/trailing children are now rejected.
-	_ = c.parseDerivationWrapper(ctx, elem, func(ce *helium.Element, kind DerivationKind) error {
-		c.dispatchSimpleContentDerivation(ctx, ce, td, kind)
+	_ = c.parseDerivationWrapper(ctx, elem, component, func(ce *helium.Element, kind DerivationKind) error {
+		c.dispatchSimpleContentDerivation(ctx, ce, td, kind, component)
 		return nil
 	})
 }
@@ -833,7 +838,7 @@ func (c *compiler) parseSimpleContent(ctx context.Context, elem *helium.Element,
 // restriction/extension and parses its attribute children. Shared by the XSD 1.0
 // lenient loop and the XSD 1.1 strict wrapper so both behave identically once a
 // derivation is selected.
-func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *helium.Element, td *TypeDef, kind DerivationKind) {
+func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *helium.Element, td *TypeDef, kind DerivationKind, component string) {
 	// @base is an xs:QName: dispatch on PRESENCE via resolveQNameRef so a
 	// PRESENT-but-empty base="" (or whitespace-only) is reported once as an invalid
 	// QName, not silently treated as absent.
@@ -842,7 +847,7 @@ func (c *compiler) dispatchSimpleContentDerivation(ctx context.Context, ce *heli
 		c.markChameleonEligible(td, ce, getAttr(ce, attrBase))
 	}
 	td.Derivation = kind
-	c.parseSimpleContentChildren(ctx, ce, td, kind)
+	c.parseSimpleContentChildren(ctx, ce, td, kind, component)
 }
 
 // isSimpleTypeFacetElement reports whether localName names an XSD constraining
@@ -878,7 +883,7 @@ func derivationKindName(kind DerivationKind) string {
 // attribute use (use="prohibited") is pointless and is warned+skipped, matching
 // complexContent xs:extension (parseExtension), so it does not propagate and
 // wrongly block an attribute the base wildcard would otherwise admit.
-func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *helium.Element, td *TypeDef, kind DerivationKind) {
+func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *helium.Element, td *TypeDef, kind DerivationKind, component string) {
 	// XSD 3.4.2 simpleContent derivation body content models:
 	//   restriction: (annotation?, simpleType?, facet*, (attribute|attributeGroup)*,
 	//                 anyAttribute?, assert*)
@@ -906,7 +911,7 @@ func (c *compiler) parseSimpleContentChildren(ctx context.Context, derivation *h
 			return
 		}
 		c.schemaError(ctx, schemaComponentError(c.diagSource(), ae.Line(),
-			derivation.LocalName(), componentLocalComplexType, what))
+			derivation.LocalName(), component, what))
 	}
 
 	for child := range helium.Children(derivation) {

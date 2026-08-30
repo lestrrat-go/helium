@@ -193,7 +193,8 @@ func TestFinalDefault(t *testing.T) {
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
 		_, errs := compileWithErrors(t, schemaXML)
-		require.Contains(t, errs, "Derivation by restriction is forbidden")
+		require.Contains(t, errs,
+			"complex type 'derivedType': Derivation by restriction is forbidden by the base type 'baseType'.")
 	})
 
 	t.Run("finalDefault=extension produces compile error for extension derivation", func(t *testing.T) {
@@ -217,7 +218,8 @@ func TestFinalDefault(t *testing.T) {
   <xs:element name="root" type="baseType"/>
 </xs:schema>`
 		_, errs := compileWithErrors(t, schemaXML)
-		require.Contains(t, errs, "Derivation by extension is forbidden")
+		require.Contains(t, errs,
+			"complex type 'derivedType': Derivation by extension is forbidden by the base type 'baseType'.")
 	})
 }
 
@@ -267,6 +269,34 @@ func TestFinalOnComplexType(t *testing.T) {
 		_, errs := compileWithErrors(t, schemaXML)
 		require.Empty(t, errs)
 	})
+}
+
+func TestFinalOnSimpleTypeComponentLabel(t *testing.T) {
+	t.Parallel()
+
+	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="Base" final="restriction">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+  <xs:simpleType name="Derived">
+    <xs:restriction base="Base"/>
+  </xs:simpleType>
+</xs:schema>`
+	for _, version := range []struct {
+		name string
+		v11  bool
+	}{
+		{testLabelXSD10, false},
+		{testLabelXSD11, true},
+	} {
+		t.Run(version.name, func(t *testing.T) {
+			t.Parallel()
+			errs := compileSchemaErrorsVersion(t, schema, version.v11)
+			require.Contains(t, errs,
+				"Derived: Derivation by restriction is forbidden by the base type 'Base'.")
+			require.NotContains(t, errs, "complex type 'Derived'")
+		})
+	}
 }
 
 func TestFinalOnSubstGroupHead(t *testing.T) {

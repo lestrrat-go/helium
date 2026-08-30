@@ -148,14 +148,27 @@ func TestComplexTypeContentModelExclusivity(t *testing.T) {
 
 	t.Run("rejects two model groups", func(t *testing.T) {
 		t.Parallel()
-		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+		const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="T">
     <xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>
     <xs:choice><xs:element name="b" type="xs:string"/></xs:choice>
   </xs:complexType>
   <xs:element name="root" type="T"/>
 </xs:schema>`
-		require.Contains(t, compileFatalErrors(t, schema), "more than one content model particle")
+		for _, version := range []struct {
+			name string
+			v11  bool
+		}{
+			{testLabelXSD10, false},
+			{testLabelXSD11, true},
+		} {
+			t.Run(version.name, func(t *testing.T) {
+				t.Parallel()
+				errs := compileSchemaErrorsVersion(t, schema, version.v11)
+				require.Contains(t, errs,
+					"complex type 'T': A complex type definition must not have more than one content model particle")
+			})
+		}
 	})
 
 	t.Run("rejects sequence then all", func(t *testing.T) {

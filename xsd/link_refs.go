@@ -1532,7 +1532,11 @@ func complexTypeComponent(td *TypeDef, src typeDefSource) string {
 	if src.isLocal {
 		return componentLocalComplexType
 	}
-	return "complex type '" + td.Name.Local + "'"
+	return globalComplexTypeComponent(td.Name.Local)
+}
+
+func globalComplexTypeComponent(name string) string {
+	return "complex type '" + name + "'"
 }
 
 // checkDuplicateAttrUses reports duplicate attribute uses (by expanded QName)
@@ -2535,12 +2539,10 @@ func (c *compiler) reportUnresolvedTypeRef(ctx context.Context, owner *TypeDef, 
 		elemKind = elemSimpleType
 	}
 	component := owner.Name.Local
-	if component == "" || src.isLocal {
-		if elemKind == elemComplexType {
-			component = componentLocalComplexType
-		} else {
-			component = componentLocalSimpleType
-		}
+	if owner.IsComplex {
+		component = complexTypeComponent(owner, src)
+	} else if component == "" || src.isLocal {
+		component = componentLocalSimpleType
 	}
 	msg := fmt.Sprintf("The QName value '{%s}%s' does not resolve to a(n) type definition.", qn.NS, qn.Local)
 	c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, elemKind, component, msg))
@@ -3639,19 +3641,15 @@ func (c *compiler) checkFinalOnTypes(ctx context.Context) {
 		// Check base type final for extension/restriction derivation.
 		if td.BaseType != nil && td.BaseType.Final != 0 {
 			baseFinal := td.BaseType.Final
+			component := td.Name.Local
+			if td.IsComplex {
+				component = complexTypeComponent(td, src)
+			}
 			if td.Derivation == DerivationExtension && baseFinal&FinalExtension != 0 {
-				component := td.Name.Local
-				if src.isLocal {
-					component = componentLocalComplexType
-				}
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by extension is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
 			}
 			if td.Derivation == DerivationRestriction && baseFinal&FinalRestriction != 0 {
-				component := td.Name.Local
-				if src.isLocal {
-					component = componentLocalComplexType
-				}
 				c.schemaError(ctx, schemaComponentError(c.filename, src.line, "complexType", component,
 					"Derivation by restriction is forbidden by the base type '"+td.BaseType.Name.Local+"'."))
 			}

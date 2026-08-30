@@ -52,9 +52,9 @@ func TestWildcardRestrictsModelGroup(t *testing.T) {
 // versionName renders an xsd.Version as a stable subtest name.
 func versionName(v xsd.Version) string {
 	if v == xsd.Version11 {
-		return "xsd11"
+		return testLabelXSD11
 	}
-	return "xsd10"
+	return testLabelXSD10
 }
 
 // A base "model group" that is a §3.9.6-POINTLESS 1/1 wrapper around a single
