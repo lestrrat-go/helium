@@ -60,8 +60,7 @@ func Example_helium_parse() {
   // <root><child>hello</child></root>
 }
 ```
-source:
-[examples/helium_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/helium_parse_example_test.go)
+source: [examples/helium_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/helium_parse_example_test.go)
 <!-- END INCLUDE -->
 
 # Packages

@@ -69,6 +69,5 @@ func Example_sax_parse() {
   // </library>
 }
 ```
-source:
-[examples/sax_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/sax_parse_example_test.go)
+source: [examples/sax_parse_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/sax_parse_example_test.go)
 <!-- END INCLUDE -->

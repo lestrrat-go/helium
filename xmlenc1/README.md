@@ -602,8 +602,7 @@ func Example_xmlenc1_encrypt_decrypt() {
   // true
 }
 ```
-source:
-[examples/xmlenc1_encrypt_decrypt_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmlenc1_encrypt_decrypt_example_test.go)
+source: [examples/xmlenc1_encrypt_decrypt_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xmlenc1_encrypt_decrypt_example_test.go)
 <!-- END INCLUDE -->
 
 ## W3C interop conformance

@@ -74,6 +74,5 @@ func Example_catalog_load() {
   // unknown: ""
 }
 ```
-source:
-[examples/catalog_load_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/catalog_load_example_test.go)
+source: [examples/catalog_load_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/catalog_load_example_test.go)
 <!-- END INCLUDE -->

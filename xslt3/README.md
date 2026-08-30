@@ -61,8 +61,7 @@ func Example_xslt3_transform_string() {
   // <?xml version="1.0" encoding="UTF-8"?><greeting>Hello, World!</greeting>
 }
 ```
-source:
-[examples/xslt3_transform_string_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xslt3_transform_string_example_test.go)
+source: [examples/xslt3_transform_string_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xslt3_transform_string_example_test.go)
 <!-- END INCLUDE -->
 
 ## Security
@@ -341,8 +340,7 @@ var (
   errOutputTooLarge = errors.New("output exceeds maximum allowed size")
 )
 ```
-source:
-[examples/xslt3_untrusted_service_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xslt3_untrusted_service_example_test.go)
+source: [examples/xslt3_untrusted_service_example_test.go](https://github.com/lestrrat-go/helium/blob/main/examples/xslt3_untrusted_service_example_test.go)
 <!-- END INCLUDE -->
 
 ## Conformance
