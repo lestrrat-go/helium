@@ -38,21 +38,24 @@ import (
 //	diff /tmp/base.txt /tmp/head.txt
 //
 // Result: the diff is empty and both files hash to sha256
-// 1389c877613206c349dc2c4ebeddce2e4d36ab3df92bb3bd972a738b562c8498. Each run
-// takes well under a minute and writes 36,143 lines.
+// 171fc1e474859abe156923f8cd753746b1df91d3cd56e64679b750c3c8a24fb5. Each run
+// takes well under a minute and writes 35,819 lines.
 //
 // Corpus 1, the golden cross-product. Every schema in
 // testdata/libxml2-compat/relaxng/test validated against every instance in the
-// same directory. 6 of the 105 schemas do not compile and are recorded once
-// each as SCHEMA-ERROR, leaving 99 schemas x 163 instances = 16,137 validated
-// pairs, 16,143 lines in all: 527 VALID, 15,610 INVALID.
+// same directory. 8 of the 105 schemas do not compile and are recorded once
+// each as SCHEMA-ERROR (6 pre-existing plus interleave0_0.rng and
+// tutor14_1.rng, which violate RELAX NG §7.4's interleave name-class
+// disjointness), leaving 97 schemas x 163 instances = 15,811 validated pairs,
+// 15,819 lines in all: 517 VALID, 15,294 INVALID.
 //
 // Corpus 2, randomized group grammars. 20,000 seeded random grammars (seed 1)
 // over three shapes, including a bare <group> under <start>, which is the only
 // shape that reaches the naive backtracker: 2,889 VALID, 17,111 INVALID
-// spanning 184 distinct error texts.
+// spanning 184 distinct error texts. This half exercises no interleave shape,
+// so it is unchanged by the interleave partitioning engine.
 //
-// 13,451 of the 32,721 INVALID lines carry diagnostic text. The rest are
+// 13,429 of the 32,405 INVALID lines carry diagnostic text. The rest are
 // failures the validator reports only through the returned error without
 // emitting anything to the error handler, which is identical on both
 // revisions.

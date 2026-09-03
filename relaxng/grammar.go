@@ -53,6 +53,9 @@ type pattern struct {
 	// by-name lookup in a single flat global define map, so nested grammars
 	// that reuse a define name keep distinct scopes.
 	resolved *pattern
+	// partition is the compile-time interleave routing table (patternInterleave
+	// only), computed by checkInterleaves.
+	partition *interleavePartition
 }
 
 // dataType identifies a datatype from a datatype library.
