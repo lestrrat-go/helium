@@ -15,6 +15,11 @@ import (
 
 const rngNS = "http://relaxng.org/ns/structure/1.0"
 
+// halfSplit is a document in which an interleave branch's first member is
+// present and its second is missing, so a composite branch that consumed only
+// part of itself is left incomplete.
+const halfSplit = "<r><a/><s/></r>"
+
 // compileInterleave compiles schema and returns the concatenated fatal
 // compile-error text.
 func compileInterleave(t *testing.T, schema string) string {
@@ -281,19 +286,19 @@ func TestInterleaveSplitCompositeBranch(t *testing.T) {
 		{"choice group-or-element split", content(cho(grp(a, b), a)), split, true},
 
 		// The same shapes must still reject what the grammar does not allow.
-		{"nested interleave missing member", content(ilv(a, b)), `<r><a/><s/></r>`, false},
+		{"nested interleave missing member", content(ilv(a, b)), halfSplit, false},
 		{"nested interleave undeclared element", content(ilv(a, b)), `<r><a/><s/><b/><c/></r>`, false},
 		{"nested interleave duplicate member", content(ilv(a, b)), `<r><a/><s/><b/><a/></r>`, false},
 		{"nested interleave missing sibling", content(ilv(a, b)), `<r><a/><b/></r>`, false},
 
 		// optional(composite) is all-or-nothing: absent is fine, half is not.
 		{"optional group absent", content(opt(grp(a, b))), `<r><s/></r>`, true},
-		{"optional group half rejects", content(opt(grp(a, b))), `<r><a/><s/></r>`, false},
+		{"optional group half rejects", content(opt(grp(a, b))), halfSplit, false},
 		{"optional interleave absent", content(opt(ilv(a, b))), `<r><s/></r>`, true},
 		{"optional interleave half rejects", content(opt(ilv(a, b))), `<r><b/><s/></r>`, false},
 
 		// A bare group branch is likewise all-or-nothing.
-		{"group half rejects", content(grp(a, b)), `<r><a/><s/></r>`, false},
+		{"group half rejects", content(grp(a, b)), halfSplit, false},
 	}
 
 	for _, tc := range cases {
@@ -492,7 +497,7 @@ func TestInterleaveCompositeBranch(t *testing.T) {
 				require.NoError(t, verr, "%s: %s should validate", tc.name, docStr)
 			}
 
-			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><a/><s/></r>`))
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(halfSplit))
 			require.NoError(t, err)
 			verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
 			if tc.acceptPartial {
@@ -518,7 +523,7 @@ func TestInterleaveRejectsIncompleteBranch(t *testing.T) {
 			`<element name="s"><empty/></element>` +
 			`</interleave></element></start></grammar>`
 		grammar := compileGrammar(t, schema)
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><a/><s/></r>`))
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(halfSplit))
 		require.NoError(t, err)
 		require.Error(t, relaxng.NewValidator(grammar).Validate(t.Context(), doc))
 	})
@@ -587,7 +592,7 @@ func TestInterleaveNullableMemberAfterSibling(t *testing.T) {
 			`<element name="s"><empty/></element>` +
 			`</interleave></element></start></grammar>`
 		grammar := compileGrammar(t, schema)
-		for _, docStr := range []string{`<r><a/><s/><b/></r>`, `<r><a/><b/><s/></r>`, `<r><a/><s/></r>`} {
+		for _, docStr := range []string{`<r><a/><s/><b/></r>`, `<r><a/><b/><s/></r>`, halfSplit} {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr))
 			require.NoError(t, err)
 			require.NoError(t, relaxng.NewValidator(grammar).Validate(t.Context(), doc), "%s should validate", docStr)
@@ -602,7 +607,7 @@ func TestInterleaveNullableMemberAfterSibling(t *testing.T) {
 			`<element name="s"><empty/></element>` +
 			`</interleave></element></start></grammar>`
 		grammar := compileGrammar(t, schema)
-		for _, docStr := range []string{`<r><a/><s/><b/></r>`, `<r><a/><b/><s/></r>`, `<r><a/><s/></r>`} {
+		for _, docStr := range []string{`<r><a/><s/><b/></r>`, `<r><a/><b/><s/></r>`, halfSplit} {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr))
 			require.NoError(t, err)
 			require.NoError(t, relaxng.NewValidator(grammar).Validate(t.Context(), doc), "%s should validate", docStr)
@@ -956,7 +961,7 @@ func TestInterleaveDiagnostics(t *testing.T) {
 			`<group><element name="a"><empty/></element><element name="b"><empty/></element></group>` +
 			`<element name="s"><empty/></element>` +
 			`</interleave></element></start></grammar>`
-		got := validate(t, schema, `<r><a/><s/></r>`)
+		got := validate(t, schema, halfSplit)
 		require.Equal(t,
 			"test.xml:1: element r: Relax-NG validity error : Invalid sequence in interleave\n"+
 				"test.xml:1: element r: Relax-NG validity error : Element r failed to validate content\n",
