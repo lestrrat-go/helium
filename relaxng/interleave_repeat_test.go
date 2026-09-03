@@ -22,7 +22,7 @@ func TestInterleaveRepeatableMemberGroup(t *testing.T) {
 		return `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start>` +
 			`<element name="root"><interleave>` + members + `</interleave></element></start></grammar>`
 	}
-	a := `<element name="a"><empty/></element>`
+	a := benchElementA
 	b := `<element name="b"><empty/></element>`
 	c := `<element name="c"><empty/></element>`
 	z := func(p string) string { return `<zeroOrMore>` + p + `</zeroOrMore>` }
