@@ -112,6 +112,8 @@ bug that prompted it.
 | `c14n_test.go` | c14n | C14N golden file tests |
 | `xsd_test.go` | xsd | Schema validation golden tests |
 | `relaxng_test.go` | relaxng | RELAX NG golden tests |
+| `interleave_test.go` | relaxng | Interleave §7.4 conflict checks and golden-schema conflict coverage |
+| `interleave_internal_test.go` | relaxng | Interleave partition/routing table (internal package) |
 | `group_backtrack_differential_test.go` | relaxng | Flag-gated group-backtracking differential harness |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization and ASCII QName scanner regression coverage |

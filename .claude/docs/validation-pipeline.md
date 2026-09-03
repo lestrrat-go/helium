@@ -1813,7 +1813,8 @@ IDConstraint { Kind (Unique|Key|KeyRef), Selector/Fields XPath, Refer, Namespace
 
 ## RELAX NG
 
-Files: `relaxng/relaxng.go` (API), `parse.go` (compiler), `validate.go` (engine), `grammar.go` (model)
+Files: `relaxng/relaxng.go` (API), `parse.go` (compiler), `validate.go` (engine), `grammar.go` (model),
+`interleave.go` (compile-time interleave partition tables and RELAX NG §7.4 conflict checks)
 
 ### Compile: Document → Grammar
 
@@ -1842,6 +1843,22 @@ Files: `relaxng/relaxng.go` (API), `parse.go` (compiler), `validate.go` (engine)
 6. **Rule checks** — compile-time semantic validation (`checkPattern` also follows `pattern.resolved`; visited
    set keyed by `{define pattern, ruleFlags}` so a define reached under a new ancestor context — e.g. once
    normally and once under `<list>` — is re-checked in each context)
+6a. **Interleave partitioning & §7.4 checks** — `checkInterleaves` (`interleave.go`, runs right after step 6, over
+   `compiler.interleaves`: every `interleave`/`mixed` pattern created plus every `<start>`/`<define>` merge whose
+   combined result is an interleave) computes each interleave's compile-time routing table
+   (`computeInterleavePartition`, libxml2: `xmlRelaxNGComputeInterleaves`) and stores it on `pattern.partition`.
+   For each branch, `collectInterleaveLeaves` walks group/choice/interleave/optional/zeroOrMore/oneOrMore
+   children and follows each resolved `<ref>`/`<parentRef>` once per branch, without crossing an element or
+   attribute boundary, collecting the branch's element and attribute name classes and whether it accepts
+   text/data/value/list. An element leaf whose name class is a finite union of names is entered into the
+   partition's `byName` map; a leaf whose name class is not finite (`nsName`/`anyName`) marks the branch `wild`.
+   Every branch pair is then checked for a RELAX NG §7.4 conflict via the existing `nameClassesOverlap`: an
+   overlapping element name class (or text/data/value/list in two branches) is `Element or text conflicts in
+   interleave`; an overlapping attribute name class is `Attributes conflicts in interleave` — both fatal compile
+   errors (`c.addPatternError`, libxml2 `{file}:{line}: element interleave: Relax-NG parser error : {msg}`
+   format), reported at most once each per interleave and only when the grammar has no earlier compile error
+   (`c.errorCount == 0`, the same gate libxml2 uses). Because §7.4 holds for every compiled grammar, routing a
+   node to the one branch whose leaves accept it (`interleavePartition.route`, validation-time) is exact.
 7. **Content-type checks (§7.2)** — `checkContentTypes` (runs AFTER scoped-ref resolution, so it follows
    `<ref>`/`<parentRef>` into their resolved define body) checks every `<element>` body reachable in the LIVE
    grammar. The live element bodies are gathered by `collectLiveElements` walking ONLY from the resolved start

@@ -64,6 +64,10 @@ type compiler struct {
 	// replaced by an <include> override is never checked even though its node is
 	// still recorded here.
 	elementNodes map[*pattern]*helium.Element
+	// interleaves records every interleave pattern created (including one
+	// produced by combining <start>/<define> via combine="interleave"), for
+	// checkInterleaves to partition and §7.4-check after refs are resolved.
+	interleaves []*pattern
 }
 
 // pendingRef is a ref/parentRef node awaiting compile-time resolution against
@@ -164,6 +168,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	c.grammar.start = startPat
 	c.checkRules(ctx)
+	c.checkInterleaves(ctx)
 
 	// Fail closed: if compilation produced any fatal errors (e.g. an unbound
 	// namespace prefix), the grammar must not validate any instance. A poisoned
@@ -421,7 +426,10 @@ func (c *compiler) parseStart(ctx context.Context, elem *helium.Element) {
 	if combineMode == "" {
 		combineMode = existing.combine
 	}
-	existing.pattern = combinePatterns(existing.pattern, pat, combineMode)
+	existing.pattern = combinePatterns(existing.pattern, pat, combineMode, elem.Line())
+	if existing.pattern.kind == patternInterleave {
+		c.interleaves = append(c.interleaves, existing.pattern)
+	}
 	if combineMode != "" {
 		existing.combine = combineMode
 	}
@@ -468,7 +476,10 @@ func (c *compiler) parseDefine(ctx context.Context, elem *helium.Element) {
 	if combineMode == "" {
 		combineMode = existing.combine
 	}
-	existing.pattern = combinePatterns(existing.pattern, pat, combineMode)
+	existing.pattern = combinePatterns(existing.pattern, pat, combineMode, elem.Line())
+	if existing.pattern.kind == patternInterleave {
+		c.interleaves = append(c.interleaves, existing.pattern)
+	}
 	if combineMode != "" {
 		existing.combine = combineMode
 	}
@@ -489,13 +500,16 @@ func (c *compiler) validateCombineValue(ctx context.Context, combine string) {
 	c.addBareSchemaError(ctx, msg)
 }
 
-// combinePatterns combines two patterns with the given combine mode.
-func combinePatterns(existing, incoming *pattern, mode string) *pattern {
+// combinePatterns combines two patterns with the given combine mode. line is
+// the source line of the <start>/<define> element being combined, recorded on
+// an interleave result so a §7.4 conflict error can point at it.
+func combinePatterns(existing, incoming *pattern, mode string, line int) *pattern {
 	switch mode {
 	case combineInterleave:
 		return &pattern{
 			kind:     patternInterleave,
 			children: []*pattern{existing, incoming},
+			line:     line,
 		}
 	case combineChoice:
 		return &pattern{
@@ -848,11 +862,13 @@ func (c *compiler) parsePattern(ctx context.Context, node *helium.Element) *patt
 	case "interleave":
 		p := &pattern{kind: patternInterleave, line: node.Line()}
 		p.children = c.parsePatternChildren(ctx, node)
+		c.interleaves = append(c.interleaves, p)
 		return p
 	case "mixed":
 		// mixed is interleave with text
 		p := &pattern{kind: patternInterleave, line: node.Line()}
 		children := c.parsePatternChildren(ctx, node)
+		c.interleaves = append(c.interleaves, p)
 		textPat := &pattern{kind: patternText}
 		if len(children) > 1 {
 			groupPat := &pattern{kind: patternGroup, children: children}
