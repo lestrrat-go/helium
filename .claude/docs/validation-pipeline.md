@@ -1878,9 +1878,9 @@ Pattern-matching engine with backtracking:
    - **Attribute**: match against instance attrs
    - **Group**: sequential with backtracking
    - **Choice**: try alternatives, prefer branches making progress
-   - **Interleave**: unordered member-by-member matching; a repeatable member-group (zeroOrMore/oneOrMore of group)
-     restarts its members each iteration so a sibling branch can consume elements between group members across
-     iterations
+   - **Interleave**: unordered member-by-member matching over an expanded branch list (see Interleave Branch
+     Expansion); a repeatable member-group (zeroOrMore/oneOrMore of group) restarts its members each iteration so a
+     sibling branch can consume elements between group members across iterations
    - **ZeroOrMore/OneOrMore/Optional**: repetition with suppressed errors
    - **Ref/ParentRef**: follow the compile-time-resolved `pattern.resolved` scoped pointer and recurse (no by-name
      lookup)
@@ -1888,6 +1888,53 @@ Pattern-matching engine with backtracking:
    - **List**: split text, validate items
 3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate
    content, check all attrs+content consumed
+
+### Interleave Branch Expansion (`validateInterleaveContent` / `expandInterleaveBranches`)
+
+RELAX NG lets each interleave branch's members appear anywhere among the other branches' members, so a branch whose
+content is a **composite** — a group or interleave of more than one member — must be matched member-by-member rather
+than atomically, or its members would have to be contiguous in the document. `interleaveMatch`'s `groupStates`
+machinery does that member-by-member tracking, but only for a branch that `resolveToGroup` reaches (a `<group>`, or a
+`zeroOrMore`/`oneOrMore` wrapping one). Two spec identities bring every other composite shape into that same form, and
+`expandInterleaveBranches` applies both to enumerate candidate branch lists:
+
+- **Associativity** — `interleave(interleave(a, b), c)` accepts exactly what `interleave(a, b, c)` accepts, so
+  `flattenInterleaveBranches`/`appendInterleaveBranch` splice a nested interleave (through `<ref>`, via
+  `resolveToInterleave`) into its parent's branch list.
+- **Distributivity over choice** — `interleave(P, choice(Q1, Q2))` accepts exactly what
+  `choice(interleave(P, Q1), interleave(P, Q2))` accepts, and `optional(Q)` is `choice(Q, empty)`, so
+  `interleaveBranchAlternatives` replaces such a branch by each of its arms in turn (`interleaveEmptyBranch` is the
+  singleton absent arm; it is a singleton because branch identity is part of the group-memoization key).
+
+A branch is expanded ONLY when at least one alternative is composite (`isCompositeBranch`). A single-element
+alternative already matches atomically, so an interleave over many `optional(element)` branches — the common shape —
+contributes no factor of two each and is matched on its own unexpanded branch list. When nothing expands, the single
+candidate IS `pat.children` and the path reduces to one `interleaveMatch` call, so any grammar without a composite
+branch is matched exactly as it would be without expansion (verified by
+`relaxng/group_backtrack_differential_test.go`: byte-identical verdicts and error text across the golden
+cross-product and 20000 random grammars).
+
+`maxInterleaveExpansions` (256 candidate lists) and `maxInterleaveExpandDepth` (12 levels) bound the enumeration;
+exhausting the budget falls back to matching the unexpanded list, which keeps validation linear in the grammar at the
+cost of rejecting some documents that interleave a composite branch's members with its siblings.
+
+**Candidate selection.** An interleave reports success as soon as its required branches are satisfied — it does NOT
+require the content to be exhausted, because the caller may have further patterns to apply. A candidate whose branches
+are all nullable (a choice arm of nothing but optionals) therefore succeeds while consuming nothing, and would shadow
+the arm that actually describes the content if arms were taken in grammar order. `validateInterleaveContent` takes the
+first candidate that leaves nothing unconsumed, and otherwise keeps the closest fit (fewest remaining nodes).
+
+**Completion of a partial member-group.** A member-group that stops mid-iteration with a non-nullable remaining member
+is incomplete content — `zeroOrMore(group(a, b))` fed an unpaired trailing `a`, or `group(a, b)` fed only `a`. The
+consumed/nullable check cannot catch it, because the group DID consume its earlier members and so counts as consumed;
+`interleaveMatch` checks every `groupStates` entry left with `0 < pos < len(members)` instead.
+
+**Diagnostics.** A branch that matches the head element by NAME but fails on its own content appends definitive errors
+(`validateElement` clears suppression once it has consumed the element), and the other branches are then unconsumed
+only because that branch blocked the sequence. `interleaveMatch` keeps those errors (`captureBlocked`, retaining the
+attempt that got furthest) and reports them in place of `Expecting an element X, got nothing` for a branch the document
+never reaches. A branch that simply does not match by name appends nothing (`elementMatchesWithErrors` returns false
+silently on a name mismatch), so only genuine inner failures are captured.
 
 ### Backtracking Strategy (`backtrackGroupFlexible` / `backtrackGroupNaive`)
 

@@ -556,216 +556,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		if len(pat.children) == 0 {
 			return 0
 		}
-		// Determine which children are repeatable (zeroOrMore/oneOrMore/text).
-		// Text is inherently repeatable in interleave (text nodes appear between elements).
-		isRepeatable := make([]bool, len(pat.children))
-		for i, child := range pat.children {
-			isRepeatable[i] = child.kind == patternZeroOrMore || child.kind == patternOneOrMore || child.kind == patternText
-		}
-
-		// For children that resolve to groups, track per-member progress.
-		// This allows group members to be matched one-by-one with other
-		// interleave children consuming elements between them. A repeatable
-		// child wrapping a group (zeroOrMore/oneOrMore of group(a,b)) is tracked
-		// the same way, with repeat=true so a completed iteration restarts at the
-		// first member — letting another interleave branch consume between group
-		// members across iterations.
-		type groupState struct {
-			members      []*pattern
-			pos          int
-			repeat       bool // member-group wrapped in zeroOrMore/oneOrMore
-			iterConsumed bool // current iteration consumed at least one item
-		}
-		groupStates := make([]*groupState, len(pat.children))
-		for i, child := range pat.children {
-			if grp := v.resolveToGroup(child); grp != nil {
-				groupStates[i] = &groupState{members: grp.children, pos: 0}
-				continue
-			}
-			if child.kind == patternZeroOrMore || child.kind == patternOneOrMore {
-				if grp := v.resolveToGroup(wrapChildren(child.children)); grp != nil {
-					groupStates[i] = &groupState{members: grp.children, pos: 0, repeat: true}
-				}
-			}
-		}
-
-		// Track which children ever consumed something.
-		consumed := make([]bool, len(pat.children))
-		// Track which single-use children are "done" (already matched once).
-		done := make([]bool, len(pat.children))
-		progress := true
-		var extraElemNode *helium.Element // node of the extra (duplicate) element
-		for progress {
-			progress = false
-			for i, child := range pat.children {
-				if done[i] {
-					// Single-use pattern already consumed. Check if the next element
-					// would match it again (= "Extra element in interleave").
-					if extraElemNode == nil {
-						remaining := skipIgnored(state.seq)
-						if len(remaining) > 0 {
-							if e, ok := remaining[0].(*helium.Element); ok {
-								savedState := state.clone()
-								savedAttrUsed := make([]bool, len(attrUsed))
-								copy(savedAttrUsed, attrUsed)
-								savedLen := len(v.pendingErrors)
-								savedValid := v.valid
-								v.suppressDepth++
-								ret := v.validateContentPat(child, elem, attrs, attrUsed, state)
-								v.suppressDepth--
-								if ret == 0 && !seqEqual(state.seq, savedState.seq) {
-									extraElemNode = e
-								}
-								*state = *savedState
-								copy(attrUsed, savedAttrUsed)
-								v.pendingErrors = v.pendingErrors[:savedLen]
-								v.valid = savedValid
-							}
-						}
-					}
-					continue
-				}
-
-				// Group children: match member-by-member so other interleave
-				// children can consume elements between group members. For a
-				// repeatable member-group, a completed iteration that consumed
-				// something restarts at the first member (a fresh group iteration).
-				if gs := groupStates[i]; gs != nil {
-					for {
-						gs.iterConsumed = false
-						blocked := false
-						for gs.pos < len(gs.members) {
-							member := gs.members[gs.pos]
-							savedState := state.clone()
-							savedAttrUsed := make([]bool, len(attrUsed))
-							copy(savedAttrUsed, attrUsed)
-							savedLen := len(v.pendingErrors)
-							savedValid := v.valid
-							v.suppressDepth++
-							ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
-							v.suppressDepth--
-							if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
-								// Member consumed something — advance.
-								consumed[i] = true
-								progress = true
-								gs.iterConsumed = true
-								gs.pos++
-								v.pendingErrors = v.pendingErrors[:savedLen]
-								v.valid = savedValid
-								// Continue trying next members in same round
-								// (they might also match immediately).
-							} else {
-								// Member didn't consume. If nullable, skip it
-								// and try the next member.
-								*state = *savedState
-								copy(attrUsed, savedAttrUsed)
-								v.pendingErrors = v.pendingErrors[:savedLen]
-								v.valid = savedValid
-								if v.isNullable(member) {
-									gs.pos++
-									continue
-								}
-								// Not nullable — stop trying this group for now.
-								// Other interleave children may consume first.
-								blocked = true
-								break
-							}
-						}
-						// Restart a repeatable member-group only after a full
-						// iteration that consumed something; otherwise stop.
-						if gs.repeat && !blocked && gs.pos >= len(gs.members) && gs.iterConsumed {
-							gs.pos = 0
-							continue
-						}
-						break
-					}
-					if gs.pos >= len(gs.members) {
-						if !isRepeatable[i] {
-							done[i] = true
-						}
-					}
-					continue
-				}
-
-				// Non-group children: try atomic matching.
-				savedState := state.clone()
-				savedAttrUsed := make([]bool, len(attrUsed))
-				copy(savedAttrUsed, attrUsed)
-				savedLen := len(v.pendingErrors)
-				savedValid := v.valid
-				v.suppressDepth++
-				ret := v.validateContentPat(child, elem, attrs, attrUsed, state)
-				v.suppressDepth--
-				if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
-					consumed[i] = true
-					progress = true
-					if !isRepeatable[i] {
-						done[i] = true
-					}
-					v.pendingErrors = v.pendingErrors[:savedLen]
-					v.valid = savedValid
-				} else {
-					*state = *savedState
-					copy(attrUsed, savedAttrUsed)
-					v.pendingErrors = v.pendingErrors[:savedLen]
-					v.valid = savedValid
-				}
-			}
-		}
-		if extraElemNode != nil {
-			v.addBareError(fmt.Sprintf("Extra element %s in interleave", extraElemNode.LocalName()))
-			v.addError(extraElemNode, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
-			return -1
-		}
-		// Check for required children that were never consumed.
-		for i, child := range pat.children {
-			if !consumed[i] && !v.isNullable(child) {
-				// For group children with partial progress, check if remaining members are all nullable.
-				if gs := groupStates[i]; gs != nil && gs.pos > 0 {
-					allNullable := true
-					for j := gs.pos; j < len(gs.members); j++ {
-						if !v.isNullable(gs.members[j]) {
-							allNullable = false
-							break
-						}
-					}
-					if allNullable {
-						continue
-					}
-				}
-				isAttr := child.kind == patternAttribute
-				if !isAttr {
-					eName := v.patternElementName(child)
-					if eName != "" {
-						v.addError(elem, fmt.Sprintf("Expecting an element %s, got nothing", eName))
-					}
-				}
-				v.addError(elem, "Invalid sequence in interleave")
-				if isAttr {
-					v.addError(elem, fmt.Sprintf("Element %s failed to validate attributes", elem.LocalName()))
-				} else {
-					v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
-				}
-				return -1
-			}
-		}
-		// A repeatable member-group that ends mid-iteration with a non-nullable
-		// remaining member has a dangling partial group (e.g. zeroOrMore(group(a,b))
-		// fed an unpaired trailing a): that is incomplete content.
-		for i := range pat.children {
-			gs := groupStates[i]
-			if gs == nil || !gs.repeat || gs.pos <= 0 || gs.pos >= len(gs.members) {
-				continue
-			}
-			for j := gs.pos; j < len(gs.members); j++ {
-				if !v.isNullable(gs.members[j]) {
-					v.addError(elem, "Invalid sequence in interleave")
-					v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
-					return -1
-				}
-			}
-		}
-		return 0
+		return v.validateInterleaveContent(pat, elem, attrs, attrUsed, state)
 
 	case patternRef, patternParentRef:
 		def := pat.resolved
@@ -1709,17 +1500,38 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	return -1
 }
 
+// validateInterleave runs the naive interleave path (the bare-pattern path
+// reached from validatePattern, with no element/attribute context). It applies
+// the same associativity flattening and choice distribution as
+// validateInterleaveContent — see there for the identities — so a composite
+// branch's members may interleave with the sibling branches here too.
 func (v *validator) validateInterleave(pat *pattern, state *validState) int {
 	if len(pat.children) == 0 {
 		return 0
 	}
 
-	matched := make([]bool, len(pat.children))
+	budget := maxInterleaveExpansions
+	candidates := v.expandInterleaveBranches(pat.children, &budget, 0)
+	if len(candidates) == 0 {
+		return v.interleaveMatchNaive(pat.children, state)
+	}
+	saved := state.clone()
+	for _, branches := range candidates {
+		if ret := v.interleaveMatchNaive(branches, state); ret == 0 {
+			return 0
+		}
+		*state = *saved
+	}
+	return -1
+}
+
+func (v *validator) interleaveMatchNaive(branches []*pattern, state *validState) int {
+	matched := make([]bool, len(branches))
 	progress := true
 
 	for progress {
 		progress = false
-		for i, child := range pat.children {
+		for i, child := range branches {
 			if matched[i] {
 				continue
 			}
@@ -1735,7 +1547,7 @@ func (v *validator) validateInterleave(pat *pattern, state *validState) int {
 	}
 
 	// Check all non-nullable children were matched
-	for i, child := range pat.children {
+	for i, child := range branches {
 		if !matched[i] && !v.isNullable(child) {
 			return -1
 		}
@@ -2655,4 +2467,504 @@ func findDocElement(doc *helium.Document) *helium.Element {
 		}
 	}
 	return nil
+}
+
+// maxInterleaveExpansions caps how many expanded branch lists
+// validateInterleaveContent will try for one interleave. Distributing choice out
+// of interleave multiplies the alternatives of every expanded branch, so a
+// pathological grammar could otherwise generate an exponential number of lists.
+// When the cap is hit the expansion is abandoned and the unexpanded branch list
+// is matched on its own, which is the pre-expansion behavior: some documents that
+// interleave a composite branch's members with its siblings are then rejected,
+// but validation stays linear in the grammar.
+const maxInterleaveExpansions = 256
+
+// maxInterleaveExpandDepth bounds the recursion in expandInterleaveBranches, so
+// a grammar whose choice alternatives keep resolving to further choices cannot
+// recurse without end.
+const maxInterleaveExpandDepth = 12
+
+// interleaveEmptyBranch stands in for the absent arm of an expanded
+// optional(...) interleave branch. It is a singleton, because a branch pattern's
+// identity is part of the group-memoization key.
+var interleaveEmptyBranch = &pattern{kind: patternEmpty}
+
+// validateInterleaveContent matches an interleave against element content.
+//
+// A branch that is a nested interleave, or a choice/optional over a composite
+// (a group or interleave of more than one member), cannot be matched atomically:
+// RELAX NG lets an interleave branch's members appear anywhere among the other
+// branches' members, so the composite's members need not be contiguous in the
+// document. Two spec identities make that reachable without a general derivative
+// engine, and expandInterleaveBranches applies both to enumerate the candidate
+// branch lists:
+//
+//   - Associativity: interleave(interleave(a, b), c) accepts exactly what
+//     interleave(a, b, c) accepts, so a nested interleave is spliced into its
+//     parent.
+//   - Distributivity over choice: interleave(P, choice(Q1, Q2)) accepts exactly
+//     what choice(interleave(P, Q1), interleave(P, Q2)) accepts — and
+//     optional(Q) is choice(Q, empty) — so a choice branch is replaced by each
+//     of its alternatives in turn.
+//
+// When nothing expands, the single candidate IS pat.children and this reduces to
+// one interleaveMatch call on the original branch list, leaving every grammar
+// without such a branch matched exactly as before.
+func (v *validator) validateInterleaveContent(pat *pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
+	budget := maxInterleaveExpansions
+	candidates := v.expandInterleaveBranches(pat.children, &budget, 0)
+	if len(candidates) <= 1 {
+		branches := pat.children
+		if len(candidates) == 1 {
+			branches = candidates[0]
+		}
+		return v.interleaveMatch(branches, elem, attrs, attrUsed, state)
+	}
+
+	savedState := state.clone()
+	savedAttrUsed := make([]bool, len(attrUsed))
+	copy(savedAttrUsed, attrUsed)
+	savedLen := len(v.pendingErrors)
+	savedValid := v.valid
+
+	// An interleave reports success once its required branches are satisfied; it
+	// does not require the content to be exhausted, because the caller may have
+	// more patterns to apply after it. So a candidate whose branches are ALL
+	// nullable — a choice arm of nothing but optionals — succeeds vacuously
+	// while consuming nothing, and would shadow the arm that actually describes
+	// this content. Prefer the candidate that consumes the most: take the first
+	// that leaves nothing behind, and otherwise keep the closest fit.
+	var (
+		okState     *validState
+		okAttrUsed  []bool
+		okRemaining = -1
+		fail        = 0
+		failClosest = -1
+	)
+	for i, branches := range candidates {
+		v.suppressDepth++
+		ret := v.interleaveMatch(branches, elem, attrs, attrUsed, state)
+		v.suppressDepth--
+		remaining := len(skipIgnored(state.seq))
+		switch {
+		case ret == 0 && remaining == 0:
+			v.pendingErrors = v.pendingErrors[:savedLen]
+			v.valid = savedValid
+			return 0
+		case ret == 0 && (okRemaining < 0 || remaining < okRemaining):
+			okRemaining = remaining
+			okState = state.clone()
+			okAttrUsed = append([]bool(nil), attrUsed...)
+		case ret != 0 && (failClosest < 0 || remaining < failClosest):
+			fail, failClosest = i, remaining
+		}
+		*state = *savedState
+		copy(attrUsed, savedAttrUsed)
+		v.pendingErrors = v.pendingErrors[:savedLen]
+		v.valid = savedValid
+	}
+
+	if okState != nil {
+		*state = *okState
+		copy(attrUsed, okAttrUsed)
+		return 0
+	}
+
+	// Every candidate failed. Replay the closest-fitting one with diagnostics
+	// enabled so the reported error describes the content that is actually
+	// there, instead of whichever arm the grammar happens to list first.
+	return v.interleaveMatch(candidates[fail], elem, attrs, attrUsed, state)
+}
+
+// expandInterleaveBranches enumerates the fully expanded branch lists for an
+// interleave: nested interleaves spliced in, and every choice/optional over a
+// composite replaced by each of its alternatives. See validateInterleaveContent
+// for the identities that make this sound. The first list returned is the one
+// reached by taking each expanded branch's first alternative, so an unexpandable
+// interleave yields exactly its own branch list.
+//
+// budget is decremented per emitted list and bounds the total; it returns nil
+// once exhausted, and the caller falls back to matching the unexpanded list.
+func (v *validator) expandInterleaveBranches(branches []*pattern, budget *int, depth int) [][]*pattern {
+	flat := v.flattenInterleaveBranches(branches, depth)
+
+	idx, alts := -1, []*pattern(nil)
+	if depth < maxInterleaveExpandDepth {
+		for i, branch := range flat {
+			if a := v.interleaveBranchAlternatives(branch); a != nil {
+				idx, alts = i, a
+				break
+			}
+		}
+	}
+	if idx < 0 {
+		if *budget <= 0 {
+			return nil
+		}
+		*budget--
+		return [][]*pattern{flat}
+	}
+
+	var out [][]*pattern
+	for _, alt := range alts {
+		next := make([]*pattern, 0, len(flat)+1)
+		next = append(next, flat[:idx]...)
+		next = append(next, alt)
+		next = append(next, flat[idx+1:]...)
+		sub := v.expandInterleaveBranches(next, budget, depth+1)
+		out = append(out, sub...)
+		if *budget <= 0 {
+			break
+		}
+	}
+	return out
+}
+
+// flattenInterleaveBranches splices any branch that resolves to a nested
+// interleave into the branch list, recursively. It returns branches unchanged
+// when there is nothing to splice, so the common case allocates nothing and
+// preserves the caller's slice identity.
+func (v *validator) flattenInterleaveBranches(branches []*pattern, depth int) []*pattern {
+	nested := false
+	for _, branch := range branches {
+		if resolveToInterleave(branch) != nil {
+			nested = true
+			break
+		}
+	}
+	if !nested {
+		return branches
+	}
+	out := make([]*pattern, 0, len(branches)+1)
+	for _, branch := range branches {
+		out = v.appendInterleaveBranch(out, branch, depth)
+	}
+	return out
+}
+
+func (v *validator) appendInterleaveBranch(dst []*pattern, branch *pattern, depth int) []*pattern {
+	if depth < maxInterleaveExpandDepth {
+		if inner := resolveToInterleave(branch); inner != nil {
+			for _, member := range inner.children {
+				dst = v.appendInterleaveBranch(dst, member, depth+1)
+			}
+			return dst
+		}
+	}
+	return append(dst, branch)
+}
+
+// interleaveBranchAlternatives returns the alternatives an interleave branch
+// distributes into, or nil when the branch needs no expansion. A choice
+// distributes into its arms and an optional into {content, empty} — but only when
+// at least one alternative is composite, since a single-element alternative
+// already matches atomically. That restriction is what keeps the candidate count
+// small for the common shape of an interleave over many optional single
+// elements, which would otherwise contribute a factor of two each.
+func (v *validator) interleaveBranchAlternatives(branch *pattern) []*pattern {
+	if branch == nil {
+		return nil
+	}
+	switch branch.kind {
+	case patternChoice:
+		if len(branch.children) == 0 || !v.anyCompositeBranch(branch.children) {
+			return nil
+		}
+		return branch.children
+	case patternOptional:
+		if len(branch.children) == 0 {
+			return nil
+		}
+		content := wrapChildren(branch.children)
+		if !v.isCompositeBranch(content) {
+			return nil
+		}
+		return []*pattern{content, interleaveEmptyBranch}
+	default:
+		return nil
+	}
+}
+
+func (v *validator) anyCompositeBranch(branches []*pattern) bool {
+	return slices.ContainsFunc(branches, v.isCompositeBranch)
+}
+
+// isCompositeBranch reports whether pat contributes more than one member to an
+// interleave, so its members may need to interleave with sibling branches
+// instead of matching contiguously.
+func (v *validator) isCompositeBranch(pat *pattern) bool {
+	return v.resolveToGroup(pat) != nil || resolveToInterleave(pat) != nil
+}
+
+// resolveToInterleave follows ref/parentRef links to a nested interleave of more
+// than one member, mirroring resolveToGroup. It returns nil for anything else.
+// The hop count is bounded because a ref chain is resolved at compile time and a
+// non-element ref cycle is a compile error, so this only guards against a
+// malformed grammar reaching the validator.
+func resolveToInterleave(pat *pattern) *pattern {
+	for hop := 0; pat != nil && hop <= maxInterleaveExpandDepth; hop++ {
+		switch pat.kind {
+		case patternRef, patternParentRef:
+			pat = pat.resolved
+		case patternInterleave:
+			if len(pat.children) > 1 {
+				return pat
+			}
+			return nil
+		default:
+			return nil
+		}
+	}
+	return nil
+}
+
+// interleaveMatch matches one fully expanded interleave branch list against the
+// element content in state. branches is the owning interleave's branch list
+// after associativity flattening and choice distribution — see
+// validateInterleaveContent.
+func (v *validator) interleaveMatch(branches []*pattern, elem *helium.Element,
+	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
+	// Determine which children are repeatable (zeroOrMore/oneOrMore/text).
+	// Text is inherently repeatable in interleave (text nodes appear between elements).
+	isRepeatable := make([]bool, len(branches))
+	for i, child := range branches {
+		isRepeatable[i] = child.kind == patternZeroOrMore || child.kind == patternOneOrMore || child.kind == patternText
+	}
+
+	// For children that resolve to groups, track per-member progress.
+	// This allows group members to be matched one-by-one with other
+	// interleave children consuming elements between them. A repeatable
+	// child wrapping a group (zeroOrMore/oneOrMore of group(a,b)) is tracked
+	// the same way, with repeat=true so a completed iteration restarts at the
+	// first member — letting another interleave branch consume between group
+	// members across iterations.
+	type groupState struct {
+		members      []*pattern
+		pos          int
+		repeat       bool // member-group wrapped in zeroOrMore/oneOrMore
+		iterConsumed bool // current iteration consumed at least one item
+	}
+	groupStates := make([]*groupState, len(branches))
+	for i, child := range branches {
+		if grp := v.resolveToGroup(child); grp != nil {
+			groupStates[i] = &groupState{members: grp.children, pos: 0}
+			continue
+		}
+		if child.kind == patternZeroOrMore || child.kind == patternOneOrMore {
+			if grp := v.resolveToGroup(wrapChildren(child.children)); grp != nil {
+				groupStates[i] = &groupState{members: grp.children, pos: 0, repeat: true}
+			}
+		}
+	}
+
+	// Track which children ever consumed something.
+	consumed := make([]bool, len(branches))
+	// Track which single-use children are "done" (already matched once).
+	done := make([]bool, len(branches))
+	progress := true
+	var extraElemNode *helium.Element // node of the extra (duplicate) element
+	// A branch that matched the head element by NAME but failed deeper appends
+	// definitive errors — validateElement clears suppression once it has consumed
+	// the element — and the per-attempt rollback below would otherwise discard
+	// them, leaving only the generic "Expecting an element X, got nothing" for
+	// some other branch that was never even reached. Keep the errors from the
+	// attempt that got furthest, so a failing interleave can report the real
+	// cause. A branch that simply does not match by name appends nothing
+	// (elementMatchesWithErrors returns false silently on a name mismatch), so
+	// this captures only genuine inner failures.
+	var blockedErrs []error
+	blockedRemaining := -1
+	captureBlocked := func(from int, at *validState) {
+		if len(v.pendingErrors) <= from {
+			return
+		}
+		if blockedRemaining >= 0 && len(at.seq) >= blockedRemaining {
+			return
+		}
+		blockedErrs = append([]error(nil), v.pendingErrors[from:]...)
+		blockedRemaining = len(at.seq)
+	}
+	for progress {
+		progress = false
+		for i, child := range branches {
+			if done[i] {
+				// Single-use pattern already consumed. Check if the next element
+				// would match it again (= "Extra element in interleave").
+				if extraElemNode == nil {
+					remaining := skipIgnored(state.seq)
+					if len(remaining) > 0 {
+						if e, ok := remaining[0].(*helium.Element); ok {
+							savedState := state.clone()
+							savedAttrUsed := make([]bool, len(attrUsed))
+							copy(savedAttrUsed, attrUsed)
+							savedLen := len(v.pendingErrors)
+							savedValid := v.valid
+							v.suppressDepth++
+							ret := v.validateContentPat(child, elem, attrs, attrUsed, state)
+							v.suppressDepth--
+							if ret == 0 && !seqEqual(state.seq, savedState.seq) {
+								extraElemNode = e
+							}
+							*state = *savedState
+							copy(attrUsed, savedAttrUsed)
+							v.pendingErrors = v.pendingErrors[:savedLen]
+							v.valid = savedValid
+						}
+					}
+				}
+				continue
+			}
+
+			// Group children: match member-by-member so other interleave
+			// children can consume elements between group members. For a
+			// repeatable member-group, a completed iteration that consumed
+			// something restarts at the first member (a fresh group iteration).
+			if gs := groupStates[i]; gs != nil {
+				for {
+					gs.iterConsumed = false
+					blocked := false
+					for gs.pos < len(gs.members) {
+						member := gs.members[gs.pos]
+						savedState := state.clone()
+						savedAttrUsed := make([]bool, len(attrUsed))
+						copy(savedAttrUsed, attrUsed)
+						savedLen := len(v.pendingErrors)
+						savedValid := v.valid
+						v.suppressDepth++
+						ret := v.validateContentPat(member, elem, attrs, attrUsed, state)
+						v.suppressDepth--
+						if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
+							// Member consumed something — advance.
+							consumed[i] = true
+							progress = true
+							gs.iterConsumed = true
+							gs.pos++
+							v.pendingErrors = v.pendingErrors[:savedLen]
+							v.valid = savedValid
+							// Continue trying next members in same round
+							// (they might also match immediately).
+						} else {
+							// Member didn't consume. If nullable, skip it
+							// and try the next member.
+							captureBlocked(savedLen, state)
+							*state = *savedState
+							copy(attrUsed, savedAttrUsed)
+							v.pendingErrors = v.pendingErrors[:savedLen]
+							v.valid = savedValid
+							if v.isNullable(member) {
+								gs.pos++
+								continue
+							}
+							// Not nullable — stop trying this group for now.
+							// Other interleave children may consume first.
+							blocked = true
+							break
+						}
+					}
+					// Restart a repeatable member-group only after a full
+					// iteration that consumed something; otherwise stop.
+					if gs.repeat && !blocked && gs.pos >= len(gs.members) && gs.iterConsumed {
+						gs.pos = 0
+						continue
+					}
+					break
+				}
+				if gs.pos >= len(gs.members) {
+					if !isRepeatable[i] {
+						done[i] = true
+					}
+				}
+				continue
+			}
+
+			// Non-group children: try atomic matching.
+			savedState := state.clone()
+			savedAttrUsed := make([]bool, len(attrUsed))
+			copy(savedAttrUsed, attrUsed)
+			savedLen := len(v.pendingErrors)
+			savedValid := v.valid
+			v.suppressDepth++
+			ret := v.validateContentPat(child, elem, attrs, attrUsed, state)
+			v.suppressDepth--
+			if ret == 0 && (!seqEqual(state.seq, savedState.seq) || !boolSliceEqual(attrUsed, savedAttrUsed)) {
+				consumed[i] = true
+				progress = true
+				if !isRepeatable[i] {
+					done[i] = true
+				}
+				v.pendingErrors = v.pendingErrors[:savedLen]
+				v.valid = savedValid
+			} else {
+				captureBlocked(savedLen, state)
+				*state = *savedState
+				copy(attrUsed, savedAttrUsed)
+				v.pendingErrors = v.pendingErrors[:savedLen]
+				v.valid = savedValid
+			}
+		}
+	}
+	if extraElemNode != nil {
+		v.addBareError(fmt.Sprintf("Extra element %s in interleave", extraElemNode.LocalName()))
+		v.addError(extraElemNode, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+		return -1
+	}
+	// Check for required children that were never consumed.
+	for i, child := range branches {
+		if !consumed[i] && !v.isNullable(child) {
+			// For group children with partial progress, check if remaining members are all nullable.
+			if gs := groupStates[i]; gs != nil && gs.pos > 0 {
+				allNullable := true
+				for j := gs.pos; j < len(gs.members); j++ {
+					if !v.isNullable(gs.members[j]) {
+						allNullable = false
+						break
+					}
+				}
+				if allNullable {
+					continue
+				}
+			}
+			isAttr := child.kind == patternAttribute
+			if len(blockedErrs) > 0 {
+				// A branch failed on its own content rather than for want of
+				// input. Report that, not this branch: this one is unconsumed
+				// only because the blocked branch left the head element in
+				// place, so naming it would point away from the real cause.
+				v.pendingErrors = append(v.pendingErrors, blockedErrs...)
+				v.valid = false
+			} else if !isAttr {
+				eName := v.patternElementName(child)
+				if eName != "" {
+					v.addError(elem, fmt.Sprintf("Expecting an element %s, got nothing", eName))
+				}
+			}
+			v.addError(elem, "Invalid sequence in interleave")
+			if isAttr {
+				v.addError(elem, fmt.Sprintf("Element %s failed to validate attributes", elem.LocalName()))
+			} else {
+				v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			}
+			return -1
+		}
+	}
+	// A member-group that stops mid-iteration with a non-nullable remaining
+	// member has a dangling partial group — zeroOrMore(group(a, b)) fed an
+	// unpaired trailing a, or group(a, b) fed only a — and that is incomplete
+	// content. The consumed/nullable loop above cannot catch it: the group DID
+	// consume its earlier members, so its branch counts as consumed.
+	for i := range branches {
+		gs := groupStates[i]
+		if gs == nil || gs.pos <= 0 || gs.pos >= len(gs.members) {
+			continue
+		}
+		for j := gs.pos; j < len(gs.members); j++ {
+			if !v.isNullable(gs.members[j]) {
+				v.addError(elem, "Invalid sequence in interleave")
+				v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+				return -1
+			}
+		}
+	}
+	return 0
 }
