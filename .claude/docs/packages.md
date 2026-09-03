@@ -982,12 +982,14 @@ RELAX NG schema compilation and validation.
 - Interleave is compile-time partitioned into a routing table per branch (`interleave.go`); every `<interleave>`
   is checked against RELAX NG §7.4 (branches' element/text/attribute name classes must be pairwise disjoint) —
   a violating grammar is a fatal compile error (`Element or text conflicts in interleave` /
-  `Attributes conflicts in interleave`), matching libxml2
+  `Attributes conflicts in interleave`), matching libxml2. Validation routes every content node to its branch in
+  one pass (no round-robin member matching, no candidate enumeration or expansion cap) and validates each
+  branch's sub-sequence independently
 - `ValidateError.Output` — libxml2-compatible error string; `ValidateError.Errors` — structured `[]ValidationError`
 - `ValidationError{Filename, Line, Element, Message}` — per-error structured type
 - Files: `relaxng.go` (API + config), `doc.go`, `grammar.go` (data model), `parse.go` (compiler), `parse_check.go`
-  (compile checks), `interleave.go` (interleave partition tables + §7.4 conflict checks), `validate.go` (engine),
-  `errors.go` (error types + formatting)
+  (compile checks), `interleave.go` (interleave partition tables, §7.4 conflict checks, partition-based
+  validation), `validate.go` (engine), `errors.go` (error types + formatting)
 - Imports: helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex,
   internal/xmlchar, internal/uripath
 - Status: 159/159 golden tests passing

@@ -1895,9 +1895,9 @@ Pattern-matching engine with backtracking:
    - **Attribute**: match against instance attrs
    - **Group**: sequential with backtracking
    - **Choice**: try alternatives, prefer branches making progress
-   - **Interleave**: unordered member-by-member matching; a repeatable member-group (zeroOrMore/oneOrMore of group)
-     restarts its members each iteration so a sibling branch can consume elements between group members across
-     iterations
+   - **Interleave**: compile-time partition routing (see "Interleave partitioning" below) — every content node is
+     routed once to the one branch whose leaves accept it, then each branch validates its own sub-sequence
+     independently
    - **ZeroOrMore/OneOrMore/Optional**: repetition with suppressed errors
    - **Ref/ParentRef**: follow the compile-time-resolved `pattern.resolved` scoped pointer and recurse (no by-name
      lookup)
@@ -1905,6 +1905,59 @@ Pattern-matching engine with backtracking:
    - **List**: split text, validate items
 3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate
    content, check all attrs+content consumed
+
+### Interleave partitioning (`interleave.go`)
+
+Every `<interleave>`/`<mixed>` is validated through its compile-time partition (built by `checkInterleaves`, see
+"Compile" step 6a), not by round-robin member matching. `interleavePartitionOf` returns the compiled
+`pattern.partition`, computing an uncached one (never cached at validation time — `Grammar` is shared across
+goroutines) for an interleave the compiler did not record. `partitionInterleave` walks `state.seq` from the
+front, routing each node via `interleavePartition.route` into one `[][]helium.Node` slot per branch; it stops at
+the first node no branch accepts, leaving that node and everything after it in `state.seq` for the caller.
+Because RELAX NG §7.4 guarantees the branches are pairwise disjoint, this routing is exact: a node routed to
+branch *i* could never have been claimed by another branch.
+
+`validateInterleaveContent` (element-content path) then validates each branch independently against its own
+routed sub-sequence, in grammar order, each under `v.suppressDepth++` (so a branch's own probing errors — an
+attribute pattern's "failed to validate attributes", a group's "Expecting an element , got nothing" — don't
+duplicate or contradict the lines the goldens expect). Errors a branch appends AFTER `validateElement` has
+consumed one of its own child elements survive suppression (`validateElement` resets `suppressDepth` to 0 for
+its own body), so a branch whose element has bad content reports that element's real failure before "Invalid
+sequence in interleave" — libxml2's order. A branch that returns success but leaves part of its OWN routed
+sub-sequence unconsumed (no other branch could take those nodes — §7.4 again) retries once with the exact-choice
+mode below. Diagnostics by scenario: a branch that never got any input and fails reports "Expecting an element
+X, got nothing" then "Invalid sequence in interleave" (attribute branches report "Element E failed to validate
+attributes" instead of "...content"); a branch that succeeded but left an element behind reports a bare "Extra
+element X in interleave" (no file/line/element prefix) followed by "Element E failed to validate content" on
+the extra element's own line; any other failure just reports "Invalid sequence in interleave" +
+"Element E failed to validate content". On any failure `state.seq` is restored to its pre-partition value (the
+group backtracker does not continue past a failed interleave). `validateInterleave` is the parallel bare-pattern
+path (no element/attribute context, so no diagnostics), reached from a top-level `<interleave>`/`<mixed>` under
+`<start>`.
+
+**Sibling-array identity (`run`).** `validState` carries a `run int`; `validator.newRun()` (backed by
+`validator.runSeq`) hands out a fresh id for every element content (`validateElement`'s `contentState`) and every
+interleave branch sub-sequence, and `clone()` copies it. `groupMemoKey` includes `run`, restoring the invariant
+that within one `run`, `seq` is always a suffix of one array, so `(pos, seqLen)` uniquely identifies a group
+subproblem — without it, two interleave branches (or two choice arms) probing the same shared `<define>` at the
+same input position with the same remaining length could collide on a memo entry that belongs to a DIFFERENT
+sibling array, silently reproducing the wrong branch's answer.
+
+**Exact-choice retry (`exactChoice`/`validateChoiceContentExact`).** `validator.exactChoice` (an int, so nested
+retries compose) makes a content-path `<choice>` in `validateContentPat` try `validateChoiceContentExact` first:
+it evaluates every arm from the saved state under suppression, keeps the successful arm leaving the fewest nodes
+behind (earliest arm wins a tie, stopping early at zero remaining), then restores and reapplies the winning
+arm's state and `attrUsed`; `ok=false` when no arm succeeds, so the caller falls through to the ordinary greedy
+choice path unchanged. Only `validateInterleaveContent` increments `exactChoice`, and only after a branch
+succeeded with leftover — no path outside interleave is affected. The greedy pass still runs FIRST (exact mode
+is the fallback, not the default) because it wins cases exact mode cannot: `group(choice(d, group(d,d)), d)` on
+`[d, d]` needs the group backtracker's flexible-member retry, which exact choice mode does not provide.
+`groupMemoKey.exact` (`v.exactChoice > 0`) keeps a memo entry computed under the retry from being reused by the
+ordinary pass or vice versa.
+
+Known limitation (shared with the pre-partition engine, unchanged): greedy routing does not cross an interleave
+boundary, so `group(interleave(a, b), a)` fed `<a/><b/><a/>` still rejects with "Extra element a in interleave"
+— libxml2 rejects the same document (jing, a non-libxml2 implementation, accepts it).
 
 ### Backtracking Strategy (`backtrackGroupFlexible` / `backtrackGroupNaive`)
 
@@ -1926,7 +1979,9 @@ The recursive retry would be exponential (`O(M^N)` for `N` flexible members over
 overlapping subproblems. `validateGroupChildren`/`validateGroupSeq` therefore
 cache each call in `validator.groupMemo`, keyed by the inputs that fully determine
 the result (child-range start pattern + length, owning element, first remaining
-node + sequence length, packed `attrUsed`, `suppressDepth>0`, content-vs-naive
+node + sequence length, the sibling-array id `run` that (pos, seqLen) is only
+unique within, whether the call ran under the interleave exact-choice retry
+(`exact`), packed `attrUsed`, `suppressDepth>0`, content-vs-naive
 discriminator). A hit reproduces the original call's effect exactly — resulting
 position, attribute usage, appended errors, return value — so memoization is sound
 (no valid document rejected) while collapsing the fan-out to polynomial. Regression

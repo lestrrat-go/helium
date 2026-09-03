@@ -115,6 +115,7 @@ bug that prompted it.
 | `interleave_test.go` | relaxng | Interleave §7.4 conflict checks and golden-schema conflict coverage |
 | `interleave_internal_test.go` | relaxng | Interleave partition/routing table (internal package) |
 | `group_backtrack_differential_test.go` | relaxng | Flag-gated group-backtracking differential harness |
+| `interleave_differential_test.go` | relaxng | Flag-gated interleave differential harness (optional `xmllint` oracle) |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization and ASCII QName scanner regression coverage |
 
@@ -207,6 +208,18 @@ selects for the default case count; `cases=0` turns the randomized half off and
 walks the full golden cross-product either way. The recorded procedure and
 result for the current run live in the header comment of
 `relaxng/group_backtrack_test.go`.
+
+`relaxng/interleave_differential_test.go` compares two revisions' interleave verdicts, optionally against the
+local `xmllint` as an oracle. `TestInterleaveDifferential` is skipped unless `-relaxng.idiff.out` is given.
+
+| Flag | Meaning |
+|------|---------|
+| `-relaxng.idiff.out=PATH` | Write the record to PATH (required to run the test) |
+| `-relaxng.idiff.cases=N` | Randomized interleave grammars (default 20000) |
+| `-relaxng.idiff.seed=N` | Seed (default 1) |
+| `-relaxng.idiff.xmllint=DIR` | Also run the local `xmllint` on each case and record its verdict in `DIR/xmllint.txt` |
+
+The recorded procedure and result live in the header comment of `relaxng/interleave_differential_test.go`.
 
 ## Build Tags
 
