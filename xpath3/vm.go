@@ -103,13 +103,13 @@ type vmInstruction struct {
 // streamInfo holds precomputed static-analysis properties so that
 // streamability queries are O(1) field reads instead of O(n) AST walks.
 type streamInfo struct {
-	axisUsed             uint16          // bitmask of AxisType values present
-	hasDownwardStep      bool            // child/descendant/descendant-or-self axis or //
-	hasDescOrSelf        bool            // PathStepExpr with // shorthand
-	hasNonMotionlessPred bool            // predicate with downward nav or last()
-	downwardSelections   int             // independent downward selection count
-	usedFunctions        map[string]bool // unprefixed function names called
-	isContextItem        bool            // expression is just "."
+	axisUsed             uint16              // bitmask of AxisType values present
+	hasDownwardStep      bool                // child/descendant/descendant-or-self axis or //
+	hasDescOrSelf        bool                // PathStepExpr with // shorthand
+	hasNonMotionlessPred bool                // predicate with downward nav or last()
+	downwardSelections   int                 // independent downward selection count
+	usedFunctions        map[string]struct{} // unprefixed function names called
+	isContextItem        bool                // expression is just "."
 }
 
 type vmProgram struct {

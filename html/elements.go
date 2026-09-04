@@ -196,8 +196,8 @@ func isHeadElement(name string) bool {
 
 // htmlStartClose is the auto-close rules table from libxml2.
 // If we encounter newTag while oldTag is open, we close oldTag first.
-// Stored as map[oldTag]map[newTag]bool for O(1) lookup.
-var htmlStartClose map[string]map[string]bool
+// Stored as map[oldTag]map[newTag]struct{} for O(1) lookup.
+var htmlStartClose map[string]map[string]struct{}
 
 func init() {
 	entries := [][2]string{
@@ -452,12 +452,12 @@ func init() {
 		{elemXmp, "ul"},
 	}
 
-	htmlStartClose = make(map[string]map[string]bool, 64)
+	htmlStartClose = make(map[string]map[string]struct{}, 64)
 	for _, e := range entries {
 		if htmlStartClose[e[0]] == nil {
-			htmlStartClose[e[0]] = make(map[string]bool, 4)
+			htmlStartClose[e[0]] = make(map[string]struct{}, 4)
 		}
-		htmlStartClose[e[0]][e[1]] = true
+		htmlStartClose[e[0]][e[1]] = struct{}{}
 	}
 }
 
@@ -467,7 +467,8 @@ func shouldAutoClose(oldTag, newTag string) bool {
 	if !ok {
 		return false
 	}
-	return m[newTag]
+	_, ok = m[newTag]
+	return ok
 }
 
 // htmlEndPriority is used to determine how end tags are handled.

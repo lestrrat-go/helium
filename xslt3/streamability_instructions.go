@@ -451,12 +451,12 @@ func forEachBodyConsumesContext(body []instruction) bool {
 // accesses the streamed variable repeatedly.
 func checkStreamingVarInLoop(body []instruction) error {
 	// Collect variables bound to streaming context (select=".")
-	streamingVars := make(map[string]bool)
+	streamingVars := make(map[string]struct{})
 	for _, inst := range body {
 		if vi, ok := inst.(*variableInst); ok && vi.Select != nil {
 			ast := vi.Select.AST()
 			if _, ok := ast.(xpath3.ContextItemExpr); ok {
-				streamingVars[vi.Name] = true
+				streamingVars[vi.Name] = struct{}{}
 			}
 		}
 	}
@@ -481,7 +481,7 @@ func checkStreamingVarInLoop(body []instruction) error {
 
 // checkVarConsumingInBody checks if any streaming variable is used consumingly
 // in a set of instructions.
-func checkVarConsumingInBody(streamingVars map[string]bool, body []instruction) error {
+func checkVarConsumingInBody(streamingVars map[string]struct{}, body []instruction) error {
 	for _, inst := range body {
 		for _, expr := range getInstructionExprs(inst) {
 			if expr == nil {
@@ -913,11 +913,11 @@ func checkIterateStreamable(_ *Stylesheet, inst instruction) error {
 	// This pattern: <xsl:param name="x" as="element()*"/>
 	//               <xsl:with-param name="x" select="($x, .)"/>
 	// is non-streamable because it accumulates streamed nodes across iterations.
-	elemParams := make(map[string]bool)
+	elemParams := make(map[string]struct{})
 	for _, p := range iter.Params {
 		as := strings.TrimSpace(p.As)
 		if strings.Contains(as, "element") && (strings.Contains(as, "*") || strings.Contains(as, "+")) {
-			elemParams[p.Name] = true
+			elemParams[p.Name] = struct{}{}
 		}
 	}
 	if len(elemParams) == 0 {
@@ -936,7 +936,7 @@ func checkIterateStreamable(_ *Stylesheet, inst instruction) error {
 
 // bodyAccumulatesStreamedNodes checks if an iterate body accumulates streamed
 // nodes by passing context items to element()* parameters via next-iteration.
-func bodyAccumulatesStreamedNodes(body []instruction, elemParams map[string]bool) bool {
+func bodyAccumulatesStreamedNodes(body []instruction, elemParams map[string]struct{}) bool {
 	// Collect variables whose select expressions reference "." (context item),
 	// either directly or transitively through other variables.
 	taintedVars := collectTaintedVars(body)
@@ -947,16 +947,16 @@ func bodyAccumulatesStreamedNodes(body []instruction, elemParams map[string]bool
 // collectTaintedVars finds all variables in the instruction tree whose select
 // expressions reference the context item "." either directly or transitively
 // through other variables that reference ".".
-func collectTaintedVars(body []instruction) map[string]bool {
+func collectTaintedVars(body []instruction) map[string]struct{} {
 	// First pass: collect all variable select expressions.
 	varExprs := make(map[string]xpath3.Expr)
 	collectVarExprs(body, varExprs)
 
 	// Build direct taint set: variables whose select directly contains ".".
-	tainted := make(map[string]bool)
+	tainted := make(map[string]struct{})
 	for name, expr := range varExprs {
 		if exprReferencesContextItem(expr) {
-			tainted[name] = true
+			tainted[name] = struct{}{}
 		}
 	}
 
@@ -966,11 +966,11 @@ func collectTaintedVars(body []instruction) map[string]bool {
 	for changed {
 		changed = false
 		for name, expr := range varExprs {
-			if tainted[name] {
+			if _, ok := tainted[name]; ok {
 				continue
 			}
 			if exprReferencesAnyVar(expr, tainted) {
-				tainted[name] = true
+				tainted[name] = struct{}{}
 				changed = true
 			}
 		}
@@ -993,14 +993,14 @@ func collectVarExprs(body []instruction, varExprs map[string]xpath3.Expr) {
 
 // exprReferencesAnyVar returns true if the expression references any variable
 // in the given set.
-func exprReferencesAnyVar(expr xpath3.Expr, vars map[string]bool) bool {
+func exprReferencesAnyVar(expr xpath3.Expr, vars map[string]struct{}) bool {
 	found := false
 	xpathstream.WalkExpr(expr, func(e xpath3.Expr) bool {
 		if found {
 			return false
 		}
 		if ve, ok := e.(xpath3.VariableExpr); ok {
-			if vars[ve.Name] {
+			if _, ok := vars[ve.Name]; ok {
 				found = true
 				return false
 			}
@@ -1010,11 +1010,11 @@ func exprReferencesAnyVar(expr xpath3.Expr, vars map[string]bool) bool {
 	return found
 }
 
-func bodyAccumulatesStreamedNodesInner(body []instruction, elemParams map[string]bool, taintedVars map[string]bool) bool {
+func bodyAccumulatesStreamedNodesInner(body []instruction, elemParams map[string]struct{}, taintedVars map[string]struct{}) bool {
 	for _, inst := range body {
 		if ni, ok := inst.(*nextIterationInst); ok {
 			for _, wp := range ni.Params {
-				if !elemParams[wp.Name] {
+				if _, ok := elemParams[wp.Name]; !ok {
 					continue
 				}
 				if wp.Select != nil {

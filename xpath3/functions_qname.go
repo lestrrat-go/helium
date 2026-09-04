@@ -301,7 +301,7 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 	// Walk from the context element outward so namespace undeclarations mask
 	// ancestor bindings for the same prefix.
 	prefixes := map[string]bool{lexicon.PrefixXML: true}
-	resolved := map[string]bool{lexicon.PrefixXML: true}
+	resolved := map[string]struct{}{lexicon.PrefixXML: {}}
 	for cur := elem; cur != nil; {
 		for _, ns := range cur.Namespaces() {
 			prefix := ns.Prefix()
@@ -309,7 +309,7 @@ func fnInScopePrefixes(_ context.Context, args []Sequence) (Sequence, error) {
 				continue
 			}
 			prefixes[prefix] = ns.URI() != ""
-			resolved[prefix] = true
+			resolved[prefix] = struct{}{}
 		}
 		p := cur.Parent()
 		if p == nil {

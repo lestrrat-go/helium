@@ -161,9 +161,9 @@ func functionHasConsumingRefInLoop(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return false
 	}
-	paramNames := make(map[string]bool)
+	paramNames := make(map[string]struct{})
 	for _, p := range fn.Params {
-		paramNames[p.Name] = true
+		paramNames[p.Name] = struct{}{}
 	}
 
 	for _, inst := range fn.Body {
@@ -178,7 +178,7 @@ func functionHasConsumingRefInLoop(fn *xslFunction) bool {
 
 // exprHasParamInLoop returns true if a parameter variable reference appears
 // inside a FLWOR for clause.
-func exprHasParamInLoop(expr xpath3.Expr, paramNames map[string]bool) bool {
+func exprHasParamInLoop(expr xpath3.Expr, paramNames map[string]struct{}) bool {
 	if flwor, ok := expr.(xpath3.FLWORExpr); ok {
 		hasForClause := false
 		for _, clause := range flwor.Clauses {
@@ -195,7 +195,7 @@ func exprHasParamInLoop(expr xpath3.Expr, paramNames map[string]bool) bool {
 				}
 				if fe, ok := e.(xpath3.FilterExpr); ok {
 					if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
-						if paramNames[ve.Name] {
+						if _, ok := paramNames[ve.Name]; ok {
 							found = true
 							return false
 						}
@@ -324,9 +324,9 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 		return false
 	}
 
-	paramNames := make(map[string]bool)
+	paramNames := make(map[string]struct{})
 	for _, p := range params {
-		paramNames[p.Name] = true
+		paramNames[p.Name] = struct{}{}
 	}
 
 	found := false
@@ -337,7 +337,7 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 		// $param/child::... or $param/*
 		if ps, ok := e.(xpath3.PathStepExpr); ok {
 			if ve, ok := ps.Left.(xpath3.VariableExpr); ok {
-				if paramNames[ve.Name] {
+				if _, ok := paramNames[ve.Name]; ok {
 					found = true
 					return false
 				}
@@ -346,7 +346,8 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 		// $param[predicate] — predicate accessing context consumes it
 		if fe, ok := e.(xpath3.FilterExpr); ok {
 			if ve, ok := fe.Expr.(xpath3.VariableExpr); ok {
-				if paramNames[ve.Name] && len(fe.Predicates) > 0 {
+				_, isParam := paramNames[ve.Name]
+				if isParam && len(fe.Predicates) > 0 {
 					// Check if any predicate is non-motionless (accesses "." etc.)
 					if slices.ContainsFunc(fe.Predicates, predicateIsNonMotionless) {
 						found = true
@@ -359,7 +360,7 @@ func exprConsumesParam(expr *xpath3.Expression, params []*param) bool {
 		if fc, ok := e.(xpath3.FunctionCall); ok {
 			if local, isFn := lexicon.StreamFnLocalName(fc.Name, fc.Prefix); isFn && local == "string" && len(fc.Args) > 0 {
 				if ve, ok := fc.Args[0].(xpath3.VariableExpr); ok {
-					if paramNames[ve.Name] {
+					if _, ok := paramNames[ve.Name]; ok {
 						found = true
 						return false
 					}

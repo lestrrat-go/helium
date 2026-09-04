@@ -297,7 +297,7 @@ func (c *compiler) checkRefCycles(ctx context.Context) {
 			if name == "##start" {
 				continue
 			}
-			visiting := map[*pattern]bool{entry.pattern: true}
+			visiting := map[*pattern]struct{}{entry.pattern: {}}
 			if ref := c.findCycleInPattern(entry.pattern, visiting); ref != nil {
 				msg := rngParserErrorAt(c.filename, ref.line, "ref",
 					fmt.Sprintf("Detected a cycle in %s references", ref.name))
@@ -314,7 +314,7 @@ func (c *compiler) checkRefCycles(ctx context.Context) {
 // Returns the offending ref pattern if a cycle is found. Refs are followed via
 // their compile-time-resolved scoped target (pat.resolved), and the visiting set
 // is keyed by define-pattern pointer so distinct same-named scopes don't collide.
-func (c *compiler) findCycleInPattern(pat *pattern, visiting map[*pattern]bool) *pattern {
+func (c *compiler) findCycleInPattern(pat *pattern, visiting map[*pattern]struct{}) *pattern {
 	if pat == nil {
 		return nil
 	}
@@ -327,10 +327,10 @@ func (c *compiler) findCycleInPattern(pat *pattern, visiting map[*pattern]bool) 
 		if def == nil {
 			return nil
 		}
-		if visiting[def] {
+		if _, ok := visiting[def]; ok {
 			return pat
 		}
-		visiting[def] = true
+		visiting[def] = struct{}{}
 		result := c.findCycleInPattern(def, visiting)
 		delete(visiting, def)
 		return result

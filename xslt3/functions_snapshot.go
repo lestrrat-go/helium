@@ -451,7 +451,7 @@ func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Elem
 		return nil, err
 	}
 
-	declaredPrefixes := make(map[string]bool)
+	declaredPrefixes := make(map[string]struct{})
 
 	// Copy namespace declarations.
 	if nc, ok := helium.Node(src).(helium.NamespaceContainer); ok {
@@ -459,14 +459,15 @@ func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Elem
 			if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 				return nil, err
 			}
-			declaredPrefixes[ns.Prefix()] = true
+			declaredPrefixes[ns.Prefix()] = struct{}{}
 		}
 	}
 
 	// Copy the active namespace.
 	if nsr, ok := helium.Node(src).(helium.Namespacer); ok {
 		if ns := nsr.Namespace(); ns != nil {
-			if ns.Prefix() != "" && !declaredPrefixes[ns.Prefix()] {
+			_, alreadyDeclared := declaredPrefixes[ns.Prefix()]
+			if ns.Prefix() != "" && !alreadyDeclared {
 				if err := elem.DeclareNamespace(ns.Prefix(), ns.URI()); err != nil {
 					return nil, err
 				}
@@ -482,9 +483,10 @@ func shallowCopyElement(src *helium.Element, doc *helium.Document) (*helium.Elem
 		if a.URI() != "" {
 			ns := helium.NewNamespace(a.Prefix(), a.URI())
 			_ = elem.SetAttributeNS(a.LocalName(), a.Value(), ns)
-			if a.Prefix() != "" && !declaredPrefixes[a.Prefix()] {
+			_, prefixDeclared := declaredPrefixes[a.Prefix()]
+			if a.Prefix() != "" && !prefixDeclared {
 				_ = elem.DeclareNamespace(a.Prefix(), a.URI())
-				declaredPrefixes[a.Prefix()] = true
+				declaredPrefixes[a.Prefix()] = struct{}{}
 			}
 		} else {
 			_ = elem.SetAttribute(a.Name(), a.Value())

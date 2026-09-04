@@ -394,7 +394,7 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 
 	// wcClaimed marks child positions (absolute index) consumed by a wildcard,
 	// so the element-content validation pass below skips them.
-	wcClaimed := make(map[int]bool)
+	wcClaimed := make(map[int]struct{})
 
 	consumed := 0
 	for pos+consumed < len(children) {
@@ -418,7 +418,7 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 				return consumed, err
 			}
 			counts[widx]++
-			wcClaimed[pos+consumed] = true
+			wcClaimed[pos+consumed] = struct{}{}
 			consumed++
 			continue
 		}
@@ -457,7 +457,7 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 	var contentErr error
 	for i := range consumed {
 		child := children[pos+i]
-		if wcClaimed[pos+i] {
+		if _, ok := wcClaimed[pos+i]; ok {
 			continue // already validated inline by the wildcard path
 		}
 		idx := allMemberForChild(members, child, vc.schema)

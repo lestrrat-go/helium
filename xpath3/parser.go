@@ -1732,12 +1732,12 @@ func (p *parser) parseFunctionKeyword() (Expr, error) {
 	}
 
 	// Check for duplicate parameter names (XQST0039)
-	seen := make(map[string]bool, len(params))
+	seen := make(map[string]struct{}, len(params))
 	for _, param := range params {
-		if seen[param.Name] {
+		if _, ok := seen[param.Name]; ok {
 			return nil, &XPathError{Code: "XQST0039", Message: fmt.Sprintf("duplicate parameter name $%s in inline function", param.Name)}
 		}
-		seen[param.Name] = true
+		seen[param.Name] = struct{}{}
 	}
 
 	var returnType *SequenceType

@@ -249,7 +249,7 @@ type processor struct {
 	noBaseFixup     bool
 	resolver        Resolver
 	baseURI         string
-	expanding       map[string]bool          // circular inclusion detection (set during recursive expansion)
+	expanding       map[string]struct{}      // circular inclusion detection (set during recursive expansion)
 	docCache        map[string]docCacheEntry // cached raw bytes for XML documents
 	txtCache        map[string]txtCacheEntry // cached text inclusions
 	errorHandler    helium.ErrorHandler
@@ -296,7 +296,7 @@ func (proc Processor) ProcessTree(ctx context.Context, node helium.Node) (int, e
 		maxIncludeSize:  cfg.maxIncludeSize,
 		maxIncludeDepth: cfg.maxIncludeDepth,
 		parser:          cfg.parser,
-		expanding:       make(map[string]bool),
+		expanding:       make(map[string]struct{}),
 		docCache:        make(map[string]docCacheEntry),
 		txtCache:        make(map[string]txtCacheEntry),
 	}
@@ -458,7 +458,7 @@ func (p *processor) processInclude(ctx context.Context, inc *helium.Element) err
 			circularKey = p.baseURI + "#" + xptrExpr
 		}
 	}
-	if p.expanding[circularKey] {
+	if _, ok := p.expanding[circularKey]; ok {
 		return fmt.Errorf("xi:include: circular inclusion detected for %q", circularKey)
 	}
 
@@ -544,7 +544,7 @@ func (p *processor) recurseIncluded(ctx context.Context, nodes []helium.Node, ke
 	if base != "" {
 		p.baseURI = base
 	}
-	p.expanding[key] = true
+	p.expanding[key] = struct{}{}
 	p.depth++
 	defer func() {
 		p.depth--
@@ -1508,17 +1508,18 @@ func fixupNamespaceDecls(n helium.Node) {
 	}
 
 	// Build set of locally declared prefixes
-	declared := make(map[string]bool)
+	declared := make(map[string]struct{})
 	if nc, ok := helium.Node(elem).(helium.NamespaceContainer); ok {
 		for _, ns := range nc.Namespaces() {
-			declared[ns.Prefix()] = true
+			declared[ns.Prefix()] = struct{}{}
 		}
 	}
 
 	// If the element has an active namespace prefix not locally declared, add it
 	if nsr, ok := helium.Node(elem).(helium.Namespacer); ok {
 		if ns := nsr.Namespace(); ns != nil {
-			if ns.Prefix() != "" && !declared[ns.Prefix()] {
+			_, isDeclared := declared[ns.Prefix()]
+			if ns.Prefix() != "" && !isDeclared {
 				_ = elem.DeclareNamespace(ns.Prefix(), ns.URI())
 			}
 		}

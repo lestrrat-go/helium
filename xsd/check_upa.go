@@ -605,7 +605,7 @@ func wildcardsOverlap(a, b firstSetEntry) bool {
 	// Both are finite sets: overlap iff they share a member.
 	if aSet != nil && bSet != nil {
 		for ns := range aSet {
-			if bSet[ns] {
+			if _, ok := bSet[ns]; ok {
 				return true
 			}
 		}
@@ -640,22 +640,22 @@ func wildcardsOverlap(a, b firstSetEntry) bool {
 // upaWildcardNSSet returns the explicit set of namespaces a wildcard can match,
 // or nil if the wildcard is a NEGATION constraint (##any, ##other,
 // ##not-absent) whose membership is open-ended.
-func upaWildcardNSSet(wcNS, targetNS string) map[string]bool {
+func upaWildcardNSSet(wcNS, targetNS string) map[string]struct{} {
 	switch wcNS {
 	case WildcardNSAny, WildcardNSOther, WildcardNSNotAbsent:
 		return nil
 	case WildcardNSLocal:
-		return map[string]bool{"": true}
+		return map[string]struct{}{"": {}}
 	default:
-		result := make(map[string]bool)
+		result := make(map[string]struct{})
 		for _, part := range splitSpace(wcNS) {
 			switch part {
 			case WildcardNSLocal:
-				result[""] = true
+				result[""] = struct{}{}
 			case WildcardNSTargetNamespace:
-				result[targetNS] = true
+				result[targetNS] = struct{}{}
 			default:
-				result[part] = true
+				result[part] = struct{}{}
 			}
 		}
 		return result

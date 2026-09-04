@@ -449,7 +449,7 @@ func fnTranslate(_ *evalContext, args []*Result) (*Result, error) {
 
 	var b strings.Builder
 	for _, r := range s {
-		if remove[r] {
+		if _, ok := remove[r]; ok {
 			continue
 		}
 		if rep, ok := mapping[r]; ok {
@@ -463,20 +463,20 @@ func fnTranslate(_ *evalContext, args []*Result) (*Result, error) {
 
 // buildTranslateMap constructs the character mapping and removal set for translate().
 // The first occurrence of each rune in fromRunes wins per XPath spec.
-func buildTranslateMap(fromRunes, toRunes []rune) (mapping map[rune]rune, remove map[rune]bool) {
+func buildTranslateMap(fromRunes, toRunes []rune) (mapping map[rune]rune, remove map[rune]struct{}) {
 	mapping = make(map[rune]rune, len(fromRunes))
-	remove = make(map[rune]bool)
+	remove = make(map[rune]struct{})
 	for i, r := range fromRunes {
 		if _, exists := mapping[r]; exists {
 			continue // first occurrence wins
 		}
-		if remove[r] {
+		if _, ok := remove[r]; ok {
 			continue
 		}
 		if i < len(toRunes) {
 			mapping[r] = toRunes[i]
 		} else {
-			remove[r] = true
+			remove[r] = struct{}{}
 		}
 	}
 	return mapping, remove

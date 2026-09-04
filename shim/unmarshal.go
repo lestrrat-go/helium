@@ -183,7 +183,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 	// needs it — reads of a nil map are legal, and a childless or path-free
 	// element never allocates it.
 	var consumedLeaves map[*helium.Element]struct{}
-	consumedAttr := make(map[int]bool)
+	consumedAttr := make(map[int]struct{})
 
 	// Process bindings in two passes: non-any first (to consume specific elements),
 	// then any bindings (to pick up remaining unconsumed elements).
@@ -221,7 +221,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 
 			idx, attr, ok := lookupAttr(elem, binding.name, binding.nameSpace, binding.hasNameSpace)
 			if ok {
-				consumedAttr[idx] = true
+				consumedAttr[idx] = struct{}{}
 				if err := assignFromAttr(field, attr); err != nil {
 					return err
 				}
@@ -471,7 +471,7 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 		// Handle []xml.Attr field
 		if field.Type() == attrSliceType {
 			for i, attr := range elem.Attributes() {
-				if consumedAttr[i] {
+				if _, ok := consumedAttr[i]; ok {
 					continue
 				}
 				a := Attr{
@@ -483,10 +483,10 @@ func decodeElementInto(target reflect.Value, elem *helium.Element) error {
 			continue
 		}
 		for i, attr := range elem.Attributes() {
-			if consumedAttr[i] {
+			if _, ok := consumedAttr[i]; ok {
 				continue
 			}
-			consumedAttr[i] = true
+			consumedAttr[i] = struct{}{}
 			if err := assignFromAttr(field, attr); err != nil {
 				return err
 			}
@@ -786,7 +786,7 @@ func buildFieldBindings(t reflect.Type) ([]fieldBinding, error) {
 	}
 
 	bindings := make([]fieldBinding, 0, t.NumField())
-	collectFieldBindings(t, nil, &bindings, map[reflect.Type]bool{})
+	collectFieldBindings(t, nil, &bindings, map[reflect.Type]struct{}{})
 	for _, b := range bindings {
 		if b.isXMLName && b.isAttr {
 			return nil, fmt.Errorf("xml: invalid tag in field %s of type %s: \"xml:%s\"", b.fieldName, t, b.rawName+",attr")
@@ -903,13 +903,14 @@ func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
 		elems = append(elems, elemInfo{topName: topName, depth: len(b.index), keptIdx: i})
 	}
 
-	shadowed := make(map[int]bool)
+	shadowed := make(map[int]struct{})
 	for i, a := range elems {
-		if shadowed[a.keptIdx] {
+		if _, ok := shadowed[a.keptIdx]; ok {
 			continue
 		}
 		for j, b := range elems {
-			if i == j || shadowed[b.keptIdx] {
+			_, bShadowed := shadowed[b.keptIdx]
+			if i == j || bShadowed {
 				continue
 			}
 			if a.topName != b.topName {
@@ -917,9 +918,9 @@ func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
 			}
 			// Same top-level name at different depths: shallower wins
 			if a.depth < b.depth {
-				shadowed[b.keptIdx] = true
+				shadowed[b.keptIdx] = struct{}{}
 			} else if b.depth < a.depth {
-				shadowed[a.keptIdx] = true
+				shadowed[a.keptIdx] = struct{}{}
 				break
 			}
 		}
@@ -928,7 +929,7 @@ func resolveBindingConflicts(bindings []fieldBinding) []fieldBinding {
 	if len(shadowed) > 0 {
 		filtered := make([]fieldBinding, 0, len(kept))
 		for i, b := range kept {
-			if !shadowed[i] {
+			if _, ok := shadowed[i]; !ok {
 				filtered = append(filtered, b)
 			}
 		}
@@ -1005,11 +1006,11 @@ func preferBinding(candidate, current fieldBinding) bool {
 	return false
 }
 
-func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding, seen map[reflect.Type]bool) {
-	if seen[t] {
+func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding, seen map[reflect.Type]struct{}) {
+	if _, ok := seen[t]; ok {
 		return
 	}
-	seen[t] = true
+	seen[t] = struct{}{}
 	defer func() {
 		delete(seen, t)
 	}()
@@ -1020,7 +1021,7 @@ func collectFieldBindings(t reflect.Type, parentIndex []int, out *[]fieldBinding
 
 		if shouldFlattenEmbeddedField(f) {
 			embeddedType := derefType(f.Type)
-			if !seen[embeddedType] {
+			if _, ok := seen[embeddedType]; !ok {
 				collectFieldBindings(embeddedType, idx, out, seen)
 				continue
 			}

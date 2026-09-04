@@ -22,10 +22,10 @@ var (
 
 // htmlURIAttrs is the set of HTML attributes that always contain URIs.
 // "name" is treated as a URI attribute only on <a> elements (see isURIAttr).
-var htmlURIAttrs = map[string]bool{
-	"href":   true,
-	"action": true,
-	"src":    true,
+var htmlURIAttrs = map[string]struct{}{
+	"href":   {},
+	"action": {},
+	"src":    {},
 }
 
 // defaultHTMLDTD is the default DOCTYPE for HTML documents without one.
@@ -870,7 +870,8 @@ func (d *htmlDumper) dumpAttributes(out io.Writer, e *helium.Element) error {
 
 		val := attr.Value()
 		elemName := strings.ToLower(e.LocalName())
-		isURI := htmlURIAttrs[attrNameLower] || (attrNameLower == "name" && elemName == "a")
+		_, inURIAttrs := htmlURIAttrs[attrNameLower]
+		isURI := inURIAttrs || (attrNameLower == "name" && elemName == "a")
 		uriEscaped := isURI && !d.noEscapeURIAttributes
 		if uriEscaped {
 			val = uriEscapeStr(val)

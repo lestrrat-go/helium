@@ -869,7 +869,7 @@ func (v *validator) advanceFlexibleNaive(content *pattern, state *validState, fr
 // isKnownChildElement checks if an element name/ns appears as a child element
 // defined anywhere in the content patterns of the given element pattern.
 func (v *validator) isKnownChildElement(elemPat *pattern, name, ns string) bool {
-	visited := make(map[*pattern]bool)
+	visited := make(map[*pattern]struct{})
 	for _, child := range elemPat.children {
 		if v.isKnownElementInPatternImpl(child, name, ns, visited) {
 			return true
@@ -878,7 +878,7 @@ func (v *validator) isKnownChildElement(elemPat *pattern, name, ns string) bool 
 	return false
 }
 
-func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, visited map[*pattern]bool) bool {
+func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, visited map[*pattern]struct{}) bool {
 	if pat == nil {
 		return false
 	}
@@ -899,10 +899,10 @@ func (v *validator) isKnownElementInPatternImpl(pat *pattern, name, ns string, v
 		if def == nil {
 			return false
 		}
-		if visited[def] {
+		if _, ok := visited[def]; ok {
 			return false
 		}
-		visited[def] = true
+		visited[def] = struct{}{}
 		return v.isKnownElementInPatternImpl(def, name, ns, visited)
 	default:
 		for _, child := range pat.children {

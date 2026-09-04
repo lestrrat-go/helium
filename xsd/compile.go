@@ -68,7 +68,7 @@ type compiler struct {
 	// Downstream derivation checks (checkSimpleContentBase) skip a derivation
 	// whose base is such a placeholder — the unresolved ref was already reported,
 	// so the base kind is unknown and any further diagnostic would be spurious.
-	recoveryBaseTypes map[*TypeDef]bool
+	recoveryBaseTypes map[*TypeDef]struct{}
 	// reportedInvalidQName dedups invalid-QName diagnostics (reportInvalidQNameValue)
 	// keyed by (element identity, attribute name, value), so one attribute validated
 	// at more than one point (checkAttributeUse AND resolveQName) is reported once
@@ -667,7 +667,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 		fsys:                      fsys,
 		parser:                    parser,
 		typeRefs:                  make(map[*TypeDef]QName),
-		recoveryBaseTypes:         make(map[*TypeDef]bool),
+		recoveryBaseTypes:         make(map[*TypeDef]struct{}),
 		elemRefs:                  make(map[*ElementDecl]QName),
 		elemRefSources:            make(map[*ElementDecl]elemRefSource),
 		groupRefs:                 make(map[*ModelGroup]QName),

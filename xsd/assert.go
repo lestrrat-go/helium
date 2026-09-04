@@ -196,12 +196,12 @@ func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *heliu
 	// re-declared too (when in scope and not already on the copy), so
 	// namespace-uri-for-prefix('', .) and unprefixed name resolution survive
 	// isolation.
-	existing := make(map[string]bool)
+	existing := make(map[string]struct{})
 	for _, ns := range ce.Namespaces() {
-		existing[ns.Prefix()] = true
+		existing[ns.Prefix()] = struct{}{}
 	}
 	for prefix, uri := range collectNSContext(elem) {
-		if existing[prefix] {
+		if _, ok := existing[prefix]; ok {
 			continue
 		}
 		if prefix == "" && uri == "" {

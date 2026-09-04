@@ -835,7 +835,7 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 	}
 
 	// Determine "candidate" prefixes: visibly utilized ∪ inclusive
-	candidates := make(map[string]bool)
+	candidates := make(map[string]struct{})
 
 	// Element's own namespace prefix. An element in no namespace (e.g. after an
 	// xmlns="" reset) has a nil active namespace; it still visibly utilizes the
@@ -843,9 +843,9 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 	// check below then emits xmlns="" iff an output ancestor left a non-empty
 	// default namespace in scope (mirrors the whole-document exclusive path).
 	if ns := e.Namespace(); ns != nil {
-		candidates[ns.Prefix()] = true
+		candidates[ns.Prefix()] = struct{}{}
 	} else {
-		candidates[""] = true
+		candidates[""] = struct{}{}
 	}
 
 	// Attribute namespace prefixes (only visible attributes)
@@ -854,13 +854,13 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 			continue
 		}
 		if p := attr.Prefix(); p != "" {
-			candidates[p] = true
+			candidates[p] = struct{}{}
 		}
 	}
 
 	// Inclusive prefixes
 	for prefix := range c.inclusivePrefixes {
-		candidates[prefix] = true
+		candidates[prefix] = struct{}{}
 	}
 
 	var toOutput []nsSortEntry
