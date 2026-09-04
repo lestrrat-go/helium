@@ -1202,14 +1202,14 @@ found:
 // collectInScopeNamespaces walks up from elem collecting all namespace
 // declarations. Inner declarations shadow outer ones (closer to elem wins).
 func collectInScopeNamespaces(elem *Element) []*Namespace {
-	seen := map[string]bool{}
+	seen := map[string]struct{}{}
 	var result []*Namespace
 	var cur Node = elem
 	for cur != nil {
 		if e, ok := cur.(*Element); ok {
 			for _, ns := range e.Namespaces() {
-				if !seen[ns.Prefix()] {
-					seen[ns.Prefix()] = true
+				if _, ok := seen[ns.Prefix()]; !ok {
+					seen[ns.Prefix()] = struct{}{}
 					result = append(result, ns)
 				}
 			}

@@ -153,14 +153,14 @@ func mergeExtensionOpenContent(baseOC, eff *OpenContent, version Version) *OpenC
 // needs a BASE type's effective open content but runs BEFORE resolveOpenContent has
 // populated td.OpenContent — an extension base's field still holds its pre-merge
 // local value — so it recomputes here. Cycle-guarded via seen.
-func (c *compiler) effectiveOpenContentReadonly(td *TypeDef, seen map[*TypeDef]bool) *OpenContent {
+func (c *compiler) effectiveOpenContentReadonly(td *TypeDef, seen map[*TypeDef]struct{}) *OpenContent {
 	if td == nil || !td.IsComplex || td.ContentType == ContentTypeSimple {
 		return nil
 	}
-	if seen[td] {
+	if _, ok := seen[td]; ok {
 		return nil
 	}
-	seen[td] = true
+	seen[td] = struct{}{}
 	eff := c.localEffectiveOpenContent(td)
 	if td.Derivation == DerivationExtension && td.BaseType != nil {
 		return mergeExtensionOpenContent(c.effectiveOpenContentReadonly(td.BaseType, seen), eff, c.version)
@@ -466,7 +466,7 @@ func (c *compiler) checkOpenContentDropsBaseLocal(ctx context.Context, td *TypeD
 				enforced = true
 			}
 		}
-		if !derivedNames[bn] {
+		if _, ok := derivedNames[bn]; !ok {
 			// The derived FULLY DROPS bn. The guard only fires if the derived open
 			// content would ACTUALLY ACCEPT bn: skip accepts all (validates nothing);
 			// lax accepts (validating only if a global exists); but a STRICT wildcard
@@ -1190,8 +1190,8 @@ func (c *compiler) readDefaultOpenContent(ctx context.Context, root *helium.Elem
 // substitution-group members). It backs the open-content "interleave" rule:
 // weak wildcards never claim an element whose name is declared in the model, so
 // such elements must go through the normal content-model match.
-func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
-	names := make(map[QName]bool)
+func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]struct{} {
+	names := make(map[QName]struct{})
 	var walk func(g *ModelGroup)
 	walk = func(g *ModelGroup) {
 		if g == nil {
@@ -1200,9 +1200,9 @@ func collectModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
 		for _, p := range g.Particles {
 			switch term := p.Term.(type) {
 			case *ElementDecl:
-				names[term.Name] = true
+				names[term.Name] = struct{}{}
 				for _, m := range substitutableMembersFor(term, schema) {
-					names[m.Name] = true
+					names[m.Name] = struct{}{}
 				}
 			case *ModelGroup:
 				walk(term)
@@ -1249,8 +1249,8 @@ func modelGroupWildcardAdmitsName(mg *ModelGroup, local, ns string, schema *Sche
 // the open-content drop guard (kept/dropped split) and suffix validation (misplaced
 // trailing-name check), consistent with baseAdmissibleElementNames / instanceSubstMembers
 // and the drop guard's maxOccursForName==0 non-emitting definition.
-func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]bool {
-	names := make(map[QName]bool)
+func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]struct{} {
+	names := make(map[QName]struct{})
 	var walk func(g *ModelGroup, ancestorsEmitting bool)
 	walk = func(g *ModelGroup, ancestorsEmitting bool) {
 		if g == nil {
@@ -1262,10 +1262,10 @@ func collectEmittingModelElementNames(mg *ModelGroup, schema *Schema) map[QName]
 			case *ElementDecl:
 				if groupEmitting && p.MaxOccurs != 0 {
 					if !term.Abstract {
-						names[term.Name] = true
+						names[term.Name] = struct{}{}
 					}
 					for _, m := range instanceSubstMembers(term, schema) {
-						names[m.Name] = true
+						names[m.Name] = struct{}{}
 					}
 				}
 			case *ModelGroup:
@@ -1506,7 +1506,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 		// by the model, so such a trailing child is legitimately open content.
 		declaredNames := collectEmittingModelElementNames(mg, vc.schema)
 		for _, ch := range leftover {
-			if declaredNames[QName{Local: ch.name, NS: ch.ns}] {
+			if _, ok := declaredNames[QName{Local: ch.name, NS: ch.ns}]; ok {
 				vc.reportValidityError(ctx, vc.filename, ch.elem.Line(), ch.displayName, "This element is not expected.")
 				return fmt.Errorf("unexpected element")
 			}
@@ -1528,7 +1528,8 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 	var declared, open []childElem
 	for _, ch := range children {
 		qn := QName{Local: ch.name, NS: ch.ns}
-		if declaredNames[qn] || modelGroupWildcardAdmitsName(mg, ch.name, ch.ns, vc.schema) {
+		_, isDeclared := declaredNames[qn]
+		if isDeclared || modelGroupWildcardAdmitsName(mg, ch.name, ch.ns, vc.schema) {
 			declared = append(declared, ch)
 			continue
 		}
@@ -1601,7 +1602,7 @@ func (vc *validationContext) refineInterleavePartition(ctx context.Context, elem
 		// non-declared-name child to open and re-trial.
 		moved := false
 		for i, c := range slices.Backward(declared) {
-			if declaredNames[QName{Local: c.name, NS: c.ns}] {
+			if _, ok := declaredNames[QName{Local: c.name, NS: c.ns}]; ok {
 				continue // a declared element name is validated as the element, not spilled
 			}
 			if !wildcardAllowsExpandedName(wc, c.name, c.ns, vc.schema, false) {
@@ -1659,9 +1660,9 @@ func (vc *validationContext) contentModelSuffixEndpoint(ctx context.Context, mg 
 	return 0, false
 }
 
-func suffixOpenStructurallyAllowed(wc *Wildcard, children []childElem, declaredNames map[QName]bool, schema *Schema) bool {
+func suffixOpenStructurallyAllowed(wc *Wildcard, children []childElem, declaredNames map[QName]struct{}, schema *Schema) bool {
 	for _, ch := range children {
-		if declaredNames[QName{Local: ch.name, NS: ch.ns}] {
+		if _, ok := declaredNames[QName{Local: ch.name, NS: ch.ns}]; ok {
 			return false
 		}
 		if !wildcardAllowsExpandedName(wc, ch.name, ch.ns, schema, false) {

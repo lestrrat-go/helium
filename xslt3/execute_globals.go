@@ -36,7 +36,7 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 	ec.transformConfig = cfg
 	ec.globalVarDefs = make(map[string]*variable, len(ec.stylesheet.globalVars))
 	ec.globalParamDefs = make(map[string]*param, len(ec.stylesheet.globalParams))
-	ec.globalEvaluating = make(map[string]bool)
+	ec.globalEvaluating = make(map[string]struct{})
 
 	// Register params — set immediately if caller provided a value
 	for _, p := range ec.stylesheet.globalParams {
@@ -279,10 +279,10 @@ func (ec *execContext) globalSourceNode() helium.Node {
 
 // evaluateGlobalVar evaluates a global variable on first access.
 func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpath3.Sequence, error) {
-	if ec.globalEvaluating[v.Name] {
+	if _, ok := ec.globalEvaluating[v.Name]; ok {
 		return nil, fmt.Errorf("%w: global variable %q", ErrCircularRef, v.Name)
 	}
-	ec.globalEvaluating[v.Name] = true
+	ec.globalEvaluating[v.Name] = struct{}{}
 	defer delete(ec.globalEvaluating, v.Name)
 
 	var val xpath3.Sequence
@@ -446,10 +446,10 @@ func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpat
 
 // evaluateGlobalParam evaluates a global param on first access.
 func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath3.Sequence, error) {
-	if ec.globalEvaluating[p.Name] {
+	if _, ok := ec.globalEvaluating[p.Name]; ok {
 		return nil, fmt.Errorf("%w: global param %q", ErrCircularRef, p.Name)
 	}
-	ec.globalEvaluating[p.Name] = true
+	ec.globalEvaluating[p.Name] = struct{}{}
 	defer delete(ec.globalEvaluating, p.Name)
 
 	var val xpath3.Sequence

@@ -34,7 +34,7 @@ type execContext struct {
 	globalVars                   map[string]xpath3.Sequence
 	globalVarDefs                map[string]*variable // unevaluated global variable definitions (lazy)
 	globalParamDefs              map[string]*param    // unevaluated global param definitions (lazy)
-	globalEvaluating             map[string]bool      // circular dependency detection
+	globalEvaluating             map[string]struct{}  // circular dependency detection
 	collectingVars               bool                 // reentrancy guard for collectAllVars
 	currentMode                  string
 	currentTemplate              *template                  // use setCurrentTemplate(); do not assign directly
@@ -1611,11 +1611,11 @@ func (ec *execContext) ResolveVariable(ctx context.Context, name string) (xpath3
 		// variable so the original can be evaluated without triggering
 		// a false circular reference.
 		origName := ec.overridingVarDef.Name
-		wasEvaluating := ec.globalEvaluating[origName]
+		_, wasEvaluating := ec.globalEvaluating[origName]
 		delete(ec.globalEvaluating, origName)
 		val, err := ec.evaluateGlobalVar(ctx, ec.overridingVarDef.OriginalVar)
 		if wasEvaluating {
-			ec.globalEvaluating[origName] = true
+			ec.globalEvaluating[origName] = struct{}{}
 		}
 		if err != nil {
 			return nil, false, err

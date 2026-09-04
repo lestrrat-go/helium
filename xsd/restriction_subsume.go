@@ -290,19 +290,19 @@ type elemSymbolInfo struct {
 
 func collectElemSymbols(n *nfa) []elemSymbolInfo {
 	var out []elemSymbolInfo
-	seen := map[*ElementDecl]map[QName]bool{}
+	seen := map[*ElementDecl]map[QName]struct{}{}
 	for _, edges := range n.states {
 		for _, e := range edges {
 			if e.eps || e.sym.elem == nil {
 				continue
 			}
 			if seen[e.sym.elem] == nil {
-				seen[e.sym.elem] = map[QName]bool{}
+				seen[e.sym.elem] = map[QName]struct{}{}
 			}
-			if seen[e.sym.elem][e.sym.name] {
+			if _, ok := seen[e.sym.elem][e.sym.name]; ok {
 				continue
 			}
-			seen[e.sym.elem][e.sym.name] = true
+			seen[e.sym.elem][e.sym.name] = struct{}{}
 			out = append(out, elemSymbolInfo{elem: e.sym.elem, name: e.sym.name})
 		}
 	}

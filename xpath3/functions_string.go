@@ -542,24 +542,24 @@ func fnTranslate(ctx context.Context, args []Sequence) (Sequence, error) {
 	to := []rune(toStr)
 
 	mapping := make(map[rune]rune, len(from))
-	remove := make(map[rune]bool)
+	remove := make(map[rune]struct{})
 	for i, r := range from {
 		if _, exists := mapping[r]; exists {
 			continue
 		}
-		if remove[r] {
+		if _, ok := remove[r]; ok {
 			continue
 		}
 		if i < len(to) {
 			mapping[r] = to[i]
 		} else {
-			remove[r] = true
+			remove[r] = struct{}{}
 		}
 	}
 
 	var b strings.Builder
 	for _, r := range s {
-		if remove[r] {
+		if _, ok := remove[r]; ok {
 			continue
 		}
 		if rep, ok := mapping[r]; ok {

@@ -329,8 +329,8 @@ func (e *DTDValidationError) ErrorLevel() ErrorLevel { return e.Level }
 type validCtx struct {
 	handler ErrorHandler
 	failed  bool
-	ids     map[string]bool // ID values seen (uniqueness check)
-	idrefs  map[string]bool // IDREF values to resolve (cross-ref check)
+	ids     map[string]struct{} // ID values seen (uniqueness check)
+	idrefs  map[string]struct{} // IDREF values to resolve (cross-ref check)
 }
 
 func (vc *validCtx) addf(ctx context.Context, format string, args ...any) {
@@ -395,8 +395,8 @@ func lookupElementDecl(doc *Document, name, prefix string) (*ElementDecl, *DTD) 
 func validateDocument(ctx context.Context, doc *Document, handler ErrorHandler) error {
 	vctx := &validCtx{
 		handler: handler,
-		ids:     make(map[string]bool),
-		idrefs:  make(map[string]bool),
+		ids:     make(map[string]struct{}),
+		idrefs:  make(map[string]struct{}),
 	}
 
 	// VC: Element Declared (XML §3.2) / libxml2 XML_DTD_NO_DTD "no DTD found!".
@@ -508,7 +508,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 	}
 
 	// Check all declared attributes from both subsets, dedup by QName
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	for _, dtd := range docDTDs(doc) {
 		for _, adecl := range dtd.attrsByElem[ename] {
 			akey := adecl.prefix + ":" + adecl.name
@@ -516,10 +516,10 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 			if adecl.prefix != "" {
 				aname = adecl.prefix + ":" + adecl.name
 			}
-			if seen[akey] {
+			if _, ok := seen[akey]; ok {
 				continue
 			}
-			seen[akey] = true
+			seen[akey] = struct{}{}
 
 			val, found := present[akey]
 
@@ -550,16 +550,16 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 				// Track ID uniqueness and collect IDREFs
 				switch adecl.atype {
 				case enum.AttrID:
-					if vctx.ids[val] {
+					if _, dup := vctx.ids[val]; dup {
 						vctx.addf(ctx, "element %s: duplicate ID %q", ename, val)
 					} else {
-						vctx.ids[val] = true
+						vctx.ids[val] = struct{}{}
 					}
 				case enum.AttrIDRef:
-					vctx.idrefs[val] = true
+					vctx.idrefs[val] = struct{}{}
 				case enum.AttrIDRefs:
 					for ref := range strings.FieldsSeq(val) {
-						vctx.idrefs[ref] = true
+						vctx.idrefs[ref] = struct{}{}
 					}
 				case enum.AttrEntity:
 					ent, ok := lookupDTDEntity(doc, val)
@@ -614,7 +614,7 @@ func validateElementAttributes(ctx context.Context, doc *Document, elem *Element
 		if a.syntheticBase {
 			continue
 		}
-		if !seen[a.Prefix()+":"+a.LocalName()] {
+		if _, ok := seen[a.Prefix()+":"+a.LocalName()]; !ok {
 			vctx.addf(ctx, "element %s: no declaration for attribute %s", ename, a.Name())
 		}
 	}
@@ -661,7 +661,7 @@ func validateElementNamespaceDecls(ctx context.Context, doc *Document, elem *Ele
 // Every IDREF value must match an ID declared somewhere in the document.
 func validateDocumentFinal(ctx context.Context, vctx *validCtx) {
 	for ref := range vctx.idrefs {
-		if !vctx.ids[ref] {
+		if _, ok := vctx.ids[ref]; !ok {
 			vctx.addf(ctx, "IDREF %q references unknown ID", ref)
 		}
 	}

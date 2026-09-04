@@ -97,7 +97,7 @@ func (c *compiler) checkRestrictionParticles(ctx context.Context, td *TypeDef) {
 	// and never the base declared model group. Recomputed read-only because
 	// resolveOpenContent has not yet populated base.OpenContent.
 	if c.version == Version11 {
-		if baseOC := c.effectiveOpenContentReadonly(base, map[*TypeDef]bool{}); baseOC != nil && baseOC.Wildcard != nil {
+		if baseOC := c.effectiveOpenContentReadonly(base, map[*TypeDef]struct{}{}); baseOC != nil && baseOC.Wildcard != nil {
 			ctx = withBaseOpenContent(ctx, baseOC)
 		}
 	}
@@ -2429,7 +2429,7 @@ func wildcardConstraintSubset(sub, super *Wildcard, schema *Schema, isAttr bool)
 		superExcl := wildcardExcludedSet(super)
 		subExcl := wildcardExcludedSet(sub)
 		for ns := range superExcl {
-			if !subExcl[ns] {
+			if _, ok := subExcl[ns]; !ok {
 				return false
 			}
 		}
@@ -2448,7 +2448,7 @@ func wildcardConstraintSubset(sub, super *Wildcard, schema *Schema, isAttr bool)
 	if superNeg {
 		superExcl := wildcardExcludedSet(super)
 		for ns := range wildcardNSSet(sub) {
-			if superExcl[ns] {
+			if _, ok := superExcl[ns]; ok {
 				return false
 			}
 		}
@@ -2458,7 +2458,7 @@ func wildcardConstraintSubset(sub, super *Wildcard, schema *Schema, isAttr bool)
 	// Both finite sets: ordinary subset.
 	superSet := wildcardNSSet(super)
 	for ns := range wildcardNSSet(sub) {
-		if !superSet[ns] {
+		if _, ok := superSet[ns]; !ok {
 			return false
 		}
 	}
@@ -2468,14 +2468,14 @@ func wildcardConstraintSubset(sub, super *Wildcard, schema *Schema, isAttr bool)
 // wildcardExcludedSet returns the namespaces a negation wildcard
 // (##other/##not-absent) does NOT admit. The empty namespace is represented by
 // "".
-func wildcardExcludedSet(wc *Wildcard) map[string]bool {
+func wildcardExcludedSet(wc *Wildcard) map[string]struct{} {
 	switch wc.Namespace {
 	case WildcardNSNotAbsent:
-		return map[string]bool{"": true}
+		return map[string]struct{}{"": {}}
 	case WildcardNSOther:
-		return map[string]bool{"": true, wc.TargetNS: true}
+		return map[string]struct{}{"": {}, wc.TargetNS: {}}
 	default:
-		return map[string]bool{}
+		return map[string]struct{}{}
 	}
 }
 

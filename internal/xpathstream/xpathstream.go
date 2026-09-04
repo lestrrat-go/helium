@@ -199,7 +199,8 @@ func ExprUsesFunction(expr *xpath3.Expression, name string) bool {
 	if expr == nil {
 		return false
 	}
-	return expr.StreamInfo().UsedFunctions[name]
+	_, ok := expr.StreamInfo().UsedFunctions[name]
+	return ok
 }
 
 // ExprHasDownwardStep returns true if the expression contains any child::, descendant::,

@@ -17,7 +17,7 @@ func (e *Expression) AST() Expr {
 // streamability properties stored on vmProgram.stream.
 func computeStreamInfo(ast Expr) streamInfo {
 	si := streamInfo{
-		usedFunctions: make(map[string]bool),
+		usedFunctions: make(map[string]struct{}),
 	}
 	switch v := derefExpr(ast).(type) {
 	case ContextItemExpr:
@@ -75,7 +75,7 @@ func computeStreamInfo(ast Expr) streamInfo {
 			}
 		case FunctionCall:
 			if local, ok := streamFnLocalName(v); ok {
-				si.usedFunctions[local] = true
+				si.usedFunctions[local] = struct{}{}
 			}
 		}
 		return true
@@ -483,7 +483,7 @@ type StreamInfo struct {
 	HasDescOrSelf        bool
 	HasNonMotionlessPred bool
 	DownwardSelections   int
-	UsedFunctions        map[string]bool
+	UsedFunctions        map[string]struct{}
 	IsContextItem        bool
 }
 

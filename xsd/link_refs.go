@@ -318,15 +318,15 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			base = missingTypePlaceholder(qn)
 			c.schema.types[qn] = base
 			if c.recoveryBaseTypes == nil {
-				c.recoveryBaseTypes = make(map[*TypeDef]bool)
+				c.recoveryBaseTypes = make(map[*TypeDef]struct{})
 			}
-			c.recoveryBaseTypes[base] = true
+			c.recoveryBaseTypes[base] = struct{}{}
 		} else if _, missing := missingTypeRef(base); missing {
 			c.reportUnresolvedTypeRef(ctx, td, qn)
 			if c.recoveryBaseTypes == nil {
-				c.recoveryBaseTypes = make(map[*TypeDef]bool)
+				c.recoveryBaseTypes = make(map[*TypeDef]struct{})
 			}
-			c.recoveryBaseTypes[base] = true
+			c.recoveryBaseTypes[base] = struct{}{}
 		}
 		td.BaseType = base
 	}
@@ -1055,8 +1055,8 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			return si.ordinal < sj.ordinal
 		})
-		merged := make(map[*TypeDef]bool)
-		visiting := make(map[*TypeDef]bool)
+		merged := make(map[*TypeDef]struct{})
+		visiting := make(map[*TypeDef]struct{})
 		for _, td := range derived {
 			c.finalizeEffectiveAttrs(ctx, td, merged, visiting)
 		}
@@ -1082,8 +1082,8 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 			}
 			return si.ordinal < sj.ordinal
 		})
-		finalized := make(map[*TypeDef]bool)
-		visiting := make(map[*TypeDef]bool)
+		finalized := make(map[*TypeDef]struct{})
+		visiting := make(map[*TypeDef]struct{})
 		for _, td := range derived {
 			c.finalizeAttrUses10(ctx, td, finalized, visiting)
 		}
@@ -1159,7 +1159,7 @@ func (c *compiler) checkSimpleContentBase(ctx context.Context) {
 	})
 	for _, td := range tds {
 		base := td.BaseType
-		if c.recoveryBaseTypes[base] {
+		if _, ok := c.recoveryBaseTypes[base]; ok {
 			continue // base ref did not resolve; already reported
 		}
 		baseIsSimpleType := !base.IsComplex
@@ -1238,7 +1238,7 @@ func (c *compiler) checkSimpleContentRestrictionDerivation(ctx context.Context) 
 	})
 	for _, td := range tds {
 		base := td.BaseType
-		if c.recoveryBaseTypes[base] {
+		if _, ok := c.recoveryBaseTypes[base]; ok {
 			continue // base ref did not resolve; already reported
 		}
 		// Only a simpleContent complex-type base has a concrete content simple type
@@ -1490,18 +1490,18 @@ func (c *compiler) checkExtensionAttrDuplicates(ctx context.Context, td *TypeDef
 	if len(td.BaseType.Attributes) == 0 || len(own) == 0 {
 		return
 	}
-	baseAttrNames := make(map[QName]bool, len(td.BaseType.Attributes))
+	baseAttrNames := make(map[QName]struct{}, len(td.BaseType.Attributes))
 	for _, au := range td.BaseType.Attributes {
 		if au.Prohibited {
 			continue
 		}
-		baseAttrNames[au.Name] = true
+		baseAttrNames[au.Name] = struct{}{}
 	}
 	for _, au := range own {
 		if au.Prohibited {
 			continue
 		}
-		if !baseAttrNames[au.Name] {
+		if _, ok := baseAttrNames[au.Name]; !ok {
 			continue
 		}
 		if c.defaultAttrUseMatches(td, td.BaseType, au.Name) {
@@ -1574,32 +1574,32 @@ func (c *compiler) checkDuplicateAttrUses(ctx context.Context) {
 			realUse[au.Name] = struct{}{}
 		}
 
-		seen := make(map[QName]bool, len(td.Attributes))
-		reported := make(map[QName]bool)
-		warnedProhib := make(map[QName]bool)
+		seen := make(map[QName]struct{}, len(td.Attributes))
+		reported := make(map[QName]struct{})
+		warnedProhib := make(map[QName]struct{})
 		for _, au := range td.Attributes {
 			if au.Prohibited {
 				if _, ok := realUse[au.Name]; !ok {
 					continue
 				}
-				if warnedProhib[au.Name] {
+				if _, warned := warnedProhib[au.Name]; warned {
 					continue
 				}
-				warnedProhib[au.Name] = true
+				warnedProhib[au.Name] = struct{}{}
 				c.warnPointlessProhibition(ctx, au)
 				continue
 			}
-			if seen[au.Name] {
-				if reported[au.Name] {
+			if _, dup := seen[au.Name]; dup {
+				if _, done := reported[au.Name]; done {
 					continue
 				}
-				reported[au.Name] = true
+				reported[au.Name] = struct{}{}
 				src := c.typeDefSources[td]
 				msg := fmt.Sprintf("Duplicate attribute use '%s'.", au.Name.Local)
 				c.schemaError(ctx, schemaComponentError(c.diagSourceOrRecorded(src.source), src.line, "complexType", complexTypeComponent(td, src), msg))
 				continue
 			}
-			seen[au.Name] = true
+			seen[au.Name] = struct{}{}
 		}
 	}
 }
@@ -1662,23 +1662,23 @@ func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
 	})
 	for _, qn := range qns {
 		attrs := c.schema.attrGroups[qn]
-		seen := make(map[QName]bool, len(attrs))
-		reported := make(map[QName]bool)
+		seen := make(map[QName]struct{}, len(attrs))
+		reported := make(map[QName]struct{})
 		deduped := attrs[:0]
 		for _, au := range attrs {
 			if au.Prohibited {
 				deduped = append(deduped, au)
 				continue
 			}
-			if !seen[au.Name] {
-				seen[au.Name] = true
+			if _, dup := seen[au.Name]; !dup {
+				seen[au.Name] = struct{}{}
 				deduped = append(deduped, au)
 				continue
 			}
-			if reported[au.Name] {
+			if _, done := reported[au.Name]; done {
 				continue
 			}
-			reported[au.Name] = true
+			reported[au.Name] = struct{}{}
 			c.reportAttrGroupDuplicate(ctx, qn, au.Name)
 		}
 		c.schema.attrGroups[qn] = deduped
@@ -1687,7 +1687,7 @@ func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
 		// brought in through nested xs:attributeGroup ref children (recursively,
 		// cycle-guarded) and report any name that collides with a use already
 		// present in the group or another referenced group.
-		visited := map[QName]bool{qn: true}
+		visited := map[QName]struct{}{qn: {}}
 		for _, refQN := range c.attrGroupRefChildren[qn] {
 			c.flattenAttrGroupRefDuplicates(ctx, qn, refQN, seen, reported, visited)
 		}
@@ -1704,33 +1704,33 @@ func (c *compiler) checkAttrGroupDuplicates(ctx context.Context) {
 // as a duplicate (g -> h, h with h carrying attribute x is a duplicate use of x,
 // which xmllint rejects). The walk descends into the referenced group's own
 // nested refs as well.
-func (c *compiler) flattenAttrGroupRefDuplicates(ctx context.Context, ownerQN, refQN QName, seen, reported map[QName]bool, visited map[QName]bool) {
-	if visited[refQN] {
+func (c *compiler) flattenAttrGroupRefDuplicates(ctx context.Context, ownerQN, refQN QName, seen, reported map[QName]struct{}, visited map[QName]struct{}) {
+	if _, ok := visited[refQN]; ok {
 		return
 	}
-	visited[refQN] = true
+	visited[refQN] = struct{}{}
 	defer delete(visited, refQN)
 	// A name repeated WITHIN this referenced group is that group's own internal
 	// duplicate (reported when the group is processed as owner), not a collision to
 	// attribute to ownerQN. Track this group's local names so each distinct name is
 	// merged into seen once and only a cross-group collision is reported here.
-	local := make(map[QName]bool)
+	local := make(map[QName]struct{})
 	for _, au := range c.schema.attrGroups[refQN] {
 		if au.Prohibited {
 			continue
 		}
-		if local[au.Name] {
+		if _, ok := local[au.Name]; ok {
 			continue
 		}
-		local[au.Name] = true
-		if !seen[au.Name] {
-			seen[au.Name] = true
+		local[au.Name] = struct{}{}
+		if _, dup := seen[au.Name]; !dup {
+			seen[au.Name] = struct{}{}
 			continue
 		}
-		if reported[au.Name] {
+		if _, done := reported[au.Name]; done {
 			continue
 		}
-		reported[au.Name] = true
+		reported[au.Name] = struct{}{}
 		c.reportAttrGroupDuplicate(ctx, ownerQN, au.Name)
 	}
 	for _, nextQN := range c.attrGroupRefChildren[refQN] {
@@ -2193,16 +2193,16 @@ func (c *compiler) checkCircularAttrGroupRefs(ctx context.Context) {
 
 	// onStack is the current DFS recursion stack; done marks fully-explored nodes
 	// so a shared subtree reachable from two roots is not re-walked.
-	onStack := make(map[QName]bool)
-	done := make(map[QName]bool)
+	onStack := make(map[QName]struct{})
+	done := make(map[QName]struct{})
 
 	var visit func(qn QName)
 	visit = func(qn QName) {
-		onStack[qn] = true
+		onStack[qn] = struct{}{}
 		// Re-read the slice each iteration: a cut splices out the back-edge in place.
 		for i := 0; i < len(c.attrGroupRefChildren[qn]); i++ {
 			child := c.attrGroupRefChildren[qn][i]
-			if onStack[child] {
+			if _, ok := onStack[child]; ok {
 				// Back-edge qn -> child closes a cycle through child. Report it as a
 				// circular reference to child, attributed to THIS back-edge ref
 				// element's recorded source (index-aligned with attrGroupRefChildren),
@@ -2225,17 +2225,17 @@ func (c *compiler) checkCircularAttrGroupRefs(ctx context.Context) {
 				i--
 				continue
 			}
-			if done[child] {
+			if _, ok := done[child]; ok {
 				continue
 			}
 			visit(child)
 		}
-		onStack[qn] = false
-		done[qn] = true
+		delete(onStack, qn)
+		done[qn] = struct{}{}
 	}
 
 	for _, qn := range roots {
-		if done[qn] {
+		if _, ok := done[qn]; ok {
 			continue
 		}
 		visit(qn)
@@ -2430,13 +2430,13 @@ func (c *compiler) checkCircularGroupRefs(ctx context.Context) map[*ModelGroup]s
 
 	// onStack is the current DFS recursion stack; done marks fully-explored groups
 	// so a group reachable from two roots is not re-walked.
-	onStack := make(map[QName]bool)
-	done := make(map[QName]bool)
+	onStack := make(map[QName]struct{})
+	done := make(map[QName]struct{})
 	var visit func(qn QName)
 	visit = func(qn QName) {
-		onStack[qn] = true
+		onStack[qn] = struct{}{}
 		for _, e := range edges[qn] {
-			if onStack[e.target] {
+			if _, ok := onStack[e.target]; ok {
 				// Back-edge qn -> target closes a cycle through target. Cut this edge's
 				// placeholder (leave it an empty model group) so resolution stays
 				// acyclic, and report the circular reference once per back-edge.
@@ -2447,16 +2447,16 @@ func (c *compiler) checkCircularGroupRefs(ctx context.Context) map[*ModelGroup]s
 				c.reportCircularGroupRef(ctx, e.target, e.placeholder)
 				continue
 			}
-			if done[e.target] {
+			if _, ok := done[e.target]; ok {
 				continue
 			}
 			visit(e.target)
 		}
-		onStack[qn] = false
-		done[qn] = true
+		delete(onStack, qn)
+		done[qn] = struct{}{}
 	}
 	for _, qn := range roots {
-		if done[qn] {
+		if _, ok := done[qn]; ok {
 			continue
 		}
 		visit(qn)
@@ -3255,20 +3255,23 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 // UNIONS its own wildcard with the base's. merged memoizes completed types (each
 // finalizes once); visiting guards a cyclic base chain (an invalid schema
 // reported by the circular-type check) from infinite recursion.
-func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merged, visiting map[*TypeDef]bool) {
-	if td == nil || merged[td] {
+func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merged, visiting map[*TypeDef]struct{}) {
+	if td == nil {
 		return
 	}
-	if visiting[td] {
+	if _, done := merged[td]; done {
+		return
+	}
+	if _, ok := visiting[td]; ok {
 		return // cyclic base chain; the circular-type check reports the error
 	}
-	visiting[td] = true
+	visiting[td] = struct{}{}
 	base := td.BaseType
 	if base != nil && base.Derivation != DerivationNone {
 		c.finalizeEffectiveAttrs(ctx, base, merged, visiting)
 	}
 	delete(visiting, td)
-	merged[td] = true
+	merged[td] = struct{}{}
 
 	if base == nil || td.Derivation == DerivationNone {
 		return
@@ -3324,20 +3327,23 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 // is a restriction that gained inherited attributes after that snapshot.
 // finalized memoizes completed types; visiting guards a cyclic base chain from
 // infinite recursion.
-func (c *compiler) finalizeAttrUses10(ctx context.Context, td *TypeDef, finalized, visiting map[*TypeDef]bool) {
-	if td == nil || finalized[td] {
+func (c *compiler) finalizeAttrUses10(ctx context.Context, td *TypeDef, finalized, visiting map[*TypeDef]struct{}) {
+	if td == nil {
 		return
 	}
-	if visiting[td] {
+	if _, done := finalized[td]; done {
+		return
+	}
+	if _, ok := visiting[td]; ok {
 		return // cyclic base chain; the circular-type check reports the error
 	}
-	visiting[td] = true
+	visiting[td] = struct{}{}
 	base := td.BaseType
 	if base != nil && base.Derivation != DerivationNone {
 		c.finalizeAttrUses10(ctx, base, finalized, visiting)
 	}
 	delete(visiting, td)
-	finalized[td] = true
+	finalized[td] = struct{}{}
 
 	if base == nil || td.Derivation == DerivationNone || len(base.Attributes) == 0 {
 		return
@@ -3412,8 +3418,8 @@ func (c *compiler) extensionWildcardUnion(ctx context.Context, td *TypeDef, base
 }
 
 // wildcardNSSet expands a wildcard's namespace constraint into a set of URIs.
-func wildcardNSSet(wc *Wildcard) map[string]bool {
-	s := make(map[string]bool)
+func wildcardNSSet(wc *Wildcard) map[string]struct{} {
+	s := make(map[string]struct{})
 	switch wc.Namespace {
 	case WildcardNSAny:
 		// Matches everything — not representable as a finite set.
@@ -3421,19 +3427,19 @@ func wildcardNSSet(wc *Wildcard) map[string]bool {
 		// Everything except target namespace and absent (empty) — not finite.
 		// For subset checking, treat as "not targetNS".
 	case WildcardNSLocal:
-		s[""] = true
+		s[""] = struct{}{}
 	case WildcardNSTargetNamespace:
-		s[wc.TargetNS] = true
+		s[wc.TargetNS] = struct{}{}
 	default:
 		// Space-separated list of URIs, possibly including ##local and ##targetNamespace.
 		for _, token := range splitSpace(wc.Namespace) {
 			switch token {
 			case WildcardNSLocal:
-				s[""] = true
+				s[""] = struct{}{}
 			case WildcardNSTargetNamespace:
-				s[wc.TargetNS] = true
+				s[wc.TargetNS] = struct{}{}
 			default:
-				s[token] = true
+				s[token] = struct{}{}
 			}
 		}
 	}
@@ -3487,7 +3493,7 @@ func wildcardUnionWithStatus(w1, w2 *Wildcard, version Version) (*Wildcard, bool
 	if !w1IsNeg && !w2IsNeg {
 		set := wildcardNSSet(w1)
 		for ns := range wildcardNSSet(w2) {
-			set[ns] = true
+			set[ns] = struct{}{}
 		}
 		return wildcardFromSet(set, pc, tns), true
 	}
@@ -3514,8 +3520,9 @@ func wildcardUnionWithStatus(w1, w2 *Wildcard, version Version) (*Wildcard, bool
 
 	negNS := wildcardNegatedNS(neg)
 	s := wildcardNSSet(set)
-	hasAbsent := s[""]
-	hasNegated := negNS != "" && s[negNS]
+	_, hasAbsent := s[""]
+	_, negInSet := s[negNS]
+	hasNegated := negNS != "" && negInSet
 
 	if negNS == "" {
 		// Case 6: neg is not(absent).
@@ -3555,7 +3562,7 @@ func wildcardNegatedNS(wc *Wildcard) string {
 }
 
 // wildcardFromSet builds a Wildcard from a namespace set.
-func wildcardFromSet(s map[string]bool, pc ProcessContentsKind, tns string) *Wildcard {
+func wildcardFromSet(s map[string]struct{}, pc ProcessContentsKind, tns string) *Wildcard {
 	var parts []string
 	for ns := range s {
 		if ns == "" {
@@ -3592,7 +3599,7 @@ func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDe
 	// DFS over ALL heads (XSD 1.1 multiple-head substitution): a cycle may close
 	// through any one of an element's heads, so following only the first head
 	// would miss cycles that run through a later head.
-	visited := map[QName]bool{}
+	visited := map[QName]struct{}{}
 	for _, current := range edecl.substitutionGroupHeads() {
 		if c.substGroupChainContains(edecl.Name, current, visited) {
 			// Cycle leads back to this element.
@@ -3609,18 +3616,18 @@ func (c *compiler) checkCircularSubstGroup(ctx context.Context, edecl *ElementDe
 	}
 }
 
-func (c *compiler) substGroupChainContains(target, current QName, visited map[QName]bool) bool {
+func (c *compiler) substGroupChainContains(target, current QName, visited map[QName]struct{}) bool {
 	if current == (QName{}) {
 		return false
 	}
 	if current == target {
 		return true
 	}
-	if visited[current] {
+	if _, ok := visited[current]; ok {
 		// Hit a cycle that doesn't include this element.
 		return false
 	}
-	visited[current] = true
+	visited[current] = struct{}{}
 	head, ok := c.schema.elements[current]
 	if !ok {
 		return false

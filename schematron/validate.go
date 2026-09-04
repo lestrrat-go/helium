@@ -25,7 +25,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		// the FIRST rule whose context matches it. Track nodes already
 		// claimed by an earlier rule in this pattern and skip them in later
 		// rules. The set is reset for each pattern.
-		matched := make(map[helium.Node]bool)
+		matched := make(map[helium.Node]struct{})
 		for _, r := range pat.rules {
 			result, err := ev.evaluate(ctx, r.contextExpr, doc)
 			if err != nil {
@@ -50,10 +50,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 
 				// Skip nodes already matched by an earlier rule in this
 				// pattern (first-match-only semantics).
-				if matched[node] {
+				if _, ok := matched[node]; ok {
 					continue
 				}
-				matched[node] = true
+				matched[node] = struct{}{}
 
 				// Set up let variables for this rule.
 				// Variables are accumulated so that each let can

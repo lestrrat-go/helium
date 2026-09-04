@@ -541,13 +541,13 @@ func resolveCharacterMaps(ss *Stylesheet, names []string) map[rune]string {
 		return nil
 	}
 	merged := make(map[rune]string)
-	visited := make(map[string]bool)
+	visited := make(map[string]struct{})
 	var resolve func(name string)
 	resolve = func(name string) {
-		if visited[name] {
+		if _, ok := visited[name]; ok {
 			return
 		}
-		visited[name] = true
+		visited[name] = struct{}{}
 		cm := ss.characterMaps[name]
 		if cm == nil {
 			return

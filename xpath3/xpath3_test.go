@@ -1757,11 +1757,11 @@ func TestExpression_StreamInfo_SnapshotIsolation(t *testing.T) {
 	require.NotEmpty(t, si.UsedFunctions)
 
 	// Mutating the returned snapshot must not corrupt internal state.
-	si.UsedFunctions["bogus"] = true
+	si.UsedFunctions["bogus"] = struct{}{}
 	delete(si.UsedFunctions, "count")
 
 	fresh := expr.StreamInfo()
-	require.True(t, fresh.UsedFunctions["count"])
+	require.Contains(t, fresh.UsedFunctions, "count")
 	require.NotContains(t, fresh.UsedFunctions, "bogus")
 }
 
@@ -1782,7 +1782,7 @@ func TestExpression_StreamInfo_EQNameFunction(t *testing.T) {
 		require.Equal(t, plain.StreamInfo().HasNonMotionlessPred,
 			eqname.StreamInfo().HasNonMotionlessPred,
 			"EQName Q{...}%s() must classify same as plain %s()", fn, fn)
-		require.True(t, eqname.StreamInfo().UsedFunctions[fn],
+		require.Contains(t, eqname.StreamInfo().UsedFunctions, fn,
 			"EQName Q{...}%s() must be recorded under local name %q", fn, fn)
 	}
 }

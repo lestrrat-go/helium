@@ -540,24 +540,24 @@ func fnInnermost(ctx context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "innermost() requires node-set"}
 	}
-	nodeSet := make(map[helium.Node]bool, len(nodes))
+	nodeSet := make(map[helium.Node]struct{}, len(nodes))
 	for _, n := range nodes {
-		nodeSet[n] = true
+		nodeSet[n] = struct{}{}
 	}
 	// A node is innermost if it is not an ancestor of any other node in the set.
 	// Collect all ancestors of nodes in the set, then exclude them.
-	ancestors := make(map[helium.Node]bool)
+	ancestors := make(map[helium.Node]struct{})
 	for _, n := range nodes {
 		for p := n.Parent(); p != nil; p = p.Parent() {
-			if ancestors[p] {
+			if _, ok := ancestors[p]; ok {
 				break // already traced this path
 			}
-			ancestors[p] = true
+			ancestors[p] = struct{}{}
 		}
 	}
 	var result []helium.Node
 	for _, n := range nodes {
-		if !ancestors[n] {
+		if _, ok := ancestors[n]; !ok {
 			result = append(result, n)
 		}
 	}
@@ -569,15 +569,15 @@ func fnOutermost(ctx context.Context, args []Sequence) (Sequence, error) {
 	if !ok {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "outermost() requires node-set"}
 	}
-	nodeSet := make(map[helium.Node]bool, len(nodes))
+	nodeSet := make(map[helium.Node]struct{}, len(nodes))
 	for _, n := range nodes {
-		nodeSet[n] = true
+		nodeSet[n] = struct{}{}
 	}
 	var result []helium.Node
 	for _, n := range nodes {
 		isOuter := true
 		for p := n.Parent(); p != nil; p = p.Parent() {
-			if nodeSet[p] {
+			if _, ok := nodeSet[p]; ok {
 				isOuter = false
 				break
 			}

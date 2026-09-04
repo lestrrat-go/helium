@@ -784,7 +784,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 			// Re-insert DOE markers when writing directly to the result tree
 			// (not inside a variable/capture context). DOE is ignored when
 			// writing to variables, attributes, or comments (XSLT 3.0 §20.1).
-			isDOE := doeTextIndices[i]
+			_, isDOE := doeTextIndices[i]
 			// Re-insert DOE markers only when writing directly to the
 			// final result tree. DOE is ignored in temporary output
 			// states (variables, functions) and capture contexts
@@ -892,8 +892,8 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 // stripDOEMarkers removes disable-output-escaping / enable-output-escaping
 // marker PIs from a sequence, returning the cleaned sequence and a map of
 // indices (in the cleaned sequence) that had DOE markers around them.
-func stripDOEMarkers(seq xpath3.Sequence) (xpath3.Sequence, map[int]bool) {
-	doeIndices := map[int]bool{}
+func stripDOEMarkers(seq xpath3.Sequence) (xpath3.Sequence, map[int]struct{}) {
+	doeIndices := map[int]struct{}{}
 	result := make(xpath3.ItemSlice, 0, sequence.Len(seq))
 	doeActive := false
 	for item := range sequence.Items(seq) {
@@ -909,7 +909,7 @@ func stripDOEMarkers(seq xpath3.Sequence) (xpath3.Sequence, map[int]bool) {
 			}
 		}
 		if doeActive {
-			doeIndices[len(result)] = true
+			doeIndices[len(result)] = struct{}{}
 		}
 		result = append(result, item)
 	}

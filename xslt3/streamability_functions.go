@@ -672,9 +672,9 @@ func functionReturnsStreamingParam(fn *xslFunction) bool {
 		}
 	}
 
-	paramNames := make(map[string]bool)
+	paramNames := make(map[string]struct{})
 	for _, p := range fn.Params {
-		paramNames[p.Name] = true
+		paramNames[p.Name] = struct{}{}
 	}
 
 	for _, inst := range fn.Body {
@@ -693,9 +693,9 @@ func functionUsesUpwardFromParam(fn *xslFunction) bool {
 	if len(fn.Params) == 0 {
 		return false
 	}
-	paramNames := make(map[string]bool)
+	paramNames := make(map[string]struct{})
 	for _, p := range fn.Params {
-		paramNames[p.Name] = true
+		paramNames[p.Name] = struct{}{}
 	}
 
 	for _, inst := range fn.Body {
@@ -711,7 +711,7 @@ func functionUsesUpwardFromParam(fn *xslFunction) bool {
 				// $param/.. or $param/parent::* (PathStepExpr form)
 				if ps, ok := e.(xpath3.PathStepExpr); ok {
 					if ve, ok := ps.Left.(xpath3.VariableExpr); ok {
-						if paramNames[ve.Name] {
+						if _, ok := paramNames[ve.Name]; ok {
 							if exprHasUpwardAxis(ps.Right) {
 								found = true
 								return false
@@ -730,7 +730,8 @@ func functionUsesUpwardFromParam(fn *xslFunction) bool {
 							varName = ve.Name
 						}
 					}
-					if varName != "" && paramNames[varName] {
+					_, isParam := paramNames[varName]
+					if varName != "" && isParam {
 						lp := *pe.Path
 						if exprHasUpwardAxis(lp) {
 							found = true
@@ -775,9 +776,9 @@ func functionBodyIsGrounded(fn *xslFunction) bool {
 		return true
 	}
 
-	paramNames := make(map[string]bool)
+	paramNames := make(map[string]struct{})
 	for _, p := range fn.Params {
-		paramNames[p.Name] = true
+		paramNames[p.Name] = struct{}{}
 	}
 
 	for _, inst := range fn.Body {
@@ -792,10 +793,11 @@ func functionBodyIsGrounded(fn *xslFunction) bool {
 }
 
 // exprReturnsParam returns true if the expression can directly return a parameter variable.
-func exprReturnsParam(expr xpath3.Expr, paramNames map[string]bool) bool {
+func exprReturnsParam(expr xpath3.Expr, paramNames map[string]struct{}) bool {
 	switch e := expr.(type) {
 	case xpath3.VariableExpr:
-		return paramNames[e.Name]
+		_, ok := paramNames[e.Name]
+		return ok
 	case xpath3.IfExpr:
 		return exprReturnsParam(e.Then, paramNames) || exprReturnsParam(e.Else, paramNames)
 	case xpath3.SequenceExpr:

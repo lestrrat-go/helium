@@ -23,24 +23,24 @@ func isXHTMLDTD(dtd *DTD) bool {
 	return false
 }
 
-var xhtmlVoidElements = map[string]bool{
-	"area": true, "base": true, "basefont": true, "br": true,
-	"col": true, "frame": true, "hr": true, "img": true,
-	"input": true, "isindex": true, "link": true, "meta": true,
-	"param": true,
+var xhtmlVoidElements = map[string]struct{}{
+	"area": {}, "base": {}, "basefont": {}, "br": {},
+	"col": {}, "frame": {}, "hr": {}, "img": {},
+	"input": {}, "isindex": {}, "link": {}, "meta": {},
+	"param": {},
 }
 
-var xhtmlNameIDElements = map[string]bool{
-	"a": true, "p": true, "div": true, "img": true,
-	"map": true, "applet": true, "form": true, "frame": true,
-	"iframe": true,
+var xhtmlNameIDElements = map[string]struct{}{
+	"a": {}, "p": {}, "div": {}, "img": {},
+	"map": {}, "applet": {}, "form": {}, "frame": {},
+	"iframe": {},
 }
 
-var htmlBooleanAttrs = map[string]bool{
-	"checked": true, "compact": true, "declare": true, "defer": true,
-	"disabled": true, "ismap": true, "multiple": true, "nohref": true,
-	"noresize": true, "noshade": true, "nowrap": true, "readonly": true,
-	"selected": true,
+var htmlBooleanAttrs = map[string]struct{}{
+	"checked": {}, "compact": {}, "declare": {}, "defer": {},
+	"disabled": {}, "ismap": {}, "multiple": {}, "nohref": {},
+	"noresize": {}, "noshade": {}, "nowrap": {}, "readonly": {},
+	"selected": {},
 }
 
 func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
@@ -135,7 +135,8 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	}
 
 	if e.FirstChild() == nil {
-		if (e.ns == nil || e.ns.Prefix() == "") && xhtmlVoidElements[localName] && !addMeta {
+		_, isVoid := xhtmlVoidElements[localName]
+		if (e.ns == nil || e.ns.Prefix() == "") && isVoid && !addMeta {
 			d.writeString(out, " />")
 		} else {
 			if addMeta {
@@ -262,7 +263,8 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 		d.writeString(out, `="`)
 
 		attrValue := attr.Value()
-		if attrValue == "" && htmlBooleanAttrs[attrName] {
+		_, isBoolAttr := htmlBooleanAttrs[attrName]
+		if attrValue == "" && isBoolAttr {
 			d.writeString(out, attrName)
 		} else {
 			for achld := range Children(attr) {
@@ -282,7 +284,8 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 		d.writeString(out, `"`)
 	}
 
-	if nameAttr != nil && idAttr == nil && xhtmlNameIDElements[localName] {
+	_, wantsNameID := xhtmlNameIDElements[localName]
+	if nameAttr != nil && idAttr == nil && wantsNameID {
 		d.writeString(out, ` id="`)
 		d.check(d.writeAttrValueContent(out, nameAttr.Content()))
 		d.writeString(out, `"`)

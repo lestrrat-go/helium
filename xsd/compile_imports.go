@@ -1672,9 +1672,9 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 			}
 			origGroup := c.schema.groups[qn]
 			// Snapshot existing groupRefs keys.
-			existingRefs := make(map[*ModelGroup]bool, len(c.groupRefs))
+			existingRefs := make(map[*ModelGroup]struct{}, len(c.groupRefs))
 			for mg := range c.groupRefs {
-				existingRefs[mg] = true
+				existingRefs[mg] = struct{}{}
 			}
 			if err := c.parseNamedGroup(ctx, elem); err != nil {
 				c.schema.elemFormQualified = savedElemForm
@@ -1699,7 +1699,7 @@ func (c *compiler) processRedefineOverrides(ctx context.Context, redefineElem *h
 				var nonSelfRef QName
 				var nonSelfRefSeen bool
 				for mg, refQN := range c.groupRefs {
-					if existingRefs[mg] {
+					if _, ok := existingRefs[mg]; ok {
 						continue
 					}
 					if refQN == qn {
