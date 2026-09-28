@@ -277,7 +277,7 @@ func TestVersion11AssertEdges(t *testing.T) {
 }
 
 // TestVersion11AssertionGauntletFixes covers the four gauntlet-review fixes:
-// (1) required-attribute inheritance for a NON-assert 1.1 restriction; (2) a list
+// (1) required-attribute inheritance for a NON-assert restriction; (2) a list
 // whose item type is a union typed via per-item active-member resolution; (3) a
 // QName-typed $value resolved with namespace context; (4) a named user-defined
 // simple type atomizing through its builtin base via SchemaDeclarations.
@@ -308,11 +308,11 @@ func TestVersion11AssertionGauntletFixes(t *testing.T) {
 		require.ErrorIs(t, validateAssertion(t, schema, `<e>x</e>`), xsd.ErrValidationFailed)
 	})
 
-	t.Run("1.0 restriction omitting required attribute stays byte-identical", func(t *testing.T) {
+	t.Run("1.0 restriction also requires inherited attribute", func(t *testing.T) {
 		t.Parallel()
-		// In 1.0 helium does not inherit restriction attributes; the historical
-		// behavior is preserved (the restriction is rejected at compile time for the
-		// missing required base attribute). This guards the 1.1-only gating.
+		// XSD 1.0 has the same inheritance rule (§3.4.2): the restriction keeps the
+		// base's required attribute, so the schema compiles and the attribute stays
+		// required. See TestSimpleContentRestrictionKeepsBaseAttrs.
 		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="base">
     <xs:simpleContent>
@@ -329,8 +329,10 @@ func TestVersion11AssertionGauntletFixes(t *testing.T) {
     </xs:complexType>
   </xs:element>
 </xs:schema>`
-		_, err := compileAssertion(t, xsd.NewCompiler(), schemaXML)
-		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
+		schema, err := compileAssertion(t, xsd.NewCompiler(), schemaXML)
+		require.NoError(t, err)
+		require.NoError(t, validateAssertion(t, schema, `<e req="5">x</e>`))
+		require.ErrorIs(t, validateAssertion(t, schema, `<e>x</e>`), xsd.ErrValidationFailed)
 	})
 
 	t.Run("list item type that is a union is typed per active member", func(t *testing.T) {

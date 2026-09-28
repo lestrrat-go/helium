@@ -23,8 +23,9 @@ func TestRestrictionAttrNamespace(t *testing.T) {
 		// Base requires the namespaced global attribute {urn:t}id; the derived
 		// restriction declares a local unqualified attribute "id" ({}id). They
 		// collide only on local name, so the derivation must be rejected: the
-		// required base {urn:t}id has no counterpart and the derived {}id matches
-		// neither a base attribute use nor a base wildcard.
+		// derived {}id matches neither a base attribute use nor a base wildcard.
+		// The required base {urn:t}id is not "missing": the restriction does not
+		// redeclare it, so it inherits it (§3.4.2).
 		schema := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t" attributeFormDefault="unqualified">
   <xs:attribute name="id" type="xs:string"/>
   <xs:complexType name="Base">
@@ -43,7 +44,7 @@ func TestRestrictionAttrNamespace(t *testing.T) {
 </xs:schema>`
 		errs := compileFatalErrors(t, schema)
 		require.Contains(t, errs, noMatchingUse)
-		require.Contains(t, errs, requiredMissing)
+		require.NotContains(t, errs, requiredMissing)
 	})
 
 	t.Run("accepts namespaced derived attr restricting same namespaced base attr", func(t *testing.T) {

@@ -1425,11 +1425,40 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// builtin, or a facet ANYWHERE along the base chain — so a simpleContent EXTENSION
 	// of a named faceted simple type (whose facets live on the base, not on td itself)
 	// still enforces the base type's minLength/maxLength/etc.
+	ns := collectNSContext(elem)
 	if td != nil && simpleContentNeedsValidation(td) {
-		return validateValue(ctx, effectiveValue, collectNSContext(elem), td, elemDisplayName(elem), vc.filename, elem.Line(), vc)
+		if err := validateValue(ctx, effectiveValue, ns, td, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+			return err
+		}
+	}
+	// A simpleContent RESTRICTION keeps its narrowing (direct facets or a nested
+	// <xs:simpleType>) on ContentSimpleType, which the base-chain walk above never
+	// reads. Check the value against the full narrowed content type as well, so
+	// e.g. a minInclusive added by a restriction rejects a smaller value. The
+	// check runs after the one above so a value that already failed keeps its
+	// earlier diagnostic.
+	if hasSimpleContentNarrowing(td) {
+		return vc.validateSimpleContentValue(ctx, effectiveValue, ns, td, elemDisplayName(elem), elem.Line())
 	}
 
 	return nil
+}
+
+// hasSimpleContentNarrowing reports whether td, or any simpleContent complex
+// type in its base chain, is a simpleContent restriction that narrows its
+// content type (TypeDef.ContentSimpleType is set).
+func hasSimpleContentNarrowing(td *TypeDef) bool {
+	visited := make(map[*TypeDef]struct{})
+	for cur := td; cur != nil && cur.IsSimpleContent; cur = cur.BaseType {
+		if _, seen := visited[cur]; seen {
+			return false
+		}
+		visited[cur] = struct{}{}
+		if cur.ContentSimpleType != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // validateSimpleContentValue validates a value against a simpleContent (or plain

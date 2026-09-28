@@ -116,16 +116,18 @@
     so imported assertions resolve their own default namespace.
 - XSD 1.1 **attribute inheritance** (`finalizeEffectiveAttrs`): a complex type inherits every base attribute
   use it does not redeclare, for ALL 1.1 derived types — `checkRestrictionAttrs` does not flag a
-  non-redeclared required base attribute as "missing" in 1.1, so the merge enforces the inherited requirement.
+  non-redeclared required base attribute as "missing" (in either version; only an explicit
+  `use="prohibited"` of a required base attribute is flagged, as libxml2 does), so the merge enforces the
+  inherited requirement.
   TOPOLOGICAL across BOTH extension AND restriction derivations: the base is finalized first (memoized,
   cycle-guarded recursion), then `checkRestrictionAttrs`/`checkExtensionAttrDuplicates` runs against td's OWN
   declarations and the finalized base, then td inherits — so an extension of a restriction (or vice versa, any
   depth) reads a complete base attribute set regardless of source order. In 1.1 the extension/restriction
   passes DEFER all attribute work to `finalizeEffectiveAttrs`. XSD 1.0 also finalizes effective attribute USES
   topologically across BOTH extension and restriction (`finalizeAttrUses10`, §3.4.2.2), after the extension
-  loop's in-loop attribute snapshot and `checkRestrictionAttrs` (which still runs against each restriction
-  base's OWN declarations, is NOT repeated in the pass, and keeps the historical 1.0 rule that a required base
-  attribute must be explicitly redeclared). The pass folds non-redeclared base uses into restriction types and
+  loop's in-loop attribute snapshot. The pass runs `checkRestrictionAttrs` on each restriction with its OWN
+  declarations against the FINALIZED base (as 1.1 does), so a restriction of a restriction is compared with the
+  attributes its base inherited too. The pass folds non-redeclared base uses into restriction types and
   re-folds any uses a restriction base gained onto extensions that copied a stale snapshot, so an extension of
   a restriction inherits undeclared grandbase attributes. It also RE-RUNS the ct-props-correct.4 extension
   check (`checkExtensionAttrDuplicates`) against the FINALIZED base, so an extension that redeclares an
@@ -167,11 +169,14 @@
     validates the instance text against it whenever any chain step has facets/assertions or a non-string
     builtin (`simpleContentNeedsValidation`), so a restriction enumeration / `xs:float` narrowing is enforced
     and inherited through further restriction/extension; `$value` uses the same composed type. In XSD 1.0
-    `validateSimpleContent` validates the text against the declared type `td` (not the narrowed
-    `ContentSimpleType`) but its gate is also `simpleContentNeedsValidation(td)` — which reports a facet
-    ANYWHERE along td's base chain — so a simpleContent EXTENSION of a named faceted simple type enforces that
-    base's facets (minLength/maxLength/etc.) in 1.0 too. (A direct facet on a simpleContent RESTRICTION lives
-    on `ContentSimpleType`, not `td`, so it is compile-checked but not yet instance-enforced in 1.0.)
+    `validateSimpleContent` first validates the text against the declared type `td`, gated by
+    `simpleContentNeedsValidation(td)` — which reports a facet ANYWHERE along td's base chain — so a
+    simpleContent EXTENSION of a named faceted simple type enforces that base's facets
+    (minLength/maxLength/etc.). When td or a simpleContent ancestor narrows its content
+    (`hasSimpleContentNarrowing`: a `ContentSimpleType` somewhere in the chain), 1.0 then ALSO validates the
+    text through `validateSimpleContentValue` (the 1.1 composed-type check), so a restriction's direct facets
+    and nested `<xs:simpleType>` are instance-enforced in 1.0. The td check runs first, so a value that fails
+    it keeps its diagnostic.
   - The assert adapter `schemaDecls` resolves a simpleContent COMPLEX type through
     `effectiveContentSimpleType` (via `lookupAtomizationType`) in
     `LookupSchemaType`/`ListItemType`/`UnionMemberTypes`, so `data(c)` on a DESCENDANT element narrowed to
