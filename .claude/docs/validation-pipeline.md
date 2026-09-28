@@ -173,7 +173,8 @@ t:T`) would fail closed and reject a VALID schema at compile time. (Standalone `
 Version10/nil-schema default — the documented Phase-1 gap.) XSD 1.1 **attribute inheritance**
 (`finalizeEffectiveAttrs`, run in `resolveRefs`, gated to 1.1): EVERY derived complex type (extension OR
 restriction) inherits each base attribute use it does not redeclare. This is mandatory, not optional —
-`checkRestrictionAttrs` does not report a non-redeclared required base attribute as "missing" in 1.1, so the
+`checkRestrictionAttrs` does not report a non-redeclared required base attribute as "missing" (in either
+version; only an explicit `use="prohibited"` of a required base attribute is reported, as libxml2 does), so the
 merge is what actually keeps that inherited requirement enforced (without it an instance omitting the
 attribute would wrongly validate). The merge is TOPOLOGICAL across BOTH derivation kinds: the base is
 finalized FIRST (memoized recursion with `merged`/`visiting` sets, following the base pointer regardless of
@@ -184,14 +185,14 @@ restriction inherits the base wildcard when it declares none; an extension also 
 the base's). Because both the extension and restriction passes DEFER all attribute work to this finalizer in
 1.1, an extension-of-restriction or restriction-of-extension at any depth inherits correctly regardless of
 source order. The passes keep their content-model merge and `checkRestrictionParticles`. XSD 1.0 folds base
-attributes into extension types in-loop (so `checkRestrictionAttrs` on a restriction-of-extension still sees
-historically merged extension bases) and then finalizes effective attribute USES topologically across BOTH
-extension and restriction via `finalizeAttrUses10` (folds non-redeclared base uses into restriction types,
+attributes into extension types in-loop and then finalizes effective attribute USES topologically across BOTH
+extension and restriction via `finalizeAttrUses10` (runs `checkRestrictionAttrs` on each restriction with its
+OWN declarations against the FINALIZED base, folds non-redeclared base uses into restriction types,
 re-folds uses a restriction base gained onto extensions that copied a stale snapshot, and re-runs
 `checkExtensionAttrDuplicates` against the FINALIZED base — with the extension's OWN uses snapshotted in
 `extOwnAttrUses` before the in-loop fold, and `extAttrDupReported` suppressing a second report of a collision
 the in-loop check already emitted — so an extension redeclaring an attribute its base merely INHERITS is a
-ct-props-correct.4 duplicate in 1.0 as in 1.1; `checkRestrictionAttrs` is NOT repeated there; the in-loop fold
+ct-props-correct.4 duplicate in 1.0 as in 1.1; the in-loop fold
 builds a FRESH slice via `concatAttrUses` — `append(base.Attributes, own...)` would park the derived type's
 own uses in the base slice's spare capacity, where a sibling derivation's fold or `finalizeAttrUses10`'s
 inheriting append silently overwrites them; the base {attribute wildcard} is NOT inherited on restriction — a
@@ -226,12 +227,12 @@ hops (XSD §3.4.2.2: a nested simpleType RESTRICTS, it does not REPLACE, the bas
 `maxLength` on the base still rejects an over-long value the nested type alone would accept). So a
 simpleContent EXTENSION of a named faceted/asserted simple type enforces that base type's facets/assertions,
 and a narrowed content type (e.g. an ancestor enumeration) is inherited through a further restriction OR
-extension. In XSD 1.0 `validateSimpleContent` validates against the declared type `td` (not the composed
-`ContentSimpleType`), but its gate is likewise `simpleContentNeedsValidation(td)` (a facet ANYWHERE along td's
-base chain), so a simpleContent EXTENSION of a named faceted type enforces the base's facets in 1.0 too; a
-direct facet on a simpleContent RESTRICTION lives on `ContentSimpleType` (built in both versions and recorded
-in `typeDefSources`), so it is compile-checked by `checkFacetConsistency` in 1.0 but not yet instance-enforced
-there. `resolveWhiteSpace` treats `xs:anySimpleType` as whiteSpace="preserve" (both versions), so a fixed
+extension. In XSD 1.0 `validateSimpleContent` first validates against the declared type `td`, gated by
+`simpleContentNeedsValidation(td)` (a facet ANYWHERE along td's base chain), so a simpleContent EXTENSION of a
+named faceted type enforces the base's facets in 1.0 too. When td or a simpleContent ancestor narrows its
+content (`hasSimpleContentNarrowing`: a `ContentSimpleType` somewhere in the chain), 1.0 then ALSO runs
+`validateSimpleContentValue`, so a restriction's direct facets and nested `<xs:simpleType>` are enforced on the
+instance; the td check runs first, so a value that fails it keeps its diagnostic. `resolveWhiteSpace` treats `xs:anySimpleType` as whiteSpace="preserve" (both versions), so a fixed
 value on an `xs:anySimpleType` element keeps surrounding whitespace significant. The
 complexContent-extension-over-simple-base check (cos-ct-extends-1-1) also flags the empty/attribute-only case
 in 1.1. **Conditional type assignment (xs:alternative)** is implemented (`alternative.go`):

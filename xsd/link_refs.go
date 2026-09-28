@@ -999,12 +999,11 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		return si.line < sj.line
 	})
 	for _, td := range restrictionTypes {
-		// In XSD 1.1 checkRestrictionAttrs is run inside finalizeEffectiveAttrs,
-		// once the base's effective attributes are finalized; here only the content
-		// model restriction check runs (it is independent of attribute finalization).
-		if c.version != Version11 {
-			c.checkRestrictionAttrs(ctx, td)
-		}
+		// checkRestrictionAttrs runs inside the attribute finalizer
+		// (finalizeEffectiveAttrs in 1.1, finalizeAttrUses10 in 1.0), once the
+		// base's effective attributes are finalized; here only the content model
+		// restriction check runs (it is independent of attribute finalization).
+		//
 		// §3.4.6.4 (Derivation Valid (Restriction, Complex), cos-ct-restricts clause
 		// 5.3.2): when both the base and the derived type have complex content, a
 		// mixed derived content type requires the base to be mixed too (clause 5.3.2.1),
@@ -1064,14 +1063,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		// XSD 1.0: finalize each derived complex type's effective {attribute uses}
 		// TOPOLOGICALLY across BOTH extension and restriction derivations
 		// (§3.4.2.2). The extension loop above already snapshots BaseType.Attributes
-		// onto extensions (so checkRestrictionAttrs on a restriction-of-extension
-		// still sees historically merged extension bases), and checkRestrictionAttrs
-		// already ran against each restriction base's OWN declarations. This merge-
-		// only pass (1) folds non-redeclared base uses into restriction types and
-		// (2) re-folds any uses a restriction base gained onto extensions that
-		// copied a stale snapshot — so an extension of a restriction inherits undeclared
-		// grandbase attributes. The base {attribute wildcard} is NOT inherited on
-		// restriction (a restriction's wildcard comes solely from its own content).
+		// onto extensions. This pass (1) runs checkRestrictionAttrs on each
+		// restriction against its FINALIZED base, (2) folds non-redeclared base uses
+		// into restriction types and (3) re-folds any uses a restriction base gained
+		// onto extensions that copied a stale snapshot — so an extension of a
+		// restriction inherits undeclared grandbase attributes. The base {attribute
+		// wildcard} is NOT inherited on restriction (a restriction's wildcard comes
+		// solely from its own content).
 		derived := make([]*TypeDef, 0, len(extensionTypes)+len(restrictionTypes))
 		derived = append(derived, extensionTypes...)
 		derived = append(derived, restrictionTypes...)
@@ -3181,19 +3179,12 @@ func (c *compiler) checkRestrictionAttrs(ctx context.Context, td *TypeDef) {
 			continue
 		}
 		derived, found := derivedAttrs[baseAU.Name]
-		// XSD restriction inherits a base attribute use that the derived type does
-		// not redeclare (§3.4.2.2): an absent derived declaration is not "missing",
-		// it carries the base use forward. In XSD 1.1 mode that inheritance is
-		// honored, so only an explicit prohibition of a required base attribute is
-		// an error. XSD 1.0 mode keeps its historical behavior byte-identical.
-		if c.version == Version11 {
-			if found && derived.Prohibited {
-				msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
-				c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
-			}
-			continue
-		}
-		if !found || derived.Prohibited {
+		// A restriction inherits every base attribute use it does not redeclare
+		// (§3.4.2.2 in both XSD 1.0 and 1.1), so an absent derived declaration is
+		// not "missing": it carries the required base use forward, and the
+		// attribute finalizer merges it in. Only an explicit use="prohibited"
+		// removes it. libxml2 reports the same single case.
+		if found && derived.Prohibited {
 			msg := fmt.Sprintf("A matching attribute use for the 'required' attribute use '%s' of the base complex type definition %s is missing.", baseAU.Name.Local, baseQualified)
 			c.schemaError(ctx, schemaComponentError(source, src.line, "complexType", component, msg))
 		}
@@ -3315,12 +3306,15 @@ func (c *compiler) finalizeEffectiveAttrs(ctx context.Context, td *TypeDef, merg
 // complex type for XSD 1.0 (§3.4.2.2) TOPOLOGICALLY across BOTH extension and
 // restriction derivations: the base is finalized FIRST (recursively, regardless
 // of its derivation kind), then td inherits every base use it does not already
-// carry. checkRestrictionAttrs already ran against each restriction base's OWN
-// declarations (1.0 historical "required base attr must be redeclared"
-// semantics) and is NOT repeated here. The ct-props-correct.4 extension check IS
-// repeated, now against the finalized base, so an extension that redeclares an
-// attribute its base merely INHERITS is rejected; extAttrDupReported keeps the
-// in-loop diagnostic from being emitted twice. A restriction deliberately does
+// carry. A restriction runs checkRestrictionAttrs here, with its OWN
+// declarations against the finalized base, so a restriction of a restriction is
+// compared with the attributes its base inherited as well as the ones it
+// declares (a prohibited or optional redeclaration of an inherited required
+// attribute is rejected, and a redeclaration of an inherited optional attribute
+// is accepted). The ct-props-correct.4 extension check is repeated, now against
+// the finalized base, so an extension that redeclares an attribute its base
+// merely INHERITS is rejected; extAttrDupReported keeps the in-loop diagnostic
+// from being emitted twice. A restriction deliberately does
 // NOT inherit the base {attribute wildcard} (complete wildcard from own content
 // only). An extension may already hold a stale in-loop snapshot of
 // BaseType.Attributes; appending only missing uses repairs chains where the base
@@ -3345,7 +3339,15 @@ func (c *compiler) finalizeAttrUses10(ctx context.Context, td *TypeDef, finalize
 	delete(visiting, td)
 	finalized[td] = struct{}{}
 
-	if base == nil || td.Derivation == DerivationNone || len(base.Attributes) == 0 {
+	if base == nil || td.Derivation == DerivationNone {
+		return
+	}
+	// A malformed @base resolves to the invalidQName placeholder, already
+	// reported once; checking against it would only add a follow-on error.
+	if td.Derivation == DerivationRestriction && !isInvalidQName(base.Name) {
+		c.checkRestrictionAttrs(ctx, td)
+	}
+	if len(base.Attributes) == 0 {
 		return
 	}
 	if td.Derivation == DerivationExtension {

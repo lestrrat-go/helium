@@ -3,6 +3,7 @@ package xsd_test
 import (
 	"testing"
 
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -382,5 +383,214 @@ func TestExtensionOwnAttrsSurviveBaseGrowth10(t *testing.T) {
 			// Assert
 			require.NoError(t, err)
 		})
+	}
+}
+
+// TestSimpleContentRestrictionKeepsBaseAttrs covers a pattern that ISO 20022
+// and EPC SEPA schemas use everywhere (GitHub issue #1483):
+//
+//	<xs:complexType name="Amt">                      <!-- a decimal amount -->
+//	  <xs:simpleContent>                             <!-- with a required  -->
+//	    <xs:extension base="xs:decimal">             <!-- Ccy attribute    -->
+//	      <xs:attribute name="Ccy" use="required"/>
+//	...
+//	<xs:restriction base="Amt">                      <!-- same type, but   -->
+//	  <xs:minInclusive value="0.01"/>                <!-- amount >= 0.01   -->
+//	</xs:restriction>
+//
+// The restriction only adds a limit on the number. It does not mention the Ccy
+// attribute again, because it does not need to: XSD says a type derived by
+// restriction keeps every attribute of its base type unless it says otherwise
+// (XSD 1.0 Structures §3.4.2, {attribute uses}). So the derived type still has
+// a required Ccy attribute, and an element that leaves out Ccy is invalid.
+// libxml2 (xmllint) accepts the schema and enforces both the attribute and the
+// 0.01 minimum.
+//
+// Two separate things have to work for this schema, and both are checked in
+// XSD 1.0 and XSD 1.1 mode:
+//
+//  1. The schema must compile. The restriction rule "a required base attribute
+//     must have a matching attribute in the derived type" is satisfied by the
+//     attribute the derived type keeps from its base. The only way to break it
+//     is to write use="prohibited" for that attribute.
+//  2. The limits the restriction adds must be checked in instance documents.
+//     They can be written directly inside <xs:restriction> (minInclusive
+//     below) or as a nested <xs:simpleType>. A value below the minimum, or
+//     above the maximum of the nested type, is invalid.
+//
+// Each case lists the instance documents to validate and whether each one must
+// be accepted.
+func TestSimpleContentRestrictionKeepsBaseAttrs(t *testing.T) {
+	t.Parallel()
+
+	const amtType = `<xs:complexType name="Amt">
+    <xs:simpleContent>
+      <xs:extension base="xs:decimal">
+        <xs:attribute name="Ccy" type="xs:string" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>`
+
+	cases := map[string]struct {
+		schema    string
+		instances map[string]bool // instance XML -> must be valid
+	}{
+		// The schema from issue #1483: the restriction adds a minInclusive
+		// facet and does not repeat the Ccy attribute.
+		"facet added directly, attribute not repeated": {
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  ` + amtType + `
+  <xs:element name="A">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="Amt">
+          <xs:minInclusive value="0.01"/>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			instances: map[string]bool{
+				`<A Ccy="EUR">1</A>`:    true,  // has Ccy, amount within the limit
+				`<A>1</A>`:              false, // Ccy is still required
+				`<A Ccy="EUR">0</A>`:    false, // below the minInclusive of 0.01
+				`<A Ccy="EUR">abc</A>`:  false, // not a decimal at all
+				`<A Ccy="EUR">0.5</A>`:  true,  // above the minimum
+				`<A Ccy="EUR">0.01</A>`: true,  // the minimum itself is allowed
+			},
+		},
+		// The same idea with the limit written as a nested simple type. The
+		// derived type repeats Ccy here, which is also allowed.
+		"limit in a nested simpleType": {
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  ` + amtType + `
+  <xs:element name="A">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="Amt">
+          <xs:simpleType>
+            <xs:restriction base="xs:decimal">
+              <xs:maxInclusive value="5"/>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:attribute name="Ccy" type="xs:string" use="required"/>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+			instances: map[string]bool{
+				`<A Ccy="EUR">3</A>`: true,  // within the nested type's maximum
+				`<A Ccy="EUR">9</A>`: false, // above the nested type's maximum of 5
+				`<A>3</A>`:           false, // Ccy is required
+			},
+		},
+		// Writing use="prohibited" removes the base's required attribute, which
+		// a restriction may not do. This must still fail to compile.
+		"required attribute prohibited": {
+			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  ` + amtType + `
+  <xs:element name="A">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:restriction base="Amt">
+          <xs:attribute name="Ccy" use="prohibited"/>
+        </xs:restriction>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+		},
+	}
+
+	for _, version := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		for name, tc := range cases {
+			t.Run(version.String()+" "+name, func(t *testing.T) {
+				t.Parallel()
+				schema, errs, err := compileWith(t, version, tc.schema)
+				if tc.instances == nil {
+					require.Error(t, err)
+					require.Contains(t, errs, "A matching attribute use for the 'required' attribute use 'Ccy'")
+					return
+				}
+				require.NoError(t, err, errs)
+				for instance, wantValid := range tc.instances {
+					err := validateXML(t, schema, instance)
+					if wantValid {
+						require.NoError(t, err, instance)
+						continue
+					}
+					require.Error(t, err, instance)
+				}
+			})
+		}
+	}
+}
+
+// TestRestrictionOfRestrictionAttrs checks a restriction whose base is itself
+// a restriction. The middle type B does not mention its base's attribute, so B
+// keeps it (see TestSimpleContentRestrictionKeepsBaseAttrs). A type C that
+// restricts B must be compared with every attribute B has, including the one B
+// only kept from A. xmllint gives the same result for each case.
+func TestRestrictionOfRestrictionAttrs(t *testing.T) {
+	t.Parallel()
+
+	// schemaFor builds A -> B -> C, where A declares aDecl, B restricts A
+	// without mentioning any attribute, and C restricts B with cDecl.
+	schemaFor := func(aDecl, cDecl string) string {
+		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="A">
+    ` + aDecl + `
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:complexContent><xs:restriction base="A"/></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="C">
+    <xs:complexContent>
+      <xs:restriction base="B">
+        ` + cDecl + `
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="C"/>
+</xs:schema>`
+	}
+
+	cases := map[string]struct {
+		schema  string
+		wantErr string // empty: the schema must compile
+	}{
+		// C may repeat an optional attribute that B kept from A.
+		"repeat kept optional attribute": {
+			schema: schemaFor(`<xs:attribute name="o" type="xs:string"/>`,
+				`<xs:attribute name="o" type="xs:string"/>`),
+		},
+		// C may not remove a required attribute that B kept from A.
+		"prohibit kept required attribute": {
+			schema: schemaFor(`<xs:attribute name="r" type="xs:string" use="required"/>`,
+				`<xs:attribute name="r" use="prohibited"/>`),
+			wantErr: "A matching attribute use for the 'required' attribute use 'r'",
+		},
+		// C may not make a required attribute that B kept from A optional.
+		"make kept required attribute optional": {
+			schema: schemaFor(`<xs:attribute name="r" type="xs:string" use="required"/>`,
+				`<xs:attribute name="r" type="xs:string" use="optional"/>`),
+			wantErr: "The 'optional' attribute use is inconsistent with the corresponding 'required' attribute use",
+		},
+	}
+
+	for _, version := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		for name, tc := range cases {
+			t.Run(version.String()+" "+name, func(t *testing.T) {
+				t.Parallel()
+				_, errs, err := compileWith(t, version, tc.schema)
+				if tc.wantErr == "" {
+					require.NoError(t, err, errs)
+					return
+				}
+				require.Error(t, err)
+				require.Contains(t, errs, tc.wantErr)
+			})
+		}
 	}
 }
