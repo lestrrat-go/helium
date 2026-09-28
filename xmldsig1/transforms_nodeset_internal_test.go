@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -150,44 +149,9 @@ func TestCanonicalizationNodeSetMatchesFullAxis(t *testing.T) {
 	})
 }
 
-// costDeclarations is how many namespace declarations each cost document
-// carries, and costConcentration is how many elements the reference document
-// spreads them over — the document under test puts every one of them on a single
-// element.
-//
-// The two documents give the collectors the same total work: the same
-// declarations bound, the same number of namespace nodes emitted, the same node
-// set built. They differ only in how many declarations sit on ONE element, which
-// is the count a membership test that scans what the element has already
-// recorded costs the square of. So the bound is a RATIO between them, and no
-// wall-clock constant enters it: a machine that is
-// uniformly slow, or a race-detector build, or a loaded runner scales both sides
-// alike and cancels out. An absolute budget cannot express that — it conflates
-// the growth this case exists to pin with the speed of whatever machine runs it.
-//
-// costMaxRatio sits between the two regimes. A collector linear in the
-// per-element count measures 0.4 to 2.7 here — the concentrated document's
-// running scope holds every prefix at once, so its map costs more per lookup —
-// and that holds under the race detector with the machine loaded. Put the
-// scan back and the same measurement reads 21 to 28, since concentrating the
-// declarations squares a cost the reference document pays costConcentration
-// times over a costConcentration-th of the count each. Ten sits nearly four
-// times above the linear regime and a little over twice below the quadratic
-// one, which is the room a shared CI runner needs: one there times the same
-// assertion 40% apart on two runs of the same code, and reads this ratio as
-// high as 7.4 with nothing wrong.
-//
-// costRuns repeats each measurement and keeps the cheapest, so a scheduler
-// hiccup during one run cannot inflate the ratio; a cost that is quadratic in
-// the per-element declaration count is quadratic in every run. Nine of them is
-// what a runner that deschedules a test for tens of milliseconds needs to leave
-// one clean run behind.
-const (
-	costDeclarations  = 20000
-	costConcentration = 32
-	costMaxRatio      = 10
-	costRuns          = 9
-)
+// denseDeclarations is how many namespace declarations declDenseDoc puts on one
+// element: far more than a poll interval, so binding them spans many polls.
+const denseDeclarations = 20000
 
 // declDenseDoc builds a document whose CHILD element carries decls namespace
 // declarations.
@@ -195,8 +159,7 @@ const (
 // The declarations must NOT sit on the element the collection starts from: that
 // element's scope is seeded from its in-scope axis in one map copy, and the
 // per-element binding loop runs only BELOW it. A document that declares
-// everything on the collection root exercises none of the per-element work this
-// case bounds.
+// everything on the collection root exercises none of the per-element work.
 func declDenseDoc(decls int) string {
 	var b strings.Builder
 	b.WriteString(`<root xmlns:r="urn:example:r"><child`)
@@ -207,40 +170,8 @@ func declDenseDoc(decls int) string {
 	return b.String()
 }
 
-// declSpreadDoc builds the reference document for declDenseDoc: elements
-// children carrying decls declarations each, no prefix shared between them, so
-// the walk binds elements*decls prefixes and emits a namespace node for every
-// one of them exactly as the dense document does. Only the per-element count
-// differs.
-func declSpreadDoc(elements, decls int) string {
-	var b strings.Builder
-	b.WriteString(`<root xmlns:r="urn:example:r">`)
-	for e := range elements {
-		fmt.Fprintf(&b, `<child%d`, e)
-		for i := range decls {
-			fmt.Fprintf(&b, ` xmlns:p%d_%d="urn:example:ns:%d:%d"`, e, i, e, i)
-		}
-		fmt.Fprintf(&b, `>text</child%d>`, e)
-	}
-	b.WriteString(`</root>`)
-	return b.String()
-}
-
-// collectC14N10Nodes and collectFullAxisNodes give the two collectors the one
-// signature the cost table below shares. Inclusive C14N 1.0 is the mode
-// Verifier.Verify canonicalizes SignedInfo under.
-func collectC14N10Nodes(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
-	return collectCanonicalizationNodes(ctx, elem, c14n.C14N10)
-}
-
-func collectFullAxisNodes(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
-	return collectSubtreeNodes(ctx, elem)
-}
-
-// costDocument parses src and returns the element the collection starts from.
-// Parsing is deliberately outside every measurement: it is the cost of building
-// the DOM, not of walking it.
-func costDocument(t *testing.T, src string) *helium.Element {
+// parseRoot parses src and returns the element the collection starts from.
+func parseRoot(t *testing.T, src string) *helium.Element {
 	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
 	require.NoError(t, err)
@@ -249,63 +180,39 @@ func costDocument(t *testing.T, src string) *helium.Element {
 	return root
 }
 
-// bestCollectionCost collects the node set under root costRuns times and returns
-// the cheapest run. Every run must produce least members or more: a smaller set
-// would mean the walk never did the work being compared.
-func bestCollectionCost(t *testing.T, collect func(context.Context, *helium.Element) ([]helium.Node, error), root *helium.Element, least int) time.Duration {
-	t.Helper()
-	best := time.Duration(-1)
-	for range costRuns {
-		start := time.Now()
-		nodes, err := collect(t.Context(), root)
-		elapsed := time.Since(start)
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, len(nodes), least,
-			"collector returned %d nodes, fewer than the %d the document puts in scope", len(nodes), least)
-		if best < 0 || elapsed < best {
-			best = elapsed
-		}
-	}
-	return best
-}
-
-// TestNodeSetCollectionCost bounds what an element carrying many namespace
-// declarations may cost the two node-set collectors. Both walk the subtree
-// through the same per-element binding loop, so a membership test that scans
-// what the element has already recorded makes both quadratic in the declaration
-// count — and an attacker reaches both before any signature is checked, through
-// the ds:SignedInfo canonicalization and through a ds:RetrievalMethod's
-// transform pipeline.
+// TestPrefixSetIndexesLargeSets pins what keeps the collectors linear in the
+// number of prefixes one element carries. Every per-element membership question
+// the walk asks goes through a prefixSet: whether enter has already recorded a
+// prefix, and whether the emission has already emitted one. A set that kept
+// scanning its list would make an element with thousands of declarations or
+// prefixed attributes cost the square of that count, and an attacker reaches
+// both collectors before any signature is checked, through the ds:SignedInfo
+// canonicalization and through a ds:RetrievalMethod's transform pipeline.
 //
-// The bound is stated against a document that does the SAME total work with the
-// declarations spread over many elements, so what it measures is the growth in
-// the per-element count alone and not the speed of the machine. Comparing the
-// concentrated document against a second measurement of ITSELF — at half the
-// size, say — would prove nothing: the quadratic scan measures the same 2.6x
-// there that the linear walk does, because both grow by the same factor when the
-// whole document grows.
-func TestNodeSetCollectionCost(t *testing.T) {
-	// no t.Parallel(): the case measures elapsed time, which a concurrent test
-	// competing for the same cores would inflate.
+// The collectors take the set only as a *prefixSet (bind, emitNamespace), so the
+// property is checked on the set's own state: from prefixIndexThreshold members
+// on, the index holds every member and answers every lookup.
+func TestPrefixSetIndexesLargeSets(t *testing.T) {
+	sizes := []int{0, 1, prefixIndexThreshold - 1, prefixIndexThreshold, prefixIndexThreshold + 1, 4000}
+	for _, size := range sizes {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			var s prefixSet
+			for i := range size {
+				prefix := "p" + strconv.Itoa(i)
+				require.False(t, s.contains(prefix), "set reports %q before it was added", prefix)
+				s.add(prefix)
+			}
 
-	concentrated := costDocument(t, declDenseDoc(costDeclarations))
-	spread := costDocument(t, declSpreadDoc(costConcentration, costDeclarations/costConcentration))
-
-	for _, tc := range []struct {
-		name    string
-		collect func(context.Context, *helium.Element) ([]helium.Node, error)
-	}{
-		{name: "canonicalization node set", collect: collectC14N10Nodes},
-		{name: "full-axis node set", collect: collectFullAxisNodes},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			onOneElement := bestCollectionCost(t, tc.collect, concentrated, costDeclarations)
-			overManyElements := bestCollectionCost(t, tc.collect, spread, costDeclarations)
-
-			require.Less(t, onOneElement, costMaxRatio*overManyElements,
-				"collecting a node set cost %v with %d declarations on one element and %v with the same %d spread over %d, a factor of %.1f: the per-element cost grows with the declaration count",
-				onOneElement, costDeclarations, overManyElements, costDeclarations, costConcentration,
-				float64(onOneElement)/float64(overManyElements))
+			if size < prefixIndexThreshold {
+				require.Nil(t, s.index, "a set of %d prefixes built an index", size)
+			} else {
+				require.Len(t, s.index, size, "a set of %d prefixes does not index all of them", size)
+			}
+			for i := range size {
+				require.True(t, s.contains("p"+strconv.Itoa(i)))
+			}
+			require.False(t, s.contains("absent"))
+			require.False(t, s.contains(""))
 		})
 	}
 }
@@ -348,7 +255,7 @@ func (*cancelOnErrContext) Value(any) any {
 // entry polls while it binds a child's declarations. The first Err call starts
 // collection; the second comes from the periodic poll inside the dense child.
 func TestNodeSetCollectionCancellationDuringChildScope(t *testing.T) {
-	root := costDocument(t, declDenseDoc(costDeclarations))
+	root := parseRoot(t, declDenseDoc(denseDeclarations))
 	ctx := &cancelOnErrContext{done: make(chan struct{}), cancelAt: 2}
 	c := &subtreeCollector{fullAxis: true}
 
@@ -358,166 +265,15 @@ func TestNodeSetCollectionCancellationDuringChildScope(t *testing.T) {
 		"collector bound %d child declarations before observing cancellation", len(c.scope))
 }
 
-// emissionPrefixes is how many prefixes the emission-cost documents put in scope
-// and carry on attributes, and emissionOwnDeclarations is how many declarations
-// of its own the CONTROL document's element adds on top.
-//
-// emissionMaxRatio sits between the two regimes. The two documents differ by
-// those few declarations and nothing else — same elements, same attributes, same
-// prefixes emitted, same node set — so a collector whose emission is linear in
-// the element's prefix count measures 0.5 to 2.0 here. Size the membership index
-// from the element's DECLARATIONS instead and the same measurement reads 9 to
-// 17: the control's declarations force an index and the other document's
-// attribute prefixes, which no count of declarations predicts, are left to a
-// scan that costs the square of their number. Five sits two and a half times
-// above the linear regime and nearly twice below the quadratic one, which is
-// the room a shared CI runner needs: one there reads this ratio as high as 3.1
-// with nothing wrong. The measurement is a best of costRuns, as above.
+// pollAxisDeclarations is how many bindings axisDenseDoc declares on the
+// collection root for the poll case, and pollAxisChildren how many children
+// repeat that whole axis below it. One element's axis is twice a poll interval,
+// so a poll that counted only walked TREE nodes would let a whole axis pass
+// between two polls.
 const (
-	emissionPrefixes        = 4000
-	emissionOwnDeclarations = 16
-	emissionMaxRatio        = 5
+	pollAxisDeclarations = 2 * ctxPollInterval
+	pollAxisChildren     = 8
 )
-
-// emissionDocument builds, WITHOUT parsing, a document whose root declares
-// emissionPrefixes prefixes and whose single child carries one attribute per
-// prefix. own extra declarations are put on that child.
-//
-// The document is built, and never parsed, because parsing thousands of
-// attributes onto one element is itself quadratic in helium's attribute
-// insertion, which is a separate cost and would dominate a measurement of the
-// walk. What the walk sees is the same tree either way.
-func emissionDocument(t *testing.T, own int) *helium.Element {
-	t.Helper()
-	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
-	root, err := doc.CreateElement("root")
-	require.NoError(t, err)
-	require.NoError(t, doc.AddChild(root))
-
-	namespaces := make([]*helium.Namespace, emissionPrefixes)
-	for i := range namespaces {
-		namespaces[i] = helium.NewNamespace(fmt.Sprintf("p%d", i), fmt.Sprintf("urn:example:ns:%d", i))
-		require.NoError(t, root.AddNamespaceDecl(namespaces[i]))
-	}
-
-	child, err := doc.CreateElement("c")
-	require.NoError(t, err)
-	require.NoError(t, root.AddChild(child))
-	for i := range own {
-		require.NoError(t, child.AddNamespaceDecl(helium.NewNamespace(fmt.Sprintf("q%d", i), fmt.Sprintf("urn:example:own:%d", i))))
-	}
-	// Every attribute names an INHERITED prefix, so the child changes no binding
-	// of its own for them while still making every one of them a candidate for
-	// emission.
-	for _, ns := range namespaces {
-		require.NoError(t, child.SetAttributeNS("a", "v", ns))
-	}
-	return root
-}
-
-// collectExclusiveNodes is the collector the emission cost below measures.
-// Exclusive C14N is the mode an attacker names in a ds:CanonicalizationMethod or
-// a ds:RetrievalMethod transform, and the only one whose emission reads the
-// element's attribute prefixes.
-func collectExclusiveNodes(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
-	return collectCanonicalizationNodes(ctx, elem, c14n.ExclusiveC14N10)
-}
-
-// TestNodeSetEmissionCost bounds what an element carrying many INHERITED
-// attribute prefixes may cost the exclusive canonicalization collector. The
-// emission asks "has this prefix been emitted for this element already" once per
-// candidate, and the candidates are the element's changed bindings, the default
-// namespace, its own prefix, and every attribute prefix. An element that changes
-// nothing and carries thousands of prefixed attributes offers thousands of
-// candidates, so a membership test that scans what has been emitted so far costs
-// the square of that count — reachable before any signature is checked, through
-// the ds:SignedInfo canonicalization and through a ds:RetrievalMethod's
-// transform pipeline.
-//
-// TestVerifyNamespaceHeavyDocument cannot see this class. The emission allocates
-// one namespace node per prefix in either regime, so the ALLOCATION stays flat
-// while the time grows. What is measured here is time.
-//
-// The control document is the same document plus a handful of declarations on
-// the same element. It does the same work and holds the same node set, so what
-// the ratio measures is how the element's own prefix count is answered and not
-// the speed of the machine: a uniformly slow machine, a race-detector build, or
-// a loaded runner scales both sides alike and cancels out.
-func TestNodeSetEmissionCost(t *testing.T) {
-	// no t.Parallel(): the case measures elapsed time, which a concurrent test
-	// competing for the same cores would inflate.
-
-	inherited := emissionDocument(t, 0)
-	declaring := emissionDocument(t, emissionOwnDeclarations)
-
-	onInheritedPrefixes := bestCollectionCost(t, collectExclusiveNodes, inherited, emissionPrefixes)
-	withOwnDeclarations := bestCollectionCost(t, collectExclusiveNodes, declaring, emissionPrefixes)
-
-	require.Less(t, onInheritedPrefixes, emissionMaxRatio*withOwnDeclarations,
-		"collecting a node set cost %v for an element carrying %d inherited attribute prefixes and %v for the same element declaring %d namespaces of its own, a factor of %.1f: what the element's prefixes cost depends on how many it declared",
-		onInheritedPrefixes, emissionPrefixes, withOwnDeclarations, emissionOwnDeclarations,
-		float64(onInheritedPrefixes)/float64(withOwnDeclarations))
-}
-
-// The deadline case walks a document whose every element repeats the whole
-// in-scope namespace axis: deadlineDeclarations bindings on the collection root,
-// and deadlineChildren children below it, so the full axis holds over five
-// million node-set members. That is the shape a ds:RetrievalMethod's XPath
-// filter transform reaches before any signature is checked, and the one where a
-// poll that counted only walked TREE nodes let a quarter of those members —
-// ctxPollInterval elements, one whole axis each — pass inside a single unpolled
-// span.
-//
-// deadlineWindow is long enough that the deadline cannot expire before the
-// collection starts, where the entry check would catch it and the walk itself
-// would never be exercised.
-//
-// deadlineRuns repeats the measurement and keeps the fastest, so one descheduled
-// run cannot fail the case.
-const (
-	deadlineDeclarations = 5000
-	deadlineChildren     = 1024
-	deadlineWindow       = 20 * time.Millisecond
-	deadlineRuns         = 5
-)
-
-// deadlineOverrunBudget is what the collector may still spend after the deadline
-// passes: one poll interval of members at ten microseconds each, hundreds of
-// times what a member costs, plus the slack the platform's own clock charges
-// before the collector has done anything at all. It does not grow with the
-// document — a collector that goes on collecting a share of the axis fails it
-// here and by a wider margin at any larger size. The share this case is stated
-// against, ctxPollInterval elements of one whole axis each, is a quarter of the
-// set and costs seventy milliseconds on an unloaded machine and more on a busy
-// one, so every budget below stays well under it.
-var deadlineOverrunBudget = ctxPollInterval*10*time.Microsecond + deadlineClockSlack()
-
-// deadlineClockSlack is how late the platform alone can make a promptly
-// abandoned collection look.
-//
-// On Windows the whole measurement runs off the clock-interrupt tick. Go reads
-// the monotonic clock from the KUSER_SHARED_DATA interrupt time
-// (runtime/time_windows_amd64.s), which the kernel advances once per clock
-// interrupt — every 15.625 ms at the default period, and near 1 ms only while
-// some process holds timeBeginPeriod. The runtime therefore cannot see the
-// deadline pass until the next tick, and time.Since quantizes the elapsed
-// reading at that same tick, so two ticks — about 31 ms — is what the platform
-// can charge on its own. A budget under one tick measures the interrupt period
-// and not the collector, and no amount of promptness can meet it. Forty
-// milliseconds covers both ticks and ordinary scheduler handoff on hosted
-// Windows runners.
-//
-// Everywhere else the monotonic clock is nanosecond-resolution
-// (clock_gettime, mach_absolute_time) and the runtime wakes off epoll or
-// kqueue: an unloaded machine overruns by a few hundred microseconds and a
-// heavily oversubscribed one by a few milliseconds, so ten milliseconds is
-// scheduler noise and nothing else.
-func deadlineClockSlack() time.Duration {
-	if runtime.GOOS == "windows" {
-		return 40 * time.Millisecond
-	}
-	return 10 * time.Millisecond
-}
 
 // axisDenseDoc builds a document declaring decls prefixes on its root and
 // carrying children element children below it. Every child inherits the whole
@@ -536,44 +292,67 @@ func axisDenseDoc(decls, children int) string {
 	return b.String()
 }
 
-// TestNodeSetCollectionHonorsDeadline requires the full-axis collector to stop
-// within a bounded time of its context's deadline. The full axis is the node set
-// an XPath filter transform is evaluated over, and it is quadratic in the
-// document by the transform's own data model, so a deadline — not a size bound —
-// is what keeps it from running to completion on an attacker's document.
-//
-// The bound is stated against the poll interval and the document's size, not
-// against a second measurement of the same code, so a run that merely matches
-// another slow run cannot satisfy it.
-func TestNodeSetCollectionHonorsDeadline(t *testing.T) {
-	// no t.Parallel(): the case measures elapsed time, which a concurrent test
-	// competing for the same cores would inflate.
+// pollGapContext records, at every Err call, how many members the collector
+// gained since the previous call, and how many it held at the call that cancels
+// the context. It reads the collector's own member count, so what a case using
+// it checks is the work done between two polls and not the time that work took.
+type pollGapContext struct {
+	cancelOnErrContext
+	c        *subtreeCollector
+	last     int
+	maxGap   int
+	atCancel int
+}
 
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(axisDenseDoc(deadlineDeclarations, deadlineChildren)))
-	require.NoError(t, err)
-	root := doc.DocumentElement()
-	require.NotNil(t, root)
-
-	best := time.Duration(-1)
-	for range deadlineRuns {
-		// The context is created here, immediately before the call, so the whole
-		// window is spent inside the collection.
-		ctx, cancel := context.WithTimeout(t.Context(), deadlineWindow)
-		start := time.Now()
-		_, err := collectSubtreeNodes(ctx, root)
-		elapsed := time.Since(start)
-		cancel()
-		require.ErrorIs(t, err, context.DeadlineExceeded,
-			"a full-axis collection over %d members ran to completion inside a %v deadline",
-			deadlineDeclarations*(deadlineChildren+1), deadlineWindow)
-		if best < 0 || elapsed < best {
-			best = elapsed
-		}
+func (p *pollGapContext) Err() error {
+	n := len(p.c.nodes)
+	p.maxGap = max(p.maxGap, n-p.last)
+	p.last = n
+	err := p.cancelOnErrContext.Err()
+	if p.calls == p.cancelAt {
+		p.atCancel = n
 	}
+	return err
+}
 
-	require.Less(t, best, deadlineWindow+deadlineOverrunBudget,
-		"the collector kept working for %v after a %v deadline, over the %v it may overrun by",
-		best-deadlineWindow, deadlineWindow, deadlineOverrunBudget)
+// TestNodeSetCollectionPollsBoundedWork requires the full-axis collector to poll
+// its context at least once every ctxPollInterval members, and to stop at the
+// first poll that reports the context done. The full axis is the node set an
+// XPath filter transform is evaluated over, and it is quadratic in the document
+// by the transform's own data model, so a deadline, not a size bound, is what
+// keeps it from running to completion on an attacker's document. A deadline is
+// only as prompt as the longest span of work between two polls.
+func TestNodeSetCollectionPollsBoundedWork(t *testing.T) {
+	root := parseRoot(t, axisDenseDoc(pollAxisDeclarations, pollAxisChildren))
+	members := pollAxisDeclarations * (pollAxisChildren + 1)
+
+	t.Run("polls every interval", func(t *testing.T) {
+		c := &subtreeCollector{fullAxis: true}
+		ctx := &pollGapContext{cancelOnErrContext: cancelOnErrContext{done: make(chan struct{})}, c: c}
+
+		require.NoError(t, c.collect(ctx, root))
+		require.GreaterOrEqual(t, len(c.nodes), members,
+			"collector returned %d members, fewer than the %d namespace nodes the document puts in scope", len(c.nodes), members)
+		// The span after the last poll counts too: a walk that stops polling part
+		// way through never calls Err again to report it.
+		maxGap := max(ctx.maxGap, len(c.nodes)-ctx.last)
+		require.LessOrEqual(t, maxGap, ctxPollInterval,
+			"collector added %d members between two polls, over the %d-member poll interval", maxGap, ctxPollInterval)
+	})
+
+	t.Run("stops at the poll that sees cancellation", func(t *testing.T) {
+		c := &subtreeCollector{fullAxis: true}
+		// Cancel about half way through, so the walk is deep inside the axis.
+		cancelAt := members / ctxPollInterval / 2
+		ctx := &pollGapContext{cancelOnErrContext: cancelOnErrContext{done: make(chan struct{}), cancelAt: cancelAt}, c: c}
+
+		err := c.collect(ctx, root)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Less(t, len(c.nodes), members, "collector ran to completion on a cancelled context")
+		require.Equal(t, ctx.atCancel, len(c.nodes),
+			"collector held %d members when its context reported cancellation and %d when it returned",
+			ctx.atCancel, len(c.nodes))
+	})
 }
 
 // chargedNodeCount is how many members each cancellation case below collects or
