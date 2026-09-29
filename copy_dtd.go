@@ -441,6 +441,7 @@ func copyAttrDeclOrder(src, dstDTD *DTD, attrCopies map[*AttributeDecl]*Attribut
 
 func copyEntity(src *Entity, doc *Document) *Entity {
 	e := newEntity(src.name, src.entityType, src.externalID, src.systemID, src.content, src.orig)
+	e.origSet = src.origSet
 	e.replacement = src.replacement
 	e.uri = src.uri
 	e.checked = src.checked
