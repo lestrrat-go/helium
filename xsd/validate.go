@@ -607,6 +607,14 @@ type validationContext struct {
 	// lax-without-global-admitted or ancestor-skipped attribute is unassessed.
 	// Populated in BOTH versions (the field classification runs in 1.0 too).
 	assessedAttrs map[*helium.Attribute]struct{}
+	// typeInfo memoizes simpleTypeInfo per *TypeDef for this run (see
+	// (*validationContext).simpleTypeInfo). newValidationContext creates it, and
+	// a diagnostic-suppressing sub-context derived from a run context shares the
+	// run's map by copying this field. Every other throwaway context
+	// (compile-time checks, TypeDef.Validate, union active-member probes) leaves
+	// it nil and uses the base-chain walkers directly. The map lives only as long
+	// as the run, so nothing is written to the shared Schema.
+	typeInfo map[*TypeDef]*simpleTypeInfo
 }
 
 // assertEffectiveValue is a recorded element default/fixed effective value plus the
@@ -647,6 +655,7 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		cfg:                            cfg,
 		filename:                       filename,
 		errorHandler:                   handler,
+		typeInfo:                       make(map[*TypeDef]*simpleTypeInfo),
 		allowXSD10LegacyGMonthInstance: true,
 		idcDocOrder:                    &ixpath.DocOrderCache{},
 		actualElemType:                 make(map[*helium.Element]*TypeDef),
@@ -2021,7 +2030,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// type is associated only for the fixed-value comparison just done), so
 			// skip the generic check to avoid validating the same value twice.
 			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
-				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
+				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance, typeInfo: vc.typeInfo}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -2453,7 +2462,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
+		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance, typeInfo: vc.typeInfo}); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
 			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)
