@@ -567,6 +567,50 @@ func TestWalk(t *testing.T) {
 	})
 }
 
+// Walk's memory is bounded by the depth of the tree, not its width: a wide
+// sibling list costs no per-child bookkeeping.
+func TestWalkAllocations(t *testing.T) {
+	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
+	// test, and a concurrent allocator would perturb the count anyway.
+	narrow := buildWideTree(t, 10)
+	wide := buildWideTree(t, 1000)
+
+	var visits int
+	w := helium.NodeWalkerFunc(func(helium.Node) error {
+		visits++
+		return nil
+	})
+	var walkErr error
+	narrowAllocs := testing.AllocsPerRun(20, func() {
+		if err := helium.Walk(narrow, w); err != nil {
+			walkErr = err
+		}
+	})
+	wideAllocs := testing.AllocsPerRun(20, func() {
+		if err := helium.Walk(wide, w); err != nil {
+			walkErr = err
+		}
+	})
+	require.NoError(t, walkErr)
+	require.NotZero(t, visits)
+	require.Equal(t, narrowAllocs, wideAllocs,
+		"a 1000-child list must allocate exactly what a 10-child list does")
+}
+
+// buildWideTree returns an element with width empty element children.
+func buildWideTree(t *testing.T, width int) *helium.Element {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	for range width {
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(child))
+	}
+	return root
+}
+
 func TestNodeAccessors(t *testing.T) {
 	t.Parallel()
 

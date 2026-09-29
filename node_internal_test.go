@@ -590,7 +590,7 @@ func TestWalkCycleGuards(t *testing.T) {
 	// Walk terminates, and never spins forever, on a sibling cycle LONGER
 	// than one node: a parent whose two children form a 2-cycle a -> b -> a. The
 	// active-path guard alone does not catch this — each child is popped off the
-	// stack before its next sibling is examined — so the per-frame seenChildren set
+	// stack before its next sibling is examined — so the per-frame sibling guard
 	// must return ErrWalkCycle.
 	t.Run("sibling cycle", func(t *testing.T) {
 		doc := NewDefaultDocument()

@@ -191,6 +191,59 @@ func TestIterators(t *testing.T) {
 		})
 	})
 
+	t.Run("attributes", func(t *testing.T) {
+		t.Run("property order", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<root xmlns:x="urn:x" b="1" x:a="2" c="3"/>`))
+			require.NoError(t, err)
+
+			root := doc.DocumentElement()
+			var got []*helium.Attribute
+			for attr := range helium.Attributes(root) {
+				got = append(got, attr)
+			}
+			require.Equal(t, root.Attributes(), got, "same attributes, same order as Element.Attributes")
+			require.Equal(t, []string{"b", "x:a", "c"}, attrNames(root), "xmlns declarations are not attributes")
+		})
+
+		t.Run("no attributes", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root xmlns="urn:x"/>`))
+			require.NoError(t, err)
+
+			for range helium.Attributes(doc.DocumentElement()) {
+				t.Fatal("an element without attributes yields nothing")
+			}
+		})
+
+		t.Run("nil element", func(t *testing.T) {
+			t.Parallel()
+
+			for range helium.Attributes(nil) {
+				t.Fatal("a nil element yields nothing")
+			}
+		})
+
+		t.Run("break early", func(t *testing.T) {
+			t.Parallel()
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root a="1" b="2" c="3"/>`))
+			require.NoError(t, err)
+
+			var names []string
+			for attr := range helium.Attributes(doc.DocumentElement()) {
+				names = append(names, attr.Name())
+				if attr.Name() == "b" {
+					break
+				}
+			}
+			require.Equal(t, []string{"a", "b"}, names)
+		})
+	})
+
 	// A sibling list corrupted into a ring through the Unsafe* link setters
 	// terminates every iterator instead of looping forever. The guard is Brent's
 	// algorithm, which stops within a bounded multiple of the cycle length rather

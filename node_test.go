@@ -546,7 +546,7 @@ func TestCycleGuards(t *testing.T) {
 	// SUCCESS, on a corrupt ONE-node sibling self-loop: a single child
 	// whose next pointer points at itself (c.next == c). nextWalkSibling must NOT
 	// silently terminate the self-loop — the duplicate flows back to the per-frame
-	// seenChildren set, which detects it, exactly as for a longer sibling cycle.
+	// sibling guard, which detects it, exactly as for a longer sibling cycle.
 	t.Run("Walk rejects a self sibling loop", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		parent, err := doc.CreateElement("parent")

@@ -144,6 +144,29 @@ func ChildElements(n Node) iter.Seq[*Element] {
 	}
 }
 
+// Attributes returns an iterator over the attributes of n in property order,
+// the same order [Element.Attributes] returns. Unlike that method it builds no
+// slice, so ranging over it allocates nothing. Namespace declarations (xmlns
+// attributes) are not attributes and are not yielded; use
+// [Element.Namespaces] for them.
+//
+// If n is nil or has no attributes, the iterator yields nothing.
+//
+// The caller must not add or remove attributes of n during iteration. Doing so
+// may cause attributes to be skipped or visited more than once.
+func Attributes(n *Element) iter.Seq[*Attribute] {
+	return func(yield func(*Attribute) bool) {
+		if n == nil {
+			return
+		}
+		for attr := n.properties; attr != nil; attr = attr.NextAttribute() {
+			if !yield(attr) {
+				return
+			}
+		}
+	}
+}
+
 // siblingCycleGuard bounds a sibling-list walk with Brent's cycle detection. A
 // sibling list is a linked list a caller can corrupt into a loop through the
 // package-private unsafeSet* link setters, so every enumeration of one needs a
