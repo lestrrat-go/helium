@@ -87,10 +87,3 @@ func (c *patternCache) loadOrStore(key patternCacheKey, value *Regexp) *Regexp {
 	}
 	return value
 }
-
-// len reports the number of cached entries.
-func (c *patternCache) len() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.ll.Len()
-}

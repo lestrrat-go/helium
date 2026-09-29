@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/helium/internal/xsdregex"
 	"github.com/stretchr/testify/require"
@@ -53,13 +54,34 @@ func TestCompileVersionCache(t *testing.T) {
 		}
 	})
 
+	t.Run("backtracking pattern recompiles after a timeout change", func(t *testing.T) {
+		// A regexp2 pattern copies DefaultMatchTimeout at compile time, so each
+		// compile after SetDefaultMatchTimeout must build a new *Regexp.
+		orig := xsdregex.DefaultMatchTimeout()
+		defer xsdregex.SetDefaultMatchTimeout(orig)
+
+		const pattern = `cache-timeout-[a-z-[aeiou]]+`
+		xsdregex.SetDefaultMatchTimeout(time.Second)
+		first, err := xsdregex.CompileVersion(pattern, false)
+		require.NoError(t, err)
+		xsdregex.SetDefaultMatchTimeout(2 * time.Second)
+		second, err := xsdregex.CompileVersion(pattern, false)
+		require.NoError(t, err)
+		require.NotSame(t, first, second)
+		require.True(t, second.MatchString("cache-timeout-xyz"))
+		require.False(t, second.MatchString("cache-timeout-abc"))
+	})
+
 	t.Run("invalid pattern reports the same error on every compile", func(t *testing.T) {
-		const pattern = `cache-bad-(a`
-		_, firstErr := xsdregex.CompileVersion(pattern, false)
-		require.Error(t, firstErr)
-		_, secondErr := xsdregex.CompileVersion(pattern, false)
-		require.Error(t, secondErr)
-		require.Equal(t, firstErr.Error(), secondErr.Error())
+		for _, xsd11 := range []bool{false, true} {
+			for _, pattern := range []string{`cache-bad-(a`, `cache-bad-[a`} {
+				_, firstErr := xsdregex.CompileVersion(pattern, xsd11)
+				require.Error(t, firstErr, pattern)
+				_, secondErr := xsdregex.CompileVersion(pattern, xsd11)
+				require.Error(t, secondErr, pattern)
+				require.Equal(t, firstErr.Error(), secondErr.Error(), pattern)
+			}
+		}
 	})
 }
 
