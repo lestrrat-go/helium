@@ -38,6 +38,12 @@ const maxSameDepth = 64
 //     parent axis are adjacent and slices.Compact removes them.
 //  4. Otherwise it returns DeduplicateNodes(out, cache, maxNodes).
 //
+// Rules 2 and 3 apply only when every input is a document, element, attribute,
+// namespace, text, CDATA, comment or processing-instruction node. Traversal
+// from an entity reference, entity or DTD node follows raw sibling links that
+// can reach DTD declarations, so its order is not document order and those
+// inputs take rule 4.
+//
 // Rules 2 and 3 enforce maxNodes and clamp the capacity of the returned slice
 // as DeduplicateNodes does. They do not index the document, but they reserve
 // its registration order in cache (reserveDocument) at the point where
@@ -48,7 +54,7 @@ func OrderStepResult(out, inputs []helium.Node, axis AxisType, cache *DocOrderCa
 	if len(out) <= 1 {
 		return out, nil
 	}
-	if len(inputs) <= 1 {
+	if len(inputs) <= 1 && allOrderedContexts(inputs) {
 		if isReverseAxis(axis) {
 			slices.Reverse(out)
 		}
@@ -57,7 +63,7 @@ func OrderStepResult(out, inputs []helium.Node, axis AxisType, cache *DocOrderCa
 	}
 	switch axis {
 	case AxisChild, AxisAttribute, AxisSelf, AxisNamespace, AxisParent:
-		if !sameDepth(inputs) {
+		if !allOrderedContexts(inputs) || !sameDepth(inputs) {
 			break
 		}
 		if axis == AxisParent {
@@ -77,6 +83,21 @@ func clampStepResult(out []helium.Node, maxNodes int) ([]helium.Node, error) {
 		return nil, ErrNodeSetLimit
 	}
 	return out[:len(out):len(out)], nil
+}
+
+// allOrderedContexts reports whether every node of nodes is a kind whose axis
+// traversal yields document order (see OrderStepResult).
+func allOrderedContexts(nodes []helium.Node) bool {
+	for _, n := range nodes {
+		switch n.Type() {
+		case helium.DocumentNode, helium.HTMLDocumentNode, helium.AttributeNode, helium.NamespaceNode:
+			continue
+		}
+		if !IsXDMChild(n) {
+			return false
+		}
+	}
+	return true
 }
 
 // isReverseAxis reports whether axis traverses in reverse document order.

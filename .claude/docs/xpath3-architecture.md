@@ -30,7 +30,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 |------|----------|
 | `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
-| `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `sameDepth`, `isReverseAxis` |
+| `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `allOrderedContexts`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)`, `appendTextDescendants` (unexported, iterative stack-based traversal), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
 | `limits.go` | `DefaultMaxRecursionDepth=5000`, `DefaultMaxNodeSetLength=10_000_000`, `ErrNodeSetLimit` |
 
@@ -67,7 +67,10 @@ location step whose context list `inputs` is sorted and duplicate-free. It skips
 whole-document index when the result has at most one node, when the step ran from one
 input (reverse axes are reversed in place), or when the axis is child, attribute, self,
 namespace or parent and every input has the same depth (parent results drop adjacent
-duplicates). A skipping step reserves its document's registration order in the cache
+duplicates). Both skips require every input to be a document, element, attribute,
+namespace, text, CDATA, comment or PI node (`allOrderedContexts`): traversal from an
+entity reference, entity or DTD node can reach DTD declarations through raw sibling
+links, so those inputs always sort. A skipping step reserves its document's registration order in the cache
 (unexported `reserveDocument`) without indexing it, so the order between documents stays
 the one indexing would have produced. `Position`, `Compare` and every indexing path index
 a reserved document on first use, under its reserved order. xpath1 ends every location
