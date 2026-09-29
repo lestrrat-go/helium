@@ -483,6 +483,29 @@ func TestTreeMutation(t *testing.T) {
 }
 
 func TestWalk(t *testing.T) {
+	t.Run("visits every node in document order", func(t *testing.T) {
+		src := `<!DOCTYPE r [<!ENTITY e "x">]>` +
+			`<r a="1"><!--c--><b>t<c/><?pi d?></b>&e;<d><e><f>deep</f></e></d><![CDATA[cd]]></r>`
+		doc, err := helium.NewParser().SubstituteEntities(false).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+
+		var visited []helium.Node
+		err = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+			visited = append(visited, n)
+			return nil
+		}))
+		require.NoError(t, err)
+
+		want := []helium.Node{doc}
+		for n := range helium.Descendants(doc) {
+			want = append(want, n)
+		}
+		require.Len(t, visited, len(want), "Walk visits the node, then its descendants in pre-order")
+		for i := range want {
+			require.Same(t, want[i], visited[i], "visit %d", i)
+		}
+	})
+
 	t.Run("sees sibling replacement during traversal", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		root, err := doc.CreateElement("root")
