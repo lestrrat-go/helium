@@ -98,6 +98,55 @@ func BenchmarkEvaluateDescendantChildPath(b *testing.B) {
 	runEvalBench(b, "//item/val")
 }
 
+// BenchmarkEvaluateNestedChildPath covers a child step whose context nodes
+// sit at different depths, which still needs the document-order sort.
+func BenchmarkEvaluateNestedChildPath(b *testing.B) {
+	var buf strings.Builder
+	buf.WriteString("<root>")
+	for range 250 {
+		buf.WriteString("<a><b/><a><b/><b/></a></a>")
+	}
+	buf.WriteString("</root>")
+	doc, err := helium.NewParser().Parse(b.Context(), []byte(buf.String()))
+	require.NoError(b, err)
+	compiled := xpath1.MustCompile("//a/b")
+	eval := xpath1.NewEvaluator()
+	ctx := b.Context()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if _, err := eval.Evaluate(ctx, compiled, doc); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkEvaluateReverseAxisPerNode evaluates a reverse-axis step once per
+// context node, the shape of per-node filters such as xmldsig1's XPath
+// transform.
+func BenchmarkEvaluateReverseAxisPerNode(b *testing.B) {
+	doc := buildBenchDoc(b, 1000)
+	vals, err := xpath1.NewEvaluator().Evaluate(b.Context(), xpath1.MustCompile("//val"), doc)
+	require.NoError(b, err)
+	nodes := vals.NodeSet
+	require.NotEmpty(b, nodes)
+
+	compiled := xpath1.MustCompile("ancestor::*")
+	eval := xpath1.NewEvaluator()
+	ctx := b.Context()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		for _, n := range nodes {
+			if _, err := eval.Evaluate(ctx, compiled, n); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
 // BenchmarkEvaluatePositionalPredicate uses a predicate that reads the
 // context position. Compile must keep `//item[1]` as two steps, because
 // position() counts within each parent's children there, so this benchmark

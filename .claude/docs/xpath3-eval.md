@@ -343,7 +343,9 @@ and the default xpath3 behavior is unchanged.
 - Default language comes from `WithDefaultLanguage`; built-ins fall back to `"en"` when unset
 - `DocOrderCache` lazy, O(n) build, O(1) lookup: one flat `map[helium.Node]sortKey` covering every indexed
   document, so a position lookup is a single hash probe with no parent-chain walk. A second map records each
-  document root's registration order, which orders nodes from different trees
+  document root's registration order, which orders nodes from different trees. A document can be registered
+  without being indexed (`reserveDocument`, used by xpath1's `OrderStepResult` when a step needs no sort); the
+  first lookup that needs a position in it indexes it under the reserved order
 - Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does
   not change captured behavior
 

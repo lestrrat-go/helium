@@ -551,9 +551,12 @@ XPath 1.0 expression parsing and evaluation.
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Robustness: `eval` and axis-iteration loops honor `ctx.Err()` so a cancelled context aborts promptly; `Evaluate` on a
   nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
+- Document order: every location step ends in `internal/xpath.OrderStepResult`, which builds the whole-document
+  order index only when the step shape cannot prove its result is already sorted and duplicate-free (multi-input
+  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, entity-reference/entity/DTD inputs)
 - Files: `xpath.go` (API), `parser.go`, `lexer.go`, `optimize.go` (compile-time `//` fold), `eval.go`, `expr.go`,
   `axes.go`, `functions.go`, `static_check.go`, `token.go`
-- Imports: helium
+- Imports: helium, internal/xpath, internal/xpath1/lexer, internal/xpath1/number, internal/domutil, internal/lexicon
 
 ## xpath3/
 

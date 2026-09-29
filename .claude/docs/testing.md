@@ -223,6 +223,13 @@ local `xmllint` as an oracle. `TestInterleaveDifferential` is skipped unless `-r
 
 The recorded procedure and result live in the header comment of `relaxng/interleave_differential_test.go`.
 
+`xpath1/step_order_test.go` `TestStepResultOrder` pins the node-set and order of a matrix of documents (nested
+same-name elements, namespaces, comments/PIs, entity references with and without substitution), context nodes
+(document, element, attribute, namespace node) and location paths, including unions with a second document bound
+to `$nodes`/`$other`, against `xpath1/testdata/step_order.golden`. `XPATH1_UPDATE_STEP_ORDER=1` rewrites the golden
+file. It also checks each result against a fresh `DocOrderCache` via `DeduplicateNodes`. Only regenerate the file for
+an intended order change.
+
 ## Build Tags
 
 - `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)
