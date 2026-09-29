@@ -333,8 +333,8 @@ func (c *compiler) facetAvailable(ns, local string) bool {
 // whether it is present (distinct from an empty value, which carries meaning for
 // vc: list attributes).
 func getVCAttr(elem *helium.Element, name string) (string, bool) {
-	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: lexicon.NamespaceXSDVersioning})
-	if !ok {
+	attr := elem.GetAttributeNodeNS(name, lexicon.NamespaceXSDVersioning)
+	if attr == nil {
 		return "", false
 	}
 	return attr.Value(), true

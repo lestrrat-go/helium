@@ -444,7 +444,10 @@ pipeline.
 ### Compile: Document → Schema
 
 1. **Parse root** — must be `xs:schema`; extract targetNamespace, form defaults, block/final defaults
-2. **Register built-in types** — 46 XSD primitives
+2. **Register built-in types** — 46 XSD primitives. Each compiled schema (and each import sub-compiler) owns its
+    own built-in `TypeDef`s (`registerBuiltinTypes` carves them out of one `[]TypeDef` backing slice); they are
+    never shared across schemas because `TypeDef` fields are exported and reachable through `Schema.LookupType`.
+    The `types` map is created pre-sized (`typesMapSizeHint`).
 2a. **Conditional inclusion pre-pass** (`conditional_inclusion.go`, `applyConditionalInclusion`) — run AFTER
     built-in registration (it consults the registry for type availability) and BEFORE the first collect pass,
     in BOTH 1.0 and 1.1 mode, on the top-level root AND every included/imported/redefined document

@@ -654,7 +654,7 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c := &compiler{
 		schema: &Schema{
 			elements:      make(map[QName]*ElementDecl),
-			types:         make(map[QName]*TypeDef),
+			types:         make(map[QName]*TypeDef, typesMapSizeHint),
 			groups:        make(map[QName]*ModelGroup),
 			attrGroups:    make(map[QName][]*AttrUse),
 			globalAttrs:   make(map[QName]*AttrUse),
@@ -1496,8 +1496,8 @@ func isXSDElement(elem *helium.Element, localName string) bool {
 // unqualified, so a foreign-namespaced attribute sharing the local name (e.g.
 // other:fixed) must not be mistaken for the XSD attribute.
 func getAttr(elem *helium.Element, name string) string {
-	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
-	if !ok {
+	attr := elem.GetAttributeNodeNS(name, "")
+	if attr == nil {
 		return ""
 	}
 	return attr.Value()
@@ -1523,8 +1523,8 @@ func collapsedAttr(elem *helium.Element, name string) string {
 // getAttrNS reads an attribute by namespace URI and local name, returning "" if
 // absent.
 func getAttrNS(elem *helium.Element, ns, name string) string {
-	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ns})
-	if !ok {
+	attr := elem.GetAttributeNodeNS(name, ns)
+	if attr == nil {
 		return ""
 	}
 	return attr.Value()
@@ -1719,13 +1719,21 @@ func builtinTypeAvailable(local string, version Version) bool {
 	return ok
 }
 
+// typesMapSizeHint pre-sizes a Schema's types map: the built-in types every
+// schema registers plus room for a typical schema's own named types, so the
+// map does not rehash while the built-ins and the first user types are added.
+var typesMapSizeHint = len(builtinTypeNames) + 64
+
+// registerBuiltinTypes registers the built-in datatypes into s.types. Each
+// schema gets its own TypeDefs; they are allocated from one backing slice so a
+// compile makes a single allocation for them instead of one per type.
 func registerBuiltinTypes(s *Schema, version Version) {
-	for _, name := range builtinTypeNames {
+	defs := make([]TypeDef, len(builtinTypeNames))
+	for i, name := range builtinTypeNames {
 		qn := QName{Local: name, NS: lexicon.NamespaceXSD}
-		td := &TypeDef{
-			Name:        qn,
-			ContentType: ContentTypeSimple,
-		}
+		td := &defs[i]
+		td.Name = qn
+		td.ContentType = ContentTypeSimple
 		if name == typeAnyType {
 			td.IsComplex = true
 			td.ContentType = ContentTypeMixed
