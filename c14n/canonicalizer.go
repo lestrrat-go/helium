@@ -20,10 +20,30 @@ type canonicalizer struct {
 	nodeSet           map[helium.Node]struct{} // nil = whole document
 	inclusivePrefixes map[string]struct{}
 	strictXMLAttrs    bool // strict W3C node-set xml:* handling (default: libxml2)
-	nsStack           *visibleNSStack
-	// nsNodesByElement indexes NamespaceNodeWrapper nodes by their parent element.
-	// Built once during process() when nodeSet is non-nil.
+	// rendered records the namespace bindings visible ancestors have emitted.
+	rendered *bindingStack
+	// scope holds the in-scope namespace bindings of the element being walked.
+	// processElement pushes one frame per element, so the live map always equals
+	// what domutil.InScopeNamespaces would compute for that element (before the
+	// xml-prefix filtering scopeLookup applies).
+	scope *bindingStack
+	// visibleAncestors holds the visible elements on the current walk path,
+	// innermost last. Its top is the nearest visible ancestor of the element
+	// whose start tag is being rendered. Popped slots keep their maps for reuse.
+	visibleAncestors []visibleAncestor
+	// absoluteURIs memoizes namespace URIs that passed the relative-URI check.
+	absoluteURIs map[string]struct{}
+	// nsNodesByElement indexes NamespaceNodeWrapper nodes by their parent element,
+	// in node-set order and with duplicates. Built once during process() when
+	// nodeSet is non-nil.
 	nsNodesByElement map[helium.Node][]nsSortEntry
+	// Per-element scratch buffers. Each is fully consumed before the walk
+	// recurses into children, so one buffer per run is enough.
+	attrs       attrCollector
+	addAttr     func(*helium.Attribute) bool
+	attrScratch []attrSortEntry
+	nsScratch   []nsSortEntry
+	utilized    map[string]string
 	// entityNSContext is a stack of entity-expansion frames, pushed when the walk
 	// descends through an EntityRef. While non-empty, an entity-replacement element
 	// resolves the prefixes it does not itself declare against the reference site's
@@ -36,6 +56,16 @@ type canonicalizer struct {
 	entityNSContext []entityFrame
 }
 
+// visibleAncestor is one visibleAncestors slot. uris maps the element's
+// namespace-node prefixes to the URI of the first node with that prefix; it is
+// filled on first use, since only an element with a child element is ever
+// asked for it.
+type visibleAncestor struct {
+	elem   *helium.Element
+	uris   map[string]string
+	filled bool
+}
+
 // entityFrame records the reference-site context for one entity expansion.
 type entityFrame struct {
 	// ns is the reference-site in-scope namespace bindings (prefix→URI).
@@ -45,17 +75,48 @@ type entityFrame struct {
 	visible bool
 }
 
+// attrCollector gathers an element's attributes into a reusable slice through
+// helium.Element.ForEachAttribute.
+type attrCollector struct {
+	list []*helium.Attribute
+}
+
+func (ac *attrCollector) add(attr *helium.Attribute) bool {
+	ac.list = append(ac.list, attr)
+	return true
+}
+
+// elementAttributes returns e's attributes in document order. The slice is
+// reused: it is valid until the next call.
+func (c *canonicalizer) elementAttributes(e *helium.Element) []*helium.Attribute {
+	c.attrs.list = c.attrs.list[:0]
+	e.ForEachAttribute(c.addAttr)
+	return c.attrs.list
+}
+
 func (c *canonicalizer) process() error {
-	c.nsStack = newVisibleNSStack()
+	c.rendered = newBindingStack()
+	c.scope = newBindingStack()
+	c.absoluteURIs = make(map[string]struct{})
+	c.addAttr = c.attrs.add
 
 	// Build namespace node index for node-set mode
 	if c.nodeSet != nil {
 		c.nsNodesByElement = make(map[helium.Node][]nsSortEntry)
+		// A node set carries one namespace node per element per in-scope
+		// binding, so the same few URIs repeat; intern them so each distinct
+		// URI is converted to a string once.
+		uris := make(map[string]string)
 		for n := range c.nodeSet {
 			if n.Type() == helium.NamespaceNode {
 				parent := n.Parent()
 				prefix := n.Name()
-				uri := string(n.Content())
+				content := n.Content()
+				uri, ok := uris[string(content)]
+				if !ok {
+					uri = string(content)
+					uris[uri] = uri
+				}
 				c.nsNodesByElement[parent] = append(c.nsNodesByElement[parent], nsSortEntry{
 					prefix: prefix,
 					uri:    uri,
@@ -137,24 +198,35 @@ func (c *canonicalizer) processDocument() error {
 // programmatically built DOM can set an active namespace with a relative URI
 // (via SetActiveNamespace) without ever declaring it.
 // Mirrors libxml2's xmlC14NCheckForRelativeNamespaces (c14n.c:1338-1373).
-func checkForRelativeNamespaces(e *helium.Element) error {
-	if err := checkRelativeNamespaceURI(e, e.Namespace()); err != nil {
+func (c *canonicalizer) checkForRelativeNamespaces(e *helium.Element) error {
+	if err := c.checkRelativeNamespaceURI(e, e.Namespace()); err != nil {
 		return err
 	}
-	for _, ns := range e.Namespaces() {
-		if err := checkRelativeNamespaceURI(e, ns); err != nil {
+	for i := 0; ; i++ {
+		ns, ok := domutil.NamespaceDeclarationAt(e, i)
+		if !ok {
+			break
+		}
+		if err := c.checkRelativeNamespaceURI(e, ns); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
+// checkRelativeNamespaceURI rejects a relative or malformed namespace URI. A
+// URI that passes is remembered for the rest of the run, so each distinct URI
+// is parsed once; a failing URI is never remembered, so it fails on the first
+// element that carries it.
+func (c *canonicalizer) checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
 	if ns == nil {
 		return nil
 	}
 	uri := ns.URI()
 	if uri == "" {
+		return nil
+	}
+	if _, ok := c.absoluteURIs[uri]; ok {
 		return nil
 	}
 	// C14N requires an operation failure on a relative namespace URI. A URI is
@@ -171,19 +243,79 @@ func checkRelativeNamespaceURI(e *helium.Element, ns *helium.Namespace) error {
 	if err != nil || parsed.Scheme == "" {
 		return fmt.Errorf("c14n: relative namespace URI %q on element %s", uri, e.Name())
 	}
+	c.absoluteURIs[uri] = struct{}{}
 	return nil
 }
 
+// pushScope opens e's frame on the in-scope binding stack. It applies e's
+// declarations and then, when e's active namespace prefix is not yet in scope,
+// the active namespace, which is the order domutil.InScopeNamespaces applies
+// per ancestor. Inside an entity expansion only the declarations apply: the
+// cached active-namespace pointer there was resolved against the first
+// reference site.
+func (c *canonicalizer) pushScope(e *helium.Element) {
+	c.scope.push()
+	for i := 0; ; i++ {
+		ns, ok := domutil.NamespaceDeclarationAt(e, i)
+		if !ok {
+			break
+		}
+		if ns == nil {
+			continue
+		}
+		c.scope.set(ns.Prefix(), ns.URI())
+	}
+	if c.currentEntityFrame() != nil {
+		return
+	}
+	if ns := e.Namespace(); ns != nil {
+		if _, ok := c.scope.lookup(ns.Prefix()); !ok {
+			c.scope.set(ns.Prefix(), ns.URI())
+		}
+	}
+}
+
+// hideXML reports whether the xml prefix is hidden from in-scope lookups. The
+// predefined binding is never rendered in whole-document mode; under a node set
+// an explicitly declared xml binding stays visible.
+func (c *canonicalizer) hideXML(prefix string) bool {
+	return prefix == lexicon.PrefixXML && c.nodeSet == nil
+}
+
+// scopeLookup returns the URI prefix is bound to in the current element's
+// scope.
+func (c *canonicalizer) scopeLookup(prefix string) (string, bool) {
+	if c.hideXML(prefix) {
+		return "", false
+	}
+	return c.scope.lookup(prefix)
+}
+
+// scopeSnapshot copies the current element's in-scope bindings.
+func (c *canonicalizer) scopeSnapshot() map[string]string {
+	ctx := make(map[string]string, len(c.scope.live))
+	for prefix, uri := range c.scope.all() {
+		if c.hideXML(prefix) {
+			continue
+		}
+		ctx[prefix] = uri
+	}
+	return ctx
+}
+
 func (c *canonicalizer) processElement(e *helium.Element) error {
-	if err := checkForRelativeNamespaces(e); err != nil {
+	if err := c.checkForRelativeNamespaces(e); err != nil {
 		return err
 	}
+
+	c.pushScope(e)
+	defer c.scope.pop()
 
 	visible := c.isVisible(e)
 
 	// Push a namespace frame for this element (visible or not)
-	c.nsStack.save()
-	defer c.nsStack.restore()
+	c.rendered.push()
+	defer c.rendered.pop()
 
 	if visible {
 		if _, err := io.WriteString(c.out, "<"); err != nil {
@@ -230,6 +362,9 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 	}
 
 	// Recurse children
+	if visible {
+		c.pushVisibleAncestor(e)
+	}
 	for child := range helium.Children(e) {
 		if err := c.processNode(child); err != nil {
 			return err
@@ -237,6 +372,7 @@ func (c *canonicalizer) processElement(e *helium.Element) error {
 	}
 
 	if visible {
+		c.visibleAncestors = c.visibleAncestors[:len(c.visibleAncestors)-1]
 		if _, err := io.WriteString(c.out, "</"); err != nil {
 			return err
 		}
@@ -293,7 +429,7 @@ func (c *canonicalizer) processNode(n helium.Node) error {
 		seeded := c.seedEntityNSStack()
 		err := c.processChildren(n)
 		if seeded {
-			c.nsStack.restore()
+			c.rendered.pop()
 		}
 		c.popEntityContext()
 		return err
@@ -325,17 +461,6 @@ func (c *canonicalizer) currentEntityFrame() *entityFrame {
 	return &c.entityNSContext[n-1]
 }
 
-// currentEntityContext returns the reference-site namespace bindings for the
-// entity expansion currently being walked, or nil when the walk is not inside
-// one.
-func (c *canonicalizer) currentEntityContext() map[string]string {
-	fr := c.currentEntityFrame()
-	if fr == nil {
-		return nil
-	}
-	return fr.ns
-}
-
 // pushEntityContext records the in-scope namespace bindings at an entity
 // reference site so the replacement subtree canonicalizes as if the text were
 // inserted there. In ordinary document content the reference site's ancestors
@@ -344,7 +469,7 @@ func (c *canonicalizer) currentEntityContext() map[string]string {
 // declarations physically present in the enclosing entity subtree (the cached
 // active-namespace pointers there are unreliable).
 func (c *canonicalizer) pushEntityContext(entityRef helium.Node) {
-	ctx := make(map[string]string)
+	var ctx map[string]string
 	parent, ok := helium.AsNode[*helium.Element](entityRef.Parent())
 	outer := c.currentEntityFrame()
 	// Whole-document mode always emits; node-set mode inherits the reference site's
@@ -353,18 +478,21 @@ func (c *canonicalizer) pushEntityContext(entityRef helium.Node) {
 	visible := c.nodeSet == nil
 	switch {
 	case outer == nil && ok:
-		for prefix, ns := range domutil.InScopeNamespaces(parent, c.nodeSet == nil) {
-			ctx[prefix] = ns.URI()
-		}
+		// The walk is at the reference site's parent element, so the live scope
+		// holds exactly that element's in-scope bindings.
+		ctx = c.scopeSnapshot()
 		if c.nodeSet != nil {
 			visible = c.isVisible(parent)
 		}
 	case outer != nil:
+		ctx = make(map[string]string, len(outer.ns))
 		maps.Copy(ctx, outer.ns)
 		if ok {
 			c.overlayEntityNSDecls(ctx, parent)
 		}
 		visible = outer.visible
+	default:
+		ctx = make(map[string]string)
 	}
 	c.entityNSContext = append(c.entityNSContext, entityFrame{ns: ctx, visible: visible})
 }
@@ -378,11 +506,11 @@ func (c *canonicalizer) popEntityContext() {
 // frame was pushed (so the caller pops it afterwards). It applies only to inclusive
 // node-set canonicalization: there the ancestor elements render their namespaces via
 // the node-set path, which tracks membership through nsNodesByElement and never
-// populates nsStack, so an entity-replacement element — rendered through the
+// populates the rendered stack, so an entity-replacement element — rendered through the
 // reference-site (whole-document) algorithm — would otherwise re-declare namespaces
 // already in scope at the reference site. Whole-document mode already carries the
-// ancestor bindings on nsStack, and every exclusive path populates nsStack directly,
-// so neither needs seeding.
+// ancestor bindings on the rendered stack, and every exclusive path populates it
+// directly, so neither needs seeding.
 func (c *canonicalizer) seedEntityNSStack() bool {
 	if c.mode == ExclusiveC14N10 || c.nodeSet == nil {
 		return false
@@ -391,18 +519,19 @@ func (c *canonicalizer) seedEntityNSStack() bool {
 	if fr == nil {
 		return false
 	}
-	c.nsStack.save()
+	c.rendered.push()
 	for prefix, uri := range fr.ns {
 		if prefix == lexicon.PrefixXML {
 			continue
 		}
-		c.nsStack.add(prefix, uri)
+		c.rendered.set(prefix, uri)
 	}
 	return true
 }
 
-// overlayEntityNSDecls applies the xmlns declarations physically present in the
-// entity subtree onto ctx: the element and its ancestors up to the entity
+// overlayEntityNSDecls builds the context of a reference nested inside another
+// entity: it applies the xmlns declarations physically present in the enclosing
+// entity subtree onto ctx — the element and its ancestors up to the entity
 // boundary (the first non-element parent — the shared Entity declaration node),
 // outermost first so an inner declaration wins. Only real declarations
 // (nsDefs) are consulted; the elements' cached active-namespace pointers are
@@ -527,24 +656,38 @@ func (c *canonicalizer) renderNamespaces(e *helium.Element) error {
 		return c.renderNamespacesNodeSet(e)
 	}
 
-	return c.renderNamespacesInclusive(e)
+	return c.renderNamespacesInclusive()
 }
 
 // renderNamespacesInclusive outputs the namespace axis for whole-document (and
 // entity-replacement) inclusive canonicalization using in-scope bindings and the
 // rendered-namespace stack.
-func (c *canonicalizer) renderNamespacesInclusive(e *helium.Element) error {
-	// Collect in-scope namespaces
-	nsMap := c.collectInScopeNamespaces(e)
+//
+// On the whole-document path every element is visible, so the rendered stack
+// holds the parent's in-scope bindings (less an unrendered empty default
+// namespace, which needsOutput rejects anyway). A binding the element does not
+// set itself therefore never needs output, and only the bindings set in the
+// element's own scope frame are examined. Entity content under a node set
+// breaks that invariant (the rendered stack is seeded without the xml prefix
+// while the scope keeps it), so that path examines every in-scope binding.
+func (c *canonicalizer) renderNamespacesInclusive() error {
+	bindings := c.scope.frameDelta()
+	if c.nodeSet != nil && c.currentEntityFrame() != nil {
+		bindings = c.scope.all()
+	}
 
 	// Determine which need to be output (not yet on the rendered stack)
-	var toOutput []nsSortEntry
-	for prefix, uri := range nsMap {
-		if c.nsStack.needsOutput(prefix, uri) {
+	toOutput := c.nsScratch[:0]
+	for prefix, uri := range bindings {
+		if c.hideXML(prefix) {
+			continue
+		}
+		if c.rendered.needsOutput(prefix, uri) {
 			toOutput = append(toOutput, nsSortEntry{prefix: prefix, uri: uri})
-			c.nsStack.add(prefix, uri)
+			c.rendered.set(prefix, uri)
 		}
 	}
+	c.nsScratch = toOutput
 
 	// Sort and output
 	sortNamespaces(toOutput)
@@ -563,7 +706,7 @@ func (c *canonicalizer) renderNamespacesInclusive(e *helium.Element) error {
 func (c *canonicalizer) renderNamespacesNodeSet(e *helium.Element) error {
 	nsNodes := c.nsNodesByElement[e]
 
-	var toOutput []nsSortEntry
+	toOutput := c.nsScratch[:0]
 	hasDefaultNS := false
 	for _, nsn := range nsNodes {
 		// Skip the xml namespace — it's never explicitly declared in C14N
@@ -573,7 +716,7 @@ func (c *canonicalizer) renderNamespacesNodeSet(e *helium.Element) error {
 		if nsn.prefix == "" {
 			hasDefaultNS = true
 		}
-		if !c.nsRenderedByAncestor(e, nsn.prefix, nsn.uri) {
+		if !c.nsRenderedByAncestor(nsn.prefix, nsn.uri) {
 			toOutput = append(toOutput, nsn)
 		}
 	}
@@ -584,11 +727,12 @@ func (c *canonicalizer) renderNamespacesNodeSet(e *helium.Element) error {
 	// rendered a non-empty URI, we must emit xmlns="" to "reset"
 	// the default namespace so it doesn't leak through from the ancestor.
 	if !hasDefaultNS {
-		ancURI := c.findNearestRenderedDefaultNS(e)
+		ancURI := c.findNearestRenderedDefaultNS()
 		if ancURI != "" {
 			toOutput = append(toOutput, nsSortEntry{prefix: "", uri: ""})
 		}
 	}
+	c.nsScratch = toOutput
 
 	sortNamespaces(toOutput)
 	for _, ns := range toOutput {
@@ -612,7 +756,7 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element, include func(stri
 		return nil
 	}
 
-	var toOutput []nsSortEntry
+	toOutput := c.nsScratch[:0]
 	for _, nsn := range nsNodes {
 		if nsn.prefix == lexicon.PrefixXML {
 			continue
@@ -620,16 +764,17 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element, include func(stri
 		if include != nil {
 			// Exclusive mode: only inclusive prefixes, and only when not already
 			// rendered on the rendered-namespace stack.
-			if !include(nsn.prefix) || !c.nsStack.needsOutput(nsn.prefix, nsn.uri) {
+			if !include(nsn.prefix) || !c.rendered.needsOutput(nsn.prefix, nsn.uri) {
 				continue
 			}
-		} else if c.nsRenderedByAncestor(e, nsn.prefix, nsn.uri) {
+		} else if c.nsRenderedByAncestor(nsn.prefix, nsn.uri) {
 			// Inclusive mode: ignore a namespace already rendered by the nearest
 			// visible ancestor.
 			continue
 		}
 		toOutput = append(toOutput, nsn)
 	}
+	c.nsScratch = toOutput
 	sortNamespaces(toOutput)
 
 	// A non-visible element only consults the rendered-namespace stack for
@@ -649,9 +794,8 @@ func (c *canonicalizer) renderNSNodesAsText(e *helium.Element, include func(stri
 // xml:* inheritance or xml:base fixup is performed — that applies to visible
 // elements only; an omitted element simply emits its node-set attributes.
 func (c *canonicalizer) renderOmittedAttributes(e *helium.Element) error {
-	attrs := e.Attributes()
-	entries := make([]attrSortEntry, 0, len(attrs))
-	for _, attr := range attrs {
+	entries := c.attrScratch[:0]
+	for _, attr := range c.elementAttributes(e) {
 		if !c.isVisible(attr) {
 			continue
 		}
@@ -661,6 +805,7 @@ func (c *canonicalizer) renderOmittedAttributes(e *helium.Element) error {
 			nsURI:     attr.URI(),
 		})
 	}
+	c.attrScratch = entries
 	sortAttributes(entries)
 	for _, entry := range entries {
 		if err := c.writeAttribute(entry); err != nil {
@@ -670,31 +815,60 @@ func (c *canonicalizer) renderOmittedAttributes(e *helium.Element) error {
 	return nil
 }
 
+// pushVisibleAncestor records e as the innermost visible element on the walk
+// path, reusing a popped slot's map when one is available.
+func (c *canonicalizer) pushVisibleAncestor(e *helium.Element) {
+	n := len(c.visibleAncestors)
+	if n == cap(c.visibleAncestors) {
+		c.visibleAncestors = append(c.visibleAncestors, visibleAncestor{elem: e})
+		return
+	}
+	c.visibleAncestors = c.visibleAncestors[:n+1]
+	slot := &c.visibleAncestors[n]
+	slot.elem = e
+	slot.filled = false
+}
+
+// nearestVisibleNSURIs returns the namespace-node prefix→URI map (first node
+// wins, as a first-match scan of the ordered list would) of the nearest
+// visible ancestor of the element whose namespace axis is being rendered.
+// That element is never on the stack itself: a visible element is pushed only
+// after its start tag is written. The node-set namespace path never runs inside
+// an entity expansion, so the stack names the same element a walk up the
+// parent chain would. The bool is false when there is no visible ancestor.
+func (c *canonicalizer) nearestVisibleNSURIs() (map[string]string, bool) {
+	n := len(c.visibleAncestors)
+	if n == 0 {
+		return nil, false
+	}
+	top := &c.visibleAncestors[n-1]
+	if !top.filled {
+		if top.uris == nil {
+			top.uris = make(map[string]string)
+		} else {
+			clear(top.uris)
+		}
+		for _, nsn := range c.nsNodesByElement[top.elem] {
+			if _, ok := top.uris[nsn.prefix]; !ok {
+				top.uris[nsn.prefix] = nsn.uri
+			}
+		}
+		top.filled = true
+	}
+	return top.uris, true
+}
+
 // nsRenderedByAncestor checks if the namespace (prefix, uri) is already
-// effectively rendered by walking up through the nearest visible ancestor.
+// effectively rendered by the nearest visible ancestor.
 // The check compares against the nearest visible parent's full namespace
 // node set — if the parent has the same (prefix, uri), suppress.
 // If the parent has the prefix with a different URI, or doesn't have the prefix
 // at all, emit.
-func (c *canonicalizer) nsRenderedByAncestor(e *helium.Element, prefix, uri string) bool {
-	// Find the nearest visible ancestor
-	for n := e.Parent(); n != nil; n = n.Parent() {
-		if n.Type() != helium.ElementNode {
-			continue
-		}
-		anc, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			continue
-		}
-		if !c.isVisible(anc) {
-			continue
-		}
+func (c *canonicalizer) nsRenderedByAncestor(prefix, uri string) bool {
+	if ancURIs, ok := c.nearestVisibleNSURIs(); ok {
 		// Check this ancestor's namespace node set
-		ancNS := c.nsNodesByElement[anc]
-		for _, ans := range ancNS {
-			if ans.prefix == prefix {
-				return ans.uri == uri
-			}
+		if ancURI, found := ancURIs[prefix]; found {
+			return ancURI == uri
 		}
 		// Nearest visible ancestor doesn't have this prefix → need to emit
 		return false
@@ -707,50 +881,40 @@ func (c *canonicalizer) nsRenderedByAncestor(e *helium.Element, prefix, uri stri
 	return false
 }
 
-// findNearestRenderedDefaultNS walks up through visible ancestors to find
-// the URI of the default namespace node in the nearest ancestor's node set.
-func (c *canonicalizer) findNearestRenderedDefaultNS(e *helium.Element) string {
-	for n := e.Parent(); n != nil; n = n.Parent() {
-		if n.Type() != helium.ElementNode {
-			continue
-		}
-		anc, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			continue
-		}
-		if !c.isVisible(anc) {
-			continue
-		}
-		// The nearest visible ancestor determines the default namespace in
-		// scope for e in the canonical output, so this ancestor is
-		// authoritative — never walk further up. The XPath namespace axis only
-		// yields a default-namespace node when the in-scope default URI is
-		// non-empty; its absence here means the default namespace is empty (it
-		// was reset via xmlns=""). Returning "" in that case stops us from
-		// reaching past a reset to a more distant, no-longer-in-scope default.
-		for _, ans := range c.nsNodesByElement[anc] {
-			if ans.prefix == "" {
-				return ans.uri
-			}
-		}
+// findNearestRenderedDefaultNS returns the URI of the default namespace node in
+// the nearest visible ancestor's node set.
+func (c *canonicalizer) findNearestRenderedDefaultNS() string {
+	ancURIs, ok := c.nearestVisibleNSURIs()
+	if !ok {
 		return ""
 	}
-	return ""
+	// The nearest visible ancestor determines the default namespace in scope
+	// for the element in the canonical output, so this ancestor is
+	// authoritative — never look further up. The XPath namespace axis only
+	// yields a default-namespace node when the in-scope default URI is
+	// non-empty; its absence here means the default namespace is empty (it was
+	// reset via xmlns=""). Returning "" in that case stops us from reaching
+	// past a reset to a more distant, no-longer-in-scope default.
+	return ancURIs[""]
 }
 
 func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 	// Entity-replacement elements resolve their visibly-utilized namespaces against
 	// the reference site, so they use the whole-document exclusive algorithm even
 	// under a node set (the node-set path keys off nsNodesByElement, which cannot
-	// hold entity-internal namespace nodes; every exclusive path populates nsStack,
-	// so redundancy suppression against ancestors still holds).
+	// hold entity-internal namespace nodes; every exclusive path populates the
+	// rendered stack, so redundancy suppression against ancestors still holds).
 	if c.nodeSet != nil && c.currentEntityFrame() == nil {
 		return c.renderNamespacesExclusiveNodeSet(e)
 	}
 
 	// Whole-document mode: output "visibly utilized" namespaces
 	// plus any in the inclusive prefixes list.
-	utilized := make(map[string]string)
+	if c.utilized == nil {
+		c.utilized = make(map[string]string)
+	}
+	utilized := c.utilized
+	clear(utilized)
 
 	// Element's own namespace
 	if ns := e.Namespace(); ns != nil {
@@ -759,7 +923,7 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 			return err
 		}
 		utilized[ns.Prefix()] = uri
-	} else if uri := c.entityDefaultNSURI(e); uri != "" {
+	} else if uri := c.entityDefaultNSURI(); uri != "" {
 		// Inside an entity expansion an unprefixed replacement element has a nil
 		// cached active namespace when the FIRST reference site had no default
 		// namespace. At THIS reference site the in-scope default namespace may be
@@ -768,15 +932,15 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 		utilized[""] = uri
 	} else {
 		// Check if default namespace needs to be undeclared
-		if existingURI, found := c.nsStack.lookup(""); found && existingURI != "" {
+		if existingURI, found := c.rendered.lookup(""); found && existingURI != "" {
 			utilized[""] = ""
 		}
 	}
 
 	// Attribute namespaces
-	for _, attr := range e.Attributes() {
+	for _, attr := range c.elementAttributes(e) {
 		if p := attr.Prefix(); p != "" {
-			uri, err := c.resolvedAttrNSURI(e, attr)
+			uri, err := c.resolvedAttrNSURI(attr)
 			if err != nil {
 				return err
 			}
@@ -786,26 +950,26 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 
 	// Inclusive prefixes
 	if c.inclusivePrefixes != nil {
-		nsMap := c.collectInScopeNamespaces(e)
 		for prefix := range c.inclusivePrefixes {
-			if uri, ok := nsMap[prefix]; ok {
+			if uri, ok := c.scopeLookup(prefix); ok {
 				utilized[prefix] = uri
 			}
 		}
 	}
 
-	var toOutput []nsSortEntry
+	toOutput := c.nsScratch[:0]
 	for prefix, uri := range utilized {
 		// The predefined xml binding is implicit and never rendered as a
 		// namespace declaration, even when an xml-prefixed name visibly utilizes it.
 		if prefix == lexicon.PrefixXML {
 			continue
 		}
-		if c.nsStack.needsOutput(prefix, uri) {
+		if c.rendered.needsOutput(prefix, uri) {
 			toOutput = append(toOutput, nsSortEntry{prefix: prefix, uri: uri})
-			c.nsStack.add(prefix, uri)
+			c.rendered.set(prefix, uri)
 		}
 	}
+	c.nsScratch = toOutput
 
 	sortNamespaces(toOutput)
 	for _, ns := range toOutput {
@@ -821,9 +985,9 @@ func (c *canonicalizer) renderNamespacesExclusive(e *helium.Element) error {
 //  1. Its prefix is "visibly utilized" (element's own ns or attribute ns) OR
 //     in the inclusive prefix list
 //  2. AND the corresponding namespace node is in the node set for this element
-//  3. AND it differs from what the nsStack already has (not already rendered)
+//  3. AND it differs from what the rendered stack already has
 //
-// Uses nsStack (not nsRenderedByAncestor) to track what was actually rendered,
+// Uses the rendered stack (not nsRenderedByAncestor) to track what was actually rendered,
 // since exclusive mode only renders a subset of ns nodes in the node set.
 func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) error {
 	nsNodes := c.nsNodesByElement[e]
@@ -849,7 +1013,7 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 	}
 
 	// Attribute namespace prefixes (only visible attributes)
-	for _, attr := range e.Attributes() {
+	for _, attr := range c.elementAttributes(e) {
 		if !c.isVisible(attr) {
 			continue
 		}
@@ -863,7 +1027,7 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 		candidates[prefix] = struct{}{}
 	}
 
-	var toOutput []nsSortEntry
+	toOutput := c.nsScratch[:0]
 
 	for prefix := range candidates {
 		if prefix == lexicon.PrefixXML {
@@ -877,19 +1041,20 @@ func (c *canonicalizer) renderNamespacesExclusiveNodeSet(e *helium.Element) erro
 			// If "" is a candidate but its ns node is NOT in the node set,
 			// check if a visible ancestor rendered a non-empty default ns.
 			if prefix == "" {
-				if existingURI, found := c.nsStack.lookup(""); found && existingURI != "" {
+				if existingURI, found := c.rendered.lookup(""); found && existingURI != "" {
 					toOutput = append(toOutput, nsSortEntry{prefix: "", uri: ""})
-					c.nsStack.add("", "")
+					c.rendered.set("", "")
 				}
 			}
 			continue
 		}
 
-		if c.nsStack.needsOutput(prefix, uri) {
+		if c.rendered.needsOutput(prefix, uri) {
 			toOutput = append(toOutput, nsSortEntry{prefix: prefix, uri: uri})
-			c.nsStack.add(prefix, uri)
+			c.rendered.set(prefix, uri)
 		}
 	}
+	c.nsScratch = toOutput
 
 	sortNamespaces(toOutput)
 	for _, ns := range toOutput {
@@ -925,11 +1090,11 @@ func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) (
 		// every point in the data model, so it is always in scope at the
 		// reference site regardless of the site's declared bindings. Resolve it
 		// to that implicit URI; like a non-entity xml:* name it is never emitted
-		// as an explicit xmlns:xml declaration (collectInScopeNamespaces drops it
-		// on the inclusive/node-set paths, matching the non-entity axis).
+		// as an explicit xmlns:xml declaration (scopeLookup hides it in
+		// whole-document mode, matching the non-entity axis).
 		return lexicon.NamespaceXML, nil
 	}
-	if uri, ok := c.collectInScopeNamespaces(e)[prefix]; ok {
+	if uri, ok := c.scopeLookup(prefix); ok {
 		return uri, nil
 	}
 	if prefix != "" {
@@ -946,11 +1111,12 @@ func (c *canonicalizer) resolvedNSURI(e *helium.Element, ns *helium.Namespace) (
 // namespace at the site currently being walked. It returns "" outside an entity
 // expansion (the cached nil is authoritative there) and when the reference site
 // has no default namespace in scope.
-func (c *canonicalizer) entityDefaultNSURI(e *helium.Element) string {
+func (c *canonicalizer) entityDefaultNSURI() string {
 	if c.currentEntityFrame() == nil {
 		return ""
 	}
-	return c.collectInScopeNamespaces(e)[""]
+	uri, _ := c.scopeLookup("")
+	return uri
 }
 
 // resolvedAttrNSURI returns the URI of an attribute's namespace. Outside an
@@ -966,7 +1132,7 @@ func (c *canonicalizer) entityDefaultNSURI(e *helium.Element) string {
 // reference site cannot be canonicalized (a prefixed name with an out-of-scope
 // prefix is namespace-not-well-formed for that expansion), so this is an error, and the
 // stale first-site binding is never borrowed.
-func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attribute) (string, error) {
+func (c *canonicalizer) resolvedAttrNSURI(attr *helium.Attribute) (string, error) {
 	if c.currentEntityFrame() == nil {
 		return attr.URI(), nil
 	}
@@ -982,39 +1148,10 @@ func (c *canonicalizer) resolvedAttrNSURI(e *helium.Element, attr *helium.Attrib
 		// declaration on the inclusive/node-set paths.
 		return lexicon.NamespaceXML, nil
 	}
-	if uri, ok := c.collectInScopeNamespaces(e)[prefix]; ok {
+	if uri, ok := c.scopeLookup(prefix); ok {
 		return uri, nil
 	}
 	return "", fmt.Errorf("c14n: namespace prefix %q of entity-replacement attribute %q is not in scope at the reference site", prefix, attr.Name())
-}
-
-// collectInScopeNamespaces collects all in-scope namespace bindings for an element
-// by walking up the ancestor chain.
-func (c *canonicalizer) collectInScopeNamespaces(e *helium.Element) map[string]string {
-	// Inside an entity expansion the element's parent chain stops at the shared
-	// Entity declaration node, so its own parent-chain walk (and its cached
-	// active-namespace pointer) can only see the entity declaration's context.
-	// Resolve against the reference site instead: start from the reference-site
-	// bindings and overlay the xmlns declarations physically present in the
-	// entity subtree.
-	if ctx := c.currentEntityContext(); ctx != nil {
-		nsMap := make(map[string]string, len(ctx))
-		maps.Copy(nsMap, ctx)
-		c.overlayEntityNSDecls(nsMap, e)
-		if c.nodeSet == nil {
-			delete(nsMap, lexicon.PrefixXML)
-		}
-		return nsMap
-	}
-
-	// Remove the xml namespace (never explicitly output per C14N spec) unless
-	// it's inherited via xml:* attributes in node-set mode.
-	byPrefix := domutil.InScopeNamespaces(e, c.nodeSet == nil)
-	nsMap := make(map[string]string, len(byPrefix))
-	for prefix, ns := range byPrefix {
-		nsMap[prefix] = ns.URI()
-	}
-	return nsMap
 }
 
 func (c *canonicalizer) writeNSDecl(prefix, uri string) error {
@@ -1041,10 +1178,8 @@ func (c *canonicalizer) writeNSDecl(prefix, uri string) error {
 
 // renderAttributes outputs the attribute axis for the element.
 func (c *canonicalizer) renderAttributes(e *helium.Element) error {
-	attrs := e.Attributes()
-
-	entries := make([]attrSortEntry, 0, len(attrs))
-	for _, attr := range attrs {
+	entries := c.attrScratch[:0]
+	for _, attr := range c.elementAttributes(e) {
 		// C14N 1.1 handles xml:lang, xml:space and xml:base specially (below), so
 		// keep them out of the ordinary visible-attribute pass.
 		if c.mode == C14N11 && isInheritableXMLAttr(attr) {
@@ -1053,7 +1188,7 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 		if c.nodeSet != nil && !c.isVisible(attr) {
 			continue
 		}
-		uri, err := c.resolvedAttrNSURI(e, attr)
+		uri, err := c.resolvedAttrNSURI(attr)
 		if err != nil {
 			return err
 		}
@@ -1074,6 +1209,7 @@ func (c *canonicalizer) renderAttributes(e *helium.Element) error {
 			return err
 		}
 	}
+	c.attrScratch = entries
 
 	sortAttributes(entries)
 

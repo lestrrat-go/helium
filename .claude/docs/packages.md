@@ -491,8 +491,20 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
   rendered element's own excluded xml:* attribute is still emitted — XMLDSig digest interop). Strict mode is
   also fail-closed on xml:base: a degenerate/un-canonicalizable value (malformed URI, empty-authority
   "//"/"///"/"urn://") errors out of Canonicalize, where default emits best-effort bytes.
-- Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go`, `sort.go`,
-  `escape.go`
+- Engine cost is linear in the document (elements + attributes + namespace declarations), independent of depth and
+  of the number of in-scope bindings. `canonicalizer.scope` (a `bindingStack`, `nsstack.go`: one live map + undo log
+  + frame marks) carries the in-scope bindings down the recursion; `processElement` pushes one frame per element
+  (its declarations, then its active namespace if that prefix is unbound; declarations only inside an entity
+  expansion). `canonicalizer.rendered` (same type) records what visible ancestors emitted.
+  - Whole-document inclusive C14N examines only the bindings set in the element's own frame (`frameDelta`):
+    `rendered` equals the parent's scope there. Entity content under a node set iterates the full live map instead.
+  - `xml` prefix: hidden from scope lookups/snapshots when `nodeSet == nil` (`hideXML`), visible under a node set.
+  - Relative-namespace-URI check (`url.Parse` + scheme) runs once per distinct URI per run (`absoluteURIs` memo);
+    failing URIs are never memoized.
+  - Node-set mode: nearest visible ancestor = top of `visibleAncestors`; each slot lazily fills a reused
+    first-wins prefix→URI map from the ordered, duplicate-keeping `nsNodesByElement`.
+- Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go` (`bindingStack`),
+  `sort.go`, `escape.go` (byte-table escaping)
 - Imports: helium
 
 ## xpath1/
@@ -2057,9 +2069,9 @@ XML Encryption 1.1 (W3C xmlenc-core1). Encrypt and decrypt XML elements/content.
   four outcomes: an ABSENT `@URI` is `ErrMalformedEncrypted` (the schema marks it required) while a
   PRESENT-and-empty one is the valid null URI; a same-document URI with no transform converts the node-set to
   octets by Canonical XML 1.0 without comments (`canonicalizeCipherReferenceNodeSet`, writing through
-  `newBudgetWriter`, which bounds canonical OUTPUT OCTETS and never the work producing them — c14n's own
-  per-element namespace-visibility scan costs elements times in-scope declarations and can run long while
-  emitting almost nothing — and which also polls the caller's context on every write, the only place a
+  `newBudgetWriter`, which bounds canonical OUTPUT OCTETS and never the work producing them (c14n work is linear
+  in the input, so a large document costs time while emitting little), and which also polls the caller's
+  context on every write, the only place a
   WHOLE-DOCUMENT form (`URI=""` or `#xpointer(/)`) ever observes cancellation, since that form has no node-set
   collector stage ahead of it; the budget is charged once, with the final total, after the write completes); a
   same-document URI whose first transform is `#base64` hands the target to `decodeCipherReferenceNodeSet`

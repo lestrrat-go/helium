@@ -1502,12 +1502,12 @@ func TestCanonicalizeScopeInvariants(t *testing.T) {
 		{
 			name: "DuplicateNamespaceNodes", build: scopeInclusivePrefixesDoc, nodes: scopeDuplicateNodes,
 			want: [4]string{
-				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><c xmlns:q="urn:q" xmlns:q="urn:q">` +
+				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><c xmlns:q="urn:q" xmlns:q="urn:q">` + //nolint:dupword // each namespace node is selected twice
 					`<d xmlns=""><p:e></p:e></d></c></r>`,
-				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><!--c--><c xmlns:q="urn:q"` +
+				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><!--c--><c xmlns:q="urn:q"` + //nolint:dupword // each namespace node is selected twice
 					` xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
 				`<r xmlns="urn:d"><c><d xmlns=""><p:e xmlns:p="urn:p"></p:e></d></c></r>`,
-				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><c xmlns:q="urn:q" xmlns:q="urn:q">` +
+				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><c xmlns:q="urn:q" xmlns:q="urn:q">` + //nolint:dupword // each namespace node is selected twice
 					`<d xmlns=""><p:e></p:e></d></c></r>`,
 			},
 		},
