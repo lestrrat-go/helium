@@ -424,7 +424,7 @@ func (dc *deepCopier) copyAttributes(src, elem *Element) error {
 		// of record()'s line preservation, but done HERE (not via dc.record) so it
 		// stays metadata-only and does not start surfacing attributes to onCopy
 		// callbacks, which only expect element/text/etc. nodes.
-		if cp, ok := elem.FindAttribute(NSPredicate{Local: a.LocalName(), NamespaceURI: a.URI()}); ok {
+		if cp, ok := elem.findAttributeNS(a.LocalName(), a.URI()); ok {
 			copyLine(a, cp)
 		}
 	}

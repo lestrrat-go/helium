@@ -62,7 +62,16 @@ Attributes are a **linked list via next/prev** on the Element, NOT children:
 - `Element.properties` → first Attribute
 - `Attribute.NextAttribute()` → next in list
 - Attribute VALUE stored as children Text/EntityRef nodes of the Attribute itself
-- `Attribute.Value()` aggregates child content as string
+- `Attribute.Value()` returns `string(rawContent)` of a lone `*Text` child (first child a `*Text` with a nil
+  `next`), one allocation; no children → `""`; any other shape goes through `aggregatedAttributeValue` →
+  `Content()`. `Value` has a VALUE receiver, so that fallback aggregates over a copy of the attribute's docnode:
+  the owned-boundary rule then stops after the first child (its `Parent()` is the real attribute, not the
+  copy), and `Value()` of `1&e;2` (Text, EntityRef, Text) is `"1"` while `Content()` is `"1x2"`. The fallback
+  is a separate function so taking the copy's address does not move `Value`'s receiver to the heap on the
+  single-Text path
+- `Attributes(elem)` (`iter.go`) iterates the `properties` chain with no slice; `findAttributeNS` (behind
+  `GetAttributeNS`/`GetAttributeNodeNS`/`RemoveAttributeNS` and the deep copy's line lookup) matches by local
+  name + URI without boxing an `NSPredicate`
 
 ## Node Builders (colon rule)
 
@@ -229,7 +238,10 @@ unsynthesized values.
 
 ### Content() Default
 `docnode.Content()` walks children and concatenates (returns a fresh buffer). Overridden by Text, CDATA,
-Comment, PI, EntityRef. It has a POINTER receiver (`*docnode`) so the receiver is the real owning node — every
+Comment, PI, EntityRef. No children returns nil; exactly one owned child that is a leaf (`aggregatesOwnContent`
+false, and `nextOwnedChild` of it is nil) returns that leaf's own `Content()` copy directly (nil when empty),
+which is byte-for-byte what the aggregation writes, without its two maps and buffer
+(`TestContentMatchesAggregate` compares both paths). It has a POINTER receiver (`*docnode`) so the receiver is the real owning node — every
 `Node` is a pointer (the sealed `baseDocNode()` interface method is itself pointer-receiver), so this changes
 nothing for callers. The aggregation runs through the private `aggregateOwnedContent` helper, which advances
 between children with the OWNED-BOUNDARY rule (`nextOwnedChild`): a foreign child — an entity reference's
@@ -510,10 +522,10 @@ shared Entity child, owned by the DTD — ends that child list instead of spilli
 declaration siblings. (2) CYCLE SAFETY: `Walk` carries the set of nodes currently ON the DFS stack (the active
 path, O(depth)) and returns the `ErrWalkCycle` sentinel when it would descend into a node already on that path
 (a child-pointer back-edge, e.g. an Entity whose child links back to its reference); it also carries a
-PER-FRAME `seenChildren` set that returns `ErrWalkCycle` when a child repeats within one sibling list — this
-covers BOTH a one-node self-loop (`child.next == child`) and a longer sibling cycle (`a -> b -> a`), which the
-active-path set misses because each child is popped before its next sibling is examined. `nextWalkSibling`
-does NOT special-case the self-loop: it lets the duplicate flow back so `seenChildren` reports `ErrWalkCycle`.
+PER-FRAME `siblingCycleGuard` that returns `ErrWalkCycle` when a sibling list loops — this covers BOTH a
+one-node self-loop (`child.next == child`) and a longer sibling cycle (`a -> b -> a`), which the active-path set
+misses because each child is popped before its next sibling is examined. `nextWalkSibling` does NOT
+special-case the self-loop: it lets the duplicate flow back so the guard reports `ErrWalkCycle`.
 Special-casing it would silently terminate and report a corrupt one-node cycle as fully traversed.
 `Descendants` mirrors this with an active-path set threaded through its recursion (visits a back-edge node
 once, does not descend through it) plus a per-list sibling guard; `Children`/`ChildElements` use that same
@@ -523,8 +535,10 @@ pays nothing for a check that fires only on a corrupt graph, where a seen set co
 child on EVERY list. The trade is where the walk stops: a seen set stops at the exact first repeat, Brent
 stops once the chasing pointer catches its checkpoint, within a small multiple of the cycle length, so a
 cyclic list can yield some of its nodes more than once before terminating. Termination is unconditional either
-way, which is the property the iterators promise. `Walk` keeps its per-frame `seenChildren` set because it
-must REPORT the cycle as `ErrWalkCycle`, not merely survive it. None of them uses a GLOBAL visited set, so a
+way, which is the property the iterators promise. `Walk` uses the same guard and turns its firing into
+`ErrWalkCycle`, so on a cyclic sibling list the visitor may see a few nodes more than once before the error;
+`Walk`'s memory is its frame stack plus the active-path set, O(depth), independent of list width
+(`TestWalkAllocations`). None of them uses a GLOBAL visited set, so a
 shared DAG node reached on two different paths (e.g. `&e;&e;` — two references to one Entity) is still visited
 on EACH occurrence; only same-path back-edges are cut. On an acyclic, parent-consistent tree behavior is
 byte-identical to a naive descent — `Walk` returns nil, so its error return is a non-nil `ErrWalkCycle` ONLY
@@ -549,7 +563,8 @@ source sibling list); `copyChildren` links each copied child into the destinatio
 (above), not `Children`; `setListDoc` (the `SetTreeDoc` sibling walker) and the serializer's attribute-chain
 walk each carry a per-list seen guard (the latter also terminates a non-`*Attribute` successor that would
 otherwise leave the cursor unadvanced). The element attribute-lookup hot paths
-(`addProperty`/`HasAttribute`/`Attributes`/`ForEachAttribute`) traverse the `properties` chain with a plain
+(`addProperty`/`HasAttribute`/`Attributes`/`ForEachAttribute`/`findAttributeNS` and the `Attributes`
+iterator) traverse the `properties` chain with a plain
 `NextAttribute` loop and NO guard: that chain is built exclusively through the guarded property-splice /
 `AddSibling` paths (which reject self/cycle insertion and install no foreign link), so a well-formed chain is
 a short, self-owned, acyclic list.

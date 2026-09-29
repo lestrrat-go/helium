@@ -262,6 +262,19 @@ func (n *Element) FindAttribute(ap AttributePredicate) (*Attribute, bool) {
 	return nil, false
 }
 
+// findAttributeNS returns the first attribute whose local name and namespace URI
+// match, in property order. It applies the same test as NSPredicate.Match
+// without boxing a predicate into the AttributePredicate interface, so a lookup
+// allocates nothing.
+func (n *Element) findAttributeNS(localName, nsURI string) (*Attribute, bool) {
+	for p := n.properties; p != nil; p = p.NextAttribute() {
+		if p.LocalName() == localName && p.URI() == nsURI {
+			return p, true
+		}
+	}
+	return nil, false
+}
+
 // GetAttribute returns the value of the attribute with the given QName,
 // or empty string and false if not found.
 func (n *Element) GetAttribute(name string) (string, bool) {
@@ -281,7 +294,7 @@ func (n *Element) HasAttribute(name string) bool {
 // GetAttributeNS returns the value of the attribute with the given
 // local name and namespace URI, or empty string and false if not found.
 func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
-	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	attr, ok := n.findAttributeNS(localName, nsURI)
 	if !ok {
 		return "", false
 	}
@@ -293,7 +306,7 @@ func (n *Element) GetAttributeNS(localName, nsURI string) (string, bool) {
 // xmlHasNsProp, returning the node itself for further inspection (e.g.,
 // checking atype or whether it is a default attribute).
 func (n *Element) GetAttributeNodeNS(localName, nsURI string) *Attribute {
-	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	attr, ok := n.findAttributeNS(localName, nsURI)
 	if !ok {
 		return nil
 	}
@@ -314,7 +327,7 @@ func (n *Element) RemoveAttribute(name string) bool {
 // RemoveAttributeNS removes the attribute with the given local name and
 // namespace URI. Returns true if an attribute was removed.
 func (n *Element) RemoveAttributeNS(localName, nsURI string) bool {
-	attr, ok := n.FindAttribute(NSPredicate{Local: localName, NamespaceURI: nsURI})
+	attr, ok := n.findAttributeNS(localName, nsURI)
 	if !ok {
 		return false
 	}

@@ -1,7 +1,9 @@
 package helium
 
 import (
+	"bytes"
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -588,7 +590,7 @@ func TestWalkCycleGuards(t *testing.T) {
 	// Walk terminates, and never spins forever, on a sibling cycle LONGER
 	// than one node: a parent whose two children form a 2-cycle a -> b -> a. The
 	// active-path guard alone does not catch this — each child is popped off the
-	// stack before its next sibling is examined — so the per-frame seenChildren set
+	// stack before its next sibling is examined — so the per-frame sibling guard
 	// must return ErrWalkCycle.
 	t.Run("sibling cycle", func(t *testing.T) {
 		doc := NewDefaultDocument()
@@ -607,6 +609,108 @@ func TestWalkCycleGuards(t *testing.T) {
 		err = Walk(parent, NodeWalkerFunc(func(Node) error { return nil }))
 		require.ErrorIs(t, err, ErrWalkCycle,
 			"Walk must detect the sibling cycle and return ErrWalkCycle instead of hanging")
+	})
+
+	// A rho-shaped sibling list: c0 -> c1 -> c2 -> c3 -> c4 -> c2. The cycle
+	// starts after a tail, so the repeat is not the list's first node. Walk must
+	// still return ErrWalkCycle, having visited every child at least once and each
+	// node only a bounded number of times.
+	t.Run("sibling cycle after a tail", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		parent, err := doc.CreateElement("parent")
+		require.NoError(t, err)
+		children := make([]*Element, 5)
+		for i := range children {
+			children[i], err = doc.CreateElement("c" + strconv.Itoa(i))
+			require.NoError(t, err)
+			require.NoError(t, parent.AddChild(children[i]))
+		}
+		unsafeSetNextSibling(children[4], children[2])
+
+		counts := map[Node]int{}
+		err = Walk(parent, walkCounter(counts))
+		require.ErrorIs(t, err, ErrWalkCycle,
+			"Walk must detect the sibling cycle after a tail and return ErrWalkCycle")
+		for _, c := range children {
+			require.GreaterOrEqual(t, counts[c], 1, "every child before the repeat is visited")
+			require.LessOrEqual(t, counts[c], 3, "a cyclic list visits each node a bounded number of times")
+		}
+		require.Equal(t, 1, counts[parent], "the parent is visited once")
+	})
+}
+
+// walkCounter is a NodeWalker that counts how many times Walk visits each node.
+type walkCounter map[Node]int
+
+func (c walkCounter) Visit(n Node) error {
+	c[n]++
+	return nil
+}
+
+// contentReference is the aggregating docnode Content() path with no fast path,
+// used as the byte-identity reference for the single-leaf fast paths in
+// docnode.Content and Attribute.Value.
+func contentReference(dn *docnode) []byte {
+	b := bytes.Buffer{}
+	aggregateOwnedContent(dn, &b, map[*docnode]struct{}{dn: {}})
+	return b.Bytes()
+}
+
+// requireSameContent asserts got equals want byte for byte, including whether
+// the slice is nil (require.Equal treats nil and empty []byte as equal).
+func requireSameContent(t *testing.T, want, got []byte, msg string) {
+	t.Helper()
+	require.Equal(t, want, got, msg)
+	require.Equal(t, want == nil, got == nil, msg+": nil-ness must match")
+}
+
+// Content() and Attribute.Value() return the same bytes as the full
+// aggregating path for every child shape: no children, one leaf of each kind,
+// an entity reference, and mixed children.
+func TestContentMatchesAggregate(t *testing.T) {
+	const dtd = `<!DOCTYPE r [<!ENTITY e "x">]>`
+	docs := []struct {
+		name string
+		src  string
+	}{
+		{"no children", `<r></r>`},
+		{"one text child", `<r>text</r>`},
+		{"one comment child", `<r><!--c--></r>`},
+		{"one CDATA child", `<r><![CDATA[cd]]></r>`},
+		{"one PI child", `<r><?pi data?></r>`},
+		{"one element child", `<r><b>inner</b></r>`},
+		{"mixed children", `<r>a<b>c</b>d</r>`},
+		{"one entity reference child", dtd + `<r>&e;</r>`},
+		{"text around an entity reference", dtd + `<r>1&e;2</r>`},
+		{"attribute with text", `<r a="value"></r>`},
+		{"empty attribute", `<r a=""></r>`},
+		{"attribute with only a reference", dtd + `<r a="&e;"></r>`},
+		{"attribute with text around a reference", dtd + `<r a="1&e;2"></r>`},
+		{"attribute with a reference then text", dtd + `<r a="&e;2"></r>`},
+		{"attribute with text then a reference", dtd + `<r a="1&e;"></r>`},
+	}
+	for _, tc := range docs {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := NewParser().SubstituteEntities(false).Parse(t.Context(), []byte(tc.src))
+			require.NoError(t, err)
+			root := doc.DocumentElement()
+			requireSameContent(t, contentReference(root.baseDocNode()), root.Content(), "element Content")
+			for attr := root.properties; attr != nil; attr = attr.NextAttribute() {
+				requireSameContent(t, contentReference(attr.baseDocNode()), attr.Content(), "attribute Content")
+				// Value has a value receiver, so it aggregates over a copy of the
+				// attribute's docnode.
+				cp := *attr
+				require.Equal(t, string(contentReference(&cp.docnode)), attr.Value(), "attribute Value")
+			}
+		})
+	}
+
+	t.Run("empty text child", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		e, err := doc.CreateElement("e")
+		require.NoError(t, err)
+		require.NoError(t, e.AddChild(doc.CreateText(nil)))
+		requireSameContent(t, contentReference(e.baseDocNode()), e.Content(), "element Content")
 	})
 }
 

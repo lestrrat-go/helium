@@ -198,7 +198,13 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in
   matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
 - **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** —
-  attribute value lookup by QName or expanded name
+  attribute value lookup by QName or expanded name. The expanded-name lookups (`GetAttributeNS`,
+  `GetAttributeNodeNS`, `RemoveAttributeNS`) loop the `properties` chain through the unexported
+  `findAttributeNS` with the `NSPredicate` test inlined, so a lookup allocates nothing (boxing a predicate into
+  `AttributePredicate` costs one allocation per `FindAttribute` call). Hot paths use these instead of
+  `FindAttribute(NSPredicate{...})`
+- **Attributes(elem) → iter.Seq[*Attribute]** (`iter.go`) — the element's attributes in property order, the
+  same order as `Element.Attributes()`, with no slice allocation. A nil element yields nothing
 - Element attribute setters (all return only `error`, create-or-replace-in-place by expanded name/QName via
   `addProperty`, and reject a colon in the name/local name):
   - **Element.SetAttribute(name, value) / Element.SetAttributeNS(localname, value, ns)** — **LITERAL**: store
@@ -324,7 +330,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   propagate `RawEncoding()`, not `Encoding()`
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal. All accept a typed-nil node (e.g.
   `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
-  (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
+  (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`. `Walk` allocates
+  O(depth), independent of sibling-list width (cycle guards: `node-types.md`)
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
   panicking. A nil `targetDoc` creates a standalone copy. A copied named `EntityRef` resolves only against a
   non-nil `targetDoc`'s declarations: a bound source reference first resolves in the corresponding destination
