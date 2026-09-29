@@ -1263,7 +1263,8 @@ via `value.Compare` for the value-comparable builtins in `enumValueSpaceTypes`
 equality for string-family/anyURI (so a numeric-looking `xs:string` fixed `5`
 does not accept `5.0`). `xs:QName`/`xs:NOTATION` fixed values are resolved in
 namespace context: each lexical QName is resolved against its own in-scope
-namespaces — the instance side via `collectNSContext(elem)`, the schema fixed
+namespaces — the instance side via `collectNSContext(elem)` (built lazily, see the
+attribute hot path below), the schema fixed
 side via the `FixedNS` map captured on the `ElementDecl`/`AttrUse` at read time
 (`collectNSContext` over the declaring schema element) — and the resolved
 `{namespace URI, local name}` pairs are compared, so two different prefixes bound
@@ -1325,9 +1326,30 @@ Per-run simple-type info memo: `(*validationContext).simpleTypeInfo(td)` (`simpl
 reachable through `BaseType`/`ItemType`/`MemberTypes`/`ContentSimpleType` is xs:QName or xs:NOTATION, or, under
 `Version11`, carries an xs:assertion facet; when false the value check never reads `valueNS`). `validateValue`,
 `validateValueByVariety`, `validateFacets`, and the ID walks (`isIDFamilyType`) read it. The map
-(`validationContext.typeInfo`) is created by `newValidationContext` and shared by the per-attribute silenced
-sub-contexts in `validateAttributes`/`validateWildcardAttr`; every other throwaway context leaves it nil, gets a nil
-info, and falls back to the walkers, which stay the single computation. Nothing is written to `Schema` or `TypeDef`.
+(`validationContext.typeInfo`) is created by `newValidationContext` and shared by the run's silent sub-context
+(`silentContext`); every other throwaway context leaves it nil, gets a nil info, and falls back to the walkers, which
+stay the single computation. Nothing is written to `Schema` or `TypeDef`.
+
+Attribute hot path (`validate.go`), all state per run on `validationContext`, none on `Schema`/`TypeDef`:
+
+- `attrUseIndexFor(td)` memoizes (`vc.attrIndex`) one `attrUseIndex` per complex type: `byName` maps each declared
+  QName to its entry (the last non-prohibited `*AttrUse`, or `prohibited` when every use of the name is prohibited)
+  and a slot; `slots[i]` is the slot of `td.Attributes[i]`. A type with no attribute uses gets the zero index and no
+  memo entry. `validateAttributes` does one `byName` lookup per instance attribute and keeps a `present` flag per
+  slot (a 32-entry stack array, a heap slice beyond that); the required-check and default-insertion loops read
+  `present[slots[i]]`, in `td.Attributes` order.
+- `elemNSContext` builds the element's `collectNSContext` map at most once per `validateAttributes` /
+  `validateSimpleContent` call, and only when `forType(vc, td)` finds the value's type consults namespaces
+  (`simpleTypeInfo.consultsNS`, or `typeConsultsNS` without a memo); otherwise the value checks get a nil map. The
+  holder is read only in the present-attribute loop, before the XSD 1.1 default-attribute namespace fixup, and is
+  dropped when the call returns. `validateWildcardAttr` takes the caller's holder.
+- `silentContext()` returns one `NilErrorHandler` sub-context per run (created on first use) for the attribute value
+  checks whose failure `validateAttributes`/`validateWildcardAttr` report themselves; its
+  `allowXSD10LegacyGMonthInstance` is copied from `vc` on every call.
+- `displayName(elem)` interns `elemDisplayName` per namespaced expanded name (`vc.displayNames`);
+  `collectChildElements` (a `validationContext` method) uses it and sizes its slice with a counting pass.
+- Attribute loops use the allocation-free `helium.Attributes(elem)` iterator; none of them adds or removes an
+  attribute while iterating.
 
 Enumeration facets are compared in value space, not raw lexical text. Each
 enumeration *literal* is first whitespace-normalized with the constrained type's
