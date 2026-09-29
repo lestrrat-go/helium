@@ -615,6 +615,16 @@ type validationContext struct {
 	// it nil and uses the base-chain walkers directly. The map lives only as long
 	// as the run, so nothing is written to the shared Schema.
 	typeInfo map[*TypeDef]*simpleTypeInfo
+	// silent is the run's diagnostic-suppressing sub-context for attribute value
+	// checks, whose failures the caller reports itself. silentContext creates it
+	// on first use and refreshes its allowXSD10LegacyGMonthInstance before each
+	// use.
+	silent *validationContext
+	// attrIndex memoizes attrUseIndexFor per complex type for this run.
+	attrIndex map[*TypeDef]attrUseIndex
+	// displayNames interns elemDisplayName results per namespaced expanded name
+	// for this run (see displayName).
+	displayNames map[QName]string
 }
 
 // assertEffectiveValue is a recorded element default/fixed effective value plus the
@@ -1425,6 +1435,9 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	value := elemTextContent(elem)
 	isEmpty := value == ""
 
+	// The element's in-scope namespaces, built only if a value check reads them.
+	nsc := elemNSContext{elem: elem}
+
 	// Effective value: substitute default/fixed for empty elements.
 	effectiveValue := value
 	if isEmpty && edecl != nil {
@@ -1466,9 +1479,9 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		}
 		// In XSD 1.1 fixedValueMatches itself narrows a simpleContent type to its
 		// effective content simple type, so the raw declared type is passed here.
-		if !fixedValueMatchesForInstance(ctx, value, *edecl.Fixed, fixedType, collectNSContext(elem), edecl.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
+		if !fixedValueMatchesForInstance(ctx, value, *edecl.Fixed, fixedType, nsc.forType(vc, fixedType), edecl.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 			msg := fmt.Sprintf("The element content '%s' does not match the fixed value constraint '%s'.", value, *edecl.Fixed)
-			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), vc.displayName(elem), msg)
 			return fmt.Errorf("fixed value constraint")
 		}
 	}
@@ -1483,8 +1496,11 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// DECLARATION's namespace context, not the instance's. XSD 1.0 keeps the original
 	// gating and instance-context resolution, byte-identical.
 	if vc.version == Version11 {
-		valueNS := effectiveValueNS(elem, edecl, isEmpty)
-		return vc.validateSimpleContentValue(ctx, effectiveValue, valueNS, td, elemDisplayName(elem), elem.Line())
+		valueNS := declValueNS(edecl, isEmpty)
+		if valueNS == nil {
+			valueNS = nsc.forType(vc, td)
+		}
+		return vc.validateSimpleContentValue(ctx, effectiveValue, valueNS, td, vc.displayName(elem), elem.Line())
 	}
 
 	// XSD 1.0: validate the text value against the type. simpleContentNeedsValidation
@@ -1492,9 +1508,9 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// builtin, or a facet ANYWHERE along the base chain — so a simpleContent EXTENSION
 	// of a named faceted simple type (whose facets live on the base, not on td itself)
 	// still enforces the base type's minLength/maxLength/etc.
-	ns := collectNSContext(elem)
+	ns := nsc.forType(vc, td)
 	if td != nil && simpleContentNeedsValidation(td) {
-		if err := validateValue(ctx, effectiveValue, ns, td, elemDisplayName(elem), vc.filename, elem.Line(), vc); err != nil {
+		if err := validateValue(ctx, effectiveValue, ns, td, vc.displayName(elem), vc.filename, elem.Line(), vc); err != nil {
 			return err
 		}
 	}
@@ -1505,7 +1521,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 	// check runs after the one above so a value that already failed keeps its
 	// earlier diagnostic.
 	if hasSimpleContentNarrowing(td) {
-		return vc.validateSimpleContentValue(ctx, effectiveValue, ns, td, elemDisplayName(elem), elem.Line())
+		return vc.validateSimpleContentValue(ctx, effectiveValue, ns, td, vc.displayName(elem), elem.Line())
 	}
 
 	return nil
@@ -1585,15 +1601,27 @@ func (vc *validationContext) validateNestedSimpleContentBases(ctx context.Contex
 // which was authored in the schema, so its prefixes resolve against the
 // DECLARATION's namespace context (FixedNS/DefaultNS).
 func effectiveValueNS(elem *helium.Element, edecl *ElementDecl, isEmpty bool) map[string]string {
-	if isEmpty && edecl != nil {
-		if edecl.Fixed != nil && edecl.FixedNS != nil {
-			return edecl.FixedNS
-		}
-		if edecl.Default != nil && edecl.DefaultNS != nil {
-			return edecl.DefaultNS
-		}
+	if ns := declValueNS(edecl, isEmpty); ns != nil {
+		return ns
 	}
 	return collectNSContext(elem)
+}
+
+// declValueNS returns the declaration's namespace context that effectiveValueNS
+// resolves an EMPTY element's substituted fixed/default value against, or nil
+// when the value is the instance's own text (resolved against the element's
+// in-scope namespaces).
+func declValueNS(edecl *ElementDecl, isEmpty bool) map[string]string {
+	if !isEmpty || edecl == nil {
+		return nil
+	}
+	if edecl.Fixed != nil && edecl.FixedNS != nil {
+		return edecl.FixedNS
+	}
+	if edecl.Default != nil && edecl.DefaultNS != nil {
+		return edecl.DefaultNS
+	}
+	return nil
 }
 
 // effectiveContentSimpleType returns the simple type that constrains the text
@@ -1716,7 +1744,7 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 }
 
 func (vc *validationContext) validateContentModel(ctx context.Context, elem *helium.Element, mg *ModelGroup) error {
-	children := collectChildElements(elem)
+	children := vc.collectChildElements(elem)
 	return vc.validateContentModelTop(ctx, elem, mg, children)
 }
 
@@ -1727,15 +1755,26 @@ type childElem struct {
 	displayName string // namespace-qualified name (for error messages)
 }
 
-func collectChildElements(elem *helium.Element) []childElem {
-	var children []childElem
+// collectChildElements returns elem's element children in document order. The
+// slice is sized by a first counting pass, so it is allocated once.
+func (vc *validationContext) collectChildElements(elem *helium.Element) []childElem {
+	n := 0
+	for child := range helium.Children(elem) {
+		if child.Type() == helium.ElementNode {
+			n++
+		}
+	}
+	if n == 0 {
+		return nil
+	}
+	children := make([]childElem, 0, n)
 	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
 			ce, ok := helium.AsNode[*helium.Element](child)
 			if !ok {
 				continue
 			}
-			children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: elemDisplayName(ce)})
+			children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: vc.displayName(ce)})
 		}
 	}
 	return children
@@ -1768,6 +1807,150 @@ func elemDisplayName(elem *helium.Element) string {
 	}
 	return elem.LocalName()
 }
+
+// displayName returns elemDisplayName(elem), interning the namespaced form per
+// expanded name for the run so an element name is formatted once, not once per
+// element or attribute.
+func (vc *validationContext) displayName(elem *helium.Element) string {
+	uri := elem.URI()
+	if uri == "" {
+		return elem.LocalName()
+	}
+	key := QName{Local: elem.LocalName(), NS: uri}
+	if name, ok := vc.displayNames[key]; ok {
+		return name
+	}
+	if vc.displayNames == nil {
+		vc.displayNames = make(map[QName]string)
+	}
+	name := helium.ClarkName(uri, key.Local)
+	vc.displayNames[key] = name
+	return name
+}
+
+// silentContext returns the run's sub-context that validates a value without
+// reporting diagnostics (a NilErrorHandler), for callers that report the
+// failure themselves. It shares the run's simpleTypeInfo memo. The sub-context
+// is created once per run; allowXSD10LegacyGMonthInstance is copied from vc on
+// every call because list and union validation change it on the context they
+// run with.
+func (vc *validationContext) silentContext() *validationContext {
+	if vc.silent == nil {
+		vc.silent = &validationContext{
+			schema:       vc.schema,
+			version:      vc.version,
+			errorHandler: helium.NilErrorHandler{},
+			typeInfo:     vc.typeInfo,
+		}
+	}
+	vc.silent.allowXSD10LegacyGMonthInstance = vc.allowXSD10LegacyGMonthInstance
+	return vc.silent
+}
+
+// valueConsultsNS reports whether validating a value of td can read the
+// in-scope namespace map, from the run's simpleTypeInfo memo when vc has one.
+func (vc *validationContext) valueConsultsNS(td *TypeDef) bool {
+	if info := vc.simpleTypeInfo(td); info != nil {
+		return info.consultsNS
+	}
+	return typeConsultsNS(td, vc.version)
+}
+
+// elemNSContext builds an element's in-scope namespace map (collectNSContext)
+// on first use and keeps it for the rest of one validateAttributes or
+// validateSimpleContent call, so the map is built at most once per element and
+// only when a value's type reads it. It is never kept across elements, and
+// validateAttributes reads it only in its present-attribute loop, which changes
+// no namespace declaration: the XSD 1.1 default-attribute namespace fixup runs
+// after that loop.
+type elemNSContext struct {
+	elem  *helium.Element
+	m     map[string]string
+	built bool
+}
+
+func (h *elemNSContext) get() map[string]string {
+	if !h.built {
+		h.m = collectNSContext(h.elem)
+		h.built = true
+	}
+	return h.m
+}
+
+// forType returns the in-scope namespace map when validating or comparing a
+// value of td can read it, and nil otherwise. A nil td (an untyped value,
+// compared as a raw string) never reads it.
+func (h *elemNSContext) forType(vc *validationContext, td *TypeDef) map[string]string {
+	if td == nil || !vc.valueConsultsNS(td) {
+		return nil
+	}
+	return h.get()
+}
+
+// attrUseIndex is validateAttributes' lookup table for one complex type's
+// {attribute uses}. It depends only on td.Attributes, which the compiled schema
+// never changes, so it is built once per type per run (attrUseIndexFor). The
+// zero value is the index of a type that declares no attribute uses.
+type attrUseIndex struct {
+	// byName maps every QName declared in td.Attributes to its entry.
+	byName map[QName]attrUseEntry
+	// slots[i] is the present-set slot of td.Attributes[i]'s QName.
+	slots []int
+	// nslots is the number of distinct declared QNames.
+	nslots int
+}
+
+// attrUseEntry is the resolved attribute use for one declared QName. use is the
+// last non-prohibited use of the QName, or nil when every use of it is
+// prohibited; prohibited is true only in that second case, since a
+// non-prohibited use of the same QName always wins over a prohibition.
+type attrUseEntry struct {
+	use        *AttrUse
+	prohibited bool
+	slot       int
+}
+
+// attrUseIndexFor returns td's attrUseIndex, building it on first use in the
+// run. A type with no attribute uses (xs:anyType, a wildcard-only type) gets the
+// zero index without touching the memo.
+func (vc *validationContext) attrUseIndexFor(td *TypeDef) attrUseIndex {
+	if len(td.Attributes) == 0 {
+		return attrUseIndex{}
+	}
+	if idx, ok := vc.attrIndex[td]; ok {
+		return idx
+	}
+	idx := attrUseIndex{
+		byName: make(map[QName]attrUseEntry, len(td.Attributes)),
+		slots:  make([]int, len(td.Attributes)),
+	}
+	for i, au := range td.Attributes {
+		ent, seen := idx.byName[au.Name]
+		if !seen {
+			ent.slot = idx.nslots
+			idx.nslots++
+		}
+		idx.slots[i] = ent.slot
+		switch {
+		case !au.Prohibited:
+			ent.use = au
+			ent.prohibited = false
+		case ent.use == nil:
+			ent.prohibited = true
+		}
+		idx.byName[au.Name] = ent
+	}
+	if vc.attrIndex == nil {
+		vc.attrIndex = make(map[*TypeDef]attrUseIndex)
+	}
+	vc.attrIndex[td] = idx
+	return idx
+}
+
+// attrPresentInline is the number of declared attribute QNames whose present
+// flags validateAttributes keeps in a stack array; a type declaring more uses a
+// heap slice.
+const attrPresentInline = 32
 
 func attrDisplayName(a *helium.Attribute) string {
 	uri := a.URI()
@@ -1958,13 +2141,13 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 	if len(td.Attributes) == 0 && td.AnyAttribute == nil {
 		// No attribute declarations — check that instance has no attributes
 		// (except xsi: namespace attributes and xmlns which are always allowed).
-		for _, a := range elem.Attributes() {
+		for a := range helium.Attributes(elem) {
 			if vc.isSpecialAttr(a) {
 				continue
 			}
 			ad := attrDisplayName(a)
 			msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
-			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 			hasErr = true
 		}
 		if hasErr {
@@ -1973,35 +2156,31 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		return nil
 	}
 
-	// Build set of allowed attributes. A prohibited attribute use does not
+	// Resolve the declared attribute uses. A prohibited attribute use does not
 	// contribute an allowed attribute; instead its QName is recorded so an
 	// instance attribute carrying it is rejected before wildcard matching. A
 	// non-prohibited use of the same QName always wins (it removes any
 	// prohibition recorded for that QName).
-	allowed := make(map[QName]*AttrUse, len(td.Attributes))
-	var prohibited map[QName]struct{}
-	for _, au := range td.Attributes {
-		if au.Prohibited {
-			if _, ok := allowed[au.Name]; ok {
-				continue
-			}
-			if prohibited == nil {
-				prohibited = make(map[QName]struct{})
-			}
-			prohibited[au.Name] = struct{}{}
-			continue
-		}
-		allowed[au.Name] = au
-		delete(prohibited, au.Name)
+	idx := vc.attrUseIndexFor(td)
+
+	// present flags each declared QName carried by a (non-special) instance
+	// attribute, by slot, for the required-check and default-insertion loops.
+	// Both look up declared names only, so an undeclared attribute needs no flag.
+	var presentInline [attrPresentInline]bool
+	var present []bool
+	if idx.nslots <= attrPresentInline {
+		present = presentInline[:idx.nslots]
+	} else {
+		present = make([]bool, idx.nslots)
 	}
 
-	// Build set of present instance attributes (excluding special attrs)
-	// for O(1) lookups in the required-check and default-insertion loops.
-	present := make(map[QName]struct{}, len(elem.Attributes()))
+	// The element's in-scope namespaces, built only if a value check reads them.
+	nsc := elemNSContext{elem: elem}
 
 	// Check for unknown attributes and fixed value constraints.
-	for _, a := range elem.Attributes() {
+	for a := range helium.Attributes(elem) {
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
+		decl, declared := idx.byName[aqn]
 		// True for a present, non-prohibited DECLARED xsi: processor-attribute use
 		// whose value was already validated by validateDeclaredXsiAttrValue below —
 		// so the generic type-based value check is skipped (no double validation);
@@ -2019,9 +2198,8 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// (and xmlns) attributes remain unconditionally special. A prohibited
 			// use is excluded from `allowed`, so the declaration is detected via
 			// both maps. 1.0 keeps the historical skip (byte-identical).
-			_, allowedXSI := allowed[aqn]
-			_, prohibitedXSI := prohibited[aqn]
-			declaredUse := allowedXSI || prohibitedXSI
+			allowedXSI := decl.use != nil
+			declaredUse := allowedXSI || decl.prohibited
 			// XSD 1.1: only the four real xsi: processor attributes participate; a
 			// declared ref to any other xsi: local name (e.g. xsi:foo) is not
 			// specially accepted — it stays skipped as special, so a required use of
@@ -2050,15 +2228,17 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 				if err := vc.validateDeclaredXsiAttrValue(a, elem); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
-					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 					hasErr = true
 					continue
 				}
 				declaredXsiValueChecked = true
 			}
 		}
-		present[aqn] = struct{}{}
-		if au, ok := allowed[aqn]; ok {
+		if declared {
+			present[decl.slot] = true
+		}
+		if au := decl.use; au != nil {
 			// Resolve the declared type up front so the fixed-value check can
 			// compare in the type's value space (applying its whitespace
 			// facet), and never by raw string equality.
@@ -2073,12 +2253,12 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 				case isDeclaredXsiSchemaLocationUse(au, vc.version):
 					fixedMatches = xsiSchemaLocationValueEqual(a.Value(), *au.Fixed)
 				default:
-					fixedMatches = fixedValueMatchesForInstance(ctx, a.Value(), *au.Fixed, attrTD, collectNSContext(elem), au.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance)
+					fixedMatches = fixedValueMatchesForInstance(ctx, a.Value(), *au.Fixed, attrTD, nsc.forType(vc, attrTD), au.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance)
 				}
 				if !fixedMatches {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *au.Fixed)
-					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 					hasErr = true
 				}
 			}
@@ -2088,10 +2268,10 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// type is associated only for the fixed-value comparison just done), so
 			// skip the generic check to avoid validating the same value twice.
 			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
-				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance, typeInfo: vc.typeInfo}); err != nil {
+				if err := validateValue(ctx, a.Value(), nsc.forType(vc, attrTD), attrTD, vc.displayName(elem), vc.filename, elem.Line(), vc.silentContext()); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
-					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 					hasErr = true
 				}
 			}
@@ -2111,40 +2291,40 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		// {attribute uses}, so the attribute matches no use and falls through to the
 		// {attribute wildcard} (or the not-allowed report below when there is none),
 		// per cvc-complex-type.3 (W3C addB034/addB136/attZ002).
-		if _, prohib := prohibited[aqn]; prohib && vc.version == Version11 {
+		if decl.prohibited && vc.version == Version11 {
 			ad := attrDisplayName(a)
 			msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
-			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 			hasErr = true
 			continue
 		}
 		// Not in explicit declarations — check anyAttribute wildcard.
 		if td.AnyAttribute != nil && wildcardAllowsExpandedName(td.AnyAttribute, a.LocalName(), a.URI(), vc.schema, true) {
-			if err := vc.validateWildcardAttr(ctx, a, elem, td.AnyAttribute); err != nil {
+			if err := vc.validateWildcardAttr(ctx, a, elem, td.AnyAttribute, &nsc); err != nil {
 				hasErr = true
 			}
 			continue
 		}
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The attribute '%s' is not allowed.", ad)
-		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 		hasErr = true
 	}
 
 	// Check for required attributes.
-	for _, au := range td.Attributes {
+	for i, au := range td.Attributes {
 		if !au.Required {
 			continue
 		}
-		if _, ok := present[au.Name]; !ok {
+		if !present[idx.slots[i]] {
 			msg := fmt.Sprintf("The attribute '%s' is required but missing.", au.Name.Local)
-			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), vc.displayName(elem), msg)
 			hasErr = true
 		}
 	}
 
 	// Insert default/fixed attribute values for absent optional attributes.
-	for _, au := range td.Attributes {
+	for i, au := range td.Attributes {
 		if au.Required {
 			continue
 		}
@@ -2162,7 +2342,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		} else {
 			continue
 		}
-		if _, ok := present[au.Name]; ok {
+		if present[idx.slots[i]] {
 			continue
 		}
 		// XSD 1.1: a QName/NOTATION default/fixed value was authored in the schema, so
@@ -2205,7 +2385,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 		// Annotate the newly inserted attribute and, for XSD 1.1, record it as
 		// inheritable when its use is — a defaulted/fixed attribute is part of the
 		// inherited-attribute set just like an explicitly-present one.
-		for _, a := range elem.Attributes() {
+		for a := range helium.Attributes(elem) {
 			if a.LocalName() == au.Name.Local && a.URI() == au.Name.NS {
 				vc.annotateAttrUse(ctx, a, au)
 				if vc.version == Version11 && au.Inheritable {
@@ -2467,7 +2647,8 @@ func smallestPrefixFor(m map[string]string, uri string) string {
 
 // validateWildcardAttr validates an attribute matched by a wildcard according
 // to its processContents setting (strict, lax, or skip).
-func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium.Attribute, elem *helium.Element, wc *Wildcard) error {
+// nsc is the calling validateAttributes' namespace holder for elem.
+func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium.Attribute, elem *helium.Element, wc *Wildcard, nsc *elemNSContext) error {
 	if wc.ProcessContents == ProcessSkip {
 		return nil
 	}
@@ -2480,7 +2661,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 		if wc.ProcessContents == ProcessStrict {
 			ad := attrDisplayName(a)
 			msg := "No matching global attribute declaration available, but demanded by the strict wildcard."
-			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 			return fmt.Errorf("strict wildcard: no global attr")
 		}
 		// Lax: no global declaration found — skip validation.
@@ -2511,20 +2692,20 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
 	// global fixed attribute must still satisfy its fixed value, in the declared
 	// type's value space (mirroring the non-wildcard attribute path).
-	if globalAttr.Fixed != nil && !fixedValueMatchesForInstance(ctx, a.Value(), *globalAttr.Fixed, attrTD, collectNSContext(elem), globalAttr.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
+	if globalAttr.Fixed != nil && !fixedValueMatchesForInstance(ctx, a.Value(), *globalAttr.Fixed, attrTD, nsc.forType(vc, attrTD), globalAttr.FixedNS, vc.schema, vc.version, vc.allowXSD10LegacyGMonthInstance) {
 		ad := attrDisplayName(a)
 		msg := fmt.Sprintf("The value '%s' does not match the fixed value constraint '%s'.", a.Value(), *globalAttr.Fixed)
-		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+		vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 		return fmt.Errorf("fixed value constraint")
 	}
 
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance, typeInfo: vc.typeInfo}); err != nil {
+		if err := validateValue(ctx, value, nsc.forType(vc, attrTD), attrTD, vc.displayName(elem), vc.filename, elem.Line(), vc.silentContext()); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
 			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)
-			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
+			vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), vc.displayName(elem), ad, msg)
 			return err
 		}
 	}
@@ -2851,7 +3032,7 @@ func elemTextContent(elem *helium.Element) string {
 // validateNilledElement, which reports the same non-nillable error.) An
 // undeclared element (edecl nil) imposes no nillable constraint.
 func (vc *validationContext) checkXsiNil(ctx context.Context, elem *helium.Element, edecl *ElementDecl) (bool, error) {
-	for _, a := range elem.Attributes() {
+	for a := range helium.Attributes(elem) {
 		if a.URI() != lexicon.NamespaceXSI || a.LocalName() != attrNil {
 			continue
 		}
@@ -2975,7 +3156,7 @@ func isDerivedFrom(derived, base *TypeDef) bool {
 func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.Element, declaredType *TypeDef, ctaActive bool) (*TypeDef, error) {
 	var xsiTypeVal string
 	var present bool
-	for _, a := range elem.Attributes() {
+	for a := range helium.Attributes(elem) {
 		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrType {
 			xsiTypeVal = a.Value()
 			present = true
@@ -3051,7 +3232,7 @@ func (vc *validationContext) resolveXsiType(ctx context.Context, elem *helium.El
 // (type, true) only when the xsi:type value resolves to a known type.
 func (vc *validationContext) resolveXsiTypeQuiet(elem *helium.Element) (*TypeDef, bool) {
 	var xsiTypeVal string
-	for _, a := range elem.Attributes() {
+	for a := range helium.Attributes(elem) {
 		if a.URI() == lexicon.NamespaceXSI && a.LocalName() == attrType {
 			xsiTypeVal = a.Value()
 			break

@@ -126,7 +126,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		// Attributes typed as ID/IDREF (including via list/union). An attribute ID
 		// is owned by its bearing element.
 		idAttrCount := 0
-		for _, a := range elem.Attributes() {
+		for a := range helium.Attributes(elem) {
 			if vc.isSpecialAttr(a) {
 				// A DECLARED special-attribute use that was genuinely assessed in pass 1
 				// still participates in the document-wide ID/IDREF pass — an attribute ID
@@ -241,7 +241,7 @@ func (vc *validationContext) collectIDNodes(ctx context.Context, doc *helium.Doc
 
 		// Attributes typed as ID (directly, or as a singleton list / selected
 		// union member).
-		for _, a := range elem.Attributes() {
+		for a := range helium.Attributes(elem) {
 			if vc.isSpecialAttr(a) {
 				if _, assessed := vc.assessedAttrs[a]; !assessed {
 					continue
@@ -445,7 +445,7 @@ func (vc *validationContext) attrTypeForID(a *helium.Attribute) *TypeDef {
 // and is treated here as not-nilled). A nilled element has no element value, so
 // the ID/IDREF pass must not substitute its default/fixed as element content.
 func isXsiNilTrue(elem *helium.Element) bool {
-	for _, a := range elem.Attributes() {
+	for a := range helium.Attributes(elem) {
 		if a.URI() != lexicon.NamespaceXSI || a.LocalName() != attrNil {
 			continue
 		}
