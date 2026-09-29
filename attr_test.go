@@ -831,6 +831,23 @@ func TestAttributeValueExpandsEntityReferences(t *testing.T) {
 		}
 	})
 
+	// DTD validation compares the expanded value against a #FIXED default and
+	// an enumeration.
+	t.Run("DTD validation", func(t *testing.T) {
+		t.Parallel()
+		const dtd = `<!DOCTYPE r [` +
+			`<!ENTITY e "x">` +
+			`<!ELEMENT r EMPTY>` +
+			`<!ATTLIST r f CDATA #FIXED "1x2" k (1x2|other) #IMPLIED>` +
+			`]>`
+		_, err := helium.NewParser().ValidateDTD(true).SubstituteEntities(false).
+			Parse(t.Context(), []byte(dtd+`<r f="1&e;2" k="1&e;2"/>`))
+		require.NoError(t, err)
+		_, err = helium.NewParser().ValidateDTD(true).SubstituteEntities(false).
+			Parse(t.Context(), []byte(dtd+`<r f="1&e;3"/>`))
+		require.Error(t, err)
+	})
+
 	// CopyDoc stores each attribute's Value as literal text, so the copy keeps
 	// the whole expanded value.
 	t.Run("CopyDoc", func(t *testing.T) {
