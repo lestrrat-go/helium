@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/stretchr/testify/require"
 )
 
@@ -537,4 +538,35 @@ func TestCompileCollapsedSeesMutation(t *testing.T) {
 	r, err = compiled.Evaluate(t.Context(), doc)
 	require.NoError(t, err)
 	require.Len(t, r.NodeSet, 2)
+}
+
+// TestCompileHandBuiltDTDElementSpill pins the one input on which the folded
+// `.//x` selects different nodes from the unfolded path: a DTD built with
+// DTD.AddChild to hold an element before an entity declaration, evaluated
+// from a reference to that entity. The descendant walk follows the Entity's
+// sibling links into the DTD and reaches the element, while the child axis
+// stops at the Entity. A parsed DTD never holds an element.
+func TestCompileHandBuiltDTDElementSpill(t *testing.T) {
+	doc := parseDifferentialDoc(t, `<a/>`)
+	dtd, err := doc.CreateInternalSubset("a", "", "")
+	require.NoError(t, err)
+	x, err := doc.CreateElement("x")
+	require.NoError(t, err)
+	require.NoError(t, dtd.AddChild(x))
+	_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "v")
+	require.NoError(t, err)
+	ref, err := doc.CreateReference("e")
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(ref))
+
+	ast, err := Parse(".//x")
+	require.NoError(t, err)
+	unfolded, err := (&Expression{source: ".//x", ast: ast}).Evaluate(t.Context(), ref)
+	require.NoError(t, err)
+	require.Empty(t, unfolded.NodeSet)
+
+	folded, err := MustCompile(".//x").Evaluate(t.Context(), ref)
+	require.NoError(t, err)
+	require.Len(t, folded.NodeSet, 1)
+	require.Same(t, x, folded.NodeSet[0])
 }

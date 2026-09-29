@@ -507,7 +507,9 @@ XPath 1.0 expression parsing and evaluation.
   `position()`, `last()`, variable, prefixed or non-builtin function, or numeric nested predicate anywhere inside. A
   `child::` step with a `node()`/`comment()`/`processing-instruction()`/`text()` test does not fold, because
   `collectDescendants` (internal/xpath) follows an entity reference context node's `Entity` child into the DTD's
-  sibling list while the child axis stops there. The folded path charges fewer ops against `OpLimit` and builds no
+  sibling list while the child axis stops there. A name test folds because a parsed DTD holds no elements; a DTD
+  given an element through `DTD.AddChild` ahead of the entity declaration makes the folded `.//x` from that entity
+  reference select the element (pinned by `TestCompileHandBuiltDTDElementSpill`). The folded path charges fewer ops against `OpLimit` and builds no
   intermediate node-set, so it can succeed where the unfolded path hits the op or node-set limit
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **NewEvaluator() → Evaluator** — create clone-on-write evaluation configuration
