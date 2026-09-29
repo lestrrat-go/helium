@@ -33,7 +33,7 @@ type validator struct {
 	// Without it the cascading retry is exponential in the number of flexible
 	// members. Keyed by the full input that determines the result; a hit
 	// reproduces the original call's effect byte-for-byte.
-	groupMemo map[groupMemoKey]*groupMemoEntry
+	groupMemo map[groupMemoKey]groupMemoEntry
 
 	// runSeq numbers the sibling arrays handed out by newRun.
 	runSeq int
@@ -62,13 +62,18 @@ type groupMemoKey struct {
 	n     int             // len(children) — sub-range length
 	elem  *helium.Element // owning element (content path); pins the element's attrs,
 	// which group content may consult even when the child sequence is empty
-	pos      helium.Node // first remaining node (nil when the input sequence is empty)
-	seqLen   int         // len(state.seq); with pos, fully identifies the sibling run
-	run      int         // identifies the sibling array state.seq is a suffix of
-	exact    bool        // v.exactChoice > 0
-	attrKey  string      // packed attrUsed bits ("" for the naive path)
-	suppress bool        // v.suppressDepth > 0 (governs whether errors are emitted)
-	content  bool        // element-content path vs naive path discriminator
+	pos    helium.Node // first remaining node (nil when the input sequence is empty)
+	seqLen int         // len(state.seq); with pos, fully identifies the sibling run
+	run    int         // identifies the sibling array state.seq is a suffix of
+	exact  bool        // v.exactChoice > 0
+	// attrUsed packed one bit per attribute when it has at most 64 entries
+	// (attrKey is then ""), else as a '0'/'1' string in attrKey (attrBits is
+	// then 0). The length needs no encoding: elem fixes it on the content path,
+	// and the naive path has no attributes.
+	attrBits uint64
+	attrKey  string
+	suppress bool // v.suppressDepth > 0 (governs whether errors are emitted)
+	content  bool // element-content path vs naive path discriminator
 }
 
 // groupMemoEntry records the full effect of a memoized group-validation call so a
@@ -103,8 +108,16 @@ func (v *validator) groupMemoLookupKey(children []*pattern, elem *helium.Element
 	if len(state.seq) > 0 {
 		pos = state.seq[0]
 	}
+	var attrBits uint64
 	var attrKey string
-	if len(attrUsed) > 0 {
+	switch {
+	case len(attrUsed) <= 64:
+		for i, used := range attrUsed {
+			if used {
+				attrBits |= 1 << uint(i)
+			}
+		}
+	default:
 		buf := make([]byte, len(attrUsed))
 		for i, used := range attrUsed {
 			if used {
@@ -123,6 +136,7 @@ func (v *validator) groupMemoLookupKey(children []*pattern, elem *helium.Element
 		seqLen:   len(state.seq),
 		run:      state.run,
 		exact:    v.exactChoice > 0,
+		attrBits: attrBits,
 		attrKey:  attrKey,
 		suppress: v.suppressDepth > 0,
 		content:  content,
@@ -186,8 +200,8 @@ type validState struct {
 	// seq is only ever re-sliced from the front (state.seq[1:] / skipIgnored)
 	// and never written through, so it is a suffix of one per-element base
 	// array. Every snapshot (a validState value copy, saveGroupBound,
-	// groupMemoEntry) shares that backing array instead of copying it. Do NOT add a write through this
-	// slice (state.seq[i] = ... or an append that grows in place) without
+	// groupMemoEntry) shares that backing array instead of copying it. Do NOT
+	// add a write through this slice (state.seq[i] = ... or an append that grows in place) without
 	// re-copying everywhere a snapshot is taken — doing so would silently
 	// corrupt every outstanding snapshot and memo entry.
 	seq []helium.Node // remaining siblings to validate
@@ -609,13 +623,34 @@ type groupBound struct {
 	valid    bool
 }
 
-func saveGroupBound(state *validState, attrUsed []bool, errLen int, valid bool) groupBound {
+// saveGroupBound snapshots the validation state at a group child boundary.
+// The attrUsed copy is carved from arena when arena is non-nil and has room
+// (see snapshotAttrUsed).
+func saveGroupBound(state *validState, attrUsed []bool, arena *[]bool, errLen int, valid bool) groupBound {
 	return groupBound{
 		state:    *state,
-		attrUsed: append([]bool(nil), attrUsed...),
+		attrUsed: snapshotAttrUsed(arena, attrUsed),
 		errLen:   errLen,
 		valid:    valid,
 	}
+}
+
+// snapshotAttrUsed returns a copy of attrUsed, or nil when it is empty. When
+// arena is non-nil and has spare capacity for the copy, the copy is appended
+// to arena and returned as a full-slice expression capped at its own length,
+// so a later snapshot carved from the same arena can never overlap it.
+// Otherwise the copy gets its own allocation.
+func snapshotAttrUsed(arena *[]bool, attrUsed []bool) []bool {
+	if len(attrUsed) == 0 {
+		return nil
+	}
+	if arena == nil || cap(*arena)-len(*arena) < len(attrUsed) {
+		return append([]bool(nil), attrUsed...)
+	}
+	start := len(*arena)
+	*arena = append(*arena, attrUsed...)
+	end := len(*arena)
+	return (*arena)[start:end:end]
 }
 
 func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
@@ -651,9 +686,9 @@ func (v *validator) validateGroupChildren(children []*pattern, elem *helium.Elem
 	result := v.validateGroupChildrenUncached(children, elem, attrs, attrUsed, state)
 	if ok {
 		if v.groupMemo == nil {
-			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+			v.groupMemo = make(map[groupMemoKey]groupMemoEntry)
 		}
-		v.groupMemo[key] = &groupMemoEntry{
+		v.groupMemo[key] = groupMemoEntry{
 			result:   result,
 			seq:      state.seq,
 			attrUsed: append([]bool(nil), attrUsed...),
@@ -669,9 +704,20 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 		return 0
 	}
 
-	// Save state before each child for backtracking.
-	bounds := make([]groupBound, 1, len(children)+1)
-	bounds[0] = saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid)
+	// Save state before each child for backtracking. Each child appends at
+	// most one bound, so len(children)+1 is the final length: a group of up to
+	// seven children keeps its bounds on the stack.
+	var boundsBuf [8]groupBound
+	bounds := boundsBuf[:0]
+	if len(children)+1 > len(boundsBuf) {
+		bounds = make([]groupBound, 0, len(children)+1)
+	}
+	// One backing array holds every bound's attrUsed snapshot.
+	var attrArena []bool
+	if len(attrUsed) > 0 {
+		attrArena = make([]bool, 0, (len(children)+1)*len(attrUsed))
+	}
+	bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 
 	groupFailed := false
 	for gi, child := range children {
@@ -695,13 +741,13 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 				// Element consumed but content failed — continue to collect
 				// errors from remaining group children (like libxml2 does)
 				groupFailed = true
-				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 				continue
 			}
 
 			// No element consumed — try backtracking.
 			if gi > 0 && v.backtrackGroupFlexible(children, gi, elem, attrs, attrUsed, state, bounds) {
-				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 				continue
 			}
 
@@ -725,7 +771,7 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 			return -1
 		}
 
-		bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
+		bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 	}
 	if groupFailed {
 		return -1
@@ -842,7 +888,7 @@ func (v *validator) advanceFlexibleContent(content *pattern, elem *helium.Elemen
 			return groupBound{}, false
 		}
 	}
-	return saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid), true
+	return saveGroupBound(state, attrUsed, nil, len(v.pendingErrors), v.valid), true
 }
 
 // advanceFlexibleNaive is advanceFlexibleContent for the naive group path, which
@@ -858,7 +904,7 @@ func (v *validator) advanceFlexibleNaive(content *pattern, state *validState, fr
 			return groupBound{}, false
 		}
 	}
-	return saveGroupBound(state, nil, len(v.pendingErrors), v.valid), true
+	return saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid), true
 }
 
 // isKnownChildElement checks if an element name/ns appears as a child element
@@ -1367,9 +1413,9 @@ func (v *validator) validateGroupSeq(children []*pattern, state *validState) int
 	result := v.validateGroupSeqUncached(children, state)
 	if ok {
 		if v.groupMemo == nil {
-			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+			v.groupMemo = make(map[groupMemoKey]groupMemoEntry)
 		}
-		v.groupMemo[key] = &groupMemoEntry{
+		v.groupMemo[key] = groupMemoEntry{
 			result: result,
 			seq:    state.seq,
 			errs:   append([]error(nil), v.pendingErrors[errBase:]...),
@@ -1387,18 +1433,22 @@ func (v *validator) validateGroupSeqUncached(children []*pattern, state *validSt
 	// fails can ask a previous flexible member (zeroOrMore/oneOrMore/optional)
 	// to yield items back. This mirrors validateGroupContent's backtracking,
 	// minus the attribute/element-content bookkeeping that path threads.
-	bounds := make([]groupBound, 1, len(children)+1)
-	bounds[0] = saveGroupBound(state, nil, len(v.pendingErrors), v.valid)
+	var boundsBuf [8]groupBound
+	bounds := boundsBuf[:0]
+	if len(children)+1 > len(boundsBuf) {
+		bounds = make([]groupBound, 0, len(children)+1)
+	}
+	bounds = append(bounds, saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid))
 
 	for gi, child := range children {
 		if ret := v.validatePattern(child, state); ret != 0 {
 			if gi > 0 && v.backtrackGroupNaive(children, gi, state, bounds) {
-				bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid))
 				continue
 			}
 			return -1
 		}
-		bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
+		bounds = append(bounds, saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid))
 	}
 	return 0
 }
