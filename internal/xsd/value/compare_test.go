@@ -122,3 +122,22 @@ func FuzzCompareDecimal(f *testing.F) {
 		require.Equal(t, ratCompareDecimal(a, b), value.CompareDecimal(a, b), "CompareDecimal(%q, %q)", a, b)
 	})
 }
+
+func BenchmarkCompareDecimal(b *testing.B) {
+	pairs := []struct {
+		name, a, b string
+	}{
+		{"integers", "12345", "99999"},
+		{"fractions", "-0.0012500", "-0.00125"},
+		{"long", "123456789012345678901234567890.5", "123456789012345678901234567890.25"},
+		{"exponent", "1.5e3", "1500"},
+	}
+	for _, p := range pairs {
+		b.Run(p.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				value.CompareDecimal(p.a, p.b)
+			}
+		})
+	}
+}
