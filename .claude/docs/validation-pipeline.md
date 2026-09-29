@@ -1228,9 +1228,13 @@ local-simpleType-name rules are separate checks, not this grammar.
 
 ### Validate: Document + Schema → Errors
 
-**Three-pass validation** (pass 3 runs only in XSD 1.1 mode):
+**Three-pass validation** (pass 3 is skipped under `SkipDatatypeIntegrityChecks`; its xs:ENTITY half runs only in
+XSD 1.1 mode). `validateDocument` first counts the instance's elements and attributes (`countPSVINodes`, a bounded
+pointer walk that allocates nothing) and pre-sizes the per-run PSVI maps (`actualElemType`, `assessedElemType`,
+`actualElemDecl`, `actualAttrType`, `assessedAttrs`, and under 1.1 `attrInheritable`) from those counts.
 
-**Pass 1 — Content Model** (`validateDocument` via `helium.Walk()`):
+**Pass 1 — Content Model** (`validateDocument` over `helium.ChildElements(doc)`): each document-level element goes
+to `validateRootElement`, whose content validation recurses through the whole subtree, in document order.
 - For each element:
   1. Match against global element declaration
   2. Resolve `xsi:type` against block flags
@@ -1493,7 +1497,8 @@ is reported as a validity error (`Failed to evaluate identity-constraint '…'`)
 field-XPath diagnostic uses `lexer.DiagnosticExcerpt`, including compile/evaluate failures, non-simple nodes,
 and multi-member node sets, so a valid long expression cannot make validation output grow with its source.
 
-**Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
+**Pass 2 — Identity Constraints** (`validateIDConstraints` via a full-tree `helium.Walk()`). This walk always runs,
+so it is also the pass that reports a tree cycle: `ErrWalkCycle` marks the document invalid.
 - **Host declaration resolution** (`idcHostDecl`): the declaration whose IDCs apply
   to an element instance is the non-ref declaration recorded during pass-1 if one is
   present — used even when it carries ZERO IDCs, because a local element that merely
@@ -1698,8 +1703,8 @@ an empty-but-present `name=""`/`refer=""` is still rejected (consistent with the
 ref-form detection); and `refer` is rejected for EVERY kind (key/unique/keyref),
 not only on `xs:keyref`.
 
-**Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, XSD 1.1 only):
-a third `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
+**Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, both XSD versions):
+a separate `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
 be unique, **except** that the same value may identify a single element more than
 once. An ID's owning element is the element BEARING it — an attribute ID on its
 owning element, an element-content ID on its **parent** (`idOwner`) — so two ID

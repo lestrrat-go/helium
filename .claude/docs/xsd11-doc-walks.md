@@ -4,8 +4,8 @@
 > 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, src-*) and W3C test IDs identify the
 > governing rule and its conformance evidence. See `xsd11.md` for the index and version-resolution framing.
 
-- **document-wide xs:ID/xs:IDREF/xs:IDREFS validation** (`validate_id.go`): a third validation walk, run in BOTH XSD 1.0
-  and 1.1 (cvc-id is version-INDEPENDENT), enforcing ID uniqueness and IDREF referential integrity.
+- **document-wide xs:ID/xs:IDREF/xs:IDREFS validation** (`validate_id.go`): a separate validation walk, run in BOTH XSD
+  1.0 and 1.1 (cvc-id is version-INDEPENDENT), enforcing ID uniqueness and IDREF referential integrity.
   - Ownership: an attribute ID belongs to its element, an element-content ID to its PARENT. On the DOCUMENT
     ROOT an element-content ID has no parent, denoting NO element — `idOwner` nil, `recordID` skips it, the
     value never enters the table, any xs:IDREF to it dangles (W3C idIDREF s3_3_4ii26/ii27).
@@ -62,7 +62,7 @@
     atop the real strict error).
 
 - **document-wide xs:ENTITY/xs:ENTITIES value-space validation** (`validate_entity.go`): `validateEntities`, a
-  fourth validation walk gated to 1.1, called from `validate.go` right after `validateIDIDREF`, enforces
+  validation walk gated to 1.1, called from `validate.go` right after `validateIDIDREF`, enforces
   cvc-id/§3.3.11 — every xs:ENTITY token MUST name an external general UNPARSED entity declared in the
   instance's DTD (`doc.GetEntity(tok)` found && `EntityType()==enum.ExternalGeneralUnparsedEntity`). It
   mirrors `validateIDIDREF`'s structure (`entityFamilyType` like `idFamilyType`; `checkEntityValue` clones
