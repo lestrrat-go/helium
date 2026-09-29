@@ -2008,7 +2008,7 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 		schema: &Schema{
 			version:     c.version,
 			elements:    make(map[QName]*ElementDecl),
-			types:       make(map[QName]*TypeDef),
+			types:       make(map[QName]*TypeDef, typesMapSizeHint),
 			groups:      make(map[QName]*ModelGroup),
 			attrGroups:  make(map[QName][]*AttrUse),
 			globalAttrs: make(map[QName]*AttrUse),

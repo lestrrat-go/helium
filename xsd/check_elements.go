@@ -15,12 +15,7 @@ import (
 // local name (e.g. other:fixed) is not matched, since XSD schema attributes
 // (name/type/fixed/default/minOccurs/...) are always unqualified.
 func hasAttr(elem *helium.Element, name string) bool {
-	for _, a := range elem.Attributes() {
-		if a.LocalName() == name && a.URI() == "" {
-			return true
-		}
-	}
-	return false
+	return elem.GetAttributeNodeNS(name, "") != nil
 }
 
 // qnameCompanionUsable reports whether a QName-valued schema attribute (attr, e.g.
