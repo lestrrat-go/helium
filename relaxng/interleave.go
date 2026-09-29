@@ -358,16 +358,17 @@ func (v *validator) validateInterleave(pat *pattern, state *validState) int {
 // flexible members, not choices.
 func (v *validator) validateChoiceContentExact(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) (int, bool) {
-	savedState := state.clone()
+	savedState := *state
 	savedAttrUsed := append([]bool(nil), attrUsed...)
 	savedLen := len(v.pendingErrors)
 	savedValid := v.valid
-	var bestState *validState
+	var bestState validState
 	var bestAttrUsed []bool
+	haveBest := false
 	bestRemaining := -1
 	v.suppressDepth++
 	for _, child := range pat.children {
-		*state = *savedState
+		*state = savedState
 		copy(attrUsed, savedAttrUsed)
 		v.pendingErrors = v.pendingErrors[:savedLen]
 		v.valid = savedValid
@@ -379,21 +380,22 @@ func (v *validator) validateChoiceContentExact(pat *pattern, elem *helium.Elemen
 			continue
 		}
 		bestRemaining = remaining
-		bestState = state.clone()
+		bestState = *state
 		bestAttrUsed = append([]bool(nil), attrUsed...)
+		haveBest = true
 		if remaining == 0 {
 			break
 		}
 	}
 	v.suppressDepth--
-	*state = *savedState
+	*state = savedState
 	copy(attrUsed, savedAttrUsed)
 	v.pendingErrors = v.pendingErrors[:savedLen]
 	v.valid = savedValid
-	if bestState == nil {
+	if !haveBest {
 		return -1, false
 	}
-	*state = *bestState
+	*state = bestState
 	copy(attrUsed, bestAttrUsed)
 	return 0, true
 }

@@ -185,8 +185,8 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 type validState struct {
 	// seq is only ever re-sliced from the front (state.seq[1:] / skipIgnored)
 	// and never written through, so it is a suffix of one per-element base
-	// array. Every snapshot below (clone, saveGroupBound, groupMemoEntry) shares
-	// that backing array instead of copying it. Do NOT add a write through this
+	// array. Every snapshot (a validState value copy, saveGroupBound,
+	// groupMemoEntry) shares that backing array instead of copying it. Do NOT add a write through this
 	// slice (state.seq[i] = ... or an append that grows in place) without
 	// re-copying everywhere a snapshot is taken — doing so would silently
 	// corrupt every outstanding snapshot and memo entry.
@@ -194,13 +194,6 @@ type validState struct {
 	// run identifies the array seq is a suffix of; each element content and each
 	// interleave branch sub-sequence gets its own (see validator.newRun).
 	run int
-}
-
-func (s *validState) clone() *validState {
-	// state.seq is only ever re-sliced from the front (state.seq[1:] /
-	// skipIgnored) and never written through, so a snapshot can share the
-	// backing array instead of copying it.
-	return &validState{seq: s.seq, run: s.run}
 }
 
 // validatePattern validates a pattern against the current state.
@@ -456,7 +449,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		lastBranchLen := savedLen
 		lastBranchValid := savedValid
 		for _, child := range pat.children {
-			savedState := state.clone()
+			savedState := *state
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
 
@@ -474,12 +467,12 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				}
 				// Succeeded but no progress — remember and try others.
 				noProgressMatch = true
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 			} else {
 				lastBranchLen = len(v.pendingErrors)
 				lastBranchValid = v.valid
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 			}
 		}
@@ -505,7 +498,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		return -1
 
 	case patternOptional:
-		savedState := state.clone()
+		savedState := *state
 		savedAttrUsed := make([]bool, len(attrUsed))
 		copy(savedAttrUsed, attrUsed)
 		savedLen := len(v.pendingErrors)
@@ -515,7 +508,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
 		v.suppressDepth--
 		if ret != 0 {
-			*state = *savedState
+			*state = savedState
 			copy(attrUsed, savedAttrUsed)
 			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
@@ -525,7 +518,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 	case patternZeroOrMore:
 		content := wrapChildren(pat.children)
 		for {
-			savedState := state.clone()
+			savedState := *state
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
 			savedLen := len(v.pendingErrors)
@@ -539,7 +532,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 					// Hard failure — propagate errors.
 					return -1
 				}
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 				v.pendingErrors = v.pendingErrors[:savedLen]
 				v.valid = savedValid
@@ -559,7 +552,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		}
 		// Then zero or more
 		for {
-			savedState := state.clone()
+			savedState := *state
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
 			savedLen := len(v.pendingErrors)
@@ -571,7 +564,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				if len(v.pendingErrors) > savedLen {
 					return -1
 				}
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 				v.pendingErrors = v.pendingErrors[:savedLen]
 				v.valid = savedValid
@@ -610,7 +603,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 
 // groupBound records state at a group child boundary for backtracking.
 type groupBound struct {
-	state    *validState
+	state    validState
 	attrUsed []bool
 	errLen   int
 	valid    bool
@@ -618,7 +611,7 @@ type groupBound struct {
 
 func saveGroupBound(state *validState, attrUsed []bool, errLen int, valid bool) groupBound {
 	return groupBound{
-		state:    state.clone(),
+		state:    *state,
 		attrUsed: append([]bool(nil), attrUsed...),
 		errLen:   errLen,
 		valid:    valid,
@@ -626,7 +619,7 @@ func saveGroupBound(state *validState, attrUsed []bool, errLen int, valid bool) 
 }
 
 func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
-	*state = *b.state
+	*state = b.state
 	copy(attrUsed, b.attrUsed)
 	v.pendingErrors = v.pendingErrors[:b.errLen]
 	v.valid = b.valid
@@ -773,12 +766,13 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 		// Try progressively increasing iteration counts from minIter upward.
 		// Track the best (highest iter) success to maximize content consumption.
 		type btSuccess struct {
-			state    *validState
+			state    validState
 			attrUsed []bool
 			errLen   int
 			valid    bool
 		}
-		var best *btSuccess
+		var best btSuccess
+		haveBest := false
 
 		// Walk the iteration counts upward incrementally: cur is the boundary
 		// after the current count, and one more repetition advances it. Replaying
@@ -802,12 +796,13 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 			// later mandatory member needs.
 			allOK := v.validateGroupChildren(children[j+1:failIdx+1], elem, attrs, attrUsed, state) == 0
 			if allOK {
-				best = &btSuccess{
-					state:    state.clone(),
+				best = btSuccess{
+					state:    *state,
 					attrUsed: append([]bool(nil), attrUsed...),
 					errLen:   len(v.pendingErrors),
 					valid:    v.valid,
 				}
+				haveBest = true
 			}
 			// Restore errors from before retry so failed attempts don't leak errors.
 			v.pendingErrors = v.pendingErrors[:retryLen]
@@ -816,8 +811,8 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 			cur, curOK = v.advanceFlexibleContent(content, elem, attrs, attrUsed, state, cur, 1)
 		}
 
-		if best != nil {
-			*state = *best.state
+		if haveBest {
+			*state = best.state
 			copy(attrUsed, best.attrUsed)
 			v.pendingErrors = v.pendingErrors[:best.errLen]
 			v.valid = best.valid
@@ -1447,9 +1442,10 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 
 		content := wrapChildren(child.children)
 
-		var bestState *validState
+		var bestState validState
 		var bestErrLen int
 		var bestValid bool
+		haveBest := false
 
 		// Walk the iteration counts upward incrementally (see
 		// backtrackGroupFlexible): cur is the boundary after the current count.
@@ -1469,9 +1465,10 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 			// later mandatory member needs.
 			allOK := v.validateGroupSeq(children[j+1:failIdx+1], state) == 0
 			if allOK {
-				bestState = state.clone()
+				bestState = *state
 				bestErrLen = len(v.pendingErrors)
 				bestValid = v.valid
+				haveBest = true
 			}
 			v.pendingErrors = v.pendingErrors[:retryLen]
 			v.valid = retryValid
@@ -1479,8 +1476,8 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 			cur, curOK = v.advanceFlexibleNaive(content, state, cur, 1)
 		}
 
-		if bestState != nil {
-			*state = *bestState
+		if haveBest {
+			*state = bestState
 			v.pendingErrors = v.pendingErrors[:bestErrLen]
 			v.valid = bestValid
 			return true
@@ -1502,8 +1499,8 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	// consuming branch (mirrors the hardened validateContentPat choice case).
 	noProgressMatch := false
 	for _, child := range pat.children {
-		saved := state.clone()
-		if ret := v.validatePattern(child, saved); ret != 0 {
+		saved := *state
+		if ret := v.validatePattern(child, &saved); ret != 0 {
 			continue
 		}
 		if !seqEqual(saved.seq, state.seq) {
@@ -1511,7 +1508,7 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 			v.suppressDepth--
 			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
-			*state = *saved
+			*state = saved
 			return 0
 		}
 		// Succeeded but consumed nothing — remember and keep trying.
@@ -1533,10 +1530,10 @@ func (v *validator) validateOptional(pat *pattern, state *validState) int { //no
 		return 0
 	}
 
-	saved := state.clone()
+	saved := *state
 	content := wrapChildren(pat.children)
-	if ret := v.validatePattern(content, saved); ret == 0 {
-		*state = *saved
+	if ret := v.validatePattern(content, &saved); ret == 0 {
+		*state = saved
 	}
 	return 0
 }
@@ -1549,14 +1546,14 @@ func (v *validator) validateZeroOrMore(pat *pattern, state *validState) int { //
 	content := wrapChildren(pat.children)
 
 	for {
-		saved := state.clone()
-		if ret := v.validatePattern(content, saved); ret != 0 {
+		saved := *state
+		if ret := v.validatePattern(content, &saved); ret != 0 {
 			break
 		}
 		if len(saved.seq) >= len(state.seq) && seqEqual(saved.seq, state.seq) {
 			break
 		}
-		*state = *saved
+		*state = saved
 	}
 	return 0
 }
@@ -1575,14 +1572,14 @@ func (v *validator) validateOneOrMore(pat *pattern, state *validState) int {
 
 	// Then zero or more
 	for {
-		saved := state.clone()
-		if ret := v.validatePattern(content, saved); ret != 0 {
+		saved := *state
+		if ret := v.validatePattern(content, &saved); ret != 0 {
 			break
 		}
 		if len(saved.seq) >= len(state.seq) && seqEqual(saved.seq, state.seq) {
 			break
 		}
-		*state = *saved
+		*state = saved
 	}
 	return 0
 }
