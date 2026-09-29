@@ -1354,7 +1354,11 @@ func (c *compiler) parseChildren(ctx context.Context, parent *helium.Element) *p
 
 // parsePatternChildren parses all RNG pattern children of an element.
 func (c *compiler) parsePatternChildren(ctx context.Context, parent *helium.Element) []*pattern {
-	var result []*pattern
+	n := countRNGChildElements(parent)
+	if n == 0 {
+		return nil
+	}
+	result := make([]*pattern, 0, n)
 	for child := range helium.Children(parent) {
 		elem, ok := child.(*helium.Element)
 		if !ok {
@@ -1368,7 +1372,26 @@ func (c *compiler) parsePatternChildren(ctx context.Context, parent *helium.Elem
 			result = append(result, pat)
 		}
 	}
+	if len(result) == 0 {
+		return nil
+	}
 	return result
+}
+
+// countRNGChildElements returns the number of RELAX NG element children of
+// parent, so parsePatternChildren can size its result in one allocation.
+func countRNGChildElements(parent *helium.Element) int {
+	n := 0
+	for child := range helium.Children(parent) {
+		elem, ok := child.(*helium.Element)
+		if !ok {
+			continue
+		}
+		if isRNGElement(elem) {
+			n++
+		}
+	}
+	return n
 }
 
 // Helper functions
@@ -1426,8 +1449,8 @@ func trimXMLSpace(s string) string {
 // simplification (spec §§4.1, 4.3), so they must never satisfy a structural
 // attribute read.
 func getUnqualifiedAttr(elem *helium.Element, name string) string {
-	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
-	if !ok {
+	attr := elem.GetAttributeNodeNS(name, "")
+	if attr == nil {
 		return ""
 	}
 	return trimXMLSpace(attr.Value())
@@ -1439,8 +1462,8 @@ func getUnqualifiedAttr(elem *helium.Element, name string) string {
 // form is used where an explicit empty value differs from absence (e.g.
 // datatypeLibrary reset, explicit ns="").
 func getUnqualifiedAttrOpt(elem *helium.Element, name string) (string, bool) {
-	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
-	if !ok {
+	attr := elem.GetAttributeNodeNS(name, "")
+	if attr == nil {
 		return "", false
 	}
 	return trimXMLSpace(attr.Value()), true
@@ -1562,7 +1585,9 @@ func groupableContentTypes(a, b rngContentType) bool {
 // content is no longer wrongly flagged. The define that REPLACED an overridden
 // one is reachable from start and so IS checked.
 func (c *compiler) checkContentTypes(ctx context.Context, startPat *pattern) {
-	walkVisited := make(map[*pattern]struct{})
+	// The pattern count is not tracked; eight patterns per element node is a
+	// sizing heuristic that skips most of the map's growth steps.
+	walkVisited := make(map[*pattern]struct{}, 8*len(c.elementNodes))
 	var elems []*pattern
 	c.collectLiveElements(startPat, walkVisited, &elems)
 
@@ -1808,10 +1833,11 @@ func getInheritedNS(node *helium.Element) string {
 	var current helium.Node = node
 	for current != nil {
 		if elem, ok := current.(*helium.Element); ok {
-			for _, attr := range elem.Attributes() {
-				if attr.LocalName() == "ns" && attr.Prefix() == "" {
-					return trimXMLSpace(attr.Value())
-				}
+			// An unprefixed attribute is never in a namespace and a prefix is
+			// always bound to a non-empty URI, so the no-namespace lookup
+			// selects exactly the unprefixed ns attribute.
+			if ns, hasNS := getUnqualifiedAttrOpt(elem, "ns"); hasNS {
+				return ns
 			}
 			current = elem.Parent()
 		} else {
