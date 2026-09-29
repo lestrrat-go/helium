@@ -111,6 +111,7 @@ bug that prompted it.
 | `tree_builder_test.go` | root | SAX-path tree construction (`TreeBuilder`) |
 | `c14n_test.go` | c14n | C14N golden file tests |
 | `xsd_test.go` | xsd | Schema validation golden tests |
+| `xsd_benchmark_test.go` | xsd | Schema compilation and valid-document validation benchmarks |
 | `relaxng_test.go` | relaxng | RELAX NG golden tests |
 | `interleave_test.go` | relaxng | Interleave §7.4 conflict checks and golden-schema conflict coverage |
 | `interleave_internal_test.go` | relaxng | Interleave partition/routing table (internal package) |
@@ -294,6 +295,10 @@ The recorded procedure and result live in the header comment of `relaxng/interle
 5. Partition compile + validation errors by severity
 6. Compare concatenated output against .err golden file
 ```
+
+XSD benchmarks use valid `extension0_0` and `nvdcve_0` schema/instance pairs from the same fixture tree.
+Compilation times `Compiler.Compile` with a parsed schema document; validation times
+`Validator.Validate` with a compiled schema and parsed instance document.
 
 ### 3. C14N Tests
 
