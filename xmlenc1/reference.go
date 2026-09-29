@@ -493,8 +493,8 @@ func (leafVisitor) leaveElement(*helium.Element) {}
 //
 // budgetWriter also polls ctx on every Write, which is what stops a
 // cancelled or expired caller here: the budget bounds OUTPUT OCTETS, not
-// work, and this walk's cost is elements times in-scope namespace
-// declarations, a shape that can run long while emitting almost nothing. For
+// work, and canonicalization work grows with the input document, so a large
+// document can cost time while emitting almost nothing. For
 // a whole-document form (below) there is no node-set collector ahead of this
 // call at all, so this write loop is the only place in the whole resolution
 // that ever observes cancellation.

@@ -171,7 +171,8 @@ libxml2.
   rejected (`sun/invalid empty`); and an NMTOKENS/IDREFS/ENTITIES token separator is exactly `#x20`
   (`splitNormalizedTokens`), so a character-reference whitespace char inside a tokenized attribute value is
   part of the token, making e.g. `abc&#9;xyz` a single invalid NMTOKEN (`rmt-e2e-20`).
-- C14N relative namespace URI check uses heuristic (`!strings.Contains(uri, ":")`) not full URI parse
+- C14N relative namespace URI check uses `url.Parse` + non-empty scheme (plus a whitespace/control-byte
+  pre-check), not libxml2's `xmlParseURI`, so the two parsers can disagree on edge-case URIs
 - HTML attribute deduplication: all kept (libxml2 keeps first)
 - HTML areBlanks heuristic simpler than libxml2's
 

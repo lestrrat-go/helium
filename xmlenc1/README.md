@@ -227,10 +227,10 @@ Import path: `github.com/lestrrat-go/helium/xmlenc1`
   package must be immune to. A same-document reference is bounded by the same
   budgets, and the bound is on canonical OUTPUT OCTETS, not on the work
   producing them costs: the writer feeding c14n stops at the first byte past
-  the allowance, but Canonical XML's own per-element scan for which namespace
-  declarations are still in scope runs in proportion to elements times
-  in-scope declarations, and a document shaped to be heavy in both can spend
-  a great deal of that work while emitting almost nothing, leaving the byte
+  the allowance, but canonicalization work grows with the input document,
+  not with its output: a namespace declaration that repeats a binding already
+  in scope costs a scope update and emits nothing, so a document heavy in such
+  declarations spends work while emitting almost nothing, leaving the byte
   budget with nothing to refuse. What actually bounds a resolution shaped
   that way is the caller's own context: the writer polls it on every write
   alongside the budget check, so a cancelled or expired caller stops the

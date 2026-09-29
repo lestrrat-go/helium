@@ -1,8 +1,11 @@
 package c14n_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1110,4 +1113,477 @@ func TestMalformedNamespaceURIRejected(t *testing.T) {
 	_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
 	require.Error(t, err, "namespace URI with a raw space must be rejected")
 	require.Contains(t, err.Error(), "namespace URI")
+}
+
+// scopeCombos are the mode/comment combinations every scope-invariant case runs
+// under, in the order of scopeCase.want.
+var scopeCombos = []struct {
+	name     string
+	mode     c14n.Mode
+	comments bool
+}{
+	{"C14N10", c14n.C14N10, false},
+	{"C14N10Comments", c14n.C14N10, true},
+	{"Exclusive10", c14n.ExclusiveC14N10, false},
+	{"C14N11", c14n.C14N11, false},
+}
+
+// scopeCase is one TestCanonicalizeScopeInvariants input. nodes is nil for
+// whole-document canonicalization. Each want entry is either the literal
+// canonical output, "error: <message>", or "sha256:<hex>" of the output for a
+// generated input too large to inline.
+type scopeCase struct {
+	name      string
+	build     func(t *testing.T) *helium.Document
+	nodes     func(t *testing.T, doc *helium.Document) []helium.Node
+	strict    bool
+	inclusive []string
+	want      [4]string
+}
+
+func scopeParse(t *testing.T, src string) *helium.Document {
+	t.Helper()
+	doc, err := helium.NewParser().MaxDepth(1024).Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	return doc
+}
+
+// scopeFullAxis selects every node, attribute and namespace node.
+func scopeFullAxis(t *testing.T, doc *helium.Document) []helium.Node {
+	t.Helper()
+	return evaluateNodeSet(t, doc, "//. | //@* | //namespace::* | //comment()", nil)
+}
+
+// scopeDeepChainDoc builds a 300-deep element chain that declares, redeclares
+// and undeclares bindings at several depths and uses them on element names and
+// attributes.
+func scopeDeepChainDoc(t *testing.T) *helium.Document {
+	t.Helper()
+	const depth = 300
+	var sb strings.Builder
+	sb.WriteString(`<r xmlns:p0="urn:p0" xmlns:p1="urn:p1"><!--top-->`)
+	names := make([]string, depth)
+	for i := range depth {
+		switch {
+		case i == 50:
+			names[i] = "p2:e"
+			sb.WriteString(`<p2:e xmlns:p2="urn:p2" p1:a="1">`)
+		case i == 100:
+			names[i] = "p1:e"
+			sb.WriteString(`<p1:e xmlns:p1="urn:p1-other">`)
+		case i == 150:
+			names[i] = "e"
+			sb.WriteString(`<e xmlns="urn:default" p2:b="2">`)
+		case i == 200:
+			names[i] = "e"
+			sb.WriteString(`<e xmlns="">`)
+		case i == 250:
+			names[i] = "p0:e"
+			sb.WriteString(`<p0:e xmlns:p0="urn:p0" p1:c="3">`)
+		case i%37 == 0:
+			names[i] = "p0:e"
+			sb.WriteString(`<p0:e>`)
+		default:
+			names[i] = "e"
+			sb.WriteString(`<e>`)
+		}
+	}
+	sb.WriteString(`x<!--leaf-->`)
+	for i := depth - 1; i >= 0; i-- {
+		sb.WriteString("</" + names[i] + ">")
+	}
+	sb.WriteString(`</r>`)
+	return scopeParse(t, sb.String())
+}
+
+// scopeManyBindingsDoc declares 200 bindings on the root, then redeclares one
+// with the same URI, one with a different URI, and undeclares one (XML 1.1).
+func scopeManyBindingsDoc(t *testing.T) *helium.Document {
+	t.Helper()
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.1"?><r`)
+	for i := range 200 {
+		sb.WriteString(` xmlns:p` + strconv.Itoa(i) + `="urn:ns` + strconv.Itoa(i) + `"`)
+	}
+	sb.WriteString(`><!--c-->`)
+	sb.WriteString(`<p5:c xmlns:p5="urn:ns5">same</p5:c>`)
+	sb.WriteString(`<p6:c xmlns:p6="urn:other" p7:a="1">diff</p6:c>`)
+	sb.WriteString(`<c xmlns:p8=""><d xmlns:p8="urn:ns8" p9:a="2"/></c>`)
+	sb.WriteString(`<p9:c p10:a="x"/>`)
+	sb.WriteString(`</r>`)
+	return scopeParse(t, sb.String())
+}
+
+// scopeActiveNamespaceDoc builds a tree whose elements carry active namespaces
+// that no element declares, including one that conflicts with an ancestor's
+// declared binding for the same prefix.
+func scopeActiveNamespaceDoc(t *testing.T) *helium.Document {
+	t.Helper()
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(root))
+	require.NoError(t, root.DeclareNamespace("q", "urn:q"))
+
+	child, err := doc.CreateElement("child")
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(child))
+	require.NoError(t, child.SetActiveNamespace("p", "urn:p"))
+
+	grand, err := doc.CreateElement("grand")
+	require.NoError(t, err)
+	require.NoError(t, child.AddChild(grand))
+
+	conflict, err := doc.CreateElement("conflict")
+	require.NoError(t, err)
+	require.NoError(t, grand.AddChild(conflict))
+	require.NoError(t, conflict.SetActiveNamespace("q", "urn:q-active"))
+
+	def, err := doc.CreateElement("def")
+	require.NoError(t, err)
+	require.NoError(t, root.AddChild(def))
+	require.NoError(t, def.SetActiveNamespace("", "urn:def"))
+
+	leaf, err := doc.CreateElement("leaf")
+	require.NoError(t, err)
+	require.NoError(t, def.AddChild(leaf))
+	return doc
+}
+
+// scopeEntityDoc references a nested entity from two sites with different
+// bindings for the prefixes its replacement text uses.
+func scopeEntityDoc(t *testing.T) *helium.Document {
+	t.Helper()
+	const src = `<!DOCTYPE r [` +
+		`<!ENTITY inner "<z:i y:a='1'><!--in--><k/></z:i>">` +
+		`<!ENTITY outer "<p:o xmlns:z='urn:z' xmlns:y='urn:y' q:a='1'>&inner;<z:k/></p:o>">` +
+		`]>` +
+		`<r xmlns:p="urn:p" xmlns:q="urn:q"><!--c--><a>&outer;</a>` +
+		`<b xmlns:p="urn:p2" xmlns:q="urn:q2" xmlns="urn:d">&outer;</b></r>`
+	return scopeParse(t, src)
+}
+
+// scopeGapDoc has an element in the middle of the chain carrying bindings and
+// xml:* attributes, for node sets that omit it.
+func scopeGapDoc(t *testing.T) *helium.Document {
+	t.Helper()
+	const src = `<r xmlns:p="urn:p" xml:lang="en"><!--c-->` +
+		`<mid xmlns:q="urn:q" xmlns="urn:d" xml:base="sub/" xml:space="preserve" q:m="1">` +
+		`<c p:a="1" xml:lang="fr"><d q:b="2"/></c></mid></r>`
+	return scopeParse(t, src)
+}
+
+// scopeGapNodes selects everything except the mid element itself.
+func scopeGapNodes(t *testing.T, doc *helium.Document) []helium.Node {
+	t.Helper()
+	return evaluateNodeSet(t, doc, "(//. | //@* | //namespace::* | //comment())[not(self::*[local-name() = 'mid'])]", nil)
+}
+
+// scopeGapAttrNodes selects everything except the mid element, its attributes,
+// and the c element's own xml:lang attribute, so c inherits xml:* values across
+// the gap and its own excluded xml:lang separates default and strict handling.
+func scopeGapAttrNodes(t *testing.T, doc *helium.Document) []helium.Node {
+	t.Helper()
+	var out []helium.Node
+	for _, n := range scopeFullAxis(t, doc) {
+		if n.Type() == helium.ElementNode && n.Name() == "mid" {
+			continue
+		}
+		if n.Type() == helium.AttributeNode {
+			parent := n.Parent()
+			if parent.Name() == "mid" || (parent.Name() == "c" && n.Name() == "xml:lang") {
+				continue
+			}
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// scopeInclusivePrefixesDoc exercises exclusive C14N with an inclusive-prefix
+// list naming the default namespace and a prefix never in scope.
+func scopeInclusivePrefixesDoc(t *testing.T) *helium.Document {
+	t.Helper()
+	const src = `<r xmlns="urn:d" xmlns:p="urn:p"><!--c--><c xmlns:q="urn:q"><d xmlns=""><p:e/></d></c></r>`
+	return scopeParse(t, src)
+}
+
+// scopeDuplicateNodes selects the full axis twice. Each XPath evaluation builds
+// fresh namespace-node wrappers, so every namespace node appears twice.
+func scopeDuplicateNodes(t *testing.T, doc *helium.Document) []helium.Node {
+	t.Helper()
+	first := scopeFullAxis(t, doc)
+	second := evaluateNodeSet(t, doc, "//namespace::*", nil)
+	return append(first, second...)
+}
+
+// scopeXMLPrefixDoc declares the xml prefix explicitly and uses it on element
+// and attribute names, with an entity reference inheriting the declaration.
+func scopeXMLPrefixDoc(t *testing.T) *helium.Document {
+	t.Helper()
+	const src = `<!DOCTYPE r [<!ENTITY e "<x xml:lang='de'/>">]>` +
+		`<r xmlns:xml="http://www.w3.org/XML/1998/namespace" xml:lang="en"><!--c-->` +
+		`<xml:c xml:space="preserve"><a>&e;</a></xml:c></r>`
+	return scopeParse(t, src)
+}
+
+func TestCanonicalizeScopeInvariants(t *testing.T) {
+	t.Parallel()
+
+	cases := []scopeCase{
+		{
+			name: "DeepChain", build: scopeDeepChainDoc,
+			want: [4]string{
+				`sha256:3e346b98ae60041429537e107814a45bedc5eabcb42dab4ed0cb2c9745bad585`,
+				`sha256:4d38d08b83c3859efd50a4b32ebf2f558064e0bc40e2fe688db7e5258d7305df`,
+				`sha256:93738243691afbf4c09c1048428e5e1d0d0764c86ba0aeb1f06f751f33aa1561`,
+				`sha256:3e346b98ae60041429537e107814a45bedc5eabcb42dab4ed0cb2c9745bad585`,
+			},
+		},
+		{
+			name: "DeepChainNodeSet", build: scopeDeepChainDoc, nodes: scopeFullAxis,
+			want: [4]string{
+				`sha256:3e346b98ae60041429537e107814a45bedc5eabcb42dab4ed0cb2c9745bad585`,
+				`sha256:4d38d08b83c3859efd50a4b32ebf2f558064e0bc40e2fe688db7e5258d7305df`,
+				`sha256:93738243691afbf4c09c1048428e5e1d0d0764c86ba0aeb1f06f751f33aa1561`,
+				`sha256:3e346b98ae60041429537e107814a45bedc5eabcb42dab4ed0cb2c9745bad585`,
+			},
+		},
+		{
+			name: "ManyBindings", build: scopeManyBindingsDoc,
+			want: [4]string{
+				`sha256:7045133e89a1c3b5d3560f8a0c4c78176957e84429e121fa6f806abfcb6e86be`,
+				`sha256:b36b4c3c99729af5c4ff986bd1638e8a1edc38c62466706b9868a66e4ceb8af7`,
+				`<r><p5:c xmlns:p5="urn:ns5">same</p5:c><p6:c xmlns:p6="urn:other" xmlns:p7="urn:ns7" p7:a="1">diff` +
+					`</p6:c><c><d xmlns:p9="urn:ns9" p9:a="2"></d></c><p9:c xmlns:p10="urn:ns10" xmlns:p9="urn:ns9"` +
+					` p10:a="x"></p9:c></r>`,
+				`sha256:7045133e89a1c3b5d3560f8a0c4c78176957e84429e121fa6f806abfcb6e86be`,
+			},
+		},
+		{
+			name: "ManyBindingsNodeSet", build: scopeManyBindingsDoc, nodes: scopeFullAxis,
+			want: [4]string{
+				`sha256:f675aeea2733b198cc5bc69a0e0cc1b9c1d5eb0e705b4fe5c772bbfb9e9c4fc5`,
+				`sha256:ac6f68dd14a73fb73a6eed966d4ce4a7e5dfc6b36bfdb53cde9b7fde244bb1f4`,
+				`<r><p5:c xmlns:p5="urn:ns5">same</p5:c><p6:c xmlns:p6="urn:other" xmlns:p7="urn:ns7" p7:a="1">diff` +
+					`</p6:c><c><d xmlns:p9="urn:ns9" p9:a="2"></d></c><p9:c xmlns:p10="urn:ns10" xmlns:p9="urn:ns9"` +
+					` p10:a="x"></p9:c></r>`,
+				`sha256:f675aeea2733b198cc5bc69a0e0cc1b9c1d5eb0e705b4fe5c772bbfb9e9c4fc5`,
+			},
+		},
+		{
+			name: "UndeclaredActiveNamespace", build: scopeActiveNamespaceDoc,
+			want: [4]string{
+				`<root xmlns:q="urn:q"><p:child xmlns:p="urn:p"><grand><q:conflict></q:conflict></grand></p:child>` +
+					`<def xmlns="urn:def"><leaf></leaf></def></root>`,
+				`<root xmlns:q="urn:q"><p:child xmlns:p="urn:p"><grand><q:conflict></q:conflict></grand></p:child>` +
+					`<def xmlns="urn:def"><leaf></leaf></def></root>`,
+				`<root><p:child xmlns:p="urn:p"><grand><q:conflict xmlns:q="urn:q-active"></q:conflict></grand>` +
+					`</p:child><def xmlns="urn:def"><leaf xmlns=""></leaf></def></root>`,
+				`<root xmlns:q="urn:q"><p:child xmlns:p="urn:p"><grand><q:conflict></q:conflict></grand></p:child>` +
+					`<def xmlns="urn:def"><leaf></leaf></def></root>`,
+			},
+		},
+		{
+			name: "UndeclaredActiveNamespaceNodeSet", build: scopeActiveNamespaceDoc, nodes: scopeFullAxis,
+			want: [4]string{
+				`<root xmlns:q="urn:q"><p:child><grand><q:conflict></q:conflict></grand></p:child><def><leaf></leaf>` +
+					`</def></root>`,
+				`<root xmlns:q="urn:q"><p:child><grand><q:conflict></q:conflict></grand></p:child><def><leaf></leaf>` +
+					`</def></root>`,
+				`<root><p:child><grand><q:conflict xmlns:q="urn:q"></q:conflict></grand></p:child><def><leaf></leaf>` +
+					`</def></root>`,
+				`<root xmlns:q="urn:q"><p:child><grand><q:conflict></q:conflict></grand></p:child><def><leaf></leaf>` +
+					`</def></root>`,
+			},
+		},
+		{
+			name: "Entity", build: scopeEntityDoc,
+			want: [4]string{
+				`<r xmlns:p="urn:p" xmlns:q="urn:q"><a><p:o xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k>` +
+					`</k></z:i><z:k></z:k></p:o></a><b xmlns="urn:d" xmlns:p="urn:p2" xmlns:q="urn:q2"><p:o` +
+					` xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k></k></z:i><z:k></z:k></p:o></b></r>`,
+				`sha256:ea8449fe817dc979892b6c715f0517ac6268b434cdaa663c0e9cbdc2bdca40f6`,
+				`sha256:eb1440cc33ed6b36cd5531b9b3e8369c13d74b1601878cb62766ce932e265244`,
+				`<r xmlns:p="urn:p" xmlns:q="urn:q"><a><p:o xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k>` +
+					`</k></z:i><z:k></z:k></p:o></a><b xmlns="urn:d" xmlns:p="urn:p2" xmlns:q="urn:q2"><p:o` +
+					` xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k></k></z:i><z:k></z:k></p:o></b></r>`,
+			},
+		},
+		{
+			name: "EntityNodeSet", build: scopeEntityDoc, nodes: scopeFullAxis,
+			want: [4]string{
+				`<r xmlns:p="urn:p" xmlns:q="urn:q"><a><p:o xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k>` +
+					`</k></z:i><z:k></z:k></p:o></a><b xmlns="urn:d" xmlns:p="urn:p2" xmlns:q="urn:q2"><p:o` +
+					` xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k></k></z:i><z:k></z:k></p:o></b></r>`,
+				`sha256:ea8449fe817dc979892b6c715f0517ac6268b434cdaa663c0e9cbdc2bdca40f6`,
+				`sha256:eb1440cc33ed6b36cd5531b9b3e8369c13d74b1601878cb62766ce932e265244`,
+				`<r xmlns:p="urn:p" xmlns:q="urn:q"><a><p:o xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k>` +
+					`</k></z:i><z:k></z:k></p:o></a><b xmlns="urn:d" xmlns:p="urn:p2" xmlns:q="urn:q2"><p:o` +
+					` xmlns:y="urn:y" xmlns:z="urn:z" q:a="1"><z:i y:a="1"><k></k></z:i><z:k></z:k></p:o></b></r>`,
+			},
+		},
+		{
+			name: "Gap", build: scopeGapDoc, nodes: scopeGapNodes,
+			want: [4]string{
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/"` +
+					` xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/" xml:lang="fr"` +
+					` xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"><!--c--> xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/"` +
+					` xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/" xml:lang="fr"` +
+					` xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xml:lang="en"> xml:base="sub/" xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:p="urn:p"` +
+					` xml:lang="fr" p:a="1"><d xmlns:q="urn:q" q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/"` +
+					` xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/" xml:lang="fr"` +
+					` xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+			},
+		},
+		{
+			name: "GapStrict", build: scopeGapDoc, nodes: scopeGapNodes, strict: true,
+			want: [4]string{
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/"` +
+					` xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/" xml:lang="fr"` +
+					` xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"><!--c--> xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/"` +
+					` xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/" xml:lang="fr"` +
+					` xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xml:lang="en"> xml:base="sub/" xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:p="urn:p"` +
+					` xml:lang="fr" p:a="1"><d xmlns:q="urn:q" q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/"` +
+					` xml:space="preserve" q:m="1"<c xmlns="urn:d" xmlns:q="urn:q" xml:base="sub/" xml:lang="fr"` +
+					` xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+			},
+		},
+		{
+			name: "GapAttrs", build: scopeGapDoc, nodes: scopeGapAttrNodes,
+			want: [4]string{
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q"<c xmlns="urn:d" xmlns:q="urn:q"` +
+					` xml:base="sub/" xml:lang="en" xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"><!--c--> xmlns="urn:d" xmlns:q="urn:q"<c xmlns="urn:d"` +
+					` xmlns:q="urn:q" xml:base="sub/" xml:lang="en" xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xml:lang="en"><c xmlns="urn:d" xmlns:p="urn:p" p:a="1"><d xmlns:q="urn:q" q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q"<c xmlns="urn:d" xmlns:q="urn:q"` +
+					` xml:base="sub/" xml:lang="fr" xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+			},
+		},
+		{
+			name: "GapAttrsStrict", build: scopeGapDoc, nodes: scopeGapAttrNodes, strict: true,
+			want: [4]string{
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q"<c xmlns="urn:d" xmlns:q="urn:q"` +
+					` xml:base="sub/" xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"><!--c--> xmlns="urn:d" xmlns:q="urn:q"<c xmlns="urn:d"` +
+					` xmlns:q="urn:q" xml:base="sub/" xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+				`<r xml:lang="en"><c xmlns="urn:d" xmlns:p="urn:p" p:a="1"><d xmlns:q="urn:q" q:b="2"></d></c></r>`,
+				`<r xmlns:p="urn:p" xml:lang="en"> xmlns="urn:d" xmlns:q="urn:q"<c xmlns="urn:d" xmlns:q="urn:q"` +
+					` xml:base="sub/" xml:space="preserve" p:a="1"><d q:b="2"></d></c></r>`,
+			},
+		},
+		{
+			name: "InclusivePrefixes", build: scopeInclusivePrefixesDoc,
+			inclusive: []string{"#default", "q", "zz"},
+			want: [4]string{
+				`<r xmlns="urn:d" xmlns:p="urn:p"><c xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
+				`<r xmlns="urn:d" xmlns:p="urn:p"><!--c--><c xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
+				`<r xmlns="urn:d"><c xmlns:q="urn:q"><d xmlns=""><p:e xmlns:p="urn:p"></p:e></d></c></r>`,
+				`<r xmlns="urn:d" xmlns:p="urn:p"><c xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
+			},
+		},
+		{
+			name: "InclusivePrefixesNodeSet", build: scopeInclusivePrefixesDoc, nodes: scopeFullAxis,
+			inclusive: []string{"#default", "q", "zz"},
+			want: [4]string{
+				`<r xmlns="urn:d" xmlns:p="urn:p"><c xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
+				`<r xmlns="urn:d" xmlns:p="urn:p"><!--c--><c xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
+				`<r xmlns="urn:d"><c xmlns:q="urn:q"><d xmlns=""><p:e xmlns:p="urn:p"></p:e></d></c></r>`,
+				`<r xmlns="urn:d" xmlns:p="urn:p"><c xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
+			},
+		},
+		{
+			name: "DuplicateNamespaceNodes", build: scopeInclusivePrefixesDoc, nodes: scopeDuplicateNodes,
+			want: [4]string{
+				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><c xmlns:q="urn:q" xmlns:q="urn:q">` + //nolint:dupword // each namespace node is selected twice
+					`<d xmlns=""><p:e></p:e></d></c></r>`,
+				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><!--c--><c xmlns:q="urn:q"` + //nolint:dupword // each namespace node is selected twice
+					` xmlns:q="urn:q"><d xmlns=""><p:e></p:e></d></c></r>`,
+				`<r xmlns="urn:d"><c><d xmlns=""><p:e xmlns:p="urn:p"></p:e></d></c></r>`,
+				`<r xmlns="urn:d" xmlns="urn:d" xmlns:p="urn:p" xmlns:p="urn:p"><c xmlns:q="urn:q" xmlns:q="urn:q">` + //nolint:dupword // each namespace node is selected twice
+					`<d xmlns=""><p:e></p:e></d></c></r>`,
+			},
+		},
+		{
+			name: "XMLPrefix", build: scopeXMLPrefixDoc,
+			want: [4]string{
+				`<r xml:lang="en"><xml:c xml:space="preserve"><a><x xml:lang="de"></x></a></xml:c></r>`,
+				`<r xml:lang="en"><!--c--><xml:c xml:space="preserve"><a><x xml:lang="de"></x></a></xml:c></r>`,
+				`<r xml:lang="en"><xml:c xml:space="preserve"><a><x xml:lang="de"></x></a></xml:c></r>`,
+				`<r xml:lang="en"><xml:c xml:space="preserve"><a><x xml:lang="de"></x></a></xml:c></r>`,
+			},
+		},
+		{
+			name: "XMLPrefixNodeSet", build: scopeXMLPrefixDoc, nodes: scopeFullAxis,
+			want: [4]string{
+				`<r xml:lang="en"><xml:c xml:space="preserve"><a><x xmlns:xml="http://www.w3.org/XML/1998/namespace"` +
+					` xml:lang="de"></x></a></xml:c></r>`,
+				`<r xml:lang="en"><!--c--><xml:c xml:space="preserve"><a><x` +
+					` xmlns:xml="http://www.w3.org/XML/1998/namespace" xml:lang="de"></x></a></xml:c></r>`,
+				`<r xml:lang="en"><xml:c xml:space="preserve"><a><x xml:lang="de"></x></a></xml:c></r>`,
+				`<r xml:lang="en"><xml:c xml:space="preserve"><a><x xmlns:xml="http://www.w3.org/XML/1998/namespace"` +
+					` xml:lang="de"></x></a></xml:c></r>`,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := tc.build(t)
+			var nodes []helium.Node
+			if tc.nodes != nil {
+				nodes = tc.nodes(t, doc)
+			}
+			for i, combo := range scopeCombos {
+				can := c14n.NewCanonicalizer(combo.mode)
+				if combo.comments {
+					can = can.Comments()
+				}
+				if tc.nodes != nil {
+					can = can.NodeSet(nodes)
+				}
+				if tc.strict {
+					can = can.StrictXMLAttributes()
+				}
+				if tc.inclusive != nil {
+					can = can.InclusiveNamespaces(tc.inclusive)
+				}
+				got, err := can.CanonicalizeTo(doc)
+				gotStr := string(got)
+				if err != nil {
+					gotStr = "error: " + err.Error()
+				}
+				want := tc.want[i]
+				if strings.HasPrefix(want, "sha256:") {
+					sum := sha256.Sum256(got)
+					gotStr = "sha256:" + hex.EncodeToString(sum[:])
+				}
+				require.Equal(t, want, gotStr, "combo %s", combo.name)
+			}
+		})
+	}
+}
+
+// TestRelativeNamespaceURIRejectedOnFirstElement verifies that a relative
+// namespace URI declared on several elements fails on the first of them, and
+// that an absolute URI shared by many elements is accepted on each.
+func TestRelativeNamespaceURIRejectedOnFirstElement(t *testing.T) {
+	t.Parallel()
+	const src = `<root xmlns:ok="urn:ok"><ok:a/><first xmlns:bad="rel/x"/><second xmlns:bad="rel/x"/></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	for _, combo := range scopeCombos {
+		_, err = c14n.NewCanonicalizer(combo.mode).CanonicalizeTo(doc)
+		require.Error(t, err, "combo %s", combo.name)
+		require.Equal(t, `c14n: relative namespace URI "rel/x" on element first`, err.Error(), "combo %s", combo.name)
+	}
 }

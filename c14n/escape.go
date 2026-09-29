@@ -1,9 +1,6 @@
 package c14n
 
-import (
-	"io"
-	"unicode/utf8"
-)
+import "io"
 
 var (
 	escAmp  = []byte("&amp;")
@@ -15,16 +12,39 @@ var (
 	escCR   = []byte("&#xD;")
 )
 
-// escapeRunes walks s as UTF-8 and writes it to w, replacing any rune for which
-// repl returns a non-nil byte slice with that slice. Runs of unreplaced bytes
-// are written verbatim in a single Write.
-func escapeRunes(w io.Writer, s []byte, repl func(rune) []byte) error {
+// escapeTable maps a byte to its replacement, or nil to copy the byte through.
+type escapeTable [256][]byte
+
+// textEscapes are the C14N text-node replacements:
+// & → &amp;  < → &lt;  > → &gt;  \r → &#xD;
+var textEscapes = escapeTable{
+	'&':  escAmp,
+	'<':  escLT,
+	'>':  escGT,
+	'\r': escCR,
+}
+
+// attrEscapes are the C14N attribute-value replacements:
+// & → &amp;  < → &lt;  " → &quot;  \t → &#x9;  \n → &#xA;  \r → &#xD;
+var attrEscapes = escapeTable{
+	'&':  escAmp,
+	'<':  escLT,
+	'"':  escQuot,
+	'\t': escTab,
+	'\n': escNL,
+	'\r': escCR,
+}
+
+// escapeBytes writes s to w, replacing each byte that has an entry in table.
+// Runs of unreplaced bytes are written verbatim in a single Write. Every
+// replaced character is ASCII and every byte of a multi-byte UTF-8 sequence is
+// at least 0x80, so a byte scan replaces exactly the characters a rune scan
+// would, and invalid UTF-8 passes through unchanged.
+func escapeBytes(w io.Writer, s []byte, table *escapeTable) error {
 	last := 0
-	for i := 0; i < len(s); {
-		r, width := utf8.DecodeRune(s[i:])
-		esc := repl(r)
+	for i, b := range s {
+		esc := table[b]
 		if esc == nil {
-			i += width
 			continue
 		}
 		if _, err := w.Write(s[last:i]); err != nil {
@@ -33,8 +53,7 @@ func escapeRunes(w io.Writer, s []byte, repl func(rune) []byte) error {
 		if _, err := w.Write(esc); err != nil {
 			return err
 		}
-		i += width
-		last = i
+		last = i + 1
 	}
 	if _, err := w.Write(s[last:]); err != nil {
 		return err
@@ -45,41 +64,13 @@ func escapeRunes(w io.Writer, s []byte, repl func(rune) []byte) error {
 // escapeText escapes text node content per C14N rules:
 // & → &amp;  < → &lt;  > → &gt;  \r → &#xD;
 func escapeText(w io.Writer, s []byte) error {
-	return escapeRunes(w, s, func(r rune) []byte {
-		switch r {
-		case '&':
-			return escAmp
-		case '<':
-			return escLT
-		case '>':
-			return escGT
-		case '\r':
-			return escCR
-		}
-		return nil
-	})
+	return escapeBytes(w, s, &textEscapes)
 }
 
 // escapeAttrValue escapes attribute values per C14N rules:
 // & → &amp;  < → &lt;  " → &quot;  \t → &#x9;  \n → &#xA;  \r → &#xD;
 func escapeAttrValue(w io.Writer, s []byte) error {
-	return escapeRunes(w, s, func(r rune) []byte {
-		switch r {
-		case '&':
-			return escAmp
-		case '<':
-			return escLT
-		case '"':
-			return escQuot
-		case '\t':
-			return escTab
-		case '\n':
-			return escNL
-		case '\r':
-			return escCR
-		}
-		return nil
-	})
+	return escapeBytes(w, s, &attrEscapes)
 }
 
 // escapePIOrComment escapes processing instruction or comment content:
