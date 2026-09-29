@@ -1491,7 +1491,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 		// with minOccurs>=1 would otherwise fail before leftover/open-content handling).
 		mg = &ModelGroup{Compositor: CompositorSequence, MinOccurs: 0, MaxOccurs: 1}
 	}
-	children := collectChildElements(elem)
+	children := vc.collectChildElements(elem)
 
 	if oc.Mode == OpenContentSuffix {
 		consumed, err := vc.matchContentModelSuffix(ctx, elem, mg, oc.Wildcard, children)
