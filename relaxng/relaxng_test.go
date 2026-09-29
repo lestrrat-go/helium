@@ -644,3 +644,34 @@ func TestCompilerParserInjection(t *testing.T) {
 		require.NotNil(t, grammar)
 	})
 }
+
+// Documents from the default parser keep entity references in attribute values
+// as EntityRef children. Both the grammar's attributes and the instance's
+// attribute values are read expanded.
+func TestAttributeValueWithEntityReference(t *testing.T) {
+	t.Parallel()
+	const schema = `<!DOCTYPE element [<!ENTITY n "q">]>
+<element name="r" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name="p&n;"><value>1x2</value></attribute>
+</element>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(schema))
+	require.NoError(t, err)
+	grammar, err := relaxng.NewCompiler().Compile(t.Context(), doc)
+	require.NoError(t, err)
+
+	for src, valid := range map[string]bool{
+		`<r pq="1x2"/>`: true,
+		`<!DOCTYPE r [<!ENTITY e "x">]><r pq="1&e;2"/>`: true,
+		`<!DOCTYPE r [<!ENTITY e "y">]><r pq="1&e;2"/>`: false,
+		`<r pq="1"/>`: false,
+	} {
+		xmlDoc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		err = relaxng.NewValidator(grammar).Validate(t.Context(), xmlDoc)
+		if valid {
+			require.NoError(t, err, src)
+			continue
+		}
+		require.Error(t, err, src)
+	}
+}

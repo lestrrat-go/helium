@@ -1671,3 +1671,26 @@ func TestNilledForwardedToXPath3(t *testing.T) {
 	// 0         : data() of a nilled element is the empty sequence
 	require.Equal(t, "nil|not-int|q-is-int|0", out)
 }
+
+// The default parser keeps entity references in attribute values as EntityRef
+// children. A stylesheet and a source document parsed that way are read with
+// the attribute values expanded: the stylesheet's select attribute, a literal
+// result attribute, and the source attribute copied and read by the transform.
+func TestAttributeValueWithEntityReference(t *testing.T) {
+	ctx := t.Context()
+	ssDoc, err := helium.NewParser().Parse(ctx, []byte(`<!DOCTYPE xsl:stylesheet [<!ENTITY n "a">]>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out lit="L&n;R" v="{r/@&n;}"><xsl:copy-of select="r/@&n;"/><xsl:value-of select="r/@&n;"/></out>
+  </xsl:template>
+</xsl:stylesheet>`))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, ssDoc)
+	require.NoError(t, err)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<!DOCTYPE r [<!ENTITY e "x">]><r a="1&e;2"/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, `<out lit="LaR" v="1x2" a="1x2">1x2</out>`)
+}
