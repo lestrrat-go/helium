@@ -1,6 +1,7 @@
 package xpath1_test
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -299,4 +300,109 @@ func (g *randomDocGen) emit(depth int) {
 		}
 	}
 	g.b.WriteString("</" + name + ">")
+}
+
+// evalIDs evaluates expr from ctxNode and returns the id attribute (or the
+// element name when there is none) of every selected node, in result order.
+func evalIDs(t *testing.T, ctx context.Context, eval xpath1.Evaluator, expr string, ctxNode helium.Node) []string {
+	t.Helper()
+	r, err := eval.Evaluate(ctx, xpath1.MustCompile(expr), ctxNode)
+	require.NoError(t, err)
+	ids := make([]string, 0, len(r.NodeSet))
+	for _, n := range r.NodeSet {
+		e, ok := n.(*helium.Element)
+		if !ok {
+			ids = append(ids, n.Name())
+			continue
+		}
+		if v, ok := e.GetAttribute("id"); ok {
+			ids = append(ids, v)
+			continue
+		}
+		ids = append(ids, e.Name())
+	}
+	return ids
+}
+
+func moveToEnd(t *testing.T, n *helium.Element) {
+	t.Helper()
+	parent, ok := n.Parent().(*helium.Element)
+	require.True(t, ok)
+	helium.UnlinkNode(n)
+	require.NoError(t, parent.AddChild(n))
+}
+
+// TestStepResultOrderMutation checks that results follow the current tree
+// after a mutation, with a fresh cache per evaluation and with a
+// caller-supplied cache that is Reset after the mutation.
+func TestStepResultOrderMutation(t *testing.T) {
+	const src = `<root><item id="i1"/><item id="i2"/><item id="i3"/><other id="o"/></root>`
+	eval := xpath1.NewEvaluator()
+
+	t.Run("fresh cache per evaluation", func(t *testing.T) {
+		doc := parseStepOrderDoc(t, src, false)
+		require.Equal(t, []string{"i1", "i2", "i3"}, evalIDs(t, t.Context(), eval, "//item", doc))
+		first := doc.DocumentElement().FirstChild().(*helium.Element)
+		moveToEnd(t, first)
+		require.Equal(t, []string{"i2", "i3", "i1"}, evalIDs(t, t.Context(), eval, "//item", doc))
+		require.Equal(t, []string{"i2", "i3", "o", "i1"}, evalIDs(t, t.Context(), eval, "/root/item | /root/other", doc))
+		helium.UnlinkNode(first)
+		require.Equal(t, []string{"i2", "i3"}, evalIDs(t, t.Context(), eval, "/root/item", doc))
+	})
+
+	t.Run("caller-supplied cache reset after the mutation", func(t *testing.T) {
+		doc := parseStepOrderDoc(t, src, false)
+		cache := &ixpath.DocOrderCache{}
+		ctx := ixpath.WithDocOrderCache(t.Context(), cache)
+		// The first evaluation only reserves the document; the second
+		// indexes it through the union.
+		require.Equal(t, []string{"i1", "i2", "i3"}, evalIDs(t, ctx, eval, "/root/item", doc))
+		require.Equal(t, []string{"i1", "i2", "i3", "o"}, evalIDs(t, ctx, eval, "/root/item | /root/other", doc))
+
+		moveToEnd(t, doc.DocumentElement().FirstChild().(*helium.Element))
+		cache.Reset()
+		require.Equal(t, []string{"i2", "i3", "i1"}, evalIDs(t, ctx, eval, "/root/item", doc))
+		require.Equal(t, []string{"i2", "i3", "o", "i1"}, evalIDs(t, ctx, eval, "/root/item | /root/other", doc))
+	})
+
+	t.Run("caller-supplied cache reset while the document is only reserved", func(t *testing.T) {
+		doc := parseStepOrderDoc(t, src, false)
+		cache := &ixpath.DocOrderCache{}
+		ctx := ixpath.WithDocOrderCache(t.Context(), cache)
+		require.Equal(t, []string{"i1", "i2", "i3"}, evalIDs(t, ctx, eval, "/root/item", doc))
+
+		moveToEnd(t, doc.DocumentElement().FirstChild().(*helium.Element))
+		cache.Reset()
+		require.Equal(t, []string{"i2", "i3", "o", "i1"}, evalIDs(t, ctx, eval, "/root/item | /root/other", doc))
+	})
+}
+
+// TestStepResultOrderSharedCache checks a caller-supplied cache that holds a
+// document reserved by a skipping step but not indexed: later evaluations
+// order that document, and a second document, as they would if the first
+// evaluation had indexed it.
+func TestStepResultOrderSharedCache(t *testing.T) {
+	doc1 := parseStepOrderDoc(t, `<a><b id="x1"><c id="xc"/></b><b id="x2"/></a>`, false)
+	doc2 := parseStepOrderDoc(t, `<a><b id="y1"/><b id="y2"><c id="yc"/></b></a>`, false)
+	eval := xpath1.NewEvaluator().Variables(map[string]any{
+		"other": []helium.Node{doc2.DocumentElement()},
+	})
+	cache := &ixpath.DocOrderCache{}
+	ctx := ixpath.WithDocOrderCache(t.Context(), cache)
+
+	// Every step of /a/b skips the sort, so doc1 is reserved, not indexed.
+	require.Equal(t, []string{"x1", "x2"}, evalIDs(t, ctx, eval, "/a/b", doc1))
+
+	// doc1 was registered first, so its nodes sort before doc2's.
+	require.Equal(t, []string{"x1", "x2", "y1", "y2"}, evalIDs(t, ctx, eval, "$other/b | /a/b", doc1))
+	require.Equal(t, []string{"x1", "xc", "x2", "y1", "y2", "yc"}, evalIDs(t, ctx, eval, "$other//b | $other//c | /a/b/c | /a/b", doc1))
+	// A lookup inside the reserved document orders it correctly.
+	require.Equal(t, []string{"x1", "xc", "x2"}, evalIDs(t, ctx, eval, "/a/b/c | /a/b", doc1))
+
+	// A second cache that registers doc2 first orders doc2 first, as the
+	// registration order dictates.
+	cache2 := &ixpath.DocOrderCache{}
+	ctx2 := ixpath.WithDocOrderCache(t.Context(), cache2)
+	require.Equal(t, []string{"y1", "y2"}, evalIDs(t, ctx2, eval, "/a/b", doc2))
+	require.Equal(t, []string{"y1", "y2", "x1", "x2"}, evalIDs(t, ctx2, eval, "/a/b | $other/b", doc1))
 }
