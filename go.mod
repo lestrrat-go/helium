@@ -2,13 +2,13 @@ module github.com/lestrrat-go/helium
 
 go 1.26.1
 
-toolchain go1.26.4
+toolchain go1.26.6
 
 require (
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.56.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.39.0
 )
 
 require (
