@@ -89,7 +89,26 @@ func (n *Attribute) IsDefault() bool {
 }
 
 // Value returns the attribute's text value as a string.
+//
+// An attribute whose value is a single Text node, the common case, converts
+// that node's bytes directly with one allocation for the string. Any other
+// shape, such as a value holding entity references, takes the aggregating
+// Content path.
 func (n Attribute) Value() string {
+	if n.firstChild == nil {
+		return ""
+	}
+	if t, ok := n.firstChild.(*Text); ok && t.next == nil {
+		return string(t.rawContent())
+	}
+	return aggregatedAttributeValue(n)
+}
+
+// aggregatedAttributeValue is Value's path for a value that is not a single
+// Text node. It is a separate function because Content needs the address of its
+// receiver: taking the address of Value's own receiver copy would move that copy
+// to the heap on every call, including the single-Text path.
+func aggregatedAttributeValue(n Attribute) string {
 	return string(n.Content())
 }
 

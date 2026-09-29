@@ -702,6 +702,71 @@ func TestGetAttribute(t *testing.T) {
 	})
 }
 
+// The namespace-aware lookups and the single-Text Value path are hot in schema
+// compilation and validation. They must not allocate beyond the returned string.
+func TestAttributeLookupAllocations(t *testing.T) {
+	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
+	// test, and a concurrent allocator would perturb the count anyway.
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<root xmlns:x="urn:x" plain="value" x:qualified="other"/>`))
+	require.NoError(t, err)
+	root := doc.DocumentElement()
+
+	t.Run("GetAttributeNodeNS", func(t *testing.T) {
+		var hit, miss *helium.Attribute
+		allocs := testing.AllocsPerRun(100, func() {
+			hit = root.GetAttributeNodeNS("qualified", "urn:x")
+			miss = root.GetAttributeNodeNS("qualified", "urn:y")
+		})
+		require.NotNil(t, hit)
+		require.Nil(t, miss)
+		require.Zero(t, allocs, "GetAttributeNodeNS must not allocate")
+	})
+
+	t.Run("GetAttributeNS", func(t *testing.T) {
+		var v string
+		var ok bool
+		allocs := testing.AllocsPerRun(100, func() {
+			v, ok = root.GetAttributeNS("plain", "")
+		})
+		require.True(t, ok)
+		require.Equal(t, "value", v)
+		require.LessOrEqual(t, allocs, 1.0, "GetAttributeNS allocates only the returned string")
+	})
+
+	t.Run("RemoveAttributeNS miss", func(t *testing.T) {
+		var ok bool
+		allocs := testing.AllocsPerRun(100, func() {
+			ok = root.RemoveAttributeNS("absent", "urn:x")
+		})
+		require.False(t, ok)
+		require.Zero(t, allocs, "a RemoveAttributeNS miss must not allocate")
+	})
+
+	t.Run("Value", func(t *testing.T) {
+		attr := root.GetAttributeNodeNS("plain", "")
+		require.NotNil(t, attr)
+		var v string
+		allocs := testing.AllocsPerRun(100, func() {
+			v = attr.Value()
+		})
+		require.Equal(t, "value", v)
+		require.LessOrEqual(t, allocs, 1.0, "a single-Text Value allocates only the returned string")
+	})
+
+	t.Run("Attributes iterator", func(t *testing.T) {
+		var count int
+		allocs := testing.AllocsPerRun(100, func() {
+			count = 0
+			for range helium.Attributes(root) {
+				count++
+			}
+		})
+		require.Equal(t, 2, count)
+		require.Zero(t, allocs, "ranging over Attributes must not allocate")
+	})
+}
+
 func TestAttributeNamespaces(t *testing.T) {
 	t.Parallel()
 

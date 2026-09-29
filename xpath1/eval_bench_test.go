@@ -92,8 +92,8 @@ func BenchmarkEvaluatePerNode(b *testing.B) {
 	}
 }
 
-// BenchmarkEvaluateDescendantChildPath covers a child step whose 1000 context
-// nodes are siblings, so their results are already in document order.
+// BenchmarkEvaluateDescendantChildPath follows a `//` step with a child step,
+// so the `//item` prefix feeds 1000 context nodes to `child::val`.
 func BenchmarkEvaluateDescendantChildPath(b *testing.B) {
 	runEvalBench(b, "//item/val")
 }
@@ -145,4 +145,12 @@ func BenchmarkEvaluateReverseAxisPerNode(b *testing.B) {
 			}
 		}
 	}
+}
+
+// BenchmarkEvaluatePositionalPredicate uses a predicate that reads the
+// context position. Compile must keep `//item[1]` as two steps, because
+// position() counts within each parent's children there, so this benchmark
+// guards against a rewrite that changes the selected set.
+func BenchmarkEvaluatePositionalPredicate(b *testing.B) {
+	runEvalBench(b, "//item[1]")
 }

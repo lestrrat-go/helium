@@ -224,7 +224,23 @@ func (n docnode) Parent() Node {
 // a pure child-pointer cycle (element -> element -> ... -> element, not routed
 // through an Entity's terminating stored-text Content) terminates on the
 // back-edge instead of recursing forever.
+//
+// A node with no children, or with exactly one leaf child (Text, Comment,
+// CDATA, PI, Entity, NS wrapper), skips the aggregation machinery and returns
+// the leaf's own Content() copy: the same bytes the aggregation would produce,
+// in one allocation. An empty result is nil on every path.
 func (n *docnode) Content() []byte {
+	child := n.firstChild
+	if child == nil {
+		return nil
+	}
+	if !aggregatesOwnContent(child) && nextOwnedChild(n, child) == nil {
+		c := child.Content()
+		if len(c) == 0 {
+			return nil
+		}
+		return c
+	}
 	b := bytes.Buffer{}
 	aggregateOwnedContent(n, &b, map[*docnode]struct{}{n: {}})
 	return b.Bytes()
@@ -343,6 +359,12 @@ func (f NodeWalkerFunc) Visit(n Node) error {
 // visited on each occurrence — Walk does not maintain a global visited set, so
 // DAG traversal is unchanged. On an acyclic, parent-consistent tree behavior is
 // identical to a naive recursive descent.
+//
+// A sibling list that loops back on itself also returns ErrWalkCycle. Each
+// child list is checked with Brent's cycle detection, which needs no allocation
+// and stops within a small multiple of the loop length, so on such a corrupt
+// list w.Visit may see a few nodes more than once before Walk returns
+// ErrWalkCycle.
 func Walk(n Node, w NodeWalker) error {
 	// Reject both a literal nil interface and a typed-nil pointer (e.g. the
 	// *Element that Document.DocumentElement returns for a rootless document)
@@ -356,13 +378,12 @@ func Walk(n Node, w NodeWalker) error {
 		node        Node
 		entered     bool
 		activeChild Node
-		// seenChildren records every child of node this frame has already
-		// enumerated, so a child that repeats within the SAME sibling list —
-		// a sibling cycle longer than one node (a -> b -> a, all siblings of
-		// node) — is detected. The active-path guard alone misses it: each
-		// child is popped and removed from onPath before its next sibling is
-		// examined, so the enumeration would otherwise spin forever.
-		seenChildren map[*docnode]struct{}
+		// siblings bounds the enumeration of node's child list, so a child
+		// list that loops back on itself (a -> b -> a, or a node whose next
+		// pointer is itself) is detected. The active-path guard alone misses
+		// it: each child is popped and removed from onPath before its next
+		// sibling is examined, so the enumeration would otherwise spin forever.
+		siblings siblingCycleGuard
 	}
 
 	onPath := make(map[*docnode]struct{})
@@ -393,13 +414,9 @@ func Walk(n Node, w NodeWalker) error {
 		if _, cyclic := onPath[childKey]; cyclic {
 			return ErrWalkCycle
 		}
-		if _, dup := top.seenChildren[childKey]; dup {
+		if top.siblings.step(childKey) {
 			return ErrWalkCycle
 		}
-		if top.seenChildren == nil {
-			top.seenChildren = make(map[*docnode]struct{})
-		}
-		top.seenChildren[childKey] = struct{}{}
 		// top may dangle after the append reallocates stack; mark before it.
 		stack = append(stack, walkFrame{node: top.activeChild})
 	}
@@ -409,7 +426,7 @@ func Walk(n Node, w NodeWalker) error {
 // nextWalkSibling advances child to the next sibling within owner's own child
 // list, applying the owned-boundary rule. It does NOT special-case a
 // self-referential sibling pointer (child.next == child): the duplicate flows
-// back to the caller so the per-frame seenChildren set detects it and Walk
+// back to the caller so the per-frame sibling guard detects it and Walk
 // returns ErrWalkCycle, exactly as it does for a longer sibling cycle
 // (a -> b -> a). Silently terminating the self-loop here would instead let Walk
 // report SUCCESS on a corrupt one-node sibling cycle.

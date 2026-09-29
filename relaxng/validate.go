@@ -33,7 +33,7 @@ type validator struct {
 	// Without it the cascading retry is exponential in the number of flexible
 	// members. Keyed by the full input that determines the result; a hit
 	// reproduces the original call's effect byte-for-byte.
-	groupMemo map[groupMemoKey]*groupMemoEntry
+	groupMemo map[groupMemoKey]groupMemoEntry
 
 	// runSeq numbers the sibling arrays handed out by newRun.
 	runSeq int
@@ -62,13 +62,18 @@ type groupMemoKey struct {
 	n     int             // len(children) — sub-range length
 	elem  *helium.Element // owning element (content path); pins the element's attrs,
 	// which group content may consult even when the child sequence is empty
-	pos      helium.Node // first remaining node (nil when the input sequence is empty)
-	seqLen   int         // len(state.seq); with pos, fully identifies the sibling run
-	run      int         // identifies the sibling array state.seq is a suffix of
-	exact    bool        // v.exactChoice > 0
-	attrKey  string      // packed attrUsed bits ("" for the naive path)
-	suppress bool        // v.suppressDepth > 0 (governs whether errors are emitted)
-	content  bool        // element-content path vs naive path discriminator
+	pos    helium.Node // first remaining node (nil when the input sequence is empty)
+	seqLen int         // len(state.seq); with pos, fully identifies the sibling run
+	run    int         // identifies the sibling array state.seq is a suffix of
+	exact  bool        // v.exactChoice > 0
+	// attrUsed packed one bit per attribute when it has at most 64 entries
+	// (attrKey is then ""), else as a '0'/'1' string in attrKey (attrBits is
+	// then 0). The length needs no encoding: elem fixes it on the content path,
+	// and the naive path has no attributes.
+	attrBits uint64
+	attrKey  string
+	suppress bool // v.suppressDepth > 0 (governs whether errors are emitted)
+	content  bool // element-content path vs naive path discriminator
 }
 
 // groupMemoEntry records the full effect of a memoized group-validation call so a
@@ -103,8 +108,16 @@ func (v *validator) groupMemoLookupKey(children []*pattern, elem *helium.Element
 	if len(state.seq) > 0 {
 		pos = state.seq[0]
 	}
+	var attrBits uint64
 	var attrKey string
-	if len(attrUsed) > 0 {
+	switch {
+	case len(attrUsed) <= 64:
+		for i, used := range attrUsed {
+			if used {
+				attrBits |= 1 << uint(i)
+			}
+		}
+	default:
 		buf := make([]byte, len(attrUsed))
 		for i, used := range attrUsed {
 			if used {
@@ -123,6 +136,7 @@ func (v *validator) groupMemoLookupKey(children []*pattern, elem *helium.Element
 		seqLen:   len(state.seq),
 		run:      state.run,
 		exact:    v.exactChoice > 0,
+		attrBits: attrBits,
 		attrKey:  attrKey,
 		suppress: v.suppressDepth > 0,
 		content:  content,
@@ -185,22 +199,15 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 type validState struct {
 	// seq is only ever re-sliced from the front (state.seq[1:] / skipIgnored)
 	// and never written through, so it is a suffix of one per-element base
-	// array. Every snapshot below (clone, saveGroupBound, groupMemoEntry) shares
-	// that backing array instead of copying it. Do NOT add a write through this
-	// slice (state.seq[i] = ... or an append that grows in place) without
+	// array. Every snapshot (a validState value copy, saveGroupBound,
+	// groupMemoEntry) shares that backing array instead of copying it. Do NOT
+	// add a write through this slice (state.seq[i] = ... or an append that grows in place) without
 	// re-copying everywhere a snapshot is taken — doing so would silently
 	// corrupt every outstanding snapshot and memo entry.
 	seq []helium.Node // remaining siblings to validate
 	// run identifies the array seq is a suffix of; each element content and each
 	// interleave branch sub-sequence gets its own (see validator.newRun).
 	run int
-}
-
-func (s *validState) clone() *validState {
-	// state.seq is only ever re-sliced from the front (state.seq[1:] /
-	// skipIgnored) and never written through, so a snapshot can share the
-	// backing array instead of copying it.
-	return &validState{seq: s.seq, run: s.run}
 }
 
 // validatePattern validates a pattern against the current state.
@@ -295,20 +302,22 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	state.seq = state.seq[1:]
 
 	// Validate attributes and content together.
-	// Build child node list, skipping non-content nodes (DTD artifacts, PIs, comments).
+	// Build child node list, skipping non-content nodes (DTD artifacts, PIs,
+	// comments). Count first so the list is allocated once at its final size.
 	var children []helium.Node
-	for child := range helium.Children(elem) {
-		switch child.Type() {
-		case helium.EntityRefNode, helium.EntityNode, helium.ProcessingInstructionNode, helium.CommentNode:
-			continue
-		default:
-			children = append(children, child)
+	if n := countContentChildren(elem); n > 0 {
+		children = make([]helium.Node, 0, n)
+		for child := range helium.Children(elem) {
+			if isContentChild(child) {
+				children = append(children, child)
+			}
 		}
 	}
 
-	// Collect instance attributes (skip xmlns declarations)
+	// Collect instance attributes (skip xmlns declarations). Attributes returns
+	// a fresh slice, so it is filtered in place.
 	allAttrs := elem.Attributes()
-	var instanceAttrs []*helium.Attribute
+	instanceAttrs := allAttrs[:0]
 	for _, attr := range allAttrs {
 		if attr.Prefix() == "xmlns" || (attr.Prefix() == "" && attr.LocalName() == "xmlns") {
 			continue
@@ -337,14 +346,14 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 			for _, n := range skipIgnored(contentState.seq) {
 				if e, ok := n.(*helium.Element); ok {
 					if !v.isKnownChildElement(pat, e.LocalName(), elemNS(e)) {
-						v.addError(elem, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+						v.addErrorf(elem, "Did not expect element %s there", e.LocalName())
 					}
 				}
 			}
 			v.pendingErrors = append(v.pendingErrors, bodyErrors...)
 		}
 		if len(v.pendingErrors) == errLenBefore {
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 		}
 		v.suppressDepth = savedSuppress
 		return -1
@@ -353,7 +362,7 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	// Check all attrs consumed
 	for i, attr := range instanceAttrs {
 		if !attrUsed[i] {
-			v.addError(elem, fmt.Sprintf("Invalid attribute %s for element %s", attr.LocalName(), elem.LocalName()))
+			v.addErrorf(elem, "Invalid attribute %s for element %s", attr.LocalName(), elem.LocalName())
 			v.suppressDepth = savedSuppress
 			return -1
 		}
@@ -369,21 +378,21 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 			for _, n := range remaining {
 				if e, ok := n.(*helium.Element); ok {
 					if !v.isKnownChildElement(pat, e.LocalName(), elemNS(e)) {
-						v.addError(elem, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+						v.addErrorf(elem, "Did not expect element %s there", e.LocalName())
 					}
 				}
 			}
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 		} else {
 			hasChildError := false
 			for _, n := range remaining {
 				if e, ok := n.(*helium.Element); ok {
-					v.addError(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+					v.addErrorf(e, "Did not expect element %s there", e.LocalName())
 					hasChildError = true
 				}
 			}
 			if !hasChildError {
-				v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+				v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 			}
 		}
 		v.suppressDepth = savedSuppress
@@ -394,6 +403,29 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	return 0
 }
 
+// isContentChild reports whether an element child takes part in content
+// validation. DTD artifacts, processing instructions, and comments do not.
+func isContentChild(child helium.Node) bool {
+	switch child.Type() {
+	case helium.EntityRefNode, helium.EntityNode, helium.ProcessingInstructionNode, helium.CommentNode:
+		return false
+	default:
+		return true
+	}
+}
+
+// countContentChildren returns how many children of elem isContentChild
+// accepts.
+func countContentChildren(elem *helium.Element) int {
+	n := 0
+	for child := range helium.Children(elem) {
+		if isContentChild(child) {
+			n++
+		}
+	}
+	return n
+}
+
 // validateElementBody validates the attribute and content patterns of an element
 // against the instance attributes and content state.
 func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
@@ -401,7 +433,7 @@ func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
 	// Validate direct attr patterns
 	for _, attrPat := range pat.attrs {
 		if !v.matchOneAttr(attrPat, attrs, attrUsed, elem) {
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate attributes", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate attributes", elem.LocalName())
 			return -1
 		}
 	}
@@ -434,7 +466,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 	switch pat.kind {
 	case patternAttribute:
 		if !v.matchOneAttr(pat, attrs, attrUsed, elem) {
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate attributes", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate attributes", elem.LocalName())
 			return -1
 		}
 		return 0
@@ -456,7 +488,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		lastBranchLen := savedLen
 		lastBranchValid := savedValid
 		for _, child := range pat.children {
-			savedState := state.clone()
+			savedState := *state
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
 
@@ -474,12 +506,12 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				}
 				// Succeeded but no progress — remember and try others.
 				noProgressMatch = true
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 			} else {
 				lastBranchLen = len(v.pendingErrors)
 				lastBranchValid = v.valid
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 			}
 		}
@@ -501,11 +533,11 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		if isValueChoice(pat) {
 			v.addError(elem, "Error validating value ")
 		}
-		v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+		v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 		return -1
 
 	case patternOptional:
-		savedState := state.clone()
+		savedState := *state
 		savedAttrUsed := make([]bool, len(attrUsed))
 		copy(savedAttrUsed, attrUsed)
 		savedLen := len(v.pendingErrors)
@@ -515,7 +547,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		ret := v.validateContentPat(content, elem, attrs, attrUsed, state)
 		v.suppressDepth--
 		if ret != 0 {
-			*state = *savedState
+			*state = savedState
 			copy(attrUsed, savedAttrUsed)
 			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
@@ -525,7 +557,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 	case patternZeroOrMore:
 		content := wrapChildren(pat.children)
 		for {
-			savedState := state.clone()
+			savedState := *state
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
 			savedLen := len(v.pendingErrors)
@@ -539,7 +571,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 					// Hard failure — propagate errors.
 					return -1
 				}
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 				v.pendingErrors = v.pendingErrors[:savedLen]
 				v.valid = savedValid
@@ -559,7 +591,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		}
 		// Then zero or more
 		for {
-			savedState := state.clone()
+			savedState := *state
 			savedAttrUsed := make([]bool, len(attrUsed))
 			copy(savedAttrUsed, attrUsed)
 			savedLen := len(v.pendingErrors)
@@ -571,7 +603,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 				if len(v.pendingErrors) > savedLen {
 					return -1
 				}
-				*state = *savedState
+				*state = savedState
 				copy(attrUsed, savedAttrUsed)
 				v.pendingErrors = v.pendingErrors[:savedLen]
 				v.valid = savedValid
@@ -597,7 +629,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		text := v.collectText(state)
 		if ret := v.matchListContent(pat, text, elem); ret != 0 {
 			v.addError(elem, "Error validating list")
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 			return -1
 		}
 		return 0
@@ -610,23 +642,44 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 
 // groupBound records state at a group child boundary for backtracking.
 type groupBound struct {
-	state    *validState
+	state    validState
 	attrUsed []bool
 	errLen   int
 	valid    bool
 }
 
-func saveGroupBound(state *validState, attrUsed []bool, errLen int, valid bool) groupBound {
+// saveGroupBound snapshots the validation state at a group child boundary.
+// The attrUsed copy is carved from arena when arena is non-nil and has room
+// (see snapshotAttrUsed).
+func saveGroupBound(state *validState, attrUsed []bool, arena *[]bool, errLen int, valid bool) groupBound {
 	return groupBound{
-		state:    state.clone(),
-		attrUsed: append([]bool(nil), attrUsed...),
+		state:    *state,
+		attrUsed: snapshotAttrUsed(arena, attrUsed),
 		errLen:   errLen,
 		valid:    valid,
 	}
 }
 
+// snapshotAttrUsed returns a copy of attrUsed, or nil when it is empty. When
+// arena is non-nil and has spare capacity for the copy, the copy is appended
+// to arena and returned as a full-slice expression capped at its own length,
+// so a later snapshot carved from the same arena can never overlap it.
+// Otherwise the copy gets its own allocation.
+func snapshotAttrUsed(arena *[]bool, attrUsed []bool) []bool {
+	if len(attrUsed) == 0 {
+		return nil
+	}
+	if arena == nil || cap(*arena)-len(*arena) < len(attrUsed) {
+		return append([]bool(nil), attrUsed...)
+	}
+	start := len(*arena)
+	*arena = append(*arena, attrUsed...)
+	end := len(*arena)
+	return (*arena)[start:end:end]
+}
+
 func (b *groupBound) restore(state *validState, attrUsed []bool, v *validator) {
-	*state = *b.state
+	*state = b.state
 	copy(attrUsed, b.attrUsed)
 	v.pendingErrors = v.pendingErrors[:b.errLen]
 	v.valid = b.valid
@@ -658,9 +711,9 @@ func (v *validator) validateGroupChildren(children []*pattern, elem *helium.Elem
 	result := v.validateGroupChildrenUncached(children, elem, attrs, attrUsed, state)
 	if ok {
 		if v.groupMemo == nil {
-			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+			v.groupMemo = make(map[groupMemoKey]groupMemoEntry)
 		}
-		v.groupMemo[key] = &groupMemoEntry{
+		v.groupMemo[key] = groupMemoEntry{
 			result:   result,
 			seq:      state.seq,
 			attrUsed: append([]bool(nil), attrUsed...),
@@ -676,9 +729,20 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 		return 0
 	}
 
-	// Save state before each child for backtracking.
-	bounds := make([]groupBound, 1, len(children)+1)
-	bounds[0] = saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid)
+	// Save state before each child for backtracking. Each child appends at
+	// most one bound, so len(children)+1 is the final length: a group of up to
+	// seven children keeps its bounds on the stack.
+	var boundsBuf [8]groupBound
+	bounds := boundsBuf[:0]
+	if len(children)+1 > len(boundsBuf) {
+		bounds = make([]groupBound, 0, len(children)+1)
+	}
+	// One backing array holds every bound's attrUsed snapshot.
+	var attrArena []bool
+	if len(attrUsed) > 0 {
+		attrArena = make([]bool, 0, (len(children)+1)*len(attrUsed))
+	}
+	bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 
 	groupFailed := false
 	for gi, child := range children {
@@ -702,13 +766,13 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 				// Element consumed but content failed — continue to collect
 				// errors from remaining group children (like libxml2 does)
 				groupFailed = true
-				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 				continue
 			}
 
 			// No element consumed — try backtracking.
 			if gi > 0 && v.backtrackGroupFlexible(children, gi, elem, attrs, attrUsed, state, bounds) {
-				bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 				continue
 			}
 
@@ -720,10 +784,10 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 					if expectedName != "" && expectedName != e.LocalName() && child.kind == patternChoice {
 						v.pendingErrors = v.pendingErrors[:errLenBefore]
 						v.valid = savedValid
-						v.addError(e, fmt.Sprintf("Expecting element %s, got %s", expectedName, e.LocalName()))
-						v.addError(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+						v.addErrorf(e, "Expecting element %s, got %s", expectedName, e.LocalName())
+						v.addErrorf(e, "Element %s failed to validate content", elem.LocalName())
 					} else if len(v.pendingErrors) == errLenBefore {
-						v.addError(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+						v.addErrorf(e, "Did not expect element %s there", e.LocalName())
 					}
 				}
 			} else if len(v.pendingErrors) == errLenBefore && v.patternElementName(child) != "" {
@@ -732,7 +796,7 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 			return -1
 		}
 
-		bounds = append(bounds, saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid))
+		bounds = append(bounds, saveGroupBound(state, attrUsed, &attrArena, len(v.pendingErrors), v.valid))
 	}
 	if groupFailed {
 		return -1
@@ -773,12 +837,13 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 		// Try progressively increasing iteration counts from minIter upward.
 		// Track the best (highest iter) success to maximize content consumption.
 		type btSuccess struct {
-			state    *validState
+			state    validState
 			attrUsed []bool
 			errLen   int
 			valid    bool
 		}
-		var best *btSuccess
+		var best btSuccess
+		haveBest := false
 
 		// Walk the iteration counts upward incrementally: cur is the boundary
 		// after the current count, and one more repetition advances it. Replaying
@@ -802,12 +867,13 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 			// later mandatory member needs.
 			allOK := v.validateGroupChildren(children[j+1:failIdx+1], elem, attrs, attrUsed, state) == 0
 			if allOK {
-				best = &btSuccess{
-					state:    state.clone(),
+				best = btSuccess{
+					state:    *state,
 					attrUsed: append([]bool(nil), attrUsed...),
 					errLen:   len(v.pendingErrors),
 					valid:    v.valid,
 				}
+				haveBest = true
 			}
 			// Restore errors from before retry so failed attempts don't leak errors.
 			v.pendingErrors = v.pendingErrors[:retryLen]
@@ -816,8 +882,8 @@ func (v *validator) backtrackGroupFlexible(children []*pattern, failIdx int,
 			cur, curOK = v.advanceFlexibleContent(content, elem, attrs, attrUsed, state, cur, 1)
 		}
 
-		if best != nil {
-			*state = *best.state
+		if haveBest {
+			*state = best.state
 			copy(attrUsed, best.attrUsed)
 			v.pendingErrors = v.pendingErrors[:best.errLen]
 			v.valid = best.valid
@@ -847,7 +913,7 @@ func (v *validator) advanceFlexibleContent(content *pattern, elem *helium.Elemen
 			return groupBound{}, false
 		}
 	}
-	return saveGroupBound(state, attrUsed, len(v.pendingErrors), v.valid), true
+	return saveGroupBound(state, attrUsed, nil, len(v.pendingErrors), v.valid), true
 }
 
 // advanceFlexibleNaive is advanceFlexibleContent for the naive group path, which
@@ -863,7 +929,7 @@ func (v *validator) advanceFlexibleNaive(content *pattern, state *validState, fr
 			return groupBound{}, false
 		}
 	}
-	return saveGroupBound(state, nil, len(v.pendingErrors), v.valid), true
+	return saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid), true
 }
 
 // isKnownChildElement checks if an element name/ns appears as a child element
@@ -923,15 +989,15 @@ func (v *validator) elementMatchesWithErrors(pat *pattern, elem *helium.Element)
 		if pat.nameClass.name == elem.LocalName() {
 			patNS := pat.nameClass.ns
 			if patNS != "" && ns == "" {
-				v.addError(elem, fmt.Sprintf("Expecting a namespace for element %s", elem.LocalName()))
+				v.addErrorf(elem, "Expecting a namespace for element %s", elem.LocalName())
 				return false
 			}
 			if patNS != "" && patNS != ns {
-				v.addError(elem, fmt.Sprintf("Element %s has wrong namespace: expecting %s", elem.LocalName(), patNS))
+				v.addErrorf(elem, "Element %s has wrong namespace: expecting %s", elem.LocalName(), patNS)
 				return false
 			}
 			if patNS == "" && ns != "" {
-				v.addError(elem, fmt.Sprintf("Expecting no namespace for element %s", elem.LocalName()))
+				v.addErrorf(elem, "Expecting no namespace for element %s", elem.LocalName())
 				return false
 			}
 			return true
@@ -945,7 +1011,7 @@ func (v *validator) elementMatchesWithErrors(pat *pattern, elem *helium.Element)
 		}
 		// Generate namespace-specific error for anyName-except
 		if pat.nameClass.kind == ncAnyName && pat.nameClass.except != nil {
-			v.addError(elem, fmt.Sprintf("Element %s has wrong namespace: expecting %s", elem.LocalName(), describeExceptNS(pat.nameClass.except)))
+			v.addErrorf(elem, "Element %s has wrong namespace: expecting %s", elem.LocalName(), describeExceptNS(pat.nameClass.except))
 		}
 		return false
 	}
@@ -953,15 +1019,15 @@ func (v *validator) elementMatchesWithErrors(pat *pattern, elem *helium.Element)
 	// No nameClass — use direct name/ns matching
 	if pat.name != "" && pat.name == elem.LocalName() {
 		if pat.ns != "" && ns == "" {
-			v.addError(elem, fmt.Sprintf("Expecting a namespace for element %s", elem.LocalName()))
+			v.addErrorf(elem, "Expecting a namespace for element %s", elem.LocalName())
 			return false
 		}
 		if pat.ns != "" && pat.ns != ns {
-			v.addError(elem, fmt.Sprintf("Element %s has wrong namespace: expecting %s", elem.LocalName(), pat.ns))
+			v.addErrorf(elem, "Element %s has wrong namespace: expecting %s", elem.LocalName(), pat.ns)
 			return false
 		}
 		if pat.ns == "" && ns != "" {
-			v.addError(elem, fmt.Sprintf("Expecting no namespace for element %s", elem.LocalName()))
+			v.addErrorf(elem, "Expecting no namespace for element %s", elem.LocalName())
 			return false
 		}
 		return true
@@ -1043,7 +1109,7 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		if ret := v.matchValue(pat, text); ret != 0 {
 			if elem != nil && pat.dataType != nil && pat.dataType.library == lexicon.NamespaceXSDDatatypes {
 				if validateXSDType(pat.dataType.name, strings.TrimSpace(text), nil) != 0 {
-					v.addError(elem, fmt.Sprintf("failed to compare type %s", pat.dataType.name))
+					v.addErrorf(elem, "failed to compare type %s", pat.dataType.name)
 				}
 			}
 			return -1
@@ -1128,14 +1194,14 @@ func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Ele
 			n, ok := v.matchAttrTokens(child, tokens[offset:])
 			if !ok {
 				if typeName := listDataTypeName(child); typeName != "" {
-					v.addError(elem, fmt.Sprintf("failed to validate type %s", typeName))
+					v.addErrorf(elem, "failed to validate type %s", typeName)
 				}
 				return -1
 			}
 			offset += n
 		}
 		if offset < len(tokens) {
-			v.addError(elem, fmt.Sprintf("Extra data in list: %s", tokens[offset]))
+			v.addErrorf(elem, "Extra data in list: %s", tokens[offset])
 		}
 	}
 	return -1
@@ -1372,9 +1438,9 @@ func (v *validator) validateGroupSeq(children []*pattern, state *validState) int
 	result := v.validateGroupSeqUncached(children, state)
 	if ok {
 		if v.groupMemo == nil {
-			v.groupMemo = make(map[groupMemoKey]*groupMemoEntry)
+			v.groupMemo = make(map[groupMemoKey]groupMemoEntry)
 		}
-		v.groupMemo[key] = &groupMemoEntry{
+		v.groupMemo[key] = groupMemoEntry{
 			result: result,
 			seq:    state.seq,
 			errs:   append([]error(nil), v.pendingErrors[errBase:]...),
@@ -1392,18 +1458,22 @@ func (v *validator) validateGroupSeqUncached(children []*pattern, state *validSt
 	// fails can ask a previous flexible member (zeroOrMore/oneOrMore/optional)
 	// to yield items back. This mirrors validateGroupContent's backtracking,
 	// minus the attribute/element-content bookkeeping that path threads.
-	bounds := make([]groupBound, 1, len(children)+1)
-	bounds[0] = saveGroupBound(state, nil, len(v.pendingErrors), v.valid)
+	var boundsBuf [8]groupBound
+	bounds := boundsBuf[:0]
+	if len(children)+1 > len(boundsBuf) {
+		bounds = make([]groupBound, 0, len(children)+1)
+	}
+	bounds = append(bounds, saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid))
 
 	for gi, child := range children {
 		if ret := v.validatePattern(child, state); ret != 0 {
 			if gi > 0 && v.backtrackGroupNaive(children, gi, state, bounds) {
-				bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
+				bounds = append(bounds, saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid))
 				continue
 			}
 			return -1
 		}
-		bounds = append(bounds, saveGroupBound(state, nil, len(v.pendingErrors), v.valid))
+		bounds = append(bounds, saveGroupBound(state, nil, nil, len(v.pendingErrors), v.valid))
 	}
 	return 0
 }
@@ -1447,9 +1517,10 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 
 		content := wrapChildren(child.children)
 
-		var bestState *validState
+		var bestState validState
 		var bestErrLen int
 		var bestValid bool
+		haveBest := false
 
 		// Walk the iteration counts upward incrementally (see
 		// backtrackGroupFlexible): cur is the boundary after the current count.
@@ -1469,9 +1540,10 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 			// later mandatory member needs.
 			allOK := v.validateGroupSeq(children[j+1:failIdx+1], state) == 0
 			if allOK {
-				bestState = state.clone()
+				bestState = *state
 				bestErrLen = len(v.pendingErrors)
 				bestValid = v.valid
+				haveBest = true
 			}
 			v.pendingErrors = v.pendingErrors[:retryLen]
 			v.valid = retryValid
@@ -1479,8 +1551,8 @@ func (v *validator) backtrackGroupNaive(children []*pattern, failIdx int,
 			cur, curOK = v.advanceFlexibleNaive(content, state, cur, 1)
 		}
 
-		if bestState != nil {
-			*state = *bestState
+		if haveBest {
+			*state = bestState
 			v.pendingErrors = v.pendingErrors[:bestErrLen]
 			v.valid = bestValid
 			return true
@@ -1502,8 +1574,8 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 	// consuming branch (mirrors the hardened validateContentPat choice case).
 	noProgressMatch := false
 	for _, child := range pat.children {
-		saved := state.clone()
-		if ret := v.validatePattern(child, saved); ret != 0 {
+		saved := *state
+		if ret := v.validatePattern(child, &saved); ret != 0 {
 			continue
 		}
 		if !seqEqual(saved.seq, state.seq) {
@@ -1511,7 +1583,7 @@ func (v *validator) validateChoice(pat *pattern, state *validState) int {
 			v.suppressDepth--
 			v.pendingErrors = v.pendingErrors[:savedLen]
 			v.valid = savedValid
-			*state = *saved
+			*state = saved
 			return 0
 		}
 		// Succeeded but consumed nothing — remember and keep trying.
@@ -1533,10 +1605,10 @@ func (v *validator) validateOptional(pat *pattern, state *validState) int { //no
 		return 0
 	}
 
-	saved := state.clone()
+	saved := *state
 	content := wrapChildren(pat.children)
-	if ret := v.validatePattern(content, saved); ret == 0 {
-		*state = *saved
+	if ret := v.validatePattern(content, &saved); ret == 0 {
+		*state = saved
 	}
 	return 0
 }
@@ -1549,14 +1621,14 @@ func (v *validator) validateZeroOrMore(pat *pattern, state *validState) int { //
 	content := wrapChildren(pat.children)
 
 	for {
-		saved := state.clone()
-		if ret := v.validatePattern(content, saved); ret != 0 {
+		saved := *state
+		if ret := v.validatePattern(content, &saved); ret != 0 {
 			break
 		}
 		if len(saved.seq) >= len(state.seq) && seqEqual(saved.seq, state.seq) {
 			break
 		}
-		*state = *saved
+		*state = saved
 	}
 	return 0
 }
@@ -1575,14 +1647,14 @@ func (v *validator) validateOneOrMore(pat *pattern, state *validState) int {
 
 	// Then zero or more
 	for {
-		saved := state.clone()
-		if ret := v.validatePattern(content, saved); ret != 0 {
+		saved := *state
+		if ret := v.validatePattern(content, &saved); ret != 0 {
 			break
 		}
 		if len(saved.seq) >= len(state.seq) && seqEqual(saved.seq, state.seq) {
 			break
 		}
-		*state = *saved
+		*state = saved
 	}
 	return 0
 }
@@ -2212,7 +2284,27 @@ func decodeBase64Octets(s string) ([]byte, bool) {
 // xmlFields), not arbitrary Unicode whitespace, so NBSP is preserved within a
 // token.
 func normalizeToken(s string) string {
+	if isCollapsedToken(s) {
+		return s
+	}
 	return strings.Join(xmlFields(s), " ")
+}
+
+// isCollapsedToken reports whether s is already in xs:token collapsed form:
+// no tab, newline, or carriage return, no leading or trailing space, and no
+// two adjacent spaces. normalizeToken returns such a string unchanged.
+func isCollapsedToken(s string) bool {
+	for i := range len(s) {
+		switch s[i] {
+		case '\t', '\n', '\r':
+			return false
+		case ' ':
+			if i == 0 || i == len(s)-1 || s[i+1] == ' ' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // isXMLSpace reports whether r is one of the four XML whitespace characters
@@ -2247,6 +2339,21 @@ func (v *validator) addError(elem *helium.Element, msg string) {
 	errStr := validityError(v.filename, line, elem.LocalName(), msg)
 	v.pendingErrors = append(v.pendingErrors, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	v.valid = false
+}
+
+// addErrorf formats a validation error and adds it via addError. It returns
+// before formatting while errors are suppressed, so a suppressed error costs
+// no allocation. The arguments are strings, not interface values, so the call
+// site boxes nothing either.
+func (v *validator) addErrorf(elem *helium.Element, format string, args ...string) {
+	if v.suppressDepth > 0 {
+		return
+	}
+	boxed := make([]any, len(args))
+	for i, arg := range args {
+		boxed[i] = arg
+	}
+	v.addError(elem, fmt.Sprintf(format, boxed...))
 }
 
 // addBareError adds a validation error without file/line/element context.

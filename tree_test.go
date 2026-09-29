@@ -483,6 +483,29 @@ func TestTreeMutation(t *testing.T) {
 }
 
 func TestWalk(t *testing.T) {
+	t.Run("visits every node in document order", func(t *testing.T) {
+		src := `<!DOCTYPE r [<!ENTITY e "x">]>` +
+			`<r a="1"><!--c--><b>t<c/><?pi d?></b>&e;<d><e><f>deep</f></e></d><![CDATA[cd]]></r>`
+		doc, err := helium.NewParser().SubstituteEntities(false).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+
+		var visited []helium.Node
+		err = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
+			visited = append(visited, n)
+			return nil
+		}))
+		require.NoError(t, err)
+
+		want := []helium.Node{doc}
+		for n := range helium.Descendants(doc) {
+			want = append(want, n)
+		}
+		require.Len(t, visited, len(want), "Walk visits the node, then its descendants in pre-order")
+		for i := range want {
+			require.Same(t, want[i], visited[i], "visit %d", i)
+		}
+	})
+
 	t.Run("sees sibling replacement during traversal", func(t *testing.T) {
 		doc := helium.NewDefaultDocument()
 		root, err := doc.CreateElement("root")
@@ -542,6 +565,50 @@ func TestWalk(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []string{"root", "a"}, visited)
 	})
+}
+
+// Walk's memory is bounded by the depth of the tree, not its width: a wide
+// sibling list costs no per-child bookkeeping.
+func TestWalkAllocations(t *testing.T) {
+	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
+	// test, and a concurrent allocator would perturb the count anyway.
+	narrow := buildWideTree(t, 10)
+	wide := buildWideTree(t, 1000)
+
+	var visits int
+	w := helium.NodeWalkerFunc(func(helium.Node) error {
+		visits++
+		return nil
+	})
+	var walkErr error
+	narrowAllocs := testing.AllocsPerRun(20, func() {
+		if err := helium.Walk(narrow, w); err != nil {
+			walkErr = err
+		}
+	})
+	wideAllocs := testing.AllocsPerRun(20, func() {
+		if err := helium.Walk(wide, w); err != nil {
+			walkErr = err
+		}
+	})
+	require.NoError(t, walkErr)
+	require.NotZero(t, visits)
+	require.Equal(t, narrowAllocs, wideAllocs,
+		"a 1000-child list must allocate exactly what a 10-child list does")
+}
+
+// buildWideTree returns an element with width empty element children.
+func buildWideTree(t *testing.T, width int) *helium.Element {
+	t.Helper()
+	doc := helium.NewDefaultDocument()
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	for range width {
+		child, err := doc.CreateElement("child")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(child))
+	}
+	return root
 }
 
 func TestNodeAccessors(t *testing.T) {

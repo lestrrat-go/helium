@@ -325,12 +325,20 @@ func NewCompiler() Compiler {
 }
 
 // Compile parses an XPath expression string into a reusable Expression.
+//
+// Compile folds a `//` step into the step after it when that selects the same
+// nodes: `//x` evaluates as descendant::x, and `//x[p]` as descendant::x[p]
+// when the predicate p cannot observe the context position or size. The
+// folded path walks the subtree once instead of twice, so it charges fewer
+// operations against Evaluator.OpLimit and can succeed where the unfolded path
+// would exceed that limit. Results and errors are otherwise unchanged. Parse
+// returns the unfolded AST.
 func (Compiler) Compile(expr string) (*Expression, error) {
 	ast, err := Parse(expr)
 	if err != nil {
 		return nil, err
 	}
-	return &Expression{source: expr, ast: ast}, nil
+	return &Expression{source: expr, ast: optimizeExpr(ast, 0)}, nil
 }
 
 // MustCompile is like Compile but panics on error.

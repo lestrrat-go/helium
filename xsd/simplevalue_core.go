@@ -151,6 +151,108 @@ func collapseSpaces(s string) string {
 	return b.String()
 }
 
+// simpleTypeInfo holds the facts the value validators derive from one simple
+// type's BaseType chain (and, for idFamily/consultsNS, from its list item and
+// union member types). Every field equals what its walker computes for the
+// same type, so reading the memo instead of walking is byte-identical:
+//
+//   - whiteSpace = resolveWhiteSpace(td)
+//   - builtinLocal = builtinBaseLocal(td)
+//   - variety = resolveVariety(td)
+//   - facets = the non-nil Facets of baseChain(td), most derived first (the
+//     order validateFacets applies them)
+//   - idFamily = idFamilyType(td)
+//   - consultsNS = typeConsultsNS(td, version)
+//
+// The info is immutable once built. It is memoized per validation run by
+// (*validationContext).simpleTypeInfo and never stored on the TypeDef or the
+// Schema, so a compiled Schema stays safe to share between concurrent runs.
+type simpleTypeInfo struct {
+	whiteSpace   string
+	builtinLocal string
+	variety      TypeVariety
+	facets       []*FacetSet
+	idFamily     bool
+	// consultsNS reports whether validating a value of the type can read the
+	// in-scope namespace map (the valueNS argument of validateValue). When it
+	// is false, a caller may pass a nil map instead of building one.
+	consultsNS bool
+}
+
+// newSimpleTypeInfo computes the simpleTypeInfo for td by running the walkers.
+// version selects the XSD version that consultsNS depends on.
+func newSimpleTypeInfo(td *TypeDef, version Version) *simpleTypeInfo {
+	info := &simpleTypeInfo{
+		whiteSpace:   resolveWhiteSpace(td),
+		builtinLocal: builtinBaseLocal(td),
+		variety:      resolveVariety(td),
+		idFamily:     idFamilyType(td),
+		consultsNS:   typeConsultsNS(td, version),
+	}
+	for cur := range baseChain(td) {
+		if cur.Facets != nil {
+			info.facets = append(info.facets, cur.Facets)
+		}
+	}
+	return info
+}
+
+// simpleTypeInfo returns the per-run memoized simpleTypeInfo for td, computing
+// it on first use. It returns nil when vc carries no per-run memo (a throwaway
+// context built outside newValidationContext); the caller then uses the
+// walkers named on simpleTypeInfo's fields, which give the same answers. For
+// consultsNS the fallback is typeConsultsNS.
+//
+// The memo is keyed by *TypeDef pointer. A TypeDef synthesized during
+// validation (for example an xml:lang union or a simpleContent facet
+// restriction) gets its own entry.
+func (vc *validationContext) simpleTypeInfo(td *TypeDef) *simpleTypeInfo {
+	if vc.typeInfo == nil {
+		return nil
+	}
+	if info, ok := vc.typeInfo[td]; ok {
+		return info
+	}
+	info := newSimpleTypeInfo(td, vc.version)
+	vc.typeInfo[td] = info
+	return info
+}
+
+// typeConsultsNS reports whether validating a value of td can read the
+// in-scope namespace map. It is true when any type reachable from td through
+// BaseType, ItemType, MemberTypes, or ContentSimpleType is xs:QName or
+// xs:NOTATION (whose lexical values and enumerations resolve prefixes), or,
+// under XSD 1.1, when any reachable type carries an xs:assertion facet (whose
+// $value may be a QName resolved against the map). The walk is cycle-safe.
+func typeConsultsNS(td *TypeDef, version Version) bool {
+	return typeConsultsNSRec(td, version, make(map[*TypeDef]struct{}))
+}
+
+func typeConsultsNSRec(td *TypeDef, version Version, visited map[*TypeDef]struct{}) bool {
+	if td == nil {
+		return false
+	}
+	if _, seen := visited[td]; seen {
+		return false
+	}
+	visited[td] = struct{}{}
+	if td.Name.NS == lexicon.NamespaceXSD && (td.Name.Local == lexicon.TypeQName || td.Name.Local == lexicon.TypeNotation) {
+		return true
+	}
+	if version == Version11 && td.Facets != nil && len(td.Facets.Assertions) > 0 {
+		return true
+	}
+	if typeConsultsNSRec(td.BaseType, version, visited) || typeConsultsNSRec(td.ItemType, version, visited) || typeConsultsNSRec(td.ContentSimpleType, version, visited) {
+		return true
+	}
+	for _, member := range td.MemberTypes {
+		if typeConsultsNSRec(member, version, visited) {
+			return true
+		}
+	}
+	return false
+}
+
 // validateValue validates a text value against a simple type definition.
 func validateValue(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
 	if qn, ok := missingTypeRef(td); ok {
@@ -161,9 +263,16 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 	}
 
 	// Apply whitespace normalization per the type's whiteSpace facet.
-	trimmed := normalizeWhiteSpace(value, resolveWhiteSpace(td))
+	info := vc.simpleTypeInfo(td)
+	var ws string
+	if info != nil {
+		ws = info.whiteSpace
+	} else {
+		ws = resolveWhiteSpace(td)
+	}
+	trimmed := normalizeWhiteSpace(value, ws)
 
-	if err := validateValueByVariety(ctx, value, trimmed, valueNS, td, elemName, filename, line, vc); err != nil {
+	if err := validateValueByVariety(ctx, value, trimmed, valueNS, td, info, elemName, filename, line, vc); err != nil {
 		return err
 	}
 
@@ -177,25 +286,33 @@ func validateValue(ctx context.Context, value string, valueNS map[string]string,
 
 // validateValueByVariety validates a value's lexical space and facets per td's
 // variety, excluding the XSD 1.1 assertion facet (handled by validateValue once
-// the value is otherwise valid).
-func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS map[string]string, td *TypeDef, elemName, filename string, line int, vc *validationContext) error {
+// the value is otherwise valid). info is vc.simpleTypeInfo(td), nil when vc has
+// no per-run memo.
+func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS map[string]string, td *TypeDef, info *simpleTypeInfo, elemName, filename string, line int, vc *validationContext) error {
+	var variety TypeVariety
+	var builtinLocal string
+	if info != nil {
+		variety = info.variety
+		builtinLocal = info.builtinLocal
+	} else {
+		variety = resolveVariety(td)
+		builtinLocal = builtinBaseLocal(td)
+	}
+
 	// Check if this is a list type.
-	if resolveVariety(td) == TypeVarietyList {
+	if variety == TypeVarietyList {
 		return validateListValue(ctx, trimmed, valueNS, td, elemName, filename, line, vc)
 	}
 
 	// Check if this is a union type.
-	if resolveVariety(td) == TypeVarietyUnion {
+	if variety == TypeVarietyUnion {
 		return validateUnionValue(ctx, value, valueNS, td, elemName, filename, line, vc)
 	}
-
-	// Find the builtin base type by walking the BaseType chain.
-	builtinLocal := builtinBaseLocal(td)
 
 	// Validate against the builtin type's lexical space.
 	if err := validateBuiltinValue(trimmed, builtinLocal, vc.version); err != nil {
 		if acceptsXSD10LegacyGMonthInstance(trimmed, builtinLocal, td, vc) {
-			return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
+			return validateFacets(ctx, trimmed, valueNS, td, info, builtinLocal, elemName, filename, line, vc)
 		}
 		typeName := typeDisplayName(td)
 		msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", trimmed, typeName)
@@ -216,7 +333,7 @@ func validateValueByVariety(ctx context.Context, value, trimmed string, valueNS 
 	}
 
 	// Validate facets along the type chain.
-	return validateFacets(ctx, trimmed, valueNS, td, builtinLocal, elemName, filename, line, vc)
+	return validateFacets(ctx, trimmed, valueNS, td, info, builtinLocal, elemName, filename, line, vc)
 }
 
 func acceptsXSD10LegacyGMonthInstance(value, builtinLocal string, td *TypeDef, vc *validationContext) bool {
@@ -608,10 +725,19 @@ func checkListPattern(ctx context.Context, value string, fs *FacetSet, elemName,
 	return fmt.Errorf("pattern")
 }
 
-// validateFacets checks all applicable facets for a type and its ancestors.
-func validateFacets(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
-	// Collect all facets along the type chain (most derived first).
+// validateFacets checks all applicable facets for a type and its ancestors,
+// most derived first. info is vc.simpleTypeInfo(td); when it is nil (no per-run
+// memo) the facets are read by walking the base chain instead.
+func validateFacets(ctx context.Context, value string, valueNS map[string]string, td *TypeDef, info *simpleTypeInfo, builtinLocal, elemName, filename string, line int, vc *validationContext) error {
 	var anyErr error
+	if info != nil {
+		for _, fs := range info.facets {
+			if err := checkFacets(ctx, value, valueNS, fs, builtinLocal, info.whiteSpace, elemName, filename, line, vc); err != nil {
+				anyErr = err
+			}
+		}
+		return anyErr
+	}
 	ws := resolveWhiteSpace(td)
 	for cur := range baseChain(td) {
 		if cur.Facets != nil {

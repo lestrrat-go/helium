@@ -198,7 +198,13 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 - **Element.FindAttribute(AttributePredicate) → (*Attribute, bool)** — attribute-node lookup by matcher; built-in
   matchers: `QNamePredicate`, `LocalNamePredicate`, `NSPredicate`
 - **Element.GetAttribute(qname) → (string, bool)** / **Element.GetAttributeNS(local, nsURI) → (string, bool)** —
-  attribute value lookup by QName or expanded name
+  attribute value lookup by QName or expanded name. The expanded-name lookups (`GetAttributeNS`,
+  `GetAttributeNodeNS`, `RemoveAttributeNS`) loop the `properties` chain through the unexported
+  `findAttributeNS` with the `NSPredicate` test inlined, so a lookup allocates nothing (boxing a predicate into
+  `AttributePredicate` costs one allocation per `FindAttribute` call). Hot paths use these instead of
+  `FindAttribute(NSPredicate{...})`
+- **Attributes(elem) → iter.Seq[*Attribute]** (`iter.go`) — the element's attributes in property order, the
+  same order as `Element.Attributes()`, with no slice allocation. A nil element yields nothing
 - Element attribute setters (all return only `error`, create-or-replace-in-place by expanded name/QName via
   `addProperty`, and reject a colon in the name/local name):
   - **Element.SetAttribute(name, value) / Element.SetAttributeNS(localname, value, ns)** — **LITERAL**: store
@@ -324,7 +330,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   propagate `RawEncoding()`, not `Encoding()`
 - `Walk(doc, fn)`, `Children(node)`, `Descendants(node)` — tree traversal. All accept a typed-nil node (e.g.
   `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
-  (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`
+  (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`. `Walk` allocates
+  O(depth), independent of sibling-list width (cycle guards: `node-types.md`)
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
   panicking. A nil `targetDoc` creates a standalone copy. A copied named `EntityRef` resolves only against a
   non-nil `targetDoc`'s declarations: a bound source reference first resolves in the corresponding destination
@@ -500,6 +507,17 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 XPath 1.0 expression parsing and evaluation.
 
 - **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath
+- `Compiler.Compile` rewrites the parsed AST (`optimize.go` `optimizeExpr`); `Parse` returns it unrewritten. A
+  predicate-free `descendant-or-self::node()` step folds into the next step: `child::<name test>` and `descendant::X`
+  become `descendant::X`, `self::X` and `descendant-or-self::X` become `descendant-or-self::X`. The next step may
+  keep predicates only when `positionFree` proves them position-free: a static boolean/string/node-set type, and no
+  `position()`, `last()`, variable, prefixed or non-builtin function, or numeric nested predicate anywhere inside. A
+  `child::` step with a `node()`/`comment()`/`processing-instruction()`/`text()` test does not fold, because
+  `collectDescendants` (internal/xpath) follows an entity reference context node's `Entity` child into the DTD's
+  sibling list while the child axis stops there. A name test folds because a parsed DTD holds no elements; a DTD
+  given an element through `DTD.AddChild` ahead of the entity declaration makes the folded `.//x` from that entity
+  reference select the element (pinned by `TestCompileFoldHandBuiltDTDElement`). The folded path charges fewer ops against `OpLimit` and builds no
+  intermediate node-set, so it can succeed where the unfolded path hits the op or node-set limit
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **NewEvaluator() → Evaluator** — create clone-on-write evaluation configuration
   - `Namespaces`, `Variables`, `Function`, `FunctionNS`, `OpLimit` — configure namespace, variable, extension-function,
@@ -523,8 +541,9 @@ XPath 1.0 expression parsing and evaluation.
   nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
 - Document order: every location step ends in `internal/xpath.OrderStepResult`, which builds the whole-document
   order index only when the step shape cannot prove its result is already sorted and duplicate-free (multi-input
-  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs)
-- Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
+  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, entity-reference/entity/DTD inputs)
+- Files: `xpath.go` (API), `parser.go`, `lexer.go`, `optimize.go` (compile-time `//` fold), `eval.go`, `expr.go`,
+  `axes.go`, `functions.go`, `static_check.go`, `token.go`
 - Imports: helium, internal/xpath, internal/xpath1/lexer, internal/xpath1/number, internal/domutil, internal/lexicon
 
 ## xpath3/
@@ -2372,7 +2391,8 @@ XSD builtin value validation and comparison, extracted from `xsd/`.
 - **ValidateBuiltin(value, builtinLocal string, version Version) error** — validate value against an XSD builtin type
   lexical space under XSD 1.0 or 1.1 rules
 - **Compare(a, b, builtinLocal string) (int, bool)** — type-aware comparison (-1/0/+1, ok)
-- **CompareDecimal(a, b string) int** — decimal comparison via math/big.Rat (-2 on error)
+- **CompareDecimal(a, b string) int** — exact decimal comparison with math/big.Rat ordering (-2 on error); plain
+  xs:decimal lexicals on both sides compare digit-wise without allocating, anything else goes through `big.Rat`
 - **CompareFloatFacetBound(a, b, builtinLocal string) (int, bool)** — float/double bound comparison ordering NaN as
   equal-to-NaN and greater-than-finite (schema-consistency check)
 - **CanonicalKey(s, builtinLocal string) (string, bool)** — canonical value-space key (e.g. for enumeration de-dup)

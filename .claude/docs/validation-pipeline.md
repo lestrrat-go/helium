@@ -459,7 +459,7 @@ pipeline.
     (collected first, unlinked after — never mid-iteration) any element — with its whole subtree — excluded by
     its version-control (`vc:`, ns `lexicon.NamespaceXSDVersioning`) attributes for the active `c.version`.
     Prune rules: `vc:minVersion`/`vc:maxVersion` (xs:decimal) keep iff `minVersion <= processorVersion <
-    maxVersion`, compared EXACTLY via `value.CompareDecimal` (math/big.Rat) against the processor version as
+    maxVersion`, compared EXACTLY via `value.CompareDecimal` (big.Rat ordering) against the processor version as
     the exact string "1.0"/"1.1" — NOT float64, so a high-precision bound (`1.1000…001`, kept) is not
     mis-rounded and a many-digit valid bound does not float-overflow into a spurious "malformed" error;
     `vc:typeAvailable`/`vc:facetAvailable` keep iff EVERY listed QName is available;
@@ -1228,9 +1228,13 @@ local-simpleType-name rules are separate checks, not this grammar.
 
 ### Validate: Document + Schema → Errors
 
-**Three-pass validation** (pass 3 runs only in XSD 1.1 mode):
+**Three-pass validation** (pass 3 is skipped under `SkipDatatypeIntegrityChecks`; its xs:ENTITY half runs only in
+XSD 1.1 mode). `validateDocument` first counts the instance's elements and attributes (`countPSVINodes`, a bounded
+pointer walk that allocates nothing) and pre-sizes the per-run PSVI maps (`actualElemType`, `assessedElemType`,
+`actualElemDecl`, `actualAttrType`, `assessedAttrs`, and under 1.1 `attrInheritable`) from those counts.
 
-**Pass 1 — Content Model** (`validateDocument` via `helium.Walk()`):
+**Pass 1 — Content Model** (`validateDocument` over `helium.ChildElements(doc)`): each document-level element goes
+to `validateRootElement`, whose content validation recurses through the whole subtree, in document order.
 - For each element:
   1. Match against global element declaration
   2. Resolve `xsi:type` against block flags
@@ -1313,6 +1317,17 @@ basic member xs:integer) against fixed `1.0` (xs:decimal) in the shared decimal
 value space, so the two compare equal. Global attributes matched through an `xs:anyAttribute`
 wildcard (`validateWildcardAttr`, processContents strict/lax) also enforce the
 global attribute's `Fixed`/`FixedNS` via `fixedValueMatches`.
+
+Per-run simple-type info memo: `(*validationContext).simpleTypeInfo(td)` (`simplevalue_core.go`) computes once per
+`*TypeDef` per validation run a `simpleTypeInfo` holding the whiteSpace mode (`resolveWhiteSpace`), builtin base local
+(`builtinBaseLocal`), variety (`resolveVariety`), the base chain's non-nil `*FacetSet`s most derived first (the order
+`validateFacets` applies them), `idFamily` (`idFamilyType`), and `consultsNS` (`typeConsultsNS`: true iff a type
+reachable through `BaseType`/`ItemType`/`MemberTypes`/`ContentSimpleType` is xs:QName or xs:NOTATION, or, under
+`Version11`, carries an xs:assertion facet; when false the value check never reads `valueNS`). `validateValue`,
+`validateValueByVariety`, `validateFacets`, and the ID walks (`isIDFamilyType`) read it. The map
+(`validationContext.typeInfo`) is created by `newValidationContext` and shared by the per-attribute silenced
+sub-contexts in `validateAttributes`/`validateWildcardAttr`; every other throwaway context leaves it nil, gets a nil
+info, and falls back to the walkers, which stay the single computation. Nothing is written to `Schema` or `TypeDef`.
 
 Enumeration facets are compared in value space, not raw lexical text. Each
 enumeration *literal* is first whitespace-normalized with the constrained type's
@@ -1493,7 +1508,8 @@ is reported as a validity error (`Failed to evaluate identity-constraint '…'`)
 field-XPath diagnostic uses `lexer.DiagnosticExcerpt`, including compile/evaluate failures, non-simple nodes,
 and multi-member node sets, so a valid long expression cannot make validation output grow with its source.
 
-**Pass 2 — Identity Constraints** (`validateIDConstraints` via second `helium.Walk()`):
+**Pass 2 — Identity Constraints** (`validateIDConstraints` via a full-tree `helium.Walk()`). This walk always runs,
+so it is also the pass that reports a tree cycle: `ErrWalkCycle` marks the document invalid.
 - **Host declaration resolution** (`idcHostDecl`): the declaration whose IDCs apply
   to an element instance is the non-ref declaration recorded during pass-1 if one is
   present — used even when it carries ZERO IDCs, because a local element that merely
@@ -1698,8 +1714,8 @@ an empty-but-present `name=""`/`refer=""` is still rejected (consistent with the
 ref-form detection); and `refer` is rejected for EVERY kind (key/unique/keyref),
 not only on `xs:keyref`.
 
-**Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, XSD 1.1 only):
-a third `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
+**Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, both XSD versions):
+a separate `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
 be unique, **except** that the same value may identify a single element more than
 once. An ID's owning element is the element BEARING it — an attribute ID on its
 owning element, an element-content ID on its **parent** (`idOwner`) — so two ID
@@ -1912,9 +1928,11 @@ Pattern-matching engine with backtracking:
 Every `<interleave>`/`<mixed>` is validated through its compile-time partition (built by `checkInterleaves`, see
 "Compile" step 6a), not by round-robin member matching. `interleavePartitionOf` returns the compiled
 `pattern.partition`, computing an uncached one (never cached at validation time — `Grammar` is shared across
-goroutines) for an interleave the compiler did not record. `partitionInterleave` walks `state.seq` from the
+goroutines) for an interleave the compiler did not record. `partitionInterleave` walks the sequence from the
 front, routing each node via `interleavePartition.route` into one `[][]helium.Node` slot per branch; it stops at
-the first node no branch accepts, leaving that node and everything after it in `state.seq` for the caller.
+the first node no branch accepts and returns that node and everything after it as the rest, which the caller
+stores back in `state.seq`. It routes twice (count per branch, then fill), so every branch sub-sequence is a
+capped slice of one backing array; a branch that receives nothing gets `nil`.
 Because RELAX NG §7.4 guarantees the branches are pairwise disjoint, this routing is exact: a node routed to
 branch *i* could never have been claimed by another branch.
 
@@ -1938,7 +1956,7 @@ path (no element/attribute context, so no diagnostics), reached from a top-level
 
 **Sibling-array identity (`run`).** `validState` carries a `run int`; `validator.newRun()` (backed by
 `validator.runSeq`) hands out a fresh id for every element content (`validateElement`'s `contentState`) and every
-interleave branch sub-sequence, and `clone()` copies it. `groupMemoKey` includes `run`, restoring the invariant
+interleave branch sub-sequence, and every snapshot (a `validState` value copy) carries it. `groupMemoKey` includes `run`, restoring the invariant
 that within one `run`, `seq` is always a suffix of one array, so `(pos, seqLen)` uniquely identifies a group
 subproblem — without it, two interleave branches (or two choice arms) probing the same shared `<define>` at the
 same input position with the same remaining length could collide on a memo entry that belongs to a DIFFERENT
@@ -1983,14 +2001,24 @@ the result (child-range start pattern + length, owning element, first remaining
 node + sequence length, the sibling-array id `run` that (pos, seqLen) is only
 unique within, whether the call ran under the interleave exact-choice retry
 (`exact`), packed `attrUsed`, `suppressDepth>0`, content-vs-naive
-discriminator). A hit reproduces the original call's effect exactly — resulting
+discriminator). `attrUsed` is packed into the `attrBits uint64` key field when it
+has at most 64 entries and into the `attrKey` string above that; the owning
+element fixes its length, so the length needs no encoding. Entries are stored by
+value (`map[groupMemoKey]groupMemoEntry`). A hit reproduces the original call's effect exactly — resulting
 position, attribute usage, appended errors, return value — so memoization is sound
 (no valid document rejected) while collapsing the fan-out to polynomial. Regression
 guard: `TestMultiFlexibleGroupBacktrackingNotExponential`. `validState.seq` is only
 ever re-sliced from the front, never written through, so every snapshot taken
-during backtracking — `clone()`, `saveGroupBound`, and the memo entries stored
-here — shares the sibling slice's backing array instead of copying it; only
-`attrUsed` is deep-copied, because that slice is mutated in place. `seqEqual`
+during backtracking — a `validState` value copy, `saveGroupBound` (whose
+`groupBound.state` is a `validState` value), and the memo entries stored here —
+shares the sibling slice's backing array instead of copying it; only `attrUsed`
+is deep-copied, because that slice is mutated in place.
+`validateGroupChildrenUncached` keeps up to eight bounds in a stack array and
+carves every bound's `attrUsed` copy from one per-call arena (full-slice
+expressions, so no two copies overlap). All of this state lives in the
+`validator` for one run; validation never writes to the `Grammar`
+(`TestGrammarConcurrentValidation` validates every golden instance from several
+goroutines sharing one `Grammar`). `seqEqual`
 exploits the same fact with an O(1) identity check (equal length plus an
 identical first-element pointer) before falling back to an element-by-element
 comparison. Regression guard for the allocation this avoids:
@@ -2126,6 +2154,8 @@ name only when `datatypeLibrary` is absent). Any other `<param>` name
 
 - `suppressDepth` counter incremented during choice branch exploration
 - Errors only emitted on definitive failures (top-level or after element consumed)
+- `addErrorf(elem, format, args ...string)` returns before formatting while `suppressDepth > 0`, so a suppressed
+  diagnostic costs no allocation; its arguments are strings, so the call site boxes nothing
 
 ### Key Data Model
 

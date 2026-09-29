@@ -607,6 +607,14 @@ type validationContext struct {
 	// lax-without-global-admitted or ancestor-skipped attribute is unassessed.
 	// Populated in BOTH versions (the field classification runs in 1.0 too).
 	assessedAttrs map[*helium.Attribute]struct{}
+	// typeInfo memoizes simpleTypeInfo per *TypeDef for this run (see
+	// (*validationContext).simpleTypeInfo). newValidationContext creates it, and
+	// a diagnostic-suppressing sub-context derived from a run context shares the
+	// run's map by copying this field. Every other throwaway context
+	// (compile-time checks, TypeDef.Validate, union active-member probes) leaves
+	// it nil and uses the base-chain walkers directly. The map lives only as long
+	// as the run, so nothing is written to the shared Schema.
+	typeInfo map[*TypeDef]*simpleTypeInfo
 }
 
 // assertEffectiveValue is a recorded element default/fixed effective value plus the
@@ -636,7 +644,10 @@ type pendingKeyRef struct {
 	table *idcTable
 }
 
-func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler) *validationContext {
+// newValidationContext creates the per-run state for one validation. sizes
+// pre-sizes the per-run PSVI maps, so a whole-document run does not rehash them
+// as they grow; the zero psviSizeHint leaves them at the default size.
+func newValidationContext(schema *Schema, cfg *validateConfig, filename string, handler helium.ErrorHandler, sizes psviSizeHint) *validationContext {
 	var version Version
 	if schema != nil {
 		version = schema.version
@@ -647,23 +658,94 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		cfg:                            cfg,
 		filename:                       filename,
 		errorHandler:                   handler,
+		typeInfo:                       make(map[*TypeDef]*simpleTypeInfo),
 		allowXSD10LegacyGMonthInstance: true,
 		idcDocOrder:                    &ixpath.DocOrderCache{},
-		actualElemType:                 make(map[*helium.Element]*TypeDef),
-		actualElemDecl:                 make(map[*helium.Element]*ElementDecl),
-		attrInheritable:                make(map[*helium.Attribute]struct{}),
-		assessedElemType:               make(map[*helium.Element]*TypeDef),
-		actualAttrType:                 make(map[*helium.Attribute]*TypeDef),
-		assessedAttrs:                  make(map[*helium.Attribute]struct{}),
+		actualElemType:                 make(map[*helium.Element]*TypeDef, sizes.elems),
+		actualElemDecl:                 make(map[*helium.Element]*ElementDecl, sizes.elems),
+		assessedElemType:               make(map[*helium.Element]*TypeDef, sizes.elems),
+		actualAttrType:                 make(map[*helium.Attribute]*TypeDef, sizes.attrs),
+		assessedAttrs:                  make(map[*helium.Attribute]struct{}, sizes.attrs),
 	}
-	if version == Version11 {
-		vc.assertAnnotations = make(TypeAnnotations)
-		vc.assertAnonTypes = make(map[string]*TypeDef)
-		vc.assertAnonNames = make(map[*TypeDef]string)
-		vc.assertEffectiveValues = make(map[helium.Node]assertEffectiveValue)
-		vc.skipContentNodes = make(map[helium.Node]struct{})
+	// attrInheritable is written only by the 1.1 attribute-inheritance path, so
+	// only a 1.1 run sizes it.
+	if version != Version11 {
+		vc.attrInheritable = make(map[*helium.Attribute]struct{})
+		return vc
 	}
+	vc.attrInheritable = make(map[*helium.Attribute]struct{}, sizes.attrs)
+	vc.assertAnnotations = make(TypeAnnotations)
+	vc.assertAnonTypes = make(map[string]*TypeDef)
+	vc.assertAnonNames = make(map[*TypeDef]string)
+	vc.assertEffectiveValues = make(map[helium.Node]assertEffectiveValue)
+	vc.skipContentNodes = make(map[helium.Node]struct{})
 	return vc
+}
+
+// psviSizeHint holds the element and attribute counts newValidationContext
+// sizes the per-run PSVI maps with. It is only a capacity hint: a map that
+// outgrows it grows as usual.
+type psviSizeHint struct {
+	elems int
+	attrs int
+	// budget is the number of node and attribute steps countPSVINodes may
+	// still take.
+	budget int
+}
+
+// psviSizeHintBudget bounds countPSVINodes. The count is a capacity hint, so a
+// document larger than the budget only starts its maps smaller than their final
+// size. The bound also ends the count on a corrupt linked graph (a sibling,
+// parent, or attribute cycle), which the full-tree identity-constraint walk in
+// validateDocument then reports as ErrWalkCycle.
+const psviSizeHintBudget = 1 << 18
+
+// countPSVINodes counts the elements and attributes of doc's element trees for
+// sizing the per-run PSVI maps. It follows the node link pointers directly (first
+// child, next sibling, parent) and allocates nothing. It descends only into
+// elements, so entity content reached through an entity reference and the DTD
+// are not counted.
+func countPSVINodes(doc *helium.Document) psviSizeHint {
+	h := psviSizeHint{budget: psviSizeHintBudget}
+	node := doc.FirstChild()
+	for node != nil && h.budget > 0 {
+		h.budget--
+		if elem, ok := helium.AsNode[*helium.Element](node); ok {
+			h.elems++
+			elem.ForEachAttribute(h.countAttribute)
+			if first := elem.FirstChild(); first != nil {
+				node = first
+				continue
+			}
+		}
+		node = h.nextNode(node)
+	}
+	return h
+}
+
+// countAttribute is the ForEachAttribute callback of countPSVINodes.
+func (h *psviSizeHint) countAttribute(*helium.Attribute) bool {
+	h.attrs++
+	h.budget--
+	return h.budget > 0
+}
+
+// nextNode returns the node after node's subtree in document order: its next
+// sibling, or the next sibling of its nearest ancestor that has one. It returns
+// nil once the climb reaches the document node or the budget runs out.
+func (h *psviSizeHint) nextNode(node helium.Node) helium.Node {
+	for node != nil && h.budget > 0 {
+		if next := node.NextSibling(); next != nil {
+			return next
+		}
+		parent := node.Parent()
+		if parent == nil || parent.Type() == helium.DocumentNode {
+			return nil
+		}
+		node = parent
+		h.budget--
+	}
+	return nil
 }
 
 // validationErrors is a synchronous ErrorHandler that accumulates error
@@ -749,7 +831,7 @@ func (td *TypeDef) ValidateElementAnnotated(ctx context.Context, elem *helium.El
 		}
 		cfg.annotations = ann
 	}
-	vc := newValidationContext(schema, cfg, "", collector)
+	vc := newValidationContext(schema, cfg, "", collector, psviSizeHint{})
 	err := vc.validateElementContent(ctx, elem, nil, td)
 	if err == nil {
 		return nil
@@ -773,7 +855,6 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		filename = "(string)"
 	}
 	valid := true
-	vc := newValidationContext(schema, cfg, filename, handler)
 
 	// Initialize annotations map if requested.
 	if cfg.annotations != nil && *cfg.annotations == nil {
@@ -793,25 +874,21 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		return false
 	}
 
-	// Walk the document tree for content model validation. A tree cycle
-	// (ErrWalkCycle) leaves the walk partial, so the document is not valid.
-	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() != helium.ElementNode {
-			return nil
-		}
-		elem, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			return nil
-		}
-		if err := vc.validateElement(ctx, elem); err != nil {
+	vc := newValidationContext(schema, cfg, filename, handler, countPSVINodes(doc))
+
+	// Content-model validation. Each element child of the document node is a
+	// validation root that must match a global element declaration, and
+	// validating a root recurses through its whole subtree, so only the
+	// document-level elements are visited here, in document order.
+	for elem := range helium.ChildElements(doc) {
+		if err := vc.validateRootElement(ctx, elem); err != nil {
 			valid = false
 		}
-		return nil
-	})); err != nil {
-		valid = false
 	}
 
-	// Second walk: evaluate identity constraints (xs:key, xs:keyref, xs:unique).
+	// Identity constraints (xs:key, xs:keyref, xs:unique). This walk covers the
+	// whole tree and always runs, so it is also the pass that reports a tree
+	// cycle: ErrWalkCycle leaves the walk partial, and the document is not valid.
 	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
 		if n.Type() != helium.ElementNode {
 			return nil
@@ -842,7 +919,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		valid = false
 	}
 
-	// Third walk: document-wide xs:ID / xs:IDREF / xs:IDREFS validation (cvc-id,
+	// Document-wide xs:ID / xs:IDREF / xs:IDREFS validation (cvc-id,
 	// §3.3.4/§3.3.11). This is a VERSION-INDEPENDENT XSD rule — ID uniqueness and
 	// IDREF referential integrity are enforced in both 1.0 and 1.1; only the
 	// multiple-IDs-per-element relaxation (recordID) is 1.1-specific. A
@@ -854,7 +931,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		}
 	}
 
-	// Fourth walk: XSD 1.1 document-wide xs:ENTITY / xs:ENTITIES value-space
+	// XSD 1.1 document-wide xs:ENTITY / xs:ENTITIES value-space
 	// validation (cvc-id / §3.3.11). Gated to 1.1 so XSD 1.0 stays byte-identical
 	// (helium validates these datatypes only lexically in 1.0), and skipped for a
 	// fragment-validating caller (cfg.skipDatatypeIntegrity).
@@ -872,16 +949,6 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	}
 
 	return valid
-}
-
-func (vc *validationContext) validateElement(ctx context.Context, elem *helium.Element) error {
-	parent := elem.Parent()
-	if parent == nil || parent.Type() == helium.DocumentNode {
-		// Root element — must match a global element declaration.
-		return vc.validateRootElement(ctx, elem)
-	}
-	// Non-root elements are validated by their parent's content model.
-	return nil
 }
 
 func (vc *validationContext) validateRootElement(ctx context.Context, elem *helium.Element) error {
@@ -2021,7 +2088,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			// type is associated only for the fixed-value comparison just done), so
 			// skip the generic check to avoid validating the same value twice.
 			if tdOK && attrTD.ContentType == ContentTypeSimple && !declaredXsiValueChecked {
-				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
+				if err := validateValue(ctx, a.Value(), collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance, typeInfo: vc.typeInfo}); err != nil {
 					ad := attrDisplayName(a)
 					msg := fmt.Sprintf("The value '%s' is not valid for the type of attribute '%s'.", a.Value(), ad)
 					vc.reportValidityErrorAttr(ctx, vc.filename, elem.Line(), elemDisplayName(elem), ad, msg)
@@ -2453,7 +2520,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 
 	if ok && attrTD.ContentType == ContentTypeSimple {
 		value := a.Value()
-		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance}); err != nil {
+		if err := validateValue(ctx, value, collectNSContext(elem), attrTD, elemDisplayName(elem), vc.filename, elem.Line(), &validationContext{schema: vc.schema, version: vc.version, errorHandler: helium.NilErrorHandler{}, allowXSD10LegacyGMonthInstance: vc.allowXSD10LegacyGMonthInstance, typeInfo: vc.typeInfo}); err != nil {
 			ad := attrDisplayName(a)
 			typeName := typeDisplayName(attrTD)
 			msg := fmt.Sprintf("'%s' is not a valid value of the atomic type '%s'.", strings.TrimSpace(value), typeName)
