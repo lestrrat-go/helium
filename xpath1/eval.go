@@ -229,7 +229,7 @@ func evalStepWithPredicates(ctx context.Context, ec *evalContext, nodes []helium
 		}
 		allFiltered = append(allFiltered, matched...)
 	}
-	return ixpath.DeduplicateNodes(allFiltered, ec.docOrder, maxNodeSetLength)
+	return ixpath.OrderStepResult(allFiltered, nodes, step.Axis, ec.docOrder, maxNodeSetLength)
 }
 
 // evalStepNoPredicates evaluates one location step that has no predicates.
@@ -249,7 +249,7 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 			return nil, err
 		}
 	}
-	return ixpath.DeduplicateNodes(next, ec.docOrder, maxNodeSetLength)
+	return ixpath.OrderStepResult(next, nodes, step.Axis, ec.docOrder, maxNodeSetLength)
 }
 
 func matchNodeTest(nt NodeTest, n helium.Node, axis AxisType, ec *evalContext) bool {

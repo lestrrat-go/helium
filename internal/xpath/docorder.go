@@ -28,6 +28,10 @@ type DocOrderCache struct {
 	// It is consulted when indexing a new document and when comparing two
 	// nodes of which at least one is not indexed.
 	documents map[helium.Node]int
+	// reserved holds the document roots that own a registration order in
+	// documents but are not indexed yet (see reserveDocument). The first
+	// lookup that needs one of their positions indexes them.
+	reserved map[helium.Node]struct{}
 }
 
 // Reset clears all cached document-order state so the same cache value can be
@@ -41,6 +45,7 @@ func (c *DocOrderCache) Reset() {
 	defer c.mu.Unlock()
 	c.keys = nil
 	c.documents = nil
+	c.reserved = nil
 }
 
 // sortKey holds precomputed sort information for a node, avoiding
@@ -160,7 +165,46 @@ func (c *DocOrderCache) indexInDocOrder(nodes []helium.Node) bool {
 func (c *DocOrderCache) Position(n helium.Node) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.sortKeyLocked(n).position
+	return c.lookupSortKeyLocked(n).position
+}
+
+// lookupSortKeyLocked returns the sort key of n like sortKeyLocked, but first
+// indexes n's document when that document is reserved and not yet indexed.
+// The caller must hold c.mu.
+func (c *DocOrderCache) lookupSortKeyLocked(n helium.Node) sortKey {
+	k := c.sortKeyLocked(n)
+	if k.position >= 0 || len(c.reserved) == 0 {
+		return k
+	}
+	root := DocumentRoot(n)
+	if _, ok := c.reserved[root]; !ok {
+		return k
+	}
+	c.buildFromLocked(root)
+	return c.sortKeyLocked(n)
+}
+
+// reserveDocument gives the document of n its registration order, as indexing
+// it would, without indexing it. Reserving an already registered document is
+// a no-op. A reserved document is indexed, under the reserved order, by the
+// first lookup that needs a position in it. Registering the document at the
+// same point where indexing would have registered it keeps the relative order
+// of nodes from different documents unchanged.
+func (c *DocOrderCache) reserveDocument(n helium.Node) {
+	root := DocumentRoot(n)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.documents[root]; ok {
+		return
+	}
+	if c.documents == nil {
+		c.documents = make(map[helium.Node]int)
+	}
+	if c.reserved == nil {
+		c.reserved = make(map[helium.Node]struct{})
+	}
+	c.documents[root] = len(c.documents)
+	c.reserved[root] = struct{}{}
 }
 
 // BuildFrom populates the cache by walking the tree rooted at root.
@@ -177,11 +221,16 @@ func (c *DocOrderCache) buildFromLocked(root helium.Node) {
 	if c.documents == nil {
 		c.documents = make(map[helium.Node]int)
 	}
-	if _, ok := c.documents[root]; ok {
-		return
+	order, ok := c.documents[root]
+	if ok {
+		if _, isReserved := c.reserved[root]; !isReserved {
+			return
+		}
+		delete(c.reserved, root)
+	} else {
+		order = len(c.documents)
+		c.documents[root] = order
 	}
-	order := len(c.documents)
-	c.documents[root] = order
 	if c.keys == nil {
 		c.keys = make(map[helium.Node]sortKey)
 	}
@@ -241,8 +290,8 @@ func (c *DocOrderCache) indexWalk(cur helium.Node, order int, pos *int) {
 func (c *DocOrderCache) Compare(a, b helium.Node) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	ka := c.sortKeyLocked(a)
-	kb := c.sortKeyLocked(b)
+	ka := c.lookupSortKeyLocked(a)
+	kb := c.lookupSortKeyLocked(b)
 	if ka.docOrder >= 0 && kb.docOrder >= 0 {
 		// Both nodes are indexed, so their document registration order
 		// already tells whether they share a root.
