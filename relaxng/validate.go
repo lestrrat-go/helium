@@ -302,20 +302,22 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	state.seq = state.seq[1:]
 
 	// Validate attributes and content together.
-	// Build child node list, skipping non-content nodes (DTD artifacts, PIs, comments).
+	// Build child node list, skipping non-content nodes (DTD artifacts, PIs,
+	// comments). Count first so the list is allocated once at its final size.
 	var children []helium.Node
-	for child := range helium.Children(elem) {
-		switch child.Type() {
-		case helium.EntityRefNode, helium.EntityNode, helium.ProcessingInstructionNode, helium.CommentNode:
-			continue
-		default:
-			children = append(children, child)
+	if n := countContentChildren(elem); n > 0 {
+		children = make([]helium.Node, 0, n)
+		for child := range helium.Children(elem) {
+			if isContentChild(child) {
+				children = append(children, child)
+			}
 		}
 	}
 
-	// Collect instance attributes (skip xmlns declarations)
+	// Collect instance attributes (skip xmlns declarations). Attributes returns
+	// a fresh slice, so it is filtered in place.
 	allAttrs := elem.Attributes()
-	var instanceAttrs []*helium.Attribute
+	instanceAttrs := allAttrs[:0]
 	for _, attr := range allAttrs {
 		if attr.Prefix() == "xmlns" || (attr.Prefix() == "" && attr.LocalName() == "xmlns") {
 			continue
@@ -344,14 +346,14 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 			for _, n := range skipIgnored(contentState.seq) {
 				if e, ok := n.(*helium.Element); ok {
 					if !v.isKnownChildElement(pat, e.LocalName(), elemNS(e)) {
-						v.addError(elem, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+						v.addErrorf(elem, "Did not expect element %s there", e.LocalName())
 					}
 				}
 			}
 			v.pendingErrors = append(v.pendingErrors, bodyErrors...)
 		}
 		if len(v.pendingErrors) == errLenBefore {
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 		}
 		v.suppressDepth = savedSuppress
 		return -1
@@ -360,7 +362,7 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	// Check all attrs consumed
 	for i, attr := range instanceAttrs {
 		if !attrUsed[i] {
-			v.addError(elem, fmt.Sprintf("Invalid attribute %s for element %s", attr.LocalName(), elem.LocalName()))
+			v.addErrorf(elem, "Invalid attribute %s for element %s", attr.LocalName(), elem.LocalName())
 			v.suppressDepth = savedSuppress
 			return -1
 		}
@@ -376,21 +378,21 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 			for _, n := range remaining {
 				if e, ok := n.(*helium.Element); ok {
 					if !v.isKnownChildElement(pat, e.LocalName(), elemNS(e)) {
-						v.addError(elem, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+						v.addErrorf(elem, "Did not expect element %s there", e.LocalName())
 					}
 				}
 			}
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 		} else {
 			hasChildError := false
 			for _, n := range remaining {
 				if e, ok := n.(*helium.Element); ok {
-					v.addError(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+					v.addErrorf(e, "Did not expect element %s there", e.LocalName())
 					hasChildError = true
 				}
 			}
 			if !hasChildError {
-				v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+				v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 			}
 		}
 		v.suppressDepth = savedSuppress
@@ -401,6 +403,29 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	return 0
 }
 
+// isContentChild reports whether an element child takes part in content
+// validation. DTD artifacts, processing instructions, and comments do not.
+func isContentChild(child helium.Node) bool {
+	switch child.Type() {
+	case helium.EntityRefNode, helium.EntityNode, helium.ProcessingInstructionNode, helium.CommentNode:
+		return false
+	default:
+		return true
+	}
+}
+
+// countContentChildren returns how many children of elem isContentChild
+// accepts.
+func countContentChildren(elem *helium.Element) int {
+	n := 0
+	for child := range helium.Children(elem) {
+		if isContentChild(child) {
+			n++
+		}
+	}
+	return n
+}
+
 // validateElementBody validates the attribute and content patterns of an element
 // against the instance attributes and content state.
 func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
@@ -408,7 +433,7 @@ func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
 	// Validate direct attr patterns
 	for _, attrPat := range pat.attrs {
 		if !v.matchOneAttr(attrPat, attrs, attrUsed, elem) {
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate attributes", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate attributes", elem.LocalName())
 			return -1
 		}
 	}
@@ -441,7 +466,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 	switch pat.kind {
 	case patternAttribute:
 		if !v.matchOneAttr(pat, attrs, attrUsed, elem) {
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate attributes", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate attributes", elem.LocalName())
 			return -1
 		}
 		return 0
@@ -508,7 +533,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		if isValueChoice(pat) {
 			v.addError(elem, "Error validating value ")
 		}
-		v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+		v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 		return -1
 
 	case patternOptional:
@@ -604,7 +629,7 @@ func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 		text := v.collectText(state)
 		if ret := v.matchListContent(pat, text, elem); ret != 0 {
 			v.addError(elem, "Error validating list")
-			v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 			return -1
 		}
 		return 0
@@ -759,10 +784,10 @@ func (v *validator) validateGroupChildrenUncached(children []*pattern, elem *hel
 					if expectedName != "" && expectedName != e.LocalName() && child.kind == patternChoice {
 						v.pendingErrors = v.pendingErrors[:errLenBefore]
 						v.valid = savedValid
-						v.addError(e, fmt.Sprintf("Expecting element %s, got %s", expectedName, e.LocalName()))
-						v.addError(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+						v.addErrorf(e, "Expecting element %s, got %s", expectedName, e.LocalName())
+						v.addErrorf(e, "Element %s failed to validate content", elem.LocalName())
 					} else if len(v.pendingErrors) == errLenBefore {
-						v.addError(e, fmt.Sprintf("Did not expect element %s there", e.LocalName()))
+						v.addErrorf(e, "Did not expect element %s there", e.LocalName())
 					}
 				}
 			} else if len(v.pendingErrors) == errLenBefore && v.patternElementName(child) != "" {
@@ -964,15 +989,15 @@ func (v *validator) elementMatchesWithErrors(pat *pattern, elem *helium.Element)
 		if pat.nameClass.name == elem.LocalName() {
 			patNS := pat.nameClass.ns
 			if patNS != "" && ns == "" {
-				v.addError(elem, fmt.Sprintf("Expecting a namespace for element %s", elem.LocalName()))
+				v.addErrorf(elem, "Expecting a namespace for element %s", elem.LocalName())
 				return false
 			}
 			if patNS != "" && patNS != ns {
-				v.addError(elem, fmt.Sprintf("Element %s has wrong namespace: expecting %s", elem.LocalName(), patNS))
+				v.addErrorf(elem, "Element %s has wrong namespace: expecting %s", elem.LocalName(), patNS)
 				return false
 			}
 			if patNS == "" && ns != "" {
-				v.addError(elem, fmt.Sprintf("Expecting no namespace for element %s", elem.LocalName()))
+				v.addErrorf(elem, "Expecting no namespace for element %s", elem.LocalName())
 				return false
 			}
 			return true
@@ -986,7 +1011,7 @@ func (v *validator) elementMatchesWithErrors(pat *pattern, elem *helium.Element)
 		}
 		// Generate namespace-specific error for anyName-except
 		if pat.nameClass.kind == ncAnyName && pat.nameClass.except != nil {
-			v.addError(elem, fmt.Sprintf("Element %s has wrong namespace: expecting %s", elem.LocalName(), describeExceptNS(pat.nameClass.except)))
+			v.addErrorf(elem, "Element %s has wrong namespace: expecting %s", elem.LocalName(), describeExceptNS(pat.nameClass.except))
 		}
 		return false
 	}
@@ -994,15 +1019,15 @@ func (v *validator) elementMatchesWithErrors(pat *pattern, elem *helium.Element)
 	// No nameClass — use direct name/ns matching
 	if pat.name != "" && pat.name == elem.LocalName() {
 		if pat.ns != "" && ns == "" {
-			v.addError(elem, fmt.Sprintf("Expecting a namespace for element %s", elem.LocalName()))
+			v.addErrorf(elem, "Expecting a namespace for element %s", elem.LocalName())
 			return false
 		}
 		if pat.ns != "" && pat.ns != ns {
-			v.addError(elem, fmt.Sprintf("Element %s has wrong namespace: expecting %s", elem.LocalName(), pat.ns))
+			v.addErrorf(elem, "Element %s has wrong namespace: expecting %s", elem.LocalName(), pat.ns)
 			return false
 		}
 		if pat.ns == "" && ns != "" {
-			v.addError(elem, fmt.Sprintf("Expecting no namespace for element %s", elem.LocalName()))
+			v.addErrorf(elem, "Expecting no namespace for element %s", elem.LocalName())
 			return false
 		}
 		return true
@@ -1084,7 +1109,7 @@ func (v *validator) matchAttrContent(pat *pattern, text string, elem *helium.Ele
 		if ret := v.matchValue(pat, text); ret != 0 {
 			if elem != nil && pat.dataType != nil && pat.dataType.library == lexicon.NamespaceXSDDatatypes {
 				if validateXSDType(pat.dataType.name, strings.TrimSpace(text), nil) != 0 {
-					v.addError(elem, fmt.Sprintf("failed to compare type %s", pat.dataType.name))
+					v.addErrorf(elem, "failed to compare type %s", pat.dataType.name)
 				}
 			}
 			return -1
@@ -1169,14 +1194,14 @@ func (v *validator) matchListContent(pat *pattern, text string, elem *helium.Ele
 			n, ok := v.matchAttrTokens(child, tokens[offset:])
 			if !ok {
 				if typeName := listDataTypeName(child); typeName != "" {
-					v.addError(elem, fmt.Sprintf("failed to validate type %s", typeName))
+					v.addErrorf(elem, "failed to validate type %s", typeName)
 				}
 				return -1
 			}
 			offset += n
 		}
 		if offset < len(tokens) {
-			v.addError(elem, fmt.Sprintf("Extra data in list: %s", tokens[offset]))
+			v.addErrorf(elem, "Extra data in list: %s", tokens[offset])
 		}
 	}
 	return -1
@@ -2259,7 +2284,27 @@ func decodeBase64Octets(s string) ([]byte, bool) {
 // xmlFields), not arbitrary Unicode whitespace, so NBSP is preserved within a
 // token.
 func normalizeToken(s string) string {
+	if isCollapsedToken(s) {
+		return s
+	}
 	return strings.Join(xmlFields(s), " ")
+}
+
+// isCollapsedToken reports whether s is already in xs:token collapsed form:
+// no tab, newline, or carriage return, no leading or trailing space, and no
+// two adjacent spaces. normalizeToken returns such a string unchanged.
+func isCollapsedToken(s string) bool {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\t', '\n', '\r':
+			return false
+		case ' ':
+			if i == 0 || i == len(s)-1 || s[i+1] == ' ' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // isXMLSpace reports whether r is one of the four XML whitespace characters
@@ -2294,6 +2339,21 @@ func (v *validator) addError(elem *helium.Element, msg string) {
 	errStr := validityError(v.filename, line, elem.LocalName(), msg)
 	v.pendingErrors = append(v.pendingErrors, helium.NewLeveledError(errStr, helium.ErrorLevelError))
 	v.valid = false
+}
+
+// addErrorf formats a validation error and adds it via addError. It returns
+// before formatting while errors are suppressed, so a suppressed error costs
+// no allocation. The arguments are strings, not interface values, so the call
+// site boxes nothing either.
+func (v *validator) addErrorf(elem *helium.Element, format string, args ...string) {
+	if v.suppressDepth > 0 {
+		return
+	}
+	boxed := make([]any, len(args))
+	for i, arg := range args {
+		boxed[i] = arg
+	}
+	v.addError(elem, fmt.Sprintf(format, boxed...))
 }
 
 // addBareError adds a validation error without file/line/element context.

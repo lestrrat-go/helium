@@ -326,15 +326,15 @@ func (v *validator) validateInterleaveContent(pat *pattern, elem *helium.Element
 				v.valid = savedValid
 				if !isAttr && len(skipIgnored(subs[i])) == 0 {
 					if eName := v.patternElementName(child); eName != "" {
-						v.addError(elem, fmt.Sprintf("Expecting an element %s, got nothing", eName))
+						v.addErrorf(elem, "Expecting an element %s, got nothing", eName)
 					}
 				}
 			}
 			v.addError(elem, "Invalid sequence in interleave")
 			if isAttr {
-				v.addError(elem, fmt.Sprintf("Element %s failed to validate attributes", elem.LocalName()))
+				v.addErrorf(elem, "Element %s failed to validate attributes", elem.LocalName())
 			} else {
-				v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+				v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 			}
 			state.seq = before
 			return -1
@@ -347,12 +347,12 @@ func (v *validator) validateInterleaveContent(pat *pattern, elem *helium.Element
 		}
 		if e, ok := left[0].(*helium.Element); ok {
 			v.addBareError(fmt.Sprintf("Extra element %s in interleave", e.LocalName()))
-			v.addError(e, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+			v.addErrorf(e, "Element %s failed to validate content", elem.LocalName())
 			state.seq = before
 			return -1
 		}
 		v.addError(elem, "Invalid sequence in interleave")
-		v.addError(elem, fmt.Sprintf("Element %s failed to validate content", elem.LocalName()))
+		v.addErrorf(elem, "Element %s failed to validate content", elem.LocalName())
 		state.seq = before
 		return -1
 	}
