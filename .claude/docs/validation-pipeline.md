@@ -1318,6 +1318,17 @@ value space, so the two compare equal. Global attributes matched through an `xs:
 wildcard (`validateWildcardAttr`, processContents strict/lax) also enforce the
 global attribute's `Fixed`/`FixedNS` via `fixedValueMatches`.
 
+Per-run simple-type info memo: `(*validationContext).simpleTypeInfo(td)` (`simplevalue_core.go`) computes once per
+`*TypeDef` per validation run a `simpleTypeInfo` holding the whiteSpace mode (`resolveWhiteSpace`), builtin base local
+(`builtinBaseLocal`), variety (`resolveVariety`), the base chain's non-nil `*FacetSet`s most derived first (the order
+`validateFacets` applies them), `idFamily` (`idFamilyType`), and `consultsNS` (`typeConsultsNS`: true iff a type
+reachable through `BaseType`/`ItemType`/`MemberTypes`/`ContentSimpleType` is xs:QName or xs:NOTATION, or, under
+`Version11`, carries an xs:assertion facet; when false the value check never reads `valueNS`). `validateValue`,
+`validateValueByVariety`, `validateFacets`, and the ID walks (`isIDFamilyType`) read it. The map
+(`validationContext.typeInfo`) is created by `newValidationContext` and shared by the per-attribute silenced
+sub-contexts in `validateAttributes`/`validateWildcardAttr`; every other throwaway context leaves it nil, gets a nil
+info, and falls back to the walkers, which stay the single computation. Nothing is written to `Schema` or `TypeDef`.
+
 Enumeration facets are compared in value space, not raw lexical text. Each
 enumeration *literal* is first whitespace-normalized with the constrained type's
 effective whiteSpace facet (`checkFacets` takes the `whiteSpace` mode resolved by

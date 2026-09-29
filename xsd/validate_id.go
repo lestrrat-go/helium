@@ -105,7 +105,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		// non-empty element), fabricating an ID/IDREF that never existed. Skipping
 		// such elements avoids piling a spurious duplicate/dangling on top of the
 		// real structural error.
-		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) && !hasChildElement(elem) {
+		if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
 			hostDecl := vc.idcHostDecl(elem)
 			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
 				raw := elemTextContent(elem)
@@ -142,7 +142,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 				}
 			}
 			atd := vc.attrTypeForID(a)
-			if atd == nil || !idFamilyType(atd) {
+			if atd == nil || !vc.isIDFamilyType(atd) {
 				continue
 			}
 			// An attribute counts toward the XSD 1.0 one-ID-attribute cap iff its
@@ -222,7 +222,7 @@ func (vc *validationContext) collectIDNodes(ctx context.Context, doc *helium.Doc
 		// match validateIDIDREF: an element with child elements has no valid
 		// simple value, and a confirmed-nilled element has no value at all.
 		td := vc.elementTypeForID(elem)
-		if td != nil && td.ContentType == ContentTypeSimple && idFamilyType(td) && !hasChildElement(elem) {
+		if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
 			hostDecl := vc.idcHostDecl(elem)
 			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
 				raw := elemTextContent(elem)
@@ -248,7 +248,7 @@ func (vc *validationContext) collectIDNodes(ctx context.Context, doc *helium.Doc
 				}
 			}
 			atd := vc.attrTypeForID(a)
-			if atd == nil || !idFamilyType(atd) {
+			if atd == nil || !vc.isIDFamilyType(atd) {
 				continue
 			}
 			if vc.valueIsID(ctx, atd, a.Value(), a) {
@@ -285,6 +285,16 @@ func (vc *validationContext) valueIsID(ctx context.Context, td *TypeDef, raw str
 	default:
 		return builtinBaseLocal(td) == "ID"
 	}
+}
+
+// isIDFamilyType is idFamilyType answered from the per-run simpleTypeInfo
+// memo, so the ID walks do not re-walk the type's chains for every node. A
+// context without a memo walks directly.
+func (vc *validationContext) isIDFamilyType(td *TypeDef) bool {
+	if info := vc.simpleTypeInfo(td); info != nil {
+		return info.idFamily
+	}
+	return idFamilyType(td)
 }
 
 // idFamilyType reports whether td involves xs:ID or xs:IDREF anywhere in its

@@ -1640,3 +1640,180 @@ func TestQNameLengthFacetVacuous(t *testing.T) {
 	require.NoError(t, err, "QName length facets must be vacuous (errata 4009); errors: %s", errs)
 	require.Empty(t, errs)
 }
+
+// validateInstanceVersion is validateInstance with an explicit XSD version.
+func validateInstanceVersion(t *testing.T, version xsd.Version, schemaXML, instanceXML string) (string, error) {
+	t.Helper()
+
+	schemaDOC, err := helium.NewParser().Parse(t.Context(), []byte(schemaXML))
+	require.NoError(t, err)
+
+	schema, err := xsd.NewCompiler().Version(version).Compile(t.Context(), schemaDOC)
+	require.NoError(t, err)
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
+	require.NoError(t, err)
+
+	var errs string
+	err = validateWithOutput(t, xsd.NewValidator(schema), doc, &errs)
+	return errs, err
+}
+
+// repeatedSimpleTypesSchema uses each simple-type shape the value validator
+// handles (derived atomic facets, an anonymous restriction, a restricted list,
+// xs:QName, an enumerated xs:NOTATION, xs:ID/xs:IDREF, a QName-bearing union, and
+// a replace-whitespace string) for several elements and attributes.
+const repeatedSimpleTypesSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:p="urn:p" targetNamespace="urn:p" elementFormDefault="qualified">
+  <xs:notation name="png" public="image/png"/>
+  <xs:simpleType name="smallInt">
+    <xs:restriction base="xs:int"><xs:minInclusive value="0"/><xs:maxInclusive value="9"/></xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="tinyInt">
+    <xs:restriction base="p:smallInt"><xs:maxInclusive value="3"/></xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="intList"><xs:list itemType="xs:int"/></xs:simpleType>
+  <xs:simpleType name="shortIntList">
+    <xs:restriction base="p:intList"><xs:maxLength value="3"/></xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="intOrQName"><xs:union memberTypes="xs:int xs:QName"/></xs:simpleType>
+  <xs:simpleType name="pic">
+    <xs:restriction base="xs:NOTATION"><xs:enumeration value="p:png"/></xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="code">
+    <xs:restriction base="xs:ID"><xs:length value="4"/></xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="norm">
+    <xs:restriction base="xs:normalizedString"><xs:maxLength value="3"/></xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="tiny" type="p:tinyInt"/>
+        <xs:element name="anon">
+          <xs:simpleType><xs:restriction base="p:tinyInt"><xs:minInclusive value="1"/></xs:restriction></xs:simpleType>
+        </xs:element>
+        <xs:element name="list" type="p:shortIntList"/>
+        <xs:element name="qn" type="xs:QName"/>
+        <xs:element name="pic" type="p:pic"/>
+        <xs:element name="norm" type="p:norm"/>
+        <xs:element name="item">
+          <xs:complexType>
+            <xs:attribute name="id" type="p:code"/>
+            <xs:attribute name="ref" type="xs:IDREF"/>
+            <xs:attribute name="key" type="p:intOrQName"/>
+            <xs:attribute name="n" type="p:tinyInt"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// repeatedSimpleTypesInstance repeats every type with valid and invalid values,
+// so a later occurrence of a type is checked the same way as the first one.
+const repeatedSimpleTypesInstance = `<p:root xmlns:p="urn:p">
+  <p:tiny>2</p:tiny><p:tiny>5</p:tiny><p:tiny> 3 </p:tiny>
+  <p:anon>1</p:anon><p:anon>0</p:anon><p:anon>3</p:anon>
+  <p:list>1 2 3</p:list><p:list>1 2 3 4</p:list><p:list>1 x</p:list>
+  <p:qn>p:a</p:qn><p:qn>q:a</p:qn><p:qn xmlns:q="urn:q">q:a</p:qn>
+  <p:pic>p:png</p:pic><p:pic>p:gif</p:pic><p:pic>q:png</p:pic>
+  <p:norm>a&#9;b</p:norm><p:norm>abcd</p:norm>
+  <p:item id="abcd" ref="abcd" key="7" n="1"/>
+  <p:item id="abce" ref="zzzz" key="p:k" n="4"/>
+  <p:item id="ab" key="q:k"/>
+  <p:item id="abcd" n="3"/>
+</p:root>`
+
+// repeatedSimpleTypesErrors is the complete diagnostic output for
+// repeatedSimpleTypesInstance. It is the same in 1.0 and 1.1.
+const repeatedSimpleTypesErrors = `(string):2: Schemas validity error : Element '{urn:p}tiny': [facet 'maxInclusive'] The value '5' is greater than the maximum value allowed ('3').
+(string):3: Schemas validity error : Element '{urn:p}anon': [facet 'minInclusive'] The value '0' is less than the minimum value allowed ('1').
+(string):4: Schemas validity error : Element '{urn:p}list': [facet 'maxLength'] The value has a length of '4'; this exceeds the allowed maximum length of '3'.
+(string):4: Schemas validity error : Element '{urn:p}list': '1 2 3 4' is not a valid value of the list type '{urn:p}shortIntList'.
+(string):4: Schemas validity error : Element '{urn:p}list': 'x' is not a valid value of the atomic type 'xs:int'.
+(string):5: Schemas validity error : Element '{urn:p}qn': 'q:a' is not a valid value of the atomic type 'xs:QName'.
+(string):6: Schemas validity error : Element '{urn:p}pic': [facet 'enumeration'] The value 'p:gif' is not an element of the set {'p:png'}.
+(string):6: Schemas validity error : Element '{urn:p}pic': 'q:png' is not a valid value of the atomic type 'pic'.
+(string):7: Schemas validity error : Element '{urn:p}norm': [facet 'maxLength'] The value has a length of '4'; this exceeds the allowed maximum length of '3'.
+(string):9: Schemas validity error : Element '{urn:p}item', attribute 'n': The value '4' is not valid for the type of attribute 'n'.
+(string):10: Schemas validity error : Element '{urn:p}item', attribute 'id': The value 'ab' is not valid for the type of attribute 'id'.
+(string):10: Schemas validity error : Element '{urn:p}item', attribute 'key': The value 'q:k' is not valid for the type of attribute 'key'.
+(string):11: Schemas validity error : Element '{urn:p}item': Duplicate key-sequence; the ID value 'abcd' (attribute 'id') is already defined elsewhere in the document.
+(string):9: Schemas validity error : Element '{urn:p}item': There is no ID/IDREF binding for the IDREF 'zzzz' (attribute 'ref').
+`
+
+// TestValidateRepeatedSimpleTypes validates documents that use the same simple
+// types many times, as elements and as attributes, and pins the exact
+// diagnostics. Each occurrence must be judged by its own value: the
+// whitespace, variety, builtin base, facet chain, namespace resolution, and
+// ID/IDREF handling a type implies must hold for its later uses too.
+func TestValidateRepeatedSimpleTypes(t *testing.T) {
+	t.Parallel()
+
+	versions := []struct {
+		name    string
+		version xsd.Version
+	}{
+		{name: "shared types in 1.0", version: xsd.Version10},
+		{name: "shared types in 1.1", version: xsd.Version11},
+	}
+	for _, tc := range versions {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			errs, err := validateInstanceVersion(t, tc.version, repeatedSimpleTypesSchema, repeatedSimpleTypesInstance)
+			require.Error(t, err)
+			require.Equal(t, repeatedSimpleTypesErrors, errs)
+		})
+	}
+
+	t.Run("assertion facet in 1.1", func(t *testing.T) {
+		t.Parallel()
+		const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:p="urn:p" targetNamespace="urn:p" elementFormDefault="qualified">
+  <xs:simpleType name="even">
+    <xs:restriction base="xs:int"><xs:assertion test="$value mod 2 = 0"/></xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="evenList"><xs:list itemType="p:even"/></xs:simpleType>
+  <xs:simpleType name="evenOrName"><xs:union memberTypes="p:even xs:NCName"/></xs:simpleType>
+  <xs:simpleType name="localQName">
+    <xs:restriction base="xs:QName">
+      <xs:assertion test="namespace-uri-from-QName($value) = 'urn:p'"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="even" type="p:even"/>
+        <xs:element name="evens" type="p:evenList"/>
+        <xs:element name="eon" type="p:evenOrName"/>
+        <xs:element name="lqn" type="p:localQName"/>
+        <xs:element name="item">
+          <xs:complexType>
+            <xs:attribute name="e" type="p:even"/>
+            <xs:attribute name="q" type="p:localQName"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+		const instanceXML = `<p:root xmlns:p="urn:p" xmlns:q="urn:q">
+  <p:even>2</p:even><p:even>3</p:even><p:even>4</p:even>
+  <p:evens>2 4</p:evens><p:evens>2 5</p:evens>
+  <p:eon>4</p:eon><p:eon>5</p:eon><p:eon>abc</p:eon>
+  <p:lqn>p:a</p:lqn><p:lqn>q:a</p:lqn><p:lqn>p:b</p:lqn>
+  <p:item e="6" q="p:x"/><p:item e="7" q="q:x"/><p:item e="8" q="p:y"/>
+</p:root>`
+		const wantErrs = `(string):2: Schemas validity error : Element '{urn:p}even': The assertion '$value mod 2 = 0' is not satisfied.
+(string):3: Schemas validity error : Element '{urn:p}evens': The assertion '$value mod 2 = 0' is not satisfied.
+(string):4: Schemas validity error : Element '{urn:p}eon': '5' is not a valid value of the union type '{urn:p}evenOrName'.
+(string):5: Schemas validity error : Element '{urn:p}lqn': The assertion 'namespace-uri-from-QName($value) = 'urn:p'' is not satisfied.
+(string):6: Schemas validity error : Element '{urn:p}item', attribute 'e': The value '7' is not valid for the type of attribute 'e'.
+(string):6: Schemas validity error : Element '{urn:p}item', attribute 'q': The value 'q:x' is not valid for the type of attribute 'q'.
+`
+		errs, err := validateInstanceVersion(t, xsd.Version11, schemaXML, instanceXML)
+		require.Error(t, err)
+		require.Equal(t, wantErrs, errs)
+	})
+}
