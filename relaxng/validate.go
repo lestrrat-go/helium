@@ -2294,7 +2294,7 @@ func normalizeToken(s string) string {
 // no tab, newline, or carriage return, no leading or trailing space, and no
 // two adjacent spaces. normalizeToken returns such a string unchanged.
 func isCollapsedToken(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		switch s[i] {
 		case '\t', '\n', '\r':
 			return false
