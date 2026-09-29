@@ -426,9 +426,110 @@ func canonicalDateTimeKey(s, builtinLocal string) (string, bool) {
 	return fmt.Sprintf("%s|%d|%d|%d|%d|%s|%t", dt.yearVal().String(), dt.month, dt.day, dt.hour, dt.min, dt.secVal().RatString(), dt.hasTZ), true
 }
 
-// CompareDecimal compares two decimal string values using math/big.Rat.
-// Returns -1 if a < b, 0 if a == b, 1 if a > b, or -2 on parse error.
+// CompareDecimal compares two decimal string values with the ordering of
+// math/big.Rat. Returns -1 if a < b, 0 if a == b, 1 if a > b, or -2 on parse
+// error.
+//
+// When both operands match the plain xs:decimal lexical grammar
+// (+|-)?(digits('.'digits?)?|'.'digits) the comparison runs digit-wise without
+// allocating. Every other input (exponents, fractions such as "1/2", base
+// prefixes, whitespace, malformed text) goes through big.Rat.SetString, so the
+// result, including the -2 error value, is always what big.Rat gives.
 func CompareDecimal(a, b string) int {
+	da, ok := parsePlainDecimal(a)
+	if !ok {
+		return compareDecimalRat(a, b)
+	}
+	db, ok := parsePlainDecimal(b)
+	if !ok {
+		return compareDecimalRat(a, b)
+	}
+	return comparePlainDecimal(da, db)
+}
+
+// plainDecimal is a parsed xs:decimal lexical form in canonical parts: intPart
+// has no leading zeros, frac has no trailing zeros, and zero is never negative
+// (both parts empty, neg false). Both parts are substrings of the input.
+type plainDecimal struct {
+	neg     bool
+	intPart string
+	frac    string
+}
+
+// parsePlainDecimal parses s against the xs:decimal lexical grammar
+// (+|-)?(digits('.'digits?)?|'.'digits) and reports false for anything else.
+func parsePlainDecimal(s string) (plainDecimal, bool) {
+	var d plainDecimal
+	body := s
+	if body != "" && (body[0] == '+' || body[0] == '-') {
+		d.neg = body[0] == '-'
+		body = body[1:]
+	}
+	intEnd := 0
+	for intEnd < len(body) && body[intEnd] >= '0' && body[intEnd] <= '9' {
+		intEnd++
+	}
+	intPart := body[:intEnd]
+	var frac string
+	if intEnd < len(body) {
+		if body[intEnd] != '.' {
+			return plainDecimal{}, false
+		}
+		frac = body[intEnd+1:]
+		for i := range len(frac) {
+			if frac[i] < '0' || frac[i] > '9' {
+				return plainDecimal{}, false
+			}
+		}
+	}
+	if intPart == "" && frac == "" {
+		// "", "+", "-", ".", "+." and "-." carry no digits.
+		return plainDecimal{}, false
+	}
+	d.intPart = strings.TrimLeft(intPart, "0")
+	d.frac = strings.TrimRight(frac, "0")
+	if d.intPart == "" && d.frac == "" {
+		d.neg = false
+	}
+	return d, true
+}
+
+// comparePlainDecimal orders two canonical plainDecimal values: by sign, then
+// by integer-part length and digits, then by fraction digits. With leading
+// zeros stripped a longer integer part is larger; with trailing zeros stripped
+// byte-wise string order of the fraction digits is numeric order.
+func comparePlainDecimal(a, b plainDecimal) int {
+	if a.neg != b.neg {
+		if a.neg {
+			return -1
+		}
+		return 1
+	}
+	cmp := compareMagnitude(a, b)
+	if a.neg {
+		return -cmp
+	}
+	return cmp
+}
+
+// compareMagnitude orders the absolute values of two canonical plainDecimal
+// values.
+func compareMagnitude(a, b plainDecimal) int {
+	if len(a.intPart) != len(b.intPart) {
+		if len(a.intPart) < len(b.intPart) {
+			return -1
+		}
+		return 1
+	}
+	if cmp := strings.Compare(a.intPart, b.intPart); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(a.frac, b.frac)
+}
+
+// compareDecimalRat is the math/big.Rat comparison CompareDecimal falls back to
+// for any operand outside the plain xs:decimal grammar.
+func compareDecimalRat(a, b string) int {
 	ra, ok1 := new(big.Rat).SetString(a)
 	rb, ok2 := new(big.Rat).SetString(b)
 	if !ok1 || !ok2 {
