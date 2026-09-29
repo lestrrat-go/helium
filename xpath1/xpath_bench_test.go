@@ -10,7 +10,7 @@ import (
 )
 
 const benchChapterExpr = "count(/EXAMPLE/chapter[p])"
-const benchCustomerExpr = "count(/Root/Customers[@CustomerID])"
+const benchNVDEntryExpr = "count(//*[local-name()='entry'])"
 
 func benchmarkXPathDocument(b *testing.B, path string) *helium.Document {
 	b.Helper()
@@ -68,10 +68,10 @@ func BenchmarkEvaluateConvenienceChapters(b *testing.B) {
 	benchmarkConvenienceXPath(b, "../testdata/libxml2-compat/xpath/docs/chapters", benchChapterExpr, 5)
 }
 
-func BenchmarkEvaluateCompiledCustomers(b *testing.B) {
-	benchmarkCompiledXPath(b, "../testdata/qt3ts/testdata/nw_Customers.xml", benchCustomerExpr, 91)
+func BenchmarkEvaluateCompiledNVDEntries(b *testing.B) {
+	benchmarkCompiledXPath(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml", benchNVDEntryExpr, 176)
 }
 
-func BenchmarkEvaluateConvenienceCustomers(b *testing.B) {
-	benchmarkConvenienceXPath(b, "../testdata/qt3ts/testdata/nw_Customers.xml", benchCustomerExpr, 91)
+func BenchmarkEvaluateConvenienceNVDEntries(b *testing.B) {
+	benchmarkConvenienceXPath(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml", benchNVDEntryExpr, 176)
 }

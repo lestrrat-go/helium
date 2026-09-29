@@ -24,7 +24,7 @@ func BenchmarkCanonicalize(b *testing.B) {
 		path string
 	}{
 		{"C14NFixture", "../testdata/libxml2-compat/c14n/exc-without-comments/test/test-0.xml"},
-		{"Customers", "../testdata/qt3ts/testdata/nw_Customers.xml"},
+		{"NVDEntries", "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml"},
 	} {
 		doc := benchmarkC14NDocument(b, input.path)
 		for _, tc := range []struct {
