@@ -117,6 +117,7 @@ bug that prompted it.
 | `interleave_internal_test.go` | relaxng | Interleave partition/routing table (internal package) |
 | `group_backtrack_differential_test.go` | relaxng | Flag-gated group-backtracking differential harness |
 | `interleave_differential_test.go` | relaxng | Flag-gated interleave differential harness (optional `xmllint` oracle) |
+| `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization and ASCII QName scanner regression coverage |
 
@@ -299,6 +300,10 @@ The recorded procedure and result live in the header comment of `relaxng/interle
 XSD benchmarks use valid `extension0_0` and `nvdcve_0` schema/instance pairs from the same fixture tree.
 Compilation times `Compiler.Compile` with a parsed schema document; validation times
 `Validator.Validate` with a compiled schema and parsed instance document.
+
+RELAX NG benchmarks (`relaxng/relaxng_benchmark_test.go`) use `tutor10_8` (`small`) and `libvirt` from the same
+tree. `BenchmarkValidate/large` validates `libvirt_0.xml` with its single `<disk>` repeated 300 times, built in
+memory; `BenchmarkCompile` skips it because the schema is the same as `libvirt`.
 
 ### 3. C14N Tests
 

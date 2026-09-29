@@ -1928,9 +1928,11 @@ Pattern-matching engine with backtracking:
 Every `<interleave>`/`<mixed>` is validated through its compile-time partition (built by `checkInterleaves`, see
 "Compile" step 6a), not by round-robin member matching. `interleavePartitionOf` returns the compiled
 `pattern.partition`, computing an uncached one (never cached at validation time — `Grammar` is shared across
-goroutines) for an interleave the compiler did not record. `partitionInterleave` walks `state.seq` from the
+goroutines) for an interleave the compiler did not record. `partitionInterleave` walks the sequence from the
 front, routing each node via `interleavePartition.route` into one `[][]helium.Node` slot per branch; it stops at
-the first node no branch accepts, leaving that node and everything after it in `state.seq` for the caller.
+the first node no branch accepts and returns that node and everything after it as the rest, which the caller
+stores back in `state.seq`. It routes twice (count per branch, then fill), so every branch sub-sequence is a
+capped slice of one backing array; a branch that receives nothing gets `nil`.
 Because RELAX NG §7.4 guarantees the branches are pairwise disjoint, this routing is exact: a node routed to
 branch *i* could never have been claimed by another branch.
 
@@ -1954,7 +1956,7 @@ path (no element/attribute context, so no diagnostics), reached from a top-level
 
 **Sibling-array identity (`run`).** `validState` carries a `run int`; `validator.newRun()` (backed by
 `validator.runSeq`) hands out a fresh id for every element content (`validateElement`'s `contentState`) and every
-interleave branch sub-sequence, and `clone()` copies it. `groupMemoKey` includes `run`, restoring the invariant
+interleave branch sub-sequence, and every snapshot (a `validState` value copy) carries it. `groupMemoKey` includes `run`, restoring the invariant
 that within one `run`, `seq` is always a suffix of one array, so `(pos, seqLen)` uniquely identifies a group
 subproblem — without it, two interleave branches (or two choice arms) probing the same shared `<define>` at the
 same input position with the same remaining length could collide on a memo entry that belongs to a DIFFERENT
@@ -1999,14 +2001,24 @@ the result (child-range start pattern + length, owning element, first remaining
 node + sequence length, the sibling-array id `run` that (pos, seqLen) is only
 unique within, whether the call ran under the interleave exact-choice retry
 (`exact`), packed `attrUsed`, `suppressDepth>0`, content-vs-naive
-discriminator). A hit reproduces the original call's effect exactly — resulting
+discriminator). `attrUsed` is packed into the `attrBits uint64` key field when it
+has at most 64 entries and into the `attrKey` string above that; the owning
+element fixes its length, so the length needs no encoding. Entries are stored by
+value (`map[groupMemoKey]groupMemoEntry`). A hit reproduces the original call's effect exactly — resulting
 position, attribute usage, appended errors, return value — so memoization is sound
 (no valid document rejected) while collapsing the fan-out to polynomial. Regression
 guard: `TestMultiFlexibleGroupBacktrackingNotExponential`. `validState.seq` is only
 ever re-sliced from the front, never written through, so every snapshot taken
-during backtracking — `clone()`, `saveGroupBound`, and the memo entries stored
-here — shares the sibling slice's backing array instead of copying it; only
-`attrUsed` is deep-copied, because that slice is mutated in place. `seqEqual`
+during backtracking — a `validState` value copy, `saveGroupBound` (whose
+`groupBound.state` is a `validState` value), and the memo entries stored here —
+shares the sibling slice's backing array instead of copying it; only `attrUsed`
+is deep-copied, because that slice is mutated in place.
+`validateGroupChildrenUncached` keeps up to eight bounds in a stack array and
+carves every bound's `attrUsed` copy from one per-call arena (full-slice
+expressions, so no two copies overlap). All of this state lives in the
+`validator` for one run; validation never writes to the `Grammar`
+(`TestGrammarConcurrentValidation` validates every golden instance from several
+goroutines sharing one `Grammar`). `seqEqual`
 exploits the same fact with an O(1) identity check (equal length plus an
 identical first-element pointer) before falling back to an element-by-element
 comparison. Regression guard for the allocation this avoids:
@@ -2142,6 +2154,8 @@ name only when `datatypeLibrary` is absent). Any other `<param>` name
 
 - `suppressDepth` counter incremented during choice branch exploration
 - Errors only emitted on definitive failures (top-level or after element consumed)
+- `addErrorf(elem, format, args ...string)` returns before formatting while `suppressDepth > 0`, so a suppressed
+  diagnostic costs no allocation; its arguments are strings, so the call site boxes nothing
 
 ### Key Data Model
 

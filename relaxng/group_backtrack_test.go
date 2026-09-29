@@ -2,6 +2,7 @@ package relaxng_test
 
 import (
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -349,4 +350,93 @@ func TestGroupBacktrackAllocationBound(t *testing.T) {
 		require.Less(t, delta, uint64(100<<20),
 			"validating zeroOrMore(a) over %d elements allocated %d bytes, want under 100 MB", m, delta)
 	})
+}
+
+// wideAttrGroupSchema returns a grammar whose root content is a backtracking
+// group that also consumes n mandatory attributes and one optional one, so the
+// group memo key carries an attribute-usage vector of n+1 entries.
+func wideAttrGroupSchema(n int) string {
+	var s strings.Builder
+	s.WriteString(`<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><element name="root"><group>`)
+	s.WriteString(`<optional><attribute name="x"/></optional>`)
+	for i := range n {
+		s.WriteString(`<attribute name="a` + strconv.Itoa(i) + `"/>`)
+	}
+	s.WriteString(`<zeroOrMore><element name="a"><empty/></element></zeroOrMore>`)
+	s.WriteString(`<element name="a"><empty/></element>`)
+	s.WriteString(`</group></element></start></grammar>`)
+	return s.String()
+}
+
+// wideAttrGroupDoc returns a root element carrying attributes a<skip+1>..a<n-1>
+// (all of them when skip is -1), plus x when withX is set, and the given
+// content.
+func wideAttrGroupDoc(n, skip int, withX bool, content string) string {
+	var d strings.Builder
+	d.WriteString(`<root`)
+	if withX {
+		d.WriteString(` x="1"`)
+	}
+	for i := range n {
+		if i == skip {
+			continue
+		}
+		d.WriteString(` a` + strconv.Itoa(i) + `="v"`)
+	}
+	d.WriteString(`>` + content + `</root>`)
+	return d.String()
+}
+
+// wideAttrInstance is one instance TestGroupMemoWideAttributes validates.
+type wideAttrInstance struct {
+	name    string
+	skip    int
+	withX   bool
+	content string
+	valid   bool
+}
+
+// wideAttrGroupRecord validates inst against the n-attribute grammar, checks
+// the verdict, and returns the error text.
+func wideAttrGroupRecord(t *testing.T, n int, inst wideAttrInstance) string {
+	t.Helper()
+
+	grammar := compileGrammar(t, wideAttrGroupSchema(n))
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(wideAttrGroupDoc(n, inst.skip, inst.withX, inst.content)))
+	require.NoError(t, err)
+	collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+	verr := relaxng.NewValidator(grammar).Label("wide.xml").ErrorHandler(collector).Validate(t.Context(), doc)
+	_ = collector.Close()
+	if inst.valid {
+		require.NoError(t, verr, "%s with %d attributes should validate", inst.name, n)
+	} else {
+		require.Error(t, verr, "%s with %d attributes should fail", inst.name, n)
+	}
+	var sb strings.Builder
+	for _, e := range collector.Errors() {
+		sb.WriteString(e.Error())
+	}
+	return sb.String()
+}
+
+// TestGroupMemoWideAttributes validates the same backtracking group with
+// attribute-usage vectors below, at, and above 64 entries: the group memo
+// packs up to 64 entries into bits and falls back to a string key above that.
+// Every width must give the same verdicts and the same error text.
+func TestGroupMemoWideAttributes(t *testing.T) {
+	t.Parallel()
+
+	instances := []wideAttrInstance{
+		{"all attributes with x", -1, true, `<a/><a/><a/>`, true},
+		{"all attributes without x", -1, false, `<a/><a/><a/>`, true},
+		{"missing a0", 0, true, `<a/><a/>`, false},
+		{"unexpected child", -1, true, `<a/><b/>`, false},
+	}
+	for _, inst := range instances {
+		want := wideAttrGroupRecord(t, 3, inst)
+		for _, n := range []int{63, 64, 70} {
+			require.Equal(t, want, wideAttrGroupRecord(t, n, inst),
+				"%s: error text with %d attributes differs from 3", inst.name, n)
+		}
+	}
 }

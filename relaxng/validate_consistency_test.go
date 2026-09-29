@@ -1,6 +1,7 @@
 package relaxng_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -84,6 +85,96 @@ func TestValueTokenNBSP(t *testing.T) {
 		// expected "foo bar".
 		err := validateWith(t, schema, "<a>foo"+nbsp+"bar</a>")
 		require.Error(t, err, "NBSP value must not collapse to match \"foo bar\"")
+	})
+}
+
+// tokenCollapseCase is one instance value checked by TestValueTokenCollapse.
+// value is spliced into the instance as-is, so it may carry character
+// references (&#9; &#10; &#13;) that survive attribute-value normalization.
+type tokenCollapseCase struct {
+	name  string
+	value string
+	match bool
+}
+
+// tokenCollapseCases pairs instance values with whether they collapse to
+// "foo bar". Already-collapsed values and values needing a collapse (leading,
+// trailing, and internal runs of spaces, tabs, newlines, and carriage returns)
+// must give the same verdict as their collapsed form.
+var tokenCollapseCases = []tokenCollapseCase{
+	{"already collapsed", "foo bar", true},
+	{"leading spaces", "  foo bar", true},
+	{"trailing spaces", "foo bar  ", true},
+	{"internal space run", "foo   bar", true},
+	{"internal tab", "foo&#9;bar", true},
+	{"internal newline", "foo&#10;bar", true},
+	{"internal carriage return", "foo&#13;bar", true},
+	{"mixed whitespace everywhere", "&#10;&#9; foo &#13;&#10;&#9; bar &#9;&#10;", true},
+	{"joined words", "foobar", false},
+	{"different word", "foo baz", false},
+	{"extra word", "foo bar baz", false},
+	{"nbsp separator", "foo" + nbsp + "bar", false},
+	{"empty", "", false},
+	{"whitespace only", " &#9;&#10; ", false},
+}
+
+// TestValueTokenCollapse checks <value type="token"> equality under the
+// built-in library's whiteSpace=collapse, on both sides: the instance value
+// and the schema literal are each collapsed before comparing, whether or not
+// they are already in collapsed form. Each case runs against element
+// content, an attribute value, and a <data type="token"> whose <except>
+// holds the same <value> (so a collapsing match is rejected there).
+func TestValueTokenCollapse(t *testing.T) {
+	t.Parallel()
+
+	for _, literal := range []string{"foo bar", " foo \t\n bar\n"} {
+		elemSchema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <value type="token">` + literal + `</value>
+</element>`
+		attrSchema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name="v"><value type="token">` + literal + `</value></attribute>
+</element>`
+		exceptSchema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <data type="token"><except><value type="token">` + literal + `</value></except></data>
+</element>`
+
+		for _, tc := range tokenCollapseCases {
+			t.Run(fmt.Sprintf("literal %q/%s", literal, tc.name), func(t *testing.T) {
+				t.Parallel()
+
+				err := validateWith(t, elemSchema, `<a>`+tc.value+`</a>`)
+				if tc.match {
+					require.NoError(t, err, "element content %q should equal token %q", tc.value, literal)
+				} else {
+					require.Error(t, err, "element content %q should not equal token %q", tc.value, literal)
+				}
+
+				err = validateWith(t, attrSchema, `<a v="`+tc.value+`"/>`)
+				if tc.match {
+					require.NoError(t, err, "attribute value %q should equal token %q", tc.value, literal)
+				} else {
+					require.Error(t, err, "attribute value %q should not equal token %q", tc.value, literal)
+				}
+
+				err = validateWith(t, exceptSchema, `<a>`+tc.value+`</a>`)
+				if tc.match {
+					require.Error(t, err, "except should reject %q as equal to token %q", tc.value, literal)
+				} else {
+					require.NoError(t, err, "except should not reject %q", tc.value)
+				}
+			})
+		}
+	}
+
+	t.Run("empty literal matches whitespace", func(t *testing.T) {
+		t.Parallel()
+		schema := `<element name="a" xmlns="http://relaxng.org/ns/structure/1.0">
+  <value type="token"> </value>
+</element>`
+		require.NoError(t, validateWith(t, schema, "<a>&#9;&#10; </a>"),
+			"whitespace-only content collapses to the empty token")
+		require.NoError(t, validateWith(t, schema, "<a></a>"), "empty content equals the empty token")
+		require.Error(t, validateWith(t, schema, "<a>x</a>"), "non-empty content must not equal the empty token")
 	})
 }
 
