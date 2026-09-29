@@ -507,6 +507,17 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 XPath 1.0 expression parsing and evaluation.
 
 - **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath
+- `Compiler.Compile` rewrites the parsed AST (`optimize.go` `optimizeExpr`); `Parse` returns it unrewritten. A
+  predicate-free `descendant-or-self::node()` step folds into the next step: `child::<name test>` and `descendant::X`
+  become `descendant::X`, `self::X` and `descendant-or-self::X` become `descendant-or-self::X`. The next step may
+  keep predicates only when `positionFree` proves them position-free: a static boolean/string/node-set type, and no
+  `position()`, `last()`, variable, prefixed or non-builtin function, or numeric nested predicate anywhere inside. A
+  `child::` step with a `node()`/`comment()`/`processing-instruction()`/`text()` test does not fold, because
+  `collectDescendants` (internal/xpath) follows an entity reference context node's `Entity` child into the DTD's
+  sibling list while the child axis stops there. A name test folds because a parsed DTD holds no elements; a DTD
+  given an element through `DTD.AddChild` ahead of the entity declaration makes the folded `.//x` from that entity
+  reference select the element (pinned by `TestCompileFoldHandBuiltDTDElement`). The folded path charges fewer ops against `OpLimit` and builds no
+  intermediate node-set, so it can succeed where the unfolded path hits the op or node-set limit
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **NewEvaluator() → Evaluator** — create clone-on-write evaluation configuration
   - `Namespaces`, `Variables`, `Function`, `FunctionNS`, `OpLimit` — configure namespace, variable, extension-function,
@@ -528,7 +539,8 @@ XPath 1.0 expression parsing and evaluation.
 - Limits: recursion 5000, node-set 10M, configurable op limit
 - Robustness: `eval` and axis-iteration loops honor `ctx.Err()` so a cancelled context aborts promptly; `Evaluate` on a
   nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
-- Files: `xpath.go` (API), `parser.go`, `lexer.go`, `eval.go`, `expr.go`, `axes.go`, `functions.go`, `token.go`
+- Files: `xpath.go` (API), `parser.go`, `lexer.go`, `optimize.go` (compile-time `//` fold), `eval.go`, `expr.go`,
+  `axes.go`, `functions.go`, `static_check.go`, `token.go`
 - Imports: helium
 
 ## xpath3/
