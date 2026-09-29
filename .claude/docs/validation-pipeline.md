@@ -459,7 +459,7 @@ pipeline.
     (collected first, unlinked after — never mid-iteration) any element — with its whole subtree — excluded by
     its version-control (`vc:`, ns `lexicon.NamespaceXSDVersioning`) attributes for the active `c.version`.
     Prune rules: `vc:minVersion`/`vc:maxVersion` (xs:decimal) keep iff `minVersion <= processorVersion <
-    maxVersion`, compared EXACTLY via `value.CompareDecimal` (math/big.Rat) against the processor version as
+    maxVersion`, compared EXACTLY via `value.CompareDecimal` (big.Rat ordering) against the processor version as
     the exact string "1.0"/"1.1" — NOT float64, so a high-precision bound (`1.1000…001`, kept) is not
     mis-rounded and a many-digit valid bound does not float-overflow into a spurious "malformed" error;
     `vc:typeAvailable`/`vc:facetAvailable` keep iff EVERY listed QName is available;
