@@ -380,3 +380,111 @@ func TestVersion11UnionAttribute(t *testing.T) {
 		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 }
+
+// builtinTypeLocals lists the XSD 1.0 built-in datatype local names every
+// compiled schema registers in the XSD namespace.
+var builtinTypeLocals = []string{
+	"string", "boolean", "decimal", "float", "double",
+	"integer", "nonPositiveInteger", "negativeInteger",
+	"long", "int", "short", "byte",
+	"nonNegativeInteger", "unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
+	"positiveInteger",
+	"normalizedString", "token", "language", "Name", "NCName",
+	"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS",
+	"date", "dateTime", "time", "duration",
+	"gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth",
+	"hexBinary", "base64Binary",
+	"anyURI", "QName", "NOTATION",
+	"anyType", "anySimpleType",
+}
+
+// builtinType11Locals maps each XSD 1.1-only built-in datatype local name to the
+// built-in it restricts.
+var builtinType11Locals = map[string]string{
+	"dateTimeStamp":     "dateTime",
+	"dayTimeDuration":   "duration",
+	"yearMonthDuration": "duration",
+	"anyAtomicType":     "anySimpleType",
+	"error":             "anySimpleType",
+}
+
+const xsdNamespace = "http://www.w3.org/2001/XMLSchema"
+
+func compileBuiltinProbe(t *testing.T, version xsd.Version) *xsd.Schema {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="v" type="xs:string"/>
+</xs:schema>`))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Version(version).Compile(t.Context(), doc)
+	require.NoError(t, err)
+	return schema
+}
+
+// expectedBuiltinTypeDef is the complete TypeDef a compiled schema holds for
+// the XSD 1.0 built-in datatype local.
+func expectedBuiltinTypeDef(local string) *xsd.TypeDef {
+	td := &xsd.TypeDef{
+		Name:        xsd.QName{Local: local, NS: xsdNamespace},
+		ContentType: xsd.ContentTypeSimple,
+	}
+	switch local {
+	case "anyType":
+		td.IsComplex = true
+		td.ContentType = xsd.ContentTypeMixed
+		td.AnyAttribute = &xsd.Wildcard{Namespace: xsd.WildcardNSAny, ProcessContents: xsd.ProcessLax}
+	case "NMTOKENS", "IDREFS", "ENTITIES":
+		one := 1
+		td.Facets = &xsd.FacetSet{MinLength: &one}
+	case "positiveInteger":
+		v := "1"
+		td.Facets = &xsd.FacetSet{MinInclusive: &v}
+	}
+	return td
+}
+
+// TestBuiltinTypeRegistration pins the built-in type definitions a compiled
+// schema exposes through LookupType: every field of each built-in, the
+// 1.1-only types present only under Version11 and linked to their base in the
+// same schema, and a separate set of TypeDefs per compiled schema.
+func TestBuiltinTypeRegistration(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		first := compileBuiltinProbe(t, version)
+		second := compileBuiltinProbe(t, version)
+
+		seen := make(map[*xsd.TypeDef]struct{}, len(builtinTypeLocals))
+		for _, local := range builtinTypeLocals {
+			td, ok := first.LookupType(local, xsdNamespace)
+			require.True(t, ok, "version %v: built-in %s", version, local)
+			require.Equal(t, expectedBuiltinTypeDef(local), td, "version %v: built-in %s", version, local)
+			_, dup := seen[td]
+			require.False(t, dup, "version %v: built-in %s shares a TypeDef", version, local)
+			seen[td] = struct{}{}
+
+			other, ok := second.LookupType(local, xsdNamespace)
+			require.True(t, ok, "version %v: built-in %s", version, local)
+			require.NotSame(t, td, other, "version %v: built-in %s shared across schemas", version, local)
+		}
+
+		for local, baseLocal := range builtinType11Locals {
+			td, ok := first.LookupType(local, xsdNamespace)
+			if version != xsd.Version11 {
+				require.False(t, ok, "version %v: 1.1-only built-in %s registered", version, local)
+				continue
+			}
+			require.True(t, ok, "1.1-only built-in %s", local)
+			base, ok := first.LookupType(baseLocal, xsdNamespace)
+			require.True(t, ok, "base %s of %s", baseLocal, local)
+			require.Same(t, base, td.BaseType, "1.1-only built-in %s base", local)
+			want := &xsd.TypeDef{
+				Name:        xsd.QName{Local: local, NS: xsdNamespace},
+				ContentType: xsd.ContentTypeSimple,
+				BaseType:    base,
+				Derivation:  xsd.DerivationRestriction,
+			}
+			require.Equal(t, want, td, "1.1-only built-in %s", local)
+		}
+	}
+}
