@@ -2388,6 +2388,25 @@ XSD builtin value validation and comparison, extracted from `xsd/`.
 - Files: `validate.go`, `compare.go`, `facets.go`
 - Imports: `internal/lexicon` (XSD builtin type-name constants)
 
+## internal/xsdregex/
+
+XML Schema / XPath regular-expression translation and compilation, shared by `xsd`, `relaxng` and `xpath3`.
+
+- **CompileVersion(pattern string, xsd11 bool) (*Regexp, error)** — validate and compile an xs:pattern facet (anchored
+  to the whole value). Character-class subtraction and quantifier bounds past RE2's limit compile with the regexp2
+  backtracking engine; everything else uses RE2. **Compile(pattern)** is `CompileVersion(pattern, false)`
+- **Regexp.MatchString(s) bool** — whole-value match; a regexp2 match timeout counts as a non-match
+- **DefaultMatchTimeout / SetDefaultMatchTimeout** — regexp2 match-time bound, copied into each regexp2 pattern at
+  compile time
+- **Translate / Validate / HasBackrefs / HasCharClassSubtraction / HasLargeQuantifier / NormalizeBackrefs /
+  RejectPerlSpecific** — the XPath `fn:matches` flavor used by `xpath3`
+- Pattern cache (`cache.go`): `CompileVersion` keeps successful RE2-engine results in a process-wide, mutex-guarded LRU
+  (`compiledPatternCache`, 1024 entries) keyed by `{pattern, xsd11}`, so every caller (xsd, relaxng) shares one
+  immutable `*Regexp` per pattern. regexp2 results are not cached (the match timeout is frozen into them) and errors
+  are not cached (each compile rebuilds the diagnostic)
+- Files: `regex.go`, `cache.go`, `xsd10_unicode_categories.go`
+- Imports: none (external: `github.com/dlclark/regexp2`)
+
 ## internal/stack/
 
 Generic stack with capacity shrinking.

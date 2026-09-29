@@ -1594,6 +1594,7 @@ func Translate(pattern string, dotAll, ignoreCase bool) (string, error) {
 // Regexp is a compiled XML Schema pattern-facet regular expression. It matches
 // the whole input value (the pattern is anchored at both ends) against either
 // Go's RE2 engine or, for constructs RE2 lacks, the regexp2 backtracking engine.
+// A Regexp is never modified after compilation and is safe for concurrent use.
 type Regexp struct {
 	std       *regexp.Regexp
 	backtrack *regexp2.Regexp
@@ -1633,7 +1634,29 @@ func Compile(pattern string) (*Regexp, error) {
 // pattern facet — 1.0 or 1.1 — follows the 5th-edition NameChar definition (test
 // bug 13606). With xsd11=false the rest of the XSD 1.0 behavior is byte-identical
 // to Compile's original.
+//
+// A pattern compiled with the RE2 engine is cached process-wide (see
+// compiledPatternCache), so repeated calls with the same pattern and version may
+// return the same *Regexp. The returned value is immutable and safe to share
+// across goroutines.
 func CompileVersion(pattern string, xsd11 bool) (*Regexp, error) {
+	key := patternCacheKey{pattern: pattern, xsd11: xsd11}
+	if re, ok := compiledPatternCache.load(key); ok {
+		return re, nil
+	}
+	re, err := compilePattern(pattern, xsd11)
+	if err != nil {
+		return nil, err
+	}
+	if re.backtrack != nil {
+		return re, nil
+	}
+	return compiledPatternCache.loadOrStore(key, re), nil
+}
+
+// compilePattern validates, translates and compiles pattern without consulting
+// the cache.
+func compilePattern(pattern string, xsd11 bool) (*Regexp, error) {
 	// Enforce the XSD/XPath regex grammar up front, independent of which engine
 	// compiles the pattern. RE2 happens to reject some non-XSD constructs (e.g.
 	// \1 back-references) but accepts others (e.g. \b word boundaries), and the
