@@ -746,7 +746,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 						attrs = append(attrs, attrData{
 							localname: attname,
 							prefix:    aprefix,
-							value:     attr.Value(),
+							value:     pctx.defaultAttributeValue(attr),
 							isDefault: attr.IsDefault(),
 						})
 					}
@@ -1345,7 +1345,7 @@ func (pctx *parserCtx) walkAttrValueWFC(ctx context.Context, content string, fla
 func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
 	for _, attrs := range pctx.attsDefault {
 		for _, attr := range attrs {
-			val := attr.Value()
+			val := lexicalAttributeValue(attr)
 			if !strings.ContainsRune(val, '&') {
 				continue
 			}
