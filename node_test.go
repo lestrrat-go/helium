@@ -667,10 +667,9 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 		`<!ENTITY h "&#38;#60;">` +
 		`<!ENTITY p "p&amp;q">` +
 		`<!ENTITY m "a<b>c&f;</b>d">` +
-		`<!ENTITY c "x<!--k-->y">` +
 		`]>` +
 		`<r n="1&g;2" h="1&h;2" p="&p;">` +
-		`<t>1&e;2</t><g>1&g;2</g><m>1&m;2</m><p>&p;</p><h>1&h;2</h><c>&c;</c>` +
+		`<t>1&e;2</t><g>1&g;2</g><m>1&m;2</m><p>&p;</p><h>1&h;2</h>` +
 		`</r>`
 
 	want := map[string]string{
@@ -679,7 +678,6 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 		"m": "1acyd2",
 		"p": "p&q",
 		"h": "1<2",
-		"c": "xky",
 	}
 	wantAttr := map[string]string{
 		"n": "1ayb2",
@@ -705,7 +703,7 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 			require.Equal(t, attr.Value(), string(attr.Content()),
 				"Content and Value of @%s agree (SubstituteEntities(%t))", name, substitute)
 		}
-		require.Equal(t, "1x21ayb21acyd2p&q1<2xky", string(root.Content()),
+		require.Equal(t, "1x21ayb21acyd2p&q1<2", string(root.Content()),
 			"Content of the root (SubstituteEntities(%t))", substitute)
 	}
 
@@ -733,5 +731,49 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 		ref, err := doc.CreateReference("g")
 		require.NoError(t, err)
 		require.Equal(t, "axb", string(ref.Content()))
+	})
+
+	// libxml2's xmlBufGetChildContent adds only Text and CDATA text while it
+	// walks an entity's children, so a comment or PI inside an entity value adds
+	// nothing, at any depth. A comment or PI in the document tree itself keeps
+	// its text in helium's Content.
+	t.Run("comment and PI inside an entity", func(t *testing.T) {
+		t.Parallel()
+		const src = `<!DOCTYPE r [` +
+			`<!ENTITY c "x<!--k-->y<?p q?>z">` +
+			`<!ENTITY n "a<b><!--k-->c<?p q?></b>d">` +
+			`<!ENTITY o "1&c;2">` +
+			`]>` +
+			`<r><c>&c;</c><n>&n;</n><o>&o;</o><t>1<!--top-->2<?pi v?>3</t></r>`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		want := map[string]string{
+			"c": "xyz",
+			"n": "acd",
+			"o": "1xyz2",
+			"t": "1top2v3",
+		}
+		for child := range helium.Children(root) {
+			value, ok := want[child.Name()]
+			require.True(t, ok, "unexpected child %s", child.Name())
+			require.Equal(t, value, string(child.Content()), "Content of <%s>", child.Name())
+		}
+		require.Equal(t, "xyzacd1xyz21top2v3", string(root.Content()), "Content of the root")
+
+		ref := root.FirstChild().FirstChild()
+		require.Equal(t, helium.EntityRefNode, ref.Type())
+		require.Equal(t, "xyz", string(ref.Content()), "Content of the reference")
+
+		attr, err := doc.CreateAttribute("a", "1&c;2", nil)
+		require.NoError(t, err)
+		require.Equal(t, "1xyz2", string(attr.Content()), "Content of an attribute built through the tree API")
+		require.Equal(t, attr.Value(), string(attr.Content()), "Content and Value of the attribute agree")
+
+		// A SubstituteEntities(true) parse copies the comment and PI into the
+		// tree, where Content keeps their text.
+		sub, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		require.Equal(t, "xkyqz", string(sub.DocumentElement().FirstChild().Content()))
 	})
 }

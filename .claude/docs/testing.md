@@ -245,6 +245,13 @@ to `$nodes`/`$other`, against `xpath1/testdata/step_order.golden`. `XPATH1_UPDAT
 file. It also checks each result against a fresh `DocOrderCache` via `DeduplicateNodes`. Only regenerate the file for
 an intended order change.
 
+`xpath3/step_order_test.go` `TestStepResultOrder` is the xpath3 counterpart, against
+`xpath3/testdata/step_order.golden` (`XPATH3_UPDATE_STEP_ORDER=1` rewrites it). Besides the xpath1 matrix it covers
+positional predicates on forward and reverse axes, path steps whose step expression is not an axis step (`/(a|b)`,
+`//b/root()`, `//a/$other`), set operators, and golden-only shapes whose result is not a document-ordered node
+sequence (`!`, atomic last steps, `reverse(...)/step`, FLWOR, mixed node/atomic steps raising XPTY0018). Only the
+path expressions go through the fresh-`DocOrderCache` check.
+
 ## Build Tags
 
 - `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)

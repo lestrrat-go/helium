@@ -237,13 +237,13 @@ func newEntityRef() *EntityRef {
 }
 
 // Content returns the referenced entity's value with every nested reference
-// expanded (libxml2: xmlNodeGetContent on an entity reference), the text a
-// SubstituteEntities(true) parse stores in the reference's place. See
-// appendEntityRefContent for how the entity is found and expanded. An empty
-// result is nil.
+// expanded (libxml2: xmlNodeGetContent on an entity reference): the Text and
+// CDATA text of the entity's parsed children, leaving out any comment or PI.
+// See appendEntityRefContent for how the entity is found and expanded. An
+// empty result is nil.
 func (e *EntityRef) Content() []byte {
 	var b bytes.Buffer
-	appendEntityRefContent(&b, e, nil, true)
+	appendEntityRefContent(&b, e, nil)
 	if b.Len() == 0 {
 		return nil
 	}

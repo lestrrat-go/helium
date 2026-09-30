@@ -345,4 +345,34 @@ func TestOrderStepResultEntityInputs(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, want, got)
 	})
+
+	t.Run("entity content inputs match DeduplicateNodes", func(t *testing.T) {
+		// Every node inside the content of e, including the reference to f
+		// and the content of f reached through it.
+		var content []helium.Node
+		for n := range helium.Descendants(entE) {
+			content = append(content, n)
+		}
+		require.Len(t, content, 6)
+		for _, ctxNode := range content {
+			for _, axis := range allAxes {
+				requireSameAsDedup(t, axis, []helium.Node{ctxNode})
+			}
+		}
+		// Same-depth sets drawn from the content of both entities, and from
+		// entity content and the body, sorted as a previous step leaves them.
+		sameDepthSets := [][]helium.Node{
+			{entE.FirstChild(), entF.FirstChild()},
+			slices.Collect(helium.Children(entE)),
+			append(slices.Collect(helium.Children(entE)), slices.Collect(helium.Children(entF))...),
+			{entE.FirstChild(), elementByID(t, doc, "z1"), elementByID(t, doc, "z2")},
+		}
+		for _, inputs := range sameDepthSets {
+			inputs, err := ixpath.DeduplicateNodes(inputs, &ixpath.DocOrderCache{}, ixpath.DefaultMaxNodeSetLength)
+			require.NoError(t, err)
+			for _, axis := range allAxes {
+				requireSameAsDedup(t, axis, inputs)
+			}
+		}
+	})
 }

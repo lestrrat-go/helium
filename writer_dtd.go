@@ -554,7 +554,11 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 		return fmt.Errorf("invalid AttributeDecl default value type: %w", ErrWriterInvalidDTDNode)
 	}
 
-	if n.defvalue != "" {
+	// A bare or #FIXED default always carries a value, and an empty one is
+	// written as "" (libxml2 xmlSaveWriteAttributeDecl writes the quotes for
+	// any non-NULL defaultValue). Omitting it would leave `CDATA>` or
+	// `#FIXED>`, which is not a valid DefaultDecl.
+	if attrHasDefaultValue(n.def) || n.defvalue != "" {
 		d.writeString(out, ` "`)
 		d.check(escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil))
 		d.writeString(out, `"`)

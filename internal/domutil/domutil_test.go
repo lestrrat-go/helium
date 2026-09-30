@@ -506,3 +506,13 @@ func TestTextContentExpandsNestedEntityReferences(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "1ayb2", domutil.TextContent(doc.DocumentElement()))
 }
+
+// TextContent leaves out a comment or PI inside an entity reference child's
+// expansion, as libxml2 does, so xmldsig1 reads a KeyName such as &k; with k
+// "a<!--x-->b" as "ab".
+func TestTextContentLeavesOutEntityCommentsAndPIs(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<!DOCTYPE k [<!ENTITY k "a<!--x-->b<?p q?>c">]><k>1&k;2</k>`))
+	require.NoError(t, err)
+	require.Equal(t, "1abc2", domutil.TextContent(doc.DocumentElement()))
+}

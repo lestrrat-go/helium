@@ -873,6 +873,22 @@ func TestAttributeValueExpandsEntityReferences(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "1axb2", attr.Value())
 	})
+
+	// Attribute-value normalization turns a tab in an entity value into a space
+	// only when the parser substitutes the reference. Without substitution the
+	// EntityRef stays and Value expands the entity's text with its tab, as
+	// libxml2 does for the same tree.
+	t.Run("tab in an entity value", func(t *testing.T) {
+		t.Parallel()
+		const src = "<!DOCTYPE r [<!ENTITY t \"a\tb\">]><r a=\"1&t;2\"/>"
+		for substitute, value := range map[bool]string{false: "1a\tb2", true: "1a b2"} {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			got, ok := doc.DocumentElement().GetAttribute("a")
+			require.True(t, ok)
+			require.Equal(t, value, got, "SubstituteEntities(%t)", substitute)
+		}
+	})
 }
 
 func TestAttributeNamespaces(t *testing.T) {
@@ -1097,20 +1113,17 @@ func TestAttributeNamespaces(t *testing.T) {
 			require.Error(t, err)
 		})
 
-		t.Run("DTD default prefixed xmlns with empty URI creates no binding", func(t *testing.T) {
+		t.Run("DTD default prefixed xmlns with empty URI is rejected", func(t *testing.T) {
 			t.Parallel()
-			// An empty default value is never registered as an attribute default
-			// (mirrors libxml2: empty defaults are not applied), so the empty-URI
-			// case cannot reach the defaulting path and no namespace is pushed.
+			// An empty default is still a default, so it reaches the defaulting
+			// path, where a DTD-defaulted namespace declaration gets the same
+			// checks as a literal one: xmlns:p="" is not allowed in XML 1.0
+			// (Namespaces 1.0 §3, Prefix Declared).
 			xml := `<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "">]><r/>`
 
 			p := helium.NewParser().DefaultDTDAttributes(true)
-			doc, err := p.Parse(t.Context(), []byte(xml))
-			require.NoError(t, err)
-
-			root := doc.DocumentElement()
-			require.NotNil(t, root)
-			require.Empty(t, root.URI())
+			_, err := p.Parse(t.Context(), []byte(xml))
+			require.ErrorContains(t, err, "Empty XML namespace is not allowed")
 		})
 
 		t.Run("literal non-xml prefix bound to reserved XML namespace is rejected", func(t *testing.T) {
