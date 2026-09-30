@@ -552,7 +552,8 @@ XPath 1.0 expression parsing and evaluation.
   nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
 - Document order: every location step ends in `internal/xpath.OrderStepResult`, which builds the whole-document
   order index only when the step shape cannot prove its result is already sorted and duplicate-free (multi-input
-  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, Entity-node inputs)
+  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, Entity-node inputs, inputs inside an
+  entity's parsed content)
 - Axes (`internal/xpath/axes.go`): the child and descendant axes enumerate child lists through `helium.Children`
   (the owned-child boundary), so an entity reference (entity substitution off) has no children and no descendants:
   its only child is the DTD-owned `Entity` node, which is not an XPath node, and the walk never follows that node's
