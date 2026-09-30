@@ -68,8 +68,10 @@ Attributes are a **linked list via next/prev** on the Element, NOT children:
   Text/EntityRef list a `SubstituteEntities(false)` parse builds, goes through the shared content walk
   `appendChildContent` (see "Content() Default") with comments/PIs left out. So `Value()` is the same string
   under `SubstituteEntities(false)` and `(true)`: `1&e;2` with `e`="x" → `"1x2"`, and a nested `&g;` with
-  `g`="a&f;b" → the fully expanded text. `Content()` on an attribute runs the same walk and returns the same
-  text
+  `g`="a&f;b" → the fully expanded text. Whitespace is the exception: attribute-value normalization turns a
+  tab in an entity value into a space only when the parser substitutes the reference, so under
+  `SubstituteEntities(false)` `Value()` keeps the tab, as libxml2 does, and C14N writes it as `&#x9;`.
+  `Content()` on an attribute runs the same walk and returns the same text
 - The parser keeps DTD default attributes (`parserCtx.attsDefault`) as `*Attribute` nodes built by
   `CreateAttribute`. Without entity substitution it reports a default's value in lexical form
   (`defaultAttributeValue` → `lexicalAttributeValue`: Text with `&` as `&#38;`, EntityRef as `&name;`), as

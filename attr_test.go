@@ -873,6 +873,22 @@ func TestAttributeValueExpandsEntityReferences(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "1axb2", attr.Value())
 	})
+
+	// Attribute-value normalization turns a tab in an entity value into a space
+	// only when the parser substitutes the reference. Without substitution the
+	// EntityRef stays and Value expands the entity's text with its tab, as
+	// libxml2 does for the same tree.
+	t.Run("tab in an entity value", func(t *testing.T) {
+		t.Parallel()
+		const src = "<!DOCTYPE r [<!ENTITY t \"a\tb\">]><r a=\"1&t;2\"/>"
+		for substitute, value := range map[bool]string{false: "1a\tb2", true: "1a b2"} {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			got, ok := doc.DocumentElement().GetAttribute("a")
+			require.True(t, ok)
+			require.Equal(t, value, got, "SubstituteEntities(%t)", substitute)
+		}
+	})
 }
 
 func TestAttributeNamespaces(t *testing.T) {
