@@ -85,11 +85,9 @@ counted as **not-passing** and shown as `⚠`, so it can never round into a perf
 
 Reference xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0.
 
-Note the committed summaries are inconsistent about these: `summary-xml.md` breaks
-XFail out as its own row (Pass 1993 + XFail 8), while `xsd/summary-xsd10.md`,
-`xsd/summary-xsd11.md` and `xpath3/summary-qt3.md` fold theirs into **Pass** (so their
-"Pass 14399 / Fail 0" silently includes 16 expected failures). This tool counts them
-uniformly, which is why XSD 1.0 reads 99.9% here and 100% there.
+The committed per-suite summaries list xfails in their own **XFail** row, apart from
+**Pass** (`xsd/summary-xsd10.md` reads Pass 14383 + XFail 16), so their Pass counts
+match the pass counts this tool reports.
 
 ## Performance-gated cases (`HELIUM_SLOW_TESTS`)
 

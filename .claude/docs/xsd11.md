@@ -11,7 +11,9 @@ with the 1.0 path byte-identical to origin. Spec citations (§, cvc-*, cos-*, sr
 governing rule and its conformance evidence.
 
 XSD 1.1 is fully implemented. The committed W3C conformance snapshot reports
-**1,049 pass / 0 skip / 0 fail** in `xsd/summary-xsd11.md`. Sub-docs by area:
+**1,048 pass / 0 skip / 1 xfail / 0 fail** in `xsd/summary-xsd11.md`. The xfail is
+`saxonMeta/Simple.testSet/simple006`, a disputed §5.3 missing-component case that helium accepts to match
+`saxonMeta/Missing/missing006`. Sub-docs by area:
 
 | Sub-doc | Covers |
 |---------|--------|

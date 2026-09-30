@@ -45,12 +45,14 @@ The heavyweight XSD 1.1 conformance harness lives in the sibling module
 pointing at the Helium worktree. Treat checked-in counts as current-state only:
 regenerate them from the current harness and the Helium branch under test. Do
 not preserve old branch/SHA counts in this section unless the heading explicitly
-marks them as historical. Persistent skips are tracked in
-`helium-w3c-tests/expectations/xsd11.json` as XSD 1.1 conformance gaps.
+marks them as historical. Persistent skips and expected failures are tracked in
+`helium-w3c-tests/expectations/xsd11.json` (`skip` and `xfail` maps).
 
-Current state (snapshot, regenerate to confirm): the `xsd11.json` skip list is
-**empty** — the committed Basic XSD 1.1 W3C evidence reports **1,049 pass / 0
-failures / 0 skipped** in `xsd/summary-xsd11.md`.
+Current state (snapshot, regenerate to confirm): the `xsd11.json` skip map is
+**empty** and its xfail map holds one disputed case
+(`saxonMeta/Simple.testSet/simple006`). The committed XSD 1.1 W3C evidence
+reports **1,048 pass / 0 skipped / 1 xfail / 0 failures** in
+`xsd/summary-xsd11.md`.
 
 ## Parser Limitations
 

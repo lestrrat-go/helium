@@ -364,7 +364,8 @@ This is the **reproducible local baseline** plus the on-demand slow run from
 **+481** performance-gated cases the default run skips.
 
 The slow figures are on-demand CI evidence (committed as
-`results-xslt30-slow.xml`); the default baseline is what a local run reproduces.
+`summary-xslt30-slow.md` and `results-xslt30-slow.xml`); the default baseline is
+what a local run reproduces.
 
 There are **0 failing tests** in the current W3C run. **Every skip is expected,
 not a deficiency.**
@@ -491,8 +492,8 @@ produced.
 
 Helium keeps only the `xslt3` unit tests plus committed, point-in-time evidence
 beside this package — a stamped `summary-xslt30.md` and JUnit
-`results-xslt30.xml` for the default run, plus `results-xslt30-slow.xml` for the
-on-demand slow run. Regenerate the default evidence from the sibling module:
+`results-xslt30.xml` for the default run, plus `summary-xslt30-slow.md` and
+`results-xslt30-slow.xml` for the on-demand slow run. Regenerate the default evidence from the sibling module:
 
 ```sh
 # in ../helium-w3c-tests, after fetch + generate

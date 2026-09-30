@@ -29,9 +29,8 @@ Against the W3C XSLT 3.0 test suite (run from the sibling
 The slow run additionally executes the 481 performance-gated cases the default
 run skips. Committed point-in-time evidence lives beside this file:
 
-- `summary-xslt30.md` / `results-xslt30.xml` — default run (the summary's
-  "Slow run" section carries the slow counts).
-- `results-xslt30-slow.xml` — slow run JUnit output.
+- `summary-xslt30.md` / `results-xslt30.xml` — default run.
+- `summary-xslt30-slow.md` / `results-xslt30-slow.xml` — slow run.
 
 The authoritative per-case reasons are the harness `w3cImplicitSkips` map
 (`helium-w3c-tests` `xslt3/w3c_helpers_test.go`) and `expectations/xslt30.json`;
