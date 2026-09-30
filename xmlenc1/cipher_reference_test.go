@@ -292,14 +292,18 @@ func readResolved(t *testing.T, resolver xmlenc1.ReferenceResolver, uri string) 
 // resolver hands back a stream that never produces a byte.
 //
 // Close releases the blocked Read, so a package that closes the stream on
-// cancellation is what lets the read goroutine finish, and never leak.
+// cancellation is what lets the read goroutine finish, and never leak. reading
+// is closed when the first Read starts, so a test can act on a read that is
+// known to be blocked.
 type blockingFS struct {
-	released chan struct{}
-	once     sync.Once
+	released    chan struct{}
+	once        sync.Once
+	reading     chan struct{}
+	readingOnce sync.Once
 }
 
 func newBlockingFS() *blockingFS {
-	return &blockingFS{released: make(chan struct{})}
+	return &blockingFS{released: make(chan struct{}), reading: make(chan struct{})}
 }
 
 func (fsys *blockingFS) release() {
@@ -319,6 +323,7 @@ func (f *blockingFile) Stat() (fs.FileInfo, error) {
 }
 
 func (f *blockingFile) Read([]byte) (int, error) {
+	f.fsys.readingOnce.Do(func() { close(f.fsys.reading) })
 	<-f.fsys.released
 	return 0, io.EOF
 }
@@ -1175,8 +1180,10 @@ func TestCipherReference(t *testing.T) {
 
 	// A resource whose reads never return does not out-wait its caller: the
 	// package selects on the context while it reads and closes the stream, which
-	// is what releases the blocked read.
-	t.Run("a blocking resource does not out-wait the deadline", func(t *testing.T) {
+	// is what releases the blocked read. The context is cancelled only after the
+	// read has started, so the cancellation must reach a read that is blocked
+	// and cannot be answered by a check made before reading.
+	t.Run("a blocking resource does not out-wait cancellation", func(t *testing.T) {
 		fsys := newBlockingFS()
 		t.Cleanup(fsys.release)
 		elem := cipherRefDoc(t, cipherReferenceXML(externalCipherURI, ""), "")
@@ -1184,7 +1191,7 @@ func TestCipherReference(t *testing.T) {
 			SessionKey(newSessionKey(t)).
 			CipherReferenceResolver(xmlenc1.FSReferenceResolver(fsys, ""))
 
-		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		done := make(chan error, 1)
 		go func() {
@@ -1192,10 +1199,18 @@ func TestCipherReference(t *testing.T) {
 			done <- err
 		}()
 		select {
+		case <-fsys.reading:
 		case err := <-done:
-			require.ErrorIs(t, err, context.DeadlineExceeded)
+			t.Fatalf("the decrypt returned %v before reading the resource", err)
 		case <-time.After(10 * time.Second):
-			t.Fatal("the decrypt ran on past its caller's deadline")
+			t.Fatal("the decrypt never read the resource")
+		}
+		cancel()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(10 * time.Second):
+			t.Fatal("the decrypt stayed blocked on the resource after its caller cancelled")
 		}
 	})
 

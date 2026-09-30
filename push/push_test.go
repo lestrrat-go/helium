@@ -52,7 +52,8 @@ func TestStreamReadReturnsAvailableBytes(t *testing.T) {
 func TestStreamReadBlocksWhileEmpty(t *testing.T) {
 	t.Parallel()
 
-	s := newStream(t.Context())
+	ctx := newPollSignalContext(t.Context())
+	s := newStream(ctx)
 
 	type readResult struct {
 		n   int
@@ -65,12 +66,11 @@ func TestStreamReadBlocksWhileEmpty(t *testing.T) {
 		resCh <- readResult{n: n, err: err}
 	}()
 
-	// Read should still be blocked since nothing was written.
-	select {
-	case <-resCh:
-		t.Fatal("Read returned before any data was available")
-	case <-time.After(100 * time.Millisecond):
-	}
+	// The reader polls the context once it holds the lock and finds the buffer
+	// empty. Write takes the same lock, so it runs only after the reader has
+	// released it in cond.Wait. A Read that returned instead of waiting would
+	// report 0 bytes, never the 4 written after it started.
+	waitForPoll(t, ctx)
 
 	_, err := s.Write([]byte("data"))
 	require.NoError(t, err)
@@ -84,12 +84,45 @@ func TestStreamReadBlocksWhileEmpty(t *testing.T) {
 	}
 }
 
+// pollSignalContext wraps a context and signals every Err call on polled. The
+// stream's Read calls Err under its lock right before it parks in cond.Wait, so
+// a test that has received a signal knows the reader reached the wait loop
+// without guessing how long that takes.
+type pollSignalContext struct {
+	context.Context //nolint:containedctx // the wrapper IS the context handed to newStream
+	polled          chan struct{}
+}
+
+func newPollSignalContext(parent context.Context) *pollSignalContext {
+	return &pollSignalContext{Context: parent, polled: make(chan struct{}, 1)}
+}
+
+func (c *pollSignalContext) Err() error {
+	select {
+	case c.polled <- struct{}{}:
+	default:
+	}
+	return c.Context.Err()
+}
+
+// waitForPoll blocks until the reader has polled ctx. The timeout only keeps
+// a broken Read from hanging the test.
+func waitForPoll(t *testing.T, ctx *pollSignalContext) {
+	t.Helper()
+	select {
+	case <-ctx.polled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Read never polled its context")
+	}
+}
+
 // TestStreamReadContextCancellation verifies that cancelling the context
 // aborts a Read that is blocked on an empty, open stream.
 func TestStreamReadContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(t.Context())
+	parent, cancel := context.WithCancel(t.Context())
+	ctx := newPollSignalContext(parent)
 	s := newStream(ctx)
 
 	errCh := make(chan error, 1)
@@ -99,12 +132,10 @@ func TestStreamReadContextCancellation(t *testing.T) {
 		errCh <- err
 	}()
 
-	// Ensure the reader is parked on cond.Wait before cancelling.
-	select {
-	case <-errCh:
-		t.Fatal("Read returned before cancellation")
-	case <-time.After(100 * time.Millisecond):
-	}
+	// Cancel only once the reader has polled the context on the empty buffer,
+	// so the cancellation reaches a Read that is in (or entering) cond.Wait. A
+	// Read that returned early would report nil, not context.Canceled.
+	waitForPoll(t, ctx)
 
 	cancel()
 
