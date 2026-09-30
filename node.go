@@ -217,11 +217,11 @@ func (n docnode) Parent() Node {
 
 // Content aggregates the content of this node's own children through
 // appendChildContent (libxml2: xmlNodeGetContent), with every entity reference
-// expanded: an EntityRef child contributes its entity's expanded value, the
-// same text a SubstituteEntities(true) parse stores in its place. Unlike
-// Attribute.Value, a Comment, PI or namespace-node child contributes its own
-// text. The receiver is a pointer so it is the real owning node against which
-// child ownership is checked.
+// expanded: an EntityRef child contributes its entity's expanded value, which
+// leaves out any comment or PI inside the entity, as libxml2 does. Unlike
+// Attribute.Value, a Comment, PI or namespace-node child in the tree itself
+// contributes its own text. The receiver is a pointer so it is the real owning
+// node against which child ownership is checked.
 //
 // A node with no children, or with exactly one leaf child (Text, Comment,
 // CDATA, PI, Entity, NS wrapper), skips the aggregation machinery and returns
@@ -257,7 +257,8 @@ type contentSink interface {
 // (appendEntityRefContent), an Entity child contributes its stored replacement
 // text, and any other container contributes the content of its own children. A
 // Comment, PI or namespace-node child contributes its own text only when
-// withOther is set (Content); Attribute.Value leaves it out, as libxml2 does.
+// withOther is set (Content outside entity content); Attribute.Value and the
+// walk through an entity's children leave it out, as libxml2 does.
 //
 // The walk follows only owner's own children (nextOwnedSibling), so an entity
 // reference's shared Entity child never leads into the DTD's declaration list,
@@ -280,7 +281,7 @@ func appendChildContent(w contentSink, owner *docnode, active []*docnode, withOt
 		case *CDATASection:
 			_, _ = w.Write(c.rawContent())
 		case *EntityRef:
-			appendEntityRefContent(w, c, active, withOther)
+			appendEntityRefContent(w, c, active)
 		case *Entity:
 			_, _ = w.WriteString(c.content)
 		case *Comment, *ProcessingInstruction, *NamespaceNodeWrapper:
@@ -300,10 +301,12 @@ func appendChildContent(w contentSink, owner *docnode, active []*docnode, withOt
 // (libxml2: xmlBufGetEntityRefContent). The entity is ref's Entity child when
 // the reference is bound, otherwise the document's declaration of that name. A
 // predefined entity contributes its character; any other entity contributes
-// the content of its parsed children, expanded by appendChildContent. An
-// entity whose replacement text was never parsed into children contributes
-// that text as stored.
-func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode, withOther bool) {
+// the content of its parsed children, expanded by appendChildContent. That walk
+// leaves out comments and PIs at every depth: libxml2's xmlBufGetChildContent
+// adds only Text and CDATA text and descends into other children, so a Comment
+// or PI inside an entity adds nothing. An entity whose replacement text was
+// never parsed into children contributes that text as stored.
+func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode) {
 	ent, ok := ref.firstChild.(*Entity)
 	if !ok {
 		ent = lookupReferencedEntity(ref)
@@ -323,7 +326,7 @@ func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode, wi
 		_, _ = w.WriteString(ent.content)
 		return
 	}
-	appendChildContent(w, edn, append(active, edn), withOther)
+	appendChildContent(w, edn, append(active, edn), false)
 }
 
 // lookupReferencedEntity resolves an unbound entity reference by name: a
