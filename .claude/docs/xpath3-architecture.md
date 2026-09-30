@@ -30,7 +30,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 |------|----------|
 | `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
-| `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `allOrderedContexts`, `sameDepth`, `isReverseAxis` |
+| `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)`, `appendTextDescendants` (unexported, iterative stack-based traversal), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
 | `limits.go` | `DefaultMaxRecursionDepth=5000`, `DefaultMaxNodeSetLength=10_000_000`, `ErrNodeSetLimit` |
 
@@ -69,13 +69,20 @@ input (reverse axes are reversed in place), or when the axis is child, attribute
 namespace or parent and every input has the same depth (parent results drop adjacent
 duplicates). Both skips require every input to be a document, element, attribute,
 namespace, text, CDATA, comment, PI, entity-reference or DTD node (`allOrderedContexts`).
-An `Entity` input always sorts: the index places an entity's content at the last
-reference to it, so the child steps of two entities, or of an entity and an element,
-can interleave. A skipping step reserves its document's registration order in the cache
-(unexported `reserveDocument`) without indexing it, so the order between documents stays
-the one indexing would have produced. `Position`, `Compare` and every indexing path index
-a reserved document on first use, under its reserved order. xpath1 ends every location
-step with it; xpath3 still uses `DeduplicateNodes`.
+An `Entity` input, and any input inside an entity's parsed content (an `Entity` among
+its ancestors, `inEntityContent`; the one-input skip walks the ancestors, the same-depth
+skip checks while `sameDepth` walks them), always sorts: the index places an entity's
+content at the last reference to it while a raw axis walk from inside the content climbs
+through the `Entity` and the DTD, so a following step from there, or the child steps of
+two entities, or of an entity and an element, come out of document order. A skipping
+step reserves its document's registration order in the cache (unexported
+`reserveDocument`) without indexing it, so the order between documents stays the one
+indexing would have produced. `Position`, `Compare` and every indexing path index a
+reserved document on first use, under its reserved order. xpath1 and xpath3 end every
+axis step of a location path with it. In xpath3 the other node-ordering sites keep
+`DeduplicateNodes`/`MergeNodeSets`: a path step whose step expression is not an axis
+step (`E1/(a|b)`, `E1/f()`, `E1/$v`, `evalPathStepExpr`), the merge of the per-node
+results of `E1/E2` (`evalPathExpr`), union, and intersect/except.
 
 ### `StringValue` signatures
 

@@ -1,7 +1,6 @@
-package xpath1_test
+package xpath3_test
 
 import (
-	"context"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -14,12 +13,12 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
-	"github.com/lestrrat-go/helium/xpath1"
+	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
 // stepOrderGoldenPath holds the recorded result of every case in
-// TestStepResultOrder. Set XPATH1_UPDATE_STEP_ORDER=1 to rewrite it.
+// TestStepResultOrder. Set XPATH3_UPDATE_STEP_ORDER=1 to rewrite it.
 var stepOrderGoldenPath = filepath.Join("testdata", "step_order.golden")
 
 type stepOrderDoc struct {
@@ -104,7 +103,7 @@ func addHandBuiltDTD(t testing.TB, doc *helium.Document) {
 }
 
 // stepOrderOtherDoc is bound, together with the document under test, to the
-// $nodes and $other variables so cross-document node-sets are covered.
+// $nodes and $other variables so cross-document sequences are covered.
 const stepOrderOtherDoc = `<a id="o"><b id="o1"/><b id="o2"><c/></b><c/></a>`
 
 // stepOrderContexts names the context nodes of the matrix. A context is
@@ -147,8 +146,6 @@ func entityContent(doc *helium.Document) []helium.Node {
 }
 
 // pickEntityElem returns the first element inside entity content, or nil.
-// XPath never reaches entity content from the document, but a caller can
-// pass such a node as the context node.
 func pickEntityElem(doc *helium.Document) helium.Node {
 	for _, n := range entityContent(doc) {
 		if n.Type() == helium.ElementNode {
@@ -170,7 +167,7 @@ func pickEntityText(doc *helium.Document) helium.Node {
 
 // entityElems returns the elements inside entity content of doc, sorted and
 // deduplicated by a fresh document-order index, the way a caller would bind
-// a node-set drawn from the content of several entities.
+// a sequence drawn from the content of several entities.
 func entityElems(t testing.TB, doc *helium.Document) []helium.Node {
 	t.Helper()
 	var elems []helium.Node
@@ -186,13 +183,18 @@ func entityElems(t testing.TB, doc *helium.Document) []helium.Node {
 
 // pickEntityRef returns the first entity reference of doc, or nil.
 func pickEntityRef(doc *helium.Document) helium.Node {
-	return firstEntityRef(doc)
+	for n := range helium.Descendants(doc) {
+		if n.Type() == helium.EntityRefNode {
+			return n
+		}
+	}
+	return nil
 }
 
 // pickEntity returns the Entity node the first entity reference of doc
 // refers to, or nil.
 func pickEntity(doc *helium.Document) helium.Node {
-	ref := firstEntityRef(doc)
+	ref := pickEntityRef(doc)
 	if ref == nil {
 		return nil
 	}
@@ -208,7 +210,14 @@ func pickDTD(doc *helium.Document) helium.Node {
 	return dtd
 }
 
-var stepOrderExprs = []string{
+// exprDescendantOrSelfNode is the step that `//` abbreviates.
+const exprDescendantOrSelfNode = "descendant-or-self::node()"
+
+// stepOrderPathExprs are path expressions whose result XPath 3.1 defines to be
+// in document order without duplicates, so every result is also checked
+// against a fresh document-order index.
+var stepOrderPathExprs = []string{
+	// Axis-step shapes shared with xpath1/step_order_test.go.
 	"//a", "//a/b", "//a/..", "//a/parent::*", "//a/@*", "//a/namespace::*",
 	"//*/self::b", "//b/following-sibling::*", "//b/preceding-sibling::*",
 	"ancestor::*", "ancestor-or-self::node()", "preceding::*", "following::*",
@@ -221,15 +230,42 @@ var stepOrderExprs = []string{
 	"//x/ancestor-or-self::*/@id", "/a/b/node()", "/a/node()/node()", "//b/node()/..",
 	"/descendant::b/ancestor::a", "//b[1]/following-sibling::node()[1]", "//c/preceding::node()[1]",
 	"/*/*/*", "/*/*/*/..", "/*/*/@*", "//comment()/..", "//b/parent::node()/parent::node()",
-	"$nodes/b", "$nodes//b", "$nodes/..", "/a/b | $other/b", "//b | $nodes", "//b | $other//b",
-	"$nodes | //b", "//b | ($other/b | $other/c)", "$other/b | /a/b", "($nodes)[1]//c",
-	"descendant-or-self::node()", ".//node()", ".//comment()", ".//processing-instruction()", ".//text()",
+	"$nodes/b", "$nodes//b", "$nodes/..", "/a/b | $other/b", "//b | $other//b",
+	"//b | ($other/b | $other/c)", "$other/b | /a/b", "($nodes)[1]//c",
+	exprDescendantOrSelfNode, ".//node()", ".//comment()", ".//processing-instruction()", ".//text()",
 	"descendant::node()/..", "child::node()", "self::node()", "descendant::x",
 	"$ents/node()", "$ents/*/node()", "$ents/..", "$ents/self::*", "$ents/@*", "$ents/namespace::*",
 	"$ents/following-sibling::node()", "$ents/following::node()", "$ents/preceding::node()",
 	"$ents/descendant::node()", "$ents/ancestor::node()", "$ents | //b", "$ents | $ents/node()",
 	"following::*[count(ancestor::node()) = 3]", "following::*[count(ancestor::node()) = 3]/node()",
 	"following::*[count(ancestor::node()) = 3]/@*", "following::*[count(ancestor::node()) = 3]/node()/..",
+	// Positional predicates on forward and reverse axes.
+	"(//b)[last()]/preceding::*", "//b/preceding-sibling::*[1]", "//b/ancestor::*[1]",
+	"ancestor::*[1]", "ancestor::*[last()]", "//a/b[1]", "//b/@*[1]", "//*[@id = 'b1']/..",
+	"descendant::*/namespace::*", "namespace::*", "//b/following::*[1]", "//b/self::node()[@id]",
+	"//a/node()[last()]", "//a/b/following-sibling::node()[1]/..", "//b/descendant-or-self::node()[1]",
+	// Kind tests.
+	"//a/element()", "//a/attribute()", "//a/child::element(b)",
+	// Path steps whose step expression is not an axis step.
+	"/(a|b)", "//a/(b|c)", "//b/(.., c)", "//b/(@id, ..)", "//b/reverse(ancestor::*)",
+	"//b/(if (@id) then . else ..)", "$nodes/(b | c)", "//a/$other", "//b/root()", "//b/root(.)/a",
+	"//b/..[1]", "//a/(b)", "//*/(.)", "//b/id('b1')", "//b/(ancestor::*)[1]", "//b/(ancestor::*[1])",
+	"//a/b/(c|x)/..", "//b/(following::*)[1]", "//b/(following::* | preceding::*)", "$ents/(..)",
+	"$ents/(node())", "//b/(1, 2)[. = 0]",
+	// Set operators.
+	"//a intersect //b/..", "//a except //b/..",
+}
+
+// stepOrderOtherExprs are expressions whose result is not a document-ordered
+// node sequence: the simple map operator, atomic last steps, explicit
+// reordering, FLWOR and sequence construction, and mixed node/atomic step
+// results (XPTY0018). They are pinned by the golden file only.
+var stepOrderOtherExprs = []string{
+	"//a ! b", "//a ! ..", "//b ! string(@id)", "//b ! (.., .)", "//b/string(@id)", "//b/data(@id)",
+	"/a/(1, .)", "//b/(if (@id) then . else 'x')", "//b/(., 'x')", "reverse(//b)/self::b", "reverse(//b)/c",
+	"reverse(//b)/..", "for $x in //b return $x/..", "(//b, //a)", "(//b, //a)/.", "//b/count(ancestor::*)",
+	"//b/name()", "sort(//b, (), function($n) { string($n/@id) })/..", "//b/position()",
+	"(/a/b)/local-name()", "$nodes | //b", "//b | $nodes", "$nodes | $other",
 }
 
 func parseStepOrderDoc(t testing.TB, src string, subst bool) *helium.Document {
@@ -293,9 +329,16 @@ func siblingIndex(parent, n helium.Node) string {
 
 type stepOrderFixture struct {
 	doc    *helium.Document
-	other  *helium.Document
 	labels map[helium.Node]string
-	eval   xpath1.Evaluator
+	eval   xpath3.Evaluator
+}
+
+func nodeSequence(nodes []helium.Node) xpath3.Sequence {
+	seq := make(xpath3.ItemSlice, len(nodes))
+	for i, n := range nodes {
+		seq[i] = xpath3.NodeItem{Node: n}
+	}
+	return seq
 }
 
 func newStepOrderFixture(t testing.TB, d stepOrderDoc) stepOrderFixture {
@@ -306,16 +349,15 @@ func newStepOrderFixture(t testing.TB, d stepOrderDoc) stepOrderFixture {
 	}
 	other := parseStepOrderDoc(t, stepOrderOtherDoc, false)
 	labels := map[helium.Node]string{doc: "d1:", other: "d2:"}
-	vars := map[string]any{
-		"nodes": []helium.Node{other.DocumentElement(), doc.DocumentElement()},
-		"other": []helium.Node{other.DocumentElement()},
-		"ents":  entityElems(t, doc),
+	vars := map[string]xpath3.Sequence{
+		"nodes": nodeSequence([]helium.Node{other.DocumentElement(), doc.DocumentElement()}),
+		"other": nodeSequence([]helium.Node{other.DocumentElement()}),
+		"ents":  nodeSequence(entityElems(t, doc)),
 	}
 	return stepOrderFixture{
 		doc:    doc,
-		other:  other,
 		labels: labels,
-		eval:   xpath1.NewEvaluator().Variables(vars),
+		eval:   xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(vars),
 	}
 }
 
@@ -330,28 +372,40 @@ func (f stepOrderFixture) contextNode(t testing.TB, expr string, pick func(*heli
 	if expr == "" {
 		return f.doc
 	}
-	r, err := f.eval.Evaluate(t.Context(), xpath1.MustCompile(expr), f.doc)
+	r, err := f.eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(expr), f.doc)
 	require.NoError(t, err)
-	if len(r.NodeSet) == 0 {
+	nodes, err := r.Nodes()
+	require.NoError(t, err)
+	if len(nodes) == 0 {
 		return nil
 	}
-	return r.NodeSet[0]
+	return nodes[0]
 }
 
-// describeResult evaluates expr and renders its node-set. It also checks that
-// the node-set is already sorted and duplicate-free according to a fresh
-// document-order index (the order oracle).
-func (f stepOrderFixture) describeResult(t testing.TB, ctxNode helium.Node, expr string) string {
+// describeResult evaluates expr and renders its result sequence. When
+// ordered is set and every item is a node, it also checks that the nodes are
+// already sorted and duplicate-free according to a fresh document-order
+// index (the order oracle).
+func (f stepOrderFixture) describeResult(t testing.TB, ctxNode helium.Node, expr string, ordered bool) string {
 	t.Helper()
-	r, err := f.eval.Evaluate(t.Context(), xpath1.MustCompile(expr), ctxNode)
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err, expr)
+	r, err := f.eval.Evaluate(t.Context(), compiled, ctxNode)
 	if err != nil {
 		return "ERR " + err.Error()
 	}
-	require.Equal(t, xpath1.NodeSetResult, r.Type, expr)
-	sorted, err := ixpath.DeduplicateNodes(slices.Clone(r.NodeSet), &ixpath.DocOrderCache{}, ixpath.DefaultMaxNodeSetLength)
+	seq := r.Sequence()
+	nodes, allNodes := xpath3.NodesFrom(seq)
+	if !allNodes {
+		return f.describeItems(seq)
+	}
+	got := f.describeNodes(nodes)
+	if !ordered {
+		return got
+	}
+	sorted, err := ixpath.DeduplicateNodes(slices.Clone(nodes), &ixpath.DocOrderCache{}, ixpath.DefaultMaxNodeSetLength)
 	require.NoError(t, err)
-	got := f.describeNodes(r.NodeSet)
-	if !slices.Equal(r.NodeSet, sorted) {
+	if !slices.Equal(nodes, sorted) {
 		// Compare the rendered paths: a diff of the node values themselves
 		// prints whole trees.
 		require.Equal(t, f.describeNodes(sorted), got, "result of %q is not in document order", expr)
@@ -369,9 +423,25 @@ func (f stepOrderFixture) describeNodes(nodes []helium.Node) string {
 	return strings.Join(parts, " ")
 }
 
-// TestStepResultOrder pins the node-set and its order for a matrix of
-// documents, context nodes and location paths against a recorded golden
-// file, so any change to how a step orders or deduplicates its result shows
+// describeItems renders a sequence that holds at least one non-node item.
+func (f stepOrderFixture) describeItems(seq xpath3.Sequence) string {
+	var parts []string
+	for item := range seq.Items() {
+		switch v := item.(type) {
+		case xpath3.NodeItem:
+			parts = append(parts, describeNode(v.Node, f.labels))
+		case xpath3.AtomicValue:
+			parts = append(parts, v.String())
+		default:
+			parts = append(parts, fmt.Sprintf("%T", item))
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// TestStepResultOrder pins the result sequence and its order for a matrix of
+// documents, context nodes and expressions against a recorded golden file,
+// so any change to how a path step orders or deduplicates its result shows
 // up as a diff.
 func TestStepResultOrder(t *testing.T) {
 	var got strings.Builder
@@ -382,13 +452,16 @@ func TestStepResultOrder(t *testing.T) {
 			if ctxNode == nil {
 				continue
 			}
-			for _, expr := range stepOrderExprs {
-				fmt.Fprintf(&got, "%s|%s|%s => %s\n", d.name, c.name, expr, f.describeResult(t, ctxNode, expr))
+			for _, expr := range stepOrderPathExprs {
+				fmt.Fprintf(&got, "%s|%s|%s => %s\n", d.name, c.name, expr, f.describeResult(t, ctxNode, expr, true))
+			}
+			for _, expr := range stepOrderOtherExprs {
+				fmt.Fprintf(&got, "%s|%s|%s => %s\n", d.name, c.name, expr, f.describeResult(t, ctxNode, expr, false))
 			}
 		}
 	}
 
-	if os.Getenv("XPATH1_UPDATE_STEP_ORDER") == "1" {
+	if os.Getenv("XPATH3_UPDATE_STEP_ORDER") == "1" {
 		require.NoError(t, os.MkdirAll(filepath.Dir(stepOrderGoldenPath), 0o755))
 		require.NoError(t, os.WriteFile(stepOrderGoldenPath, []byte(got.String()), 0o644))
 		return
@@ -403,8 +476,9 @@ func TestStepResultOrder(t *testing.T) {
 	}
 }
 
-// TestStepResultOrderRandom runs the expression matrix over generated
-// documents and checks every node-set against a fresh document-order index.
+// TestStepResultOrderRandom runs the path expressions over generated
+// documents and checks every node sequence against a fresh document-order
+// index.
 func TestStepResultOrderRandom(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2)) //nolint:gosec // deterministic test input
 	for range 40 {
@@ -415,8 +489,8 @@ func TestStepResultOrderRandom(t *testing.T) {
 			if ctxNode == nil {
 				continue
 			}
-			for _, expr := range stepOrderExprs {
-				f.describeResult(t, ctxNode, expr)
+			for _, expr := range stepOrderPathExprs {
+				f.describeResult(t, ctxNode, expr, true)
 			}
 		}
 	}
@@ -468,14 +542,17 @@ func (g *randomDocGen) emit(depth int) {
 	g.b.WriteString("</" + name + ">")
 }
 
-// evalIDs evaluates expr from ctxNode and returns the id attribute (or the
-// element name when there is none) of every selected node, in result order.
-func evalIDs(t *testing.T, ctx context.Context, eval xpath1.Evaluator, expr string, ctxNode helium.Node) []string {
+// stepOrderIDs evaluates expr from ctxNode and returns the id attribute (or
+// the element name when there is none) of every selected node, in result
+// order.
+func stepOrderIDs(t *testing.T, eval xpath3.Evaluator, expr string, ctxNode helium.Node) []string {
 	t.Helper()
-	r, err := eval.Evaluate(ctx, xpath1.MustCompile(expr), ctxNode)
+	r, err := eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(expr), ctxNode)
 	require.NoError(t, err)
-	ids := make([]string, 0, len(r.NodeSet))
-	for _, n := range r.NodeSet {
+	nodes, err := r.Nodes()
+	require.NoError(t, err)
+	ids := make([]string, 0, len(nodes))
+	for _, n := range nodes {
 		e, ok := n.(*helium.Element)
 		if !ok {
 			ids = append(ids, n.Name())
@@ -503,72 +580,94 @@ func moveToEnd(t *testing.T, n *helium.Element) {
 // caller-supplied cache that is Reset after the mutation.
 func TestStepResultOrderMutation(t *testing.T) {
 	const src = `<root><item id="i1"/><item id="i2"/><item id="i3"/><other id="o"/></root>`
-	eval := xpath1.NewEvaluator()
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
 	t.Run("fresh cache per evaluation", func(t *testing.T) {
 		doc := parseStepOrderDoc(t, src, false)
-		require.Equal(t, []string{"i1", "i2", "i3"}, evalIDs(t, t.Context(), eval, "//item", doc))
+		require.Equal(t, []string{"i1", "i2", "i3"}, stepOrderIDs(t, eval, "//item", doc))
 		first := doc.DocumentElement().FirstChild().(*helium.Element)
 		moveToEnd(t, first)
-		require.Equal(t, []string{"i2", "i3", "i1"}, evalIDs(t, t.Context(), eval, "//item", doc))
-		require.Equal(t, []string{"i2", "i3", "o", "i1"}, evalIDs(t, t.Context(), eval, "/root/item | /root/other", doc))
+		require.Equal(t, []string{"i2", "i3", "i1"}, stepOrderIDs(t, eval, "//item", doc))
+		require.Equal(t, []string{"i2", "i3", "o", "i1"}, stepOrderIDs(t, eval, "/root/item | /root/other", doc))
 		helium.UnlinkNode(first)
-		require.Equal(t, []string{"i2", "i3"}, evalIDs(t, t.Context(), eval, "/root/item", doc))
+		require.Equal(t, []string{"i2", "i3"}, stepOrderIDs(t, eval, "/root/item", doc))
 	})
 
 	t.Run("caller-supplied cache reset after the mutation", func(t *testing.T) {
 		doc := parseStepOrderDoc(t, src, false)
-		cache := &ixpath.DocOrderCache{}
-		ctx := ixpath.WithDocOrderCache(t.Context(), cache)
-		// The first evaluation only reserves the document; the second
-		// indexes it through the union.
-		require.Equal(t, []string{"i1", "i2", "i3"}, evalIDs(t, ctx, eval, "/root/item", doc))
-		require.Equal(t, []string{"i1", "i2", "i3", "o"}, evalIDs(t, ctx, eval, "/root/item | /root/other", doc))
+		cache := xpath3.NewDocOrderCache()
+		shared := eval.DocOrderCache(cache)
+		require.Equal(t, []string{"i1", "i2", "i3"}, stepOrderIDs(t, shared, "/root/item", doc))
+		require.Equal(t, []string{"i1", "i2", "i3", "o"}, stepOrderIDs(t, shared, "/root/item | /root/other", doc))
 
 		moveToEnd(t, doc.DocumentElement().FirstChild().(*helium.Element))
 		cache.Reset()
-		require.Equal(t, []string{"i2", "i3", "i1"}, evalIDs(t, ctx, eval, "/root/item", doc))
-		require.Equal(t, []string{"i2", "i3", "o", "i1"}, evalIDs(t, ctx, eval, "/root/item | /root/other", doc))
+		require.Equal(t, []string{"i2", "i3", "i1"}, stepOrderIDs(t, shared, "/root/item", doc))
+		require.Equal(t, []string{"i2", "i3", "o", "i1"}, stepOrderIDs(t, shared, "/root/item | /root/other", doc))
 	})
 
-	t.Run("caller-supplied cache reset while the document is only reserved", func(t *testing.T) {
+	t.Run("caller-supplied cache reset before any union", func(t *testing.T) {
 		doc := parseStepOrderDoc(t, src, false)
-		cache := &ixpath.DocOrderCache{}
-		ctx := ixpath.WithDocOrderCache(t.Context(), cache)
-		require.Equal(t, []string{"i1", "i2", "i3"}, evalIDs(t, ctx, eval, "/root/item", doc))
+		cache := xpath3.NewDocOrderCache()
+		shared := eval.DocOrderCache(cache)
+		require.Equal(t, []string{"i1", "i2", "i3"}, stepOrderIDs(t, shared, "/root/item", doc))
 
 		moveToEnd(t, doc.DocumentElement().FirstChild().(*helium.Element))
 		cache.Reset()
-		require.Equal(t, []string{"i2", "i3", "o", "i1"}, evalIDs(t, ctx, eval, "/root/item | /root/other", doc))
+		require.Equal(t, []string{"i2", "i3", "o", "i1"}, stepOrderIDs(t, shared, "/root/item | /root/other", doc))
 	})
 }
 
-// TestStepResultOrderSharedCache checks a caller-supplied cache that holds a
-// document reserved by a skipping step but not indexed: later evaluations
-// order that document, and a second document, as they would if the first
-// evaluation had indexed it.
+// TestStepResultOrderSharedCache checks a caller-supplied cache across
+// evaluations over two documents: later evaluations order the documents by
+// the order in which the cache first met them.
 func TestStepResultOrderSharedCache(t *testing.T) {
 	doc1 := parseStepOrderDoc(t, `<a><b id="x1"><c id="xc"/></b><b id="x2"/></a>`, false)
 	doc2 := parseStepOrderDoc(t, `<a><b id="y1"/><b id="y2"><c id="yc"/></b></a>`, false)
-	eval := xpath1.NewEvaluator().Variables(map[string]any{
-		"other": []helium.Node{doc2.DocumentElement()},
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+		"other": nodeSequence([]helium.Node{doc2.DocumentElement()}),
 	})
-	cache := &ixpath.DocOrderCache{}
-	ctx := ixpath.WithDocOrderCache(t.Context(), cache)
+	shared := eval.DocOrderCache(xpath3.NewDocOrderCache())
 
-	// Every step of /a/b skips the sort, so doc1 is reserved, not indexed.
-	require.Equal(t, []string{"x1", "x2"}, evalIDs(t, ctx, eval, "/a/b", doc1))
+	require.Equal(t, []string{"x1", "x2"}, stepOrderIDs(t, shared, "/a/b", doc1))
 
-	// doc1 was registered first, so its nodes sort before doc2's.
-	require.Equal(t, []string{"x1", "x2", "y1", "y2"}, evalIDs(t, ctx, eval, "$other/b | /a/b", doc1))
-	require.Equal(t, []string{"x1", "xc", "x2", "y1", "y2", "yc"}, evalIDs(t, ctx, eval, "$other//b | $other//c | /a/b/c | /a/b", doc1))
-	// A lookup inside the reserved document orders it correctly.
-	require.Equal(t, []string{"x1", "xc", "x2"}, evalIDs(t, ctx, eval, "/a/b/c | /a/b", doc1))
+	// doc1 was met first, so its nodes sort before doc2's.
+	require.Equal(t, []string{"x1", "x2", "y1", "y2"}, stepOrderIDs(t, shared, "$other/b | /a/b", doc1))
+	require.Equal(t, []string{"x1", "xc", "x2", "y1", "y2", "yc"}, stepOrderIDs(t, shared, "$other//b | $other//c | /a/b/c | /a/b", doc1))
+	require.Equal(t, []string{"x1", "xc", "x2"}, stepOrderIDs(t, shared, "/a/b/c | /a/b", doc1))
 
-	// A second cache that registers doc2 first orders doc2 first, as the
-	// registration order dictates.
-	cache2 := &ixpath.DocOrderCache{}
-	ctx2 := ixpath.WithDocOrderCache(t.Context(), cache2)
-	require.Equal(t, []string{"y1", "y2"}, evalIDs(t, ctx2, eval, "/a/b", doc2))
-	require.Equal(t, []string{"y1", "y2", "x1", "x2"}, evalIDs(t, ctx2, eval, "/a/b | $other/b", doc1))
+	// A second cache that meets doc2 first orders doc2 first.
+	shared2 := eval.DocOrderCache(xpath3.NewDocOrderCache())
+	require.Equal(t, []string{"y1", "y2"}, stepOrderIDs(t, shared2, "/a/b", doc2))
+	require.Equal(t, []string{"y1", "y2", "x1", "x2"}, stepOrderIDs(t, shared2, "/a/b | $other/b", doc1))
+}
+
+// TestStepResultOrderNodeLimit checks that the node-sequence limit still
+// applies to steps whose result needs no sort: child steps from one input,
+// attribute steps from same-depth inputs, and a reverse axis from one input,
+// each with and without a predicate.
+func TestStepResultOrderNodeLimit(t *testing.T) {
+	doc := parseStepOrderDoc(t, `<root><item id="i1" k="1"><v/></item><item id="i2" k="2"><v/></item><item id="i3"><v/></item></root>`, false)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).MaxNodesForTesting(2)
+	v := doc.DocumentElement().FirstChild().FirstChild()
+	cases := []struct {
+		expr string
+		node helium.Node
+	}{
+		{expr: "/root/item", node: doc},
+		{expr: "/root/item[@id]", node: doc},
+		{expr: "/root/item[position() <= 2]/@*", node: doc},
+		{expr: "/root/item[position() <= 2]/@*[true()]", node: doc},
+		{expr: "ancestor-or-self::node()", node: v},
+		{expr: "ancestor-or-self::node()[. instance of element()]", node: v},
+	}
+	for _, c := range cases {
+		_, err := eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(c.expr), c.node)
+		require.ErrorIs(t, err, xpath3.ErrNodeSetLimit, c.expr)
+	}
+	r, err := eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile("/root/item[position() <= 2]/@id"), doc)
+	require.NoError(t, err)
+	nodes, err := r.Nodes()
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
 }

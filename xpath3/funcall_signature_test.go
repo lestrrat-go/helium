@@ -4,9 +4,7 @@ import (
 	"context"
 	"iter"
 	"math/big"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -417,44 +415,74 @@ func TestSignatureGateRejectsNonStringForStringParam(t *testing.T) {
 
 // Finding 2: a too-long sequence supplied to a singleton (xs:string?) parameter
 // must be rejected promptly with XPTY0004 — without atomizing the whole range.
-// A 10M-item lazy range would allocate ~1GB if atomized eagerly; the cap keeps
-// allocation and time tiny.
+// The gate stops atomizing at the second atom, so a 10M-item lazy sequence is
+// read no further than its second item, and the real 10M-item range allocates
+// no more than a short one: atomizing it eagerly allocates once per item.
+//
+// NOT t.Parallel: testing.AllocsPerRun reads a process-wide allocation counter
+// and panics in a parallel test.
 func TestSignatureGateRejectsLongSequencePromptly(t *testing.T) {
-	// NOT t.Parallel: the allocation check below reads runtime.MemStats.TotalAlloc,
-	// which is a process-wide cumulative counter, not per-goroutine. Under
-	// t.Parallel the measured delta would also capture every sibling parallel
-	// test allocating during this test's window, inflating it past the bound
-	// on busy CI runners (a flake). Running serially — while parallel tests are
-	// paused — makes the delta reflect essentially only this test's own work.
+	const (
+		items = 10000000
+		// maxAllocs is far below the one allocation per item an eager
+		// atomization of the range makes.
+		maxAllocs = 1000
+	)
 
-	var m1, m2 runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&m1)
-	start := time.Now()
-	_, err := evaluate(t.Context(), nil, `upper-case(1 to 10000000)`)
-	elapsed := time.Since(start)
-	runtime.ReadMemStats(&m2)
+	t.Run("lazy sequence is read to its second item", func(t *testing.T) {
+		maxIdx := -1
+		_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+			Functions(countingSequenceLib(items, &maxIdx), nil).
+			Evaluate(t.Context(), xpath3.NewCompiler().MustCompile("upper-case(make-lazy())"), nil)
+		requireErrorCode(t, err, lexicon.ErrXPTY0004)
+		require.LessOrEqual(t, maxIdx, 1,
+			"the xs:string? gate read the lazy sequence up to index %d instead of stopping at its second item", maxIdx)
+	})
 
+	t.Run("range allocation does not grow with its length", func(t *testing.T) {
+		r := &allocRun{ctx: t.Context(), expr: `upper-case(1 to 10000000)`}
+		allocs := testing.AllocsPerRun(1, r.run)
+		requireErrorCode(t, r.err, lexicon.ErrXPTY0004)
+		require.Less(t, allocs, float64(maxAllocs),
+			"rejecting a %d-item range allocated %.0f times: the gate atomized the whole range", items, allocs)
+	})
+}
+
+// requireErrorCode requires err to be an *xpath3.XPathError carrying code.
+func requireErrorCode(t *testing.T, err error, code string) {
+	t.Helper()
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
+	require.Equal(t, code, xpErr.Code)
+}
 
-	// Eager atomization of 10M items took ~800ms / ~1GB before the fix; the
-	// incremental cap keeps both small. The elapsed-time bound is the primary
-	// correctness signal that the gate stays lazy.
-	require.Less(t, elapsed, 200*time.Millisecond, "should reject without atomizing whole range")
+// allocRun evaluates expr with no context node and keeps the outcome, so
+// testing.AllocsPerRun can measure one evaluation through the run method.
+type allocRun struct {
+	ctx    context.Context //nolint:containedctx // carries the test context into AllocsPerRun's callback
+	expr   string
+	result *xpath3.Result
+	err    error
+}
 
-	// The allocation bound is a secondary check. Race instrumentation inflates
-	// allocations well past the tight bound (observed ~84MB under -race), so it
-	// is skipped when the detector is active; the elapsed-time assertion above
-	// still proves laziness. Even so the relaxed bound proves the 10M-item range
-	// (hundreds of MB / GB if atomized eagerly) was not materialized.
-	if raceEnabled {
-		return
+func (r *allocRun) run() {
+	r.result, r.err = evaluate(r.ctx, nil, r.expr)
+}
+
+// countingSequenceLib registers make-lazy(), which returns an n-item
+// countingSequence recording the highest index read into maxIdx. A registered
+// function hands the lazy sequence to the signature gate without the
+// materialization variable cloning would apply.
+func countingSequenceLib(n int, maxIdx *int) map[string]xpath3.Function {
+	return map[string]xpath3.Function{
+		"make-lazy": userFunc{
+			min: 0, max: 0,
+			call: func(context.Context, []xpath3.Sequence) (xpath3.Sequence, error) {
+				return countingSequence{n: n, maxIndex: maxIdx}, nil
+			},
+		},
 	}
-	allocKB := (m2.TotalAlloc - m1.TotalAlloc) / 1024
-	require.Less(t, allocKB, uint64(50*1024), "should not allocate the whole atomized sequence")
 }
 
 // countingSequence is a lazy Sequence that records how far it was actually
@@ -521,14 +549,16 @@ func TestSignatureGateKeepsItemStarLazy(t *testing.T) {
 
 // Finding 1 (round 7): count(1 to N) / exists(1 to N) over a huge lazy range must
 // return promptly without materializing the range — the item()* gate must not
-// force iteration.
+// force iteration. Materializing the range allocates once per item, so the
+// allocation count of one evaluation is the laziness signal.
 //
-// NOT parallel: the allocation assertion reads runtime.MemStats.TotalAlloc, which
-// is a PROCESS-WIDE cumulative counter. Under t.Parallel() other concurrently
-// running tests' allocations pollute the (m2-m1) delta, spuriously blowing the
-// budget (observed on Windows CI). Running in the sequential phase isolates the
-// measurement to this test's own work.
+// NOT parallel: testing.AllocsPerRun reads a PROCESS-WIDE allocation counter
+// and panics in a parallel test.
 func TestSignatureGateLargeRangeIsLazy(t *testing.T) {
+	// maxAllocs is far below the one allocation per item materializing the
+	// 9M-item range makes.
+	const maxAllocs = 1000
+
 	for expr, check := range map[string]func(*xpath3.Result){
 		`count(1 to 9000000)`: func(r *xpath3.Result) {
 			n, ok := r.IsNumber()
@@ -541,19 +571,12 @@ func TestSignatureGateLargeRangeIsLazy(t *testing.T) {
 			require.True(t, b)
 		},
 	} {
-		var m1, m2 runtime.MemStats
-		runtime.GC()
-		runtime.ReadMemStats(&m1)
-		start := time.Now()
-		result, err := evaluate(t.Context(), nil, expr)
-		elapsed := time.Since(start)
-		runtime.ReadMemStats(&m2)
+		r := &allocRun{ctx: t.Context(), expr: expr}
+		allocs := testing.AllocsPerRun(1, r.run)
 
-		require.NoError(t, err, expr)
-		check(result)
-		require.Less(t, elapsed, 200*time.Millisecond, "%s must stay lazy", expr)
-		allocKB := (m2.TotalAlloc - m1.TotalAlloc) / 1024
-		require.Less(t, allocKB, uint64(50*1024), "%s must not materialize the range", expr)
+		require.NoError(t, r.err, expr)
+		check(r.result)
+		require.Less(t, allocs, float64(maxAllocs), "%s allocated %.0f times: it materialized the range", expr, allocs)
 	}
 }
 

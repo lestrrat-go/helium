@@ -138,13 +138,28 @@ bug that prompted it.
 
 ### internal/heliumtest
 
-Shared test utilities in `internal/heliumtest/callerdir.go`:
+Shared test utilities in `internal/heliumtest/` (`callerdir.go`, `pollctx.go`):
 
 | Function | Purpose |
 |----------|---------|
 | `CallerDir(skip)` | Directory of caller's source file (skip=0 for direct caller) |
 | `RepoRoot()` | Absolute path to repo root (finds go.mod, cached) |
 | `TestDir(path...)` | Join path elements under repo root |
+| `NewPollContext(parent, expireAt, err)` | `context.Context` counting its `Err` calls; the `expireAt`-th call and later return `err` and close `Done` (`expireAt <= 0` never expires). `Polls()`, `PollsAfterExpiry()` |
+
+## Timing-Free Assertions
+
+Tests never pass or fail on elapsed time. Express the protected property as work instead:
+
+- Cancellation/deadline honored mid-run → `heliumtest.PollContext` placing the cancellation or deadline at a
+  fixed poll (helium's walks poll through `ctx.Err()`), then assert the context error and a small
+  `PollsAfterExpiry()`. A pre-cancelled context covers the entry checks.
+- Laziness, bounded backtracking, linear growth → count work: items read from a counting `Sequence`,
+  `testing.AllocsPerRun`, or allocated bytes compared across two input sizes. Allocation measurements read a
+  process-wide counter, so those tests are not `t.Parallel()` (`AllocsPerRun` panics in a parallel test).
+- Blocking behavior → synchronize on a signal from the code under test (a context whose `Err` signals, a
+  reader that signals when a blocking `Read` starts), never on a sleep.
+- `time.After` stays only as a hang guard that fails a test which would otherwise never return.
 
 ### SAX Event Normalization
 
@@ -230,6 +245,13 @@ to `$nodes`/`$other`, against `xpath1/testdata/step_order.golden`. `XPATH1_UPDAT
 file. It also checks each result against a fresh `DocOrderCache` via `DeduplicateNodes`. Only regenerate the file for
 an intended order change.
 
+`xpath3/step_order_test.go` `TestStepResultOrder` is the xpath3 counterpart, against
+`xpath3/testdata/step_order.golden` (`XPATH3_UPDATE_STEP_ORDER=1` rewrites it). Besides the xpath1 matrix it covers
+positional predicates on forward and reverse axes, path steps whose step expression is not an axis step (`/(a|b)`,
+`//b/root()`, `//a/$other`), set operators, and golden-only shapes whose result is not a document-ordered node
+sequence (`!`, atomic last steps, `reverse(...)/step`, FLWOR, mixed node/atomic steps raising XPTY0018). Only the
+path expressions go through the fresh-`DocOrderCache` check.
+
 ## Build Tags
 
 - `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)
@@ -250,15 +272,16 @@ an intended order change.
   settable together) and leaves `SessionKey` unset, so the input alone selects which key-protection path runs
   — RSA-OAEP, ECDH-ES, or AES key wrap — and every branch is reachable from the one target. The keys are
   fixed, because a crasher written under `testdata/fuzz` must reproduce across runs.
-- The `xslt3` targets time each input's parse+compile (and transform) inline and fail via `t.Errorf` when it
-  crosses `slowInputThreshold()` (`fuzz_test.go` `flagIfSlow`), so the fuzzing engine persists the exact bytes
-  as a crasher. Go's own worker already turns a genuine hang into a crasher via a 10s deadlock detector
-  (`internal/fuzz` `worker.go`), so this targets the slow-but-finite input (a few seconds) that 10s net misses
-  — the input that drags run throughput toward the fuzztime deadline and surfaces only as an unactionable
-  `context deadline exceeded` with no reproducer. The threshold MUST stay below Go's 10s worker deadline to
-  fire first; it defaults to 5s (ample headroom over any legitimate compile, so no false trips under CI
-  scheduler jitter) and is overridable via `HELIUM_FUZZ_SLOW_INPUT` (a Go duration). Timing inline (not in a
-  child goroutine) keeps panics on `testing`'s normal minimizable-crasher path.
+- The `xslt3` targets count each input's heap allocations over parse+compile (and compile+transform) inline
+  and fail via `t.Errorf` when the count exceeds `maxInputAllocs()` (`fuzz_test.go` `flagIfHeavy`, read from
+  the `/gc/heap/allocs:objects` runtime metric), so the fuzzing engine persists the exact bytes as a crasher.
+  Go's own worker already turns a genuine hang into a crasher via a 10s deadlock detector (`internal/fuzz`
+  `worker.go`), so this targets the heavy-but-finite input that 10s net misses — the input that drags run
+  throughput toward the fuzztime deadline and surfaces only as an unactionable `context deadline exceeded`
+  with no reproducer. The count is the same for an input on every run and machine, so a flagged input
+  replays as flagged. The bound defaults to 100 million objects (a million-body `xsl:for-each` transform
+  allocates about 56 million) and is overridable via `HELIUM_FUZZ_MAX_ALLOCS` (a decimal count). Checking
+  inline (not in a child goroutine) keeps panics on `testing`'s normal minimizable-crasher path.
 
 ## Fuzz CI
 

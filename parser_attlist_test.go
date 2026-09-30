@@ -124,6 +124,77 @@ func TestAttlistDecl(t *testing.T) {
 		require.Equal(t, "def", a)
 	})
 
+	// An empty default value is still a default, so DefaultDTDAttributes adds
+	// the attribute with an empty value (libxml2 xmlAddDefAttrs runs for any
+	// non-NULL default). A reference to an undefined entity, a warning when an
+	// external subset is present, leaves an empty default the same way.
+	t.Run("an empty default is applied", func(t *testing.T) {
+		t.Parallel()
+
+		testcases := []struct {
+			name string
+			doc  string
+		}{
+			{name: "empty literal", doc: `<!DOCTYPE r [<!ATTLIST r x CDATA "">]><r/>`},
+			{name: "empty fixed literal", doc: `<!DOCTYPE r [<!ATTLIST r x CDATA #FIXED "">]><r/>`},
+			{name: "undefined entity", doc: `<!DOCTYPE r SYSTEM "ext.dtd" [<!ATTLIST r x CDATA "&undef;">]><r/>`},
+			{name: "fixed undefined entity", doc: `<!DOCTYPE r SYSTEM "ext.dtd" [<!ATTLIST r x CDATA #FIXED "&undef;">]><r/>`},
+		}
+
+		for _, tc := range testcases {
+			for _, substitute := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s substitute=%t", tc.name, substitute), func(t *testing.T) {
+					t.Parallel()
+
+					parsed, err := helium.NewParser().
+						DefaultDTDAttributes(true).
+						SubstituteEntities(substitute).
+						Parse(t.Context(), []byte(tc.doc))
+					require.NoError(t, err)
+
+					root := parsed.DocumentElement()
+					v, ok := root.GetAttribute("x")
+					require.True(t, ok, "the empty default must be applied")
+					require.Empty(t, v)
+
+					attr := root.GetAttributeNodeNS("x", "")
+					require.NotNil(t, attr)
+					require.Empty(t, attr.Value())
+					require.True(t, attr.IsDefault())
+
+					out, err := helium.WriteString(root)
+					require.NoError(t, err)
+					require.Equal(t, `<r x=""/>`, out)
+				})
+			}
+		}
+	})
+
+	// An empty default-namespace default is applied like a literal xmlns="":
+	// it undeclares the default namespace. (The empty xmlns:p default is
+	// covered in TestAttributeNamespaces.)
+	t.Run("an empty default namespace default", func(t *testing.T) {
+		t.Parallel()
+
+		parsed, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<!DOCTYPE r [<!ATTLIST r xmlns CDATA "">]><x xmlns="u"><r/></x>`))
+		require.NoError(t, err)
+		r, ok := parsed.DocumentElement().FirstChild().(*helium.Element)
+		require.True(t, ok)
+		require.Empty(t, r.URI())
+	})
+
+	// Without DefaultDTDAttributes an empty default adds nothing, like any
+	// other default.
+	t.Run("an empty default is not applied without DefaultDTDAttributes", func(t *testing.T) {
+		t.Parallel()
+
+		parsed, err := helium.NewParser().Parse(t.Context(), []byte(`<!DOCTYPE r [<!ATTLIST r x CDATA "">]><r/>`))
+		require.NoError(t, err)
+		_, ok := parsed.DocumentElement().GetAttribute("x")
+		require.False(t, ok)
+	})
+
 	// An ATTLIST with no element Name at all is malformed and must still be
 	// rejected — the mandatory `S Name` after `<!ATTLIST` is unaffected by allowing
 	// an empty AttDef list.

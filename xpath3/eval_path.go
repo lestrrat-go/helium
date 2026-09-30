@@ -139,6 +139,9 @@ func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		nodes = []helium.Node{ec.node}
 	}
 
+	// The path starts from one node and every step returns its result sorted
+	// and duplicate-free, so each step's context list meets the precondition
+	// of ixpath.OrderStepResult, which ends every step.
 	var err error
 	for _, step := range lp.Steps {
 		if len(step.Predicates) > 0 {
@@ -178,6 +181,9 @@ func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 		nodes = []helium.Node{ec.node}
 	}
 
+	// The path starts from one node and every step returns its result sorted
+	// and duplicate-free, so each step's context list meets the precondition
+	// of ixpath.OrderStepResult, which ends every step.
 	var err error
 	for _, step := range lp.Steps {
 		if len(step.Predicates) > 0 {
@@ -394,7 +400,7 @@ func evalStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalC
 		}
 		allFiltered = append(allFiltered, matched...)
 	}
-	return ixpath.DeduplicateNodes(allFiltered, ec.docOrder, ec.maxNodes)
+	return ixpath.OrderStepResult(allFiltered, nodes, step.Axis, ec.docOrder, ec.maxNodes)
 }
 
 func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.Node, step Step) ([]helium.Node, error) {
@@ -410,7 +416,7 @@ func evalStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium.N
 			return nil, err
 		}
 	}
-	return ixpath.DeduplicateNodes(next, ec.docOrder, ec.maxNodes)
+	return ixpath.OrderStepResult(next, nodes, step.Axis, ec.docOrder, ec.maxNodes)
 }
 
 func evalVMStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, step vmLocationStep) ([]helium.Node, error) {
@@ -431,7 +437,7 @@ func evalVMStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *eva
 		}
 		allFiltered = append(allFiltered, matched...)
 	}
-	return ixpath.DeduplicateNodes(allFiltered, ec.docOrder, ec.maxNodes)
+	return ixpath.OrderStepResult(allFiltered, nodes, step.Axis, ec.docOrder, ec.maxNodes)
 }
 
 func applyVMPredicate(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, pred Expr) ([]helium.Node, error) {
@@ -575,7 +581,7 @@ func evalVMStepNoPredicates(ctx context.Context, ec *evalContext, nodes []helium
 			return nil, err
 		}
 	}
-	return ixpath.DeduplicateNodes(next, ec.docOrder, ec.maxNodes)
+	return ixpath.OrderStepResult(next, nodes, step.Axis, ec.docOrder, ec.maxNodes)
 }
 
 func appendAxisNodeMatches(ctx context.Context, dst []helium.Node, ec *evalContext, node helium.Node, axis AxisType, nodeTest NodeTest) ([]helium.Node, int, error) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xslt3"
@@ -178,48 +178,49 @@ func TestResourceBudget(t *testing.T) {
 		}
 	})
 
-	// TestResourceBudgetDeadlinePreemption proves mid-execution preemption: a short
-	// deadline set on a genuinely long-running xsl:for-each must trip DURING the
-	// loop (after transform setup completes), returning context.DeadlineExceeded
-	// well short of running the whole 1..N range to completion.
+	// TestResourceBudgetDeadlinePreemption proves mid-execution preemption: a
+	// deadline that passes while a genuinely long-running xsl:for-each runs must
+	// trip DURING the loop (after transform setup completes), returning
+	// context.DeadlineExceeded well short of running the whole range to
+	// completion. The deadline is placed by work, not time: the context reports
+	// it at its deadlinePoll-th poll, far past setup and far short of the loop's
+	// million bodies, and the transform must stop within a few polls of it.
 	t.Run("deadline preemption", func(t *testing.T) {
 		// Nested loops keep every individual range well under the xpath3 node-set
-		// length cap (10M) so the cost is in the ITERATION COUNT (~25M inner bodies),
-		// not one giant materialization. A non-preempting engine would run for
-		// seconds; a preempting one returns ~at the deadline.
+		// length cap (10M) so the cost is in the ITERATION COUNT (1M inner bodies),
+		// not one giant materialization. A non-preempting engine runs every body
+		// and completes; a preempting one returns at the deadline.
 		const deadlineStylesheet = `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="/">
     <out>
-      <xsl:for-each select="1 to 5000">
-        <xsl:for-each select="1 to 5000">
+      <xsl:for-each select="1 to 1000">
+        <xsl:for-each select="1 to 1000">
           <n><xsl:value-of select=". * 2"/></n>
         </xsl:for-each>
       </xsl:for-each>
     </out>
   </xsl:template>
 </xsl:stylesheet>`
+		const (
+			deadlinePoll = 10000
+			// maxPollsAfterDeadline allows the unwinding error paths to consult
+			// the context again; it is far below the polls one outer iteration
+			// (1000 inner bodies) makes.
+			maxPollsAfterDeadline = 16
+		)
 
 		ss := compileStylesheetString(t, deadlineStylesheet)
 		source := parseTransformSource(t)
 
-		ctx, cancel := context.WithTimeout(t.Context(), 25*time.Millisecond)
-		defer cancel()
-
-		done := make(chan error, 1)
-		go func() {
-			_, err := ss.Transform(source).Serialize(ctx)
-			done <- err
-		}()
-
-		select {
-		case err := <-done:
-			require.Error(t, err, "deadline transform must error, not complete")
-			require.ErrorIs(t, err, context.DeadlineExceeded,
-				"error must wrap context.DeadlineExceeded, got %v", err)
-		case <-time.After(30 * time.Second):
-			t.Fatal("transform did not honor the deadline: it kept running long past it (unbounded)")
-		}
+		ctx := heliumtest.NewPollContext(t.Context(), deadlinePoll, context.DeadlineExceeded)
+		_, err := ss.Transform(source).Serialize(ctx)
+		require.Error(t, err, "deadline transform must error, not complete")
+		require.ErrorIs(t, err, context.DeadlineExceeded,
+			"error must wrap context.DeadlineExceeded, got %v", err)
+		require.LessOrEqual(t, ctx.PollsAfterExpiry(), maxPollsAfterDeadline,
+			"transform kept polling %d times after its deadline passed at poll %d",
+			ctx.PollsAfterExpiry(), deadlinePoll)
 	})
 
 	// TestResourceBudgetMaxResourceBytesDoc proves Invocation.MaxResourceBytes

@@ -376,6 +376,57 @@ func TestAttributeValidity(t *testing.T) {
 		require.NotEmpty(t, errs, "wrong #FIXED value is a validation error")
 	})
 
+	// An empty #FIXED default fixes the value to "". It stays empty when the
+	// literal's only content is a reference to an entity that is not defined:
+	// with an external subset that reference is a warning (helium does not
+	// raise VC Entity Declared once an external subset is present), and it
+	// contributes nothing to the value.
+	t.Run("empty fixed default", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{"ext.dtd": {Data: []byte(`<!ELEMENT r EMPTY>`)}}
+		for _, fixed := range []string{`""`, `"&undef;"`} {
+			src := `<!DOCTYPE r SYSTEM "ext.dtd" [<!ATTLIST r x CDATA #FIXED ` + fixed + `>]>`
+			t.Run(fixed, func(t *testing.T) {
+				t.Parallel()
+
+				testcases := []struct {
+					name  string
+					body  string
+					valid bool
+				}{
+					{name: "absent", body: `<r/>`, valid: true},
+					{name: "empty", body: `<r x=""/>`, valid: true},
+					{name: "differing", body: `<r x="y"/>`, valid: false},
+				}
+				for _, tc := range testcases {
+					t.Run(tc.name, func(t *testing.T) {
+						t.Parallel()
+
+						h := &collectingErrorHandler{}
+						doc, err := helium.NewParser().
+							BlockXXE(false).
+							FS(fsys).
+							ValidateDTD(true).
+							DefaultDTDAttributes(true).
+							ErrorHandler(h).
+							Parse(t.Context(), []byte(src+tc.body))
+						if tc.valid {
+							require.NoError(t, err)
+							require.Empty(t, h.errs)
+							v, ok := doc.DocumentElement().GetAttribute("x")
+							require.True(t, ok, "the #FIXED default must be applied")
+							require.Empty(t, v)
+							return
+						}
+						require.ErrorIs(t, err, helium.ErrDTDValidationFailed)
+						require.True(t, containsError(h.errs, `attribute x has value "y" but must be ""`), "errors: %v", h.errs)
+					})
+				}
+			})
+		}
+	})
+
 	// The groups below cover the per-instance attribute VCs enforced in
 	// validateElementAttributes: Attribute Value Type (every present attribute must
 	// be declared, for ordinary attributes and for xmlns/xmlns:* namespace

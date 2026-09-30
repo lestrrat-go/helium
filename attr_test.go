@@ -1113,20 +1113,17 @@ func TestAttributeNamespaces(t *testing.T) {
 			require.Error(t, err)
 		})
 
-		t.Run("DTD default prefixed xmlns with empty URI creates no binding", func(t *testing.T) {
+		t.Run("DTD default prefixed xmlns with empty URI is rejected", func(t *testing.T) {
 			t.Parallel()
-			// An empty default value is never registered as an attribute default
-			// (mirrors libxml2: empty defaults are not applied), so the empty-URI
-			// case cannot reach the defaulting path and no namespace is pushed.
+			// An empty default is still a default, so it reaches the defaulting
+			// path, where a DTD-defaulted namespace declaration gets the same
+			// checks as a literal one: xmlns:p="" is not allowed in XML 1.0
+			// (Namespaces 1.0 §3, Prefix Declared).
 			xml := `<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "">]><r/>`
 
 			p := helium.NewParser().DefaultDTDAttributes(true)
-			doc, err := p.Parse(t.Context(), []byte(xml))
-			require.NoError(t, err)
-
-			root := doc.DocumentElement()
-			require.NotNil(t, root)
-			require.Empty(t, root.URI())
+			_, err := p.Parse(t.Context(), []byte(xml))
+			require.ErrorContains(t, err, "Empty XML namespace is not allowed")
 		})
 
 		t.Run("literal non-xml prefix bound to reserved XML namespace is rejected", func(t *testing.T) {

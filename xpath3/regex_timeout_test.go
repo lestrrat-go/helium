@@ -15,13 +15,13 @@ import (
 // on adversary-supplied inputs. xpath3 sets a default match timeout on
 // every such compilation so a pathological pattern + input does not pin
 // a goroutine.
+//
+// The test lowers DefaultRegexMatchTimeout and checks that the compiled
+// pattern carries the lowered budget, which is what bounds the match, and
+// that the pathological match then fails with the engine's timeout error. It
+// asserts nothing about how long the match took.
 func TestRegexMatchTimeout_BoundsCatastrophicBacktracking(t *testing.T) {
-	// regexp2's fastclock has ~100ms granularity, so a 150ms budget
-	// realizes as ~150-300ms wall time. The elapsed bound is well below
-	// the 5s default DefaultRegexMatchTimeout — a passing assertion
-	// here proves the lowered budget actually took effect.
 	const matchBudget = 150 * time.Millisecond
-	const elapsedBound = 750 * time.Millisecond
 
 	orig := xpath3.DefaultRegexMatchTimeout
 	xpath3.DefaultRegexMatchTimeout = matchBudget
@@ -30,26 +30,28 @@ func TestRegexMatchTimeout_BoundsCatastrophicBacktracking(t *testing.T) {
 	// (.+)+\1 forces the regexp2 path (backreference) and exhibits
 	// catastrophic backtracking: with 30 'a's plus a non-matching 'b'
 	// the engine explores ~2^n splits. Empirically this runs many
-	// seconds without a timeout; with matchBudget it must fail quickly
-	// with regexp2's "match timeout after ..." error.
+	// seconds without a timeout; with matchBudget it must fail with
+	// regexp2's "match timeout after ..." error. No other test compiles this
+	// pattern, so the compilation cache cannot hand back one carrying a
+	// different budget.
+	const pattern = `^(.+)+\1$`
+	re, err := xpath3.CompileRegex(pattern, "")
+	require.NoError(t, err)
+	require.Equal(t, matchBudget, re.MatchTimeoutForTesting(),
+		"the backtracking compilation does not carry DefaultRegexMatchTimeout")
+
 	input := strings.Repeat("a", 30) + "b"
-	expr := `matches("` + input + `", "^(.+)+\1$")`
+	expr := `matches("` + input + `", "` + pattern + `")`
 
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	require.NoError(t, err)
 
-	start := time.Now()
 	_, evalErr := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
 		Evaluate(t.Context(), compiled, nil)
-	elapsed := time.Since(start)
 
-	require.Error(t, evalErr,
-		"expected regexp2 match timeout, got nil error; elapsed=%v", elapsed)
+	require.Error(t, evalErr, "expected regexp2 match timeout, got nil error")
 	require.Contains(t, evalErr.Error(), "match timeout",
-		"expected regexp2 timeout error, got %v; elapsed=%v", evalErr, elapsed)
-	require.Less(t, elapsed, elapsedBound,
-		"timeout did not fire near %v budget; elapsed=%v err=%v",
-		matchBudget, elapsed, evalErr)
+		"expected regexp2 timeout error, got %v", evalErr)
 }
 
 func TestRegex_PublicAPI(t *testing.T) {

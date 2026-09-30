@@ -1,5 +1,7 @@
 package xpath3
 
+import "time"
+
 // NewLexerForTesting exposes the internal lexer for tests.
 func NewLexerForTesting(input string) (*lexer, error) {
 	return newLexer(input)
@@ -20,4 +22,13 @@ func (e Evaluator) MaxNodesForTesting(n int) Evaluator {
 	e = e.clone()
 	e.cfg.maxNodes = n
 	return e
+}
+
+// MatchTimeoutForTesting reports the match timeout the backtracking engine
+// applies to r, or zero when r compiled to Go's RE2 engine, which needs none.
+func (r *Regex) MatchTimeoutForTesting() time.Duration {
+	if r.inner.backtrack == nil {
+		return 0
+	}
+	return r.inner.backtrack.MatchTimeout
 }

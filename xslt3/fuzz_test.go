@@ -3,8 +3,9 @@ package xslt3_test
 import (
 	"io"
 	"os"
+	"runtime/metrics"
+	"strconv"
 	"testing"
-	"time"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xslt3"
@@ -29,39 +30,59 @@ const fuzzStylesheet = `<?xml version="1.0"?>
 
 const fuzzSource = `<?xml version="1.0"?><root><item>1</item></root>`
 
-// slowInputThreshold bounds how long a single fuzz input may spend in
-// parse+compile (or transform) before the harness flags it. Go's fuzzing worker
-// already turns a genuine hang into a crasher — it wraps each fuzz call in a 10s
-// deadlock detector (internal/fuzz worker.go: panic("deadlocked!")), and its
-// coordinator records the offending input when the worker panics or dies. What
-// that 10s net misses is the slow-but-finite input (say 3-8s): it completes, so
-// no deadlock fires, and it silently drags the run's throughput toward the
-// overall fuzztime deadline — the aggregate slowdown that surfaces only as an
-// unactionable "context deadline exceeded" with no reproducer. Timing each input
-// inline and failing via t.Errorf when it crosses this threshold makes the
-// fuzzing engine persist those exact bytes as a crasher (CI's existing
-// "Failing input written to" collection then uploads them). The threshold MUST
-// stay below Go's 10s worker deadline to fire first; it defaults to 5s (normal
-// compiles finish in well under a second even under load, so this leaves ample
-// headroom for CI scheduler jitter) and is overridable via HELIUM_FUZZ_SLOW_INPUT
-// (a Go duration, e.g. "8s" or "500ms").
-func slowInputThreshold() time.Duration {
-	if v := os.Getenv("HELIUM_FUZZ_SLOW_INPUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return d
+// defaultMaxInputAllocs is how many heap objects one fuzz input may allocate in
+// parse+compile (or compile+transform) before the harness flags it. The
+// allocation count measures the work an input causes, and the same input
+// allocates the same count on every run and every machine, so a flagged input
+// replays as a flagged input.
+//
+// Go's fuzzing worker already turns a genuine hang into a crasher — it wraps
+// each fuzz call in a 10s deadlock detector (internal/fuzz worker.go:
+// panic("deadlocked!")), and its coordinator records the offending input when
+// the worker panics or dies. What that net misses is the heavy-but-finite
+// input: it completes, so no deadlock fires, and it silently drags the run's
+// throughput toward the overall fuzztime deadline — the aggregate slowdown that
+// surfaces only as an unactionable "context deadline exceeded" with no
+// reproducer. Counting each input's allocations inline and failing via
+// t.Errorf when it crosses this bound makes the fuzzing engine persist those
+// exact bytes as a crasher (CI's existing "Failing input written to"
+// collection then uploads them).
+//
+// A transform running a million xsl:for-each bodies allocates about 56 million
+// objects, so the default of 100 million is several seconds of work on any
+// machine, and ordinary stylesheets stay orders of magnitude below it. It is
+// overridable via HELIUM_FUZZ_MAX_ALLOCS (a decimal object count). Work that
+// allocates nothing is not counted; the deadlock detector remains the net for
+// such an input.
+const defaultMaxInputAllocs = 100_000_000
+
+// maxInputAllocs returns the allocation bound, honoring HELIUM_FUZZ_MAX_ALLOCS.
+func maxInputAllocs() uint64 {
+	if v := os.Getenv("HELIUM_FUZZ_MAX_ALLOCS"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 64); err == nil && n > 0 {
+			return n
 		}
 	}
-	return 5 * time.Second
+	return defaultMaxInputAllocs
 }
 
-// flagIfSlow fails the current fuzz input when it ran past the slow-input
-// threshold, so the fuzzing engine captures its bytes as a reproducer. It runs
-// via defer in the fuzz goroutine, so a panic in the code under test still
-// unwinds through testing's normal recovery (an ordinary minimizable crasher),
-// and the elapsed check simply does not fire on that path.
-func flagIfSlow(t *testing.T, start time.Time, stage string) {
-	if d := time.Since(start); d >= slowInputThreshold() {
-		t.Errorf("xslt3 %s took %s (>= %s) on this input; captured as a slow-input crasher", stage, d, slowInputThreshold())
+// heapAllocs returns the process's cumulative count of heap allocations. A
+// fuzz worker runs one input at a time, so the difference between two reads
+// around an input is that input's work.
+func heapAllocs() uint64 {
+	sample := [1]metrics.Sample{{Name: "/gc/heap/allocs:objects"}}
+	metrics.Read(sample[:])
+	return sample[0].Value.Uint64()
+}
+
+// flagIfHeavy fails the current fuzz input when it allocated more than
+// maxInputAllocs objects since start, so the fuzzing engine captures its bytes
+// as a reproducer. It runs via defer in the fuzz goroutine, so a panic in the
+// code under test still unwinds through testing's normal recovery (an ordinary
+// minimizable crasher), and the check simply does not fire on that path.
+func flagIfHeavy(t *testing.T, start uint64, stage string) {
+	if n := heapAllocs() - start; n > maxInputAllocs() {
+		t.Errorf("xslt3 %s allocated %d objects (> %d) on this input; captured as a heavy-input crasher", stage, n, maxInputAllocs())
 	}
 }
 
@@ -83,7 +104,7 @@ func FuzzCompile(f *testing.F) {
 			return
 		}
 
-		defer flagIfSlow(t, time.Now(), "parse+compile")
+		defer flagIfHeavy(t, heapAllocs(), "parse+compile")
 
 		doc, err := helium.NewParser().Parse(t.Context(), data)
 		if err != nil {
@@ -103,7 +124,7 @@ func FuzzTransform(f *testing.F) {
 			return
 		}
 
-		defer flagIfSlow(t, time.Now(), "compile+transform")
+		defer flagIfHeavy(t, heapAllocs(), "compile+transform")
 
 		styleDoc, err := helium.NewParser().Parse(t.Context(), data)
 		if err != nil {

@@ -552,7 +552,8 @@ XPath 1.0 expression parsing and evaluation.
   nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
 - Document order: every location step ends in `internal/xpath.OrderStepResult`, which builds the whole-document
   order index only when the step shape cannot prove its result is already sorted and duplicate-free (multi-input
-  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, Entity-node inputs)
+  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, Entity-node inputs, inputs inside an
+  entity's parsed content)
 - Axes (`internal/xpath/axes.go`): the child and descendant axes enumerate child lists through `helium.Children`
   (the owned-child boundary), so an entity reference (entity substitution off) has no children and no descendants:
   its only child is the DTD-owned `Entity` node, which is not an XPath node, and the walk never follows that node's
@@ -630,6 +631,9 @@ XPath 3.1 expression parsing and evaluation.
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
+- Document order: every axis step of a location path ends in `internal/xpath.OrderStepResult` (same skip rules as
+  xpath1); non-axis path steps (`E1/(a|b)`, function calls, `$v` steps), the `E1/E2` merge, union and
+  intersect/except sort through `DeduplicateNodes`/`MergeNodeSets`
 - Runtime: `Compile()` first tries a direct fast path for simple path-like expressions and simple predicate
   comparisons, otherwise lowers AST to a VM instruction graph while collecting the prefix-validation plan,
   keeping trivial leaves inline in parent payloads and reusing parsed slices on the owned compile path;
@@ -2464,7 +2468,9 @@ Test helpers shared across helium packages.
 - `CallerDir(skip)` — directory of caller's source file
 - `RepoRoot()` — absolute path to repository root (cached)
 - `TestDir(path...)` — join path elements under repo root
-- Files: `callerdir.go`
+- `NewPollContext(parent, expireAt, err)` — `*PollContext` counting `Err` calls and expiring at a chosen one
+  (`Polls`, `PollsAfterExpiry`), for cancellation/deadline tests placed by work instead of time
+- Files: `callerdir.go`, `pollctx.go`
 
 ## internal/cliutil/
 
