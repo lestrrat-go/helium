@@ -42,9 +42,15 @@ const maxSameDepth = 64
 // namespace, text, CDATA, comment, processing-instruction, entity-reference or
 // DTD node. Every axis walk stops at the owned-child boundary, so traversal
 // from an entity reference or the DTD stays inside lists the index numbers in
-// order. An Entity input takes rule 4: the index places an entity's content at
-// the last reference to it, so the child steps of two entities, or of an
-// entity and an element, can interleave.
+// order. An Entity input, and any input inside an entity's parsed content (an
+// Entity node among its ancestors, see inEntityContent), takes rule 4: the
+// index places an entity's content at the last reference to it, while a raw
+// axis walk from inside that content climbs through the Entity and the DTD.
+// So the following axis from inside the content returns it before the DTD's
+// later declarations and the document element, which the index places
+// earlier, and the child steps of same-depth inputs from entity content and
+// from the body, or from two entities, can interleave. Rule 2 walks the
+// input's ancestors for the check; rule 3 folds it into the sameDepth walk.
 //
 // Rules 2 and 3 enforce maxNodes and clamp the capacity of the returned slice
 // as DeduplicateNodes does. They do not index the document, but they reserve
@@ -56,7 +62,7 @@ func OrderStepResult(out, inputs []helium.Node, axis AxisType, cache *DocOrderCa
 	if len(out) <= 1 {
 		return out, nil
 	}
-	if len(inputs) <= 1 && allOrderedContexts(inputs) {
+	if len(inputs) <= 1 && allOrderedContexts(inputs) && (len(inputs) == 0 || !inEntityContent(inputs[0])) {
 		if isReverseAxis(axis) {
 			slices.Reverse(out)
 		}
@@ -112,12 +118,30 @@ func isReverseAxis(axis AxisType) bool {
 	return false
 }
 
+// inEntityContent reports whether some ancestor of n is an Entity node, that
+// is, whether n lies inside the parsed content of an entity. The walk has no
+// depth bound: one node's ancestor chain is never longer than the document
+// the sorting path would index instead.
+func inEntityContent(n helium.Node) bool {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.Type() == helium.EntityNode {
+			return true
+		}
+	}
+	return false
+}
+
 // sameDepth reports whether every node in nodes has the same number of
-// ancestors. It gives up (false) when the first node is deeper than
-// maxSameDepth, and stops at the first node whose depth differs.
+// ancestors and none of them lies inside entity content (an Entity node
+// among its ancestors). It gives up (false) when the first node is deeper
+// than maxSameDepth, and stops at the first node whose depth differs or that
+// lies inside entity content.
 func sameDepth(nodes []helium.Node) bool {
 	depth := 0
 	for p := nodes[0].Parent(); p != nil; p = p.Parent() {
+		if p.Type() == helium.EntityNode {
+			return false
+		}
 		depth++
 		if depth > maxSameDepth {
 			return false
@@ -127,7 +151,7 @@ func sameDepth(nodes []helium.Node) bool {
 		p := n
 		for range depth {
 			p = p.Parent()
-			if p == nil {
+			if p == nil || p.Type() == helium.EntityNode {
 				return false
 			}
 		}
