@@ -171,6 +171,69 @@ func TestEntitySubstitution(t *testing.T) {
 	})
 }
 
+// TestEntityRedeclaration covers XML 1.0 §4.2: when an entity is declared more
+// than once, the first declaration is binding and later ones are ignored. Each
+// expected serialization is xmllint's output for the same input.
+func TestEntityRedeclaration(t *testing.T) {
+	t.Parallel()
+
+	// W3C xmlconf valid-sa-086: an empty first declaration must win over a later
+	// one whose replacement text is not well balanced.
+	t.Run("an empty first declaration wins", func(t *testing.T) {
+		t.Parallel()
+
+		src := "<!DOCTYPE doc [\r\n<!ELEMENT doc (#PCDATA)>\r\n" +
+			"<!ENTITY e \"\">\r\n<!ENTITY e \"<foo>\">\r\n]>\r\n<doc>&e;</doc>\r\n"
+		doc, err := helium.NewParser().
+			SubstituteEntities(true).
+			ValidateDTD(true).
+			Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		require.Empty(t, string(doc.DocumentElement().Content()))
+		ent, ok := doc.GetEntity("e")
+		require.True(t, ok)
+		require.Empty(t, string(ent.Content()))
+
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ELEMENT doc (#PCDATA)>
+<!ENTITY e "">
+]>
+<doc/>
+`, out)
+	})
+
+	t.Run("the first declarations are serialized", func(t *testing.T) {
+		t.Parallel()
+
+		const src = `<!DOCTYPE doc [
+<!ENTITY % p "">
+<!ENTITY % p "x">
+<!ENTITY e "first">
+<!ENTITY e "<foo>">
+]>
+<doc>&e;</doc>
+`
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, `<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ENTITY % p "">
+<!ENTITY e "first">
+]>
+<doc>&e;</doc>
+`, out)
+
+		doc, err = helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		require.Equal(t, "first", string(doc.DocumentElement().Content()))
+	})
+}
+
 func TestPredefinedEntities(t *testing.T) {
 	t.Parallel()
 

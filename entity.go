@@ -37,7 +37,13 @@ const (
 // Entity represents an XML entity declaration (libxml2: xmlEntity).
 type Entity struct {
 	node
-	orig    string // content without substitution
+	orig string // content without substitution
+	// origSet reports whether orig has been recorded (libxml2: orig != NULL).
+	// An empty EntityValue records an empty orig, so orig == "" cannot tell a
+	// recorded empty value from an unrecorded one. parseEntityDecl records orig
+	// and replacement only while origSet is false, so a redeclaration never
+	// overwrites the binding first declaration (XML §4.2).
+	origSet bool
 	content string // content or ndata if unparsed
 	// replacement retains XML 1.1 restricted-character-reference spelling from an
 	// EntityValue after parameter-entity expansion. content remains the decoded
@@ -144,6 +150,7 @@ func newEntity(name string, typ enum.EntityType, publicID, systemID, notation, o
 		externalID: publicID,
 		systemID:   systemID,
 		orig:       orig,
+		origSet:    orig != "",
 	}
 	e.etype = EntityNode
 	e.name = name
@@ -163,6 +170,7 @@ func (e *Entity) MarkChecked() {
 
 func (e *Entity) SetOrig(s string) {
 	e.orig = s
+	e.origSet = true
 }
 
 func (e *Entity) EntityType() enum.EntityType {

@@ -763,7 +763,7 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 		}
 		if current != nil {
 			if ent, ok := current.(*Entity); ok && ent != nil {
-				if ent.orig == "" {
+				if !ent.origSet {
 					ent.SetOrig(literal)
 					ent.setReplacementContent(replacement)
 				}

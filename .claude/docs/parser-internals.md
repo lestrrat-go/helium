@@ -92,6 +92,9 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
   provenance (§2.9 standalone VC); see `addSpecialAttribute` / `parseAttribute` (`parser_element.go`).
   `xml:id` unconditional normalization is a deliberate XPath-3.1/xml:id-§4 divergence from libxml2
 - `attsDefault` — DTD default attributes
+- Entity redeclaration (§4.2: the first declaration binds) — `DTD.AddEntity` returns the existing entity, and
+  `parseEntityDecl` records the literal (`orig`) and XML 1.1 replacement spelling only while `Entity.origSet` is
+  false (libxml2: `orig == NULL`), so an empty first EntityValue is never overwritten by a later declaration
 - `inSubset int` — 0=none, 1=internal, 2=external
 - `replaceEntities bool` — expand entity refs (SubstituteEntities(true))
 - `fsys fs.FS` — filesystem for external DTDs/entities; defaults to `internal/iofs.DenyAll{}`
