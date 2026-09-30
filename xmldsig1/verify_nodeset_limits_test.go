@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/xmldsig1"
 	"github.com/stretchr/testify/require"
 )
@@ -504,20 +504,51 @@ func TestVerifyXPathFilterNodeLimitBoundsWholeDocumentAttributes(t *testing.T) {
 }
 
 // TestVerifyDeadlineDuringNodeSetConstruction pins that a deadline stops node-set
-// construction while it runs, well before the whole set is built. The
-// document costs seconds of work to canonicalize, so a deadline an order of
-// magnitude shorter must surface as the deadline error.
+// construction while it runs, well before the whole set is built. The XPath
+// filter's node set holds every in-scope namespace of every element, and its
+// collector polls the context once per poll interval of members.
+//
+// The deadline is placed by work, not time. A first verification capped at one
+// member stops at the collection's first member, so the polls it made are the
+// ones every run makes before collecting. The second run reports the deadline
+// deadlineIntervals polls after that point, deep inside the collection, and
+// caps the set at memberCap members, a count the collection reaches only if it
+// keeps building past the deadline without polling. It must return the deadline
+// error, not the member-cap error, and stop within a few polls of the deadline.
 func TestVerifyDeadlineDuringNodeSetConstruction(t *testing.T) {
+	const (
+		// pollInterval is ctxPollInterval, the members the collector adds
+		// between two polls.
+		pollInterval = 256
+		// deadlineIntervals is how many collector polls pass before the
+		// deadline, and memberCap how many members fit before the cap trips;
+		// the cap is four times the members built by the deadline.
+		deadlineIntervals = 16
+		memberCap         = 4 * deadlineIntervals * pollInterval
+		// maxPollsAfterDeadline allows the unwinding error paths to consult
+		// the context again; it is far below the polls left in the collection.
+		maxPollsAfterDeadline = 8
+	)
+
 	key := generateRSAKey(t)
-	doc := mustParseXML(t, xpathFilterRetrievalDoc(800, 2000))
+	// 400 elements carrying 80 inherited declarations each put over 32000
+	// members in the filter's node set, twice memberCap.
+	doc := mustParseXML(t, xpathFilterRetrievalDoc(80, 400))
+	verifier := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey))
 
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
+	counter := heliumtest.NewPollContext(t.Context(), 0, nil)
+	_, err := verifier.MaxXPathFilterNodes(1).Verify(counter, doc)
+	require.ErrorIs(t, err, xmldsig1.ErrResourceLimitExceeded)
+	beforeCollection := counter.Polls()
 
-	_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).
-		MaxXPathFilterNodes(-1).
-		Verify(ctx, doc)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	deadlinePoll := beforeCollection + deadlineIntervals
+	ctx := heliumtest.NewPollContext(t.Context(), deadlinePoll, context.DeadlineExceeded)
+	_, err = verifier.MaxXPathFilterNodes(memberCap).Verify(ctx, doc)
+	require.ErrorIs(t, err, context.DeadlineExceeded,
+		"node-set construction did not stop at a deadline %d polls into the collection", deadlineIntervals)
+	require.LessOrEqual(t, ctx.PollsAfterExpiry(), maxPollsAfterDeadline,
+		"verification polled its context %d more times after the deadline at poll %d",
+		ctx.PollsAfterExpiry(), deadlinePoll)
 }
 
 // TestVerifyCancelledDuringCanonicalization pins that the SignedInfo
