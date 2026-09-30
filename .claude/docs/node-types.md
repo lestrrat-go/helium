@@ -120,7 +120,7 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 | Comment | `Comment` | node | ✗ | ✓ content | ✓ | — |
 | PI | `ProcessingInstruction` | docnode | ✗ | data field | ✓ | target, data (Name() returns target). AddChild/AppendText route text into `data`; non-text children rejected |
 | EntityRef | `EntityRef` | node | ✓ (if expanded) | ✓ (if resolved) | ✓ | References Entity by name |
-| Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, expanding, expandedSize |
+| Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, attrWFCFlags, expanding, expandedSize, attrExpandedSize |
 | DTD | `DTD` | docnode | ✓ (decls) | — | ✓ | attributes/attrsByElem/elements/entities/pentities/notations maps, attrDecls slice, externalID, systemID |
 | ElementDecl | `ElementDecl` | docnode | — | — | ✓ | decltype, content (grammar tree), attributes, prefix |
 | AttributeDecl | `AttributeDecl` | docnode | — | — | ✓ | atype, def, defvalue, tree (enumeration), prefix, elem, external (declared in external subset/PE) |

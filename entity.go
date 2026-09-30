@@ -37,7 +37,13 @@ const (
 // Entity represents an XML entity declaration (libxml2: xmlEntity).
 type Entity struct {
 	node
-	orig    string // content without substitution
+	orig string // content without substitution
+	// origSet reports whether orig has been recorded (libxml2: orig != NULL).
+	// An empty EntityValue records an empty orig, so orig == "" cannot tell a
+	// recorded empty value from an unrecorded one. parseEntityDecl records orig
+	// and replacement only while origSet is false, so a redeclaration never
+	// overwrites the binding first declaration (XML §4.2).
+	origSet bool
 	content string // content or ndata if unparsed
 	// replacement retains XML 1.1 restricted-character-reference spelling from an
 	// EntityValue after parameter-entity expansion. content remains the decoded
@@ -62,6 +68,13 @@ type Entity struct {
 	attrWFCFlags int   // attribute-value WFC memoization (entWFCValidated/entWFCChecked)
 	expanding    bool  // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
 	expandedSize int64 // total expanded byte count after recursive resolution
+	// attrExpandedSize is the amplification charge for one reference to this
+	// entity from an attribute value parsed without substitution: the length of
+	// its replacement text plus, per nested general-entity reference, the nested
+	// entity's attrExpandedSize and entityFixedCost (libxml2 expandedSize as
+	// computed by xmlCheckEntityInAttValue). checkEntityInAttValue sets it
+	// together with entWFCChecked; it stays zero until a body-context walk.
+	attrExpandedSize int64
 	/* this is also used to count entities
 	 * references done from that entity
 	 * and if it contains '<' */
@@ -144,6 +157,7 @@ func newEntity(name string, typ enum.EntityType, publicID, systemID, notation, o
 		externalID: publicID,
 		systemID:   systemID,
 		orig:       orig,
+		origSet:    orig != "",
 	}
 	e.etype = EntityNode
 	e.name = name
@@ -163,6 +177,7 @@ func (e *Entity) MarkChecked() {
 
 func (e *Entity) SetOrig(s string) {
 	e.orig = s
+	e.origSet = true
 }
 
 func (e *Entity) EntityType() enum.EntityType {
