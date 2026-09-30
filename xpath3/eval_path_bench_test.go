@@ -120,3 +120,18 @@ func BenchmarkPathChapters(b *testing.B) {
 func BenchmarkPathNVDEntries(b *testing.B) {
 	runPathBench(b, benchmarkPathDocument(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml"), "count(//*[local-name()='entry'])")
 }
+
+// The NVD string-value benchmarks compute element and document string values:
+// a predicate on each entry's whole subtree text, a predicate on many
+// text-only elements, and the whole document's text.
+func BenchmarkPathNVDEntryStrings(b *testing.B) {
+	runPathBench(b, benchmarkPathDocument(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml"), "count(//*[local-name()='entry'][contains(., 'remote')])")
+}
+
+func BenchmarkPathNVDRefStrings(b *testing.B) {
+	runPathBench(b, benchmarkPathDocument(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml"), "count(//*[local-name()='ref'][. != ''])")
+}
+
+func BenchmarkPathNVDDocumentString(b *testing.B) {
+	runPathBench(b, benchmarkPathDocument(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml"), "string-length(string(/))")
+}
