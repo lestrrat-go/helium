@@ -110,6 +110,7 @@ jobs:
             -harness-commit "$HARNESS_COMMIT" \
             -go-version "$GO_VERSION" \
             -mode "$RUN_MODE" \
+            -no-system-out \
             "$SUITE"
 
       - name: Upload conformance results
