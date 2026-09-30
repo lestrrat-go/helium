@@ -16,6 +16,16 @@ import (
 const entityAxisSrc = `<!DOCTYPE a [<!--c0--><?p0 x?><!ENTITY e "<b id='eb'>ent<!--ec--></b>"><!--c1--><?p1 y?>]>` +
 	`<a><b id="b1"/>&e;<x>&e;<!--cx--></x></a>`
 
+// Expressions and node labels the cases below repeat.
+const (
+	descendantNodeExpr    = "descendant::node()"
+	dotDescendantNodeExpr = ".//node()"
+	entityContentLabel    = "b#eb"
+	commentCXLabel        = "comment(cx)"
+	commentECLabel        = "comment(ec)"
+	textEntLabel          = "text(ent)"
+)
+
 // entityAxisLabel names a node by kind, and by name, id or content where one
 // tells it apart.
 func entityAxisLabel(n helium.Node) string {
@@ -89,9 +99,9 @@ func TestDescendantAxisEntityBoundary(t *testing.T) {
 				name: "entity reference",
 				node: ref,
 				cases: []entityAxisCase{
-					{expr: "descendant::node()", want: []string{}},
+					{expr: descendantNodeExpr, want: []string{}},
 					{expr: "descendant-or-self::node()", want: []string{"entref(e)"}},
-					{expr: ".//node()", want: []string{}},
+					{expr: dotDescendantNodeExpr, want: []string{}},
 					{expr: "descendant::comment()", want: []string{}},
 					{expr: "descendant::processing-instruction()", want: []string{}},
 					{expr: ".//comment()", want: []string{}},
@@ -102,35 +112,35 @@ func TestDescendantAxisEntityBoundary(t *testing.T) {
 				name: "entity",
 				node: ent,
 				cases: []entityAxisCase{
-					{expr: "descendant::node()", want: []string{"b#eb", "text(ent)", "comment(ec)"}},
-					{expr: ".//node()", want: []string{"b#eb", "text(ent)", "comment(ec)"}},
-					{expr: "descendant-or-self::node()", want: []string{"entity(e)", "b#eb", "text(ent)", "comment(ec)"}},
+					{expr: descendantNodeExpr, want: []string{entityContentLabel, textEntLabel, commentECLabel}},
+					{expr: dotDescendantNodeExpr, want: []string{entityContentLabel, textEntLabel, commentECLabel}},
+					{expr: "descendant-or-self::node()", want: []string{"entity(e)", entityContentLabel, textEntLabel, commentECLabel}},
 				},
 			},
 			{
 				name: "dtd",
 				node: doc.IntSubset(),
 				cases: []entityAxisCase{
-					{expr: "descendant::node()", want: []string{"comment(c0)", "pi(p0)", "comment(c1)", "pi(p1)"}},
-					{expr: ".//node()", want: []string{"comment(c0)", "pi(p0)", "comment(c1)", "pi(p1)"}},
+					{expr: descendantNodeExpr, want: []string{"comment(c0)", "pi(p0)", "comment(c1)", "pi(p1)"}},
+					{expr: dotDescendantNodeExpr, want: []string{"comment(c0)", "pi(p0)", "comment(c1)", "pi(p1)"}},
 				},
 			},
 			{
 				name: "element holding a reference",
 				node: x,
 				cases: []entityAxisCase{
-					{expr: "descendant::node()", want: []string{"comment(cx)"}},
-					{expr: "descendant-or-self::node()", want: []string{"x", "comment(cx)"}},
-					{expr: ".//node()", want: []string{"comment(cx)"}},
+					{expr: descendantNodeExpr, want: []string{commentCXLabel}},
+					{expr: "descendant-or-self::node()", want: []string{"x", commentCXLabel}},
+					{expr: dotDescendantNodeExpr, want: []string{commentCXLabel}},
 				},
 			},
 			{
 				name: "document",
 				node: doc,
 				cases: []entityAxisCase{
-					{expr: "//node()", want: []string{"a", "b#b1", "x", "comment(cx)"}},
-					{expr: "descendant::node()", want: []string{"a", "b#b1", "x", "comment(cx)"}},
-					{expr: "//comment()", want: []string{"comment(cx)"}},
+					{expr: "//node()", want: []string{"a", "b#b1", "x", commentCXLabel}},
+					{expr: descendantNodeExpr, want: []string{"a", "b#b1", "x", commentCXLabel}},
+					{expr: "//comment()", want: []string{commentCXLabel}},
 				},
 			},
 		}
@@ -149,12 +159,12 @@ func TestDescendantAxisEntityBoundary(t *testing.T) {
 		require.Nil(t, firstEntityRef(doc))
 		x := firstNodeOf(t, doc, "//x")
 		require.NotNil(t, x)
-		require.Equal(t, []string{"b#eb", "text(ent)", "comment(ec)", "comment(cx)"},
-			entityAxisLabels(t, "descendant::node()", x))
-		require.Equal(t, []string{"a", "b#b1", "b#eb", "text(ent)", "comment(ec)", "x", "b#eb", "text(ent)", "comment(ec)", "comment(cx)"},
+		require.Equal(t, []string{entityContentLabel, textEntLabel, commentECLabel, commentCXLabel},
+			entityAxisLabels(t, descendantNodeExpr, x))
+		require.Equal(t, []string{"a", "b#b1", entityContentLabel, textEntLabel, commentECLabel, "x", entityContentLabel, textEntLabel, commentECLabel, commentCXLabel},
 			entityAxisLabels(t, "//node()", doc))
 		require.Equal(t, []string{"comment(c0)", "pi(p0)", "comment(c1)", "pi(p1)"},
-			entityAxisLabels(t, "descendant::node()", doc.IntSubset()))
+			entityAxisLabels(t, descendantNodeExpr, doc.IntSubset()))
 	})
 
 	t.Run("hand-built DTD holding an element", func(t *testing.T) {
@@ -171,7 +181,7 @@ func TestDescendantAxisEntityBoundary(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, doc.DocumentElement().AddChild(ref))
 
-		for _, expr := range []string{"descendant::x", ".//x", "descendant::node()", ".//node()", "descendant::*"} {
+		for _, expr := range []string{"descendant::x", ".//x", descendantNodeExpr, dotDescendantNodeExpr, "descendant::*"} {
 			require.Empty(t, entityAxisLabels(t, expr, ref), expr)
 		}
 		require.Equal(t, []string{"x"}, entityAxisLabels(t, "descendant::x", dtd))
