@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/stretchr/testify/require"
@@ -93,35 +93,7 @@ func TestPushParser(t *testing.T) {
 
 	t.Run("delayed byte at a time", func(t *testing.T) {
 		t.Parallel()
-		// Push one byte at a time from a separate goroutine with a small
-		// delay between pushes so the background parser wakes on a partially
-		// buffered stream, well before the whole input arrives. A slow
-		// producer that splits the XML declaration across pushes must not be
-		// mistaken for end-of-input: fillBuffer has to keep reading until it
-		// has the bytes it asked for. Regression test for the incremental
-		// push-parser short-read handling.
-		input := []byte(testXML)
-
-		p := helium.NewParser()
-		want, err := p.Parse(t.Context(), input)
-		require.NoError(t, err)
-
-		pp := p.NewPushParser(t.Context())
-		pushed := make(chan struct{})
-		go func() {
-			defer close(pushed)
-			for i := range input {
-				_ = pp.Push(input[i : i+1])
-				time.Sleep(time.Millisecond)
-			}
-		}()
-
-		// Wait for the producer to finish before signalling end-of-input so
-		// Close does not race the slow pushes.
-		<-pushed
-		got, err := pp.Close()
-		require.NoError(t, err)
-		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
+		synctest.Test(t, testPushOneByteAtATime)
 	})
 
 	t.Run("SAX events", func(t *testing.T) {
@@ -254,76 +226,12 @@ func TestPushParser(t *testing.T) {
 
 	t.Run("context cancel while waiting for data", func(t *testing.T) {
 		t.Parallel()
-
-		// Push a partial document and never push the rest. The background
-		// parser will block in the stream's Read waiting for more data. The
-		// stream wait is context-aware, so cancelling must unblock it and let
-		// Close return promptly with the context error.
-		ctx, cancel := context.WithCancel(t.Context())
-
-		p := helium.NewParser()
-		pp := p.NewPushParser(ctx)
-		require.NoError(t, pp.Push([]byte(`<?xml version="1.0"?><root>`)))
-
-		cancel()
-
-		done := make(chan error, 1)
-		go func() {
-			_, err := pp.Close()
-			done <- err
-		}()
-
-		select {
-		case err := <-done:
-			require.ErrorIs(t, err, context.Canceled, "Close must return the context error")
-		case <-time.After(10 * time.Second):
-			t.Fatal("push parser did not abort promptly after context cancellation")
-		}
+		synctest.Test(t, testPushCancelWhileWaiting)
 	})
 
 	t.Run("context cancel while reading xml-declaration whitespace", func(t *testing.T) {
 		t.Parallel()
-
-		// Push only "<?xml " (the declaration hint plus a single space) and never
-		// push the rest. The background parser consumes "<?xml", skips the one
-		// buffered space, then blocks in the stream's Read scanning for more
-		// whitespace after "<?xml". Cancelling unblocks that Read with
-		// context.Canceled, which the cursor records as a sticky Err() while
-		// PeekAt reports 0. The blank scanner must surface that read error so the
-		// cancellation propagates as context.Canceled. A synthesized syntax
-		// error ("blank needed after '<?xml'") would mask it.
-		ctx, cancel := context.WithCancel(t.Context())
-
-		p := helium.NewParser()
-		pp := p.NewPushParser(ctx)
-		require.NoError(t, pp.Push([]byte("<?xml ")))
-
-		// Give the background parser time to consume "<?xml ", advance over the
-		// buffered space, and block in the whitespace Read before cancelling so
-		// the cancellation lands squarely in the declaration whitespace scan.
-		time.Sleep(200 * time.Millisecond)
-		cancel()
-
-		done := make(chan struct {
-			doc *helium.Document
-			err error
-		}, 1)
-		go func() {
-			doc, err := pp.Close()
-			done <- struct {
-				doc *helium.Document
-				err error
-			}{doc, err}
-		}()
-
-		select {
-		case res := <-done:
-			require.ErrorIs(t, res.err, context.Canceled,
-				"cancellation in xml-declaration whitespace must surface as context.Canceled")
-			require.Nil(t, res.doc, "a cancelled parse must not return a partial document")
-		case <-time.After(10 * time.Second):
-			t.Fatal("push parser did not abort promptly after context cancellation")
-		}
+		synctest.Test(t, testPushCancelInDeclWhitespace)
 	})
 
 	t.Run("real file", func(t *testing.T) {
@@ -349,4 +257,77 @@ func TestPushParser(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
 	})
+}
+
+// testPushOneByteAtATime pushes the document one byte at a time and waits,
+// after each push, until the background parser has consumed the byte and parked
+// in the stream's Read for the next one. Every Read therefore wakes on a
+// partially buffered stream holding a single byte, so a parser that took a
+// short read for end-of-input (fillBuffer must keep reading until it has the
+// bytes it asked for) fails here. It runs in a synctest bubble, where
+// synctest.Wait returns once the parser goroutine is blocked.
+func testPushOneByteAtATime(t *testing.T) {
+	input := []byte(testXML)
+
+	p := helium.NewParser()
+	want, err := p.Parse(t.Context(), input)
+	require.NoError(t, err)
+
+	pp := p.NewPushParser(t.Context())
+	for i := range input {
+		require.NoError(t, pp.Push(input[i:i+1]))
+		synctest.Wait()
+	}
+
+	got, err := pp.Close()
+	require.NoError(t, err)
+	require.Equal(t, dumpDoc(t, want), dumpDoc(t, got))
+}
+
+// testPushCancelWhileWaiting pushes a partial document and never pushes the
+// rest. Once the background parser has parked in the stream's Read waiting for
+// more data (synctest.Wait), the context is cancelled: the context-aware wait
+// must wake and end the parse on its own, before Close. The second
+// synctest.Wait lets the woken parser run to completion; a finished parse
+// closes the stream for writing with its error, so a further Push reports the
+// cancellation. A wait that ignored the cancellation would still be parked and
+// accept the Push.
+func testPushCancelWhileWaiting(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+
+	pp := helium.NewParser().NewPushParser(ctx)
+	require.NoError(t, pp.Push([]byte(`<?xml version="1.0"?><root>`)))
+
+	synctest.Wait()
+	cancel()
+	synctest.Wait()
+
+	require.ErrorIs(t, pp.Push([]byte(`</root>`)), context.Canceled,
+		"the cancelled parse must end without waiting for Close")
+
+	_, err := pp.Close()
+	require.ErrorIs(t, err, context.Canceled, "Close must return the context error")
+}
+
+// testPushCancelInDeclWhitespace pushes only "<?xml " (the declaration hint
+// plus a single space) and never pushes the rest. The background parser
+// consumes "<?xml", skips the buffered space, then parks in the stream's Read
+// scanning for more whitespace; synctest.Wait returns once it has. Cancelling
+// then wakes that Read with context.Canceled, which the cursor records as a
+// sticky Err() while PeekAt reports 0. The blank scanner must surface that read
+// error so the cancellation propagates as context.Canceled. A synthesized
+// syntax error ("blank needed after '<?xml'") would mask it.
+func testPushCancelInDeclWhitespace(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+
+	pp := helium.NewParser().NewPushParser(ctx)
+	require.NoError(t, pp.Push([]byte("<?xml ")))
+
+	synctest.Wait()
+	cancel()
+
+	doc, err := pp.Close()
+	require.ErrorIs(t, err, context.Canceled,
+		"cancellation in xml-declaration whitespace must surface as context.Canceled")
+	require.Nil(t, doc, "a cancelled parse must not return a partial document")
 }
