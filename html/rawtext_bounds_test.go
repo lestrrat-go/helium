@@ -2,6 +2,7 @@ package html_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -1648,6 +1649,52 @@ func testSaturatedRefPushCancellation(t *testing.T, elem string) {
 	mu.Unlock()
 	require.Zero(t, got,
 		"no Characters/CDATA must be emitted when cancellation aborts a saturated char-ref spool")
+}
+
+// failAfterReader returns data in reads no larger than the caller's buffer,
+// then fails every later Read with err.
+type failAfterReader struct {
+	data []byte
+	err  error
+}
+
+func (r *failAfterReader) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, r.err
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
+// TestRCDATASaturatedRefReadErrorBeforeCap pins the spool's in-loop read-error
+// check in parseSaturatedCharRefLiteral. The saturated "&amp"+tail run is
+// longer than MaxContentSize, but the reader fails before the spool's first
+// chunk is complete, so that chunk comes back short together with the read
+// error. The spool must stop on the read error before it counts the partial
+// chunk against the cap: the parse then reports the read error. Counting the
+// partial chunk first would record ErrContentSizeExceeded, which the parse loop
+// reports ahead of the read error, so the input would look over-cap when it in
+// fact failed to read.
+func TestRCDATASaturatedRefReadErrorBeforeCap(t *testing.T) {
+	const sizeCap = 2048 // above the 1100-byte comment filler, below the run
+	errRead := errors.New("read failed inside the saturated run")
+
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			// The comment filler clears the 1024-byte charset prescan. The run's
+			// name is sizeCap+3 bytes, so "&" plus the name is over the cap, while
+			// the part left after the scanner's lookahead is shorter than one
+			// spool chunk (sizeCap bytes).
+			input := metaUTF8 + "<!--" + strings.Repeat("p", 1100) + "-->" +
+				"<" + elem + ">&amp" + strings.Repeat("x", sizeCap)
+			_, err := html.NewParser().MaxContentSize(sizeCap).
+				ParseReader(t.Context(), &failAfterReader{data: []byte(input), err: errRead})
+			require.ErrorIs(t, err, errRead, "a read failure inside the spool must be reported as that failure")
+			require.NotErrorIs(t, err, html.ErrContentSizeExceeded,
+				"the partial chunk before a read failure must not be counted against the cap")
+		})
+	}
 }
 
 // TestRCDATACharRefEmitPathsCapEnforced is the convergent, cross-path regression
