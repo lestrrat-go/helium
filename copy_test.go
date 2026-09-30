@@ -390,7 +390,10 @@ func TestCopyEntityReference(t *testing.T) {
 		copied, copyErr := helium.CopyNode(numeric, dst)
 		require.NoError(t, copyErr)
 		require.Nil(t, copied.FirstChild())
-		require.Empty(t, copied.Content())
+		// Content of an unbound reference looks its name up in the document, as
+		// libxml2's xmlBufGetEntityRefContent does, so only the tree-API
+		// declaration of "#65" gives it a value.
+		require.Equal(t, []byte("WRONG"), copied.Content())
 	})
 
 	t.Run("document copy shares only its own repeated declaration", func(t *testing.T) {
@@ -433,7 +436,8 @@ func TestCopyEntityReference(t *testing.T) {
 		copiedRef := copied.DocumentElement().FirstChild()
 		require.Equal(t, helium.EntityRefNode, copiedRef.Type())
 		require.Nil(t, copiedRef.FirstChild())
-		require.Empty(t, copiedRef.Content())
+		// The childless reference still resolves its value by name.
+		require.Equal(t, []byte("PAYLOAD"), copiedRef.Content())
 	})
 
 	t.Run("document copy resolves an external declaration", func(t *testing.T) {

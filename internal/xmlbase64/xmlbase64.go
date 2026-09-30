@@ -142,9 +142,9 @@ func characterData(n helium.Node) ([]byte, error) {
 // [helium.Entity.Content] is a leaf accessor returning the raw replacement
 // literal: it expands no nested reference and recurses into no subtree, so the
 // cost is one copy of that literal, the same one-copy floor a text child
-// already has. Reading r.Content() instead would aggregate r's children, which
-// is bounded for a parser-built reference but not for a hand-built one carrying
-// an element. Walking past the first child would leave the value altogether:
+// already has. Reading r.Content() instead would expand the entity's parsed
+// children recursively, nested references included, which is bounded for a
+// parser-built reference but not for a hand-built one. Walking past the first child would leave the value altogether:
 // the Entity's siblings are the remaining entity declarations of the DTD, not
 // more of this value.
 //

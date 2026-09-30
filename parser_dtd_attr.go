@@ -567,6 +567,36 @@ func (ctx *parserCtx) lookupAttributeDefault(elemName string) ([]*Attribute, boo
 	return v, ok
 }
 
+// defaultAttributeValue is the value the parser reports for a DTD default
+// attribute. With entity substitution it is the attribute's value. Without it,
+// the value keeps its entity references, the same lexical form the parser
+// reports for an attribute written in the start tag and the form libxml2 keeps
+// in its attsDefault table.
+func (ctx *parserCtx) defaultAttributeValue(attr *Attribute) string {
+	if ctx.replaceEntities {
+		return attr.Value()
+	}
+	return lexicalAttributeValue(attr)
+}
+
+// lexicalAttributeValue rebuilds the lexical form of an attribute value from
+// its children, the inverse of stringToNodeList: a Text child is written with
+// each '&' as "&#38;", and an EntityRef child is written as "&name;".
+func lexicalAttributeValue(attr *Attribute) string {
+	var b strings.Builder
+	for child := range Children(attr) {
+		switch c := child.(type) {
+		case *Text:
+			_, _ = b.WriteString(strings.ReplaceAll(string(c.rawContent()), "&", "&#38;"))
+		case *EntityRef:
+			_ = b.WriteByte('&')
+			_, _ = b.WriteString(c.name)
+			_ = b.WriteByte(';')
+		}
+	}
+	return b.String()
+}
+
 func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 	cur := pctx.getCursor()
 	if cur == nil {

@@ -1280,6 +1280,7 @@ func TestDefaultOutputDef(t *testing.T) {
 const (
 	outMethodJSON = "json"
 	outMethodXML  = "xml"
+	outMethodText = "text"
 )
 
 // outMethodXHTML is the XHTML output method. Its version parameter uses an XML

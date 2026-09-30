@@ -1671,3 +1671,157 @@ func TestNilledForwardedToXPath3(t *testing.T) {
 	// 0         : data() of a nilled element is the empty sequence
 	require.Equal(t, "nil|not-int|q-is-int|0", out)
 }
+
+// The default parser keeps entity references in attribute values as EntityRef
+// children. A stylesheet and a source document parsed that way are read with
+// the attribute values expanded: the stylesheet's select attribute, a literal
+// result attribute, and the source attribute copied and read by the transform.
+func TestAttributeValueWithEntityReference(t *testing.T) {
+	ctx := t.Context()
+	ssDoc, err := helium.NewParser().Parse(ctx, []byte(`<!DOCTYPE xsl:stylesheet [<!ENTITY n "a">]>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <out lit="L&n;R" v="{r/@&n;}"><xsl:copy-of select="r/@&n;"/><xsl:value-of select="r/@&n;"/></out>
+  </xsl:template>
+</xsl:stylesheet>`))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(ctx, ssDoc)
+	require.NoError(t, err)
+
+	src, err := helium.NewParser().Parse(ctx, []byte(`<!DOCTYPE r [<!ENTITY e "x">]><r a="1&e;2"/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(ctx)
+	require.NoError(t, err)
+	require.Contains(t, out, `<out lit="LaR" v="1x2" a="1x2">1x2</out>`)
+}
+
+// A source parsed with the default parser keeps EntityRef nodes, and an entity
+// whose replacement text holds another reference is expanded all the way
+// wherever the transform or the serializer reads a node's string value.
+func TestNestedEntityReferenceStringValue(t *testing.T) {
+	const source = `<!DOCTYPE r [<!ENTITY f "y"><!ENTITY g "a&f;b">]><r n="1&g;2"><e>1&g;2</e></r>`
+
+	t.Run("attribute returned by a template with as", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:call-template name="t"/></out></xsl:template>
+  <xsl:template name="t" as="attribute()"><xsl:sequence select="r/@n"/></xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, out, `<out n="1ayb2"/>`)
+	})
+
+	t.Run("xsl:message of an attribute", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><xsl:message select="r/@n"/><out/></xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(source))
+		require.NoError(t, err)
+		handler := &messageRecordingHandler{}
+		_, err = ss.Transform(src).MessageHandler(handler).Do(t.Context())
+		require.NoError(t, err)
+		require.Equal(t, []string{"1ayb2"}, handler.messages)
+	})
+
+	// xsl:copy type= checks the copied attribute's expanded value.
+	t.Run("attribute copied with a type", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:template match="/"><out><xsl:for-each select="r/@l"><xsl:copy type="xs:language"/></xsl:for-each></out></xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<!DOCTYPE r [<!ENTITY n "n"><!ENTITY lang "e&n;">]><r l="&lang;"/>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, out, ` l="en"/>`)
+	})
+
+	for name, tc := range map[string]struct {
+		output *xslt3.OutputDef
+		node   func(*helium.Element) helium.Node
+		want   string
+	}{
+		"adaptive output of an attribute": {
+			output: &xslt3.OutputDef{Method: adaptiveMethod},
+			node:   nestedEntityAttribute,
+			want:   `n="1ayb2"`,
+		},
+		"json output of an element": {
+			output: &xslt3.OutputDef{Method: outMethodJSON},
+			node:   nestedEntityElement,
+			want:   `"1ayb2"`,
+		},
+		"json output of an attribute as xml": {
+			output: &xslt3.OutputDef{Method: outMethodJSON, JSONNodeOutputMethod: outMethodXML},
+			node:   nestedEntityAttribute,
+			want:   `"1ayb2"`,
+		},
+		"xml output of an attribute item": {
+			output: &xslt3.OutputDef{Method: outMethodXML},
+			node:   nestedEntityAttribute,
+			want:   `1ayb2`,
+		},
+		"json output of an element as text": {
+			output: &xslt3.OutputDef{Method: outMethodJSON, JSONNodeOutputMethod: outMethodText},
+			node:   nestedEntityElement,
+			want:   `"1ayb2"`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			src, err := helium.NewParser().Parse(t.Context(), []byte(source))
+			require.NoError(t, err)
+			items := xpath3.ItemSlice{xpath3.NodeItem{Node: tc.node(src.DocumentElement())}}
+			var buf strings.Builder
+			require.NoError(t, xslt3.SerializeItems(&buf, items, nil, tc.output))
+			require.Equal(t, tc.want, buf.String())
+		})
+	}
+}
+
+func nestedEntityAttribute(root *helium.Element) helium.Node {
+	return root.GetAttributeNodeNS("n", "")
+}
+
+func nestedEntityElement(root *helium.Element) helium.Node {
+	for child := range helium.Children(root) {
+		if child.Type() == helium.ElementNode {
+			return child
+		}
+	}
+	return nil
+}
+
+// An attribute captured as a standalone item (a variable with
+// as="attribute()*") keeps its value literally. The source value p&q, written
+// p&amp;q, holds a bare "&" that must not be read again as the start of an
+// entity reference, whichever instruction builds the item.
+func TestStandaloneAttributeValueIsLiteral(t *testing.T) {
+	for name, body := range map[string]string{
+		"xsl:copy":       `<xsl:for-each select="r/@a"><xsl:copy/></xsl:for-each>`,
+		"xsl:copy-of":    `<xsl:copy-of select="r/@a"/>`,
+		"deep-copy mode": `<xsl:apply-templates select="r/@a" mode="dc"/>`,
+		"xsl:attribute":  `<xsl:attribute name="a" select="string(r/@a)"/>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:mode name="dc" on-no-match="deep-copy"/>
+  <xsl:template match="/">
+    <xsl:variable name="v" as="attribute()*">`+body+`</xsl:variable>
+    <out><xsl:copy-of select="$v"/><xsl:value-of select="$v"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<r a="p&amp;q&lt;&#38;#60;"/>`))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, out, `<out a="p&amp;q&lt;&amp;#60;">p&amp;q&lt;&amp;#60;</out>`)
+		})
+	}
+}

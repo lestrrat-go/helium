@@ -159,3 +159,24 @@ func TestRootStringConversion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 43.0, r.Number)
 }
+
+// The default parser keeps entity references in attribute values as EntityRef
+// children. The string-value of such an attribute is the expanded value, as
+// libxml2 computes it (`xmllint --xpath 'string(/r/@a)'` prints 1x2).
+func TestAttributeStringValueExpandsEntityReferences(t *testing.T) {
+	doc := parseXML(t, `<!DOCTYPE r [<!ENTITY e "x"><!ENTITY f "y"><!ENTITY g "a&f;b">]>`+
+		`<r a="1&e;2" n="1&g;2"/>`)
+
+	for expr, want := range map[string]string{
+		"string(/r/@a)": "1x2",
+		"string(/r/@n)": "1ayb2",
+	} {
+		r, err := xpath1.Evaluate(t.Context(), doc, expr)
+		require.NoError(t, err, expr)
+		require.Equal(t, want, r.String, expr)
+	}
+
+	r, err := xpath1.Evaluate(t.Context(), doc, "/r/@a = '1x2'")
+	require.NoError(t, err)
+	require.True(t, r.Bool, "comparison uses the expanded value")
+}

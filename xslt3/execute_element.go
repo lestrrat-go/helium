@@ -855,7 +855,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			}
 			valTypeName = tn
 		}
-		attr, attrErr := out.doc.CreateAttribute(localName, value, attrNS)
+		attr, attrErr := newStandaloneAttribute(out.doc, localName, value, attrNS)
 		if attrErr != nil {
 			return attrErr
 		}
@@ -1018,6 +1018,24 @@ func copyAttributeToElement(elem *helium.Element, attr *helium.Attribute) {
 		return
 	}
 	_ = elem.SetAttribute(attr.Name(), attr.Value())
+}
+
+// newStandaloneAttribute builds an attribute item attached to no element, with
+// value stored literally as one text child, the way Element.SetAttribute stores
+// it. Document.CreateAttribute parses its value for entity references, so a
+// value such as "p&q" would be read again from its "&".
+func newStandaloneAttribute(doc *helium.Document, localName, value string, ns *helium.Namespace) (*helium.Attribute, error) {
+	attr, err := doc.CreateAttribute(localName, "", ns)
+	if err != nil {
+		return nil, err
+	}
+	if value == "" {
+		return attr, nil
+	}
+	if err := attr.AppendText([]byte(value)); err != nil {
+		return nil, err
+	}
+	return attr, nil
 }
 
 // conflictingAttrPrefix returns true if the given prefix is already used

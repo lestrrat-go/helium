@@ -426,11 +426,8 @@ func stripPrefix(name string) string {
 // like x:test belongs to a foreign vocabulary and must not be read as
 // Schematron.
 func getStructuralAttr(elem *helium.Element, name string) string {
-	attr, ok := elem.FindAttribute(helium.NSPredicate{Local: name, NamespaceURI: ""})
-	if !ok {
-		return ""
-	}
-	return attr.Value()
+	v, _ := elem.GetAttributeNS(name, "")
+	return v
 }
 
 // elementInNamespace reports whether elem belongs to the given Schematron

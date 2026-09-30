@@ -62,13 +62,19 @@ Attributes are a **linked list via next/prev** on the Element, NOT children:
 - `Element.properties` → first Attribute
 - `Attribute.NextAttribute()` → next in list
 - Attribute VALUE stored as children Text/EntityRef nodes of the Attribute itself
-- `Attribute.Value()` returns `string(rawContent)` of a lone `*Text` child (first child a `*Text` with a nil
-  `next`), one allocation; no children → `""`; any other shape goes through `aggregatedAttributeValue` →
-  `Content()`. `Value` has a VALUE receiver, so that fallback aggregates over a copy of the attribute's docnode:
-  the owned-boundary rule then stops after the first child (its `Parent()` is the real attribute, not the
-  copy), and `Value()` of `1&e;2` (Text, EntityRef, Text) is `"1"` while `Content()` is `"1x2"`. The fallback
-  is a separate function so taking the copy's address does not move `Value`'s receiver to the heap on the
-  single-Text path
+- `(*Attribute).Value()` (pointer receiver) returns the value with every entity reference expanded, the string
+  libxml2's `xmlGetProp`/`xmlNodeGetContent` return. A lone `*Text` child (first child a `*Text` with a nil
+  `next`) is `string(rawContent)`, one allocation; no children → `""`. Any other shape, such as the
+  Text/EntityRef list a `SubstituteEntities(false)` parse builds, goes through the shared content walk
+  `appendChildContent` (see "Content() Default") with comments/PIs left out. So `Value()` is the same string
+  under `SubstituteEntities(false)` and `(true)`: `1&e;2` with `e`="x" → `"1x2"`, and a nested `&g;` with
+  `g`="a&f;b" → the fully expanded text. `Content()` on an attribute runs the same walk and returns the same
+  text
+- The parser keeps DTD default attributes (`parserCtx.attsDefault`) as `*Attribute` nodes built by
+  `CreateAttribute`. Without entity substitution it reports a default's value in lexical form
+  (`defaultAttributeValue` → `lexicalAttributeValue`: Text with `&` as `&#38;`, EntityRef as `&name;`), as
+  libxml2 does, so a defaulted `d="1&e;2"` keeps its EntityRef child in the tree; the post-DTD
+  `validateAttributeDefaultsWFC` walks the same lexical form
 - `Attributes(elem)` (`iter.go`) iterates the `properties` chain with no slice; `findAttributeNS` (behind
   `GetAttributeNS`/`GetAttributeNodeNS`/`RemoveAttributeNS` and the deep copy's line lookup) matches by local
   name + URI without boxing an `NSPredicate`
@@ -109,7 +115,7 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 | Comment | `Comment` | node | ✗ | ✓ content | ✓ | — |
 | PI | `ProcessingInstruction` | docnode | ✗ | data field | ✓ | target, data (Name() returns target). AddChild/AppendText route text into `data`; non-text children rejected |
 | EntityRef | `EntityRef` | node | ✓ (if expanded) | ✓ (if resolved) | ✓ | References Entity by name |
-| Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, expanding, expandedSize |
+| Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, attrWFCFlags, expanding, expandedSize, attrExpandedSize |
 | DTD | `DTD` | docnode | ✓ (decls) | — | ✓ | attributes/attrsByElem/elements/entities/pentities/notations maps, attrDecls slice, externalID, systemID |
 | ElementDecl | `ElementDecl` | docnode | — | — | ✓ | decltype, content (grammar tree), attributes, prefix |
 | AttributeDecl | `AttributeDecl` | docnode | — | — | ✓ | atype, def, defvalue, tree (enumeration), prefix, elem, external (declared in external subset/PE) |
@@ -238,22 +244,33 @@ unsynthesized values.
 
 ### Content() Default
 `docnode.Content()` walks children and concatenates (returns a fresh buffer). Overridden by Text, CDATA,
-Comment, PI, EntityRef. No children returns nil; exactly one owned child that is a leaf (`aggregatesOwnContent`
-false, and `nextOwnedChild` of it is nil) returns that leaf's own `Content()` copy directly (nil when empty),
-which is byte-for-byte what the aggregation writes, without its two maps and buffer
-(`TestContentMatchesAggregate` compares both paths). It has a POINTER receiver (`*docnode`) so the receiver is the real owning node — every
+Comment, PI, Entity (its stored replacement text), NamespaceNodeWrapper, and EntityRef (the expanded entity
+value, `appendEntityRefContent`). No children returns nil; exactly one owned child that is a leaf
+(`aggregatesOwnContent` false, and `nextOwnedChild` of it is nil) returns that leaf's own `Content()` copy
+directly (nil when empty), which is byte-for-byte what the aggregation writes (`TestContentMatchesAggregate`
+compares both paths). It has a POINTER receiver (`*docnode`) so the receiver is the real owning node — every
 `Node` is a pointer (the sealed `baseDocNode()` interface method is itself pointer-receiver), so this changes
-nothing for callers. The aggregation runs through the private `aggregateOwnedContent` helper, which advances
-between children with the OWNED-BOUNDARY rule (`nextOwnedChild`): a foreign child — an entity reference's
-shared Entity child, owned by the DTD, whose sibling pointers belong to the DTD declaration list — ends the
-aggregation instead of spilling into another list's siblings, and a per-list seen set terminates a cyclic
-sibling pointer. The recursion into a container child's subtree carries an ACTIVE-PATH set (the container
-docnodes currently being aggregated, receiver inclusive): a child already on that path is a back-edge and is
-skipped, so a pure child-pointer cycle (`element -> element -> element`, NOT routed through an Entity's
-terminating stored-text `Content()`) terminates instead of recursing forever. A leaf child
-(Text/Comment/CDATA/PI/Entity/NamespaceNodeWrapper — `aggregatesOwnContent` returns false) is self-contained
-and called directly; every other node type recurses under the guard. The active-path set is not a global
-visited set, so a shared DAG node reached on a different path is re-aggregated per occurrence.
+nothing for callers.
+
+The aggregation is `appendChildContent`, a port of libxml2 `xmlBufGetChildContent`/`xmlBufGetEntityRefContent`
+shared with `Attribute.Value()`. It writes into a `contentSink` (`*bytes.Buffer` for Content, `*strings.Builder`
+for Value). Text/CDATA add their text; an EntityRef adds its entity's value (`appendEntityRefContent`:
+predefined → its character; otherwise the entity's parsed children walked by the same function, recursively; an
+entity with no parsed children adds its stored replacement text; an unbound reference is looked up by name in
+the document, predefined entities first); an Entity child adds its stored replacement text; Comment/PI/namespace
+wrapper add their own text only for Content (`withOther`), never for Value; any other node recurses into its
+children. So Content of a node holding references equals the text a `SubstituteEntities(true)` parse stores
+(`<g>1&g;2</g>` with `g`="a&f;b", `f`="y" → `"1ayb2"`). libxml2 leaves comments and PIs out of
+`xmlNodeGetContent`; helium's Content keeps their text at every depth.
+
+The walk follows only the owner's own children (`nextOwnedSibling`): a foreign child — an entity reference's
+shared Entity child, owned by the DTD, whose sibling pointers belong to the DTD declaration list — ends the list
+instead of spilling into another list's siblings, and `siblingCycleGuard` (Brent) stops a cyclic sibling
+pointer. An ACTIVE-PATH slice (the receiver, each container recursed into, and each Entity being expanded)
+skips a child already on the path, so a child-pointer cycle (`element -> element -> element`) or an entity that
+references itself terminates. It plays the role of libxml2's `XML_ENT_EXPANDING` flag without writing the
+shared Entity, so concurrent readers do not race. It is not a global visited set, so a shared entity referenced
+twice is expanded at each reference.
 
 The text-bearing leaves (Text, Comment, CDATASection) store content in an internal mutable `content []byte`.
 Their exported `Content()` returns a **defensive copy** (`bytes.Clone`) so a caller mutating the result cannot

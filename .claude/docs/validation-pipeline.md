@@ -1555,33 +1555,46 @@ so it is also the pass that reports a tree cycle: `ErrWalkCycle` marks the docum
   3. Check unique/key: all key-sequences must be unique
   4. Check keyref: all key-sequences must exist in referenced constraint table.
      **Keyref tables are SUBTREE-SCOPED** (XSD identity-constraint scope, matching
-     xmllint): the key/unique table a keyref resolves against is the one in scope
-     for the keyref's host OCCURRENCE — the constraints declared directly on the
-     host (`validateIDConstraints` builds a per-occurrence `keyTables
-     map[QName]*idcTable` and resolves the occurrence's keyrefs against it after
-     every key/unique on the occurrence is evaluated, so a keyref declared before
-     its key still resolves) PLUS key/unique tables that PROPAGATE UP from the
-     host's DESCENDANT subtree (`collectSubtreeKeyTable` delegates to
-     `appendSubtreeKeys`, which walks the host's children recursively, gathering —
-     via `idcHostDecl` per descendant — every key/unique of the referenced QName
-     and appending their key-sequences into a single accumulator as it descends,
-     rather than building and copying a table at each level). Each descendant
-     OCCURRENCE's evaluation (`gatherIDCTable`) is memoized on
-     `validationContext.idcGathered`, keyed by `idcOccurrenceKey{elem, idc}` (the
-     element POINTER, so two occurrences of the same declaration are evaluated
-     independently), so a descendant reachable from several nested keyref hosts is
-     evaluated at most once per run. The memo is confined to this suppressed
-     gathering path: evaluation runs under `suppressDepth` so cvc field/key-missing
-     diagnostics are reported only once, by that descendant's own unsuppressed
-     pass-2 walk, never by the cached gathering call. So a key on a CHILD element
-     satisfies a keyref on an ancestor host (bug322411). A keyref whose referenced
-     key/unique is declared OUTSIDE the host's subtree — on a SIBLING, or on a
-     different occurrence of a repeating host — resolves against an EMPTY key space →
-     every key-sequence is a "no match" failure. This is deliberate and matches
-     xmllint: two sibling occurrences of a repeating host never leak key spaces into
-     each other (a doc-wide merged table would falsely accept a cross-scope
-     reference), and a key on a sibling element is out of the keyref's scope. No
-     false accepts.
+     xmllint). `validateIDConstraints` builds a per-occurrence `keyTables
+     map[QName]*idcTable` and resolves the occurrence's keyrefs after every
+     key/unique on the occurrence is evaluated, so a keyref declared before its key
+     still resolves. `checkKeyRef` tests membership through a `refKeySet`:
+     - The host declares the referenced constraint itself → `tableKeySet`, the
+       host's OWN table only; descendant tables are NOT merged in. A referenced
+       constraint whose evaluation failed is absent from `keyTables` and takes the
+       subtree path below.
+     - Otherwise → `scopedKeySet`: the key-sequences of every DESCENDANT occurrence
+       of that key/unique (host excluded), with NO conflict dropping and NO
+       own-entry precedence, so a key-sequence present in two children still
+       satisfies the keyref. This is a known subset of XSD §3.11.4/§3.11.5 node-table
+       propagation (conflicting key-sequences are not dropped), kept byte-identical
+       in 1.0 and 1.1.
+
+     The subtree path uses one `subtreeKeyIndex` per referenced key/unique QName on
+     `validationContext.idcSubtreeIndex`, built lazily per run. `subtreeKeyScope`
+     returns the host's `hostSpan` from `index.hosts`, or first indexes the host's
+     subtree: `indexSubtreeKeys` hands out DFS positions from a counter that only
+     grows, records every gathered key-sequence (`formatKeySequence` of the
+     canonical values) at its occurrence's position in `byKey`, and records a span
+     `(pre, end]` for every element hosting a keyref to that QName. A lookup
+     binary-searches `byKey[key]` for a position in `(pre, end]`. Because the pass-2
+     walk is pre-order, the outermost host of a nested chain indexes its whole
+     subtree once and every nested host reuses its recorded span, so a chain of D
+     nested hosts costs O(N) in the subtree size. A host outside every indexed subtree
+     gets a fresh DFS with fresh positions, so correctness never depends on visit
+     order. Each descendant OCCURRENCE's evaluation (`gatherIDCTable`) is memoized
+     on `validationContext.idcGathered`, keyed by `idcOccurrenceKey{elem, idc}`
+     (the element POINTER, so two occurrences of the same declaration are evaluated
+     independently). Gathering runs under `suppressDepth` so cvc
+     field/key-missing diagnostics are reported only once, by that descendant's
+     own unsuppressed pass-2 visit. So a key on a CHILD element satisfies a keyref
+     on an ancestor host (bug322411). A keyref whose referenced key/unique is
+     declared OUTSIDE the host's subtree — on a SIBLING, on an ancestor, or on a
+     different occurrence of a repeating host — does not satisfy it; with no
+     descendant occurrence every key-sequence is a "no match" failure. This matches
+     xmllint: two sibling occurrences of a repeating host never leak key spaces
+     into each other (a doc-wide merged table would falsely accept a cross-scope
+     reference).
   - Field presence (cvc-identity-constraint.4.2.1): an `xs:key` requires every
     field to evaluate to a node for each selected node; an absent field is a
     validity error (`Not all fields of key identity-constraint '…' evaluate to a
@@ -2257,7 +2270,7 @@ select="..."/>` (XPath value).
   content (`parseMessageElement`) are ignored, not interpolated.
 
 Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read
-unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as
+unqualified-only via `getStructuralAttr` (`GetAttributeNS(name, "")`); a prefixed `x:test` is not read as
 Schematron.
 
 **Fatal compile errors:** `compileSchema` wraps the configured handler in a `fatalTrackingHandler`. If any

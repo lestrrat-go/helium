@@ -746,7 +746,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 						attrs = append(attrs, attrData{
 							localname: attname,
 							prefix:    aprefix,
-							value:     attr.Value(),
+							value:     pctx.defaultAttributeValue(attr),
 							isDefault: attr.IsDefault(),
 						})
 					}
@@ -1135,6 +1135,18 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 							return
 						}
 					}
+					// The reference stays unexpanded, but its expanded size is
+					// still charged to the amplification counters, as libxml2's
+					// xmlParseAttValueInternal does on this path
+					// (parser.c:4196-4203: xmlParserEntityCheck with
+					// ent->expandedSize, which adds entityFixedCost on top).
+					// Inside the DTD subset attrExpandedSize is not yet computed
+					// and only the fixed cost is charged, as in libxml2.
+					pctx.sizeentcopy = saturatedAdd(pctx.sizeentcopy, saturatedAdd(ent.attrExpandedSize, entityFixedCost))
+					if lerr := pctx.entityCheckLimits(); lerr != nil {
+						err = pctx.error(ctx, lerr)
+						return
+					}
 					// Route the unresolved reference through the bounded helper:
 					// a declared entity with a very long name under
 					// MaxNameLength(-1) would otherwise copy "&"+ent.name+";"
@@ -1214,23 +1226,28 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 // a pure SAX-event parse whose custom handler answers GetEntity. The DIRECT case
 // (pent itself external/unparsed, or its own content directly containing '<') is
 // caught earlier by parseEntityRef; this covers content reached only through
-// nested &name; references.
+// nested &name; references. A reference cycle (WFC No Recursion) fails the walk
+// with errEntityLoop, as libxml2 fails it with XML_ERR_ENTITY_LOOP.
 //
 // The result is memoized on each internal entity it walks via the WFC flags, so
 // a repeated reference — or a nested entity shared across walks — skips the
 // re-walk and does NOT re-emit the getEntity callbacks the nested lookups make.
 // flags selects the memoization target (entWFCChecked|entWFCValidated in body
 // content, entWFCValidated alone inside the DTD subset).
+//
+// The walk also computes each walked entity's expanded size for amplification
+// accounting and, when flags include entWFCChecked, stores it as
+// attrExpandedSize. libxml2 stores the size only when ctxt->inSubset == 0
+// (parser.c:3779-3780), because inside the DTD subset a nested entity may not be
+// declared yet; entWFCChecked is set under the same condition.
 func (pctx *parserCtx) checkEntityInAttValue(ctx context.Context, pent *Entity, flags int) (attrEntityWFC, error) {
-	visited := map[*Entity]struct{}{pent: {}}
+	sizes := map[*Entity]int64{pent: attrWalkInProgress}
 	checked := []*Entity{pent}
-	wfc, err := pctx.walkAttrValueWFC(ctx, pent.content, flags, visited, &checked)
+	wfc, err := pctx.walkAttrValueWFC(ctx, pent, pent.content, flags, sizes, &checked)
 	if err != nil || wfc != attrWFCNone {
 		return wfc, err
 	}
-	for _, e := range checked {
-		e.attrWFCFlags |= flags
-	}
+	markAttrValueChecked(checked, flags, sizes)
 	return attrWFCNone, nil
 }
 
@@ -1240,89 +1257,166 @@ func (pctx *parserCtx) checkEntityInAttValue(ctx context.Context, pent *Entity, 
 // Unlike an entity, the string itself is not memoized; the internal entities it
 // reaches are.
 func (pctx *parserCtx) checkAttrValueStringWFC(ctx context.Context, s string, flags int) (attrEntityWFC, error) {
-	visited := map[*Entity]struct{}{}
+	sizes := map[*Entity]int64{}
 	var checked []*Entity
-	wfc, err := pctx.walkAttrValueWFC(ctx, s, flags, visited, &checked)
+	wfc, err := pctx.walkAttrValueWFC(ctx, nil, s, flags, sizes, &checked)
 	if err != nil || wfc != attrWFCNone {
 		return wfc, err
 	}
+	markAttrValueChecked(checked, flags, sizes)
+	return attrWFCNone, nil
+}
+
+// markAttrValueChecked records a successful attribute-value walk on every entity
+// it walked: the WFC memoization flags and, for a body-context walk
+// (entWFCChecked), the expanded size the walk computed.
+func markAttrValueChecked(checked []*Entity, flags int, sizes map[*Entity]int64) {
 	for _, e := range checked {
 		e.attrWFCFlags |= flags
+		if flags&entWFCChecked != 0 {
+			e.attrExpandedSize = sizes[e]
+		}
 	}
-	return attrWFCNone, nil
+}
+
+// attrWalkInProgress marks, in walkAttrValueWFC's size map, an entity whose
+// replacement text is still being walked.
+const attrWalkInProgress int64 = -1
+
+// attrWalkFrame is one replacement text on walkAttrValueWFC's work stack.
+type attrWalkFrame struct {
+	ent  *Entity // entity that owns s; nil for a raw attribute-value string
+	s    string  // replacement text being scanned
+	pos  int     // scan position to resume from
+	size int64   // expanded size accumulated so far
 }
 
 // walkAttrValueWFC walks content for a literal '<' or a nested general reference
 // to an external/unparsed/undefined entity, following internal general entities
 // transitively. It uses an EXPLICIT work stack, in place of native recursion, so a
 // long ACYCLIC chain of nested internal entities cannot grow the Go call stack
-// without bound; the visited set both guards reference cycles and bounds the
-// walk to the number of distinct declared entities. Each internal entity whose
-// content is walked is appended to *checked so the caller can flag it once the
-// walk completes without a violation. A nested entity already carrying the
-// target flags is trusted and not re-walked, mirroring libxml2's flag-gated
-// recursion. Predefined entities (&lt; &gt; &amp; &apos; &quot;) are the
-// sanctioned escapes and are never a violation.
-func (pctx *parserCtx) walkAttrValueWFC(ctx context.Context, content string, flags int, visited map[*Entity]struct{}, checked *[]*Entity) (attrEntityWFC, error) {
-	stack := []string{content}
+// without bound. Like libxml2's recursion, it descends into a nested entity as
+// soon as the reference is seen and resumes the parent afterwards, so each
+// entity's expanded size is complete when its frame is popped.
+//
+// sizes records every entity the walk has entered: attrWalkInProgress while its
+// frame is on the stack, then its expanded size. A reference to an entity still
+// on the stack is a reference cycle and fails with errEntityLoop (libxml2
+// XML_ENT_EXPANDING, parser.c:3705-3708). A reference to an entity already
+// walked to completion (the same entity reached twice without a cycle) reuses
+// its size, which bounds the walk to the number of distinct declared entities. root is the
+// entity that owns content (nil for a raw attribute-value string); the caller
+// seeds sizes with it. Each internal entity whose content is walked is appended
+// to *checked so the caller can flag it once the walk completes without a
+// violation. A nested entity already carrying the target flags is trusted and
+// not re-walked, mirroring libxml2's flag-gated recursion. Predefined entities
+// (&lt; &gt; &amp; &apos; &quot;) are the sanctioned escapes and are never a
+// violation.
+//
+// The expanded size ports xmlCheckEntityInAttValue (parser.c:3695 and
+// 3764-3774): the length of the replacement text, plus the nested entity's
+// size and entityFixedCost for every reference to a non-predefined entity.
+func (pctx *parserCtx) walkAttrValueWFC(ctx context.Context, root *Entity, content string, flags int, sizes map[*Entity]int64, checked *[]*Entity) (attrEntityWFC, error) {
+	stack := []attrWalkFrame{{ent: root, s: content, size: int64(len(content))}}
 	for len(stack) > 0 {
-		s := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		for i := 0; i < len(s); i++ {
-			c := s[i]
-			if c == '<' {
-				return attrWFCLessThan, nil
-			}
-			if c != '&' {
-				continue
-			}
-			semi := strings.IndexByte(s[i+1:], ';')
-			if semi < 0 {
-				break
-			}
-			ref := s[i+1 : i+1+semi]
-			i += 1 + semi // loop's i++ then moves past ';'
-			if len(ref) == 0 || ref[0] == '#' {
-				// Char reference: character data. Any '<' it resolves to is an
-				// allowed escape (&#60;), so it is intentionally not flagged.
-				continue
-			}
-			nested, wfc, err := pctx.lookupGeneralEntity(ctx, ref, true)
-			if err != nil {
-				return attrWFCNone, err
-			}
-			if wfc != attrWFCNone {
-				return wfc, nil
-			}
-			if nested == nil {
-				// Undefined nested entity: the "Entity Declared" WFC. A fatal
-				// verdict stops the walk; a non-fatal one (external subset present)
-				// lets it continue, to be re-checked once declarations complete.
-				if uerr := pctx.handleUndeclaredEntity(ctx, ref); uerr != nil {
-					return attrWFCNone, uerr
-				}
-				continue
-			}
-			if nested.entityType != enum.InternalGeneralEntity {
-				// Predefined or any non-internal type that survived
-				// lookupGeneralEntity's WFC gate: nothing to recurse into.
-				continue
-			}
-			if _, seen := visited[nested]; seen {
-				continue
-			}
-			if nested.attrWFCFlags&flags == flags {
-				// Already validated in this (or a stricter) context; its content is
-				// known clean, so skip the re-walk — and the getEntity callbacks it
-				// would emit — matching libxml2's flag-gated recursion.
-				continue
-			}
-			visited[nested] = struct{}{}
+		f := &stack[len(stack)-1]
+		nested, wfc, err := pctx.nextAttrValueEntity(ctx, f, flags, sizes)
+		if err != nil || wfc != attrWFCNone {
+			return wfc, err
+		}
+		if nested != nil {
+			sizes[nested] = attrWalkInProgress
 			*checked = append(*checked, nested)
-			stack = append(stack, nested.content)
+			stack = append(stack, attrWalkFrame{ent: nested, s: nested.content, size: int64(len(nested.content))})
+			continue
+		}
+
+		// f.s is fully scanned: its size is final.
+		size := f.size
+		if f.ent != nil {
+			sizes[f.ent] = size
+		}
+		stack = stack[:len(stack)-1]
+		if len(stack) > 0 {
+			parent := &stack[len(stack)-1]
+			parent.size = saturatedAdd(parent.size, saturatedAdd(size, entityFixedCost))
 		}
 	}
 	return attrWFCNone, nil
+}
+
+// nextAttrValueEntity scans f.s from f.pos and returns the next nested internal
+// entity walkAttrValueWFC must descend into, leaving f.pos just past its
+// reference. It returns a nil entity once f.s is fully scanned. References that
+// need no descent are accounted in f.size here: an entity already walked in this
+// walk, or one already carrying the target flags (its stored attrExpandedSize).
+func (pctx *parserCtx) nextAttrValueEntity(ctx context.Context, f *attrWalkFrame, flags int, sizes map[*Entity]int64) (*Entity, attrEntityWFC, error) {
+	s := f.s
+	for f.pos < len(s) {
+		c := s[f.pos]
+		if c == '<' {
+			return nil, attrWFCLessThan, nil
+		}
+		if c != '&' {
+			f.pos++
+			continue
+		}
+		semi := strings.IndexByte(s[f.pos+1:], ';')
+		if semi < 0 {
+			f.pos = len(s)
+			break
+		}
+		ref := s[f.pos+1 : f.pos+1+semi]
+		f.pos += 2 + semi // past ';'
+		if len(ref) == 0 || ref[0] == '#' {
+			// Char reference: character data. Any '<' it resolves to is an
+			// allowed escape (&#60;), so it is intentionally not flagged.
+			continue
+		}
+		nested, wfc, err := pctx.lookupGeneralEntity(ctx, ref, true)
+		if err != nil {
+			return nil, attrWFCNone, err
+		}
+		if wfc != attrWFCNone {
+			return nil, wfc, nil
+		}
+		if nested == nil {
+			// Undefined nested entity: the "Entity Declared" WFC. A fatal
+			// verdict stops the walk; a non-fatal one (external subset present)
+			// lets it continue, to be re-checked once declarations complete.
+			if uerr := pctx.handleUndeclaredEntity(ctx, ref); uerr != nil {
+				return nil, attrWFCNone, uerr
+			}
+			continue
+		}
+		if nested.entityType != enum.InternalGeneralEntity {
+			// Predefined or any non-internal type that survived
+			// lookupGeneralEntity's WFC gate: nothing to recurse into.
+			continue
+		}
+		if size, seen := sizes[nested]; seen {
+			if size == attrWalkInProgress {
+				// A reference back into an entity whose frame is still on the
+				// stack is a cycle: WFC No Recursion. libxml2 marks each entity
+				// on the recursion path XML_ENT_EXPANDING and fails with
+				// XML_ERR_ENTITY_LOOP on re-entry (parser.c:3705-3708, flag set
+				// around the recursive call at 3767-3769). Wrapped here so the
+				// post-DTD default re-check reports it with a position too.
+				return nil, attrWFCNone, pctx.error(ctx, errEntityLoop)
+			}
+			f.size = saturatedAdd(f.size, saturatedAdd(size, entityFixedCost))
+			continue
+		}
+		if nested.attrWFCFlags&flags == flags {
+			// Already validated in this (or a stricter) context; its content is
+			// known clean, so skip the re-walk — and the getEntity callbacks it
+			// would emit — matching libxml2's flag-gated recursion.
+			f.size = saturatedAdd(f.size, saturatedAdd(nested.attrExpandedSize, entityFixedCost))
+			continue
+		}
+		return nested, attrWFCNone, nil
+	}
+	return nil, attrWFCNone, nil
 }
 
 // validateAttributeDefaultsWFC re-checks every DTD-declared attribute default
@@ -1345,7 +1439,7 @@ func (pctx *parserCtx) walkAttrValueWFC(ctx context.Context, content string, fla
 func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
 	for _, attrs := range pctx.attsDefault {
 		for _, attr := range attrs {
-			val := attr.Value()
+			val := lexicalAttributeValue(attr)
 			if !strings.ContainsRune(val, '&') {
 				continue
 			}

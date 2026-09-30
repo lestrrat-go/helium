@@ -391,6 +391,22 @@ func TestXPathExpressions(t *testing.T) {
 			wantContains: []string{"bar"},
 		},
 		{
+			// lint does not substitute entities by default, so the attribute
+			// keeps an EntityRef child; its value is still expanded.
+			name:         "attribute holding an entity reference",
+			xml:          `<!DOCTYPE a [<!ENTITY e "x">]><a foo="1&e;2"/>`,
+			expr:         "/a/@foo",
+			wantCode:     0,
+			wantContains: []string{`foo="1x2"`},
+		},
+		{
+			name:         "string value of an attribute holding an entity reference",
+			xml:          `<!DOCTYPE a [<!ENTITY e "x">]><a foo="1&e;2"/>`,
+			expr:         "string(/a/@foo)",
+			wantCode:     0,
+			wantContains: []string{"1x2"},
+		},
+		{
 			name:     "invalid expression",
 			xml:      `<a/>`,
 			expr:     "///invalid[[[",
@@ -640,6 +656,20 @@ func TestXPathWithNoOut(t *testing.T) {
 	require.Equal(t, 0, code)
 	require.Contains(t, out, "42")
 	require.NotContains(t, out, `<?xml`)
+}
+
+// A defaulted attribute keeps its entity references, as `xmllint --dtdattr`
+// prints them, and its string value is expanded.
+func TestDTDAttrDefaultWithEntityReference(t *testing.T) {
+	const xml = `<!DOCTYPE r [<!ENTITY e "x"><!ATTLIST r d CDATA "1&e;2" p CDATA "p&amp;q">]><r/>`
+
+	out, _, code := executeLintStdin(t, xml, "--dtdattr")
+	require.Equal(t, 0, code)
+	require.Contains(t, out, `<r d="1&e;2" p="p&amp;q"/>`)
+
+	out, _, code = executeLintStdin(t, xml, "--dtdattr", "--xpath", "concat(/r/@d, '|', /r/@p)")
+	require.Equal(t, 0, code)
+	require.Contains(t, out, "1x2|p&q")
 }
 
 func TestSchemaValidQuiet(t *testing.T) {

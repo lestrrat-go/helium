@@ -422,3 +422,28 @@ func TestSignVerifyWithFragmentReference(t *testing.T) {
 	_, err = verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 }
+
+// The default parser keeps entity references in attribute values as EntityRef
+// children. The verifier reads such an attribute expanded, so a SignatureMethod
+// Algorithm spelled with an entity reference names the same algorithm.
+func TestVerifyAlgorithmAttributeWithEntityReference(t *testing.T) {
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	doc := mustParseXML(t, samlAssertion)
+	signer := xmldsig1.NewSigner().
+		SignatureAlgorithm(xmldsig1.AlgHMACSHA256).
+		Reference(xmldsig1.NewEnvelopedReference())
+	require.NoError(t, signer.SignEnveloped(t.Context(), doc, doc.DocumentElement(), secret))
+
+	signed, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	alg := xmldsig1.AlgHMACSHA256
+	base, fragment, ok := strings.Cut(alg, "#")
+	require.True(t, ok)
+	require.Contains(t, signed, `Algorithm="`+alg+`"`)
+	signed = strings.Replace(signed, `Algorithm="`+alg+`"`, `Algorithm="`+base+`#&frag;"`, 1)
+	signed = strings.Replace(signed, "<saml:Assertion",
+		`<!DOCTYPE saml:Assertion [<!ENTITY frag "`+fragment+`">]>`+"\n<saml:Assertion", 1)
+
+	_, err = xmldsig1.NewVerifier(xmldsig1.StaticKey(secret)).Verify(t.Context(), mustParseXML(t, signed))
+	require.NoError(t, err)
+}

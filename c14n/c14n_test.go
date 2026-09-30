@@ -846,6 +846,21 @@ func TestC14N11XMLBaseLexicalJoin(t *testing.T) {
 	require.NotContains(t, string(got), "../../c/", "xml:base must not be re-relativized against a retrieval base URI, got: %s", string(got))
 }
 
+// TestC14N11XMLBaseEntityReference covers an omitted ancestor whose xml:base
+// holds an entity reference (kept as an EntityRef child by the default parser).
+// The fixup joins the expanded value, as libxml2 xmlC14NFixupBaseAttr does.
+func TestC14N11XMLBaseEntityReference(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><!DOCTYPE root [<!ENTITY d "c">]><root xml:base="/&d;/"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Contains(t, string(got), `xml:base="/c/"`, "got: %s", string(got))
+}
+
 // TestC14N11ExcludedOwnXMLBase covers a rendered element whose own xml:base is
 // excluded from the node set, with no omitted ancestor carrying xml:base. The
 // default (libxml2) mode still emits the element's own value; strict W3C mode
@@ -1585,5 +1600,28 @@ func TestRelativeNamespaceURIRejectedOnFirstElement(t *testing.T) {
 		_, err = c14n.NewCanonicalizer(combo.mode).CanonicalizeTo(doc)
 		require.Error(t, err, "combo %s", combo.name)
 		require.Equal(t, `c14n: relative namespace URI "rel/x" on element first`, err.Error(), "combo %s", combo.name)
+	}
+}
+
+// An attribute value parsed with SubstituteEntities(false) keeps its entity
+// references as EntityRef children. Canonical XML replaces each reference with
+// its fully expanded value, including a reference inside an entity's
+// replacement text, and escapes the result, so both parse modes canonicalize
+// the same. The expected output matches `xmllint --c14n`.
+func TestCanonicalAttributeExpandsNestedEntityReferences(t *testing.T) {
+	t.Parallel()
+	const src = `<!DOCTYPE r [<!ENTITY e "x"><!ENTITY f "y"><!ENTITY g "a&f;b">` +
+		`<!ENTITY h "&#38;#60;"><!ENTITY p "p&amp;q">]>` +
+		`<r n="1&g;2" h="1&h;2" p="&p;" e="&e;"/>`
+	const want = `<r e="x" h="1&lt;2" n="1ayb2" p="p&amp;q"></r>`
+
+	for _, mode := range []c14n.Mode{c14n.C14N10, c14n.ExclusiveC14N10, c14n.C14N11} {
+		for _, substitute := range []bool{false, true} {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			got, err := c14n.NewCanonicalizer(mode).CanonicalizeTo(doc)
+			require.NoError(t, err)
+			require.Equal(t, want, string(got), "mode %v, SubstituteEntities(%t)", mode, substitute)
+		}
 	}
 }

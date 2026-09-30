@@ -28,7 +28,7 @@ func (c *compiler) walkComponentIDs(ctx context.Context, elem *helium.Element, s
 	// element. Foreign-namespace elements (e.g. inside xs:appinfo) are not
 	// schema components, so their `id` attributes are not xs:ID and are ignored.
 	if elem.URI() == lexicon.NamespaceXSD {
-		if a, ok := elem.FindAttribute(helium.NSPredicate{Local: "id", NamespaceURI: ""}); ok {
+		if a := elem.GetAttributeNodeNS("id", ""); a != nil {
 			id := normalizeWhiteSpace(a.Value(), "collapse")
 			// Attribute the diagnostic to the document that actually declares this
 			// component: for an xs:include/xs:redefine/xs:override the walked root is

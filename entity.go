@@ -68,6 +68,13 @@ type Entity struct {
 	attrWFCFlags int   // attribute-value WFC memoization (entWFCValidated/entWFCChecked)
 	expanding    bool  // guard against recursive expansion (mirrors XML_ENT_EXPANDING)
 	expandedSize int64 // total expanded byte count after recursive resolution
+	// attrExpandedSize is the amplification charge for one reference to this
+	// entity from an attribute value parsed without substitution: the length of
+	// its replacement text plus, per nested general-entity reference, the nested
+	// entity's attrExpandedSize and entityFixedCost (libxml2 expandedSize as
+	// computed by xmlCheckEntityInAttValue). checkEntityInAttValue sets it
+	// together with entWFCChecked; it stays zero until a body-context walk.
+	attrExpandedSize int64
 	/* this is also used to count entities
 	 * references done from that entity
 	 * and if it contains '<' */

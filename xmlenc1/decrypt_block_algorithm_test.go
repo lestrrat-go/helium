@@ -256,3 +256,37 @@ func TestDecryptRejectsKeySizeContradiction(t *testing.T) {
 	_, err = xmlenc1.NewDecryptor().PrivateKey(key).DecryptBytes(t.Context(), edElem)
 	require.ErrorIs(t, err, xmlenc1.ErrMalformedEncrypted)
 }
+
+// The default parser keeps entity references in attribute values as EntityRef
+// children. The decryptor reads such an attribute expanded, so an
+// EncryptionMethod Algorithm spelled with an entity reference names the same
+// algorithm.
+func TestDecryptAlgorithmAttributeWithEntityReference(t *testing.T) {
+	const plaintext = `<x>secret</x>`
+	sessionKey := randKey(t, 32)
+	doc := mustParseXML(t, `<root>`+plaintext+`</root>`)
+	target, ok := helium.AsNode[*helium.Element](doc.DocumentElement().FirstChild())
+	require.True(t, ok)
+	encrypted, err := xmlenc1.NewEncryptor().
+		BlockAlgorithm(xmlenc1.AES256GCM11).
+		SessionKey(sessionKey).
+		EncryptElement(t.Context(), target)
+	require.NoError(t, err)
+
+	wire, err := helium.WriteString(encrypted)
+	require.NoError(t, err)
+	base, fragment, found := strings.Cut(xmlenc1.AES256GCM11, "#")
+	require.True(t, found)
+	require.Contains(t, wire, `Algorithm="`+xmlenc1.AES256GCM11+`"`)
+	wire = strings.Replace(wire, `Algorithm="`+xmlenc1.AES256GCM11+`"`, `Algorithm="`+base+`#&frag;"`, 1)
+	wire = `<!DOCTYPE EncryptedData [<!ENTITY frag "` + fragment + `">]>` + wire
+
+	nodes, err := xmlenc1.NewDecryptor().
+		SessionKey(sessionKey).
+		Decrypt(t.Context(), mustParseXML(t, wire).DocumentElement())
+	require.NoError(t, err)
+	require.Len(t, nodes, 1)
+	s, err := helium.WriteString(nodes[0])
+	require.NoError(t, err)
+	require.Equal(t, plaintext, s)
+}

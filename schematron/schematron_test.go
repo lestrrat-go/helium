@@ -1282,3 +1282,29 @@ func TestCompilerParserInjection(t *testing.T) {
 		require.NotNil(t, schema)
 	})
 }
+
+// Documents from the default parser keep entity references in attribute values
+// as EntityRef children. Rule tests and value-of see the expanded value.
+func TestAttributeValueWithEntityReference(t *testing.T) {
+	t.Parallel()
+	for _, binding := range []string{"xslt", "xslt3"} {
+		t.Run(binding, func(t *testing.T) {
+			t.Parallel()
+			schema, errs := compileTestSchema(t, `<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="`+binding+`">
+				<pattern><rule context="item">
+					<assert test="@a = '1x2'">a is <value-of select="@a"/></assert>
+				</rule></pattern>
+			</schema>`)
+			require.Equal(t, "", errs)
+
+			doc, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<!DOCTYPE root [<!ENTITY e "x"><!ENTITY f "y">]><root><item a="1&e;2"/><item a="1&f;2"/></root>`))
+			require.NoError(t, err)
+
+			collected, err := validateAndCollect(t, schema, doc)
+			require.ErrorIs(t, err, schematron.ErrValidationFailed)
+			require.Len(t, collected, 1)
+			require.Contains(t, collected[0].Message, "a is 1y2")
+		})
+	}
+}
