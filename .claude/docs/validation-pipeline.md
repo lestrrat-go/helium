@@ -2257,7 +2257,7 @@ select="..."/>` (XPath value).
   content (`parseMessageElement`) are ignored, not interpolated.
 
 Structural attributes (`context`, `test`, `select`, `name`, `id`, `prefix`, `uri`, `value`, `path`) are read
-unqualified-only via `getStructuralAttr` (`NSPredicate{..., NamespaceURI: ""}`); a prefixed `x:test` is not read as
+unqualified-only via `getStructuralAttr` (`GetAttributeNS(name, "")`); a prefixed `x:test` is not read as
 Schematron.
 
 **Fatal compile errors:** `compileSchema` wraps the configured handler in a `fatalTrackingHandler`. If any
