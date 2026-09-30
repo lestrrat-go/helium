@@ -11,8 +11,9 @@ suite:
 
 | Outcome | Count |
 |---------|------:|
-| Pass | 22,328 |
+| Pass | 22,324 |
 | Skip | 141 |
+| XFail | 4 |
 | Fail | 0 |
 | Total | 22,469 |
 
@@ -24,10 +25,12 @@ run-enabled case degrades to a no-op pass. The committed `false_pass_risk` count
 is **0**: no case slips through on an unchecked assertion, so a green run reflects
 real conformance, with no silent no-op passes behind it.
 
-The 141 skips split into **136 out-of-scope** (XQuery `load-xquery-module`,
-static typing, XSD 1.0, XML 1.1, Unicode 7.0, remote HTTP access, and
-directory-as-collection URIs) and **5 not-wired** harness gaps (`fn:transform`
-fixture-base-URI/resource cases). Zero cases fail.
+The 141 skips split into **137 out-of-scope** (XQuery `load-xquery-module`,
+static typing, XSD 1.0, Unicode 7.0, remote HTTP access, and
+directory-as-collection URIs) and **4** `fn:transform` cases: three fixture
+base-URI/resource mapping gaps in the harness, and one where helium applies the
+stylesheet to an empty default document instead of raising `FOXT0002`. The 4
+XFail cases are the known gaps listed below. Zero cases fail.
 
 ### Known gaps
 

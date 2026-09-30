@@ -31,10 +31,10 @@ and xs:key/unique/keyref identity-constraint validation are unaffected. It is fo
 element/subtree as a fragment and enforce document-scope ID/IDREF integrity themselves (xslt3). In 1.0 it suppresses the
 ID/IDREF walk (the ENTITY walk never runs there).
 
-XSD 1.1 is fully implemented behind the `Version11` opt-in. The committed W3C conformance snapshot reports **1,049 pass
-/ 0 skip / 0 fail** (`xsd/summary-xsd11.md`). The complete feature-by-feature implementation state — every 1.1
-construct, its file/function, spec clause, version gating, W3C test evidence, and remaining gaps — lives in
-`.claude/docs/xsd11.md`. **Read that doc before any work in `xsd/`.** Feature areas covered there:
+XSD 1.1 is fully implemented behind the `Version11` opt-in. The committed W3C conformance snapshot reports **1,048 pass
+/ 0 skip / 1 xfail / 0 fail** (`xsd/summary-xsd11.md`; the xfail is the disputed
+`saxonMeta/Simple.testSet/simple006`). The complete feature-by-feature implementation state — every 1.1 construct, its
+file/function, spec clause, version gating, W3C test evidence, and remaining gaps — lives in `.claude/docs/xsd11.md`. **Read that doc before any work in `xsd/`.** Feature areas covered there:
 
 - Type system: xs:assert (complex + simpleContent), xs:assertion facet, conditional type assignment (xs:alternative),
   simpleContent content-type narrowing, attribute inheritance, 1.1 built-in datatypes, simple-type 1.1 edges.

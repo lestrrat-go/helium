@@ -270,7 +270,7 @@ expected-failure (documented known gap) breakdowns where applicable.
 |-------|---------|----------|
 | XML 1.0 (parser + validity) | core parser | [summary](summary-xml.md) |
 | XPath 3.1 (QT3) | [`xpath3`](xpath3/README.md) | [summary](xpath3/summary-qt3.md) |
-| XSLT 3.0 | [`xslt3`](xslt3/README.md) | [summary](xslt3/summary-xslt30.md), [conformance declaration](xslt3/CONFORMANCE.md) |
+| XSLT 3.0 | [`xslt3`](xslt3/README.md) | [summary](xslt3/summary-xslt30.md), [slow-run summary](xslt3/summary-xslt30-slow.md), [conformance declaration](xslt3/CONFORMANCE.md) |
 | XSD 1.0 (default) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd10.md) |
 | XSD 1.1 (opt-in) | [`xsd`](xsd/README.md) | [summary](xsd/summary-xsd11.md) |
 | C14N 1.1 + XMLDSig interop (xmldsig2ed-tests) | [`xmldsig1`](xmldsig1/README.md) | [summary](xmldsig1/summary-xmldsig2ed.md) |
