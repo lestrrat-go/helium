@@ -292,7 +292,10 @@ computes an element/document node's string value and, in a schema-aware run (`Co
 child of an element whose annotation resolves to ELEMENT-ONLY complex content is not part of the string value
 (XDM 3.1 PSVI construction), so `fn:string` / `fn:string-length` / `fn:normalize-space` with no argument
 (which use the string value) see only the child element string values. Used by `contextStringValue` and
-`fn:string`'s node argument. Without a provider/annotations, or for a non-element-only element, it is
+`fn:string`'s node argument. Its walk follows the same node rules as `ixpath.StringValue`: child lists
+through `helium.Children` (the owned-child boundary), an entity reference adds the text it expands to (its
+`Content()`, skipped as insignificant when it is whitespace-only in element-only content), and a document's
+DTD, comments and PIs add nothing. Without a provider/annotations, or for a non-element-only element, it is
 byte-identical to `ixpath.StringValue` — non-schema-aware runs and mixed/simple content are unchanged.
 
 ## SequenceType (used in `instance of`, `cast as`, etc.)

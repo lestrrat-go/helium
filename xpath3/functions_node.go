@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -253,24 +254,37 @@ func (ec *evalContext) nodeStringValue(n helium.Node) string {
 }
 
 // appendSchemaStringValue walks descendants in document order (iteratively, so a
-// deep tree does not truncate) concatenating text/CDATA content. A whitespace-only
-// text-node child of an element-only element is skipped as insignificant.
+// deep tree does not truncate) concatenating text/CDATA content, with the same
+// node rules as ixpath.StringValue: child lists are enumerated through
+// helium.Children (the owned-child boundary), an entity reference adds the text
+// it expands to (its Content), and a document's DTD, comments and PIs add
+// nothing. A whitespace-only text-node or entity-reference child of an
+// element-only element is skipped as insignificant.
 func (ec *evalContext) appendSchemaStringValue(b *strings.Builder, root helium.Node, provider ContentTypeKindProvider) {
 	stack := []helium.Node{root}
+	var kids []helium.Node
 	for len(stack) > 0 {
 		cur := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
 		switch cur.Type() {
-		case helium.TextNode, helium.CDATASectionNode:
+		case helium.TextNode, helium.CDATASectionNode, helium.EntityRefNode:
 			b.Write(cur.Content())
+			continue
+		case helium.ElementNode, helium.DocumentNode:
+		default:
+			continue
 		}
 
 		elementOnly := cur.Type() == helium.ElementNode && ec.isElementOnlyContent(cur, provider)
-		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
+		kids = kids[:0]
+		for child := range helium.Children(cur) {
 			if elementOnly && isInsignificantWhitespaceText(child) {
 				continue
 			}
+			kids = append(kids, child)
+		}
+		for _, child := range slices.Backward(kids) {
 			stack = append(stack, child)
 		}
 	}
@@ -287,14 +301,16 @@ func (ec *evalContext) isElementOnlyContent(n helium.Node, provider ContentTypeK
 	return ok && kind == ContentTypeElementOnly
 }
 
-// isInsignificantWhitespaceText reports whether n is a text or CDATA-section node
-// whose content is entirely XSD whitespace (space, tab, CR, LF). XSD treats
-// whitespace-only text and CDATA identically for element-only content, and
-// ixpath.StringValue includes CDATA as a text descendant, so both are skipped
-// when a child of an element-only element (not part of its string value).
+// isInsignificantWhitespaceText reports whether n is a text or CDATA-section node,
+// or an entity reference expanding to text, whose content is entirely XSD
+// whitespace (space, tab, CR, LF). XSD treats whitespace-only text and CDATA
+// identically for element-only content, ixpath.StringValue includes CDATA as a
+// text descendant, and a reference counts as the text a substituted parse
+// stores in its place, so each is skipped when a child of an element-only
+// element (not part of its string value).
 func isInsignificantWhitespaceText(n helium.Node) bool {
 	switch n.Type() {
-	case helium.TextNode, helium.CDATASectionNode:
+	case helium.TextNode, helium.CDATASectionNode, helium.EntityRefNode:
 		return xmlchar.IsAllSpace(n.Content())
 	default:
 		return false
