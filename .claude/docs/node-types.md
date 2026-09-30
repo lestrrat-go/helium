@@ -269,8 +269,10 @@ PI adds nothing at any depth, whether it sits in the tree (`<t>1<!--c-->2</t>` �
 value (`x<!--k-->y` → `"xy"`, also for `EntityRef.Content()`). Content of a node holding references therefore
 equals the Content of the tree a `SubstituteEntities(true)` parse builds (`<g>1&g;2</g>` with `g`="a&f;b",
 `f`="y" → `"1ayb2"`), and both parse modes read the same text. `Content()` on a Comment or PI node itself
-returns its text, as libxml2's does. XPath string-value (`internal/xpath.StringValue`) walks Text/CDATA
-descendants itself and does not call `Content()`.
+returns its text, as libxml2's does. XPath string-value (`internal/xpath.StringValue`) of an element is its
+`Content()`. A document's is the `Content()` of its element, text, CDATA and entity-reference children only,
+because the DTD is not part of the XPath data model: a document's own `Content()` also descends into the DTD,
+where each `Entity` declaration adds its stored replacement text.
 
 The walk follows only the owner's own children (`nextOwnedSibling`): a foreign child — an entity reference's
 shared Entity child, owned by the DTD, whose sibling pointers belong to the DTD declaration list — ends the list

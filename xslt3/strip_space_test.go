@@ -894,6 +894,15 @@ func TestStripSpace(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, ref.FirstChild())
 
+		cp, err := xslt3.CopyAndStripForTest(src)
+		require.NoError(t, err)
+		cpRef := cp.DocumentElement().FirstChild()
+		require.Equal(t, helium.EntityRefNode, cpRef.Type())
+		require.Nil(t, cpRef.FirstChild())
+
+		// The childless reference in the copy expands through the document's
+		// declaration of its name, as the source reference does, so the
+		// transformed string-value is the source's.
 		const stylesheet = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
   <xsl:strip-space elements="*"/>
   <xsl:output method="text"/>
@@ -903,7 +912,8 @@ func TestStripSpace(t *testing.T) {
 		require.NoError(t, err)
 		out, err := xslt3.TransformString(t.Context(), src, ss)
 		require.NoError(t, err)
-		require.Empty(t, out)
+		require.Equal(t, "PAYLOAD", out)
+		require.Equal(t, "PAYLOAD", string(src.DocumentElement().Content()))
 	})
 
 	t.Run("copy preserves entity declaration identity", func(t *testing.T) {

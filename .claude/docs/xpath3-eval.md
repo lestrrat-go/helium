@@ -77,7 +77,10 @@ cancellation (each operand is individually capped, but the concatenation must be
 The child axis and the descendant walks enumerate child lists through `helium.Children` (the owned-child
 boundary), and keep only XDM kinds (`IsXDMChild`). The XDM has no entity references, so from an entity-reference
 context node (entity substitution off) the child and descendant axes are empty: its only child is the DTD-owned
-`Entity` node, and the walk does not follow that node's sibling links into the DTD.
+`Entity` node, and the walk does not follow that node's sibling links into the DTD. String-value
+(`ixpath.StringValue`, an element's `Content()`) counts an entity reference as the text it expands to, so an
+element or document holding references has the string-value of the tree a substituted parse builds, and a
+document's DTD adds nothing.
 
 **Cancellation:** the fused hot child/attribute loops check `ctx.Err()` once per enumerated node (the
 attribute path also inside its `ForEachAttribute` callback) so a cancelled context aborts mid-enumeration
