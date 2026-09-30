@@ -26,11 +26,9 @@ The columns cover test corpora with different breadth; see each owning package R
 | `v0.6.0` | 2026-07-20 | 99.5% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | 54.0% ⚠3 | 27.3% | 0.0% ⚠4 | 18.8% ⚠10 |
 | `v0.7.0` | 2026-07-24 | 99.5% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | 94.6% ⚠2 | **100%** | 0.0% ⚠4 | **100%** |
 | `v0.8.0` | 2026-08-25 | 99.5% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | **100%** | **100%** | **100%** | **100%** |
-| `v0.9.0` ⚑ | 2026-09-30 | 99.6% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | **100%** | **100%** | **100%** | **100%** |
+| `v0.9.0` | 2026-09-30 | 99.6% ⚠8 | 99.9% ⚠16 | 99.90% ⚠1 | **100%** | 99.98% ⚠4 | **100%** | **100%** | **100%** | **100%** |
 
 ✗ hang/OOM crasher · ⊘ in-scope case never run · ⚠ documented expected failure — **all three count as not-passing**.
-
-⚑ measured at an **untagged release candidate** (before its tag existed, e.g. by the release gate); a re-measure at the real tag supersedes it.
 
 ## How a score is computed
 
