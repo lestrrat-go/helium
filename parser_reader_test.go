@@ -132,12 +132,15 @@ type blockUntilCancelledBlankReader struct {
 // Read with err. It models the push/streaming stream whose blocking Read
 // returns context.Canceled when cancellation unblocks a pending wait: the
 // ByteCursor records that as a sticky Err() while PeekAt reports 0, the same 0
-// a genuine non-blank byte / clean EOF yields. ctx is never cancelled here, so
-// the ONLY signal of the failure is the cursor's sticky read error.
+// a genuine non-blank byte / clean EOF yields. Unless cancelOnErr is set, ctx
+// is never cancelled, so the ONLY signal of the failure is the cursor's sticky
+// read error. A non-nil cancelOnErr is called by each failing Read, so the
+// context is cancelled right after the read has failed.
 type headThenReadErrReader struct {
-	head []byte
-	pos  int
-	err  error
+	head        []byte
+	pos         int
+	err         error
+	cancelOnErr context.CancelFunc
 }
 
 // largeDoc builds a document with many sibling elements so the content loop
@@ -301,6 +304,35 @@ func TestParseReader(t *testing.T) {
 				doc, err := helium.NewParser().ParseReader(context.Background(), r)
 				require.ErrorIs(t, err, context.Canceled,
 					"a read failure in the XML declaration (%s) must surface as context.Canceled, not a synthesized syntax error", name)
+				require.Nil(t, doc, "a failed parse must not return a partial document")
+			})
+		}
+	})
+
+	// The blank scanner reports the read failure that ended a blank run as
+	// that failure. Here the context is cancelled by the same failing Read, so
+	// by the time the parse builds its error both a read error and a
+	// cancellation are pending. The scanner has already recorded the read error
+	// and the parse reports it. Without the scanner's report the parse would
+	// fall back to the pending cancellation and report context.Canceled, hiding
+	// the read failure that stopped the parse.
+	t.Run("a read error in a declaration blank run wins over a later cancellation", func(t *testing.T) {
+		errRead := errors.New("read failed after the blank")
+		cases := map[string]string{
+			"blank after <?xml":         "<?xml ",
+			"blank after version='1.0'": "<?xml version='1.0' ",
+		}
+
+		for name, head := range cases {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				r := &headThenReadErrReader{head: []byte(head), err: errRead, cancelOnErr: cancel}
+				doc, err := helium.NewParser().ParseReader(ctx, r)
+				require.ErrorIs(t, err, errRead, "the read failure in the blank run (%s) must be reported", name)
+				require.NotErrorIs(t, err, context.Canceled,
+					"a cancellation that followed the read failure must not replace it (%s)", name)
 				require.Nil(t, doc, "a failed parse must not return a partial document")
 			})
 		}
