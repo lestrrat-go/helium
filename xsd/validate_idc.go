@@ -243,17 +243,24 @@ func (vc *validationContext) subtreeKeyScope(ctx context.Context, host *helium.E
 }
 
 // indexSubtreeChildren indexes every element child of parent, in document
-// order, with indexSubtreeKeys.
+// order and with the elements of an entity reference child's expansion
+// spliced in, with indexSubtreeKeys.
 func (vc *validationContext) indexSubtreeChildren(ctx context.Context, idx *subtreeKeyIndex, parent *helium.Element) {
+	var pieces []contentPiece
 	for child := range helium.Children(parent) {
-		if child.Type() != helium.ElementNode {
-			continue
+		switch child.Type() {
+		case helium.ElementNode:
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			vc.indexSubtreeKeys(ctx, idx, ce)
+		case helium.EntityRefNode:
+			pieces = appendExpansion(pieces[:0], child, true, nil)
+			for _, p := range pieces {
+				vc.indexSubtreeKeys(ctx, idx, p.elem)
+			}
 		}
-		ce, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
-		vc.indexSubtreeKeys(ctx, idx, ce)
 	}
 }
 

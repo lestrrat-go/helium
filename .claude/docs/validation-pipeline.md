@@ -113,9 +113,11 @@ materialization block is gated on `vc.version == Version11`, so XSD 1.0 inserts 
 exactly as authored with no namespace-declaration rewrite — byte-identical serialization (no golden exercises
 this case, so the gate is the only guard). **XDM context isolation** (`isolatedAssertTree`): the test is
 evaluated against a deep copy (`helium.CopyNode`) of the element rooted in NO document and with comment/PI
-nodes removed (`stripCommentsAndPIs`) and each entity reference replaced by a Text node holding the live
-reference's character data, joined with adjacent text (`expandAssertEntityRefs`, run from
-`mapAssertAnnotations`; the XDM has no entity reference nodes and the copy has no DTD to resolve them), so an absolute path `/`/`//` raises XPDY0050 (root is not a document
+nodes removed (`stripCommentsAndPIs`) and each entity reference replaced by the live reference's expansion:
+its character data as Text nodes joined with adjacent text, and a copy of each entity-borne element whose
+annotations are mapped from the live element (`expandAssertEntityRefs`, run from `mapAssertAnnotations`;
+the XDM has no entity reference nodes and the copy has no DTD to resolve them), so an absolute path
+`/`/`//` raises XPDY0050 (root is not a document
 node) — the assertion cannot navigate outside the element subtree — while the element's in-scope namespaces —
 INCLUDING an inherited default namespace (prefix "", when not already on the copy), so
 `namespace-uri-for-prefix('', .)` and unprefixed resolution survive isolation — are re-declared on the copy
@@ -1251,16 +1253,38 @@ to `validateRootElement`, whose content validation recurses through the whole su
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
-Element text is read as it would be after entity substitution, so a document parsed without
-`SubstituteEntities` validates like one parsed with it. Simple content, `$value`, ID/ENTITY content, and
-IDC field values use `helium.CharacterData` (Text/CDATA plus each entity reference's expansion, never comment
-or PI text). The per-child character checks (`rejectNonWhitespaceText` for element-only content,
-`validateEmptyContent`, the nilled-element check, and the schema-side xs:annotation/xs:notation content
-checks) treat an EntityRef child as the `helium.CharacterData` of its expansion; one that expands to nothing
-adds no character content. `mixedInitialValue` walks entity expansions itself (budgeted, memoized, and also
-reporting entity-borne elements for cvc-elt.5.2.2.1). Attribute values come from `Attribute.Value()`, which
-expands references too. Elements inside an entity's replacement are not seen by the content-model match,
-the simple-content element check, or the per-child character checks.
+The instance is validated as the tree entity substitution would build, so a document parsed without
+`SubstituteEntities` gets the verdict and diagnostics of one parsed with it (`entity_expansion.go`). An
+EntityRef child stands for its expansion, the referenced entity's own children (the owned boundary
+`helium.Children` uses), spliced into the host at the reference with nested references expanded in place
+(`appendExpansion`; a cyclic entity graph built through the DOM ends at the back-edge).
+
+- Element text: simple content, `$value`, ID/ENTITY content, and IDC field values use
+  `helium.CharacterData` (Text/CDATA plus each reference's expansion, never comment or PI text).
+  `rejectNonWhitespaceText` and the schema-side xs:annotation/xs:notation content checks treat an EntityRef
+  child as the `helium.CharacterData` of its expansion; one that expands to nothing adds no character
+  content. Attribute values come from `Attribute.Value()`, which expands references too.
+- Element children: `collectChildElements` (the content-model match for sequence, choice, all, mixed, and
+  open content) splices each reference's elements in at the reference, in document order. The same
+  expansion feeds the simple-content "no element children" check, `validateEmptyContent` and the
+  nilled-element check (`validateEmptyExpansion`/`validateNilledExpansion` walk the expansion's elements
+  and character data in document order, so the first offending item is the one the substituted tree has
+  first), `hasChildElement`, `annotateAnyTypeChildren`, `annotateSkipChildren`, and the keyref subtree index
+  (`indexSubtreeChildren`). `mixedInitialValue` walks entity expansions itself (budgeted, memoized, and also
+  reporting entity-borne elements for cvc-elt.5.2.2.1).
+- Document-wide passes: pass 3 (ID/IDREF, `validateIDIDREF`), the ENTITY pass, and `collectIDNodes` walk
+  `walkOccurrences`: every element occurrence in document order with expansions spliced in and the DTD
+  never entered. An element of an entity referenced twice is two occurrences. Pass 2 walks the
+  `idcDocument` copy described there.
+- Lines: `TreeBuilder.Reference` records the reference's line on the EntityRef node, the line a
+  substituting parse gives every node of the expansion. While the validator works inside an expansion,
+  `validationContext.entityLine` holds the outermost reference's line and `reportValidityError` /
+  `reportValidityErrorAttr` report it in place of the entity-relative line of the node named;
+  `childElem.refLine` carries it for diagnostics about an entity-borne child issued from its host. A
+  reference built through the DOM API has no line, so its host's line stands in.
+- Shared nodes: an entity referenced more than once shares one set of element nodes. Every reference is
+  validated as its own occurrence, but the per-node PSVI outputs (`TypeAnnotations`, `NilledElements`,
+  `IDNodes`, keyed by node) hold one entry per node, written by the last occurrence validated.
 
 Fixed value constraints (element content and attribute values) are compared in
 the declared simple type's value space via `fixedValueMatches`. Both the fixed
@@ -1546,8 +1570,15 @@ is reported as a validity error (`Failed to evaluate identity-constraint '…'`)
 field-XPath diagnostic uses `lexer.DiagnosticExcerpt`, including compile/evaluate failures, non-simple nodes,
 and multi-member node sets, so a valid long expression cannot make validation output grow with its source.
 
-**Pass 2 — Identity Constraints** (`validateIDConstraints` via a full-tree `helium.Walk()`). This walk always runs,
-so it is also the pass that reports a tree cycle: `ErrWalkCycle` marks the document invalid.
+**Pass 2 — Identity Constraints** (`validateIDConstraints` via `walkOccurrences`, which visits every element
+occurrence and never the DTD). This walk always runs, so it is also the pass that reports a tree cycle:
+`ErrWalkCycle` marks the document invalid. Selector and field paths follow the child axis, which does not
+enter an entity reference, so when the instance's DTD declares an entity holding elements the pass walks
+`idcDocument`, a copy of the element trees built as entity substitution would build them: each reference
+replaced by a copy of its expansion, each copied expansion node on its outermost reference's line, and the
+PSVI records the pass reads (`actualElemDecl`, `actualElemType`, `assessedElemType`, `assessedAttrs`,
+`skipContentNodes`) added under each copy's key (`mirrorPSVI`). An element of an entity referenced twice is
+then two elements. Any other document is walked in place.
 - **Host declaration resolution** (`idcHostDecl`): the declaration whose IDCs apply
   to an element instance is the non-ref declaration recorded during pass-1 if one is
   present — used even when it carries ZERO IDCs, because a local element that merely
@@ -1766,14 +1797,16 @@ ref-form detection); and `refer` is rejected for EVERY kind (key/unique/keyref),
 not only on `xs:keyref`.
 
 **Pass 3 — ID/IDREF/IDREFS** (`validateIDIDREF`, `validate_id.go`, both XSD versions):
-a separate `helium.Walk()` enforcing cvc-id document-wide. Every `xs:ID` value must
+a separate `walkOccurrences` walk enforcing cvc-id document-wide. Every `xs:ID` value must
 be unique, **except** that the same value may identify a single element more than
 once. An ID's owning element is the element BEARING it — an attribute ID on its
 owning element, an element-content ID on its **parent** (`idOwner`) — so two ID
 attributes of one element, or two `<id>` children of one parent, sharing a value
-is valid, while the same value reaching two different owners is a duplicate. An
+is valid, while the same value reaching two different owners is a duplicate. The
+owner is an element OCCURRENCE (`elementOccurrence.index`), and the parent of an
+element inside an entity expansion is the reference's host. An
 element-content ID on the DOCUMENT ROOT has no parent element, so it denotes NO
-element: `idOwner` returns nil and `recordID` skips it (the value never enters
+element: `idOwner` returns -1 and `recordID` skips it (the value never enters
 the table), so any `xs:IDREF` to it dangles — W3C idIDREF s3_3_4ii26/ii27, "ID on
 root does not denote any element". Each
 `xs:IDREF`/`xs:IDREFS` token must resolve to some collected ID. Values are

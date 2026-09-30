@@ -27,63 +27,65 @@ import (
 // byte-identical (helium does not enforce this datatype constraint in 1.0, and
 // the libxml2-compat goldens depend on that).
 func (vc *validationContext) validateEntities(ctx context.Context, doc *helium.Document) bool {
-	valid := true
-
-	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() != helium.ElementNode {
-			return nil
-		}
-		elem, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			return nil
-		}
-		td := vc.elementTypeForID(elem)
-
-		// Element simple content typed as ENTITY/ENTITIES (including via
-		// list/union). The default/fixed substitution, nilled-element, and
-		// child-element guards are identical to validateIDIDREF: an empty element
-		// contributes its default/fixed value, a confirmed nilled element
-		// contributes nothing, and an element with child elements is left to pass 1's
-		// structural rejection (see validateIDIDREF for the full rationale).
-		if td != nil && td.ContentType == ContentTypeSimple && entityFamilyType(td) && !hasChildElement(elem) {
-			hostDecl := vc.idcHostDecl(elem)
-			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
-				raw := helium.CharacterData(elem)
-				if raw == "" && hostDecl != nil {
-					if hostDecl.Fixed != nil {
-						raw = *hostDecl.Fixed
-					} else if hostDecl.Default != nil {
-						raw = *hostDecl.Default
-					}
-				}
-				if !vc.checkEntityValue(ctx, doc, td, raw, elem, elem, "") {
-					valid = false
-				}
-			}
-		}
-
-		// Attributes typed as ENTITY/ENTITIES (including via list/union). Default
-		// attributes are already inserted into the live tree before this pass.
-		for _, a := range elem.Attributes() {
-			if vc.isSpecialAttr(a) {
-				continue
-			}
-			atd := vc.attrTypeForID(a)
-			if atd == nil || !entityFamilyType(atd) {
-				continue
-			}
-			if !vc.checkEntityValue(ctx, doc, atd, a.Value(), a, elem, attrDisplayName(a)) {
-				valid = false
-			}
-		}
-		return nil
-	})); err != nil {
+	v := &entityValueVisitor{vc: vc, doc: doc, valid: true}
+	if err := vc.walkOccurrences(ctx, doc, v); err != nil {
 		// A tree cycle (ErrWalkCycle) leaves the walk partial; the document
 		// cannot be certified valid.
-		valid = false
+		v.valid = false
+	}
+	return v.valid
+}
+
+// entityValueVisitor is the occurrenceVisitor of validateEntities.
+type entityValueVisitor struct {
+	vc    *validationContext
+	doc   *helium.Document
+	valid bool
+}
+
+// visitOccurrence checks the xs:ENTITY values of one element occurrence: its
+// simple content and its attributes.
+func (v *entityValueVisitor) visitOccurrence(ctx context.Context, occ elementOccurrence) {
+	vc, doc, elem := v.vc, v.doc, occ.elem
+	td := vc.elementTypeForID(elem)
+
+	// Element simple content typed as ENTITY/ENTITIES (including via
+	// list/union). The default/fixed substitution, nilled-element, and
+	// child-element guards are identical to validateIDIDREF: an empty element
+	// contributes its default/fixed value, a confirmed nilled element
+	// contributes nothing, and an element with child elements is left to pass 1's
+	// structural rejection (see validateIDIDREF for the full rationale).
+	if td != nil && td.ContentType == ContentTypeSimple && entityFamilyType(td) && !hasChildElement(elem) {
+		hostDecl := vc.idcHostDecl(elem)
+		if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
+			raw := helium.CharacterData(elem)
+			if raw == "" && hostDecl != nil {
+				if hostDecl.Fixed != nil {
+					raw = *hostDecl.Fixed
+				} else if hostDecl.Default != nil {
+					raw = *hostDecl.Default
+				}
+			}
+			if !vc.checkEntityValue(ctx, doc, td, raw, elem, elem, "") {
+				v.valid = false
+			}
+		}
 	}
 
-	return valid
+	// Attributes typed as ENTITY/ENTITIES (including via list/union). Default
+	// attributes are already inserted into the live tree before this pass.
+	for _, a := range elem.Attributes() {
+		if vc.isSpecialAttr(a) {
+			continue
+		}
+		atd := vc.attrTypeForID(a)
+		if atd == nil || !entityFamilyType(atd) {
+			continue
+		}
+		if !vc.checkEntityValue(ctx, doc, atd, a.Value(), a, elem, attrDisplayName(a)) {
+			v.valid = false
+		}
+	}
 }
 
 // entityFamilyType reports whether td involves xs:ENTITY or xs:ENTITIES anywhere

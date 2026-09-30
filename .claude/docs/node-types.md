@@ -117,7 +117,7 @@ NamespaceDeclNode(18) XIncludeStartNode(19) XIncludeEndNode(20) NamespaceNode(21
 | CDATASection | `CDATASection` | node | ✗ | ✓ content | ✓ | — |
 | Comment | `Comment` | node | ✗ | ✓ content | ✓ | — |
 | PI | `ProcessingInstruction` | docnode | ✗ | data field | ✓ | target, data (Name() returns target). AddChild/AppendText route text into `data`; non-text children rejected |
-| EntityRef | `EntityRef` | node | ✓ (if expanded) | ✓ (if resolved) | ✓ | References Entity by name |
+| EntityRef | `EntityRef` | node | ✓ (if expanded) | ✓ (if resolved) | ✓ | References Entity by name. A parsed reference carries the line it sits on (`TreeBuilder.Reference`), the line a substituting parse gives the expansion's nodes |
 | Entity | `Entity` | node | ✓ (parsed) | ✓ content | ✓ | entityType, externalID, systemID, uri, checked, attrWFCFlags, expanding, expandedSize, attrExpandedSize |
 | DTD | `DTD` | docnode | ✓ (decls) | — | ✓ | attributes/attrsByElem/elements/entities/pentities/notations maps, attrDecls slice, externalID, systemID |
 | ElementDecl | `ElementDecl` | docnode | — | — | ✓ | decltype, content (grammar tree), attributes, prefix |

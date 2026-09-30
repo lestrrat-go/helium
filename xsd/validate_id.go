@@ -16,39 +16,44 @@ type idRefOccurrence struct {
 	value string
 	elem  *helium.Element
 	attr  string // attribute display name, or "" for element content
+	// line is the entity reference line in effect when the reference was
+	// collected (validationContext.entityLine), reported in place of elem's
+	// line for an element inside an entity's expansion.
+	line int
 }
 
 // idCollector accumulates ID values (and their owning element) and pending IDREF
 // references during a document-wide xs:ID/xs:IDREF/xs:IDREFS validation pass.
 type idCollector struct {
-	// ids maps each collected xs:ID value to the element it identifies. In XSD 1.1
-	// the SAME ID value may appear more than once as long as every occurrence
+	// ids maps each collected xs:ID value to the occurrence index
+	// (elementOccurrence.index) of the element it identifies. In XSD 1.1 the
+	// SAME ID value may appear more than once as long as every occurrence
 	// identifies the SAME element (e.g. two ID attributes of one element, or two
-	// <id> children of one parent), so a repeat is a duplicate only when the owning
-	// element differs; in XSD 1.0 any repeat is a duplicate (recordID gates the
-	// relaxation on Version11).
-	ids   map[string]helium.Node
+	// <id> children of one parent), so a repeat is a duplicate only when the
+	// owning element differs; in XSD 1.0 any repeat is a duplicate (recordID
+	// gates the relaxation on Version11). The owner is an occurrence, not a node,
+	// because an element inside an entity referenced twice is two elements after
+	// entity substitution.
+	ids   map[string]int
 	refs  []idRefOccurrence
 	valid bool
 }
 
-// idOwner returns the element an ID value identifies. For an element-content ID
-// (elementContent true) that is the element's PARENT (the element bearing the ID
-// child); for an attribute ID it is the bearing element itself.
+// idOwner returns the occurrence index of the element an ID value of occ
+// identifies. For an element-content ID (elementContent true) that is the
+// element's PARENT (the element bearing the ID child); for an attribute ID it
+// is the bearing element itself.
 //
 // An element-content ID on the DOCUMENT ROOT has no parent element, so it denotes
 // NO element (XSD §3.3.4: an element-content ID identifies its parent). idOwner
-// returns nil in that case and recordID skips it, so the value is never entered
+// returns -1 in that case and recordID skips it, so the value is never entered
 // into the ID/IDREF table and any xs:IDREF to it dangles (W3C idIDREF
 // s3_3_4ii26/ii27 — "ID on root does not denote any element").
-func idOwner(elem *helium.Element, elementContent bool) helium.Node {
+func idOwner(occ elementOccurrence, elementContent bool) int {
 	if !elementContent {
-		return elem
+		return occ.index
 	}
-	if parent, ok := elem.Parent().(*helium.Element); ok {
-		return parent
-	}
-	return nil
+	return occ.parent
 }
 
 // validateIDIDREF performs document-wide xs:ID / xs:IDREF / xs:IDREFS validation
@@ -64,117 +69,9 @@ func idOwner(elem *helium.Element, elementContent bool) helium.Node {
 // (mirroring canonicalValueKey), so e.g. a list of union(xs:ID, xs:integer)
 // contributes each ID item.
 func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Document) bool {
-	col := &idCollector{ids: make(map[string]helium.Node), valid: true}
+	col := &idCollector{ids: make(map[string]int), valid: true}
 
-	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() != helium.ElementNode {
-			return nil
-		}
-		elem, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			return nil
-		}
-		td := vc.elementTypeForID(elem)
-
-		// Element simple content typed as ID/IDREF (including via list/union). An
-		// empty element with a default/fixed value constraint contributes that
-		// value — an XSD 1.1 relaxation lets ID-typed elements carry a default
-		// (e.g. two empty <id/> elements both defaulting to "p1" collide).
-		//
-		// The owner of an element-content ID — the element the ID identifies for
-		// uniqueness purposes — is the PARENT element, not the typed element
-		// itself. An xs:ID value identifies the element that BEARS it; an attribute
-		// bears it on its owning element, and an element of type ID bears it on its
-		// containing (parent) element. So two <id> siblings of one parent carrying
-		// the same value (or an attribute ID and an <id> child of one element)
-		// identify the SAME element and are not a duplicate, whereas the same value
-		// reaching two different parents is (saxonData/Id id003, id004).
-		// A CONFIRMED nilled element — one DECLARED nillable carrying
-		// xsi:nil="true" — has NO element value, so its declared default/fixed must
-		// NOT be substituted as an ID/IDREF (that would fabricate a duplicate ID or
-		// a dangling IDREF and false-reject a valid document). Skip its
-		// element-content collection. The check is by DECLARATION, not raw xsi:nil:
-		// a processContents="lax" element with no declaration but a resolvable
-		// xsi:type is NOT validly nilled (xsi:nil requires a nillable declaration) —
-		// assessLaxElement validated its real content, so its xs:ID/xs:IDREF value
-		// must still be collected. Attribute IDs always apply (handled below).
-		// Only collect from genuinely-valid simple content. Simple content forbids
-		// CHILD ELEMENTS; if the element has any, pass 1 already rejected it
-		// structurally and there is no valid simple value here — `helium.CharacterData`
-		// would ignore the children (and a default/fixed would be substituted for a
-		// non-empty element), fabricating an ID/IDREF that never existed. Skipping
-		// such elements avoids piling a spurious duplicate/dangling on top of the
-		// real structural error.
-		if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
-			hostDecl := vc.idcHostDecl(elem)
-			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
-				raw := helium.CharacterData(elem)
-				// A default/fixed value is only the element's value when the content is
-				// genuinely empty (no text, no children — children already excluded
-				// above).
-				if raw == "" && hostDecl != nil {
-					if hostDecl.Fixed != nil {
-						raw = *hostDecl.Fixed
-					} else if hostDecl.Default != nil {
-						raw = *hostDecl.Default
-					}
-				}
-				vc.collectIDFromValue(ctx, col, td, raw, idOwner(elem, true), elem, elem, "")
-			}
-		}
-
-		// Attributes typed as ID/IDREF (including via list/union). An attribute ID
-		// is owned by its bearing element.
-		idAttrCount := 0
-		for a := range helium.Attributes(elem) {
-			if vc.isSpecialAttr(a) {
-				// A DECLARED special-attribute use that was genuinely assessed in pass 1
-				// still participates in the document-wide ID/IDREF pass — an attribute ID
-				// identifies its bearing element regardless of namespace. In XSD 1.0 a
-				// declared `ref="xml:id"` is typed as xs:ID (via xmlNamespaceAttrType) and
-				// annotated, so its value must be collected for uniqueness/integrity like
-				// any xs:ID attribute; a declared xsi: attribute is assessed the same way
-				// (its non-ID type is simply filtered below). An UNDECLARED special
-				// attribute (an undeclared xml:id, xmlns, or an unassessed xsi: attr) is
-				// never assessed, so it stays skipped.
-				if _, assessed := vc.assessedAttrs[a]; !assessed {
-					continue
-				}
-			}
-			atd := vc.attrTypeForID(a)
-			if atd == nil || !vc.isIDFamilyType(atd) {
-				continue
-			}
-			// An attribute counts toward the XSD 1.0 one-ID-attribute cap iff its
-			// value contributes at least one xs:ID leaf under the SAME list/union
-			// active-member decomposition the collection uses (so a union(xs:int,
-			// xs:ID) attribute counts only when its value is an ID, and a list of
-			// xs:ID counts) — keeping the cap consistent with the uniqueness table.
-			if vc.collectIDFromValue(ctx, col, atd, a.Value(), elem, a, elem, attrDisplayName(a)) {
-				idAttrCount++
-			}
-		}
-		// This is the INSTANCE manifestation of the one-ID-per-element rule: >1
-		// ID-typed attribute actually PRESENT on an element. It covers the current
-		// targets (attZ014a/attZ014b supply their two ID attributes via a wildcard,
-		// so the element instance carries two IDs) and every constructible case where
-		// two ID attributes co-occur. Two related XSD 1.0 SCHEMA-COMPONENT rules are
-		// DEFERRED (compile-time, not yet enforced):
-		//   (i) the static Schema Component Constraint that a complex type must not
-		//       have two or more ID-typed attribute USES even when one/both are
-		//       optional and never both present in any instance (Part 1 §3.4.6). The
-		//       instance cap here does not reject such a type at compile time.
-		//   (ii) the full "wild IDs" rule — a declared ID attribute use together with
-		//       a wildcard-admitted global ID attribute is invalid even when the
-		//       declared use is ABSENT in the instance. The instance-present case is
-		//       covered by this cap; the declared-absent static case is not.
-		if vc.version == Version10 && idAttrCount > 1 {
-			col.valid = false
-			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
-				"An element may have at most one attribute of type ID.")
-		}
-		return nil
-	})); err != nil {
+	if err := vc.walkOccurrences(ctx, doc, idrefVisitor{vc: vc, col: col}); err != nil {
 		// A tree cycle (ErrWalkCycle) leaves the walk partial; the document
 		// cannot be certified valid.
 		col.valid = false
@@ -190,9 +87,122 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		if r.attr != "" {
 			msg = fmt.Sprintf("There is no ID/IDREF binding for the IDREF '%s' (attribute '%s').", r.value, r.attr)
 		}
+		prevLine := vc.enterEntityLine(r.line)
 		vc.reportValidityError(ctx, vc.filename, r.elem.Line(), elemDisplayName(r.elem), msg)
+		vc.entityLine = prevLine
 	}
 	return col.valid
+}
+
+// idrefVisitor is the occurrenceVisitor of validateIDIDREF.
+type idrefVisitor struct {
+	vc  *validationContext
+	col *idCollector
+}
+
+// visitOccurrence collects the xs:ID values and xs:IDREF references of one
+// element occurrence: its simple content and its attributes.
+func (v idrefVisitor) visitOccurrence(ctx context.Context, occ elementOccurrence) {
+	vc, col, elem := v.vc, v.col, occ.elem
+	td := vc.elementTypeForID(elem)
+
+	// Element simple content typed as ID/IDREF (including via list/union). An
+	// empty element with a default/fixed value constraint contributes that
+	// value — an XSD 1.1 relaxation lets ID-typed elements carry a default
+	// (e.g. two empty <id/> elements both defaulting to "p1" collide).
+	//
+	// The owner of an element-content ID — the element the ID identifies for
+	// uniqueness purposes — is the PARENT element, not the typed element
+	// itself. An xs:ID value identifies the element that BEARS it; an attribute
+	// bears it on its owning element, and an element of type ID bears it on its
+	// containing (parent) element. So two <id> siblings of one parent carrying
+	// the same value (or an attribute ID and an <id> child of one element)
+	// identify the SAME element and are not a duplicate, whereas the same value
+	// reaching two different parents is (saxonData/Id id003, id004).
+	// A CONFIRMED nilled element — one DECLARED nillable carrying
+	// xsi:nil="true" — has NO element value, so its declared default/fixed must
+	// NOT be substituted as an ID/IDREF (that would fabricate a duplicate ID or
+	// a dangling IDREF and false-reject a valid document). Skip its
+	// element-content collection. The check is by DECLARATION, not raw xsi:nil:
+	// a processContents="lax" element with no declaration but a resolvable
+	// xsi:type is NOT validly nilled (xsi:nil requires a nillable declaration) —
+	// assessLaxElement validated its real content, so its xs:ID/xs:IDREF value
+	// must still be collected. Attribute IDs always apply (handled below).
+	// Only collect from genuinely-valid simple content. Simple content forbids
+	// CHILD ELEMENTS; if the element has any, pass 1 already rejected it
+	// structurally and there is no valid simple value here — `helium.CharacterData`
+	// would ignore the children (and a default/fixed would be substituted for a
+	// non-empty element), fabricating an ID/IDREF that never existed. Skipping
+	// such elements avoids piling a spurious duplicate/dangling on top of the
+	// real structural error.
+	if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
+		hostDecl := vc.idcHostDecl(elem)
+		if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
+			raw := helium.CharacterData(elem)
+			// A default/fixed value is only the element's value when the content is
+			// genuinely empty (no text, no children — children already excluded
+			// above).
+			if raw == "" && hostDecl != nil {
+				if hostDecl.Fixed != nil {
+					raw = *hostDecl.Fixed
+				} else if hostDecl.Default != nil {
+					raw = *hostDecl.Default
+				}
+			}
+			vc.collectIDFromValue(ctx, col, td, raw, idOwner(occ, true), elem, elem, "")
+		}
+	}
+
+	// Attributes typed as ID/IDREF (including via list/union). An attribute ID
+	// is owned by its bearing element.
+	idAttrCount := 0
+	for a := range helium.Attributes(elem) {
+		if vc.isSpecialAttr(a) {
+			// A DECLARED special-attribute use that was genuinely assessed in pass 1
+			// still participates in the document-wide ID/IDREF pass — an attribute ID
+			// identifies its bearing element regardless of namespace. In XSD 1.0 a
+			// declared `ref="xml:id"` is typed as xs:ID (via xmlNamespaceAttrType) and
+			// annotated, so its value must be collected for uniqueness/integrity like
+			// any xs:ID attribute; a declared xsi: attribute is assessed the same way
+			// (its non-ID type is simply filtered below). An UNDECLARED special
+			// attribute (an undeclared xml:id, xmlns, or an unassessed xsi: attr) is
+			// never assessed, so it stays skipped.
+			if _, assessed := vc.assessedAttrs[a]; !assessed {
+				continue
+			}
+		}
+		atd := vc.attrTypeForID(a)
+		if atd == nil || !vc.isIDFamilyType(atd) {
+			continue
+		}
+		// An attribute counts toward the XSD 1.0 one-ID-attribute cap iff its
+		// value contributes at least one xs:ID leaf under the SAME list/union
+		// active-member decomposition the collection uses (so a union(xs:int,
+		// xs:ID) attribute counts only when its value is an ID, and a list of
+		// xs:ID counts) — keeping the cap consistent with the uniqueness table.
+		if vc.collectIDFromValue(ctx, col, atd, a.Value(), idOwner(occ, false), a, elem, attrDisplayName(a)) {
+			idAttrCount++
+		}
+	}
+	// This is the INSTANCE manifestation of the one-ID-per-element rule: >1
+	// ID-typed attribute actually PRESENT on an element. It covers the current
+	// targets (attZ014a/attZ014b supply their two ID attributes via a wildcard,
+	// so the element instance carries two IDs) and every constructible case where
+	// two ID attributes co-occur. Two related XSD 1.0 SCHEMA-COMPONENT rules are
+	// DEFERRED (compile-time, not yet enforced):
+	//   (i) the static Schema Component Constraint that a complex type must not
+	//       have two or more ID-typed attribute USES even when one/both are
+	//       optional and never both present in any instance (Part 1 §3.4.6). The
+	//       instance cap here does not reject such a type at compile time.
+	//   (ii) the full "wild IDs" rule — a declared ID attribute use together with
+	//       a wildcard-admitted global ID attribute is invalid even when the
+	//       declared use is ABSENT in the instance. The instance-present case is
+	//       covered by this cap; the declared-absent static case is not.
+	if vc.version == Version10 && idAttrCount > 1 {
+		col.valid = false
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
+			"An element may have at most one attribute of type ID.")
+	}
 }
 
 // collectIDNodes records every node whose PSVI is-id property is true into out.
@@ -208,55 +218,58 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 // in both XSD 1.0 and 1.1, because is-id is a version-independent PSVI property
 // distinct from document-wide ID uniqueness.
 func (vc *validationContext) collectIDNodes(ctx context.Context, doc *helium.Document, out IDNodes) {
-	_ = helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() != helium.ElementNode {
-			return nil
-		}
-		elem, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			return nil
-		}
+	_ = vc.walkOccurrences(ctx, doc, idNodesVisitor{vc: vc, out: out})
+}
 
-		// Element simple content typed as ID (directly, or as a singleton
-		// list / selected union member). The child-element and nilled guards
-		// match validateIDIDREF: an element with child elements has no valid
-		// simple value, and a confirmed-nilled element has no value at all.
-		td := vc.elementTypeForID(elem)
-		if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
-			hostDecl := vc.idcHostDecl(elem)
-			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
-				raw := helium.CharacterData(elem)
-				if raw == "" && hostDecl != nil {
-					if hostDecl.Fixed != nil {
-						raw = *hostDecl.Fixed
-					} else if hostDecl.Default != nil {
-						raw = *hostDecl.Default
-					}
-				}
-				if vc.valueIsID(ctx, td, raw, elem) {
-					out[elem] = struct{}{}
+// idNodesVisitor is the occurrenceVisitor of collectIDNodes.
+type idNodesVisitor struct {
+	vc  *validationContext
+	out IDNodes
+}
+
+// visitOccurrence records the is-id nodes of one element occurrence: the
+// element itself and its attributes.
+func (v idNodesVisitor) visitOccurrence(ctx context.Context, occ elementOccurrence) {
+	vc, out, elem := v.vc, v.out, occ.elem
+
+	// Element simple content typed as ID (directly, or as a singleton
+	// list / selected union member). The child-element and nilled guards
+	// match validateIDIDREF: an element with child elements has no valid
+	// simple value, and a confirmed-nilled element has no value at all.
+	td := vc.elementTypeForID(elem)
+	if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
+		hostDecl := vc.idcHostDecl(elem)
+		if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
+			raw := helium.CharacterData(elem)
+			if raw == "" && hostDecl != nil {
+				if hostDecl.Fixed != nil {
+					raw = *hostDecl.Fixed
+				} else if hostDecl.Default != nil {
+					raw = *hostDecl.Default
 				}
 			}
-		}
-
-		// Attributes typed as ID (directly, or as a singleton list / selected
-		// union member).
-		for a := range helium.Attributes(elem) {
-			if vc.isSpecialAttr(a) {
-				if _, assessed := vc.assessedAttrs[a]; !assessed {
-					continue
-				}
+			if vc.valueIsID(ctx, td, raw, elem) {
+				out[elem] = struct{}{}
 			}
-			atd := vc.attrTypeForID(a)
-			if atd == nil || !vc.isIDFamilyType(atd) {
+		}
+	}
+
+	// Attributes typed as ID (directly, or as a singleton list / selected
+	// union member).
+	for a := range helium.Attributes(elem) {
+		if vc.isSpecialAttr(a) {
+			if _, assessed := vc.assessedAttrs[a]; !assessed {
 				continue
 			}
-			if vc.valueIsID(ctx, atd, a.Value(), a) {
-				out[a] = struct{}{}
-			}
 		}
-		return nil
-	}))
+		atd := vc.attrTypeForID(a)
+		if atd == nil || !vc.isIDFamilyType(atd) {
+			continue
+		}
+		if vc.valueIsID(ctx, atd, a.Value(), a) {
+			out[a] = struct{}{}
+		}
+	}
 }
 
 // valueIsID reports whether raw, validated against td, has the XDM is-id
@@ -329,7 +342,7 @@ func idFamilyType(td *TypeDef) bool {
 // The Version10 one-ID-attribute cap uses this return so it detects ID-ness the
 // SAME way the collection does, keeping the cap and the uniqueness table
 // consistent by construction.
-func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idCollector, td *TypeDef, raw string, owner helium.Node, fieldNode helium.Node, elem *helium.Element, attr string) bool {
+func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idCollector, td *TypeDef, raw string, owner int, fieldNode helium.Node, elem *helium.Element, attr string) bool {
 	switch resolveVariety(td) {
 	case TypeVarietyList:
 		item := resolveItemType(td)
@@ -368,14 +381,14 @@ func (vc *validationContext) collectIDFromValue(ctx context.Context, col *idColl
 
 // recordID registers an xs:ID value, flagging a duplicate when the same value is
 // already bound to a DIFFERENT owning element.
-func (vc *validationContext) recordID(ctx context.Context, col *idCollector, tok string, owner helium.Node, elem *helium.Element, attr string) {
+func (vc *validationContext) recordID(ctx context.Context, col *idCollector, tok string, owner int, elem *helium.Element, attr string) {
 	if tok == "" {
 		return
 	}
-	// A nil owner means the ID denotes no element (an element-content ID on the
-	// document root). Such an ID is not entered into the table, so any IDREF to it
-	// dangles. Skip it without recording.
-	if owner == nil {
+	// A negative owner means the ID denotes no element (an element-content ID on
+	// the document root). Such an ID is not entered into the table, so any IDREF
+	// to it dangles. Skip it without recording.
+	if owner < 0 {
 		return
 	}
 	prev, seen := col.ids[tok]
@@ -407,7 +420,7 @@ func (vc *validationContext) recordIDRef(col *idCollector, tok string, elem *hel
 	if tok == "" {
 		return
 	}
-	col.refs = append(col.refs, idRefOccurrence{value: tok, elem: elem, attr: attr})
+	col.refs = append(col.refs, idRefOccurrence{value: tok, elem: elem, attr: attr, line: vc.entityLine})
 }
 
 // elementTypeForID resolves the effective type of an instance element for the
@@ -458,14 +471,20 @@ func isXsiNilTrue(elem *helium.Element) bool {
 	return false
 }
 
-// hasChildElement reports whether elem has any child ELEMENT node. Simple content
-// forbids child elements; when one is present, pass 1 already rejected the element
+// hasChildElement reports whether elem has any child ELEMENT node, counting the
+// elements of an entity reference child's expansion. Simple content forbids
+// child elements; when one is present, pass 1 already rejected the element
 // structurally, so the ID/IDREF pass must not treat its (children-ignoring) text
 // or a substituted default/fixed as a valid simple ID/IDREF value.
 func hasChildElement(elem *helium.Element) bool {
 	for child := range helium.Children(elem) {
-		if child.Type() == helium.ElementNode {
+		switch child.Type() {
+		case helium.ElementNode:
 			return true
+		case helium.EntityRefNode:
+			if expansionHasElement(child) {
+				return true
+			}
 		}
 	}
 	return false
