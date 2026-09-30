@@ -220,19 +220,21 @@ func appendAxisNode(result *[]helium.Node, node helium.Node, maxNodes int) error
 	return nil
 }
 
+// collectDescendants appends the descendants of node to result in document
+// order. It enumerates every child list through helium.Children, the
+// owned-child boundary the child axis and the document-order index use: an
+// entity reference's only child is the Entity node, owned by the DTD, and the
+// walk does not follow that node's sibling links into the DTD's declarations.
+// The Entity itself is not an XDM node, so an entity reference has no
+// descendants.
 func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.Node, maxNodes int) error {
 	// In XPath, attributes have no children
 	if _, ok := node.(*helium.Attribute); ok {
 		return nil
 	}
-	var stack []helium.Node
-	for c := node.LastChild(); c != nil; c = c.PrevSibling() {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if IsXDMChild(c) {
-			stack = append(stack, c)
-		}
+	stack, err := pushXDMChildren(ctx, nil, node)
+	if err != nil {
+		return err
 	}
 	for len(stack) > 0 {
 		if err := ctx.Err(); err != nil {
@@ -245,16 +247,28 @@ func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.
 		if err := appendAxisNode(result, cur, maxNodes); err != nil {
 			return err
 		}
-		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if IsXDMChild(child) {
-				stack = append(stack, child)
-			}
+		stack, err = pushXDMChildren(ctx, stack, cur)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// pushXDMChildren appends the XDM children of n to stack in reverse document
+// order, so the first child is the next one popped.
+func pushXDMChildren(ctx context.Context, stack []helium.Node, n helium.Node) ([]helium.Node, error) {
+	start := len(stack)
+	for c := range helium.Children(n) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if IsXDMChild(c) {
+			stack = append(stack, c)
+		}
+	}
+	slices.Reverse(stack[start:])
+	return stack, nil
 }
 
 func axisParent(node helium.Node) []helium.Node {
@@ -511,7 +525,7 @@ func collectDescendantsReverse(ctx context.Context, node helium.Node, result *[]
 		}
 
 		stack = append(stack, frame{node: cur.node, expanded: true})
-		for child := cur.node.FirstChild(); child != nil; child = child.NextSibling() {
+		for child := range helium.Children(cur.node) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}

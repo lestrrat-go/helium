@@ -8,7 +8,7 @@ package xpath1
 // of each of them. Like libxml2's xmlXPathOptimizeExpression, the rewrite
 // folds a bare descendant-or-self::node() step into the step that follows it:
 //
-//	descendant-or-self::node()/child::N              → descendant::N (N a name test)
+//	descendant-or-self::node()/child::X              → descendant::X
 //	descendant-or-self::node()/self::X               → descendant-or-self::X
 //	descendant-or-self::node()/descendant::X         → descendant::X
 //	descendant-or-self::node()/descendant-or-self::X → descendant-or-self::X
@@ -142,7 +142,7 @@ func collapseDescendantSteps(steps []Step, depth int) []Step {
 	for _, s := range steps {
 		n := len(out)
 		if n > 0 && isBareDescendantOrSelfNode(out[n-1]) {
-			if axis, ok := collapsedAxis(s.Axis, s.NodeTest); ok && predicatesPositionFree(s.Predicates, depth) {
+			if axis, ok := collapsedAxis(s.Axis); ok && predicatesPositionFree(s.Predicates, depth) {
 				out[n-1] = Step{Axis: axis, NodeTest: s.NodeTest, Predicates: s.Predicates}
 				continue
 			}
@@ -163,29 +163,13 @@ func isBareDescendantOrSelfNode(s Step) bool {
 }
 
 // collapsedAxis returns the axis that replaces descendant-or-self::node()
-// followed by a step on axis with node test nt, and false when the pair
-// cannot be folded.
-//
-// A child step folds only when nt is a name test. When the context node is an
-// entity reference, the descendant walk (collectDescendants in
-// internal/xpath) follows the entity's sibling links into the DTD and reaches
-// the comments and PIs declared before the entity, while the child axis stops
-// at the entity. Both pairs would then disagree for node(), comment() and
-// processing-instruction() tests. A name test on these axes matches only
-// elements, which a parsed DTD never holds, so it selects the same nodes
-// either way. (DTD.AddChild accepts an element, and a DTD built that way
-// with an element before the entity declaration would make `.//x` from the
-// entity reference differ.)
-// The descendant and descendant-or-self pairs make the same walk before and
-// after the fold, so any node test folds there.
-func collapsedAxis(axis AxisType, nt NodeTest) (AxisType, bool) {
+// followed by a step on axis, and false when the pair cannot be folded. Any
+// node test folds: the descendant walk and the child axis both stop at the
+// owned-child boundary, so from every context node the descendant axis is
+// the union of the child axes of the descendant-or-self nodes.
+func collapsedAxis(axis AxisType) (AxisType, bool) {
 	switch axis {
-	case AxisChild:
-		if _, ok := nt.(NameTest); !ok {
-			return axis, false
-		}
-		return AxisDescendant, true
-	case AxisDescendant:
+	case AxisChild, AxisDescendant:
 		return AxisDescendant, true
 	case AxisSelf, AxisDescendantOrSelf:
 		return AxisDescendantOrSelf, true

@@ -358,6 +358,8 @@ func TestCompileFoldShape(t *testing.T) {
 		"//*[local-name() = 'a']", "//.", ".//b", "//self::b", "//self::node()",
 		"//descendant::b", "//descendant::node()", "//descendant-or-self::b",
 		"//descendant-or-self::comment()", "$nodes//b", "/root//x/y", "//a[.//b]",
+		"//node()", "//text()", "//comment()", "//processing-instruction()",
+		"//processing-instruction('pi')", "//comment()[string(.)]",
 	}
 	kept := []string{
 		"//a[1]", "//a[last()]", "//a[position()=1]", "//b[position() > 1 and @x]",
@@ -365,8 +367,7 @@ func TestCompileFoldShape(t *testing.T) {
 		"//a[$nodes]", "//b[@x = $one]", "//b[ext:g()]", "//b[f()]", "//a[count(b)]",
 		"//a[sum(b)]", "//x[number(.)]", "//a[-1]", "//a[1 + 1]", "//b[string-length()]",
 		"//a[b[1]]", "//a[b[last()]]", "//a[(b)[1]]", "//a[.//b[2]]", "//..", "//@x",
-		"//following-sibling::b", "//node()", "//text()", "//comment()",
-		"//processing-instruction()", "//processing-instruction('pi')",
+		"//following-sibling::b", "//node()[1]", "//text()[last()]",
 	}
 
 	for _, src := range folded {
@@ -467,12 +468,12 @@ func TestCompileFoldSeesMutation(t *testing.T) {
 	require.Len(t, r.NodeSet, 2)
 }
 
-// TestCompileFoldHandBuiltDTDElement pins the one input on which the folded
-// `.//x` selects different nodes from the unfolded path: a DTD built with
-// DTD.AddChild to hold an element before an entity declaration, evaluated
-// from a reference to that entity. The descendant walk follows the Entity's
-// sibling links into the DTD and reaches the element, while the child axis
-// stops at the Entity. A parsed DTD never holds an element.
+// TestCompileFoldHandBuiltDTDElement runs the differential test on a DTD
+// built with DTD.AddChild to hold an element and a comment before an entity
+// declaration, with a reference to that entity in the document. The
+// descendant walk stops at the entity reference's Entity child, as the child
+// axis does, so the folded and unfolded paths never reach the DTD's element
+// from the entity reference.
 func TestCompileFoldHandBuiltDTDElement(t *testing.T) {
 	doc := parseFoldDoc(t, `<a/>`)
 	dtd, err := doc.CreateInternalSubset("a", "", "")
@@ -480,18 +481,19 @@ func TestCompileFoldHandBuiltDTDElement(t *testing.T) {
 	x, err := doc.CreateElement("x")
 	require.NoError(t, err)
 	require.NoError(t, dtd.AddChild(x))
+	require.NoError(t, dtd.AddChild(doc.CreateComment([]byte("dtdc"))))
 	_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "v")
 	require.NoError(t, err)
 	ref, err := doc.CreateReference("e")
 	require.NoError(t, err)
 	require.NoError(t, doc.DocumentElement().AddChild(ref))
 
-	unfolded, err := xpath1.MustCompile(unfoldedReference(".//x")).Evaluate(t.Context(), ref)
-	require.NoError(t, err)
-	require.Empty(t, unfolded.NodeSet)
-
 	folded, err := xpath1.MustCompile(".//x").Evaluate(t.Context(), ref)
 	require.NoError(t, err)
-	require.Len(t, folded.NodeSet, 1)
-	require.Same(t, x, folded.NodeSet[0])
+	require.Empty(t, folded.NodeSet)
+
+	eval := foldEvaluator([]helium.Node{doc.DocumentElement()})
+	contexts := foldContexts(t, doc)
+	require.Len(t, contexts, 4)
+	requireFoldMatchesReference(t, eval, "hand-built DTD", contexts)
 }
