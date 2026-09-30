@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,8 @@ type stepOrderDoc struct {
 	name  string
 	src   string
 	subst bool
+	// build, when set, edits the parsed document before the cases run.
+	build func(testing.TB, *helium.Document)
 }
 
 var stepOrderDocs = []stepOrderDoc{
@@ -51,20 +54,82 @@ var stepOrderDocs = []stepOrderDoc{
 			`<a xmlns:p="urn:p"><b id="b1"/>&e;<!--c--><x id="x1">&e;</x><b id="b2"/></a>`,
 		subst: true,
 	},
+	{
+		name: "entity-late-decl",
+		src: `<!DOCTYPE a [<!--dtdc--><?dtdpi z?><!ENTITY e "<b id='eb'>ent<!--ec--></b>">]>` +
+			`<a xmlns:p="urn:p"><b id="b1"/>&e;<!--c--><x id="x1">&e;</x><b id="b2"/></a>`,
+	},
+	{
+		name:  "handbuilt-dtd",
+		src:   `<a xmlns:p="urn:p"><b id="b1"/><x id="x1"/></a>`,
+		build: addHandBuiltDTD,
+	},
+}
+
+// addHandBuiltDTD gives doc an internal subset built through the DOM API
+// that holds an element, a comment and an entity declaration, in that
+// order, and appends a reference to the entity to the root element. A parsed
+// DTD never holds an element; DTD.AddChild accepts one.
+func addHandBuiltDTD(t testing.TB, doc *helium.Document) {
+	t.Helper()
+	dtd, err := doc.CreateInternalSubset("a", "", "")
+	require.NoError(t, err)
+	x, err := doc.CreateElement("x")
+	require.NoError(t, err)
+	require.NoError(t, x.SetAttribute("id", "dtdx"))
+	require.NoError(t, dtd.AddChild(x))
+	require.NoError(t, dtd.AddChild(doc.CreateComment([]byte("dtdc"))))
+	_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "v")
+	require.NoError(t, err)
+	ref, err := doc.CreateReference("e")
+	require.NoError(t, err)
+	require.NoError(t, doc.DocumentElement().AddChild(ref))
 }
 
 // stepOrderOtherDoc is bound, together with the document under test, to the
 // $nodes and $other variables so cross-document node-sets are covered.
 const stepOrderOtherDoc = `<a id="o"><b id="o1"/><b id="o2"><c/></b><c/></a>`
 
+// stepOrderContexts names the context nodes of the matrix. A context is
+// either resolved by evaluating expr from the document node or, when pick is
+// set, picked from the tree directly: XPath never selects entity references,
+// entities or the DTD, but a caller can pass any node as the context node.
 var stepOrderContexts = []struct {
 	name string
 	expr string
+	pick func(*helium.Document) helium.Node
 }{
 	{name: "doc", expr: ""},
 	{name: "elem", expr: "(//*[@id])[2]"},
 	{name: "attr", expr: "(//@id)[1]"},
 	{name: "ns", expr: "/*/namespace::p"},
+	{name: "entref", pick: pickEntityRef},
+	{name: "entity", pick: pickEntity},
+	{name: "dtd", pick: pickDTD},
+}
+
+// pickEntityRef returns the first entity reference of doc, or nil.
+func pickEntityRef(doc *helium.Document) helium.Node {
+	return firstEntityRef(doc)
+}
+
+// pickEntity returns the Entity node the first entity reference of doc
+// refers to, or nil.
+func pickEntity(doc *helium.Document) helium.Node {
+	ref := firstEntityRef(doc)
+	if ref == nil {
+		return nil
+	}
+	return ref.FirstChild()
+}
+
+// pickDTD returns the internal subset of doc, or nil.
+func pickDTD(doc *helium.Document) helium.Node {
+	dtd := doc.IntSubset()
+	if dtd == nil {
+		return nil
+	}
+	return dtd
 }
 
 var stepOrderExprs = []string{
@@ -82,6 +147,8 @@ var stepOrderExprs = []string{
 	"/*/*/*", "/*/*/*/..", "/*/*/@*", "//comment()/..", "//b/parent::node()/parent::node()",
 	"$nodes/b", "$nodes//b", "$nodes/..", "/a/b | $other/b", "//b | $nodes", "//b | $other//b",
 	"$nodes | //b", "//b | ($other/b | $other/c)", "$other/b | /a/b", "($nodes)[1]//c",
+	"descendant-or-self::node()", ".//node()", ".//comment()", ".//processing-instruction()", ".//text()",
+	"descendant::node()/..", "child::node()", "self::node()", "descendant::x",
 }
 
 func parseStepOrderDoc(t testing.TB, src string, subst bool) *helium.Document {
@@ -153,6 +220,9 @@ type stepOrderFixture struct {
 func newStepOrderFixture(t testing.TB, d stepOrderDoc) stepOrderFixture {
 	t.Helper()
 	doc := parseStepOrderDoc(t, d.src, d.subst)
+	if d.build != nil {
+		d.build(t, doc)
+	}
 	other := parseStepOrderDoc(t, stepOrderOtherDoc, false)
 	labels := map[helium.Node]string{doc: "d1:", other: "d2:"}
 	vars := map[string]any{
@@ -167,11 +237,14 @@ func newStepOrderFixture(t testing.TB, d stepOrderDoc) stepOrderFixture {
 	}
 }
 
-// contextNode resolves a context by evaluating expr from the document node;
-// the first node of the result is the context. It returns nil when the
-// expression selects nothing in this document.
-func (f stepOrderFixture) contextNode(t testing.TB, expr string) helium.Node {
+// contextNode resolves a context with pick when it is set, and otherwise by
+// evaluating expr from the document node; the first node of the result is
+// the context. It returns nil when the document has no such node.
+func (f stepOrderFixture) contextNode(t testing.TB, expr string, pick func(*helium.Document) helium.Node) helium.Node {
 	t.Helper()
+	if pick != nil {
+		return pick(f.doc)
+	}
 	if expr == "" {
 		return f.doc
 	}
@@ -212,7 +285,7 @@ func TestStepResultOrder(t *testing.T) {
 	for _, d := range stepOrderDocs {
 		f := newStepOrderFixture(t, d)
 		for _, c := range stepOrderContexts {
-			ctxNode := f.contextNode(t, c.expr)
+			ctxNode := f.contextNode(t, c.expr, c.pick)
 			if ctxNode == nil {
 				continue
 			}
@@ -245,7 +318,7 @@ func TestStepResultOrderRandom(t *testing.T) {
 		src := randomStepOrderDoc(rng)
 		f := newStepOrderFixture(t, stepOrderDoc{name: "random", src: src})
 		for _, c := range stepOrderContexts {
-			ctxNode := f.contextNode(t, c.expr)
+			ctxNode := f.contextNode(t, c.expr, c.pick)
 			if ctxNode == nil {
 				continue
 			}
