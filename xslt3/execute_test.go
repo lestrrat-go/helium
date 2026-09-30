@@ -1796,3 +1796,69 @@ func nestedEntityElement(root *helium.Element) helium.Node {
 	}
 	return nil
 }
+
+// A comment or PI inside an entity value adds no text to the string value the
+// transform or the serializer reads from a node holding a reference to that
+// entity, as in libxml2's xmlNodeGetContent. The source is parsed with the
+// default parser, so the references stay in the tree.
+func TestEntityCommentStringValue(t *testing.T) {
+	const entityDecl = `<!ENTITY c "a<!--k-->b<?p q?>c">`
+
+	t.Run("json output of an element", func(t *testing.T) {
+		src, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<!DOCTYPE r [`+entityDecl+`]><r><e>1&c;2</e></r>`))
+		require.NoError(t, err)
+		items := xpath3.ItemSlice{xpath3.NodeItem{Node: nestedEntityElement(src.DocumentElement())}}
+		var buf strings.Builder
+		require.NoError(t, xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodJSON}))
+		require.Equal(t, `"1abc2"`, buf.String())
+	})
+
+	// input-type-annotations="strip" registers a validated xs:ID element under
+	// its text so fn:id still finds it.
+	t.Run("xs:ID element after stripping annotations", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  input-type-annotations="strip">
+  <xsl:import-schema>
+    <xs:schema>
+      <xs:element name="r"><xs:complexType><xs:sequence>
+        <xs:element name="k" type="xs:ID"/>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/"><out><xsl:value-of select="count(id('abc'))"/></out></xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<!DOCTYPE r [`+entityDecl+`]><r><k>&c;</k></r>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, out, `>1</out>`)
+	})
+
+	// Copying the document node brings the DTD into the result tree, so a
+	// copied reference stays bound, and strict validation casts the copied
+	// element's text.
+	t.Run("strict validation of a copied element", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:import-schema>
+    <xs:schema>
+      <xs:element name="price" type="xs:decimal"/>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/">
+    <xsl:copy-of select="/"/>
+    <xsl:copy-of select="/r/price" validation="strict"/>
+  </xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<!DOCTYPE r [<!ENTITY d "0<!--k-->0<?p q?>">]><r><price>1&d;2</price></r>`))
+		require.NoError(t, err)
+		_, err = ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+	})
+}
