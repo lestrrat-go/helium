@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lestrrat-go/helium/internal/catalog"
@@ -83,10 +84,16 @@ func TestResolveAlreadyCancelledReturnsPromptly(t *testing.T) {
 }
 
 // A second resolution waiting on the same entry's in-flight load must return on
-// context cancellation, without blocking until the load completes.
+// context cancellation, without blocking until the load completes. The test
+// runs in a synctest bubble: synctest.Wait returns once the holder is blocked
+// inside the loader and the waiter is blocked on the in-flight load, so the
+// cancellation reaches a waiter that is known to be waiting.
 func TestResolveWaiterReturnsOnCancellation(t *testing.T) {
 	t.Parallel()
+	synctest.Test(t, testResolveWaiterReturnsOnCancellation)
+}
 
+func testResolveWaiterReturnsOnCancellation(t *testing.T) {
 	leaf := &catalog.Catalog{
 		Entries: []catalog.Entry{
 			{Type: catalog.EntrySystem, Name: fooDTDSystemID, URL: "file:///foo.dtd"},
@@ -102,47 +109,42 @@ func TestResolveWaiterReturnsOnCancellation(t *testing.T) {
 	}
 
 	// Goroutine 1: starts the load and holds it in flight (never cancelled).
-	holderCtx := t.Context()
 	holderDone := make(chan struct{})
 	go func() {
 		defer close(holderDone)
-		root.Resolve(holderCtx, "", fooDTDSystemID)
+		root.Resolve(t.Context(), "", fooDTDSystemID)
 	}()
 
 	// Wait until the load is actually in flight.
-	select {
-	case <-loader.started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("loader was never entered")
-	}
+	<-loader.started
 
-	// Goroutine 2: waits on the same entry's load, but its context is cancelled.
+	// Goroutine 2: waits on the same entry's load, but its context is cancelled
+	// once it is blocked on that load.
 	waiterCtx, waiterCancel := context.WithCancel(t.Context())
 	waiterDone := make(chan string, 1)
 	go func() {
 		waiterDone <- root.Resolve(waiterCtx, "", fooDTDSystemID)
 	}()
 
-	// Give the waiter a moment to actually start blocking on the load, then
-	// cancel it. It must return promptly even though the load is still in
-	// flight.
-	time.Sleep(50 * time.Millisecond)
+	synctest.Wait()
 	waiterCancel()
+	synctest.Wait()
 
+	// The waiter must have returned while the load is still in flight.
+	var got string
+	returned := false
 	select {
-	case got := <-waiterDone:
-		require.Equal(t, "", got, "cancelled waiter must not resolve")
-	case <-time.After(2 * time.Second):
-		t.Fatal("waiter did not return on cancellation while a load was in flight")
+	case got = <-waiterDone:
+		returned = true
+	default:
 	}
 
 	// Release the in-flight load and let the holder finish cleanly.
 	close(loader.release)
-	select {
-	case <-holderDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("holder did not finish after release")
-	}
+	<-holderDone
+
+	require.True(t, returned, "waiter did not return on cancellation while a load was in flight")
+	require.Equal(t, "", got, "cancelled waiter must not resolve")
 
 	// The single-load dedup must still hold: the entry was loaded at most once.
 	require.LessOrEqual(t, loader.calls.Load(), int32(1), "entry loaded more than once")
