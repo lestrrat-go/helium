@@ -1203,7 +1203,7 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
   honor `broke` to stop falling through to later catalogs
 - Const `MaxCatalogSize`; sentinel `ErrCatalogTooLarge`
 - Catalog chaining via nextCatalog; URN urn:publicid: support
-- Files: `catalog.go`, `load.go`
+- Files: `catalog.go`, `load.go`, `load_unix.go` (O_NONBLOCK open; cancellable FIFO read), `load_other.go`
 - Imports: helium, internal/catalog/, internal/iofs/, internal/lexicon/, internal/xmlchar/
 
 ## stream/

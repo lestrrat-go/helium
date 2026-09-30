@@ -3,9 +3,17 @@
 package catalog_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"runtime/pprof"
+	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -14,87 +22,225 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A catalog read against a FIFO with no writer blocks indefinitely. Load must
-// honor ctx and abort promptly on cancellation instead of hanging forever.
+// newBlockingFIFO creates a FIFO and holds it open for writing for the rest of
+// the test without ever writing to it, so a read of the FIFO blocks until the
+// reader gives up. (With no writer at all, a non-blocking read of a FIFO
+// reports end-of-file at once and nothing would block.) O_RDWR opens a FIFO
+// without waiting for the other end.
+func newBlockingFIFO(t *testing.T) string {
+	t.Helper()
+	fifo := filepath.Join(t.TempDir(), "catalog.xml")
+	require.NoError(t, syscall.Mkfifo(fifo, 0o600), "mkfifo")
+	w, err := os.OpenFile(fifo, os.O_RDWR, 0)
+	require.NoError(t, err, "open the FIFO's write end")
+	t.Cleanup(func() { _ = w.Close() })
+	return fifo
+}
+
+// watchContext wraps a context and closes watched the first time code asks for
+// its Done channel. Load reads the catalog while a watcher goroutine waits on
+// Done to interrupt that read, so watched closing means the file is open and the
+// interrupt is armed: a cancellation from then on must be delivered through it.
+type watchContext struct {
+	context.Context //nolint:containedctx // the wrapper IS the context handed to Load
+	once            sync.Once
+	watched         chan struct{}
+}
+
+func newWatchContext(parent context.Context) *watchContext {
+	return &watchContext{Context: parent, watched: make(chan struct{})}
+}
+
+func (c *watchContext) Done() <-chan struct{} {
+	c.once.Do(c.markWatched)
+	return c.Context.Done()
+}
+
+func (c *watchContext) markWatched() {
+	close(c.watched)
+}
+
+// loadInto runs catalog.Load and reports its error on done.
+func loadInto(ctx context.Context, filename string, done chan<- error) {
+	_, err := catalog.Load(ctx, filename)
+	done <- err
+}
+
+// cancelWatchedLoad waits until the load in flight on done is waiting on ctx,
+// cancels it, and returns the load's error. The timeouts only keep a broken
+// Load from hanging the test.
+func cancelWatchedLoad(t *testing.T, ctx *watchContext, cancel context.CancelFunc, done <-chan error) error {
+	t.Helper()
+	select {
+	case <-ctx.watched:
+	case err := <-done:
+		t.Fatalf("Load returned %v before it waited on its context", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Load never waited on its context")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(10 * time.Second):
+		t.Fatal("Load did not return after cancellation of a blocking FIFO read")
+		return nil
+	}
+}
+
+// A catalog read against a FIFO whose writer never writes blocks indefinitely.
+// Load must honor ctx and abort on cancellation instead of hanging forever.
 func TestLoadCancelsOnBlockingFIFO(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	fifo := filepath.Join(dir, "catalog.xml")
-	require.NoError(t, syscall.Mkfifo(fifo, 0o600), "mkfifo")
-
-	ctx, cancel := context.WithCancel(context.Background())
+	fifo := newBlockingFIFO(t)
+	parent, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ctx := newWatchContext(parent)
 
 	done := make(chan error, 1)
-	go func() {
-		_, err := catalog.Load(ctx, fifo)
-		done <- err
-	}()
+	go loadInto(ctx, fifo, done)
 
-	// Let the load block on the open/read of the writer-less FIFO, then cancel.
-	time.Sleep(100 * time.Millisecond)
-	cancel()
-
-	select {
-	case err := <-done:
-		require.Error(t, err, "cancelled FIFO load must return an error")
-	case <-time.After(3 * time.Second):
-		t.Fatal("Load did not return after cancellation of a blocking FIFO read")
-	}
+	err := cancelWatchedLoad(t, ctx, cancel, done)
+	require.ErrorIs(t, err, context.Canceled, "cancelled FIFO load must return the context error")
 }
 
-// A writer-less FIFO whose open and read both block must not leave a goroutine
-// (and the OS thread it occupies) parked forever after Load returns on
-// cancellation. On unix the file is opened with O_NONBLOCK and the blocking read
-// is interrupted via a read deadline, so no reader goroutine survives. This is
-// the leak the CAT-004 residual finding described: a count taken after the load
-// has drained must return to its pre-load baseline.
+// loadResult carries what catalog.Load returned.
+type loadResult struct {
+	cat *catalog.Catalog
+	err error
+}
+
+// loadCatalogInto runs catalog.Load and reports its result on done.
+func loadCatalogInto(ctx context.Context, filename string, done chan<- loadResult) {
+	cat, err := catalog.Load(ctx, filename)
+	done <- loadResult{cat: cat, err: err}
+}
+
+// A catalog that arrives on a FIFO after Load has opened it must be read in
+// full: while the writer has the FIFO open but has not written yet, Load waits
+// for data instead of failing because none is available.
+func TestLoadWaitsForFIFOWriter(t *testing.T) {
+	t.Parallel()
+
+	fifo := filepath.Join(t.TempDir(), "catalog.xml")
+	require.NoError(t, syscall.Mkfifo(fifo, 0o600), "mkfifo")
+	w, err := os.OpenFile(fifo, os.O_RDWR, 0)
+	require.NoError(t, err, "open the FIFO's write end")
+	defer w.Close()
+
+	ctx := newWatchContext(t.Context())
+	done := make(chan loadResult, 1)
+	go loadCatalogInto(ctx, fifo, done)
+
+	// Load has opened the FIFO once it waits on its context. Write the catalog
+	// only then, and close the write end so the reader sees end-of-file.
+	select {
+	case <-ctx.watched:
+	case res := <-done:
+		t.Fatalf("Load returned (%v) before the catalog was written", res.err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Load never waited on its context")
+	}
+	_, err = w.WriteString(`<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="sid" uri="out.dtd"/>
+</catalog>`)
+	require.NoError(t, err, "write the catalog to the FIFO")
+	require.NoError(t, w.Close(), "close the FIFO's write end")
+
+	var res loadResult
+	select {
+	case res = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Load did not return after the FIFO writer finished")
+	}
+	require.NoError(t, res.err, "Load must wait for the FIFO writer")
+	require.True(t, strings.HasSuffix(res.cat.Resolve(t.Context(), "", "sid"), "/out.dtd"),
+		"catalog read from the FIFO must resolve its entry")
+}
+
+// A blocking FIFO read must not leave a goroutine (and the OS thread it
+// occupies) parked forever after Load returns on cancellation. On unix the file
+// is opened with O_NONBLOCK, and the blocking read is interrupted via a read
+// deadline (where the runtime poller manages the FIFO) or stops waiting on
+// cancellation (where it does not, as on darwin), so no reader goroutine
+// survives.
+//
+// The load runs on a goroutine carrying a pprof label, which every goroutine it
+// starts inherits, so the test counts exactly the goroutines this load created,
+// whatever else runs in parallel. Once Load has returned they must all exit.
 func TestLoadFIFONoGoroutineLeak(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	fifo := filepath.Join(dir, "catalog.xml")
-	require.NoError(t, syscall.Mkfifo(fifo, 0o600), "mkfifo")
+	fifo := newBlockingFIFO(t)
+	parent, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ctx := newWatchContext(parent)
 
-	// Settle any goroutines from prior work so the baseline is meaningful.
-	settle()
-	before := runtime.NumGoroutine()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
+	const labelKey, labelValue = "helium-catalog-test", "fifo-leak"
+	labels := pprof.WithLabels(context.Background(), pprof.Labels(labelKey, labelValue))
 	done := make(chan error, 1)
-	go func() {
-		_, err := catalog.Load(ctx, fifo)
-		done <- err
-	}()
+	go loadLabeled(labels, ctx, fifo, done)
 
-	// Let the load block on the open/read of the writer-less FIFO, then cancel.
-	time.Sleep(100 * time.Millisecond)
-	cancel()
+	err := cancelWatchedLoad(t, ctx, cancel, done)
+	require.ErrorIs(t, err, context.Canceled, "cancelled FIFO load must return the context error")
 
-	select {
-	case err := <-done:
-		require.Error(t, err, "cancelled FIFO load must return an error")
-	case <-time.After(3 * time.Second):
-		t.Fatal("Load did not return after cancellation of a blocking FIFO read")
-	}
-
-	// Allow the (now-unblocked) reader and watcher goroutines to exit, then
-	// assert the count returned to baseline. Without the O_NONBLOCK open + read
-	// deadline this stays elevated because a reader is stuck in os.Open/ReadAll.
-	settle()
-	after := runtime.NumGoroutine()
-	require.LessOrEqual(t, after, before,
-		"goroutine leak after cancelled FIFO load: before=%d after=%d", before, after)
+	waitLabeledGoroutinesExit(t, labelKey, labelValue)
 }
 
-// settle gives recently-unblocked goroutines a chance to exit before a
-// NumGoroutine snapshot, polling instead of sleeping a fixed duration.
-func settle() {
-	for range 50 {
+// loadLabeled applies the pprof labels in labels to the current goroutine, so
+// every goroutine Load starts inherits them, then runs loadInto.
+func loadLabeled(labels, ctx context.Context, filename string, done chan<- error) {
+	pprof.SetGoroutineLabels(labels)
+	loadInto(ctx, filename, done)
+}
+
+// waitLabeledGoroutinesExit waits until no goroutine carries the pprof label
+// key=value. A goroutine that has been told to stop can take a moment to exit,
+// so this polls; a goroutine that never exits fails the test once the hang
+// guard expires, with the goroutine profile in the message.
+func waitLabeledGoroutinesExit(t *testing.T, key, value string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		n, profile := labeledGoroutines(t, key, value)
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d goroutine(s) started by the load never exited:\n%s", n, profile)
+		}
 		runtime.Gosched()
-		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+var goroutineRecord = regexp.MustCompile(`^(\d+) @`)
+
+// labeledGoroutines counts the goroutines carrying the pprof label key=value in
+// the debug=1 goroutine profile, where each record opens with "<count> @ ..."
+// and a labelled record's next line is "# labels: {...}".
+func labeledGoroutines(t *testing.T, key, value string) (int, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	require.NoError(t, pprof.Lookup("goroutine").WriteTo(&buf, 1))
+	want := strconv.Quote(key) + ":" + strconv.Quote(value)
+
+	total := 0
+	count := 0
+	sc := bufio.NewScanner(bytes.NewReader(buf.Bytes()))
+	for sc.Scan() {
+		line := sc.Text()
+		if m := goroutineRecord.FindStringSubmatch(line); m != nil {
+			count, _ = strconv.Atoi(m[1])
+			continue
+		}
+		if strings.HasPrefix(line, "# labels: ") && strings.Contains(line, want) {
+			total += count
+		}
+		count = 0
+	}
+	return total, buf.String()
 }
 
 // An already-cancelled context must make Load fail fast without blocking on a
