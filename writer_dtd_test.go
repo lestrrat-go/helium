@@ -207,6 +207,86 @@ func TestSerializeDTD(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, buf.String(), "<empty></empty>")
 	})
+
+	// An empty default value is still a default: a bare or #FIXED default is
+	// written with its quotes even when the value is "", as libxml2
+	// xmlSaveWriteAttributeDecl does. A reference to an undefined entity
+	// becomes an empty default when an external subset makes it a warning
+	// instead of a well-formedness error; libxml2 xmlParseAttValueInternal
+	// drops such a reference the same way.
+	t.Run("empty attribute default", func(t *testing.T) {
+		t.Parallel()
+
+		testcases := []struct {
+			name string
+			src  string
+			want string
+		}{
+			{
+				name: "empty literal",
+				src:  `<!DOCTYPE r [<!ATTLIST r x CDATA "">]><r/>`,
+				want: `<!ATTLIST r x CDATA "">`,
+			},
+			{
+				name: "empty fixed literal",
+				src:  `<!DOCTYPE r [<!ATTLIST r x CDATA #FIXED "">]><r/>`,
+				want: `<!ATTLIST r x CDATA #FIXED "">`,
+			},
+			{
+				name: "undefined entity",
+				src:  `<!DOCTYPE r SYSTEM "ext.dtd" [<!ATTLIST r x CDATA "&undef;">]><r/>`,
+				want: `<!ATTLIST r x CDATA "">`,
+			},
+			{
+				name: "fixed undefined entity",
+				src:  `<!DOCTYPE r SYSTEM "ext.dtd" [<!ATTLIST r x CDATA #FIXED "&undef;">]><r/>`,
+				want: `<!ATTLIST r x CDATA #FIXED "">`,
+			},
+			{
+				name: "undefined entity between text",
+				src:  `<!DOCTYPE r SYSTEM "ext.dtd" [<!ATTLIST r x CDATA "a&undef;b">]><r/>`,
+				want: `<!ATTLIST r x CDATA "ab">`,
+			},
+		}
+
+		for _, tc := range testcases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.src))
+				require.NoError(t, err)
+				out, err := helium.WriteString(doc)
+				require.NoError(t, err)
+				require.Contains(t, out, tc.want)
+
+				// The written declaration parses back to the same output.
+				reparsed, err := helium.NewParser().Parse(t.Context(), []byte(out))
+				require.NoError(t, err)
+				again, err := helium.WriteString(reparsed)
+				require.NoError(t, err)
+				require.Equal(t, out, again)
+			})
+		}
+	})
+
+	// A declaration built through the DTD API with an empty bare default is
+	// written with its quotes, like a parsed one.
+	t.Run("empty attribute default from AddAttributeDecl", func(t *testing.T) {
+		t.Parallel()
+
+		doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+		dtd, err := doc.CreateInternalSubset("r", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("r", "x", enum.AttrCDATA, enum.AttrDefaultNone, "", nil)
+		require.NoError(t, err)
+		_, err = dtd.AddAttributeDecl("r", "y", enum.AttrCDATA, enum.AttrDefaultImplied, "", nil)
+		require.NoError(t, err)
+
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Contains(t, out, `<!ATTLIST r x CDATA "">`)
+		require.Contains(t, out, `<!ATTLIST r y CDATA #IMPLIED>`)
+	})
 }
 
 func TestWriterEntityDecl(t *testing.T) {

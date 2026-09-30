@@ -351,6 +351,13 @@ default namespace was NOT explicitly declared on the same tag; (3) apply default
 that prefix (incl. reserved `xml`) was NOT explicitly declared; (4) remaining defaults (skip if an explicit
 attr exists). Explicit namespace declarations always win over ATTLIST defaults.
 
+`parseAttributeListDecl` (`parser_dtd_attr.go`) registers a default whenever the DefaultDecl kind carries a value
+(`attrHasDefaultValue`: a bare default or `#FIXED`), including an empty one, as libxml2 `xmlAddDefAttrs` does for any
+non-NULL default. So `x CDATA ""` defaults `x=""`, and an empty `xmlns:p` default meets the same empty-URI check as a
+literal `xmlns:p=""`. A reference to an undeclared entity in a default is dropped from the value when it is only a
+warning (external subset or PE references present), as libxml2 `xmlParseAttValueInternal` does, so `"&undef;"`
+leaves an empty default.
+
 ## Recovery Mode / Early Termination
 
 - **RecoverOnError** — on a recoverable error in `parseContent()`: save `recoverErr`, `disableSAX=true`,

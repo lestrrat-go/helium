@@ -690,7 +690,10 @@ func (pctx *parserCtx) parseAttributeListDecl(ctx context.Context) error {
 			}
 		}
 
-		if defvalue != "" && def != enum.AttrDefaultImplied && def != enum.AttrDefaultRequired {
+		// An empty default is still a default (libxml2 calls xmlAddDefAttrs
+		// for any non-NULL defaultValue), so presence is decided by the
+		// DefaultDecl kind, not by the value being non-empty.
+		if attrHasDefaultValue(def) {
 			pctx.addAttributeDefault(elemName, attrName, defvalue)
 		}
 
