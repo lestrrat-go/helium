@@ -72,6 +72,11 @@ cancellation (each operand is individually capped, but the concatenation must be
    avoiding the generic `TraverseAxis` + extra filtered-slice path
 4. Return merged node-set
 
+The child axis and the descendant walks enumerate child lists through `helium.Children` (the owned-child
+boundary), and keep only XDM kinds (`IsXDMChild`). The XDM has no entity references, so from an entity-reference
+context node (entity substitution off) the child and descendant axes are empty: its only child is the DTD-owned
+`Entity` node, and the walk does not follow that node's sibling links into the DTD.
+
 **Cancellation:** the fused hot child/attribute loops check `ctx.Err()` once per enumerated node (the
 attribute path also inside its `ForEachAttribute` callback) so a cancelled context aborts mid-enumeration
 instead of scanning the whole child/attribute set before the next `countOps` boundary. Generic (non-hot) axes

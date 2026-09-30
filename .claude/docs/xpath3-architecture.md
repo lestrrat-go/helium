@@ -28,7 +28,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 
 | File | Contents |
 |------|----------|
-| `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers |
+| `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
 | `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `allOrderedContexts`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)`, `appendTextDescendants` (unexported, iterative stack-based traversal), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
@@ -68,9 +68,10 @@ whole-document index when the result has at most one node, when the step ran fro
 input (reverse axes are reversed in place), or when the axis is child, attribute, self,
 namespace or parent and every input has the same depth (parent results drop adjacent
 duplicates). Both skips require every input to be a document, element, attribute,
-namespace, text, CDATA, comment or PI node (`allOrderedContexts`): traversal from an
-entity reference, entity or DTD node can reach DTD declarations through raw sibling
-links, so those inputs always sort. A skipping step reserves its document's registration order in the cache
+namespace, text, CDATA, comment, PI, entity-reference or DTD node (`allOrderedContexts`).
+An `Entity` input always sorts: the index places an entity's content at the last
+reference to it, so the child steps of two entities, or of an entity and an element,
+can interleave. A skipping step reserves its document's registration order in the cache
 (unexported `reserveDocument`) without indexing it, so the order between documents stays
 the one indexing would have produced. `Position`, `Compare` and every indexing path index
 a reserved document on first use, under its reserved order. xpath1 ends every location

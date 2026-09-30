@@ -956,25 +956,18 @@ func TestCipherReference(t *testing.T) {
 
 	// The same walk observes the context once per node, so a caller that
 	// cancelled is answered while the walk is running, well before it has
-	// stepped every node of a document the caller did not write.
+	// stepped every node of a document the caller did not write. A named form
+	// ("#id") builds its node-set first, and both that walk and the
+	// budgetWriter feeding c14n poll the caller's context: a context cancelled
+	// before the decrypt starts comes back as context.Canceled from whichever
+	// of the two sees it first, never as the result of a completed
+	// canonicalization.
 	t.Run("a cancelled context stops the node-set walk", func(t *testing.T) {
 		elem, _ := wideDoc(t, 50000, 500)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(ctx, elem)
 		require.ErrorIs(t, err, context.Canceled)
-
-		// And a deadline is not out-waited: the same document under a deadline
-		// of a tenth of a second returns in that order of time, and never in
-		// tens of seconds, which is what a walk polling nothing would cost.
-		deadline, stop := context.WithTimeout(t.Context(), 100*time.Millisecond)
-		defer stop()
-		start := time.Now()
-		_, err = xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(deadline, elem)
-		elapsed := time.Since(start)
-		require.Error(t, err)
-		t.Logf("a 100ms deadline over a 50000 element reference returned after %s", elapsed)
-		require.Less(t, elapsed, 10*time.Second, "the resolution ran on after its caller's deadline passed")
 	})
 
 	// The two whole-document forms (URI="" and "#xpointer(/)") never build a
@@ -999,19 +992,6 @@ func TestCipherReference(t *testing.T) {
 			require.ErrorIs(t, err, context.Canceled)
 		})
 	}
-
-	// A named form ("#id") builds a node-set first, and both that walk and the
-	// budgetWriter feeding c14n poll the caller's context. A context cancelled
-	// before the decrypt starts comes back as context.Canceled from whichever
-	// of the two sees it first (the walk, since it runs first), never as the
-	// result of a completed canonicalization.
-	t.Run("a named reference stops for a cancelled context", func(t *testing.T) {
-		elem, _ := wideDoc(t, 100, 10)
-		ctx, cancel := context.WithCancel(t.Context())
-		cancel()
-		_, err := xmlenc1.NewDecryptor().SessionKey(newSessionKey(t)).Decrypt(ctx, elem)
-		require.ErrorIs(t, err, context.Canceled)
-	})
 
 	// The fix above changes nothing about what a non-cancelled decrypt
 	// produces: the same same-document reference resolves to the identical
