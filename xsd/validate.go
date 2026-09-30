@@ -630,6 +630,11 @@ type validationContext struct {
 	// displayNames interns elemDisplayName results per namespaced expanded name
 	// for this run (see displayName).
 	displayNames map[QName]string
+	// entityLine is non-zero while the validator is inside an entity
+	// reference's expansion: the line of the outermost reference, which every
+	// diagnostic reports in place of the entity-relative line of the node it
+	// names (see entity_expansion.go).
+	entityLine int
 }
 
 // assertEffectiveValue is a recorded element default/fixed effective value plus the
@@ -778,6 +783,9 @@ func (vc *validationContext) reportValidityError(ctx context.Context, file strin
 	if vc.suppressDepth > 0 {
 		return
 	}
+	if vc.entityLine != 0 {
+		line = vc.entityLine
+	}
 	ve := &ValidationError{
 		Filename: file,
 		Line:     line,
@@ -791,6 +799,9 @@ func (vc *validationContext) reportValidityError(ctx context.Context, file strin
 func (vc *validationContext) reportValidityErrorAttr(ctx context.Context, file string, line int, elemName, attrName, msg string) {
 	if vc.suppressDepth > 0 {
 		return
+	}
+	if vc.entityLine != 0 {
+		line = vc.entityLine
 	}
 	ve := &ValidationError{
 		Filename:      file,
@@ -904,33 +915,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	// Identity constraints (xs:key, xs:keyref, xs:unique). This walk covers the
 	// whole tree and always runs, so it is also the pass that reports a tree
 	// cycle: ErrWalkCycle leaves the walk partial, and the document is not valid.
-	if err := helium.Walk(doc, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n.Type() != helium.ElementNode {
-			return nil
-		}
-		elem, ok := helium.AsNode[*helium.Element](n)
-		if !ok {
-			return nil
-		}
-		// Choose the declaration whose identity constraints apply to this element
-		// instance. idcHostDecl uses the non-ref declaration recorded during pass-1
-		// if one is present — even when it carries zero IDCs — because a local
-		// element that merely shadows a same-named global must NOT inherit the
-		// global's IDCs. lookupElemDecl finds only GLOBAL declarations, so IDCs on a
-		// local element would otherwise be silently skipped. It falls back to the
-		// global lookup only when no declaration was recorded OR the recorded one is
-		// a ref: an <xs:element ref="g"> matches a ref declaration (IsRef) that does
-		// NOT copy the global's IDCs (IDCs are a property of the referenced global
-		// declaration), so for a ref the global lookup is the one that carries the
-		// constraints.
-		edecl := vc.idcHostDecl(elem)
-		if edecl != nil && len(edecl.IDCs) > 0 {
-			if err := vc.validateIDConstraints(ctx, elem, edecl); err != nil {
-				valid = false
-			}
-		}
-		return nil
-	})); err != nil {
+	// It visits each element occurrence of the tree entity substitution would
+	// build (idcDocument), and nothing in the DTD.
+	idc := &idcVisitor{vc: vc, valid: true}
+	if err := vc.walkOccurrences(ctx, vc.idcDocument(doc), idc); err != nil || !idc.valid {
 		valid = false
 	}
 
@@ -964,6 +952,35 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	}
 
 	return valid
+}
+
+// idcVisitor is the occurrenceVisitor of validateDocument's identity-constraint
+// pass.
+type idcVisitor struct {
+	vc    *validationContext
+	valid bool
+}
+
+// visitOccurrence evaluates the identity constraints of the declaration that
+// governs one element occurrence.
+func (v *idcVisitor) visitOccurrence(ctx context.Context, occ elementOccurrence) {
+	// Choose the declaration whose identity constraints apply to this element
+	// instance. idcHostDecl uses the non-ref declaration recorded during pass-1
+	// if one is present — even when it carries zero IDCs — because a local
+	// element that merely shadows a same-named global must NOT inherit the
+	// global's IDCs. lookupElemDecl finds only GLOBAL declarations, so IDCs on a
+	// local element would otherwise be silently skipped. It falls back to the
+	// global lookup only when no declaration was recorded OR the recorded one is
+	// a ref: an <xs:element ref="g"> matches a ref declaration (IsRef) that does
+	// NOT copy the global's IDCs (IDCs are a property of the referenced global
+	// declaration), so for a ref the global lookup is the one that carries the
+	// constraints.
+	edecl := v.vc.idcHostDecl(occ.elem)
+	if edecl != nil && len(edecl.IDCs) > 0 {
+		if err := v.vc.validateIDConstraints(ctx, occ.elem, edecl); err != nil {
+			v.valid = false
+		}
+	}
 }
 
 func (vc *validationContext) validateRootElement(ctx context.Context, elem *helium.Element) error {
@@ -1319,73 +1336,81 @@ func (vc *validationContext) assessLaxElement(ctx context.Context, ce *helium.El
 // honored during key canonicalization.
 func (vc *validationContext) annotateAnyTypeChildren(ctx context.Context, elem *helium.Element) error {
 	var contentErr error
+	var pieces []contentPiece
 	for child := range helium.Children(elem) {
-		if child.Type() != helium.ElementNode {
-			continue
-		}
-		ce, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
-		edecl := lookupElemDecl(ce, vc.schema)
-		if edecl == nil {
-			// Lax with no global declaration: assess the child against its xsi:type
-			// (if resolvable), else recurse to annotate deeper descendants.
-			if err := vc.assessLaxElement(ctx, ce); err != nil {
+		switch child.Type() {
+		case helium.ElementNode:
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			if err := vc.annotateAnyTypeChild(ctx, ce); err != nil {
 				contentErr = err
 			}
-			continue
-		}
-		// XSD 1.1 conditional type assignment applies to a global element reached
-		// through xs:anyType too: select the alternative type BEFORE resolving
-		// xsi:type (xsi:type still wins), mirroring the established order at the
-		// explicit-particle/wildcard match sites.
-		declType := effectiveDeclType(edecl, vc.schema)
-		if err := vc.rejectMissingTypeRef(ctx, ce, declType); err != nil {
-			contentErr = err
-			continue
-		}
-		declType = vc.applyTypeAlternatives(ctx, ce, edecl, declType)
-		td, xsiErr := vc.resolveXsiType(ctx, ce, declType, vc.hasTypeTable(edecl))
-		if xsiErr != nil {
-			contentErr = xsiErr
-			continue
-		}
-		// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
-		// for a global element assessed through xs:anyType too. The blocked set unions
-		// the element declaration's block with the declared type's block.
-		if td != declType && declType != nil && typeDerivationBlocked(td, declType, edecl.Block) {
-			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
-				"The xsi:type definition is blocked by the element declaration.")
-			contentErr = fmt.Errorf("blocked xsi:type")
-			continue
-		}
-		if td != nil && td.Abstract {
-			msg := msgAbstractType
-			vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msg)
-			contentErr = fmt.Errorf("abstract type")
-			continue
-		}
-		vc.annotateElement(ctx, ce, td, true)
-		if td == nil {
-			continue
-		}
-		nilled, nilErr := vc.checkXsiNil(ctx, ce, edecl)
-		if nilErr != nil {
-			contentErr = nilErr
-			continue
-		}
-		if nilled {
-			if err := vc.validateNilledElement(ctx, ce, edecl, td); err != nil {
-				contentErr = err
+		case helium.EntityRefNode:
+			pieces = appendExpansion(pieces[:0], child, true, nil)
+			if len(pieces) == 0 {
+				continue
 			}
-			continue
-		}
-		if err := vc.validateElementContent(ctx, ce, edecl, td); err != nil {
-			contentErr = err
+			prevLine := vc.enterEntityLine(expansionLine(vc.entityLine, elem, child))
+			for _, p := range pieces {
+				if err := vc.annotateAnyTypeChild(ctx, p.elem); err != nil {
+					contentErr = err
+				}
+			}
+			vc.entityLine = prevLine
 		}
 	}
 	return contentErr
+}
+
+// annotateAnyTypeChild lax-validates one child element ce of an xs:anyType
+// element (see annotateAnyTypeChildren).
+func (vc *validationContext) annotateAnyTypeChild(ctx context.Context, ce *helium.Element) error {
+	edecl := lookupElemDecl(ce, vc.schema)
+	if edecl == nil {
+		// Lax with no global declaration: assess the child against its xsi:type
+		// (if resolvable), else recurse to annotate deeper descendants.
+		return vc.assessLaxElement(ctx, ce)
+	}
+	// XSD 1.1 conditional type assignment applies to a global element reached
+	// through xs:anyType too: select the alternative type BEFORE resolving
+	// xsi:type (xsi:type still wins), mirroring the established order at the
+	// explicit-particle/wildcard match sites.
+	declType := effectiveDeclType(edecl, vc.schema)
+	if err := vc.rejectMissingTypeRef(ctx, ce, declType); err != nil {
+		return err
+	}
+	declType = vc.applyTypeAlternatives(ctx, ce, edecl, declType)
+	td, xsiErr := vc.resolveXsiType(ctx, ce, declType, vc.hasTypeTable(edecl))
+	if xsiErr != nil {
+		return xsiErr
+	}
+	// A blocked xsi:type derivation is a validity error (cvc-elt.4.3), enforced
+	// for a global element assessed through xs:anyType too. The blocked set unions
+	// the element declaration's block with the declared type's block.
+	if td != declType && declType != nil && typeDerivationBlocked(td, declType, edecl.Block) {
+		vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce),
+			"The xsi:type definition is blocked by the element declaration.")
+		return fmt.Errorf("blocked xsi:type")
+	}
+	if td != nil && td.Abstract {
+		msg := msgAbstractType
+		vc.reportValidityError(ctx, vc.filename, ce.Line(), elemDisplayName(ce), msg)
+		return fmt.Errorf("abstract type")
+	}
+	vc.annotateElement(ctx, ce, td, true)
+	if td == nil {
+		return nil
+	}
+	nilled, nilErr := vc.checkXsiNil(ctx, ce, edecl)
+	if nilErr != nil {
+		return nilErr
+	}
+	if nilled {
+		return vc.validateNilledElement(ctx, ce, edecl, td)
+	}
+	return vc.validateElementContent(ctx, ce, edecl, td)
 }
 
 // annotateSkipChildren walks the subtree of an element matched by an
@@ -1414,34 +1439,54 @@ func (vc *validationContext) annotateSkipChildren(ctx context.Context, elem *hel
 	if actual, ok := vc.resolveXsiTypeQuiet(elem); ok {
 		vc.annotateElement(ctx, elem, actual, false)
 	}
+	var pieces []contentPiece
 	for child := range helium.Children(elem) {
-		if child.Type() != helium.ElementNode {
-			continue
+		switch child.Type() {
+		case helium.ElementNode:
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			vc.annotateSkipChild(ctx, ce)
+		case helium.EntityRefNode:
+			pieces = appendExpansion(pieces[:0], child, true, nil)
+			for _, p := range pieces {
+				vc.annotateSkipChild(ctx, p.elem)
+			}
 		}
-		ce, ok := helium.AsNode[*helium.Element](child)
-		if !ok {
-			continue
-		}
-		// Resolve xsi:type WITHOUT reporting: skipped content is not assessed, so
-		// an unresolvable or non-derived xsi:type must not raise a validity error.
-		// Only an xsi:type override contributes an actual type distinct from what
-		// pass-2 can already derive from the content model, so record only that
-		// (assessed=false — skipped content is not schema-assessed).
-		if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
-			vc.annotateElement(ctx, ce, actual, false)
-		}
-		vc.annotateSkipChildren(ctx, ce)
 	}
 }
 
+// annotateSkipChild records the actual type of one child element ce of skipped
+// content and walks its subtree (see annotateSkipChildren).
+func (vc *validationContext) annotateSkipChild(ctx context.Context, ce *helium.Element) {
+	// Resolve xsi:type WITHOUT reporting: skipped content is not assessed, so
+	// an unresolvable or non-derived xsi:type must not raise a validity error.
+	// Only an xsi:type override contributes an actual type distinct from what
+	// pass-2 can already derive from the content model, so record only that
+	// (assessed=false — skipped content is not schema-assessed).
+	if actual, ok := vc.resolveXsiTypeQuiet(ce); ok {
+		vc.annotateElement(ctx, ce, actual, false)
+	}
+	vc.annotateSkipChildren(ctx, ce)
+}
+
 func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
-	// Simple content types must not have child elements.
+	// Simple content types must not have child elements, including the elements
+	// of an entity reference's expansion.
 	for child := range helium.Children(elem) {
-		if child.Type() == helium.ElementNode {
-			vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(),
-				"Element content is not allowed, because the content type is a simple type definition.")
-			return fmt.Errorf("element content not allowed")
+		switch child.Type() {
+		case helium.ElementNode:
+		case helium.EntityRefNode:
+			if !expansionHasElement(child) {
+				continue
+			}
+		default:
+			continue
 		}
+		vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(),
+			"Element content is not allowed, because the content type is a simple type definition.")
+		return fmt.Errorf("element content not allowed")
 	}
 
 	value := helium.CharacterData(elem)
@@ -1751,21 +1796,36 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 				return fmt.Errorf("not expected")
 			}
 		case helium.EntityRefNode:
-			// An entity reference is the character data of its expansion. One that
-			// expands to nothing leaves no character content, as it would after
-			// entity substitution.
-			text := helium.CharacterData(child)
-			if text == "" {
-				continue
+			if err := vc.validateEmptyExpansion(ctx, elem, child, strict); err != nil {
+				return err
 			}
-			if strict {
-				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the content type is empty.")
-				return fmt.Errorf("not expected")
-			}
-			if !xmlchar.IsAllSpace(text) {
-				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
-				return fmt.Errorf("not expected")
-			}
+		}
+	}
+	return nil
+}
+
+// validateEmptyExpansion applies validateEmptyContent's checks to the
+// expansion of ref, a child of elem, in document order, as they apply to the
+// element and character children entity substitution would give elem. An
+// expansion with no element and no character data leaves no content.
+func (vc *validationContext) validateEmptyExpansion(ctx context.Context, elem *helium.Element, ref helium.Node, strict bool) error {
+	for _, p := range appendExpansion(nil, ref, false, nil) {
+		if p.elem != nil {
+			prevLine := vc.enterEntityLine(expansionLine(vc.entityLine, elem, ref))
+			vc.reportValidityError(ctx, vc.filename, p.elem.Line(), p.elem.LocalName(), "This element is not expected.")
+			vc.entityLine = prevLine
+			return fmt.Errorf("not expected")
+		}
+		if len(p.text) == 0 {
+			continue
+		}
+		if strict {
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the content type is empty.")
+			return fmt.Errorf("not expected")
+		}
+		if !xmlchar.IsAllSpace(p.text) {
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
+			return fmt.Errorf("not expected")
 		}
 	}
 	return nil
@@ -1781,16 +1841,36 @@ type childElem struct {
 	name        string // local name (for matching)
 	ns          string // namespace URI (for matching)
 	displayName string // namespace-qualified name (for error messages)
+	// refLine is non-zero for an element reached through an entity reference:
+	// the line of the outermost reference (see expansionLine).
+	refLine int
 }
 
-// collectChildElements returns elem's element children in document order. The
-// slice is sized by a first counting pass, so it is allocated once.
+// reportLine returns the line diagnostics about the child report.
+func (c childElem) reportLine() int {
+	if c.refLine != 0 {
+		return c.refLine
+	}
+	return c.elem.Line()
+}
+
+// collectChildElements returns elem's element children in document order, with
+// the elements of each entity reference child's expansion spliced in at the
+// reference. The slice is sized by a first counting pass, so it is allocated
+// once.
 func (vc *validationContext) collectChildElements(elem *helium.Element) []childElem {
 	n := 0
+	hasRef := false
 	for child := range helium.Children(elem) {
-		if child.Type() == helium.ElementNode {
+		switch child.Type() {
+		case helium.ElementNode:
 			n++
+		case helium.EntityRefNode:
+			hasRef = true
 		}
+	}
+	if hasRef {
+		return vc.collectExpandedChildElements(elem, n)
 	}
 	if n == 0 {
 		return nil
@@ -1804,6 +1884,38 @@ func (vc *validationContext) collectChildElements(elem *helium.Element) []childE
 			}
 			children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: vc.displayName(ce)})
 		}
+	}
+	return children
+}
+
+// collectExpandedChildElements is collectChildElements for an element with at
+// least one entity reference child. n is the number of its direct element
+// children.
+func (vc *validationContext) collectExpandedChildElements(elem *helium.Element, n int) []childElem {
+	children := make([]childElem, 0, n)
+	var pieces []contentPiece
+	for child := range helium.Children(elem) {
+		switch child.Type() {
+		case helium.ElementNode:
+			ce, ok := helium.AsNode[*helium.Element](child)
+			if !ok {
+				continue
+			}
+			children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: vc.displayName(ce)})
+		case helium.EntityRefNode:
+			pieces = appendExpansion(pieces[:0], child, true, nil)
+			if len(pieces) == 0 {
+				continue
+			}
+			line := expansionLine(vc.entityLine, elem, child)
+			for _, p := range pieces {
+				ce := p.elem
+				children = append(children, childElem{elem: ce, name: ce.LocalName(), ns: ce.URI(), displayName: vc.displayName(ce), refLine: line})
+			}
+		}
+	}
+	if len(children) == 0 {
+		return nil
 	}
 	return children
 }
@@ -3135,17 +3247,35 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 				return fmt.Errorf("content in nilled element")
 			}
 		case helium.EntityRefNode:
-			// The same rule applied to the reference's expansion; one that expands
-			// to nothing leaves no character content.
-			text := helium.CharacterData(child)
-			if text != "" && (vc.version == Version11 || !xmlchar.IsAllSpace(text)) {
-				vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
-					"Character content is not allowed, because the element is nilled.")
-				return fmt.Errorf("content in nilled element")
+			if err := vc.validateNilledExpansion(ctx, elem, child, dn); err != nil {
+				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+// validateNilledExpansion applies validateNilledElement's content checks to
+// the expansion of ref, a child of the nilled element elem (display name dn),
+// in document order, as they apply to the element and character children
+// entity substitution would give elem. An expansion with no element and no
+// character data leaves no content.
+func (vc *validationContext) validateNilledExpansion(ctx context.Context, elem *helium.Element, ref helium.Node, dn string) error {
+	for _, p := range appendExpansion(nil, ref, false, nil) {
+		if p.elem != nil {
+			prevLine := vc.enterEntityLine(expansionLine(vc.entityLine, elem, ref))
+			vc.reportValidityError(ctx, vc.filename, p.elem.Line(), elemDisplayName(p.elem),
+				"This element is not expected, because the element '"+dn+"' is nilled.")
+			vc.entityLine = prevLine
+			return fmt.Errorf("content in nilled element")
+		}
+		if len(p.text) != 0 && (vc.version == Version11 || !xmlchar.IsAllSpace(p.text)) {
+			vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
+				"Character content is not allowed, because the element is nilled.")
+			return fmt.Errorf("content in nilled element")
+		}
+	}
 	return nil
 }
 

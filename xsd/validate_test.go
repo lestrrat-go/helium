@@ -1320,6 +1320,16 @@ func entityBorneSchema(v11 bool) string {
     </xs:complexType>
     <xs:keyref name="ou" refer="kk"><xs:selector xpath="use"/><xs:field xpath="."/></xs:keyref>
   </xs:element>
+  <xs:element name="fkeys">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType><xs:sequence><xs:element name="v" type="xs:int"/></xs:sequence></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="fu"><xs:selector xpath="item"/><xs:field xpath="v"/></xs:unique>
+  </xs:element>
 `)
 	if v11 {
 		b.WriteString(`  <xs:element name="cmp">
@@ -1350,14 +1360,18 @@ type entityBorneCase struct {
 }
 
 func entityBorneCases() []entityBorneCase {
-	const xsi = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+	const (
+		xsi     = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+		entA    = `<!ENTITY c "<a>1</a>">`
+		intBody = `<int>&c;</int>`
+	)
 	return []entityBorneCase{
 		{name: "element-only valid", entities: `<!ENTITY c "<a>1</a><b>2</b>">`, body: `<seq>&c;</seq>`, valid: true},
 		{name: "element-only wrong order", entities: `<!ENTITY c "<b>2</b><a>1</a>">`, body: "<seq>\n&c;</seq>"},
 		{name: "element-only child content invalid", entities: `<!ENTITY c "<a>x</a>">`, body: "<seq>\n\n&c;</seq>"},
 		{name: "element-only descendant on a later entity line", entities: "<!ENTITY c \"<a>1</a>\n<b>x</b>\">", body: "<seq>\n&c;</seq>"},
-		{name: "element-only entity then literal", entities: `<!ENTITY c "<a>1</a>">`, body: `<seq>&c;<b>2</b></seq>`, valid: true},
-		{name: "element-only literal then entity", entities: `<!ENTITY c "<a>1</a>">`, body: "<seq><b>2</b>\n&c;</seq>"},
+		{name: "element-only entity then literal", entities: entA, body: `<seq>&c;<b>2</b></seq>`, valid: true},
+		{name: "element-only literal then entity", entities: entA, body: "<seq><b>2</b>\n&c;</seq>"},
 		{name: "element-only nested entities valid", entities: `<!ENTITY d "<b>2</b>"><!ENTITY c "<a>1</a>&d;">`, body: `<seq>&c;</seq>`, valid: true},
 		{name: "element-only nested entities invalid", entities: `<!ENTITY d "<a>2</a>"><!ENTITY c "<a>1</a>&d;">`, body: "<seq>\n&c;</seq>"},
 		{name: "element-only nested entity content invalid", entities: "<!ENTITY d \"<b>y</b>\"><!ENTITY c \"<a>1</a>\n&d;\">", body: "<seq>\n\n&c;</seq>"},
@@ -1365,17 +1379,17 @@ func entityBorneCases() []entityBorneCase {
 		{name: "mixed text and elements valid", entities: `<!ENTITY c "x<a>1</a>y">`, body: `<mix>&c;<b>2</b></mix>`, valid: true},
 		{name: "mixed text and elements invalid", entities: `<!ENTITY c "x<b>1</b>">`, body: "<mix>\n&c;</mix>"},
 		{name: "all valid", entities: `<!ENTITY c "<b>2</b><a>1</a>">`, body: `<all>&c;</all>`, valid: true},
-		{name: "all repeated through entity", entities: `<!ENTITY c "<a>1</a>">`, body: "<all>&c;\n&c;<b>1</b></all>"},
-		{name: "simple content with element", entities: `<!ENTITY c "<x/>42">`, body: `<int>&c;</int>`},
-		{name: "simple content with nested element", entities: `<!ENTITY d "<x/>"><!ENTITY c "4&d;2">`, body: `<int>&c;</int>`},
-		{name: "simple content with text-only entity", entities: `<!ENTITY d "2"><!ENTITY c "4&d;">`, body: `<int>&c;</int>`, valid: true},
+		{name: "all repeated through entity", entities: entA, body: "<all>&c;\n&c;<b>1</b></all>"},
+		{name: "simple content with element", entities: `<!ENTITY c "<x/>42">`, body: intBody},
+		{name: "simple content with nested element", entities: `<!ENTITY d "<x/>"><!ENTITY c "4&d;2">`, body: intBody},
+		{name: "simple content with text-only entity", entities: `<!ENTITY d "2"><!ENTITY c "4&d;">`, body: intBody, valid: true},
 		{name: "empty content with element", entities: `<!ENTITY c "<x/>">`, body: "<empty>\n&c;</empty>"},
 		{name: "empty content with whitespace then element", entities: `<!ENTITY c " <x/>">`, body: "<empty>\n&c;</empty>"},
 		{name: "empty content with text then element", entities: `<!ENTITY c "t<x/>">`, body: "<empty>\n&c;</empty>"},
 		{name: "empty content with entity expanding to nothing", entities: `<!ENTITY c "">`, body: `<empty>&c;</empty>`, valid: true},
-		{name: "nilled with element", entities: `<!ENTITY c "<a>1</a>">`, body: `<nil ` + xsi + ` xsi:nil="true">` + "\n&c;</nil>"},
+		{name: "nilled with element", entities: entA, body: `<nil ` + xsi + ` xsi:nil="true">` + "\n&c;</nil>"},
 		{name: "nilled with entity expanding to nothing", entities: `<!ENTITY c "">`, body: `<nil ` + xsi + ` xsi:nil="true">&c;</nil>`, valid: true},
-		{name: "not nilled with element", entities: `<!ENTITY c "<a>1</a>">`, body: `<nil ` + xsi + ` xsi:nil="false">&c;</nil>`, valid: true},
+		{name: "not nilled with element", entities: entA, body: `<nil ` + xsi + ` xsi:nil="false">&c;</nil>`, valid: true},
 		{name: "anyType with valid global element", entities: `<!ENTITY c "<g>1</g>">`, body: `<any>&c;</any>`, valid: true},
 		{name: "anyType with invalid global element", entities: `<!ENTITY c "<g>x</g>">`, body: "<any>\n&c;</any>"},
 		{name: "strict wildcard valid", entities: `<!ENTITY c "<g>1</g><g>2</g>">`, body: `<wild>&c;</wild>`, valid: true},
@@ -1394,6 +1408,13 @@ func entityBorneCases() []entityBorneCase {
 		{name: "entity-borne key host referenced twice", entities: `<!ENTITY c "<keys><k>1</k><k>1</k></keys>">`, body: "<box>&c;\n&c;</box>"},
 		{name: "keyref resolved by entity-borne descendant key", entities: `<!ENTITY c "<keys><k>1</k></keys>">`, body: `<outer>&c;<use>1</use></outer>`, valid: true},
 		{name: "keyref dangling against entity-borne descendant key", entities: `<!ENTITY c "<keys><k>1</k></keys>">`, body: "<outer>&c;\n<use>2</use></outer>"},
+		{name: "key selector reaching entity-borne elements duplicate", entities: `<!ENTITY c "<k>1</k><k>1</k>">`, body: "<keys>\n&c;</keys>"},
+		{name: "key selector reaching entity-borne elements distinct", entities: `<!ENTITY c "<k>1</k><k>2</k>">`, body: `<keys>&c;<ref>2</ref></keys>`, valid: true},
+		{name: "key selector reaching element of entity referenced twice", entities: `<!ENTITY c "<k>1</k>">`, body: "<keys>&c;\n&c;</keys>"},
+		{name: "keyref selector reaching entity-borne element dangling", entities: `<!ENTITY c "<ref>2</ref>">`, body: "<keys><k>1</k>\n&c;</keys>"},
+		{name: "keyref selector reaching entity-borne element resolved", entities: `<!ENTITY c "<ref>1</ref>">`, body: `<keys><k>1</k>&c;</keys>`, valid: true},
+		{name: "unique field reaching entity-borne elements duplicate", entities: `<!ENTITY c "<v>01</v>">`, body: "<fkeys><item>&c;</item>\n<item><v>1</v></item></fkeys>"},
+		{name: "unique field reaching nested entity-borne elements distinct", entities: `<!ENTITY d "<v>2</v>"><!ENTITY c "<item>&d;</item>">`, body: `<fkeys><item><v>1</v></item>&c;</fkeys>`, valid: true},
 		{name: "assert over entity-borne elements valid", entities: `<!ENTITY c "<v>1</v><v>2</v>">`, body: `<cmp>&c;</cmp>`, valid: true, v11Only: true},
 		{name: "assert over entity-borne elements invalid", entities: `<!ENTITY c "<v>2</v><v>1</v>">`, body: "<cmp>\n&c;</cmp>", v11Only: true},
 		{name: "assert over nested entity-borne elements", entities: `<!ENTITY d "<v>2</v>"><!ENTITY c "<v>1</v>&d;">`, body: `<cmp>&c;</cmp>`, valid: true, v11Only: true},

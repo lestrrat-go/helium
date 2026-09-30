@@ -1507,7 +1507,7 @@ func (vc *validationContext) validateContentModelOpen(ctx context.Context, elem 
 		declaredNames := collectEmittingModelElementNames(mg, vc.schema)
 		for _, ch := range leftover {
 			if _, ok := declaredNames[QName{Local: ch.name, NS: ch.ns}]; ok {
-				vc.reportValidityError(ctx, vc.filename, ch.elem.Line(), ch.displayName, "This element is not expected.")
+				vc.reportValidityError(ctx, vc.filename, ch.reportLine(), ch.displayName, "This element is not expected.")
 				return fmt.Errorf("unexpected element")
 			}
 		}
@@ -1691,7 +1691,7 @@ func (vc *validationContext) validateOpenChildren(ctx context.Context, parent *h
 	}
 	if consumed < len(open) {
 		ce := open[consumed]
-		vc.reportValidityError(ctx, vc.filename, ce.elem.Line(), ce.displayName, "This element is not expected.")
+		vc.reportValidityError(ctx, vc.filename, ce.reportLine(), ce.displayName, "This element is not expected.")
 		return fmt.Errorf("unexpected element")
 	}
 	return nil

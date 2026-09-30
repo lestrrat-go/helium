@@ -322,7 +322,7 @@ func (vc *validationContext) matchAll10(ctx context.Context, parent *helium.Elem
 		if len(expected) > 0 {
 			msg = formatExpected("This element is not expected.", expected)
 		}
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), child.displayName, msg)
 		return consumed, fmt.Errorf("unexpected element")
 	}
 
@@ -432,7 +432,7 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 		if len(expected) > 0 {
 			msg = formatExpected("This element is not expected.", expected)
 		}
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), child.displayName, msg)
 		return consumed, fmt.Errorf("unexpected element")
 	}
 
@@ -480,6 +480,8 @@ func (vc *validationContext) matchAll11(ctx context.Context, parent *helium.Elem
 // derivation-block check, xsi:nil, and the element content). Shared by the XSD
 // 1.0 and 1.1 matchers so the per-child content validation is identical.
 func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child childElem, edecl *ElementDecl) error {
+	prevLine := vc.enterEntityLine(child.refLine)
+	defer vc.restoreEntityLine(prevLine)
 	actualDecl := resolveSubstDecl(child, edecl, vc.schema)
 	// cvc-elt.2: the resolved element declaration must not be abstract. The XSD 1.0
 	// xs:all matcher (matchAll10) maps an element member's own name directly, so a
@@ -487,7 +489,7 @@ func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child 
 	// concrete substitution-group member may appear). The 1.1 matcher already
 	// filters this at allMemberForChild, so this never fires there.
 	if actualDecl.Abstract {
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractElement)
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), elemDisplayName(child.elem), msgAbstractElement)
 		return fmt.Errorf("abstract element")
 	}
 	declType := effectiveDeclType(actualDecl, vc.schema)
@@ -504,12 +506,12 @@ func (vc *validationContext) validateAllMatchedChild(ctx context.Context, child 
 	// the element declaration's block and the declared type's {prohibited
 	// substitutions}.
 	if td != declType && declType != nil && typeDerivationBlocked(td, declType, actualDecl.Block) {
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
 	}
 	if td != nil && td.Abstract {
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractType)
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), elemDisplayName(child.elem), msgAbstractType)
 		return fmt.Errorf("abstract type")
 	}
 	vc.annotateElement(ctx, child.elem, td, true)
@@ -662,7 +664,7 @@ func (vc *validationContext) matchContentModelFull(ctx context.Context, parent *
 	// Check for unconsumed children.
 	if consumed < len(children) {
 		ce := children[consumed]
-		vc.reportValidityError(ctx, vc.filename, ce.elem.Line(), ce.displayName, "This element is not expected.")
+		vc.reportValidityError(ctx, vc.filename, ce.reportLine(), ce.displayName, "This element is not expected.")
 		return fmt.Errorf("unexpected element")
 	}
 
@@ -741,7 +743,7 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 			// There IS a child but it doesn't match — "This element is not expected."
 			child := children[pos+count]
 			msg := formatExpected("This element is not expected.", expectedNames)
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+			vc.reportValidityError(ctx, vc.filename, child.reportLine(), child.displayName, msg)
 		} else {
 			// No more children at all — "Missing child element(s)."
 			// When the sequence contains wildcards, suppress "Expected is" since the
@@ -763,52 +765,56 @@ func (vc *validationContext) matchElementParticle(ctx context.Context, parent *h
 	// xsi:type overrides the declared type for polymorphism.
 	var contentErr error
 	for i := range count {
-		child := children[pos+i]
-		actualDecl := resolveSubstDecl(child, edecl, vc.schema)
-		// The host declaration was already recorded during the initial match scan
-		// above (before any early return). Nothing to record here.
-		declType := effectiveDeclType(actualDecl, vc.schema)
-		if err := vc.rejectMissingTypeRef(ctx, child.elem, declType); err != nil {
+		if err := vc.validateParticleChild(ctx, children[pos+i], edecl); err != nil {
 			contentErr = err
-			continue
-		}
-		declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
-		td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
-		if xsiErr != nil {
-			contentErr = xsiErr
-			continue
-		}
-		// Check block flags against xsi:type derivation (cvc-elt.4.3): the union of
-		// the element declaration's block and the declared type's block.
-		if td != declType && declType != nil && typeDerivationBlocked(td, declType, actualDecl.Block) {
-			msg := "The xsi:type definition is blocked by the element declaration."
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
-			contentErr = fmt.Errorf("blocked xsi:type")
-			continue
-		}
-		if td != nil && td.Abstract {
-			msg := msgAbstractType
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msg)
-			contentErr = fmt.Errorf("abstract type")
-			continue
-		}
-		// Annotate child element with its type for pass-2 identity-constraint evaluation.
-		vc.annotateElement(ctx, child.elem, td, true)
-		if td != nil {
-			nilled, nilErr := vc.checkXsiNil(ctx, child.elem, actualDecl)
-			if nilErr != nil {
-				contentErr = nilErr
-			} else if nilled {
-				if err := vc.validateNilledElement(ctx, child.elem, actualDecl, td); err != nil {
-					contentErr = err
-				}
-			} else if err := vc.validateElementContent(ctx, child.elem, actualDecl, td); err != nil {
-				contentErr = err
-			}
 		}
 	}
 
 	return count, contentErr
+}
+
+// validateParticleChild validates one child element matched to the element
+// particle declaring edecl: the substitution-group member's declaration, type
+// alternatives, xsi:type and its derivation-block check, xsi:nil, and the
+// element content. The host declaration was already recorded by the match scan
+// in matchElementParticle.
+func (vc *validationContext) validateParticleChild(ctx context.Context, child childElem, edecl *ElementDecl) error {
+	prevLine := vc.enterEntityLine(child.refLine)
+	defer vc.restoreEntityLine(prevLine)
+	actualDecl := resolveSubstDecl(child, edecl, vc.schema)
+	declType := effectiveDeclType(actualDecl, vc.schema)
+	if err := vc.rejectMissingTypeRef(ctx, child.elem, declType); err != nil {
+		return err
+	}
+	declType = vc.applyTypeAlternatives(ctx, child.elem, actualDecl, declType)
+	td, xsiErr := vc.resolveXsiType(ctx, child.elem, declType, vc.hasTypeTable(actualDecl))
+	if xsiErr != nil {
+		return xsiErr
+	}
+	// Check block flags against xsi:type derivation (cvc-elt.4.3): the union of
+	// the element declaration's block and the declared type's block.
+	if td != declType && declType != nil && typeDerivationBlocked(td, declType, actualDecl.Block) {
+		msg := "The xsi:type definition is blocked by the element declaration."
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), elemDisplayName(child.elem), msg)
+		return fmt.Errorf("blocked xsi:type")
+	}
+	if td != nil && td.Abstract {
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), elemDisplayName(child.elem), msgAbstractType)
+		return fmt.Errorf("abstract type")
+	}
+	// Annotate child element with its type for pass-2 identity-constraint evaluation.
+	vc.annotateElement(ctx, child.elem, td, true)
+	if td == nil {
+		return nil
+	}
+	nilled, nilErr := vc.checkXsiNil(ctx, child.elem, actualDecl)
+	if nilErr != nil {
+		return nilErr
+	}
+	if nilled {
+		return vc.validateNilledElement(ctx, child.elem, actualDecl, td)
+	}
+	return vc.validateElementContent(ctx, child.elem, actualDecl, td)
 }
 
 // resolveSubstDecl returns the actual element declaration for a child element.
@@ -1179,7 +1185,7 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 	if count < p.MinOccurs {
 		msg := fmt.Sprintf("This element is not expected. Expected is ( %s ).", wildcardExpected(wc))
 		if pos < len(children) {
-			vc.reportValidityError(ctx, vc.filename, children[pos].elem.Line(), children[pos].displayName, msg)
+			vc.reportValidityError(ctx, vc.filename, children[pos].reportLine(), children[pos].displayName, msg)
 		} else {
 			vc.reportValidityError(ctx, vc.filename, parent.Line(), elemDisplayName(parent), msg)
 		}
@@ -1221,6 +1227,8 @@ func (vc *validationContext) matchWildcardParticle(ctx context.Context, parent *
 // per-child logic the run-based matchWildcardParticle applies, factored out so the
 // xs:all matcher can reuse it.
 func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wildcard, child childElem, edcScope *ModelGroup) error {
+	prevLine := vc.enterEntityLine(child.refLine)
+	defer vc.restoreEntityLine(prevLine)
 	if wc.ProcessContents == ProcessSkip {
 		vc.annotateSkipChildren(ctx, child.elem)
 		return nil
@@ -1241,7 +1249,7 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 				return vc.validateUndeclaredElementWithType(ctx, child.elem, actual)
 			}
 			msg := "No matching global declaration available, but demanded by the strict wildcard."
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+			vc.reportValidityError(ctx, vc.filename, child.reportLine(), child.displayName, msg)
 			// Strict assessment FAILED (no declaration), so the element AND its whole
 			// subtree are NOT schema-assessed — exactly like skip content. Walk it
 			// with annotateSkipChildren (canonicalization-only: records pass-2
@@ -1281,12 +1289,12 @@ func (vc *validationContext) validateWildcardChild(ctx context.Context, wc *Wild
 	// a strict wildcard-matched global element too. The blocked set unions the
 	// element declaration's block with the declared type's {prohibited substitutions}.
 	if td != declType && declType != nil && typeDerivationBlocked(td, declType, edecl.Block) {
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem),
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), elemDisplayName(child.elem),
 			"The xsi:type definition is blocked by the element declaration.")
 		return fmt.Errorf("blocked xsi:type")
 	}
 	if td != nil && td.Abstract {
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), elemDisplayName(child.elem), msgAbstractType)
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), elemDisplayName(child.elem), msgAbstractType)
 		return fmt.Errorf("abstract type")
 	}
 	if err := vc.validateWildcardElementConsistent(ctx, edcScope, child, td); err != nil {
@@ -1327,7 +1335,7 @@ func (vc *validationContext) validateWildcardElementConsistent(ctx context.Conte
 			continue
 		}
 		msg := fmt.Sprintf("The wildcard-matched element's governing type definition is not validly substitutable for the locally declared type definition of element '%s'.", child.displayName)
-		vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, msg)
+		vc.reportValidityError(ctx, vc.filename, child.reportLine(), child.displayName, msg)
 		return fmt.Errorf("wildcard element declaration inconsistent")
 	}
 	return nil
