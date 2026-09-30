@@ -82,7 +82,7 @@ jobs:
       # only after a newer harness commit passes the manual Conformance run.
       # This one is the first to carry the xmlenc11 suite, which the matrix
       # above gates on, so the two must advance together.
-      harness_ref: 39d9ff5f072cf804e503588958178fc6e71cd32d
+      harness_ref: 7456121a454031af0221ef00ea7537b651406842
 
   release:
     needs: conformance-gate
