@@ -150,6 +150,36 @@ func TestSerializeXHTML(t *testing.T) {
 		require.Contains(t, out, `<p xml:lang="en-&g;" lang="en-ayb">`, "output:\n%s", out)
 	})
 
+	// A name attribute built through the tree API with a comment child gives a
+	// synthesized id without the comment text: libxml2's
+	// xmlSaveWriteAttrContent writes only the attribute's Text and entity
+	// reference children.
+	t.Run("synthesized id from a name attribute holding a comment", func(t *testing.T) {
+		const src = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>t</title></head>
+<body><a name="ab">x</a></body>
+</html>`
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err, "parse XHTML document")
+		var a *helium.Element
+		for n := range helium.Descendants(doc) {
+			if e, ok := helium.AsNode[*helium.Element](n); ok && e.LocalName() == "a" {
+				a = e
+			}
+		}
+		require.NotNil(t, a)
+		name := a.GetAttributeNodeNS("name", "")
+		require.NotNil(t, name)
+		require.NoError(t, name.AddChild(doc.CreateComment([]byte("c"))))
+
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err, "serialize XHTML document")
+		require.Contains(t, out, ` id="ab">`, "output:\n%s", out)
+	})
+
 	t.Run("through the public API", func(t *testing.T) {
 		t.Run("void element default NS self-closes", func(t *testing.T) {
 			t.Parallel()

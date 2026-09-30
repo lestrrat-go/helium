@@ -107,11 +107,9 @@ type encryptedKey struct {
 	//
 	// That join belongs to the DOM, not to this package: helium's
 	// appendChildContent (node.go) answers a container's Content() by
-	// recursing through its whole descendant subtree, and
-	// internal/domutil.TextContent concatenates Content() over every direct
-	// child. xmlenc1 implements neither, so the cost above is what reading the
-	// field through them would take, and no work any xmlenc1 code path
-	// performs.
+	// recursing through its whole descendant subtree. xmlenc1 does not
+	// implement it, so the cost above is what reading the field through
+	// Content() would take, and no work any xmlenc1 code path performs.
 	CarriedKeyName string
 	// AgreementMethod, when set, means the key that protects CipherValue is
 	// derived by key agreement, and never supplied directly.
