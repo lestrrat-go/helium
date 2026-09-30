@@ -251,3 +251,21 @@ func TestAttributeValueWithEntityReference(t *testing.T) {
 	require.Error(t, validateXML(t, schema, `<root code="1"/>`))
 	require.Error(t, validateXML(t, schema, `<!DOCTYPE root [<!ENTITY e "y">]><root code="1&e;2"/>`))
 }
+
+// The xml:lang of an xs:documentation is checked as an xs:language after its
+// entity references are expanded, including a reference inside an entity's
+// replacement text.
+func TestDocumentationLangWithNestedEntityReference(t *testing.T) {
+	t.Parallel()
+
+	const schemaSrc = `<!DOCTYPE xs:schema [<!ENTITY n "n"><!ENTITY lang "e&n;">]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:annotation><xs:documentation xml:lang="&lang;">doc</xs:documentation></xs:annotation>
+  <xs:element name="root" type="xs:string"/>
+</xs:schema>`
+	schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaSrc))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDoc)
+	require.NoError(t, err)
+	require.NoError(t, validateXML(t, schema, `<root>x</root>`))
+}

@@ -106,7 +106,7 @@ type encryptedKey struct {
 	// document may spread one over as many CDATA sections as it likes.
 	//
 	// That join belongs to the DOM, not to this package: helium's
-	// aggregateOwnedContent (node.go) answers a container's Content() by
+	// appendChildContent (node.go) answers a container's Content() by
 	// recursing through its whole descendant subtree, and
 	// internal/domutil.TextContent concatenates Content() over every direct
 	// child. xmlenc1 implements neither, so the cost above is what reading the

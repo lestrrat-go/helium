@@ -651,3 +651,87 @@ func TestCycleGuards(t *testing.T) {
 			"Content must terminate on a cyclic sibling list instead of looping forever")
 	})
 }
+
+// A tree parsed with SubstituteEntities(false) keeps each entity reference as
+// an EntityRef node. Content must expand every reference through the entity's
+// parsed children, recursively, the way libxml2's xmlNodeGetContent does, so it
+// returns the same text a SubstituteEntities(true) parse stores. The expected
+// strings match `xmllint --xpath 'string(...)'`.
+func TestContentExpandsEntityReferences(t *testing.T) {
+	t.Parallel()
+
+	const src = `<!DOCTYPE r [` +
+		`<!ENTITY e "x">` +
+		`<!ENTITY f "y">` +
+		`<!ENTITY g "a&f;b">` +
+		`<!ENTITY h "&#38;#60;">` +
+		`<!ENTITY p "p&amp;q">` +
+		`<!ENTITY m "a<b>c&f;</b>d">` +
+		`<!ENTITY c "x<!--k-->y">` +
+		`]>` +
+		`<r n="1&g;2" h="1&h;2" p="&p;">` +
+		`<t>1&e;2</t><g>1&g;2</g><m>1&m;2</m><p>&p;</p><h>1&h;2</h><c>&c;</c>` +
+		`</r>`
+
+	want := map[string]string{
+		"t": "1x2",
+		"g": "1ayb2",
+		"m": "1acyd2",
+		"p": "p&q",
+		"h": "1<2",
+		"c": "xky",
+	}
+	wantAttr := map[string]string{
+		"n": "1ayb2",
+		"h": "1<2",
+		"p": "p&q",
+	}
+
+	for _, substitute := range []bool{false, true} {
+		doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		for child := range helium.Children(root) {
+			value, ok := want[child.Name()]
+			require.True(t, ok, "unexpected child %s", child.Name())
+			require.Equal(t, value, string(child.Content()),
+				"Content of <%s> (SubstituteEntities(%t))", child.Name(), substitute)
+		}
+		for name, value := range wantAttr {
+			attr := root.GetAttributeNodeNS(name, "")
+			require.NotNil(t, attr, "attribute %s", name)
+			require.Equal(t, value, string(attr.Content()),
+				"Content of @%s (SubstituteEntities(%t))", name, substitute)
+			require.Equal(t, attr.Value(), string(attr.Content()),
+				"Content and Value of @%s agree (SubstituteEntities(%t))", name, substitute)
+		}
+		require.Equal(t, "1x21ayb21acyd2p&q1<2xky", string(root.Content()),
+			"Content of the root (SubstituteEntities(%t))", substitute)
+	}
+
+	// Content of the EntityRef itself is the expanded entity value.
+	t.Run("entity reference node", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		g := doc.DocumentElement().FirstChild().NextSibling()
+		require.Equal(t, "g", g.Name())
+		ref := g.FirstChild().NextSibling()
+		require.Equal(t, helium.EntityRefNode, ref.Type())
+		require.Equal(t, "ayb", string(ref.Content()))
+	})
+
+	// A reference built through the tree API resolves its entity the same way.
+	t.Run("reference built through the tree API", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<!DOCTYPE r [<!ENTITY e "x"><!ENTITY g "a&e;b">]><r>&g;</r>`))
+		require.NoError(t, err)
+		attr, err := doc.CreateAttribute("a", "1&g;2", nil)
+		require.NoError(t, err)
+		require.Equal(t, "1axb2", string(attr.Content()))
+		ref, err := doc.CreateReference("g")
+		require.NoError(t, err)
+		require.Equal(t, "axb", string(ref.Content()))
+	})
+}

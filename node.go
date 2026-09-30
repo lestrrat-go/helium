@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/nodelink"
 )
 
@@ -213,17 +215,13 @@ func (n docnode) Parent() Node {
 	return n.parent
 }
 
-// Content aggregates the content of this node's own children. It advances
-// between children with the owned-boundary rule (nextOwnedChild): a foreign
-// child — an entity reference's shared Entity child, owned by the DTD, whose
-// sibling pointers belong to the DTD declaration list — ends the aggregation
-// instead of spilling into another list's siblings, and a per-list seen set
-// stops a cyclic sibling pointer from looping forever. The receiver is a pointer
-// so it is the real owning node against which child ownership is checked. The
-// recursion into a container child's own subtree carries an ACTIVE-PATH set, so
-// a pure child-pointer cycle (element -> element -> ... -> element, not routed
-// through an Entity's terminating stored-text Content) terminates on the
-// back-edge instead of recursing forever.
+// Content aggregates the content of this node's own children through
+// appendChildContent (libxml2: xmlNodeGetContent), with every entity reference
+// expanded: an EntityRef child contributes its entity's expanded value, the
+// same text a SubstituteEntities(true) parse stores in its place. Unlike
+// Attribute.Value, a Comment, PI or namespace-node child contributes its own
+// text. The receiver is a pointer so it is the real owning node against which
+// child ownership is checked.
 //
 // A node with no children, or with exactly one leaf child (Text, Comment,
 // CDATA, PI, Entity, NS wrapper), skips the aggregation machinery and returns
@@ -241,49 +239,114 @@ func (n *docnode) Content() []byte {
 		}
 		return c
 	}
-	b := bytes.Buffer{}
-	aggregateOwnedContent(n, &b, map[*docnode]struct{}{n: {}})
+	var b bytes.Buffer
+	appendChildContent(&b, n, []*docnode{n}, true)
 	return b.Bytes()
 }
 
-// aggregateOwnedContent appends the concatenated content of n's own children to
-// b. onPath is the set of container docnodes currently being aggregated (n
-// inclusive): a child already on that path is a back-edge (a child-pointer
-// cycle) and is skipped so the recursion terminates. onPath is an ACTIVE-PATH
-// set, not a global visited set, so a shared DAG node reached on a different
-// path is still re-aggregated per occurrence. A per-list seen set independently
-// bounds a cyclic sibling pointer within one child list.
-func aggregateOwnedContent(n *docnode, b *bytes.Buffer, onPath map[*docnode]struct{}) {
-	seen := make(map[*docnode]struct{})
-	for child := n.firstChild; child != nil; child = nextOwnedChild(n, child) {
+// contentSink is the buffer the content walk writes into: a *bytes.Buffer for
+// Content and a *strings.Builder for Attribute.Value.
+type contentSink interface {
+	io.Writer
+	io.StringWriter
+}
+
+// appendChildContent appends the content of owner's own children to w,
+// following libxml2's xmlBufGetChildContent: a Text or CDATA child contributes
+// its text, an EntityRef child contributes its entity's expanded value
+// (appendEntityRefContent), an Entity child contributes its stored replacement
+// text, and any other container contributes the content of its own children. A
+// Comment, PI or namespace-node child contributes its own text only when
+// withOther is set (Content); Attribute.Value leaves it out, as libxml2 does.
+//
+// The walk follows only owner's own children (nextOwnedSibling), so an entity
+// reference's shared Entity child never leads into the DTD's declaration list,
+// and siblingCycleGuard stops a cyclic sibling list. active holds the
+// containers and entities being expanded on the current path; a node already
+// on it is a child-pointer or reference cycle and is skipped. It plays the role
+// of libxml2's XML_ENT_EXPANDING flag without writing to the shared Entity, so
+// concurrent readers of one document do not race. It is a path, not a global
+// visited set, so an entity referenced twice is expanded at each reference.
+func appendChildContent(w contentSink, owner *docnode, active []*docnode, withOther bool) {
+	var g siblingCycleGuard
+	for child := owner.firstChild; child != nil; {
 		cdn := child.baseDocNode()
-		if _, dup := seen[cdn]; dup {
-			break
+		if g.step(cdn) {
+			return
 		}
-		seen[cdn] = struct{}{}
-		if _, active := onPath[cdn]; active {
-			continue
+		switch c := child.(type) {
+		case *Text:
+			_, _ = w.Write(c.rawContent())
+		case *CDATASection:
+			_, _ = w.Write(c.rawContent())
+		case *EntityRef:
+			appendEntityRefContent(w, c, active, withOther)
+		case *Entity:
+			_, _ = w.WriteString(c.content)
+		case *Comment, *ProcessingInstruction, *NamespaceNodeWrapper:
+			if withOther {
+				_, _ = w.Write(rawContent(child))
+			}
+		default:
+			if !slices.Contains(active, cdn) {
+				appendChildContent(w, cdn, append(active, cdn), withOther)
+			}
 		}
-		// A leaf child (Text/Comment/CDATA/PI/Entity/NS wrapper) overrides
-		// Content() with self-contained text that cannot loop, so call it
-		// directly. Any other node aggregates its own children through this same
-		// docnode path, so recurse under the active-path guard.
-		if aggregatesOwnContent(child) {
-			onPath[cdn] = struct{}{}
-			aggregateOwnedContent(cdn, b, onPath)
-			delete(onPath, cdn)
-			continue
-		}
-		_, _ = b.Write(child.Content())
+		child = nextOwnedSibling(owner, cdn)
 	}
 }
 
-// aggregatesOwnContent reports whether n's Content() is the child-aggregating
-// docnode implementation (a container), as opposed to a self-contained leaf
-// override. The leaf types enumerated here store their text directly and their
-// Content() cannot recurse; every other node type — including any future
-// container — aggregates its children and must be recursed under the
-// active-path cycle guard.
+// appendEntityRefContent appends the expanded value of the entity ref names
+// (libxml2: xmlBufGetEntityRefContent). The entity is ref's Entity child when
+// the reference is bound, otherwise the document's declaration of that name. A
+// predefined entity contributes its character; any other entity contributes
+// the content of its parsed children, expanded by appendChildContent. An
+// entity whose replacement text was never parsed into children contributes
+// that text as stored.
+func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode, withOther bool) {
+	ent, ok := ref.firstChild.(*Entity)
+	if !ok {
+		ent = lookupReferencedEntity(ref)
+		if ent == nil {
+			return
+		}
+	}
+	if ent.entityType == enum.InternalPredefinedEntity {
+		_, _ = w.WriteString(ent.content)
+		return
+	}
+	edn := &ent.docnode
+	if slices.Contains(active, edn) {
+		return
+	}
+	if ent.firstChild == nil {
+		_, _ = w.WriteString(ent.content)
+		return
+	}
+	appendChildContent(w, edn, append(active, edn), withOther)
+}
+
+// lookupReferencedEntity resolves an unbound entity reference by name: a
+// predefined entity first, then the owning document's declarations
+// (libxml2: xmlGetDocEntity).
+func lookupReferencedEntity(ref *EntityRef) *Entity {
+	if ent, err := resolvePredefinedEntity(ref.name); err == nil {
+		return ent
+	}
+	if ref.doc == nil {
+		return nil
+	}
+	ent, ok := ref.doc.GetEntity(ref.name)
+	if !ok {
+		return nil
+	}
+	return ent
+}
+
+// aggregatesOwnContent reports whether n's Content() aggregates its children
+// (a container, or an EntityRef, which expands its entity), as opposed to a
+// self-contained leaf override. The leaf types enumerated here store their
+// text directly and their Content() cannot recurse.
 func aggregatesOwnContent(n Node) bool {
 	switch n.(type) {
 	case *Text, *Comment, *CDATASection, *ProcessingInstruction, *Entity, *NamespaceNodeWrapper:

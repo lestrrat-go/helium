@@ -652,7 +652,7 @@ func (c walkCounter) Visit(n Node) error {
 // docnode.Content and Attribute.Value.
 func contentReference(dn *docnode) []byte {
 	b := bytes.Buffer{}
-	aggregateOwnedContent(dn, &b, map[*docnode]struct{}{dn: {}})
+	appendChildContent(&b, dn, []*docnode{dn}, true)
 	return b.Bytes()
 }
 

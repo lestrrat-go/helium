@@ -1,7 +1,6 @@
 package helium
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -99,8 +98,9 @@ func (n *Attribute) IsDefault() bool {
 // An attribute whose value is a single Text node, the common case, converts
 // that node's bytes directly with one allocation for the string. Any other
 // shape, such as the Text/EntityRef list a SubstituteEntities(false) parse
-// builds, is expanded by appendAttributeValue, so the result is the same
-// string a SubstituteEntities(true) parse stores.
+// builds, is expanded by appendChildContent, so the result is the same
+// string a SubstituteEntities(true) parse stores. A Comment or PI reached
+// through an entity contributes nothing, as in libxml2.
 func (n *Attribute) Value() string {
 	if n.firstChild == nil {
 		return ""
@@ -109,90 +109,8 @@ func (n *Attribute) Value() string {
 		return string(t.rawContent())
 	}
 	var b strings.Builder
-	appendAttributeValue(&b, &n.docnode, nil)
+	appendChildContent(&b, &n.docnode, []*docnode{&n.docnode}, false)
 	return b.String()
-}
-
-// appendAttributeValue appends the expanded value of owner's children to b,
-// following libxml2's xmlBufGetChildContent: a Text or CDATA child contributes
-// its text, an EntityRef child contributes its entity's expanded value, any
-// other child contributes the value of its own children, and a child with no
-// text (a comment or PI) contributes nothing.
-//
-// The walk follows only owner's own children (nextOwnedSibling) and stops on a
-// cyclic sibling list. active holds the containers and entities being expanded
-// on the current path; a node already on it is a reference cycle and is
-// skipped. It plays the role of libxml2's XML_ENT_EXPANDING flag without
-// writing to the shared Entity, so concurrent readers of one document do not
-// race.
-func appendAttributeValue(b *strings.Builder, owner *docnode, active []*docnode) {
-	var g siblingCycleGuard
-	for child := owner.firstChild; child != nil; {
-		cdn := child.baseDocNode()
-		if g.step(cdn) {
-			return
-		}
-		switch c := child.(type) {
-		case *Text:
-			_, _ = b.Write(c.rawContent())
-		case *CDATASection:
-			_, _ = b.Write(c.rawContent())
-		case *EntityRef:
-			appendEntityRefValue(b, c, active)
-		case *Comment, *ProcessingInstruction, *NamespaceNodeWrapper:
-		default:
-			if !slices.Contains(active, cdn) {
-				appendAttributeValue(b, cdn, append(active, cdn))
-			}
-		}
-		child = nextOwnedSibling(owner, cdn)
-	}
-}
-
-// appendEntityRefValue appends the expanded value of the entity ref names
-// (libxml2: xmlBufGetEntityRefContent). The entity is ref's Entity child when
-// the reference is bound, otherwise the document's declaration of that name. A
-// predefined entity contributes its character; any other entity contributes
-// the expanded value of its parsed children. An entity whose replacement text
-// was never parsed into children contributes that text as stored.
-func appendEntityRefValue(b *strings.Builder, ref *EntityRef, active []*docnode) {
-	ent, ok := ref.firstChild.(*Entity)
-	if !ok {
-		ent = lookupReferencedEntity(ref)
-		if ent == nil {
-			return
-		}
-	}
-	if ent.entityType == enum.InternalPredefinedEntity {
-		_, _ = b.WriteString(ent.content)
-		return
-	}
-	edn := &ent.docnode
-	if slices.Contains(active, edn) {
-		return
-	}
-	if ent.firstChild == nil {
-		_, _ = b.WriteString(ent.content)
-		return
-	}
-	appendAttributeValue(b, edn, append(active, edn))
-}
-
-// lookupReferencedEntity resolves an unbound entity reference by name: a
-// predefined entity first, then the owning document's declarations
-// (libxml2: xmlGetDocEntity).
-func lookupReferencedEntity(ref *EntityRef) *Entity {
-	if ent, err := resolvePredefinedEntity(ref.name); err == nil {
-		return ent
-	}
-	if ref.doc == nil {
-		return nil
-	}
-	ent, ok := ref.doc.GetEntity(ref.name)
-	if !ok {
-		return nil
-	}
-	return ent
 }
 
 // Name returns the qualified (prefixed) name of the attribute.
