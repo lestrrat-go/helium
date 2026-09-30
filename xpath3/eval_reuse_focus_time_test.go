@@ -2,6 +2,7 @@ package xpath3_test
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lestrrat-go/helium/xpath3"
@@ -39,35 +40,37 @@ func TestEvaluateReuse_RestoresSeededContextItem(t *testing.T) {
 }
 
 // Without an explicitly configured CurrentTime, fn:current-dateTime() must
-// re-read the clock on each EvaluateReuse call, staying frozen at no
-// time NewEvalState was constructed.
+// re-read the clock on each EvaluateReuse call, never staying frozen at the
+// time NewEvalState was constructed. The test runs in a synctest bubble, whose
+// fake clock moves by exactly the slept duration, so the second call must
+// report the first call's time plus one second.
 func TestEvaluateReuse_CurrentTimeRefreshesWhenUnset(t *testing.T) {
+	synctest.Test(t, testCurrentTimeRefreshesWhenUnset)
+}
+
+func testCurrentTimeRefreshesWhenUnset(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile("current-dateTime()")
 	require.NoError(t, err)
 
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 	state := eval.NewEvalState(nil)
 
-	first, err := compiled.EvaluateReuse(t.Context(), state, nil)
-	require.NoError(t, err)
-	firstStr := first.StringValue()
+	first := evaluateReuseTime(t, compiled, state)
+	time.Sleep(time.Second)
+	second := evaluateReuseTime(t, compiled, state)
 
-	// Advance the wall clock enough to guarantee a distinguishable timestamp.
-	target := time.Now().Add(2 * time.Millisecond)
-	for time.Now().Before(target) {
-	}
-
-	second, err := compiled.EvaluateReuse(t.Context(), state, nil)
-	require.NoError(t, err)
-	secondStr := second.StringValue()
-
-	require.NotEqual(t, firstStr, secondStr,
-		"current-dateTime() must not be frozen across reuse calls when CurrentTime is unset")
+	require.Equal(t, time.Second, second.Sub(first),
+		"current-dateTime() must follow the clock across reuse calls when CurrentTime is unset")
 }
 
 // An explicitly configured CurrentTime must stay pinned across EvaluateReuse
-// calls — the refresh must not clobber a user-pinned clock.
+// calls: the refresh must not clobber a user-pinned clock. The bubble's fake
+// clock moves by one second between the calls, so a refresh would show.
 func TestEvaluateReuse_CurrentTimePinnedWhenSet(t *testing.T) {
+	synctest.Test(t, testCurrentTimePinnedWhenSet)
+}
+
+func testCurrentTimePinnedWhenSet(t *testing.T) {
 	compiled, err := xpath3.NewCompiler().Compile("current-dateTime()")
 	require.NoError(t, err)
 
@@ -75,18 +78,21 @@ func TestEvaluateReuse_CurrentTimePinnedWhenSet(t *testing.T) {
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).CurrentTime(pinned)
 	state := eval.NewEvalState(nil)
 
-	first, err := compiled.EvaluateReuse(t.Context(), state, nil)
+	first := evaluateReuseTime(t, compiled, state)
+	time.Sleep(time.Second)
+	second := evaluateReuseTime(t, compiled, state)
+
+	require.True(t, first.Equal(pinned), "first call must report the pinned time, got %s", first)
+	require.True(t, second.Equal(pinned), "pinned CurrentTime must remain fixed across reuse calls, got %s", second)
+}
+
+// evaluateReuseTime evaluates compiled against state and parses the resulting
+// xs:dateTime string.
+func evaluateReuseTime(t *testing.T, compiled *xpath3.Expression, state *xpath3.EvalState) time.Time {
+	t.Helper()
+	res, err := compiled.EvaluateReuse(t.Context(), state, nil)
 	require.NoError(t, err)
-	firstStr := first.StringValue()
-
-	target := time.Now().Add(2 * time.Millisecond)
-	for time.Now().Before(target) {
-	}
-
-	second, err := compiled.EvaluateReuse(t.Context(), state, nil)
+	got, err := time.Parse(time.RFC3339Nano, res.StringValue())
 	require.NoError(t, err)
-	secondStr := second.StringValue()
-
-	require.Equal(t, firstStr, secondStr,
-		"pinned CurrentTime must remain fixed across reuse calls")
+	return got
 }
