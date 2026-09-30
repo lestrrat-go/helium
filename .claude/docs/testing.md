@@ -157,8 +157,19 @@ Tests never pass or fail on elapsed time. Express the protected property as work
 - Laziness, bounded backtracking, linear growth → count work: items read from a counting `Sequence`,
   `testing.AllocsPerRun`, or allocated bytes compared across two input sizes. Allocation measurements read a
   process-wide counter, so those tests are not `t.Parallel()` (`AllocsPerRun` panics in a parallel test).
-- Blocking behavior → synchronize on a signal from the code under test (a context whose `Err` signals, a
-  reader that signals when a blocking `Read` starts), never on a sleep.
+- Blocking behavior → synchronize on a signal from the code under test (a context whose `Err` or `Done`
+  signals, a reader that signals when a blocking `Read` starts), never on a sleep.
+- Code that parks on channels or `sync.Cond` (push parsers, the catalog load dedup) → run the test in a
+  `testing/synctest` bubble (`synctest.Test`) and call `synctest.Wait()`. It returns once every goroutine
+  in the bubble is blocked, so the parser has consumed what was pushed and is waiting in the push stream's
+  `Read`. A goroutine blocked in a syscall or the network poller never counts as blocked, so FIFO and
+  socket reads use a `Done` signal instead (`catalog/load_cancel_test.go` `watchContext`).
+- Clock-dependent results (`fn:current-dateTime`) → a synctest bubble, whose fake clock moves only by what
+  the test sleeps.
+- Goroutine leaks → start the work on a goroutine carrying a pprof label (`pprof.SetGoroutineLabels`);
+  every goroutine it starts inherits the label. Count labelled goroutines in the goroutine profile until
+  none remain (`catalog/load_cancel_test.go` `waitLabeledGoroutinesExit`). Never compare
+  `runtime.NumGoroutine`, which counts every parallel test's goroutines.
 - `time.After` stays only as a hang guard that fails a test which would otherwise never return.
 
 ### SAX Event Normalization

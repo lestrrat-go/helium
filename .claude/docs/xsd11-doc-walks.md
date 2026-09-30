@@ -6,9 +6,12 @@
 
 - **document-wide xs:ID/xs:IDREF/xs:IDREFS validation** (`validate_id.go`): a separate validation walk, run in BOTH XSD
   1.0 and 1.1 (cvc-id is version-INDEPENDENT), enforcing ID uniqueness and IDREF referential integrity.
-  - Ownership: an attribute ID belongs to its element, an element-content ID to its PARENT. On the DOCUMENT
-    ROOT an element-content ID has no parent, denoting NO element — `idOwner` nil, `recordID` skips it, the
-    value never enters the table, any xs:IDREF to it dangles (W3C idIDREF s3_3_4ii26/ii27).
+  - Ownership: an attribute ID belongs to its element, an element-content ID to its PARENT. The owner is an
+    element occurrence of `walkOccurrences` (entity expansions spliced in, the DTD never entered), so an
+    element inside an entity referenced twice owns two IDs and the parent of an entity-borne element is the
+    reference's host. On the DOCUMENT ROOT an element-content ID has no parent, denoting NO element —
+    `idOwner` -1, `recordID` skips it, the value never enters the table, any xs:IDREF to it dangles (W3C
+    idIDREF s3_3_4ii26/ii27).
   - 1.1 multiple-ID relaxation: a value may recur while each occurrence identifies ONE element (two ID
     attributes of one element, or two ID element-content children of one parent) — `recordID` `prev == owner`,
     Version11. XSD 1.0 has NO relaxation: each distinct ID-bearing item MUST be unique; a repeat is a

@@ -167,7 +167,7 @@ func typeHasAssertions(td *TypeDef) bool {
 // isolatedAssertTree builds the isolated XDM tree an xs:assert is evaluated
 // against: a deep copy of elem rooted in a fresh document, with comment and
 // processing-instruction nodes removed (XSD 1.1 §3.13.4.2) and each entity
-// reference replaced by its character data (mapAssertAnnotations). The returned
+// reference replaced by its expansion (mapAssertAnnotations). The returned
 // annotation map carries the PSVI type annotations from the live tree onto the
 // corresponding copied element/attribute nodes so typed atomization (e.g. a
 // typed attribute in a value comparison) still works. If the copy fails for any
@@ -229,9 +229,10 @@ func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *heliu
 // dst (keyed by copied node). It runs BEFORE comment/PI stripping so the two trees
 // still align node-for-node. A nil src copies no annotation.
 //
-// The same walk replaces each entity reference in the copy with the character
-// data of the live reference it was copied from (expandAssertEntityRefs), since
-// the XDM tree an assertion reads has no entity reference nodes.
+// The same walk replaces each entity reference in the copy with the expansion
+// of the live reference it was copied from, character data and elements
+// (expandAssertEntityRefs), since the XDM tree an assertion reads has no entity
+// reference nodes.
 //
 // The assertion-tree ROOT element is deliberately left UNannotated (isRoot): an
 // xs:assert is part of determining the element's own validity, so its type is not
@@ -281,17 +282,20 @@ func (vc *validationContext) mapAssertAnnotations(ctx context.Context, orig, cop
 		}
 	}
 	if hasRef {
-		expandAssertEntityRefs(oc, cc)
+		vc.expandAssertEntityRefs(ctx, oc, cc, src, dst)
 	}
 }
 
 // expandAssertEntityRefs replaces each entity reference among cc, the children of
-// an element in the isolated assert copy, with a Text node holding the character
-// data of the live reference at the same index in oc, then joins adjacent Text
-// children, so the copy carries the text entity substitution would give it. The
-// copy lives in a fresh document without the live DTD, so the text is read from
-// the live reference. A reference that expands to no text is removed.
-func expandAssertEntityRefs(oc, cc []helium.Node) {
+// an element in the isolated assert copy, with the nodes entity substitution
+// would put there: the expansion of the live reference at the same index in oc,
+// its character data as Text nodes and a copy of each of its elements, whose
+// annotations mapAssertAnnotations carries over from the live entity-borne
+// element. It then joins adjacent Text children, so the copy carries the tree a
+// SubstituteEntities(true) parse gives it. The copy lives in a fresh document
+// without the live DTD, so the expansion is read from the live reference. A
+// reference that expands to nothing is removed.
+func (vc *validationContext) expandAssertEntityRefs(ctx context.Context, oc, cc []helium.Node, src TypeAnnotations, dst map[helium.Node]string) {
 	var parent *helium.Element
 	for i := range min(len(oc), len(cc)) {
 		if oc[i].Type() != helium.EntityRefNode {
@@ -304,16 +308,49 @@ func expandAssertEntityRefs(oc, cc []helium.Node) {
 		if parent == nil {
 			parent, _ = helium.AsNode[*helium.Element](cc[i].Parent())
 		}
-		text := helium.CharacterData(oc[i])
-		if text == "" {
+		nodes := vc.assertExpansionNodes(ctx, oc[i], ref.OwnerDocument(), src, dst)
+		if len(nodes) == 0 {
 			helium.UnlinkNode(ref)
 			continue
 		}
-		_ = ref.Replace(ref.OwnerDocument().CreateText([]byte(text)))
+		_ = ref.Replace(nodes...)
 	}
 	if parent != nil {
 		joinAdjacentText(parent)
 	}
+}
+
+// assertExpansionNodes builds, in doc, the nodes that replace a copy of the
+// live entity reference ref in the isolated assert tree: one Text node per run
+// of character data and a copy of each element of the expansion, with the
+// copied element's subtree annotated by mapAssertAnnotations.
+func (vc *validationContext) assertExpansionNodes(ctx context.Context, ref helium.Node, doc *helium.Document, src TypeAnnotations, dst map[helium.Node]string) []helium.Node {
+	var nodes []helium.Node
+	var text []byte
+	for _, p := range appendExpansion(nil, ref, false, nil) {
+		if p.elem == nil {
+			text = append(text, p.text...)
+			continue
+		}
+		copied, err := helium.CopyNode(p.elem, doc)
+		if err != nil {
+			continue
+		}
+		ce, ok := helium.AsNode[*helium.Element](copied)
+		if !ok {
+			continue
+		}
+		if len(text) > 0 {
+			nodes = append(nodes, doc.CreateText(text))
+			text = nil
+		}
+		vc.mapAssertAnnotations(ctx, p.elem, ce, src, dst, false)
+		nodes = append(nodes, ce)
+	}
+	if len(text) > 0 {
+		nodes = append(nodes, doc.CreateText(text))
+	}
+	return nodes
 }
 
 // joinAdjacentText merges each run of adjacent Text children of elem into the

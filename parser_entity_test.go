@@ -3,6 +3,7 @@ package helium_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -396,6 +397,31 @@ func TestEntityReference(t *testing.T) {
 		require.False(t, ok)
 		_, ok = bare.GetParameterEntity("pe")
 		require.False(t, ok)
+	})
+
+	// A parse without entity substitution keeps each reference as an EntityRef
+	// node carrying the line the reference sits on: the line a
+	// SubstituteEntities(true) parse gives the nodes of that expansion.
+	t.Run("a parsed reference records its line", func(t *testing.T) {
+		const src = "<!DOCTYPE doc [<!ENTITY e \"<x/>\n<y/>\">]>\n<doc>\n&e;<z>\n&e;</z></doc>"
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		var refLines []int
+		for n := range helium.Descendants(doc.DocumentElement()) {
+			if n.Type() == helium.EntityRefNode {
+				refLines = append(refLines, n.Line())
+			}
+		}
+		require.Equal(t, []int{4, 5}, refLines)
+
+		subst, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		var elemLines []string
+		for e := range helium.ChildElements(subst.DocumentElement()) {
+			elemLines = append(elemLines, fmt.Sprintf("%s:%d", e.LocalName(), e.Line()))
+		}
+		require.Equal(t, []string{"x:4", "y:4", "z:4"}, elemLines)
 	})
 
 	// Entity.URI's fallback to SystemID.

@@ -987,7 +987,9 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
   readers), `link_refs.go` + `restriction_particle.go` + `all_subsumption.go` + `substitution_group.go` +
   `wildcard_algebra.go` + `check_*.go` (`check_element_consistent.go`, `check_elements.go`, `check_facets.go`,
   `check_upa.go`; reference resolution + constraints), `validate.go` + `validate_elem.go` + `validate_idc.go`
-  + `validate_id.go` (validation flow/content/IDC/ID), `simplevalue_core.go` + `simplevalue_facets.go`
+  + `validate_id.go` (validation flow/content/IDC/ID), `entity_expansion.go` (entity-reference expansions
+  read as the substituted tree: spliced element children, the document-wide occurrence walk, the IDC copy,
+  and entity-borne diagnostic lines), `simplevalue_core.go` + `simplevalue_facets.go`
   (simple-value engine), `assert.go` + `assertion_facet.go` (XSD 1.1 assertions), `alternative.go`
   (conditional type assignment), `conditional_inclusion.go` (XSD 1.1 conditional inclusion), `opencontent.go`
   (open content), `override.go` (xs:override), `inherited_attrs.go` (XSD 1.1 inherited attributes),

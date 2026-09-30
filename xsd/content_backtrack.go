@@ -381,7 +381,7 @@ func (vc *validationContext) validateContentModelChildren(ctx context.Context, p
 		if ed == nil {
 			// contentModelAccepts guaranteed placement, so this is unreachable; report
 			// defensively, accepting nothing silently.
-			vc.reportValidityError(ctx, vc.filename, child.elem.Line(), child.displayName, "This element is not expected.")
+			vc.reportValidityError(ctx, vc.filename, child.reportLine(), child.displayName, "This element is not expected.")
 			contentErr = fmt.Errorf("unexpected element")
 			continue
 		}
