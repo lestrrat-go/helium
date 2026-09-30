@@ -546,6 +546,112 @@ func TestEntityInAttributeValue(t *testing.T) {
 		require.Nil(t, got)
 		require.Contains(t, err.Error(), "attribute references external entity")
 	})
+
+	// An attribute value that reaches an entity reference cycle violates WFC No
+	// Recursion (XML 1.0 §4.1). libxml2 rejects it at parse time with
+	// XML_ERR_ENTITY_LOOP whether or not entities are substituted
+	// (xmlCheckEntityInAttValue on the unexpanded path), so helium rejects it in
+	// both modes too.
+	t.Run("a reference loop", func(t *testing.T) {
+		testcases := []struct {
+			name string
+			src  string
+		}{
+			{
+				name: "two-entity cycle",
+				src:  `<!DOCTYPE r [<!ENTITY a "&b;"><!ENTITY b "&a;">]><r x="&a;"/>`,
+			},
+			{
+				name: "three-entity cycle",
+				src:  `<!DOCTYPE r [<!ENTITY a "1&b;"><!ENTITY b "2&c;"><!ENTITY c "3&a;">]><r x="&a;"/>`,
+			},
+			{
+				name: "self-reference",
+				src:  `<!DOCTYPE r [<!ENTITY a "x&a;y">]><r x="&a;"/>`,
+			},
+			{
+				name: "cycle below an acyclic entity",
+				src:  `<!DOCTYPE r [<!ENTITY a "&b;"><!ENTITY b "&a;"><!ENTITY top "t&a;">]><r x="&top;"/>`,
+			},
+			{
+				name: "cycle after a clean reference",
+				src:  `<!DOCTYPE r [<!ENTITY a "&b;"><!ENTITY b "&a;"><!ENTITY c "x">]><r y="&c;" x="&c;&a;"/>`,
+			},
+			{
+				// libxml2 raises the loop while it parses the ATTLIST default,
+				// inside the internal subset.
+				name: "ATTLIST default",
+				src: `<!DOCTYPE r [<!ENTITY a "&b;"><!ENTITY b "&a;">` +
+					`<!ATTLIST r x CDATA "&a;">]><r/>`,
+			},
+		}
+
+		for _, tc := range testcases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				for _, substitute := range []bool{false, true} {
+					doc, err := helium.NewParser().SubstituteEntities(substitute).
+						Parse(t.Context(), []byte(tc.src))
+					require.Error(t, err, "an entity loop must be rejected (SubstituteEntities(%t))", substitute)
+					require.Nil(t, doc, "no document on a fatal well-formedness error")
+					require.Contains(t, err.Error(), "entity loop", "SubstituteEntities(%t)", substitute)
+				}
+			})
+		}
+	})
+
+	// A loop declared after the ATTLIST default that reaches it through a
+	// declared entity. The external subset makes the early undefined reference
+	// non-fatal, so the loop is found by the post-DTD re-check of the stored
+	// default, as the forward-referenced external entity above is.
+	t.Run("a forward-declared reference loop in a default", func(t *testing.T) {
+		t.Parallel()
+		const src = "<!DOCTYPE r SYSTEM \"d.dtd\" [\n" +
+			"<!ENTITY top \"&a;\">\n" +
+			"<!ATTLIST r x CDATA \"&top;\">\n" +
+			"<!ENTITY a \"&b;\">\n" +
+			"<!ENTITY b \"&a;\">\n" +
+			"]>\n<r/>"
+		fsys := fstest.MapFS{dtdSystemID: {Data: []byte("<!-- external subset -->")}}
+
+		doc, err := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).
+			SubstituteEntities(false).FS(fsys).Parse(t.Context(), []byte(src))
+		require.Error(t, err)
+		require.Nil(t, doc)
+		require.Contains(t, err.Error(), "entity loop")
+	})
+
+	// Reaching the same entity more than once without a cycle is not a loop,
+	// and the accepted attribute values still expand to the same strings.
+	t.Run("repeated references without a loop", func(t *testing.T) {
+		const src = `<!DOCTYPE r [` +
+			`<!ENTITY c "x">` +
+			`<!ENTITY a "&c;&c;">` +
+			`<!ENTITY b "&c;">` +
+			`<!ENTITY inner "value">` +
+			`<!ENTITY outer "a&inner;b">` +
+			`<!ENTITY deep "[&outer;|&a;]">` +
+			`<!ATTLIST r d CDATA "&a;&b;">` +
+			`]><r diamond="&a;&b;&a;" nested="&outer;" deep="&deep;&deep;"/>`
+
+		want := map[string]string{
+			"diamond": "xxxxx",
+			"nested":  "avalueb",
+			"deep":    "[avalueb|xx][avalueb|xx]",
+			"d":       "xxx",
+		}
+		for _, substitute := range []bool{false, true} {
+			doc, err := helium.NewParser().DefaultDTDAttributes(true).SubstituteEntities(substitute).
+				Parse(t.Context(), []byte(src))
+			require.NoError(t, err, "SubstituteEntities(%t)", substitute)
+			root := doc.DocumentElement()
+			for name, value := range want {
+				attr := root.GetAttributeNodeNS(name, "")
+				require.NotNil(t, attr, "attribute %s", name)
+				require.Equal(t, value, attr.Value(), "Value of %s (SubstituteEntities(%t))", name, substitute)
+			}
+		}
+	})
 }
 
 func TestEntityValueRefValidation(t *testing.T) {

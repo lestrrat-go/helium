@@ -193,7 +193,7 @@ func (pctx *parserCtx) decodeEntitiesInternal(ctx context.Context, s []byte, wha
 // unchanged.
 func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what SubstitutionType, depth int, sink entityDecodeSink, preserveCharRefs, account bool) error {
 	if depth > 40 {
-		return errors.New("entity loop (depth > 40)")
+		return fmt.Errorf("%w (depth > 40)", errEntityLoop)
 	}
 
 	for len(s) > 0 {
@@ -408,7 +408,7 @@ func (pctx *parserCtx) validateEntityValueRefs(ctx context.Context, s []byte) er
 // general-reference scanning.
 func (pctx *parserCtx) expandEntityValueForRefCheck(ctx context.Context, s []byte, depth int) ([]byte, error) {
 	if depth > 40 {
-		return nil, errors.New("entity loop (depth > 40)")
+		return nil, fmt.Errorf("%w (depth > 40)", errEntityLoop)
 	}
 
 	out := bufferPool.Get()
@@ -876,7 +876,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	defer func() { pctx.depth-- }()
 
 	if pctx.depth > 40 {
-		return nil, errors.New("entity loop")
+		return nil, errEntityLoop
 	}
 
 	var input sax.ParseInput
@@ -1072,12 +1072,19 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 // caller's error switch. It never escapes the package.
 var errParseSucceeded = errors.New("parse succeeded")
 
+// errEntityLoop reports a recursive general-entity reference (XML 1.0 §4.1 WFC
+// No Recursion; libxml2 XML_ERR_ENTITY_LOOP). The expanding paths raise it once
+// nesting passes the depth guard; the unexpanded attribute-value walk
+// (walkAttrValueWFC) raises it as soon as a reference re-enters an entity it is
+// still walking.
+var errEntityLoop = errors.New("entity loop")
+
 func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []byte) (Node, error) {
 	pctx.depth++
 	defer func() { pctx.depth-- }()
 
 	if pctx.depth > 40 {
-		return nil, errors.New("entity loop")
+		return nil, errEntityLoop
 	}
 
 	newctx := &parserCtx{}
