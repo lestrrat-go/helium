@@ -496,3 +496,13 @@ func TestFindElementsByIDNilRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, index)
 }
+
+// TextContent expands an entity reference child whose replacement text holds
+// another reference, so xmldsig1's KeyName, X509 names, and XPath transform
+// expression read the text the document means.
+func TestTextContentExpandsNestedEntityReferences(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<!DOCTYPE k [<!ENTITY f "y"><!ENTITY g "a&f;b">]><k>1&g;2</k>`))
+	require.NoError(t, err)
+	require.Equal(t, "1ayb2", domutil.TextContent(doc.DocumentElement()))
+}

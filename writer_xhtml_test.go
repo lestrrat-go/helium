@@ -125,6 +125,31 @@ func TestSerializeXHTML(t *testing.T) {
 		require.Contains(t, out, `>f00<`, "output:\n%s", out)
 	})
 
+	// The id synthesized from @name and the xml:lang/lang synthesized from its
+	// counterpart carry the attribute's value with a nested entity reference
+	// expanded, while the source attribute keeps its reference.
+	t.Run("synthesized attribute from a nested entity reference", func(t *testing.T) {
+		const src = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd" [
+<!ENTITY f "y">
+<!ENTITY g "a&f;b">
+]>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>t</title></head>
+<body><a name="1&g;2">x</a><p lang="en-&g;">x</p><p xml:lang="en-&g;">x</p></body>
+</html>`
+
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err, "parse XHTML document")
+
+		out, err := helium.WriteString(doc)
+		require.NoError(t, err, "serialize XHTML document")
+
+		require.Contains(t, out, `<a name="1&g;2" id="1ayb2">`, "output:\n%s", out)
+		require.Contains(t, out, `<p lang="en-&g;" xml:lang="en-ayb">`, "output:\n%s", out)
+		require.Contains(t, out, `<p xml:lang="en-&g;" lang="en-ayb">`, "output:\n%s", out)
+	})
+
 	t.Run("through the public API", func(t *testing.T) {
 		t.Run("void element default NS self-closes", func(t *testing.T) {
 			t.Parallel()
