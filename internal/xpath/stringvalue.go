@@ -8,47 +8,64 @@ import (
 
 // StringValue returns the XPath string-value of a node.
 // Rules are identical across XPath 1.0 and 3.1.
+//
+// An element's string-value is its Content(): the text of every Text and CDATA
+// descendant, with every entity reference expanded and comments and PIs left
+// out (libxml2: xmlXPathCastNodeToString -> xmlNodeGetContent). The XDM has no
+// entity references, so the value an entity reference adds is the text it
+// expands to, and both parse modes give the value of the tree a
+// SubstituteEntities(true) parse builds. The expansion follows only owned
+// children, so a reference never reaches text of other declarations in the DTD
+// that owns its entity. A document's string-value is that of its element,
+// text and entity-reference children; its DTD is not part of the XPath data
+// model and adds nothing (documentStringValue).
 func StringValue(n helium.Node) string {
 	// Check Attribute by type assertion first since etype may not be set
 	if attr, ok := n.(*helium.Attribute); ok {
 		return attr.Value()
 	}
 	switch n.Type() {
-	case helium.DocumentNode, helium.ElementNode:
-		// XPath spec 5.2: string-value of element/document is the
-		// concatenation of string-values of all text node descendants.
-		var b strings.Builder
-		appendTextDescendants(&b, n)
-		return b.String()
-	case helium.TextNode, helium.CDATASectionNode:
-		return string(n.Content())
-	case helium.CommentNode:
-		return string(n.Content())
-	case helium.ProcessingInstructionNode:
-		return string(n.Content())
-	case helium.NamespaceNode:
+	case helium.DocumentNode:
+		return documentStringValue(n)
+	case helium.ElementNode, helium.TextNode, helium.CDATASectionNode, helium.CommentNode,
+		helium.ProcessingInstructionNode, helium.NamespaceNode:
 		return string(n.Content())
 	}
 	return ""
 }
 
-// appendTextDescendants walks descendants iteratively so programmatically
-// constructed deep trees do not truncate string-value computation.
-func appendTextDescendants(b *strings.Builder, root helium.Node) {
-	stack := []helium.Node{root}
-	for len(stack) > 0 {
-		cur := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		switch cur.Type() {
-		case helium.TextNode, helium.CDATASectionNode:
-			b.Write(cur.Content())
+// documentStringValue concatenates the content of doc's element, text, CDATA
+// and entity-reference children. The DTD, comments and PIs add nothing. The
+// common single-element document returns that element's content without an
+// extra copy through a builder.
+func documentStringValue(doc helium.Node) string {
+	var single []byte
+	var b strings.Builder
+	parts := 0
+	for child := range helium.Children(doc) {
+		switch child.Type() {
+		case helium.ElementNode, helium.TextNode, helium.CDATASectionNode, helium.EntityRefNode:
+		default:
+			continue
 		}
-
-		for child := cur.LastChild(); child != nil; child = child.PrevSibling() {
-			stack = append(stack, child)
+		c := child.Content()
+		if len(c) == 0 {
+			continue
 		}
+		parts++
+		if parts == 1 {
+			single = c
+			continue
+		}
+		if parts == 2 {
+			b.Write(single)
+		}
+		b.Write(c)
 	}
+	if parts > 1 {
+		return b.String()
+	}
+	return string(single)
 }
 
 // LocalNameOf returns the local name of any node type.

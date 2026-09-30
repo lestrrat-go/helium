@@ -105,10 +105,67 @@ func TestLoadCancelsOnBlockingFIFO(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled, "cancelled FIFO load must return the context error")
 }
 
+// loadResult carries what catalog.Load returned.
+type loadResult struct {
+	cat *catalog.Catalog
+	err error
+}
+
+// loadCatalogInto runs catalog.Load and reports its result on done.
+func loadCatalogInto(ctx context.Context, filename string, done chan<- loadResult) {
+	cat, err := catalog.Load(ctx, filename)
+	done <- loadResult{cat: cat, err: err}
+}
+
+// A catalog that arrives on a FIFO after Load has opened it must be read in
+// full: while the writer has the FIFO open but has not written yet, Load waits
+// for data instead of failing because none is available.
+func TestLoadWaitsForFIFOWriter(t *testing.T) {
+	t.Parallel()
+
+	fifo := filepath.Join(t.TempDir(), "catalog.xml")
+	require.NoError(t, syscall.Mkfifo(fifo, 0o600), "mkfifo")
+	w, err := os.OpenFile(fifo, os.O_RDWR, 0)
+	require.NoError(t, err, "open the FIFO's write end")
+	defer w.Close()
+
+	ctx := newWatchContext(t.Context())
+	done := make(chan loadResult, 1)
+	go loadCatalogInto(ctx, fifo, done)
+
+	// Load has opened the FIFO once it waits on its context. Write the catalog
+	// only then, and close the write end so the reader sees end-of-file.
+	select {
+	case <-ctx.watched:
+	case res := <-done:
+		t.Fatalf("Load returned (%v) before the catalog was written", res.err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Load never waited on its context")
+	}
+	_, err = w.WriteString(`<?xml version="1.0"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="sid" uri="out.dtd"/>
+</catalog>`)
+	require.NoError(t, err, "write the catalog to the FIFO")
+	require.NoError(t, w.Close(), "close the FIFO's write end")
+
+	var res loadResult
+	select {
+	case res = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Load did not return after the FIFO writer finished")
+	}
+	require.NoError(t, res.err, "Load must wait for the FIFO writer")
+	require.True(t, strings.HasSuffix(res.cat.Resolve(t.Context(), "", "sid"), "/out.dtd"),
+		"catalog read from the FIFO must resolve its entry")
+}
+
 // A blocking FIFO read must not leave a goroutine (and the OS thread it
 // occupies) parked forever after Load returns on cancellation. On unix the file
-// is opened with O_NONBLOCK and the blocking read is interrupted via a read
-// deadline, so no reader goroutine survives.
+// is opened with O_NONBLOCK, and the blocking read is interrupted via a read
+// deadline (where the runtime poller manages the FIFO) or stops waiting on
+// cancellation (where it does not, as on darwin), so no reader goroutine
+// survives.
 //
 // The load runs on a goroutine carrying a pprof label, which every goroutine it
 // starts inherits, so the test counts exactly the goroutines this load created,

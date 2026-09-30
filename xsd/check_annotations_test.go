@@ -103,7 +103,23 @@ func TestAnnotationSchemaRepresentation(t *testing.T) {
 </xs:schema>`,
 			wantReject: true,
 		},
+		{
+			name: "annotation with text through an entity reference",
+			schema: `<!DOCTYPE xs:schema [<!ENTITY t "text">]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:annotation>&t;</xs:annotation>
+</xs:schema>`,
+			wantReject: true,
+		},
 		// Valid annotations must still compile.
+		{
+			name: "valid annotation with whitespace through an entity reference",
+			schema: `<!DOCTYPE xs:schema [<!ENTITY sp " ">]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:annotation>&sp;<xs:documentation>ok</xs:documentation></xs:annotation>
+</xs:schema>`,
+			wantReject: false,
+		},
 		{
 			name: "valid annotation appinfo documentation with source and lang",
 			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

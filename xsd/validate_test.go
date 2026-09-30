@@ -1061,3 +1061,176 @@ e = xs:anyType
 e/@{}q = Q{}aQName
 `,
 }
+
+// entityRefTextSchema declares one global element per way the validator reads
+// element or attribute text: simple content (with facets, fixed and default
+// values), attribute values, element-only, empty and nilled content, xs:ID
+// content, and xs:key/xs:keyref fields. The 1.1 variant adds xs:assert on
+// simple and complex content and an xs:alternative whose test reads an
+// attribute.
+func entityRefTextSchema(v11 bool) string {
+	var b strings.Builder
+	b.WriteString(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="int" type="xs:int"/>
+  <xs:element name="short">
+    <xs:simpleType>
+      <xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="fixed" type="xs:string" fixed="123"/>
+  <xs:element name="dflt" type="xs:int" default="5"/>
+  <xs:element name="attr">
+    <xs:complexType><xs:attribute name="n" type="xs:int"/></xs:complexType>
+  </xs:element>
+  <xs:element name="eonly">
+    <xs:complexType><xs:sequence><xs:element name="k" type="xs:int"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="empty"><xs:complexType/></xs:element>
+  <xs:element name="nil" type="xs:int" nillable="true"/>
+  <xs:element name="ids">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="w" maxOccurs="unbounded">
+          <xs:complexType><xs:sequence><xs:element name="id" type="xs:ID"/></xs:sequence></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="keys">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="k" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="ref" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="kk"><xs:selector xpath="k"/><xs:field xpath="."/></xs:key>
+    <xs:keyref name="kr" refer="kk"><xs:selector xpath="ref"/><xs:field xpath="."/></xs:keyref>
+  </xs:element>
+`)
+	if v11 {
+		b.WriteString(`  <xs:element name="big">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:int"><xs:assert test="$value gt 10"/></xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="cmp">
+    <xs:complexType>
+      <xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence>
+      <xs:assert test="v = 'ab'"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="acmp">
+    <xs:complexType>
+      <xs:attribute name="n" type="xs:int"/>
+      <xs:assert test="@n = 42"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="alt" type="T">
+    <xs:alternative test="@t = 'int'" type="TInt"/>
+  </xs:element>
+  <xs:complexType name="T">
+    <xs:simpleContent>
+      <xs:extension base="xs:string"><xs:attribute name="t" type="xs:string"/></xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="TInt">
+    <xs:simpleContent>
+      <xs:restriction base="T"><xs:pattern value="[0-9]+"/></xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+`)
+	}
+	b.WriteString(`</xs:schema>`)
+	return b.String()
+}
+
+type entityRefTextCase struct {
+	name     string
+	entities string // internal DTD subset
+	body     string // document element
+	valid    bool
+	v11Only  bool
+}
+
+func entityRefTextCases() []entityRefTextCase {
+	const xsi = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+	return []entityRefTextCase{
+		{name: "int valid", entities: `<!ENTITY c "42">`, body: `<int>&c;</int>`, valid: true},
+		{name: "int invalid", entities: `<!ENTITY c "4x">`, body: `<int>&c;</int>`},
+		{name: "int nested valid", entities: `<!ENTITY a "4"><!ENTITY b "&a;2">`, body: `<int>&b;</int>`, valid: true},
+		{name: "int nested invalid", entities: `<!ENTITY a "x"><!ENTITY b "&a;2">`, body: `<int>&b;</int>`},
+		{name: "int mixed with literal text", entities: `<!ENTITY c "2">`, body: `<int>1&c;3</int>`, valid: true},
+		{name: "int entity holding a comment", entities: `<!ENTITY c "4<!--x-->2">`, body: `<int>&c;</int>`, valid: true},
+		{name: "maxLength exceeded through entity", entities: `<!ENTITY c "cd">`, body: `<short>ab&c;</short>`},
+		{name: "fixed matched through entity", entities: `<!ENTITY c "2">`, body: `<fixed>1&c;3</fixed>`, valid: true},
+		{name: "fixed mismatched through entity", entities: `<!ENTITY c "9">`, body: `<fixed>1&c;3</fixed>`},
+		{name: "empty entity takes default", entities: `<!ENTITY e "">`, body: `<dflt>&e;</dflt>`, valid: true},
+		{name: "attribute valid", entities: `<!ENTITY c "42">`, body: `<attr n="&c;"/>`, valid: true},
+		{name: "attribute nested mixed valid", entities: `<!ENTITY a "2"><!ENTITY b "&a;3">`, body: `<attr n="1&b;"/>`, valid: true},
+		{name: "attribute invalid", entities: `<!ENTITY c "x">`, body: `<attr n="&c;"/>`},
+		{name: "element-only text through entity", entities: `<!ENTITY c "x">`, body: `<eonly>&c;<k>1</k></eonly>`},
+		{name: "element-only whitespace through entity", entities: `<!ENTITY sp " ">`, body: `<eonly>&sp;<k>1</k></eonly>`, valid: true},
+		{name: "empty content text through entity", entities: `<!ENTITY c "x">`, body: `<empty>&c;</empty>`},
+		{name: "nilled text through entity", entities: `<!ENTITY c "1">`, body: `<nil ` + xsi + ` xsi:nil="true">&c;</nil>`},
+		{name: "distinct IDs through entity", entities: `<!ENTITY c "b">`, body: `<ids><w><id>&c;</id></w><w><id>a</id></w></ids>`, valid: true},
+		{name: "duplicate ID through entity", entities: `<!ENTITY c "a">`, body: `<ids><w><id>&c;</id></w><w><id>a</id></w></ids>`},
+		{name: "distinct keys through entities", entities: `<!ENTITY c "1"><!ENTITY d "2">`, body: `<keys><k>&c;</k><k>&d;</k></keys>`, valid: true},
+		{name: "duplicate key through entity", entities: `<!ENTITY c "2">`, body: `<keys><k>&c;</k><k>2</k></keys>`},
+		{name: "keyref resolved through entity", entities: `<!ENTITY c "2">`, body: `<keys><k>1</k><k>2</k><ref>&c;</ref></keys>`, valid: true},
+		{name: "keyref dangling through entity", entities: `<!ENTITY c "3">`, body: `<keys><k>1</k><k>2</k><ref>&c;</ref></keys>`},
+		{name: "simple assert valid", entities: `<!ENTITY c "42">`, body: `<big>&c;</big>`, valid: true, v11Only: true},
+		{name: "simple assert invalid", entities: `<!ENTITY c "5">`, body: `<big>&c;</big>`, v11Only: true},
+		{name: "complex assert valid", entities: `<!ENTITY c "b">`, body: `<cmp><v>a&c;</v></cmp>`, valid: true, v11Only: true},
+		{name: "complex assert invalid", entities: `<!ENTITY c "c">`, body: `<cmp><v>a&c;</v></cmp>`, v11Only: true},
+		{name: "complex assert on entity-only text", entities: `<!ENTITY c "b">`, body: `<cmp><v>&c;</v></cmp>`, v11Only: true},
+		{name: "attribute assert valid", entities: `<!ENTITY a "4"><!ENTITY c "&a;2">`, body: `<acmp n="&c;"/>`, valid: true, v11Only: true},
+		{name: "attribute assert invalid", entities: `<!ENTITY c "41">`, body: `<acmp n="&c;"/>`, v11Only: true},
+		{name: "alternative selected through entity", entities: `<!ENTITY c "int">`, body: `<alt t="&c;">ab</alt>`, v11Only: true},
+		{name: "alternative content through entity", entities: `<!ENTITY c "int"><!ENTITY v "12">`, body: `<alt t="&c;">&v;</alt>`, valid: true, v11Only: true},
+	}
+}
+
+// TestValidateEntityRefText verifies that element and attribute text reached
+// through entity references is validated as its expansion. A document parsed
+// without entity substitution (the default) keeps EntityRef nodes in the tree;
+// its validation result and diagnostics must equal those of the same document
+// parsed with SubstituteEntities(true), in XSD 1.0 and 1.1.
+func TestValidateEntityRefText(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(entityRefTextSchema(version == xsd.Version11)))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(version).Compile(t.Context(), schemaDoc)
+		require.NoError(t, err)
+
+		for _, tc := range entityRefTextCases() {
+			if tc.v11Only && version != xsd.Version11 {
+				continue
+			}
+			t.Run(version.String()+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				instance := "<!DOCTYPE r [" + tc.entities + "]>\n" + tc.body
+
+				refDoc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+				require.NoError(t, err)
+				var buf bytes.Buffer
+				require.NoError(t, helium.Write(&buf, refDoc.DocumentElement()))
+				require.Contains(t, buf.String(), "&", "the default parse keeps entity references")
+
+				substDoc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(instance))
+				require.NoError(t, err)
+
+				var substOut, refOut string
+				substErr := validateWithOutput(t, xsd.NewValidator(schema).Label("test.xml"), substDoc, &substOut)
+				refErr := validateWithOutput(t, xsd.NewValidator(schema).Label("test.xml"), refDoc, &refOut)
+
+				require.Equal(t, tc.valid, substErr == nil, "substituted parse: %s", substOut)
+				require.Equal(t, substOut, refOut)
+				require.Equal(t, substErr == nil, refErr == nil)
+			})
+		}
+	}
+}

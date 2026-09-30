@@ -142,6 +142,10 @@ func (c *compiler) checkNotationContent(ctx context.Context, elem *helium.Elemen
 			if !xmlchar.IsAllSpace(child.Content()) {
 				invalid = true
 			}
+		case helium.EntityRefNode:
+			if !xmlchar.IsAllSpace(helium.CharacterData(child)) {
+				invalid = true
+			}
 		case helium.ElementNode:
 			ce, ok := child.(*helium.Element)
 			if !ok {

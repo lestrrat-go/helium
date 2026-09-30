@@ -87,6 +87,30 @@ func TestResolveKey(t *testing.T) {
 		_, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
 		require.NoError(t, err)
 	})
+
+	// key name with a comment: a ds:KeyName reads as libxml2's
+	// xmlNodeGetContent returns it. A comment or PI written inside it adds
+	// nothing, and a reference to an entity whose value holds another
+	// reference adds the fully expanded text.
+	t.Run("key name with a comment", func(t *testing.T) {
+		key := generateRSAKey(t)
+		signed := signedKeyInfoDoc(t, key, xmldsig1.RSAKeyValueKeyInfo())
+		rootAt := strings.Index(signed, "<doc>")
+		require.Positive(t, rootAt, "signed document has no doc element")
+		keyInfoEnd := strings.Index(signed, "</ds:KeyInfo>")
+		require.Positive(t, keyInfoEnd, "signed document has no ds:KeyInfo")
+		src := signed[:rootAt] +
+			`<!DOCTYPE doc [<!ENTITY f "y"><!ENTITY g "a&f;b">]>` +
+			signed[rootAt:keyInfoEnd] + "<ds:KeyName>1<!--x-->&g;<?p q?>2</ds:KeyName>" + signed[keyInfoEnd:]
+		doc := mustParseXML(t, src)
+
+		ks := xmldsig1.KeySourceFunc(func(_ context.Context, ki *xmldsig1.KeyInfoData, _ string) (any, error) {
+			require.Equal(t, []string{"1ayb2"}, ki.KeyNames)
+			return &key.PublicKey, nil
+		})
+		_, err := xmldsig1.NewVerifier(ks).Verify(t.Context(), doc)
+		require.NoError(t, err)
+	})
 }
 
 // TestX509CertKeySourceNil confirms that a KeySource built from a nil

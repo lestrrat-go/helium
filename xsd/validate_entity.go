@@ -48,7 +48,7 @@ func (vc *validationContext) validateEntities(ctx context.Context, doc *helium.D
 		if td != nil && td.ContentType == ContentTypeSimple && entityFamilyType(td) && !hasChildElement(elem) {
 			hostDecl := vc.idcHostDecl(elem)
 			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
-				raw := elemTextContent(elem)
+				raw := helium.CharacterData(elem)
 				if raw == "" && hostDecl != nil {
 					if hostDecl.Fixed != nil {
 						raw = *hostDecl.Fixed

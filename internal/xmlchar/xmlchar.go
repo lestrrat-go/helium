@@ -16,10 +16,10 @@ func IsChar(r rune) bool {
 }
 
 // IsAllSpace reports whether every byte of b is XML 1.0 §2.3 whitespace (the S
-// production: #x20 | #x9 | #xD | #xA). An empty slice is all-space.
-func IsAllSpace(b []byte) bool {
-	for _, c := range b {
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+// production: #x20 | #x9 | #xD | #xA). An empty value is all-space.
+func IsAllSpace[T string | []byte](b T) bool {
+	for i := range len(b) {
+		if c := b[i]; c != ' ' && c != '\t' && c != '\n' && c != '\r' {
 			return false
 		}
 	}

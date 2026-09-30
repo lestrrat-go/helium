@@ -532,9 +532,12 @@ func filterPreservesOrder(ctx context.Context, ec *evalContext, e Expr) bool {
 }
 
 // evalPathStepExpr evaluates E1/E2 where E2 is a non-axis expression.
-// Per XPath 3.1: E1 must produce a node sequence; E2 is evaluated for each node
-// with that node as context. If all results are nodes, they are sorted in
-// document order and deduplicated.
+// Per XPath 3.1 §3.3.1.1: E1 must produce a node sequence (XPTY0019); E2 is
+// evaluated for each node with that node as context. If all results are nodes,
+// they are sorted in document order and deduplicated; if all are non-nodes,
+// they keep their order. Any mix of nodes and non-nodes, within one result of
+// E2 or across the results for different context nodes, raises XPTY0018. An
+// empty result counts as either kind.
 func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e PathStepExpr) (Sequence, error) {
 	base, err := evalFn(ctx, ec, e.Left)
 	if err != nil {
@@ -556,30 +559,28 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		if err != nil {
 			return nil, err
 		}
+		if seqLen(r) == 0 {
+			continue
+		}
 		rNodes, nok := NodesFrom(r)
-		if nok {
-			if len(rNodes) > 0 {
-				// XPTY0018: path expression returns mix of nodes and non-nodes.
-				if hasNonNodes {
-					return nil, fmt.Errorf("XPTY0018: path expression result contains a mix of nodes and non-nodes")
-				}
-				hasNodes = true
-				allNodes = append(allNodes, rNodes...)
-			}
-		} else {
-			// Check for mixed results.
-			if hasNodes {
-				return nil, fmt.Errorf("XPTY0018: path expression result contains a mix of nodes and non-nodes")
-			}
-			hasNonNodes = true
-			// Accumulate through the bounded helper so maxNodes / OpLimit /
-			// cancellation are enforced on the atomic branch just as they are on
-			// the node branch below; otherwise a per-node right expression such as
-			// (1 to 10000000) could grow allItems past ec.maxNodes unbounded.
-			allItems, err = appendBoundedSeq(ctx, ec, allItems, r, ec.maxNodes)
-			if err != nil {
-				return nil, err
-			}
+		if nok && !hasNonNodes {
+			hasNodes = true
+			allNodes = append(allNodes, rNodes...)
+			continue
+		}
+		// r is all nodes after earlier non-nodes, or it holds a non-node after
+		// earlier nodes or next to a node of its own.
+		if nok || hasNodes || sequenceHasNode(r) {
+			return nil, &XPathError{Code: errCodeXPTY0018, Message: errMsgPathMixedResult}
+		}
+		hasNonNodes = true
+		// Accumulate through the bounded helper so maxNodes / OpLimit /
+		// cancellation are enforced on the atomic branch just as they are on
+		// the node branch below; otherwise a per-node right expression such as
+		// (1 to 10000000) could grow allItems past ec.maxNodes unbounded.
+		allItems, err = appendBoundedSeq(ctx, ec, allItems, r, ec.maxNodes)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -599,4 +600,14 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		return seq, nil
 	}
 	return allItems, nil
+}
+
+// sequenceHasNode reports whether seq holds at least one node.
+func sequenceHasNode(seq Sequence) bool {
+	for item := range seqItems(seq) {
+		if _, ok := item.(NodeItem); ok {
+			return true
+		}
+	}
+	return false
 }

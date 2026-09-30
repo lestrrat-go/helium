@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/relaxng"
@@ -420,7 +419,12 @@ func TestInterleaveSplitReportsRealCause(t *testing.T) {
 func TestInterleaveSplitExpansionBounded(t *testing.T) {
 	t.Parallel()
 
-	const n = 22
+	const (
+		n = 22
+		// maxSteps is several times what the partition engine takes and far
+		// below the 2^n candidate matchings an enumerating engine explores.
+		maxSteps = 1000
+	)
 	var branches, body strings.Builder
 	for i := range n {
 		name := "e" + string(rune('a'+i%26)) + string(rune('a'+i/26))
@@ -438,10 +442,7 @@ func TestInterleaveSplitExpansionBounded(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r>`+body.String()+`</r>`))
 	require.NoError(t, err)
 
-	start := time.Now()
-	require.NoError(t, relaxng.NewValidator(grammar).Validate(t.Context(), doc))
-	require.Less(t, time.Since(start), 5*time.Second,
-		"an interleave of many single-element branches must stay linear")
+	validationSteps(t, grammar, doc, maxSteps)
 }
 
 // TestInterleaveCompositeBranch is the branch-shape matrix from issue #1474: an
@@ -689,12 +690,17 @@ func fmtInt(b *strings.Builder, n int) {
 // design's evidence gathering (repro2/cap2_test.go): an interleave of k
 // optional(group(x_i,y_i)) branches plus a sibling <s/>, fed a document that
 // omits branch 0 and splits every other branch's two members across <s/>,
-// must accept in well under a second at k = 9, 12 and 40 — the partition
-// engine routes in one O(children × wild branches) pass, so it never needs a
-// cap on the number of branches (unlike a round-robin engine that must
-// silently degrade past some k).
+// must accept at k = 9, 12 and 40 in a number of steps linear in k — the
+// partition engine routes in one O(children × wild branches)
+// pass, so it never needs a cap on the number of branches (unlike a
+// round-robin engine that must silently degrade past some k).
 func TestInterleaveManyCompositeBranchesLinear(t *testing.T) {
 	t.Parallel()
+
+	// maxStepsPerK bounds the steps per branch. The partition engine takes
+	// 10 per branch at every k; an engine whose work per branch grows with k
+	// crosses the bound as k grows.
+	const maxStepsPerK = 50
 
 	for _, k := range []int{9, 12, 40} {
 		t.Run(strconv.Itoa(k), func(t *testing.T) {
@@ -703,10 +709,7 @@ func TestInterleaveManyCompositeBranchesLinear(t *testing.T) {
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(manyCompositeBranchesDoc(k)))
 			require.NoError(t, err)
 
-			start := time.Now()
-			verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
-			require.NoError(t, verr)
-			require.Less(t, time.Since(start), time.Second, "k=%d should validate in well under a second", k)
+			validationSteps(t, grammar, doc, maxStepsPerK*k)
 		})
 	}
 }

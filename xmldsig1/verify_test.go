@@ -167,6 +167,32 @@ func TestVerifyRejectsInclusiveNamespacesOnNonExclusiveSignedInfoC14N(t *testing
 	}
 }
 
+// The XPath filter transform reads its expression as libxml2's
+// xmlNodeGetContent returns it, which leaves out comments and PIs. A ds:XPath
+// element that holds only a comment therefore has an empty expression and is
+// rejected before any key resolution or signature check.
+func TestVerifyXPathTransformExpressionLeavesOutComments(t *testing.T) {
+	key := generateRSAKey(t)
+	sig := `<ds:Signature xmlns:ds="` + xmldsig1.NamespaceDSig + `">` +
+		`<ds:SignedInfo>` +
+		`<ds:CanonicalizationMethod Algorithm="` + xmldsig1.ExcC14N10 + `"/>` +
+		`<ds:SignatureMethod Algorithm="` + xmldsig1.AlgRSASHA256 + `"/>` +
+		`<ds:Reference URI="">` +
+		`<ds:Transforms><ds:Transform Algorithm="` + xmldsig1.TransformXPath + `">` +
+		`<ds:XPath><!--not(ancestor-or-self::ds:Signature)--><?p q?></ds:XPath>` +
+		`</ds:Transform></ds:Transforms>` +
+		`<ds:DigestMethod Algorithm="` + xmldsig1.DigestSHA256 + `"/>` +
+		`<ds:DigestValue>AA==</ds:DigestValue>` +
+		`</ds:Reference>` +
+		`</ds:SignedInfo>` +
+		`<ds:SignatureValue>AA==</ds:SignatureValue>` +
+		`</ds:Signature>`
+	doc := mustParseXML(t, `<root>`+sig+`</root>`)
+	_, err := xmldsig1.NewVerifier(xmldsig1.StaticKey(&key.PublicKey)).Verify(t.Context(), doc)
+	require.ErrorIs(t, err, xmldsig1.ErrUnsupportedTransform)
+	require.ErrorContains(t, err, "XPath transform has empty expression")
+}
+
 // findSignatureElement walks the tree and returns the first ds:Signature
 // element, or nil if none is present.
 func findSignatureElement(root helium.Node) *helium.Element {

@@ -18,6 +18,8 @@
 //
 // On failure, the returned error is [ErrValidationFailed]. Individual
 // validation errors are delivered to the configured [helium.ErrorHandler].
+// Validation polls ctx at every pattern step, so a cancelled context or a
+// passed deadline stops it; Validate then returns the context's error.
 //
 // # Error Handling
 //

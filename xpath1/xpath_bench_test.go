@@ -12,6 +12,14 @@ import (
 const benchChapterExpr = "count(/EXAMPLE/chapter[p])"
 const benchNVDEntryExpr = "count(//*[local-name()='entry'])"
 
+// String-value workloads: a predicate on each entry's whole subtree text, a
+// predicate on many text-only elements, and the whole document's text.
+const (
+	benchNVDEntryStringExpr = "count(//*[local-name()='entry'][contains(., 'remote')])"
+	benchNVDRefStringExpr   = "count(//*[local-name()='ref'][. != ''])"
+	benchNVDDocStringExpr   = "string-length(string(/))"
+)
+
 func benchmarkXPathDocument(b *testing.B, path string) *helium.Document {
 	b.Helper()
 	data, err := os.ReadFile(path)
@@ -74,4 +82,16 @@ func BenchmarkEvaluateCompiledNVDEntries(b *testing.B) {
 
 func BenchmarkEvaluateConvenienceNVDEntries(b *testing.B) {
 	benchmarkConvenienceXPath(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml", benchNVDEntryExpr, 176)
+}
+
+func BenchmarkEvaluateCompiledNVDEntryStrings(b *testing.B) {
+	benchmarkCompiledXPath(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml", benchNVDEntryStringExpr, 147)
+}
+
+func BenchmarkEvaluateCompiledNVDRefStrings(b *testing.B) {
+	benchmarkCompiledXPath(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml", benchNVDRefStringExpr, 484)
+}
+
+func BenchmarkEvaluateCompiledNVDDocumentString(b *testing.B) {
+	benchmarkCompiledXPath(b, "../testdata/libxml2-compat/schemas/test/nvdcve_0.xml", benchNVDDocStringExpr, 121849)
 }

@@ -27,6 +27,13 @@ type validator struct {
 	suppressDepth int // when > 0, errors are suppressed (inside choice branches)
 	depth         int // recursion depth guard
 
+	// ctx is the caller's context, polled once per pattern step (stopped).
+	// stopErr holds the context error once a poll reports one; from then on
+	// every step fails at once, so the recursion unwinds without doing more
+	// matching work.
+	ctx     context.Context //nolint:containedctx // per-run state; the validator never outlives Validate
+	stopErr error
+
 	// groupMemo caches results of validateGroupChildren/validateGroupSeq so the
 	// recursive group backtracker (backtrackGroupFlexible/backtrackGroupNaive)
 	// does not re-explore overlapping (child-range, input-position) subproblems.
@@ -145,9 +152,12 @@ func (v *validator) groupMemoLookupKey(children []*pattern, elem *helium.Element
 
 const maxValidationDepth = 500
 
-func validateDocument(ctx context.Context, doc *helium.Document, grammar *Grammar, cfg *validateConfig, handler helium.ErrorHandler) bool {
+// validateDocument reports whether doc is valid against grammar. It returns
+// ctx's error, and delivers no validation errors, when ctx is done before the
+// validation finishes.
+func validateDocument(ctx context.Context, doc *helium.Document, grammar *Grammar, cfg *validateConfig, handler helium.ErrorHandler) (bool, error) {
 	if grammar == nil || grammar.start == nil {
-		return false
+		return false, nil
 	}
 
 	label := cfg.label
@@ -163,12 +173,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 		filename:     label,
 		errorHandler: handler,
 		valid:        true,
+		ctx:          ctx,
 	}
 
 	root := findDocElement(doc)
 	if root == nil {
 		v.valid = false
-		return false
+		return false, nil
 	}
 
 	// Create initial state: the root element
@@ -177,6 +188,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 	}
 
 	ret := v.validatePattern(grammar.start, state)
+	if v.stopErr != nil {
+		return false, v.stopErr
+	}
 	if ret != 0 {
 		v.valid = false
 	}
@@ -192,7 +206,23 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 		handler.Handle(ctx, e)
 	}
 
-	return v.valid
+	return v.valid, nil
+}
+
+// stopped polls the caller's context for one pattern step and reports whether
+// validation must stop. Every step polls, so how far a validation got is
+// measured in steps, and a cancelled context is seen at the next step. Once a
+// poll reports an error it is kept, and every later step stops without
+// polling again.
+func (v *validator) stopped() bool {
+	if v.stopErr != nil {
+		return true
+	}
+	if err := v.ctx.Err(); err != nil {
+		v.stopErr = err
+		return true
+	}
+	return false
 }
 
 // validState tracks the current position during validation.
@@ -213,7 +243,7 @@ type validState struct {
 // validatePattern validates a pattern against the current state.
 // Returns 0 for success, -1 for failure.
 func (v *validator) validatePattern(pat *pattern, state *validState) int {
-	if pat == nil {
+	if pat == nil || v.stopped() {
 		return -1
 	}
 
@@ -452,7 +482,7 @@ func (v *validator) validateElementBody(pat *pattern, elem *helium.Element,
 // that appear in mixed-mode (attributes inside groups/choices within elements).
 func (v *validator) validateContentPat(pat *pattern, elem *helium.Element,
 	attrs []*helium.Attribute, attrUsed []bool, state *validState) int {
-	if pat == nil {
+	if pat == nil || v.stopped() {
 		return -1
 	}
 

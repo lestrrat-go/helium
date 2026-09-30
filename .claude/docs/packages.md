@@ -332,6 +332,11 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
   (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`. `Walk` allocates
   O(depth), independent of sibling-list width (cycle guards: `node-types.md`)
+- `CharacterData(node) → string` (`node.go`) — the character data a node holds directly, entity references
+  expanded: Text/CDATA children plus each EntityRef child's expansion (nested references too). Element
+  children, elements inside an entity, and comments/PIs at any depth add nothing; a Text/CDATA node is its own
+  text and an EntityRef its expansion's character data. Same result with or without `SubstituteEntities`. It is
+  the text XSD validation reads for an element (`node-types.md` "Content() Default")
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
   panicking. A nil `targetDoc` creates a standalone copy. A copied named `EntityRef` resolves only against a
   non-nil `targetDoc`'s declarations: a bound source reference first resolves in the corresponding destination
@@ -1020,7 +1025,8 @@ RELAX NG schema compilation and validation.
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
-  - `Validate(ctx, *Document) → error` — terminal method
+  - `Validate(ctx, *Document) → error` — terminal method; polls ctx at every pattern step and returns ctx's error
+    (delivering no validation errors) when ctx is done before validation finishes
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list,
   mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
@@ -1197,7 +1203,7 @@ OASIS XML Catalog resolution for public/system IDs and URIs.
   honor `broke` to stop falling through to later catalogs
 - Const `MaxCatalogSize`; sentinel `ErrCatalogTooLarge`
 - Catalog chaining via nextCatalog; URN urn:publicid: support
-- Files: `catalog.go`, `load.go`
+- Files: `catalog.go`, `load.go`, `load_unix.go` (O_NONBLOCK open; cancellable FIFO read), `load_other.go`
 - Imports: helium, internal/catalog/, internal/iofs/, internal/lexicon/, internal/xmlchar/
 
 ## stream/

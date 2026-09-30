@@ -77,7 +77,10 @@ cancellation (each operand is individually capped, but the concatenation must be
 The child axis and the descendant walks enumerate child lists through `helium.Children` (the owned-child
 boundary), and keep only XDM kinds (`IsXDMChild`). The XDM has no entity references, so from an entity-reference
 context node (entity substitution off) the child and descendant axes are empty: its only child is the DTD-owned
-`Entity` node, and the walk does not follow that node's sibling links into the DTD.
+`Entity` node, and the walk does not follow that node's sibling links into the DTD. String-value
+(`ixpath.StringValue`, an element's `Content()`) counts an entity reference as the text it expands to, so an
+element or document holding references has the string-value of the tree a substituted parse builds, and a
+document's DTD adds nothing.
 
 **Cancellation:** the fused hot child/attribute loops check `ctx.Err()` once per enumerated node (the
 attribute path also inside its `ForEachAttribute` callback) so a cancelled context aborts mid-enumeration
@@ -85,6 +88,13 @@ instead of scanning the whole child/attribute set before the next `countOps` bou
 delegate to `ixpath.TraverseAxis(ctx, ...)`, which performs its own in-loop `ctx.Err()` checks; on the
 namespace axis those checks run inside the `NamespacePrefixesInScope` / `CollectNamespaceNodes` helper loops
 (outer and inner) so `namespace::*` cancels promptly too.
+
+### Path steps (`E1/E2`)
+Every step but the last must return nodes only: `PathExpr` / `vmPathExpr` (axis-step E2) and `PathStepExpr`
+(non-axis E2) return `ErrPathNotNodeSet` (an `*XPathError` with code XPTY0019) when E1 holds any non-node.
+`evalPathStepExpr` evaluates E2 once per E1 node. All-node results are sorted and deduplicated, all-non-node
+results keep their order, and any mix of nodes and non-nodes raises XPTY0018, whether the mix sits in one
+evaluation of E2 (`/a/(1, .)`) or across evaluations for different nodes. An empty result counts as either kind.
 
 ### Predicates
 - Numeric atomic → compare to position (1-based)

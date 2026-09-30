@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -154,4 +155,42 @@ func TestStringValueElementOnlyStripsWhitespace_XSD(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "xy", av.StringVal())
 	})
+}
+
+// TestStringValueElementOnlyEntityReferences checks the schema-aware
+// string-value against entity references: a reference in element-only content
+// that expands to whitespace is insignificant, as the whitespace text a
+// substituted parse stores there is, and a reference inside an element's
+// content adds the text it expands to, never text of other declarations in the
+// DTD that owns its entity.
+func TestStringValueElementOnlyEntityReferences(t *testing.T) {
+	const src = `<!DOCTYPE root [<!ENTITY w "W"><!--c0--><!ENTITY ws "&#10;&#9;"><?p0 x?>` +
+		`<!ENTITY f "F<!--fc-->">]><root>&ws;<a>x&f;</a>&ws;<b>y&w;</b>&ws;</root>`
+
+	decls := contentKindDecls{kinds: map[string]xpath3.ContentTypeKind{
+		xpath3.QAnnotation("urn:t", "rootType"): xpath3.ContentTypeElementOnly,
+	}}
+	for _, substitute := range []bool{false, true} {
+		t.Run("substitute="+strconv.FormatBool(substitute), func(t *testing.T) {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				TypeAnnotations(map[helium.Node]string{
+					doc.DocumentElement(): xpath3.QAnnotation("urn:t", "rootType"),
+				}).
+				SchemaDeclarations(decls)
+
+			for expr, want := range map[string]string{
+				`/*/string()`:  "xFyW",
+				`/string()`:    "xFyW",
+				`//a/string()`: "xF",
+			} {
+				seq := evalExprWithEval(t, eval, doc, expr)
+				require.Equal(t, 1, seq.Len(), expr)
+				av, ok := seq.Get(0).(xpath3.AtomicValue)
+				require.True(t, ok, expr)
+				require.Equal(t, want, av.StringVal(), expr)
+			}
+		})
+	}
 }
