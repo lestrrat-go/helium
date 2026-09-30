@@ -265,6 +265,8 @@ func TestStringValue_EntityReferences(t *testing.T) {
 				}
 			}
 			require.Equal(t, want, got)
+			require.Equal(t, want["doc"], string(doc.Content()),
+				"the document's Content is its string-value, without the DTD")
 		})
 	}
 }

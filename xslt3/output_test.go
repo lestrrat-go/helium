@@ -1830,3 +1830,23 @@ func BenchmarkSerializeResultXML(b *testing.B) {
 		}
 	}
 }
+
+// JSON output writes a document node, under json-node-output-method "text" or
+// unset, as the JSON string of its string value. The DTD adds nothing: entity
+// declarations are left out and references in the document element expand,
+// the same text XPath string(/) reads.
+func TestSerializeItemsJSONDocumentStringValue(t *testing.T) {
+	const src = `<!DOCTYPE r [<!ENTITY e "EEE"><!ENTITY f "F<b>FF</b>"><!ENTITY u "UNUSED">]><r>1&e;2&f;3</r>`
+	for _, substitute := range []bool{false, true} {
+		doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		items := xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}
+		for _, method := range []string{"", outMethodText} {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodJSON, JSONNodeOutputMethod: method})
+			require.NoError(t, err)
+			require.Equal(t, `"1EEE2FFF3"`, buf.String(),
+				"json-node-output-method %q (SubstituteEntities(%t))", method, substitute)
+		}
+	}
+}
