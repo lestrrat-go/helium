@@ -1234,3 +1234,246 @@ func TestValidateEntityRefText(t *testing.T) {
 		}
 	}
 }
+
+// entityBorneSchema declares one global element per check that reads an
+// element's element children: element-only, mixed and xs:all content models,
+// simple, empty and nilled content, xs:anyType content, strict and lax
+// wildcards, xs:ID/xs:IDREF content, and xs:key/xs:keyref on a host reached
+// through an entity or holding one. The 1.1 variant adds xs:assert over child
+// elements.
+func entityBorneSchema(v11 bool) string {
+	var b strings.Builder
+	b.WriteString(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="seq">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="b" type="xs:int" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="mix">
+    <xs:complexType mixed="true">
+      <xs:sequence>
+        <xs:element name="a" type="xs:int"/>
+        <xs:element name="b" type="xs:int" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="all">
+    <xs:complexType>
+      <xs:all><xs:element name="a" type="xs:int"/><xs:element name="b" type="xs:int"/></xs:all>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="int" type="xs:int"/>
+  <xs:element name="empty"><xs:complexType/></xs:element>
+  <xs:element name="nil" nillable="true">
+    <xs:complexType>
+      <xs:sequence><xs:element name="a" type="xs:int" minOccurs="0"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="g" type="xs:int"/>
+  <xs:element name="any" type="xs:anyType"/>
+  <xs:element name="wild">
+    <xs:complexType>
+      <xs:sequence><xs:any processContents="strict" maxOccurs="unbounded"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="lax">
+    <xs:complexType>
+      <xs:sequence><xs:any processContents="lax" maxOccurs="unbounded"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ids">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="w" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence><xs:element name="id" type="xs:ID" maxOccurs="unbounded"/></xs:sequence>
+            <xs:attribute name="ref" type="xs:IDREF"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="box">
+    <xs:complexType>
+      <xs:sequence><xs:element ref="keys" maxOccurs="unbounded"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="keys">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="k" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="ref" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:key name="kk"><xs:selector xpath="k"/><xs:field xpath="."/></xs:key>
+    <xs:keyref name="kr" refer="kk"><xs:selector xpath="ref"/><xs:field xpath="."/></xs:keyref>
+  </xs:element>
+  <xs:element name="outer">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="keys" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="use" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:keyref name="ou" refer="kk"><xs:selector xpath="use"/><xs:field xpath="."/></xs:keyref>
+  </xs:element>
+`)
+	if v11 {
+		b.WriteString(`  <xs:element name="cmp">
+    <xs:complexType>
+      <xs:sequence><xs:element name="v" type="xs:int" maxOccurs="unbounded"/></xs:sequence>
+      <xs:assert test="count(v) eq 2 and data(v[1]) instance of xs:int and v[2] eq 2"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="cmpm">
+    <xs:complexType mixed="true">
+      <xs:sequence><xs:element name="v" type="xs:int"/></xs:sequence>
+      <xs:assert test="string(.) eq 'x1y' and count(text()) eq 2 and data(v) instance of xs:int"/>
+    </xs:complexType>
+  </xs:element>
+`)
+	}
+	b.WriteString(`</xs:schema>`)
+	return b.String()
+}
+
+type entityBorneCase struct {
+	name     string
+	entities string // internal DTD subset
+	body     string // document element, starting on line 2
+	valid    bool
+	v10Only  bool
+	v11Only  bool
+}
+
+func entityBorneCases() []entityBorneCase {
+	const xsi = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+	return []entityBorneCase{
+		{name: "element-only valid", entities: `<!ENTITY c "<a>1</a><b>2</b>">`, body: `<seq>&c;</seq>`, valid: true},
+		{name: "element-only wrong order", entities: `<!ENTITY c "<b>2</b><a>1</a>">`, body: "<seq>\n&c;</seq>"},
+		{name: "element-only child content invalid", entities: `<!ENTITY c "<a>x</a>">`, body: "<seq>\n\n&c;</seq>"},
+		{name: "element-only descendant on a later entity line", entities: "<!ENTITY c \"<a>1</a>\n<b>x</b>\">", body: "<seq>\n&c;</seq>"},
+		{name: "element-only entity then literal", entities: `<!ENTITY c "<a>1</a>">`, body: `<seq>&c;<b>2</b></seq>`, valid: true},
+		{name: "element-only literal then entity", entities: `<!ENTITY c "<a>1</a>">`, body: "<seq><b>2</b>\n&c;</seq>"},
+		{name: "element-only nested entities valid", entities: `<!ENTITY d "<b>2</b>"><!ENTITY c "<a>1</a>&d;">`, body: `<seq>&c;</seq>`, valid: true},
+		{name: "element-only nested entities invalid", entities: `<!ENTITY d "<a>2</a>"><!ENTITY c "<a>1</a>&d;">`, body: "<seq>\n&c;</seq>"},
+		{name: "element-only nested entity content invalid", entities: "<!ENTITY d \"<b>y</b>\"><!ENTITY c \"<a>1</a>\n&d;\">", body: "<seq>\n\n&c;</seq>"},
+		{name: "element-only entity with whitespace between elements", entities: "<!ENTITY c \"<a>1</a>\n <b>2</b> \">", body: `<seq>&c;</seq>`, valid: true},
+		{name: "mixed text and elements valid", entities: `<!ENTITY c "x<a>1</a>y">`, body: `<mix>&c;<b>2</b></mix>`, valid: true},
+		{name: "mixed text and elements invalid", entities: `<!ENTITY c "x<b>1</b>">`, body: "<mix>\n&c;</mix>"},
+		{name: "all valid", entities: `<!ENTITY c "<b>2</b><a>1</a>">`, body: `<all>&c;</all>`, valid: true},
+		{name: "all repeated through entity", entities: `<!ENTITY c "<a>1</a>">`, body: "<all>&c;\n&c;<b>1</b></all>"},
+		{name: "simple content with element", entities: `<!ENTITY c "<x/>42">`, body: `<int>&c;</int>`},
+		{name: "simple content with nested element", entities: `<!ENTITY d "<x/>"><!ENTITY c "4&d;2">`, body: `<int>&c;</int>`},
+		{name: "simple content with text-only entity", entities: `<!ENTITY d "2"><!ENTITY c "4&d;">`, body: `<int>&c;</int>`, valid: true},
+		{name: "empty content with element", entities: `<!ENTITY c "<x/>">`, body: "<empty>\n&c;</empty>"},
+		{name: "empty content with whitespace then element", entities: `<!ENTITY c " <x/>">`, body: "<empty>\n&c;</empty>"},
+		{name: "empty content with text then element", entities: `<!ENTITY c "t<x/>">`, body: "<empty>\n&c;</empty>"},
+		{name: "empty content with entity expanding to nothing", entities: `<!ENTITY c "">`, body: `<empty>&c;</empty>`, valid: true},
+		{name: "nilled with element", entities: `<!ENTITY c "<a>1</a>">`, body: `<nil ` + xsi + ` xsi:nil="true">` + "\n&c;</nil>"},
+		{name: "nilled with entity expanding to nothing", entities: `<!ENTITY c "">`, body: `<nil ` + xsi + ` xsi:nil="true">&c;</nil>`, valid: true},
+		{name: "not nilled with element", entities: `<!ENTITY c "<a>1</a>">`, body: `<nil ` + xsi + ` xsi:nil="false">&c;</nil>`, valid: true},
+		{name: "anyType with valid global element", entities: `<!ENTITY c "<g>1</g>">`, body: `<any>&c;</any>`, valid: true},
+		{name: "anyType with invalid global element", entities: `<!ENTITY c "<g>x</g>">`, body: "<any>\n&c;</any>"},
+		{name: "strict wildcard valid", entities: `<!ENTITY c "<g>1</g><g>2</g>">`, body: `<wild>&c;</wild>`, valid: true},
+		{name: "strict wildcard undeclared", entities: `<!ENTITY c "<q/>">`, body: "<wild>\n&c;</wild>"},
+		{name: "lax wildcard invalid global element", entities: `<!ENTITY c "<g>z</g>">`, body: "<lax>\n&c;</lax>"},
+		{name: "IDs distinct", entities: `<!ENTITY c "<w><id>a</id></w>">`, body: `<ids>&c;<w><id>b</id></w></ids>`, valid: true},
+		{name: "ID from entity referenced twice", entities: `<!ENTITY c "<w><id>a</id></w>">`, body: "<ids>&c;\n&c;</ids>"},
+		{name: "IDREF to an entity-borne ID", entities: `<!ENTITY c "<w><id>a</id></w>">`, body: `<ids>&c;<w ref="a"><id>b</id></w></ids>`, valid: true},
+		{name: "IDREF from an entity-borne element", entities: `<!ENTITY c "<w ref='z'><id>a</id></w>">`, body: "<ids>\n&c;</ids>"},
+		{name: "entity-borne IDs under one host", entities: `<!ENTITY c "<id>a</id><id>b</id>">`, body: `<ids><w>&c;</w></ids>`, valid: true},
+		{name: "entity-borne ID repeated under one host", entities: `<!ENTITY c "<id>a</id>">`, body: "<ids><w>&c;\n&c;</w></ids>", v10Only: true},
+		{name: "entity-borne ID repeated under one host", entities: `<!ENTITY c "<id>a</id>">`, body: "<ids><w>&c;\n&c;</w></ids>", valid: true, v11Only: true},
+		{name: "key on entity-borne host valid", entities: `<!ENTITY c "<keys><k>1</k><k>2</k><ref>2</ref></keys>">`, body: `<box>&c;</box>`, valid: true},
+		{name: "key on entity-borne host duplicate", entities: `<!ENTITY c "<keys><k>1</k><k>1</k></keys>">`, body: "<box>\n&c;</box>"},
+		{name: "keyref on entity-borne host dangling", entities: `<!ENTITY c "<keys><k>1</k><ref>3</ref></keys>">`, body: "<box>\n&c;</box>"},
+		{name: "entity-borne key host referenced twice", entities: `<!ENTITY c "<keys><k>1</k><k>1</k></keys>">`, body: "<box>&c;\n&c;</box>"},
+		{name: "keyref resolved by entity-borne descendant key", entities: `<!ENTITY c "<keys><k>1</k></keys>">`, body: `<outer>&c;<use>1</use></outer>`, valid: true},
+		{name: "keyref dangling against entity-borne descendant key", entities: `<!ENTITY c "<keys><k>1</k></keys>">`, body: "<outer>&c;\n<use>2</use></outer>"},
+		{name: "assert over entity-borne elements valid", entities: `<!ENTITY c "<v>1</v><v>2</v>">`, body: `<cmp>&c;</cmp>`, valid: true, v11Only: true},
+		{name: "assert over entity-borne elements invalid", entities: `<!ENTITY c "<v>2</v><v>1</v>">`, body: "<cmp>\n&c;</cmp>", v11Only: true},
+		{name: "assert over nested entity-borne elements", entities: `<!ENTITY d "<v>2</v>"><!ENTITY c "<v>1</v>&d;">`, body: `<cmp>&c;</cmp>`, valid: true, v11Only: true},
+		{name: "assert over entity mixing text and elements", entities: `<!ENTITY c "x<v>1</v>y">`, body: `<cmpm>&c;</cmpm>`, valid: true, v11Only: true},
+	}
+}
+
+// TestValidateEntityBorneElements verifies that elements inside an entity's
+// replacement text are validated as the element children entity substitution
+// would give their host. A document parsed without entity substitution (the
+// default) keeps EntityRef nodes whose expansion holds those elements; its
+// verdict, diagnostics (lines included), and PSVI type annotations must equal
+// those of the same document parsed with SubstituteEntities(true), in XSD 1.0
+// and 1.1.
+func TestValidateEntityBorneElements(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []xsd.Version{xsd.Version10, xsd.Version11} {
+		schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(entityBorneSchema(version == xsd.Version11)))
+		require.NoError(t, err)
+		schema, err := xsd.NewCompiler().Version(version).Compile(t.Context(), schemaDoc)
+		require.NoError(t, err)
+
+		for _, tc := range entityBorneCases() {
+			if (tc.v11Only && version != xsd.Version11) || (tc.v10Only && version != xsd.Version10) {
+				continue
+			}
+			t.Run(version.String()+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				instance := "<!DOCTYPE r [" + tc.entities + "]>\n" + tc.body
+
+				refDoc, err := helium.NewParser().Parse(t.Context(), []byte(instance))
+				require.NoError(t, err)
+				var buf bytes.Buffer
+				require.NoError(t, helium.Write(&buf, refDoc.DocumentElement()))
+				require.Contains(t, buf.String(), "&", "the default parse keeps entity references")
+
+				substDoc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(instance))
+				require.NoError(t, err)
+
+				var substOut, refOut string
+				var substAnn, refAnn xsd.TypeAnnotations
+				substErr := validateWithOutput(t, xsd.NewValidator(schema).Label("test.xml").Annotations(&substAnn), substDoc, &substOut)
+				refErr := validateWithOutput(t, xsd.NewValidator(schema).Label("test.xml").Annotations(&refAnn), refDoc, &refOut)
+
+				require.Equal(t, tc.valid, substErr == nil, "substituted parse: %s", substOut)
+				require.Equal(t, substOut, refOut)
+				require.Equal(t, substErr == nil, refErr == nil)
+				require.Equal(t, elementOccurrenceTypes(substDoc, substAnn), elementOccurrenceTypes(refDoc, refAnn))
+			})
+		}
+	}
+}
+
+// elementOccurrenceTypes lists the type annotation of every element of doc's
+// document element tree in document order, descending through each entity
+// reference into its entity's children, so a document parsed with and without
+// entity substitution list the same elements.
+func elementOccurrenceTypes(doc *helium.Document, ann xsd.TypeAnnotations) string {
+	var b strings.Builder
+	root := doc.DocumentElement()
+	fmt.Fprintf(&b, "%s = %s\n", root.LocalName(), ann[root])
+	appendOccurrenceTypes(&b, root, ann)
+	return b.String()
+}
+
+func appendOccurrenceTypes(b *strings.Builder, n helium.Node, ann xsd.TypeAnnotations) {
+	for c := range helium.Children(n) {
+		switch c.Type() {
+		case helium.ElementNode:
+			e, ok := c.(*helium.Element)
+			if !ok {
+				continue
+			}
+			fmt.Fprintf(b, "%s = %s\n", e.LocalName(), ann[e])
+			appendOccurrenceTypes(b, e, ann)
+		case helium.EntityRefNode:
+			if ent, ok := c.FirstChild().(*helium.Entity); ok {
+				appendOccurrenceTypes(b, ent, ann)
+			}
+		}
+	}
+}
