@@ -135,7 +135,8 @@ func inEntityContent(n helium.Node) bool {
 // ancestors and none of them lies inside entity content (an Entity node
 // among its ancestors). It gives up (false) when the first node is deeper
 // than maxSameDepth, and stops at the first node whose depth differs or that
-// lies inside entity content.
+// lies inside entity content. A node whose parent is the parent of the node
+// before it shares that node's ancestors, so it is not walked again.
 func sameDepth(nodes []helium.Node) bool {
 	depth := 0
 	for p := nodes[0].Parent(); p != nil; p = p.Parent() {
@@ -147,7 +148,13 @@ func sameDepth(nodes []helium.Node) bool {
 			return false
 		}
 	}
+	prevParent := nodes[0].Parent()
 	for _, n := range nodes[1:] {
+		parent := n.Parent()
+		if parent == prevParent {
+			continue
+		}
+		prevParent = parent
 		p := n
 		for range depth {
 			p = p.Parent()
