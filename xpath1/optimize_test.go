@@ -358,6 +358,8 @@ func TestCompileFoldShape(t *testing.T) {
 		"//*[local-name() = 'a']", "//.", ".//b", "//self::b", "//self::node()",
 		"//descendant::b", "//descendant::node()", "//descendant-or-self::b",
 		"//descendant-or-self::comment()", "$nodes//b", "/root//x/y", "//a[.//b]",
+		"//node()", "//text()", "//comment()", "//processing-instruction()",
+		"//processing-instruction('pi')", "//comment()[string(.)]",
 	}
 	kept := []string{
 		"//a[1]", "//a[last()]", "//a[position()=1]", "//b[position() > 1 and @x]",
@@ -365,8 +367,7 @@ func TestCompileFoldShape(t *testing.T) {
 		"//a[$nodes]", "//b[@x = $one]", "//b[ext:g()]", "//b[f()]", "//a[count(b)]",
 		"//a[sum(b)]", "//x[number(.)]", "//a[-1]", "//a[1 + 1]", "//b[string-length()]",
 		"//a[b[1]]", "//a[b[last()]]", "//a[(b)[1]]", "//a[.//b[2]]", "//..", "//@x",
-		"//following-sibling::b", "//node()", "//text()", "//comment()",
-		"//processing-instruction()", "//processing-instruction('pi')",
+		"//following-sibling::b", "//node()[1]", "//text()[last()]",
 	}
 
 	for _, src := range folded {
