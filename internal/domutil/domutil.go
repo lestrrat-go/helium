@@ -26,16 +26,6 @@ func LocalName(e *helium.Element) string {
 	return name
 }
 
-// TextContent returns the concatenated Content() of an element's direct
-// children.
-func TextContent(e *helium.Element) string {
-	var sb []byte
-	for child := e.FirstChild(); child != nil; child = child.NextSibling() {
-		sb = append(sb, child.Content()...)
-	}
-	return string(sb)
-}
-
 // XMLLangMatches walks the ancestor chain from n looking for an xml:lang
 // attribute. langArg must already be lower-cased by the caller. It returns
 // (matched, found): found is true once an xml:lang attribute is encountered,

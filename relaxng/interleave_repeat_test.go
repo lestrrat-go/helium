@@ -3,7 +3,6 @@ package relaxng_test
 import (
 	"strings"
 	"testing"
-	"time"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/relaxng"
@@ -71,15 +70,15 @@ func TestInterleaveRepeatableMemberGroup(t *testing.T) {
 // blowup in the interleave matcher: a long document of interleaved group(a,b)
 // pairs and c elements must validate with polynomial growth, never exponential.
 //
-// The guard is the SCALING RATIO between two input sizes, not an absolute
-// wall-clock bound. Doubling the input multiplies a correct (quadratic-ish)
-// matcher's time by a small constant (~5x here); an exponential regression would
-// multiply it by ~2^N. Because the ratio is measured on a single machine it is
-// independent of how fast that machine is, so this cannot flake on a slow or
-// loaded CI runner the way an absolute threshold does. (A genuinely exponential
-// regression would also fail to finish within `go test -timeout`, so it is
-// caught regardless of this assertion.)
+// The guard is the growth in validation STEPS between two input sizes. The
+// validator polls its context once per pattern step, so the step count is the
+// work it did, identical on every run and machine. Doubling the input
+// multiplies a correct matcher's steps by a small constant; an exponential
+// regression multiplies them by ~2^N, so the larger input gets a step budget of
+// maxGrow times what the smaller one took.
 func TestInterleaveRepeatableMemberGroupNotExponential(t *testing.T) {
+	t.Parallel()
+
 	schema := `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start>` +
 		`<element name="root"><interleave>` +
 		`<zeroOrMore><group>` +
@@ -90,53 +89,30 @@ func TestInterleaveRepeatableMemberGroupNotExponential(t *testing.T) {
 
 	grammar := compileGrammar(t, schema)
 
-	// validateN builds a <root> of n interleaved a/c/b triples, validates it
-	// repeatedly, and returns the total validation time. Batching the runs keeps
-	// the timing window above the clock resolution on platforms such as Windows.
-	validateN := func(n int) time.Duration {
-		var docStr strings.Builder
-		docStr.WriteString(`<root>`)
-		for range n {
-			docStr.WriteString(`<a/><c/><b/>`)
-		}
-		docStr.WriteString(`</root>`)
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr.String()))
-		require.NoError(t, err)
-
-		const repetitions = 8
-		start := time.Now()
-		for range repetitions {
-			verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
-			require.NoError(t, verr, "interleave of %d group(a,b) pairs with c must validate", n)
-		}
-		elapsed := time.Since(start)
-		return elapsed
-	}
-
-	// fastest validates size n a few times and keeps the shortest run, so a
-	// one-off GC pause or scheduler hiccup cannot inflate the measurement.
-	fastest := func(n, trials int) time.Duration {
-		best := validateN(n)
-		for range trials - 1 {
-			if d := validateN(n); d < best {
-				best = d
-			}
-		}
-		return best
-	}
-
 	const (
-		baseN   = 1000
-		trials  = 3
-		maxGrow = 20.0 // observed ~5x for a 2x input; exponential would be astronomically higher
+		baseN = 1000
+		// maxBaseSteps is far above the 13 steps per triple the matcher takes.
+		maxBaseSteps = 1 << 20
+		// maxGrow is the step growth allowed for a 2x input. The matcher's steps
+		// grow 2x; polynomial growth up to cubic stays below 8x, and an
+		// exponential regression is cut off by the budget it implies.
+		maxGrow = 8
 	)
 
-	validateN(baseN) // warm up the allocator/caches before the first timed run
-	base := fastest(baseN, trials)
-	grown := fastest(2*baseN, trials)
-	growth := float64(grown) / float64(base)
-	require.Less(t, growth, maxGrow,
-		"validation time grew %.1fx for a 2x larger input (base %s at N=%d, grown %s at N=%d); "+
-			"expected polynomial growth, suspect exponential blowup",
-		growth, base, baseN, grown, 2*baseN)
+	base := validationSteps(t, grammar, interleavedTriplesDoc(t, baseN), maxBaseSteps)
+	validationSteps(t, grammar, interleavedTriplesDoc(t, 2*baseN), maxGrow*base)
+}
+
+// interleavedTriplesDoc parses a <root> of n interleaved a/c/b triples.
+func interleavedTriplesDoc(t *testing.T, n int) *helium.Document {
+	t.Helper()
+	var docStr strings.Builder
+	docStr.WriteString(`<root>`)
+	for range n {
+		docStr.WriteString(`<a/><c/><b/>`)
+	}
+	docStr.WriteString(`</root>`)
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr.String()))
+	require.NoError(t, err)
+	return doc
 }

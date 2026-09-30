@@ -243,7 +243,7 @@ func newEntityRef() *EntityRef {
 // empty result is nil.
 func (e *EntityRef) Content() []byte {
 	var b bytes.Buffer
-	appendEntityRefContent(&b, e, nil, 0)
+	appendEntityRefContent(&b, e, nil, false)
 	if b.Len() == 0 {
 		return nil
 	}

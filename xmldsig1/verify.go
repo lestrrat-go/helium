@@ -969,7 +969,7 @@ func parseXPathTransform(te *helium.Element) (string, map[string]string, *helium
 	if xpathElem == nil {
 		return "", nil, nil, fmt.Errorf("%w: XPath transform missing XPath element", ErrUnsupportedTransform)
 	}
-	expr := strings.TrimSpace(domutil.TextContent(xpathElem))
+	expr := strings.TrimSpace(string(xpathElem.Content()))
 	if expr == "" {
 		return "", nil, nil, fmt.Errorf("%w: XPath transform has empty expression", ErrUnsupportedTransform)
 	}

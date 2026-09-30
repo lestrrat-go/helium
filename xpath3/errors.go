@@ -47,11 +47,14 @@ const errCodeFOJS0006 = "FOJS0006"
 const errCodeFOJS0007 = "FOJS0007"
 const errCodeFORG0002 = "FORG0002"
 const errCodeSENR0001 = "SENR0001"
+const errCodeXPTY0018 = "XPTY0018"
+const errCodeXPTY0019 = "XPTY0019"
 
 // Error message constants reused across the package.
 const (
 	errMsgContextItemAbsent                = "context item is absent"
 	errMsgParseXMLFragmentMalformedTextDec = "parse-xml-fragment: malformed text declaration"
+	errMsgPathMixedResult                  = "path expression result contains a mix of nodes and non-nodes"
 )
 
 // Sentinel errors for the xpath3 package.
@@ -72,8 +75,11 @@ var (
 	ErrExpectedToken            = errors.New("xpath3: expected token")
 	ErrExprTooDeep              = errors.New("xpath3: expression nesting too deep")
 	ErrUnionNotNodeSet          = errors.New("xpath3: union operands must be node-sets")
-	ErrPathNotNodeSet           = errors.New("xpath3: path expression requires node-set")
-	ErrUnsupportedBinaryOp      = errors.New("xpath3: unsupported binary operator")
+	// ErrPathNotNodeSet is the XPTY0019 type error raised when a step of a path
+	// expression other than the last returns a non-node. It is an [*XPathError],
+	// so an XPath try/catch on err:XPTY0019 catches it.
+	ErrPathNotNodeSet      error = &XPathError{Code: errCodeXPTY0019, Message: "path expression requires node-set"}
+	ErrUnsupportedBinaryOp       = errors.New("xpath3: unsupported binary operator")
 	// ErrNodeSetLimit is returned when a node-set exceeds the maximum length.
 	// Aliased from internal/xpath so errors.Is works end-to-end.
 	ErrNodeSetLimit = ixpath.ErrNodeSetLimit

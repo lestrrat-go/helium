@@ -733,35 +733,44 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 		require.Equal(t, "axb", string(ref.Content()))
 	})
 
-	// libxml2's xmlBufGetChildContent adds only Text and CDATA text while it
-	// walks an entity's children, so a comment or PI inside an entity value adds
-	// nothing, at any depth. A comment or PI in the document tree itself keeps
-	// its text in helium's Content.
-	t.Run("comment and PI inside an entity", func(t *testing.T) {
+	// libxml2's xmlBufGetChildContent adds only Text and CDATA text and
+	// descends into other children, so a comment or PI adds nothing at any
+	// depth, whether it sits inside an entity value or in the tree itself. A
+	// SubstituteEntities(true) parse copies an entity's comment and PI into the
+	// tree, so both parse modes read the same text.
+	t.Run("comments and PIs", func(t *testing.T) {
 		t.Parallel()
 		const src = `<!DOCTYPE r [` +
 			`<!ENTITY c "x<!--k-->y<?p q?>z">` +
 			`<!ENTITY n "a<b><!--k-->c<?p q?></b>d">` +
 			`<!ENTITY o "1&c;2">` +
 			`]>` +
-			`<r><c>&c;</c><n>&n;</n><o>&o;</o><t>1<!--top-->2<?pi v?>3</t></r>`
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
-		require.NoError(t, err)
-		root := doc.DocumentElement()
+			`<r><c>&c;</c><n>&n;</n><o>&o;</o><t>1<!--top-->2<?pi v?>3</t>` +
+			`<d>1<e>2<!--deep-->3<?pi w?></e>4</d></r>`
 		want := map[string]string{
 			"c": "xyz",
 			"n": "acd",
 			"o": "1xyz2",
-			"t": "1top2v3",
+			"t": "123",
+			"d": "1234",
 		}
-		for child := range helium.Children(root) {
-			value, ok := want[child.Name()]
-			require.True(t, ok, "unexpected child %s", child.Name())
-			require.Equal(t, value, string(child.Content()), "Content of <%s>", child.Name())
+		for _, substitute := range []bool{false, true} {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			root := doc.DocumentElement()
+			for child := range helium.Children(root) {
+				value, ok := want[child.Name()]
+				require.True(t, ok, "unexpected child %s", child.Name())
+				require.Equal(t, value, string(child.Content()),
+					"Content of <%s> (SubstituteEntities(%t))", child.Name(), substitute)
+			}
+			require.Equal(t, "xyzacd1xyz21231234", string(root.Content()),
+				"Content of the root (SubstituteEntities(%t))", substitute)
 		}
-		require.Equal(t, "xyzacd1xyz21top2v3", string(root.Content()), "Content of the root")
 
-		ref := root.FirstChild().FirstChild()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		ref := doc.DocumentElement().FirstChild().FirstChild()
 		require.Equal(t, helium.EntityRefNode, ref.Type())
 		require.Equal(t, "xyz", string(ref.Content()), "Content of the reference")
 
@@ -769,12 +778,45 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "1xyz2", string(attr.Content()), "Content of an attribute built through the tree API")
 		require.Equal(t, attr.Value(), string(attr.Content()), "Content and Value of the attribute agree")
+	})
 
-		// A SubstituteEntities(true) parse copies the comment and PI into the
-		// tree, where Content keeps their text.
-		sub, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
+	// An element whose only child is a comment or PI has no content, while the
+	// comment or PI node itself still returns its own text (libxml2:
+	// xmlNodeGetContent on XML_COMMENT_NODE / XML_PI_NODE).
+	t.Run("only a comment or PI child", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><a><!--c--></a><b><?p d?></b></r>`))
 		require.NoError(t, err)
-		require.Equal(t, "xkyqz", string(sub.DocumentElement().FirstChild().Content()))
+		a := doc.DocumentElement().FirstChild()
+		require.Nil(t, a.Content(), "Content of <a>")
+		require.Equal(t, "c", string(a.FirstChild().Content()), "Content of the comment")
+		b := a.NextSibling()
+		require.Nil(t, b.Content(), "Content of <b>")
+		require.Equal(t, "d", string(b.FirstChild().Content()), "Content of the PI")
+	})
+
+	// Content of the document node leaves out the comments and PIs around and
+	// inside the document element.
+	t.Run("document node", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<?p a?><!--b--><r>x<!--c-->y<?q d?></r><!--e--><?s f?>`))
+		require.NoError(t, err)
+		require.Equal(t, "xy", string(doc.Content()))
+	})
+
+	// An attribute built through the tree API can hold a comment or PI child.
+	// Its Content leaves them out and agrees with Value.
+	t.Run("attribute with a comment or PI child", func(t *testing.T) {
+		t.Parallel()
+		doc := helium.NewDefaultDocument()
+		attr, err := doc.CreateAttribute("a", "1", nil)
+		require.NoError(t, err)
+		require.NoError(t, attr.AddChild(doc.CreateComment([]byte("c"))))
+		require.NoError(t, attr.AddChild(doc.CreateText([]byte("2"))))
+		require.NoError(t, attr.AddChild(doc.CreatePI("p", "d")))
+		require.Equal(t, "12", string(attr.Content()))
+		require.Equal(t, attr.Value(), string(attr.Content()))
 	})
 }
 

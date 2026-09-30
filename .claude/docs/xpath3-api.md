@@ -324,7 +324,7 @@ var (
     ErrExpectedToken            // expected token
     ErrExprTooDeep              // expression nesting too deep
     ErrUnionNotNodeSet          // union operands must be node-sets
-    ErrPathNotNodeSet           // path expression requires node-set
+    ErrPathNotNodeSet           // XPTY0019 *XPathError: a non-last path step returned a non-node
     ErrUnsupportedBinaryOp      // unsupported binary operator
     ErrNodeSetLimit             // node-set size limit exceeded (alias of internal/xpath.ErrNodeSetLimit)
     ErrRegexMatchLimit          // Regex.EachSubmatchIndex full-context match alloc exceeds the safe ceiling

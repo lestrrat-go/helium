@@ -23,9 +23,9 @@ func Example_helium_character_data() {
 	// entity reference expanded. The comment and the <note> child add nothing.
 	fmt.Println(helium.CharacterData(root))
 
-	// Content, by contrast, also includes comment and descendant element text.
+	// Content, by contrast, also includes the text of descendant elements.
 	fmt.Println(string(root.Content()))
 	// Output:
 	// 12.99
-	// 12. cents follow 99USD
+	// 12.99USD
 }

@@ -99,8 +99,8 @@ func (n *Attribute) IsDefault() bool {
 // that node's bytes directly with one allocation for the string. Any other
 // shape, such as the Text/EntityRef list a SubstituteEntities(false) parse
 // builds, is expanded by appendChildContent, so the result is the same
-// string a SubstituteEntities(true) parse stores. A Comment or PI reached
-// through an entity contributes nothing, as in libxml2.
+// string a SubstituteEntities(true) parse stores. A Comment or PI, as a child
+// or reached through an entity, contributes nothing, as in libxml2.
 func (n *Attribute) Value() string {
 	if n.firstChild == nil {
 		return ""
@@ -109,7 +109,7 @@ func (n *Attribute) Value() string {
 		return string(t.rawContent())
 	}
 	var b strings.Builder
-	appendChildContent(&b, &n.docnode, []*docnode{&n.docnode}, 0)
+	appendChildContent(&b, &n.docnode, []*docnode{&n.docnode}, false)
 	return b.String()
 }
 

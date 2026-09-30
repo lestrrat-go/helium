@@ -444,7 +444,7 @@ func parseKeyInfo(ctx context.Context, budget *verifyBudget, keyInfoElem *helium
 		case "KeyName":
 			// A ds:KeyName is an opaque producer-chosen label; surface it verbatim
 			// (whitespace-trimmed) for a KeySource to map to a key.
-			data.KeyNames = append(data.KeyNames, strings.TrimSpace(domutil.TextContent(elem)))
+			data.KeyNames = append(data.KeyNames, strings.TrimSpace(string(elem.Content())))
 		case "X509Data":
 			if err := parseX509Data(ctx, budget, elem, data); err != nil {
 				return nil, err
@@ -576,7 +576,7 @@ func parseX509Data(ctx context.Context, budget *verifyBudget, elem *helium.Eleme
 			}
 			data.X509SKIs = append(data.X509SKIs, ski)
 		case "X509SubjectName":
-			data.X509SubjectNames = append(data.X509SubjectNames, domutil.TextContent(e))
+			data.X509SubjectNames = append(data.X509SubjectNames, string(e.Content()))
 		case "X509IssuerSerial":
 			is, err := parseX509IssuerSerial(e)
 			if err != nil {
@@ -630,12 +630,12 @@ func parseX509IssuerSerial(elem *helium.Element) (*X509IssuerSerial, error) {
 		}
 		switch domutil.LocalName(e) {
 		case "X509IssuerName":
-			is.IssuerName = domutil.TextContent(e)
+			is.IssuerName = string(e.Content())
 		case "X509SerialNumber":
 			// The ceiling is weighed BEFORE the conversion: past it the
 			// conversion is the whole cost, so checking afterwards would return
 			// this same error having already paid it.
-			text := strings.TrimSpace(domutil.TextContent(e))
+			text := strings.TrimSpace(string(e.Content()))
 			if len(text) > maxX509SerialNumberDigits {
 				return nil, fmt.Errorf("%w: X509SerialNumber is over the %d digit limit", ErrInvalidKeyInfo, maxX509SerialNumberDigits)
 			}

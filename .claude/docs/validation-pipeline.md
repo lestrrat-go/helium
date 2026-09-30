@@ -1973,6 +1973,13 @@ Pattern-matching engine with backtracking:
    - **List**: split text, validate items
 3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate
    content, check all attrs+content consumed
+4. Cancellation: `validatePattern` and `validateContentPat` call `validator.stopped` at entry, which polls the
+   caller's context once per pattern step. The first error it sees is kept in `validator.stopErr`; from then on
+   every step fails at once without polling, so the recursion unwinds without further matching work.
+   `validateDocument` then returns that error and delivers none of the buffered errors, and `Validator.Validate`
+   returns it as is (`context.Canceled`/`context.DeadlineExceeded`). Because every step polls, the poll count of
+   a context is the step count of a validation; the relaxng complexity tests bound steps through
+   `heliumtest.PollContext` (`validationSteps` in `group_backtrack_test.go`).
 
 ### Interleave partitioning (`interleave.go`)
 
