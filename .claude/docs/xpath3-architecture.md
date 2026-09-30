@@ -31,7 +31,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 | `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
 | `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
-| `stringvalue.go` | `StringValue(Node)` (an element's string-value is its `Content()`: Text/CDATA descendants with entity references expanded through owned children only), `documentStringValue` (unexported; element/text/CDATA/entity-reference children, DTD excluded), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
+| `stringvalue.go` | `StringValue(Node)` (an element's or document's string-value is its `Content()`: Text/CDATA descendants with entity references expanded through owned children only; a document's leaves out its DTD), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
 | `limits.go` | `DefaultMaxRecursionDepth=5000`, `DefaultMaxNodeSetLength=10_000_000`, `ErrNodeSetLimit` |
 
 ### `TraverseAxis` signature
@@ -88,7 +88,6 @@ results of `E1/E2` (`evalPathExpr`), union, and intersect/except.
 
 ```go
 func StringValue(n helium.Node) string
-// unexported: documentStringValue(doc helium.Node) string
 func LocalNameOf(n helium.Node) string
 func NodeNamespaceURI(n helium.Node) string
 func NodePrefix(n helium.Node) string

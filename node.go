@@ -314,6 +314,15 @@ func appendChildContent(w contentSink, owner *docnode, ownOnly bool) {
 	cw.run(w, cw.push(inline[:0], owner, true))
 }
 
+// appendDocumentContent appends the content of doc's Element, Text, CDATA and
+// EntityRef children to w, walked the way appendChildContent walks them. Any
+// other child of doc, the DTD above all, adds nothing.
+func appendDocumentContent(w contentSink, doc *docnode) {
+	var inline [contentWalkInlineDepth]contentFrame
+	cw := contentWalk{document: true}
+	cw.run(w, cw.push(inline[:0], doc, true))
+}
+
 // appendEntityRefContent appends the expanded value of the entity ref names
 // (libxml2: xmlBufGetEntityRefContent), walked the way appendChildContent walks
 // a container. See contentWalk.enterEntityRef for how the entity is found and
@@ -388,6 +397,9 @@ type contentFrame struct {
 // analysis move the inline frame array to the heap.
 type contentWalk struct {
 	ownOnly bool
+	// document says the first frame is a document, whose children other than
+	// Element, Text, CDATA and EntityRef add nothing (appendDocumentContent).
+	document bool
 	// deep holds the owners of frames above the inline ones that the path check
 	// must find: every anchor, and every frame once full is set. Owners on the
 	// path are distinct, so a frame's owner is a key only while that frame is
@@ -418,6 +430,9 @@ func (cw *contentWalk) run(w contentSink, stack []contentFrame) {
 			continue
 		}
 		f.next = nextOwnedSibling(f.owner, cdn)
+		if cw.document && len(stack) == 1 && !isDocumentContentChild(child) {
+			continue
+		}
 		switch c := child.(type) {
 		case *Text:
 			_, _ = w.Write(c.rawContent())
@@ -441,6 +456,17 @@ func (cw *contentWalk) run(w contentSink, stack []contentFrame) {
 		}
 	}
 	cw.release()
+}
+
+// isDocumentContentChild reports whether a document's child n adds to the
+// document's content: an element, text, CDATA section or entity reference. The
+// DTD, comments and PIs do not.
+func isDocumentContentChild(n Node) bool {
+	switch n.Type() {
+	case ElementNode, TextNode, CDATASectionNode, EntityRefNode:
+		return true
+	}
+	return false
 }
 
 // enterEntityRef expands the entity ref names and returns the stack. The

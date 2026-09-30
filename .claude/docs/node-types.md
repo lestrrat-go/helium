@@ -248,8 +248,8 @@ unsynthesized values.
 
 ### Content() Default
 `docnode.Content()` walks children and concatenates (returns a fresh buffer). Overridden by Text, CDATA,
-Comment, PI, Entity (its stored replacement text), NamespaceNodeWrapper, and EntityRef (the expanded entity
-value, `appendEntityRefContent`). No children returns nil. Exactly one owned child (`nextOwnedChild` of it is nil)
+Comment, PI, Entity (its stored replacement text), NamespaceNodeWrapper, EntityRef (the expanded entity
+value, `appendEntityRefContent`), and Document (its content without the DTD, see below). No children returns nil. Exactly one owned child (`nextOwnedChild` of it is nil)
 skips the walk: a Text, CDATA or Entity child returns its own `Content()` copy (nil when empty), and a Comment,
 PI or namespace-wrapper child returns nil. Both are byte-for-byte what the aggregation writes
 (`TestContentMatchesAggregate` compares both paths). It has a POINTER receiver (`*docnode`) so the receiver is
@@ -269,10 +269,10 @@ PI adds nothing at any depth, whether it sits in the tree (`<t>1<!--c-->2</t>` �
 value (`x<!--k-->y` → `"xy"`, also for `EntityRef.Content()`). Content of a node holding references therefore
 equals the Content of the tree a `SubstituteEntities(true)` parse builds (`<g>1&g;2</g>` with `g`="a&f;b",
 `f`="y" → `"1ayb2"`), and both parse modes read the same text. `Content()` on a Comment or PI node itself
-returns its text, as libxml2's does. XPath string-value (`internal/xpath.StringValue`) of an element is its
-`Content()`. A document's is the `Content()` of its element, text, CDATA and entity-reference children only,
-because the DTD is not part of the XPath data model: a document's own `Content()` also descends into the DTD,
-where each `Entity` declaration adds its stored replacement text.
+returns its text, as libxml2's does. `Document.Content()` (`appendDocumentContent`, the same walk with the
+`document` flag) adds only its Element, Text, CDATA and EntityRef children (`isDocumentContentChild`); the DTD
+and every entity declaration in it add nothing, as in libxml2 2.9's `xmlNodeGetContent` document case. XPath
+string-value (`internal/xpath.StringValue`) of an element or a document is its `Content()`.
 
 `CharacterData(n)` runs the same walk with `ownOnly` set, which stops the descent into elements and other
 containers, including inside entity expansions: Text/CDATA text and each EntityRef's expansion, with no
