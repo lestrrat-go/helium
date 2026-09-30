@@ -233,10 +233,13 @@ func (sc *stripCopier) copyNode(
 	case helium.EntityRefNode:
 		// A whitespace-only replacement is a text node in the expanded XDM tree.
 		// Strip it using the reference's containing element and xml:space context;
-		// the shared declaration graph cannot carry a per-reference parent.
-		if _, ok := helium.AsNode[*helium.Entity](src.FirstChild()); ok &&
-			len(src.Content()) > 0 && !xmlSpacePreserve &&
-			sc.stripText(src, parent, inScope, entityReplacement) {
+		// the shared declaration graph cannot carry a per-reference parent. The
+		// test reads the Entity's stored replacement text: the reference's own
+		// Content() is the expanded value, which is whitespace-only for a
+		// replacement such as "<a>   </a>" that holds an element.
+		if ent, ok := helium.AsNode[*helium.Entity](src.FirstChild()); ok &&
+			len(ent.Content()) > 0 && !xmlSpacePreserve &&
+			sc.stripText(ent, parent, inScope, entityReplacement) {
 			return nil, nil //nolint:nilnil // omitted whitespace-only replacement
 		}
 		if srcEntity, ok := helium.AsNode[*helium.Entity](src.FirstChild()); ok {
