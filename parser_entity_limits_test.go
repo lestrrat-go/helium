@@ -45,6 +45,27 @@ func (r *stoppableEBCDICEntityReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// nestedEntityDecls declares the chain lol, lol2 .. lolN, where each entity
+// holds ten references to the previous one, so lolN expands to 3*10^(N-1)
+// bytes.
+func nestedEntityDecls(levels int) string {
+	var b strings.Builder
+	b.WriteString(`<!ENTITY lol "lol">`)
+	prev := "lol"
+	for i := 2; i <= levels; i++ {
+		name := fmt.Sprintf("lol%d", i)
+		fmt.Fprintf(&b, "\n<!ENTITY %s \"%s\">", name, strings.Repeat("&"+prev+";", 10))
+		prev = name
+	}
+	return b.String()
+}
+
+// nestedEntityAttrDoc returns a document whose root element carries one
+// attribute that references lolN from nestedEntityDecls.
+func nestedEntityAttrDoc(levels int) string {
+	return fmt.Sprintf("<!DOCTYPE root [\n%s\n]>\n<root a=\"&lol%d;\"/>", nestedEntityDecls(levels), levels)
+}
+
 func TestEntityAmplification(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +150,97 @@ func TestEntityAmplification(t *testing.T) {
 		// The absolute hard-ceiling behavior (it trips even with the ratio check
 		// disabled) is covered by TestEntityHardCeiling in the internal test, which
 		// lowers entityHardCeiling so it need not actually expand toward 1 GB.
+	})
+
+	// An attribute value parsed WITHOUT entity substitution keeps its entity
+	// references as EntityRef children, but the expanded size of each reference
+	// is still charged to the amplification counters at parse time, as libxml2
+	// does (xmlCheckEntityInAttValue + xmlParserEntityCheck). Otherwise a small
+	// document accepted by the default parser could expand to hundreds of MB once
+	// something expands the attribute's references.
+	t.Run("attribute values without substitution", func(t *testing.T) {
+		t.Run("a nested entity past the limit is rejected", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().Parse(t.Context(), []byte(nestedEntityAttrDoc(9)))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "maximum entity amplification factor exceeded")
+		})
+
+		t.Run("the same document with substitution is rejected", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(nestedEntityAttrDoc(9)))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "maximum entity amplification factor exceeded")
+		})
+
+		t.Run("an entity inside element content charges its attribute", func(t *testing.T) {
+			t.Parallel()
+			// The attribute sits in the replacement text of an entity that is
+			// referenced from content, so it is parsed by the nested entity parse.
+			input := `<!DOCTYPE root [` + nestedEntityDecls(9) +
+				`<!ENTITY wrap "<e a='&lol9;'/>">]><root>&wrap;</root>`
+			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "maximum entity amplification factor exceeded")
+		})
+
+		t.Run("nested entities under the limit parse unchanged", func(t *testing.T) {
+			t.Parallel()
+			input := nestedEntityAttrDoc(4)
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+
+			attr := doc.DocumentElement().Attributes()[0]
+			ref := attr.FirstChild()
+			require.NotNil(t, ref)
+			require.Equal(t, helium.EntityRefNode, ref.Type())
+			require.Equal(t, "lol4", ref.Name())
+
+			out, err := helium.WriteString(doc)
+			require.NoError(t, err)
+			require.Contains(t, out, `<root a="&lol4;"/>`)
+		})
+
+		t.Run("repeated small references parse", func(t *testing.T) {
+			t.Parallel()
+			var b strings.Builder
+			b.WriteString(`<!DOCTYPE root [<!ENTITY e "value"><!ENTITY f "&e;&e;">]><root>`)
+			for i := range 1000 {
+				fmt.Fprintf(&b, `<c a="&f;" b="x&e;y" n="%d"/>`, i)
+			}
+			b.WriteString(`</root>`)
+			_, err := helium.NewParser().Parse(t.Context(), []byte(b.String()))
+			require.NoError(t, err)
+		})
+
+		t.Run("a large entity referenced once parses", func(t *testing.T) {
+			t.Parallel()
+			// Over the 1 MB baseline, but referenced once: the charge stays well
+			// under the ratio limit for an input of this size.
+			input := `<!DOCTYPE root [<!ENTITY big "` + strings.Repeat("A", 1_500_000) +
+				`">]><root a="&big;"/>`
+			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+		})
+
+		t.Run("MaxEntityAmplification(-1) lifts the ratio check", func(t *testing.T) {
+			t.Parallel()
+			input := nestedEntityAttrDoc(7)
+			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
+			require.Error(t, err, "the default parser must reject this document")
+			require.Contains(t, err.Error(), "maximum entity amplification factor exceeded")
+
+			doc, err := helium.NewParser().MaxEntityAmplification(-1).Parse(t.Context(), []byte(input))
+			require.NoError(t, err)
+			require.NotNil(t, doc)
+		})
+
+		t.Run("MaxEntityAmplification(-1) keeps the absolute ceiling", func(t *testing.T) {
+			t.Parallel()
+			_, err := helium.NewParser().MaxEntityAmplification(-1).Parse(t.Context(), []byte(nestedEntityAttrDoc(9)))
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "maximum entity expansion size exceeded")
+		})
 	})
 
 	// an external parsed entity's bytes
