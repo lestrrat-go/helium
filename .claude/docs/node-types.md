@@ -168,7 +168,8 @@ mirroring the parser's `specialAttrKey`.
 
 The `DTD.Add*` builders (`AddEntity`/`AddNotation`/`AddElementDecl`/`AddAttributeDecl`) build a declaration
 from public parameters, register it in the lookup table, AND link it into the DTD child list so it serializes.
-`AddAttributeDecl(elem, name, atype, def, defvalue, enumValues)` is the `<!ATTLIST>` counterpart; the
+`AddAttributeDecl(elem, name, atype, def, defvalue, enumValues)` is the `<!ATTLIST>` counterpart (the writer
+emits `defvalue` quoted whenever `def` is a bare default or `#FIXED`, so an empty value is written as `""`); the
 low-level table-only `registerAttribute` is unexported. Like its sibling constructors, `AddAttributeDecl`
 validates only the enum parameters (`atype` must be a defined `enum.Attr*` value, `def` a defined
 `enum.AttrDefault*` kind — both `ErrInvalidArgument` otherwise) and rejects a duplicate
