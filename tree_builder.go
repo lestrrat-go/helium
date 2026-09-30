@@ -891,9 +891,15 @@ func (t *TreeBuilder) Reference(ctxif context.Context, name string) error {
 			return err
 		}
 	} else {
-		if n, err = doc.CreateReference(name); err != nil {
+		ref, err := doc.CreateReference(name)
+		if err != nil {
 			return err
 		}
+		// The line of the reference is the line a SubstituteEntities(true) parse
+		// gives every node of the expansion, so a consumer reporting on
+		// entity-borne nodes can point at the reference.
+		ref.SetLine(ctx.LineNumber())
+		n = ref
 	}
 
 	parent := ctx.elem

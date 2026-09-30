@@ -180,7 +180,8 @@ doc comments; below is the ownership map.
 
 Flow: `parseReference()` → `parseEntityRef()` → `entityCheck()` → parse content (`parseBalancedChunkInternal`
 / `parseExternalEntityPrivate`) → deliver to SAX (expand + replay node children when `replaceEntities`, else
-fire `Reference`). Each invariant lives at its function:
+fire `Reference`, whose tree builder records the reference's line on the EntityRef node: the line the replay
+gives every node of the expansion). Each invariant lives at its function:
 
 - Amplification guard — `entityCheck` / `entityCheckBytes` (`parser_entity_ref.go`); external content read through
   `io.LimitReader` (`externalEntityMaxBytes` 10 MiB) charged raw-only to avoid double-counting the fixed cost
