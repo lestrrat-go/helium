@@ -516,3 +516,13 @@ func TestTextContentLeavesOutEntityCommentsAndPIs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "1abc2", domutil.TextContent(doc.DocumentElement()))
 }
+
+// TextContent reads an element as libxml2's xmlNodeGetContent does: a comment
+// or PI adds nothing, whether it is a direct child or sits deeper in the tree,
+// so xmldsig1 reads <ds:KeyName>a<!--x-->b</ds:KeyName> as "ab".
+func TestTextContentLeavesOutCommentsAndPIs(t *testing.T) {
+	doc, err := helium.NewParser().Parse(t.Context(),
+		[]byte(`<k>1<!--x-->2<?p q?>3<b>4<!--y-->5<?p r?></b>6</k>`))
+	require.NoError(t, err)
+	require.Equal(t, "123456", domutil.TextContent(doc.DocumentElement()))
+}

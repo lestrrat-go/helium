@@ -1863,6 +1863,120 @@ func TestEntityCommentStringValue(t *testing.T) {
 	})
 }
 
+// A comment or PI in an element, as a direct child or deeper, adds no text to
+// the string value the transform or the serializer reads from that element
+// (XDM string value; libxml2's xmlNodeGetContent).
+func TestCommentStringValue(t *testing.T) {
+	for name, method := range map[string]string{
+		"json output of an element":         "",
+		"json output of an element as text": outMethodText,
+	} {
+		t.Run(name, func(t *testing.T) {
+			src, err := helium.NewParser().Parse(t.Context(),
+				[]byte(`<r><e>1<!--k-->2<?p q?><b>3<!--k-->4</b></e></r>`))
+			require.NoError(t, err)
+			items := xpath3.ItemSlice{xpath3.NodeItem{Node: nestedEntityElement(src.DocumentElement())}}
+			var buf strings.Builder
+			output := &xslt3.OutputDef{Method: outMethodJSON, JSONNodeOutputMethod: method}
+			require.NoError(t, xslt3.SerializeItems(&buf, items, nil, output))
+			require.Equal(t, `"1234"`, buf.String())
+		})
+	}
+
+	// input-type-annotations="strip" registers a validated xs:ID element under
+	// its text so fn:id still finds it.
+	t.Run("xs:ID element after stripping annotations", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  input-type-annotations="strip">
+  <xsl:import-schema>
+    <xs:schema>
+      <xs:element name="r"><xs:complexType><xs:sequence>
+        <xs:element name="k" type="xs:ID"/>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/"><out><xsl:value-of select="count(id('abc'))"/></out></xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<r><k>a<!--k-->b<?p q?>c</k></r>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, out, `>1</out>`)
+	})
+
+	// Strict validation casts a copied element's text to its simple type.
+	t.Run("strict validation of a copied element", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:import-schema>
+    <xs:schema>
+      <xs:element name="price" type="xs:decimal"/>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/"><xsl:copy-of select="/r/price" validation="strict"/></xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<r><price>1<!--k-->0<?p q?></price></r>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, out, `<price>1<!--k-->0<?p q?></price>`)
+	})
+
+	// Strict validation casts a constructed element's text to its simple type.
+	t.Run("strict validation of a constructed element", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:import-schema>
+    <xs:schema>
+      <xs:element name="price" type="xs:decimal"/>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/">
+    <price xsl:validation="strict">1<xsl:comment>k</xsl:comment>0<xsl:processing-instruction name="p">q</xsl:processing-instruction></price>
+  </xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<r/>`))
+		require.NoError(t, err)
+		out, err := ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, out, `<price>1<!--k-->0<?p q?></price>`)
+	})
+
+	// Strict validation of a document checks that the xs:IDREF and xs:IDREFS
+	// values of elements typed through xsi:type resolve to an xs:ID.
+	t.Run("xsi:type IDREF elements in a validated document", func(t *testing.T) {
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <xsl:import-schema>
+    <xs:schema>
+      <xs:element name="r"><xs:complexType><xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType><xs:attribute name="id" type="xs:ID"/></xs:complexType>
+        </xs:element>
+        <xs:element name="ref" type="xs:string"/>
+        <xs:element name="refs" type="xs:anySimpleType"/>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:schema>
+  </xsl:import-schema>
+  <xsl:template match="/">
+    <xsl:document validation="strict">
+      <r><item id="ab"/><item id="cd"/><ref xmlns:t="http://www.w3.org/2001/XMLSchema" xsi:type="t:IDREF">a<xsl:comment>k</xsl:comment>b</ref><refs xmlns:t="http://www.w3.org/2001/XMLSchema" xsi:type="t:IDREFS">ab <xsl:comment>k</xsl:comment>cd</refs></r>
+    </xsl:document>
+  </xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(`<r/>`))
+		require.NoError(t, err)
+		_, err = ss.Transform(src).Serialize(t.Context())
+		require.NoError(t, err)
+	})
+}
+
 // An attribute captured as a standalone item (a variable with
 // as="attribute()*") keeps its value literally. The source value p&q, written
 // p&amp;q, holds a bare "&" that must not be read again as the start of an
