@@ -1226,7 +1226,8 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 // a pure SAX-event parse whose custom handler answers GetEntity. The DIRECT case
 // (pent itself external/unparsed, or its own content directly containing '<') is
 // caught earlier by parseEntityRef; this covers content reached only through
-// nested &name; references.
+// nested &name; references. A reference cycle (WFC No Recursion) fails the walk
+// with errEntityLoop, as libxml2 fails it with XML_ERR_ENTITY_LOOP.
 //
 // The result is memoized on each internal entity it walks via the WFC flags, so
 // a repeated reference — or a nested entity shared across walks — skips the
@@ -1299,8 +1300,11 @@ type attrWalkFrame struct {
 // entity's expanded size is complete when its frame is popped.
 //
 // sizes records every entity the walk has entered: attrWalkInProgress while its
-// frame is on the stack, then its expanded size. It guards reference cycles and
-// bounds the walk to the number of distinct declared entities. root is the
+// frame is on the stack, then its expanded size. A reference to an entity still
+// on the stack is a reference cycle and fails with errEntityLoop (libxml2
+// XML_ENT_EXPANDING, parser.c:3705-3708). A reference to an entity already
+// walked to completion (the same entity reached twice without a cycle) reuses
+// its size, which bounds the walk to the number of distinct declared entities. root is the
 // entity that owns content (nil for a raw attribute-value string); the caller
 // seeds sizes with it. Each internal entity whose content is walked is appended
 // to *checked so the caller can flag it once the walk completes without a
@@ -1311,9 +1315,7 @@ type attrWalkFrame struct {
 //
 // The expanded size ports xmlCheckEntityInAttValue (parser.c:3695 and
 // 3764-3774): the length of the replacement text, plus the nested entity's
-// size and entityFixedCost for every reference to a non-predefined entity. A
-// reference back to an entity still on the stack (a cycle) adds only
-// entityFixedCost, because its size is not known yet.
+// size and entityFixedCost for every reference to a non-predefined entity.
 func (pctx *parserCtx) walkAttrValueWFC(ctx context.Context, root *Entity, content string, flags int, sizes map[*Entity]int64, checked *[]*Entity) (attrEntityWFC, error) {
 	stack := []attrWalkFrame{{ent: root, s: content, size: int64(len(content))}}
 	for len(stack) > 0 {
@@ -1394,7 +1396,13 @@ func (pctx *parserCtx) nextAttrValueEntity(ctx context.Context, f *attrWalkFrame
 		}
 		if size, seen := sizes[nested]; seen {
 			if size == attrWalkInProgress {
-				size = 0
+				// A reference back into an entity whose frame is still on the
+				// stack is a cycle: WFC No Recursion. libxml2 marks each entity
+				// on the recursion path XML_ENT_EXPANDING and fails with
+				// XML_ERR_ENTITY_LOOP on re-entry (parser.c:3705-3708, flag set
+				// around the recursive call at 3767-3769). Wrapped here so the
+				// post-DTD default re-check reports it with a position too.
+				return nil, attrWFCNone, pctx.error(ctx, errEntityLoop)
 			}
 			f.size = saturatedAdd(f.size, saturatedAdd(size, entityFixedCost))
 			continue

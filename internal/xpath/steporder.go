@@ -39,10 +39,12 @@ const maxSameDepth = 64
 //  4. Otherwise it returns DeduplicateNodes(out, cache, maxNodes).
 //
 // Rules 2 and 3 apply only when every input is a document, element, attribute,
-// namespace, text, CDATA, comment or processing-instruction node. Traversal
-// from an entity reference, entity or DTD node follows raw sibling links that
-// can reach DTD declarations, so its order is not document order and those
-// inputs take rule 4.
+// namespace, text, CDATA, comment, processing-instruction, entity-reference or
+// DTD node. Every axis walk stops at the owned-child boundary, so traversal
+// from an entity reference or the DTD stays inside lists the index numbers in
+// order. An Entity input takes rule 4: the index places an entity's content at
+// the last reference to it, so the child steps of two entities, or of an
+// entity and an element, can interleave.
 //
 // Rules 2 and 3 enforce maxNodes and clamp the capacity of the returned slice
 // as DeduplicateNodes does. They do not index the document, but they reserve
@@ -90,7 +92,8 @@ func clampStepResult(out []helium.Node, maxNodes int) ([]helium.Node, error) {
 func allOrderedContexts(nodes []helium.Node) bool {
 	for _, n := range nodes {
 		switch n.Type() {
-		case helium.DocumentNode, helium.HTMLDocumentNode, helium.AttributeNode, helium.NamespaceNode:
+		case helium.DocumentNode, helium.HTMLDocumentNode, helium.AttributeNode, helium.NamespaceNode,
+			helium.EntityRefNode, helium.DTDNode:
 			continue
 		}
 		if !IsXDMChild(n) {

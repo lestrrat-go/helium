@@ -520,15 +520,14 @@ XPath 1.0 expression parsing and evaluation.
 
 - **Compile(string) → (*Expression, error)** / **MustCompile(string) → *Expression** — parse XPath
 - `Compiler.Compile` rewrites the parsed AST (`optimize.go` `optimizeExpr`); `Parse` returns it unrewritten. A
-  predicate-free `descendant-or-self::node()` step folds into the next step: `child::<name test>` and `descendant::X`
-  become `descendant::X`, `self::X` and `descendant-or-self::X` become `descendant-or-self::X`. The next step may
-  keep predicates only when `positionFree` proves them position-free: a static boolean/string/node-set type, and no
-  `position()`, `last()`, variable, prefixed or non-builtin function, or numeric nested predicate anywhere inside. A
-  `child::` step with a `node()`/`comment()`/`processing-instruction()`/`text()` test does not fold, because
-  `collectDescendants` (internal/xpath) follows an entity reference context node's `Entity` child into the DTD's
-  sibling list while the child axis stops there. A name test folds because a parsed DTD holds no elements; a DTD
-  given an element through `DTD.AddChild` ahead of the entity declaration makes the folded `.//x` from that entity
-  reference select the element (pinned by `TestCompileFoldHandBuiltDTDElement`). The folded path charges fewer ops against `OpLimit` and builds no
+  predicate-free `descendant-or-self::node()` step folds into the next step, for any node test, as libxml2's
+  `xmlXPathOptimizeExpression` does: `child::X` and `descendant::X` become `descendant::X`, `self::X` and
+  `descendant-or-self::X` become `descendant-or-self::X`. The next step may keep predicates only when
+  `positionFree` proves them position-free: a static boolean/string/node-set type, and no `position()`, `last()`,
+  variable, prefixed or non-builtin function, or numeric nested predicate anywhere inside. The fold is exact from
+  every context node, entity references and hand-built DTDs included, because the descendant walk and the child
+  axis both stop at the owned-child boundary (`TestCompileFoldMatchesUnfolded`,
+  `TestCompileFoldHandBuiltDTDElement`). The folded path charges fewer ops against `OpLimit` and builds no
   intermediate node-set, so it can succeed where the unfolded path hits the op or node-set limit
 - **Expression.Evaluate(ctx, Node) → (*Result, error)**
 - **NewEvaluator() → Evaluator** — create clone-on-write evaluation configuration
@@ -553,7 +552,16 @@ XPath 1.0 expression parsing and evaluation.
   nil/zero-value `Expression` returns `ErrNilExpression` instead of panicking
 - Document order: every location step ends in `internal/xpath.OrderStepResult`, which builds the whole-document
   order index only when the step shape cannot prove its result is already sorted and duplicate-free (multi-input
-  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, entity-reference/entity/DTD inputs)
+  descendant/ancestor/sibling/following/preceding steps, mixed-depth inputs, Entity-node inputs)
+- Axes (`internal/xpath/axes.go`): the child and descendant axes enumerate child lists through `helium.Children`
+  (the owned-child boundary), so an entity reference (entity substitution off) has no children and no descendants:
+  its only child is the DTD-owned `Entity` node, which is not an XPath node, and the walk never follows that node's
+  sibling links into the DTD's declarations. From an `Entity` node the descendant axis is its parsed content; from
+  the DTD it is the DTD's comments and PIs (and any element added through `DTD.AddChild`). libxml2's
+  `xmlXPathNextDescendant` does not descend into an entity declaration reached from a reference and skips DTD nodes,
+  so the two agree from document and element context nodes. From an entity-reference context node libxml2 starts
+  at the entity declaration and continues through the rest of the DTD and the document body; helium returns no
+  nodes there, matching its child axis
 - Files: `xpath.go` (API), `parser.go`, `lexer.go`, `optimize.go` (compile-time `//` fold), `eval.go`, `expr.go`,
   `axes.go`, `functions.go`, `static_check.go`, `token.go`
 - Imports: helium, internal/xpath, internal/xpath1/lexer, internal/xpath1/number, internal/domutil, internal/lexicon

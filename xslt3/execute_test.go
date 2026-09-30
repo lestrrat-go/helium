@@ -1796,3 +1796,32 @@ func nestedEntityElement(root *helium.Element) helium.Node {
 	}
 	return nil
 }
+
+// An attribute captured as a standalone item (a variable with
+// as="attribute()*") keeps its value literally. The source value p&q, written
+// p&amp;q, holds a bare "&" that must not be read again as the start of an
+// entity reference, whichever instruction builds the item.
+func TestStandaloneAttributeValueIsLiteral(t *testing.T) {
+	for name, body := range map[string]string{
+		"xsl:copy":       `<xsl:for-each select="r/@a"><xsl:copy/></xsl:for-each>`,
+		"xsl:copy-of":    `<xsl:copy-of select="r/@a"/>`,
+		"deep-copy mode": `<xsl:apply-templates select="r/@a" mode="dc"/>`,
+		"xsl:attribute":  `<xsl:attribute name="a" select="string(r/@a)"/>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:mode name="dc" on-no-match="deep-copy"/>
+  <xsl:template match="/">
+    <xsl:variable name="v" as="attribute()*">`+body+`</xsl:variable>
+    <out><xsl:copy-of select="$v"/><xsl:value-of select="$v"/></out>
+  </xsl:template>
+</xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<r a="p&amp;q&lt;&#38;#60;"/>`))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, out, `<out a="p&amp;q&lt;&amp;#60;">p&amp;q&lt;&amp;#60;</out>`)
+		})
+	}
+}

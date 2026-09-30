@@ -222,7 +222,15 @@ fire `Reference`). Each invariant lives at its function:
   computes each entity's `attrExpandedSize` (replacement length + nested size + fixed cost per nested
   reference, libxml2 `xmlCheckEntityInAttValue`) and stores it only with `entWFCChecked`, i.e. outside the DTD
   subset; inside the subset a reference is charged only the fixed cost, as in libxml2. `attrExpandedSize` is
-  separate from the content path's `expandedSize`, so content-reference accounting is unaffected
+  separate from the content path's `expandedSize`, so content-reference accounting is unaffected. A reference
+  back into an entity whose frame is still on the stack is a cycle (WFC No Recursion) and fails with
+  `errEntityLoop` (libxml2 `XML_ENT_EXPANDING` → `XML_ERR_ENTITY_LOOP`), in body attributes, in an ATTLIST
+  default inside the subset, and in the post-DTD default re-check; an entity reached twice without a cycle
+  reuses its computed size
+- Recursion (WFC No Recursion) — `errEntityLoop` (`parser_entity_decl.go`, "entity loop"): the expanding paths
+  (`decodeEntitiesToSink`, `parseBalancedChunkInternal`, `parseExternalEntityPrivate`,
+  `expandEntityValueForRefCheck`) raise it once nesting passes depth 40; the unexpanded attribute-value walk
+  raises it on the first re-entry
 - `decodeEntities()` — SubstitutionType None(0)/Ref(1)/PERef(2)/Both(3); recursion capped at depth > 40
 
 ## Tree Builder (SAX→DOM)
