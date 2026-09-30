@@ -86,6 +86,13 @@ delegate to `ixpath.TraverseAxis(ctx, ...)`, which performs its own in-loop `ctx
 namespace axis those checks run inside the `NamespacePrefixesInScope` / `CollectNamespaceNodes` helper loops
 (outer and inner) so `namespace::*` cancels promptly too.
 
+### Path steps (`E1/E2`)
+Every step but the last must return nodes only: `PathExpr` / `vmPathExpr` (axis-step E2) and `PathStepExpr`
+(non-axis E2) return `ErrPathNotNodeSet` (an `*XPathError` with code XPTY0019) when E1 holds any non-node.
+`evalPathStepExpr` evaluates E2 once per E1 node. All-node results are sorted and deduplicated, all-non-node
+results keep their order, and any mix of nodes and non-nodes raises XPTY0018, whether the mix sits in one
+evaluation of E2 (`/a/(1, .)`) or across evaluations for different nodes. An empty result counts as either kind.
+
 ### Predicates
 - Numeric atomic → compare to position (1-based)
 - Otherwise → compute EBV
