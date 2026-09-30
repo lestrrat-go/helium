@@ -697,10 +697,9 @@ func TestContentMatchesAggregate(t *testing.T) {
 			requireSameContent(t, contentReference(root.baseDocNode()), root.Content(), "element Content")
 			for attr := root.properties; attr != nil; attr = attr.NextAttribute() {
 				requireSameContent(t, contentReference(attr.baseDocNode()), attr.Content(), "attribute Content")
-				// Value has a value receiver, so it aggregates over a copy of the
-				// attribute's docnode.
-				cp := *attr
-				require.Equal(t, string(contentReference(&cp.docnode)), attr.Value(), "attribute Value")
+				// These entities hold plain text, so the expanded Value equals the
+				// aggregated Content.
+				require.Equal(t, string(contentReference(attr.baseDocNode())), attr.Value(), "attribute Value")
 			}
 		})
 	}

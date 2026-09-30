@@ -846,6 +846,21 @@ func TestC14N11XMLBaseLexicalJoin(t *testing.T) {
 	require.NotContains(t, string(got), "../../c/", "xml:base must not be re-relativized against a retrieval base URI, got: %s", string(got))
 }
 
+// TestC14N11XMLBaseEntityReference covers an omitted ancestor whose xml:base
+// holds an entity reference (kept as an EntityRef child by the default parser).
+// The fixup joins the expanded value, as libxml2 xmlC14NFixupBaseAttr does.
+func TestC14N11XMLBaseEntityReference(t *testing.T) {
+	t.Parallel()
+	xml := `<?xml version="1.0"?><!DOCTYPE root [<!ENTITY d "c">]><root xml:base="/&d;/"><child>text</child></root>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xml))
+	require.NoError(t, err)
+	nodes := collectDescendantElements(t, doc)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N11).NodeSet(nodes).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Contains(t, string(got), `xml:base="/c/"`, "got: %s", string(got))
+}
+
 // TestC14N11ExcludedOwnXMLBase covers a rendered element whose own xml:base is
 // excluded from the node set, with no omitted ancestor carrying xml:base. The
 // default (libxml2) mode still emits the element's own value; strict W3C mode

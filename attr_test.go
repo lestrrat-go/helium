@@ -767,6 +767,114 @@ func TestAttributeLookupAllocations(t *testing.T) {
 	})
 }
 
+// An attribute parsed with SubstituteEntities(false) keeps each entity
+// reference as an EntityRef child. Value must still return the fully expanded
+// value, the same string libxml2's xmlGetProp/xmlNodeGetContent return for that
+// tree and the same string a SubstituteEntities(true) parse stores as one Text
+// node. The expected strings match `xmllint --xpath 'string(/r/@name)'`.
+func TestAttributeValueExpandsEntityReferences(t *testing.T) {
+	t.Parallel()
+
+	const src = `<!DOCTYPE r [` +
+		`<!ENTITY e "x">` +
+		`<!ENTITY f "y">` +
+		`<!ENTITY g "a&f;b">` +
+		`<!ENTITY h "&#38;#60;">` +
+		`]>` +
+		`<r text="1&e;2" nested="1&g;2" only="&e;" predefined="p&amp;q&e;" charref="1&h;2" leading="&e;2" trailing="1&e;"/>`
+
+	want := map[string]string{
+		"text":       "1x2",
+		"nested":     "1ayb2",
+		"only":       "x",
+		"predefined": "p&qx",
+		"charref":    "1<2",
+		"leading":    "x2",
+		"trailing":   "1x",
+	}
+
+	for _, substitute := range []bool{false, true} {
+		doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		for name, value := range want {
+			attr := root.GetAttributeNodeNS(name, "")
+			require.NotNil(t, attr, "attribute %s", name)
+			require.Equal(t, value, attr.Value(), "Value of %s (SubstituteEntities(%t))", name, substitute)
+			got, ok := root.GetAttribute(name)
+			require.True(t, ok, "GetAttribute(%s)", name)
+			require.Equal(t, value, got, "GetAttribute(%s) (SubstituteEntities(%t))", name, substitute)
+		}
+	}
+
+	// A DTD default value keeps its references in the tree, as libxml2 does
+	// (`xmllint --dtdattr` prints <r d="1&e;2" p="p&amp;q" n="1&g;2"/>), and
+	// its Value is expanded.
+	t.Run("DTD default value", func(t *testing.T) {
+		t.Parallel()
+		const src = `<!DOCTYPE r [` +
+			`<!ENTITY e "x">` +
+			`<!ENTITY g "a&e;b">` +
+			`<!ATTLIST r d CDATA "1&e;2" p CDATA "p&amp;q" n CDATA "1&g;2">` +
+			`]><r/>`
+		doc, err := helium.NewParser().DefaultDTDAttributes(true).SubstituteEntities(false).
+			Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		out, err := helium.WriteString(root)
+		require.NoError(t, err)
+		require.Equal(t, `<r d="1&e;2" p="p&amp;q" n="1&g;2"/>`, out)
+		for name, value := range map[string]string{"d": "1x2", "p": "p&q", "n": "1axb2"} {
+			got, ok := root.GetAttribute(name)
+			require.True(t, ok, "GetAttribute(%s)", name)
+			require.Equal(t, value, got, "GetAttribute(%s)", name)
+		}
+	})
+
+	// DTD validation compares the expanded value against a #FIXED default and
+	// an enumeration.
+	t.Run("DTD validation", func(t *testing.T) {
+		t.Parallel()
+		const dtd = `<!DOCTYPE r [` +
+			`<!ENTITY e "x">` +
+			`<!ELEMENT r EMPTY>` +
+			`<!ATTLIST r f CDATA #FIXED "1x2" k (1x2|other) #IMPLIED>` +
+			`]>`
+		_, err := helium.NewParser().ValidateDTD(true).SubstituteEntities(false).
+			Parse(t.Context(), []byte(dtd+`<r f="1&e;2" k="1&e;2"/>`))
+		require.NoError(t, err)
+		_, err = helium.NewParser().ValidateDTD(true).SubstituteEntities(false).
+			Parse(t.Context(), []byte(dtd+`<r f="1&e;3"/>`))
+		require.Error(t, err)
+	})
+
+	// CopyDoc stores each attribute's Value as literal text, so the copy keeps
+	// the whole expanded value.
+	t.Run("CopyDoc", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().SubstituteEntities(false).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		cp, err := helium.CopyDoc(doc)
+		require.NoError(t, err)
+		root := cp.DocumentElement()
+		for name, value := range want {
+			got, ok := root.GetAttribute(name)
+			require.True(t, ok, "GetAttribute(%s)", name)
+			require.Equal(t, value, got, "copied %s", name)
+		}
+	})
+
+	t.Run("reference built through the tree API", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(),
+			[]byte(`<!DOCTYPE r [<!ENTITY e "x"><!ENTITY g "a&e;b">]><r/>`))
+		require.NoError(t, err)
+		attr, err := doc.CreateAttribute("a", "1&g;2", nil)
+		require.NoError(t, err)
+		require.Equal(t, "1axb2", attr.Value())
+	})
+}
+
 func TestAttributeNamespaces(t *testing.T) {
 	t.Parallel()
 

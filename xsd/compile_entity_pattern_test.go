@@ -220,3 +220,34 @@ func validateXML(t *testing.T, schema *xsd.Schema, src string) error {
 	require.NoError(t, err)
 	return xsd.NewValidator(schema).Validate(t.Context(), doc)
 }
+
+// Documents from the default parser keep entity references in attribute values
+// as EntityRef children. Both the schema's facet values and the instance's
+// attribute values are read expanded.
+func TestAttributeValueWithEntityReference(t *testing.T) {
+	t.Parallel()
+
+	const schemaSrc = `<!DOCTYPE xs:schema [<!ENTITY e "x">]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:attribute name="code" use="required">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="1&e;2"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+	schemaDoc, err := helium.NewParser().Parse(t.Context(), []byte(schemaSrc))
+	require.NoError(t, err)
+	schema, err := xsd.NewCompiler().Compile(t.Context(), schemaDoc)
+	require.NoError(t, err)
+
+	require.NoError(t, validateXML(t, schema, `<root code="1x2"/>`))
+	require.NoError(t, validateXML(t, schema, `<!DOCTYPE root [<!ENTITY e "x">]><root code="1&e;2"/>`))
+	require.Error(t, validateXML(t, schema, `<root code="1"/>`))
+	require.Error(t, validateXML(t, schema, `<!DOCTYPE root [<!ENTITY e "y">]><root code="1&e;2"/>`))
+}

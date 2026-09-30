@@ -254,3 +254,21 @@ func TestRegexBacktrack_AnalyzeString(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, float64(2), n)
 }
+
+// The default parser keeps entity references in attribute values as EntityRef
+// children. fn:string and value comparisons see the expanded value.
+func TestAttributeStringValueExpandsEntityReferences(t *testing.T) {
+	doc := mustParseXML(t, `<!DOCTYPE r [<!ENTITY e "x"><!ENTITY f "y"><!ENTITY g "a&f;b">]>`+
+		`<r a="1&e;2" n="1&g;2"/>`)
+
+	for expr, want := range map[string]string{
+		"string(/r/@a)":             "1x2",
+		"string(/r/@n)":             "1ayb2",
+		"string(/r/@a eq '1x2')":    "true",
+		"string(/r[@a = '1x2']/@n)": "1ayb2",
+	} {
+		r, err := evaluate(t.Context(), doc, expr)
+		require.NoError(t, err, expr)
+		require.Equal(t, want, r.StringValue(), expr)
+	}
+}

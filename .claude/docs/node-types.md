@@ -62,13 +62,24 @@ Attributes are a **linked list via next/prev** on the Element, NOT children:
 - `Element.properties` → first Attribute
 - `Attribute.NextAttribute()` → next in list
 - Attribute VALUE stored as children Text/EntityRef nodes of the Attribute itself
-- `Attribute.Value()` returns `string(rawContent)` of a lone `*Text` child (first child a `*Text` with a nil
-  `next`), one allocation; no children → `""`; any other shape goes through `aggregatedAttributeValue` →
-  `Content()`. `Value` has a VALUE receiver, so that fallback aggregates over a copy of the attribute's docnode:
-  the owned-boundary rule then stops after the first child (its `Parent()` is the real attribute, not the
-  copy), and `Value()` of `1&e;2` (Text, EntityRef, Text) is `"1"` while `Content()` is `"1x2"`. The fallback
-  is a separate function so taking the copy's address does not move `Value`'s receiver to the heap on the
-  single-Text path
+- `(*Attribute).Value()` (pointer receiver) returns the value with every entity reference expanded, the string
+  libxml2's `xmlGetProp`/`xmlNodeGetContent` return. A lone `*Text` child (first child a `*Text` with a nil
+  `next`) is `string(rawContent)`, one allocation; no children → `""`. Any other shape, such as the
+  Text/EntityRef list a `SubstituteEntities(false)` parse builds, goes through `appendAttributeValue`, a port of
+  libxml2 `xmlBufGetChildContent`/`xmlBufGetEntityRefContent`: Text/CDATA add their text, an EntityRef adds its
+  entity's value (predefined → its character; otherwise the expanded value of the entity's parsed children,
+  recursively; an entity with no parsed children adds its stored replacement text; an unbound reference is
+  looked up by name in the document), Comment/PI add nothing, and other containers recurse. So `Value()` is the
+  same string under `SubstituteEntities(false)` and `(true)`: `1&e;2` with `e`="x" → `"1x2"`, and a nested
+  `&g;` with `g`="a&f;b" → the fully expanded text. A local active-path slice stops reference cycles without
+  writing the shared `Entity.expanding` flag, so concurrent readers do not race. `Content()` is the generic
+  docnode aggregation and does NOT expand: an EntityRef contributes its Entity's stored replacement text, so
+  `Content()` differs from `Value()` when that text itself holds a reference (`"1a&f;b2"` vs `"1ayb2"`)
+- The parser keeps DTD default attributes (`parserCtx.attsDefault`) as `*Attribute` nodes built by
+  `CreateAttribute`. Without entity substitution it reports a default's value in lexical form
+  (`defaultAttributeValue` → `lexicalAttributeValue`: Text with `&` as `&#38;`, EntityRef as `&name;`), as
+  libxml2 does, so a defaulted `d="1&e;2"` keeps its EntityRef child in the tree; the post-DTD
+  `validateAttributeDefaultsWFC` walks the same lexical form
 - `Attributes(elem)` (`iter.go`) iterates the `properties` chain with no slice; `findAttributeNS` (behind
   `GetAttributeNS`/`GetAttributeNodeNS`/`RemoveAttributeNS` and the deep copy's line lookup) matches by local
   name + URI without boxing an `NSPredicate`
