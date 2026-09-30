@@ -204,6 +204,22 @@ func (d *Document) Free() {
 	d.textContentSlab = nil
 }
 
+// Content returns the document's content: the content of its Element, Text,
+// CDATA and EntityRef children, with every entity reference expanded and
+// comments and PIs left out, the same text XPath string(/) reads. The DTD is
+// not document content and adds nothing, so neither does any entity
+// declaration it holds. libxml2 2.9's xmlNodeGetContent read a document the
+// same way, adding only its element, text and CDATA children. A document with
+// no such content returns nil.
+func (d *Document) Content() []byte {
+	if d.firstChild == nil {
+		return nil
+	}
+	var b bytes.Buffer
+	appendDocumentContent(&b, &d.docnode)
+	return b.Bytes()
+}
+
 // AddChild appends cur as the last child of the document, detaching it from any
 // previous parent first. It returns an error if cur is nil or if the insertion
 // would create a cycle.

@@ -16,56 +16,20 @@ import (
 // expands to, and both parse modes give the value of the tree a
 // SubstituteEntities(true) parse builds. The expansion follows only owned
 // children, so a reference never reaches text of other declarations in the DTD
-// that owns its entity. A document's string-value is that of its element,
-// text and entity-reference children; its DTD is not part of the XPath data
-// model and adds nothing (documentStringValue).
+// that owns its entity. A document's string-value is its Content(): that of
+// its element, text, CDATA and entity-reference children, since its DTD is not
+// part of the XPath data model and adds nothing.
 func StringValue(n helium.Node) string {
 	// Check Attribute by type assertion first since etype may not be set
 	if attr, ok := n.(*helium.Attribute); ok {
 		return attr.Value()
 	}
 	switch n.Type() {
-	case helium.DocumentNode:
-		return documentStringValue(n)
-	case helium.ElementNode, helium.TextNode, helium.CDATASectionNode, helium.CommentNode,
+	case helium.DocumentNode, helium.ElementNode, helium.TextNode, helium.CDATASectionNode, helium.CommentNode,
 		helium.ProcessingInstructionNode, helium.NamespaceNode:
 		return string(n.Content())
 	}
 	return ""
-}
-
-// documentStringValue concatenates the content of doc's element, text, CDATA
-// and entity-reference children. The DTD, comments and PIs add nothing. The
-// common single-element document returns that element's content without an
-// extra copy through a builder.
-func documentStringValue(doc helium.Node) string {
-	var single []byte
-	var b strings.Builder
-	parts := 0
-	for child := range helium.Children(doc) {
-		switch child.Type() {
-		case helium.ElementNode, helium.TextNode, helium.CDATASectionNode, helium.EntityRefNode:
-		default:
-			continue
-		}
-		c := child.Content()
-		if len(c) == 0 {
-			continue
-		}
-		parts++
-		if parts == 1 {
-			single = c
-			continue
-		}
-		if parts == 2 {
-			b.Write(single)
-		}
-		b.Write(c)
-	}
-	if parts > 1 {
-		return b.String()
-	}
-	return string(single)
 }
 
 // LocalNameOf returns the local name of any node type.
