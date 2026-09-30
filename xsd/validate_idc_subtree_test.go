@@ -10,19 +10,18 @@ import (
 )
 
 // TestIDCSubtreeKeyGatherReportsAbsentFieldOnce pins the diagnostic contract
-// collectSubtreeKeyTable's descendant key-table gathering must not break: a
+// the descendant key-table gathering for keyref hosts must not break: a
 // descendant xs:key's own "absent field" error is reported exactly once, no
-// matter how many ancestor keyref hosts gather that same descendant occurrence
-// out of their own subtree.
+// matter how many ancestor keyref hosts resolve against that same descendant
+// occurrence.
 //
 // "outer" and "inner" are both "node" elements with a keyref referring to
 // "ItemKey", declared on the single "items" descendant nested under "inner".
-// Because "inner" is itself a descendant of "outer", BOTH hosts' subtree scans
-// reach the very same "items" occurrence and its ItemKey constraint: outer's
-// keyref gathers it directly, and inner's keyref gathers it again. That
-// gathering is deliberately suppressed (it exists only to collect key-sequence
-// VALUES for keyref resolution) — the canonical report comes from "items"'s own
-// pass-2 walk, which runs unsuppressed exactly once. A cache that leaks a
+// Because "inner" is itself a descendant of "outer", BOTH hosts' keyrefs
+// resolve against the very same "items" occurrence and its ItemKey constraint.
+// That gathering is deliberately suppressed (it exists only to collect
+// key-sequence VALUES for keyref resolution) — the canonical report comes from
+// "items"'s own pass-2 walk, which runs unsuppressed exactly once. A cache that leaks a
 // suppressed evaluation into the reporting path would double the message; a
 // cache that swallows the real pass-2 evaluation would drop it. Either is a
 // regression this test catches.

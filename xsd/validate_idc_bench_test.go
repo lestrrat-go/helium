@@ -74,11 +74,10 @@ func nestedKeyrefDoc(depth, k int) string {
 }
 
 // BenchmarkIDCKeyrefNestedSubtree measures xsd.Validator.Validate over a
-// document whose keyref hosts nest, so collectSubtreeKeyTable's descendant
-// key-table gathering repeats at every ancestor level (xsd/validate_idc.go).
-// Depths were chosen to keep the benchmark runnable while still exposing the
-// super-linear growth: doubling depth should roughly double the per-op time
-// after the fix, not multiply it ~7x as the unfixed cubic gathering does.
+// document whose keyref hosts nest, so every ancestor host resolves its keyref
+// against the key tables of every descendant level (subtreeKeyScope in
+// xsd/validate_idc.go). Validation cost should grow linearly with depth: 4x
+// the depth should cost about 4x the time and bytes per op.
 func BenchmarkIDCKeyrefNestedSubtree(b *testing.B) {
 	sdoc, err := helium.NewParser().Parse(b.Context(), []byte(nestedKeyrefSchema))
 	require.NoError(b, err)
@@ -96,5 +95,75 @@ func BenchmarkIDCKeyrefNestedSubtree(b *testing.B) {
 				require.NoError(b, v.Validate(b.Context(), idoc))
 			}
 		})
+	}
+}
+
+// wideKeyrefSchema declares a keyref ("ItemRef") on "node" that refers to a
+// unique ("ItemUnique") declared on "items", and lets one "node" hold any
+// number of sibling "items" blocks and refs, so a single keyref host gathers
+// the key tables of many children.
+const wideKeyrefSchema = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="items">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="ItemUnique">
+      <xs:selector xpath="item"/>
+      <xs:field xpath="."/>
+    </xs:unique>
+  </xs:element>
+  <xs:element name="node">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="items" maxOccurs="unbounded"/>
+        <xs:element name="ref" type="xs:string" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:keyref name="ItemRef" refer="ItemUnique">
+      <xs:selector xpath="ref"/>
+      <xs:field xpath="."/>
+    </xs:keyref>
+  </xs:element>
+</xs:schema>`
+
+// wideKeyrefDoc builds one "node" holding blocks sibling k-item <items>
+// blocks with distinct values, followed by one <ref> per block that resolves
+// against that block's first key.
+func wideKeyrefDoc(blocks, k int) string {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0"?><node>`)
+	for i := range blocks {
+		b.WriteString("<items>")
+		for j := range k {
+			fmt.Fprintf(&b, "<item>v%d</item>", i*k+j)
+		}
+		b.WriteString("</items>")
+	}
+	for i := range blocks {
+		fmt.Fprintf(&b, "<ref>v%d</ref>", i*k)
+	}
+	b.WriteString("</node>")
+	return b.String()
+}
+
+// BenchmarkIDCKeyrefWideSubtree measures xsd.Validator.Validate over one
+// keyref host whose referenced key tables come from 2,000 sibling children,
+// the common shallow shape of descendant key gathering.
+func BenchmarkIDCKeyrefWideSubtree(b *testing.B) {
+	sdoc, err := helium.NewParser().Parse(b.Context(), []byte(wideKeyrefSchema))
+	require.NoError(b, err)
+	schema, err := xsd.NewCompiler().Compile(b.Context(), sdoc)
+	require.NoError(b, err)
+
+	idoc, err := helium.NewParser().Parse(b.Context(), []byte(wideKeyrefDoc(2000, 5)))
+	require.NoError(b, err)
+	v := xsd.NewValidator(schema)
+
+	b.ResetTimer()
+	for range b.N {
+		require.NoError(b, v.Validate(b.Context(), idoc))
 	}
 }
