@@ -68,8 +68,10 @@ Attributes are a **linked list via next/prev** on the Element, NOT children:
   Text/EntityRef list a `SubstituteEntities(false)` parse builds, goes through the shared content walk
   `appendChildContent` (see "Content() Default") with comments/PIs left out. So `Value()` is the same string
   under `SubstituteEntities(false)` and `(true)`: `1&e;2` with `e`="x" → `"1x2"`, and a nested `&g;` with
-  `g`="a&f;b" → the fully expanded text. `Content()` on an attribute runs the same walk and returns the same
-  text
+  `g`="a&f;b" → the fully expanded text. Whitespace is the exception: attribute-value normalization turns a
+  tab in an entity value into a space only when the parser substitutes the reference, so under
+  `SubstituteEntities(false)` `Value()` keeps the tab, as libxml2 does, and C14N writes it as `&#x9;`.
+  `Content()` on an attribute runs the same walk and returns the same text
 - The parser keeps DTD default attributes (`parserCtx.attsDefault`) as `*Attribute` nodes built by
   `CreateAttribute`. Without entity substitution it reports a default's value in lexical form
   (`defaultAttributeValue` → `lexicalAttributeValue`: Text with `&` as `&#38;`, EntityRef as `&name;`), as
@@ -259,10 +261,15 @@ for Value). Text/CDATA add their text; an EntityRef adds its entity's value (`ap
 predefined → its character; otherwise the entity's parsed children walked by the same function, recursively; an
 entity with no parsed children adds its stored replacement text; an unbound reference is looked up by name in
 the document, predefined entities first); an Entity child adds its stored replacement text; Comment/PI/namespace
-wrapper add their own text only for Content (`withOther`), never for Value; any other node recurses into its
-children. So Content of a node holding references equals the text a `SubstituteEntities(true)` parse stores
-(`<g>1&g;2</g>` with `g`="a&f;b", `f`="y" → `"1ayb2"`). libxml2 leaves comments and PIs out of
-`xmlNodeGetContent`; helium's Content keeps their text at every depth.
+wrapper add their own text only for Content (`withOther`), never for Value and never inside an entity's
+children; any other node recurses into its children. So Content of a node holding references equals the text a
+`SubstituteEntities(true)` parse stores (`<g>1&g;2</g>` with `g`="a&f;b", `f`="y" → `"1ayb2"`), except for
+comments and PIs. libxml2 (`tree.c` `xmlBufGetChildContent`) adds only Text/CDATA text and descends into other
+children, so it leaves out every Comment/PI below the node it is called on. helium matches that inside entity
+content (`x<!--k-->y` → `"xy"`, also for `EntityRef.Content()`), but keeps the text of a Comment/PI that sits in
+the tree itself, at any depth (`<t>1<!--c-->2</t>` → `"1c2"`); a `SubstituteEntities(true)` parse copies an
+entity's comments into the tree, so there Content keeps them. `Content()` on a Comment or PI node returns its
+text, as libxml2's does.
 
 The walk follows only the owner's own children (`nextOwnedSibling`): a foreign child — an entity reference's
 shared Entity child, owned by the DTD, whose sibling pointers belong to the DTD declaration list — ends the list

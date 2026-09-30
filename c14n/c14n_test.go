@@ -402,6 +402,20 @@ func TestEntityReferenceReplacementTextInAttribute(t *testing.T) {
 	require.Equal(t, `<r a="before-hello-entity-content-after"></r>`, string(got))
 }
 
+func TestEntityReferenceTabInAttribute(t *testing.T) {
+	t.Parallel()
+	// The default parser keeps the reference, so no attribute-value
+	// normalization turns the entity's tab into a space. The expanded value
+	// keeps the tab, and C14N escapes it as &#x9;.
+	src := "<!DOCTYPE r [<!ENTITY t \"a\tb\">]><r a=\"1&t;2\"/>"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<r a="1a&#x9;b2"></r>`, string(got))
+}
+
 func TestEntityReferenceReplacementNamespaceContextPerSite(t *testing.T) {
 	t.Parallel()
 	// The same entity, whose replacement text is a namespace-prefixed element,
