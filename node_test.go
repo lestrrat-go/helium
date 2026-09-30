@@ -805,6 +805,37 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 		require.Equal(t, "xy", string(doc.Content()))
 	})
 
+	// The DTD is not document content: Content of the document node leaves out
+	// every entity declaration, referenced or not, and reads the same text as
+	// XPath string(/). References in the document element still expand.
+	t.Run("document node leaves out the DTD", func(t *testing.T) {
+		t.Parallel()
+		const src = `<!DOCTYPE r [` +
+			`<!ENTITY e "EEE">` +
+			`<!ENTITY f "F<b>FF</b>">` +
+			`<!ENTITY u "UNUSED">` +
+			`<!--dc--><?dp x?>` +
+			`]>` +
+			`<r>1&e;2&f;3</r>`
+		for _, substitute := range []bool{false, true} {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			require.Equal(t, "1EEE2FFF3", string(doc.Content()), "SubstituteEntities(%t)", substitute)
+		}
+
+		doc := helium.NewDefaultDocument()
+		dtd, err := doc.CreateInternalSubset("r", "", "")
+		require.NoError(t, err)
+		_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "EEE")
+		require.NoError(t, err)
+		require.Nil(t, doc.Content(), "a document holding only a DTD has no content")
+		root, err := doc.CreateElement("r")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.AppendText([]byte("x")))
+		require.Equal(t, "x", string(doc.Content()), "a document built through the tree API")
+	})
+
 	// An attribute built through the tree API can hold a comment or PI child.
 	// Its Content leaves them out and agrees with Value.
 	t.Run("attribute with a comment or PI child", func(t *testing.T) {
