@@ -886,3 +886,40 @@ func TestCharacterData(t *testing.T) {
 		require.Equal(t, "4", helium.CharacterData(k.LastChild()), "a CDATA section is its own text")
 	})
 }
+
+// Content walks deep trees completely. A chain nested far deeper than the
+// inline path the walk keeps on the goroutine stack returns every level's
+// text, and an entity referenced at every level is expanded at each reference,
+// including its element children, so leaving an expansion releases the entity
+// for the next reference.
+func TestContentDeepTree(t *testing.T) {
+	t.Parallel()
+
+	t.Run("element chain", func(t *testing.T) {
+		t.Parallel()
+		const depth = 50000
+		root := parseDeepContentDocument(t, depth).DocumentElement()
+		require.Equal(t, strings.Repeat("x", depth), string(root.Content()))
+	})
+
+	t.Run("entity at every level", func(t *testing.T) {
+		t.Parallel()
+		const depth = 300
+		var b strings.Builder
+		b.WriteString(`<!DOCTYPE a [<!ENTITY e "y<b>z</b>">]>`)
+		for range depth {
+			b.WriteString("<a>&e;")
+		}
+		for range depth {
+			b.WriteString("</a>")
+		}
+		want := strings.Repeat("yz", depth)
+		for _, substitute := range []bool{false, true} {
+			doc, err := helium.NewParser().MaxDepth(-1).SubstituteEntities(substitute).Parse(t.Context(), []byte(b.String()))
+			require.NoError(t, err)
+			root := doc.DocumentElement()
+			require.Equal(t, want, string(root.Content()), "Content (SubstituteEntities(%t))", substitute)
+			require.Equal(t, "y", helium.CharacterData(root), "CharacterData (SubstituteEntities(%t))", substitute)
+		}
+	})
+}

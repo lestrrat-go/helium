@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/nodelink"
@@ -246,7 +247,7 @@ func (n *docnode) Content() []byte {
 		}
 	}
 	var b bytes.Buffer
-	appendChildContent(&b, n, []*docnode{n}, false)
+	appendChildContent(&b, n, false)
 	return b.Bytes()
 }
 
@@ -274,7 +275,7 @@ func CharacterData(n Node) string {
 		return string(v.rawContent())
 	case *EntityRef:
 		var b strings.Builder
-		appendEntityRefContent(&b, v, nil, true)
+		appendEntityRefContent(&b, v, true)
 		return b.String()
 	}
 	dn := n.baseDocNode()
@@ -286,7 +287,7 @@ func CharacterData(n Node) string {
 		return string(t.rawContent())
 	}
 	var b strings.Builder
-	appendChildContent(&b, dn, []*docnode{dn}, true)
+	appendChildContent(&b, dn, true)
 	return b.String()
 }
 
@@ -299,79 +300,266 @@ type contentSink interface {
 
 // appendChildContent appends the content of owner's own children to w,
 // following libxml2's xmlBufGetChildContent: a Text or CDATA child contributes
-// its text, an EntityRef child contributes its entity's expanded value
-// (appendEntityRefContent), an Entity child contributes its stored replacement
-// text, and any other container contributes the content of its own children. A
-// Comment, PI or namespace-node child has no children and contributes nothing,
-// as in libxml2, which adds only Text and CDATA text at every depth. With
-// ownOnly set (CharacterData), an element or other container child contributes
-// nothing, here and inside entity expansions, so only the owner's own
-// character data is collected.
+// its text, an EntityRef child contributes its entity's expanded value, an
+// Entity child contributes its stored replacement text, and any other container
+// contributes the content of its own children. A Comment, PI or namespace-node
+// child has no children and contributes nothing, as in libxml2, which adds only
+// Text and CDATA text at every depth. With ownOnly set (CharacterData), an
+// element or other container child contributes nothing, here and inside entity
+// expansions, so only the owner's own character data is collected. See
+// contentWalk for how the walk stays linear and terminates.
+func appendChildContent(w contentSink, owner *docnode, ownOnly bool) {
+	var inline [contentWalkInlineDepth]contentFrame
+	cw := contentWalk{ownOnly: ownOnly}
+	cw.run(w, cw.push(inline[:0], owner, true))
+}
+
+// appendEntityRefContent appends the expanded value of the entity ref names
+// (libxml2: xmlBufGetEntityRefContent), walked the way appendChildContent walks
+// a container. See contentWalk.enterEntityRef for how the entity is found and
+// expanded.
+func appendEntityRefContent(w contentSink, ref *EntityRef, ownOnly bool) {
+	var inline [contentWalkInlineDepth]contentFrame
+	cw := contentWalk{ownOnly: ownOnly}
+	cw.run(w, cw.enterEntityRef(w, inline[:0], ref))
+}
+
+// contentWalkInlineDepth is the number of bottom path frames the content walk
+// keeps in an array on the goroutine stack and checks by scanning. It picks a
+// data structure only, never a cutoff: a deeper walk moves its frames to a
+// pooled heap stack, and the frames above the inline ones that the path check
+// needs are found through contentWalk.deep.
+const contentWalkInlineDepth = 8
+
+// contentStackPoolMax is the largest heap stack, in frames, a finished walk
+// returns to contentStackPool. A larger one, left by a pathologically deep
+// tree, is dropped so the pool does not hold its memory.
+const contentStackPoolMax = 1 << 16
+
+// contentStack holds a heap frame stack between walks. Reusing it keeps a deep
+// walk from allocating and copying its frames again on every call.
+type contentStack struct {
+	frames []contentFrame
+}
+
+// contentStackPool holds the heap stacks of finished deep walks, cleared up to
+// the depth each one reached so they keep no node alive.
+var contentStackPool sync.Pool
+
+// contentFrame is one container or entity on the content walk's current path.
+type contentFrame struct {
+	owner *docnode
+	// next is the next child of owner to visit, nil once the list is done.
+	next Node
+	// guard stops a cyclic sibling list of owner.
+	guard siblingCycleGuard
+}
+
+// contentWalk is the per-call state of the content walk behind Content,
+// CharacterData and Attribute.Value. It visits the tree depth first with an
+// explicit stack of frames, so a deep tree neither grows the goroutine stack
+// nor costs more than one visit per node.
 //
-// The walk follows only owner's own children (nextOwnedSibling), so an entity
-// reference's shared Entity child never leads into the DTD's declaration list,
-// and siblingCycleGuard stops a cyclic sibling list. active holds the
-// containers and entities being expanded on the current path; a node already
-// on it is a child-pointer or reference cycle and is skipped. It plays the role
-// of libxml2's XML_ENT_EXPANDING flag without writing to the shared Entity, so
-// concurrent readers of one document do not race. It is a path, not a global
-// visited set, so an entity referenced twice is expanded at each reference.
-func appendChildContent(w contentSink, owner *docnode, active []*docnode, ownOnly bool) {
-	var g siblingCycleGuard
-	for child := owner.firstChild; child != nil; {
-		cdn := child.baseDocNode()
-		if g.step(cdn) {
-			return
+// The walk follows only each owner's own children (nextOwnedSibling), so an
+// entity reference's shared Entity child never leads into the DTD's declaration
+// list, and each frame's siblingCycleGuard stops a cyclic sibling list. A
+// container or entity already on the current path is a child-pointer or
+// reference cycle and is skipped. That path check plays the role of libxml2's
+// XML_ENT_EXPANDING flag without writing to the shared Entity, so concurrent
+// readers of one document do not race. It covers the path only, not every node
+// visited, so an entity referenced twice is expanded at each reference.
+//
+// The path check costs O(1) per node without scanning the path. A frame is an
+// ANCHOR when it was not entered through an owned edge: the walk's first frame,
+// every entity being expanded, and a container whose parent pointer is not the
+// frame below it. Every other frame's owner has the frame below as its parent.
+// A container reached through an owned edge (its parent is the current owner)
+// can therefore only repeat an anchor: were it the owner of a non-anchor frame,
+// that frame's parent, the current owner, would appear on the path twice. An
+// entity likewise can only repeat an anchor, because entities enter the path
+// only as anchors. So those checks look at the anchors alone: the bottom
+// contentWalkInlineDepth frames by scanning, and anchors above them through
+// deep. A container reached through a foreign edge could repeat any frame; the
+// first such check on a deep path moves every frame above the inline ones into
+// deep, and from then on every frame pushed above them goes there too.
+//
+// The frame stack and the sink are parameters and results of the methods, not
+// fields: storing the stack through the receiver pointer would make escape
+// analysis move the inline frame array to the heap.
+type contentWalk struct {
+	ownOnly bool
+	// deep holds the owners of frames above the inline ones that the path check
+	// must find: every anchor, and every frame once full is set. Owners on the
+	// path are distinct, so a frame's owner is a key only while that frame is
+	// on the stack.
+	deep map[*docnode]struct{}
+	// full records that deep holds every frame above the inline ones.
+	full bool
+	// heap holds the frames once they outgrow the inline array, nil until then.
+	heap *contentStack
+	// high is the deepest the stack has been, the prefix of heap's frames
+	// release clears.
+	high int
+}
+
+// run visits the frames on stack until the walk is done, writing the text to
+// w.
+func (cw *contentWalk) run(w contentSink, stack []contentFrame) {
+	for len(stack) > 0 {
+		f := &stack[len(stack)-1]
+		child := f.next
+		if child == nil {
+			stack = cw.pop(stack)
+			continue
 		}
+		cdn := child.baseDocNode()
+		if f.guard.step(cdn) {
+			stack = cw.pop(stack)
+			continue
+		}
+		f.next = nextOwnedSibling(f.owner, cdn)
 		switch c := child.(type) {
 		case *Text:
 			_, _ = w.Write(c.rawContent())
 		case *CDATASection:
 			_, _ = w.Write(c.rawContent())
 		case *EntityRef:
-			appendEntityRefContent(w, c, active, ownOnly)
+			stack = cw.enterEntityRef(w, stack, c)
 		case *Entity:
 			_, _ = w.WriteString(c.content)
 		case *Comment, *ProcessingInstruction, *NamespaceNodeWrapper:
 			// No text: libxml2 descends into these, and they have no children.
 		default:
-			if !ownOnly && !slices.Contains(active, cdn) {
-				appendChildContent(w, cdn, append(active, cdn), false)
+			if cw.ownOnly {
+				continue
 			}
+			owned := cdn.parent != nil && cdn.parent.baseDocNode() == f.owner
+			if cw.onPath(stack, cdn, owned) {
+				continue
+			}
+			stack = cw.push(stack, cdn, !owned)
 		}
-		child = nextOwnedSibling(owner, cdn)
 	}
+	cw.release()
 }
 
-// appendEntityRefContent appends the expanded value of the entity ref names
-// (libxml2: xmlBufGetEntityRefContent). The entity is ref's Entity child when
-// the reference is bound, otherwise the document's declaration of that name. A
-// predefined entity contributes its character; any other entity contributes
-// the content of its parsed children, expanded by appendChildContent, which
-// leaves out comments and PIs at every depth. An entity whose replacement text
-// was never parsed into children contributes that text as stored. ownOnly is
-// passed on to that walk (see appendChildContent).
-func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode, ownOnly bool) {
+// enterEntityRef expands the entity ref names and returns the stack. The
+// entity is ref's Entity child when the reference is bound, otherwise the
+// document's declaration of that name. A predefined entity contributes its
+// character, and an entity whose replacement text was never parsed into
+// children contributes that text as stored. Any other entity is pushed as an
+// anchor so the walk visits its parsed children, unless it is already being
+// expanded on the current path.
+func (cw *contentWalk) enterEntityRef(w contentSink, stack []contentFrame, ref *EntityRef) []contentFrame {
 	ent, ok := ref.firstChild.(*Entity)
 	if !ok {
 		ent = lookupReferencedEntity(ref)
 		if ent == nil {
-			return
+			return stack
 		}
 	}
 	if ent.entityType == enum.InternalPredefinedEntity {
 		_, _ = w.WriteString(ent.content)
-		return
+		return stack
 	}
 	edn := &ent.docnode
-	if slices.Contains(active, edn) {
-		return
+	if cw.onPath(stack, edn, true) {
+		return stack
 	}
 	if ent.firstChild == nil {
 		_, _ = w.WriteString(ent.content)
+		return stack
+	}
+	return cw.push(stack, edn, true)
+}
+
+// onPath reports whether dn owns a frame on stack. anchorsOnly says dn can
+// only repeat an anchor (see contentWalk), so the check may skip frames that
+// are not anchors.
+func (cw *contentWalk) onPath(stack []contentFrame, dn *docnode, anchorsOnly bool) bool {
+	if !anchorsOnly && !cw.full && len(stack) > contentWalkInlineDepth {
+		cw.trackAll(stack)
+	}
+	for i := range min(len(stack), contentWalkInlineDepth) {
+		if stack[i].owner == dn {
+			return true
+		}
+	}
+	_, ok := cw.deep[dn]
+	return ok
+}
+
+// trackAll adds the owner of every frame above the inline ones to deep and
+// sets full, so onPath finds every frame on the path.
+func (cw *contentWalk) trackAll(stack []contentFrame) {
+	if cw.deep == nil {
+		cw.deep = make(map[*docnode]struct{}, len(stack)-contentWalkInlineDepth)
+	}
+	for i := contentWalkInlineDepth; i < len(stack); i++ {
+		cw.deep[stack[i].owner] = struct{}{}
+	}
+	cw.full = true
+}
+
+// push starts visiting dn's children and returns the grown stack. anchor says
+// dn was not entered through an owned edge (see contentWalk).
+func (cw *contentWalk) push(stack []contentFrame, dn *docnode, anchor bool) []contentFrame {
+	if len(stack) >= contentWalkInlineDepth && (anchor || cw.full) {
+		if cw.deep == nil {
+			cw.deep = make(map[*docnode]struct{})
+		}
+		cw.deep[dn] = struct{}{}
+	}
+	if len(stack) == cap(stack) {
+		stack = cw.grow(stack)
+	}
+	stack = append(stack, contentFrame{owner: dn, next: dn.firstChild})
+	cw.high = max(cw.high, len(stack))
+	return stack
+}
+
+// grow moves the full stack to a heap stack with room to push: the pooled
+// stack when it is large enough, otherwise a new one twice the depth.
+func (cw *contentWalk) grow(stack []contentFrame) []contentFrame {
+	if cw.heap == nil {
+		s, ok := contentStackPool.Get().(*contentStack)
+		if !ok {
+			s = &contentStack{}
+		}
+		cw.heap = s
+	}
+	frames := cw.heap.frames
+	if cap(frames) <= len(stack) {
+		frames = make([]contentFrame, 0, 2*len(stack))
+	}
+	frames = append(frames[:0], stack...)
+	cw.heap.frames = frames
+	return frames
+}
+
+// pop finishes the top frame and returns the shrunk stack.
+func (cw *contentWalk) pop(stack []contentFrame) []contentFrame {
+	top := len(stack) - 1
+	if top >= contentWalkInlineDepth && cw.deep != nil {
+		delete(cw.deep, stack[top].owner)
+	}
+	return stack[:top]
+}
+
+// release returns the heap stack, if the walk used one, to contentStackPool.
+// It clears the frames the walk wrote so the pool keeps no node alive; frames
+// beyond them are still zero from an earlier release or from allocation.
+func (cw *contentWalk) release() {
+	if cw.heap == nil {
 		return
 	}
-	appendChildContent(w, edn, append(active, edn), ownOnly)
+	frames := cw.heap.frames
+	if cap(frames) > contentStackPoolMax {
+		return
+	}
+	clear(frames[:cw.high])
+	cw.heap.frames = frames[:0]
+	contentStackPool.Put(cw.heap)
 }
 
 // lookupReferencedEntity resolves an unbound entity reference by name: a

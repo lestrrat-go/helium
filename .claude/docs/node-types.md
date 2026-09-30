@@ -281,14 +281,22 @@ without entity substitution (`<m>1&m;2</m>` with `m`="a<b>c</b>d" → `"1ad2"`).
 one-allocation fast path. A Text/CDATA n returns its own text and an EntityRef n its expansion's character
 data. The xsd validator reads element text for validation through it.
 
-The walk follows only the owner's own children (`nextOwnedSibling`): a foreign child — an entity reference's
-shared Entity child, owned by the DTD, whose sibling pointers belong to the DTD declaration list — ends the list
-instead of spilling into another list's siblings, and `siblingCycleGuard` (Brent) stops a cyclic sibling
-pointer. An ACTIVE-PATH slice (the receiver, each container recursed into, and each Entity being expanded)
-skips a child already on the path, so a child-pointer cycle (`element -> element -> element`) or an entity that
-references itself terminates. It plays the role of libxml2's `XML_ENT_EXPANDING` flag without writing the
-shared Entity, so concurrent readers do not race. It is not a global visited set, so a shared entity referenced
-twice is expanded at each reference.
+The walk (`contentWalk`) is iterative: an explicit stack of frames (owner, next child, per-frame
+`siblingCycleGuard`), the bottom `contentWalkInlineDepth` (8) frames in an array on the goroutine stack and deeper
+ones in a heap stack reused through `contentStackPool` (cleared on release; stacks over 65536 frames are dropped).
+It costs one visit per node, so a 50000-deep element chain is linear. It follows only the owner's own children
+(`nextOwnedSibling`): a foreign child — an entity reference's shared Entity child, owned by the DTD, whose sibling
+pointers belong to the DTD declaration list — ends the list instead of spilling into another list's siblings, and
+`siblingCycleGuard` (Brent) stops a cyclic sibling pointer. A container or Entity already on the current path is
+skipped, so a child-pointer cycle (`element -> element -> element`) or an entity that references itself
+terminates. It plays the role of libxml2's `XML_ENT_EXPANDING` flag without writing the shared Entity, so
+concurrent readers do not race. It covers the path only, so a shared entity referenced twice is expanded at each
+reference. The path check is O(1) without scanning the path: a frame is an ANCHOR when not entered through an
+owned edge (the first frame, each Entity, a container whose parent pointer is not the frame below). A container
+entered through an owned edge, or an Entity, can only repeat an anchor, so those checks scan the inline frames
+and look up anchors above them in the `deep` map. A container entered through a foreign edge can repeat any
+frame; the first such check on a path deeper than the inline frames puts every frame above them into `deep`,
+and every later push above them goes there too.
 
 The text-bearing leaves (Text, Comment, CDATASection) store content in an internal mutable `content []byte`.
 Their exported `Content()` returns a **defensive copy** (`bytes.Clone`) so a caller mutating the result cannot
