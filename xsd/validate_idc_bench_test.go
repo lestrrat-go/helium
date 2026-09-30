@@ -74,11 +74,10 @@ func nestedKeyrefDoc(depth, k int) string {
 }
 
 // BenchmarkIDCKeyrefNestedSubtree measures xsd.Validator.Validate over a
-// document whose keyref hosts nest, so collectSubtreeKeyTable's descendant
-// key-table gathering repeats at every ancestor level (xsd/validate_idc.go).
-// Depths were chosen to keep the benchmark runnable while still exposing the
-// super-linear growth: doubling depth should roughly double the per-op time
-// after the fix, not multiply it ~7x as the unfixed cubic gathering does.
+// document whose keyref hosts nest, so every ancestor host resolves its keyref
+// against the key tables of every descendant level (subtreeKeyScope in
+// xsd/validate_idc.go). Validation cost should grow linearly with depth: 4x
+// the depth should cost about 4x the time and bytes per op.
 func BenchmarkIDCKeyrefNestedSubtree(b *testing.B) {
 	sdoc, err := helium.NewParser().Parse(b.Context(), []byte(nestedKeyrefSchema))
 	require.NoError(b, err)

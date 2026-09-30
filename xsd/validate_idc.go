@@ -112,25 +112,24 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 	}
 
 	// Resolve this occurrence's keyrefs against the key/unique tables in scope for
-	// this host occurrence. Per XSD identity-constraint scope, a key/unique table
-	// declared on a DESCENDANT element propagates UP to the keyref's host node, so
-	// the referenced table is gathered from the host occurrence's OWN SUBTREE (the
-	// host element and all its descendants), not only the constraints declared
-	// directly on the host. This keeps the scope tight: a key on a SIBLING (or on
-	// a different occurrence of a repeating host) is OUTSIDE this subtree and so
+	// this host occurrence. A keyref whose referenced constraint is declared on the
+	// host itself resolves against the host's own table only. Otherwise, per XSD
+	// identity-constraint scope, a key/unique table declared on a DESCENDANT
+	// element propagates UP to the keyref's host node, so the referenced
+	// key-sequences are those of every descendant occurrence in the host's OWN
+	// SUBTREE (subtreeKeyScope). This keeps the scope tight: a key on a SIBLING (or
+	// on a different occurrence of a repeating host) is OUTSIDE this subtree and so
 	// does NOT satisfy the keyref — matching xmllint, which rejects those — while a
 	// key on a child element (bug322411) correctly does.
 	for _, pending := range keyRefs {
-		refTable := keyTables[pending.idc.ReferQName]
-		if refTable == nil {
-			// Not declared on the host itself; gather it from the host occurrence's
-			// descendant subtree (propagated-up tables).
-			refTable = vc.collectSubtreeKeyTable(ctx, elem, pending.idc.ReferQName)
+		var refs refKeySet
+		if refTable := keyTables[pending.idc.ReferQName]; refTable != nil {
+			refs = newTableKeySet(refTable)
+		} else {
+			idx, span := vc.subtreeKeyScope(ctx, elem, pending.idc.ReferQName)
+			refs = scopedKeySet{idx: idx, span: span}
 		}
-		if refTable == nil {
-			refTable = &idcTable{idc: pending.idc}
-		}
-		if err := vc.checkKeyRef(ctx, pending.table, refTable, pending.idc); err != nil {
+		if err := vc.checkKeyRef(ctx, pending.table, refs, pending.idc); err != nil {
 			lastErr = err
 		}
 	}
@@ -138,39 +137,115 @@ func (vc *validationContext) validateIDConstraints(ctx context.Context, elem *he
 	return lastErr
 }
 
-// collectSubtreeKeyTable gathers the merged key-sequence table for the
-// key/unique constraint identified by referQN, evaluated over every DESCENDANT
-// element occurrence of host that declares a constraint with that QName. This
-// models XSD identity-constraint table propagation up the tree: a key/unique
-// declared on a child element is in scope for a keyref on an ancestor host.
-//
-// The host element ITSELF is excluded — constraints declared directly on the
-// host are already in the caller's keyTables map (and handled before this path
-// is reached). Only the value collection matters here; uniqueness for each
-// descendant constraint is checked by that descendant's own pass-2 evaluation,
-// so this path does NOT re-report uniqueness violations.
-//
-// Returns nil when no descendant declares a matching constraint (so the keyref
-// resolves against an empty space and every key-sequence is a "no match"
-// failure), preserving the out-of-scope rejection for sibling/other-occurrence
-// keys.
-func (vc *validationContext) collectSubtreeKeyTable(ctx context.Context, host *helium.Element, referQN QName) *idcTable {
-	var merged *idcTable
-	vc.appendSubtreeKeys(ctx, host, referQN, &merged)
-	return merged
+// refKeySet answers whether a formatKeySequence key is among the key-sequences
+// a keyref resolves against.
+type refKeySet interface {
+	has(key string) bool
 }
 
-// appendSubtreeKeys walks host's descendants in DFS order and appends every
-// matching key/unique constraint's key-sequences into the single *merged
-// accumulator, instead of collectSubtreeKeyTable's former level-by-level
-// build-then-copy-upward merge (each level allocated its own *idcTable and the
-// caller re-copied its keys into the parent's, making a nested keyref chain of
-// depth D pay a Θ(D²) copy at every one of its D ancestor hosts). Appending
-// into one accumulator as the walk descends keeps the total copy work linear
-// in the number of contributing key-sequences. DFS order, and therefore key
-// order, is unchanged.
-func (vc *validationContext) appendSubtreeKeys(ctx context.Context, host *helium.Element, referQN QName, merged **idcTable) {
-	for child := range helium.Children(host) {
+// tableKeySet is the refKeySet of a key/unique table declared on the keyref's
+// host itself.
+type tableKeySet map[string]struct{}
+
+// newTableKeySet builds the membership set of table's value-space canonical
+// key-sequences.
+func newTableKeySet(table *idcTable) tableKeySet {
+	set := make(tableKeySet, len(table.keys))
+	for _, entry := range table.keys {
+		set[formatKeySequence(entry.canon)] = struct{}{}
+	}
+	return set
+}
+
+func (s tableKeySet) has(key string) bool {
+	_, ok := s[key]
+	return ok
+}
+
+// scopedKeySet is the refKeySet of a keyref host that does not declare the
+// referenced constraint: the key-sequences of every descendant occurrence of
+// that constraint strictly inside the host's subtree.
+type scopedKeySet struct {
+	idx  *subtreeKeyIndex
+	span hostSpan
+}
+
+// has reports whether some descendant occurrence inside span produced key.
+// Positions strictly greater than span.pre exclude the host itself, so only
+// descendants count.
+func (s scopedKeySet) has(key string) bool {
+	positions := s.idx.byKey[key]
+	i, _ := slices.BinarySearch(positions, s.span.pre+1)
+	return i < len(positions) && positions[i] <= s.span.end
+}
+
+// subtreeKeyIndex indexes every gathered key-sequence of one key/unique QName
+// by the DFS position of the descendant occurrence that produced it, so a
+// keyref host resolves a key-sequence by an interval test over its own
+// subtree's positions instead of re-walking the subtree and copying every
+// descendant table. One index per referenced QName lives on the per-run
+// validationContext (vc.idcSubtreeIndex).
+//
+// Positions are handed out in DFS order from a counter that only grows, so
+// every byKey list is ascending even when a later DFS indexes another subtree.
+// A keyref host's subtree occupies the interval (pre, end] of the DFS that
+// visited it; the pass-2 walk is pre-order, so the outermost host of a nested
+// chain indexes its whole subtree once and every nested host inside it reuses
+// the span recorded for it.
+//
+// Every key/unique occurrence contributes all of its key-sequences, in the same
+// set today's descendant gathering sees: no conflict dropping between children
+// and no own-entry precedence, so a key-sequence present in two children still
+// satisfies the keyref.
+type subtreeKeyIndex struct {
+	referQN QName
+	next    int                          // DFS position counter, monotonic across builds
+	byKey   map[string][]int             // formatKeySequence(canon) → ascending DFS positions
+	hosts   map[*helium.Element]hostSpan // keyref host → its (pre, end] interval
+}
+
+// hostSpan is the DFS interval of a keyref host's subtree: pre is the host's
+// own position and end the last position of its descendants, so its strict
+// descendants occupy (pre, end].
+type hostSpan struct {
+	pre int
+	end int
+}
+
+// subtreeKeyScope returns the index for referQN and the span of host within
+// it, indexing host's subtree first when no earlier DFS recorded host. The
+// host's own key/unique tables are NOT gathered: the caller resolves against
+// them directly when host declares referQN, and a host's own entries fall
+// outside its (pre, end] interval anyway.
+func (vc *validationContext) subtreeKeyScope(ctx context.Context, host *helium.Element, referQN QName) (*subtreeKeyIndex, hostSpan) {
+	idx := vc.idcSubtreeIndex[referQN]
+	if idx == nil {
+		idx = &subtreeKeyIndex{
+			referQN: referQN,
+			byKey:   make(map[string][]int),
+			hosts:   make(map[*helium.Element]hostSpan),
+		}
+		if vc.idcSubtreeIndex == nil {
+			vc.idcSubtreeIndex = make(map[QName]*subtreeKeyIndex)
+		}
+		vc.idcSubtreeIndex[referQN] = idx
+	}
+	if span, ok := idx.hosts[host]; ok {
+		return idx, span
+	}
+
+	pre := idx.next
+	idx.next++
+	vc.indexSubtreeChildren(ctx, idx, host)
+	span := hostSpan{pre: pre, end: idx.next - 1}
+	idx.hosts[host] = span
+	return idx, span
+}
+
+// indexSubtreeChildren indexes every element child of parent, in document
+// order, with indexSubtreeKeys.
+func (vc *validationContext) indexSubtreeChildren(ctx context.Context, idx *subtreeKeyIndex, parent *helium.Element) {
+	for child := range helium.Children(parent) {
 		if child.Type() != helium.ElementNode {
 			continue
 		}
@@ -178,24 +253,53 @@ func (vc *validationContext) appendSubtreeKeys(ctx context.Context, host *helium
 		if !ok {
 			continue
 		}
-		// Evaluate any matching key/unique declared on this descendant occurrence.
-		if decl := vc.idcHostDecl(ce); decl != nil {
-			for _, idc := range decl.IDCs {
-				if idc.Kind == IDCKeyRef || idc.QName != referQN {
+		vc.indexSubtreeKeys(ctx, idx, ce)
+	}
+}
+
+// indexSubtreeKeys assigns elem the next DFS position, records the
+// key-sequences of every key/unique of idx.referQN declared on elem at that
+// position, recurses into elem's children, and records elem's span when elem
+// hosts a keyref referring to idx.referQN.
+//
+// Each occurrence's table comes from gatherIDCTable, memoized and evaluated
+// with diagnostics suppressed; elem's own pass-2 visit reports its errors.
+func (vc *validationContext) indexSubtreeKeys(ctx context.Context, idx *subtreeKeyIndex, elem *helium.Element) {
+	pre := idx.next
+	idx.next++
+
+	isHost := false
+	if decl := vc.idcHostDecl(elem); decl != nil {
+		for _, idc := range decl.IDCs {
+			if idc.Kind == IDCKeyRef {
+				if idc.ReferQName == idx.referQN {
+					isHost = true
+				}
+				continue
+			}
+			if idc.QName != idx.referQN {
+				continue
+			}
+			table := vc.gatherIDCTable(ctx, elem, decl, idc)
+			if table == nil {
+				continue
+			}
+			for _, entry := range table.keys {
+				key := formatKeySequence(entry.canon)
+				positions := idx.byKey[key]
+				// A key-sequence repeated within one occurrence needs one position.
+				if n := len(positions); n > 0 && positions[n-1] == pre {
 					continue
 				}
-				table := vc.gatherIDCTable(ctx, ce, decl, idc)
-				if table == nil {
-					continue
-				}
-				if *merged == nil {
-					*merged = &idcTable{idc: idc}
-				}
-				(*merged).keys = append((*merged).keys, table.keys...)
+				idx.byKey[key] = append(positions, pre)
 			}
 		}
-		// Recurse so a constraint declared deeper in the subtree also propagates up.
-		vc.appendSubtreeKeys(ctx, ce, referQN, merged)
+	}
+
+	vc.indexSubtreeChildren(ctx, idx, elem)
+
+	if isHost {
+		idx.hosts[elem] = hostSpan{pre: pre, end: idx.next - 1}
 	}
 }
 
@@ -210,9 +314,9 @@ type idcOccurrenceKey struct {
 }
 
 // gatherIDCTable evaluates a descendant key/unique constraint for use by
-// collectSubtreeKeyTable's ancestor keyref gathering, memoizing the result per
-// idcOccurrenceKey on vc.idcGathered so a descendant occurrence reachable from
-// several nested keyref hosts is evaluated at most once per run. Returns nil
+// indexSubtreeKeys's ancestor keyref gathering, memoizing the result per
+// idcOccurrenceKey on vc.idcGathered so a descendant occurrence that more than
+// one index build visits is evaluated at most once per run. Returns nil
 // when evaluation fails (cached as nil, distinguished from "not yet gathered"
 // by the two-value map read).
 //
@@ -478,18 +582,13 @@ func (vc *validationContext) checkUniqueness(ctx context.Context, table *idcTabl
 	return lastErr
 }
 
-// checkKeyRef checks that every key-sequence in the keyref table has a match in the referenced table.
-func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable, refTable *idcTable, idc *IDConstraint) error {
-	// Build set of referenced key-sequences (value-space canonical).
-	refKeys := make(map[string]struct{}, len(refTable.keys))
-	for _, entry := range refTable.keys {
-		refKeys[formatKeySequence(entry.canon)] = struct{}{}
-	}
-
+// checkKeyRef checks that every key-sequence in the keyref table is among the
+// referenced key-sequences refs (value-space canonical).
+func (vc *validationContext) checkKeyRef(ctx context.Context, keyrefTable *idcTable, refs refKeySet, idc *IDConstraint) error {
 	var lastErr error
 	for _, entry := range keyrefTable.keys {
 		key := formatKeySequence(entry.canon)
-		if _, ok := refKeys[key]; !ok {
+		if !refs.has(key) {
 			elemName := entryDisplayName(entry)
 			idcName := idcDisplayName(idc, vc.schema)
 			msg := fmt.Sprintf("No match found for key-sequence %s of keyref '%s'.",
