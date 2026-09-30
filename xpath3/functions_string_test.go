@@ -302,7 +302,7 @@ func TestStringEntityReferences(t *testing.T) {
 		{expr: "string(/a/x/@v)", want: "qGr&"},
 		{expr: "string(data(/a/x))", want: "entFtc"},
 		{expr: "/a/z/string()", want: "GG"},
-		{expr: "string(/a/x = 'entFtc')", want: "true"},
+		{expr: "string(/a/x = 'entFtc')", want: wantTrue},
 	}
 	for _, substitute := range []bool{false, true} {
 		t.Run("substitute="+strconv.FormatBool(substitute), func(t *testing.T) {
