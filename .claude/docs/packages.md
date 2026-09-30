@@ -2464,7 +2464,9 @@ Test helpers shared across helium packages.
 - `CallerDir(skip)` — directory of caller's source file
 - `RepoRoot()` — absolute path to repository root (cached)
 - `TestDir(path...)` — join path elements under repo root
-- Files: `callerdir.go`
+- `NewPollContext(parent, expireAt, err)` — `*PollContext` counting `Err` calls and expiring at a chosen one
+  (`Polls`, `PollsAfterExpiry`), for cancellation/deadline tests placed by work instead of time
+- Files: `callerdir.go`, `pollctx.go`
 
 ## internal/cliutil/
 
