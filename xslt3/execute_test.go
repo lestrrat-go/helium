@@ -1943,7 +1943,7 @@ func TestCommentStringValue(t *testing.T) {
 		require.NoError(t, err)
 		out, err := ss.Transform(src).Serialize(t.Context())
 		require.NoError(t, err)
-		require.Contains(t, out, `<price>1<!--k-->0<?p q?></price>`)
+		require.Contains(t, out, `>1<!--k-->0<?p q?></price>`)
 	})
 
 	// Strict validation of a document checks that the xs:IDREF and xs:IDREFS

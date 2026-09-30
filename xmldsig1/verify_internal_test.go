@@ -612,7 +612,7 @@ func TestVerifyLineWrappedDigestValue(t *testing.T) {
 
 	// Line-wrap the DigestValue text in place, then re-sign SignedInfo so the
 	// SignatureValue covers the wrapped DigestValue.
-	wrapped := wrapText(domutil.TextContent(digestValue), 16)
+	wrapped := wrapText(string(digestValue.Content()), 16)
 	require.Contains(t, wrapped, " ")
 	setText(t, digestValue, wrapped)
 

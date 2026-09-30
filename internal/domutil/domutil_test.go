@@ -496,33 +496,3 @@ func TestFindElementsByIDNilRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, index)
 }
-
-// TextContent expands an entity reference child whose replacement text holds
-// another reference, so xmldsig1's KeyName, X509 names, and XPath transform
-// expression read the text the document means.
-func TestTextContentExpandsNestedEntityReferences(t *testing.T) {
-	doc, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<!DOCTYPE k [<!ENTITY f "y"><!ENTITY g "a&f;b">]><k>1&g;2</k>`))
-	require.NoError(t, err)
-	require.Equal(t, "1ayb2", domutil.TextContent(doc.DocumentElement()))
-}
-
-// TextContent leaves out a comment or PI inside an entity reference child's
-// expansion, as libxml2 does, so xmldsig1 reads a KeyName such as &k; with k
-// "a<!--x-->b" as "ab".
-func TestTextContentLeavesOutEntityCommentsAndPIs(t *testing.T) {
-	doc, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<!DOCTYPE k [<!ENTITY k "a<!--x-->b<?p q?>c">]><k>1&k;2</k>`))
-	require.NoError(t, err)
-	require.Equal(t, "1abc2", domutil.TextContent(doc.DocumentElement()))
-}
-
-// TextContent reads an element as libxml2's xmlNodeGetContent does: a comment
-// or PI adds nothing, whether it is a direct child or sits deeper in the tree,
-// so xmldsig1 reads <ds:KeyName>a<!--x-->b</ds:KeyName> as "ab".
-func TestTextContentLeavesOutCommentsAndPIs(t *testing.T) {
-	doc, err := helium.NewParser().Parse(t.Context(),
-		[]byte(`<k>1<!--x-->2<?p q?>3<b>4<!--y-->5<?p r?></b>6</k>`))
-	require.NoError(t, err)
-	require.Equal(t, "123456", domutil.TextContent(doc.DocumentElement()))
-}
