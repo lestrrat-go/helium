@@ -1,8 +1,10 @@
 package xpath3_test
 
 import (
+	"strconv"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -270,5 +272,50 @@ func TestAttributeStringValueExpandsEntityReferences(t *testing.T) {
 		r, err := evaluate(t.Context(), doc, expr)
 		require.NoError(t, err, expr)
 		require.Equal(t, want, r.StringValue(), expr)
+	}
+}
+
+// entityStringSrc declares entities between comments and PIs of the internal
+// subset: f holds a PI and a comment, and e, declared after f, nests a
+// reference to f inside markup. The content references e, and g inside an
+// attribute value, in a single-reference element and in an adjacent pair.
+const entityStringSrc = `<!DOCTYPE a [<!ENTITY g "G"><!ENTITY f "F<?pf x?><!--fc-->">` +
+	`<!--c0--><?p0 x?><!ENTITY e "<b>ent<!--ec-->&f;</b>t"><!--c1--><?p1 y?>]>` +
+	`<a>1&e;2<x v="q&g;r&amp;">&e;<!--cx--><![CDATA[c]]></x><y>&g;</y><z>&g;&g;</z></a>`
+
+// TestStringEntityReferences checks that the string-value of a node holding
+// entity references is the concatenation of the text the references expand
+// to. The XDM has no entity references, so both parse modes give the value of
+// the tree a substituted parse builds: a reference never reaches text of other
+// declarations in the DTD that owns its entity, and the DTD is not part of the
+// document's string-value.
+func TestStringEntityReferences(t *testing.T) {
+	cases := []struct {
+		expr string
+		want string
+	}{
+		{expr: "string(/)", want: "1entFt2entFtcGGG"},
+		{expr: "string(/a)", want: "1entFt2entFtcGGG"},
+		{expr: "string(/a/x)", want: "entFtc"},
+		{expr: "string(/a/y)", want: "G"},
+		{expr: "string(/a/z)", want: "GG"},
+		{expr: "string(/a/x/@v)", want: "qGr&"},
+		{expr: "string(data(/a/x))", want: "entFtc"},
+		{expr: "/a/z/string()", want: "GG"},
+		{expr: "string(/a/x = 'entFtc')", want: "true"},
+	}
+	for _, substitute := range []bool{false, true} {
+		t.Run("substitute="+strconv.FormatBool(substitute), func(t *testing.T) {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).
+				Parse(t.Context(), []byte(entityStringSrc))
+			require.NoError(t, err)
+			for _, tc := range cases {
+				seq := evalExpr(t, doc, tc.expr)
+				require.Equal(t, 1, seq.Len(), tc.expr)
+				av, ok := seq.Get(0).(xpath3.AtomicValue)
+				require.True(t, ok, tc.expr)
+				require.Equal(t, tc.want, av.StringVal(), tc.expr)
+			}
+		})
 	}
 }

@@ -2,8 +2,10 @@ package xpath1_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
+	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
@@ -159,4 +161,47 @@ func TestFunction(t *testing.T) {
 		require.NotNil(t, captured)
 		require.Equal(t, "root", captured.Node().Name())
 	})
+}
+
+// entityStringSrc declares entities between comments and PIs of the internal
+// subset: f holds a PI and a comment, and e, declared after f, nests a
+// reference to f inside markup. The content references e, and g inside an
+// attribute value, in a single-reference element and in an adjacent pair.
+const entityStringSrc = `<!DOCTYPE a [<!ENTITY g "G"><!ENTITY f "F<?pf x?><!--fc-->">` +
+	`<!--c0--><?p0 x?><!ENTITY e "<b>ent<!--ec-->&f;</b>t"><!--c1--><?p1 y?>]>` +
+	`<a>1&e;2<x v="q&g;r&amp;">&e;<!--cx--><![CDATA[c]]></x><y>&g;</y><z>&g;&g;</z></a>`
+
+// TestStringEntityReferences checks that string() of a node holding entity
+// references reads the text the references expand to (libxml2:
+// xmlXPathCastNodeToString -> xmlNodeGetContent), so both parse modes give
+// what a substituted parse stores. A reference never reaches text of other
+// declarations in the DTD that owns its entity, and the DTD is not part of the
+// document's string-value.
+func TestStringEntityReferences(t *testing.T) {
+	cases := []struct {
+		expr string
+		want string
+	}{
+		{expr: "string(/)", want: "1entFt2entFtcGGG"},
+		{expr: "string(/a)", want: "1entFt2entFtcGGG"},
+		{expr: "string(/a/x)", want: "entFtc"},
+		{expr: "string(/a/y)", want: "G"},
+		{expr: "string(/a/z)", want: "GG"},
+		{expr: "string(/a/x/@v)", want: "qGr&"},
+		{expr: "string(/a/x = 'entFtc')", want: "true"},
+		{expr: "string(string-length(/a/z))", want: "2"},
+	}
+	for _, substitute := range []bool{false, true} {
+		t.Run("substitute="+strconv.FormatBool(substitute), func(t *testing.T) {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).
+				Parse(t.Context(), []byte(entityStringSrc))
+			require.NoError(t, err)
+			for _, tc := range cases {
+				r, err := xpath1.Evaluate(t.Context(), doc, tc.expr)
+				require.NoError(t, err, tc.expr)
+				require.Equal(t, xpath1.StringResult, r.Type, tc.expr)
+				require.Equal(t, tc.want, r.String, tc.expr)
+			}
+		})
+	}
 }

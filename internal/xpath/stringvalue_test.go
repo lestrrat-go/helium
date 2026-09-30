@@ -1,6 +1,7 @@
 package xpath_test
 
 import (
+	"strconv"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
@@ -222,4 +223,48 @@ func TestStringValue_DeepTreeDoesNotTruncate(t *testing.T) {
 	require.NoError(t, parent.AddChild(leaf))
 
 	require.Equal(t, "prefixleaf", ixpath.StringValue(root))
+}
+
+// entityStringValueSrc declares entities between comments and PIs of the
+// internal subset: f holds a PI and a comment, and e, declared after f, nests
+// a reference to f inside markup. The content references e, and g inside an
+// attribute value, in a single-reference element and in an adjacent pair.
+const entityStringValueSrc = `<!DOCTYPE a [<!ENTITY g "G"><!ENTITY f "F<?pf x?><!--fc-->">` +
+	`<!--c0--><?p0 x?><!ENTITY e "<b>ent<!--ec-->&f;</b>t"><!--c1--><?p1 y?>]>` +
+	`<a>1&e;2<x v="q&g;r&amp;">&e;<!--cx--><![CDATA[c]]></x><y>&g;</y><z>&g;&g;</z></a>`
+
+// TestStringValue_EntityReferences checks that the string-value of a node
+// holding entity references is the text the references expand to, so both
+// parse modes read what a substituted parse stores: a reference never reaches
+// text of other declarations in the DTD that owns its entity, and the DTD of a
+// document is not part of the document's string-value.
+func TestStringValue_EntityReferences(t *testing.T) {
+	want := map[string]string{
+		"doc": "1entFt2entFtcGGG",
+		"a":   "1entFt2entFtcGGG",
+		"x":   "entFtc",
+		"y":   "G",
+		"z":   "GG",
+		"@v":  "qGr&",
+	}
+	for _, substitute := range []bool{false, true} {
+		t.Run("substitute="+strconv.FormatBool(substitute), func(t *testing.T) {
+			doc, err := helium.NewParser().SubstituteEntities(substitute).
+				Parse(t.Context(), []byte(entityStringValueSrc))
+			require.NoError(t, err)
+			got := map[string]string{"doc": ixpath.StringValue(doc)}
+			root := doc.DocumentElement()
+			got[root.Name()] = ixpath.StringValue(root)
+			for child := range helium.ChildElements(root) {
+				if _, ok := want[child.Name()]; !ok {
+					continue // b is a child of a only in a substituted parse
+				}
+				got[child.Name()] = ixpath.StringValue(child)
+				for _, attr := range child.Attributes() {
+					got["@"+attr.Name()] = ixpath.StringValue(attr)
+				}
+			}
+			require.Equal(t, want, got)
+		})
+	}
 }
