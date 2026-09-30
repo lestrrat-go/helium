@@ -2,11 +2,13 @@ package html_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unicode/utf8"
 
@@ -1566,77 +1568,131 @@ func TestRCDATASaturatedRefContextCancellation(t *testing.T) {
 // chardata event would be a leaked partial resolution. Before the fix this
 // records >0 chardata bytes; after it records exactly zero.
 func TestRCDATASaturatedRefPushCancellationEmitsNothing(t *testing.T) {
+	for _, elem := range []string{tagTitle, tagTextarea} {
+		t.Run(elem, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) { testSaturatedRefPushCancellation(t, elem) })
+		})
+	}
+}
+
+// testSaturatedRefPushCancellation runs one element's case of
+// TestRCDATASaturatedRefPushCancellationEmitsNothing in a synctest bubble, where
+// synctest.Wait returns once the background parser has parked in the push
+// stream's Read, so the cancellation lands exactly at that wait.
+func testSaturatedRefPushCancellation(t *testing.T, elem string) {
 	const sizeCap = 1 << 30 // far above the pushed run so the within-cap spool keeps draining
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	var mu sync.Mutex
+	var charBytes int
+	record := html.CharactersFunc(func(data []byte) error {
+		mu.Lock()
+		charBytes += len(data)
+		mu.Unlock()
+		return nil
+	})
+	started := make(chan struct{}, 1)
+	sax := &html.SAXCallbacks{}
+	sax.SetOnCharacters(record)
+	sax.SetOnCDataBlock(html.CDataBlockFunc(record))
+	// Signal once the RCDATA element start fires: the parser is then about
+	// to scan the saturated run.
+	sax.SetOnStartElement(html.StartElementFunc(func(name string, _ []html.Attribute) error {
+		if name == elem {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+		}
+		return nil
+	}))
+
+	pp := html.NewParser().MaxContentSize(sizeCap).NewSAXPushParser(ctx, sax)
+
+	// Clear the 1024-byte charset prescan (meta charset forces the
+	// streaming path), open the RCDATA element, and start a saturated
+	// "&amp"+tail run (no ';') that exceeds the 32-byte lookahead so
+	// parseSaturatedCharRefLiteral spools the tail. The run is NEVER
+	// terminated and the stream is left OPEN (Close is deferred until after
+	// cancel), so the spool drains the pushed tail and then PARKS in a
+	// blocking push-stream Read waiting for more of the run — exactly where
+	// the cancel must land so that blocked Read returns context.Canceled
+	// (the short-chunk-via-read-error case). Cancelling before the parser
+	// reaches the spool would just trip the main loop's ctx.Err() check and
+	// never exercise the scan helper; closing the stream first would feed
+	// the spool a clean EOF instead of a read error.
+	// Filler to clear the prescan is an HTML comment so it fires a Comment
+	// event, NOT Characters — keeping the chardata counter clean so any
+	// non-zero count is unambiguously a leaked partial char-ref resolution.
+	head := metaUTF8 + "<!--" + strings.Repeat("p", 1100) + "-->" +
+		"<" + elem + ">&amp" + strings.Repeat("x", 8192)
+	require.NoError(t, pp.Push([]byte(head)))
+
+	// Wait until the parser has drained the pushed tail and parked in the
+	// spool's push-stream Read. It must have opened the element by then.
+	synctest.Wait()
+	select {
+	case <-started:
+	default:
+		t.Fatal("parser parked before opening the RCDATA element")
+	}
+	cancel()
+
+	_, err := pp.Close()
+	require.ErrorIs(t, err, context.Canceled,
+		"cancelled mid-saturated-run push parse should return context.Canceled")
+
+	mu.Lock()
+	got := charBytes
+	mu.Unlock()
+	require.Zero(t, got,
+		"no Characters/CDATA must be emitted when cancellation aborts a saturated char-ref spool")
+}
+
+// failAfterReader returns data in reads no larger than the caller's buffer,
+// then fails every later Read with err.
+type failAfterReader struct {
+	data []byte
+	err  error
+}
+
+func (r *failAfterReader) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, r.err
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
+// TestRCDATASaturatedRefReadErrorBeforeCap pins the spool's in-loop read-error
+// check in parseSaturatedCharRefLiteral. The saturated "&amp"+tail run is
+// longer than MaxContentSize, but the reader fails before the spool's first
+// chunk is complete, so that chunk comes back short together with the read
+// error. The spool must stop on the read error before it counts the partial
+// chunk against the cap: the parse then reports the read error. Counting the
+// partial chunk first would record ErrContentSizeExceeded, which the parse loop
+// reports ahead of the read error, so the input would look over-cap when it in
+// fact failed to read.
+func TestRCDATASaturatedRefReadErrorBeforeCap(t *testing.T) {
+	const sizeCap = 2048 // above the 1100-byte comment filler, below the run
+	errRead := errors.New("read failed inside the saturated run")
 
 	for _, elem := range []string{tagTitle, tagTextarea} {
 		t.Run(elem, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(t.Context())
-			t.Cleanup(cancel)
-
-			var mu sync.Mutex
-			var charBytes int
-			record := html.CharactersFunc(func(data []byte) error {
-				mu.Lock()
-				charBytes += len(data)
-				mu.Unlock()
-				return nil
-			})
-			started := make(chan struct{}, 1)
-			sax := &html.SAXCallbacks{}
-			sax.SetOnCharacters(record)
-			sax.SetOnCDataBlock(html.CDataBlockFunc(record))
-			// Signal once the RCDATA element start fires: the parser is then about
-			// to scan the saturated run.
-			sax.SetOnStartElement(html.StartElementFunc(func(name string, _ []html.Attribute) error {
-				if name == elem {
-					select {
-					case started <- struct{}{}:
-					default:
-					}
-				}
-				return nil
-			}))
-
-			pp := html.NewParser().MaxContentSize(sizeCap).NewSAXPushParser(ctx, sax)
-
-			// Clear the 1024-byte charset prescan (meta charset forces the
-			// streaming path), open the RCDATA element, and start a saturated
-			// "&amp"+tail run (no ';') that exceeds the 32-byte lookahead so
-			// parseSaturatedCharRefLiteral spools the tail. The run is NEVER
-			// terminated and the stream is left OPEN (Close is deferred until after
-			// cancel), so the spool drains the pushed tail and then PARKS in a
-			// blocking push-stream Read waiting for more of the run — exactly where
-			// the cancel must land so that blocked Read returns context.Canceled
-			// (the short-chunk-via-read-error case). Cancelling before the parser
-			// reaches the spool would just trip the main loop's ctx.Err() check and
-			// never exercise the scan helper; closing the stream first would feed
-			// the spool a clean EOF instead of a read error.
-			// Filler to clear the prescan is an HTML comment so it fires a Comment
-			// event, NOT Characters — keeping the chardata counter clean so any
-			// non-zero count is unambiguously a leaked partial char-ref resolution.
-			head := metaUTF8 + "<!--" + strings.Repeat("p", 1100) + "-->" +
-				"<" + elem + ">&amp" + strings.Repeat("x", 8192)
-			require.NoError(t, pp.Push([]byte(head)))
-
-			// Wait until the element opened, then let the parser drain the pushed
-			// tail and block in the spool's push-stream Read before cancelling.
-			select {
-			case <-started:
-			case <-time.After(10 * time.Second):
-				t.Fatal("parser never opened the RCDATA element")
-			}
-			time.Sleep(100 * time.Millisecond)
-			cancel()
-
-			_, err := pp.Close()
-			require.ErrorIs(t, err, context.Canceled,
-				"cancelled mid-saturated-run push parse should return context.Canceled")
-
-			mu.Lock()
-			got := charBytes
-			mu.Unlock()
-			require.Zero(t, got,
-				"no Characters/CDATA must be emitted when cancellation aborts a saturated char-ref spool")
+			// The comment filler clears the 1024-byte charset prescan. The run's
+			// name is sizeCap+3 bytes, so "&" plus the name is over the cap, while
+			// the part left after the scanner's lookahead is shorter than one
+			// spool chunk (sizeCap bytes).
+			input := metaUTF8 + "<!--" + strings.Repeat("p", 1100) + "-->" +
+				"<" + elem + ">&amp" + strings.Repeat("x", sizeCap)
+			_, err := html.NewParser().MaxContentSize(sizeCap).
+				ParseReader(t.Context(), &failAfterReader{data: []byte(input), err: errRead})
+			require.ErrorIs(t, err, errRead, "a read failure inside the spool must be reported as that failure")
+			require.NotErrorIs(t, err, html.ErrContentSizeExceeded,
+				"the partial chunk before a read failure must not be counted against the cap")
 		})
 	}
 }

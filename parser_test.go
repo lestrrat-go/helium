@@ -221,6 +221,9 @@ func (r *headThenReadErrReader) Read(p []byte) (int, error) {
 		r.pos += n
 		return n, nil
 	}
+	if r.cancelOnErr != nil {
+		r.cancelOnErr()
+	}
 	return 0, r.err
 }
 
