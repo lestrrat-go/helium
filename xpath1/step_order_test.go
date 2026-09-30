@@ -60,6 +60,23 @@ var stepOrderDocs = []stepOrderDoc{
 			`<a xmlns:p="urn:p"><b id="b1"/>&e;<!--c--><x id="x1">&e;</x><b id="b2"/></a>`,
 	},
 	{
+		// f is referenced from e's content and from the document, so the
+		// content of both entities sits in the order index at a reference
+		// inside the document element.
+		name: "entity-nested",
+		src: `<!DOCTYPE a [<!--dtdc--><!ENTITY f "<c id='fc'><d/>tf</c>">` +
+			`<!ENTITY e "<b id='eb'>&f;<c id='ec'/></b><x id='ex'>te</x>"><?dtdpi z?>]>` +
+			`<a><b id="b1">&f;</b>&e;<x id="x1"><c id="c1"/>&f;</x>&e;<b id="b2"/></a>`,
+	},
+	{
+		// The only reference to e sits in y, which has the same depth as
+		// the top-level elements of e's content, so the order index places
+		// that content inside the subtree of y.
+		name: "entity-in-body",
+		src: `<!DOCTYPE a [<!ENTITY e "<b id='eb'><c id='ec'/></b><x id='ex'>te</x>">]>` +
+			`<a><p><y id="y1">&e;<z id="z1"/></y></p></a>`,
+	},
+	{
 		name:  "handbuilt-dtd",
 		src:   `<a xmlns:p="urn:p"><b id="b1"/><x id="x1"/></a>`,
 		build: addHandBuiltDTD,
@@ -106,6 +123,65 @@ var stepOrderContexts = []struct {
 	{name: "entref", pick: pickEntityRef},
 	{name: "entity", pick: pickEntity},
 	{name: "dtd", pick: pickDTD},
+	{name: "entelem", pick: pickEntityElem},
+	{name: "enttext", pick: pickEntityText},
+}
+
+// entityContent returns every node inside the parsed content of the
+// entities declared in the internal subset of doc, in raw traversal order.
+func entityContent(doc *helium.Document) []helium.Node {
+	dtd := doc.IntSubset()
+	if dtd == nil {
+		return nil
+	}
+	var nodes []helium.Node
+	for decl := range helium.Children(dtd) {
+		if decl.Type() != helium.EntityNode {
+			continue
+		}
+		for n := range helium.Descendants(decl) {
+			nodes = append(nodes, n)
+		}
+	}
+	return nodes
+}
+
+// pickEntityElem returns the first element inside entity content, or nil.
+// XPath never reaches entity content from the document, but a caller can
+// pass such a node as the context node.
+func pickEntityElem(doc *helium.Document) helium.Node {
+	for _, n := range entityContent(doc) {
+		if n.Type() == helium.ElementNode {
+			return n
+		}
+	}
+	return nil
+}
+
+// pickEntityText returns the first text node inside entity content, or nil.
+func pickEntityText(doc *helium.Document) helium.Node {
+	for _, n := range entityContent(doc) {
+		if n.Type() == helium.TextNode {
+			return n
+		}
+	}
+	return nil
+}
+
+// entityElems returns the elements inside entity content of doc, sorted and
+// deduplicated by a fresh document-order index, the way a caller would bind
+// a node-set drawn from the content of several entities.
+func entityElems(t testing.TB, doc *helium.Document) []helium.Node {
+	t.Helper()
+	var elems []helium.Node
+	for _, n := range entityContent(doc) {
+		if n.Type() == helium.ElementNode {
+			elems = append(elems, n)
+		}
+	}
+	elems, err := ixpath.DeduplicateNodes(elems, &ixpath.DocOrderCache{}, ixpath.DefaultMaxNodeSetLength)
+	require.NoError(t, err)
+	return elems
 }
 
 // pickEntityRef returns the first entity reference of doc, or nil.
@@ -149,6 +225,11 @@ var stepOrderExprs = []string{
 	"$nodes | //b", "//b | ($other/b | $other/c)", "$other/b | /a/b", "($nodes)[1]//c",
 	"descendant-or-self::node()", ".//node()", ".//comment()", ".//processing-instruction()", ".//text()",
 	"descendant::node()/..", "child::node()", "self::node()", "descendant::x",
+	"$ents/node()", "$ents/*/node()", "$ents/..", "$ents/self::*", "$ents/@*", "$ents/namespace::*",
+	"$ents/following-sibling::node()", "$ents/following::node()", "$ents/preceding::node()",
+	"$ents/descendant::node()", "$ents/ancestor::node()", "$ents | //b", "$ents | $ents/node()",
+	"following::*[count(ancestor::node()) = 3]", "following::*[count(ancestor::node()) = 3]/node()",
+	"following::*[count(ancestor::node()) = 3]/@*", "following::*[count(ancestor::node()) = 3]/node()/..",
 }
 
 func parseStepOrderDoc(t testing.TB, src string, subst bool) *helium.Document {
@@ -228,6 +309,7 @@ func newStepOrderFixture(t testing.TB, d stepOrderDoc) stepOrderFixture {
 	vars := map[string]any{
 		"nodes": []helium.Node{other.DocumentElement(), doc.DocumentElement()},
 		"other": []helium.Node{other.DocumentElement()},
+		"ents":  entityElems(t, doc),
 	}
 	return stepOrderFixture{
 		doc:    doc,
@@ -268,9 +350,20 @@ func (f stepOrderFixture) describeResult(t testing.TB, ctxNode helium.Node, expr
 	require.Equal(t, xpath1.NodeSetResult, r.Type, expr)
 	sorted, err := ixpath.DeduplicateNodes(slices.Clone(r.NodeSet), &ixpath.DocOrderCache{}, ixpath.DefaultMaxNodeSetLength)
 	require.NoError(t, err)
-	require.Equal(t, r.NodeSet, sorted, "result of %q is not in document order", expr)
-	parts := make([]string, len(r.NodeSet))
-	for i, n := range r.NodeSet {
+	got := f.describeNodes(r.NodeSet)
+	if !slices.Equal(r.NodeSet, sorted) {
+		// Compare the rendered paths: a diff of the node values themselves
+		// prints whole trees.
+		require.Equal(t, f.describeNodes(sorted), got, "result of %q is not in document order", expr)
+		require.FailNow(t, "result of "+expr+" holds different nodes that render alike")
+	}
+	return got
+}
+
+// describeNodes renders every node of nodes with describeNode.
+func (f stepOrderFixture) describeNodes(nodes []helium.Node) string {
+	parts := make([]string, len(nodes))
+	for i, n := range nodes {
 		parts[i] = describeNode(n, f.labels)
 	}
 	return strings.Join(parts, " ")
