@@ -413,7 +413,7 @@ func TestEntityReference(t *testing.T) {
 				refLines = append(refLines, n.Line())
 			}
 		}
-		require.Equal(t, []int{3, 4}, refLines)
+		require.Equal(t, []int{4, 5}, refLines)
 
 		subst, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(src))
 		require.NoError(t, err)
@@ -421,7 +421,7 @@ func TestEntityReference(t *testing.T) {
 		for e := range helium.ChildElements(subst.DocumentElement()) {
 			elemLines = append(elemLines, fmt.Sprintf("%s:%d", e.LocalName(), e.Line()))
 		}
-		require.Equal(t, []string{"x:3", "y:3", "z:3"}, elemLines)
+		require.Equal(t, []string{"x:4", "y:4", "z:4"}, elemLines)
 	})
 
 	// Entity.URI's fallback to SystemID.
