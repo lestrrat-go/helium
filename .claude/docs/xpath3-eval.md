@@ -67,7 +67,9 @@ cancellation (each operand is individually capped, but the concatenation must be
 
 ### LocationPath
 1. Start: root node (absolute) or context node (relative)
-2. Per step: traverse axis → filter by NodeTest → apply predicates → dedup doc order
+2. Per step: traverse axis → filter by NodeTest → apply predicates → `ixpath.OrderStepResult` (document order,
+   no duplicates; the whole-document order index is built only when the step shape cannot prove the order,
+   see `xpath3-architecture.md`)
 3. Hot axes (`child`, `attribute`, `self`, `parent`) fuse traversal and node-test filtering directly in `xpath3`,
    avoiding the generic `TraverseAxis` + extra filtered-slice path
 4. Return merged node-set
@@ -349,7 +351,7 @@ and the default xpath3 behavior is unchanged.
 - `DocOrderCache` lazy, O(n) build, O(1) lookup: one flat `map[helium.Node]sortKey` covering every indexed
   document, so a position lookup is a single hash probe with no parent-chain walk. A second map records each
   document root's registration order, which orders nodes from different trees. A document can be registered
-  without being indexed (`reserveDocument`, used by xpath1's `OrderStepResult` when a step needs no sort); the
+  without being indexed (`reserveDocument`, used by `OrderStepResult` when a location step needs no sort); the
   first lookup that needs a position in it indexes it under the reserved order
 - Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does
   not change captured behavior
