@@ -161,14 +161,14 @@ func TestEntityAmplification(t *testing.T) {
 	t.Run("attribute values without substitution", func(t *testing.T) {
 		t.Run("a nested entity past the limit is rejected", func(t *testing.T) {
 			t.Parallel()
-			_, err := helium.NewParser().Parse(t.Context(), []byte(nestedEntityAttrDoc(9)))
+			_, err := helium.NewParser().Parse(t.Context(), []byte(nestedEntityAttrDoc(8)))
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "maximum entity amplification factor exceeded")
 		})
 
 		t.Run("the same document with substitution is rejected", func(t *testing.T) {
 			t.Parallel()
-			_, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(nestedEntityAttrDoc(9)))
+			_, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(nestedEntityAttrDoc(8)))
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "maximum entity amplification factor exceeded")
 		})
@@ -177,8 +177,8 @@ func TestEntityAmplification(t *testing.T) {
 			t.Parallel()
 			// The attribute sits in the replacement text of an entity that is
 			// referenced from content, so it is parsed by the nested entity parse.
-			input := `<!DOCTYPE root [` + nestedEntityDecls(9) +
-				`<!ENTITY wrap "<e a='&lol9;'/>">]><root>&wrap;</root>`
+			input := `<!DOCTYPE root [` + nestedEntityDecls(8) +
+				`<!ENTITY wrap "<e a='&lol8;'/>">]><root>&wrap;</root>`
 			_, err := helium.NewParser().Parse(t.Context(), []byte(input))
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "maximum entity amplification factor exceeded")
