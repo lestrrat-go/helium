@@ -1,13 +1,14 @@
 package relaxng_test
 
 import (
+	"errors"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/relaxng"
 	"github.com/stretchr/testify/require"
 )
@@ -86,6 +87,25 @@ func manyChildrenDoc(n int) string {
 	}
 	d.WriteString(`</root>`)
 	return d.String()
+}
+
+// errStepBudget is the error validationSteps' context reports once a
+// validation has used up its step budget.
+var errStepBudget = errors.New("validation step budget exhausted")
+
+// validationSteps validates doc against grammar, requires the document to be
+// valid within maxSteps pattern steps, and returns the steps it took. The
+// validator polls its context once per pattern step, so the poll count is the
+// work the validation did, identical on every machine and under any load. The
+// context expires at the step after the budget, so a validation that would run
+// far past it stops there and fails instead of running on.
+func validationSteps(t *testing.T, grammar *relaxng.Grammar, doc *helium.Document, maxSteps int) int {
+	t.Helper()
+	ctx := heliumtest.NewPollContext(t.Context(), maxSteps+1, errStepBudget)
+	err := relaxng.NewValidator(grammar).Validate(ctx, doc)
+	require.NotErrorIs(t, err, errStepBudget, "validation took more than %d steps", maxSteps)
+	require.NoError(t, err)
+	return ctx.Polls()
 }
 
 // compileGrammar compiles a RELAX NG grammar from a string, failing the test on
@@ -272,11 +292,16 @@ func TestMultiFlexibleGroupBacktracking(t *testing.T) {
 // a mandatory member, matched against M elements, drove the cascading backtracker
 // to O(M^N) before group-result memoization was added (N=9/M=25 took ~45s). With
 // memoization each distinct (child-range, input-position) subproblem is computed
-// once, so the same input validates near-instantly.
+// once, so the same input validates in about 40000 steps.
 func TestMultiFlexibleGroupBacktrackingNotExponential(t *testing.T) {
 	t.Parallel()
 
-	const N, M = 10, 30
+	const (
+		N, M = 10, 30
+		// maxSteps is several times what the memoized backtracker takes and
+		// orders of magnitude below the cascading retry's O(M^N) steps.
+		maxSteps = 200_000
+	)
 	a := `<element name="a"><empty/></element>`
 	var schema strings.Builder
 	schema.WriteString(`<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start><element name="root"><group>`)
@@ -296,12 +321,7 @@ func TestMultiFlexibleGroupBacktrackingNotExponential(t *testing.T) {
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(docStr.String()))
 	require.NoError(t, err)
 
-	start := time.Now()
-	verr := relaxng.NewValidator(grammar).Validate(t.Context(), doc)
-	elapsed := time.Since(start)
-
-	require.NoError(t, verr, "group(zeroOrMore(a) x%d, a) over %d elements should validate", N, M)
-	require.Less(t, elapsed, 5*time.Second, "validation must not be exponential (took %s)", elapsed)
+	validationSteps(t, grammar, doc, maxSteps)
 }
 
 // TestGroupBacktrackAllocationBound guards against validState.clone() and its
