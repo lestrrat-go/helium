@@ -1020,7 +1020,8 @@ RELAX NG schema compilation and validation.
   - `Compile(ctx, *Document) → (*Grammar, error)` / `CompileFile(ctx, path) → (*Grammar, error)` — terminal methods
 - **NewValidator(grammar) → Validator** — create fluent builder for validation
   - `Filename(name)`, `ErrorHandler(h)` — builder methods
-  - `Validate(ctx, *Document) → error` — terminal method
+  - `Validate(ctx, *Document) → error` — terminal method; polls ctx at every pattern step and returns ctx's error
+    (delivering no validation errors) when ctx is done before validation finishes
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list,
   mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types

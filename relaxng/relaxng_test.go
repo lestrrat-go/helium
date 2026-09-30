@@ -1,6 +1,7 @@
 package relaxng_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"testing/fstest"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/relaxng"
 	"github.com/stretchr/testify/require"
 )
@@ -674,4 +676,46 @@ func TestAttributeValueWithEntityReference(t *testing.T) {
 		}
 		require.Error(t, err, src)
 	}
+}
+
+// TestValidateContext pins that Validate honors its context: validation polls
+// it at every pattern step, stops at the first poll that reports an error,
+// returns that error, and delivers none of the validation errors the abandoned
+// run collected. The deadline is placed by work: a first run counts the steps
+// a complete validation takes, and the second reports the deadline half way
+// through them.
+func TestValidateContext(t *testing.T) {
+	t.Parallel()
+
+	const children = 2000
+	grammar := compileGrammar(t, `<grammar xmlns="http://relaxng.org/ns/structure/1.0"><start>`+
+		`<element name="root"><zeroOrMore><element name="a"><empty/></element></zeroOrMore></element>`+
+		`</start></grammar>`)
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(manyChildrenDoc(children)))
+	require.NoError(t, err)
+
+	t.Run("cancelled before validation", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		err := relaxng.NewValidator(grammar).ErrorHandler(collector).Validate(ctx, doc)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, collector.Errors(), "an abandoned validation delivered errors")
+	})
+
+	t.Run("deadline during validation", func(t *testing.T) {
+		t.Parallel()
+		counter := heliumtest.NewPollContext(t.Context(), 0, nil)
+		require.NoError(t, relaxng.NewValidator(grammar).Validate(counter, doc))
+		total := counter.Polls()
+		require.Greater(t, total, children, "a complete validation took fewer steps than the document has children")
+
+		ctx := heliumtest.NewPollContext(t.Context(), total/2, context.DeadlineExceeded)
+		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
+		err := relaxng.NewValidator(grammar).ErrorHandler(collector).Validate(ctx, doc)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.Zero(t, ctx.PollsAfterExpiry(), "validation kept polling after the deadline")
+		require.Empty(t, collector.Errors(), "an abandoned validation delivered errors")
+	})
 }

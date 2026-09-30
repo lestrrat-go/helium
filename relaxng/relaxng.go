@@ -239,6 +239,10 @@ func (v Validator) closeHandler() {
 // Validate validates a document against the compiled grammar.
 // It returns nil if the document is valid, or [ErrValidationFailed].
 // Individual validation errors are delivered to the configured [helium.ErrorHandler].
+//
+// Validation polls ctx at every pattern step. When ctx is cancelled or its
+// deadline passes before validation finishes, Validate stops and returns
+// ctx's error, and delivers no validation errors to the handler.
 // (libxml2: xmlRelaxNGValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { //nolint:contextcheck
 	if ctx == nil {
@@ -254,8 +258,11 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { /
 		handler = helium.NilErrorHandler{}
 	}
 
-	valid := validateDocument(ctx, doc, v.grammar, cfg, handler)
+	valid, err := validateDocument(ctx, doc, v.grammar, cfg, handler)
 	v.closeHandler()
+	if err != nil {
+		return err
+	}
 	if valid {
 		return nil
 	}
