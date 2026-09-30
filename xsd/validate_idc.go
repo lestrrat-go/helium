@@ -551,7 +551,7 @@ func (vc *validationContext) evaluateIDC(ctx context.Context, ev xpath1.Evaluato
 func nodeStringValue(n helium.Node) string {
 	switch v := n.(type) {
 	case *helium.Element:
-		return elemTextContent(v)
+		return helium.CharacterData(v)
 	case *helium.Attribute:
 		return v.Value()
 	default:

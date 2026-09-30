@@ -261,8 +261,9 @@ for Value). Text/CDATA add their text; an EntityRef adds its entity's value (`ap
 predefined → its character; otherwise the entity's parsed children walked by the same function, recursively; an
 entity with no parsed children adds its stored replacement text; an unbound reference is looked up by name in
 the document, predefined entities first); an Entity child adds its stored replacement text; Comment/PI/namespace
-wrapper add their own text only for Content (`withOther`), never for Value and never inside an entity's
-children; any other node recurses into its children. So Content of a node holding references equals the text a
+wrapper add their own text only for Content (`contentWithOther`), never for Value and never inside an entity's
+children; any other node recurses into its children unless the walk runs with `contentOwnCharData`
+(CharacterData, below). So Content of a node holding references equals the text a
 `SubstituteEntities(true)` parse stores (`<g>1&g;2</g>` with `g`="a&f;b", `f`="y" → `"1ayb2"`), except for
 comments and PIs. libxml2 (`tree.c` `xmlBufGetChildContent`) adds only Text/CDATA text and descends into other
 children, so it leaves out every Comment/PI below the node it is called on. helium matches that inside entity
@@ -270,6 +271,13 @@ content (`x<!--k-->y` → `"xy"`, also for `EntityRef.Content()`), but keeps the
 the tree itself, at any depth (`<t>1<!--c-->2</t>` → `"1c2"`); a `SubstituteEntities(true)` parse copies an
 entity's comments into the tree, so there Content keeps them. `Content()` on a Comment or PI node returns its
 text, as libxml2's does.
+
+`CharacterData(n)` runs the same walk with `contentOwnCharData` (the `contentMode` bits select what the walk
+adds): Text/CDATA text and each EntityRef's expansion, with no Comment/PI text at any depth and nothing from an
+element child or an element inside an entity. It is the character data n holds directly, the same with or
+without entity substitution (`<m>1&m;2</m>` with `m`="a<b>c</b>d" → `"1ad2"`). A lone Text child takes the
+one-allocation fast path. A Text/CDATA n returns its own text and an EntityRef n its expansion's character
+data. The xsd validator reads element text for validation through it.
 
 The walk follows only the owner's own children (`nextOwnedSibling`): a foreign child — an entity reference's
 shared Entity child, owned by the DTD, whose sibling pointers belong to the DTD declaration list — ends the list

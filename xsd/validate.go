@@ -1121,18 +1121,25 @@ func missingTypeRefMessage(qn QName) string {
 }
 
 // rejectNonWhitespaceText reports a validity error and returns a non-nil error
-// if elem has any non-whitespace text or CDATA child. It is used for element-only
-// content types (including the XSD 1.1 synthesized empty+openContent type), where
-// character content other than whitespace is not allowed.
+// if elem has any non-whitespace text or CDATA child, or an entity reference
+// whose expansion holds such character data. It is used for element-only
+// content types (including the XSD 1.1 synthesized empty+openContent type),
+// where character content other than whitespace is not allowed.
 func (vc *validationContext) rejectNonWhitespaceText(ctx context.Context, elem *helium.Element) error {
 	for child := range helium.Children(elem) {
-		if child.Type() != helium.TextNode && child.Type() != helium.CDATASectionNode {
+		var allSpace bool
+		switch child.Type() {
+		case helium.TextNode, helium.CDATASectionNode:
+			// Use XSD/XML whitespace (space, tab, CR, LF) only: characters like
+			// NBSP (U+00A0) are NOT ignorable in element-only content, so
+			// strings.TrimSpace (which strips all Unicode space) must not be used.
+			allSpace = xmlchar.IsAllSpace(child.Content())
+		case helium.EntityRefNode:
+			allSpace = xmlchar.IsAllSpace(helium.CharacterData(child))
+		default:
 			continue
 		}
-		// Use XSD/XML whitespace (space, tab, CR, LF) only: characters like
-		// NBSP (U+00A0) are NOT ignorable in element-only content, so
-		// strings.TrimSpace (which strips all Unicode space) must not be used.
-		if !xmlchar.IsAllSpace(child.Content()) {
+		if !allSpace {
 			msg := "Character content other than whitespace is not allowed because the content type is 'element-only'."
 			vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem), msg)
 			return fmt.Errorf("text content in element-only type")
@@ -1437,7 +1444,7 @@ func (vc *validationContext) validateSimpleContent(ctx context.Context, elem *he
 		}
 	}
 
-	value := elemTextContent(elem)
+	value := helium.CharacterData(elem)
 	isEmpty := value == ""
 
 	// The element's in-scope namespaces, built only if a value check reads them.
@@ -1740,6 +1747,22 @@ func (vc *validationContext) validateEmptyContent(ctx context.Context, elem *hel
 				return fmt.Errorf("not expected")
 			}
 			if !xmlchar.IsAllSpace(child.Content()) {
+				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
+				return fmt.Errorf("not expected")
+			}
+		case helium.EntityRefNode:
+			// An entity reference is the character data of its expansion. One that
+			// expands to nothing leaves no character content, as it would after
+			// entity substitution.
+			text := helium.CharacterData(child)
+			if text == "" {
+				continue
+			}
+			if strict {
+				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the content type is empty.")
+				return fmt.Errorf("not expected")
+			}
+			if !xmlchar.IsAllSpace(text) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elem.LocalName(), "Character content is not allowed, because the type definition is simple.")
 				return fmt.Errorf("not expected")
 			}
@@ -3009,19 +3032,6 @@ func mixedInitialValue(elem *helium.Element, fixed string) (initial string, hasC
 	return string(s.initial), s.hasChar, s.hasElem, s.invalid
 }
 
-// elemTextContent returns the concatenated text content of an element,
-// including both text nodes and CDATA sections.
-func elemTextContent(elem *helium.Element) string {
-	var buf []byte
-	for child := range helium.Children(elem) {
-		switch child.Type() {
-		case helium.TextNode, helium.CDATASectionNode:
-			buf = append(buf, child.Content()...)
-		}
-	}
-	return string(buf)
-}
-
 // checkXsiNil parses the element's xsi:nil attribute as an xs:boolean (after
 // whitespace collapse). It returns whether the element is nilled ("true"/"1").
 // "false"/"0" and an absent attribute mean not-nilled. Any other lexical form
@@ -3120,6 +3130,15 @@ func (vc *validationContext) validateNilledElement(ctx context.Context, elem *he
 			// tolerates insignificant whitespace (matching libxml2); XSD 1.1 rejects
 			// any character content, including whitespace-only.
 			if vc.version == Version11 || !xmlchar.IsAllSpace(child.Content()) {
+				vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
+					"Character content is not allowed, because the element is nilled.")
+				return fmt.Errorf("content in nilled element")
+			}
+		case helium.EntityRefNode:
+			// The same rule applied to the reference's expansion; one that expands
+			// to nothing leaves no character content.
+			text := helium.CharacterData(child)
+			if text != "" && (vc.version == Version11 || !xmlchar.IsAllSpace(text)) {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), dn,
 					"Character content is not allowed, because the element is nilled.")
 				return fmt.Errorf("content in nilled element")

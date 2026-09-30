@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/nodelink"
@@ -240,9 +241,62 @@ func (n *docnode) Content() []byte {
 		return c
 	}
 	var b bytes.Buffer
-	appendChildContent(&b, n, []*docnode{n}, true)
+	appendChildContent(&b, n, []*docnode{n}, contentWithOther)
 	return b.Bytes()
 }
+
+// CharacterData returns the character data n holds directly, with every
+// entity reference expanded: the text a SubstituteEntities(true) parse would
+// put in n's own Text children. A Text or CDATA child adds its text, and an
+// EntityRef child adds the character data of its entity's replacement,
+// expanded the same way, so nested references expand too. An element child,
+// or an element inside an entity's replacement, adds nothing, and neither does
+// a comment or processing instruction at any depth. For a Text or CDATA n,
+// the result is its own text; for an EntityRef n, the character data of its
+// entity's replacement.
+//
+// This is the text XML Schema validates for an element (its character
+// information item children), and it is the same for a document parsed with
+// or without entity substitution. Content differs: it adds the text of
+// descendant elements and of comments and PIs that are n's own children.
+//
+// n must not be nil.
+func CharacterData(n Node) string {
+	switch v := n.(type) {
+	case *Text:
+		return string(v.rawContent())
+	case *CDATASection:
+		return string(v.rawContent())
+	case *EntityRef:
+		var b strings.Builder
+		appendEntityRefContent(&b, v, nil, contentOwnCharData)
+		return b.String()
+	}
+	dn := n.baseDocNode()
+	child := dn.firstChild
+	if child == nil {
+		return ""
+	}
+	if t, ok := child.(*Text); ok && nextOwnedChild(dn, child) == nil {
+		return string(t.rawContent())
+	}
+	var b strings.Builder
+	appendChildContent(&b, dn, []*docnode{dn}, contentOwnCharData)
+	return b.String()
+}
+
+// contentMode selects what appendChildContent adds beyond Text and CDATA text
+// and entity expansions.
+type contentMode uint8
+
+const (
+	// contentWithOther adds the text of a Comment, PI or namespace-node child
+	// (Content outside entity content).
+	contentWithOther contentMode = 1 << iota
+	// contentOwnCharData adds nothing for an element or other container child,
+	// so only the owner's own character data is collected (CharacterData).
+	contentOwnCharData
+)
 
 // contentSink is the buffer the content walk writes into: a *bytes.Buffer for
 // Content and a *strings.Builder for Attribute.Value.
@@ -256,9 +310,11 @@ type contentSink interface {
 // its text, an EntityRef child contributes its entity's expanded value
 // (appendEntityRefContent), an Entity child contributes its stored replacement
 // text, and any other container contributes the content of its own children. A
-// Comment, PI or namespace-node child contributes its own text only when
-// withOther is set (Content outside entity content); Attribute.Value and the
-// walk through an entity's children leave it out, as libxml2 does.
+// Comment, PI or namespace-node child contributes its own text only when mode
+// has contentWithOther (Content outside entity content); Attribute.Value and
+// the walk through an entity's children leave it out, as libxml2 does. When
+// mode has contentOwnCharData, an element or other container child
+// contributes nothing (CharacterData).
 //
 // The walk follows only owner's own children (nextOwnedSibling), so an entity
 // reference's shared Entity child never leads into the DTD's declaration list,
@@ -268,7 +324,7 @@ type contentSink interface {
 // of libxml2's XML_ENT_EXPANDING flag without writing to the shared Entity, so
 // concurrent readers of one document do not race. It is a path, not a global
 // visited set, so an entity referenced twice is expanded at each reference.
-func appendChildContent(w contentSink, owner *docnode, active []*docnode, withOther bool) {
+func appendChildContent(w contentSink, owner *docnode, active []*docnode, mode contentMode) {
 	var g siblingCycleGuard
 	for child := owner.firstChild; child != nil; {
 		cdn := child.baseDocNode()
@@ -281,16 +337,16 @@ func appendChildContent(w contentSink, owner *docnode, active []*docnode, withOt
 		case *CDATASection:
 			_, _ = w.Write(c.rawContent())
 		case *EntityRef:
-			appendEntityRefContent(w, c, active)
+			appendEntityRefContent(w, c, active, mode)
 		case *Entity:
 			_, _ = w.WriteString(c.content)
 		case *Comment, *ProcessingInstruction, *NamespaceNodeWrapper:
-			if withOther {
+			if mode&contentWithOther != 0 {
 				_, _ = w.Write(rawContent(child))
 			}
 		default:
-			if !slices.Contains(active, cdn) {
-				appendChildContent(w, cdn, append(active, cdn), withOther)
+			if mode&contentOwnCharData == 0 && !slices.Contains(active, cdn) {
+				appendChildContent(w, cdn, append(active, cdn), mode)
 			}
 		}
 		child = nextOwnedSibling(owner, cdn)
@@ -305,8 +361,10 @@ func appendChildContent(w contentSink, owner *docnode, active []*docnode, withOt
 // leaves out comments and PIs at every depth: libxml2's xmlBufGetChildContent
 // adds only Text and CDATA text and descends into other children, so a Comment
 // or PI inside an entity adds nothing. An entity whose replacement text was
-// never parsed into children contributes that text as stored.
-func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode) {
+// never parsed into children contributes that text as stored. The walk keeps
+// mode's contentOwnCharData, so an element inside the entity adds nothing for
+// CharacterData.
+func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode, mode contentMode) {
 	ent, ok := ref.firstChild.(*Entity)
 	if !ok {
 		ent = lookupReferencedEntity(ref)
@@ -326,7 +384,7 @@ func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode) {
 		_, _ = w.WriteString(ent.content)
 		return
 	}
-	appendChildContent(w, edn, append(active, edn), false)
+	appendChildContent(w, edn, append(active, edn), mode&^contentWithOther)
 }
 
 // lookupReferencedEntity resolves an unbound entity reference by name: a

@@ -777,3 +777,70 @@ func TestContentExpandsEntityReferences(t *testing.T) {
 		require.Equal(t, "xkyqz", string(sub.DocumentElement().FirstChild().Content()))
 	})
 }
+
+// CharacterData returns only the character data a node holds directly, with
+// entity references expanded: element children, elements inside an entity, and
+// comments and PIs at any depth add nothing. It is the same for a document
+// parsed with or without entity substitution.
+func TestCharacterData(t *testing.T) {
+	t.Parallel()
+
+	const src = `<!DOCTYPE r [` +
+		`<!ENTITY e "x">` +
+		`<!ENTITY f "y">` +
+		`<!ENTITY g "a&f;b">` +
+		`<!ENTITY h "&#38;#60;">` +
+		`<!ENTITY m "a<b>c&f;</b>d">` +
+		`<!ENTITY c "x<!--k-->y<?p q?>z">` +
+		`]>` +
+		`<r a="1&g;2">` +
+		`<t>1&e;2</t><g>1&g;2</g><m>1&m;2</m><c>&c;</c><k>1<!--top-->2<?pi v?>3<![CDATA[4]]></k><h>1&h;2</h><z/>` +
+		`</r>`
+
+	want := map[string]string{
+		"t": "1x2",
+		"g": "1ayb2",
+		"m": "1ad2",
+		"c": "xyz",
+		"k": "1234",
+		"h": "1<2",
+		"z": "",
+	}
+
+	for _, substitute := range []bool{false, true} {
+		doc, err := helium.NewParser().SubstituteEntities(substitute).Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+		require.Empty(t, helium.CharacterData(root), "an element with only element children (SubstituteEntities(%t))", substitute)
+		for child := range helium.Children(root) {
+			value, ok := want[child.Name()]
+			require.True(t, ok, "unexpected child %s", child.Name())
+			require.Equal(t, value, helium.CharacterData(child),
+				"CharacterData of <%s> (SubstituteEntities(%t))", child.Name(), substitute)
+		}
+		attr := root.GetAttributeNodeNS("a", "")
+		require.NotNil(t, attr)
+		require.Equal(t, "1ayb2", helium.CharacterData(attr), "CharacterData of @a (SubstituteEntities(%t))", substitute)
+	}
+
+	t.Run("leaf nodes", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		root := doc.DocumentElement()
+
+		m := root.FirstChild().NextSibling().NextSibling()
+		require.Equal(t, "m", m.Name())
+		require.Equal(t, "1", helium.CharacterData(m.FirstChild()), "a Text node is its own text")
+		ref := m.FirstChild().NextSibling()
+		require.Equal(t, helium.EntityRefNode, ref.Type())
+		require.Equal(t, "ad", helium.CharacterData(ref), "an entity reference is its expansion's character data")
+
+		k := m.NextSibling().NextSibling()
+		require.Equal(t, "k", k.Name())
+		comment := k.FirstChild().NextSibling()
+		require.Equal(t, helium.CommentNode, comment.Type())
+		require.Empty(t, helium.CharacterData(comment), "a comment holds no character data")
+		require.Equal(t, "4", helium.CharacterData(k.LastChild()), "a CDATA section is its own text")
+	})
+}

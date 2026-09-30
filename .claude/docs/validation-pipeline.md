@@ -113,7 +113,9 @@ materialization block is gated on `vc.version == Version11`, so XSD 1.0 inserts 
 exactly as authored with no namespace-declaration rewrite — byte-identical serialization (no golden exercises
 this case, so the gate is the only guard). **XDM context isolation** (`isolatedAssertTree`): the test is
 evaluated against a deep copy (`helium.CopyNode`) of the element rooted in NO document and with comment/PI
-nodes removed (`stripCommentsAndPIs`), so an absolute path `/`/`//` raises XPDY0050 (root is not a document
+nodes removed (`stripCommentsAndPIs`) and each entity reference replaced by a Text node holding the live
+reference's character data, joined with adjacent text (`expandAssertEntityRefs`, run from
+`mapAssertAnnotations`; the XDM has no entity reference nodes and the copy has no DTD to resolve them), so an absolute path `/`/`//` raises XPDY0050 (root is not a document
 node) — the assertion cannot navigate outside the element subtree — while the element's in-scope namespaces —
 INCLUDING an inherited default namespace (prefix "", when not already on the copy), so
 `namespace-uri-for-prefix('', .)` and unprefixed resolution survive isolation — are re-declared on the copy
@@ -1249,6 +1251,17 @@ to `validateRootElement`, whose content validation recurses through the whole su
      - Simple: no child elements, validate text vs type facets
      - Element-only/Mixed: match children against ModelGroup (`matchSequence()`/`matchChoice()`)
 
+Element text is read as it would be after entity substitution, so a document parsed without
+`SubstituteEntities` validates like one parsed with it. Simple content, `$value`, ID/ENTITY content, and
+IDC field values use `helium.CharacterData` (Text/CDATA plus each entity reference's expansion, never comment
+or PI text). The per-child character checks (`rejectNonWhitespaceText` for element-only content,
+`validateEmptyContent`, the nilled-element check, and the schema-side xs:annotation/xs:notation content
+checks) treat an EntityRef child as the `helium.CharacterData` of its expansion; one that expands to nothing
+adds no character content. `mixedInitialValue` walks entity expansions itself (budgeted, memoized, and also
+reporting entity-borne elements for cvc-elt.5.2.2.1). Attribute values come from `Attribute.Value()`, which
+expands references too. Elements inside an entity's replacement are not seen by the content-model match,
+the simple-content element check, or the per-child character checks.
+
 Fixed value constraints (element content and attribute values) are compared in
 the declared simple type's value space via `fixedValueMatches`. Both the fixed
 and instance values are first whitespace-normalized using the type's *effective*
@@ -1771,7 +1784,7 @@ member (`unionActiveMember`), reaching the atomic ID/IDREF leaves; the built-in
 collection is SKIPPED entirely when the element has CHILD ELEMENTS
 (`hasChildElement`): simple content forbids child elements, so pass 1 already
 rejected such an element structurally and there is no valid simple value here —
-`elemTextContent` ignores the children and a default/fixed would otherwise be
+`helium.CharacterData` ignores the children and a default/fixed would otherwise be
 substituted for non-empty content, fabricating an ID/IDREF on top of the real
 structural error. Otherwise, genuinely-empty element content falls back to the
 declaration's default/fixed value — EXCEPT on a CONFIRMED nilled element: one

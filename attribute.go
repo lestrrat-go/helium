@@ -109,7 +109,7 @@ func (n *Attribute) Value() string {
 		return string(t.rawContent())
 	}
 	var b strings.Builder
-	appendChildContent(&b, &n.docnode, []*docnode{&n.docnode}, false)
+	appendChildContent(&b, &n.docnode, []*docnode{&n.docnode}, 0)
 	return b.String()
 }
 

@@ -1089,7 +1089,11 @@ func entityRefTextSchema(v11 bool) string {
   <xs:element name="nil" type="xs:int" nillable="true"/>
   <xs:element name="ids">
     <xs:complexType>
-      <xs:sequence><xs:element name="id" type="xs:ID" maxOccurs="unbounded"/></xs:sequence>
+      <xs:sequence>
+        <xs:element name="w" maxOccurs="unbounded">
+          <xs:complexType><xs:sequence><xs:element name="id" type="xs:ID"/></xs:sequence></xs:complexType>
+        </xs:element>
+      </xs:sequence>
     </xs:complexType>
   </xs:element>
   <xs:element name="keys">
@@ -1115,6 +1119,12 @@ func entityRefTextSchema(v11 bool) string {
     <xs:complexType>
       <xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence>
       <xs:assert test="v = 'ab'"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="acmp">
+    <xs:complexType>
+      <xs:attribute name="n" type="xs:int"/>
+      <xs:assert test="@n = 42"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="alt" type="T">
@@ -1164,7 +1174,8 @@ func entityRefTextCases() []entityRefTextCase {
 		{name: "element-only whitespace through entity", entities: `<!ENTITY sp " ">`, body: `<eonly>&sp;<k>1</k></eonly>`, valid: true},
 		{name: "empty content text through entity", entities: `<!ENTITY c "x">`, body: `<empty>&c;</empty>`},
 		{name: "nilled text through entity", entities: `<!ENTITY c "1">`, body: `<nil ` + xsi + ` xsi:nil="true">&c;</nil>`},
-		{name: "duplicate ID through entity", entities: `<!ENTITY c "a">`, body: `<ids><id>&c;</id><id>a</id></ids>`},
+		{name: "distinct IDs through entity", entities: `<!ENTITY c "b">`, body: `<ids><w><id>&c;</id></w><w><id>a</id></w></ids>`, valid: true},
+		{name: "duplicate ID through entity", entities: `<!ENTITY c "a">`, body: `<ids><w><id>&c;</id></w><w><id>a</id></w></ids>`},
 		{name: "distinct keys through entities", entities: `<!ENTITY c "1"><!ENTITY d "2">`, body: `<keys><k>&c;</k><k>&d;</k></keys>`, valid: true},
 		{name: "duplicate key through entity", entities: `<!ENTITY c "2">`, body: `<keys><k>&c;</k><k>2</k></keys>`},
 		{name: "keyref resolved through entity", entities: `<!ENTITY c "2">`, body: `<keys><k>1</k><k>2</k><ref>&c;</ref></keys>`, valid: true},
@@ -1173,6 +1184,9 @@ func entityRefTextCases() []entityRefTextCase {
 		{name: "simple assert invalid", entities: `<!ENTITY c "5">`, body: `<big>&c;</big>`, v11Only: true},
 		{name: "complex assert valid", entities: `<!ENTITY c "b">`, body: `<cmp><v>a&c;</v></cmp>`, valid: true, v11Only: true},
 		{name: "complex assert invalid", entities: `<!ENTITY c "c">`, body: `<cmp><v>a&c;</v></cmp>`, v11Only: true},
+		{name: "complex assert on entity-only text", entities: `<!ENTITY c "b">`, body: `<cmp><v>&c;</v></cmp>`, v11Only: true},
+		{name: "attribute assert valid", entities: `<!ENTITY a "4"><!ENTITY c "&a;2">`, body: `<acmp n="&c;"/>`, valid: true, v11Only: true},
+		{name: "attribute assert invalid", entities: `<!ENTITY c "41">`, body: `<acmp n="&c;"/>`, v11Only: true},
 		{name: "alternative selected through entity", entities: `<!ENTITY c "int">`, body: `<alt t="&c;">ab</alt>`, v11Only: true},
 		{name: "alternative content through entity", entities: `<!ENTITY c "int"><!ENTITY v "12">`, body: `<alt t="&c;">&v;</alt>`, valid: true, v11Only: true},
 	}
