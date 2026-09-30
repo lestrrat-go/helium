@@ -281,3 +281,68 @@ func TestOrderStepResultReservesDocument(t *testing.T) {
 		require.Same(t, doc2Nodes[0], got[0], "doc2 is registered first after Reset")
 	})
 }
+
+// stepOrderEntitySrc references entity e, whose content references entity f,
+// inside the body, after an element sibling, so the document-order index
+// places the content of both entities at their last reference: the content
+// of f sits in the middle of the content of e. The internal subset holds a
+// comment and a PI on either side of the declarations.
+const stepOrderEntitySrc = `<!DOCTYPE r [<!--c0--><?p0 x?><!ENTITY f "<d/>t"><!ENTITY e "<b/>&f;<c/>"><!--c1-->]>` +
+	`<r><a id="a1"><z id="z1"/>&e;</a><a id="a2">&f;&e;<z id="z2"/></a></r>`
+
+// TestOrderStepResultEntityInputs checks steps whose inputs are entity
+// references, Entity nodes or the DTD against DeduplicateNodes.
+func TestOrderStepResultEntityInputs(t *testing.T) {
+	doc := parseStepOrderDoc(t, stepOrderEntitySrc)
+	a1 := elementByID(t, doc, "a1")
+	a2 := elementByID(t, doc, "a2")
+	dtd := doc.IntSubset()
+	require.NotNil(t, dtd)
+	refE1 := childByType(a1, helium.EntityRefNode, "e")
+	refF2 := childByType(a2, helium.EntityRefNode, "f")
+	refE2 := childByType(a2, helium.EntityRefNode, "e")
+	require.NotNil(t, refE1)
+	require.NotNil(t, refF2)
+	require.NotNil(t, refE2)
+	entE := childByType(dtd, helium.EntityNode, "e")
+	entF := childByType(dtd, helium.EntityNode, "f")
+	require.NotNil(t, entE)
+	require.NotNil(t, entF)
+
+	t.Run("one input matches DeduplicateNodes on every axis", func(t *testing.T) {
+		for _, ctxNode := range []helium.Node{refE1, refF2, refE2, entE, entF, dtd} {
+			for _, axis := range allAxes {
+				requireSameAsDedup(t, axis, []helium.Node{ctxNode})
+			}
+		}
+	})
+
+	t.Run("same-depth inputs match DeduplicateNodes", func(t *testing.T) {
+		sameDepthSets := [][]helium.Node{
+			{refF2, refE2},
+			{refE1, refF2, refE2},
+			{dtd, doc.DocumentElement()},
+			{a1, entE},
+			{entE, entF},
+		}
+		for _, inputs := range sameDepthSets {
+			for _, axis := range allAxes {
+				requireSameAsDedup(t, axis, inputs)
+			}
+		}
+	})
+
+	t.Run("entity inputs take the sorting path", func(t *testing.T) {
+		// The index places the content of f inside the content of e, so the
+		// child steps of e and f interleave: the concatenation b c d t is not
+		// in document order, and only DeduplicateNodes sorts it.
+		out := traverseAll(t, ixpath.AxisChild, []helium.Node{entE, entF})
+		require.Len(t, out, 4)
+		want, err := ixpath.DeduplicateNodes(slices.Clone(out), &ixpath.DocOrderCache{}, ixpath.DefaultMaxNodeSetLength)
+		require.NoError(t, err)
+		require.NotEqual(t, out, want)
+		got, err := ixpath.OrderStepResult(out, []helium.Node{entE, entF}, ixpath.AxisChild, &ixpath.DocOrderCache{}, ixpath.DefaultMaxNodeSetLength)
+		require.NoError(t, err)
+		require.Equal(t, want, got)
+	})
+}

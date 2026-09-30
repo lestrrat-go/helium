@@ -7,6 +7,7 @@ import (
 	"time"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/stretchr/testify/require"
 )
@@ -377,4 +378,135 @@ func TestTraverseAxisNamespace_WideEnumerationChecksContext(t *testing.T) {
 	require.Len(t, nodes, width+1)
 	require.GreaterOrEqual(t, ctx.calls, 2*width,
 		"namespace helpers must check ctx.Err() per declared namespace in their inner loops")
+}
+
+// entityBoundarySrc declares an entity between comments and PIs of the
+// internal subset and references it twice, once next to an element and once
+// inside one.
+const entityBoundarySrc = `<!DOCTYPE a [<!--c0--><?p0 x?><!ENTITY e "<b id='eb'>ent<!--ec--></b>"><!--c1--><?p1 y?>]>` +
+	`<a><b id="b1"/>&e;<x>&e;<!--cx--></x></a>`
+
+// axisNodeLabel names a node by kind, and by name, id or content where one
+// tells it apart, so an axis result reads as a short list.
+func axisNodeLabel(n helium.Node) string {
+	switch n.Type() {
+	case helium.ElementNode:
+		if e, ok := n.(*helium.Element); ok {
+			if id, ok := e.GetAttribute("id"); ok {
+				return n.Name() + "#" + id
+			}
+		}
+		return n.Name()
+	case helium.TextNode:
+		return "text(" + string(n.Content()) + ")"
+	case helium.CommentNode:
+		return "comment(" + string(n.Content()) + ")"
+	case helium.ProcessingInstructionNode:
+		return "pi(" + n.Name() + ")"
+	case helium.EntityRefNode:
+		return "entref(" + n.Name() + ")"
+	case helium.EntityNode:
+		return "entity(" + n.Name() + ")"
+	case helium.DTDNode:
+		return "dtd"
+	case helium.DocumentNode:
+		return "doc"
+	}
+	return "type" + strconv.Itoa(int(n.Type()))
+}
+
+func axisLabels(t *testing.T, axis ixpath.AxisType, n helium.Node) []string {
+	t.Helper()
+	nodes, err := ixpath.TraverseAxis(t.Context(), axis, n, ixpath.DefaultMaxNodeSetLength)
+	require.NoError(t, err)
+	labels := make([]string, 0, len(nodes))
+	for _, m := range nodes {
+		labels = append(labels, axisNodeLabel(m))
+	}
+	return labels
+}
+
+// firstOfType returns the first node of type typ in a pre-order walk of n
+// that follows every child link, entity references' Entity children included.
+func firstOfType(n helium.Node, typ helium.ElementType) helium.Node {
+	for c := range helium.Children(n) {
+		if c.Type() == typ {
+			return c
+		}
+		if found := firstOfType(c, typ); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// TestTraverseAxisDescendant_EntityBoundary checks that the descendant axes
+// stop at the owned-child boundary, as the child axis does. An entity
+// reference's only child is the Entity node, owned by the DTD, whose sibling
+// links belong to the DTD's declaration list; the descendant walk must not
+// follow them into the DTD's comments and PIs.
+func TestTraverseAxisDescendant_EntityBoundary(t *testing.T) {
+	t.Run("entities not substituted", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(entityBoundarySrc))
+		require.NoError(t, err)
+		ref := firstOfType(doc, helium.EntityRefNode)
+		require.NotNil(t, ref)
+		ent := ref.FirstChild()
+		require.Equal(t, helium.EntityNode, ent.Type())
+		dtd := doc.IntSubset()
+		root := doc.DocumentElement()
+		x := childByType(root, helium.ElementNode, "x")
+		require.NotNil(t, x)
+
+		cases := []struct {
+			name string
+			node helium.Node
+			desc []string
+		}{
+			{name: "entity reference", node: ref, desc: []string{}},
+			{name: "entity", node: ent, desc: []string{"b#eb", "text(ent)", "comment(ec)"}},
+			{name: "dtd", node: dtd, desc: []string{"comment(c0)", "pi(p0)", "comment(c1)", "pi(p1)"}},
+			{name: "element holding a reference", node: x, desc: []string{"comment(cx)"}},
+			{name: "root element", node: root, desc: []string{"b#b1", "x", "comment(cx)"}},
+			{name: "document", node: doc, desc: []string{"a", "b#b1", "x", "comment(cx)"}},
+		}
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				require.Equal(t, c.desc, axisLabels(t, ixpath.AxisDescendant, c.node))
+				want := append([]string{axisNodeLabel(c.node)}, c.desc...)
+				require.Equal(t, want, axisLabels(t, ixpath.AxisDescendantOrSelf, c.node))
+			})
+		}
+	})
+
+	t.Run("entities substituted", func(t *testing.T) {
+		doc, err := helium.NewParser().SubstituteEntities(true).Parse(t.Context(), []byte(entityBoundarySrc))
+		require.NoError(t, err)
+		require.Nil(t, firstOfType(doc.DocumentElement(), helium.EntityRefNode))
+		x := childByType(doc.DocumentElement(), helium.ElementNode, "x")
+		require.NotNil(t, x)
+		require.Equal(t, []string{"b#eb", "text(ent)", "comment(ec)", "comment(cx)"},
+			axisLabels(t, ixpath.AxisDescendant, x))
+		require.Equal(t, []string{"comment(c0)", "pi(p0)", "comment(c1)", "pi(p1)"},
+			axisLabels(t, ixpath.AxisDescendant, doc.IntSubset()))
+	})
+
+	t.Run("hand-built DTD holding an element", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<a/>`))
+		require.NoError(t, err)
+		dtd, err := doc.CreateInternalSubset("a", "", "")
+		require.NoError(t, err)
+		x, err := doc.CreateElement("x")
+		require.NoError(t, err)
+		require.NoError(t, dtd.AddChild(x))
+		_, err = dtd.AddEntity("e", enum.InternalGeneralEntity, "", "", "v")
+		require.NoError(t, err)
+		ref, err := doc.CreateReference("e")
+		require.NoError(t, err)
+		require.NoError(t, doc.DocumentElement().AddChild(ref))
+
+		require.Empty(t, axisLabels(t, ixpath.AxisDescendant, ref))
+		require.Equal(t, []string{"entref(e)"}, axisLabels(t, ixpath.AxisDescendantOrSelf, ref))
+		require.Equal(t, []string{"x"}, axisLabels(t, ixpath.AxisDescendant, dtd))
+	})
 }

@@ -290,7 +290,7 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 					attrNS = ns
 				}
 			}
-			copiedAttr, err := out.doc.CreateAttribute(attr.LocalName(), attr.Value(), attrNS)
+			copiedAttr, err := newStandaloneAttribute(out.doc, attr.LocalName(), attr.Value(), attrNS)
 			if err != nil {
 				return err
 			}

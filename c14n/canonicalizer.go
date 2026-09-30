@@ -1491,22 +1491,20 @@ func (c *canonicalizer) writeAttribute(entry attrSortEntry) error {
 	return err
 }
 
-// writeAttrValue writes the canonical attribute value by walking child nodes.
+// writeAttrValue writes the canonical attribute value: the value with every
+// entity reference replaced (libxml2: xmlNodeListGetString(doc,
+// attr->children, 1) in xmlC14NPrintAttrs), escaped. A value held in one text
+// child is escaped from that child directly. Any other shape, such as the
+// Text/EntityRef list a SubstituteEntities(false) parse builds, goes through
+// Attribute.Value, which expands references nested in an entity's
+// replacement text as well.
 func (c *canonicalizer) writeAttrValue(attr *helium.Attribute) error {
-	for child := range helium.Children(attr) {
-		switch child.Type() {
-		case helium.TextNode:
-			if err := escapeAttrValue(c.out, child.Content()); err != nil {
-				return err
-			}
-		case helium.EntityRefNode:
-			// Expand entity reference children recursively
-			for entChild := range helium.Children(child) {
-				if err := escapeAttrValue(c.out, entChild.Content()); err != nil {
-					return err
-				}
-			}
-		}
+	first := attr.FirstChild()
+	if first == nil {
+		return nil
 	}
-	return nil
+	if first.Type() == helium.TextNode && first.NextSibling() == nil {
+		return escapeAttrValue(c.out, first.Content())
+	}
+	return escapeAttrValue(c.out, []byte(attr.Value()))
 }
