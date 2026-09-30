@@ -75,10 +75,14 @@ skip checks while `sameDepth` walks them), always sorts: the index places an ent
 content at the last reference to it while a raw axis walk from inside the content climbs
 through the `Entity` and the DTD, so a following step from there, or the child steps of
 two entities, or of an entity and an element, come out of document order. A skipping
-step reserves its document's registration order in the cache (unexported `reserveDocument`) without indexing it, so the order between documents stays
-the one indexing would have produced. `Position`, `Compare` and every indexing path index
-a reserved document on first use, under its reserved order. xpath1 ends every location
-step with it; xpath3 still uses `DeduplicateNodes`.
+step reserves its document's registration order in the cache (unexported
+`reserveDocument`) without indexing it, so the order between documents stays the one
+indexing would have produced. `Position`, `Compare` and every indexing path index a
+reserved document on first use, under its reserved order. xpath1 and xpath3 end every
+axis step of a location path with it. In xpath3 the other node-ordering sites keep
+`DeduplicateNodes`/`MergeNodeSets`: a path step whose step expression is not an axis
+step (`E1/(a|b)`, `E1/f()`, `E1/$v`, `evalPathStepExpr`), the merge of the per-node
+results of `E1/E2` (`evalPathExpr`), union, and intersect/except.
 
 ### `StringValue` signatures
 

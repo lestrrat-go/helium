@@ -210,6 +210,9 @@ func pickDTD(doc *helium.Document) helium.Node {
 	return dtd
 }
 
+// exprDescendantOrSelfNode is the step that `//` abbreviates.
+const exprDescendantOrSelfNode = "descendant-or-self::node()"
+
 // stepOrderPathExprs are path expressions whose result XPath 3.1 defines to be
 // in document order without duplicates, so every result is also checked
 // against a fresh document-order index.
@@ -229,7 +232,7 @@ var stepOrderPathExprs = []string{
 	"/*/*/*", "/*/*/*/..", "/*/*/@*", "//comment()/..", "//b/parent::node()/parent::node()",
 	"$nodes/b", "$nodes//b", "$nodes/..", "/a/b | $other/b", "//b | $other//b",
 	"//b | ($other/b | $other/c)", "$other/b | /a/b", "($nodes)[1]//c",
-	"descendant-or-self::node()", ".//node()", ".//comment()", ".//processing-instruction()", ".//text()",
+	exprDescendantOrSelfNode, ".//node()", ".//comment()", ".//processing-instruction()", ".//text()",
 	"descendant::node()/..", "child::node()", "self::node()", "descendant::x",
 	"$ents/node()", "$ents/*/node()", "$ents/..", "$ents/self::*", "$ents/@*", "$ents/namespace::*",
 	"$ents/following-sibling::node()", "$ents/following::node()", "$ents/preceding::node()",
@@ -637,4 +640,34 @@ func TestStepResultOrderSharedCache(t *testing.T) {
 	shared2 := eval.DocOrderCache(xpath3.NewDocOrderCache())
 	require.Equal(t, []string{"y1", "y2"}, stepOrderIDs(t, shared2, "/a/b", doc2))
 	require.Equal(t, []string{"y1", "y2", "x1", "x2"}, stepOrderIDs(t, shared2, "/a/b | $other/b", doc1))
+}
+
+// TestStepResultOrderNodeLimit checks that the node-sequence limit still
+// applies to steps whose result needs no sort: child steps from one input,
+// attribute steps from same-depth inputs, and a reverse axis from one input,
+// each with and without a predicate.
+func TestStepResultOrderNodeLimit(t *testing.T) {
+	doc := parseStepOrderDoc(t, `<root><item id="i1" k="1"><v/></item><item id="i2" k="2"><v/></item><item id="i3"><v/></item></root>`, false)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).MaxNodesForTesting(2)
+	v := doc.DocumentElement().FirstChild().FirstChild()
+	cases := []struct {
+		expr string
+		node helium.Node
+	}{
+		{expr: "/root/item", node: doc},
+		{expr: "/root/item[@id]", node: doc},
+		{expr: "/root/item[position() <= 2]/@*", node: doc},
+		{expr: "/root/item[position() <= 2]/@*[true()]", node: doc},
+		{expr: "ancestor-or-self::node()", node: v},
+		{expr: "ancestor-or-self::node()[. instance of element()]", node: v},
+	}
+	for _, c := range cases {
+		_, err := eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(c.expr), c.node)
+		require.ErrorIs(t, err, xpath3.ErrNodeSetLimit, c.expr)
+	}
+	r, err := eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile("/root/item[position() <= 2]/@id"), doc)
+	require.NoError(t, err)
+	nodes, err := r.Nodes()
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
 }

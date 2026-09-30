@@ -631,6 +631,9 @@ XPath 3.1 expression parsing and evaluation.
 - Type system: Sequence ([]Item), AtomicValue, NodeItem, MapItem, ArrayItem, FunctionItem
 - Structured errors: XPathError with W3C error codes (XPTY0004, FOER0000, etc.)
 - Limits: recursion 5000, node-set 10M, configurable op limit
+- Document order: every axis step of a location path ends in `internal/xpath.OrderStepResult` (same skip rules as
+  xpath1); non-axis path steps (`E1/(a|b)`, function calls, `$v` steps), the `E1/E2` merge, union and
+  intersect/except sort through `DeduplicateNodes`/`MergeNodeSets`
 - Runtime: `Compile()` first tries a direct fast path for simple path-like expressions and simple predicate
   comparisons, otherwise lowers AST to a VM instruction graph while collecting the prefix-validation plan,
   keeping trivial leaves inline in parent payloads and reusing parsed slices on the owned compile path;
