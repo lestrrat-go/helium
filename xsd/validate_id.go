@@ -100,7 +100,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		// must still be collected. Attribute IDs always apply (handled below).
 		// Only collect from genuinely-valid simple content. Simple content forbids
 		// CHILD ELEMENTS; if the element has any, pass 1 already rejected it
-		// structurally and there is no valid simple value here — `elemTextContent`
+		// structurally and there is no valid simple value here — `helium.CharacterData`
 		// would ignore the children (and a default/fixed would be substituted for a
 		// non-empty element), fabricating an ID/IDREF that never existed. Skipping
 		// such elements avoids piling a spurious duplicate/dangling on top of the
@@ -108,7 +108,7 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 		if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
 			hostDecl := vc.idcHostDecl(elem)
 			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
-				raw := elemTextContent(elem)
+				raw := helium.CharacterData(elem)
 				// A default/fixed value is only the element's value when the content is
 				// genuinely empty (no text, no children — children already excluded
 				// above).
@@ -225,7 +225,7 @@ func (vc *validationContext) collectIDNodes(ctx context.Context, doc *helium.Doc
 		if td != nil && td.ContentType == ContentTypeSimple && vc.isIDFamilyType(td) && !hasChildElement(elem) {
 			hostDecl := vc.idcHostDecl(elem)
 			if hostDecl == nil || !hostDecl.Nillable || !isXsiNilTrue(elem) {
-				raw := elemTextContent(elem)
+				raw := helium.CharacterData(elem)
 				if raw == "" && hostDecl != nil {
 					if hostDecl.Fixed != nil {
 						raw = *hostDecl.Fixed

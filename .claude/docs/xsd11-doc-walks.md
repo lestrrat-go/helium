@@ -31,7 +31,7 @@
     attribute is invalid even with the declared use absent.
   - list/union values decompose to atomic ID/IDREF leaves via the active-member resolver. Element-content
     collection is SKIPPED when the element has CHILD ELEMENTS (`hasChildElement`; simple content forbids them,
-    so pass 1 already rejected it structurally; `elemTextContent` ignores children, and a default/fixed must
+    so pass 1 already rejected it structurally; `helium.CharacterData` ignores children, and a default/fixed must
     not substitute for non-empty content — else a spurious duplicate/dangling).
   - A default/fixed value applies only to genuinely-empty content, NEVER a CONFIRMED nilled element — a
     DECLARED nillable (`idcHostDecl(elem).Nillable`) carrying `xsi:nil="true"` (else a fabricated duplicate ID

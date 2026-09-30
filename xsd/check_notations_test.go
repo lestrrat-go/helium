@@ -66,6 +66,13 @@ func TestNotationStructuralRules(t *testing.T) {
 </xs:schema>`,
 		},
 		{
+			name: "non-whitespace text through an entity reference",
+			schema: `<!DOCTYPE xs:schema [<!ENTITY t "Some Text">]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:notation name="jpeg" public="image/jpeg">&t;</xs:notation>
+</xs:schema>`,
+		},
+		{
 			name: "disallowed non-annotation child",
 			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="jpeg" public="image/jpeg"><xs:sequence/></xs:notation>
@@ -129,6 +136,13 @@ func TestNotationStructuralRules(t *testing.T) {
 			name: "foreign-namespaced attribute allowed",
 			schema: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:foo">
   <xs:notation a:b="c" name="jpeg" public="image/jpeg"/>
+</xs:schema>`,
+		},
+		{
+			name: "whitespace through an entity reference",
+			schema: `<!DOCTYPE xs:schema [<!ENTITY sp " ">]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:notation name="jpeg" public="image/jpeg">&sp;</xs:notation>
 </xs:schema>`,
 		},
 		{

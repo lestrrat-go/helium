@@ -332,6 +332,11 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `Document.DocumentElement()` of a rootless doc) without panicking: the iterators
   (`Children`/`ChildElements`/`Descendants`) yield nothing; `Walk` returns `ErrNilNode`. `Walk` allocates
   O(depth), independent of sibling-list width (cycle guards: `node-types.md`)
+- `CharacterData(node) → string` (`node.go`) — the character data a node holds directly, entity references
+  expanded: Text/CDATA children plus each EntityRef child's expansion (nested references too). Element
+  children, elements inside an entity, and comments/PIs at any depth add nothing; a Text/CDATA node is its own
+  text and an EntityRef its expansion's character data. Same result with or without `SubstituteEntities`. It is
+  the text XSD validation reads for an element (`node-types.md` "Content() Default")
 - `CopyNode(src, targetDoc)` — deep copy across documents; a nil or typed-nil `src` returns `ErrNilNode` instead of
   panicking. A nil `targetDoc` creates a standalone copy. A copied named `EntityRef` resolves only against a
   non-nil `targetDoc`'s declarations: a bound source reference first resolves in the corresponding destination

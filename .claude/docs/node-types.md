@@ -272,6 +272,13 @@ equals the Content of the tree a `SubstituteEntities(true)` parse builds (`<g>1&
 returns its text, as libxml2's does. XPath string-value (`internal/xpath.StringValue`) walks Text/CDATA
 descendants itself and does not call `Content()`.
 
+`CharacterData(n)` runs the same walk with `ownOnly` set, which stops the descent into elements and other
+containers, including inside entity expansions: Text/CDATA text and each EntityRef's expansion, with no
+Comment/PI text and nothing from an element child or an element inside an entity. It is the character data n holds directly, the same with or
+without entity substitution (`<m>1&m;2</m>` with `m`="a<b>c</b>d" → `"1ad2"`). A lone Text child takes the
+one-allocation fast path. A Text/CDATA n returns its own text and an EntityRef n its expansion's character
+data. The xsd validator reads element text for validation through it.
+
 The walk follows only the owner's own children (`nextOwnedSibling`): a foreign child — an entity reference's
 shared Entity child, owned by the DTD, whose sibling pointers belong to the DTD declaration list — ends the list
 instead of spilling into another list's siblings, and `siblingCycleGuard` (Brent) stops a cyclic sibling

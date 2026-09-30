@@ -166,7 +166,8 @@ func typeHasAssertions(td *TypeDef) bool {
 
 // isolatedAssertTree builds the isolated XDM tree an xs:assert is evaluated
 // against: a deep copy of elem rooted in a fresh document, with comment and
-// processing-instruction nodes removed (XSD 1.1 §3.13.4.2). The returned
+// processing-instruction nodes removed (XSD 1.1 §3.13.4.2) and each entity
+// reference replaced by its character data (mapAssertAnnotations). The returned
 // annotation map carries the PSVI type annotations from the live tree onto the
 // corresponding copied element/attribute nodes so typed atomization (e.g. a
 // typed attribute in a value comparison) still works. If the copy fails for any
@@ -216,8 +217,8 @@ func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *heliu
 	var ann map[helium.Node]string
 	if vc.assertAnnotations != nil {
 		ann = make(map[helium.Node]string, len(vc.assertAnnotations))
-		vc.mapAssertAnnotations(ctx, elem, ce, vc.assertAnnotations, ann, true)
 	}
+	vc.mapAssertAnnotations(ctx, elem, ce, vc.assertAnnotations, ann, true)
 	stripCommentsAndPIs(ce)
 	return ce, ann
 }
@@ -226,7 +227,11 @@ func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *heliu
 // copy in parallel (helium.CopyNode preserves child node types and order), copying
 // each element's and attribute's type annotation from src (keyed by live node) into
 // dst (keyed by copied node). It runs BEFORE comment/PI stripping so the two trees
-// still align node-for-node.
+// still align node-for-node. A nil src copies no annotation.
+//
+// The same walk replaces each entity reference in the copy with the character
+// data of the live reference it was copied from (expandAssertEntityRefs), since
+// the XDM tree an assertion reads has no entity reference nodes.
 //
 // The assertion-tree ROOT element is deliberately left UNannotated (isRoot): an
 // xs:assert is part of determining the element's own validity, so its type is not
@@ -260,15 +265,73 @@ func (vc *validationContext) mapAssertAnnotations(ctx context.Context, orig, cop
 	}
 	oc := childNodes(orig)
 	cc := childNodes(copied)
+	hasRef := false
 	for i := range oc {
 		if i >= len(cc) {
 			break
+		}
+		if oc[i].Type() == helium.EntityRefNode {
+			hasRef = true
+			continue
 		}
 		oe, ok1 := helium.AsNode[*helium.Element](oc[i])
 		ce, ok2 := helium.AsNode[*helium.Element](cc[i])
 		if ok1 && ok2 {
 			vc.mapAssertAnnotations(ctx, oe, ce, src, dst, false)
 		}
+	}
+	if hasRef {
+		expandAssertEntityRefs(oc, cc)
+	}
+}
+
+// expandAssertEntityRefs replaces each entity reference among cc, the children of
+// an element in the isolated assert copy, with a Text node holding the character
+// data of the live reference at the same index in oc, then joins adjacent Text
+// children, so the copy carries the text entity substitution would give it. The
+// copy lives in a fresh document without the live DTD, so the text is read from
+// the live reference. A reference that expands to no text is removed.
+func expandAssertEntityRefs(oc, cc []helium.Node) {
+	var parent *helium.Element
+	for i := range min(len(oc), len(cc)) {
+		if oc[i].Type() != helium.EntityRefNode {
+			continue
+		}
+		ref, ok := cc[i].(helium.MutableNode)
+		if !ok {
+			continue
+		}
+		if parent == nil {
+			parent, _ = helium.AsNode[*helium.Element](cc[i].Parent())
+		}
+		text := helium.CharacterData(oc[i])
+		if text == "" {
+			helium.UnlinkNode(ref)
+			continue
+		}
+		_ = ref.Replace(ref.OwnerDocument().CreateText([]byte(text)))
+	}
+	if parent != nil {
+		joinAdjacentText(parent)
+	}
+}
+
+// joinAdjacentText merges each run of adjacent Text children of elem into the
+// run's first node.
+func joinAdjacentText(elem *helium.Element) {
+	var prev *helium.Text
+	for _, child := range childNodes(elem) {
+		t, ok := child.(*helium.Text)
+		if !ok {
+			prev = nil
+			continue
+		}
+		if prev == nil {
+			prev = t
+			continue
+		}
+		_ = prev.AppendText(t.Content())
+		helium.UnlinkNode(t)
 	}
 }
 
@@ -286,8 +349,8 @@ func (vc *validationContext) materializeAssertDefault(ctx context.Context, orig,
 	if !ok || ev.value == "" {
 		return
 	}
-	if elemTextContent(copied) != "" {
-		return // copy already carries content; do not overwrite
+	if helium.CharacterData(orig) != "" {
+		return // the element carries content; do not overwrite
 	}
 	_ = copied.AppendText([]byte(vc.materializeAssertText(ctx, copied, ev)))
 }
@@ -359,7 +422,7 @@ func (vc *validationContext) assertValueSequence(ctx context.Context, elem *heli
 	// simpleContent chain (a narrowing inherited through derived types), matching
 	// what validateSimpleContent validates against.
 	valueType := effectiveContentSimpleType(td)
-	value := elemTextContent(elem)
+	value := helium.CharacterData(elem)
 	isEmpty := value == ""
 	if isEmpty && edecl != nil {
 		if edecl.Fixed != nil {

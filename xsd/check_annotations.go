@@ -126,6 +126,10 @@ func (c *compiler) checkAnnotationDecl(ctx context.Context, elem *helium.Element
 			if !xmlchar.IsAllSpace(child.Content()) {
 				invalid = true
 			}
+		case helium.EntityRefNode:
+			if !xmlchar.IsAllSpace(helium.CharacterData(child)) {
+				invalid = true
+			}
 		case helium.ElementNode:
 			ce, ok := child.(*helium.Element)
 			if !ok {

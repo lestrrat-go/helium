@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/nodelink"
@@ -245,8 +246,48 @@ func (n *docnode) Content() []byte {
 		}
 	}
 	var b bytes.Buffer
-	appendChildContent(&b, n, []*docnode{n})
+	appendChildContent(&b, n, []*docnode{n}, false)
 	return b.Bytes()
+}
+
+// CharacterData returns the character data n holds directly, with every
+// entity reference expanded: the text a SubstituteEntities(true) parse would
+// put in n's own Text children. A Text or CDATA child adds its text, and an
+// EntityRef child adds the character data of its entity's replacement,
+// expanded the same way, so nested references expand too. An element child,
+// or an element inside an entity's replacement, adds nothing, and neither does
+// a comment or processing instruction at any depth. For a Text or CDATA n,
+// the result is its own text; for an EntityRef n, the character data of its
+// entity's replacement.
+//
+// This is the text XML Schema validates for an element (its character
+// information item children), and it is the same for a document parsed with
+// or without entity substitution. Content differs: it also adds the text of
+// descendant elements.
+//
+// n must not be nil.
+func CharacterData(n Node) string {
+	switch v := n.(type) {
+	case *Text:
+		return string(v.rawContent())
+	case *CDATASection:
+		return string(v.rawContent())
+	case *EntityRef:
+		var b strings.Builder
+		appendEntityRefContent(&b, v, nil, true)
+		return b.String()
+	}
+	dn := n.baseDocNode()
+	child := dn.firstChild
+	if child == nil {
+		return ""
+	}
+	if t, ok := child.(*Text); ok && nextOwnedChild(dn, child) == nil {
+		return string(t.rawContent())
+	}
+	var b strings.Builder
+	appendChildContent(&b, dn, []*docnode{dn}, true)
+	return b.String()
 }
 
 // contentSink is the buffer the content walk writes into: a *bytes.Buffer for
@@ -262,7 +303,10 @@ type contentSink interface {
 // (appendEntityRefContent), an Entity child contributes its stored replacement
 // text, and any other container contributes the content of its own children. A
 // Comment, PI or namespace-node child has no children and contributes nothing,
-// as in libxml2, which adds only Text and CDATA text at every depth.
+// as in libxml2, which adds only Text and CDATA text at every depth. With
+// ownOnly set (CharacterData), an element or other container child contributes
+// nothing, here and inside entity expansions, so only the owner's own
+// character data is collected.
 //
 // The walk follows only owner's own children (nextOwnedSibling), so an entity
 // reference's shared Entity child never leads into the DTD's declaration list,
@@ -272,7 +316,7 @@ type contentSink interface {
 // of libxml2's XML_ENT_EXPANDING flag without writing to the shared Entity, so
 // concurrent readers of one document do not race. It is a path, not a global
 // visited set, so an entity referenced twice is expanded at each reference.
-func appendChildContent(w contentSink, owner *docnode, active []*docnode) {
+func appendChildContent(w contentSink, owner *docnode, active []*docnode, ownOnly bool) {
 	var g siblingCycleGuard
 	for child := owner.firstChild; child != nil; {
 		cdn := child.baseDocNode()
@@ -285,14 +329,14 @@ func appendChildContent(w contentSink, owner *docnode, active []*docnode) {
 		case *CDATASection:
 			_, _ = w.Write(c.rawContent())
 		case *EntityRef:
-			appendEntityRefContent(w, c, active)
+			appendEntityRefContent(w, c, active, ownOnly)
 		case *Entity:
 			_, _ = w.WriteString(c.content)
 		case *Comment, *ProcessingInstruction, *NamespaceNodeWrapper:
 			// No text: libxml2 descends into these, and they have no children.
 		default:
-			if !slices.Contains(active, cdn) {
-				appendChildContent(w, cdn, append(active, cdn))
+			if !ownOnly && !slices.Contains(active, cdn) {
+				appendChildContent(w, cdn, append(active, cdn), false)
 			}
 		}
 		child = nextOwnedSibling(owner, cdn)
@@ -305,8 +349,9 @@ func appendChildContent(w contentSink, owner *docnode, active []*docnode) {
 // predefined entity contributes its character; any other entity contributes
 // the content of its parsed children, expanded by appendChildContent, which
 // leaves out comments and PIs at every depth. An entity whose replacement text
-// was never parsed into children contributes that text as stored.
-func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode) {
+// was never parsed into children contributes that text as stored. ownOnly is
+// passed on to that walk (see appendChildContent).
+func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode, ownOnly bool) {
 	ent, ok := ref.firstChild.(*Entity)
 	if !ok {
 		ent = lookupReferencedEntity(ref)
@@ -326,7 +371,7 @@ func appendEntityRefContent(w contentSink, ref *EntityRef, active []*docnode) {
 		_, _ = w.WriteString(ent.content)
 		return
 	}
-	appendChildContent(w, edn, append(active, edn))
+	appendChildContent(w, edn, append(active, edn), ownOnly)
 }
 
 // lookupReferencedEntity resolves an unbound entity reference by name: a
