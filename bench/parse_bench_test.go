@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/heliumtest"
+	"golang.org/x/text/encoding/htmlindex"
 )
 
 var (
@@ -79,13 +82,27 @@ func BenchmarkStdlibXMLDecode(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				dec := xml.NewDecoder(bytes.NewReader(data))
+				// The 118KB fixture declares iso-8859-1, which encoding/xml
+				// rejects on the first token without a CharsetReader.
+				dec.CharsetReader = stdlibCharsetReader
 				for {
 					_, err := dec.Token()
-					if err != nil {
+					if errors.Is(err, io.EOF) {
 						break
+					}
+					if err != nil {
+						b.Fatal(err)
 					}
 				}
 			}
 		})
 	}
+}
+
+func stdlibCharsetReader(label string, input io.Reader) (io.Reader, error) {
+	enc, err := htmlindex.Get(label)
+	if err != nil {
+		return nil, err
+	}
+	return enc.NewDecoder().Reader(input), nil
 }

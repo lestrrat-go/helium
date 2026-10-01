@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,6 +34,38 @@ func BenchmarkWriteNonASCII(b *testing.B) {
 	for range b.N {
 		err := w.WriteTo(io.Discard, doc)
 		require.NoError(b, err)
+	}
+}
+
+// BenchmarkWrite serializes whole parsed real-world documents with the
+// default writer settings. Each fixture is parsed once outside the timed
+// loop, so only serialization is measured.
+func BenchmarkWrite(b *testing.B) {
+	fixtures := []struct {
+		name string
+		path string // slash-separated, relative to testdata/libxml2-compat
+	}{
+		// Wide, shallow NVD CVE feed: many small elements and attributes.
+		{name: "nvdcve", path: "schemas/test/nvdcve_0.xml"},
+		// Fedora comps file: text-heavy groups with many xml:lang
+		// translations in non-ASCII UTF-8.
+		{name: "comps", path: "relaxng/test/comps_0.xml"},
+	}
+	for _, fx := range fixtures {
+		b.Run(fx.name, func(b *testing.B) {
+			src, err := os.ReadFile(heliumtest.TestDir("testdata", "libxml2-compat", filepath.FromSlash(fx.path)))
+			require.NoError(b, err)
+			doc, err := helium.NewParser().Parse(b.Context(), src)
+			require.NoError(b, err)
+
+			b.SetBytes(int64(len(src)))
+			b.ReportAllocs()
+			for b.Loop() {
+				if err := helium.Write(io.Discard, doc); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
