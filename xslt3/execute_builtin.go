@@ -312,12 +312,10 @@ func (ec *execContext) onNoMatchDeepCopy(node helium.Node) error {
 	}
 }
 
-// whitespaceStripParent returns the parent element to evaluate strip/preserve
-// verdicts against for node, and whether node is even a candidate: a
-// whitespace-only text/CDATA node with an element parent. It is the cheap,
-// tree-shape-only preamble shared by shouldStripWhitespace and the strip
-// pre-pass (stripWhitespaceFromNodeInto).
-func whitespaceStripParent(node helium.Node) (*helium.Element, bool) {
+// textStripParent returns the element whose strip/preserve verdict applies to
+// node, and whether node is even a candidate: a text/CDATA node with an element
+// parent. It looks only at the tree shape, never at the text itself.
+func textStripParent(node helium.Node) (*helium.Element, bool) {
 	if normalizeNode(node) == nil {
 		return nil, false
 	}
@@ -325,20 +323,35 @@ func whitespaceStripParent(node helium.Node) (*helium.Element, bool) {
 	if node.Type() != helium.TextNode && node.Type() != helium.CDATASectionNode {
 		return nil, false
 	}
-	content := node.Content()
-	// Check if whitespace-only
-	for _, b := range content {
-		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
-			return nil, false
-		}
-	}
-	// Check parent element against strip/preserve space rules
 	parent := node.Parent()
 	if parent == nil || parent.Type() != helium.ElementNode {
 		return nil, false
 	}
-	elem, ok := helium.AsNode[*helium.Element](parent)
-	return elem, ok
+	return helium.AsNode[*helium.Element](parent)
+}
+
+// isWhitespaceOnlyText reports whether node's content consists only of XML
+// whitespace (space, tab, CR, LF). Reading the content copies it, so callers
+// run this after their cheaper checks.
+func isWhitespaceOnlyText(node helium.Node) bool {
+	for _, b := range node.Content() {
+		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
+			return false
+		}
+	}
+	return true
+}
+
+// whitespaceStripParent returns the parent element to evaluate strip/preserve
+// verdicts against for node, and whether node is even a candidate: a
+// whitespace-only text/CDATA node with an element parent. It is the preamble
+// of the strip pre-pass (stripWhitespaceFromNodeInto).
+func whitespaceStripParent(node helium.Node) (*helium.Element, bool) {
+	elem, ok := textStripParent(node)
+	if !ok || !isWhitespaceOnlyText(node) {
+		return nil, false
+	}
+	return elem, true
 }
 
 // stripVerdict reports whether elem's whitespace-only text-node children would
@@ -379,12 +392,21 @@ func (ec *execContext) stripVerdict(elem *helium.Element) bool {
 // any node. Deferring it means the common case — no xsl:strip-space, no DTD
 // element-only content, no schema annotations, where stripVerdict is false —
 // never walks the ancestor chain at all.
+//
+// Without schema type annotations, stripVerdict is a strip-rule scan plus a DTD
+// lookup, which is cheaper than reading the text (a copy), so it runs before
+// the whitespace check and the common no-strip case never reads the text. With
+// annotations, stripVerdict walks the ancestors, so the text check runs first.
 func (ec *execContext) shouldStripWhitespace(node helium.Node) bool {
-	elem, ok := whitespaceStripParent(node)
+	elem, ok := textStripParent(node)
 	if !ok {
 		return false
 	}
-	if !ec.stripVerdict(elem) {
+	if ec.typeAnnotations == nil {
+		if !ec.stripVerdict(elem) || !isWhitespaceOnlyText(node) {
+			return false
+		}
+	} else if !isWhitespaceOnlyText(node) || !ec.stripVerdict(elem) {
 		return false
 	}
 	return !ec.xmlSpacePreserve(elem)

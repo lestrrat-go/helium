@@ -3,6 +3,7 @@ package xslt3
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -925,8 +926,10 @@ func (ec *execContext) execEvaluate(ctx context.Context, inst *evaluateInst) err
 	// 6. Build evaluation context with variables from xsl:with-param.
 	dynCtx := ec.xpathContext(ctx)
 
-	// Collect variables: start with current XSLT variables plus xsl:with-param
-	vars := ec.collectAllVars(ctx)
+	// Collect variables: start with current XSLT variables plus xsl:with-param.
+	// collectAllVars returns a cached map shared with other evaluators, so
+	// copy it before adding the parameters below.
+	vars := maps.Clone(ec.collectAllVars(ctx))
 
 	// Add xsl:with-param variables
 	for _, wp := range inst.Params {

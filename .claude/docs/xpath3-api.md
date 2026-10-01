@@ -64,6 +64,7 @@ func (e Evaluator) BaseURI(uri string) Evaluator
 func (e Evaluator) Position(pos int) Evaluator
 func (e Evaluator) Size(size int) Evaluator
 func (e Evaluator) ContextItem(item Item) Evaluator
+func (e Evaluator) Focus(item Item, position, size int) Evaluator // all three in one copy
 
 // Schema / typing
 func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator
@@ -79,6 +80,17 @@ func (e Evaluator) AllowXML11Chars() Evaluator
 func (e Evaluator) DocOrderCache(cache *DocOrderCache) Evaluator
 func (e Evaluator) TraceWriter(w io.Writer) Evaluator // nil → os.Stderr
 ```
+
+`Focus(item, position, size)` sets the whole dynamic focus with one copy of the
+configuration, giving the same result as `ContextItem(item).Position(position).Size(size)`.
+A nil item leaves the context to the node passed to `Evaluate`; a position or size
+of 0 or less selects the default of 1. It is for callers that set a new focus on
+every evaluation over an otherwise fixed evaluator (xslt3 sets it per `evalXPath`
+on a cached evaluator).
+
+`Variables` builds the root variable scope once, at the setter; every evaluation
+from that evaluator shares it read-only instead of copying the map. `Evaluate`
+allocates a private document-order cache only when `DocOrderCache` was not set.
 
 `MaxResourceBytes` caps the bytes read from a single external resource fetched
 through the `URIResolver` / `HTTPClient` by `fn:unparsed-text`,
