@@ -187,6 +187,10 @@ type writeSession struct {
 	// serialized subtree still gets a declaration. It is nil until the first
 	// namespaced element, so a plain-XML dump allocates nothing.
 	nsScope map[string]string
+	// charRefs is the scratch buffer escapeText and escapeAttrValue format a
+	// computed character reference into; see refBuf. It is nil until the first
+	// such reference.
+	charRefs *charRefBuf
 }
 
 // nsSaved records a prefix's prior binding in nsScope so it can be restored
@@ -1341,7 +1345,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			if err := d.writeNormalizedText(out, c); err != nil {
 				return err
 			}
-		} else if err := escapeText(out, c, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, d.charMap); err != nil {
+		} else if err := d.escapeText(out, c, false, d.charMap); err != nil {
 			return err
 		}
 		return d.err // no recursing down
@@ -1733,7 +1737,7 @@ func (d *writeSession) reconcileOne(out io.Writer, prefix, href string, isElemen
 	}
 	d.writeString(out, `="`)
 	if d.err == nil {
-		if err := escapeAttrValue(out, []byte(href), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
+		if err := d.escapeAttrValue(out, []byte(href), nil); err != nil {
 			d.err = err
 		}
 	}

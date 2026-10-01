@@ -37,6 +37,66 @@ func BenchmarkWriteNonASCII(b *testing.B) {
 	}
 }
 
+// writeAllocProbe serializes doc with w to io.Discard, keeping the first error,
+// so testing.AllocsPerRun can measure one WriteTo call through a method value.
+type writeAllocProbe struct {
+	w   helium.Writer
+	doc *helium.Document
+	err error
+}
+
+func (p *writeAllocProbe) run() {
+	if err := p.w.WriteTo(io.Discard, p.doc); err != nil && p.err == nil {
+		p.err = err
+	}
+}
+
+// parseEscapeHeavyDoc parses a document whose root holds n text-bearing
+// children, each needing markup escapes and (under EscapeNonASCII) Latin-1
+// character references.
+func parseEscapeHeavyDoc(t *testing.T, n int) *helium.Document {
+	t.Helper()
+	var buf strings.Builder
+	buf.WriteString("<root>")
+	for range n {
+		buf.WriteString("<t>a &amp; b &lt; c &gt; café naïve</t>")
+	}
+	buf.WriteString("</root>")
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(buf.String()))
+	require.NoError(t, err)
+	return doc
+}
+
+// Text escaping allocates nothing per text node: the character-reference
+// scratch buffer is allocated at most once per WriteTo, so a document with 200
+// escaped text nodes costs exactly what a one-node document does.
+func TestWriteToAllocations(t *testing.T) {
+	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
+	// test, and a concurrent allocator would perturb the count anyway.
+	narrowDoc := parseEscapeHeavyDoc(t, 1)
+	wideDoc := parseEscapeHeavyDoc(t, 200)
+
+	writers := []struct {
+		name string
+		w    helium.Writer
+	}{
+		{name: "default", w: helium.NewWriter()},
+		{name: "escape non-ASCII", w: helium.NewWriter().EscapeNonASCII(true)},
+	}
+	for _, tc := range writers {
+		t.Run(tc.name, func(t *testing.T) {
+			narrow := &writeAllocProbe{w: tc.w, doc: narrowDoc}
+			wide := &writeAllocProbe{w: tc.w, doc: wideDoc}
+			narrowAllocs := testing.AllocsPerRun(20, narrow.run)
+			wideAllocs := testing.AllocsPerRun(20, wide.run)
+			require.NoError(t, narrow.err)
+			require.NoError(t, wide.err)
+			require.Equal(t, narrowAllocs, wideAllocs,
+				"a 200-text-node document must allocate exactly what a 1-node document does")
+		})
+	}
+}
+
 // BenchmarkWrite serializes whole parsed real-world documents with the
 // default writer settings. Each fixture is parsed once outside the timed
 // loop, so only serialization is measured.

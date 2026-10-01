@@ -129,7 +129,7 @@ func (d *writeSession) writeNormalizedText(out io.Writer, content []byte) error 
 			}
 			continue
 		}
-		if err := escapeText(out, seg.text, false, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
+		if err := d.escapeText(out, seg.text, false, nil); err != nil {
 			return err
 		}
 	}
@@ -145,7 +145,7 @@ func (d *writeSession) writeNormalizedText(out io.Writer, content []byte) error 
 // replacement is emitted verbatim.
 func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) error {
 	if !d.normalize {
-		return escapeAttrValue(out, content, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, d.charMap)
+		return d.escapeAttrValue(out, content, d.charMap)
 	}
 	for _, seg := range d.normalizeContent(content) {
 		if seg.mapped {
@@ -154,7 +154,7 @@ func (d *writeSession) writeAttrValueContent(out io.Writer, content []byte) erro
 			}
 			continue
 		}
-		if err := escapeAttrValue(out, seg.text, d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
+		if err := d.escapeAttrValue(out, seg.text, nil); err != nil {
 			return err
 		}
 	}
@@ -275,9 +275,14 @@ func isXML11SerializeAsCharRef(r rune) bool {
 	return isXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
 }
 
+// charRefBuf is scratch space for one character reference. Twelve bytes hold
+// the longest form any helper below produces: "&#1114111;" (decimal) and
+// "&#x10FFFF;" (hex) are both ten bytes.
+type charRefBuf = [12]byte
+
 // decimalCharRef writes r as a decimal character reference ("&#N;") into buf and
 // returns the populated slice.
-func decimalCharRef(buf *[12]byte, r rune) []byte {
+func decimalCharRef(buf *charRefBuf, r rune) []byte {
 	n := len(buf)
 	n--
 	buf[n] = ';'
@@ -298,7 +303,7 @@ func decimalCharRef(buf *[12]byte, r rune) []byte {
 	return buf[n:]
 }
 
-func hexCharRef(buf *[8]byte, r rune) []byte {
+func hexCharRef(buf *charRefBuf, r rune) []byte {
 	buf[0] = '&'
 	buf[1] = '#'
 	buf[2] = 'x'
@@ -319,7 +324,7 @@ func hexCharRef(buf *[8]byte, r rune) []byte {
 // digits). hexCharRef is limited to two digits (r <= 0xFF); this variant is used
 // for US-ASCII output, where every non-ASCII character — including astral and BMP
 // characters beyond Latin-1 — must be emitted as a reference.
-func hexCharRefWide(buf *[10]byte, r rune) []byte {
+func hexCharRefWide(buf *charRefBuf, r rune) []byte {
 	n := len(buf)
 	n--
 	buf[n] = ';'
@@ -494,7 +499,7 @@ func (s *writeSession) serializeEntityValue(what, value string) (string, bool) {
 		case r == utf8.RuneError && width == 1, !isInCharacterRange(r):
 			b.Write(esc_fffd)
 		case s.xml11 && isXML11SerializeAsCharRef(r):
-			var dbuf [12]byte
+			var dbuf charRefBuf
 			b.Write(decimalCharRef(&dbuf, r))
 		default:
 			b.WriteString(value[i : i+width])
@@ -611,11 +616,28 @@ func writeCharMapReplacement(w io.Writer, s []byte, last, cut, next int, repl st
 	return next, nil
 }
 
-func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectCharMapNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
+// refBuf returns the session's character-reference scratch buffer, allocating
+// it on first use. The buffer lives on the heap behind a pointer so that
+// handing a slice of it to an io.Writer does not force the (normally
+// stack-allocated) session onto the heap, and serialization that never emits a
+// computed character reference allocates nothing for it.
+func (d *writeSession) refBuf() *charRefBuf {
+	if d.charRefs == nil {
+		d.charRefs = new(charRefBuf)
+	}
+	return d.charRefs
+}
+
+// escapeAttrValue writes attribute-value content s to w, escaping markup and
+// whitespace characters and emitting character references as the session's
+// escaping settings require. charMap, when non-nil, is applied first.
+func (d *writeSession) escapeAttrValue(w io.Writer, s []byte, charMap map[rune]string) error {
+	escapeNonASCII := d.escapeNonASCII
+	asciiOutput := d.asciiOutput
+	rejectCharMapNonASCII := d.asciiReject()
+	rejectInvalidChars := !d.replaceInvalidChars
+	xml11 := d.xml11
 	var esc []byte
-	var hbuf [8]byte
-	var wbuf [10]byte
-	var dbuf [12]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
@@ -665,7 +687,7 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 			// them as decimal character references (before the out-of-range
 			// replacement and the escapeNonASCII hex branch).
 			if xml11 && isXML11SerializeAsCharRef(r) {
-				esc = decimalCharRef(&dbuf, r)
+				esc = decimalCharRef(d.refBuf(), r)
 				break
 			}
 			// A character outside the XML character range (or a lone U+FFFD from a
@@ -689,12 +711,12 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 			// consistent with the encoding declaration. Checked before the Latin-1-only
 			// escapeNonASCII branch so BMP/astral characters are covered too.
 			if asciiOutput && r >= 0x80 {
-				esc = hexCharRefWide(&wbuf, r)
+				esc = hexCharRefWide(d.refBuf(), r)
 				break
 			}
 			if escapeNonASCII && !(0x20 <= r && r < 0x80) { //nolint:staticcheck
 				if r < 0x100 {
-					esc = hexCharRef(&hbuf, r)
+					esc = hexCharRef(d.refBuf(), r)
 					break
 				}
 			}
@@ -721,11 +743,16 @@ func escapeAttrValue(w io.Writer, s []byte, escapeNonASCII, asciiOutput, rejectC
 	return nil
 }
 
-func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutput, rejectCharMapNonASCII, rejectInvalidChars, xml11 bool, charMap map[rune]string) error {
+// escapeText writes text content s to w, escaping markup characters (and a
+// newline when escapeNewline is set) and emitting character references as the
+// session's escaping settings require. charMap, when non-nil, is applied first.
+func (d *writeSession) escapeText(w io.Writer, s []byte, escapeNewline bool, charMap map[rune]string) error {
+	escapeNonASCII := d.escapeNonASCII
+	asciiOutput := d.asciiOutput
+	rejectCharMapNonASCII := d.asciiReject()
+	rejectInvalidChars := !d.replaceInvalidChars
+	xml11 := d.xml11
 	var esc []byte
-	var hbuf [8]byte
-	var wbuf [10]byte
-	var dbuf [12]byte
 	last := 0
 	for i := 0; i < len(s); {
 		r, width := utf8.DecodeRune(s[i:])
@@ -774,7 +801,7 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 			// them as decimal character references (before the out-of-range
 			// replacement and the escapeNonASCII hex branch).
 			if xml11 && isXML11SerializeAsCharRef(r) {
-				esc = decimalCharRef(&dbuf, r)
+				esc = decimalCharRef(d.refBuf(), r)
 				break
 			}
 			// A character outside the XML character range (or a lone U+FFFD from a
@@ -798,12 +825,12 @@ func escapeText(w io.Writer, s []byte, escapeNewline, escapeNonASCII, asciiOutpu
 			// consistent with the encoding declaration. Checked before the Latin-1-only
 			// escapeNonASCII branch so BMP/astral characters are covered too.
 			if asciiOutput && r >= 0x80 {
-				esc = hexCharRefWide(&wbuf, r)
+				esc = hexCharRefWide(d.refBuf(), r)
 				break
 			}
 			if escapeNonASCII && !(r == '\t' || (0x20 <= r && r < 0x80)) { //nolint:staticcheck
 				if r < 0x100 {
-					esc = hexCharRef(&hbuf, r)
+					esc = hexCharRef(d.refBuf(), r)
 					break
 				}
 			}

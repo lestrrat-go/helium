@@ -560,7 +560,7 @@ func (d *writeSession) dumpAttributeDecl(out io.Writer, n *AttributeDecl) error 
 	// `#FIXED>`, which is not a valid DefaultDecl.
 	if attrHasDefaultValue(n.def) || n.defvalue != "" {
 		d.writeString(out, ` "`)
-		d.check(escapeAttrValue(out, []byte(n.defvalue), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil))
+		d.check(d.escapeAttrValue(out, []byte(n.defvalue), nil))
 		d.writeString(out, `"`)
 	}
 	d.writeString(out, ">\n")
@@ -629,7 +629,7 @@ func (d *writeSession) dumpNs(out io.Writer, ns *Namespace) error {
 	if _, err := io.WriteString(out, `="`); err != nil {
 		return err
 	}
-	if err := escapeAttrValue(out, []byte(ns.href), d.escapeNonASCII, d.asciiOutput, d.asciiReject(), !d.replaceInvalidChars, d.xml11, nil); err != nil {
+	if err := d.escapeAttrValue(out, []byte(ns.href), nil); err != nil {
 		return err
 	}
 	if _, err := io.WriteString(out, `"`); err != nil {
