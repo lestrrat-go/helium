@@ -74,6 +74,18 @@ cancellation (each operand is individually capped, but the concatenation must be
    avoiding the generic `TraverseAxis` + extra filtered-slice path
 4. Return merged node-set
 
+### UnionExpr / IntersectExceptExpr
+`evalUnionExpr` gathers the nodes of both operands into one buffer (left, then right; a non-node item raises
+`ErrUnionNotNodeSet`) and orders them with `ixpath.UnionNodeSets`, which returns what `ixpath.MergeNodeSets`
+returns. When the concatenation is a subsequence of one element's attribute list followed by its owned-child list
+(`@*|node()`, `@id|*`, `*[1]|*[last()]`) it is already in document order and free of duplicates, so it is
+returned as is and the document order index is not built. Otherwise the sort keys are resolved and two operands
+that are each strictly increasing are merged in one pass; anything else is deduplicated and sorted. Every result
+node is wrapped again with `nodeItemFor`. `evalIntersectExceptExpr` filters the left operand by node identity
+(`makeNodeIdentityKey`) and orders the result with `ixpath.DeduplicateNodes`. xpath1 keeps
+`ixpath.MergeNodeSets` for its union.
+
+### Child-list enumeration
 The child axis and the descendant walks enumerate child lists through `helium.Children` (the owned-child
 boundary), and keep only XDM kinds (`IsXDMChild`). The XDM has no entity references, so from an entity-reference
 context node (entity substitution off) the child and descendant axes are empty: its only child is the DTD-owned

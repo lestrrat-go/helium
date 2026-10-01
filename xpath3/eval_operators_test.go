@@ -106,6 +106,13 @@ func TestEvalFLWOR_WithinMaxNodes(t *testing.T) {
 	require.Equal(t, 6, res.Sequence().Len())
 }
 
+// Labels unionLabel gives to text, comment and namespaced attribute nodes.
+const (
+	unionText    = "text()"
+	unionComment = "comment()"
+	unionPC      = "@p:c"
+)
+
 // unionOrderSrc gives the element e attributes, a namespace declaration and
 // mixed children, next to a sibling f with its own attribute and child.
 const unionOrderSrc = `<r xmlns:p="urn:p"><e a="1" b="2" p:c="3">t1<x id="x1"/><!--c--><x id="x2"/></e><f g="4"><y id="y"/></f></r>`
@@ -120,9 +127,9 @@ func unionLabel(n helium.Node) string {
 	case helium.NamespaceNode:
 		return "ns:" + n.Name()
 	case helium.TextNode:
-		return "text()"
+		return unionText
 	case helium.CommentNode:
-		return "comment()"
+		return unionComment
 	}
 	e, ok := n.(*helium.Element)
 	if !ok {
@@ -159,7 +166,7 @@ func TestEvalUnionExpr(t *testing.T) {
 	require.Equal(t, "e", e.Name())
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 
-	all := []string{"@a", "@b", "@p:c", "text()", "x1", "comment()", "x2"}
+	all := []string{"@a", "@b", unionPC, unionText, "x1", unionComment, "x2"}
 	cases := []struct {
 		expr string
 		want []string
@@ -169,10 +176,10 @@ func TestEvalUnionExpr(t *testing.T) {
 		{expr: "@*|node()|@*", want: all},
 		{expr: "@b|@a", want: []string{"@a", "@b"}},
 		{expr: "@a|@b|@a", want: []string{"@a", "@b"}},
-		{expr: "@a|node()", want: []string{"@a", "text()", "x1", "comment()", "x2"}},
+		{expr: "@a|node()", want: []string{"@a", unionText, "x1", unionComment, "x2"}},
 		{expr: "*[2]|*[1]", want: []string{"x1", "x2"}},
 		{expr: "*[1]|*[1]", want: []string{"x1"}},
-		{expr: "*|text()", want: []string{"text()", "x1", "x2"}},
+		{expr: "*|text()", want: []string{unionText, "x1", "x2"}},
 		{expr: "(*, *)|@a", want: []string{"@a", "x1", "x2"}},
 		{expr: "(*[2], *[1])|@b", want: []string{"@b", "x1", "x2"}},
 		{expr: "@*|(node(), node())", want: all},
@@ -180,18 +187,18 @@ func TestEvalUnionExpr(t *testing.T) {
 		{expr: "namespace::p|@a", want: []string{"ns:p", "@a"}},
 		{expr: "@a|namespace::p", want: []string{"ns:p", "@a"}},
 		{expr: "namespace::p|namespace::p", want: []string{"ns:p"}},
-		{expr: "@*|../f/@*", want: []string{"@a", "@b", "@p:c", "@g"}},
-		{expr: "../f/@*|@*", want: []string{"@a", "@b", "@p:c", "@g"}},
+		{expr: "@*|../f/@*", want: []string{"@a", "@b", unionPC, "@g"}},
+		{expr: "../f/@*|@*", want: []string{"@a", "@b", unionPC, "@g"}},
 		{expr: "@a|../f/node()", want: []string{"@a", "y"}},
 		{expr: "../f/node()|@a", want: []string{"@a", "y"}},
 		{expr: "..|@a", want: []string{"r", "@a"}},
 		{expr: "@a|self::node()", want: []string{"e", "@a"}},
-		{expr: "x/@*|@*", want: []string{"@a", "@b", "@p:c", "@id", "@id"}},
-		{expr: "descendant::node()|@a", want: []string{"@a", "text()", "x1", "comment()", "x2"}},
-		{expr: "(@*|node()) intersect node()", want: []string{"text()", "x1", "comment()", "x2"}},
-		{expr: "(@*|node()) except @*", want: []string{"text()", "x1", "comment()", "x2"}},
+		{expr: "x/@*|@*", want: []string{"@a", "@b", unionPC, "@id", "@id"}},
+		{expr: "descendant::node()|@a", want: []string{"@a", unionText, "x1", unionComment, "x2"}},
+		{expr: "(@*|node()) intersect node()", want: []string{unionText, "x1", unionComment, "x2"}},
+		{expr: "(@*|node()) except @*", want: []string{unionText, "x1", unionComment, "x2"}},
 		{expr: "(@*, node()) intersect (node(), @*)", want: all},
-		{expr: "reverse(node()) except text()", want: []string{"x1", "comment()", "x2"}},
+		{expr: "reverse(node()) except text()", want: []string{"x1", unionComment, "x2"}},
 	}
 	for _, c := range cases {
 		require.Equal(t, c.want, evalUnionLabels(t, eval, c.expr, e), c.expr)
@@ -205,7 +212,7 @@ func TestEvalUnionExpr(t *testing.T) {
 		})
 		// Each evaluation uses a fresh cache, and the document that cache
 		// meets first sorts first.
-		require.Equal(t, []string{"@a", "@b", "@p:c", "@k"}, evalUnionLabels(t, vars, "$other/@*|@*", e))
+		require.Equal(t, []string{"@a", "@b", unionPC, "@k"}, evalUnionLabels(t, vars, "$other/@*|@*", e))
 		require.Equal(t, []string{"@k", "z1", "@a"}, evalUnionLabels(t, vars, "$other/(@*|node())|@a", e))
 	})
 
@@ -230,7 +237,7 @@ func TestEvalUnionExpr(t *testing.T) {
 			_, err := limited.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(expr), e)
 			require.ErrorIs(t, err, xpath3.ErrNodeSetLimit, expr)
 		}
-		require.Equal(t, []string{"@a", "@b", "@p:c"}, evalUnionLabels(t, limited, "@*|@a", e))
+		require.Equal(t, []string{"@a", "@b", unionPC}, evalUnionLabels(t, limited, "@*|@a", e))
 		require.Equal(t, []string{"@a", "x1", "x2"}, evalUnionLabels(t, limited, "@a|*", e))
 	})
 }
