@@ -487,6 +487,8 @@ func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *he
 	// The XPath @test runs against the XSD 1.1 CTA context node: a detached copy of
 	// the element with its own + inherited attributes and namespaces but no children
 	// or parent (§3.13). Built once per element and shared by every alternative.
+	// Nothing keeps the context node past this call, so its scratch document
+	// returns its node slabs to the pool on return.
 	var cta *helium.Element
 	for _, alt := range alts {
 		// A testless alternative is the unconditional default.
@@ -497,9 +499,13 @@ func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *he
 			continue
 		}
 		if cta == nil {
-			cta = vc.ctaContextNode(elem)
+			var scratch *helium.Document
+			cta, scratch = vc.ctaContextNode(elem)
+			defer scratch.Free()
 		}
-		ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		// The compiled schema owns alt.Namespaces and xpath3 only reads it, so
+		// the evaluator borrows the map instead of cloning it per element.
+		ev := xpath3.NewEvaluator(xpath3.EvalBorrowing).
 			Namespaces(alt.Namespaces).
 			Position(1).
 			Size(1).

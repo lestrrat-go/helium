@@ -16,6 +16,12 @@
     namespaces re-declared (incl. an inherited default-namespace prefix "" so `namespace-uri-for-prefix('',
     .)` resolves); PSVI annotations onto DESCENDANT elements + ALL attributes but NOT the assertion ROOT (type
     unassigned during its assert → `data(.)` untyped; matches Saxon/conformance tests).
+  - The PSVI annotations (`vc.assertAnnotations`), the anonymous-type registry, and `assertEffectiveValues` are
+    recorded only when the schema carries an xs:assert or xs:assertion (`Schema.hasAssertions`, set by
+    `parseAssertion`, OR-ed in from imported and instance-hint schemas); only assertion evaluation reads them.
+  - Per-assert cost follows the asserted SUBTREE: the copy's annotation map holds only that subtree's nodes, the
+    evaluator borrows it (`xpath3.EvalBorrowing`, no per-assertion clone), and `checkAssertions` Frees the scratch
+    document that owns the copy once every assertion ran, so its node slabs go back to the pool.
   - `xpath3.SchemaDeclarations` adapter (`schema_decls.go`, `schemaDecls`, carries the schema version): a
     NAMED user simple type atomizes through its builtin base; a user `cast`/`castable` validates at the schema
     version (1.1-only lexical year `0000` castable).
@@ -213,7 +219,8 @@
   - @test runs against a DETACHED CTA context node (`inherited_attrs.go` `ctaContextNode`): an orphan element
     with the instance element's own attributes PLUS inheritable attributes from ancestors
     (`inheritedAttributes`, declaration `inheritable="true"`), its in-scope namespaces, position()=last()=1,
-    an empty `emptyCollectionResolver`, the schema base URI, no children/parent.
+    an empty `emptyCollectionResolver`, the schema base URI, no children/parent. `applyTypeAlternatives` Frees the
+    node's scratch document on return.
   - A non-default `@type`/inline alternative must be VALIDLY SUBSTITUTABLE for the declared type
     (`checkAltSubstitutability`, compile time): `strictBuiltinAwareDerivedFrom` (`builtin_hierarchy.go`)
     accepts a genuine derivation via `isDerivedFrom`, the built-in simple-type hierarchy via

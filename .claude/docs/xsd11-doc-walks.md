@@ -73,3 +73,7 @@
   default/fixed substitution, nilled-element, and `hasChildElement` guards) but needs no cross-element table
   since the DTD entity table is known up front. Fixes saxonData/Id id017-021 (ENTITY/ENTITIES attribute
   defaults, a union(ENTITY,integer), and ENTITY/ENTITIES element content). 1.0 stays byte-identical.
+  - The walk checks only nodes pass 1 assessed with an ENTITY-family type, so `validateDocument` skips it when pass 1
+    assessed none: `noteEntityType` sets `vc.entityTyped` where `assessedElemType` (simple content only) and
+    `actualAttrType` are written, which covers a declared ENTITY type and an instance `xsi:type="xs:ENTITY"` alike.
+    The visitor reads attributes through the allocation-free `helium.Attributes` iterator.

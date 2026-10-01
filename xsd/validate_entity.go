@@ -74,7 +74,7 @@ func (v *entityValueVisitor) visitOccurrence(ctx context.Context, occ elementOcc
 
 	// Attributes typed as ENTITY/ENTITIES (including via list/union). Default
 	// attributes are already inserted into the live tree before this pass.
-	for _, a := range elem.Attributes() {
+	for a := range helium.Attributes(elem) {
 		if vc.isSpecialAttr(a) {
 			continue
 		}
@@ -86,6 +86,17 @@ func (v *entityValueVisitor) visitOccurrence(ctx context.Context, occ elementOcc
 			v.valid = false
 		}
 	}
+}
+
+// noteEntityType records in vc.entityTyped that pass 1 assessed a node of type
+// td when td is in the ENTITY family, the only nodes validateEntities checks.
+// It is a no-op outside XSD 1.1, where that pass never runs, and once the flag
+// is set.
+func (vc *validationContext) noteEntityType(td *TypeDef) {
+	if vc.entityTyped || vc.version != Version11 {
+		return
+	}
+	vc.entityTyped = entityFamilyType(td)
 }
 
 // entityFamilyType reports whether td involves xs:ENTITY or xs:ENTITIES anywhere

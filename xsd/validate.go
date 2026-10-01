@@ -497,7 +497,14 @@ type validationContext struct {
 	// standalone TypeDef.Validate stay strict even when they carry diagnostic
 	// source metadata.
 	allowXSD10LegacyGMonthInstance bool
-	idcDocOrder                    *ixpath.DocOrderCache
+	// entityTyped records that pass 1 assessed some node whose type can carry
+	// xs:ENTITY values: an element of simple content or an attribute whose type
+	// is in the ENTITY family (entityFamilyType). Written in XSD 1.1 only. The
+	// xs:ENTITY pass (validateEntities) checks only such nodes, so a run that
+	// never sets it skips that walk. It sits next to the other bool to use that
+	// field's padding.
+	entityTyped bool
+	idcDocOrder *ixpath.DocOrderCache
 	// idcGathered memoizes the per-occurrence key/unique evaluations that
 	// indexSubtreeKeys feeds into idcSubtreeIndex, keyed by the descendant
 	// ELEMENT OCCURRENCE (not declaration), since two occurrences of the same
@@ -547,7 +554,8 @@ type validationContext struct {
 	actualElemDecl map[*helium.Element]*ElementDecl
 	// assertAnnotations maps assessed element and attribute nodes to their XSD
 	// type name (the xpath3 annotation form, e.g. "xs:integer"). It is populated
-	// during validation in XSD 1.1 mode (nil otherwise) so xs:assert tests
+	// during validation in XSD 1.1 mode when the schema carries an assertion
+	// (Schema.hasAssertions; nil otherwise) so xs:assert tests
 	// evaluate against a PSVI-typed tree: a typed attribute like @length atomizes
 	// to xs:nonNegativeInteger, and never xs:untypedAtomic (which a value
 	// comparison would cast to xs:string), and "instance of" tests see the
@@ -627,6 +635,9 @@ type validationContext struct {
 	silent *validationContext
 	// attrIndex memoizes attrUseIndexFor per complex type for this run.
 	attrIndex map[*TypeDef]attrUseIndex
+	// typeNames memoizes xsdTypeName per *TypeDef for this run (see
+	// annotationTypeName). Nil until first use.
+	typeNames map[*TypeDef]string
 	// displayNames interns elemDisplayName results per namespaced expanded name
 	// for this run (see displayName).
 	displayNames map[QName]string
@@ -694,11 +705,17 @@ func newValidationContext(schema *Schema, cfg *validateConfig, filename string, 
 		return vc
 	}
 	vc.attrInheritable = make(map[*helium.Attribute]struct{}, sizes.attrs)
-	vc.assertAnnotations = make(TypeAnnotations)
+	vc.skipContentNodes = make(map[helium.Node]struct{})
+	// The assertion PSVI records feed only xs:assert and xs:assertion
+	// evaluation, so a schema without assertions leaves them nil and its run
+	// records none.
+	if !schema.hasAssertions {
+		return vc
+	}
+	vc.assertAnnotations = make(TypeAnnotations, sizes.elems+sizes.attrs)
 	vc.assertAnonTypes = make(map[string]*TypeDef)
 	vc.assertAnonNames = make(map[*TypeDef]string)
 	vc.assertEffectiveValues = make(map[helium.Node]assertEffectiveValue)
-	vc.skipContentNodes = make(map[helium.Node]struct{})
 	return vc
 }
 
@@ -937,8 +954,10 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	// XSD 1.1 document-wide xs:ENTITY / xs:ENTITIES value-space
 	// validation (cvc-id / §3.3.11). Gated to 1.1 so XSD 1.0 stays byte-identical
 	// (helium validates these datatypes only lexically in 1.0), and skipped for a
-	// fragment-validating caller (cfg.skipDatatypeIntegrity).
-	if vc.version == Version11 && !cfg.skipDatatypeIntegrity {
+	// fragment-validating caller (cfg.skipDatatypeIntegrity). The walk checks only
+	// nodes pass 1 assessed with an ENTITY-family type, so it is also skipped when
+	// pass 1 assessed none (vc.entityTyped).
+	if vc.version == Version11 && !cfg.skipDatatypeIntegrity && vc.entityTyped {
 		if !vc.validateEntities(ctx, doc) {
 			valid = false
 		}
@@ -2827,6 +2846,7 @@ func (vc *validationContext) validateWildcardAttr(ctx context.Context, a *helium
 	// canonicalization (an untyped global records no type but stays assessed above).
 	if ok && vc.actualAttrType != nil {
 		vc.actualAttrType[a] = attrTD
+		vc.noteEntityType(attrTD)
 	}
 
 	// Enforce the global attribute's fixed-value constraint. A wildcard-matched
@@ -3469,6 +3489,23 @@ func xsdTypeName(td *TypeDef) string {
 	return "xs:anyType"
 }
 
+// annotationTypeName returns xsdTypeName(td), memoized per *TypeDef for this
+// run, so annotating every node of one type builds its name string once.
+func (vc *validationContext) annotationTypeName(td *TypeDef) string {
+	if td == nil {
+		return xsdTypeName(td)
+	}
+	if name, ok := vc.typeNames[td]; ok {
+		return name
+	}
+	name := xsdTypeName(td)
+	if vc.typeNames == nil {
+		vc.typeNames = make(map[*TypeDef]string)
+	}
+	vc.typeNames[td] = name
+	return name
+}
+
 // assertAnnotationName returns the PSVI annotation name recorded for a NODE in the
 // xs:assert evaluation tree. For an INLINE ANONYMOUS list/union simple type (whose
 // list-item / union-member metadata would be lost once xsdTypeName collapses it to a
@@ -3483,7 +3520,7 @@ func xsdTypeName(td *TypeDef) string {
 // changed.
 func (vc *validationContext) assertAnnotationName(td *TypeDef) string {
 	if td == nil || vc.assertAnonNames == nil {
-		return xsdTypeName(td)
+		return vc.annotationTypeName(td)
 	}
 	if name, ok := vc.assertAnonNames[td]; ok {
 		return name
@@ -3498,7 +3535,7 @@ func (vc *validationContext) assertAnnotationName(td *TypeDef) string {
 			return vc.assertRegisterAnon(td)
 		}
 	}
-	return xsdTypeName(td)
+	return vc.annotationTypeName(td)
 }
 
 // assertRegisterAnon registers an ANONYMOUS TypeDef of ANY variety (atomic
@@ -3555,6 +3592,9 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 		}
 		if assessed && vc.assessedElemType != nil {
 			vc.assessedElemType[elem] = td
+			if td.ContentType == ContentTypeSimple {
+				vc.noteEntityType(td)
+			}
 		}
 	}
 	if assessed && vc.assertAnnotations != nil {
@@ -3563,7 +3603,7 @@ func (vc *validationContext) annotateElement(_ context.Context, elem *helium.Ele
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
-	(*vc.cfg.annotations)[elem] = xsdTypeName(td)
+	(*vc.cfg.annotations)[elem] = vc.annotationTypeName(td)
 }
 
 // recordElemDecl records the resolved *ElementDecl matched for an element
@@ -3607,6 +3647,7 @@ func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attrib
 	// independent of the optional user-facing annotations map.
 	if vc.actualAttrType != nil {
 		vc.actualAttrType[a] = td
+		vc.noteEntityType(td)
 	}
 	// Record the assert annotation (1.1) so an xs:assert/xs:assertion atomizes this
 	// attribute in its schema value space.
@@ -3616,5 +3657,5 @@ func (vc *validationContext) annotateAttrUse(_ context.Context, a *helium.Attrib
 	if vc.cfg == nil || vc.cfg.annotations == nil {
 		return
 	}
-	(*vc.cfg.annotations)[a] = xsdTypeName(td)
+	(*vc.cfg.annotations)[a] = vc.annotationTypeName(td)
 }

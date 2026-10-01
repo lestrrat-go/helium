@@ -126,8 +126,15 @@ root and the PSVI type annotations are carried onto DESCENDANT elements and ALL 
 count(...)`) atomizes in its value space and node-scope QName resolution works. The assertion-tree ROOT
 element is deliberately left UNannotated (an xs:assert is part of determining the element's own validity, so
 its type is not yet assigned — `data(.)` on the root is untyped, matching Saxon/the conformance tests). The
-PSVI annotations come from `validationContext.assertAnnotations`, an always-on map (1.1 only) populated by
-`annotateElement`/`annotateAttrUse`. A single-schema `xpath3.SchemaDeclarations` adapter (`schema_decls.go`,
+copy's annotation map holds only the asserted subtree's nodes and the evaluator borrows it
+(`xpath3.EvalBorrowing`), so per-assert cost follows the subtree; `checkAssertions` Frees the scratch
+document that owns the copy after the last assertion, returning its node slabs to the pool. The
+PSVI annotations come from `validationContext.assertAnnotations`, populated by
+`annotateElement`/`annotateAttrUse` in a 1.1 run whose schema carries an xs:assert or xs:assertion
+(`Schema.hasAssertions`, set by `parseAssertion` and OR-ed in from imported and instance-hint schemas); a run
+against a schema without assertions leaves it, the anonymous-type registry, and `assertEffectiveValues` nil,
+since only assertion evaluation reads them. Annotation names come from `annotationTypeName`, which memoizes
+`xsdTypeName` per `*TypeDef` for the run. A single-schema `xpath3.SchemaDeclarations` adapter (`schema_decls.go`,
 `schemaDecls`, via `vc.assertSchemaDecls()`, carrying `vc.version`) is passed to the evaluator so a node
 annotated with a NAMED user simple type atomizes through its builtin base (e.g. `data(@x) instance of
 xs:integer`) and instance-of/schema-element tests see the type hierarchy. The assert/assertion-facet
@@ -260,7 +267,8 @@ inherited from the schema-level default; affects only unprefixed element name te
 DETACHED single-node CTA context (`inherited_attrs.go` `ctaContextNode`: an orphan element bearing the
 element's own attributes PLUS inheritable attributes from ancestors (`inheritedAttributes`, decl
 `inheritable="true"`), in-scope namespaces, position()=last()=1, an `emptyCollectionResolver`, schema base
-URI, no children/parent — so @test cannot navigate to ancestors/siblings). A non-default `@type`/inline
+URI, no children/parent — so @test cannot navigate to ancestors/siblings; `applyTypeAlternatives` Frees its
+scratch document on return). A non-default `@type`/inline
 alternative must be VALIDLY SUBSTITUTABLE for the declared type (`checkAltSubstitutability`, compile time):
 `strictBuiltinAwareDerivedFrom` (`builtin_hierarchy.go`) accepts a genuine `isDerivedFrom` derivation (user
 types), the built-in simple-type hierarchy via the `builtinSimpleBase` table (the 1.0 built-ins are NOT
@@ -1236,9 +1244,10 @@ local-simpleType-name rules are separate checks, not this grammar.
 ### Validate: Document + Schema → Errors
 
 **Three-pass validation** (pass 3 is skipped under `SkipDatatypeIntegrityChecks`; its xs:ENTITY half runs only in
-XSD 1.1 mode). `validateDocument` first counts the instance's elements and attributes (`countPSVINodes`, a bounded
-pointer walk that allocates nothing) and pre-sizes the per-run PSVI maps (`actualElemType`, `assessedElemType`,
-`actualElemDecl`, `actualAttrType`, `assessedAttrs`, and under 1.1 `attrInheritable`) from those counts.
+XSD 1.1 mode, and only when pass 1 assessed a node with an ENTITY-family type). `validateDocument` first counts the
+instance's elements and attributes (`countPSVINodes`, a bounded pointer walk that allocates nothing) and pre-sizes
+the per-run PSVI maps (`actualElemType`, `assessedElemType`, `actualElemDecl`, `actualAttrType`, `assessedAttrs`,
+and under 1.1 `attrInheritable` plus, for a schema with assertions, `assertAnnotations`) from those counts.
 
 **Pass 1 — Content Model** (`validateDocument` over `helium.ChildElements(doc)`): each document-level element goes
 to `validateRootElement`, whose content validation recurses through the whole subtree, in document order.
@@ -1868,13 +1877,15 @@ real strict error. So a `skip` wildcard element AND a strict-failed subtree — 
 ones carrying `xsi:type="xs:ID"` or globally-declared `xs:ID` descendants — are
 NEVER assessed and not treated as xs:ID/xs:IDREF, while a lax xsi:type'd element
 IS. This avoids both false-rejecting duplicate skipped/strict-failed IDs and
-false-accepting duplicate (or invalid) lax-assessed xsi:type content. The pass never runs in 1.0
-mode, so the libxml2-compat goldens stay byte-identical. ID/IDREF members inside a
+false-accepting duplicate (or invalid) lax-assessed xsi:type content. ID/IDREF members inside a
 union ARE covered: `collectIDFromValue`'s union branch resolves the active member
 (`unionActiveMember`) and recurses to the atomic ID/IDREF leaf (and `idFamilyType`
 recurses into union members), so a duplicate union xs:ID across owners and a
 dangling union xs:IDREF both fail. `xs:ENTITY`/`xs:ENTITIES` value-space validity is enforced by the separate
-`validateEntities` pass (`validate_entity.go`), not this one. NOTE: this skip-exclusion is for the
+`validateEntities` pass (`validate_entity.go`), not this one; it runs only when pass 1 recorded an
+assessed element of simple content or attribute with an ENTITY-family type (`vc.entityTyped`, set by
+`noteEntityType` where `assessedElemType`/`actualAttrType` are written, so an `xsi:type="xs:ENTITY"`
+counts too). NOTE: this skip-exclusion is for the
 ID/IDREF DATATYPE pass only; pass-2 IDC selectors (`xs:key`/`xs:unique`) still
 match skip-content nodes by XPath — helium deliberately includes skip-matched
 nodes in an ancestor IDC (see `TestIDCFieldSkipWildcardSelectedSelf`), so the
