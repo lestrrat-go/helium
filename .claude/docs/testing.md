@@ -338,9 +338,17 @@ path expressions go through the fresh-`DocOrderCache` check.
 6. Compare concatenated output against .err golden file
 ```
 
-XSD benchmarks use valid `extension0_0` and `nvdcve_0` schema/instance pairs from the same fixture tree.
-Compilation times `Compiler.Compile` with a parsed schema document; validation times
-`Validator.Validate` with a compiled schema and parsed instance document.
+XSD benchmarks use valid `extension0_0` and `nvdcve_0` schema/instance pairs from the same fixture tree, plus
+`assert_cta_1000`, an inline schema whose `<item>` type is chosen by `xs:alternative` and checked by `xs:assert`,
+validated against an in-memory `<order>` of 1000 items. Every case runs once per version as `<case>/1.0` and
+`<case>/1.1`; `assert_cta_1000` runs only at 1.1. Compilation times `Compiler.Compile` with a parsed schema
+document; validation times `Validator.Validate` with a compiled schema and parsed instance document.
+
+`BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml` and `relaxng/test/comps_0.xml` with
+`helium.Write` into `io.Discard`. `BenchmarkIdentityTransform` (`xslt3/identity_bench_test.go`) runs an identity
+transform over `comps_0.xml` in two stylesheet forms (`template`: a `match="@*|node()"` copy rule; `mode`:
+`xsl:mode on-no-match="shallow-copy"`), each timed as `writer` (`TransformToWriter`, transform plus serialization)
+and `tree` (`Transform` only).
 
 RELAX NG benchmarks (`relaxng/relaxng_benchmark_test.go`) use `tutor10_8` (`small`) and `libvirt` from the same
 tree. `BenchmarkValidate/large` validates `libvirt_0.xml` with its single `<disk>` repeated 300 times, built in
