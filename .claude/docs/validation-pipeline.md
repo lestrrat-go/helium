@@ -126,6 +126,9 @@ root and the PSVI type annotations are carried onto DESCENDANT elements and ALL 
 count(...)`) atomizes in its value space and node-scope QName resolution works. The assertion-tree ROOT
 element is deliberately left UNannotated (an xs:assert is part of determining the element's own validity, so
 its type is not yet assigned — `data(.)` on the root is untyped, matching Saxon/the conformance tests). The
+copy's annotation map holds only the asserted subtree's nodes and the evaluator borrows it
+(`xpath3.EvalBorrowing`), so per-assert cost follows the subtree; `checkAssertions` Frees the scratch
+document that owns the copy after the last assertion, returning its node slabs to the pool. The
 PSVI annotations come from `validationContext.assertAnnotations`, an always-on map (1.1 only) populated by
 `annotateElement`/`annotateAttrUse`. A single-schema `xpath3.SchemaDeclarations` adapter (`schema_decls.go`,
 `schemaDecls`, via `vc.assertSchemaDecls()`, carrying `vc.version`) is passed to the evaluator so a node
@@ -260,7 +263,8 @@ inherited from the schema-level default; affects only unprefixed element name te
 DETACHED single-node CTA context (`inherited_attrs.go` `ctaContextNode`: an orphan element bearing the
 element's own attributes PLUS inheritable attributes from ancestors (`inheritedAttributes`, decl
 `inheritable="true"`), in-scope namespaces, position()=last()=1, an `emptyCollectionResolver`, schema base
-URI, no children/parent — so @test cannot navigate to ancestors/siblings). A non-default `@type`/inline
+URI, no children/parent — so @test cannot navigate to ancestors/siblings; `applyTypeAlternatives` Frees its
+scratch document on return). A non-default `@type`/inline
 alternative must be VALIDLY SUBSTITUTABLE for the declared type (`checkAltSubstitutability`, compile time):
 `strictBuiltinAwareDerivedFrom` (`builtin_hierarchy.go`) accepts a genuine `isDerivedFrom` derivation (user
 types), the built-in simple-type hierarchy via the `builtinSimpleBase` table (the 1.0 built-ins are NOT

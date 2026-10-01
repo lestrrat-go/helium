@@ -104,25 +104,30 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 	// is the element being assessed, isolated from the rest of the document and
 	// stripped of comment/PI nodes. Build that isolated tree once (carrying the
 	// PSVI type annotations onto the copy) and evaluate every assertion against it
-	// so an expression cannot navigate to ancestors/siblings.
-	root, annotations := vc.isolatedAssertTree(ctx, elem)
-	decls := vc.assertSchemaDecls()
+	// so an expression cannot navigate to ancestors/siblings. Nothing keeps a node
+	// of the copy past this call, so its scratch document returns its node slabs
+	// to the pool when the assertions are done.
+	root, annotations, scratch := vc.isolatedAssertTree(ctx, elem)
+	defer scratch.Free()
+	// The evaluator borrows the annotation map, the namespace map, and the
+	// variable map instead of cloning them per assertion: this call owns the
+	// annotation map, the compiled schema owns the namespace map, and xpath3
+	// treats all three as read-only.
+	base := xpath3.NewEvaluator(xpath3.EvalBorrowing).QNameValueNoDefaultNamespace()
+	if annotations != nil {
+		base = base.TypeAnnotations(annotations)
+	}
+	if decls := vc.assertSchemaDecls(); decls != nil {
+		base = base.SchemaDeclarations(decls)
+	}
+	vars := map[string]xpath3.Sequence{"value": valueSeq}
 	var firstErr error
 	for cur := range baseChain(td) {
 		for _, a := range cur.Assertions {
 			if a.compiled == nil {
 				continue
 			}
-			ev := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
-				Namespaces(a.Namespaces).
-				Variables(map[string]xpath3.Sequence{"value": valueSeq}).
-				QNameValueNoDefaultNamespace()
-			if annotations != nil {
-				ev = ev.TypeAnnotations(annotations)
-			}
-			if decls != nil {
-				ev = ev.SchemaDeclarations(decls)
-			}
+			ev := base.Namespaces(a.Namespaces).Variables(vars)
 			res, err := ev.Evaluate(ctx, a.compiled, root)
 			if err != nil {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
@@ -165,24 +170,28 @@ func typeHasAssertions(td *TypeDef) bool {
 }
 
 // isolatedAssertTree builds the isolated XDM tree an xs:assert is evaluated
-// against: a deep copy of elem rooted in a fresh document, with comment and
-// processing-instruction nodes removed (XSD 1.1 §3.13.4.2) and each entity
-// reference replaced by its expansion (mapAssertAnnotations). The returned
-// annotation map carries the PSVI type annotations from the live tree onto the
-// corresponding copied element/attribute nodes so typed atomization (e.g. a
-// typed attribute in a value comparison) still works. If the copy fails for any
-// reason it falls back to the live element and annotations (the documented
-// non-isolated behavior), skipping no assertion.
-func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *helium.Element) (helium.Node, map[helium.Node]string) {
+// against: a deep copy of elem owned by a scratch document (but not linked
+// under it), with comment and processing-instruction nodes removed (XSD 1.1
+// §3.13.4.2) and each entity reference replaced by its expansion
+// (mapAssertAnnotations). The returned annotation map carries the PSVI type
+// annotations from the live tree onto the corresponding copied
+// element/attribute nodes so typed atomization (e.g. a typed attribute in a
+// value comparison) still works; it holds entries for elem's subtree only. If
+// the copy fails for any reason it falls back to the live element and
+// annotations (the documented non-isolated behavior), skipping no assertion.
+//
+// The scratch document is returned so the caller can Free it once nothing
+// refers to the copy any more.
+func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *helium.Element) (helium.Node, map[helium.Node]string, *helium.Document) {
 	live := map[helium.Node]string(vc.assertAnnotations)
 	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
 	copied, err := helium.CopyNode(elem, doc)
 	if err != nil {
-		return elem, live
+		return elem, live, doc
 	}
 	ce, ok := helium.AsNode[*helium.Element](copied)
 	if !ok {
-		return elem, live
+		return elem, live, doc
 	}
 	// The copy is left parentless (NOT linked as a document child): per XSD 1.1
 	// the element is the ROOT of the assertion tree, so an absolute-path
@@ -214,13 +223,15 @@ func (vc *validationContext) isolatedAssertTree(ctx context.Context, elem *heliu
 		_ = ce.AddNamespaceDecl(helium.NewNamespace(prefix, uri))
 	}
 
+	// The map grows with elem's subtree, the only nodes mapAssertAnnotations
+	// copies an annotation for.
 	var ann map[helium.Node]string
 	if vc.assertAnnotations != nil {
-		ann = make(map[helium.Node]string, len(vc.assertAnnotations))
+		ann = make(map[helium.Node]string)
 	}
 	vc.mapAssertAnnotations(ctx, elem, ce, vc.assertAnnotations, ann, true)
 	stripCommentsAndPIs(ce)
-	return ce, ann
+	return ce, ann, doc
 }
 
 // mapAssertAnnotations walks the live element orig and its structurally identical

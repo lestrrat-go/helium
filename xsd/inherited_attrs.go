@@ -59,7 +59,10 @@ func (vc *validationContext) inheritedAttributes(elem *helium.Element) []*helium
 // string()=” and `. is root()` therefore hold — while preserving the namespace
 // context so resolve-QName(@x, .) and prefixed name tests resolve, and exposing
 // inherited ancestor attributes so a test like @c:kind matches them.
-func (vc *validationContext) ctaContextNode(elem *helium.Element) *helium.Element {
+//
+// It also returns the scratch document that owns the node, so the caller can
+// Free it once nothing refers to the node any more.
+func (vc *validationContext) ctaContextNode(elem *helium.Element) (*helium.Element, *helium.Document) {
 	doc := helium.NewDocument("1.0", "UTF-8", helium.StandaloneExplicitNo)
 	// Carry the INSTANCE document's URI onto the synthetic document so fn:base-uri(.)
 	// on the CTA context node resolves to the instance document (the element bears no
@@ -100,7 +103,7 @@ func (vc *validationContext) ctaContextNode(elem *helium.Element) *helium.Elemen
 		seen[qn] = struct{}{}
 		addSynthAttr(synth, a)
 	}
-	return synth
+	return synth, doc
 }
 
 // isNamespaceDeclAttr reports whether a is a namespace declaration (xmlns or
