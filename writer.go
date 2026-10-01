@@ -180,6 +180,15 @@ type writeSession struct {
 	// suppress-indentation element, so indentation is disabled for it even when
 	// format is enabled.
 	suppressDepth int
+	// attrWalk is the stack of attributes the in-progress attribute-chain
+	// walks have visited (see attrWalkGuard). Each walk owns the entries from
+	// its base upward and truncates back to that base when it ends, so a walk
+	// nested inside an attribute's value reuses the same backing array.
+	attrWalk []*docnode
+	// attrOpen is the scratch buffer an attribute's ` prefix:local="` opening
+	// is assembled in, so the qualified name is written in one call without
+	// allocating a string for it.
+	attrOpen []byte
 	// nsScope maps a namespace prefix to the URI currently in force in the
 	// serialized OUTPUT — the union of the xmlns declarations emitted on the
 	// ancestor path. reconcileNamespaces consults it so a prefixed element or
@@ -411,6 +420,104 @@ func (s *writeSession) checkAttributeName(name string) bool {
 	return s.checkRawName("attribute name", name, rawNameQName, ErrWriterInvalidAttributeName)
 }
 
+// checkAttributeQName is checkAttributeName for an attribute name held as its
+// namespace prefix and local name, the parts Attribute.Name joins. A name that
+// passes every check is accepted without joining the parts, so validating a
+// prefixed attribute allocates nothing: two valid NCNames joined by one colon
+// form a valid QName, and the joined name carries the reserved "xmlns:" prefix
+// exactly when prefix is "xmlns". Any other name is joined and handed to
+// checkAttributeName, which records the same error it always has.
+func (s *writeSession) checkAttributeQName(prefix, local string) bool {
+	if prefix == "" {
+		return s.checkAttributeName(local)
+	}
+	if prefix != lexicon.PrefixXMLNS && xmlchar.IsValidNCName(prefix) && xmlchar.IsValidNCName(local) &&
+		(!s.asciiReject() || (!hasNonASCII(prefix) && !hasNonASCII(local))) {
+		return true
+	}
+	return s.checkAttributeName(prefix + ":" + local)
+}
+
+// writeAttrOpen writes the opening of an attribute, ` prefix:local="` (or
+// ` local="` when prefix is empty), as a single write. The bytes are assembled
+// in the session's reused attrOpen buffer, so no string is allocated for the
+// qualified name.
+func (s *writeSession) writeAttrOpen(out io.Writer, prefix, local string) {
+	if s.attrOpen == nil {
+		// Room for a typical qualified name, so most documents allocate the
+		// buffer once and never grow it.
+		s.attrOpen = make([]byte, 0, 64)
+	}
+	buf := append(s.attrOpen[:0], ' ')
+	if prefix != "" {
+		buf = append(buf, prefix...)
+		buf = append(buf, ':')
+	}
+	buf = append(buf, local...)
+	buf = append(buf, '=', '"')
+	s.attrOpen = buf
+	s.writeBytes(out, buf)
+}
+
+// attrWalkGuard bounds one walk of an element's attribute chain. A corrupt
+// chain (a cyclic SetNextSibling, or a non-*Attribute successor that would
+// leave the walk on the same attribute) revisits an attribute, and visitAttr
+// reports that so the walk stops. Visited attributes live on the session's
+// attrWalk stack and are found by a linear scan, so the common short chain
+// allocates nothing; a chain that reaches attrDupSetThreshold moves to a
+// map-backed set, keeping a long chain linear. The walk must stop at the exact
+// first revisit, which siblingCycleGuard does not promise: an attribute emitted
+// twice is a duplicate attribute on the start tag, which no parser accepts.
+type attrWalkGuard struct {
+	base int
+	n    int
+	set  map[*docnode]struct{}
+}
+
+// beginAttrWalk starts a walk guard whose entries sit above everything already
+// on the session's attrWalk stack.
+func (s *writeSession) beginAttrWalk() attrWalkGuard {
+	return attrWalkGuard{base: len(s.attrWalk)}
+}
+
+// endAttrWalk releases g's entries from the session's attrWalk stack.
+func (s *writeSession) endAttrWalk(g *attrWalkGuard) {
+	s.attrWalk = s.attrWalk[:g.base]
+}
+
+// visitAttr records key in g, reporting false when g has already recorded it.
+// The stack is resliced to g's own extent before appending, so entries a
+// nested walk left behind (one that returned on an error) are overwritten.
+func (s *writeSession) visitAttr(g *attrWalkGuard, key *docnode) bool {
+	if g.set != nil {
+		if _, dup := g.set[key]; dup {
+			return false
+		}
+		g.set[key] = struct{}{}
+		return true
+	}
+	seen := s.attrWalk[g.base : g.base+g.n]
+	if slices.Contains(seen, key) {
+		return false
+	}
+	if g.n+1 < attrDupSetThreshold {
+		if s.attrWalk == nil {
+			// Size the stack for one full linear-scan walk up front, so a
+			// typical document grows it once rather than by repeated doubling.
+			s.attrWalk = make([]*docnode, 0, attrDupSetThreshold)
+		}
+		s.attrWalk = append(s.attrWalk[:g.base+g.n], key)
+		g.n++
+		return true
+	}
+	g.set = make(map[*docnode]struct{}, 2*attrDupSetThreshold)
+	for _, k := range seen {
+		g.set[k] = struct{}{}
+	}
+	g.set[key] = struct{}{}
+	return true
+}
+
 // checkNamespaceBinding rejects a QName whose non-empty prefix resolves to an
 // empty (absent) namespace URI. Such a name serializes verbatim as
 // "prefix:local" with no in-scope xmlns:prefix declaration — reconcileOne skips
@@ -422,15 +529,17 @@ func (s *writeSession) checkAttributeName(name string) bool {
 // always accepted regardless of the namespace object's href: Namespaces in XML
 // binds it by definition to lexicon.NamespaceXML, so "xml:local" reparses
 // without any declaration (the parser resolves it in lookupNamespace, and
-// LookupNSByPrefix/dumpNs treat it the same way). On failure it records a sticky
-// error (preserving any earlier one) and returns false. Shared by the element
-// and attribute serialization paths so they cannot diverge.
-func (s *writeSession) checkNamespaceBinding(what, name, prefix, href string) bool {
+// LookupNSByPrefix/dumpNs treat it the same way). The name is taken as its
+// prefix and local parts and joined only for the error message, so the check
+// allocates nothing when it passes. On failure it records a sticky error
+// (preserving any earlier one) and returns false. Shared by the element and
+// attribute serialization paths so they cannot diverge.
+func (s *writeSession) checkNamespaceBinding(what, prefix, local, href string) bool {
 	if prefix == "xml" {
 		return true
 	}
 	if prefix != "" && href == "" {
-		s.check(fmt.Errorf("helium: %s %q uses prefix %q bound to an empty namespace URI: %w", what, name, prefix, ErrWriterUnboundNamespacePrefix))
+		s.check(fmt.Errorf("helium: %s %q uses prefix %q bound to an empty namespace URI: %w", what, prefix+":"+local, prefix, ErrWriterUnboundNamespacePrefix))
 		return false
 	}
 	return true
@@ -1399,14 +1508,15 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	}
 
 	// if it got here it's some sort of an element
-	var name string
+	var name, local string
 	var nslist []*Namespace
 	nser, isNser := n.(Namespacer)
 	if isNser {
+		local = nser.LocalName()
 		if prefix := nser.Prefix(); prefix != "" {
-			name = prefix + ":" + nser.LocalName()
+			name = prefix + ":" + local
 		} else {
-			name = nser.LocalName()
+			name = local
 		}
 		nslist = nser.Namespaces()
 		// When the element's active namespace uses a prefix (empty or not) whose
@@ -1438,7 +1548,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	// no reparseable serialization: the name emits as "prefix:local" but no
 	// xmlns:prefix is synthesized. Reject it, emitting no output the parser
 	// cannot read.
-	if isNser && !d.checkNamespaceBinding("element name", name, nser.Prefix(), nser.URI()) {
+	if isNser && !d.checkNamespaceBinding("element name", nser.Prefix(), local, nser.URI()) {
 		return d.err
 	}
 
@@ -1472,53 +1582,8 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	}
 
 	if e, ok := n.(*Element); ok {
-		// A per-list seen guard bounds a corrupt attribute chain: a cyclic
-		// SetNextSibling, or a non-*Attribute successor (which would otherwise
-		// leave attr unchanged and spin), terminates the walk. A normal
-		// properties list is short and acyclic, so this never triggers there.
-		seenAttrs := make(map[*docnode]struct{})
-		for attr := e.properties; attr != nil; {
-			akey := attr.baseDocNode()
-			if _, dup := seenAttrs[akey]; dup {
-				break
-			}
-			seenAttrs[akey] = struct{}{}
-			// The attribute name is emitted verbatim. checkAttributeName
-			// rejects names that would inject raw markup into the start tag.
-			if !d.checkAttributeName(attr.Name()) {
-				return d.err
-			}
-			// A prefixed attribute name whose prefix is bound to an empty
-			// namespace URI (constructible via SetAttributeNS with a
-			// CreateNamespace(prefix, "") binding) is likewise unreparseable.
-			if !d.checkNamespaceBinding("attribute name", attr.Name(), attr.Prefix(), attr.URI()) {
-				return d.err
-			}
-			d.writeString(out, " "+attr.Name()+`="`)
-			if d.err != nil {
-				return d.err
-			}
-			count := 0
-			for achld := range Children(attr) {
-				count++
-				if achld.Type() == TextNode {
-					if err := d.writeAttrValueContent(out, rawContent(achld)); err != nil {
-						return err
-					}
-				} else {
-					if err := d.writeNode(out, achld); err != nil {
-						return err
-					}
-				}
-			}
-			d.writeString(out, `"`)
-			a := attr.NextSibling()
-			if a == nil {
-				break
-			}
-			if at, ok := AsNode[*Attribute](a); ok {
-				attr = at
-			}
+		if err := d.writeAttributes(out, e); err != nil {
+			return err
 		}
 
 		if child := e.FirstChild(); child == nil {
@@ -1589,6 +1654,63 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	d.writeString(out, ">")
 
 	return d.err
+}
+
+// writeAttributes writes the attributes of e's start tag. It returns the error
+// that ends serialization (a rejected attribute name, or a failed write of an
+// attribute value), or nil once every attribute is written; a sticky write
+// error recorded along the way stays in d.err for the caller to return.
+//
+// A per-list seen guard bounds a corrupt attribute chain: a cyclic
+// SetNextSibling, or a non-*Attribute successor (which would otherwise leave
+// attr unchanged and spin), terminates the walk. A normal properties list is
+// short and acyclic, so this never triggers there.
+func (d *writeSession) writeAttributes(out io.Writer, e *Element) error {
+	guard := d.beginAttrWalk()
+	for attr := e.properties; attr != nil; {
+		if !d.visitAttr(&guard, attr.baseDocNode()) {
+			break
+		}
+		// The qualified name is handled as its prefix and local parts (the
+		// parts Attribute.Name joins) so no joined string is built.
+		prefix, local := attr.Prefix(), attr.LocalName()
+		// The attribute name is emitted verbatim. checkAttributeQName rejects
+		// names that would inject raw markup into the start tag.
+		if !d.checkAttributeQName(prefix, local) {
+			return d.err
+		}
+		// A prefixed attribute name whose prefix is bound to an empty namespace
+		// URI (constructible via SetAttributeNS with a CreateNamespace(prefix,
+		// "") binding) is likewise unreparseable.
+		if !d.checkNamespaceBinding("attribute name", prefix, local, attr.URI()) {
+			return d.err
+		}
+		d.writeAttrOpen(out, prefix, local)
+		if d.err != nil {
+			return d.err
+		}
+		for achld := range Children(attr) {
+			if achld.Type() == TextNode {
+				if err := d.writeAttrValueContent(out, rawContent(achld)); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := d.writeNode(out, achld); err != nil {
+				return err
+			}
+		}
+		d.writeString(out, `"`)
+		a := attr.NextSibling()
+		if a == nil {
+			break
+		}
+		if at, ok := AsNode[*Attribute](a); ok {
+			attr = at
+		}
+	}
+	d.endAttrWalk(&guard)
+	return nil
 }
 
 // reconcileNamespaces runs after an element's own xmlns declarations (nslist)
@@ -1676,17 +1798,16 @@ func (d *writeSession) reconcileNamespaces(out io.Writer, n Node, nser Namespace
 	// Namespaced attributes. The per-list seen guard bounds a corrupt attribute
 	// chain, mirroring the emission loop in writeNode.
 	if e, ok := n.(*Element); ok {
-		seen := make(map[*docnode]struct{})
+		guard := d.beginAttrWalk()
 		for attr := e.properties; attr != nil; attr = attr.NextAttribute() {
-			key := attr.baseDocNode()
-			if _, dup := seen[key]; dup {
+			if !d.visitAttr(&guard, attr.baseDocNode()) {
 				break
 			}
-			seen[key] = struct{}{}
 			if ans := attr.ns; ans != nil {
 				saved = d.reconcileOne(out, ans.prefix, ans.href, false, emitted, saved)
 			}
 		}
+		d.endAttrWalk(&guard)
 	}
 	return saved
 }

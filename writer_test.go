@@ -3,6 +3,7 @@ package helium_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -725,6 +726,45 @@ func TestSerialize(t *testing.T) {
 			})
 		}
 	})
+
+	// A corrupt attribute chain that loops back to an earlier attribute stops
+	// the walk at the first revisit, so each attribute is written once and the
+	// output matches the intact chain. The 40-attribute case is long enough
+	// for the walk guard to switch from its linear scan to a set.
+	t.Run("cyclic attribute chain", func(t *testing.T) {
+		for _, n := range []int{3, 40} {
+			t.Run(fmt.Sprintf("%d attributes", n), func(t *testing.T) {
+				t.Parallel()
+
+				var src strings.Builder
+				src.WriteString(`<root xmlns:p="urn:p"><e`)
+				for i := range n {
+					if i%2 == 1 {
+						fmt.Fprintf(&src, ` p:a%d="%d"`, i, i)
+						continue
+					}
+					fmt.Fprintf(&src, ` a%d="%d"`, i, i)
+				}
+				src.WriteString(`/></root>`)
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(src.String()))
+				require.NoError(t, err)
+
+				want, err := helium.WriteString(doc)
+				require.NoError(t, err)
+				require.Contains(t, want, src.String())
+
+				e, ok := doc.DocumentElement().FirstChild().(*helium.Element)
+				require.True(t, ok, "first child of root is <e>")
+				attrs := e.Attributes()
+				require.Len(t, attrs, n)
+				helium.UnsafeSetNextSiblingForTesting(attrs[n-1], attrs[1])
+
+				got, err := helium.WriteString(doc)
+				require.NoError(t, err)
+				require.Equal(t, want, got)
+			})
+		}
+	})
 }
 
 func TestWriteErrors(t *testing.T) {
@@ -1117,4 +1157,75 @@ func TestWriterOptions(t *testing.T) {
 	err = helium.NewWriter().EscapeNonASCII(true).WriteTo(&buf, d2)
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "&#")
+}
+
+// attrAllocProbe serializes doc with the default writer to io.Discard,
+// keeping the first error, so testing.AllocsPerRun can measure one WriteTo
+// call through a method value.
+type attrAllocProbe struct {
+	doc *helium.Document
+	err error
+}
+
+func (p *attrAllocProbe) run() {
+	if err := helium.NewWriter().WriteTo(io.Discard, p.doc); err != nil && p.err == nil {
+		p.err = err
+	}
+}
+
+// parseAttrHeavyDoc parses a document whose single <e> element carries n
+// empty-valued attributes, alternating between unprefixed and prefixed names.
+// Empty values keep attribute-value escaping out of the count, so only the
+// per-attribute name and duplicate-tracking work is measured. With xhtml set
+// the document carries an XHTML 1.0 DOCTYPE, which routes it through the
+// XHTML serializer.
+func parseAttrHeavyDoc(t *testing.T, n int, xhtml bool) *helium.Document {
+	t.Helper()
+	var buf strings.Builder
+	if xhtml {
+		buf.WriteString(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" ` +
+			`"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">`)
+		buf.WriteString(`<html xmlns="http://www.w3.org/1999/xhtml" xmlns:p="urn:p"><e`)
+	} else {
+		buf.WriteString(`<root xmlns:p="urn:p"><e`)
+	}
+	for i := range n {
+		if i%2 == 1 {
+			fmt.Fprintf(&buf, ` p:a%d=""`, i)
+			continue
+		}
+		fmt.Fprintf(&buf, ` a%d=""`, i)
+	}
+	if xhtml {
+		buf.WriteString(`/></html>`)
+	} else {
+		buf.WriteString(`/></root>`)
+	}
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(buf.String()))
+	require.NoError(t, err)
+	return doc
+}
+
+// Attribute names and the attribute-chain walk guard allocate nothing per
+// attribute: an element with 24 attributes, half of them prefixed, costs
+// exactly what an element with one attribute does.
+func TestWriteToAttributeAllocations(t *testing.T) {
+	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
+	// test, and a concurrent allocator would perturb the count anyway.
+	for _, xhtml := range []bool{false, true} {
+		name := "xml"
+		if xhtml {
+			name = "xhtml"
+		}
+		t.Run(name, func(t *testing.T) {
+			narrow := &attrAllocProbe{doc: parseAttrHeavyDoc(t, 1, xhtml)}
+			wide := &attrAllocProbe{doc: parseAttrHeavyDoc(t, 24, xhtml)}
+			narrowAllocs := testing.AllocsPerRun(20, narrow.run)
+			wideAllocs := testing.AllocsPerRun(20, wide.run)
+			require.NoError(t, narrow.err)
+			require.NoError(t, wide.err)
+			require.Equal(t, narrowAllocs, wideAllocs,
+				"a 24-attribute element must allocate exactly what a 1-attribute element does")
+		})
+	}
 }
