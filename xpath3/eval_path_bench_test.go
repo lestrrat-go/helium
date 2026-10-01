@@ -104,6 +104,19 @@ func BenchmarkPathReverseAxisPerNode(b *testing.B) {
 	runPerNodeBench(b, "//val", "ancestor::*")
 }
 
+// BenchmarkPathUnionPerNode evaluates the identity-transform select
+// expression once per item: its operands are the attributes and the
+// children of one element, already in document order when concatenated.
+func BenchmarkPathUnionPerNode(b *testing.B) {
+	runPerNodeBench(b, "//item", "@*|node()")
+}
+
+// BenchmarkPathUnionSwappedPerNode swaps the operands of
+// BenchmarkPathUnionPerNode, so the union has to merge them.
+func BenchmarkPathUnionSwappedPerNode(b *testing.B) {
+	runPerNodeBench(b, "//item", "node()|@*")
+}
+
 func benchmarkPathDocument(b *testing.B, path string) *helium.Document {
 	b.Helper()
 	data, err := os.ReadFile(path)

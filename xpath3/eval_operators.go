@@ -291,12 +291,18 @@ func evalUnionExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e
 	if err != nil {
 		return nil, err
 	}
-	leftNodes, ok1 := NodesFrom(left)
-	rightNodes, ok2 := NodesFrom(right)
-	if !ok1 || !ok2 {
+	// Gather both operands into one buffer, left then right, so the union
+	// can return it as is when it is already in document order.
+	nodes, ok := appendSequenceNodes(make([]helium.Node, 0, seqLen(left)+seqLen(right)), left)
+	if !ok {
 		return nil, ErrUnionNotNodeSet
 	}
-	merged, err := ixpath.MergeNodeSets(leftNodes, rightNodes, ec.docOrder, ec.maxNodes)
+	split := len(nodes)
+	nodes, ok = appendSequenceNodes(nodes, right)
+	if !ok {
+		return nil, ErrUnionNotNodeSet
+	}
+	merged, err := ixpath.UnionNodeSets(nodes, split, ec.docOrder, ec.maxNodes)
 	if err != nil {
 		return nil, err
 	}

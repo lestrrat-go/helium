@@ -88,15 +88,39 @@ func NodesFrom(seq Sequence) ([]helium.Node, bool) {
 	if seqLen(seq) == 0 {
 		return nil, true
 	}
-	nodes := make([]helium.Node, 0, seq.Len())
+	nodes, ok := appendSequenceNodes(make([]helium.Node, 0, seq.Len()), seq)
+	if !ok {
+		return nil, false
+	}
+	return nodes, true
+}
+
+// appendSequenceNodes appends the node of every item of seq to dst. It
+// reports false, with dst holding the nodes before it, when an item is not a
+// NodeItem.
+func appendSequenceNodes(dst []helium.Node, seq Sequence) ([]helium.Node, bool) {
+	if seqLen(seq) == 0 {
+		return dst, true
+	}
+	// Range over a slice directly: the Items iterator allocates a closure.
+	if items, ok := seq.(ItemSlice); ok {
+		for _, item := range items {
+			ni, ok := item.(NodeItem)
+			if !ok {
+				return dst, false
+			}
+			dst = append(dst, ni.Node)
+		}
+		return dst, true
+	}
 	for item := range seqItems(seq) {
 		ni, ok := item.(NodeItem)
 		if !ok {
-			return nil, false
+			return dst, false
 		}
-		nodes = append(nodes, ni.Node)
+		dst = append(dst, ni.Node)
 	}
-	return nodes, true
+	return dst, true
 }
 
 // AtomizeSequence atomizes all items in a sequence per XPath 3.1 Section 2.6.2.

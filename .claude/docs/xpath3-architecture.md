@@ -30,6 +30,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 |------|----------|
 | `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
+| `union.go` | `UnionNodeSets` (xpath3 union: `MergeNodeSets` result, skipping the index for one element's attributes then children, and merging two sorted operands in one pass), `inElementOrder`, `mergeIncreasingRuns` |
 | `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)` (an element's or document's string-value is its `Content()`: Text/CDATA descendants with entity references expanded through owned children only; a document's leaves out its DTD), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
 | `limits.go` | `DefaultMaxRecursionDepth=5000`, `DefaultMaxNodeSetLength=10_000_000`, `ErrNodeSetLimit` |
@@ -58,6 +59,7 @@ func (c *DocOrderCache) Less(a, b helium.Node) bool
 func (c *DocOrderCache) Reset() // clear cache; callers MUST call after mutating the document
 func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
+func UnionNodeSets(nodes []helium.Node, split int, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func DocumentRoot(n helium.Node) helium.Node
 func OrderStepResult(out, inputs []helium.Node, axis AxisType, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 ```
@@ -80,9 +82,27 @@ step reserves its document's registration order in the cache (unexported
 indexing would have produced. `Position`, `Compare` and every indexing path index a
 reserved document on first use, under its reserved order. xpath1 and xpath3 end every
 axis step of a location path with it. In xpath3 the other node-ordering sites keep
-`DeduplicateNodes`/`MergeNodeSets`: a path step whose step expression is not an axis
-step (`E1/(a|b)`, `E1/f()`, `E1/$v`, `evalPathStepExpr`), the merge of the per-node
-results of `E1/E2` (`evalPathExpr`), union, and intersect/except.
+`DeduplicateNodes`: a path step whose step expression is not an axis step (`E1/(a|b)`,
+`E1/f()`, `E1/$v`, `evalPathStepExpr`), the merge of the per-node results of `E1/E2`
+(`evalPathExpr`), and intersect/except. xpath3 union uses `UnionNodeSets` and xpath1
+union uses `MergeNodeSets`.
+
+`UnionNodeSets(nodes, split, ...)` takes both operands in one buffer (`nodes[:split]`
+then `nodes[split:]`) and returns what `MergeNodeSets(nodes[:split], nodes[split:], ...)`
+returns, with the same documents registered in the cache in the same order. When
+`nodes` is a subsequence of one element's attributes (in `ForEachAttribute` order)
+followed by that element's owned children (in `helium.Children` order),
+`inElementOrder`, it returns `nodes` with its capacity clamped and only reserves the
+document (unexported `reserveDocumentOf`, which does nothing for an already-indexed
+node). The index numbers an element, its attributes and its owned children's subtrees
+in exactly that order on every walk that reaches the element, and leaves all of them
+unindexed together otherwise, so that order is the sorted order in both cases; namespace
+nodes and nodes of another element fail the check. Otherwise it resolves the sort keys
+and, when the keys of each operand are strictly increasing, merges them in one pass
+(`mergeIncreasingRuns`), emitting a node common to both once and falling back on two
+different nodes with equal keys (namespace nodes of one element, unindexed nodes).
+Anything else takes the `MergeNodeSets` body over the resolved keys
+(`mergeNodeSetsWithKeys`).
 
 ### `StringValue` signatures
 

@@ -194,6 +194,25 @@ func (c *DocOrderCache) reserveDocument(n helium.Node) {
 	root := DocumentRoot(n)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.reserveRootLocked(root)
+}
+
+// reserveDocumentOf registers the document of n the way resolving the sort
+// key of n would (ensureSortKeyLocked), without indexing it: it does nothing
+// when n is already indexed and otherwise reserves the document of n
+// (reserveDocument). n must not be a namespace node.
+func (c *DocOrderCache) reserveDocumentOf(n helium.Node) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.keys[n]; ok {
+		return
+	}
+	c.reserveRootLocked(DocumentRoot(n))
+}
+
+// reserveRootLocked reserves root, a DocumentRoot result, unless it is
+// already registered. The caller must hold c.mu.
+func (c *DocOrderCache) reserveRootLocked(root helium.Node) {
 	if _, ok := c.documents[root]; ok {
 		return
 	}
@@ -619,6 +638,12 @@ func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]he
 	// registration order follows first appearance across a then b, which is the
 	// order the deduplicated result would have produced.
 	keys := cache.indexSortKeys(a, b)
+	return mergeNodeSetsWithKeys(a, b, keys, maxNodes)
+}
+
+// mergeNodeSetsWithKeys is MergeNodeSets over the sort keys of a followed by
+// those of b, already resolved by indexSortKeys.
+func mergeNodeSetsWithKeys(a, b []helium.Node, keys []sortKey, maxNodes int) ([]helium.Node, error) {
 	// Cap the seen-map and result allocations at the limit (plus one slot to
 	// detect overflow) so a large, duplicate-heavy input does not over-allocate
 	// buffers sized to the full input when the deduplicated result fits well
