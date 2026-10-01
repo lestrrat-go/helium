@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -59,7 +60,7 @@ type execContext struct {
 	cachedFns                    map[string]xpath3.Function               // cached xsltFunctions() result
 	cachedFnsNS                  map[xpath3.QualifiedName]xpath3.Function // cached xsltFunctionsNS() result
 	globalVarsGen                uint64                                   // incremented when globalVars changes
-	cachedVarsMap                map[string]xpath3.Sequence               // cached result of collectAllVars (globals only)
+	cachedVarsMap                map[string]xpath3.Sequence               // cached result of collectAllVars; never mutated once built
 	cachedVarsGen                uint64                                   // globalVarsGen at time cachedVarsMap was built
 	accumulatorState             map[string]xpath3.Sequence               // accumulator name -> current value
 	accumulatorStateError        map[string]error                         // accumulator name -> deferred error
@@ -146,6 +147,27 @@ type execContext struct {
 	cachedBaseEvalPackage           *Stylesheet
 	cachedBaseEvalInPattern         bool
 	cachedBaseEvalPatternNSPtr      uintptr // identity of the pattern ns snapshot baked into the cached evaluator
+	cachedBaseEvalGen               uint64  // incremented each time the base evaluator is rebuilt
+
+	// scopedEval caches the base evaluator plus the per-scope overlays
+	// (variables, functions, schema state, collation); see scopedXPathEvaluator.
+	scopedEval scopedEvalCache
+
+	// localVarsVer is incremented whenever a binding is added to a local
+	// variable scope (setVar/setVarDeferred) and when a scope that holds
+	// bindings is popped. Together with the innermost non-empty scope
+	// (visibleVarScope) it tells collectAllVars whether its cached map is
+	// still current.
+	localVarsVer       uint64
+	cachedVarsScope    *varScope   // visibleVarScope() when cachedVarsMap was built
+	cachedVarsScopeVer uint64      // localVarsVer when cachedVarsMap was built
+	cachedVarsPackage  *Stylesheet // currentPackage when cachedVarsMap was built
+
+	// nilledGen is incremented on every change to nilledElements; nilledNodes
+	// caches nilledElementNodes' conversion of it as of nilledNodesGen.
+	nilledGen      uint64
+	nilledNodes    map[helium.Node]struct{}
+	nilledNodesGen uint64
 }
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
@@ -289,6 +311,7 @@ func (ec *execContext) remapAnnotationsToCopy(nodeMap map[helium.Node]helium.Nod
 			}
 		}
 		ec.nilledElements = remapped
+		ec.nilledGen++
 	}
 }
 
@@ -298,6 +321,7 @@ func (ec *execContext) markNilled(elem *helium.Element) {
 		ec.nilledElements = make(map[*helium.Element]struct{})
 	}
 	ec.nilledElements[elem] = struct{}{}
+	ec.nilledGen++
 }
 
 // preserveIDAnnotations populates the document-level ID index and sets
@@ -429,10 +453,17 @@ func (ec *execContext) nilledElementNodes() map[helium.Node]struct{} {
 	if len(ec.nilledElements) == 0 || ec.stylesheet.inputTypeAnnotations == validationStrip {
 		return nil
 	}
+	// The conversion is cached until nilledElements changes. A change builds
+	// a new map, so a map already handed to an evaluator is never mutated.
+	if ec.nilledNodes != nil && ec.nilledNodesGen == ec.nilledGen {
+		return ec.nilledNodes
+	}
 	out := make(map[helium.Node]struct{}, len(ec.nilledElements))
 	for elem := range ec.nilledElements {
 		out[elem] = struct{}{}
 	}
+	ec.nilledNodes = out
+	ec.nilledNodesGen = ec.nilledGen
 	return out
 }
 
@@ -645,6 +676,9 @@ func (ec *execContext) popVarScope() {
 	}
 	old := ec.localVars
 	ec.localVars = old.parent
+	if len(old.vars) > 0 {
+		ec.localVarsVer++
+	}
 	old.parent = nil
 	clear(old.vars)
 	clear(old.deferredErrors)
@@ -659,6 +693,7 @@ func (ec *execContext) setVar(name string, value xpath3.Sequence) {
 		ec.localVars.vars = make(map[string]xpath3.Sequence, 4)
 	}
 	ec.localVars.vars[name] = value
+	ec.localVarsVer++
 }
 
 // setVarDeferred stores a variable with a deferred error. The variable
@@ -676,6 +711,7 @@ func (ec *execContext) setVarDeferred(name string, err error) {
 		ec.localVars.deferredErrors = make(map[string]error, 2)
 	}
 	ec.localVars.deferredErrors[name] = err
+	ec.localVarsVer++
 }
 
 // lookupTypeNamespaceOK resolves a namespace prefix used inside a sequence
@@ -778,10 +814,16 @@ func (ec *execContext) addNode(node helium.Node) error {
 	// break the "consecutive atomic" chain from xsl:sequence outputs.
 	out.prevWasAtomic = false
 
-	// For text nodes, compute whitespace-only once; used by multiple checks below.
-	isNonWhitespaceText := isText && strings.TrimSpace(string(node.Content())) != ""
+	// For text nodes, read the content once (Content copies it) and compute
+	// whitespace-only once; both are used by multiple checks below.
+	var text []byte
+	isNonWhitespaceText := false
+	if isText {
+		text = node.Content()
+		isNonWhitespaceText = len(bytes.TrimSpace(text)) != 0
+	}
 	if len(out.deferredMarkupSeps) > 0 &&
-		(!isText || len(node.Content()) > 0) &&
+		(!isText || len(text) > 0) &&
 		!isAdaptiveStandaloneMarkupNode(node) {
 		if err := out.materializeDeferredMarkupSeps(); err != nil {
 			return err
@@ -819,7 +861,7 @@ func (ec *execContext) addNode(node helium.Node) error {
 	// Zero-length text nodes are discarded from the result tree
 	// (XSLT 3.0 §11.4.1: "If the result ... is a zero-length string,
 	// then no text node is created").
-	if isText && len(node.Content()) == 0 {
+	if isText && len(text) == 0 {
 		return nil
 	}
 	// When a text node is about to be merged (via addChild) with an
@@ -1149,8 +1191,13 @@ func (ec *execContext) sortXPathEvalState(ctx context.Context) *xpath3.EvalState
 
 // xpathContext returns a context.Context suitable for XPath evaluation.
 // It carries cancellation/deadlines and the xslt3 exec context, but
-// NOT XPath config (that comes from the Evaluator).
+// NOT XPath config (that comes from the Evaluator). When ctx already resolves
+// to ec (the transform attaches it at the start), ctx is returned as is
+// instead of wrapping it again on every evaluation.
 func (ec *execContext) xpathContext(ctx context.Context) context.Context {
+	if getExecContext(ctx) == ec {
+		return ctx
+	}
 	return withExecContext(ctx, ec)
 }
 
@@ -1172,6 +1219,7 @@ func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
 	eval := ec.buildBaseXPathEvaluator(baseURI)
 
 	ec.cachedBaseEval = eval
+	ec.cachedBaseEvalGen++
 	ec.cachedBaseEvalValid = true
 	ec.cachedBaseEvalXPathDefaultNS = ec.xpathDefaultNS
 	ec.cachedBaseEvalHasXPathDefaultNS = ec.hasXPathDefaultNS
@@ -1233,22 +1281,24 @@ func (ec *execContext) buildBaseXPathEvaluator(baseURI string) xpath3.Evaluator 
 	return eval
 }
 
-// effectiveXPathNamespaces returns the prefix→URI bindings for the strict
-// XPath evaluator, or nil when there are no bindings to apply. The evaluator is
-// built with StrictPrefixes(), so it does NOT consult the XPath predeclared
-// fallback (fn/math/map/array/xs/err) on its own. Stylesheet-declared bindings
-// always take precedence; explicit declarations override the fallback.
-// mapIdentity returns a stable identity value for a namespace-bindings map so
-// the cached base evaluator can be invalidated when the active pattern's lexical
-// snapshot changes. A nil map yields 0; two non-nil maps share an identity iff
-// they are the same underlying map (patterns reuse the same snapshot instance).
-func mapIdentity(m map[string]string) uintptr {
+// mapIdentity returns a stable identity value for a map so the cached
+// evaluators can be invalidated when an input map is replaced (for example
+// when the active pattern's lexical namespace snapshot changes). A nil map
+// yields 0; two non-nil maps share an identity iff they are the same
+// underlying map. reflect is used because Go offers no other way to read a
+// map's identity; the value never leaves this function.
+func mapIdentity[M ~map[K]V, K comparable, V any](m M) uintptr {
 	if m == nil {
 		return 0
 	}
 	return reflect.ValueOf(m).Pointer()
 }
 
+// effectiveXPathNamespaces returns the prefix→URI bindings for the strict
+// XPath evaluator, or nil when there are no bindings to apply. The evaluator is
+// built with StrictPrefixes(), so it does NOT consult the XPath predeclared
+// fallback (fn/math/map/array/xs/err) on its own. Stylesheet-declared bindings
+// always take precedence; explicit declarations override the fallback.
 func (ec *execContext) effectiveXPathNamespaces() map[string]string {
 	// During pattern matching, prefix resolution must use the PATTERN's own
 	// lexical namespace snapshot (captured at compile time from the xmlns
@@ -1376,49 +1426,108 @@ func (ec *execContext) accumulatorStateKey(name string) string {
 	return name
 }
 
-// xpathEvaluator returns the base evaluator with per-call overlays
-// (variables, position, size, context item, collation, doc-order cache).
-func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
+// scopedEvalKey identifies every input of the scoped evaluator (see
+// scopedXPathEvaluator). Maps are compared by identity: the cached evaluator
+// borrows each keyed map, which keeps it reachable, so a different map can
+// never reuse the address of a cached one.
+type scopedEvalKey struct {
+	baseGen     uint64
+	vars        uintptr
+	fns         uintptr
+	fnsNS       uintptr
+	typeAnn     uintptr
+	nilled      uintptr
+	preservedID uintptr
+	schema      *schemaRegistry
+	collation   string
+	docOrder    *xpath3.DocOrderCache
+}
+
+// scopedEvalCache holds the evaluator scopedXPathEvaluator last built, plus its
+// XPath 1.0 compatibility-mode variant, which is built on first use.
+type scopedEvalCache struct {
+	key         scopedEvalKey
+	valid       bool
+	eval        xpath3.Evaluator
+	compat      xpath3.Evaluator
+	compatValid bool
+}
+
+// scopedXPathEvaluator returns the base evaluator overlaid with everything
+// except the dynamic focus: variables, functions, schema state, collation, and
+// the doc-order cache. These change only when a variable scope, package,
+// collation, or schema state changes, so the result is cached and rebuilt only
+// when one of its inputs (scopedEvalKey) differs. compat selects the XPath 1.0
+// compatibility-mode variant.
+func (ec *execContext) scopedXPathEvaluator(ctx context.Context, compat bool) xpath3.Evaluator {
 	vars := ec.collectAllVars(ctx)
-	eval := ec.baseXPathEvaluator().
-		Variables(vars).
-		Functions(ec.xsltFunctions(), ec.xsltFunctionsNS())
-	if ec.typeAnnotations != nil {
-		eval = eval.TypeAnnotations(ec.typeAnnotations)
+	base := ec.baseXPathEvaluator()
+	fns := ec.xsltFunctions()
+	fnsNS := ec.xsltFunctionsNS()
+	nilled := ec.nilledElementNodes()
+	key := scopedEvalKey{
+		baseGen:     ec.cachedBaseEvalGen,
+		vars:        mapIdentity(vars),
+		fns:         mapIdentity(fns),
+		fnsNS:       mapIdentity(fnsNS),
+		typeAnn:     mapIdentity(ec.typeAnnotations),
+		nilled:      mapIdentity(nilled),
+		preservedID: mapIdentity(ec.preservedIDAnnotations),
+		schema:      ec.schemaRegistry,
+		collation:   ec.defaultCollation,
+		docOrder:    ec.docOrderCache,
 	}
-	if nilled := ec.nilledElementNodes(); nilled != nil {
-		eval = eval.NilledElements(nilled)
+	cache := &ec.scopedEval
+	if !cache.valid || cache.key != key {
+		eval := base.Variables(vars).Functions(fns, fnsNS)
+		if ec.typeAnnotations != nil {
+			eval = eval.TypeAnnotations(ec.typeAnnotations)
+		}
+		if nilled != nil {
+			eval = eval.NilledElements(nilled)
+		}
+		if ec.preservedIDAnnotations != nil {
+			eval = eval.PreservedIDAnnotations(ec.preservedIDAnnotations)
+		}
+		if ec.schemaRegistry != nil {
+			eval = eval.SchemaDeclarations(ec.schemaRegistry)
+		}
+		if ec.defaultCollation != "" {
+			eval = eval.DefaultCollation(ec.defaultCollation)
+		}
+		if ec.docOrderCache != nil {
+			eval = eval.DocOrderCache(ec.docOrderCache)
+		}
+		*cache = scopedEvalCache{key: key, valid: true, eval: eval}
 	}
-	if ec.preservedIDAnnotations != nil {
-		eval = eval.PreservedIDAnnotations(ec.preservedIDAnnotations)
+	if !compat {
+		return cache.eval
 	}
-	if ec.schemaRegistry != nil {
-		eval = eval.SchemaDeclarations(ec.schemaRegistry)
+	if !cache.compatValid {
+		cache.compat = cache.eval.XPath10Compat()
+		cache.compatValid = true
 	}
-	if ec.position > 0 {
-		eval = eval.Position(ec.position)
+	return cache.compat
+}
+
+// withFocus applies the current dynamic focus (context item, position, size)
+// to eval. When no focus is set, eval is returned unchanged.
+func (ec *execContext) withFocus(eval xpath3.Evaluator) xpath3.Evaluator {
+	if ec.contextItem == nil && ec.position <= 0 && ec.size <= 0 {
+		return eval
 	}
-	if ec.size > 0 {
-		eval = eval.Size(ec.size)
-	}
-	if ec.contextItem != nil {
-		eval = eval.ContextItem(ec.contextItem)
-	}
-	if ec.defaultCollation != "" {
-		eval = eval.DefaultCollation(ec.defaultCollation)
-	}
-	if ec.docOrderCache != nil {
-		eval = eval.DocOrderCache(ec.docOrderCache)
-	}
-	return eval
+	return eval.Focus(ec.contextItem, ec.position, ec.size)
+}
+
+// xpathEvaluator returns the scoped evaluator with the current dynamic focus
+// applied.
+func (ec *execContext) xpathEvaluator(ctx context.Context) xpath3.Evaluator {
+	return ec.withFocus(ec.scopedXPathEvaluator(ctx, false))
 }
 
 // evalXPath evaluates an XPath expression using the Evaluator-based path.
 func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
-	eval := ec.xpathEvaluator(ctx)
-	if ec.isCompatExpr(expr) {
-		eval = eval.XPath10Compat()
-	}
+	eval := ec.withFocus(ec.scopedXPathEvaluator(ctx, ec.isCompatExpr(expr)))
 	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
 }
 
@@ -1430,10 +1539,7 @@ func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, n
 // body via evalXPath under its OWN version, so compat does not leak across the
 // component boundary.
 func (ec *execContext) evalPatternExpr(ctx context.Context, expr *xpath3.Expression, node helium.Node) (*xpath3.Result, error) {
-	eval := ec.xpathEvaluator(ctx)
-	if ec.patternCompat {
-		eval = eval.XPath10Compat()
-	}
+	eval := ec.withFocus(ec.scopedXPathEvaluator(ctx, ec.patternCompat))
 	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
 }
 
@@ -1455,6 +1561,21 @@ func (ec *execContext) withCompat(eval xpath3.Evaluator, expr *xpath3.Expression
 		return eval.XPath10Compat()
 	}
 	return eval
+}
+
+// visibleVarScope returns the innermost local scope that holds bindings, or nil
+// when no local binding is in scope. Empty scopes (a template or instruction
+// that declares no variables) contribute nothing to the visible variables, so
+// collectAllVars keys its cache on this scope instead of ec.localVars. The
+// bindings of this scope and of its ancestors change only through setVar and
+// setVarDeferred, which increment localVarsVer.
+func (ec *execContext) visibleVarScope() *varScope {
+	for s := ec.localVars; s != nil; s = s.parent {
+		if len(s.vars) > 0 {
+			return s
+		}
+	}
+	return nil
 }
 
 func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Sequence {
@@ -1511,12 +1632,18 @@ func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Seq
 		}
 	}
 
-	// Fast path: when there are no local variables, globals haven't
-	// changed, and we're not in a package context, return the cached map.
-	inPackage := ec.currentPackage != nil && ec.currentPackage != ec.stylesheet
-	if ec.localVars == nil && !inPackage && ec.cachedVarsGen == ec.globalVarsGen && ec.cachedVarsMap != nil {
+	// Fast path: when neither the globals, the visible local bindings, nor
+	// the package context changed since the cached map was built, return it.
+	// Callers must not mutate the returned map.
+	visible := ec.visibleVarScope()
+	if ec.cachedVarsMap != nil &&
+		ec.cachedVarsGen == ec.globalVarsGen &&
+		ec.cachedVarsScope == visible &&
+		ec.cachedVarsScopeVer == ec.localVarsVer &&
+		ec.cachedVarsPackage == ec.currentPackage {
 		return ec.cachedVarsMap
 	}
+	inPackage := ec.currentPackage != nil && ec.currentPackage != ec.stylesheet
 
 	vars := make(map[string]xpath3.Sequence, len(ec.globalVars))
 	// Start with globals
@@ -1542,11 +1669,11 @@ func (ec *execContext) collectAllVars(ctx context.Context) map[string]xpath3.Seq
 		}
 	}
 
-	// Cache the result when it's globals-only (no local scopes and no package)
-	if ec.localVars == nil && !inPackage {
-		ec.cachedVarsMap = vars
-		ec.cachedVarsGen = ec.globalVarsGen
-	}
+	ec.cachedVarsMap = vars
+	ec.cachedVarsGen = ec.globalVarsGen
+	ec.cachedVarsScope = visible
+	ec.cachedVarsScopeVer = ec.localVarsVer
+	ec.cachedVarsPackage = ec.currentPackage
 
 	return vars
 }
@@ -1568,20 +1695,17 @@ func (ec *execContext) evaluatePackageVar(ctx context.Context, v *variable) (xpa
 	// stylesheet.
 	savedVal, hadSaved := ec.globalVars[v.Name]
 	val, err := ec.evaluateGlobalVar(ctx, v)
-	if err != nil {
-		// Restore on error
-		if hadSaved {
-			ec.globalVars[v.Name] = savedVal
-		} else {
-			delete(ec.globalVars, v.Name)
-		}
-		return nil, err
-	}
-	// Restore the original globalVars entry
+	// Restore the original globalVars entry, on error too. The restore
+	// changes globalVars, so bump globalVarsGen to drop the cached variable
+	// map collectAllVars may have built while the package value was present.
 	if hadSaved {
 		ec.globalVars[v.Name] = savedVal
 	} else {
 		delete(ec.globalVars, v.Name)
+	}
+	ec.globalVarsGen++
+	if err != nil {
+		return nil, err
 	}
 	ec.packageVarCache[v] = val
 	return val, nil

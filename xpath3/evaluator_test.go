@@ -205,6 +205,65 @@ func TestEvaluatorBuilders(t *testing.T) {
 	require.Equal(t, float64(5), n)
 }
 
+// evalToString evaluates expr against node and returns its xs:string result.
+func evalToString(t *testing.T, eval xpath3.Evaluator, expr *xpath3.Expression, node helium.Node) string {
+	t.Helper()
+	res, err := eval.Evaluate(t.Context(), expr, node)
+	require.NoError(t, err)
+	s, ok := res.IsString()
+	require.True(t, ok)
+	return s
+}
+
+func TestEvaluatorFocus(t *testing.T) {
+	doc := mustParseXML(t, "<root><a/><b/></root>")
+	root := doc.DocumentElement()
+
+	focusExpr, err := xpath3.NewCompiler().Compile(`string-join((string(.), string(position()), string(last())), "|")`)
+	require.NoError(t, err)
+
+	base := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+
+	t.Run("sets item, position, and size", func(t *testing.T) {
+		eval := base.Focus(xpath3.SingleString("item").Get(0), 2, 5)
+		require.Equal(t, "item|2|5", evalToString(t, eval, focusExpr, root))
+	})
+
+	t.Run("matches the separate setters", func(t *testing.T) {
+		item := xpath3.SingleString("item").Get(0)
+		separate := base.ContextItem(item).Position(3).Size(4)
+		combined := base.Focus(item, 3, 4)
+		require.Equal(t, evalToString(t, separate, focusExpr, root), evalToString(t, combined, focusExpr, root))
+	})
+
+	t.Run("nil item uses the context node and non-positive values default to 1", func(t *testing.T) {
+		eval := base.Focus(nil, 0, -1)
+		require.Equal(t, "|1|1", evalToString(t, eval, focusExpr, root))
+	})
+
+	t.Run("replaces an earlier focus without changing the original", func(t *testing.T) {
+		first := base.Focus(xpath3.SingleString("first").Get(0), 2, 2)
+		second := first.Focus(nil, 1, 3)
+		require.Equal(t, "first|2|2", evalToString(t, first, focusExpr, root))
+		require.Equal(t, "|1|3", evalToString(t, second, focusExpr, root))
+	})
+
+	t.Run("variables are shared across evaluations", func(t *testing.T) {
+		vars := map[string]xpath3.Sequence{
+			"x": xpath3.SingleString("one"),
+			"y": xpath3.SingleString("two"),
+		}
+		eval := base.Variables(vars)
+		// Changing the caller's map after Variables must not affect the
+		// evaluator, which cloned it.
+		vars["x"] = xpath3.SingleString("changed")
+		varsExpr, err := xpath3.NewCompiler().Compile(`concat($x, $y, position())`)
+		require.NoError(t, err)
+		require.Equal(t, "onetwo1", evalToString(t, eval.Focus(nil, 1, 2), varsExpr, root))
+		require.Equal(t, "onetwo2", evalToString(t, eval.Focus(nil, 2, 2), varsExpr, root))
+	})
+}
+
 func TestVariableAndFunctionResolver(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 

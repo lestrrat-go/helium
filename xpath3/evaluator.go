@@ -37,6 +37,7 @@ type evaluatorCfg struct {
 	options                EvaluatorOption
 	namespaces             map[string]string
 	variables              map[string]Sequence
+	varScope               *variableScope             // root scope built once from variables by Variables(); shared read-only by every evaluation
 	functions              map[string]Function        // unqualified calls
 	functionsNS            map[QualifiedName]Function // namespaced calls
 	opLimit                int
@@ -113,6 +114,10 @@ func (e Evaluator) Variables(vars map[string]Sequence) Evaluator {
 	} else {
 		e.cfg.variables = cloneVariableMap(vars)
 	}
+	// Build the root variable scope once here instead of per evaluation. A
+	// variableScope is never mutated after construction (evaluation only links
+	// new child scopes to it), so every evaluation can share it.
+	e.cfg.varScope = newVariableScope(e.cfg.variables)
 	return e
 }
 
@@ -288,6 +293,20 @@ func (e Evaluator) ContextItem(item Item) Evaluator {
 	return e
 }
 
+// Focus sets the whole dynamic focus — context item, context position, and
+// context size — in one step. It gives the same configuration as
+// ContextItem(item).Position(position).Size(size) but copies the evaluator
+// configuration once instead of three times, for callers that set a new focus
+// on every evaluation. A nil item leaves the context to the node passed to
+// Evaluate, and a position or size of 0 or less selects the default of 1.
+func (e Evaluator) Focus(item Item, position, size int) Evaluator {
+	e = e.clone()
+	e.cfg.contextItem = item
+	e.cfg.position = position
+	e.cfg.size = size
+	return e
+}
+
 // TypeAnnotations sets the type annotation map for schema-aware evaluation.
 // The map is cloned unless EvalBorrowing is set.
 func (e Evaluator) TypeAnnotations(annotations map[helium.Node]string) Evaluator {
@@ -435,7 +454,6 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 // newEvalCtx creates the internal evaluation context from the Evaluator config.
 func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	opCount := 0
-	now := time.Now()
 
 	cfg := e.cfg
 	if cfg == nil {
@@ -452,7 +470,6 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 		position: 1,
 		size:     1,
 		opCount:  &opCount,
-		docOrder: &ixpath.DocOrderCache{},
 		maxNodes: maxNodes,
 		docCache: make(map[string]helium.Node),
 	}
@@ -460,10 +477,8 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	// namespaces
 	ec.namespaces = cfg.namespaces
 
-	// variables
-	if len(cfg.variables) > 0 {
-		ec.vars = newVariableScope(cfg.variables)
-	}
+	// variables: the root scope is built once by Variables() and shared.
+	ec.vars = cfg.varScope
 
 	// functions
 	ec.functions = cfg.functions
@@ -486,6 +501,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 	if cfg.currentTime != nil {
 		ec.currentTime = cfg.currentTime
 	} else {
+		now := time.Now()
 		ec.currentTime = &now
 	}
 	ec.implicitTimezone = cfg.implicitTimezone
@@ -524,8 +540,11 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 		ec.contextItem = cfg.contextItem
 		ec.node = nil
 	}
-	if cfg.docOrder != nil {
-		ec.docOrder = cfg.docOrder
+	// Allocate a private document-order cache only when no shared one is
+	// configured.
+	ec.docOrder = cfg.docOrder
+	if ec.docOrder == nil {
+		ec.docOrder = &ixpath.DocOrderCache{}
 	}
 
 	ec.traceWriter = cfg.traceWriter

@@ -593,7 +593,8 @@ XPath 3.1 expression parsing and evaluation.
   `ImplicitTimezone(*time.Location)`, `DefaultLanguage(string)`, `DefaultCollation(string)`,
   `DefaultDecimalFormat(DecimalFormat)`, `NamedDecimalFormats(map[QualifiedName]DecimalFormat)`,
   `BaseURI(string)`, `URIResolver(URIResolver)`, `CollectionResolver(CollectionResolver)`,
-  `HTTPClient(*http.Client)`, `Position(int)`, `Size(int)`, `ContextItem(Item)`,
+  `HTTPClient(*http.Client)`, `Position(int)`, `Size(int)`, `ContextItem(Item)`, `Focus(Item, position, size int)`
+  (context item + position + size in one copy),
   `TypeAnnotations(map[helium.Node]string)`, `PreservedIDAnnotations(map[helium.Node]string)`,
   `IDNodes(map[helium.Node]struct{})` (PSVI is-id node set from `xsd.Validator.IDNodes`; a node here is
   treated as is-id by `fn:id`/`fn:element-with-id` in addition to those whose type annotation is a subtype of
@@ -863,6 +864,16 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   to separator character data. If a later non-markup item requires XML fallback, every deferred separator is
   restored at its original boundary. A quoted string-like atomic delegates character-data processing to the
   Text method before adaptive quoting, including normalization and character maps.
+- XPath evaluation (`execute.go`): every expression goes through `execContext.evalXPath` /
+  `evalPatternExpr`, which take a cached evaluator from `scopedXPathEvaluator` and apply only the dynamic focus
+  with `Evaluator.Focus`. The cache holds the base evaluator (`baseXPathEvaluator`, rebuilt on namespace,
+  base-URI, package, or pattern changes) plus the per-scope overlays (variables, functions, type/nilled/ID
+  annotations, schema, collation, doc-order cache), and its XPath 1.0 compat variant. It is rebuilt only when
+  one of those inputs changes (`scopedEvalKey`; maps compare by identity). `collectAllVars` caches its map
+  keyed on the global-variable generation, the innermost local scope that holds bindings
+  (`visibleVarScope`), `localVarsVer` (bumped by `setVar`/`setVarDeferred` and by popping a scope that held
+  bindings), and the current package. The returned map is shared, so callers copy it before adding bindings
+  (`xsl:evaluate` does).
 - Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder +
   orchestration), `compile_*.go`
   (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),
