@@ -1159,16 +1159,19 @@ func TestWriterOptions(t *testing.T) {
 	require.Contains(t, buf.String(), "&#")
 }
 
-// attrAllocProbe serializes doc with the default writer to io.Discard,
-// keeping the first error, so testing.AllocsPerRun can measure one WriteTo
-// call through a method value.
+// attrAllocProbe serializes doc to io.Discard, keeping the first error, so
+// testing.AllocsPerRun can measure one WriteTo call through a method value.
+// The DOCTYPE is left out of the output: it is formatted through fmt, whose
+// printer pool the race detector randomly drains, which would make the count
+// vary from run to run. Leaving it out does not change XHTML detection, which
+// reads the document's DTD.
 type attrAllocProbe struct {
 	doc *helium.Document
 	err error
 }
 
 func (p *attrAllocProbe) run() {
-	if err := helium.NewWriter().WriteTo(io.Discard, p.doc); err != nil && p.err == nil {
+	if err := helium.NewWriter().IncludeDTD(false).WriteTo(io.Discard, p.doc); err != nil && p.err == nil {
 		p.err = err
 	}
 }
