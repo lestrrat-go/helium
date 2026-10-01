@@ -100,6 +100,35 @@ func TestSourceSchema(t *testing.T) {
 		require.Error(t, err, "a no-resolver source-schema load must be fatal under lax validation")
 		require.Contains(t, err.Error(), "no URIResolver configured",
 			"the denial must surface as a policy error")
+		require.ErrorContains(t, err, `the source document's xsi:noNamespaceSchemaLocation names this schema`)
+		require.ErrorContains(t, err, "set Invocation.URIResolver")
+		require.NotContains(t, err.Error(), "HTTPClient",
+			"an HTTP client cannot fetch a non-http schema, so the hint must not suggest one")
+		require.NotContains(t, err.Error(), "nested-schema")
+	})
+
+	// A remote xsi:schemaLocation hint on the source document of a
+	// non-schema-aware stylesheet fails the transform when neither an HTTPClient
+	// nor a URIResolver is configured. The error names the schema URL, the
+	// attribute that referenced it, and the Invocation options that fix it.
+	t.Run("remote schema hint denied by default", func(t *testing.T) {
+		ctx := t.Context()
+		ss := compileTaxSheet(t)
+
+		const schemaURL = "http://example.com/schema/s.xsd"
+		src, err := helium.NewParser().Parse(ctx, []byte(`<?xml version="1.0"?>
+<doc xmlns="urn:example:doc"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="urn:example:doc `+schemaURL+`"/>`))
+		require.NoError(t, err)
+
+		_, err = ss.Transform(src).Serialize(ctx)
+		require.Error(t, err, "a remote schema hint with no HTTPClient or URIResolver must fail the transform")
+		require.ErrorContains(t, err, `load source schema "`+schemaURL+`"`)
+		require.ErrorContains(t, err, "the source document's xsi:schemaLocation names this schema")
+		require.ErrorContains(t, err, "no HTTPClient or URIResolver configured")
+		require.ErrorContains(t, err, "set Invocation.HTTPClient or Invocation.URIResolver")
+		require.NotContains(t, err.Error(), "nested-schema")
 	})
 
 	// TestSourceSchemaLoadFetchMissSkippedUnderLax verifies that a genuine fetch miss

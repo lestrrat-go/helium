@@ -651,9 +651,10 @@ pipeline.
    benign nested misses internally and returns non-nil only for a fatal condition, so a content-invalid nested
    include inside an imported schema stays fatal. `xslt3` marks TWO of its loader errors so
    `IsFatalSchemaLoad` recognizes them across the boundary: an over-cap read (`ErrResourceTooLarge`) and the
-   default-deny POLICY denial (`errSchemaResolverDenied` — "no URIResolver configured", filesystem access is
-   opt-in), both wrapped in a `FatalSchemaLoader` marker by `schemaResolverFS.Open` that `Unwrap`s to the
-   original so `errors.Is` still holds and the "no URIResolver configured" message survives; the marker
+   default-deny POLICY denial (`errSchemaResolverDenied`; `loadSchemaBytes` reports it as `XTSE0165: cannot
+   load schema "<uri>": no URIResolver configured to fetch it; set Compiler.URIResolver ...`), both wrapped in
+   a `FatalSchemaLoader` marker by `schemaResolverFS.Open` that `Unwrap`s to the original so `errors.Is` still
+   holds and the "no URIResolver configured" message survives; the marker
    distinguishes a POLICY denial from a resolver fetch MISS (a configured resolver simply lacking the target,
    which stays demotable). The `xslt3` TOP-LEVEL `xsl:import-schema` schema-location path (`compile_schema.go`
    `compileImportSchema`) applies the SAME three-way fetch-miss / content / denial taxonomy to its
@@ -684,7 +685,9 @@ pipeline.
    error so the caller can classify it: a malformed schema-location reference (`resolveSchemaURI`), malformed
    XML (`Parse`), or invalid XSD (`Compile`) is tagged `errSchemaContentInvalid`; a default-deny POLICY denial
    (no URIResolver/HTTPClient configured for the hint, detected via `execContext.schemaFetchAvailable`) is
-   tagged `errSchemaResolverDenied`; a resource-cap breach (`ErrResourceTooLarge`) survives in the chain. The
+   tagged `errSchemaResolverDenied` by `sourceSchemaDeniedError`, whose message names the schema URI, the
+   `xsi:` attribute that named it, and the `Invocation` option to set (`HTTPClient` or `URIResolver` for an
+   http/https URI, `URIResolver` alone otherwise); a resource-cap breach (`ErrResourceTooLarge`) survives in the chain. The
    caller returns fatal when validation is strict OR the error is NOT a positively-tagged demotable miss
    (`!isDemotableSchemaMiss`); ONLY a CONFIRMED benign resolution miss (`errSchemaResolutionMiss` — a resolver
    lacking the target / HTTP 404) is best-effort skipped under lax/default (schemaLocation is only a hint, the

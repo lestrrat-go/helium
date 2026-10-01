@@ -12,10 +12,14 @@ import (
 
 // loadSchemasFromSchemaLocation loads schemas referenced by the source
 // document's xsi:schemaLocation / xsi:noNamespaceSchemaLocation attributes.
-// Schema bytes are fetched through the transformation's configured
-// URIResolver / HTTPClient (default-deny: with nothing configured the load
-// is refused), and never via a raw os.ReadFile, so runtime schema loads
-// obey the same secure-by-default policy as fn:doc and document().
+// The transform calls it for every source document, whether or not the
+// stylesheet is schema-aware. Schema bytes are fetched through the
+// transformation's configured URIResolver / HTTPClient, and never via a raw
+// os.ReadFile, so runtime schema loads obey the same secure-by-default policy
+// as fn:doc and document(). When neither can fetch a schema URI, it returns
+// [sourceSchemaDeniedError], which names the schema, the attribute, and the
+// Invocation option to set; the caller fails the transform on it even under lax
+// validation.
 func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *helium.Document) ([]*xsd.Schema, error) {
 	root := doc.DocumentElement()
 	if root == nil {
@@ -24,7 +28,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 
 	baseURI := doc.URL()
 	seen := make(map[string]struct{})
-	var paths []string
+	var refs []sourceSchemaRef
 	for _, attr := range root.Attributes() {
 		if attr.URI() != lexicon.NamespaceXSI {
 			continue
@@ -47,7 +51,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 					continue
 				}
 				seen[resolved] = struct{}{}
-				paths = append(paths, resolved)
+				refs = append(refs, sourceSchemaRef{uri: resolved, attr: attr.LocalName()})
 			}
 		case "noNamespaceSchemaLocation":
 			ref := strings.TrimSpace(attr.Value())
@@ -65,11 +69,11 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 				continue
 			}
 			seen[resolved] = struct{}{}
-			paths = append(paths, resolved)
+			refs = append(refs, sourceSchemaRef{uri: resolved, attr: attr.LocalName()})
 		}
 	}
 
-	if len(paths) == 0 {
+	if len(refs) == 0 {
 		return nil, nil
 	}
 
@@ -84,9 +88,10 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 	// (execute_transform.go) then classifies the aggregated result: a fatal/content
 	// error stays fatal, a pure miss is demoted under lax, and the partial schemas
 	// merge best-effort.
-	schemas := make([]*xsd.Schema, 0, len(paths))
+	schemas := make([]*xsd.Schema, 0, len(refs))
 	var firstMiss error
-	for _, uri := range paths {
+	for _, ref := range refs {
+		uri := ref.uri
 		data, err := ec.retrieveDocumentBytes(ctx, uri)
 		if err != nil {
 			// Phase-tag the fetch failure so the caller's fetch/content/denial
@@ -94,7 +99,7 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 			// default-deny POLICY DENIAL (tagged errSchemaResolverDenied) that stays
 			// fatal even under lax validation.
 			if !ec.schemaFetchAvailable(uri) {
-				return schemas, fmt.Errorf("load source schema %q: %w: %w", uri, errSchemaResolverDenied, err)
+				return schemas, sourceSchemaDeniedError(ref)
 			}
 			wrapped := fmt.Errorf("load source schema %q: %w", uri, err)
 			// POSITIVE-TAG discipline (mirrors the xsd nested classifier): ONLY a
@@ -147,6 +152,33 @@ func (ec *execContext) loadSchemasFromSchemaLocation(ctx context.Context, doc *h
 	// Every schema that loaded, plus at most the first genuine fetch miss (nil when
 	// all entries loaded). The caller demotes a pure miss under lax.
 	return schemas, firstMiss
+}
+
+// sourceSchemaRef is one schema named by the source document's root element:
+// the resolved schema URI and the local name of the xsi: attribute that named
+// it ("schemaLocation" or "noNamespaceSchemaLocation").
+type sourceSchemaRef struct {
+	uri  string
+	attr string
+}
+
+// sourceSchemaDeniedError builds the error for a source-document schema hint
+// that no configured HTTPClient or URIResolver can fetch. It names the schema
+// URI, the xsi: attribute that named it, and the Invocation options that allow
+// the fetch: an http/https URI accepts either option, and any other URI only a
+// URIResolver. The error wraps [errSchemaResolverDenied], so
+// [isFatalSchemaLoadError] keeps it fatal under lax validation.
+func sourceSchemaDeniedError(ref sourceSchemaRef) error {
+	if isHTTPURI(ref.uri) {
+		return fmt.Errorf("load source schema %q: %w: the source document's xsi:%s names this schema, "+
+			"but there is no HTTPClient or URIResolver configured to fetch it; "+
+			"set Invocation.HTTPClient or Invocation.URIResolver to allow or redirect the fetch",
+			ref.uri, errSchemaResolverDenied, ref.attr)
+	}
+	return fmt.Errorf("load source schema %q: %w: the source document's xsi:%s names this schema, "+
+		"but there is no URIResolver configured to fetch it; "+
+		"set Invocation.URIResolver to allow or redirect the fetch",
+		ref.uri, errSchemaResolverDenied, ref.attr)
 }
 
 // collectPackageSchemas returns the schemas of ss followed by the schemas of

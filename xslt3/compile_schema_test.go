@@ -620,7 +620,9 @@ func TestImportSchema(t *testing.T) {
 		_, err = xslt3.NewCompiler().BaseURI(baseURI).Compile(ctx, docDeny)
 		require.Error(t, err, "import-schema must fail without a URIResolver")
 		require.Contains(t, err.Error(), "no URIResolver configured",
-			"error should explain that filesystem access is opt-in")
+			"error should explain that no resolver is configured")
+		require.ErrorContains(t, err, `xsl:import-schema: cannot compile "mem://stylesheets/s.xsd"`)
+		require.ErrorContains(t, err, "set Compiler.URIResolver")
 
 		// With a resolver: success.
 		resolver := fileMapResolver{files: map[string]string{
@@ -751,7 +753,9 @@ func TestImportSchema(t *testing.T) {
 		_, err = xslt3.NewCompiler().BaseURI(baseURI).Compile(ctx, doc)
 		require.Error(t, err, "inline schema's nested xs:include must be denied without a URIResolver")
 		require.Contains(t, err.Error(), "no URIResolver configured",
-			"error should explain that filesystem access is opt-in")
+			"error should explain that no resolver is configured")
+		require.ErrorContains(t, err, "failed to load include")
+		require.ErrorContains(t, err, "set Compiler.URIResolver")
 	})
 
 	// TestImportSchemaInlineNestedIncludeDenied verifies that when a resolver is
