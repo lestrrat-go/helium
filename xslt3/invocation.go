@@ -299,6 +299,17 @@ func (inv Invocation) CollectionResolver(r xpath3.CollectionResolver) Invocation
 // and fn:json-doc during the transformation. Without this (and without an
 // HTTPClient) those functions cannot reach the filesystem or network and
 // return their spec-mandated retrieval errors.
+//
+// The resolver also fetches the schemas named by xsi:schemaLocation and
+// xsi:noNamespaceSchemaLocation on the source document's root element. Every
+// transform fetches them, even for a stylesheet that is not schema-aware. An
+// http or https schema URI goes to the [Invocation.HTTPClient] when one is set,
+// and to this resolver otherwise; any other schema URI goes only to this
+// resolver. A resolver can therefore return a local copy of a remote schema.
+// When a schema URI reaches neither, the transform fails with an error that
+// names the schema. A resolver error that satisfies errors.Is(err,
+// fs.ErrNotExist) skips that schema instead, unless the stylesheet's
+// default-validation is strict.
 func (inv Invocation) URIResolver(r xpath3.URIResolver) Invocation {
 	inv = inv.clone()
 	inv.cfg.uriResolver = r
@@ -309,6 +320,14 @@ func (inv Invocation) URIResolver(r xpath3.URIResolver) Invocation {
 // fn:doc / fn:unparsed-text / fn:json-doc when no URIResolver is supplied.
 // The caller owns the client's transport, timeouts, and redirect policy.
 // Without this (and without a URIResolver), network retrieval is refused.
+//
+// The client also fetches http and https schema URIs named by
+// xsi:schemaLocation and xsi:noNamespaceSchemaLocation on the source
+// document's root element, ahead of any [Invocation.URIResolver]. Every
+// transform fetches them, even for a stylesheet that is not schema-aware. With
+// neither this client nor a URIResolver set, the transform fails with an error
+// that names the schema URL. An HTTP 404 or 410 response skips that schema
+// instead, unless the stylesheet's default-validation is strict.
 func (inv Invocation) HTTPClient(client *http.Client) Invocation {
 	inv = inv.clone()
 	inv.cfg.httpClient = client

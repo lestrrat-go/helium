@@ -79,15 +79,19 @@ func (e schemaMissNotExistError) Unwrap() error { return e.cause }
 
 func (schemaMissNotExistError) Is(target error) bool { return target == fs.ErrNotExist }
 
-// errSchemaResolverDenied marks a nested-schema load refused by the compile-time
-// default-deny policy (no URIResolver configured — filesystem access is opt-in).
-// It distinguishes a POLICY DENIAL from a resolver fetch MISS (a configured
-// resolver that simply lacks the target): the former must stay fatal, the latter
-// may be demoted to a warning by the xsd compiler (schemaLocation is only a
-// hint). [schemaResolverFS.Open] tags an error carrying it [fatalSchemaLoadError]
-// so [xsd.IsFatalSchemaLoad] recognizes it while the "no URIResolver configured"
-// message is preserved for callers.
-var errSchemaResolverDenied = errors.New("xslt3: nested-schema load denied by default-deny policy")
+// errSchemaResolverDenied marks a schema load refused because nothing is
+// configured to fetch it. Two loaders return it: [compiler.loadSchemaBytes], for
+// an xsl:import-schema schema-location or a nested xs:include / xs:import /
+// xs:redefine when the Compiler has no URIResolver, and
+// [execContext.loadSchemasFromSchemaLocation], for a source document's
+// xsi:schemaLocation / xsi:noNamespaceSchemaLocation when the Invocation has no
+// HTTPClient or URIResolver that can fetch the URI. It distinguishes a POLICY
+// DENIAL from a resolver fetch MISS (a configured resolver that simply lacks the
+// target): the former must stay fatal, the latter may be demoted to a warning
+// (schemaLocation is only a hint). [schemaResolverFS.Open] tags an error carrying
+// it [fatalSchemaLoadError] so [xsd.IsFatalSchemaLoad] recognizes it, and each
+// loader's own message names the schema and the option to set.
+var errSchemaResolverDenied = errors.New("xslt3: schema load denied by default-deny policy")
 
 // errSchemaContentInvalid marks a schema-load failure that occurred AFTER the
 // bytes were successfully fetched — a malformed XML parse error, or an invalid

@@ -498,15 +498,7 @@ func (ec *execContext) retrieveDocumentBytes(ctx context.Context, resolvedURI st
 // shared by (*execContext).retrieveDocumentBytes and the standalone
 // fn:transform implementation (resolverEntityLoader).
 func retrieveBytesVia(ctx context.Context, resolvedURI string, resolver xpath3.URIResolver, httpClient *http.Client, limit int64) ([]byte, error) {
-	// URI schemes are case-insensitive per RFC 3986; url.Parse lowercases
-	// .Scheme so the equality compares are scheme-correct regardless of
-	// how the caller spelled "HTTP" / "Https" / ...
-	var isHTTP bool
-	if u, err := url.Parse(resolvedURI); err == nil {
-		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
-	}
-
-	if isHTTP {
+	if isHTTPURI(resolvedURI) {
 		if httpClient != nil {
 			return fetchHTTPBytes(ctx, httpClient, resolvedURI, limit)
 		}
@@ -534,14 +526,22 @@ func (ec *execContext) schemaFetchAvailable(uri string) bool {
 		resolver = ec.transformConfig.uriResolver
 		httpClient = ec.transformConfig.httpClient
 	}
-	isHTTP := false
-	if u, err := url.Parse(uri); err == nil {
-		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
-	}
-	if isHTTP {
+	if isHTTPURI(uri) {
 		return httpClient != nil || resolver != nil
 	}
 	return resolver != nil
+}
+
+// isHTTPURI reports whether uri has an http or https scheme. Such a URI is
+// fetched through the configured HTTPClient when one is set, and otherwise
+// through the URIResolver. URI schemes are case-insensitive per RFC 3986;
+// url.Parse lowercases .Scheme, so "HTTP" and "Https" also match.
+func isHTTPURI(uri string) bool {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
 }
 
 // resourceLimit returns the per-resource read cap for runtime resolver/HTTP
@@ -597,10 +597,6 @@ func fetchViaResolver(r xpath3.URIResolver, uri string, limit int64) ([]byte, er
 // default-deny posture matches retrieveDocumentBytes: with no resolver /
 // HTTPClient configured, retrieval is refused.
 func (ec *execContext) retrieveDocumentPrefix(ctx context.Context, resolvedURI string, n int) ([]byte, error) {
-	var isHTTP bool
-	if u, err := url.Parse(resolvedURI); err == nil {
-		isHTTP = u.Scheme == lexicon.SchemeHTTP || u.Scheme == lexicon.SchemeHTTPS
-	}
 	var resolver xpath3.URIResolver
 	var httpClient *http.Client
 	if ec.transformConfig != nil {
@@ -608,7 +604,7 @@ func (ec *execContext) retrieveDocumentPrefix(ctx context.Context, resolvedURI s
 		httpClient = ec.transformConfig.httpClient
 	}
 
-	if isHTTP {
+	if isHTTPURI(resolvedURI) {
 		if httpClient != nil {
 			return fetchHTTPPrefix(ctx, httpClient, resolvedURI, n)
 		}

@@ -733,7 +733,13 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   sentinel. `URIResolver` and `HTTPClient` are the opt-in for runtime resource retrieval —
   `fn:doc`/`fn:unparsed-text`, plus `xsl:source-document`, `xsl:merge`, and `fn:stream-available`; without
   them those instructions error (`FODC0002`) or report unavailable per the default-deny model (no implicit
-  `os.ReadFile`).
+  `os.ReadFile`). They also fetch the schemas named by `xsi:schemaLocation`/`xsi:noNamespaceSchemaLocation`
+  on the source document's root, which every transform loads even for a non-schema-aware stylesheet
+  (`source_schema.go` `loadSchemasFromSchemaLocation`); an http/https schema URI goes to `HTTPClient` first,
+  then `URIResolver`. With neither able to fetch it, the transform fails with `load source schema "<uri>":
+  xslt3: schema load denied by default-deny policy: the source document's xsi:<attr> names this schema, but
+  there is no HTTPClient or URIResolver configured to fetch it; set Invocation.HTTPClient or
+  Invocation.URIResolver to allow or redirect the fetch` (non-http URIs name only `URIResolver`).
 - **Invocation.Do(ctx) → (*Document, error)** / **Invocation.Serialize(ctx) → (string, error)** /
   **Invocation.WriteTo(ctx, io.Writer) → error** / **Invocation.ResolvedOutputDef() → *OutputDef** — terminal execution
   + resolved primary output metadata

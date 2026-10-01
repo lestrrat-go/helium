@@ -35,6 +35,13 @@
 // For simple transforms, [Transform], [TransformString], and
 // [TransformToWriter] are convenience wrappers.
 //
+// Before a transform runs, it fetches every schema named by xsi:schemaLocation
+// or xsi:noNamespaceSchemaLocation on the source document's root element, even
+// when the stylesheet is not schema-aware. The fetch goes through
+// [Invocation.HTTPClient] and [Invocation.URIResolver]. When neither one can
+// fetch the schema URI, the transform fails with an error that names the schema;
+// set one of them to allow or redirect the fetch.
+//
 // # Concurrency
 //
 // A [*Stylesheet] returned by [Compiler.Compile] / [CompileStylesheet] is

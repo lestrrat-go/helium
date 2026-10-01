@@ -86,7 +86,8 @@ document is gated:
 |-----------|--------------------|
 | `xsl:import` / `xsl:include` (module loads) | compile fails — `XTSE0165` ("no URIResolver configured") |
 | `xsl:use-package` | compile fails — no `PackageResolver` configured |
-| `xsl:import-schema`, `xsi:schemaLocation` source schemas | schema load refused |
+| `xsl:import-schema` `schema-location`, and the `xs:include` / `xs:import` / `xs:redefine` inside an imported schema | compile fails — `XTSE0165` ("no URIResolver configured to fetch it") |
+| `xsi:schemaLocation` / `xsi:noNamespaceSchemaLocation` on the source document's root element | the whole transform fails, even for a stylesheet that is not schema-aware — "no HTTPClient or URIResolver configured to fetch it" (see [Schema hints on the source document](#schema-hints-on-the-source-document)) |
 | `doc()` / `fn:doc()` / `document()` | dynamic error — "no URIResolver configured" (or "no HTTPClient or URIResolver" for `http(s)`) |
 | `xsl:source-document`, `xsl:merge` `for-each-source` | dynamic error — `FODC0002` |
 | `unparsed-text()` / `unparsed-text-lines()` | retrieval error — `FOUT1170` |
@@ -97,6 +98,34 @@ documents are delivered in-memory to a `ResultDocumentHandler` (or collected),
 so output is confined to the caller's process. Retrieval functions raise their
 spec-mandated errors; the *availability* probes report `false` without
 stat-ing the host.
+
+### Schema hints on the source document
+
+Every transform reads the `xsi:schemaLocation` and
+`xsi:noNamespaceSchemaLocation` attributes on the source document's root
+element and fetches each schema they name. The fetch runs whether or not the
+stylesheet is schema-aware: a stylesheet with no `xsl:import-schema` still
+triggers it. When neither `Invocation.HTTPClient` nor `Invocation.URIResolver`
+is set, the fetch is refused and the transform returns an error before it
+produces any output:
+
+```
+load source schema "http://example.com/schema/s.xsd": xslt3: schema load denied by default-deny policy: the source document's xsi:schemaLocation names this schema, but there is no HTTPClient or URIResolver configured to fetch it; set Invocation.HTTPClient or Invocation.URIResolver to allow or redirect the fetch
+```
+
+To let the transform run, set one of these on the `Invocation`:
+
+- `Invocation.HTTPClient(client)` fetches `http` and `https` schema URLs with
+  that client.
+- `Invocation.URIResolver(r)` receives each schema URI that the `HTTPClient`
+  does not fetch, and can return a local copy of a remote schema. A schema URI
+  that is not `http` or `https` reaches only the `URIResolver`.
+
+A fetched schema validates the source document before the transform starts.
+When the fetch reports the schema as absent (HTTP 404 or 410, or a
+`URIResolver` error that satisfies `errors.Is(err, fs.ErrNotExist)`), the
+transform skips that schema and continues, unless the stylesheet sets
+`default-validation="strict"`. Any other fetch error fails the transform.
 
 ### Granting access
 
