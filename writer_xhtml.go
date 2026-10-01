@@ -78,7 +78,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	// A prefixed element name whose prefix is bound to an empty namespace URI
 	// has no reparseable serialization. Reject it here just like writeNode does,
 	// so the XHTML path cannot emit output the parser rejects.
-	if isNser && !d.checkNamespaceBinding("element name", name, nser.Prefix(), nser.URI()) {
+	if isNser && !d.checkNamespaceBinding("element name", nser.Prefix(), localName, nser.URI()) {
 		return d.err
 	}
 
@@ -230,42 +230,55 @@ func (d *writeSession) dumpXHTMLAttrList(out io.Writer, e *Element) error {
 	localName := e.LocalName()
 
 	for attr := e.properties; attr != nil; attr = attr.NextAttribute() {
-		attrName := attr.Name()
+		// The qualified name is handled as its prefix and local parts (the
+		// parts Attribute.Name joins) so no joined string is built.
+		prefix, local := attr.Prefix(), attr.LocalName()
 
 		// The attribute name is emitted verbatim below. Validate it just like
 		// writeNode so an injected name cannot inject raw markup. Stop on the
 		// first invalid name and return the sticky error so the caller aborts
 		// before emitting any element body or child content.
-		if !d.checkAttributeName(attrName) {
+		if !d.checkAttributeQName(prefix, local) {
 			return d.err
 		}
 
 		// A prefixed attribute name whose prefix is bound to an empty namespace
 		// URI is likewise unreparseable — no xmlns:prefix declaration is
 		// synthesized. Reject it just like writeNode's attribute path.
-		if !d.checkNamespaceBinding("attribute name", attrName, attr.Prefix(), attr.URI()) {
+		if !d.checkNamespaceBinding("attribute name", prefix, local, attr.URI()) {
 			return d.err
 		}
 
-		switch attrName {
-		case "id":
-			idAttr = attr
-		case "name":
-			nameAttr = attr
-		case "lang":
-			langAttr = attr
-		case lexicon.QNameXMLLang:
+		// A validated prefix holds no colon, so a prefixed name equals
+		// "xml:lang" exactly when its parts are "xml" and "lang". An unprefixed
+		// local name may itself be the colon name "xml:lang" (an attribute built
+		// without a namespace), which the unprefixed switch matches.
+		if prefix == "" {
+			switch local {
+			case "id":
+				idAttr = attr
+			case "name":
+				nameAttr = attr
+			case "lang":
+				langAttr = attr
+			case lexicon.QNameXMLLang:
+				xmlLangAttr = attr
+			}
+		} else if prefix == lexicon.PrefixXML && local == "lang" {
 			xmlLangAttr = attr
 		}
 
-		d.writeString(out, " ")
-		d.writeString(out, attrName)
-		d.writeString(out, `="`)
+		d.writeAttrOpen(out, prefix, local)
 
-		attrValue := attr.Value()
-		_, isBoolAttr := htmlBooleanAttrs[attrName]
-		if attrValue == "" && isBoolAttr {
-			d.writeString(out, attrName)
+		// No boolean attribute name holds a colon, so only an unprefixed
+		// attribute can be one. The value is read only for a boolean attribute,
+		// where an empty value is minimized to the attribute's own name.
+		isBoolAttr := false
+		if prefix == "" {
+			_, isBoolAttr = htmlBooleanAttrs[local]
+		}
+		if isBoolAttr && attr.Value() == "" {
+			d.writeString(out, local)
 		} else {
 			for achld := range Children(attr) {
 				if achld.Type() == TextNode {

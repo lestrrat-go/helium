@@ -604,8 +604,12 @@ with one exception: `addSibling`'s fallback walk (above) is a raw, unbounded `Ne
 `Children` (bounding a corrupt
 source sibling list); `copyChildren` links each copied child into the destination via `appendCopiedChild`
 (above), not `Children`; `setListDoc` (the `SetTreeDoc` sibling walker) and the serializer's attribute-chain
-walk each carry a per-list seen guard (the latter also terminates a non-`*Attribute` successor that would
-otherwise leave the cursor unadvanced). The element attribute-lookup hot paths
+walks each carry a per-list seen guard (the latter also terminates a non-`*Attribute` successor that would
+otherwise leave the cursor unadvanced). The serializer's guard is `attrWalkGuard` (`writer.go`, used by
+`writeAttributes` and `reconcileNamespaces`): it stops at the exact first repeat, since an attribute written
+twice makes an unparseable start tag, and it scans a stack reused across the write session, switching to a
+map only once one chain reaches `attrDupSetThreshold`, so a short chain allocates nothing. The element
+attribute-lookup hot paths
 (`addProperty`/`HasAttribute`/`Attributes`/`ForEachAttribute`/`findAttributeNS` and the `Attributes`
 iterator) traverse the `properties` chain with a plain
 `NextAttribute` loop and NO guard: that chain is built exclusively through the guarded property-splice /

@@ -1572,9 +1572,11 @@ type attrKey struct {
 // duplicate detection (qualified name, expanded name, and DTD-default
 // application) switches from a linear scan of the attributes collected so
 // far to a map-backed set. Below the threshold the scan is cheaper than
-// building and probing a map; a package-level constant lets a test drive
-// the attribute count directly off it rather than a magic number that would
-// silently stop exercising the set path if the threshold ever changes.
+// building and probing a map. The writer's attribute-chain walk guard
+// (attrWalkGuard) switches at the same count. A package-level constant lets a
+// test drive the attribute count directly off it rather than a magic number
+// that would silently stop exercising the set path if the threshold ever
+// changes.
 const attrDupSetThreshold = 32
 
 // ensureAttrSet returns attrSet unchanged once it is non-nil or attrs has not
