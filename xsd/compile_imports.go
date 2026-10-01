@@ -2212,6 +2212,11 @@ func (c *compiler) loadImport(ctx context.Context, location, ns string, importEl
 
 	// Propagate sub-compiler diagnostics (same rule as the early-return paths).
 	propagateImpErrors()
+	// An imported component may carry an assertion the importing schema's
+	// validation must evaluate.
+	if impC.schema.hasAssertions {
+		c.schema.hasAssertions = true
+	}
 	if impC.errorCount > 0 {
 		return nil
 	}

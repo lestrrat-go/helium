@@ -16,6 +16,9 @@
     namespaces re-declared (incl. an inherited default-namespace prefix "" so `namespace-uri-for-prefix('',
     .)` resolves); PSVI annotations onto DESCENDANT elements + ALL attributes but NOT the assertion ROOT (type
     unassigned during its assert → `data(.)` untyped; matches Saxon/conformance tests).
+  - The PSVI annotations (`vc.assertAnnotations`), the anonymous-type registry, and `assertEffectiveValues` are
+    recorded only when the schema carries an xs:assert or xs:assertion (`Schema.hasAssertions`, set by
+    `parseAssertion`, OR-ed in from imported and instance-hint schemas); only assertion evaluation reads them.
   - Per-assert cost follows the asserted SUBTREE: the copy's annotation map holds only that subtree's nodes, the
     evaluator borrows it (`xpath3.EvalBorrowing`, no per-assertion clone), and `checkAssertions` Frees the scratch
     document that owns the copy once every assertion ran, so its node slabs go back to the pool.

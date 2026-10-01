@@ -179,4 +179,7 @@ func mergeHintSchema(dst, src *Schema) {
 		}
 		dst.substGroups[qn] = append(dst.substGroups[qn], members...)
 	}
+	if src.hasAssertions {
+		dst.hasAssertions = true
+	}
 }

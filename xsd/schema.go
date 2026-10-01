@@ -53,6 +53,12 @@ type Schema struct {
 	targetNamespace   string
 	elemFormQualified bool // elementFormDefault="qualified"
 	attrFormQualified bool // attributeFormDefault="qualified"
+	// hasAssertions reports that some component carries an xs:assert or an
+	// xs:assertion facet (set by parseAssertion, OR-ed in from imported and
+	// instance-hint schemas). Only those assertions read the PSVI annotations a
+	// 1.1 validation run records for them (validationContext.assertAnnotations),
+	// so a run against a schema without assertions records none.
+	hasAssertions     bool
 	blockDefault      BlockFlags
 	finalDefault      FinalFlags
 	defaultAttributes QName

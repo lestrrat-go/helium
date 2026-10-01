@@ -74,6 +74,7 @@ func (c *compiler) parseAssertion(ctx context.Context, elem *helium.Element, ele
 		return nil
 	}
 	a.compiled = compiled
+	c.schema.hasAssertions = true
 	return a
 }
 
