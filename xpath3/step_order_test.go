@@ -254,6 +254,25 @@ var stepOrderPathExprs = []string{
 	"$ents/(node())", "//b/(1, 2)[. = 0]",
 	// Set operators.
 	"//a intersect //b/..", "//a except //b/..",
+	// Unions of steps from one context node: attributes, children and
+	// namespace nodes of one element, in either operand order, with
+	// overlapping and duplicate operands.
+	"@*|node()", "node()|@*", "@*|*", "*|@*", "@id|node()", "@*|@id", "@id|@*", "@*|@*",
+	"node()|node()", "*|text()", "text()|*", "comment()|*", "*[1]|*[last()]", "*[last()]|*[1]",
+	"*[1]|*[1]", "@*|node()|@*", "(@*|node())|node()", "namespace::*|@*", "@*|namespace::*",
+	"namespace::*|node()", "node()|namespace::*", "namespace::*|namespace::*", "@*|..", "..|@*",
+	"@*|self::node()", "self::node()|@*|node()", "node()|self::node()", "@*|descendant::node()",
+	"descendant::node()|@*", "@*|following-sibling::node()", "preceding-sibling::node()|node()",
+	// Operands that are not sorted or not duplicate-free.
+	"(*, *)|@*", "@*|(node(), node())", "(@*, @*)|node()", "reverse(node())|@*", "@*|reverse(node())",
+	"(*[2], *[1])|*", "(@*[last()], @*[1])|node()",
+	// Attributes and children of different elements.
+	"*/@*|@*", "@*|*/@*", "*/@*|*", "*|*/@*", "*/node()|node()", "node()|*/node()", "@*|*/node()",
+	"..|../@*", "../@*|@*", "//b/@*|//b/node()", "//@*|//node()", "//node()|//@*",
+	"$ents/@*|$ents/node()", "$ents/node()|$ents/@*", "$ents/@*|$ents", "$ents|$ents/@*",
+	// intersect and except over the same shapes.
+	"(@*|node()) intersect node()", "(@*|node()) except @*", "node() except *",
+	"(node()|@*) intersect (@*|*)", "(@*, node()) intersect (node(), @*)", "reverse(node()) except text()",
 }
 
 // stepOrderOtherExprs are expressions whose result is not a document-ordered
@@ -266,6 +285,10 @@ var stepOrderOtherExprs = []string{
 	"reverse(//b)/..", "for $x in //b return $x/..", "(//b, //a)", "(//b, //a)/.", "//b/count(ancestor::*)",
 	"//b/name()", "sort(//b, (), function($n) { string($n/@id) })/..", "//b/position()",
 	"(/a/b)/local-name()", "$nodes | //b", "//b | $nodes", "$nodes | $other",
+	// Unions and set operators whose operands come from two documents.
+	"@*|$other/@*", "$other/@*|@*", "node()|$other/node()", "$other/node()|node()",
+	"@*|$other/node()", "$other/node()|@*", "$other/(@*|node())|@*|node()",
+	"(@*|node()|$other/node()) except $other/*", "$nodes/(@*|node()) intersect (node()|$other/node())",
 }
 
 func parseStepOrderDoc(t testing.TB, src string, subst bool) *helium.Document {
