@@ -89,7 +89,7 @@ bug that prompted it.
 | `parser_xmlchar_test.go` | root | XML character validation and attribute-value parsing |
 | `parser_sax_test.go` | root | SAX/dispatch/stop-parser regression coverage |
 | `parser_push_test.go` | root | Push parser coverage |
-| `writer_test.go` | root | Core serialization, writer options, write errors, benchmarks |
+| `writer_test.go` | root | Core serialization, writer options, write errors, per-node allocation bounds, benchmarks |
 | `writer_escape_test.go` | root | Invalid-character rejection, character maps, normalization, injection rejection |
 | `writer_namespace_test.go` | root | Namespace emission and subtree reconciliation |
 | `writer_dtd_test.go` | root | DTD serialization (subset/escaping/formatting/self-close, entity and literal emission) |
