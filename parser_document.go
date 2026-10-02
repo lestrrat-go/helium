@@ -14,9 +14,7 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	// Store pctx in the context so SAX callbacks (e.g. TreeBuilder) can
 	// retrieve it via getParserCtx. Also store the document locator and
 	// stop function so helium.StopParser works.
-	ctx = withParserCtx(ctx, pctx)
-	ctx = sax.WithDocumentLocator(ctx, pctx)
-	ctx = context.WithValue(ctx, stopFuncKey{}, pctx.stop)
+	ctx = newDocumentContext(ctx, pctx)
 
 	// Honor a context that is already cancelled before any parsing work
 	// (or blocking reads) begins.
@@ -288,7 +286,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 		// Check the context BEFORE cur.Done(), which may refill the cursor
 		// from an io.Reader and block; this lets a cancelled context be
 		// observed between reads, ahead of any blocking refill.
-		if err := ctx.Err(); err != nil {
+		if err := pollErr(ctx); err != nil {
 			return err
 		}
 		if cur.Done() || pctx.stopped {

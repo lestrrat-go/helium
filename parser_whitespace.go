@@ -55,7 +55,7 @@ func (pctx *parserCtx) skipBlankRun(ctx context.Context, cur blankScanner) (bool
 	advanced := false
 	total := 0
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := pollErr(ctx); err != nil {
 			return advanced, err
 		}
 		i := 0

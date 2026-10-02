@@ -30,6 +30,55 @@ func (r readerReturningErr) Read([]byte) (int, error) { return 0, r.err }
 
 type stopFuncKey struct{}
 
+// documentContext is the context parseDocument hands to the rest of the
+// parse. It carries the parser context and the document locator in
+// context.WithValue layers over the caller's context, and answers the
+// stopFuncKey lookup StopParser makes itself, as the outermost
+// context.WithValue layer would. Its Err is the caller's Err, since the value
+// layers in between do not override it; pollErr uses that to skip them.
+type documentContext struct {
+	context.Context
+	stop       func()
+	caller     context.Context
+	cancelable bool // caller.Done() != nil
+}
+
+// newDocumentContext derives the context for parsing a document with pctx
+// from the caller's context. The caller's Done is read once: a context's
+// Done returns the same value on every call, and a nil Done means the context
+// can never be cancelled.
+func newDocumentContext(caller context.Context, pctx *parserCtx) context.Context {
+	ctx := withParserCtx(caller, pctx)
+	ctx = sax.WithDocumentLocator(ctx, pctx)
+	return &documentContext{
+		Context:    ctx,
+		stop:       pctx.stop,
+		caller:     caller,
+		cancelable: caller.Done() != nil,
+	}
+}
+
+func (c *documentContext) Value(key any) any {
+	if _, ok := key.(stopFuncKey); ok {
+		return c.stop
+	}
+	return c.Context.Value(key)
+}
+
+// pollErr returns ctx.Err() for the cancellation polls the hot parse loops
+// make once per step. For a documentContext it asks the caller's context
+// directly, without walking the value layers in between, and returns nil
+// without asking when the caller's context can never be cancelled.
+func pollErr(ctx context.Context) error {
+	if dc, ok := ctx.(*documentContext); ok {
+		if !dc.cancelable {
+			return nil
+		}
+		return dc.caller.Err()
+	}
+	return ctx.Err()
+}
+
 // StopParser tells the parser to stop at the next opportunity. Call this
 // from any SAX callback to abort parsing early. The parse functions will
 // return the partial document built so far with a nil error.
