@@ -468,6 +468,78 @@ func TestParseExternalDTDMalformed(t *testing.T) {
 		require.Equal(t, "bogus.dtd", pe.File, "error must reference the external DTD, not the main document")
 	})
 
+	// The line and column of an error in the external subset, or in a
+	// parameter entity it references, count every byte the declarations before
+	// the error consumed. Only an LF starts a line; a CR, a tab, and each byte of
+	// a multi-byte character are one column. The positions match libxml2.
+	t.Run("a malformed declaration reports its line and column", func(t *testing.T) {
+		t.Parallel()
+
+		const dtdName = "ext.dtd"
+		const peName = "ext.ent"
+		cases := []struct {
+			name string
+			dtd  string
+			pe   string
+			file string
+			line int
+			col  int
+		}{
+			{
+				name: "after a declaration on the same line",
+				dtd:  "<!ELEMENT r ANY><!BOGUS>\n",
+				file: dtdName,
+				line: 1,
+				col:  17,
+			},
+			{
+				name: "inside a declaration on a later line",
+				dtd:  "<!ELEMENT r ANY>\n<!ELEMENT q ANY>   <!ATTLIST r a CDATA #BOGUS>\n",
+				file: dtdName,
+				line: 2,
+				col:  40,
+			},
+			{
+				name: "after CRLF line ends and a tab",
+				dtd:  "<!ELEMENT r ANY>\r\n<!ELEMENT q ANY>\r\n\t<!BOGUS>\r\n",
+				file: dtdName,
+				line: 3,
+				col:  2,
+			},
+			{
+				name: "after a multi-byte character",
+				dtd:  "<!ELEMENT r ANY><!ENTITY été \"x\"> <!BOGUS>\n",
+				file: dtdName,
+				line: 1,
+				col:  37,
+			},
+			{
+				name: "in a referenced parameter entity",
+				dtd:  "<!ENTITY % ext SYSTEM \"ext.ent\">\n%ext;\n",
+				pe:   "<!ELEMENT q ANY>\n<!ELEMENT s ANY> <!BOGUS>",
+				file: peName,
+				line: 2,
+				col:  18,
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				fsys := fstest.MapFS{
+					dtdName: {Data: []byte(tc.dtd)},
+					peName:  {Data: []byte(tc.pe)},
+				}
+				p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).FS(fsys)
+				_, err := p.Parse(t.Context(), []byte(`<!DOCTYPE r SYSTEM "ext.dtd"><r/>`))
+				var perr helium.ErrParseError
+				require.ErrorAs(t, err, &perr)
+				require.Equal(t, tc.file, perr.File, "file of the external subset or parameter entity")
+				require.Equal(t, tc.line, perr.LineNumber, "line within the external subset or parameter entity")
+				require.Equal(t, tc.col, perr.Column, "column within the external subset or parameter entity")
+			})
+		}
+	})
+
 	t.Run("a malformed declaration inside INCLUDE surfaces", func(t *testing.T) {
 		const input = `<?xml version="1.0"?>
 <!DOCTYPE r SYSTEM "inc.dtd">

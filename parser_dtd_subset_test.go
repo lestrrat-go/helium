@@ -609,9 +609,7 @@ func TestInternalSubsetClosedByParameterEntity(t *testing.T) {
 	}
 
 	// line and col locate the stray "]" inside the parameter entity's
-	// replacement text. col is 0 (not checked) when a declaration precedes the
-	// "]" in that text: the replacement text is read through a
-	// strcursor.ByteCursor, whose Consume does not advance the column.
+	// replacement text, counted from the start of that text.
 	rejected := []struct {
 		name string
 		doc  string
@@ -634,6 +632,7 @@ func TestInternalSubsetClosedByParameterEntity(t *testing.T) {
 			name: "pe supplies a declaration then the doctype close",
 			doc:  `<!DOCTYPE r [<!ENTITY % pe "<!ELEMENT r ANY>]><r>"> %pe;</r>`,
 			line: 1,
+			col:  17,
 		},
 		{
 			name: "pe supplies only the closing bracket",
@@ -665,6 +664,7 @@ func TestInternalSubsetClosedByParameterEntity(t *testing.T) {
 			name: "external pe supplies a conditional section then the doctype close",
 			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "cond-end.ent"> %ext;<r/>`,
 			line: 1,
+			col:  31,
 		},
 		{
 			// After a literal "]" a PE reference is not expanded, so it
@@ -688,9 +688,6 @@ func TestInternalSubsetClosedByParameterEntity(t *testing.T) {
 				require.ErrorAs(t, err, &perr)
 				require.Equal(t, helium.ErrorLevelFatal, perr.Level)
 				require.Equal(t, tc.line, perr.LineNumber, "line of the parameter-entity replacement text")
-				if tc.col == 0 {
-					return
-				}
 				require.Equal(t, tc.col, perr.Column, "column of the parameter-entity replacement text")
 			})
 
