@@ -37,10 +37,10 @@ type stopFuncKey struct{}
 // context.WithValue layer would. Its Err is the caller's Err, since the value
 // layers in between do not override it; pollErr uses that to skip them.
 type documentContext struct {
-	context.Context
-	stop       func()
-	caller     context.Context
-	cancelable bool // caller.Done() != nil
+	context.Context //nolint:containedctx // documentContext is itself a context; Done, Deadline and other values come from here
+	stop            func()
+	caller          context.Context //nolint:containedctx // pollErr asks it for Err without walking the value layers
+	cancelable      bool            // caller.Done() != nil
 }
 
 // newDocumentContext derives the context for parsing a document with pctx
