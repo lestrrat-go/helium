@@ -202,6 +202,13 @@ Tests never pass or fail on elapsed time. Express the protected property as work
 | `partitionCompileErrors([]error) (warnings, errors string)` | Split errors by ErrorLevelFatal |
 | `shouldSkip(name) string` | Check skip maps (prefix + exact match) → skip reason |
 
+## Filesystem Fixtures
+
+- A test that asserts a fixture's permission bits sets them with `os.Chmod` after creating the file
+  (`internal/cli/heliumcmd/safety_unix_test.go` `writeFileMode`). `os.WriteFile` and `os.Create` apply the
+  process umask, which differs between machines.
+- A test that changes the umask (`syscall.Umask`) does not call `t.Parallel()` and restores the old value.
+
 ## Environment Variable Filtering
 
 Run specific test subsets via env vars:
