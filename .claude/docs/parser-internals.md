@@ -31,7 +31,7 @@ INPUT ([]byte or io.Reader)
   → ByteCursor on inputStack
   → detectEncoding() — BOM/pattern/EBCDIC scan
   → parseXMLDecl() — version, encoding, standalone
-  → switchEncoding() — RuneCursor wrapping encoder
+  → switchEncoding() — UTF8Cursor over the bytes (UTF-8) or the decoder
   → SetDocumentLocator SAX callback
   → StartDocument SAX → create Document
   → parseMisc() — comments, PIs before DOCTYPE
@@ -55,7 +55,7 @@ INPUT ([]byte or io.Reader)
 Central state struct (`parserctx.go`). Key fields:
 
 ### Input Management
-- `inputTab` (inputStack) — LIFO stack of ByteCursor/RuneCursor; entity expansion + external DTDs push new cursors
+- `inputTab` (inputStack) — LIFO stack of ByteCursor/UTF8Cursor; entity expansion + external DTDs push new cursors
 - `getCursor()` — current cursor; auto-pops exhausted ones, caches the active cursor between calls
 
 ### Parser State Machine
@@ -164,7 +164,7 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 
 `detectEncoding()` order: UCS-4 BE/LE/2143/3412 (PEEK, not consume) → EBCDIC invariant prefix → UTF-8 BOM →
 UTF-16 BOM → UTF-16 by context → default ASCII/UTF-8. `switchEncoding()` pops the ByteCursor, pushes a
-RuneCursor wrapping the encoder. UTF-16 switches encoding before parsing the decl; EBCDIC extracts the name
+`UTF8Cursor` over it (UTF-8) or over a decoder. UTF-16 switches encoding before parsing the decl; EBCDIC extracts the name
 from the invariant charset (default IBM-037); ASCII-compatible parses the decl at byte level then switches.
 
 - BOM vs declared encoding — `checkBOMEncodingConflict` (`parser_encoding.go`): a declared name resolving to a

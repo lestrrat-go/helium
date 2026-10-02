@@ -543,3 +543,228 @@ func TestExternalSubsetUTF16(t *testing.T) {
 		}
 	})
 }
+
+// internalSubsetCloseFS holds the external subsets and external parameter
+// entities that the internal-subset closing tests reference.
+func internalSubsetCloseFS() fstest.MapFS {
+	return fstest.MapFS{
+		"close.ent":    {Data: []byte(`]>`)},
+		"cond-end.ent": {Data: []byte(`<![INCLUDE[<!ELEMENT r ANY>]]>]>`)},
+		"decl.ent":     {Data: []byte(`<!ENTITY g "ext-pe">`)},
+		"nest.ent":     {Data: []byte(`%inner;`)},
+		"cond.ent":     {Data: []byte(`<![INCLUDE[<!ENTITY g "cond">]]>`)},
+		"value.dtd":    {Data: []byte(`<!ENTITY % close "]>"><!ENTITY g "x%close;y">`)},
+		"decl.dtd":     {Data: []byte(`<!ENTITY % decl "<!ENTITY g 'ext-subset'>"> %decl;`)},
+	}
+}
+
+func internalSubsetCloseParser() helium.Parser {
+	return helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		FS(internalSubsetCloseFS())
+}
+
+func parseInternalSubsetViaBytes(t *testing.T, p helium.Parser, in []byte) (*helium.Document, error) {
+	t.Helper()
+	return p.Parse(t.Context(), in)
+}
+
+func parseInternalSubsetViaReader(t *testing.T, p helium.Parser, in []byte) (*helium.Document, error) {
+	t.Helper()
+	return p.ParseReader(t.Context(), bytes.NewReader(in))
+}
+
+func parseInternalSubsetViaPush(t *testing.T, p helium.Parser, in []byte) (*helium.Document, error) {
+	t.Helper()
+	pp := p.NewPushParser(t.Context())
+	// A parse that has already failed rejects the write; Close reports that
+	// same failure, so a Push error only matters when Close succeeds.
+	pushErr := pp.Push(in)
+	doc, err := pp.Close()
+	if err != nil {
+		return doc, err
+	}
+	return doc, pushErr
+}
+
+// TestInternalSubsetClosedByParameterEntity covers the WFC "PE Between
+// Declarations" (XML 1.0 §2.8): the replacement text of a parameter-entity
+// reference between internal-subset declarations must match extSubsetDecl,
+// which cannot contain the "]" and ">" that close the DOCTYPE. A "]" supplied
+// by any parameter entity (internal, nested, or external) is therefore not well
+// formed, matching libxml2's "xmlParseInternalSubset: error detected in Markup
+// declaration".
+func TestInternalSubsetClosedByParameterEntity(t *testing.T) {
+	t.Parallel()
+
+	runners := []struct {
+		name  string
+		parse func(*testing.T, helium.Parser, []byte) (*helium.Document, error)
+	}{
+		{name: "Parse", parse: parseInternalSubsetViaBytes},
+		{name: "ParseReader", parse: parseInternalSubsetViaReader},
+		{name: "push", parse: parseInternalSubsetViaPush},
+	}
+
+	// line and col locate the stray "]" inside the parameter entity's
+	// replacement text. col is 0 (not checked) when a declaration precedes the
+	// "]" in that text: the replacement text is read through a
+	// strcursor.ByteCursor, whose Consume does not advance the column.
+	rejected := []struct {
+		name string
+		doc  string
+		line int
+		col  int
+	}{
+		{
+			name: "pe supplies the doctype close and the root start tag",
+			doc:  `<!DOCTYPE r [<!ENTITY % pe "]><r>"> %pe;</r>`,
+			line: 1,
+			col:  1,
+		},
+		{
+			name: "pe supplies the doctype close",
+			doc:  `<!DOCTYPE r [<!ENTITY % pe "]>"> %pe;<r/>`,
+			line: 1,
+			col:  1,
+		},
+		{
+			name: "pe supplies a declaration then the doctype close",
+			doc:  `<!DOCTYPE r [<!ENTITY % pe "<!ELEMENT r ANY>]><r>"> %pe;</r>`,
+			line: 1,
+		},
+		{
+			name: "pe supplies only the closing bracket",
+			doc:  `<!DOCTYPE r [<!ENTITY % pe "]"> %pe;><r/>`,
+			line: 1,
+			col:  1,
+		},
+		{
+			name: "pe supplies blanks then the doctype close",
+			doc:  `<!DOCTYPE r [<!ENTITY % pe "  ]>"> %pe;<r/>`,
+			line: 1,
+			col:  3,
+		},
+		{
+			// The external PE's replacement text references %inner;, so the "]"
+			// sits two inputs above the internal subset's own.
+			name: "nested pe supplies the doctype close",
+			doc:  `<!DOCTYPE r [<!ENTITY % inner "]>"><!ENTITY % ext SYSTEM "nest.ent"> %ext;<r/>`,
+			line: 1,
+			col:  1,
+		},
+		{
+			name: "external pe supplies the doctype close",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "close.ent"> %ext;<r/>`,
+			line: 1,
+			col:  1,
+		},
+		{
+			name: "external pe supplies a conditional section then the doctype close",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "cond-end.ent"> %ext;<r/>`,
+			line: 1,
+		},
+		{
+			// After a literal "]" a PE reference is not expanded, so it
+			// cannot supply the closing ">" either.
+			name: "pe after the closing bracket supplies the doctype close",
+			doc:  `<!DOCTYPE r [<!ENTITY % pe ">"> ] %pe;<r/>`,
+			line: 1,
+			col:  35,
+		},
+	}
+
+	for _, runner := range runners {
+		for _, tc := range rejected {
+			t.Run(runner.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, err := runner.parse(t, internalSubsetCloseParser(), []byte(tc.doc))
+				require.Error(t, err, "a parameter entity must not close the internal subset")
+				require.Nil(t, doc)
+				require.ErrorIs(t, err, helium.ErrDocTypeNotFinished)
+				var perr helium.ErrParseError
+				require.ErrorAs(t, err, &perr)
+				require.Equal(t, helium.ErrorLevelFatal, perr.Level)
+				require.Equal(t, tc.line, perr.LineNumber, "line of the parameter-entity replacement text")
+				if tc.col == 0 {
+					return
+				}
+				require.Equal(t, tc.col, perr.Column, "column of the parameter-entity replacement text")
+			})
+
+			// Recovery returns the partial document built before the error,
+			// as for any other malformed internal-subset declaration: the DTD
+			// exists, and nothing after the bad "]" (the root element) does.
+			t.Run(runner.name+"/recover/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, err := runner.parse(t, internalSubsetCloseParser().RecoverOnError(true), []byte(tc.doc))
+				require.ErrorIs(t, err, helium.ErrDocTypeNotFinished)
+				require.NotNil(t, doc, "recovery returns the partial document")
+				_, derr := doc.InternalSubset()
+				require.NoError(t, derr, "the internal subset parsed before the error is kept")
+				require.Nil(t, doc.DocumentElement(), "parsing stops at the error, so no root element is built")
+			})
+		}
+	}
+
+	accepted := []struct {
+		name string
+		doc  string
+		want string
+	}{
+		{
+			name: "pe supplies whole declarations",
+			doc:  `<!DOCTYPE r [<!ENTITY % d "<!ELEMENT r ANY><!ENTITY g 'decl'>"> %d; ]><r>&g;</r>`,
+			want: "decl",
+		},
+		{
+			name: "doctype close characters inside entity values",
+			doc:  `<!DOCTYPE r [<!ENTITY g "]>"><!ENTITY % unused "]>">]><r>&g;</r>`,
+			want: "]>",
+		},
+		{
+			name: "pe reference inside an external-subset entity value",
+			doc:  `<!DOCTYPE r SYSTEM "value.dtd" [<!ELEMENT r ANY>]><r>&g;</r>`,
+			want: "x]>y",
+		},
+		{
+			name: "pe references in the external subset",
+			doc:  `<!DOCTYPE r SYSTEM "decl.dtd" [<!ELEMENT r ANY>]><r>&g;</r>`,
+			want: "ext-subset",
+		},
+		{
+			name: "nested pes supply a declaration",
+			doc:  `<!DOCTYPE r [<!ENTITY % inner "<!ENTITY g 'nested'>"><!ENTITY % ext SYSTEM "nest.ent"> %ext;]><r>&g;</r>`,
+			want: "nested",
+		},
+		{
+			name: "literal doctype close right after a pe reference",
+			doc:  `<!DOCTYPE r [<!ENTITY % d "<!ENTITY g 'adjacent'>">%d;]><r>&g;</r>`,
+			want: "adjacent",
+		},
+		{
+			name: "external pe supplies a declaration",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "decl.ent"> %ext;]><r>&g;</r>`,
+			want: "ext-pe",
+		},
+		{
+			name: "external pe supplies a conditional section",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "cond.ent"> %ext;]><r>&g;</r>`,
+			want: "cond",
+		},
+	}
+
+	for _, runner := range runners {
+		for _, tc := range accepted {
+			t.Run(runner.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, err := runner.parse(t, internalSubsetCloseParser(), []byte(tc.doc))
+				require.NoError(t, err)
+				require.NotNil(t, doc.DocumentElement())
+				require.Equal(t, tc.want, string(doc.DocumentElement().Content()))
+			})
+		}
+	}
+}
