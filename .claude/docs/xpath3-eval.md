@@ -74,6 +74,39 @@ cancellation (each operand is individually capped, but the concatenation must be
    avoiding the generic `TraverseAxis` + extra filtered-slice path
 4. Return merged node-set
 
+`evalVMLocationPathNodes` runs the steps and returns the `[]helium.Node`; `evalVMLocationPath` wraps it in node
+items, and `evalVMPathExpr` (`E1/path`) takes the node list for each E1 node directly.
+
+#### `//` fusion (`eval_path_descendant.go`)
+A bare `descendant-or-self::node()` step (what `//` abbreviates) followed by a child or attribute step runs as
+one pre-order walk of each context node's subtree instead of two steps, when `fusesDescendantContexts` accepts the
+context list: every node passes `ixpath.OrderedFrom` (not inside entity content, not an `Entity`), and with several
+nodes none is an attribute or namespace node and none lies inside another's subtree (a node whose parent differs
+from the previous node's is checked against the last top-level node's ancestors). Child matches are emitted when
+the walk reaches them and attributes when it reaches their element, so the result is in document order and neither
+step builds the whole-document order index. Any other context list evaluates the steps one by one. The fused walk
+keeps every observable effect of the two-step evaluation:
+- per context node it fails with `ErrNodeSetLimit` when the subtree has more than `maxNodes` nodes and then
+  charges one op per subtree node, as the descendant-or-self traversal does;
+- it then fails with `ErrNodeSetLimit` when all subtrees together exceed `maxNodes`, and registers the document in
+  the order cache when they hold more than one node (`DocOrderCache.ReserveDocument`, where `OrderStepResult` or
+  `DeduplicateNodes` would), then charges the ops the second step's per-node enumeration charges (XDM children or
+  attributes), and applies the node-set limit to the result;
+- predicates of the second step run per parent, on that parent's candidate list (so `position()`/`last()` keep
+  their meaning), in document order of the parents. With predicates, a first pass counts the subtrees so the
+  limits, the first charges and the registration come before any predicate runs; the second pass marks each
+  parent's selected children on the walk stack and emits them when they are popped.
+
+#### Node-list consumers (`vm_path_nodes.go`)
+`vm.evalLocationPathRef` evaluates an operand that is a compiled location path to its node list, with the
+recursion accounting of `evalWith`. A one-argument static call whose argument is a location path resolves the
+function after evaluating the path; the built-in `fn:count`, `fn:exists`, `fn:empty`, `fn:boolean`, `fn:not` and
+`fn:head` (all `item()*`) compute their result from the node list without creating a node item per node, and any
+other function (including a user function that shadows one of them) gets the node items through
+`callResolvedFunction`. A filter expression over a location path passes the node list to its predicates; a numeric
+literal predicate (`(//x)[1]`) charges the per-node ops and the first node's recursion check of `applyPredicate`
+and then selects by position without evaluating the literal per node.
+
 ### UnionExpr / IntersectExceptExpr
 `evalUnionExpr` gathers the nodes of both operands into one buffer (left, then right; a non-node item raises
 `ErrUnionNotNodeSet`) and orders them with `ixpath.UnionNodeSets`, which returns what `ixpath.MergeNodeSets`
@@ -373,7 +406,7 @@ and the default xpath3 behavior is unchanged.
 - `DocOrderCache` lazy, O(n) build, O(1) lookup: one flat `map[helium.Node]sortKey` covering every indexed
   document, so a position lookup is a single hash probe with no parent-chain walk. A second map records each
   document root's registration order, which orders nodes from different trees. A document can be registered
-  without being indexed (`reserveDocument`, used by `OrderStepResult` when a location step needs no sort); the
+  without being indexed (`ReserveDocument`, used by `OrderStepResult` when a location step needs no sort, and by the `//` fusion); the
   first lookup that needs a position in it indexes it under the reserved order
 - Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does
   not change captured behavior

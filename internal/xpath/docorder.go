@@ -29,7 +29,7 @@ type DocOrderCache struct {
 	// nodes of which at least one is not indexed.
 	documents map[helium.Node]int
 	// reserved holds the document roots that own a registration order in
-	// documents but are not indexed yet (see reserveDocument). The first
+	// documents but are not indexed yet (see ReserveDocument). The first
 	// lookup that needs one of their positions indexes them.
 	reserved map[helium.Node]struct{}
 }
@@ -184,13 +184,13 @@ func (c *DocOrderCache) lookupSortKeyLocked(n helium.Node) sortKey {
 	return c.sortKeyLocked(n)
 }
 
-// reserveDocument gives the document of n its registration order, as indexing
+// ReserveDocument gives the document of n its registration order, as indexing
 // it would, without indexing it. Reserving an already registered document is
 // a no-op. A reserved document is indexed, under the reserved order, by the
 // first lookup that needs a position in it. Registering the document at the
 // same point where indexing would have registered it keeps the relative order
 // of nodes from different documents unchanged.
-func (c *DocOrderCache) reserveDocument(n helium.Node) {
+func (c *DocOrderCache) ReserveDocument(n helium.Node) {
 	root := DocumentRoot(n)
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -200,7 +200,7 @@ func (c *DocOrderCache) reserveDocument(n helium.Node) {
 // reserveDocumentOf registers the document of n the way resolving the sort
 // key of n would (ensureSortKeyLocked), without indexing it: it does nothing
 // when n is already indexed and otherwise reserves the document of n
-// (reserveDocument). n must not be a namespace node.
+// (ReserveDocument). n must not be a namespace node.
 func (c *DocOrderCache) reserveDocumentOf(n helium.Node) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

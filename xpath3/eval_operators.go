@@ -489,12 +489,11 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	result := make([]helium.Node, 0, len(baseNodes))
 	for _, n := range baseNodes {
 		frame := ec.pushNodeContext(n, 1, 1)
-		subResult, err := evalVMLocationPath(evalFn, ctx, ec, *e.Path)
+		subNodes, err := evalVMLocationPathNodes(evalFn, ctx, ec, *e.Path)
 		ec.restoreContext(frame)
 		if err != nil {
 			return nil, err
 		}
-		subNodes, _ := NodesFrom(subResult)
 		result = append(result, subNodes...)
 	}
 	var deduped []helium.Node
