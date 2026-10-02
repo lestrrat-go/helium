@@ -413,6 +413,34 @@ func TestSAXEvents(t *testing.T) {
 		require.Error(t, perr, "an indirect external reference resolvable only via SAX GetEntity must violate the attribute-value WFC even after the entity is used in content")
 		require.Contains(t, perr.Error(), "attribute references external entity")
 	})
+
+	// Start and end events report the local name and the prefix of ASCII and
+	// non-ASCII qualified names, with DTD defaults applied by qualified name.
+	t.Run("qualified names", func(t *testing.T) {
+		const doc = `<!DOCTYPE p:r [<!ATTLIST p:c a CDATA "d">]>` +
+			`<p:r xmlns:p="urn:p" xmlns:é="urn:e"><p:c/><é:ŕ é:a="1"><r/></é:ŕ></p:r>`
+		const want = "SAX.StartElementNS(r, p, 'urn:p', 2, xmlns:p='urn:p', xmlns:é='urn:e', 0, 0)\n" +
+			"SAX.StartElementNS(c, p, 'urn:p', 0, 1, 1, a='d...', 1)\n" +
+			"SAX.EndElementNS(c, p, 'urn:p')\n" +
+			"SAX.StartElementNS(ŕ, é, 'urn:e', 0, 1, 0, é:a='1...', 1)\n" +
+			"SAX.StartElementNS(r, NULL, NULL, 0, 0, 0)\n" +
+			"SAX.EndElementNS(r, NULL, NULL)\n" +
+			"SAX.EndElementNS(ŕ, é, 'urn:e')\n" +
+			"SAX.EndElementNS(r, p, 'urn:p')\n"
+
+		var out bytes.Buffer
+		_, err := helium.NewParser().DefaultDTDAttributes(true).SAXHandler(newEventEmitter(&out)).
+			Parse(t.Context(), []byte(doc))
+		require.NoError(t, err, "Parse should succeed")
+
+		var got strings.Builder
+		for line := range strings.Lines(out.String()) {
+			if strings.HasPrefix(line, "SAX.StartElementNS(") || strings.HasPrefix(line, "SAX.EndElementNS(") {
+				got.WriteString(line)
+			}
+		}
+		require.Equal(t, want, got.String(), "element events must carry the local name and prefix")
+	})
 }
 
 func TestDocumentLocator(t *testing.T) {
