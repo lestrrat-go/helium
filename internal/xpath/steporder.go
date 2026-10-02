@@ -54,7 +54,7 @@ const maxSameDepth = 64
 //
 // Rules 2 and 3 enforce maxNodes and clamp the capacity of the returned slice
 // as DeduplicateNodes does. They do not index the document, but they reserve
-// its registration order in cache (reserveDocument) at the point where
+// its registration order in cache (ReserveDocument) at the point where
 // DeduplicateNodes would have indexed it, so a later merge orders nodes from
 // different documents exactly as before. Every node of out belongs to one
 // tree: a step traverses from nodes of a single location path.
@@ -66,7 +66,7 @@ func OrderStepResult(out, inputs []helium.Node, axis AxisType, cache *DocOrderCa
 		if isReverseAxis(axis) {
 			slices.Reverse(out)
 		}
-		cache.reserveDocument(out[0])
+		cache.ReserveDocument(out[0])
 		return clampStepResult(out, maxNodes)
 	}
 	switch axis {
@@ -77,10 +77,19 @@ func OrderStepResult(out, inputs []helium.Node, axis AxisType, cache *DocOrderCa
 		if axis == AxisParent {
 			out = slices.Compact(out)
 		}
-		cache.reserveDocument(out[0])
+		cache.ReserveDocument(out[0])
 		return clampStepResult(out, maxNodes)
 	}
 	return DeduplicateNodes(out, cache, maxNodes)
+}
+
+// OrderedFrom reports whether OrderStepResult takes rule 2 for a step that
+// runs from the single context node n: n is a kind whose axis traversal
+// yields document order and it does not lie inside entity content. A caller
+// that walks the subtree of such a node in pre-order visits its nodes in the
+// order the whole-document index numbers them.
+func OrderedFrom(n helium.Node) bool {
+	return allOrderedContexts([]helium.Node{n}) && !inEntityContent(n)
 }
 
 // clampStepResult applies the node-set limit and returns out with its

@@ -232,7 +232,7 @@ func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.
 	if _, ok := node.(*helium.Attribute); ok {
 		return nil
 	}
-	stack, err := pushXDMChildren(ctx, nil, node)
+	stack, err := PushXDMChildren(ctx, nil, node)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.
 		if err := appendAxisNode(result, cur, maxNodes); err != nil {
 			return err
 		}
-		stack, err = pushXDMChildren(ctx, stack, cur)
+		stack, err = PushXDMChildren(ctx, stack, cur)
 		if err != nil {
 			return err
 		}
@@ -255,9 +255,12 @@ func collectDescendants(ctx context.Context, node helium.Node, result *[]helium.
 	return nil
 }
 
-// pushXDMChildren appends the XDM children of n to stack in reverse document
-// order, so the first child is the next one popped.
-func pushXDMChildren(ctx context.Context, stack []helium.Node, n helium.Node) ([]helium.Node, error) {
+// PushXDMChildren appends the XDM children of n to stack in reverse document
+// order, so the first child is the next one popped. It enumerates the owned
+// children (helium.Children) and checks ctx before each one; on error it
+// returns a nil stack. n must not be an attribute: the XDM gives attributes
+// no children, and the caller handles that case.
+func PushXDMChildren(ctx context.Context, stack []helium.Node, n helium.Node) ([]helium.Node, error) {
 	start := len(stack)
 	for c := range helium.Children(n) {
 		if err := ctx.Err(); err != nil {

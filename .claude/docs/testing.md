@@ -314,6 +314,12 @@ positional predicates on forward and reverse axes, path steps whose step express
 sequence (`!`, atomic last steps, `reverse(...)/step`, FLWOR, mixed node/atomic steps raising XPTY0018). Only the
 path expressions go through the fresh-`DocOrderCache` check.
 
+`xpath3/eval_path_descendant_test.go` checks the `//` fusion over the same documents and contexts: every `//`
+expression must render exactly like its reference, which spells `//` as
+`/descendant-or-self::node()/self::node()/` so the path runs one step at a time. The extra self step charges one
+op per descendant-or-self node, so `TestDescendantStepFusionLimits` requires the reference's smallest passing
+`OpLimit` to be exactly that much higher, and both forms to fail on the same `MaxNodesForTesting` limits.
+
 ## Build Tags
 
 - `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)

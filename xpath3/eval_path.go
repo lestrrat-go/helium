@@ -162,6 +162,25 @@ func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 }
 
 func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext, lp vmLocationPathExpr) (Sequence, error) {
+	nodes, err := evalVMLocationPathNodes(evalFn, ctx, ec, lp)
+	if err != nil {
+		return nil, err
+	}
+	return nodeItemsFor(ctx, ec, nodes), nil
+}
+
+// nodeItemsFor wraps every node of nodes in its NodeItem.
+func nodeItemsFor(ctx context.Context, ec *evalContext, nodes []helium.Node) ItemSlice {
+	result := make(ItemSlice, len(nodes))
+	for i, n := range nodes {
+		result[i] = nodeItemFor(ctx, ec, n)
+	}
+	return result
+}
+
+// evalVMLocationPathNodes evaluates lp and returns its nodes, in document
+// order and free of duplicates, without wrapping them in items.
+func evalVMLocationPathNodes(evalFn exprEvaluator, ctx context.Context, ec *evalContext, lp vmLocationPathExpr) ([]helium.Node, error) {
 	var nodes []helium.Node
 
 	if lp.Absolute {
@@ -185,22 +204,22 @@ func evalVMLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 	// and duplicate-free, so each step's context list meets the precondition
 	// of ixpath.OrderStepResult, which ends every step.
 	var err error
-	for _, step := range lp.Steps {
-		if len(step.Predicates) > 0 {
+	for i := 0; i < len(lp.Steps); i++ {
+		step := lp.Steps[i]
+		switch {
+		case len(nodes) == 1 && fusesDescendantStep(lp.Steps, i) && ixpath.OrderedFrom(nodes[0]):
+			i++
+			nodes, err = evalVMDescendantStep(evalFn, ctx, ec, nodes[0], lp.Steps[i])
+		case len(step.Predicates) > 0:
 			nodes, err = evalVMStepWithPredicates(evalFn, ctx, ec, nodes, step)
-		} else {
+		default:
 			nodes, err = evalVMStepNoPredicates(ctx, ec, nodes, step)
 		}
 		if err != nil {
 			return nil, err
 		}
 	}
-
-	result := make(ItemSlice, len(nodes))
-	for i, n := range nodes {
-		result[i] = nodeItemFor(ctx, ec, n)
-	}
-	return result, nil
+	return nodes, nil
 }
 
 func nodeItemFor(ctx context.Context, ec *evalContext, n helium.Node) NodeItem {
