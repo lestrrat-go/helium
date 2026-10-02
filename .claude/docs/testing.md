@@ -135,6 +135,8 @@ bug that prompted it.
 - CLI examples call importable entrypoints (e.g. `internal/cli/heliumcmd.Execute`) directly. Do NOT spawn subprocesses
   unless behavior requires it.
 - Do NOT use `examples/` for scratch programs, golden fixtures, or temporary experiments.
+- An example that needs files on disk writes them under `os.MkdirTemp("", ...)` (the system temp dir), never
+  under the package directory, so `go test ./examples/` runs from a read-only checkout.
 
 ## Test Helpers
 

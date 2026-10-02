@@ -16,7 +16,7 @@ func Example_xsd_compile_file() {
   <xs:element name="greeting" type="xs:string"/>
 </xs:schema>`
 
-	dir, err := os.MkdirTemp(".", ".tmp-xsd-*")
+	dir, err := os.MkdirTemp("", ".tmp-xsd-*")
 	if err != nil {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return

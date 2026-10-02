@@ -20,7 +20,7 @@ func Example_catalog_with_parser() {
 </catalog>`
 
 	// Write the catalog to a temporary file.
-	dir, err := os.MkdirTemp(".", ".tmp-catalog-*")
+	dir, err := os.MkdirTemp("", ".tmp-catalog-*")
 	if err != nil {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return

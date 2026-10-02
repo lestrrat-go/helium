@@ -25,7 +25,7 @@ func Example_xinclude_process() {
 	// Create a temporary directory and write both files to it.
 	// The parser needs real files on disk because XInclude resolves
 	// hrefs relative to the base URI of the including document.
-	dir, err := os.MkdirTemp(".", ".tmp-xinclude-*")
+	dir, err := os.MkdirTemp("", ".tmp-xinclude-*")
 	if err != nil {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return
