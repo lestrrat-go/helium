@@ -219,8 +219,7 @@ build against two lower-level baselines: an `encoding/xml` token loop
 That is a narrower benchmark than every real `encoding/xml` workload. Many Go
 programs use `encoding/xml` to decode directly into structs, and this section
 does not measure that use. On these three files, building Helium's full DOM is
-faster than the `encoding/xml` token loop. It is slower than libxml2 on the two
-smaller files and faster on the largest.
+faster than both the `encoding/xml` token loop and libxml2.
 
 The files are `spec_0.xml` (118 KB, ISO-8859-1, with an internal DTD subset),
 `nvdcve_0.xml` (287 KB) and `comps_0.xml` (608 KB) from
@@ -232,9 +231,9 @@ libxml2bench ./bench`:
 
 | File | Helium | `encoding/xml` | libxml2 (cgo) |
 |------|--------|----------------|---------------|
-| 118 KB | 103 MB/s | 71 MB/s | 127 MB/s |
-| 287 KB | 133 MB/s | 85 MB/s | 161 MB/s |
-| 608 KB | 140 MB/s | 76 MB/s | 90 MB/s |
+| 118 KB | 146 MB/s | 72 MB/s | 128 MB/s |
+| 287 KB | 189 MB/s | 88 MB/s | 165 MB/s |
+| 608 KB | 186 MB/s | 77 MB/s | 90 MB/s |
 
 Helium allocates far fewer objects than `encoding/xml` in this benchmark. On the
 608 KB file, Helium makes about 2,700 allocations per parse and `encoding/xml`
