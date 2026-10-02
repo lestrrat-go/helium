@@ -32,6 +32,7 @@ var xsdBenchmarkCases = []struct {
 	{name: "nvdcve_0", fixture: "nvdcve_0", versions: bothVersions},
 	// xs:assert and xs:alternative exist only in XSD 1.1.
 	{name: "assert_cta_1000", schema: assertCTASchema, items: 1000, versions: only11},
+	{name: "assert_paths_1000", schema: assertPathsSchema, items: 1000, versions: only11},
 }
 
 // assertCTASchema selects each <item>'s type through conditional type
@@ -67,6 +68,34 @@ const assertCTASchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
         <xs:assert test="qty ge 100"/>
       </xs:restriction>
     </xs:complexContent>
+  </xs:complexType>
+</xs:schema>`
+
+// assertPathsSchema validates an assertCTAInstance with xs:assert tests that
+// only need to know whether a node path selects a node: a path on its own,
+// exists(), empty() and not() of a path, and count() of a path compared with
+// zero. Every assertion holds on assertCTAInstance.
+const assertPathsSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="itemType" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:assert test="item/qty"/>
+      <xs:assert test="exists(.//sku)"/>
+      <xs:assert test="empty(item[not(sku)])"/>
+      <xs:assert test="count(item) > 0"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="itemType">
+    <xs:sequence>
+      <xs:element name="sku" type="xs:string"/>
+      <xs:element name="qty" type="xs:integer"/>
+    </xs:sequence>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:assert test="sku and qty"/>
+    <xs:assert test="exists(.//qty)"/>
+    <xs:assert test="not(.//nosuch)"/>
   </xs:complexType>
 </xs:schema>`
 

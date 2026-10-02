@@ -181,35 +181,45 @@ func nodeItemsFor(ctx context.Context, ec *evalContext, nodes []helium.Node) Ite
 // evalVMLocationPathNodes evaluates lp and returns its nodes, in document
 // order and free of duplicates, without wrapping them in items.
 func evalVMLocationPathNodes(evalFn exprEvaluator, ctx context.Context, ec *evalContext, lp vmLocationPathExpr) ([]helium.Node, error) {
-	var nodes []helium.Node
-
-	if lp.Absolute {
-		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
-		}
-		root := ixpath.DocumentRoot(ec.node)
-		// XPDY0050: the root of the context node's tree must be a document node.
-		if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
-			return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
-		}
-		nodes = []helium.Node{root}
-	} else {
-		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
-		}
-		nodes = []helium.Node{ec.node}
+	start, err := locationPathStart(ec, lp)
+	if err != nil {
+		return nil, err
 	}
+	return evalVMSteps(evalFn, ctx, ec, []helium.Node{start}, lp.Steps)
+}
 
+// locationPathStart returns the node the location path lp starts from: the
+// root of the context node's tree for an absolute path, which must be a
+// document node, and the context node otherwise.
+func locationPathStart(ec *evalContext, lp vmLocationPathExpr) (helium.Node, error) {
+	if ixpath.IsNilNode(ec.node) {
+		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+	}
+	if !lp.Absolute {
+		return ec.node, nil
+	}
+	root := ixpath.DocumentRoot(ec.node)
+	// XPDY0050: the root of the context node's tree must be a document node.
+	if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
+		return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+	}
+	return root, nil
+}
+
+// evalVMSteps evaluates steps from the context list nodes, which must be
+// sorted in document order and free of duplicates, and returns the result of
+// the last step.
+func evalVMSteps(evalFn exprEvaluator, ctx context.Context, ec *evalContext, nodes []helium.Node, steps []vmLocationStep) ([]helium.Node, error) {
 	// The path starts from one node and every step returns its result sorted
 	// and duplicate-free, so each step's context list meets the precondition
 	// of ixpath.OrderStepResult, which ends every step.
 	var err error
-	for i := 0; i < len(lp.Steps); i++ {
-		step := lp.Steps[i]
+	for i := 0; i < len(steps); i++ {
+		step := steps[i]
 		switch {
-		case fusesDescendantStep(lp.Steps, i) && fusesDescendantContexts(nodes):
+		case fusesDescendantStep(steps, i) && fusesDescendantContexts(nodes):
 			i++
-			nodes, err = evalVMDescendantStep(evalFn, ctx, ec, nodes, lp.Steps[i])
+			nodes, err = evalVMDescendantStep(evalFn, ctx, ec, nodes, steps[i])
 		case len(step.Predicates) > 0:
 			nodes, err = evalVMStepWithPredicates(evalFn, ctx, ec, nodes, step)
 		default:

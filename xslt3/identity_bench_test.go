@@ -85,3 +85,81 @@ func BenchmarkIdentityTransform(b *testing.B) {
 		})
 	}
 }
+
+// conditionalPathStylesheet visits every package and tests node paths on
+// their own with xsl:if and xsl:when.
+const conditionalPathStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="//package"/></out></xsl:template>
+  <xsl:template match="package">
+    <xsl:if test="dependencylist/dependency"><deps/></xsl:if>
+    <xsl:choose>
+      <xsl:when test=".//nosuch"><nosuch/></xsl:when>
+      <xsl:when test=".//dependency"><some/></xsl:when>
+      <xsl:otherwise><none/></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// conditionalExistsStylesheet is conditionalPathStylesheet with every test
+// written as exists(), empty() or count() > 0 of the path.
+const conditionalExistsStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="//package"/></out></xsl:template>
+  <xsl:template match="package">
+    <xsl:if test="exists(dependencylist/dependency)"><deps/></xsl:if>
+    <xsl:choose>
+      <xsl:when test="not(empty(.//nosuch))"><nosuch/></xsl:when>
+      <xsl:when test="count(.//dependency) > 0"><some/></xsl:when>
+      <xsl:otherwise><none/></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// conditionalDocumentStylesheet visits every group and tests paths over the
+// whole document, on their own and through exists().
+const conditionalDocumentStylesheet = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="//group"/></out></xsl:template>
+  <xsl:template match="group">
+    <xsl:if test="//packagereq"><pkgs/></xsl:if>
+    <xsl:if test="exists(/comps/group/packagelist/packagereq)"><listed/></xsl:if>
+  </xsl:template>
+</xsl:stylesheet>`
+
+// BenchmarkConditionalNodeTests measures transforms whose xsl:if and
+// xsl:when tests only need to know whether a node path selects a node, over
+// the same 608 KB document as BenchmarkIdentityTransform:
+//
+//   - path: per package, paths on their own as the test;
+//   - exists: per package, the same paths through exists(), empty() and
+//     count() > 0;
+//   - document: per group, paths over the whole document.
+//
+// Each times xslt3.Transform, which builds the result tree only.
+func BenchmarkConditionalNodeTests(b *testing.B) {
+	srcBytes, err := os.ReadFile(heliumtest.TestDir("testdata", "libxml2-compat", "relaxng", "test", "comps_0.xml"))
+	require.NoError(b, err)
+
+	source, err := helium.NewParser().Parse(b.Context(), srcBytes)
+	require.NoError(b, err)
+
+	forms := []struct {
+		name string
+		ss   *xslt3.Stylesheet
+	}{
+		{name: "path", ss: compileBenchStylesheet(b, conditionalPathStylesheet)},
+		{name: "exists", ss: compileBenchStylesheet(b, conditionalExistsStylesheet)},
+		{name: "document", ss: compileBenchStylesheet(b, conditionalDocumentStylesheet)},
+	}
+	for _, form := range forms {
+		b.Run(form.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				if _, err := xslt3.Transform(b.Context(), source, form.ss); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

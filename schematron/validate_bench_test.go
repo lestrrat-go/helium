@@ -107,3 +107,56 @@ func BenchmarkValidateXSLT1Binding(b *testing.B) {
 func BenchmarkValidateXSLT3Binding(b *testing.B) {
 	benchValidate(b, "xslt3", benchRecords)
 }
+
+// benchNodePathSchema is an xslt3-binding schema whose tests take the
+// effective boolean value of node paths: a path on its own, exists() and
+// empty() of a path, count() of a path compared with zero, and report tests
+// that never fire. Every assertion holds on benchInstance, so validation
+// evaluates every test on every rule context.
+const benchNodePathSchema = `<?xml version="1.0" encoding="UTF-8"?>
+<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">
+  <pattern>
+    <rule context="catalog">
+      <assert test="exists(//book)">a catalog holds books</assert>
+      <assert test="//tag">a catalog holds tags</assert>
+      <assert test="count(//price) > 0">a catalog holds prices</assert>
+      <report test="//book[not(title)]">every book has a title</report>
+    </rule>
+  </pattern>
+  <pattern>
+    <rule context="book">
+      <assert test=".//tag">a book has tags</assert>
+      <assert test="exists(tags/tag)">a book lists its tags</assert>
+      <assert test="count(.//tag) > 0">a book counts its tags</assert>
+      <assert test="title and author">a book has a title and an author</assert>
+      <report test=".//nosuch">a book has no nosuch</report>
+      <report test="empty(price/@currency)">a price has a currency</report>
+    </rule>
+  </pattern>
+  <pattern>
+    <rule context="tag">
+      <assert test="ancestor::book">a tag sits in a book</assert>
+      <report test="following-sibling::nosuch">a tag has no nosuch sibling</report>
+    </rule>
+  </pattern>
+</schema>`
+
+// BenchmarkValidateNodePathTests validates benchInstance against
+// benchNodePathSchema, whose tests only need to know whether a node path
+// selects a node.
+func BenchmarkValidateNodePathTests(b *testing.B) {
+	sdoc, err := helium.NewParser().Parse(b.Context(), []byte(benchNodePathSchema))
+	require.NoError(b, err, "parse schema")
+	schema, err := schematron.NewCompiler().Compile(b.Context(), sdoc)
+	require.NoError(b, err, "compile schema")
+	doc := benchParseInstance(b, benchRecords)
+	require.NoError(b, schematron.NewValidator(schema).Quiet().Validate(b.Context(), doc))
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := schematron.NewValidator(schema).Quiet().Validate(b.Context(), doc); err != nil {
+			b.Fatalf("validation failed: %s", err)
+		}
+	}
+}

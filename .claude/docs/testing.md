@@ -319,7 +319,8 @@ expression must render exactly like its reference, which spells `//` as
 `/descendant-or-self::node()/self::node()/` so the path runs one step at a time. The extra self step charges one
 op per descendant-or-self node, so `TestDescendantStepFusionLimits` requires the reference's smallest passing
 `OpLimit` to be exactly that much higher, and both forms to fail on the same `MaxNodesForTesting` limits; its cases
-cover one-pass predicates and nested context nodes (`/descendant::*//b`). `TestDescendantStepFusionAnnotated`
+cover one-pass predicates and nested context nodes (`/descendant::*//b`), and count the nodes of a path in a
+predicate (`[count(.//c) > 0]`) because a path that only has to select a node stops at its first one. `TestDescendantStepFusionAnnotated`
 annotates every attribute so `[@a = 's']` evaluates the comparison, and the sequential
 `TestDescendantNestedContextsAllocate` requires `//a//b` over nested elements to allocate at least 500 times less
 than its reference.
@@ -327,11 +328,25 @@ than its reference.
 `xpath3/vm_path_nodes_test.go` checks the VM node-list consumers the same way. Each template marks an operand
 `«X»`: the fast form reads `(X)`, the reference `(if (true()) then X else ())`, which hands X on as a sequence of
 node items and charges nothing, so both forms must render alike, need the same smallest `OpLimit` and fail on the
-same `MaxNodesForTesting` limits. `TestNodeListTypeAnnotations` validates a document against a schema with list and
+same `MaxNodesForTesting` limits. In the `nodeListExistsExprs` templates the operand is a location path or `E1/path`
+that only has to select a node, so the fast form stops at its first node: it must render alike, need no larger
+smallest `OpLimit`, and fail on a node-set limit only where the reference fails too. `TestNodeListTypeAnnotations` validates a document against a schema with list and
 union types and requires every node item to equal the one `.` gives for its node. `TestNodeListResult` checks the
 `Result` accessors of a node-list result against the reference, and the sequential
 `TestNodeListConsumersAllocate` requires each fast form to allocate at least 1,000 times less than its reference
 over 2,000 nodes.
+
+`xpath3/eval_path_exists_test.go` checks the early stop. `TestPathExists` puts every path of `existsPaths` in places
+that only take whether it selects a node (`exists`, `not`, `if`, predicates, and from the document node `empty`,
+`boolean`, `and`/`or`, quantifiers, `fn:`/`Q{}` spellings), plus `(exists(X), $other//c | //c)`, whose union order
+shows where X registered its document, and requires each to render like its reference `(if (true()) then X else
+())` over every document and context node; `TestPathExistsRandom` and `TestPathExistsRandomPaths` repeat it over
+generated documents and generated paths. `TestPathExistsLimits` compares `exists(X)` with `count(X)`: no more
+operations, and node-set-limit failures only where `count(X)` fails, and exactly the same operations and failures
+when X selects nothing. `TestPathExistsStopsEarly` shows that paths over 2,000 elements stay within an `OpLimit`
+and a `MaxNodesForTesting` of 100 that their full evaluation exceeds, `TestPathExistsSkippedErrors` that a
+predicate error on nodes after the first match no longer fires, and `TestPathExistsCancel` that a cancelled context
+stops a probe before it starts and mid-walk (`heliumtest.PollContext`).
 
 ## Build Tags
 
@@ -412,8 +427,10 @@ over 2,000 nodes.
 
 XSD benchmarks use valid `extension0_0` and `nvdcve_0` schema/instance pairs from the same fixture tree, plus
 `assert_cta_1000`, an inline schema whose `<item>` type is chosen by `xs:alternative` and checked by `xs:assert`,
-validated against an in-memory `<order>` of 1000 items. Every case runs once per version as `<case>/1.0` and
-`<case>/1.1`; `assert_cta_1000` runs only at 1.1. Compilation times `Compiler.Compile` with a parsed schema
+validated against an in-memory `<order>` of 1000 items, and `assert_paths_1000`, an inline schema whose
+`xs:assert` tests only check whether node paths select a node (a bare path, `exists`/`empty`/`not`, `count(...) > 0`),
+validated against the same `<order>`. Every case runs once per version as `<case>/1.0` and `<case>/1.1`;
+`assert_cta_1000` and `assert_paths_1000` run only at 1.1. Compilation times `Compiler.Compile` with a parsed schema
 document; validation times `Validator.Validate` with a compiled schema and parsed instance document.
 
 `BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml`, `relaxng/test/comps_0.xml`, and
@@ -421,7 +438,11 @@ document; validation times `Validator.Validate` with a compiled schema and parse
 declarations on the root) with `helium.Write` into `io.Discard`. `BenchmarkIdentityTransform` (`xslt3/identity_bench_test.go`) runs an identity
 transform over `comps_0.xml` in two stylesheet forms (`template`: a `match="@*|node()"` copy rule; `mode`:
 `xsl:mode on-no-match="shallow-copy"`), each timed as `writer` (`TransformToWriter`, transform plus serialization)
-and `tree` (`Transform` only).
+and `tree` (`Transform` only). `BenchmarkConditionalNodeTests` (same file, same document) times `Transform` for
+stylesheets whose `xsl:if`/`xsl:when` tests only check whether a node path selects a node: `path` (bare paths per
+`package`), `exists` (the same through `exists`/`empty`/`count(...) > 0`) and `document` (whole-document paths per
+`group`). `BenchmarkValidateNodePathTests` (`schematron/validate_bench_test.go`) validates the 500-record catalog
+against an `xslt3`-binding schema of such `assert`/`report` tests.
 
 RELAX NG benchmarks (`relaxng/relaxng_benchmark_test.go`) use `tutor10_8` (`small`) and `libvirt` from the same
 tree. `BenchmarkValidate/large` validates `libvirt_0.xml` with its single `<disk>` repeated 300 times, built in

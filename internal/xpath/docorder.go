@@ -197,6 +197,17 @@ func (c *DocOrderCache) ReserveDocument(n helium.Node) {
 	c.reserveRootLocked(root)
 }
 
+// DocumentRegistered reports whether the document of n has a registration
+// order in c, whether it is indexed or only reserved. Registering it again
+// would change nothing.
+func DocumentRegistered(c *DocOrderCache, n helium.Node) bool {
+	root := DocumentRoot(n)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.documents[root]
+	return ok
+}
+
 // reserveDocumentOf registers the document of n the way resolving the sort
 // key of n would (ensureSortKeyLocked), without indexing it: it does nothing
 // when n is already indexed and otherwise reserves the document of n
