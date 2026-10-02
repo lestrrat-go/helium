@@ -24,7 +24,7 @@ func Example_parser_xinclude() {
 
 	// XInclude resolves hrefs relative to the including document's location, so
 	// write both files to a temp dir and parse the main file from disk.
-	dir, err := os.MkdirTemp(".", ".tmp-xinclude-*")
+	dir, err := os.MkdirTemp("", ".tmp-xinclude-*")
 	if err != nil {
 		fmt.Printf("failed to create temp dir: %s\n", err)
 		return
