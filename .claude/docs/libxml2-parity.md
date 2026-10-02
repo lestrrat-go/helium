@@ -228,3 +228,8 @@ These are architectural choices, not bugs:
   NCNames, and enumeration members are checked as distinct Nmtokens or Names before output. A character map is
   exempt because its replacement string is emitted verbatim (Serialization 3.1 §7). Parsed-document output and
   serialization goldens remain byte-identical; the divergence only affects malformed in-memory trees.
+- Conditional-section opening across a PE boundary: when a parameter entity supplies the INCLUDE/IGNORE keyword
+  and `[` of a section whose `<![` is in another input (XML §3.4 VC Proper Conditional Section/PE Nesting),
+  helium reports `ErrEntityBoundary` ("all markup of the conditional section is not in the same entity") only
+  when validating (`checkCondSectionEntityBoundary`); libxml2 2.9.14 reports it as a fatal parser error. The
+  closing side (a `]]>` from a different input than the section content) is fatal in both, as in libxml2.

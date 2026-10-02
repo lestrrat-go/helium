@@ -296,53 +296,78 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		// declarations (e.g. a defaulting <!ATTLIST>) are silently skipped.
 		pctx.popSpentExternalSubsetInputs(sectionDepth)
 		baseLen := pctx.inputTab.Len()
+		// crossed records that the section's content input ended before its
+		// "]]>", so the terminator comes from a different entity and
+		// checkCondSectionClose rejects it.
+		crossed := false
 		for {
-			// Pop spent nested PE/conditional cursors and skip leading blanks on
-			// the section's own cursor so the "]]>" terminator and EOF are checked
-			// against the enclosing cursor, not an exhausted PE cursor.
+			// Pop spent nested PE/conditional cursors so the "]]>" terminator
+			// and EOF are checked against a live cursor.
 			pctx.popSpentExternalSubsetInputs(baseLen)
-			if pctx.inputTab.Len() <= baseLen {
-				// Inspect the section's OWN cursor (the floor cursor at baseLen-1)
-				// directly, bypassing getCursor(): if this external DTD's
-				// INCLUDE section reaches EOF before its "]]>" terminator,
-				// getCursor() would auto-pop the exhausted section cursor and
-				// return the enclosing (e.g. main document) cursor, which is not
-				// Done — defeating the EOF check and spinning this loop forever.
-				sec := pctx.adaptCursor(pctx.inputTab.PeekOne())
-				if sec == nil {
-					return ErrConditionalSectionNotFinished
-				}
-
-				// Bounded blank skip (NOT skipBlanks, which would consume a
-				// "%pe;" reference without expanding it). skipBlankRun only
-				// advances over whitespace, so it is safe here and caps an
-				// oversized blank run inside the section with
-				// ErrNodeContentTooLarge.
-				if _, err := pctx.skipBlankRun(ctx, sec); err != nil {
+			// A declaration step reads through getCursor(), which auto-pops an
+			// exhausted input. When the section's own content input ran out
+			// that way, the stack is now BELOW baseLen and the top cursor is
+			// the input that referenced the parameter entity holding the
+			// section. That input must not silently supply the "]]>".
+			if pctx.inputTab.Len() < baseLen {
+				n, err := pctx.resumeCondSectionBelow(ctx)
+				if err != nil {
 					return err
 				}
-
-				if sec.Done() {
-					return ErrConditionalSectionNotFinished
-				}
-
-				if sec.Peek() == ']' && sec.PeekAt(1) == ']' && sec.PeekAt(2) == '>' {
-					if err := sec.Advance(3); err != nil {
-						return err
-					}
-					return nil
-				}
+				baseLen = n
+				crossed = true
+				continue
 			}
 
-			stop, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen)
-			if err != nil {
+			// Inspect the top cursor directly, bypassing getCursor(), which
+			// would auto-pop an exhausted section cursor and return the
+			// enclosing (e.g. main document) cursor.
+			sec := pctx.adaptCursor(pctx.inputTab.PeekOne())
+			if sec == nil {
+				return ErrConditionalSectionNotFinished
+			}
+
+			// Bounded blank skip (NOT skipBlanks, which would consume a
+			// "%pe;" reference without expanding it). skipBlankRun only
+			// advances over whitespace, so it is safe here and caps an
+			// oversized blank run inside the section with
+			// ErrNodeContentTooLarge.
+			if _, err := pctx.skipBlankRun(ctx, sec); err != nil {
 				return err
 			}
-			// stop=true means the section's own content cursor is exhausted
-			// before a "]]>" terminator was seen. Report the unterminated
-			// conditional section instead of looping forever.
-			if stop {
-				return ErrConditionalSectionNotFinished
+
+			if sec.Done() {
+				// A spent parameter entity inside the section body: pop it
+				// at the top of the loop and continue in the section.
+				if pctx.inputTab.Len() > baseLen {
+					continue
+				}
+				n, err := pctx.resumeCondSectionBelow(ctx)
+				if err != nil {
+					return err
+				}
+				baseLen = n
+				crossed = true
+				continue
+			}
+
+			if sec.Peek() == ']' && sec.PeekAt(1) == ']' && sec.PeekAt(2) == '>' {
+				// A "]]>" above baseLen was supplied by a parameter entity
+				// referenced inside the section body.
+				if err := pctx.checkCondSectionClose(ctx, crossed || pctx.inputTab.Len() > baseLen); err != nil {
+					return err
+				}
+				if err := sec.Advance(3); err != nil {
+					return err
+				}
+				return nil
+			}
+
+			// stop=true means the section's content cursor is exhausted
+			// before a "]]>" terminator was seen; the top of the loop resumes
+			// below it or reports the unterminated section.
+			if _, err := pctx.parseExternalSubsetDeclStep(ctx, baseLen); err != nil {
+				return err
 			}
 		}
 	}
@@ -366,11 +391,25 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			return err
 		}
 
+		// An ignored section recognizes no parameter-entity references, so its
+		// body never pushes an input: it is read from the section's content
+		// input until that runs out. The cursor is read from the stack
+		// directly, not through getCursor(), which would auto-pop an exhausted
+		// content input and let the input below it close the section.
+		pctx.popSpentExternalSubsetInputs(sectionDepth)
+		crossed := false
 		depth := 1
 		for depth > 0 {
-			cur = pctx.getCursor()
-			if cur == nil || cur.Done() {
+			cur = pctx.adaptCursor(pctx.inputTab.PeekOne())
+			if cur == nil {
 				return ErrConditionalSectionNotFinished
+			}
+			if cur.Done() {
+				if _, err := pctx.resumeCondSectionBelow(ctx); err != nil {
+					return err
+				}
+				crossed = true
+				continue
 			}
 
 			c := cur.Peek()
@@ -383,6 +422,11 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 			}
 			if c == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				depth--
+				if depth == 0 {
+					if err := pctx.checkCondSectionClose(ctx, crossed); err != nil {
+						return err
+					}
+				}
 				if err := cur.Advance(3); err != nil {
 					return err
 				}
@@ -419,8 +463,74 @@ func (pctx *parserCtx) checkCondSectionEntityBoundary(ctx context.Context, secti
 	if pctx.inputTab.Len() <= sectionDepth {
 		return nil
 	}
-	return pctx.error(ctx,
-		fmt.Errorf("%w: all markup of the conditional section is not in the same entity", ErrEntityBoundary))
+	return pctx.error(ctx, errCondSectionBoundary)
+}
+
+// errCondSectionBoundary reports a conditional section whose "<![", "[" and
+// "]]>" are not all in the same entity (libxml2 XML_ERR_ENTITY_BOUNDARY, "All
+// markup of the conditional section is not in the same entity").
+var errCondSectionBoundary = fmt.Errorf("%w: all markup of the conditional section is not in the same entity", ErrEntityBoundary)
+
+// checkCondSectionClose enforces the closing side of "Proper Conditional
+// Section/PE Nesting" (XML §3.4) at a section's "]]>". crossed reports that the
+// "]]>" comes from a different input than the section's content: the content
+// input ran out first (resumeCondSectionBelow), or a parameter entity
+// referenced inside the body supplied the "]]>". Either way a parameter
+// entity's replacement text holds only part of the section, so it cannot
+// match extSubsetDecl (§2.8 WFC: PE Between Declarations). That is a fatal
+// well-formedness error in both subsets, whether or not validating, matching
+// libxml2 ("All markup of the conditional section is not in the same entity").
+// The opening side (checkCondSectionEntityBoundary) is reported only when
+// validating.
+func (pctx *parserCtx) checkCondSectionClose(ctx context.Context, crossed bool) error {
+	if !crossed {
+		return nil
+	}
+	return pctx.error(ctx, errCondSectionBoundary)
+}
+
+// resumeCondSectionBelow handles a conditional section whose content input
+// ran out before its "]]>": a parameter entity opened the section and the
+// rest of it, if any, follows the reference in the input below. Every path
+// ends in a fatal error; they differ only in which error and where.
+//
+// In the internal subset it fails at once: ErrEntityBoundary when the input
+// below continues with the "]]>", and ErrConditionalSectionNotFinished
+// otherwise.
+//
+// In the external subset it returns the depth of the input below, never past
+// the external subset's own cursor (dtdInputFloor): reading on into the
+// document would let markup after the DOCTYPE close the section. The section
+// keeps reading there so that, like libxml2, a "]]>" is reported as
+// ErrEntityBoundary by checkCondSectionClose at that "]]>", and a section
+// that no "]]>" closes before the external subset ends is reported as
+// ErrConditionalSectionNotFinished.
+func (pctx *parserCtx) resumeCondSectionBelow(ctx context.Context) (int, error) {
+	if !pctx.external {
+		cur := pctx.getCursor()
+		if cur == nil {
+			return 0, ErrConditionalSectionNotFinished
+		}
+		if _, err := pctx.skipBlankRun(ctx, cur); err != nil {
+			return 0, err
+		}
+		if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
+			return 0, pctx.error(ctx, errCondSectionBoundary)
+		}
+		return 0, ErrConditionalSectionNotFinished
+	}
+
+	for pctx.inputTab.Len() >= pctx.dtdInputFloor {
+		top := pctx.adaptCursor(pctx.inputTab.PeekOne())
+		if top != nil && !top.Done() {
+			return pctx.inputTab.Len(), nil
+		}
+		if pctx.inputTab.Len() == pctx.dtdInputFloor {
+			break
+		}
+		pctx.popInput()
+	}
+	return 0, ErrConditionalSectionNotFinished
 }
 
 // popSpentExternalSubsetInputs pops any exhausted (Done) parameter-entity or
