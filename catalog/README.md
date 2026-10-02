@@ -31,7 +31,7 @@ func Example_catalog_load() {
 
   // Write the catalog to a temporary file. In a real application, the
   // catalog file would typically live at a well-known location on disk.
-  dir, err := os.MkdirTemp(".", ".tmp-catalog-*")
+  dir, err := os.MkdirTemp("", ".tmp-catalog-*")
   if err != nil {
     fmt.Printf("failed to create temp dir: %s\n", err)
     return
