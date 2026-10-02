@@ -56,6 +56,17 @@ func IsXML11RestrictedChar(r rune) bool {
 	}
 }
 
+// IsXML11SerializeAsCharRef reports whether a writer producing XML 1.1 output
+// must write r as a character reference and never literally. This is the
+// RestrictedChar set (IsXML11RestrictedChar) plus NEL (U+0085) and LINE
+// SEPARATOR (U+2028). Those two are not RestrictedChar, but XML 1.1 §2.11
+// line-ending normalization turns them into U+000A on input, so a literal one
+// would not survive a round trip. In XML 1.0 neither is a line-ending
+// character, so writers consult this only for XML 1.1 output.
+func IsXML11SerializeAsCharRef(r rune) bool {
+	return IsXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
+}
+
 // IsLiteralChar reports whether r may appear literally (not as a character
 // reference) in an XML 1.1 document (xml11) or an XML 1.0 document (!xml11):
 // Char for XML 1.0, Char minus RestrictedChar for XML 1.1. It is the single

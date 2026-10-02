@@ -176,18 +176,18 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
     overrides it — the writer emits the XML 1.1 **restricted** control characters (`#x1-#x8`, `#xB-#xC`,
     `#xE-#x1F`, `#x7F-#x84`, `#x86-#x9F`; §2.11, tab/LF/CR excluded) **plus the two end-of-line characters NEL
     `#x85` and LINE SEPARATOR `#x2028`** (excluded from `RestrictedChar` but normalized to `#xA` on §2.11
-    input, so they must be char-ref'd to round-trip — the serialization set is `isXML11SerializeAsCharRef` =
-    `isXML11RestrictedChar` ∪ {`#x85`, `#x2028`}) as **decimal** character references (`&#N;`) in text and
+    input, so they must be char-ref'd to round-trip — the serialization set is `xmlchar.IsXML11SerializeAsCharRef` =
+    `xmlchar.IsXML11RestrictedChar` ∪ {`#x85`, `#x2028`}) as **decimal** character references (`&#N;`) in text and
     attribute content instead of hex (`escapeNonASCII`) or U+FFFD replacement/`SERE0006` rejection. Gated on
     the document version, so XML 1.0 output is byte-identical (the `xml11` branch sits after the
     `RejectInvalidChars` check and before the `escapeNonASCII` hex branch, so it adds no extra walk; in XML
     1.0 NEL/LS are ordinary characters written literally). The `stream.Writer` has the parallel
     `XMLVersion("1.1")` fluent method (also set by `StartDocument` when the declaration version is `1.1`): its
     text/attribute validation admits the restricted chars and `writeEscaped` serializes the same
-    `isXML11SerializeAsCharRef` set as decimal refs (comment/PI/CDATA content, which cannot carry a reference,
+    `xmlchar.IsXML11SerializeAsCharRef` set as decimal refs (comment/PI/CDATA content, which cannot carry a reference,
     stay strictly rejected)
   - XML 1.1 DTD literals: `EntityValue` validates and preserves existing named and numeric references, then
-    converts each raw `isXML11SerializeAsCharRef` character to a decimal character reference. It is the one
+    converts each raw `xmlchar.IsXML11SerializeAsCharRef` character to a decimal character reference. It is the one
     DTD literal grammar that can carry a character reference. Comment text, PI data, CDATA content, and
     external DTD public/system literals cannot carry one, so `serializeRefFree`/`dtdLiteral` reject XML 1.1
     serialization-only characters by default or replace them with raw U+FFFD in replacement mode. XML 1.0
@@ -2427,6 +2427,8 @@ XML Char range, literal-character, encoding-name, and PI-target validation share
 - **IsChar(rune) → bool** — XML 1.0 Char production (legal document character)
 - **IsXML11Char(rune) → bool** — XML 1.1 Char production (every code point but U+0000, surrogates, U+FFFE/U+FFFF)
 - **IsXML11RestrictedChar(rune) → bool** — XML 1.1 RestrictedChar (must appear only as a character reference)
+- **IsXML11SerializeAsCharRef(rune) → bool** — RestrictedChar plus NEL (U+0085) and LINE SEPARATOR (U+2028): what
+  the DOM writer and `stream.Writer` emit as decimal character references in XML 1.1 output
 - **IsLiteralChar(rune, xml11 bool) → bool** — may the character appear literally: XML 1.0 Char, or XML 1.1 Char
   minus RestrictedChar. The parser's literal checks and `strcursor.ScanCharDataSlice` are built from it
 - **IsNCNameStartChar(rune) → bool** — XML 1.0 NCName start character production

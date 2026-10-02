@@ -200,6 +200,36 @@ func TestIsLiteralChar(t *testing.T) {
 	}
 }
 
+func TestIsXML11SerializeAsCharRef(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		r    rune
+		want bool
+	}{
+		{0x1, true},     // C0: RestrictedChar
+		{0x9, false},    // tab
+		{0xA, false},    // LF
+		{0xD, false},    // CR
+		{0x1F, true},    // C0: RestrictedChar
+		{0x20, false},   // space
+		{0x7F, true},    // DEL: RestrictedChar
+		{0x84, true},    // C1: RestrictedChar
+		{0x85, true},    // NEL: normalized to LF on input
+		{0x86, true},    // C1: RestrictedChar
+		{0x9F, true},    // C1: RestrictedChar
+		{0xA0, false},   // no-break space
+		{0x2027, false}, // just before LINE SEPARATOR
+		{0x2028, true},  // LINE SEPARATOR: normalized to LF on input
+		{0x2029, false}, // PARAGRAPH SEPARATOR
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("U+%04X", tt.r), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, xmlchar.IsXML11SerializeAsCharRef(tt.r))
+		})
+	}
+}
+
 func TestIsNCNameStartChar(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

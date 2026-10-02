@@ -240,19 +240,6 @@ var (
 
 const upperHex = "0123456789ABCDEF"
 
-// isXML11SerializeAsCharRef reports whether r must be written as a character
-// reference, and never literally, when producing XML 1.1 output. This is the
-// XML 1.1 RestrictedChar set (xmlchar.IsXML11RestrictedChar) PLUS the two end-of-line
-// characters NEL (U+0085) and LINE SEPARATOR (U+2028). Both are excluded from
-// RestrictedChar, but XML 1.1 §2.11 line-ending normalization translates them to
-// U+000A on input, so a literal occurrence would not round-trip; emitting them as
-// character references preserves the value. In XML 1.0 neither is a line-ending
-// character, so this is gated on the xml11 flag and 1.0 serialization is
-// unaffected.
-func isXML11SerializeAsCharRef(r rune) bool {
-	return xmlchar.IsXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
-}
-
 // charRefBuf is scratch space for one character reference. Twelve bytes hold
 // the longest form any helper below produces: "&#1114111;" (decimal) and
 // "&#x10FFFF;" (hex) are both ten bytes.
@@ -336,11 +323,11 @@ func isInCharacterRange(r rune) bool {
 
 // isSerializableChar reports whether r is a character the writer may serialize
 // for the target XML version: any XML 1.0 Char (isInCharacterRange) plus, when
-// targeting XML 1.1, the restricted control characters (isXML11SerializeAsCharRef)
+// targeting XML 1.1, the restricted control characters (xmlchar.IsXML11SerializeAsCharRef)
 // that are valid in 1.1 but must be emitted as character references. A character
 // failing this is rejected with ErrInvalidXMLChar when RejectInvalidChars is set.
 func isSerializableChar(r rune, xml11 bool) bool {
-	return isInCharacterRange(r) || (xml11 && isXML11SerializeAsCharRef(r))
+	return isInCharacterRange(r) || (xml11 && xmlchar.IsXML11SerializeAsCharRef(r))
 }
 
 // serializeRefFree screens content bound for a REFERENCE-LESS serialization
@@ -367,7 +354,7 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 		case r == utf8.RuneError && width == 1:
 			// A malformed UTF-8 byte is always replaced with U+FFFD.
 			work = true
-		case !isInCharacterRange(r) || (s.xml11 && isXML11SerializeAsCharRef(r)):
+		case !isInCharacterRange(r) || (s.xml11 && xmlchar.IsXML11SerializeAsCharRef(r)):
 			if !s.replaceInvalidChars {
 				s.check(fmt.Errorf("helium: %s contains a character invalid in the target XML version: %w", what, ErrInvalidXMLChar))
 				return nil, true
@@ -382,7 +369,7 @@ func (s *writeSession) serializeRefFree(what string, b []byte) (out []byte, stop
 	out = make([]byte, 0, len(b))
 	for i := 0; i < len(b); {
 		r, width := utf8.DecodeRune(b[i:])
-		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) || (s.xml11 && isXML11SerializeAsCharRef(r)) {
+		if (r == utf8.RuneError && width == 1) || !isInCharacterRange(r) || (s.xml11 && xmlchar.IsXML11SerializeAsCharRef(r)) {
 			out = append(out, esc_fffd...)
 		} else {
 			out = append(out, b[i:i+width]...)
@@ -450,7 +437,7 @@ func (s *writeSession) serializeEntityValue(what, value string) (string, bool) {
 				return "", true
 			}
 			work = true
-		case s.xml11 && isXML11SerializeAsCharRef(r):
+		case s.xml11 && xmlchar.IsXML11SerializeAsCharRef(r):
 			work = true
 		}
 		i += width
@@ -476,7 +463,7 @@ func (s *writeSession) serializeEntityValue(what, value string) (string, bool) {
 		switch {
 		case r == utf8.RuneError && width == 1, !isInCharacterRange(r):
 			b.Write(esc_fffd)
-		case s.xml11 && isXML11SerializeAsCharRef(r):
+		case s.xml11 && xmlchar.IsXML11SerializeAsCharRef(r):
 			var dbuf charRefBuf
 			b.Write(decimalCharRef(&dbuf, r))
 		default:
@@ -664,7 +651,7 @@ func (d *writeSession) escapeAttrValue(w io.Writer, s []byte, charMap map[rune]s
 			// end-of-line characters) are valid but may not appear literally: emit
 			// them as decimal character references (before the out-of-range
 			// replacement and the escapeNonASCII hex branch).
-			if xml11 && isXML11SerializeAsCharRef(r) {
+			if xml11 && xmlchar.IsXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(d.refBuf(), r)
 				break
 			}
@@ -778,7 +765,7 @@ func (d *writeSession) escapeText(w io.Writer, s []byte, escapeNewline bool, cha
 			// end-of-line characters) are valid but may not appear literally: emit
 			// them as decimal character references (before the out-of-range
 			// replacement and the escapeNonASCII hex branch).
-			if xml11 && isXML11SerializeAsCharRef(r) {
+			if xml11 && xmlchar.IsXML11SerializeAsCharRef(r) {
 				esc = decimalCharRef(d.refBuf(), r)
 				break
 			}
