@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"context"
 	"iter"
 	"testing"
 
@@ -870,48 +871,96 @@ func TestArrayFilterEmptyMemberCountBound(t *testing.T) {
 // TestMapFindSingleClone proves map:find clones each matched value EXACTLY ONCE.
 // The function collects matched values into a slice that is then handed to
 // NewArray, which clones every member defensively. A regression that also cloned
-// the value when appending it would clone each matched value twice — doubling the
-// per-value allocation and exceeding the single-clone op precharge. The result is
-// correct and the clone work stays at one clone per matched value, observed as a
-// stable allocation count: appending the uncloned value keeps allocs at the
-// single-clone level; a double-clone roughly doubles the per-value allocations.
+// the value when appending it would clone each matched value twice.
+//
+// The check compares two allocation counts, so it does not depend on what one
+// clone costs on a given toolchain: each additional matched value must cost
+// map:find about what NewArray pays to clone that value, never twice that. A
+// double clone adds a whole clone per value, far past the half-clone allowance.
+//
+// No t.Parallel(): testing.AllocsPerRun reads a process-wide allocation counter
+// and panics if called from a parallel test.
 func TestMapFindSingleClone(t *testing.T) {
-	// No t.Parallel(): testing.AllocsPerRun panics if called from a parallel test.
-
 	const n = 200
+
+	small := measureMapFindClones(t, n)
+	large := measureMapFindClones(t, 2*n)
+	findDelta := large.find - small.find
+	cloneDelta := large.clone - small.clone
+	t.Logf("map:find allocations: %d values %.0f, %d values %.0f; NewArray clone: %.0f, %.0f",
+		n, small.find, 2*n, large.find, small.clone, large.clone)
+	require.Positive(t, cloneDelta, "cloning more values must allocate more")
+	require.Less(t, findDelta-cloneDelta, cloneDelta/2,
+		"map:find should clone each matched value once; %d more values cost %.0f allocations against %.0f for one clone each",
+		n, findDelta, cloneDelta)
+}
+
+// mapFindCloneCost is the allocation count of one map:find over a sequence of
+// single-entry maps, and of one NewArray over the same matched values.
+type mapFindCloneCost struct {
+	find  float64
+	clone float64
+}
+
+// measureMapFindClones builds n single-entry maps, checks that map:find returns
+// every value, and measures the allocations of map:find and of cloning the n
+// values once through NewArray.
+func measureMapFindClones(t *testing.T, n int) mapFindCloneCost {
+	t.Helper()
 
 	key := xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "k"}
 	items := make([]xpath3.Item, n)
+	values := make([]xpath3.Sequence, n)
 	for i := range items {
-		items[i] = xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: xpath3.SingleInteger(int64(i))}})
+		values[i] = xpath3.SingleInteger(int64(i))
+		items[i] = xpath3.NewMap([]xpath3.MapEntry{{Key: key, Value: values[i]}})
 	}
-	vars := varsSet("maps", xpath3.ItemSlice(items))
 
 	compiled, err := xpath3.NewCompiler().Compile(`map:find($maps, "k")`)
 	require.NoError(t, err)
+	run := &mapFindRun{
+		ctx:      t.Context(),
+		compiled: compiled,
+		eval:     xpath3.NewEvaluator(xpath3.EvalBorrowing).Variables(varsSet("maps", xpath3.ItemSlice(items))),
+	}
 
 	// Sanity: every value is collected once into the result array.
-	res, err := xpath3.NewEvaluator(xpath3.EvalBorrowing).
-		Variables(vars).
-		Evaluate(t.Context(), compiled, nil)
-	require.NoError(t, err)
-	require.Equal(t, 1, res.Sequence().Len())
-	arr, ok := res.Sequence().Get(0).(xpath3.ArrayItem)
+	run.find()
+	require.NoError(t, run.err)
+	require.Equal(t, 1, run.result.Sequence().Len())
+	arr, ok := run.result.Sequence().Get(0).(xpath3.ArrayItem)
 	require.True(t, ok)
 	require.Equal(t, n, arr.Size())
 
-	// A single clone of n matched values allocates close to one clone's worth per
-	// value; a double-clone regression allocates roughly twice as much. The
-	// threshold sits between the two regimes (measured: ~430 single vs ~830
-	// double), so it locks in single-clone behavior without being brittle.
-	allocs := testing.AllocsPerRun(50, func() {
-		_, evalErr := xpath3.NewEvaluator(xpath3.EvalBorrowing).
-			Variables(vars).
-			Evaluate(t.Context(), compiled, nil)
-		require.NoError(t, evalErr)
-	})
-	require.Less(t, allocs, float64(600),
-		"map:find should clone each matched value once; a higher alloc count indicates a double clone")
+	cost := mapFindCloneCost{find: testing.AllocsPerRun(50, run.find)}
+	require.NoError(t, run.err)
+	clone := &newArrayRun{members: values}
+	cost.clone = testing.AllocsPerRun(50, clone.run)
+	return cost
+}
+
+// mapFindRun evaluates a compiled map:find and keeps the outcome, so
+// testing.AllocsPerRun can measure one evaluation through the find method.
+type mapFindRun struct {
+	ctx      context.Context //nolint:containedctx // carries the test context into AllocsPerRun's callback
+	compiled *xpath3.Expression
+	eval     xpath3.Evaluator
+	result   *xpath3.Result
+	err      error
+}
+
+func (r *mapFindRun) find() {
+	r.result, r.err = r.eval.Evaluate(r.ctx, r.compiled, nil)
+}
+
+// newArrayRun builds an array over members, which clones each member once.
+type newArrayRun struct {
+	members []xpath3.Sequence
+	result  xpath3.ArrayItem
+}
+
+func (r *newArrayRun) run() {
+	r.result = xpath3.NewArray(r.members)
 }
 
 // TestMapFindNeverMaterializesValue proves map:find applies its size bound to a

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -18,43 +19,22 @@ func fakeTimeout() error {
 // almost immediately) from a genuine ReDoS timeout (burns ~budget of wall
 // time), retrying only the former. These cases pin that behavior without
 // depending on regexp2's flaky background clock.
+//
+// The cases that depend on elapsed time run in a synctest bubble, whose fake
+// clock moves only when the bubble sleeps: an instant call measures zero
+// elapsed time and a call that sleeps the budget measures exactly the budget,
+// however loaded the machine is.
 func TestWithSpuriousTimeoutRetry(t *testing.T) {
 	t.Run("spurious timeout is retried then succeeds", func(t *testing.T) {
-		calls := 0
-		v, err := withSpuriousTimeoutRetry(time.Second, func() (int, error) {
-			calls++
-			if calls == 1 {
-				return 0, fakeTimeout() // instant: far below budget/2
-			}
-			return 42, nil
-		})
-		require.NoError(t, err)
-		require.Equal(t, 42, v)
-		require.Equal(t, 2, calls, "should retry exactly once after the spurious timeout")
+		synctest.Test(t, testSpuriousTimeoutRetried)
 	})
 
 	t.Run("genuine timeout is propagated without retry", func(t *testing.T) {
-		const budget = 40 * time.Millisecond
-		calls := 0
-		_, err := withSpuriousTimeoutRetry(budget, func() (int, error) {
-			calls++
-			time.Sleep(budget) // elapsed >= budget/2 => genuine
-			return 0, fakeTimeout()
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "match timeout")
-		require.Equal(t, 1, calls, "a genuine timeout must not be retried")
+		synctest.Test(t, testGenuineTimeoutPropagated)
 	})
 
 	t.Run("persistent spurious timeout gives up after max attempts", func(t *testing.T) {
-		calls := 0
-		_, err := withSpuriousTimeoutRetry(time.Second, func() (int, error) {
-			calls++
-			return 0, fakeTimeout() // always instant
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "match timeout")
-		require.Equal(t, 3, calls, "should stop after maxAttempts")
+		synctest.Test(t, testPersistentSpuriousTimeout)
 	})
 
 	t.Run("non-timeout error is returned immediately", func(t *testing.T) {
@@ -77,4 +57,42 @@ func TestWithSpuriousTimeoutRetry(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, 1, calls, "no budget means we cannot tell spurious from genuine")
 	})
+}
+
+func testSpuriousTimeoutRetried(t *testing.T) {
+	calls := 0
+	v, err := withSpuriousTimeoutRetry(time.Second, func() (int, error) {
+		calls++
+		if calls == 1 {
+			return 0, fakeTimeout() // instant: far below budget/2
+		}
+		return 42, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, 42, v)
+	require.Equal(t, 2, calls, "should retry exactly once after the spurious timeout")
+}
+
+func testGenuineTimeoutPropagated(t *testing.T) {
+	const budget = 40 * time.Millisecond
+	calls := 0
+	_, err := withSpuriousTimeoutRetry(budget, func() (int, error) {
+		calls++
+		time.Sleep(budget) // elapsed >= budget/2 => genuine
+		return 0, fakeTimeout()
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "match timeout")
+	require.Equal(t, 1, calls, "a genuine timeout must not be retried")
+}
+
+func testPersistentSpuriousTimeout(t *testing.T) {
+	calls := 0
+	_, err := withSpuriousTimeoutRetry(time.Second, func() (int, error) {
+		calls++
+		return 0, fakeTimeout() // always instant
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "match timeout")
+	require.Equal(t, 3, calls, "should stop after maxAttempts")
 }

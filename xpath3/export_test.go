@@ -32,3 +32,9 @@ func (r *Regex) MatchTimeoutForTesting() time.Duration {
 	}
 	return r.inner.backtrack.MatchTimeout
 }
+
+// BacktrackingForTesting reports whether r compiled to the backtracking regexp2
+// engine instead of Go's linear RE2 engine.
+func (r *Regex) BacktrackingForTesting() bool {
+	return r.inner.backtrack != nil
+}
