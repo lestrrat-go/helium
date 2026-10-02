@@ -1,6 +1,7 @@
 package helium
 
 import (
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/stack"
 )
 
@@ -18,7 +19,21 @@ type nodeEntry struct {
 	// DTD element declaration that happens to match that synthetic name — see
 	// areBlanksBytes / whitespaceContextIgnorable.
 	synthetic bool
+	// declType caches the element's DTD content-model type for whitespace
+	// classification (parserCtx.nodeDeclType): declState is declUnknown until
+	// the first lookup, then declMissing when neither subset declares the
+	// element, or declKnown with declType holding the declared type. Both DTD
+	// subsets are complete before the root element opens, so the answer cannot
+	// change while the entry is on the stack.
+	declType  enum.ElementType
+	declState uint8
 }
+
+const (
+	declUnknown uint8 = iota
+	declMissing
+	declKnown
+)
 
 func (e *nodeEntry) Name() string {
 	return e.qname

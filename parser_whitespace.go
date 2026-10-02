@@ -293,8 +293,8 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 	// inside the synthetic pseudo-root and never consults the enclosing element's
 	// content model. Reclassifying the entity whitespace to match the literal path
 	// would DIVERGE from libxml2, which is the byte-parity target.
-	if ctx.doc != nil && !ctx.peekNode().synthetic {
-		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
+	if top := ctx.peekNode(); ctx.doc != nil && !top.synthetic {
+		if dt, found := ctx.nodeDeclType(top); found {
 			switch dt {
 			case enum.ElementElementType:
 				return true
@@ -378,8 +378,8 @@ func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 	// entered solely when ctx.doc == nil, so the declaration branch never governs
 	// a live classification; it is kept in sync so both siblings state the fact
 	// identically.
-	if ctx.doc != nil && !ctx.peekNode().synthetic {
-		if dt, found := ctx.doc.elementDeclType(ctx.peekNode().Name()); found {
+	if top := ctx.peekNode(); ctx.doc != nil && !top.synthetic {
+		if dt, found := ctx.nodeDeclType(top); found {
 			switch dt {
 			case enum.ElementElementType:
 				return true
@@ -389,6 +389,24 @@ func (ctx *parserCtx) whitespaceContextIgnorable() bool {
 		}
 	}
 	return true
+}
+
+// nodeDeclType returns the content-model type the DTD declares for the element
+// of the node-stack entry top, and whether it declares one, as
+// Document.elementDeclType reports for the entry's name. The lookup builds a
+// name:prefix key and probes up to two DTD tables, and an element asks once
+// per whitespace run, so the answer is resolved on the first call and kept on
+// the entry. ctx.doc must not be nil.
+func (ctx *parserCtx) nodeDeclType(top *nodeEntry) (enum.ElementType, bool) {
+	if top.declState == declUnknown {
+		dt, found := ctx.doc.elementDeclType(top.Name())
+		top.declType = dt
+		top.declState = declMissing
+		if found {
+			top.declState = declKnown
+		}
+	}
+	return top.declType, top.declState == declKnown
 }
 
 // allBlankBytes reports whether every byte of s is XML whitespace.
