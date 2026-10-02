@@ -34,15 +34,16 @@ All error formatting matches libxml2 output for golden test compatibility.
   CDATA section (`parseCDataContent`), comment body (`parseComment`), processing-instruction body (`parsePI`),
   character-data run (`parseCharDataContent`), or attribute value (`parseAttributeValueInternal`) — exceeds
   the byte cap (`MaxNodeContentSize` or default `DefaultMaxNodeContentSize`, 10 MiB). The cap fires DURING
-  accumulation (the loop scanners check `buf.Len()` each iteration; the char-data fast/fallback scanners pass
-  a `maxBytes` budget into `ScanCharDataSlice`/`ScanCharDataInto`; the attribute-value fast path bounds
+  accumulation (the loop scanners check `buf.Len()` each iteration; the char-data scanner passes
+  a `maxBytes` budget into `ScanCharDataSlice`; the attribute-value fast path bounds
   `ScanSimpleAttrValue` with the same budget and re-checks the exact count, while the slow path routes every
   write through cap-enforcing `writeAttr*` helpers and decodes entity replacements through a cap-checking
   `attrEntitySink`) so the parse fails before the whole run is buffered. The SAME cap also bounds a single
   contiguous run of XML whitespace: `skipBlankRun` (`parser_whitespace.go`) scans blanks in 4 KiB chunks and
   trips this error once the run exceeds `blankRunLimit()` (= the resolved `maxNodeContent`), so an unbounded
-  whitespace run cannot grow the cursor buffer. This covers the prolog/epilogue/inter-root blank skips
-  (`skipBlanks`/`skipBlankBytes`) AND the blank skips inside the external DTD subset declaration loop and
+  whitespace run cannot grow the cursor buffer (`skipBlankRunUTF8` is the same scan for start/end tags). This
+  covers the prolog/epilogue/inter-root blank skips (`skipBlanks`/`skipBlankBytes`), the start/end-tag skips
+  (`skipBlanksUTF8`), AND the blank skips inside the external DTD subset declaration loop and
   INCLUDE conditional sections (`parser_dtd_subset.go`, which call `skipBlankRun` directly to preserve `%pe;`
   expansion). `NewParser` applies the default (secure by default); `MaxNodeContentSize(-1)` resolves
   `maxNodeContent` to `0` and disables BOTH the node-content and the blank-run cap. The streaming SAX

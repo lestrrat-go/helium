@@ -131,7 +131,10 @@ func FuzzParse(f *testing.F) {
 		if len(data) > 1<<20 {
 			return
 		}
-		_, _ = helium.NewParser().Parse(t.Context(), data)
+		_, err := helium.NewParser().Parse(t.Context(), data)
+		// Every entry point installs a UTF-8 cursor before element content,
+		// so no input may reach content without one.
+		require.NotErrorIs(t, err, helium.ErrContentCursorForTesting)
 	})
 }
 
@@ -152,6 +155,7 @@ func FuzzParseRoundtrip(f *testing.F) {
 		}
 		doc, err := p.Parse(t.Context(), data)
 		if err != nil {
+			require.NotErrorIs(t, err, helium.ErrContentCursorForTesting)
 			return
 		}
 

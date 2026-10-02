@@ -164,6 +164,26 @@ func (pctx *parserCtx) fastProcessingInstruction(target, data string) error {
 	return parent.AddSibling(pi)
 }
 
+// appendFastChildElem is appendFastChild for a parent known to be an *Element,
+// the parser's case: the recorded tail is trusted when it has no successor and
+// names this very element as its parent (an element never holds an off-chain
+// child claim), and any other shape goes through the generic resolution.
+func appendFastChildElem(parent *Element, child Node) error {
+	pdn := &parent.docnode
+	if l := pdn.lastChild; l != nil && pdn.firstChild != nil {
+		ldn := l.baseDocNode()
+		if ldn.next == nil && ldn.parent == Node(parent) {
+			cdn := child.baseDocNode()
+			ldn.next = child
+			cdn.prev = l
+			cdn.parent = parent
+			pdn.lastChild = child
+			return nil
+		}
+	}
+	return appendFastChild(parent, child)
+}
+
 func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []attrData, nbNs int) error {
 	doc := pctx.doc
 	if doc == nil {
@@ -261,16 +281,13 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 		}
 	}
 
-	var parent MutableNode
-	if pctx.elem != nil {
-		parent = pctx.elem
-	}
+	parent := pctx.elem
 	if parent == nil {
 		if err := appendFastChild(doc, e); err != nil {
 			return err
 		}
 	} else if parent.Type() == ElementNode {
-		if err := appendFastChild(parent, e); err != nil {
+		if err := appendFastChildElem(parent, e); err != nil {
 			return err
 		}
 	} else {
@@ -289,8 +306,7 @@ func (pctx *parserCtx) fastEndElement() error {
 		return errors.New("no context node to end")
 	}
 
-	parent := cur.Parent()
-	if e, ok := parent.(*Element); ok {
+	if e, ok := cur.parent.(*Element); ok {
 		pctx.elem = e
 		return nil
 	}
@@ -306,13 +322,13 @@ func (pctx *parserCtx) fastCharacters(data []byte) error {
 
 	// A plain type assertion plus a nil check answers what AsNode[*Text]
 	// answers, without its reflect-based typed-nil probe, on every text run.
-	pdn := parent.baseDocNode()
+	pdn := &parent.docnode
 	if t, ok := pdn.lastChild.(*Text); ok && t != nil {
 		return t.AppendText(data)
 	}
 
 	text := pctx.doc.CreateText(data)
-	return appendFastChild(parent, text)
+	return appendFastChildElem(parent, text)
 }
 
 func (pctx *parserCtx) fastIgnorableWhitespace(data []byte) error {

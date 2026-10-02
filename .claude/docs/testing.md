@@ -72,6 +72,7 @@ bug that prompted it.
 |------|---------|---------|
 | `libxml2_compat_test.go` | root, html, catalog | Golden file comparison suite |
 | `parser_test.go` | root | Core parse entry points: `Parse`/`ParseFile`, names/QNames, namespaces, malformed input, options, recovery |
+| `parser_document_test.go` | root | Element content across input encodings (UTF-8 with/without declaration or BOM, XML 1.1, US-ASCII, ISO-8859-1, windows-1252, UTF-16, UCS-4, EBCDIC 037, Shift_JIS, EUC-JP) and entry points (`Parse`, `ParseReader`, one-byte push, `ParseInNodeContext`, internal and external entity content): tree and error text must match the UTF-8 baseline, and no parse may return `ErrContentCursorForTesting` |
 | `parser_decl_test.go` | root | XML declaration, lenient declaration, BOM/UCS-4/UTF-16 encoding detection, encoding declarations |
 | `parser_reader_test.go` | root | `ParseReader` streaming, EBCDIC decoding, context cancellation |
 | `parser_dtd_test.go` | root | External DTD loading: size/read limits, malformed declarations, PE expansion |
@@ -120,7 +121,7 @@ bug that prompted it.
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `bytecursor_test.go` | internal/strcursor | ByteCursor read-error and zero-progress handling; `TestCursorPosition` checks line, column, and line text after every advancing method on both ByteCursor and UTF8Cursor |
-| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast` line/column against `Advance` |
+| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast`/`AdvanceNoNewline` line/column against `Advance` |
 
 ## `examples/`
 

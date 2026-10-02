@@ -25,3 +25,9 @@ func UnsafeAppendChildForTesting(parent MutableNode, child Node) error {
 func UnsafeSetNextSiblingForTesting(n Node, next Node) {
 	unsafeSetNextSibling(n, next)
 }
+
+// ErrContentCursorForTesting exposes the internal error element content
+// returns when it is reached without a UTF-8 input cursor. Every entry point
+// installs one before content starts, so tests and fuzz targets assert that
+// no parse ever returns it.
+var ErrContentCursorForTesting = errContentCursor

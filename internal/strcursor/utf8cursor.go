@@ -279,16 +279,24 @@ func (c *UTF8Cursor) Peek() byte {
 }
 
 // PeekAt returns the byte at offset bytes from the current position (0-indexed).
+// The buffered case is small enough to inline at a concrete call site; a
+// position past the buffered bytes goes through peekAtSlow.
 func (c *UTF8Cursor) PeekAt(offset int) byte {
+	if pos := c.bufpos + offset; pos < c.buflen {
+		return c.buf[pos]
+	}
+	return c.peekAtSlow(offset)
+}
+
+// peekAtSlow is PeekAt for a position past the buffered bytes: it refills the
+// buffer and returns 0 when the input ends first.
+func (c *UTF8Cursor) peekAtSlow(offset int) byte {
+	if c.fillBuffer(offset+1) != nil {
+		return 0
+	}
 	pos := c.bufpos + offset
 	if pos >= c.buflen {
-		if c.fillBuffer(offset+1) != nil {
-			return 0
-		}
-		pos = c.bufpos + offset
-		if pos >= c.buflen {
-			return 0
-		}
+		return 0
 	}
 	return c.buf[pos]
 }
@@ -298,17 +306,21 @@ func (c *UTF8Cursor) PeekAt(offset int) byte {
 // and for a position past EOF), this lets callers distinguish a real U+0000 in
 // the input from end-of-stream.
 func (c *UTF8Cursor) HasByteAt(offset int) bool {
-	pos := c.bufpos + offset
-	if pos >= c.buflen {
-		if c.fillBuffer(offset+1) != nil {
-			return false
-		}
-		pos = c.bufpos + offset
-		if pos >= c.buflen {
-			return false
-		}
+	if c.bufpos+offset < c.buflen {
+		return true
 	}
-	return true
+	return c.hasByteAtSlow(offset)
+}
+
+// hasByteAtSlow is HasByteAt for a position past the buffered bytes. It is
+// kept out of line: inlined, it would push HasByteAt over the inlining budget.
+//
+//go:noinline
+func (c *UTF8Cursor) hasByteAtSlow(offset int) bool {
+	if c.fillBuffer(offset+1) != nil {
+		return false
+	}
+	return c.bufpos+offset < c.buflen
 }
 
 // PeekRune decodes and returns the rune at the current position.
@@ -344,7 +356,31 @@ func (c *UTF8Cursor) PeekString(n int) string {
 
 // Advance consumes n bytes, updating line number and column tracking.
 // The line buffer is not maintained eagerly — Line() reconstructs it on demand.
+// Consuming one buffered byte other than a newline, the parser's most frequent
+// advance, returns before any refill or bulk scan; everything else goes
+// through advanceSlow.
 func (c *UTF8Cursor) Advance(n int) error {
+	if n == 1 && c.bufpos < c.buflen && c.buf[c.bufpos] != '\n' {
+		c.bufpos++
+		c.column++
+		return nil
+	}
+	return c.advanceSlow(n)
+}
+
+// AdvanceNoNewline consumes n bytes the caller has already scanned and proven
+// free of '\n' (a name, or an attribute value the simple scan accepted), so the
+// column moves by n and no byte is examined again.
+func (c *UTF8Cursor) AdvanceNoNewline(n int) error {
+	if c.buflen-c.bufpos >= n {
+		c.bufpos += n
+		c.column += n
+		return nil
+	}
+	return c.AdvanceFast(n)
+}
+
+func (c *UTF8Cursor) advanceSlow(n int) error {
 	if c.buflen-c.bufpos < n {
 		if err := c.fillBuffer(n); err != nil {
 			return err

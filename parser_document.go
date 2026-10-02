@@ -234,9 +234,13 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 		return pctx.error(ctx, ErrEmptyDocument)
 	}
 
+	u8, err := pctx.contentCursor()
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
 	pctx.instate = psContent
 	pctx.armBodyPoll(ctx)
-	err := pctx.parseElement(ctx)
+	err = pctx.parseElement(ctx, u8)
 	pctx.bodyNeverDone = false
 	if err != nil {
 		return pctx.error(ctx, err)
@@ -277,13 +281,39 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	return nil
 }
 
-func (pctx *parserCtx) parseContent(ctx context.Context) error {
-	pctx.instate = psContent
-
+// contentCursor returns the input cursor that element content is parsed from.
+// Every parse installs a UTF-8 cursor (switchEncoding) before it reaches
+// element content, so the element-content functions take the concrete cursor
+// as a parameter: its methods are called directly, and inlined where small,
+// instead of through strcursor.Cursor, and no level re-fetches it from the
+// input stack.
+func (pctx *parserCtx) contentCursor() (*strcursor.UTF8Cursor, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		return pctx.error(ctx, errNoCursor)
+		return nil, errNoCursor
 	}
+	u8, ok := cur.(*strcursor.UTF8Cursor)
+	if !ok {
+		return nil, errContentCursor
+	}
+	return u8, nil
+}
+
+// parseContentInput parses element content from the current input: the entry
+// point of a sub-parse (entity replacement text, a node-context fragment).
+func (pctx *parserCtx) parseContentInput(ctx context.Context) error {
+	cur, err := pctx.contentCursor()
+	if err != nil {
+		return pctx.error(ctx, err)
+	}
+	return pctx.parseContent(ctx, cur)
+}
+
+// parseContent parses element content from cur, the cursor contentCursor
+// returned. A reference is expanded in its own parser context, so the input
+// stack, and with it cur, does not change while the loop runs.
+func (pctx *parserCtx) parseContent(ctx context.Context, cur *strcursor.UTF8Cursor) error {
+	pctx.instate = psContent
 
 	doRecover := pctx.options.IsSet(parseRecover)
 
@@ -320,15 +350,15 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 				case cur.PeekAt(2) == '-' && cur.PeekAt(3) == '-':
 					err = pctx.parseComment(ctx)
 				default:
-					err = pctx.parseElement(ctx)
+					err = pctx.parseElement(ctx, cur)
 				}
 			default:
-				err = pctx.parseElement(ctx)
+				err = pctx.parseElement(ctx, cur)
 			}
 		case '&':
 			err = pctx.parseReference(ctx)
 		default:
-			if err := pctx.parseCharData(ctx, false); err != nil {
+			if err := pctx.parseCharDataContent(ctx, cur); err != nil {
 				if !doRecover || isParseAbort(err) {
 					return err
 				}
