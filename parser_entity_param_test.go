@@ -289,6 +289,79 @@ func TestParameterEntity(t *testing.T) {
 			require.NotNil(t, doc.DocumentElement())
 		})
 	})
+
+	// An error inside a parameter entity's replacement text is located by line
+	// and column within that text: the column is 1 plus the bytes since the last
+	// LF, counting everything the declarations before the error consumed. The
+	// positions match libxml2's "Entity: line N" context.
+	t.Run("error position in the replacement text", func(t *testing.T) {
+		t.Parallel()
+
+		fsys := fstest.MapFS{
+			"decl.ent":  {Data: []byte(`<!ELEMENT q ANY> <!BOGUS>`)},
+			"lines.ent": {Data: []byte("<!ELEMENT q ANY>\r\n\t<!ELEMENT s ANY> <!BOGUS>")},
+		}
+		cases := []struct {
+			name string
+			doc  string
+			file string
+			line int
+			col  int
+		}{
+			{
+				name: "after a declaration on the same line",
+				doc:  `<!DOCTYPE r [<!ENTITY % pe "<!ELEMENT r ANY><!BOGUS>"> %pe;]><r/>`,
+				line: 1,
+				col:  17,
+			},
+			{
+				name: "on a later line",
+				doc:  "<!DOCTYPE r [<!ENTITY % pe \"<!ELEMENT r ANY>\n  <!ATTLIST r a CDATA #BOGUS>\"> %pe;]><r/>",
+				line: 2,
+				col:  23,
+			},
+			{
+				name: "after a blank line and a declaration",
+				doc:  "<!DOCTYPE r [<!ENTITY % pe \"<!ELEMENT r ANY>\n\n<!ELEMENT q ANY>  <!BOGUS>\"> %pe;]><r/>",
+				line: 3,
+				col:  19,
+			},
+			{
+				// The column counts bytes, so "é" adds two.
+				name: "after a multi-byte character",
+				doc:  `<!DOCTYPE r [<!ENTITY % pe "<!ENTITY é 'x'> <!BOGUS>"> %pe;]><r/>`,
+				line: 1,
+				col:  18,
+			},
+			{
+				name: "in an external parameter entity",
+				doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "decl.ent"> %ext;]><r/>`,
+				file: "decl.ent",
+				line: 1,
+				col:  18,
+			},
+			{
+				// A CR is one column and only the LF starts a line.
+				name: "in an external parameter entity after CRLF and a tab",
+				doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "lines.ent"> %ext;]><r/>`,
+				file: "lines.ent",
+				line: 2,
+				col:  19,
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				p := helium.NewParser().BlockXXE(false).FS(fsys)
+				_, err := p.Parse(t.Context(), []byte(tc.doc))
+				var perr helium.ErrParseError
+				require.ErrorAs(t, err, &perr)
+				require.Equal(t, tc.file, perr.File, "file of the replacement text")
+				require.Equal(t, tc.line, perr.LineNumber, "line within the replacement text")
+				require.Equal(t, tc.col, perr.Column, "column within the replacement text")
+			})
+		}
+	})
 }
 
 func TestParameterEntityBoundary(t *testing.T) {

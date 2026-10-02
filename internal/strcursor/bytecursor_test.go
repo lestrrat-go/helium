@@ -1,8 +1,10 @@
 package strcursor_test
 
 import (
+	"bytes"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,4 +139,211 @@ func TestByteCursorTreatsEOFWithDataAsCleanEnd(t *testing.T) {
 	require.NoError(t, cur.Advance(7))
 	require.True(t, cur.Done())
 	require.NoError(t, cur.Err(), "io.EOF must not be reported as an error")
+}
+
+// cursorMethod names the advancing call a positionOp makes.
+type cursorMethod string
+
+const (
+	methodAdvance       cursorMethod = "Advance"
+	methodAdvanceFast   cursorMethod = "AdvanceFast"
+	methodConsume       cursorMethod = "Consume"
+	methodConsumeString cursorMethod = "ConsumeString"
+	methodScanCharData  cursorMethod = "ScanCharData"
+)
+
+// positionOp is one advancing call made on a cursor, followed by the position
+// the cursor must report afterwards.
+type positionOp struct {
+	method cursorMethod
+	n      int    // byte count for Advance and AdvanceFast
+	s      string // prefix for Consume and ConsumeString
+	ok     bool   // expected result of Consume and ConsumeString
+	line   int    // LineNumber() after the call
+	col    int    // Column() after the call
+	text   string // Line() after the call
+}
+
+// applyPositionOp makes one advancing call on cur and checks the position that
+// follows it. ScanCharData scans a character-data run and advances over it
+// with AdvanceFast, as the parser does.
+func applyPositionOp(t *testing.T, cur strcursor.Cursor, op positionOp) {
+	t.Helper()
+	switch op.method {
+	case methodAdvance:
+		require.NoError(t, cur.Advance(op.n))
+	case methodAdvanceFast:
+		require.NoError(t, cur.AdvanceFast(op.n))
+	case methodConsume:
+		require.Equal(t, op.ok, cur.Consume([]byte(op.s)))
+	case methodConsumeString:
+		require.Equal(t, op.ok, cur.ConsumeString(op.s))
+	case methodScanCharData:
+		// A scan covers only the buffered bytes, so scan until the run ends.
+		var buf bytes.Buffer
+		for n := cur.ScanCharDataInto(&buf, 0); n > 0; n = cur.ScanCharDataInto(&buf, 0) {
+			require.NoError(t, cur.AdvanceFast(n))
+		}
+	default:
+		t.Fatalf("unknown cursor method %q", op.method)
+	}
+	require.Equal(t, op.line, cur.LineNumber(), "line after %s", op.method)
+	require.Equal(t, op.col, cur.Column(), "column after %s", op.method)
+	require.Equal(t, op.text, cur.Line(), "line text after %s", op.method)
+}
+
+// TestCursorPosition checks the line, column, and line text after every
+// advancing method. The column is 1 plus the number of bytes since the last
+// LF, so a multi-byte character counts once per byte, a tab and a CR count as
+// one column each, and only an LF starts a new line. ByteCursor (DTD
+// parameter-entity text, the external subset, and the bytes before the
+// encoding switch) and UTF8Cursor (the document after the switch) must agree,
+// so the same cases run against both.
+func TestCursorPosition(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		ops   []positionOp
+	}{
+		{
+			name:  "advance across one newline",
+			input: "ab\ncd",
+			ops: []positionOp{
+				{method: methodAdvance, n: 2, line: 1, col: 3, text: "ab"},
+				{method: methodAdvance, n: 1, line: 2, col: 1, text: ""},
+				{method: methodAdvance, n: 2, line: 2, col: 3, text: "cd"},
+			},
+		},
+		{
+			name:  "advance across several newlines at once",
+			input: "a\nb\nc\nde",
+			ops: []positionOp{
+				{method: methodAdvance, n: 7, line: 4, col: 2, text: "d"},
+			},
+		},
+		{
+			name:  "advance ending on a newline",
+			input: "ab\ncd",
+			ops: []positionOp{
+				{method: methodAdvance, n: 3, line: 2, col: 1, text: ""},
+			},
+		},
+		{
+			name:  "lone CR is one column",
+			input: "a\rb",
+			ops: []positionOp{
+				{method: methodAdvance, n: 3, line: 1, col: 4, text: "a\rb"},
+			},
+		},
+		{
+			name:  "CRLF ends the line at the LF",
+			input: "a\r\nb",
+			ops: []positionOp{
+				{method: methodAdvance, n: 2, line: 1, col: 3, text: "a\r"},
+				{method: methodAdvance, n: 1, line: 2, col: 1, text: ""},
+				{method: methodAdvance, n: 1, line: 2, col: 2, text: "b"},
+			},
+		},
+		{
+			name:  "CRLF in one advance",
+			input: "a\r\nb",
+			ops: []positionOp{
+				{method: methodAdvance, n: 4, line: 2, col: 2, text: "b"},
+			},
+		},
+		{
+			name:  "tab is one column",
+			input: "\t\tx",
+			ops: []positionOp{
+				{method: methodAdvance, n: 2, line: 1, col: 3, text: "\t\t"},
+			},
+		},
+		{
+			name:  "multi-byte characters count their bytes",
+			input: "é€x",
+			ops: []positionOp{
+				{method: methodAdvance, n: 5, line: 1, col: 6, text: "é€"},
+				{method: methodAdvance, n: 1, line: 1, col: 7, text: "é€x"},
+			},
+		},
+		{
+			name:  "advance fast across newlines",
+			input: "ab\ncd\nef",
+			ops: []positionOp{
+				{method: methodAdvanceFast, n: 2, line: 1, col: 3, text: "ab"},
+				{method: methodAdvanceFast, n: 5, line: 3, col: 2, text: "e"},
+			},
+		},
+		{
+			name:  "consume advances the column",
+			input: "<!ELEMENT r ANY>]",
+			ops: []positionOp{
+				{method: methodConsume, s: "<!ELEMENT", ok: true, line: 1, col: 10, text: "<!ELEMENT"},
+				{method: methodConsumeString, s: " r ANY>", ok: true, line: 1, col: 17, text: "<!ELEMENT r ANY>"},
+			},
+		},
+		{
+			name:  "consume across a newline",
+			input: "<a\n b>",
+			ops: []positionOp{
+				{method: methodConsumeString, s: "<a\n ", ok: true, line: 2, col: 2, text: " "},
+				{method: methodConsume, s: "b>", ok: true, line: 2, col: 4, text: " b>"},
+			},
+		},
+		{
+			name:  "consume across CRLF and tab",
+			input: "a\r\n\tb",
+			ops: []positionOp{
+				{method: methodConsume, s: "a\r\n\t", ok: true, line: 2, col: 2, text: "\t"},
+			},
+		},
+		{
+			name:  "consume multi-byte characters",
+			input: "été<",
+			ops: []positionOp{
+				{method: methodConsumeString, s: "été", ok: true, line: 1, col: 6, text: "été"},
+			},
+		},
+		{
+			name:  "failed consume keeps the position",
+			input: "abcd",
+			ops: []positionOp{
+				{method: methodAdvance, n: 1, line: 1, col: 2, text: "a"},
+				{method: methodConsume, s: "x", ok: false, line: 1, col: 2, text: "a"},
+				{method: methodConsumeString, s: "bx", ok: false, line: 1, col: 2, text: "a"},
+			},
+		},
+		{
+			name:  "scanned character data with CR, LF, and CRLF",
+			input: "x\r\ny\rz\n\té<",
+			ops: []positionOp{
+				{method: methodScanCharData, line: 3, col: 4, text: "\té"},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("ByteCursor", func(t *testing.T) {
+				cur := strcursor.NewByteCursor(strings.NewReader(tc.input))
+				for _, op := range tc.ops {
+					applyPositionOp(t, cur, op)
+				}
+			})
+			// A two-byte buffer makes ByteCursor refill and compact while the
+			// line text spans several fills.
+			t.Run("ByteCursor small buffer", func(t *testing.T) {
+				cur := strcursor.NewByteCursor(strings.NewReader(tc.input), 2)
+				for _, op := range tc.ops {
+					applyPositionOp(t, cur, op)
+				}
+			})
+			t.Run("UTF8Cursor", func(t *testing.T) {
+				cur := strcursor.NewUTF8Cursor(strings.NewReader(tc.input))
+				for _, op := range tc.ops {
+					applyPositionOp(t, cur, op)
+				}
+			})
+		})
+	}
 }
