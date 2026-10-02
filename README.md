@@ -217,26 +217,28 @@ build against two lower-level baselines: an `encoding/xml` token loop
 (`Decoder.Token`) and libxml2 via cgo.
 
 That is a narrower benchmark than every real `encoding/xml` workload. Many Go
-programs use `encoding/xml` to decode directly into structs, and this section is
-not meant to dismiss that use case or the package. The point here is simply
-that Helium's DOM parse is already quite fast: it is materially faster than the
-stdlib token benchmark on all three corpora, it now edges past libxml2 on the
-medium corpus, and it is clearly ahead on the largest corpus.
+programs use `encoding/xml` to decode directly into structs, and this section
+does not measure that use. On these three files, building Helium's full DOM is
+faster than the `encoding/xml` token loop. It is slower than libxml2 on the two
+smaller files and faster on the largest.
 
-Benchmarks parse real-world XML files of varying sizes (AMD Ryzen 9 7900X3D,
-Go 1.26.1, `go test -run '^$' -bench 'Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$' -benchmem -count=5 -tags
-libxml2bench ./bench`,
-median shown):
+The files are `spec_0.xml` (118 KB, ISO-8859-1, with an internal DTD subset),
+`nvdcve_0.xml` (287 KB) and `comps_0.xml` (608 KB) from
+`testdata/libxml2-compat`. The `encoding/xml` loop decodes the ISO-8859-1 file
+through a `CharsetReader`. Numbers are the median of 5 runs on an AMD Ryzen 9
+7900X3D with Go 1.26.8, from `go test -run '^$' -bench
+'Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$' -benchmem -count=5 -tags
+libxml2bench ./bench`:
 
 | File | Helium | `encoding/xml` | libxml2 (cgo) |
 |------|--------|----------------|---------------|
-| 109 KB | 139 MB/s | 77 MB/s | 158 MB/s |
-| 196 KB | 124 MB/s | 66 MB/s | 109 MB/s |
-| 3 MB | 497 MB/s | 120 MB/s | 366 MB/s |
+| 118 KB | 79 MB/s | 71 MB/s | 125 MB/s |
+| 287 KB | 101 MB/s | 85 MB/s | 164 MB/s |
+| 608 KB | 105 MB/s | 75 MB/s | 91 MB/s |
 
-Helium also allocates far fewer objects than `encoding/xml` in this benchmark.
-On the 3 MB corpus, the current Helium DOM parse lands around `94 allocs/op`
-versus about `155k allocs/op` for `encoding/xml`.
+Helium allocates far fewer objects than `encoding/xml` in this benchmark. On the
+608 KB file, Helium makes about 4,400 allocations per parse and `encoding/xml`
+makes about 125,000.
 
 To run the benchmarks yourself:
 
