@@ -2585,7 +2585,7 @@ external markup declarations, mirroring libxml2's `XML_DTD_STANDALONE_*` /
 `XML_DTD_NOT_STANDALONE` reports. A declaration counts as **external** when it
 comes from the external subset OR from an external parameter entity referenced
 anywhere (including from the internal subset) — `parserCtx.effectivelyExternal()`
-= `inSubset == inExternalSubset || len(externalPEScopes) > 0`, the analogue of
+= `inSubset == inExternalSubset || externalPEDepth > 0`, the analogue of
 libxml2's `PARSER_EXTERNAL`. Because an external-PE-supplied declaration is
 registered in the *internal* subset's declaration table, origin cannot be inferred
 from which subset holds the decl; it is recorded at parse time

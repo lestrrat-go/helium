@@ -233,9 +233,17 @@ gives every node of the expansion). Each invariant lives at its function:
   two reopens the accept-then-fail-to-serialize gap
 - Character-reference provenance (element-content validity, §3.2.1 E15) — `charDataFromCharRef` flag in
   `parseReference`; `fromCharRef` node field (see `node-types.md`)
-- Parameter entity refs — `parsePEReference` (`parser_dtd_subset.go`): charges the PE's OWN replacement bytes
-  (not post-expansion), `padPEContent` §4.4.8; external PE load via `loadExternalParameterEntityContent`
-  (XXE-gated, base-URI- and TextDecl-version-scoped, active-PE recursion guard)
+- Parameter entity refs — `parsePEReference` (`parser_dtd_subset.go`): pushes an internal or external PE's
+  replacement text verbatim as a new input (`pushInternalPEInput` / `pushExternalPEInput`), so the declaration
+  loop parses it as markup in place, as libxml2 `xmlParsePEReference` does. The text is never decoded again: a
+  `% name` declaration marker, a `%`/`&` that came from a character reference, and a `%name;` naming a PE the
+  text itself declares are ordinary markup there. Charges the PE's OWN replacement bytes; a reference inside the
+  text is charged when it is parsed. `padPEContent` §4.4.8. Both kinds share the active-PE recursion guard
+  (`peScopes`/`parameterEntityActive`, cleared in `popInput`); `externalPEDepth` counts the external ones for
+  `effectivelyExternal`. External PE load via `loadExternalParameterEntityContent` (XXE-gated, base-URI- and
+  TextDecl-version-scoped). Inside an internal PE's replacement text in the internal subset the WFC PEs in
+  Internal Subset still applies (no PE expansion inside a declaration or an entity value), as in newer libxml2
+  (`PARSER_EXTERNAL`); libxml2 2.9.14 expands both
 - PE references inside/adjacent to markup decls (external subset) — `skipBlanksPE` (`parser_whitespace.go`) +
   `dtdRefetch`; boundary violations → `ErrEntityBoundary` (VC Proper Declaration/Group/PE Nesting)
 - WFC PEs in Internal Subset (§2.8) — `expandEntityValueForRefCheck` `%` branch → `ErrPEReferenceInInternalSubset`
@@ -253,7 +261,7 @@ gives every node of the expansion). Each invariant lives at its function:
 - Recursion (WFC No Recursion) — `errEntityLoop` (`parser_entity_decl.go`, "entity loop"): the expanding paths
   (`decodeEntitiesToSink`, `parseBalancedChunkInternal`, `parseExternalEntityPrivate`,
   `expandEntityValueForRefCheck`) raise it once nesting passes depth 40; the unexpanded attribute-value walk
-  raises it on the first re-entry
+  and `parsePEReference` (an internal PE whose input is still on the stack) raise it on the first re-entry
 - `decodeEntities()` — SubstitutionType None(0)/Ref(1)/PERef(2)/Both(3); recursion capped at depth > 40
 
 ## Tree Builder (SAX→DOM)
