@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"slices"
 	"strings"
@@ -253,32 +254,132 @@ func (pctx *parserCtx) isLiteralCharWidth(r rune, w int) bool {
 }
 
 func (pctx *parserCtx) isLiteralCharValue(c uint32) bool {
-	if pctx.isXML11() {
+	return literalCharValueValid(c, pctx.isXML11())
+}
+
+// literalCharValueValid reports whether c may appear literally in an XML 1.1
+// document (xml11) or an XML 1.0 document (!xml11).
+func literalCharValueValid(c uint32, xml11 bool) bool {
+	if xml11 {
 		return isXML11CharValue(c) && !isXML11RestrictedChar(rune(c))
 	}
 	return isXMLCharValue(c)
 }
 
+// literalASCIIValid holds literalCharValueValid for every ASCII byte, indexed
+// [0] for XML 1.0 and [1] for XML 1.1.
+var literalASCIIValid = buildLiteralASCIIValid()
+
+func buildLiteralASCIIValid() [2][utf8.RuneSelf]bool {
+	var tbl [2][utf8.RuneSelf]bool
+	for c := range uint32(utf8.RuneSelf) {
+		tbl[0][c] = literalCharValueValid(c, false)
+		tbl[1][c] = literalCharValueValid(c, true)
+	}
+	return tbl
+}
+
+const (
+	wordOnes  = 0x0101010101010101
+	wordHighs = 0x8080808080808080
+)
+
+// literalWordValid reports whether all eight bytes packed in w are ASCII bytes
+// in 0x20-0x7F (0x20-0x7E for XML 1.1), all of which are valid literal
+// characters. A false result only means the bytes need a byte-by-byte check:
+// tab, LF, and CR are valid yet fail here.
+func literalWordValid(w uint64, xml11 bool) bool {
+	if w&wordHighs != 0 {
+		return false
+	}
+	// With every high bit clear, (w - 0x20 per byte) &^ w sets a high bit
+	// only when some byte is below 0x20.
+	if (w-0x20*wordOnes)&^w&wordHighs != 0 {
+		return false
+	}
+	if !xml11 {
+		return true
+	}
+	// XML 1.1 also rejects a literal DEL (0x7F): find a zero byte in w^0x7F.
+	d := w ^ 0x7F*wordOnes
+	return (d-wordOnes)&^d&wordHighs == 0
+}
+
+// literalBytesValid reports whether b holds only characters that may appear
+// literally under the parsed XML version, rejecting invalid UTF-8. It checks
+// every byte itself and does not rely on how the caller scanned b. Runs of
+// printable ASCII are checked eight bytes at a time, other ASCII bytes by
+// table, and only non-ASCII bytes are decoded as runes.
 func (pctx *parserCtx) literalBytesValid(b []byte) bool {
-	for len(b) > 0 {
-		r, w := utf8.DecodeRune(b)
-		if !pctx.isLiteralCharWidth(r, w) {
+	xml11 := pctx.isXML11()
+	ascii := &literalASCIIValid[0]
+	if xml11 {
+		ascii = &literalASCIIValid[1]
+	}
+	i := 0
+	for i < len(b) {
+		if len(b)-i >= 8 && literalWordValid(binary.LittleEndian.Uint64(b[i:]), xml11) {
+			i += 8
+			continue
+		}
+		if c := b[i]; c < utf8.RuneSelf {
+			if !ascii[c] {
+				return false
+			}
+			i++
+			continue
+		}
+		r, w := utf8.DecodeRune(b[i:])
+		if r == utf8.RuneError && w == 1 {
 			return false
 		}
-		b = b[w:]
+		if !literalCharValueValid(uint32(r), xml11) {
+			return false
+		}
+		i += w
 	}
 	return true
 }
 
+// literalStringValid is the string counterpart of literalBytesValid.
 func (pctx *parserCtx) literalStringValid(s string) bool {
-	for len(s) > 0 {
-		r, w := utf8.DecodeRuneInString(s)
-		if !pctx.isLiteralCharWidth(r, w) {
+	xml11 := pctx.isXML11()
+	ascii := &literalASCIIValid[0]
+	if xml11 {
+		ascii = &literalASCIIValid[1]
+	}
+	i := 0
+	for i < len(s) {
+		if len(s)-i >= 8 && literalWordValid(stringWord(s[i:]), xml11) {
+			i += 8
+			continue
+		}
+		if c := s[i]; c < utf8.RuneSelf {
+			if !ascii[c] {
+				return false
+			}
+			i++
+			continue
+		}
+		r, w := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && w == 1 {
 			return false
 		}
-		s = s[w:]
+		if !literalCharValueValid(uint32(r), xml11) {
+			return false
+		}
+		i += w
 	}
 	return true
+}
+
+// stringWord packs the first eight bytes of s little-endian, as
+// binary.LittleEndian.Uint64 does for a byte slice. s must hold at least eight
+// bytes.
+func stringWord(s string) uint64 {
+	_ = s[7]
+	return uint64(s[0]) | uint64(s[1])<<8 | uint64(s[2])<<16 | uint64(s[3])<<24 |
+		uint64(s[4])<<32 | uint64(s[5])<<40 | uint64(s[6])<<48 | uint64(s[7])<<56
 }
 
 func isXMLCharValue(c uint32) bool {

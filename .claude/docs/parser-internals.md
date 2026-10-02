@@ -77,7 +77,11 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
   literals, cached external-PE bodies, and external-DTD `IGNORE` sections via `parser_content.go`
   `isLiteralCharValue`, `parser_dtd_attr.go` `scanQuotedLiteral`, and `parser_dtd_subset.go`
   `parseConditionalSections` / `loadExternalParameterEntityContent`; cached PE bodies use their effective
-  TextDecl version. `IGNORE` scans decode non-delimiter UTF-8 as runes before validation. Character references
+  TextDecl version. `IGNORE` scans decode non-delimiter UTF-8 as runes before validation. Whole runs (char
+  data, simple attribute values, external-PE bodies) go through `literalBytesValid` / `literalStringValid`,
+  which resolve the version once per call, check printable ASCII eight bytes at a time (`literalWordValid`),
+  check other ASCII bytes by table (`literalASCIIValid`), and decode only non-ASCII bytes as runes; they check
+  every byte themselves, so callers need not pre-scan the run. Character references
   accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` / `parseStringCharRef` /
   `isXML11CharValue`; parsed internal entity values retain XML 1.1 restricted-character-reference segments for
   nested reparse while `Entity.Content()` remains decoded
