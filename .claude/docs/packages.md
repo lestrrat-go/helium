@@ -2374,6 +2374,18 @@ by xslt3 streaming analysis.
 - Files: `xpathstream.go`
 - Imports: xpath3
 
+## internal/intconv/
+
+Platform-independent decimal-to-int conversion.
+
+- **Atoi(string) → (int, error)** — `strconv.Atoi`, except a value that fits int64 but not int (only where int
+  is 32 bits) saturates at `math.MaxInt`/`math.MinInt`; a value beyond int64 still returns `strconv.ErrRange`.
+  Used where a parsed count, index, arity, or facet value is compared against sizes or limits (xpath3 named
+  function arity, xslt3 `function-available` arity, xpointer child index, xsd length facets and occurs), so
+  those comparisons give the 64-bit answer on 32-bit platforms.
+- Files: `intconv.go`
+- Imports: none
+
 ## internal/bitset/
 
 Generic bitset operations for bitmask types.

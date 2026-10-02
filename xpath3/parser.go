@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lestrrat-go/helium/internal/intconv"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -787,7 +788,10 @@ func (p *parser) parseNamePrimary() (Expr, error) {
 		if arityTok.Type != TokenNumber {
 			return nil, fmt.Errorf("%w: arity number after '#' but got %s", ErrExpectedToken, arityTok)
 		}
-		arity, err := strconv.Atoi(arityTok.Value)
+		// An arity that fits int64 but not int (where int is 32 bits)
+		// saturates instead of failing to parse; no call can pass that many
+		// arguments.
+		arity, err := intconv.Atoi(arityTok.Value)
 		if err != nil {
 			return nil, fmt.Errorf("invalid arity %q: %w", arityTok.Value, err)
 		}

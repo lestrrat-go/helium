@@ -435,3 +435,14 @@ func TestXPathFlavorKeepsReluctantAndNonCapturing(t *testing.T) {
 		require.NoErrorf(t, err, "Translate must accept XPath-valid %q", p)
 	}
 }
+
+// TestNormalizeBackrefsPastInt32 verifies that a back-reference digit run past
+// 2^31-1 never wraps into the capture range. Accumulated in a 32-bit int,
+// \4294967297 reads as \1 and \42949672971 as \1 followed by "1".
+func TestNormalizeBackrefsPastInt32(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, `(a)\4294967297`, xsdregex.NormalizeBackrefs(`(a)\4294967297`))
+	require.Equal(t, `(a)\42949672971`, xsdregex.NormalizeBackrefs(`(a)\42949672971`))
+	require.Equal(t, `(a)(?:\1)2`, xsdregex.NormalizeBackrefs(`(a)\12`))
+}

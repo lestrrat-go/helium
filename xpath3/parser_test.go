@@ -1,6 +1,7 @@
 package xpath3_test
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -282,6 +283,16 @@ func TestParseAST(t *testing.T) {
 		require.Equal(t, "fn", nfr.Prefix)
 		require.Equal(t, "upper-case", nfr.Name)
 		require.Equal(t, 1, nfr.Arity)
+	})
+
+	t.Run("named function ref arity past int32", func(t *testing.T) {
+		// The arity fits int64 but not a 32-bit int; it saturates at
+		// math.MaxInt instead of failing to parse there.
+		expr, err := xpath3.Parse("concat#4294967297")
+		require.NoError(t, err)
+		nfr, ok := expr.(xpath3.NamedFunctionRef)
+		require.True(t, ok, "expected NamedFunctionRef, got %T", expr)
+		require.Equal(t, min(int64(4294967297), math.MaxInt), int64(nfr.Arity))
 	})
 
 	t.Run("map constructor structure", func(t *testing.T) {

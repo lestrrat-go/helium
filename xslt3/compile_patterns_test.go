@@ -10,6 +10,32 @@ import (
 )
 
 func TestPattern(t *testing.T) {
+	// A numeric predicate matches only the position it equals exactly. A
+	// fractional value equals no position, and a value past 2^31-1 is beyond
+	// every position; neither may be truncated to an int first.
+	t.Run("numeric predicate compares exactly", func(t *testing.T) {
+		t.Parallel()
+
+		const ss = `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/item"/></out></xsl:template>
+  <xsl:template match="item[1.5]">frac</xsl:template>
+  <xsl:template match="item[4294967297]">big</xsl:template>
+  <xsl:template match="item[2]">two</xsl:template>
+  <xsl:template match="item">-</xsl:template>
+</xsl:stylesheet>`
+		ctx := t.Context()
+		ssDoc, err := helium.NewParser().Parse(ctx, []byte(ss))
+		require.NoError(t, err)
+		compiled, err := xslt3.CompileStylesheet(ctx, ssDoc)
+		require.NoError(t, err)
+		src, err := helium.NewParser().Parse(ctx, []byte(`<doc><item/><item/><item/></doc>`))
+		require.NoError(t, err)
+		out, err := compiled.Transform(src).Serialize(ctx)
+		require.NoError(t, err)
+		require.Contains(t, out, "<out>-two-</out>")
+	})
+
 	// TestPatternPredeclaredFunctionNamespace verifies that match patterns may use
 	// the XPath 3.0 predeclared namespace prefixes (fn:, math:, map:, ...) without
 	// an explicit xmlns declaration in the stylesheet. The static context

@@ -837,7 +837,12 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 			num := 0
 			validEnd := start // end of the longest valid group number
 			for i < len(repl) && repl[i] >= '0' && repl[i] <= '9' {
-				num = num*10 + int(repl[i]-'0')
+				// Stop accumulating once num exceeds numGroups: more digits only
+				// grow it, and accumulating a long digit run would wrap int
+				// (past 2^31-1 where int is 32 bits) back into the group range.
+				if num <= numGroups {
+					num = num*10 + int(repl[i]-'0')
+				}
 				i++
 				if num > 0 && num <= numGroups {
 					validEnd = i

@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"slices"
 	"strings"
@@ -381,14 +382,20 @@ func isDatePresentationModifier(mod string) bool {
 	return true
 }
 
+// parseSimpleInt parses the leading decimal digits of s. A value above
+// math.MaxInt (2^31-1 where int is 32 bits) saturates at math.MaxInt instead of
+// wrapping to a small or negative width.
 func parseSimpleInt(s string) int {
 	n := 0
 	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			n = n*10 + int(r-'0')
-		} else {
+		if r < '0' || r > '9' {
 			break
 		}
+		d := int(r - '0')
+		if n > (math.MaxInt-d)/10 {
+			return math.MaxInt
+		}
+		n = n*10 + d
 	}
 	return n
 }

@@ -9,19 +9,28 @@ import (
 )
 
 // Conservative magnitude bounds for time.AddDate operands. time.Time can
-// represent years up to roughly ±2.9e11, but time.AddDate adds days/months as
-// plain ints whose internal normalization silently wraps for magnitudes near
-// math.MaxInt (e.g. AddDate(0,0,1<<60) returns the original date unchanged). We
-// bound day/month operands to ~1e11 years' worth, which stays comfortably inside
-// the representable range and well clear of any wrap; anything larger is a
-// genuine FODT0002 overflow.
+// represent years up to roughly ±2.9e11, but time.AddDate adds years, months and
+// days as plain ints whose internal normalization silently wraps for magnitudes
+// near math.MaxInt (e.g. AddDate(0,0,1<<60) returns the original date
+// unchanged). We bound the move to maxSafeAddDateYears' worth of months or days,
+// which stays comfortably inside the representable range and well clear of any
+// wrap; anything larger is a genuine FODT0002 overflow.
+//
+// maxSafeAddDateYears is 1e11 where int is 64 bits. Where int is 32 bits,
+// time.Time reports its year as an int, so the bound is math.MaxInt/4 (about
+// 5.4e8 years): a larger move would produce a year that int cannot hold.
 const (
-	maxSafeAddDateMonths = int64(1200000000000) // ~1e11 years in months
+	maxSafeAddDateYears  = min(100_000_000_000, math.MaxInt/4)
+	maxSafeAddDateMonths = int64(maxSafeAddDateYears * 12)
+	// addDateDayChunk is the largest day count passed to one time.AddDate call.
+	// Where int is 64 bits it exceeds maxSafeAddDateDays, so a day move is a
+	// single call; where int is 32 bits a larger move takes several calls.
+	addDateDayChunk = math.MaxInt / 4
 )
 
-// maxSafeAddDateDays is ~1e11 years in days (365.25 * 1e11), as a *big.Int since
-// the day count is computed in big.Int.
-var maxSafeAddDateDays = big.NewInt(36525000000000)
+// maxSafeAddDateDays is maxSafeAddDateYears in days (365.25 days a year), as a
+// *big.Int since the day count is computed in big.Int.
+var maxSafeAddDateDays = big.NewInt(maxSafeAddDateYears * 36525 / 100)
 
 func isDurationType(typeName string) bool {
 	return typeName == TypeDuration || typeName == TypeYearMonthDuration || typeName == TypeDayTimeDuration
@@ -293,7 +302,10 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 		secs /= n
 	}
 
-	if math.IsInf(months, 0) || math.IsInf(secs, 0) {
+	// A NaN here comes from 0 * ±INF. A ±INF multiplier overflows per F&O
+	// (FODT0002), and converting NaN to int64 below would give a different
+	// value on each architecture.
+	if math.IsInf(months, 0) || math.IsInf(secs, 0) || math.IsNaN(months) || math.IsNaN(secs) {
 		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
 	// Detect precision loss for very large values
@@ -306,7 +318,13 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 
 	// Per XPath F&O spec: months are rounded "half towards positive infinity"
 	// i.e. math.Floor(months + 0.5)
-	resMonths := int(math.Floor(months + 0.5))
+	// The rounded count is at most 2^53, so it fits int64; where int is 32
+	// bits a count past 2^31-1 is a duration overflow.
+	roundedMonths := int64(math.Floor(months + 0.5))
+	resMonths := int(roundedMonths)
+	if int64(resMonths) != roundedMonths {
+		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow: month count out of int range"}
+	}
 	resSecs := secs
 	negative := resMonths < 0 || (resMonths == 0 && resSecs < 0)
 	if negative {
@@ -398,7 +416,10 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		if int64(months) > maxSafeAddDateMonths || int64(months) < -maxSafeAddDateMonths {
 			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: month count out of range"}
 		}
-		t = addMonths(t, months)
+		if !resultYearFits(t, int64(max(months, -months)/12+1)) {
+			return nil, true, &XPathError{Code: errCodeFODT0001, Message: "date/time arithmetic overflow: result year out of range"}
+		}
+		t = addMonths(t, int64(months))
 	}
 
 	// Add seconds exactly: split into whole seconds and a sub-second nanosecond
@@ -429,11 +450,14 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		if days.CmpAbs(maxSafeAddDateDays) > 0 {
 			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: day count out of range"}
 		}
+		if !resultYearFits(t, days.Int64()/365+1) {
+			return nil, true, &XPathError{Code: errCodeFODT0001, Message: "date/time arithmetic overflow: result year out of range"}
+		}
 		sign := 1
 		if neg {
 			sign = -1
 		}
-		t = t.AddDate(0, 0, sign*int(days.Int64()))
+		t = addDays(t, sign, days.Int64())
 		t = t.Add(time.Duration(sign) * time.Duration(remSecs.Int64()) * time.Second)
 		t = t.Add(time.Duration(sign) * time.Duration(nanos) * time.Nanosecond)
 	}
@@ -449,16 +473,51 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 	}), true, nil
 }
 
+// maxResultYear bounds the year of a date/time ± duration result. Where int is
+// 32 bits, time.Time reports the year as an int, so a result past about ±1e9
+// years would wrap; each move is at most maxSafeAddDateYears (about 5.4e8
+// years there), so a start year within this bound cannot wrap before the check.
+// Where int is 64 bits the bound is far beyond any year time.Time holds, so the
+// check never fires.
+const maxResultYear = math.MaxInt / 2
+
+// resultYearFits reports whether moving t by up to moveYears years, in either
+// direction, keeps the result year within ±maxResultYear. Callers round the
+// move up to whole years, so the check may reject a result within a year of
+// the bound. They have bounded the move by maxSafeAddDateYears, so the sums
+// below cannot overflow int64.
+func resultYearFits(t time.Time, moveYears int64) bool {
+	year := int64(t.Year())
+	return year+moveYears <= maxResultYear && year-moveYears >= -maxResultYear
+}
+
 // addMonths adds months to a time.Time, clamping the day per XSD rules.
 // Uses time.AddDate for the heavy lifting; detects day overflow (e.g. Jan 31 + 1 month
-// normalizing to Mar 3) and clamps to the last day of the target month.
-func addMonths(t time.Time, months int) time.Time {
-	result := t.AddDate(0, months, 0)
+// normalizing to Mar 3) and clamps to the last day of the target month. The
+// month count is split into whole years and remaining months, so each AddDate
+// operand fits in int even where int is 32 bits; AddDate normalizes months
+// into years exactly, so the split does not change the result. The caller
+// bounds |months| by maxSafeAddDateMonths.
+func addMonths(t time.Time, months int64) time.Time {
+	years := int(months / 12)
+	rem := int(months % 12)
+	result := t.AddDate(years, rem, 0)
 	if result.Day() != t.Day() {
 		// Day overflowed — go back to last day of the intended month
-		result = t.AddDate(0, months+1, -t.Day())
+		result = t.AddDate(years, rem+1, -t.Day())
 	}
 	return result
+}
+
+// addDays moves t by sign*days calendar days. Each time.AddDate call takes at
+// most addDateDayChunk days, so the day operand fits in int even where int is
+// 32 bits. The caller bounds days by maxSafeAddDateDays.
+func addDays(t time.Time, sign int, days int64) time.Time {
+	for days > addDateDayChunk {
+		t = t.AddDate(0, 0, sign*addDateDayChunk)
+		days -= addDateDayChunk
+	}
+	return t.AddDate(0, 0, sign*int(days))
 }
 
 // arithmeticDateTimeDatetime handles dateTime - dateTime, date - date, time - time.

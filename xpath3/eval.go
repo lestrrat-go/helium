@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"net/http"
 	"time"
 
@@ -270,6 +271,13 @@ func (ec *evalContext) countOps(ctx context.Context, n int) error {
 	}
 	if ec.opLimit <= 0 {
 		return nil
+	}
+	// Saturate instead of wrapping: where int is 32 bits a long evaluation
+	// can count past 2^31-1, and a wrapped (negative) count would never
+	// reach the limit again. A total past math.MaxInt exceeds every limit.
+	if n > math.MaxInt-*ec.opCount {
+		*ec.opCount = math.MaxInt
+		return ErrOpLimit
 	}
 	*ec.opCount += n
 	if *ec.opCount > ec.opLimit {

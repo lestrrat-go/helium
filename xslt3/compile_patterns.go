@@ -2067,9 +2067,11 @@ func evaluatePredicateWithPosition(ctx context.Context, ec *execContext, pred xp
 		}
 		return false
 	}
-	// Numeric predicates: compare to the provided position
+	// Numeric predicates: compare to the provided position. Compare as float64:
+	// converting f to int is undefined above the int range (2^31-1 where int is
+	// 32 bits) and truncates a fraction, while position()=1.5 is never true.
 	if f, ok := result.IsNumber(); ok {
-		return int(f) == pos
+		return f == float64(pos)
 	}
 	b, err := xpath3.EBV(result.Sequence())
 	if err != nil {

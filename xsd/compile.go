@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
-	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/intconv"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -1650,8 +1650,12 @@ func lookupNS(elem *helium.Element, prefix string) string {
 // not a plain integer. Occurrence attributes (minOccurs/maxOccurs) are parsed by
 // parseNonNegativeOccurs / parseParticleOccurs, which additionally accept the
 // "unbounded" keyword and clamp values too large for an int.
+//
+// A value that fits int64 but not int (where int is 32 bits) saturates at
+// math.MaxInt (intconv.Atoi): no string, list, or digit count there can reach
+// that size, so the facet constrains values exactly as the larger number would.
 func parseOccurs(s string) int {
-	n, err := strconv.Atoi(s)
+	n, err := intconv.Atoi(s)
 	if err != nil {
 		return 0
 	}

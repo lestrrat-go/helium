@@ -10,23 +10,29 @@ import (
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
-var (
-	maxArrayIndex = big.NewInt(int64(^uint(0) >> 1))
-	minArrayIndex = big.NewInt(-int64(^uint(0)>>1) - 1)
-)
-
+// checkedArrayIndex converts an xs:integer array index to int. An index outside
+// the int range (above 2^31-1 where int is 32 bits) raises FOAY0001: no array
+// has that many members, and converting it would wrap to a valid index.
 func checkedArrayIndex(a AtomicValue) (int, error) {
 	switch v := a.Value.(type) {
 	case int64:
-		return int(v), nil
+		return arrayIndexFromInt64(v)
 	case *big.Int:
-		if v.Cmp(minArrayIndex) < 0 || v.Cmp(maxArrayIndex) > 0 {
+		if !v.IsInt64() {
 			return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
 		}
-		return int(v.Int64()), nil
+		return arrayIndexFromInt64(v.Int64())
 	default:
 		return 0, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("array lookup key must be xs:integer, got %s", a.TypeName)}
 	}
+}
+
+func arrayIndexFromInt64(v int64) (int, error) {
+	n := int(v)
+	if int64(n) != v {
+		return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
+	}
+	return n, nil
 }
 
 func evalLookupExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e LookupExpr) (Sequence, error) {

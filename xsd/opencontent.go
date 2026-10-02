@@ -214,7 +214,7 @@ func (c *compiler) checkDerivedWildcardReadmitsBaseOpen(ctx context.Context, td 
 		for _, bw := range baseWCs {
 			if wildcardConstraintSubset(dw.wc, bw.wc, c.schema, false) &&
 				processContentsStrength(dw.wc.ProcessContents) >= processContentsStrength(bw.wc.ProcessContents) {
-				baseDeclCap = maxOccursAdd(baseDeclCap, bw.effMax)
+				baseDeclCap = occursAdd(baseDeclCap, bw.effMax)
 			}
 		}
 		if occursCovers(baseDeclCap, dw.effMax) {
@@ -267,11 +267,11 @@ func collectEmittingDeclaredWildcards(mg *ModelGroup) []declaredWildcardInfo {
 		if g == nil {
 			return
 		}
-		gMax := mulOccurs(ancestorMax, g.MaxOccurs)
+		gMax := occursMul(ancestorMax, g.MaxOccurs)
 		for _, p := range g.Particles {
 			switch term := p.Term.(type) {
 			case *Wildcard:
-				if pMax := mulOccurs(gMax, p.MaxOccurs); pMax != 0 {
+				if pMax := occursMul(gMax, p.MaxOccurs); pMax != 0 {
 					out = append(out, declaredWildcardInfo{wc: term, effMax: pMax})
 				}
 			case *ModelGroup:
@@ -350,14 +350,14 @@ func (c *compiler) checkOpenContentDropsBaseWildcard(ctx context.Context, td *Ty
 		for _, bw2 := range baseWCs {
 			if processContentsStrength(bw2.wc.ProcessContents) >= bwStrength &&
 				constraintsIntersect(wildcardConstraint(bw2.wc), spillCon) {
-				baseCap = maxOccursAdd(baseCap, bw2.effMax)
+				baseCap = occursAdd(baseCap, bw2.effMax)
 			}
 		}
 		derivedCap := 0
 		for _, dw := range derivedWCs {
 			if processContentsStrength(dw.wc.ProcessContents) >= bwStrength &&
 				wildcardConstraintSubset(spillWC, dw.wc, c.schema, false) {
-				derivedCap = maxOccursAdd(derivedCap, dw.effMax)
+				derivedCap = occursAdd(derivedCap, dw.effMax)
 			}
 		}
 		if occursCovers(derivedCap, baseCap) {
@@ -667,10 +667,10 @@ func maxOccursForName(mg *ModelGroup, n QName, schema *Schema) int {
 		if mg.Compositor == CompositorChoice {
 			inner = maxOccursOf(inner, cnt)
 		} else {
-			inner = maxOccursAdd(inner, cnt)
+			inner = occursAdd(inner, cnt)
 		}
 	}
-	return mulOccurs(inner, mg.MaxOccurs)
+	return occursMul(inner, mg.MaxOccurs)
 }
 
 func particleMaxOccursForName(p *Particle, n QName, schema *Schema) int {

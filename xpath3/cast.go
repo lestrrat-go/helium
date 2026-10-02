@@ -428,10 +428,12 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 	case TypeDuration:
 		d, err := parseXSDDuration(s)
 		if err != nil {
-			return AtomicValue{}, castError(s, targetType)
+			return AtomicValue{}, durationCastError(err, s, targetType)
 		}
 		return AtomicValue{TypeName: TypeDuration, Value: d}, nil
 	case TypeDayTimeDuration:
+		// A dayTimeDuration has no months, so a month total of any size is a
+		// lexical error (FORG0001), never an overflow.
 		d, err := parseXSDDuration(s)
 		if err != nil {
 			return AtomicValue{}, castError(s, targetType)
@@ -443,7 +445,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 	case TypeYearMonthDuration:
 		d, err := parseXSDDuration(s)
 		if err != nil {
-			return AtomicValue{}, castError(s, targetType)
+			return AtomicValue{}, durationCastError(err, s, targetType)
 		}
 		// Reject any nonzero dayTime part. SecRat carries the EXACT total dayTime
 		// seconds magnitude, so an underflowing fraction (e.g. PT0.000...1S) is
@@ -688,6 +690,19 @@ func castError(value string, targetType string) *XPathError {
 		Code:    errCodeFORG0001,
 		Message: fmt.Sprintf("cannot cast %q to %s", value, targetType),
 	}
+}
+
+// durationCastError maps a parseXSDDuration failure to its cast error: a month
+// total that fits int64 but not int (only where int is 32 bits) is a duration
+// overflow, FODT0002; anything else is FORG0001.
+func durationCastError(err error, value, targetType string) *XPathError {
+	if errors.Is(err, errDurationMonthsRange) {
+		return &XPathError{
+			Code:    errCodeFODT0002,
+			Message: fmt.Sprintf("cannot cast %q to %s: duration overflow", value, targetType),
+		}
+	}
+	return castError(value, targetType)
 }
 
 // checkBigIntRange reports a FORG0001 "out of range" error when n falls below

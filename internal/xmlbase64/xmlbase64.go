@@ -13,6 +13,7 @@ package xmlbase64
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
@@ -274,21 +275,34 @@ type Counter struct {
 // The piece is bytes because that is how a DOM hands out node content;
 // converting it to a string first would copy the lexical length this counter
 // exists to keep out of memory.
+//
+// The counts saturate instead of wrapping. Entity references let a DOM repeat
+// one large text many times without holding it more than once, so the
+// character count can pass 2^31-1 where int is 32 bits; a wrapped count would
+// report a small decoded size and pass the budget. A count saturated at
+// math.MaxInt exceeds any budget the caller can hold in memory. The padding
+// count stops at 3, since DecodedLen only tells 0, 1, 2 and "more than 2" apart.
 func (c *Counter) Add(piece []byte) {
 	for _, ch := range piece {
 		switch ch {
 		case ' ', '\t', '\r', '\n':
 			// drop XML whitespace, as DecodeString does
 		case '=':
-			c.pad++
-			c.chars++
+			if c.pad <= 2 {
+				c.pad++
+			}
+			if c.chars < math.MaxInt {
+				c.chars++
+			}
 		default:
 			// Padding may only end a value, and every other character must be
 			// in the alphabet, so either way this one cannot decode.
 			if c.pad > 0 || !isAlphabet(ch) {
 				c.undecodable = true
 			}
-			c.chars++
+			if c.chars < math.MaxInt {
+				c.chars++
+			}
 		}
 	}
 }

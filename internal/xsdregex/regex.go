@@ -1070,7 +1070,12 @@ func resolveXPathBackref(runes []rune, start, captureCount int, groupStack []int
 	end := start
 	value := 0
 	for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
-		value = value*10 + int(runes[end]-'0')
+		// Stop accumulating once value exceeds captureCount: more digits only
+		// grow it, and a long digit run would wrap int (past 2^31-1 where int
+		// is 32 bits) back into the capture range.
+		if value <= captureCount {
+			value = value*10 + int(runes[end]-'0')
+		}
 		end++
 	}
 
@@ -1083,6 +1088,9 @@ func resolveXPathBackref(runes []rune, start, captureCount int, groupStack []int
 
 	value = 0
 	for i := start; i < end; i++ {
+		if value > captureCount {
+			break
+		}
 		value = value*10 + int(runes[i]-'0')
 		if value > 0 && value <= captureCount && !isOpenCaptureGroup(groupStack, value) {
 			ref = value

@@ -430,7 +430,9 @@ func facetLength(val, builtinLocal string) int {
 			return r
 		}, val)
 		s = strings.TrimRight(s, "=")
-		return len(s) * 3 / 4
+		// len(s)*3/4 without forming len(s)*3, which wraps for a value over
+		// about 715M characters where int is 32 bits.
+		return len(s)/4*3 + len(s)%4*3/4
 	default:
 		// String types: length in characters.
 		return len([]rune(val))

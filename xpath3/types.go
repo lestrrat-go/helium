@@ -747,6 +747,9 @@ func HasTimezone(t time.Time) bool {
 	return t.Location() != noTZLocation
 }
 
+// Duration is the value of an xs:duration, xs:yearMonthDuration, or
+// xs:dayTimeDuration. Months is an int: where int is 32 bits, a month total
+// above 2^31-1 is a duration overflow (FODT0002) wherever one is computed.
 type Duration struct {
 	Months   int      // total months (years*12 + months)
 	Seconds  float64  // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)

@@ -1435,3 +1435,17 @@ func TestEvalBookstoreExample(t *testing.T) {
 	require.Equal(t, "title", r.NodeSet[0].Name())
 	require.Equal(t, "B", string(r.NodeSet[0].Content()))
 }
+
+// TestCountOpsSaturates verifies that the op counter saturates instead of
+// wrapping. With the counter next to math.MaxInt, a wrapped (negative) count
+// would read as under the limit and never trip it again; that is 2^31-1
+// operations where int is 32 bits.
+func TestCountOpsSaturates(t *testing.T) {
+	count, err := xpath1.CountOpsForTesting(math.MaxInt-1, 5, math.MaxInt)
+	require.ErrorIs(t, err, xpath1.ErrOpLimit)
+	require.Equal(t, math.MaxInt, count)
+
+	count, err = xpath1.CountOpsForTesting(10, 5, 100)
+	require.NoError(t, err)
+	require.Equal(t, 15, count)
+}
