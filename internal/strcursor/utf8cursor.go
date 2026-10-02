@@ -8,25 +8,42 @@ import (
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 )
 
-var charDataByteClass = buildCharDataByteClass()
+// Byte classes for the ASCII fast path of ScanCharDataSlice.
+const (
+	// charDataPlain is an ASCII literal character other than a delimiter.
+	charDataPlain uint8 = iota
+	// charDataStop ends the fast path: a delimiter ('<', '&', ']', CR), a
+	// byte >= 0x80, or an ASCII byte outside the XML 1.0 Char production.
+	charDataStop
+	// charDataRestricted is an ASCII XML 1.0 Char that is not a literal
+	// character under the document's version (DEL under XML 1.1). It continues
+	// the run, as any Char does, but makes the run invalid.
+	charDataRestricted
+)
+
+// charDataByteClass classifies every byte per XML version ([0] for XML 1.0,
+// [1] for XML 1.1). It is built from xmlchar.IsChar and xmlchar.IsLiteralChar,
+// so the scanner and the parser's run validators share one definition of
+// literal-character validity.
+var charDataByteClass = [2][256]uint8{buildCharDataByteClass(false), buildCharDataByteClass(true)}
 var ncNameByteClass = buildNCNameByteClass()
 
-func buildCharDataByteClass() [256]uint8 {
+func buildCharDataByteClass(xml11 bool) [256]uint8 {
 	var tbl [256]uint8
-	for i := range 0x80 {
-		tbl[i] = 0
+	for i := range utf8.RuneSelf {
+		switch r := rune(i); {
+		case !xmlchar.IsChar(r):
+			tbl[i] = charDataStop
+		case !xmlchar.IsLiteralChar(r, xml11):
+			tbl[i] = charDataRestricted
+		}
 	}
-	for i := range 0x20 {
-		tbl[i] = 1
-	}
-	tbl['\t'] = 0
-	tbl['\n'] = 0
-	tbl['<'] = 1
-	tbl['&'] = 1
-	tbl['\r'] = 1
-	tbl[']'] = 1
-	for i := 0x80; i < 0x100; i++ {
-		tbl[i] = 1
+	tbl['<'] = charDataStop
+	tbl['&'] = charDataStop
+	tbl['\r'] = charDataStop
+	tbl[']'] = charDataStop
+	for i := utf8.RuneSelf; i < 0x100; i++ {
+		tbl[i] = charDataStop
 	}
 	return tbl
 }
@@ -51,30 +68,48 @@ func buildNCNameByteClass() [256]uint8 {
 	return tbl
 }
 
-func scanSafeCharDataASCII(data []byte) int {
+// scanCharDataASCII returns the length of the leading run of data made of
+// plain and restricted ASCII bytes (see charDataByteClass), and the offset of
+// the first restricted byte in that run, or -1 when there is none.
+func scanCharDataASCII(data []byte, class *[256]uint8) (int, int) {
+	bad := -1
+	n := scanSafeCharDataASCII(data, class)
+	for n < len(data) && class[data[n]] == charDataRestricted {
+		if bad < 0 {
+			bad = n
+		}
+		n++
+		n += scanSafeCharDataASCII(data[n:], class)
+	}
+	return n, bad
+}
+
+// scanSafeCharDataASCII returns the length of the leading run of data that
+// class marks charDataPlain.
+func scanSafeCharDataASCII(data []byte, class *[256]uint8) int {
 	off := 0
 	for off+16 <= len(data) {
-		if charDataByteClass[data[off+0]]|
-			charDataByteClass[data[off+1]]|
-			charDataByteClass[data[off+2]]|
-			charDataByteClass[data[off+3]]|
-			charDataByteClass[data[off+4]]|
-			charDataByteClass[data[off+5]]|
-			charDataByteClass[data[off+6]]|
-			charDataByteClass[data[off+7]]|
-			charDataByteClass[data[off+8]]|
-			charDataByteClass[data[off+9]]|
-			charDataByteClass[data[off+10]]|
-			charDataByteClass[data[off+11]]|
-			charDataByteClass[data[off+12]]|
-			charDataByteClass[data[off+13]]|
-			charDataByteClass[data[off+14]]|
-			charDataByteClass[data[off+15]] != 0 {
+		if class[data[off+0]]|
+			class[data[off+1]]|
+			class[data[off+2]]|
+			class[data[off+3]]|
+			class[data[off+4]]|
+			class[data[off+5]]|
+			class[data[off+6]]|
+			class[data[off+7]]|
+			class[data[off+8]]|
+			class[data[off+9]]|
+			class[data[off+10]]|
+			class[data[off+11]]|
+			class[data[off+12]]|
+			class[data[off+13]]|
+			class[data[off+14]]|
+			class[data[off+15]] != charDataPlain {
 			break
 		}
 		off += 16
 	}
-	for off < len(data) && charDataByteClass[data[off]] == 0 {
+	for off < len(data) && class[data[off]] == charDataPlain {
 		off++
 	}
 	return off
@@ -717,11 +752,21 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 	}
 }
 
-// ScanCharDataInto scans XML character data with inline EOL normalization.
-// Does NOT consume — caller must call AdvanceFast(nBytes) after processing.
 // ScanCharDataSlice scans XML character data with EOL normalization, appending
-// to dst. Returns the grown slice and the number of bytes consumed. The caller takes
-// ownership of the returned slice. Does NOT consume — call AdvanceFast after.
+// to dst. Returns the grown slice, the number of bytes consumed, and whether
+// every scanned character may appear literally under the document's XML
+// version (xml11 selects XML 1.1, otherwise XML 1.0). The caller takes ownership
+// of the returned slice. Does NOT consume — call AdvanceFast after.
+//
+// The scan validates the run as it goes, so callers need not re-check the
+// returned bytes. Where the run stops does not depend on xml11: it stops at '<',
+// '&', "]]>", invalid UTF-8, and any character outside the XML 1.0 Char
+// production (xmlchar.IsChar), leaving that byte for the caller to diagnose. A
+// character that is an XML 1.0 Char but not a literal character under xml11
+// (an XML 1.1 RestrictedChar such as DEL or U+0080) does not stop the run: it is
+// scanned like any other character and the run is reported not valid
+// (valid == false), so the caller rejects the whole run at its start position.
+// Under XML 1.0 valid is always true, since every Char is a literal character.
 //
 // When maxBytes > 0 the scan stops once that many input bytes have been
 // consumed (always on a UTF-8 character boundary; a single rune wider than
@@ -729,11 +774,17 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 // the returned slice and the cursor's internal buffer, letting callers deliver a
 // long delimiter-free run in fixed-size chunks instead of materializing it all.
 // maxBytes <= 0 means unbounded (scan the whole run up to the next delimiter).
-func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int) ([]byte, int) {
+// valid covers only the bytes this call scanned.
+func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int, xml11 bool) ([]byte, int, bool) {
 	if c.fillBuffer(1) != nil {
-		return dst, 0
+		return dst, 0, true
 	}
 
+	class := &charDataByteClass[0]
+	if xml11 {
+		class = &charDataByteClass[1]
+	}
+	valid := true
 	off := 0
 	data := c.buf[c.bufpos:c.buflen]
 	dlen := len(data)
@@ -742,11 +793,14 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int) ([]byte, int) {
 		if maxBytes > 0 && off >= maxBytes {
 			break
 		}
-		runLen := scanSafeCharDataASCII(data[off:dlen])
+		runLen, bad := scanCharDataASCII(data[off:dlen], class)
 		if maxBytes > 0 && off+runLen > maxBytes {
 			// Cap the ASCII run at the byte budget. ASCII bytes are single-byte,
 			// so this never splits a multi-byte character.
 			runLen = maxBytes - off
+		}
+		if bad >= 0 && bad < runLen {
+			valid = false
 		}
 		if runLen > 0 {
 			dst = append(dst, data[off:off+runLen]...)
@@ -768,7 +822,7 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int) ([]byte, int) {
 		}
 
 		b := data[off]
-		if b < 0x80 {
+		if b < utf8.RuneSelf {
 			if b == '<' || b == '&' {
 				break
 			}
@@ -823,13 +877,23 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int) ([]byte, int) {
 			// wider than maxBytes (it is returned whole on the next call).
 			break
 		}
+		// Every XML 1.0 Char is a literal character in XML 1.0, so only XML
+		// 1.1 needs the second check: a RestrictedChar (U+0080-U+0084,
+		// U+0086-U+009F) continues the run but makes it invalid.
+		if xml11 && !xmlchar.IsLiteralChar(r, true) {
+			valid = false
+		}
 		dst = append(dst, data[off:off+w]...)
 		off += w
 	}
 
-	return dst, off
+	return dst, off, valid
 }
 
+// ScanCharDataInto scans XML character data with inline EOL normalization.
+// Does NOT consume — caller must call AdvanceFast(nBytes) after processing.
+// Unlike ScanCharDataSlice it applies only the XML 1.0 Char rules, so callers
+// must validate the returned bytes against the document's XML version.
 func (c *UTF8Cursor) ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int {
 	if c.fillBuffer(1) != nil {
 		return 0

@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -202,7 +203,7 @@ func (pctx *parserCtx) decodeEntitiesToSink(ctx context.Context, s []byte, what 
 			if err != nil {
 				return err
 			}
-			if preserveCharRefs && pctx.isXML11() && isXML11RestrictedChar(val) {
+			if preserveCharRefs && pctx.isXML11() && xmlchar.IsXML11RestrictedChar(val) {
 				err = sink.write(ctx, s[:width])
 			} else {
 				err = sink.writeRune(ctx, val)

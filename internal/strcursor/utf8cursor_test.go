@@ -1,12 +1,16 @@
 package strcursor_test
 
 import (
+	"bytes"
 	"io"
+	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/strcursor"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,7 +79,8 @@ func TestUTF8CursorScanCharDataSliceSpansBufferEdge(t *testing.T) {
 		chunk: 2,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil, 0)
+	data, n, valid := cur.ScanCharDataSlice(nil, 0, false)
+	require.True(t, valid)
 	require.Equal(t, 4, n)
 	require.Equal(t, "    ", string(data))
 }
@@ -86,7 +91,8 @@ func TestUTF8CursorScanCharDataSliceConsumesCRLFAcrossBufferEdge(t *testing.T) {
 		chunk: 1,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil, 0)
+	data, n, valid := cur.ScanCharDataSlice(nil, 0, false)
+	require.True(t, valid)
 	require.Equal(t, 2, n)
 	require.Equal(t, "\n", string(data))
 }
@@ -97,7 +103,8 @@ func TestUTF8CursorScanCharDataSlicePreservesWhitespaceRunAcrossBufferEdge(t *te
 		chunk: 3,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil, 0)
+	data, n, valid := cur.ScanCharDataSlice(nil, 0, false)
+	require.True(t, valid)
 	require.Equal(t, 7, n)
 	require.Equal(t, strings.Repeat(" ", 7), string(data))
 }
@@ -111,9 +118,207 @@ func TestUTF8CursorScanCharDataSliceReturnsOverBudgetRuneWhole(t *testing.T) {
 		chunk: 1,
 	})
 
-	data, n := cur.ScanCharDataSlice(nil, 1)
+	data, n, valid := cur.ScanCharDataSlice(nil, 1, false)
+	require.True(t, valid)
 	require.Equal(t, 3, n, "a lone rune wider than maxBytes is returned whole")
 	require.Equal(t, "世", string(data))
+}
+
+// charDataPieces are the fragments the char-data differential test builds its
+// inputs from: delimiters, CR/LF, every class of literal and non-literal
+// character in both XML versions, and malformed UTF-8.
+var charDataPieces = []string{
+	"a", "Z", " ", "~", "\t", "\n", "\r", "\r\n", "<", "&", "]", "]]", "]]>",
+	"\x00", "\x01", "\x08", "\x0b", "\x1f", "\x7f",
+	"\u0080", "\u0084", "\u0085", "\u0086", "\u009f", " ", "é", "日", " ",
+	"퟿", "", "�", "￾", "￿", "\U00010000", "\U0001F600", "\U0010FFFF",
+	"\xed\xa0\x80", "\xc0\x80", "\xe2\x82", "\xf0\x9f\x98", "\x80", "\xbf", "\xc2", "\xff",
+	"0123456789abcdef", "plain text run",
+}
+
+// TestUTF8CursorScanCharDataSliceValidates checks ScanCharDataSlice against
+// referenceScanCharData, a byte-at-a-time model of the scan followed by a
+// separate literal-character check of the scanned run, for random inputs in
+// both XML versions, under byte budgets and with input split across reads.
+func TestUTF8CursorScanCharDataSliceValidates(t *testing.T) {
+	t.Parallel()
+
+	t.Run("each piece at every offset of a 16-byte block", func(t *testing.T) {
+		t.Parallel()
+
+		for _, piece := range charDataPieces {
+			for off := range 33 {
+				input := []byte(strings.Repeat("x", off) + piece + "0123456789abcdefghij<")
+				for _, xml11 := range []bool{false, true} {
+					checkScanCharData(t, input, 0, 0, xml11)
+					checkScanCharData(t, input, 0, 1, xml11)
+					checkScanCharData(t, input, 0, 3, xml11)
+					checkScanCharData(t, input, off, 0, xml11)
+					checkScanCharData(t, input, off+1, 0, xml11)
+				}
+			}
+		}
+	})
+
+	t.Run("each piece at the cursor buffer edge", func(t *testing.T) {
+		t.Parallel()
+
+		// NewUTF8Cursor starts with an 8 KiB buffer; place each piece so it
+		// starts just before, on, or just after the first refill.
+		for _, piece := range charDataPieces {
+			for off := 8192 - 5; off <= 8192+2; off++ {
+				input := []byte(strings.Repeat("x", off) + piece + "tail<")
+				for _, xml11 := range []bool{false, true} {
+					checkScanCharData(t, input, 0, 0, xml11)
+					checkScanCharData(t, input, 0, 4096, xml11)
+					checkScanCharData(t, input, off, 0, xml11)
+				}
+			}
+		}
+	})
+
+	t.Run("random inputs", func(t *testing.T) {
+		t.Parallel()
+
+		rng := rand.New(rand.NewPCG(3, 4))
+		var buf []byte
+		for range 20000 {
+			buf = buf[:0]
+			for range rng.IntN(24) {
+				if rng.IntN(5) == 0 {
+					buf = append(buf, byte(rng.IntN(0x100)))
+					continue
+				}
+				buf = append(buf, charDataPieces[rng.IntN(len(charDataPieces))]...)
+			}
+			budget := 0
+			if rng.IntN(2) == 0 {
+				budget = 1 + rng.IntN(40)
+			}
+			chunk := 0
+			if rng.IntN(2) == 0 {
+				chunk = 1 + rng.IntN(9)
+			}
+			for _, xml11 := range []bool{false, true} {
+				checkScanCharData(t, buf, budget, chunk, xml11)
+			}
+		}
+	})
+}
+
+// FuzzScanCharDataSlice runs the TestUTF8CursorScanCharDataSliceValidates
+// comparison on fuzzer-chosen input, budget, and read size.
+func FuzzScanCharDataSlice(f *testing.F) {
+	for _, piece := range charDataPieces {
+		f.Add([]byte("0123456789"+piece+"abcdef<"), uint8(0), uint8(0), true)
+	}
+	f.Fuzz(func(t *testing.T, input []byte, budget, chunk uint8, xml11 bool) {
+		checkScanCharData(t, input, int(budget), int(chunk%16), xml11)
+	})
+}
+
+// checkScanCharData scans input with ScanCharDataSlice and compares the run,
+// the bytes consumed, and the validity with referenceScanCharData. chunk > 0
+// feeds the cursor chunk bytes per read; budget is the maxBytes argument.
+//
+// A call may stop where the buffered input ends (after a CR, ']' or multi-byte
+// character that consumed the last buffered byte), leaving the rest of the run
+// to the next call. Without a budget the test therefore calls
+// ScanCharDataSlice until it returns nothing, advancing past each run as the
+// parser does, and compares the concatenated runs. A budget applies per call,
+// so with one the test compares a single call over input that the first read
+// buffers whole (chunk is ignored).
+func checkScanCharData(t *testing.T, input []byte, budget, chunk int, xml11 bool) {
+	t.Helper()
+
+	var r io.Reader = bytes.NewReader(input)
+	if chunk > 0 && budget == 0 {
+		r = &chunkedReader{data: input, chunk: chunk}
+	}
+	cur := strcursor.NewUTF8Cursor(r)
+
+	var got []byte
+	consumed := 0
+	valid := true
+	for {
+		run, n, ok := cur.ScanCharDataSlice(nil, budget, xml11)
+		if n <= 0 {
+			break
+		}
+		got = append(got, run...)
+		consumed += n
+		valid = valid && ok
+		require.NoError(t, cur.AdvanceFast(n))
+		if budget > 0 {
+			break
+		}
+	}
+
+	want, wantConsumed, wantValid := referenceScanCharData(input, budget, xml11)
+	if consumed != wantConsumed || !bytes.Equal(got, want) || valid != wantValid {
+		require.Failf(t, "ScanCharDataSlice disagrees with the reference",
+			"input %q (%d bytes), budget %d, chunk %d, xml11 %t: consumed %d want %d, valid %t want %t, run tail %q want %q",
+			tail(input), len(input), budget, chunk, xml11, consumed, wantConsumed, valid, wantValid, tail(got), tail(want))
+	}
+}
+
+// tail returns at most the last 48 bytes of b, keeping failure messages short
+// for inputs that cross the 8 KiB cursor buffer.
+func tail(b []byte) []byte {
+	return b[max(0, len(b)-48):]
+}
+
+// referenceScanCharData models the char-data scan one character at a time:
+// the run ends at '<', '&', "]]>", invalid UTF-8, a character outside the XML
+// 1.0 Char production, or the byte budget (rounded up to a whole character,
+// and a CR LF pair is consumed together). CR and CR LF become LF. Validity is
+// checked afterwards over the whole run, as a separate pass: XML 1.0 accepts
+// every Char, XML 1.1 rejects RestrictedChar.
+func referenceScanCharData(input []byte, budget int, xml11 bool) ([]byte, int, bool) {
+	var run []byte
+	off := 0
+	for off < len(input) {
+		if budget > 0 && off >= budget {
+			break
+		}
+		b := input[off]
+		if b == '<' || b == '&' {
+			break
+		}
+		if b == ']' && off+2 < len(input) && input[off+1] == ']' && input[off+2] == '>' {
+			break
+		}
+		if b == '\r' {
+			run = append(run, '\n')
+			off++
+			if off < len(input) && input[off] == '\n' {
+				off++
+			}
+			continue
+		}
+		r, w := utf8.DecodeRune(input[off:])
+		if r == utf8.RuneError && w == 1 {
+			break
+		}
+		if !xmlchar.IsChar(r) {
+			break
+		}
+		if budget > 0 && off > 0 && off+w > budget {
+			break
+		}
+		run = append(run, input[off:off+w]...)
+		off += w
+	}
+
+	valid := true
+	for rest := run; len(rest) > 0; {
+		r, w := utf8.DecodeRune(rest)
+		if xml11 && (!xmlchar.IsXML11Char(r) || xmlchar.IsXML11RestrictedChar(r)) {
+			valid = false
+		}
+		rest = rest[w:]
+	}
+	return run, off, valid
 }
 
 func TestUTF8CursorScanQNameBytesASCIIUnprefixed(t *testing.T) {

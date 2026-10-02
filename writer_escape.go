@@ -240,31 +240,9 @@ var (
 
 const upperHex = "0123456789ABCDEF"
 
-// isXML11RestrictedChar reports whether r is an XML 1.1 restricted character: a
-// control character that is a valid XML 1.1 Char but must be serialized as a
-// character reference and never appear literally (XML 1.1 §2.11). Tab
-// (U+0009), LF (U+000A), and CR (U+000D) are excluded — they follow the ordinary
-// escaping rules.
-func isXML11RestrictedChar(r rune) bool {
-	switch {
-	case r >= 0x1 && r <= 0x8:
-		return true
-	case r == 0xB || r == 0xC:
-		return true
-	case r >= 0xE && r <= 0x1F:
-		return true
-	case r >= 0x7F && r <= 0x84:
-		return true
-	case r >= 0x86 && r <= 0x9F:
-		return true
-	default:
-		return false
-	}
-}
-
 // isXML11SerializeAsCharRef reports whether r must be written as a character
 // reference, and never literally, when producing XML 1.1 output. This is the
-// XML 1.1 RestrictedChar set (isXML11RestrictedChar) PLUS the two end-of-line
+// XML 1.1 RestrictedChar set (xmlchar.IsXML11RestrictedChar) PLUS the two end-of-line
 // characters NEL (U+0085) and LINE SEPARATOR (U+2028). Both are excluded from
 // RestrictedChar, but XML 1.1 §2.11 line-ending normalization translates them to
 // U+000A on input, so a literal occurrence would not round-trip; emitting them as
@@ -272,7 +250,7 @@ func isXML11RestrictedChar(r rune) bool {
 // character, so this is gated on the xml11 flag and 1.0 serialization is
 // unaffected.
 func isXML11SerializeAsCharRef(r rune) bool {
-	return isXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
+	return xmlchar.IsXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
 }
 
 // charRefBuf is scratch space for one character reference. Twelve bytes hold

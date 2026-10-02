@@ -158,6 +158,48 @@ func TestIsChar(t *testing.T) {
 	}
 }
 
+func TestIsLiteralChar(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		r      rune
+		want10 bool
+		want11 bool
+	}{
+		{0x0, false, false},      // NUL: never a Char
+		{0x1, false, false},      // C0: XML 1.1 Char, but RestrictedChar
+		{0x9, true, true},        // tab
+		{0xA, true, true},        // LF
+		{0xB, false, false},      // C0
+		{0xD, true, true},        // CR
+		{0x1F, false, false},     // C0
+		{0x20, true, true},       // space
+		{0x7E, true, true},       // tilde
+		{0x7F, true, false},      // DEL: RestrictedChar
+		{0x80, true, false},      // C1: RestrictedChar
+		{0x84, true, false},      // C1: RestrictedChar
+		{0x85, true, true},       // NEL: not restricted
+		{0x86, true, false},      // C1: RestrictedChar
+		{0x9F, true, false},      // C1: RestrictedChar
+		{0xA0, true, true},       // no-break space
+		{0xD7FF, true, true},     // last before surrogates
+		{0xD800, false, false},   // surrogate
+		{0xFFFD, true, true},     // replacement char
+		{0xFFFE, false, false},   // non-character
+		{0x10FFFF, true, true},   // last code point
+		{0x110000, false, false}, // beyond Unicode
+		{-1, false, false},       // negative
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("U+%04X", tt.r), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want10, xmlchar.IsLiteralChar(tt.r, false), "XML 1.0")
+			require.Equal(t, tt.want11, xmlchar.IsLiteralChar(tt.r, true), "XML 1.1")
+			require.Equal(t, tt.r > 0 && tt.r <= 0x10FFFF && (tt.r < 0xD800 || tt.r > 0xDFFF) && tt.r != 0xFFFE && tt.r != 0xFFFF,
+				xmlchar.IsXML11Char(tt.r), "IsXML11Char")
+		})
+	}
+}
+
 func TestIsNCNameStartChar(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
