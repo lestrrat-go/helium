@@ -119,7 +119,7 @@ bug that prompted it.
 | `interleave_differential_test.go` | relaxng | Flag-gated interleave differential harness (optional `xmllint` oracle) |
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
-| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, and `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`) |
+| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference and over every code point, and `AdvanceFast` line/column against `Advance` |
 
 ## `examples/`
 
