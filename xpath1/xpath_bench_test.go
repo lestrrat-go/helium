@@ -121,6 +121,7 @@ var descendantBenchNVDCases = []descendantBenchCase{
 	{"exists", "boolean(//n:ref)"},
 	{"first", "(//n:ref)[1]"},
 	{"multi", "/n:nvd/n:entry//n:ref"},
+	{"nested", "//*//n:ref"},
 }
 
 var descendantBenchSyntheticCases = []descendantBenchCase{
@@ -133,6 +134,7 @@ var descendantBenchSyntheticCases = []descendantBenchCase{
 	{"exists", "boolean(//val)"},
 	{"first", "(//val)[1]"},
 	{"multi", "/root/group//val"},
+	{"nested", "//*//val"},
 }
 
 // buildDescendantBenchDoc generates 100 <group> elements of 100 <item>

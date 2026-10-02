@@ -318,7 +318,11 @@ path expressions go through the fresh-`DocOrderCache` check.
 expression must render exactly like its reference, which spells `//` as
 `/descendant-or-self::node()/self::node()/` so the path runs one step at a time. The extra self step charges one
 op per descendant-or-self node, so `TestDescendantStepFusionLimits` requires the reference's smallest passing
-`OpLimit` to be exactly that much higher, and both forms to fail on the same `MaxNodesForTesting` limits.
+`OpLimit` to be exactly that much higher, and both forms to fail on the same `MaxNodesForTesting` limits; its cases
+cover one-pass predicates and nested context nodes (`/descendant::*//b`). `TestDescendantStepFusionAnnotated`
+annotates every attribute so `[@a = 's']` evaluates the comparison, and the sequential
+`TestDescendantNestedContextsAllocate` requires `//a//b` over nested elements to allocate at least 500 times less
+than its reference.
 
 ## Build Tags
 

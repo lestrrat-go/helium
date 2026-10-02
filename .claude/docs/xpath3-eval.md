@@ -79,23 +79,31 @@ items, and `evalVMPathExpr` (`E1/path`) takes the node list for each E1 node dir
 
 #### `//` fusion (`eval_path_descendant.go`)
 A bare `descendant-or-self::node()` step (what `//` abbreviates) followed by a child or attribute step runs as
-one pre-order walk of each context node's subtree instead of two steps, when `fusesDescendantContexts` accepts the
-context list: every node passes `ixpath.OrderedFrom` (not inside entity content, not an `Entity`), and with several
-nodes none is an attribute or namespace node and none lies inside another's subtree (a node whose parent differs
-from the previous node's is checked against the last top-level node's ancestors). Child matches are emitted when
-the walk reaches them and attributes when it reaches their element, so the result is in document order and neither
-step builds the whole-document order index. Any other context list evaluates the steps one by one. The fused walk
-keeps every observable effect of the two-step evaluation:
-- per context node it fails with `ErrNodeSetLimit` when the subtree has more than `maxNodes` nodes and then
-  charges one op per subtree node, as the descendant-or-self traversal does;
-- it then fails with `ErrNodeSetLimit` when all subtrees together exceed `maxNodes`, and registers the document in
-  the order cache when they hold more than one node (`DocOrderCache.ReserveDocument`, where `OrderStepResult` or
-  `DeduplicateNodes` would), then charges the ops the second step's per-node enumeration charges (XDM children or
-  attributes), and applies the node-set limit to the result;
+one pre-order walk of each outermost context node's subtree instead of two steps, when `fusesDescendantContexts`
+accepts the context list: every node passes `ixpath.OrderedFrom` (not inside entity content, not an `Entity`), and
+with several nodes none is an attribute or namespace node and every node inside the subtree of an earlier one is a
+kind the walk visits (`ixpath.IsXDMChild`). `nestedContextRun` finds the context nodes nested in an outermost one
+(the run right after it in the sorted list; a sibling of the previous node is nested exactly when that node is,
+otherwise its ancestors are checked). Child matches are emitted when the walk reaches them and attributes when it
+reaches their element, so the result is in document order and neither step builds the whole-document order index.
+Any other context list evaluates the steps one by one. The fused walk keeps every observable effect of the
+two-step evaluation:
+- per outermost context node it fails with `ErrNodeSetLimit` when the subtree has more than `maxNodes` nodes and
+  then charges one op per subtree node, as the descendant-or-self traversal does, followed by the subtree size of
+  each context node nested in it (`chargeDescendantOrSelf`); the walk measures those nested subtrees as it goes
+  (`nestedSubtrees`: a nested node's descendants are the nodes popped while the stack is longer than right after
+  it was popped), and a nested subtree is smaller than its outer one, so it cannot hit the node-set limit;
+- it then fails with `ErrNodeSetLimit` when all outermost subtrees together exceed `maxNodes`, and registers the
+  document in the order cache when they hold more than one node (`DocOrderCache.ReserveDocument`, where
+  `OrderStepResult` or `DeduplicateNodes` would), then charges the ops the second step's per-node enumeration
+  charges (XDM children or attributes), and applies the node-set limit to the result;
 - predicates of the second step run per parent, on that parent's candidate list (so `position()`/`last()` keep
-  their meaning), in document order of the parents. With predicates, a first pass counts the subtrees so the
-  limits, the first charges and the registration come before any predicate runs; the second pass marks each
-  parent's selected children on the walk stack and emits them when they are popped.
+  their meaning), in document order of the parents. When every predicate only selects (`quietPredicates`: a
+  position `[N]`, an attribute test `[@a]`, or `[@a = 's']` while the evaluator has no type annotations, so it
+  never falls back to evaluating the comparison), nothing can fail or charge between the walk and the second
+  step's charges, so one pass walks, selects and counts. With any other predicate, a first pass counts the
+  subtrees so the limits, the first charges and the registration come before any predicate runs; the second pass
+  marks each parent's selected children on the walk stack and emits them when they are popped.
 
 #### Node-list consumers (`vm_path_nodes.go`)
 `vm.evalLocationPathRef` evaluates an operand that is a compiled location path to its node list, with the
