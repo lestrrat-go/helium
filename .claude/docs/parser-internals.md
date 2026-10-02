@@ -231,9 +231,15 @@ gives every node of the expansion). Each invariant lives at its function:
   internal-entity parsing inherits the parent effective XML version, and its lexical replacement form retains
   XML 1.1 restricted-character-reference origin so XML 1.1 validates a reference separately from a raw literal
 - External entity/DTD TextDecl handling + version check (§4.3.1/§4.3.4) — `parseExternalEntityPrivate`
-  (`parser_entity_decl.go`), `decodeExternalPEContentVersion` / `decodeFixedWidthExternalContent`,
+  (`parser_entity_decl.go`), `decodeExternalPEContentVersion` / `decodeNonASCIIExternalContent`,
   `checkEntityVersion`; the effective compatible TextDecl version is scoped to the decoded external DTD or
-  parameter/general-entity input
+  parameter/general-entity input. One decoder serves external general entities, external parameter entities
+  and the external subset. ASCII-compatible content drops a leading UTF-8 BOM, parses a following TextDecl at
+  byte level, and rejects a TextDecl name that contradicts that BOM with `ErrEncodingBOMMismatch`, as for the
+  document entity (libxml2 rejects only a UTF-16 name there). UTF-16 / UCS-4 / EBCDIC content
+  (`nonASCIIExternalEncoding`) is decoded first and its TextDecl read on the rune cursor; EBCDIC is recognized
+  by an encoded `<?xm` and takes its code page from the TextDecl via `encoding.ExtractEBCDICEncoding`
+  (default IBM-037). A TextDecl name contradicting a UTF-16 BOM is not checked on that path
 - Document XMLDecl VersionNum constraint (§2.8) — `checkDocumentVersion` (`parser_xml_decl.go`), applied on
   all four document-declaration paths (`parseXMLDecl`, `parseXMLDeclFromCursor`, and both `LenientXMLDecl`
   variants — that option relaxes pseudo-attribute ORDER only), never on a TextDecl. `versionNumLen`

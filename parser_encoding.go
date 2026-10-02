@@ -126,16 +126,16 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	return
 }
 
-// fixedWidthUnicodeEncoding reports the fixed-width Unicode encoding (UTF-16 /
-// UCS-4) that an external resource's replacement text begins with — detected
-// from a byte-order mark or the encoded shape of a leading '<'/'<?' — or "" for
-// ASCII-compatible content. These encodings are not ASCII-compatible, so their
-// bytes (body AND any leading TextDecl) must be decoded to UTF-8 before either
+// nonASCIIExternalEncoding reports the encoding family that an external
+// resource's replacement text begins with when that family is not
+// ASCII-compatible: UTF-16 / UCS-4, detected from a byte-order mark or the
+// encoded shape of a leading '<'/'<?', or EBCDIC, detected from an encoded
+// leading '<?xm'. It returns "" for ASCII-compatible content. The bytes of
+// these encodings (body AND any leading TextDecl) must be decoded before either
 // can be read; a byte-level "<?xml" scan cannot see a TextDecl that is itself
-// UTF-16-encoded. The pattern order mirrors detectEncoding. EBCDIC and the
-// ASCII-compatible UTF-8 forms are deliberately excluded — those stay on the
-// byte-level TextDecl path.
-func fixedWidthUnicodeEncoding(content []byte) string {
+// encoded. The pattern order mirrors detectEncoding. The ASCII-compatible UTF-8
+// forms, with or without a byte-order mark, stay on the byte-level TextDecl path.
+func nonASCIIExternalEncoding(content []byte) string {
 	switch {
 	case bytes.HasPrefix(content, patUCS4BE):
 		return encUCS4BE
@@ -145,6 +145,8 @@ func fixedWidthUnicodeEncoding(content []byte) string {
 		return encUCS42143
 	case bytes.HasPrefix(content, patUCS43412):
 		return encUCS43412
+	case bytes.HasPrefix(content, patEBCDIC):
+		return encEBCDIC
 	case bytes.HasPrefix(content, patUTF16LE4B):
 		return encUTF16LE
 	case bytes.HasPrefix(content, patUTF16BE4B):
