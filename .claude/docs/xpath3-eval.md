@@ -120,7 +120,7 @@ sequence of node items:
   `xs:boolean` as a position, so the outcome is the one the node sequence gives. The walk still runs to the end,
   so op charges and node-set limits are unchanged.
 - `Evaluator.Evaluate` and `Expression.EvaluateReuse` keep the node list in the `Result` when the root is a
-  producer and the evaluator has no type annotations (`vmProgram.executeNodes`), so `nodeItemFor(n)` is
+  producer and the evaluator has no type annotations (`vmProgram.execute`), so `nodeItemFor(n)` is
   `NodeItem{Node: n}`; `Result.Sequence()` builds the `ItemSlice` on first use (see `xpath3-api.md`).
 
 Raw AST evaluation (`dispatchExpr`, `evalLocationPath`) has none of these paths and no `//` fusion; `Compile` and

@@ -1019,22 +1019,21 @@ type vm struct {
 	program *vmProgram
 }
 
-func (p *vmProgram) execute(ctx context.Context, ec *evalContext) (Sequence, error) {
+// execute evaluates the program. When its root is a node-list producer and
+// the nodes carry no type annotations, so that nodeItemFor(n) is
+// NodeItem{Node: n} and the node list alone describes the result, it returns
+// the node list and true; otherwise it returns the result sequence.
+func (p *vmProgram) execute(ctx context.Context, ec *evalContext) (Sequence, []helium.Node, bool, error) {
 	machine := vm{program: p}
-	return machine.evalExpr(ctx, ec, compiledExprRef{index: p.root})
-}
-
-// executeNodes evaluates the program to the node list of its root when the
-// root is a node-list producer and the nodes carry no type annotations, so
-// that nodeItemFor(n) is NodeItem{Node: n} and the node list alone describes
-// the result. ok reports whether that is the case; when it is false nothing
-// was evaluated.
-func (p *vmProgram) executeNodes(ctx context.Context, ec *evalContext) ([]helium.Node, bool, error) {
-	if ec.typeAnnotations != nil {
-		return nil, false, nil
+	root := compiledExprRef{index: p.root}
+	if ec.typeAnnotations == nil {
+		nodes, ok, err := machine.evalNodeListRef(ctx, ec, root)
+		if ok {
+			return nil, nodes, true, err
+		}
 	}
-	machine := vm{program: p}
-	return machine.evalNodeListRef(ctx, ec, compiledExprRef{index: p.root})
+	seq, err := machine.evalExpr(ctx, ec, root)
+	return seq, nil, false, err
 }
 
 func (v *vm) evalExpr(ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {

@@ -108,19 +108,27 @@ func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node h
 	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
 		return Result{}, err
 	}
-	return e.evaluate(ctx, ec, &state.nodes)
+	seq, nodes, isNodes, err := e.evaluate(ctx, ec)
+	if err != nil {
+		return Result{}, err
+	}
+	if !isNodes {
+		return Result{seq: seq}, nil
+	}
+	state.nodes = resultNodes{nodes: nodes}
+	return Result{seq: &state.nodes}, nil
 }
 
 // StringValue returns the XPath string value of the result sequence.
 // For single-node results, this returns the node's string value directly,
 // avoiding the AtomizeItem → AtomicValue → AtomicToString round-trip.
 func (r Result) StringValue() string {
-	if r.nodes != nil {
-		switch len(r.nodes.nodes) {
+	if rn, ok := r.seq.(*resultNodes); ok {
+		switch len(rn.nodes) {
 		case 0:
 			return ""
 		case 1:
-			return ixpath.StringValue(r.nodes.nodes[0])
+			return ixpath.StringValue(rn.nodes[0])
 		}
 	}
 	seq := r.items()

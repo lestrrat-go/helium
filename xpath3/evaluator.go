@@ -444,14 +444,16 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 		return nil, err
 	}
 
-	// One allocation holds the Result and, when the result is a node list,
-	// its node list.
-	box := &resultBox{}
-	r, err := expr.evaluate(ctx, ec, &box.nodes)
+	seq, nodes, isNodes, err := expr.evaluate(ctx, ec)
 	if err != nil {
 		return nil, err
 	}
-	box.result = r
+	if !isNodes {
+		return &Result{seq: seq}, nil
+	}
+	// One allocation holds the Result and its node list.
+	box := &resultBox{nodes: resultNodes{nodes: nodes}}
+	box.result.seq = &box.nodes
 	return &box.result, nil
 }
 
