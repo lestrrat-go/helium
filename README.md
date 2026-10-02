@@ -212,14 +212,10 @@ Migrate behind your own tests, and treat the swap as a change in behavior.
 
 # Performance
 
-Helium parses XML into a full DOM tree. The benchmark below compares that DOM
-build against two lower-level baselines: an `encoding/xml` token loop
-(`Decoder.Token`) and libxml2 via cgo.
-
-That is a narrower benchmark than every real `encoding/xml` workload. Many Go
-programs use `encoding/xml` to decode directly into structs, and this section
-does not measure that use. On these three files, building Helium's full DOM is
-faster than both the `encoding/xml` token loop and libxml2.
+Helium parses XML into a full DOM tree. The benchmark below compares that with
+libxml2 via cgo (`xmlParseMemory`), which also builds a full tree, and with an
+`encoding/xml` token loop (`Decoder.Token`), which reads every token but builds
+no tree. On all three files, Helium is faster than both.
 
 The files are `spec_0.xml` (118 KB, ISO-8859-1, with an internal DTD subset),
 `nvdcve_0.xml` (287 KB) and `comps_0.xml` (608 KB) from
