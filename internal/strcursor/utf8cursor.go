@@ -189,6 +189,12 @@ func NewUTF8Cursor(r io.Reader) *UTF8Cursor {
 	}
 }
 
+// LineContextMax is the most bytes of the current line that Line returns: the
+// text between the last LF and the cursor, cut to its last LineContextMax bytes.
+// The cursor keeps those bytes buffered across every refill, so Line returns the
+// same text however the input arrives.
+const LineContextMax = 1024
+
 // fillBuffer ensures at least minBytes are available from bufpos.
 func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 	avail := c.buflen - c.bufpos
@@ -196,18 +202,17 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 		return nil
 	}
 
-	// Compact: move unconsumed bytes to front.
-	if c.bufpos > 0 {
-		if avail > 0 {
-			copy(c.buf, c.buf[c.bufpos:c.buflen])
-		}
-		c.buflen = avail
-		c.bufpos = 0
+	// Compact only when the request does not fit after bufpos. Reading into
+	// the free space after the buffered bytes until then keeps a reader that
+	// delivers a few bytes per Read from moving the kept line text on every
+	// refill.
+	if c.bufpos+minBytes > len(c.buf) {
+		c.compact()
 	}
 
 	// Grow buffer if needed.
-	if minBytes > len(c.buf) {
-		newBuf := make([]byte, minBytes*2)
+	if c.bufpos+minBytes > len(c.buf) {
+		newBuf := make([]byte, (c.bufpos+minBytes)*2)
 		copy(newBuf, c.buf[:c.buflen])
 		c.buf = newBuf
 	}
@@ -252,6 +257,29 @@ func (c *UTF8Cursor) fillBuffer(minBytes int) error {
 		}
 	}
 	return nil
+}
+
+// compact moves the text Line needs and the unconsumed bytes to the front of
+// the buffer, dropping the consumed bytes before them.
+func (c *UTF8Cursor) compact() {
+	keep := c.lineStart()
+	if keep == 0 {
+		return
+	}
+	c.buflen = copy(c.buf, c.buf[keep:c.buflen])
+	c.bufpos -= keep
+}
+
+// lineStart returns the buffer offset where Line's text begins: just after the
+// last LF before the cursor, or LineContextMax bytes before the cursor when the
+// line is longer. compact never drops a byte at or after this offset, so the
+// buffer holds the same text here whatever sizes the reads returned.
+func (c *UTF8Cursor) lineStart() int {
+	lo := max(c.bufpos-LineContextMax, 0)
+	if i := bytes.LastIndexByte(c.buf[lo:c.bufpos], '\n'); i >= 0 {
+		return lo + i + 1
+	}
+	return lo
 }
 
 // Err returns a sticky non-EOF read error encountered while filling the buffer,
@@ -588,13 +616,17 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 	return true
 }
 
-// Line returns the content of the current line up to the cursor position.
-// Reconstructed on demand by scanning backward in the buffer.
+// Line returns the content of the current line up to the cursor position, cut
+// to its last LineContextMax bytes. A cut that lands inside a multi-byte
+// character drops that character's remaining bytes. The text is found on demand
+// in the buffer, which compact keeps it in, so it does not depend on how the
+// input was split across reads.
 func (c *UTF8Cursor) Line() string {
-	// Scan backward from bufpos to find the start of the current line.
-	start := c.bufpos
-	for start > 0 && c.buf[start-1] != '\n' {
-		start--
+	start := c.lineStart()
+	if c.bufpos-start == LineContextMax {
+		for i := 0; i < utf8.UTFMax-1 && start < c.bufpos && !utf8.RuneStart(c.buf[start]); i++ {
+			start++
+		}
 	}
 	if start == c.bufpos {
 		return ""

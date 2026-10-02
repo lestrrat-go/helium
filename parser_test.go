@@ -983,7 +983,7 @@ func TestParseNamespace(t *testing.T) {
 			{
 				name:    "end tag cut short",
 				input:   `<p:r xmlns:p="urn:p"></p>`,
-				wantErr: "expected end tag 'p:r' at line 1, column 24\n -> '' <-- around here",
+				wantErr: "expected end tag 'p:r' at line 1, column 24\n -> '<p:r xmlns:p=\"urn:p\"></' <-- around here",
 			},
 			{
 				name:    "non-ASCII end tag with another local name",

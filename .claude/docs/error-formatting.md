@@ -135,6 +135,14 @@ character are one column). libxml2's context caret is byte-based too, but its in
 The `UTF8Cursor` that `switchEncoding` pushes starts at line 1, column 1 after the XML declaration, so a column on
 the declaration's line leaves out the declaration's bytes.
 
+`Line` is the text of the current line from its last LF up to the error position. On a `UTF8Cursor` (element content,
+and every input after `switchEncoding`) it is cut to its last `strcursor.LineContextMax` (1024) bytes, dropping the
+leftover bytes of a character the cut splits; the caret of a cut line still sits at `Column`. The cursor keeps that
+text in its buffer across refills (`compact` drops only bytes before `lineStart`), so the context line is the same
+whether the input arrives whole, in short reads, through the push parser, or through a transcoder
+(`TestErrorContextChunking`, `parser_error_context_test.go`). A `ByteCursor` (prolog, DTD, parameter-entity text)
+copies the line as it consumes bytes and does not cut it.
+
 ### ErrorHandler (root package, `errorhandler.go`)
 
 ```

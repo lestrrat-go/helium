@@ -694,3 +694,54 @@ func TestUTF8CursorScanSimpleAttrValueCharacters(t *testing.T) {
 		require.NoError(t, cur.Advance(width+1))
 	}
 }
+
+// TestUTF8CursorLineAcrossReads moves a cursor through inputs in random steps,
+// peeking ahead by random amounts so the buffer refills at varying points, and
+// checks Line against referenceLine after every step, for readers that return
+// a few bytes per Read and for one that returns the whole input. The inputs
+// hold short lines, a line longer than the buffer, and a line of two-byte
+// characters, so the LineContextMax cut lands on both character boundaries and
+// mid-character.
+func TestUTF8CursorLineAcrossReads(t *testing.T) {
+	t.Parallel()
+
+	inputs := map[string]string{
+		"short lines":         strings.Repeat("<a b=\"c\">text é</a>\n", 1200),
+		"long ASCII line":     "<r>\n" + strings.Repeat("abcdefgh", 2000) + "\n<x/>",
+		"long two-byte line":  "<r>\n" + strings.Repeat("é", 6000) + "\n" + "x" + strings.Repeat("é", 6000),
+		"line ends at buffer": strings.Repeat("a", 8191) + "\n" + strings.Repeat("b", 9000),
+	}
+	for name, input := range inputs {
+		for _, chunk := range []int{1, 2, 3, 7, 4093, 0} {
+			rng := rand.New(rand.NewPCG(uint64(len(input)), uint64(chunk)))
+			var r io.Reader = strings.NewReader(input)
+			if chunk > 0 {
+				r = &chunkedReader{data: []byte(input), chunk: chunk}
+			}
+			cur := strcursor.NewUTF8Cursor(r)
+			pos := 0
+			for pos < len(input) {
+				_ = cur.PeekAt(rng.IntN(64))
+				step := min(1+rng.IntN(300), len(input)-pos)
+				require.NoError(t, cur.Advance(step))
+				pos += step
+				require.Equal(t, referenceLine(input[:pos]), cur.Line(), "%s, %d-byte reads, at byte %d", name, chunk, pos)
+			}
+		}
+	}
+}
+
+// referenceLine is what Line returns once consumed has been read: the text
+// after its last LF, cut to its last LineContextMax bytes, and without the
+// trailing bytes of a character the cut splits.
+func referenceLine(consumed string) string {
+	line := consumed[strings.LastIndexByte(consumed, '\n')+1:]
+	if len(line) < strcursor.LineContextMax {
+		return line
+	}
+	line = line[len(line)-strcursor.LineContextMax:]
+	for i := 0; i < utf8.UTFMax-1 && line != "" && !utf8.RuneStart(line[0]); i++ {
+		line = line[1:]
+	}
+	return line
+}
