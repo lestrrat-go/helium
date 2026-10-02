@@ -379,8 +379,29 @@ func (c *UTF8Cursor) AdvanceFast(n int) error {
 	start := c.bufpos
 	end := start + n
 	segment := c.buf[start:end]
+	if n <= advanceScanInline {
+		// A short run (a name, an attribute value, the whitespace between two
+		// tags) costs less to walk once than to hand to two vectorized
+		// searches, each with its own call and setup cost.
+		lines := 0
+		last := -1
+		for i, b := range segment {
+			if b == '\n' {
+				lines++
+				last = i
+			}
+		}
+		if last >= 0 {
+			c.lineno += lines
+			c.column = len(segment) - last
+		} else {
+			c.column += n
+		}
+		c.bufpos = end
+		return nil
+	}
 	if idx := bytes.LastIndexByte(segment, '\n'); idx >= 0 {
-		c.lineno += bytes.Count(segment, []byte{'\n'})
+		c.lineno += bytes.Count(segment[:idx], []byte{'\n'}) + 1
 		c.column = len(segment) - idx
 	} else {
 		c.column += n
@@ -388,6 +409,10 @@ func (c *UTF8Cursor) AdvanceFast(n int) error {
 	c.bufpos = end
 	return nil
 }
+
+// advanceScanInline is the run length up to which AdvanceFast counts newlines
+// with a plain loop instead of bytes.LastIndexByte and bytes.Count.
+const advanceScanInline = 32
 
 func (c *UTF8Cursor) HasPrefix(b []byte) bool {
 	n := len(b)
