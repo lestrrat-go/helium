@@ -126,6 +126,14 @@ CONTEXT_LINE
 Domain maps: `ErrorDomainNamespace` → `"namespace"`, others → `"parser"`.
 Severity maps: `ErrorLevelWarning` → `"warning"`, others → `"error"`.
 
+`LineNumber`, `Column`, and `Line` come from the active input cursor (`errorAtLevel`, `parserctx.go`), so an error
+inside parameter-entity text or the external subset is located within that input, as in libxml2's "Entity: line N"
+context. `ByteCursor` and `UTF8Cursor` (`internal/strcursor`) count the same way in every advancing method: only an
+LF starts a line, and the column is 1 plus the bytes since the last LF (a CR, a tab, and each byte of a multi-byte
+character are one column). libxml2's context caret is byte-based too, but its internal column counts characters.
+The `UTF8Cursor` that `switchEncoding` pushes starts at line 1, column 1 after the XML declaration, so a column on
+the declaration's line leaves out the declaration's bytes.
+
 ### ErrorHandler (root package, `errorhandler.go`)
 
 ```
