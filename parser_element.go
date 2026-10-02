@@ -436,21 +436,18 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		return err
 	}
 
-	local, prefix, err := pctx.parseQName(ctx)
+	// elemQName is the element's full QName (prefix + local) exactly as
+	// written. ATTLIST declarations (special-attribute types and attribute
+	// defaults) are keyed by the declared element QName, so lookups must use
+	// the qualified name — an unprefixed `<!ATTLIST id …>` does not apply to
+	// `<p:r>` and vice-versa. The node stack keeps it for end-tag matching and
+	// element-declaration lookups.
+	local, prefix, elemQName, err := pctx.parseQName(ctx)
 	if local == "" {
 		return pctx.error(ctx, fmt.Errorf("local name empty! local = %s, prefix = %s, err = %s", local, prefix, err))
 	}
 	if err != nil {
 		return pctx.error(ctx, err)
-	}
-
-	// The element's full QName (prefix + local) exactly as written. ATTLIST
-	// declarations (special-attribute types and attribute defaults) are keyed by
-	// the declared element QName, so lookups must use the qualified name — an
-	// unprefixed `<!ATTLIST id …>` does not apply to `<p:r>` and vice-versa.
-	elemQName := local
-	if prefix != "" {
-		elemQName = prefix + ":" + local
 	}
 
 	// Push xml:space stack entry for this element (inherit parent's value by default)
@@ -867,11 +864,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			return pctx.error(ctx, err)
 		}
 	}
-	qname := local
-	if prefix != "" {
-		qname = prefix + ":" + local
-	}
-	pctx.pushNodeEntry(nodeEntry{local: local, prefix: prefix, uri: nsuri, qname: qname})
+	pctx.pushNodeEntry(nodeEntry{local: local, prefix: prefix, uri: nsuri, qname: elemQName})
 	pctx.nsNrTab = append(pctx.nsNrTab, nbNs)
 	pctx.attrBuf = attrs[:0]
 	pctx.nsDeclaredBuf = nsDeclared[:0]
@@ -1461,20 +1454,15 @@ func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {
-	l, p, err := pctx.parseQName(ctx)
-	if err != nil {
-		err = pctx.error(ctx, err)
-		return
-	}
-
 	// Special-attribute (tokenized-type) declarations are keyed by the attribute's
 	// full QName exactly as written, so an instance attribute is matched by its own
 	// QName (prefix + local): `p:id` matches an `<!ATTLIST r p:id …>` declaration and
 	// NOT an unprefixed `<!ATTLIST r id …>` (and vice-versa). Matches libxml2, which
 	// keys special-attribute state on the fully-qualified name.
-	attrQName := l
-	if p != "" {
-		attrQName = p + ":" + l
+	l, p, attrQName, err := pctx.parseQName(ctx)
+	if err != nil {
+		err = pctx.error(ctx, err)
+		return
 	}
 
 	normalize := false

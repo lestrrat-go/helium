@@ -835,6 +835,109 @@ func TestParseNamespace(t *testing.T) {
 		require.Contains(t, out, `p:attr="v"`)
 		require.Contains(t, out, `xmlns:p="urn:p"`)
 	})
+
+	// ATTLIST defaults and tokenized-type normalization are keyed by the
+	// element's and the attribute's qualified names exactly as written, for
+	// ASCII names and for non-ASCII names alike, and an end tag must repeat the
+	// start tag's qualified name.
+	t.Run("qualified names", func(t *testing.T) {
+		testcases := []struct {
+			name     string
+			input    string
+			defaults bool
+			want     string
+			wantErr  string
+		}{
+			{
+				name:     "defaults for a prefixed element",
+				input:    `<!DOCTYPE p:r [<!ATTLIST p:r a CDATA "d" p:b CDATA "e"><!ATTLIST r a CDATA "x">]><p:r xmlns:p="urn:p"><r/><p:r/></p:r>`,
+				defaults: true,
+				want:     `<p:r xmlns:p="urn:p" a="d" p:b="e"><r a="x"/><p:r a="d" p:b="e"/></p:r>`,
+			},
+			{
+				name:     "defaults for a non-ASCII prefixed element",
+				input:    `<!DOCTYPE é:r [<!ATTLIST é:r a CDATA "d"><!ATTLIST é:ŕ a CDATA "n">]><é:r xmlns:é="urn:e"><é:ŕ/></é:r>`,
+				defaults: true,
+				want:     `<é:r xmlns:é="urn:e" a="d"><é:ŕ a="n"/></é:r>`,
+			},
+			{
+				name:  "no defaults without DefaultDTDAttributes",
+				input: `<!DOCTYPE p:r [<!ATTLIST p:r a CDATA "d">]><p:r xmlns:p="urn:p"/>`,
+				want:  `<p:r xmlns:p="urn:p"/>`,
+			},
+			{
+				name:  "tokenized normalization by qualified names",
+				input: `<!DOCTYPE p:r [<!ATTLIST p:r p:t NMTOKENS #IMPLIED t NMTOKENS #IMPLIED><!ATTLIST r p:t NMTOKENS #IMPLIED>]><p:r xmlns:p="urn:p" p:t="  a   b " t=" c  d "><r p:t=" e  f " t=" g  h "/></p:r>`,
+				want:  `<p:r xmlns:p="urn:p" p:t="a b" t="c d"><r p:t="e f" t=" g  h "/></p:r>`,
+			},
+			{
+				name:  "tokenized normalization with non-ASCII names",
+				input: `<!DOCTYPE é:r [<!ATTLIST é:r é:t NMTOKENS #IMPLIED>]><é:r xmlns:é="urn:e" é:t="  a   b " t="  c  "/>`,
+				want:  `<é:r xmlns:é="urn:e" é:t="a b" t="  c  "/>`,
+			},
+			{
+				name:  "xml:id on a prefixed element",
+				input: `<p:r xmlns:p="urn:p" xml:id="  a  "/>`,
+				want:  `<p:r xmlns:p="urn:p" xml:id="a"/>`,
+			},
+			{
+				name:  "no DTD",
+				input: `<p:r xmlns:p="urn:p" p:a="1"><p:c p:b="2">t</p:c></p:r >`,
+				want:  `<p:r xmlns:p="urn:p" p:a="1"><p:c p:b="2">t</p:c></p:r>`,
+			},
+			{
+				name:    "end tag with another local name",
+				input:   `<p:r xmlns:p="urn:p"></p:x>`,
+				wantErr: "expected end tag 'p:r' at line 1, column 24\n -> '<p:r xmlns:p=\"urn:p\"></' <-- around here",
+			},
+			{
+				name:    "end tag with another prefix",
+				input:   `<p:r xmlns:p="urn:p"></q:r>`,
+				wantErr: "expected end tag 'p:r' at line 1, column 24\n -> '<p:r xmlns:p=\"urn:p\"></' <-- around here",
+			},
+			{
+				name:    "end tag with a longer local name",
+				input:   `<p:r xmlns:p="urn:p"></p:rr>`,
+				wantErr: "'>' was required here at line 1, column 27\n -> '<p:r xmlns:p=\"urn:p\"></p:r' <-- around here",
+			},
+			{
+				name:    "end tag without the prefix",
+				input:   `<p:r xmlns:p="urn:p"></rr>`,
+				wantErr: "expected end tag 'p:r' at line 1, column 24\n -> '<p:r xmlns:p=\"urn:p\"></' <-- around here",
+			},
+			{
+				name:    "end tag cut short",
+				input:   `<p:r xmlns:p="urn:p"></p>`,
+				wantErr: "expected end tag 'p:r' at line 1, column 24\n -> '' <-- around here",
+			},
+			{
+				name:    "non-ASCII end tag with another local name",
+				input:   `<é:r xmlns:é="urn:e"></é:x>`,
+				wantErr: "expected end tag 'é:r' at line 1, column 26\n -> '<é:r xmlns:é=\"urn:e\"></' <-- around here",
+			},
+			{
+				name:    "prefixed end tag for an unprefixed element",
+				input:   `<r></p:r>`,
+				wantErr: "expected end tag 'r' at line 1, column 6\n -> '<r></' <-- around here",
+			},
+		}
+
+		for _, tc := range testcases {
+			t.Run(tc.name, func(t *testing.T) {
+				doc, err := helium.NewParser().DefaultDTDAttributes(tc.defaults).Parse(t.Context(), []byte(tc.input))
+				if tc.wantErr != "" {
+					require.Error(t, err, "Parse should fail")
+					require.Equal(t, tc.wantErr, err.Error(), "error output must match")
+					return
+				}
+				require.NoError(t, err, "Parse should succeed")
+
+				got, err := helium.WriteString(doc.DocumentElement())
+				require.NoError(t, err, "WriteString should succeed")
+				require.Equal(t, tc.want, got, "parsed tree must match")
+			})
+		}
+	})
 }
 
 func TestParseMisc(t *testing.T) {
