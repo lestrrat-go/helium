@@ -270,9 +270,14 @@ type dtPresentation struct {
 	implicit      bool
 }
 
+// dtWidth is a parsed width modifier (F&O 3.1 §9.8.4.2). A max-width the
+// modifier omits means `*`, so maxWidth is -1 both for an explicit `*` and
+// for an omitted maximum; maxOmitted tells the two apart for fractional
+// seconds (see formatFractionalSeconds).
 type dtWidth struct {
-	minWidth int
-	maxWidth int // -1 = unlimited
+	minWidth   int  // -1 = no explicit minimum
+	maxWidth   int  // -1 = unlimited
+	maxOmitted bool // the modifier has no "-" max-width part
 }
 
 // maxPictureMinWidth is the largest minimum width a picture's width modifier
@@ -356,13 +361,13 @@ func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
 	if widthPart != "" {
 		parts := strings.Split(widthPart, "-")
 		if len(parts) == 1 {
-			if parts[0] == "*" {
-				// No constraint
-			} else {
+			// An omitted max-width means "*" (F&O 3.1 §9.8.4.2), so only the
+			// minimum is set.
+			w.maxOmitted = true
+			if parts[0] != "*" {
 				n := parseSimpleInt(parts[0])
 				if n > 0 {
 					w.minWidth = n
-					w.maxWidth = n
 				}
 			}
 		} else if len(parts) == 2 {
@@ -412,7 +417,7 @@ func parseSimpleInt(s string) int {
 
 func formatDateTimeValue(value int64, comp byte, p dtPresentation, w dtWidth, lang string) string {
 	format := p.format
-	numericValue := normalizeDateNumericValue(value, comp, w)
+	numericValue := normalizeDateNumericValue(value, comp, p, w)
 
 	switch format {
 	case "N", "n", "Nn":
@@ -459,7 +464,6 @@ func formatDateDecimal(value int64, p dtPresentation, w dtWidth, comp byte) stri
 	format := p.format
 	// Determine min digits from format token
 	minDigits := 0
-	digitSigns := 0
 	zeroDigit := '0'
 
 	runes := []rune(format)
@@ -467,9 +471,6 @@ func formatDateDecimal(value int64, p dtPresentation, w dtWidth, comp byte) stri
 		if unicode.IsDigit(r) {
 			zeroDigit = unicodeDigitZero(r)
 			minDigits++
-			digitSigns++
-		} else if r == '#' {
-			digitSigns++
 		}
 	}
 
@@ -477,18 +478,15 @@ func formatDateDecimal(value int64, p dtPresentation, w dtWidth, comp byte) stri
 		minDigits = 1
 	}
 
-	// Apply width constraints
+	// Apply width constraints. F&O 3.1 §9.8.4.3 ignores the maximum width of
+	// a decimal component, so no digit is ever dropped here; the year keeps
+	// only its low-order digits through the modulus that
+	// normalizeDateNumericValue already applied.
 	if p.implicit && (comp == 'm' || comp == 's') && w.minWidth < 0 {
 		minDigits = 2
 	}
 	if w.minWidth > 0 {
 		minDigits = w.minWidth
-	}
-
-	// For year with max width, truncate
-	maxWidth := w.maxWidth
-	if maxWidth < 0 && (comp == 'Y' || comp == 'E') && digitSigns > 1 {
-		maxWidth = digitSigns
 	}
 
 	abs := value
@@ -503,11 +501,6 @@ func formatDateDecimal(value int64, p dtPresentation, w dtWidth, comp byte) stri
 	// Pad to minimum digits
 	if len(s) < minDigits {
 		s = strings.Repeat("0", minDigits-len(s)) + s
-	}
-
-	// Truncate to max width (for year, take rightmost digits)
-	if maxWidth > 0 && len(s) > maxWidth {
-		s = s[len(s)-maxWidth:]
 	}
 
 	// Apply grouping separators from format pattern
@@ -525,7 +518,13 @@ func formatDateDecimal(value int64, p dtPresentation, w dtWidth, comp byte) stri
 	return s
 }
 
-func normalizeDateNumericValue(value int64, comp byte, w dtWidth) int64 {
+// normalizeDateNumericValue applies the year modulus of F&O 3.1 §9.8.4.4:
+// the year is output modulo 10^N, where N is a finite maximum width if the
+// width modifier gives one, or else the number of digit signs in a decimal
+// digit pattern of two or more digit signs (`[Y01]` keeps two digits). In
+// every other case the year is output in full. Other components are
+// returned unchanged.
+func normalizeDateNumericValue(value int64, comp byte, p dtPresentation, w dtWidth) int64 {
 	if comp != 'Y' && comp != 'E' {
 		return value
 	}
@@ -534,11 +533,24 @@ func normalizeDateNumericValue(value int64, comp byte, w dtWidth) int64 {
 		value = -value
 	}
 
-	// Every int64 has at most maxInt64Digits digits, so a maximum width of
-	// that many digits or more keeps the whole year and needs no modulus.
-	if w.maxWidth > 0 && w.maxWidth < maxInt64Digits {
+	digits := w.maxWidth
+	if digits < 0 {
+		digits = 0
+		for _, r := range p.format {
+			if unicode.IsDigit(r) || r == '#' {
+				digits++
+			}
+		}
+		if digits < 2 {
+			return value
+		}
+	}
+
+	// Every int64 has at most maxInt64Digits digits, so a modulus of that
+	// many digits or more keeps the whole year and is skipped.
+	if digits < maxInt64Digits {
 		mod := int64(1)
-		for range w.maxWidth {
+		for range digits {
 			mod *= 10
 		}
 		value %= mod
@@ -652,22 +664,24 @@ func dayNamesForLang(lang string) []string {
 	}
 }
 
+// applyNameWidth fits a full name to the width modifier (F&O 3.1 §9.8.4.3).
+// A name longer than the maximum width is abbreviated by removing characters
+// from the end, down to the minimum width when one is given (so `[FNn,3-4]`
+// yields the conventional "Wed", not "Wedn") or else to the maximum width. A
+// name shorter than the minimum width is padded with trailing spaces.
 func applyNameWidth(name string, _ byte, w dtWidth) string {
-	if w.maxWidth <= 0 && w.minWidth <= 0 {
-		return name
+	n := utf8.RuneCountInString(name)
+	if w.maxWidth > 0 && n > w.maxWidth {
+		target := w.maxWidth
+		if w.minWidth > 0 {
+			target = w.minWidth
+		}
+		return string([]rune(name)[:target])
 	}
-	target := w.maxWidth
-	if w.minWidth > 0 {
-		target = w.minWidth
+	if w.minWidth > 0 && n < w.minWidth {
+		return name + strings.Repeat(" ", w.minWidth-n)
 	}
-	if target <= 0 {
-		return name
-	}
-	runes := []rune(name)
-	if len(runes) <= target {
-		return name
-	}
-	return string(runes[:target])
+	return name
 }
 
 func formatDayOfWeek(t time.Time, p dtPresentation, w dtWidth, lang string) string {
@@ -767,6 +781,14 @@ func formatFractionalSeconds(t time.Time, p dtPresentation, w dtWidth) string {
 	}
 	if w.maxWidth > 0 {
 		maxPlaces = w.maxWidth
+	}
+	// A width modifier stops the single-digit picture from growing to the
+	// value's precision (F&O 3.1 §9.8.4.5), so `[f,3]` keeps exactly three
+	// digits. An explicit `*` maximum keeps growing it: the W3C cases
+	// format-dateTime-013t and format-time-024t expect `[f,1-*]` to output
+	// every significant digit.
+	if w.maxOmitted && w.minWidth > 0 {
+		maxPlaces = w.minWidth
 	}
 	if maxPlaces < minPlaces {
 		maxPlaces = minPlaces

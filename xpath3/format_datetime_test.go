@@ -129,30 +129,99 @@ func TestFormatDateTimeWidthOutputBound(t *testing.T) {
 	requireErrorCode(t, err, "FOFD1340")
 }
 
+// formatDateTimeWidthCase is one picture and the output it must produce.
+type formatDateTimeWidthCase struct {
+	picture string
+	expect  string
+}
+
+// requireFormatDateTimeWidth evaluates fn(value, picture) for every case and
+// requires the expected output.
+func requireFormatDateTimeWidth(t *testing.T, fn, value string, cases []formatDateTimeWidthCase) {
+	t.Helper()
+
+	for _, tc := range cases {
+		expr := fn + `(` + value + `, '` + tc.picture + `')`
+		result, err := evaluate(t.Context(), nil, expr)
+		require.NoError(t, err, expr)
+		require.Equal(t, tc.expect, result.StringValue(), expr)
+	}
+}
+
 // TestFormatDateYearMaximumWidth verifies the year modulus of F&O 3.1
-// §9.8.4.4: a maximum width keeps the low-order digits, and a maximum width
-// of 19 or more digits keeps every digit of any representable year.
+// §9.8.4.4. A finite maximum width keeps that many low-order digits. Without
+// one, a decimal digit pattern of two or more digit signs sets the modulus,
+// and otherwise the year is output in full. An omitted maximum width means
+// `*` (§9.8.4.2), so `[Y,2]` keeps every digit. A maximum width of 19 or more
+// digits keeps every digit of any representable year.
 func TestFormatDateYearMaximumWidth(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		picture string
-		expect  string
-	}{
-		{`[Y,2]`, "12"},
+	requireFormatDateTimeWidth(t, "format-date", `xs:date('2012-05-18')`, []formatDateTimeWidthCase{
+		{`[Y,2]`, "2012"},
 		{`[Y,2-2]`, "12"},
-		{`[Y,3-4]`, "2012"},
+		{`[Y,2-*]`, "2012"},
 		{`[Y01]`, "12"},
+		{`[Y,4]`, "2012"},
+		{`[Y,1-2]`, "12"},
+		{`[Y,3-4]`, "2012"},
+		{`[Y01,4]`, "0012"},
 		{`[Y9999,25]`, "0000000000000000000002012"},
 		{`[Y,1-18]`, "2012"},
 		{`[Y,1-19]`, "2012"},
 		{`[Y,1-64]`, "2012"},
 		{`[Y,1-*]`, "2012"},
-	}
-	for _, tc := range cases {
-		expr := `format-date(xs:date('2012-05-18'), '` + tc.picture + `')`
-		result, err := evaluate(t.Context(), nil, expr)
-		require.NoError(t, err, expr)
-		require.Equal(t, tc.expect, result.StringValue(), expr)
-	}
+	})
+	requireFormatDateTimeWidth(t, "format-date", `xs:date('0005-05-18')`, []formatDateTimeWidthCase{
+		{`[Y,2]`, "05"},
+		{`[Y,2-2]`, "05"},
+		{`[Y01]`, "05"},
+		{`[Y,4]`, "0005"},
+		{`[Y,1-2]`, "5"},
+	})
+}
+
+// TestFormatDateTimeMaximumWidth verifies how a maximum width treats the
+// components other than the year. F&O 3.1 §9.8.4.3 ignores the maximum width
+// of a decimal component, so it never drops digits. §9.8.4.5 extends the
+// fractional seconds picture to the maximum width and truncates past it. A
+// name longer than the maximum width is abbreviated, and a name shorter than
+// the minimum width is padded with spaces. §9.8.4.6 never shortens a timezone.
+func TestFormatDateTimeMaximumWidth(t *testing.T) {
+	t.Parallel()
+
+	requireFormatDateTimeWidth(t, "format-dateTime", `xs:dateTime('2012-11-25T13:47:38.123456+05:00')`,
+		[]formatDateTimeWidthCase{
+			{`[D,1-1]`, "25"},
+			{`[D,2]`, "25"},
+			{`[D,3]`, "025"},
+			{`[M,1-1]`, "11"},
+			{`[d,1-2]`, "330"},
+			{`[H,1-1]`, "13"},
+			{`[m,1-1]`, "47"},
+			{`[s,1-1]`, "38"},
+			{`[W,1-1]`, "47"},
+			{`[f,1-1]`, "1"},
+			{`[f,1-3]`, "123"},
+			{`[f,*-2]`, "12"},
+			{`[f,3]`, "123"},
+			{`[f,1-*]`, "123456"},
+			{`[f001,1-1]`, "123"},
+			{`[MNn,3-3]`, "Nov"},
+			{`[MNn,3]`, "November"},
+			{`[MNn,3-10]`, "November"},
+			{`[MNn,*-3]`, "Nov"},
+			{`[MNn,1-3]`, "N"},
+			{`[MN,3-3]`, "NOV"},
+			{`[MNn,10]`, "November  "},
+			{`[FNn,3-3]`, "Sun"},
+			{`[FNn,3]`, "Sunday"},
+			{`[FNn,8-8]`, "Sunday  "},
+			{`[Z,2]`, "+05:00"},
+			{`[Z,6-6]`, "+05:00"},
+		})
+	requireFormatDateTimeWidth(t, "format-date", `xs:date('2012-05-18')`, []formatDateTimeWidthCase{
+		{`[MNn,5-5]`, "May  "},
+		{`[MNn,1-3]`, "May"},
+	})
 }
