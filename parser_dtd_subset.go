@@ -297,8 +297,8 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 		pctx.popSpentExternalSubsetInputs(sectionDepth)
 		baseLen := pctx.inputTab.Len()
 		// crossed records that the section's content input ended before its
-		// "]]>", so the terminator comes from a different entity (see
-		// resumeCondSectionBelow and checkCondSectionClose).
+		// "]]>", so the terminator comes from a different entity and
+		// checkCondSectionClose rejects it.
 		crossed := false
 		for {
 			// Pop spent nested PE/conditional cursors so the "]]>" terminator
@@ -475,17 +475,15 @@ var errCondSectionBoundary = fmt.Errorf("%w: all markup of the conditional secti
 // Section/PE Nesting" (XML §3.4) at a section's "]]>". crossed reports that the
 // "]]>" comes from a different input than the section's content: the content
 // input ran out first (resumeCondSectionBelow), or a parameter entity
-// referenced inside the body supplied the "]]>". In the external subset this
-// is a validity constraint, reported only when validating, like the opening
-// side (checkCondSectionEntityBoundary). In the internal subset the section
-// can only come from an external parameter entity, whose replacement text
-// must match extSubsetDecl (§2.8 WFC: PE Between Declarations), so it is a
-// fatal error there.
+// referenced inside the body supplied the "]]>". Either way a parameter
+// entity's replacement text holds only part of the section, so it cannot
+// match extSubsetDecl (§2.8 WFC: PE Between Declarations). That is a fatal
+// well-formedness error in both subsets, whether or not validating, matching
+// libxml2 ("All markup of the conditional section is not in the same entity").
+// The opening side (checkCondSectionEntityBoundary) is reported only when
+// validating.
 func (pctx *parserCtx) checkCondSectionClose(ctx context.Context, crossed bool) error {
 	if !crossed {
-		return nil
-	}
-	if pctx.external && !pctx.options.IsSet(parseDTDValid) {
 		return nil
 	}
 	return pctx.error(ctx, errCondSectionBoundary)
@@ -493,18 +491,20 @@ func (pctx *parserCtx) checkCondSectionClose(ctx context.Context, crossed bool) 
 
 // resumeCondSectionBelow handles a conditional section whose content input
 // ran out before its "]]>": a parameter entity opened the section and the
-// rest of it, if any, follows the reference in the input below. It returns
-// the new content depth for the section, or an error.
+// rest of it, if any, follows the reference in the input below. Every path
+// ends in a fatal error; they differ only in which error and where.
 //
-// In the internal subset this is fatal (see checkCondSectionClose). The error
-// is ErrEntityBoundary when the input below continues with the "]]>", and
-// ErrConditionalSectionNotFinished otherwise.
+// In the internal subset it fails at once: ErrEntityBoundary when the input
+// below continues with the "]]>", and ErrConditionalSectionNotFinished
+// otherwise.
 //
-// In the external subset the section continues in the input below, never
-// past the external subset's own cursor (dtdInputFloor): reading on into the
-// document would let markup after the DOCTYPE close the section. When no
-// external-subset input is left, the section is unterminated. The validity
-// error, if any, is reported at the "]]>" by checkCondSectionClose.
+// In the external subset it returns the depth of the input below, never past
+// the external subset's own cursor (dtdInputFloor): reading on into the
+// document would let markup after the DOCTYPE close the section. The section
+// keeps reading there so that, like libxml2, a "]]>" is reported as
+// ErrEntityBoundary by checkCondSectionClose at that "]]>", and a section
+// that no "]]>" closes before the external subset ends is reported as
+// ErrConditionalSectionNotFinished.
 func (pctx *parserCtx) resumeCondSectionBelow(ctx context.Context) (int, error) {
 	if !pctx.external {
 		cur := pctx.getCursor()

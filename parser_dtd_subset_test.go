@@ -821,11 +821,10 @@ func condSectNestingParser(validate bool) helium.Parser {
 // TestConditionalSectionEntityNesting covers the closing side of XML 1.0 §3.4
 // "Proper Conditional Section/PE Nesting": the "<![", "[" and "]]>" of a
 // conditional section must come from the same parameter-entity replacement
-// text. A section that a parameter entity opens and the input below it closes
-// is a well-formedness error in the internal subset, where the replacement
-// text of a PE between declarations must match extSubsetDecl (§2.8 WFC: PE
-// Between Declarations). In the external subset it is only a validity error,
-// so it is reported only when validating, like the opening side.
+// text. A section that a parameter entity opens and the input below it closes,
+// or that a parameter entity closes, leaves a replacement text that cannot
+// match extSubsetDecl (§2.8 WFC: PE Between Declarations), so it is a fatal
+// error in both subsets whether or not validating, as in libxml2.
 func TestConditionalSectionEntityNesting(t *testing.T) {
 	t.Parallel()
 
@@ -838,52 +837,67 @@ func TestConditionalSectionEntityNesting(t *testing.T) {
 		{name: "push", parse: parseInternalSubsetViaPush},
 	}
 
-	// Internal subset: fatal whether or not validation is on.
+	// Fatal in both subsets, whether or not validation is on.
 	fatal := []struct {
 		name string
 		doc  string
 		want error
 	}{
 		{
-			name: "include opened by an external pe and closed below it",
+			name: "internal subset include opened by an external pe and closed below it",
 			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "inc-open.ent"> %ext; ]]> ]><r/>`,
 			want: helium.ErrEntityBoundary,
 		},
 		{
-			name: "ignore opened by an external pe and closed below it",
+			name: "internal subset ignore opened by an external pe and closed below it",
 			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "ign-open.ent"> %ext; ]]> <!ELEMENT r ANY>]><r/>`,
 			want: helium.ErrEntityBoundary,
 		},
 		{
-			name: "outer section opened by an external pe and closed below it",
+			name: "internal subset outer section opened by an external pe and closed below it",
 			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "nest-open.ent"> %ext; ]]> ]><r/>`,
 			want: helium.ErrEntityBoundary,
 		},
 		{
-			name: "section closed by a nested pe",
+			name: "internal subset section closed by a nested pe",
 			doc:  `<!DOCTYPE r [<!ENTITY % close "]]>"><!ENTITY % ext SYSTEM "pe-close.ent"> %ext; ]><r/>`,
 			want: helium.ErrEntityBoundary,
 		},
 		{
-			name: "section opened by an external pe and never closed",
+			name: "internal subset section opened by an external pe and never closed",
 			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "inc-open.ent"> %ext; ]><r/>`,
 			want: helium.ErrConditionalSectionNotFinished,
 		},
-	}
-
-	// External subset: a validity error. Without validation the section closes
-	// where the "]]>" is and the document parses.
-	validity := []struct {
-		name string
-		dtd  string
-		want string
-	}{
-		{name: "include opened by a pe and closed below it", dtd: "inc-open.dtd", want: "inc"},
-		{name: "ignore opened by a pe and closed below it", dtd: "ign-open.dtd", want: "kept"},
-		{name: "include closed by a pe", dtd: "pe-close.dtd", want: "pe-close"},
-		{name: "inner section opened by a pe and closed below it", dtd: "nest-inner.dtd", want: "inner"},
-		{name: "two sections opened by a pe and closed below it", dtd: "nest-both.dtd", want: "both"},
-		{name: "ignore with a nested section opened by a pe", dtd: "nest-ign.dtd", want: "kept"},
+		{
+			name: "external subset include opened by a pe and closed below it",
+			doc:  `<!DOCTYPE r SYSTEM "inc-open.dtd"><r>&g;</r>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "external subset ignore opened by a pe and closed below it",
+			doc:  `<!DOCTYPE r SYSTEM "ign-open.dtd"><r>&g;</r>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "external subset include closed by a pe",
+			doc:  `<!DOCTYPE r SYSTEM "pe-close.dtd"><r>&g;</r>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "external subset inner section opened by a pe and closed below it",
+			doc:  `<!DOCTYPE r SYSTEM "nest-inner.dtd"><r>&g;</r>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "external subset two sections opened by a pe and closed below it",
+			doc:  `<!DOCTYPE r SYSTEM "nest-both.dtd"><r>&g;</r>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "external subset ignore with a nested section opened by a pe",
+			doc:  `<!DOCTYPE r SYSTEM "nest-ign.dtd"><r>&g;</r>`,
+			want: helium.ErrEntityBoundary,
+		},
 	}
 
 	// A section that a PE opens and nothing closes must not run into the
@@ -949,22 +963,6 @@ func TestConditionalSectionEntityNesting(t *testing.T) {
 					if tc.want == helium.ErrEntityBoundary {
 						require.Contains(t, err.Error(), "all markup of the conditional section is not in the same entity")
 					}
-				})
-			}
-
-			for _, tc := range validity {
-				doc := `<!DOCTYPE r SYSTEM "` + tc.dtd + `"><r>&g;</r>`
-				t.Run(runner.name+mode+tc.name, func(t *testing.T) {
-					t.Parallel()
-					parsed, err := runner.parse(t, condSectNestingParser(validate), []byte(doc))
-					if validate {
-						require.ErrorIs(t, err, helium.ErrEntityBoundary)
-						require.Contains(t, err.Error(), "all markup of the conditional section is not in the same entity")
-						return
-					}
-					require.NoError(t, err)
-					require.NotNil(t, parsed.DocumentElement())
-					require.Equal(t, tc.want, string(parsed.DocumentElement().Content()))
 				})
 			}
 
