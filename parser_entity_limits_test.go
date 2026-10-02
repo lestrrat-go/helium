@@ -320,12 +320,12 @@ func TestEntityAmplification(t *testing.T) {
 	// the direct parameter-entity
 	// replacement path in parsePEReference: a large PE declared in the internal DTD
 	// subset and referenced directly (%p;) as markup many times. Each reference
-	// decodes the replacement text and pushes it as new input; the PE's OWN expanded
-	// size must be charged to the amplification counters on every use, otherwise a
-	// small DTD can drive unbounded expansion past the limit. Each PE expands to a
-	// large comment (valid DTD markup), so the only growth is the replacement text
-	// itself — no nested entity refs (which decodeEntities already charges) are
-	// involved, isolating the direct-PE charge being verified here.
+	// pushes the replacement text as new input; the PE's OWN size must be charged
+	// to the amplification counters on every use, otherwise a small DTD can drive
+	// unbounded expansion past the limit. Each PE expands to a large comment
+	// (valid DTD markup), so the only growth is the replacement text itself — no
+	// nested entity refs are involved, isolating the direct-PE charge being
+	// verified here.
 	t.Run("a direct PE reference", func(t *testing.T) {
 		// ~100 KiB per expansion, referenced 200 times → ~20 MB of expansion from a
 		// ~100 KiB subset. This crosses the 1 MiB baseline and trips the
@@ -345,23 +345,13 @@ func TestEntityAmplification(t *testing.T) {
 			"error must explain the amplification limit, got: %v", err)
 	})
 
-	// is the regression for the PE-accounting
-	// double-count bug. The PE %p; has a TINY literal replacement text ("<!-- &g;
-	// -->") that expands ALMOST ENTIRELY through a nested GENERAL entity reference
-	// &g; pointing at a large value. When %p; is referenced, parsePEReference
-	// decodes its replacement via decodeEntities(SubstituteBoth), which ALREADY
-	// charges the &g; expansion against the amplification counters. The PE-direct
-	// charge must therefore account ONLY p's own literal replacement bytes
-	// (len(entity.Content()), here ~12 bytes), NOT the full decoded length
-	// (~100 KiB). Charging the decoded length double-counts g's expansion and
-	// would falsely reject this legitimate DTD.
-	//
-	// Sizing keeps the CORRECT total (one charge of g per %p;, ~8*100 KiB ≈ 800 KiB)
-	// below the 1 MiB amplification baseline so it must NOT be rejected, while the
-	// OLD double-counting total (~1.6 MiB) crosses the baseline and trips the ratio
-	// guard against the ~100 KiB input. A regression to the old accounting
-	// (entityCheck on len(decodedContent)) brings this test back as a spurious
-	// "amplification" rejection.
+	// checks that a PE reference is charged only its own replacement bytes. The
+	// PE %p; has a TINY replacement text ("<!-- &g; -->") naming a GENERAL
+	// entity &g; with a large value. parsePEReference pushes that text verbatim
+	// and charges len(entity.Content()) (~12 bytes); the &g; inside the comment
+	// is never expanded. Charging g's ~100 KiB value twice per %p; (~1.6 MiB over
+	// eight references) would cross the 1 MiB amplification baseline and falsely
+	// reject this legitimate DTD against the ~100 KiB input.
 	t.Run("a nested PE reference is not double counted", func(t *testing.T) {
 		big := strings.Repeat("A", 100_000)
 		xml := `<?xml version="1.0"?>` + "\n" +

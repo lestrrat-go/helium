@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -553,4 +554,224 @@ func TestParameterEntityBoundary(t *testing.T) {
 			require.Equal(t, "hi", string(doc.DocumentElement().Content()))
 		})
 	}
+}
+
+// TestParameterEntityReplacementText covers a parameter-entity reference whose
+// replacement text is itself markup that declares or references further
+// entities. The replacement text is parsed as markup where the reference occurs,
+// the way libxml2 pushes it as a new input, so a "% " declaration marker in it
+// is not read as a reference, a '%' or '&' that came from a character reference
+// is not decoded a second time, and a PE the text declares can be referenced
+// later in the same text. Each case goes through Parse, ParseReader and the push
+// parser, and its accept/reject outcome matches xmllint 2.9.14 unless noted.
+func TestParameterEntityReplacementText(t *testing.T) {
+	t.Parallel()
+
+	const innerDecl = `<!ENTITY % inner "<!ELEMENT r ANY>">%inner;<!ENTITY fromInner "ok">`
+	const nestedDecl = `<!ENTITY % inner "<!ENTITY &#37; deeper '<!ELEMENT r ANY>'>&#37;deeper;">%inner;`
+	fsys := fstest.MapFS{
+		"inner.ent":  {Data: []byte(innerDecl)},
+		"nested.ent": {Data: []byte(nestedDecl)},
+	}
+	p := helium.NewParser().
+		BlockXXE(false).
+		FS(fsys).
+		SubstituteEntities(true).
+		DefaultDTDAttributes(true)
+
+	testcases := []struct {
+		name string
+		src  string
+		// wantErr is a substring of the error every entry point must return; empty
+		// means the document is well formed.
+		wantErr string
+		// wantReject marks a rejected document whose message is not pinned.
+		wantReject  bool
+		wantElement string
+		wantEntity  map[string]string
+		wantRoot    string
+	}{
+		{
+			name:        "a PE declaring and referencing another PE",
+			src:         `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY &#37; inner '<!ELEMENT r ANY>'>&#37;inner;"> %outer;]><r/>`,
+			wantElement: "r",
+		},
+		{
+			name:        "an external PE declaring an internal PE",
+			src:         `<!DOCTYPE r [<!ENTITY % ext SYSTEM "inner.ent"> %ext;]><r/>`,
+			wantElement: "r",
+			wantEntity:  map[string]string{"fromInner": "ok"},
+		},
+		{
+			name:        "an external PE declaring a PE that declares another PE",
+			src:         `<!DOCTYPE r [<!ENTITY % ext SYSTEM "nested.ent"> %ext;]><r/>`,
+			wantElement: "r",
+		},
+		{
+			name:       "a PE declaring a general entity whose value has a percent character reference",
+			src:        `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY g '50&#38;#37; off'>"> %outer;]><r>&g;</r>`,
+			wantEntity: map[string]string{"g": "50% off"},
+			wantRoot:   `<r>50% off</r>`,
+		},
+		{
+			// The PE's replacement text holds a literal '%' followed by a space in
+			// an entity value, which is not a PE reference (xmllint: "EntityValue:
+			// '%' forbidden except for entities references").
+			name:       "a PE declaring a general entity whose value has a bare percent",
+			src:        `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY g '50&#37; off'>"> %outer;]><r/>`,
+			wantReject: true,
+		},
+		{
+			name:       "a PE declaring a general entity whose value has an unterminated percent reference",
+			src:        `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY g '50&#37;off'>"> %outer;]><r/>`,
+			wantReject: true,
+		},
+		{
+			name:        "a percent followed by a tab declares a PE",
+			src:         "<!DOCTYPE r [<!ENTITY % outer \"<!ENTITY &#37;\tinner '<!ELEMENT r ANY>'>&#37;inner;\"> %outer;]><r/>",
+			wantElement: "r",
+		},
+		{
+			name:        "a percent followed by a newline declares a PE",
+			src:         "<!DOCTYPE r [<!ENTITY % outer \"<!ENTITY &#37;\ninner '<!ELEMENT r ANY>'>&#37;inner;\"> %outer;]><r/>",
+			wantElement: "r",
+		},
+		{
+			name:        "a percent followed by a tab character reference declares a PE",
+			src:         `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY &#37;&#9;inner '<!ELEMENT r ANY>'>&#37;inner;"> %outer;]><r/>`,
+			wantElement: "r",
+		},
+		{
+			name:        "a percent followed by a newline character reference declares a PE",
+			src:         `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY &#37;&#10;inner '<!ELEMENT r ANY>'>&#37;inner;"> %outer;]><r/>`,
+			wantElement: "r",
+		},
+		{
+			name: "PEs nested three levels deep",
+			src: `<!DOCTYPE r [<!ENTITY % a "<!ENTITY &#37; b '<!ENTITY &#38;#37; c &#34;<!ELEMENT r ANY>` +
+				`<!ENTITY deep &#38;#38;#39;three&#38;#38;#39;>&#34;>&#38;#37;c;'>&#37;b;"> %a;]><r>&deep;</r>`,
+			wantElement: "r",
+			wantEntity:  map[string]string{"deep": "three"},
+			wantRoot:    `<r>three</r>`,
+		},
+		{
+			// libxml2 2.9.14 accepts this; helium keeps the WFC (PEs in Internal
+			// Subset, XML §2.8) for an entity value inside an internal PE's
+			// replacement text, as newer libxml2 does (PARSER_EXTERNAL).
+			name:    "a PE reference inside an entity value declared by an internal PE",
+			src:     `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY &#37; inner 'v'><!ENTITY x '[&#37;inner;]'>"> %outer;]><r>&x;</r>`,
+			wantErr: "PEReferences forbidden in internal subset",
+		},
+		{
+			// libxml2 2.9.14 expands this reference; helium applies the same WFC
+			// to a declaration inside an internal PE's replacement text as to one
+			// written directly in the internal subset.
+			name:       "a PE reference inside a declaration declared by an internal PE",
+			src:        `<!DOCTYPE r [<!ENTITY % m "ANY"><!ENTITY % outer "<!ELEMENT r &#37;m;>"> %outer;]><r/>`,
+			wantReject: true,
+		},
+		{
+			name:    "a PE reference inside an entity value in the internal subset",
+			src:     `<!DOCTYPE r [<!ENTITY % inner "v"><!ENTITY x "%inner;">]><r>&x;</r>`,
+			wantErr: "PEReferences forbidden in internal subset",
+		},
+		{
+			// An undeclared PE after another PE reference is a warning, as in
+			// libxml2 ("PEReference: %undef; not found").
+			name: "an undeclared PE between declarations in replacement text",
+			src:  `<!DOCTYPE r [<!ENTITY % outer "&#37;undef;"> %outer;]><r/>`,
+		},
+		{
+			name:       "an undeclared PE inside a declaration in replacement text",
+			src:        `<!DOCTYPE r [<!ENTITY % outer "<!ELEMENT r &#37;undef;>"> %outer;]><r/>`,
+			wantReject: true,
+		},
+		{
+			name:    "an undeclared PE in the internal subset",
+			src:     `<!DOCTYPE r [%undef;]><r/>`,
+			wantErr: "PEReference: %undef; not found",
+		},
+		{
+			name:     "a PE declaring an attribute default with an escaped less-than",
+			src:      `<!DOCTYPE r [<!ENTITY % outer "<!ATTLIST r a CDATA '&#38;lt;'>"> %outer;]><r/>`,
+			wantRoot: `<r a="&lt;"/>`,
+		},
+		{
+			name:       "a PE declaring an entity whose value references a later entity",
+			src:        `<!DOCTYPE r [<!ENTITY % outer "<!ENTITY a '&#38;b;'>"> %outer;<!ENTITY b 'B'>]><r>&a;</r>`,
+			wantEntity: map[string]string{"a": "&b;"},
+			wantRoot:   `<r>B</r>`,
+		},
+		{
+			name:    "a PE that references itself",
+			src:     `<!DOCTYPE r [<!ENTITY % a "&#37;a;"> %a;]><r/>`,
+			wantErr: "references itself",
+		},
+		{
+			name:    "two PEs that reference each other",
+			src:     `<!DOCTYPE r [<!ENTITY % a "&#37;b;"><!ENTITY % b "&#37;a;"> %a;]><r/>`,
+			wantErr: "references itself",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, res := range parseEveryEntryPoint(t, p, tc.src) {
+				if tc.wantErr != "" || tc.wantReject {
+					require.Error(t, res.err, res.entry)
+					require.Contains(t, res.err.Error(), tc.wantErr, res.entry)
+					continue
+				}
+				require.NoError(t, res.err, res.entry)
+				require.NotNil(t, res.doc, res.entry)
+				if tc.wantElement != "" {
+					_, ok := res.doc.IntSubset().LookupElement(tc.wantElement, "")
+					require.True(t, ok, "%s: element %q is declared", res.entry, tc.wantElement)
+				}
+				for name, want := range tc.wantEntity {
+					ent, ok := res.doc.GetEntity(name)
+					require.True(t, ok, "%s: entity %q is declared", res.entry, name)
+					require.Equal(t, want, string(ent.Content()), "%s: entity %q", res.entry, name)
+				}
+				if tc.wantRoot != "" {
+					str, err := helium.WriteString(res.doc.DocumentElement())
+					require.NoError(t, err, res.entry)
+					require.Equal(t, tc.wantRoot, str, res.entry)
+				}
+			}
+		})
+	}
+}
+
+// entryPointResult is the outcome of one parser entry point.
+type entryPointResult struct {
+	entry string
+	doc   *helium.Document
+	err   error
+}
+
+// parseEveryEntryPoint parses src through Parse, ParseReader and the push
+// parser (fed five bytes at a time) and returns each outcome.
+func parseEveryEntryPoint(t *testing.T, p helium.Parser, src string) []entryPointResult {
+	t.Helper()
+
+	results := make([]entryPointResult, 0, 3)
+	doc, err := p.Parse(t.Context(), []byte(src))
+	results = append(results, entryPointResult{entry: "Parse", doc: doc, err: err})
+	doc, err = p.ParseReader(t.Context(), strings.NewReader(src))
+	results = append(results, entryPointResult{entry: "ParseReader", doc: doc, err: err})
+
+	pp := p.NewPushParser(t.Context())
+	b := []byte(src)
+	for len(b) > 0 {
+		n := min(5, len(b))
+		if err := pp.Push(b[:n]); err != nil {
+			break
+		}
+		b = b[n:]
+	}
+	doc, err = pp.Close()
+	results = append(results, entryPointResult{entry: "push parser", doc: doc, err: err})
+	return results
 }

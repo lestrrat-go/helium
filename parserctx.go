@@ -215,15 +215,17 @@ type parserCtx struct {
 	nsDeclaredBuf    []string          // reusable scratch buffer of ns prefixes declared on the current start tag
 	baseURIScopes    []baseURIScope    // per-input baseURI overrides (restored when the input is popped)
 	versionScopes    []versionScope    // per-input XML-version overrides (restored when the input is popped)
-	// externalPEScopes records, per pushed external parameter-entity input, the
-	// entity whose replacement text the input holds. activeExternalPECount is the
-	// set of external PEs currently on the input stack (count per entity, to
+	// peScopes records, per pushed parameter-entity input (internal or
+	// external), the entity whose replacement text the input holds. activePECount
+	// is the set of PEs currently on the input stack (count per entity, to
 	// tolerate the same PE legitimately appearing at sibling positions). Together
-	// they reject a self/mutually recursive external PE before it can drive
-	// unbounded cursor pushes into the amplification ceiling. The active mark is
+	// they reject a self/mutually recursive PE before it can drive unbounded
+	// cursor pushes into the amplification ceiling. externalPEDepth counts the
+	// external PE inputs among them (effectivelyExternal). The active mark is
 	// cleared when the pushed input is popped (popInput), mirroring baseURIScopes.
-	externalPEScopes      []externalPEScope
-	activeExternalPECount map[*Entity]int
+	peScopes        []peScope
+	activePECount   map[*Entity]int
+	externalPEDepth int
 
 	// bodyNeverDone is set by armBodyPoll while the root element is parsed
 	// under a context whose Done is nil; see pollErr.
@@ -249,12 +251,14 @@ type versionScope struct {
 	version string
 }
 
-// externalPEScope records which external parameter entity a pushed input belongs
-// to, so its active mark can be cleared when that exact input is popped (strictly
-// LIFO, like baseURIScope).
-type externalPEScope struct {
-	input  any
-	entity *Entity
+// peScope records which parameter entity a pushed input belongs to, so its
+// active mark can be cleared when that exact input is popped (strictly LIFO, like
+// baseURIScope). external marks an external parameter entity, whose markup
+// counts as external (effectivelyExternal).
+type peScope struct {
+	input    any
+	entity   *Entity
+	external bool
 }
 
 type parserCtxKey struct{}
@@ -480,17 +484,35 @@ func (ctx *parserCtx) pushInputWithVersion(in any, version string) {
 func (ctx *parserCtx) pushExternalPEInput(in any, baseURI, version string, ent *Entity) {
 	ctx.pushInputWithBaseURI(in, baseURI)
 	ctx.scopeInputVersion(in, version)
-	if ctx.activeExternalPECount == nil {
-		ctx.activeExternalPECount = make(map[*Entity]int)
-	}
-	ctx.activeExternalPECount[ent]++
-	ctx.externalPEScopes = append(ctx.externalPEScopes, externalPEScope{input: in, entity: ent})
+	ctx.markPEActive(in, ent, true)
 }
 
-// externalPEActive reports whether the given external parameter entity is
+// pushInternalPEInput pushes an internal parameter entity's replacement text
+// and records the entity as active, as pushExternalPEInput does. A nil ent (a
+// custom SAX handler's own entity type) is pushed without the recursion mark.
+func (ctx *parserCtx) pushInternalPEInput(in any, ent *Entity) {
+	ctx.pushInput(in)
+	ctx.markPEActive(in, ent, false)
+}
+
+// markPEActive records the scope that popInput clears for the PE input in.
+func (ctx *parserCtx) markPEActive(in any, ent *Entity, external bool) {
+	if ent != nil {
+		if ctx.activePECount == nil {
+			ctx.activePECount = make(map[*Entity]int)
+		}
+		ctx.activePECount[ent]++
+	}
+	if external {
+		ctx.externalPEDepth++
+	}
+	ctx.peScopes = append(ctx.peScopes, peScope{input: in, entity: ent, external: external})
+}
+
+// parameterEntityActive reports whether the given parameter entity is
 // currently on the input stack (its replacement text is being parsed).
-func (ctx *parserCtx) externalPEActive(ent *Entity) bool {
-	return ctx.activeExternalPECount[ent] > 0
+func (ctx *parserCtx) parameterEntityActive(ent *Entity) bool {
+	return ctx.activePECount[ent] > 0
 }
 
 // effectivelyExternal reports whether a markup declaration parsed at this point
@@ -501,7 +523,7 @@ func (ctx *parserCtx) externalPEActive(ent *Entity) bool {
 // external-PE-supplied declaration referenced from the internal subset is external
 // markup even though it is registered in the internal subset's declaration table.
 func (ctx *parserCtx) effectivelyExternal() bool {
-	return ctx.inSubset == inExternalSubset || len(ctx.externalPEScopes) > 0
+	return ctx.inSubset == inExternalSubset || ctx.externalPEDepth > 0
 }
 
 func (ctx *parserCtx) getByteCursor() *strcursor.ByteCursor {
@@ -598,15 +620,20 @@ func (ctx *parserCtx) popInput() any { //nolint:unparam // return value used for
 		ctx.version = ctx.versionScopes[n-1].version
 		ctx.versionScopes = ctx.versionScopes[:n-1]
 	}
-	// Clear the active mark for an external parameter entity whose pushed input is
-	// being popped (strictly LIFO, like the baseURI scope above), so a later
-	// sibling reference to the same PE is not mistaken for recursion.
-	if n := len(ctx.externalPEScopes); n > 0 && ctx.externalPEScopes[n-1].input == popped {
-		ent := ctx.externalPEScopes[n-1].entity
-		ctx.externalPEScopes = ctx.externalPEScopes[:n-1]
-		ctx.activeExternalPECount[ent]--
-		if ctx.activeExternalPECount[ent] <= 0 {
-			delete(ctx.activeExternalPECount, ent)
+	// Clear the active mark for a parameter entity whose pushed input is being
+	// popped (strictly LIFO, like the baseURI scope above), so a later sibling
+	// reference to the same PE is not mistaken for recursion.
+	if n := len(ctx.peScopes); n > 0 && ctx.peScopes[n-1].input == popped {
+		scope := ctx.peScopes[n-1]
+		ctx.peScopes = ctx.peScopes[:n-1]
+		if scope.external {
+			ctx.externalPEDepth--
+		}
+		if ent := scope.entity; ent != nil {
+			ctx.activePECount[ent]--
+			if ctx.activePECount[ent] <= 0 {
+				delete(ctx.activePECount, ent)
+			}
 		}
 	}
 	return popped

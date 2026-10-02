@@ -633,22 +633,22 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 			// the referenced external resource, not inline text. Load it from
 			// the resolver (gated by the XXE secure default) and push the RAW
 			// bytes so the surrounding DTD declaration loop parses them — the
-			// same mechanism the external subset body uses. This must NOT go
-			// through decodeEntities like an internal PE: the loaded resource is
-			// a DTD fragment whose own references are resolved lexically during
-			// declaration parsing. When external loading is disabled the load
-			// returns empty content and behavior is unchanged (no input pushed).
+			// same mechanism the external subset body and an internal PE use: the
+			// loaded resource is a DTD fragment whose own references are resolved
+			// lexically during declaration parsing. When external loading is
+			// disabled the load returns empty content and behavior is unchanged
+			// (no input pushed).
 			ent, ok := entity.(*Entity)
 			if !ok {
 				return pctx.error(ctx, errors.New("internal: external parameter entity is not *helium.Entity"))
 			}
 			// Reject a self/mutually recursive external PE BEFORE loading or
 			// pushing: while a PE's replacement text is being parsed its input is
-			// still on the stack (externalPEActive), so a nested "%pe;" to the same
-			// entity would otherwise keep pushing cursors until the amplification
-			// ceiling trips. A counter check fails closed and reports a parse error
-			// instead. Internal PEs are guarded separately by the decode-depth cap.
-			if pctx.externalPEActive(ent) {
+			// still on the stack (parameterEntityActive), so a nested "%pe;" to the
+			// same entity would otherwise keep pushing cursors until the
+			// amplification ceiling trips. A counter check fails closed and reports
+			// a parse error instead.
+			if pctx.parameterEntityActive(ent) {
 				return pctx.error(ctx, fmt.Errorf("parse error: external parameter entity %%%s; references itself", name))
 			}
 			// loadExternalParameterEntityContent already strips and decodes any
@@ -680,36 +680,34 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 			pctx.hasExternalPERef = true
 			return nil
 		} else {
-			// Capture the PE's replacement text once: Entity.Content()
-			// allocates a fresh []byte copy on every call, so we reuse this
-			// local for both decoding and the amplification accounting below.
-			content := entity.Content()
-
-			decodedContent, err := pctx.decodeEntities(ctx, content, SubstituteBoth)
-			if err != nil {
-				return fmt.Errorf("failed to decode parameter entity content: %v", err)
+			// Internal parameter entity: push its replacement text verbatim as a
+			// new input, as libxml2 xmlParsePEReference does, so the surrounding
+			// declaration loop parses it as markup in place. The stored value is
+			// already the replacement text (character references and the PE
+			// references of the literal were resolved when it was declared;
+			// general references are bypassed, XML §4.5), so it must not be
+			// decoded again: a "% " declaration marker, a '%' or '&' that came
+			// from a character reference, or a "%name;" naming a PE the text
+			// itself declares are all ordinary markup to the parser here.
+			ent, _ := entity.(*Entity)
+			// A PE whose replacement text references itself (directly or through
+			// another PE) would push inputs without end; reject it while its
+			// earlier input is still on the stack (WFC: No Recursion).
+			if ent != nil && pctx.parameterEntityActive(ent) {
+				return pctx.error(ctx, fmt.Errorf("%w: parameter entity %%%s; references itself", errEntityLoop, name))
 			}
-
+			content := entity.Content()
 			// Charge this PE's OWN replacement bytes before pushing it as new
 			// input. Without this the PE's direct contribution is free, so a
 			// small DTD that references a large PE many times could drive
-			// unbounded expansion past the amplification limit.
-			//
-			// Charge len(content) (the PE's stored replacement text), NOT
-			// len(decodedContent): decodeEntities(SubstituteBoth) above already
-			// charged every nested entity expansion it performed — general
-			// references (&g;) left literal in the stored value, and any
-			// parameter references — via its own entityCheck calls.
-			// decodedContent is the result AFTER those nested expansions, so
-			// charging its length here would double-count those nested bytes and
-			// could falsely reject a legitimate DTD whose %p; expands mostly
-			// through a nested entity. content is the direct bytes this PE itself
-			// contributes.
+			// unbounded expansion past the amplification limit. A reference
+			// inside the text is charged by its own parsePEReference call when
+			// the parser reaches it.
 			if err := pctx.entityCheck(entity, len(content)); err != nil {
 				return pctx.error(ctx, err)
 			}
 
-			pctx.pushInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent([]byte(decodedContent), pad))))
+			pctx.pushInternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), ent)
 		}
 	}
 	pctx.hasPERefs = true
