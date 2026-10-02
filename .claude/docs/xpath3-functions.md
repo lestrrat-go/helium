@@ -615,6 +615,12 @@ All delegate to Go `math` package.
 ### `format_datetime.go`
 `format-date`, `format-dateTime`, `format-time`
 
+A picture component's width modifier (F&O 3.1 §9.8.4.2, `,min-width("-"max-width)?`) has an
+implementation-defined limit: a minimum width above `maxPictureMinWidth` (1000) raises FOFD1340, so one
+component never pads past 1000 characters and output stays linear in the picture length. A maximum width has
+no limit, because it only shortens output. The year modulus (§9.8.4.4) applies only for a maximum width
+below 19 digits (`maxInt64Digits`); a wider maximum keeps every digit of any int64 year.
+
 ### `functions_unparsed_text.go`
 `unparsed-text`, `unparsed-text-lines`, `unparsed-text-available`
 

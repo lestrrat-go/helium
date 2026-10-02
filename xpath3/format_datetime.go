@@ -275,6 +275,16 @@ type dtWidth struct {
 	maxWidth int // -1 = unlimited
 }
 
+// maxPictureMinWidth is the largest minimum width a picture's width modifier
+// may request. F&O 3.1 §9.8.4.2 sets no upper bound, so the limit is
+// implementation-defined: a larger minimum width raises FOFD1340 instead of
+// producing that many padding characters. A maximum width has no limit,
+// because it only ever shortens the output.
+const maxPictureMinWidth = 1000
+
+// maxInt64Digits is the number of decimal digits in math.MaxInt64.
+const maxInt64Digits = 19
+
 func parseDatePresentation(rest string) (dtPresentation, dtWidth) {
 	p := dtPresentation{format: "1", implicit: true}
 	w := dtWidth{minWidth: -1, maxWidth: -1}
@@ -491,8 +501,8 @@ func formatDateDecimal(value int64, p dtPresentation, w dtWidth, comp byte) stri
 	s := fmt.Sprintf("%d", abs)
 
 	// Pad to minimum digits
-	for len(s) < minDigits {
-		s = "0" + s
+	if len(s) < minDigits {
+		s = strings.Repeat("0", minDigits-len(s)) + s
 	}
 
 	// Truncate to max width (for year, take rightmost digits)
@@ -524,7 +534,9 @@ func normalizeDateNumericValue(value int64, comp byte, w dtWidth) int64 {
 		value = -value
 	}
 
-	if w.maxWidth > 0 {
+	// Every int64 has at most maxInt64Digits digits, so a maximum width of
+	// that many digits or more keeps the whole year and needs no modulus.
+	if w.maxWidth > 0 && w.maxWidth < maxInt64Digits {
 		mod := int64(1)
 		for range w.maxWidth {
 			mod *= 10
@@ -538,8 +550,8 @@ func applyTextWidth(s string, w dtWidth) string {
 	if w.minWidth <= 0 {
 		return s
 	}
-	for utf8.RuneCountInString(s) < w.minWidth {
-		s += " "
+	if n := utf8.RuneCountInString(s); n < w.minWidth {
+		s += strings.Repeat(" ", w.minWidth-n)
 	}
 	return s
 }
@@ -1173,6 +1185,9 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 	}
 	if w.minWidth > 0 && w.maxWidth > 0 && w.minWidth > w.maxWidth {
 		return &XPathError{Code: errCodeFOFD1340, Message: "minimum width exceeds maximum width"}
+	}
+	if w.minWidth > maxPictureMinWidth {
+		return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("minimum width exceeds the implementation limit of %d", maxPictureMinWidth)}
 	}
 
 	return nil
