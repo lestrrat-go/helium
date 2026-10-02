@@ -19,6 +19,8 @@ import (
 type EvalState struct {
 	ec      evalContext
 	oneItem [1]Item // reusable backing for single-item results
+	// nodes is the reusable backing of a result that is a node list.
+	nodes resultNodes
 
 	// baseNode / baseContextItem capture the focus seeded by NewEvalState so
 	// each EvaluateReuse call starts from that base focus, and never a focus
@@ -106,22 +108,27 @@ func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node h
 	if err := e.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
 		return Result{}, err
 	}
-	seq, err := e.evaluate(ctx, ec)
-	if err != nil {
-		return Result{}, err
-	}
-	return Result{seq: seq}, nil
+	return e.evaluate(ctx, ec, &state.nodes)
 }
 
 // StringValue returns the XPath string value of the result sequence.
 // For single-node results, this returns the node's string value directly,
 // avoiding the AtomizeItem → AtomicValue → AtomicToString round-trip.
 func (r Result) StringValue() string {
-	if seqLen(r.seq) == 0 {
+	if r.nodes != nil {
+		switch len(r.nodes.nodes) {
+		case 0:
+			return ""
+		case 1:
+			return ixpath.StringValue(r.nodes.nodes[0])
+		}
+	}
+	seq := r.items()
+	if seqLen(seq) == 0 {
 		return ""
 	}
-	if seqLen(r.seq) == 1 {
-		switch v := r.seq.Get(0).(type) {
+	if seqLen(seq) == 1 {
+		switch v := seq.Get(0).(type) {
 		case NodeItem:
 			return ixpath.StringValue(v.Node)
 		case AtomicValue:
@@ -131,7 +138,7 @@ func (r Result) StringValue() string {
 	}
 	var sb strings.Builder
 	i := 0
-	for item := range seqItems(r.seq) {
+	for item := range seqItems(seq) {
 		if i > 0 {
 			sb.WriteByte(' ')
 		}

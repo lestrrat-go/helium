@@ -114,9 +114,11 @@ type descendantBenchCase struct {
 var descendantBenchNVDCases = []descendantBenchCase{
 	{"count_all", "count(//*)"},
 	{"all", "//*"},
+	{"union", "//n:ref | //n:entry"},
 	{"named", "//n:ref"},
 	{"named_attr", "/n:nvd//n:entry/@name"},
 	{"count_pred", "count(//n:ref[@url])"},
+	{"path_pred", "count(//n:entry[.//n:ref])"},
 	{"last", "//*[last()]"},
 	{"exists", "boolean(//n:ref)"},
 	{"first", "(//n:ref)[1]"},
@@ -126,9 +128,11 @@ var descendantBenchNVDCases = []descendantBenchCase{
 var descendantBenchSyntheticCases = []descendantBenchCase{
 	{"count_all", "count(//*)"},
 	{"all", "//*"},
+	{"union", "//val | //note"},
 	{"named", "//item"},
 	{"named_attr", "/root//item/@id"},
 	{"count_pred", "count(//item[@cat])"},
+	{"path_pred", "count(//item[.//b])"},
 	{"last", "//*[last()]"},
 	{"exists", "boolean(//val)"},
 	{"first", "(//val)[1]"},

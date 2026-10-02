@@ -444,11 +444,22 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 		return nil, err
 	}
 
-	seq, err := expr.evaluate(ctx, ec)
+	// One allocation holds the Result and, when the result is a node list,
+	// its node list.
+	box := &resultBox{}
+	r, err := expr.evaluate(ctx, ec, &box.nodes)
 	if err != nil {
 		return nil, err
 	}
-	return &Result{seq: seq}, nil
+	box.result = r
+	return &box.result, nil
+}
+
+// resultBox holds the Result Evaluate returns and the node list it may
+// refer to.
+type resultBox struct {
+	result Result
+	nodes  resultNodes
 }
 
 // newEvalCtx creates the internal evaluation context from the Evaluator config.
