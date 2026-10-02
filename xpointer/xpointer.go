@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -489,17 +490,19 @@ func isChildIndex(s string) bool {
 
 // childIndexValue converts a child-sequence index already validated by
 // isChildIndex into an int. isChildIndex guarantees the lexical form, but an
-// arbitrarily long digit string can still exceed the platform int range (e.g.
-// "18446744073709551617"). strconv.Atoi reports such a value as a range error,
-// which we surface as a syntax error, letting the index wrap around
-// and select no wrong node.
+// arbitrarily long digit string can still exceed the int64 range (e.g.
+// "18446744073709551617"). strconv.ParseInt reports such a value as a range
+// error, which we surface as a syntax error, letting no index wrap around and
+// select a wrong node. An index that fits int64 but not int (where int is 32
+// bits) saturates at math.MaxInt: no node has that many element children, so
+// it selects nothing, as the exact index does where int is 64 bits.
 func childIndexValue(s string) (int, error) {
-	idx, err := strconv.Atoi(s)
+	idx, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("xpointer: child index %q in element() scheme is out of range",
 			lexer.DiagnosticExcerpt(s))
 	}
-	return idx, nil
+	return int(min(idx, math.MaxInt)), nil
 }
 
 // nthElementChild returns the n-th element child (1-based) of the given node.

@@ -159,7 +159,7 @@
       derived wildcard excluding the head via notQName="h" but re-admitting member m loses m's type). A skip
       wildcard never enforces type; a ref/member under lax is exempt (a global exists). An abstract head's own
       name is excluded. A NON-EMITTING base name (effective base maxOccurs 0, own or ANCESTOR group via
-      `mulOccurs`) is filtered out before the dropped/kept split. The DERIVED kept-name set and the SUFFIX
+      `occursMul`) is filtered out before the dropped/kept split. The DERIVED kept-name set and the SUFFIX
       misplaced-trailing-name set use `collectEmittingModelElementNames` (EMITTING particles, names
       `elemMatchesDeclOrSubst` can consume: own name when CONCRETE plus instance-admissible abstract-EXCLUDED
       substitution members via `instanceSubstMembers`) — a derived element narrowed to maxOccurs=0 counts as

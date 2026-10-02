@@ -875,7 +875,13 @@ pipeline.
    `length`/`minLength`/`maxLength`/`fractionDigits` must be a valid `xs:nonNegativeInteger` and `totalDigits`
    a valid `xs:positiveInteger` (whitespace-collapsed first, via `validateBuiltinValue`), so `<xs:maxLength
    value="1e2"/>`, a negative/non-numeric/empty value, or `totalDigits="0"` is a fatal schema error instead of
-   being silently collapsed to `0` by `parseOccurs` (which would drop the constraint). This is an XSD 1.0 rule
+   being silently collapsed to `0` by `parseOccurs` (which would drop the constraint). `parseOccurs` parses an
+   int64 and saturates a value above `math.MaxInt` (where int is 32 bits) at `math.MaxInt`: no string, list, or
+   digit count there reaches that size, so the facet constrains values as the larger number would. Occurrence
+   attributes follow the same rule (`parseNonNegativeOccurs`: a value that fits int64 but not int saturates at
+   `math.MaxInt`), and the restriction checks' occurrence sums and products saturate at `math.MaxInt`
+   (`satAddOccurs`/`satMulOccurs` in `xsd/all_subsumption.go`, used by `occursAdd`/`occursMul`) instead of
+   wrapping to a negative count, to `Unbounded` (-1), or to 0. This is an XSD 1.0 rule
    enforced in BOTH the default (1.0) and Version11 mode (goldens are byte-identical — no libxml2-compat
    golden uses an out-of-space length/digit facet value). `checkFacetConsistency()` likewise runs
    `checkEnumValueAgainstBase()` (`xsd/check_facets.go`): each `enumeration` value is validated against the

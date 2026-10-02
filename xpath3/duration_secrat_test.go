@@ -208,7 +208,7 @@ func TestDateTimePlusOverflowingDayCount(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
 	err := evalExprErr(t, doc, `xs:dateTime("2020-01-01T00:00:00") + xs:dayTimeDuration("P9223372036854775808D")`)
-	require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+	require.ErrorIs(t, err, &xpath3.XPathError{Code: codeFODT0002})
 }
 
 // TestDurationYearMonthOverflowRejected verifies that a year/month total
@@ -236,12 +236,12 @@ func TestYearMonthDurationArithmeticOverflow(t *testing.T) {
 
 	t.Run("addition overflow", func(t *testing.T) {
 		err := evalExprErr(t, doc, bigYM+` + `+bigYM)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: codeFODT0002})
 	})
 
 	t.Run("sum overflow", func(t *testing.T) {
 		err := evalExprErr(t, doc, `sum(( `+bigYM+`, `+bigYM+` ))`)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: codeFODT0002})
 	})
 
 	t.Run("non-overflowing addition still works", func(t *testing.T) {

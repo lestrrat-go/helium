@@ -114,7 +114,7 @@ type AtomicValue struct {
 | `TypeDate` | xs:date | `time.Time` |
 | `TypeDateTime` | xs:dateTime | `time.Time` |
 | `TypeTime` | xs:time | `time.Time` |
-| `TypeDuration` | xs:duration | `Duration` struct |
+| `TypeDuration` | xs:duration | `Duration` struct (`Months int64`, so the range is the same on every platform) |
 | `TypeDayTimeDuration` | xs:dayTimeDuration | `Duration` struct |
 | `TypeYearMonthDuration` | xs:yearMonthDuration | `Duration` struct |
 | `TypeAnyURI` | xs:anyURI | `string` |

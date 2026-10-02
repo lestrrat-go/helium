@@ -388,3 +388,14 @@ and the default xpath3 behavior is unchanged.
 | Sequence/node-set size | 10M | `internal/xpath.DefaultMaxNodeSetLength` |
 
 Range expressions (`1 to N`) and `for` clauses also check sequence size limit.
+
+The limits hold where int is 32 bits:
+- The op counter saturates at `math.MaxInt` instead of wrapping (`countOps`; xpath1 does the same), and a
+  charge that would pass `math.MaxInt` returns `ErrOpLimit`.
+- A `Sequence` length is an int, so `NewRangeSequence` reports a range longer than `math.MaxInt` as
+  `math.MaxInt` items (`rangeLen`); every length limit still rejects it.
+- An array index that fits int64 but not int raises FOAY0001 (`checkedArrayIndex`).
+- Date/time ± duration moves at most `maxSafeAddDateYears` (1e11 years where int is 64 bits, `math.MaxInt/4`
+  where it is 32 bits) and passes `time.AddDate` operands that fit int (`addMonths` splits months into years
+  and months, `addDays` adds days in chunks). A result year past `maxResultYear` (`math.MaxInt/2`) raises
+  FODT0001; only where int is 32 bits can a result reach it.

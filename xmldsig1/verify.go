@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 
@@ -114,9 +115,17 @@ func (b *verifyBudget) addKeyInfoEntry() error {
 	return nil
 }
 
-// consume adds n decoded bytes to the running total and fails closed past the cap.
+// consume adds n decoded bytes to the running total and fails closed past the
+// cap. The total saturates at math.MaxInt instead of wrapping: with a cap near
+// math.MaxInt (2^31-1 where int is 32 bits) a wrapped, negative total would
+// never pass the cap again, while a saturated one passes every cap below
+// math.MaxInt.
 func (b *verifyBudget) consume(n int) error {
-	b.decoded += n
+	if n > math.MaxInt-b.decoded {
+		b.decoded = math.MaxInt
+	} else {
+		b.decoded += n
+	}
 	if b.maxDecoded > 0 && b.decoded > b.maxDecoded {
 		return fmt.Errorf("%w: decoded byte budget exceeded (limit %d)", ErrResourceLimitExceeded, b.maxDecoded)
 	}

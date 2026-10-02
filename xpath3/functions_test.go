@@ -577,6 +577,11 @@ func TestFnArrayIntegerPositions(t *testing.T) {
 			`array:insert-before([1, 2], 0, 9)`,
 			// Huge start+length must not overflow into a make() panic.
 			`array:subarray([1], 6917529027641081856, 6917529027641081856)`,
+			// 2^32+1 must not narrow to index 1 where int is 32 bits. The sum
+			// is an int64-backed xs:integer; the literal alone is a big.Int.
+			`[10, 20, 30](4294967296 + 1)`,
+			`[10, 20, 30]?(4294967296 + 1)`,
+			`array:get([10, 20, 30], 4294967296 + 1)`,
 		} {
 			t.Run(expr, func(t *testing.T) {
 				evalErrCode(t, expr, "FOAY0001")

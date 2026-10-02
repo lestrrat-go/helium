@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -1650,12 +1651,17 @@ func lookupNS(elem *helium.Element, prefix string) string {
 // not a plain integer. Occurrence attributes (minOccurs/maxOccurs) are parsed by
 // parseNonNegativeOccurs / parseParticleOccurs, which additionally accept the
 // "unbounded" keyword and clamp values too large for an int.
+//
+// The value is parsed as an int64 and a value above math.MaxInt (2^31-1 where
+// int is 32 bits) saturates at math.MaxInt: no string, list, or digit count
+// there can reach that size, so the facet constrains values exactly as the
+// larger number would.
 func parseOccurs(s string) int {
-	n, err := strconv.Atoi(s)
+	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return 0
 	}
-	return n
+	return int(min(n, math.MaxInt))
 }
 
 // builtinTypeNames is the immutable list of XSD 1.0 built-in datatype local names

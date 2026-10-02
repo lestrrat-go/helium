@@ -1,6 +1,9 @@
 package xpath3
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // NewLexerForTesting exposes the internal lexer for tests.
 func NewLexerForTesting(input string) (*lexer, error) {
@@ -38,3 +41,16 @@ func (r *Regex) MatchTimeoutForTesting() time.Duration {
 func (r *Regex) BacktrackingForTesting() bool {
 	return r.inner.backtrack != nil
 }
+
+// CountOpsForTesting charges n operations, against limit, to an op counter that
+// already stands at count. It returns the counter afterwards and the charge's
+// error, so a test can start the counter next to math.MaxInt without running
+// that many operations.
+func CountOpsForTesting(ctx context.Context, count, n, limit int) (int, error) {
+	ec := &evalContext{opCount: &count, opLimit: limit}
+	err := ec.countOps(ctx, n)
+	return count, err
+}
+
+// ParseSimpleIntForTesting exposes the picture-width integer parser.
+var ParseSimpleIntForTesting = parseSimpleInt

@@ -3,6 +3,7 @@ package xpath3_test
 import (
 	"context"
 	"iter"
+	"math"
 	"math/big"
 	"testing"
 
@@ -782,4 +783,27 @@ func TestTryCatch_CodeForms(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
+}
+
+// TestCountOpsSaturates verifies that the op counter saturates instead of
+// wrapping. With the counter next to math.MaxInt, a wrapped (negative) count
+// would read as under the limit and never trip it again; that is 2^31-1
+// operations where int is 32 bits.
+func TestCountOpsSaturates(t *testing.T) {
+	count, err := xpath3.CountOpsForTesting(t.Context(), math.MaxInt-1, 5, math.MaxInt)
+	require.ErrorIs(t, err, xpath3.ErrOpLimit)
+	require.Equal(t, math.MaxInt, count)
+
+	count, err = xpath3.CountOpsForTesting(t.Context(), 10, 5, 100)
+	require.NoError(t, err)
+	require.Equal(t, 15, count)
+}
+
+// TestParseSimpleIntSaturates verifies that a picture width past math.MaxInt
+// saturates. Accumulating "4294967298" in a 32-bit int would wrap to 2.
+func TestParseSimpleIntSaturates(t *testing.T) {
+	require.Equal(t, 12, xpath3.ParseSimpleIntForTesting("12"))
+	require.Equal(t, 7, xpath3.ParseSimpleIntForTesting("7-*"))
+	require.Equal(t, min(int64(4294967298), math.MaxInt), int64(xpath3.ParseSimpleIntForTesting("4294967298")))
+	require.Equal(t, math.MaxInt, xpath3.ParseSimpleIntForTesting("99999999999999999999999"))
 }

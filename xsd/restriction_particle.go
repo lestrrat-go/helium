@@ -3,6 +3,7 @@ package xsd
 import (
 	"context"
 	"maps"
+	"math"
 	"slices"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -686,8 +687,8 @@ func reduceSingletonGroup(p *Particle) *Particle {
 			return p
 		}
 		p = &Particle{
-			MinOccurs: mulOccurs(p.MinOccurs, only.MinOccurs),
-			MaxOccurs: mulOccurs(p.MaxOccurs, only.MaxOccurs),
+			MinOccurs: occursMul(p.MinOccurs, only.MinOccurs),
+			MaxOccurs: occursMul(p.MaxOccurs, only.MaxOccurs),
 			Term:      only.Term,
 		}
 	}
@@ -1020,7 +1021,7 @@ func reduceWildcardOnlyGroupBody(g *ModelGroup) (wildcardOnlyReduction, bool) {
 		if !ok {
 			return wildcardOnlyReduction{}, false
 		}
-		acc = wildcardOnlyReduction{cover: cover, lo: acc.lo + m.lo, hi: addOccursMax(acc.hi, m.hi)}
+		acc = wildcardOnlyReduction{cover: cover, lo: satAddOccurs(acc.lo, m.lo), hi: occursAdd(acc.hi, m.hi)}
 	}
 	return acc, true
 }
@@ -1053,7 +1054,7 @@ func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnly
 	switch {
 	case gmin == gmax:
 		// A fixed number of copies of a contiguous body stays contiguous.
-		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: mulOccurs(gmin, body.hi)}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: satMulOccurs(gmin, body.lo), hi: occursMul(gmin, body.hi)}, true
 	case body.hi == -1:
 		// Each copy already spans to ∞. With gmin >= 1 the smallest copy count
 		// reaches [gmin*lo, ∞) and every larger count is a subset, so the union is
@@ -1065,28 +1066,24 @@ func applyOccReduction(body wildcardOnlyReduction, gmin, gmax int) (wildcardOnly
 		if gmin == 0 && body.lo > 1 {
 			return wildcardOnlyReduction{}, false
 		}
-		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: -1}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: satMulOccurs(gmin, body.lo), hi: -1}, true
 	case body.lo == 0:
 		// Every copy count includes 0, so the union is [0, gmax*hi] — contiguous.
-		return wildcardOnlyReduction{cover: body.cover, lo: 0, hi: mulOccurs(gmax, body.hi)}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: 0, hi: occursMul(gmax, body.hi)}, true
 	default:
 		// body.lo >= 1, finite body.hi, gmin < gmax. The union of consecutive copy
 		// intervals [k*lo, k*hi] is gap-free iff each abuts the next:
 		// k*hi + 1 >= (k+1)*lo. With hi >= lo this is monotone non-decreasing in k,
 		// so checking the smallest copy count gmin suffices.
-		if gmin*body.hi+1 < (gmin+1)*body.lo {
+		// A saturated product is not the true count, so the gap test cannot be
+		// decided: fail closed.
+		next := satAddOccurs(satMulOccurs(gmin, body.hi), 1)
+		need := satMulOccurs(satAddOccurs(gmin, 1), body.lo)
+		if next == math.MaxInt || need == math.MaxInt || next < need {
 			return wildcardOnlyReduction{}, false
 		}
-		return wildcardOnlyReduction{cover: body.cover, lo: gmin * body.lo, hi: mulOccurs(gmax, body.hi)}, true
+		return wildcardOnlyReduction{cover: body.cover, lo: satMulOccurs(gmin, body.lo), hi: occursMul(gmax, body.hi)}, true
 	}
-}
-
-// addOccursMax adds two maxOccurs values, treating -1 as unbounded.
-func addOccursMax(a, b int) int {
-	if a == -1 || b == -1 {
-		return -1
-	}
-	return a + b
 }
 
 // unionInterval merges two contiguous occurrence intervals into one, reporting
@@ -1348,8 +1345,8 @@ func pointlessReduce(p *Particle) (*Particle, bool) {
 			return p, false
 		}
 		p = &Particle{
-			MinOccurs: mulOccurs(p.MinOccurs, only.MinOccurs),
-			MaxOccurs: mulOccurs(p.MaxOccurs, only.MaxOccurs),
+			MinOccurs: occursMul(p.MinOccurs, only.MinOccurs),
+			MaxOccurs: occursMul(p.MaxOccurs, only.MaxOccurs),
 			Term:      only.Term,
 		}
 	}
@@ -1672,7 +1669,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		if bw.MaxOccurs == Unbounded {
 			baseUnbounded = true
 		} else {
-			baseWildMax += bw.MaxOccurs
+			baseWildMax = satAddOccurs(baseWildMax, bw.MaxOccurs)
 		}
 	}
 
@@ -1719,7 +1716,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 			if rp.MaxOccurs == Unbounded {
 				derivedUnbounded = true
 			} else {
-				derivedWildMax += rp.MaxOccurs
+				derivedWildMax = satAddOccurs(derivedWildMax, rp.MaxOccurs)
 			}
 		case *Wildcard:
 			if baseUnion == nil {
@@ -1747,7 +1744,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 			if rp.MaxOccurs == Unbounded {
 				derivedUnbounded = true
 			} else {
-				derivedWildMax += rp.MaxOccurs
+				derivedWildMax = satAddOccurs(derivedWildMax, rp.MaxOccurs)
 			}
 		case *ModelGroup:
 			// A nested sequence/choice on the derived side (nested 1/1 all-groups
@@ -1843,7 +1840,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		for _, dw := range derivedWilds {
 			dwc, _ := dw.Term.(*Wildcard)
 			if wildcardConstraintSubset(dwc, bwc, schema, false) {
-				guaranteed += dw.MinOccurs
+				guaranteed = satAddOccurs(guaranteed, dw.MinOccurs)
 			}
 		}
 		// A concrete derived element whose name this base wildcard admits places
@@ -1851,7 +1848,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 		for _, de := range derivedElems {
 			det, _ := de.Term.(*ElementDecl)
 			if wildcardAllowsName(bwc, det.Name, schema) {
-				guaranteed += de.MinOccurs
+				guaranteed = satAddOccurs(guaranteed, de.MinOccurs)
 			}
 		}
 		if guaranteed < bw.MinOccurs {
@@ -1889,7 +1886,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 				over = true
 				break
 			}
-			capacity += dw.MaxOccurs
+			capacity = satAddOccurs(capacity, dw.MaxOccurs)
 		}
 		// Concrete derived elements admitted by this base wildcard also draw on
 		// its capacity.
@@ -1903,7 +1900,7 @@ func allRestrictsWithWildcards(ctx context.Context, rParticles, bParticles []*Pa
 					over = true
 					break
 				}
-				capacity += de.MaxOccurs
+				capacity = satAddOccurs(capacity, de.MaxOccurs)
 			}
 		}
 		if over || capacity > bw.MaxOccurs {
@@ -2177,7 +2174,7 @@ func particleElementRange(p *Particle) (int, int) {
 		return p.MinOccurs, p.MaxOccurs
 	}
 	cMin, cMax := modelGroupElementRange(mg)
-	return mulOccurs(p.MinOccurs, cMin), mulOccurs(p.MaxOccurs, cMax)
+	return occursMul(p.MinOccurs, cMin), occursMul(p.MaxOccurs, cMax)
 }
 
 // modelGroupElementRange computes the per-occurrence (min, max) element-emission
@@ -2213,20 +2210,11 @@ func modelGroupElementRange(mg *ModelGroup) (int, int) {
 		sumMin, sumMax := 0, 0
 		for _, child := range mg.Particles {
 			gMin, gMax := particleElementRange(child)
-			sumMin += gMin
-			sumMax = maxOccursAdd(sumMax, gMax)
+			sumMin = satAddOccurs(sumMin, gMin)
+			sumMax = occursAdd(sumMax, gMax)
 		}
 		return sumMin, sumMax
 	}
-}
-
-// maxOccursAdd adds two maximum occurrence bounds, treating -1 as unbounded
-// (unbounded + anything = unbounded).
-func maxOccursAdd(a, b int) int {
-	if a == -1 || b == -1 {
-		return -1
-	}
-	return a + b
 }
 
 // groupRestrictsWildcard implements NSRecurseCheckCardinality (XSD §3.9.6): a
@@ -2280,7 +2268,7 @@ func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle, schema 
 		if particleEmitsNothing(p) {
 			continue
 		}
-		leafMax := mulOccurs(encMax, p.MaxOccurs)
+		leafMax := occursMul(encMax, p.MaxOccurs)
 		switch t := p.Term.(type) {
 		case *ElementDecl:
 			wc, ok := bw.Term.(*Wildcard)
@@ -2317,18 +2305,6 @@ func groupLeavesWithinWildcard(rg *ModelGroup, encMax int, bw *Particle, schema 
 		}
 	}
 	return true
-}
-
-// mulOccurs multiplies two occurrence bounds, treating -1 as unbounded
-// (unbounded × anything non-zero = unbounded; anything × 0 = 0).
-func mulOccurs(a, b int) int {
-	if a == 0 || b == 0 {
-		return 0
-	}
-	if a == -1 || b == -1 {
-		return -1
-	}
-	return a * b
 }
 
 // occurrenceValidRestriction reports whether the occurrence range [rMin,rMax] is

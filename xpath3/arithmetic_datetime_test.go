@@ -2,12 +2,16 @@ package xpath3_test
 
 import (
 	"math/big"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
+
+// codeFODT0002 is the duration overflow error code.
+const codeFODT0002 = "FODT0002"
 
 // TestDurationFractionalSeconds guards against double-counting fractional
 // seconds when a dayTimeDuration carries an exact FracSec component alongside
@@ -444,7 +448,7 @@ func TestDateTimeAddDateOverflow(t *testing.T) {
 	for _, tt := range overflowExprs {
 		t.Run(tt.name, func(t *testing.T) {
 			err := evalExprErr(t, doc, tt.expr)
-			require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0002"})
+			require.ErrorIs(t, err, &xpath3.XPathError{Code: codeFODT0002})
 		})
 	}
 
@@ -453,4 +457,81 @@ func TestDateTimeAddDateOverflow(t *testing.T) {
 		seq := evalExpr(t, doc, `xs:dateTime("2020-01-01T00:00:00") + xs:dayTimeDuration("P3650000D")`)
 		require.Equal(t, 1, seq.Len())
 	})
+}
+
+// TestDurationArithmeticPastInt32 verifies date/time and yearMonthDuration
+// arithmetic whose month or day counts lie just past 2^31. Each count fits in a
+// 64-bit int but not a 32-bit one, so a count narrowed to int would wrap and give
+// a different value where int is 32 bits; the expected values are the same on
+// every platform.
+func TestDurationArithmeticPastInt32(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	tests := []struct {
+		expr string
+		want string
+	}{
+		// 2147483653 months: the cast itself must hold the month count.
+		{`xs:yearMonthDuration("P2147483653M")`, "P178956971Y1M"},
+		{`xs:date("2000-01-31") + xs:yearMonthDuration("P178956971Y1M")`, "178958971-02-28"},
+		{`xs:date("2000-01-31") - xs:yearMonthDuration("P178956971Y1M")`, "-178954972-12-31"},
+		// 2147483653 days.
+		{`xs:dateTime("2000-03-01T12:00:00Z") + xs:dayTimeDuration("P2147483653D")`, "5881610-09-15T12:00:00Z"},
+		{`xs:dateTime("2000-03-01T12:00:00Z") - xs:dayTimeDuration("P2147483653D")`, "-5877611-08-16T12:00:00Z"},
+		// 3000000000 months from a float and from a decimal multiplier.
+		{`xs:yearMonthDuration("P100000000Y") * xs:double(2.5)`, "P250000000Y"},
+		{`xs:yearMonthDuration("P100000000Y") * 2.5`, "P250000000Y"},
+		{`xs:yearMonthDuration("P178956970Y") + xs:yearMonthDuration("P1Y")`, "P178956971Y"},
+		{`sum((xs:yearMonthDuration("P178956970Y"), xs:yearMonthDuration("P1Y")))`, "P178956971Y"},
+		{`avg((xs:yearMonthDuration("P178956971Y"), xs:yearMonthDuration("P178956971Y")))`, "P178956971Y"},
+		{`years-from-duration(xs:yearMonthDuration("-P178956971Y5M"))`, "-178956971"},
+		{`months-from-duration(xs:yearMonthDuration("-P178956971Y5M"))`, "-5"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.expr, func(t *testing.T) {
+			seq := evalExpr(t, doc, tc.expr)
+			require.Equal(t, 1, seq.Len())
+			got, err := xpath3.AtomicToString(seq.Get(0).(xpath3.AtomicValue))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestDurationTimesInfinityOverflows verifies that multiplying a zero duration
+// by ±INF raises FODT0002, as F&O specifies for an infinite multiplier. The
+// product 0 * INF is NaN, and converting NaN to an integer gives a different
+// value on each architecture.
+func TestDurationTimesInfinityOverflows(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	for _, expr := range []string{
+		`xs:yearMonthDuration("P0M") * xs:double("INF")`,
+		`xs:yearMonthDuration("P0M") * xs:double("-INF")`,
+		`xs:dayTimeDuration("PT0S") * xs:double("INF")`,
+	} {
+		t.Run(expr, func(t *testing.T) {
+			err := evalExprErr(t, doc, expr)
+			require.ErrorIs(t, err, &xpath3.XPathError{Code: codeFODT0002})
+		})
+	}
+}
+
+// TestDateArithmeticResultYearLimit verifies the platform limit on a date/time
+// arithmetic result year. Where int is 32 bits, time.Time reports the year as an
+// int, so a result year past about ±1e9 raises FODT0001 instead of wrapping.
+// Where int is 64 bits the same expression succeeds.
+func TestDateArithmeticResultYearLimit(t *testing.T) {
+	doc := mustParseXML(t, "<root/>")
+
+	const expr = `xs:date("999999999-01-01") + xs:yearMonthDuration("P500000000Y") + xs:yearMonthDuration("P500000000Y")`
+	if strconv.IntSize == 32 {
+		err := evalExprErr(t, doc, expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0001"})
+		return
+	}
+	seq := evalExpr(t, doc, expr)
+	got, err := xpath3.AtomicToString(seq.Get(0).(xpath3.AtomicValue))
+	require.NoError(t, err)
+	require.Equal(t, "1999999999-01-01", got)
 }

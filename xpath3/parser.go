@@ -2,6 +2,7 @@ package xpath3
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -787,11 +788,13 @@ func (p *parser) parseNamePrimary() (Expr, error) {
 		if arityTok.Type != TokenNumber {
 			return nil, fmt.Errorf("%w: arity number after '#' but got %s", ErrExpectedToken, arityTok)
 		}
-		arity, err := strconv.Atoi(arityTok.Value)
+		arity, err := strconv.ParseInt(arityTok.Value, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("invalid arity %q: %w", arityTok.Value, err)
 		}
-		return NamedFunctionRef{Prefix: prefix, Name: name, Arity: arity}, nil
+		// An arity above math.MaxInt (2^31-1 where int is 32 bits) saturates
+		// instead of failing to parse; no call can pass that many arguments.
+		return NamedFunctionRef{Prefix: prefix, Name: name, Arity: int(min(arity, math.MaxInt))}, nil
 	}
 
 	// Function call: name(args)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strings"
@@ -130,7 +131,9 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 	// whole in acc before the first callback. The budget is a small multiple of
 	// the configured chunk size with a fixed floor, so realistic indentation
 	// runs still classify as ignorable whitespace while memory stays bounded.
-	blankBudget := max(limit*8, minPendingBlankBytes)
+	// limit is a caller setting; cap it so limit*8 cannot wrap (past 2^28
+	// where int is 32 bits) to a negative budget.
+	blankBudget := max(min(limit, math.MaxInt/8)*8, minPendingBlankBytes)
 
 	// blank tracks whether the run could still be ignorable whitespace. When the
 	// context makes whitespace non-ignorable, it starts false so the first chunk

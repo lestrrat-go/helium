@@ -7,6 +7,7 @@ package strcursor
 import (
 	"bytes"
 	"io"
+	"math/bits"
 	"unicode/utf8"
 	"unsafe"
 
@@ -96,20 +97,20 @@ type runeEntry struct {
 	width int
 }
 
-// roundUpPow2 rounds n up to the next power of 2 (or n itself if already a power of 2).
+// maxPow2Int is the largest power of 2 an int holds.
+const maxPow2Int = 1 << (bits.UintSize - 2)
+
+// roundUpPow2 rounds n up to the next power of 2 (or n itself if already a
+// power of 2). A value above maxPow2Int returns maxPow2Int, since the next
+// power of 2 does not fit in int.
 func roundUpPow2(n int) int {
-	if n <= 0 {
+	if n <= 1 {
 		return 1
 	}
-	n--
-	n |= n >> 1
-	n |= n >> 2
-	n |= n >> 4
-	n |= n >> 8
-	n |= n >> 16
-	n |= n >> 32
-	n++
-	return n
+	if n > maxPow2Int {
+		return maxPow2Int
+	}
+	return 1 << bits.Len(uint(n-1))
 }
 
 // RuneCursor reads runes from an io.Reader using a circular buffer so that

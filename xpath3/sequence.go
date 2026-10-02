@@ -13,14 +13,28 @@ import (
 
 // NewRangeSequence creates a lazy integer range sequence from start to end (inclusive).
 // If start > end, returns nil (empty sequence per XPath spec).
+//
+// A Sequence's length is an int. A range with more items than math.MaxInt
+// (possible where int is 32 bits, or for a range spanning nearly all of int64)
+// reports math.MaxInt as its length, so every length limit still rejects it.
 func NewRangeSequence(start, end int64) Sequence {
 	if start > end {
 		return nil
 	}
-	n := int(end - start + 1)
-	return sequence.NewRange(n, func(i int) Item {
+	return sequence.NewRange(rangeLen(start, end), func(i int) Item {
 		return AtomicValue{TypeName: TypeInteger, Value: start + int64(i)}
 	})
+}
+
+// rangeLen returns the number of integers in start..end (start <= end),
+// saturated at math.MaxInt. The span is computed in uint64, where end-start
+// cannot overflow.
+func rangeLen(start, end int64) int {
+	span := uint64(end) - uint64(start)
+	if span >= math.MaxInt {
+		return math.MaxInt
+	}
+	return int(span) + 1
 }
 
 // SingleNode creates a Sequence containing a single NodeItem.

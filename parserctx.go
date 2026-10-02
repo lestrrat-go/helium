@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
@@ -728,7 +729,9 @@ func (ctx *parserCtx) nodeContentScanBudget() int {
 	if ctx.maxNodeContent <= 0 {
 		return 0
 	}
-	return ctx.maxNodeContent + utf8.UTFMax
+	// A cap within utf8.UTFMax of math.MaxInt (a caller setting, and only
+	// 2^31-1 where int is 32 bits) saturates instead of wrapping negative.
+	return min(ctx.maxNodeContent, math.MaxInt-utf8.UTFMax) + utf8.UTFMax
 }
 
 // countingReader wraps an io.Reader and tracks the total number of bytes read

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -363,7 +364,9 @@ var win1252ToUnicode = [32]rune{
 // Other bytes > 0x7F are treated as their Latin-1 Unicode equivalents.
 func latin1ToUTF8(data []byte) []byte {
 	var buf bytes.Buffer
-	buf.Grow(len(data) * 2)
+	// Cap the hint so len(data)*2 cannot wrap negative (past 1 GiB where int
+	// is 32 bits), which would make Grow panic.
+	buf.Grow(min(len(data), math.MaxInt/2) * 2)
 	for _, b := range data {
 		if b < 0x80 {
 			buf.WriteByte(b)

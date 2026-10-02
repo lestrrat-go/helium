@@ -35,6 +35,12 @@ func TestReplace_EdgeBranches(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "22/06/2023", r.StringValue())
 
+	// A group number just past 2^32 names no group. Accumulating its digits
+	// in a 32-bit int would wrap to group 1 and substitute "b".
+	r, err = evaluate(t.Context(), nil, `replace("abc", "(b)", "$42949672971")`)
+	require.NoError(t, err)
+	require.Equal(t, "ac", r.StringValue())
+
 	// Pattern matching the empty string -> FORX0003.
 	_, err = evaluate(t.Context(), nil, `replace("abc", "x*", "y")`)
 	require.Error(t, err)

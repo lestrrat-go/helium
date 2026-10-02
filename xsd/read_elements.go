@@ -79,8 +79,10 @@ func (c *compiler) localElementNamespace(elem *helium.Element) string {
 // XSD's minOccurs / maxOccurs value spaces are unbounded, so such a literal is
 // valid and must not be rejected; the content-model matcher only needs a finite
 // upper bound (a minOccurs this large already cannot be satisfied by any
-// instance). math.MaxInt32 leaves headroom for the matcher's occurrence
-// arithmetic while still reading as "effectively unlimited".
+// instance). math.MaxInt32 reads as "effectively unlimited"; the restriction
+// checks' occurrence arithmetic saturates at math.MaxInt (satAddOccurs,
+// satMulOccurs), so a sum of clamped counts cannot wrap even where int is 32
+// bits and math.MaxInt32 is math.MaxInt.
 const occursOverflowClamp = math.MaxInt32
 
 func parseParticleOccurs(elem *helium.Element) (int, int) {
@@ -110,28 +112,27 @@ func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 		return Unbounded, true
 	}
 	// xs:nonNegativeInteger has no leading sign: a leading '+' or '-' (including
-	// "+0"/"-0") is not a valid lexical form. strconv.Atoi would accept these, so
+	// "+0"/"-0") is not a valid lexical form. strconv.ParseInt would accept these, so
 	// reject any non-digit character before converting.
 	if !isASCIIDigits(s) {
 		return 0, false
 	}
-	n, err := strconv.Atoi(s)
+	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		// isASCIIDigits guaranteed a non-empty all-digits string, so the only
-		// possible Atoi failure is a range error: a lexically valid
-		// xs:nonNegativeInteger whose magnitude exceeds int. The value space is
+		// possible ParseInt failure is a range error: a lexically valid
+		// xs:nonNegativeInteger whose magnitude exceeds int64. The value space is
 		// unbounded, so this is valid — clamp it, and reject nothing. A maxOccurs
-		// beyond int range is treated as "unbounded" (matching the MS "maxOccurs
+		// beyond int64 range is treated as "unbounded" (matching the MS "maxOccurs
 		// > 4096 ⇒ xs:any" behavior); a minOccurs clamps to a large finite cap.
 		if allowMax {
 			return Unbounded, true
 		}
 		return occursOverflowClamp, true
 	}
-	if n < 0 {
-		return 0, false
-	}
-	return n, true
+	// A value that fits int64 but not int (where int is 32 bits) saturates at
+	// math.MaxInt, so it stays a finite count as it is where int is 64 bits.
+	return int(min(n, math.MaxInt)), true
 }
 
 // compareNonNegDigits compares two non-empty ASCII-digit strings as

@@ -422,7 +422,7 @@ func TestElementChildIndexOverflow(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// An index that exceeds the int range must be reported as a syntax
+			// An index that exceeds the int64 range must be reported as a syntax
 			// error, never wrapped to a small in-range value (which would select
 			// the wrong node) or coerced to a silent empty result.
 			nodes, err := xpointer.Evaluate(t.Context(), doc, tt.expr)
@@ -430,6 +430,21 @@ func TestElementChildIndexOverflow(t *testing.T) {
 			require.Nil(t, nodes)
 		})
 	}
+}
+
+// TestElementChildIndexPastInt32 verifies that a child index that fits int64
+// but not a 32-bit int selects nothing, as it does where int is 64 bits, and
+// is not rejected as a syntax error.
+func TestElementChildIndexPastInt32(t *testing.T) {
+	t.Parallel()
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>
+<root xml:id="r"><child>text</child></root>`))
+	require.NoError(t, err)
+
+	nodes, err := xpointer.Evaluate(t.Context(), doc, "element(/1/4294967297)")
+	require.NoError(t, err)
+	require.Empty(t, nodes)
 }
 
 func TestShorthandAfterSchemeRejected(t *testing.T) {

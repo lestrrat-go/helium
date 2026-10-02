@@ -165,7 +165,7 @@ func TestCastFromString(t *testing.T) {
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				d := v.DurationVal()
-				require.Equal(t, 14, d.Months) // 1*12 + 2
+				require.Equal(t, int64(14), d.Months) // 1*12 + 2
 				require.InDelta(t, 3*86400+4*3600+5*60+6, d.Seconds, 0.001)
 			},
 		},
@@ -175,7 +175,7 @@ func TestCastFromString(t *testing.T) {
 			check: func(t *testing.T, v xpath3.AtomicValue) {
 				t.Helper()
 				d := v.DurationVal()
-				require.Equal(t, 0, d.Months)
+				require.Zero(t, d.Months)
 				require.InDelta(t, 86400.0, d.Seconds, 0.001)
 			},
 		},
@@ -447,7 +447,7 @@ func TestDurationParsing(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		months  int
+		months  int64
 		seconds float64
 		neg     bool
 	}{

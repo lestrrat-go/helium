@@ -1,6 +1,9 @@
 package xsd
 
-import "context"
+import (
+	"context"
+	"math"
+)
 
 // XSD 1.1 occurrence-counting subsumption of a base xs:all model group.
 //
@@ -29,16 +32,18 @@ type memberRange struct {
 	max int
 }
 
-// occursAdd adds two occurrence counts, propagating Unbounded (-1).
+// occursAdd adds two occurrence counts, propagating Unbounded (-1). A finite
+// sum saturates at math.MaxInt (see satAddOccurs).
 func occursAdd(a, b int) int {
 	if a == Unbounded || b == Unbounded {
 		return Unbounded
 	}
-	return a + b
+	return satAddOccurs(a, b)
 }
 
 // occursMul multiplies an occurrence count by a repetition factor, propagating
-// Unbounded. Zero on either side yields zero (no contribution).
+// Unbounded. Zero on either side yields zero (no contribution). A finite
+// product saturates at math.MaxInt (see satMulOccurs).
 func occursMul(a, factor int) int {
 	if a == 0 || factor == 0 {
 		return 0
@@ -46,7 +51,27 @@ func occursMul(a, factor int) int {
 	if a == Unbounded || factor == Unbounded {
 		return Unbounded
 	}
-	return a * factor
+	return satMulOccurs(a, factor)
+}
+
+// satAddOccurs adds two finite, non-negative occurrence counts, saturating at
+// math.MaxInt. Counts are ints, so a sum of large maxOccurs values (past 2^31-1
+// where int is 32 bits) would otherwise wrap to a negative number, to
+// Unbounded (-1), or to a small count, and turn a restriction check's verdict.
+func satAddOccurs(a, b int) int {
+	if a > math.MaxInt-b {
+		return math.MaxInt
+	}
+	return a + b
+}
+
+// satMulOccurs multiplies two finite, non-negative occurrence counts,
+// saturating at math.MaxInt for the reason given on satAddOccurs.
+func satMulOccurs(a, b int) int {
+	if a != 0 && b > math.MaxInt/a {
+		return math.MaxInt
+	}
+	return a * b
 }
 
 // occursMax returns the larger of two occurrence counts (Unbounded dominates).
