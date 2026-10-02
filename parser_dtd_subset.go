@@ -76,6 +76,14 @@ func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
 	if cur == nil {
 		return pctx.error(ctx, errNoCursor)
 	}
+	// Depth of the input holding the '[' that opened the internal subset. Only
+	// a ']' on that same input closes the subset: a parameter-entity reference
+	// between declarations must have replacement text matching extSubsetDecl
+	// (XML §2.8 WFC: PE Between Declarations), which cannot contain the "]>"
+	// that ends the DOCTYPE. libxml2 keeps parsing declarations while the input
+	// stack is deeper than this, and reports the stray ']' as "error detected
+	// in Markup declaration".
+	baseDepth := pctx.inputTab.Len()
 	if cur.Peek() != '[' {
 		goto FinishDTD
 	}
@@ -92,7 +100,13 @@ func (pctx *parserCtx) parseInternalSubset(ctx context.Context) error {
 			return err
 		}
 		cur = pctx.getCursor()
-		if cur == nil || cur.Done() || cur.Peek() == ']' {
+		if cur == nil || cur.Done() {
+			break
+		}
+		if cur.Peek() == ']' {
+			if pctx.inputTab.Len() > baseDepth {
+				return pctx.error(ctx, ErrDocTypeNotFinished)
+			}
 			break
 		}
 
