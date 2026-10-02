@@ -121,7 +121,7 @@ bug that prompted it.
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `bytecursor_test.go` | internal/strcursor | ByteCursor read-error and zero-progress handling; `TestCursorPosition` checks line, column, and line text after every advancing method on both ByteCursor and UTF8Cursor |
-| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast` line/column against `Advance` |
+| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast`/`AdvanceNoNewline` line/column against `Advance` |
 
 ## `examples/`
 

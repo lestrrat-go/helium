@@ -506,7 +506,8 @@ func (pctx *parserCtx) parseQName(ctx context.Context, cur *strcursor.UTF8Cursor
 				prefix = qname[:colon]
 				local = qname[colon+1:]
 			}
-			if err := cur.AdvanceFast(len(name)); err != nil {
+			// A QName holds no newline, so the column moves by its length.
+			if err := cur.AdvanceNoNewline(len(name)); err != nil {
 				return "", "", "", err
 			}
 			return local, prefix, qname, nil

@@ -823,8 +823,12 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context, cur *strcursor.UTF8Curso
 		}
 
 		e := pctx.peekNode()
-		if !cur.ConsumeString(e.Name()) {
+		// The name matched holds no newline, so the column moves by its length.
+		if !cur.HasPrefixString(e.Name()) {
 			return pctx.error(ctx, errors.New("expected end tag '"+e.Name()+"'"))
+		}
+		if err := cur.AdvanceNoNewline(len(e.Name())); err != nil {
+			return err
 		}
 
 		pctx.skipBlanksUTF8(ctx, cur)
@@ -947,7 +951,9 @@ func (pctx *parserCtx) parseAttributeValueUTF8(ctx context.Context, cur *strcurs
 			if pctx.isXML11() && !pctx.literalStringValid(v) {
 				return "", 0, pctx.error(ctx, ErrInvalidChar)
 			}
-			if err := cur.AdvanceFast(nBytes); err != nil {
+			// The simple scan accepts no byte below 0x20, so the value holds
+			// no newline and the column moves by its length.
+			if err := cur.AdvanceNoNewline(nBytes); err != nil {
 				return "", 0, err
 			}
 			return v, 0, nil

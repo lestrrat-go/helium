@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -461,6 +462,50 @@ func checkAdvanceFast(t *testing.T, prefix string, run []byte) {
 			"prefix %q run %q: line %d column %d, want line %d column %d",
 			prefix, run, fast.LineNumber(), fast.Column(), slow.LineNumber(), slow.Column())
 	}
+}
+
+// TestUTF8CursorAdvanceNoNewline checks that AdvanceNoNewline over a run with
+// no newline leaves the same position, line number, and column as Advance, for
+// runs of 0-40 bytes with and without multi-byte characters, after a prefix on
+// the first and on a later line, from a fully buffered input and from one
+// read a byte at a time (where the run is not yet buffered).
+func TestUTF8CursorAdvanceNoNewline(t *testing.T) {
+	t.Parallel()
+
+	for n := range 41 {
+		runs := []string{strings.Repeat("x", n), strings.Repeat("é", n/2)}
+		for _, run := range runs {
+			for _, prefix := range []string{"", "ab", "a\nbcd"} {
+				for _, oneByte := range []bool{false, true} {
+					checkAdvanceNoNewline(t, prefix, run, oneByte)
+				}
+			}
+		}
+	}
+}
+
+func checkAdvanceNoNewline(t *testing.T, prefix, run string, oneByte bool) {
+	t.Helper()
+
+	input := prefix + run + "<tail"
+	fast := newCursorOver(input, oneByte)
+	slow := newCursorOver(input, oneByte)
+	require.NoError(t, fast.Advance(len(prefix)))
+	require.NoError(t, slow.Advance(len(prefix)))
+	require.NoError(t, fast.AdvanceNoNewline(len(run)))
+	require.NoError(t, slow.Advance(len(run)))
+	require.Equal(t, slow.Peek(), fast.Peek(), "prefix %q run %q", prefix, run)
+	require.Equal(t, slow.LineNumber(), fast.LineNumber(), "prefix %q run %q", prefix, run)
+	require.Equal(t, slow.Column(), fast.Column(), "prefix %q run %q", prefix, run)
+}
+
+// newCursorOver returns a cursor over input, read a byte at a time when
+// oneByte is set.
+func newCursorOver(input string, oneByte bool) *strcursor.UTF8Cursor {
+	if oneByte {
+		return strcursor.NewUTF8Cursor(iotest.OneByteReader(strings.NewReader(input)))
+	}
+	return strcursor.NewUTF8Cursor(strings.NewReader(input))
 }
 
 // attrValuePieces extends charDataPieces with both quote characters, so the

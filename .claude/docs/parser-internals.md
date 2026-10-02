@@ -343,9 +343,13 @@ the negative-sentinel option disables the cap for trusted input.
   reclassification policy.
 - **UTF-8 fast paths** — `parseQName`/`parseNCName`/`parseAttributeValueUTF8` try
   `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the
-  cursor buffer, invalidating borrowed slices), and use `AdvanceFast()` when the run is proven newline-free.
-  `AdvanceFast` counts newlines in one loop for runs up to `advanceScanInline` (32) bytes and with
-  `bytes.LastIndexByte`/`bytes.Count` above it. `ScanSimpleAttrValue` skips printable ASCII other than the
+  cursor buffer, invalidating borrowed slices). A QName, a matched end-tag name, and a simple attribute
+  value hold no newline, so they advance with `AdvanceNoNewline`, which moves the column by the run length
+  without reading the bytes again when the run is buffered; character data and `parseNCName` advance with
+  `AdvanceFast`, which counts newlines in one loop for runs up to `advanceScanInline` (32) bytes and with
+  `bytes.LastIndexByte`/`bytes.Count` above it. `PeekAt` and `HasByteAt` serve a buffered position
+  inline and refill out of line (`peekAtSlow`, `hasByteAtSlow`), and `Advance(1)` over a buffered
+  non-newline byte returns before `advanceSlow`. `ScanSimpleAttrValue` skips printable ASCII other than the
   quote, `&` and `<` sixteen bytes at a time (`attrValueByteClass`), re-checking its byte budget after each
   skip exactly where the byte-at-a-time walk would. See `internal/strcursor/utf8cursor.go`.
 - **Qualified names** — `parseQName` returns the local name, the prefix, and the whole QName as written. Its
