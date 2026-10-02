@@ -77,7 +77,11 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
   literals, cached external-PE bodies, and external-DTD `IGNORE` sections via `parser_content.go`
   `isLiteralCharValue`, `parser_dtd_attr.go` `scanQuotedLiteral`, and `parser_dtd_subset.go`
   `parseConditionalSections` / `loadExternalParameterEntityContent`; cached PE bodies use their effective
-  TextDecl version. `IGNORE` scans decode non-delimiter UTF-8 as runes before validation. Character references
+  TextDecl version. `IGNORE` scans decode non-delimiter UTF-8 as runes before validation. Whole runs (char
+  data, simple attribute values, external-PE bodies) go through `literalBytesValid` / `literalStringValid`,
+  which resolve the version once per call, check printable ASCII eight bytes at a time (`literalWordValid`),
+  check other ASCII bytes by table (`literalASCIIValid`), and decode only non-ASCII bytes as runes; they check
+  every byte themselves, so callers need not pre-scan the run. Character references
   accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` / `parseStringCharRef` /
   `isXML11CharValue`; parsed internal entity values retain XML 1.1 restricted-character-reference segments for
   nested reparse while `Entity.Content()` remains decoded
@@ -280,6 +284,8 @@ the negative-sentinel option disables the cap for trusted input.
 - **Blank-run cap** (`skipBlankRun`/`blankRunLimit`, `parser_whitespace.go`) — the same cap bounds a
   contiguous whitespace run in 4 KiB chunks; sticky `blankRunErr`, preferred by `errorAtLevel`. DTD
   subset/INCLUDE loops call `skipBlankRun` directly (not `skipBlanks`, which consumes `%pe;` unexpanded).
+  `skipBlanks` returns before the scan when the cursor holds a non-blank byte (a non-zero `Peek`), so only
+  an actual run, a NUL, or an exhausted input reaches `skipBlankRun` and its context poll.
 - **Character buffering** (`deliverCharacters`, `CharBufferSize`) — UTF-8-boundary-respecting chunking; bounded
   streaming-SAX char-data path `parseCharDataChunkedSAX` (no DOM built) with a documented over-budget blank-run
   reclassification policy.
@@ -287,6 +293,13 @@ the negative-sentinel option disables the cap for trusted input.
   `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the
   cursor buffer, invalidating borrowed slices), and use `AdvanceFast()` when the run is proven newline-free.
   See `internal/strcursor/utf8cursor.go`.
+- **Qualified names** — `parseQName` returns the local name, the prefix, and the whole QName as written. Its
+  ASCII fast path interns the whole name once and slices the prefix and local name out of it, so a
+  prefixed name costs no concatenation; `parseQNameSlow` (non-ASCII, non-UTF-8 cursor, malformed) joins
+  `prefix:local` once. `parseStartTag` keys ATTLIST defaults and the node stack (end-tag matching,
+  `elementDeclType` whitespace lookups) on that name, and `parseAttribute` keys tokenized-type lookups on
+  the attribute's. `DTD.LookupElement` builds its `name:prefix` key in a stack buffer, so a lookup
+  allocates nothing for names that fit.
 - **Name interning** (`intern.go`) — global lexicon seed with a `(first byte, length)` cheap-check before the map probe.
 - **Entity-amplification / external bounds** — see Entity Expansion above.
 - **Start-tag duplicate detection** (`parser_element.go` `attrDupSetThreshold` = 32) — per-start-tag attribute
@@ -311,6 +324,11 @@ has no blocking read; `ParseReader` needs a context-honoring reader; the push pa
 `sync.Cond` unblocked by a watcher goroutine on `ctx.Done()`). Bounded scanners (blank scan, char-data,
 char-ref) re-check `ctx.Err()` and disambiguate exhaustion from a sticky cursor read error via
 `HasByteAt`/`Err()` for push-cancel safety. See `parseDocument`, `skipBlankRun`, and the `push` package.
+
+While the root element is parsed, the per-step polls in `parseContent` and `skipBlankRun` go through
+`pollErr` (`parserctx.go`). `armBodyPoll` reads the parse context's `Done` once; when it is nil (a context
+that can never be cancelled, such as `context.Background()`) `pollErr` returns nil without calling `Err`.
+Every other poll, including every poll of a cancellable context, calls `Err`.
 
 ## Push Parser
 

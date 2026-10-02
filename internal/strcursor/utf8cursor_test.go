@@ -119,21 +119,19 @@ func TestUTF8CursorScanCharDataSliceReturnsOverBudgetRuneWhole(t *testing.T) {
 func TestUTF8CursorScanQNameBytesASCIIUnprefixed(t *testing.T) {
 	cur := strcursor.NewUTF8Cursor(strings.NewReader("root attr"))
 
-	prefix, local, n, ok := cur.ScanQNameBytes()
+	name, colon, ok := cur.ScanQNameBytes()
 	require.True(t, ok)
-	require.Nil(t, prefix)
-	require.Equal(t, "root", string(local))
-	require.Equal(t, 4, n)
+	require.Equal(t, "root", string(name))
+	require.Equal(t, -1, colon)
 }
 
 func TestUTF8CursorScanQNameBytesASCIIPrefixed(t *testing.T) {
 	cur := strcursor.NewUTF8Cursor(strings.NewReader("x:item attr"))
 
-	prefix, local, n, ok := cur.ScanQNameBytes()
+	name, colon, ok := cur.ScanQNameBytes()
 	require.True(t, ok)
-	require.Equal(t, "x", string(prefix))
-	require.Equal(t, "item", string(local))
-	require.Equal(t, 6, n)
+	require.Equal(t, "x:item", string(name))
+	require.Equal(t, 1, colon)
 }
 
 func TestUTF8CursorScanQNameBytesSpansBufferEdge(t *testing.T) {
@@ -142,21 +140,19 @@ func TestUTF8CursorScanQNameBytesSpansBufferEdge(t *testing.T) {
 		chunk: 2,
 	})
 
-	prefix, local, n, ok := cur.ScanQNameBytes()
+	name, colon, ok := cur.ScanQNameBytes()
 	require.True(t, ok)
-	require.Equal(t, "x", string(prefix))
-	require.Equal(t, "item", string(local))
-	require.Equal(t, 6, n)
+	require.Equal(t, "x:item", string(name))
+	require.Equal(t, 1, colon)
 }
 
 func TestUTF8CursorScanQNameBytesRejectsSecondColon(t *testing.T) {
 	cur := strcursor.NewUTF8Cursor(strings.NewReader("a:b:c"))
 
-	prefix, local, n, ok := cur.ScanQNameBytes()
+	name, colon, ok := cur.ScanQNameBytes()
 	require.False(t, ok)
-	require.Nil(t, prefix)
-	require.Nil(t, local)
-	require.Zero(t, n)
+	require.Nil(t, name)
+	require.Equal(t, -1, colon)
 	require.Equal(t, byte('a'), cur.Peek())
 }
 

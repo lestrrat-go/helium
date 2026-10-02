@@ -224,6 +224,10 @@ type parserCtx struct {
 	// cleared when the pushed input is popped (popInput), mirroring baseURIScopes.
 	externalPEScopes      []externalPEScope
 	activeExternalPECount map[*Entity]int
+
+	// bodyNeverDone is set by armBodyPoll while the root element is parsed
+	// under a context whose Done is nil; see pollErr.
+	bodyNeverDone bool
 }
 
 // baseURIScope records the baseURI to restore when a particular pushed input
@@ -337,6 +341,27 @@ func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any
 		return err
 	}
 	return nil
+}
+
+// armBodyPoll prepares the per-step cancellation polls made while the root
+// element is parsed. It reads ctx's Done channel once: a context's Done
+// returns the same value on every call, and a nil Done means the context can
+// never be cancelled, so its Err is always nil.
+func (ctx *parserCtx) armBodyPoll(c context.Context) {
+	ctx.bodyNeverDone = c.Done() == nil
+}
+
+// pollErr is ctx.Err() for the cancellation polls the hot parse loops make
+// once per step. While the root element is parsed under a context that can
+// never be cancelled (armBodyPoll), it returns nil without the call, which
+// would otherwise walk the parse's context.WithValue layers on every step. In
+// every other case, including a cancellable context, it calls Err, so the
+// returned error and the number of Err calls are unchanged.
+func (ctx *parserCtx) pollErr(c context.Context) error {
+	if ctx.bodyNeverDone {
+		return nil
+	}
+	return c.Err()
 }
 
 func (ctx *parserCtx) pushNodeEntry(e nodeEntry) {

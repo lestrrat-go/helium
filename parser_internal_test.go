@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/strcursor"
@@ -767,4 +769,96 @@ func sameSpecialAttrSet(a, b map[specialAttrKey]struct{}) bool {
 	_, ok := b[probe]
 	delete(a, probe)
 	return ok
+}
+
+// TestLiteralBytesValid compares literalBytesValid and literalStringValid with
+// a rune-at-a-time reference that decodes every character. The validators are
+// unexported, which is why this test lives in the internal test file.
+func TestLiteralBytesValid(t *testing.T) {
+	t.Parallel()
+
+	versions := []*parserCtx{{version: xmlVersion10}, {version: xmlVersion11}}
+
+	t.Run("every one- and two-byte value at every word offset", func(t *testing.T) {
+		t.Parallel()
+
+		const pad = "abcdefghijklmnop"
+		buf := make([]byte, 0, 2*len(pad)+2)
+		for n := range 0x10000 + 0x100 {
+			var probe []byte
+			if n < 0x100 {
+				probe = []byte{byte(n)}
+			} else {
+				probe = []byte{byte(n >> 8), byte(n)}
+			}
+			for off := range 9 {
+				buf = append(append(append(buf[:0], pad[:off]...), probe...), pad[:9]...)
+				for _, pctx := range versions {
+					checkLiteralValidators(t, pctx, buf)
+				}
+			}
+		}
+	})
+
+	t.Run("random mixes of ASCII, controls, and UTF-8", func(t *testing.T) {
+		t.Parallel()
+
+		pieces := []string{
+			"a", "Z", " ", "~", "\t", "\n", "\r", "\x00", "\x01", "\x1f", "\x7f",
+			"\u0080", "\u0084", "\u0085", "\u0086", "\u009f", " ", "é",
+			"日", "퟿", "", "�", "￾", "￿",
+			"\U00010000", "\U0001F600", "\U0010FFFF",
+			"\xed\xa0\x80", "\xed\xbf\xbf", "\xf4\x90\x80\x80", "\xc0\x80",
+			"\xe2\x82", "\xf0\x9f\x98", "\x80", "\xbf", "\xc2", "\xff",
+			"plain text run", "0123456789abcdef",
+		}
+		rng := rand.New(rand.NewPCG(1, 2))
+		var buf []byte
+		for range 50000 {
+			buf = buf[:0]
+			for range rng.IntN(16) {
+				if rng.IntN(4) == 0 {
+					buf = append(buf, byte(rng.IntN(0x100)))
+					continue
+				}
+				buf = append(buf, pieces[rng.IntN(len(pieces))]...)
+			}
+			for _, pctx := range versions {
+				checkLiteralValidators(t, pctx, buf)
+			}
+		}
+	})
+}
+
+func checkLiteralValidators(t *testing.T, pctx *parserCtx, b []byte) {
+	t.Helper()
+
+	want := referenceLiteralValid(b, pctx.version == xmlVersion11)
+	if got := pctx.literalBytesValid(b); got != want {
+		require.Equal(t, want, got, "literalBytesValid(%q) for XML %s", b, pctx.version)
+	}
+	if got := pctx.literalStringValid(string(b)); got != want {
+		require.Equal(t, want, got, "literalStringValid(%q) for XML %s", b, pctx.version)
+	}
+}
+
+// referenceLiteralValid decodes b one rune at a time and checks each rune
+// against the XML 1.0 Char production, or for XML 1.1 against Char minus
+// RestrictedChar. A width-one RuneError is invalid UTF-8; a real U+FFFD is a
+// valid character.
+func referenceLiteralValid(b []byte, xml11 bool) bool {
+	for len(b) > 0 {
+		r, w := utf8.DecodeRune(b)
+		if r == utf8.RuneError && w == 1 {
+			return false
+		}
+		if xml11 && (!isXML11CharValue(uint32(r)) || isXML11RestrictedChar(r)) {
+			return false
+		}
+		if !xml11 && !isXMLCharValue(uint32(r)) {
+			return false
+		}
+		b = b[w:]
+	}
+	return true
 }

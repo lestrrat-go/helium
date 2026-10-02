@@ -185,10 +185,11 @@ type writeSession struct {
 	// its base upward and truncates back to that base when it ends, so a walk
 	// nested inside an attribute's value reuses the same backing array.
 	attrWalk []*docnode
-	// attrOpen is the scratch buffer an attribute's ` prefix:local="` opening
-	// is assembled in, so the qualified name is written in one call without
-	// allocating a string for it.
-	attrOpen []byte
+	// nameBuf is the scratch buffer a prefixed qualified name is assembled in
+	// (an element's prefix:local, or an attribute's ` prefix:local="`
+	// opening), so the name is written in one call without allocating a
+	// string for it.
+	nameBuf []byte
 	// nsScope maps a namespace prefix to the URI currently in force in the
 	// serialized OUTPUT — the union of the xmlns declarations emitted on the
 	// ancestor path. reconcileNamespaces consults it so a prefixed element or
@@ -424,42 +425,83 @@ func (s *writeSession) checkAttributeName(name string) bool {
 	return s.checkRawName("attribute name", name, rawNameQName, ErrWriterInvalidAttributeName)
 }
 
-// checkAttributeQName is checkAttributeName for an attribute name held as its
-// namespace prefix and local name, the parts Attribute.Name joins. A name that
+// passesQNameParts reports whether the qualified name prefix:local, with a
+// non-empty prefix, passes every check checkElementName and checkAttributeName
+// apply, without joining the parts: two valid NCNames joined by one colon form
+// a valid QName, and the joined name carries the reserved "xmlns:" prefix
+// exactly when prefix is "xmlns". A false result means the joined name must go
+// through the full check, which records the error.
+func (s *writeSession) passesQNameParts(prefix, local string) bool {
+	return prefix != lexicon.PrefixXMLNS && xmlchar.IsValidNCName(prefix) && xmlchar.IsValidNCName(local) &&
+		(!s.asciiReject() || (!hasNonASCII(prefix) && !hasNonASCII(local)))
+}
+
+// checkElementQName is checkElementName for an element name held as its
+// namespace prefix and local name, the parts Element.Name joins. A name that
 // passes every check is accepted without joining the parts, so validating a
-// prefixed attribute allocates nothing: two valid NCNames joined by one colon
-// form a valid QName, and the joined name carries the reserved "xmlns:" prefix
-// exactly when prefix is "xmlns". Any other name is joined and handed to
-// checkAttributeName, which records the same error it always has.
+// prefixed element allocates nothing. Any other name is joined and handed to
+// checkElementName, which records the same error it always has.
+func (s *writeSession) checkElementQName(prefix, local string) bool {
+	if prefix == "" {
+		return s.checkElementName(local)
+	}
+	if s.passesQNameParts(prefix, local) {
+		return true
+	}
+	return s.checkElementName(prefix + ":" + local)
+}
+
+// checkAttributeQName is checkElementQName's counterpart for an attribute
+// name, the parts Attribute.Name joins. Any name that does not pass is joined
+// and handed to checkAttributeName.
 func (s *writeSession) checkAttributeQName(prefix, local string) bool {
 	if prefix == "" {
 		return s.checkAttributeName(local)
 	}
-	if prefix != lexicon.PrefixXMLNS && xmlchar.IsValidNCName(prefix) && xmlchar.IsValidNCName(local) &&
-		(!s.asciiReject() || (!hasNonASCII(prefix) && !hasNonASCII(local))) {
+	if s.passesQNameParts(prefix, local) {
 		return true
 	}
 	return s.checkAttributeName(prefix + ":" + local)
 }
 
+// nameScratch returns the session's nameBuf, emptied. It is allocated on first
+// use with room for a typical qualified name, so most documents allocate it
+// once and never grow it.
+func (s *writeSession) nameScratch() []byte {
+	if s.nameBuf == nil {
+		s.nameBuf = make([]byte, 0, 64)
+	}
+	return s.nameBuf[:0]
+}
+
+// writeQName writes an element's qualified name, prefix:local (or local when
+// prefix is empty), as a single write. A prefixed name is assembled in the
+// session's reused nameBuf, so no string is allocated for it.
+func (s *writeSession) writeQName(out io.Writer, prefix, local string) {
+	if prefix == "" {
+		s.writeString(out, local)
+		return
+	}
+	buf := append(s.nameScratch(), prefix...)
+	buf = append(buf, ':')
+	buf = append(buf, local...)
+	s.nameBuf = buf
+	s.writeBytes(out, buf)
+}
+
 // writeAttrOpen writes the opening of an attribute, ` prefix:local="` (or
 // ` local="` when prefix is empty), as a single write. The bytes are assembled
-// in the session's reused attrOpen buffer, so no string is allocated for the
-// qualified name.
+// in the session's reused nameBuf, so no string is allocated for the qualified
+// name.
 func (s *writeSession) writeAttrOpen(out io.Writer, prefix, local string) {
-	if s.attrOpen == nil {
-		// Room for a typical qualified name, so most documents allocate the
-		// buffer once and never grow it.
-		s.attrOpen = make([]byte, 0, 64)
-	}
-	buf := append(s.attrOpen[:0], ' ')
+	buf := append(s.nameScratch(), ' ')
 	if prefix != "" {
 		buf = append(buf, prefix...)
 		buf = append(buf, ':')
 	}
 	buf = append(buf, local...)
 	buf = append(buf, '=', '"')
-	s.attrOpen = buf
+	s.nameBuf = buf
 	s.writeBytes(out, buf)
 }
 
@@ -1511,17 +1553,14 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		return nil
 	}
 
-	// if it got here it's some sort of an element
-	var name, local string
+	// if it got here it's some sort of an element. Its qualified name is
+	// handled as its prefix and local parts (the parts Element.Name joins), so
+	// no joined string is built.
+	var prefix, local string
 	var nslist []*Namespace
 	nser, isNser := n.(Namespacer)
 	if isNser {
-		local = nser.LocalName()
-		if prefix := nser.Prefix(); prefix != "" {
-			name = prefix + ":" + local
-		} else {
-			name = local
-		}
+		prefix, local = nser.Prefix(), nser.LocalName()
 		nslist = nser.Namespaces()
 		// When the element's active namespace uses a prefix (empty or not) whose
 		// URI differs from a declaration for that same prefix in its own nsDefs,
@@ -1537,13 +1576,13 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 			nslist = dropConflictingActiveNS(nslist, active.prefix, active.href)
 		}
 	} else {
-		name = n.Name()
+		local = n.Name()
 	}
 
-	// The element name is emitted verbatim below. checkElementName rejects
+	// The element name is emitted verbatim below. checkElementQName rejects
 	// names that are not well-formed XML QNames (whitespace, quotes, '>') and
 	// records a sticky error without clobbering an earlier I/O failure.
-	if !d.checkElementName(name) {
+	if !d.checkElementQName(prefix, local) {
 		return d.err
 	}
 
@@ -1552,12 +1591,12 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	// no reparseable serialization: the name emits as "prefix:local" but no
 	// xmlns:prefix is synthesized. Reject it, emitting no output the parser
 	// cannot read.
-	if isNser && !d.checkNamespaceBinding("element name", nser.Prefix(), local, nser.URI()) {
+	if isNser && !d.checkNamespaceBinding("element name", prefix, local, nser.URI()) {
 		return d.err
 	}
 
 	d.writeString(out, "<")
-	d.writeString(out, name)
+	d.writeQName(out, prefix, local)
 
 	if d.err != nil {
 		return d.err
@@ -1593,7 +1632,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 		if child := e.FirstChild(); child == nil {
 			if d.noEmpty {
 				d.writeString(out, "></")
-				d.writeString(out, name)
+				d.writeQName(out, prefix, local)
 				d.writeString(out, ">")
 			} else {
 				d.writeString(out, "/>")
@@ -1654,7 +1693,7 @@ func (d *writeSession) writeNode(out io.Writer, n Node) error {
 	}
 
 	d.writeString(out, "</")
-	d.writeString(out, name)
+	d.writeQName(out, prefix, local)
 	d.writeString(out, ">")
 
 	return d.err

@@ -52,48 +52,123 @@ func (p *writeAllocProbe) run() {
 	}
 }
 
-// parseEscapeHeavyDoc parses a document whose root holds n text-bearing
-// children, each needing markup escapes and (under EscapeNonASCII) Latin-1
-// character references.
-func parseEscapeHeavyDoc(t *testing.T, n int) *helium.Document {
+// allocDocShape names the construct an allocation-test document repeats.
+type allocDocShape int
+
+const (
+	// allocText repeats a text-bearing child element.
+	allocText allocDocShape = iota
+	// allocAttrs repeats an attribute on one element, alternating between
+	// unprefixed and prefixed names.
+	allocAttrs
+	// allocPrefixedElems repeats a prefixed element holding a prefixed empty
+	// element and text.
+	allocPrefixedElems
+)
+
+// allocAttrValue is the attribute value parseAllocDoc gives every attribute.
+// It needs markup escapes ('&', '<', '"') and, under EscapeNonASCII, a
+// character reference for 'é', so attribute-value escaping is counted too.
+const allocAttrValue = `a &amp; b &lt; c &quot; d café`
+
+// parseAllocDoc parses a document that repeats shape n times. Every repeat
+// needs markup escapes and (under EscapeNonASCII) character references. With
+// xhtml set the document carries an XHTML 1.0 DOCTYPE, which routes it
+// through the XHTML serializer.
+func parseAllocDoc(t *testing.T, shape allocDocShape, n int, xhtml bool) *helium.Document {
 	t.Helper()
 	var buf strings.Builder
-	buf.WriteString("<root>")
-	for range n {
-		buf.WriteString("<t>a &amp; b &lt; c &gt; café naïve</t>")
+	if xhtml {
+		buf.WriteString(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" ` +
+			`"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">`)
+		buf.WriteString(`<html xmlns="http://www.w3.org/1999/xhtml" xmlns:p="urn:p">`)
+	} else {
+		buf.WriteString(`<root xmlns:p="urn:p">`)
 	}
-	buf.WriteString("</root>")
+	switch shape {
+	case allocText:
+		for range n {
+			buf.WriteString("<t>a &amp; b &lt; c &gt; café naïve</t>")
+		}
+	case allocAttrs:
+		buf.WriteString("<e")
+		for i := range n {
+			if i%2 == 1 {
+				fmt.Fprintf(&buf, ` p:a%d="%s"`, i, allocAttrValue)
+				continue
+			}
+			fmt.Fprintf(&buf, ` a%d="%s"`, i, allocAttrValue)
+		}
+		buf.WriteString("/>")
+	case allocPrefixedElems:
+		for range n {
+			buf.WriteString("<p:e><p:f/>a &amp; b</p:e>")
+		}
+	}
+	if xhtml {
+		buf.WriteString(`</html>`)
+	} else {
+		buf.WriteString(`</root>`)
+	}
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(buf.String()))
 	require.NoError(t, err)
 	return doc
 }
 
-// Text escaping allocates nothing per text node: the character-reference
-// scratch buffer is allocated at most once per WriteTo, so a document with 200
-// escaped text nodes costs exactly what a one-node document does.
+// Serialization allocates nothing per repeated construct: a document that
+// repeats escaped text nodes, escaped attributes (half of them prefixed) or
+// prefixed elements many times costs exactly what a document holding one does,
+// on both the XML and the XHTML serializer. The character-reference scratch buffer, the
+// qualified-name buffer and the attribute-chain walk guard are each allocated
+// at most once per WriteTo.
 func TestWriteToAllocations(t *testing.T) {
 	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
 	// test, and a concurrent allocator would perturb the count anyway.
-	narrowDoc := parseEscapeHeavyDoc(t, 1)
-	wideDoc := parseEscapeHeavyDoc(t, 200)
 
+	// Every writer leaves the DOCTYPE out: it is formatted through fmt, whose
+	// printer pool the race detector randomly drains, which would make the
+	// count vary from run to run. Leaving it out does not change XHTML
+	// detection, which reads the document's DTD.
 	writers := []struct {
 		name string
 		w    helium.Writer
 	}{
-		{name: "default", w: helium.NewWriter()},
-		{name: "escape non-ASCII", w: helium.NewWriter().EscapeNonASCII(true)},
+		{name: "default", w: helium.NewWriter().IncludeDTD(false)},
+		{name: "escape non-ASCII", w: helium.NewWriter().IncludeDTD(false).EscapeNonASCII(true)},
+		{name: "no self-closing", w: helium.NewWriter().IncludeDTD(false).SelfCloseEmptyElements(false)},
 	}
-	for _, tc := range writers {
-		t.Run(tc.name, func(t *testing.T) {
-			narrow := &writeAllocProbe{w: tc.w, doc: narrowDoc}
-			wide := &writeAllocProbe{w: tc.w, doc: wideDoc}
-			narrowAllocs := testing.AllocsPerRun(20, narrow.run)
-			wideAllocs := testing.AllocsPerRun(20, wide.run)
-			require.NoError(t, narrow.err)
-			require.NoError(t, wide.err)
-			require.Equal(t, narrowAllocs, wideAllocs,
-				"a 200-text-node document must allocate exactly what a 1-node document does")
+	docs := []struct {
+		name  string
+		shape allocDocShape
+		xhtml bool
+		wide  int
+	}{
+		{name: "text xml", shape: allocText, wide: 200},
+		{name: "text xhtml", shape: allocText, xhtml: true, wide: 200},
+		// 24 attributes stays below the count at which the attribute-chain
+		// walk guard switches to a map.
+		{name: "attributes xml", shape: allocAttrs, wide: 24},
+		{name: "attributes xhtml", shape: allocAttrs, xhtml: true, wide: 24},
+		{name: "prefixed elements xml", shape: allocPrefixedElems, wide: 50},
+		{name: "prefixed elements xhtml", shape: allocPrefixedElems, xhtml: true, wide: 50},
+	}
+	for _, dc := range docs {
+		t.Run(dc.name, func(t *testing.T) {
+			narrowDoc := parseAllocDoc(t, dc.shape, 1, dc.xhtml)
+			wideDoc := parseAllocDoc(t, dc.shape, dc.wide, dc.xhtml)
+			for _, wc := range writers {
+				t.Run(wc.name, func(t *testing.T) {
+					narrow := &writeAllocProbe{w: wc.w, doc: narrowDoc}
+					wide := &writeAllocProbe{w: wc.w, doc: wideDoc}
+					narrowAllocs := testing.AllocsPerRun(20, narrow.run)
+					wideAllocs := testing.AllocsPerRun(20, wide.run)
+					require.NoError(t, narrow.err)
+					require.NoError(t, wide.err)
+					require.Equal(t, narrowAllocs, wideAllocs,
+						"a document repeating the construct %d times must allocate exactly what one holding it once does",
+						dc.wide)
+				})
+			}
 		})
 	}
 }
@@ -111,6 +186,9 @@ func BenchmarkWrite(b *testing.B) {
 		// Fedora comps file: text-heavy groups with many xml:lang
 		// translations in non-ASCII UTF-8.
 		{name: "comps", path: "relaxng/test/comps_0.xml"},
+		// XMP RELAX NG schema: every element carries the rng: prefix, and
+		// the root declares about thirty namespaces.
+		{name: "xmprng", path: "relaxng/test/ISO19005-1-XMP_Packet.rng"},
 	}
 	for _, fx := range fixtures {
 		b.Run(fx.name, func(b *testing.B) {
@@ -1217,78 +1295,4 @@ func TestWriterOptions(t *testing.T) {
 	err = helium.NewWriter().EscapeNonASCII(true).WriteTo(&buf, d2)
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "&#")
-}
-
-// attrAllocProbe serializes doc to io.Discard, keeping the first error, so
-// testing.AllocsPerRun can measure one WriteTo call through a method value.
-// The DOCTYPE is left out of the output: it is formatted through fmt, whose
-// printer pool the race detector randomly drains, which would make the count
-// vary from run to run. Leaving it out does not change XHTML detection, which
-// reads the document's DTD.
-type attrAllocProbe struct {
-	doc *helium.Document
-	err error
-}
-
-func (p *attrAllocProbe) run() {
-	if err := helium.NewWriter().IncludeDTD(false).WriteTo(io.Discard, p.doc); err != nil && p.err == nil {
-		p.err = err
-	}
-}
-
-// parseAttrHeavyDoc parses a document whose single <e> element carries n
-// empty-valued attributes, alternating between unprefixed and prefixed names.
-// Empty values keep attribute-value escaping out of the count, so only the
-// per-attribute name and duplicate-tracking work is measured. With xhtml set
-// the document carries an XHTML 1.0 DOCTYPE, which routes it through the
-// XHTML serializer.
-func parseAttrHeavyDoc(t *testing.T, n int, xhtml bool) *helium.Document {
-	t.Helper()
-	var buf strings.Builder
-	if xhtml {
-		buf.WriteString(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" ` +
-			`"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">`)
-		buf.WriteString(`<html xmlns="http://www.w3.org/1999/xhtml" xmlns:p="urn:p"><e`)
-	} else {
-		buf.WriteString(`<root xmlns:p="urn:p"><e`)
-	}
-	for i := range n {
-		if i%2 == 1 {
-			fmt.Fprintf(&buf, ` p:a%d=""`, i)
-			continue
-		}
-		fmt.Fprintf(&buf, ` a%d=""`, i)
-	}
-	if xhtml {
-		buf.WriteString(`/></html>`)
-	} else {
-		buf.WriteString(`/></root>`)
-	}
-	doc, err := helium.NewParser().Parse(t.Context(), []byte(buf.String()))
-	require.NoError(t, err)
-	return doc
-}
-
-// Attribute names and the attribute-chain walk guard allocate nothing per
-// attribute: an element with 24 attributes, half of them prefixed, costs
-// exactly what an element with one attribute does.
-func TestWriteToAttributeAllocations(t *testing.T) {
-	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
-	// test, and a concurrent allocator would perturb the count anyway.
-	for _, xhtml := range []bool{false, true} {
-		name := "xml"
-		if xhtml {
-			name = "xhtml"
-		}
-		t.Run(name, func(t *testing.T) {
-			narrow := &attrAllocProbe{doc: parseAttrHeavyDoc(t, 1, xhtml)}
-			wide := &attrAllocProbe{doc: parseAttrHeavyDoc(t, 24, xhtml)}
-			narrowAllocs := testing.AllocsPerRun(20, narrow.run)
-			wideAllocs := testing.AllocsPerRun(20, wide.run)
-			require.NoError(t, narrow.err)
-			require.NoError(t, wide.err)
-			require.Equal(t, narrowAllocs, wideAllocs,
-				"a 24-attribute element must allocate exactly what a 1-attribute element does")
-		})
-	}
 }

@@ -481,31 +481,52 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 	return
 }
 
-func (pctx *parserCtx) parseQName(ctx context.Context) (local string, prefix string, err error) {
+// parseQName parses a QName and returns its local name, its prefix, and the
+// whole name as written (prefix ":" local, or the local name when there is no
+// prefix). Start tags, end-tag matching, and the DTD tables (ATTLIST defaults,
+// tokenized attribute types, element declarations) all key on that whole name.
+// The ASCII fast path interns the whole name once and takes the prefix and the
+// local name as substrings of it, so a prefixed name costs one intern lookup
+// and no concatenation. On error all three names are empty.
+func (pctx *parserCtx) parseQName(ctx context.Context) (local, prefix, qname string, err error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		err = pctx.error(ctx, errNoCursor)
-		return
+		return "", "", "", pctx.error(ctx, errNoCursor)
 	}
 	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
-		prefixBytes, localBytes, nBytes, ok := u8.ScanQNameBytes()
+		name, colon, ok := u8.ScanQNameBytes()
 		if ok {
 			// Bound the full QName (prefix + ':' + local), not just each part,
 			// so a prefixed name can't exceed the cap by splitting across the
-			// colon. nBytes is the total scanned QName length.
-			if pctx.nameTooLong(nBytes) {
-				return "", "", pctx.error(ctx, ErrNameTooLong)
+			// colon.
+			if pctx.nameTooLong(len(name)) {
+				return "", "", "", pctx.error(ctx, ErrNameTooLong)
 			}
-			if len(prefixBytes) > 0 {
-				prefix = pctx.internNameBytes(prefixBytes)
+			// Intern before advancing: the advance may compact the cursor
+			// buffer that name borrows.
+			qname = pctx.internNameBytes(name)
+			local = qname
+			if colon >= 0 {
+				prefix = qname[:colon]
+				local = qname[colon+1:]
 			}
-			local = pctx.internNameBytes(localBytes)
-			if err := u8.AdvanceFast(nBytes); err != nil {
-				return "", "", err
+			if err := u8.AdvanceFast(len(name)); err != nil {
+				return "", "", "", err
 			}
-			return local, prefix, nil
+			return local, prefix, qname, nil
 		}
 	}
+	local, prefix, err = pctx.parseQNameSlow(ctx, cur)
+	if err != nil || prefix == "" {
+		return local, prefix, local, err
+	}
+	return local, prefix, prefix + ":" + local, nil
+}
+
+// parseQNameSlow is parseQName for input the ASCII fast path does not handle:
+// a non-UTF-8 cursor, a non-ASCII name, or a malformed name. It returns the
+// local name and the prefix; on error both are empty.
+func (pctx *parserCtx) parseQNameSlow(ctx context.Context, cur strcursor.Cursor) (local string, prefix string, err error) {
 	var v string
 	v, err = pctx.parseNCName(ctx)
 	if err != nil {

@@ -304,7 +304,11 @@ corrupt the DOM. Internal read-only hot paths (serializers in `writer.go`/`write
 package-level `rawContent(Node)` helper — backed by an unexported `rawContent()` method on each of those three
 leaf types — to get the raw slice without the copy. The `rawContentNode` interface gates the no-copy path; for
 any other node `rawContent` falls back to `Content()`. PI/EntityRef/Entity/NamespaceNodeWrapper already
-returned string-derived copies and are unaffected.
+returned string-derived copies and are unaffected. The same serializers handle an element's or attribute's
+qualified name as its `Prefix()` and `LocalName()` parts and never join them: `checkElementQName`/
+`checkAttributeQName` validate the parts, and `writeQName`/`writeAttrOpen` assemble a prefixed name in the
+write session's reused `nameBuf`, so a prefixed name allocates nothing per node. The parts are joined only to
+build an error message.
 
 ### Predefined Entities
 5 unexported singletons: `entityLT`, `entityGT`, `entityAmpersand`, `entityApostrophe`, `entityQuote` (resolved by name
