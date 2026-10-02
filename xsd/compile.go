@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"math"
 	"sort"
-	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
+	"github.com/lestrrat-go/helium/internal/intconv"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -1652,16 +1651,15 @@ func lookupNS(elem *helium.Element, prefix string) string {
 // parseNonNegativeOccurs / parseParticleOccurs, which additionally accept the
 // "unbounded" keyword and clamp values too large for an int.
 //
-// The value is parsed as an int64 and a value above math.MaxInt (2^31-1 where
-// int is 32 bits) saturates at math.MaxInt: no string, list, or digit count
-// there can reach that size, so the facet constrains values exactly as the
-// larger number would.
+// A value that fits int64 but not int (where int is 32 bits) saturates at
+// math.MaxInt (intconv.Atoi): no string, list, or digit count there can reach
+// that size, so the facet constrains values exactly as the larger number would.
 func parseOccurs(s string) int {
-	n, err := strconv.ParseInt(s, 10, 64)
+	n, err := intconv.Atoi(s)
 	if err != nil {
 		return 0
 	}
-	return int(min(n, math.MaxInt))
+	return n
 }
 
 // builtinTypeNames is the immutable list of XSD 1.0 built-in datatype local names

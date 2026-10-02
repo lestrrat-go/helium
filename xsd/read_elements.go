@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/intconv"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/internal/xpath1/lexer"
@@ -112,15 +112,18 @@ func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 		return Unbounded, true
 	}
 	// xs:nonNegativeInteger has no leading sign: a leading '+' or '-' (including
-	// "+0"/"-0") is not a valid lexical form. strconv.ParseInt would accept these, so
+	// "+0"/"-0") is not a valid lexical form. strconv.Atoi would accept these, so
 	// reject any non-digit character before converting.
 	if !isASCIIDigits(s) {
 		return 0, false
 	}
-	n, err := strconv.ParseInt(s, 10, 64)
+	// A value that fits int64 but not int (where int is 32 bits) saturates at
+	// math.MaxInt (intconv.Atoi), so it stays a finite count as it is where
+	// int is 64 bits.
+	n, err := intconv.Atoi(s)
 	if err != nil {
 		// isASCIIDigits guaranteed a non-empty all-digits string, so the only
-		// possible ParseInt failure is a range error: a lexically valid
+		// possible Atoi failure is a range error: a lexically valid
 		// xs:nonNegativeInteger whose magnitude exceeds int64. The value space is
 		// unbounded, so this is valid — clamp it, and reject nothing. A maxOccurs
 		// beyond int64 range is treated as "unbounded" (matching the MS "maxOccurs
@@ -130,9 +133,7 @@ func parseNonNegativeOccurs(s string, allowMax bool) (int, bool) {
 		}
 		return occursOverflowClamp, true
 	}
-	// A value that fits int64 but not int (where int is 32 bits) saturates at
-	// math.MaxInt, so it stays a finite count as it is where int is 64 bits.
-	return int(min(n, math.MaxInt)), true
+	return n, true
 }
 
 // compareNonNegDigits compares two non-empty ASCII-digit strings as

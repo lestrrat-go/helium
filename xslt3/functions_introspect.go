@@ -3,10 +3,10 @@ package xslt3
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/intconv"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -87,10 +87,11 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 		av2, err2 := xpath3.AtomizeItem(args[1].Get(0))
 		if err2 == nil {
 			s2, _ := xpath3.AtomicToString(av2)
-			// Parse in int64 and clamp, so an arity above 2^31-1 is still a
-			// number (matching no fixed-arity function) where int is 32 bits.
-			if n, err3 := strconv.ParseInt(strings.TrimSpace(s2), 10, 64); err3 == nil {
-				arity = clampInt64ToInt(n)
+			// intconv.Atoi saturates an arity that fits int64 but not int, so
+			// where int is 32 bits it is still a number (matching no
+			// fixed-arity function) instead of falling back to "any".
+			if n, err3 := intconv.Atoi(strings.TrimSpace(s2)); err3 == nil {
+				arity = n
 			}
 		}
 	}

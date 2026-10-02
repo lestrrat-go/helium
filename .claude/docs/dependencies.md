@@ -11,12 +11,12 @@ xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/
                   → internal/xmlchar (via xpointer)
                   (helium.Parser.XInclude injects an xinclude.Processor through the helium.XIncludeProcessor interface — dependency inversion keeps this edge one-way; helium does NOT import xinclude)
 xpath1         → helium, internal/lexicon, internal/domutil, internal/xpath1/lexer
-xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil, internal/writerctl
-xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, internal/writerctl, xslt3/internal/elements
-xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, internal/xpath1/lexer, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs
+xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil, internal/writerctl, internal/intconv
+xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, internal/writerctl, internal/intconv, xslt3/internal/elements
+xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, internal/xpath1/lexer, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs, internal/intconv
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/lexer, internal/xpath1/number
-xpointer       → helium, xpath1, internal/xpath1/lexer, internal/xmlchar
+xpointer       → helium, xpath1, internal/xpath1/lexer, internal/xmlchar, internal/intconv
 c14n           → helium, internal/lexicon, internal/domutil
 xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil, internal/xpath1/lexer, internal/xmlbase64, internal/xmlchar
 xmldsig1/transform → helium, xmldsig1, xslt3  (opt-in xslt3-backed XSLTTransformer; kept out of xmldsig1 so the core never imports xslt3)
@@ -37,6 +37,7 @@ helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parse
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
+internal/intconv → (none)
 internal/icu   → (none)
 push → (none)
 internal/heliumtest → (none)
@@ -59,7 +60,7 @@ test           → helium
 
 ## Leaf packages (no helium deps)
 sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil,
-internal/encoding, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence,
+internal/encoding, internal/intconv, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence,
 internal/strcursor,
 internal/writerctl, internal/xpath1/lexer, internal/xsdregex, internal/uripath
 
