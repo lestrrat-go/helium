@@ -447,16 +447,16 @@ func (pctx *parserCtx) parseConditionalSections(ctx context.Context) error {
 	return ErrConditionalSectionKeyword
 }
 
-// checkCondSectionEntityBoundary enforces the "Proper Conditional Section/PE
-// Nesting" validity constraint (XML §3.4): the "<![", the INCLUDE/IGNORE
-// keyword, and the "[" that open a conditional section must all originate in
-// the same parameter-entity replacement text. sectionDepth is the input-stack
-// depth of the cursor holding "<!["; when the keyword and "[" were supplied by a
-// parameter entity pushed above it, the section markup straddles an entity
-// boundary and the input stack is deeper than sectionDepth. It is a VALIDITY
-// constraint, so it is reported only when validating (matching libxml2, which
-// raises XML_ERR_ENTITY_BOUNDARY here as xmlValidityError, not a fatal
-// well-formedness error).
+// checkCondSectionEntityBoundary enforces the opening side of the "Proper
+// Conditional Section/PE Nesting" validity constraint (XML §3.4): the "<![",
+// the INCLUDE/IGNORE keyword, and the "[" that open a conditional section must
+// all come from the same parameter-entity replacement text. sectionDepth is the
+// input-stack depth of the cursor holding "<!["; when a parameter entity pushed
+// above it supplied the keyword and "[", the input stack is deeper than
+// sectionDepth. The spec classifies this as a validity constraint, so helium
+// reports it only when validating. This intentionally differs from libxml2
+// 2.9.14, which reports the same markup as a fatal parser error ("All markup of
+// the conditional section is not in the same entity") even without validation.
 func (pctx *parserCtx) checkCondSectionEntityBoundary(ctx context.Context, sectionDepth int) error {
 	if !pctx.options.IsSet(parseDTDValid) {
 		return nil
