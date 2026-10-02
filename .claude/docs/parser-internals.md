@@ -325,11 +325,10 @@ has no blocking read; `ParseReader` needs a context-honoring reader; the push pa
 char-ref) re-check `ctx.Err()` and disambiguate exhaustion from a sticky cursor read error via
 `HasByteAt`/`Err()` for push-cancel safety. See `parseDocument`, `skipBlankRun`, and the `push` package.
 
-`parseDocument` hands the parse a `documentContext` (`parser.go`): value layers for the parser context and
-the document locator over the caller's context, plus the `stopFuncKey` value `StopParser` reads. The
-per-step polls in `parseContent` and `skipBlankRun` go through `pollErr`, which asks the caller's context
-directly (the value layers do not change `Err`) and skips the call when the caller's `Done` is nil, i.e.
-the context can never be cancelled. Any other context, such as a nested parse's, is asked as given.
+While the root element is parsed, the per-step polls in `parseContent` and `skipBlankRun` go through
+`pollErr` (`parserctx.go`). `armBodyPoll` reads the parse context's `Done` once; when it is nil (a context
+that can never be cancelled, such as `context.Background()`) `pollErr` returns nil without calling `Err`.
+Every other poll, including every poll of a cancellable context, calls `Err`.
 
 ## Push Parser
 
