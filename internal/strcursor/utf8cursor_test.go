@@ -539,6 +539,21 @@ func TestUTF8CursorScanSimpleAttrValue(t *testing.T) {
 	})
 }
 
+// FuzzScanSimpleAttrValue runs the TestUTF8CursorScanSimpleAttrValue
+// comparison on fuzzer-chosen input, quote, budget, and read size.
+func FuzzScanSimpleAttrValue(f *testing.F) {
+	for _, piece := range attrValuePieces {
+		f.Add([]byte("0123456789"+piece+`abcdef"`), false, uint8(0), uint8(0))
+	}
+	f.Fuzz(func(t *testing.T, input []byte, apostrophe bool, budget, chunk uint8) {
+		quote := byte('"')
+		if apostrophe {
+			quote = '\''
+		}
+		checkScanSimpleAttrValue(t, input, quote, int(budget), int(chunk%16))
+	})
+}
+
 // checkScanSimpleAttrValue scans input with ScanSimpleAttrValue and compares
 // the value and byte count with referenceScanSimpleAttrValue. chunk > 0 feeds
 // the cursor chunk bytes per read; budget is the maxBytes argument.
