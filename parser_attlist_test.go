@@ -362,42 +362,37 @@ func TestValidateAttributeValue(t *testing.T) {
 	}
 }
 
-// noDTDDefaultParseAllocBudget is the measured allocation count of Parser.Parse
-// on a minimal well-formed document with no DTD and no attributes.
-//
-// It exists to pin ONE property: attsDefaultSeen is a DTD-default-only dedup set
-// and must be allocated lazily, on the first <!ATTLIST> default, so a document
-// that declares no DTD never pays for it. Allocating it eagerly in parserCtx.init
-// costs every parse in the program exactly one map, which this budget catches.
-//
-// Treat a failure as a real question about the parse path, not as a number to
-// bump: any increase means the common no-DTD parse acquired a new allocation.
-const noDTDDefaultParseAllocBudget = 27
-
-// A document with no DTD must not allocate the <!ATTLIST> default dedup set.
+// attsDefaultSeen is a DTD-default-only dedup set and must be allocated
+// lazily, on the first <!ATTLIST> default, so a document that declares no DTD
+// never pays for it. The parse state reports whether the set was allocated, so
+// the check reads the property itself instead of an allocation count.
 func TestParseNoDTDAllocations(t *testing.T) {
-	// No t.Parallel: testing.AllocsPerRun panics when called from a parallel
-	// test, and a concurrent allocator would perturb the count anyway.
+	t.Parallel()
 
-	src := []byte(`<root/>`)
-	p := helium.NewParser()
-	ctx := t.Context()
-
-	// Warm up first: the very first Parse in the process seeds package-level
-	// lazies (the name lexicon, buffer pools), which AllocsPerRun would
-	// otherwise charge to the measured run.
-	if _, err := p.Parse(ctx, src); err != nil {
+	t.Run("a document with no DTD leaves the set unallocated", func(t *testing.T) {
+		t.Parallel()
+		state, err := helium.ParseStateOfParseForTesting(t.Context(), helium.NewParser(), []byte(`<root/>`))
 		require.NoError(t, err)
-	}
-
-	var parseErr error
-	allocs := testing.AllocsPerRun(200, func() {
-		_, err := p.Parse(ctx, src)
-		if err != nil && parseErr == nil {
-			parseErr = err
-		}
+		require.False(t, state.AttributeDefaultSetAllocated,
+			"parsing a document with no DTD must not allocate DTD-only bookkeeping")
 	})
-	require.NoError(t, parseErr)
-	require.LessOrEqual(t, int(allocs), noDTDDefaultParseAllocBudget,
-		"parsing a document with no DTD must not allocate DTD-only bookkeeping")
+
+	t.Run("a DTD without attribute defaults leaves the set unallocated", func(t *testing.T) {
+		t.Parallel()
+		src := []byte(`<!DOCTYPE root [<!ELEMENT root EMPTY><!ATTLIST root a CDATA #IMPLIED>]><root/>`)
+		state, err := helium.ParseStateOfParseForTesting(t.Context(), helium.NewParser(), src)
+		require.NoError(t, err)
+		require.False(t, state.AttributeDefaultSetAllocated,
+			"an #IMPLIED attribute declares no default, so the dedup set must stay unallocated")
+	})
+
+	t.Run("an attribute default allocates the set", func(t *testing.T) {
+		t.Parallel()
+		// The positive control: without it, a parse state that never reports
+		// the set would pass the cases above.
+		src := []byte(`<!DOCTYPE root [<!ATTLIST root a CDATA "x">]><root/>`)
+		state, err := helium.ParseStateOfParseForTesting(t.Context(), helium.NewParser(), src)
+		require.NoError(t, err)
+		require.True(t, state.AttributeDefaultSetAllocated)
+	})
 }

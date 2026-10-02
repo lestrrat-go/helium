@@ -156,9 +156,8 @@ Tests never pass or fail on elapsed time. Express the protected property as work
 - Cancellation/deadline honored mid-run → `heliumtest.PollContext` placing the cancellation or deadline at a
   fixed poll (helium's walks poll through `ctx.Err()`), then assert the context error and a small
   `PollsAfterExpiry()`. A pre-cancelled context covers the entry checks.
-- Laziness, bounded backtracking, linear growth → count work: items read from a counting `Sequence`,
-  `testing.AllocsPerRun`, or allocated bytes compared across two input sizes. Allocation measurements read a
-  process-wide counter, so those tests are not `t.Parallel()` (`AllocsPerRun` panics in a parallel test).
+- Laziness, bounded backtracking, linear growth → count work, as described in Resource-Measuring Assertions
+  below.
 - Blocking behavior → synchronize on a signal from the code under test (a context whose `Err` or `Done`
   signals, a reader that signals when a blocking `Read` starts), never on a sleep.
 - Code that parks on channels or `sync.Cond` (push parsers, the catalog load dedup) → run the test in a
@@ -173,6 +172,31 @@ Tests never pass or fail on elapsed time. Express the protected property as work
   none remain (`catalog/load_cancel_test.go` `waitLabeledGoroutinesExit`). Never compare
   `runtime.NumGoroutine`, which counts every parallel test's goroutines.
 - `time.After` stays only as a hang guard that fails a test which would otherwise never return.
+
+## Resource-Measuring Assertions
+
+A test that guards a memory or work bound gives the same verdict on every machine and Go toolchain, on every
+`GOARCH` and `GOMAXPROCS`, and under `-race`.
+
+- Count the work where the code already counts it, and read the count through `export_test.go`.
+  `ParseStateOfParseForTesting` (root package) returns the entity-expansion bytes the parser charged and
+  whether the parse allocated the `<!ATTLIST>` default set. xpath3 tests count items read from a counting
+  `Sequence`. These counts belong to one call, so the test can be `t.Parallel()`.
+- A hook reads state the code keeps anyway, so a normal build pays nothing for it. Never add a
+  package-level counter: every parallel test would add to it.
+- Show that the check can fail. Add a positive control (an input that must trip it), or require that the
+  counted path ran (`require.Positive` on the count), so an error raised earlier cannot pass the test
+  without reaching the bound.
+- When no count exists, measure allocations with `testing.AllocsPerRun` or the `runtime.MemStats.TotalAlloc`
+  delta. Both read process-wide counters, so the measurement is its own top-level test, and neither it nor an
+  ancestor calls `t.Parallel()` (`AllocsPerRun` panics in a parallel test). It then runs alone, in the test
+  binary's sequential phase. Its doc comment says why it is sequential.
+- Compare allocations relatively (N items against 1, a large input against a small one), or bound them by the
+  input size with a wide margin: the guarded regression costs a copy of a multi-MiB input, and the bound sits
+  far above the fixed cost of the call. `require.Zero` on a path that must not allocate is fine. Never pin an
+  absolute count measured on one toolchain.
+- Process-wide settings (`syscall.Umask`, package-level variables such as `xpath3.DefaultRegexMatchTimeout`)
+  change only in a sequential test, which restores them.
 
 ### SAX Event Normalization
 

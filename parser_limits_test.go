@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -526,54 +525,53 @@ func TestMaxNodeContentSize(t *testing.T) {
 }
 
 // TestMaxNodeContentSizeEntityNotMaterialized checks that the substituted
-// entity-replacement path enforces the node-content cap DURING decode, well before
-// the expansion is fully materialized. The entity nests so its stored literal is
-// tiny (~tens of KiB) but its full expansion is ~64 MiB. The amplification guard
-// is disabled so only the node-content cap can stop it. Building the whole
-// replacement string before checking the cap would allocate at least the full
-// 64 MiB expansion; streaming the decode through the cap keeps total allocation
-// orders of magnitude smaller.
+// entity-replacement path enforces the node-content cap DURING decode, well
+// before the expansion is fully materialized. The entity nests so each stored
+// literal fits under the cap (inner is 4 KiB, outer 112 KiB) while the full
+// expansion of outer is 64 MiB. The amplification ratio check is disabled so
+// only the node-content cap can stop it.
 //
-// The bound is checked via runtime.MemStats TotalAlloc, which is process-wide, so
-// this is a separate top-level test that does not call t.Parallel: it runs in the
-// sequential phase, before any parallel test resumes, and the delta reflects only
-// this parse.
-func TestMaxNodeContentSizeEntityNotMaterialized(t *testing.T) { //nolint:paralleltest // TotalAlloc is process-wide; see the doc comment
-	// inner: 4 KiB; outer references inner 16384 times => ~64 MiB expansion,
-	// but the stored literal of outer is only ~3*16384 = ~48 KiB.
-	inner := strings.Repeat("a", 4096)
+// The parser charges the replacement text of every entity reference it expands
+// to its amplification counter, whether or not the ratio check is enabled, so
+// the counter after the parse measures how much replacement text the parse
+// built. Building the whole replacement before checking the cap charges the
+// full 64 MiB; streaming the decode through the cap stops once the attribute
+// value reaches the cap, after about cap/4 KiB expansions of inner.
+func TestMaxNodeContentSizeEntityNotMaterialized(t *testing.T) {
+	t.Parallel()
+
+	// inner: 4 KiB; outer references inner 16384 times => 64 MiB expansion,
+	// but the stored literal of outer is only 7*16384 bytes = 112 KiB.
+	const (
+		innerSize   = 4096
+		innerRefs   = 16384
+		expansion   = innerRefs * innerSize // the 64 MiB a materializing path builds
+		contentCap  = 128 << 10             // above both literals, far below the expansion
+		chargeBound = 2 * contentCap
+	)
+	inner := strings.Repeat("a", innerSize)
 	var refs strings.Builder
-	for range 16384 {
+	for range innerRefs {
 		refs.WriteString("&inner;")
 	}
+	require.Less(t, refs.Len(), contentCap, "outer's literal must fit under the cap so the DTD parses")
 	in := []byte(`<!DOCTYPE r [` +
 		`<!ENTITY inner "` + inner + `">` +
 		`<!ENTITY outer "` + refs.String() + `">` +
 		`]><r a="&outer;"/>`)
 
-	const expansion = 16384 * 4096 // ~64 MiB the old path would have materialized
-	// Generous bound: far below the full expansion, far above the parse's real
-	// working set (input + entity-table literals + cursor buffers ≈ a few MiB).
-	const allocBound = 16 << 20 // 16 MiB
-
-	var before, after runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-
-	_, err := helium.NewParser().
+	p := helium.NewParser().
 		SubstituteEntities(true).
 		MaxEntityAmplification(-1). // disable amplification guard: cap is the only brake
-		MaxNodeContentSize(64).
-		Parse(t.Context(), in)
-
-	runtime.ReadMemStats(&after)
-
+		MaxNodeContentSize(contentCap)
+	state, err := helium.ParseStateOfParseForTesting(t.Context(), p, in)
 	require.ErrorIs(t, err, helium.ErrNodeContentTooLarge)
-
-	delta := after.TotalAlloc - before.TotalAlloc
-	require.Less(t, delta, uint64(allocBound),
-		"entity expansion was materialized: parse allocated %d bytes (full expansion is %d bytes); the cap must stop the decode incrementally",
-		delta, uint64(expansion))
+	// A zero charge means the cap tripped before the attribute value was
+	// decoded, so the check below would prove nothing.
+	require.Positive(t, state.EntityExpansionBytes, "the attribute's entity reference was never expanded")
+	require.Less(t, state.EntityExpansionBytes, int64(chargeBound),
+		"entity expansion was materialized: the parse charged %d bytes of replacement text (full expansion is %d bytes); the cap must stop the decode incrementally",
+		state.EntityExpansionBytes, int64(expansion))
 }
 
 func TestCharBufferSize(t *testing.T) {
