@@ -119,7 +119,7 @@ bug that prompted it.
 | `interleave_differential_test.go` | relaxng | Flag-gated interleave differential harness (optional `xmllint` oracle) |
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
-| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization and ASCII QName scanner regression coverage |
+| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, and `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`) |
 
 ## `examples/`
 
@@ -272,7 +272,8 @@ path expressions go through the fresh-`DocOrderCache` check.
 
 - Public-package fuzz coverage lives in package-local `fuzz_test.go` files.
 - Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `relaxng`, `schematron`, `sink`, `stream`, `xinclude`,
-  `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xmlenc1`, `xslt3`.
+  `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xmlenc1`, `xslt3`. `internal/strcursor` has
+  `FuzzScanCharDataSlice`, which is not in the `fuzz.yml` matrix; its seeds run as ordinary tests.
 - `shim` intentionally excluded from repo fuzz matrix.
 - `enum` + `sax` intentionally excluded from direct fuzzing → constants/interface-only surface.
 - Bound fuzz input sizes early. Return on oversize inputs.

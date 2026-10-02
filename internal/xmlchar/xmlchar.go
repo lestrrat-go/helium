@@ -1,4 +1,6 @@
-// Package xmlchar provides XML 1.0 NCName character classification functions.
+// Package xmlchar provides XML character classification functions: the XML 1.0
+// and XML 1.1 Char productions, literal-character validity, and the NCName,
+// QName, and Name productions.
 package xmlchar
 
 import (

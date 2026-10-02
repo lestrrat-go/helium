@@ -41,7 +41,7 @@ internal/icu   → (none)
 push → (none)
 internal/heliumtest → (none)
 internal/sequence → (none)
-internal/strcursor → (none)
+internal/strcursor → internal/xmlchar
 internal/xpath1/lexer → (none)
 internal/unparsedtext → internal/xmlchar, internal/uripath, internal/iofs
 internal/catalog → internal/uripath
