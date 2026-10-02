@@ -6,6 +6,7 @@ import (
 
 	xmlenc "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/transform"
 )
 
 func TestISO88591(t *testing.T) {
@@ -294,5 +295,73 @@ func TestUSASCIIStrictDecode(t *testing.T) {
 
 		_, err = e.NewDecoder().String(string([]byte{0x80}))
 		require.Error(t, err, "alias %q: 0x80 must be rejected", alias)
+	}
+}
+
+// TestC1FallbackDecode decodes single-byte charmap input made of ASCII runs of
+// every length 0-17 around non-ASCII bytes, C1 bytes and bytes a code page
+// leaves undefined. The whole input must decode to what its bytes decode to one
+// at a time, both in one call and through destination buffers too small to take
+// the output at once.
+func TestC1FallbackDecode(t *testing.T) {
+	t.Parallel()
+
+	const ascii = "abc<d&e\"f g\th\nijklmnopqrstuvwxyz"
+	for _, name := range []string{"iso-8859-1", "windows-1252", "iso-8859-5"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			e := xmlenc.Load(name)
+			require.NotNil(t, e)
+			dec := e.NewDecoder()
+			for _, mid := range []byte{0xE9, 0x80, 0x81, 0x85, 0x9F, 0xA0, 0xFF} {
+				for pre := range 18 {
+					for post := range 18 {
+						src := []byte(ascii[:pre])
+						src = append(src, mid)
+						src = append(src, ascii[:post]...)
+						src = append(src, mid, mid)
+						src = append(src, ascii[len(ascii)-pre:]...)
+
+						var want []byte
+						for _, b := range src {
+							one, err := dec.Bytes([]byte{b})
+							require.NoError(t, err)
+							want = append(want, one...)
+						}
+
+						got, err := dec.Bytes(src)
+						require.NoError(t, err)
+						require.Equal(t, string(want), string(got), "src %q", src)
+
+						for _, size := range []int{3, 4, 7, 8, 9, 16} {
+							require.Equal(t, string(want), string(decodeInto(t, dec.Transformer, src, size)),
+								"src %q, destination size %d", src, size)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+// decodeInto runs tr over src with a destination buffer of size bytes,
+// collecting the output across the short-destination returns.
+func decodeInto(t *testing.T, tr transform.Transformer, src []byte, size int) []byte {
+	t.Helper()
+
+	tr.Reset()
+	dst := make([]byte, size)
+	var out []byte
+	for {
+		nDst, nSrc, err := tr.Transform(dst, src, true)
+		out = append(out, dst[:nDst]...)
+		src = src[nSrc:]
+		if err == nil {
+			require.Empty(t, src)
+			return out
+		}
+		require.ErrorIs(t, err, transform.ErrShortDst)
+		require.True(t, nDst > 0 || nSrc > 0, "transform made no progress")
 	}
 }

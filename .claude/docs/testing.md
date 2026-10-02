@@ -119,7 +119,7 @@ bug that prompted it.
 | `interleave_differential_test.go` | relaxng | Flag-gated interleave differential harness (optional `xmllint` oracle) |
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
-| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, and `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`) |
+| `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast` line/column against `Advance` |
 
 ## `examples/`
 
@@ -271,9 +271,9 @@ path expressions go through the fresh-`DocOrderCache` check.
 ## Fuzzing
 
 - Public-package fuzz coverage lives in package-local `fuzz_test.go` files.
-- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `internal/strcursor` (`FuzzScanCharDataSlice`),
-  `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`, `xsd`, `xmldsig1`, `xmlenc1`,
-  `xslt3`; all are in the `fuzz.yml` matrix. Artifact names replace `/` in the package with `-`
+- Direct fuzz targets exist for `.`, `c14n`, `catalog`, `html`, `internal/strcursor` (`FuzzScanCharDataSlice`,
+  `FuzzScanSimpleAttrValue`), `relaxng`, `schematron`, `sink`, `stream`, `xinclude`, `xpath1`, `xpath3`, `xpointer`,
+  `xsd`, `xmldsig1`, `xmlenc1`, `xslt3`; all are in the `fuzz.yml` matrix. Artifact names replace `/` in the package with `-`
   (`fuzz-corpus-internal-strcursor`).
 - `shim` intentionally excluded from repo fuzz matrix.
 - `enum` + `sax` intentionally excluded from direct fuzzing → constants/interface-only surface.

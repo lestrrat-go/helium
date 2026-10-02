@@ -28,6 +28,26 @@ const (
 var charDataByteClass = [2][256]uint8{buildCharDataByteClass(false), buildCharDataByteClass(true)}
 var ncNameByteClass = buildNCNameByteClass()
 
+// attrValueByteClass marks, per quote character ([0] for the double quote, [1]
+// for the apostrophe), the bytes ScanSimpleAttrValue may skip in bulk as
+// charDataPlain: printable ASCII (0x20-0x7F) other than the quote, '&' and '<'.
+// Every other byte is charDataStop and is left to the scanner's
+// byte-at-a-time classification.
+var attrValueByteClass = [2][256]uint8{buildAttrValueByteClass('"'), buildAttrValueByteClass('\'')}
+
+func buildAttrValueByteClass(quote byte) [256]uint8 {
+	var tbl [256]uint8
+	for i := range 0x100 {
+		if i < 0x20 || i >= utf8.RuneSelf {
+			tbl[i] = charDataStop
+		}
+	}
+	tbl[quote] = charDataStop
+	tbl['&'] = charDataStop
+	tbl['<'] = charDataStop
+	return tbl
+}
+
 func buildCharDataByteClass(xml11 bool) [256]uint8 {
 	var tbl [256]uint8
 	for i := range utf8.RuneSelf {
@@ -379,8 +399,29 @@ func (c *UTF8Cursor) AdvanceFast(n int) error {
 	start := c.bufpos
 	end := start + n
 	segment := c.buf[start:end]
+	if n <= advanceScanInline {
+		// A short run (a name, an attribute value, the whitespace between two
+		// tags) costs less to walk once than to hand to two vectorized
+		// searches, each with its own call and setup cost.
+		lines := 0
+		last := -1
+		for i, b := range segment {
+			if b == '\n' {
+				lines++
+				last = i
+			}
+		}
+		if last >= 0 {
+			c.lineno += lines
+			c.column = len(segment) - last
+		} else {
+			c.column += n
+		}
+		c.bufpos = end
+		return nil
+	}
 	if idx := bytes.LastIndexByte(segment, '\n'); idx >= 0 {
-		c.lineno += bytes.Count(segment, []byte{'\n'})
+		c.lineno += bytes.Count(segment[:idx], []byte{'\n'}) + 1
 		c.column = len(segment) - idx
 	} else {
 		c.column += n
@@ -388,6 +429,10 @@ func (c *UTF8Cursor) AdvanceFast(n int) error {
 	c.bufpos = end
 	return nil
 }
+
+// advanceScanInline is the run length up to which AdvanceFast counts newlines
+// with a plain loop instead of bytes.LastIndexByte and bytes.Count.
+const advanceScanInline = 32
 
 func (c *UTF8Cursor) HasPrefix(b []byte) bool {
 	n := len(b)
@@ -704,6 +749,10 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 		return "", 0
 	}
 
+	class := &attrValueByteClass[0]
+	if quote == '\'' {
+		class = &attrValueByteClass[1]
+	}
 	off := 0
 	for {
 		if maxBytes > 0 && off > maxBytes {
@@ -717,6 +766,18 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 			if c.bufpos+off >= c.buflen {
 				return "", 0
 			}
+		}
+		// Skip the buffered run of printable ASCII other than the quote, '&'
+		// and '<' sixteen bytes at a time; the loop below would accept each of
+		// those bytes one by one. The budget is checked again before the byte
+		// that ends the run is looked at, as the byte-at-a-time walk would
+		// have checked it before each byte.
+		off += scanSafeCharDataASCII(c.buf[c.bufpos+off:c.buflen], class)
+		if maxBytes > 0 && off > maxBytes {
+			return "", 0
+		}
+		if c.bufpos+off >= c.buflen {
+			continue
 		}
 		b := c.buf[c.bufpos+off]
 		if b == quote {

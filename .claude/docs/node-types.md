@@ -94,7 +94,9 @@ slab-backed by another document `SetNamespace` marks that source escaped — Cro
 `Element.SetAttributeNS(localname, value, ns)` is the attribute counterpart. A nil receiver allocates a
 standalone (heap, non-slab) element/attribute. Neither builder checks the rest of the XML Name/NCName grammar.
 The parser/copy code never passes a colon — it splits a QName into prefix+local and sets the namespace via
-`SetActiveNamespace`/`SetNamespace` — so the rejection only guards hand-built trees.
+`SetActiveNamespace`/`SetNamespace` — so the rejection only guards hand-built trees. The parser's DOM fast path
+(`fastStartElement`) therefore allocates its elements from the slab directly instead of calling
+`CreateElement`, and builds a reference-free attribute value with `createLiteralAttribute`.
 
 ## ElementType Enum (21 values)
 

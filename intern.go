@@ -52,10 +52,43 @@ func (pctx *parserCtx) internName(s string) string {
 	return s
 }
 
-// internNameBytes returns a deduplicated string for the given byte slice.
-// Uses Go's map optimization: map[string]([]byte) lookups don't allocate
-// when the key is a []byte→string conversion used only for the lookup.
+// nameCacheSlots is the size of the direct-mapped cache internNameBytes
+// consults before the interning maps. A document repeats a small set of
+// element and attribute names, so most lookups hit their slot and cost one
+// short string comparison instead of a map probe that hashes the whole name.
+const nameCacheSlots = 256
+
+// nameCacheSlot maps a scanned name to its slot in the direct-mapped cache
+// from its length and three of its bytes. b must not be empty.
+func nameCacheSlot(b []byte) int {
+	n := len(b)
+	return (n*131 + int(b[0])*31 + int(b[n-1])*7 + int(b[n/2])) & (nameCacheSlots - 1)
+}
+
+// internNameBytes returns a deduplicated string for the given byte slice. A
+// hit in the direct-mapped cache returns the string an earlier call interned
+// for the same bytes; a miss (an empty slot, or a different name sharing the
+// slot) interns through internNameBytesMaps and replaces the slot. The cache
+// lives on the parser context, so it never carries a name from one parse into
+// another, and every string it returns is the one the maps hold.
 func (pctx *parserCtx) internNameBytes(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	slot := nameCacheSlot(b)
+	if s := pctx.nameCacheFast[slot]; s == string(b) {
+		return s
+	}
+	s := pctx.internNameBytesMaps(b)
+	pctx.nameCacheFast[slot] = s
+	return s
+}
+
+// internNameBytesMaps interns b through the global well-known table and the
+// per-parse map. Uses Go's map optimization: map[string]([]byte) lookups don't
+// allocate when the key is a []byte→string conversion used only for the
+// lookup.
+func (pctx *parserCtx) internNameBytesMaps(b []byte) string {
 	// Tier 1: global well-known names.
 	if couldBeGlobalNameBytes(b) {
 		if interned, ok := globalNames[string(b)]; ok {

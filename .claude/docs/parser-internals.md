@@ -65,7 +65,9 @@ States: `psStart`, `psContent`, `psPrologue`, `psEpilogue`, `psCDATA`, `psDTD`, 
 forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 
 ### Element/Namespace Stacks
-- `nodeTab` (nodeStack) — element nesting stack
+- `nodeTab` (nodeStack) — element nesting stack; each `nodeEntry` caches its element's DTD content-model type on
+  the first whitespace classification that needs it (`nodeDeclType`, `parser_whitespace.go`). Both DTD subsets
+  are complete before the root element opens, so the cached answer holds for the entry's lifetime
 - `nsTab` (nsStack) — prefix→URI bindings; `Push`/`Lookup`/`Pop(n)`
 - `nsNrTab []int` — namespace count per element level (pop exact count on close)
 - `spaceTab []int` — xml:space stack (-1=inherit, 0=default, 1=preserve)
@@ -89,11 +91,13 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
   after the node-content cap check, without a second pass over the bytes. The scanner's per-version byte
   table (`charDataByteClass`) is built from `IsChar` / `IsLiteralChar`; restricted ASCII bytes end its 16-byte
   fast path, are recorded, and the run continues.
-- Other whole runs (char data from a non-UTF-8 cursor via `parseCharDataBuffered`/`ScanCharDataInto`, simple
-  attribute values from `ScanSimpleAttrValue`, external-PE bodies) go through `literalBytesValid` /
+- Other whole runs (char data from a non-UTF-8 cursor via `parseCharDataBuffered`/`ScanCharDataInto`, XML 1.1
+  simple attribute values from `ScanSimpleAttrValue`, external-PE bodies) go through `literalBytesValid` /
   `literalStringValid`, which resolve the version once per call, check printable ASCII eight bytes at a time
   (`literalWordValid`), check other ASCII bytes by table (`literalASCIIValid`), and decode only non-ASCII bytes
-  as runes; they check every byte themselves, so callers need not pre-scan the run.
+  as runes; they check every byte themselves, so callers need not pre-scan the run. An XML 1.0 simple attribute
+  value skips that pass: `ScanSimpleAttrValue` accepts only ASCII at or above 0x20 and well-formed UTF-8 that
+  is an `xmlchar.IsChar`, which is `IsLiteralChar`'s XML 1.0 rule (`parseAttributeValueInState`)
 - Character references accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` /
   `parseStringCharRef` / `xmlchar.IsXML11Char`; parsed internal entity values retain XML 1.1
   restricted-character-reference segments for nested reparse while `Entity.Content()` remains decoded
@@ -174,6 +178,8 @@ from the invariant charset (default IBM-037); ASCII-compatible parses the decl a
 - Strict fixed-width decode — `withStrictDecode` (`internal/encoding/strict.go`): malformed UTF-16/32/UCS-2/4 → fatal
   `ErrInvalidEncodedChar`; surfaced via `UTF8Cursor.Err()` at the document-end gate.
 - Strict US-ASCII decode — `asciiEncoding` (`internal/encoding/ascii.go`): any byte ≥ 0x80 → fatal `ErrInvalidASCII`.
+- Single-byte charsets — `withC1Fallback` (`internal/encoding/c1fallback.go`) maps 0x80-0x9F to the C1 controls
+  where x/text yields U+FFFD; its decoder copies ASCII eight bytes at a time and decodes other bytes one by one.
 
 ## File Responsibilities
 
@@ -283,7 +289,10 @@ gives every node of the expansion). Each invariant lives at its function:
 Parent selection: DTD subset → add to DTD; no current element → add to document; else → append as child.
 
 DOM fast path: when the default parser builds a DOM, start-tag attribute/ID/child linking bypasses generic
-duplicate-checking setters where parser invariants already guarantee the `xmlAddChild` preconditions. Both
+duplicate-checking setters where parser invariants already guarantee the `xmlAddChild` preconditions.
+`fastStartElement` (`tree_fastpath.go`) draws the element from the document slab without `CreateElement`'s
+colon check (the local name is an NCName from `parseQName`), and builds an attribute whose value has no `&`
+as a single Text child (`createLiteralAttribute`), the node list `CreateAttribute` builds for such a value. Both
 the direct path and `TreeBuilder.StartElementNS` bulk-declare namespaces through `declareNamespaces`: it uses
 the allocation-free `DeclareNamespace` scan below `attrDupSetThreshold` and a prefix-to-slot index at or above
 it. Declaration order, prefix-collapse behavior, and public DOM shape are preserved.
@@ -312,7 +321,10 @@ the negative-sentinel option disables the cap for trusted input.
 - **UTF-8 fast paths** — `parseQName`/`parseNCName`/`parseAttributeValueInternal` try
   `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the
   cursor buffer, invalidating borrowed slices), and use `AdvanceFast()` when the run is proven newline-free.
-  See `internal/strcursor/utf8cursor.go`.
+  `AdvanceFast` counts newlines in one loop for runs up to `advanceScanInline` (32) bytes and with
+  `bytes.LastIndexByte`/`bytes.Count` above it. `ScanSimpleAttrValue` skips printable ASCII other than the
+  quote, `&` and `<` sixteen bytes at a time (`attrValueByteClass`), re-checking its byte budget after each
+  skip exactly where the byte-at-a-time walk would. See `internal/strcursor/utf8cursor.go`.
 - **Qualified names** — `parseQName` returns the local name, the prefix, and the whole QName as written. Its
   ASCII fast path interns the whole name once and slices the prefix and local name out of it, so a
   prefixed name costs no concatenation; `parseQNameSlow` (non-ASCII, non-UTF-8 cursor, malformed) joins
@@ -320,7 +332,10 @@ the negative-sentinel option disables the cap for trusted input.
   `elementDeclType` whitespace lookups) on that name, and `parseAttribute` keys tokenized-type lookups on
   the attribute's. `DTD.LookupElement` builds its `name:prefix` key in a stack buffer, so a lookup
   allocates nothing for names that fit.
-- **Name interning** (`intern.go`) — global lexicon seed with a `(first byte, length)` cheap-check before the map probe.
+- **Name interning** (`intern.go`) — `internNameBytes` first checks a per-parse direct-mapped cache
+  (`parserCtx.nameCacheFast`, `nameCacheSlots` slots keyed by length and three bytes); a hit costs one string
+  comparison. A miss goes to the global lexicon seed (a `(first byte, length)` cheap-check before the map probe)
+  and the per-parse map, and the result replaces the slot, so every cached string is the one the map holds.
 - **Entity-amplification / external bounds** — see Entity Expansion above.
 - **Start-tag duplicate detection** (`parser_element.go` `attrDupSetThreshold` = 32) — per-start-tag attribute
   (qualified-name and expanded-name) and namespace-declaration duplicate checks scan the tag's own

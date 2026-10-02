@@ -18,6 +18,7 @@ package encoding
 //   input to pass C1 characters (U+0080-U+009F) directly as bytes 0x80-0x9F
 
 import (
+	"encoding/binary"
 	"unicode/utf8"
 
 	enc "golang.org/x/text/encoding"
@@ -62,6 +63,22 @@ func (t *c1DecoderTransformer) Transform(dst, src []byte, atEOF bool) (nDst, nSr
 	// Unicode character in UTF-8. We process one byte at a time to maintain
 	// the mapping between source bytes and output characters.
 	for nSrc < len(src) {
+		// Copy a run of ASCII eight bytes at a time: a word with no high bit
+		// set holds eight ASCII bytes, each of which the branch below would
+		// copy unchanged. A word that does not fit in dst is left to that
+		// branch, which reports ErrShortDst after the bytes that fit.
+		for len(src)-nSrc >= 8 && len(dst)-nDst >= 8 {
+			w := binary.LittleEndian.Uint64(src[nSrc:])
+			if w&0x8080808080808080 != 0 {
+				break
+			}
+			binary.LittleEndian.PutUint64(dst[nDst:], w)
+			nSrc += 8
+			nDst += 8
+		}
+		if nSrc >= len(src) {
+			break
+		}
 		b := src[nSrc]
 
 		// ASCII bytes pass through unchanged

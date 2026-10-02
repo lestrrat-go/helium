@@ -3,6 +3,7 @@ package helium_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -766,6 +767,40 @@ func TestParseMalformed(t *testing.T) {
 		_, err := p.Parse(t.Context(), []byte(ok))
 		require.NoError(t, err, "canonical xml prefix binding must be accepted")
 	})
+
+	// The line and column reported for an error right after a run of
+	// character data or a name, for runs of 0-40 bytes with no newline or one
+	// newline at every position, after a first line of text.
+	t.Run("error position after a run", func(t *testing.T) {
+		t.Parallel()
+
+		for n := range 41 {
+			for nl := -1; nl < n; nl++ {
+				run := []byte(strings.Repeat("x", n))
+				if nl >= 0 {
+					run[nl] = '\n'
+				}
+				// The text run is consumed whole; \x01 then stops the next
+				// scan, and the error is reported there. The second document
+				// puts the run in the content of an element named with n
+				// bytes, so the name scan also precedes the error.
+				docs := []string{
+					"<r>a\nbc" + string(run) + "\x01</r>",
+					"<r>a\nbc<" + strings.Repeat("n", max(n, 1)) + ">" + string(run) + "\x01</r>",
+				}
+				for _, src := range docs {
+					_, err := helium.NewParser().Parse(t.Context(), []byte(src))
+					var perr helium.ErrParseError
+					require.ErrorAs(t, err, &perr, "src %q", src)
+					pos := strings.IndexByte(src, 0x01)
+					line := 1 + strings.Count(src[:pos], "\n")
+					column := pos - strings.LastIndexByte(src[:pos], '\n')
+					require.Equal(t, line, perr.LineNumber, "line of %q", src)
+					require.Equal(t, column, perr.Column, "column of %q", src)
+				}
+			}
+		}
+	})
 }
 
 func TestParseName(t *testing.T) {
@@ -790,6 +825,46 @@ func TestParseName(t *testing.T) {
 		p := helium.NewParser()
 		_, err := p.Parse(t.Context(), xml)
 		require.Error(t, err)
+	})
+
+	// Thousands of distinct names of one length that differ only in their
+	// inner bytes, used as element, attribute and prefixed names, in forward
+	// and then reverse order, across two parses with one parser. Every name
+	// must come back as written however the parser caches names it has seen.
+	t.Run("many similar names", func(t *testing.T) {
+		t.Parallel()
+
+		p := helium.NewParser()
+		for _, prefix := range []string{"n", "m"} {
+			names := make([]string, 0, 3000)
+			for i := range 3000 {
+				names = append(names, fmt.Sprintf("%s%04dz", prefix, i))
+			}
+			reversed := slices.Clone(names)
+			slices.Reverse(reversed)
+			var sb strings.Builder
+			sb.WriteString(`<r xmlns:p="urn:p">`)
+			for _, order := range [][]string{names, reversed} {
+				for _, name := range order {
+					fmt.Fprintf(&sb, `<%s %s="%s" p:%s="x"/>`, name, name, name, name)
+				}
+			}
+			sb.WriteString(`</r>`)
+
+			doc, err := p.Parse(t.Context(), []byte(sb.String()))
+			require.NoError(t, err)
+			var got []string
+			for child := range helium.Children(doc.DocumentElement()) {
+				elem := child.(*helium.Element)
+				attrs := elem.Attributes()
+				require.Len(t, attrs, 2)
+				require.Equal(t, elem.Name(), attrs[0].Name())
+				require.Equal(t, elem.Name(), attrs[0].Value())
+				require.Equal(t, "p:"+elem.Name(), attrs[1].Name())
+				got = append(got, elem.Name())
+			}
+			require.Equal(t, slices.Concat(names, reversed), got)
+		}
 	})
 }
 
