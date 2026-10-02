@@ -315,7 +315,10 @@ DOM fast path: when the default parser builds a DOM, start-tag attribute/ID/chil
 duplicate-checking setters where parser invariants already guarantee the `xmlAddChild` preconditions.
 `fastStartElement` (`tree_fastpath.go`) draws the element from the document slab without `CreateElement`'s
 colon check (the local name is an NCName from `parseQName`), and builds an attribute whose value has no `&`
-as a single Text child (`createLiteralAttribute`), the node list `CreateAttribute` builds for such a value. Both
+as a single Text child (`createLiteralAttribute`), the node list `CreateAttribute` builds for such a value.
+Elements and text runs under an element are linked by `appendFastChildElem`, which appends after the recorded
+tail under the same conditions `resolveOwnedTail` trusts it, and `fastEndElement` reads the parent pointer
+directly. Both
 the direct path and `TreeBuilder.StartElementNS` bulk-declare namespaces through `declareNamespaces`: it uses
 the allocation-free `DeclareNamespace` scan below `attrDupSetThreshold` and a prefix-to-slot index at or above
 it. Declaration order, prefix-collapse behavior, and public DOM shape are preserved.

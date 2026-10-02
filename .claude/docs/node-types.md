@@ -430,6 +430,11 @@ Skipped in `setTreeDoc()` — sentinel type rarely instantiated.
   reaches `bindEntityReference` through `BindEntityReference`, and creates private context-specific entity
   views through `CloneEntityReferenceBinding`,
   and the external `helium_test` package through `UnsafeAppendChildForTesting` in `export_test.go`.
+- `appendFastChildElem(parent *Element, child)` (`tree_fastpath.go`) — the parser's element and text appends
+  onto an `*Element` parent. It links after `lastChild` directly when the parent has a first child and the
+  recorded tail has no `next` and names this exact element as its parent, which is the case where
+  `resolveOwnedTail` trusts the record (an element never holds an off-chain claim); every other shape goes
+  to `appendFastChild`, so the result is the same as `appendFastChild`'s.
 - `appendCopiedChild(parent, child)` (`copy_deep.go`) — the deep-copy core's own no-preflight link, used by
   `copyChildren` in place of `AddChild`. It mirrors `addChild`'s linking rules exactly, INCLUDING the
   adjacent-Text merge and the `pdn.lastChild` correction that follows a merge, but skips `addChild`'s
