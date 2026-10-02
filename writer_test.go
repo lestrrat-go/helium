@@ -61,6 +61,9 @@ const (
 	// allocAttrs repeats an attribute on one element, alternating between
 	// unprefixed and prefixed names.
 	allocAttrs
+	// allocPrefixedElems repeats a prefixed element holding a prefixed empty
+	// element and text.
+	allocPrefixedElems
 )
 
 // allocAttrValue is the attribute value parseAllocDoc gives every attribute.
@@ -97,6 +100,10 @@ func parseAllocDoc(t *testing.T, shape allocDocShape, n int, xhtml bool) *helium
 			fmt.Fprintf(&buf, ` a%d="%s"`, i, allocAttrValue)
 		}
 		buf.WriteString("/>")
+	case allocPrefixedElems:
+		for range n {
+			buf.WriteString("<p:e><p:f/>a &amp; b</p:e>")
+		}
 	}
 	if xhtml {
 		buf.WriteString(`</html>`)
@@ -109,9 +116,9 @@ func parseAllocDoc(t *testing.T, shape allocDocShape, n int, xhtml bool) *helium
 }
 
 // Serialization allocates nothing per repeated construct: a document that
-// repeats escaped text nodes or escaped attributes (half of them prefixed)
-// many times costs exactly what a document holding one does, on both the XML
-// and the XHTML serializer. The character-reference scratch buffer, the
+// repeats escaped text nodes, escaped attributes (half of them prefixed) or
+// prefixed elements many times costs exactly what a document holding one does,
+// on both the XML and the XHTML serializer. The character-reference scratch buffer, the
 // qualified-name buffer and the attribute-chain walk guard are each allocated
 // at most once per WriteTo.
 func TestWriteToAllocations(t *testing.T) {
@@ -142,6 +149,8 @@ func TestWriteToAllocations(t *testing.T) {
 		// walk guard switches to a map.
 		{name: "attributes xml", shape: allocAttrs, wide: 24},
 		{name: "attributes xhtml", shape: allocAttrs, xhtml: true, wide: 24},
+		{name: "prefixed elements xml", shape: allocPrefixedElems, wide: 50},
+		{name: "prefixed elements xhtml", shape: allocPrefixedElems, xhtml: true, wide: 50},
 	}
 	for _, dc := range docs {
 		t.Run(dc.name, func(t *testing.T) {
@@ -177,6 +186,9 @@ func BenchmarkWrite(b *testing.B) {
 		// Fedora comps file: text-heavy groups with many xml:lang
 		// translations in non-ASCII UTF-8.
 		{name: "comps", path: "relaxng/test/comps_0.xml"},
+		// XMP RELAX NG schema: every element carries the rng: prefix, and
+		// the root declares about thirty namespaces.
+		{name: "xmprng", path: "relaxng/test/ISO19005-1-XMP_Packet.rng"},
 	}
 	for _, fx := range fixtures {
 		b.Run(fx.name, func(b *testing.B) {

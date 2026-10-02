@@ -56,34 +56,33 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	}
 	localName := e.LocalName()
 
-	var name string
+	// The qualified name is handled as its prefix and local parts (the parts
+	// Element.Name joins), so no joined string is built.
+	var prefix string
+	nameLocal := localName
 	nser, isNser := n.(Namespacer)
 	if isNser {
-		if prefix := nser.Prefix(); prefix != "" {
-			name = prefix + ":" + localName
-		} else {
-			name = localName
-		}
+		prefix = nser.Prefix()
 	} else {
-		name = n.Name()
+		nameLocal = n.Name()
 	}
 
 	// The element name is emitted verbatim here and on the closing tag below.
 	// Validate it just like writeNode so an injected name (e.g. from
 	// CreateElement) cannot inject raw markup through the XHTML path.
-	if !d.checkElementName(name) {
+	if !d.checkElementQName(prefix, nameLocal) {
 		return d.err
 	}
 
 	// A prefixed element name whose prefix is bound to an empty namespace URI
 	// has no reparseable serialization. Reject it here just like writeNode does,
 	// so the XHTML path cannot emit output the parser rejects.
-	if isNser && !d.checkNamespaceBinding("element name", nser.Prefix(), localName, nser.URI()) {
+	if isNser && !d.checkNamespaceBinding("element name", prefix, nameLocal, nser.URI()) {
 		return d.err
 	}
 
 	d.writeString(out, "<")
-	d.writeString(out, name)
+	d.writeQName(out, prefix, nameLocal)
 
 	nslist := e.Namespaces()
 	if len(nslist) > 0 {
@@ -156,7 +155,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 				d.writeString(out, ">")
 			}
 			d.writeString(out, "</")
-			d.writeString(out, name)
+			d.writeQName(out, prefix, nameLocal)
 			d.writeString(out, ">")
 		}
 		return d.err
@@ -220,7 +219,7 @@ func (d *writeSession) dumpXHTMLNode(out io.Writer, n Node) error {
 	}
 
 	d.writeString(out, "</")
-	d.writeString(out, name)
+	d.writeQName(out, prefix, nameLocal)
 	d.writeString(out, ">")
 	return d.err
 }
