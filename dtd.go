@@ -267,8 +267,18 @@ func (dtd *DTD) AddElementDecl(name string, typ enum.ElementType, content *Eleme
 // LookupElement returns the element declaration registered under the given
 // local name and prefix, and reports whether it was found.
 func (dtd *DTD) LookupElement(name, prefix string) (*ElementDecl, bool) {
-	key := name + ":" + prefix
-	decl, ok := dtd.elements[key]
+	if len(dtd.elements) == 0 {
+		return nil, false
+	}
+	// The table is keyed by name + ":" + prefix. Build the key in a stack
+	// buffer: indexing a map with string(bytes) does not allocate, so a lookup
+	// with a key that fits allocates nothing. The parser makes one per
+	// character-data run while it classifies whitespace.
+	var buf [64]byte
+	key := append(buf[:0], name...)
+	key = append(key, ':')
+	key = append(key, prefix...)
+	decl, ok := dtd.elements[string(key)]
 	if !ok {
 		return nil, false
 	}

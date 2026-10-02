@@ -588,24 +588,25 @@ func (c *UTF8Cursor) ScanNCNameBytes() ([]byte, int) {
 }
 
 // ScanQNameBytes scans a common ASCII QName without consuming it.
-// It returns the raw prefix and local-name byte slices, the total byte
-// length, and ok=true on success. Non-ASCII input, multiple colons, or
-// malformed prefix/local parts return ok=false so callers can fall back to
-// the full parser path.
-func (c *UTF8Cursor) ScanQNameBytes() (prefix, local []byte, nBytes int, ok bool) {
+// It returns the raw bytes of the whole QName as written, the offset of its
+// colon (-1 when the name has no prefix), and ok=true on success; the prefix
+// is name[:colon] and the local name is name[colon+1:]. Non-ASCII input,
+// multiple colons, or malformed prefix/local parts return ok=false so callers
+// can fall back to the full parser path.
+func (c *UTF8Cursor) ScanQNameBytes() (name []byte, colon int, ok bool) {
 	if err := c.fillBuffer(1); err != nil {
-		return nil, nil, 0, false
+		return nil, -1, false
 	}
 
 	off := 0
 
 	b := c.buf[c.bufpos]
 	if (b < 'A' || b > 'Z') && (b < 'a' || b > 'z') && b != '_' {
-		return nil, nil, 0, false
+		return nil, -1, false
 	}
 	off++
 
-	colon := -1
+	colon = -1
 	for {
 		if c.bufpos+off >= c.buflen {
 			if c.fillBuffer(off+1) != nil {
@@ -618,27 +619,27 @@ func (c *UTF8Cursor) ScanQNameBytes() (prefix, local []byte, nBytes int, ok bool
 
 		b = c.buf[c.bufpos+off]
 		if b >= utf8.RuneSelf {
-			return nil, nil, 0, false
+			return nil, -1, false
 		}
 		if b == ':' {
 			if colon >= 0 {
-				return nil, nil, 0, false
+				return nil, -1, false
 			}
 			colon = off
 			off++
 
 			if c.bufpos+off >= c.buflen {
 				if c.fillBuffer(off+1) != nil {
-					return nil, nil, 0, false
+					return nil, -1, false
 				}
 				if c.bufpos+off >= c.buflen {
-					return nil, nil, 0, false
+					return nil, -1, false
 				}
 			}
 
 			b = c.buf[c.bufpos+off]
 			if (b < 'A' || b > 'Z') && (b < 'a' || b > 'z') && b != '_' {
-				return nil, nil, 0, false
+				return nil, -1, false
 			}
 			off++
 			continue
@@ -649,10 +650,7 @@ func (c *UTF8Cursor) ScanQNameBytes() (prefix, local []byte, nBytes int, ok bool
 		off++
 	}
 
-	if colon < 0 {
-		return nil, c.buf[c.bufpos : c.bufpos+off], off, true
-	}
-	return c.buf[c.bufpos : c.bufpos+colon], c.buf[c.bufpos+colon+1 : c.bufpos+off], off, true
+	return c.buf[c.bufpos : c.bufpos+off], colon, true
 }
 
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special

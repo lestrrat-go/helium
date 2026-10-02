@@ -105,7 +105,14 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		return nil
 	}
 
-	// Fallback: use bytes.Buffer for non-UTF8 cursors.
+	return pctx.parseCharDataBuffered(ctx, cur)
+}
+
+// parseCharDataBuffered is parseCharDataContent for cursors other than
+// *strcursor.UTF8Cursor: it scans the run into a pooled bytes.Buffer. It is
+// kept out of parseCharDataContent so that the UTF-8 path, which runs for
+// nearly every text node, carries no defer.
+func (pctx *parserCtx) parseCharDataBuffered(ctx context.Context, cur strcursor.Cursor) error {
 	buf := bufferPool.Get()
 	defer releaseBuffer(buf)
 
@@ -436,21 +443,18 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		return err
 	}
 
-	local, prefix, err := pctx.parseQName(ctx)
+	// elemQName is the element's full QName (prefix + local) exactly as
+	// written. ATTLIST declarations (special-attribute types and attribute
+	// defaults) are keyed by the declared element QName, so lookups must use
+	// the qualified name — an unprefixed `<!ATTLIST id …>` does not apply to
+	// `<p:r>` and vice-versa. The node stack keeps it for end-tag matching and
+	// element-declaration lookups.
+	local, prefix, elemQName, err := pctx.parseQName(ctx)
 	if local == "" {
 		return pctx.error(ctx, fmt.Errorf("local name empty! local = %s, prefix = %s, err = %s", local, prefix, err))
 	}
 	if err != nil {
 		return pctx.error(ctx, err)
-	}
-
-	// The element's full QName (prefix + local) exactly as written. ATTLIST
-	// declarations (special-attribute types and attribute defaults) are keyed by
-	// the declared element QName, so lookups must use the qualified name — an
-	// unprefixed `<!ATTLIST id …>` does not apply to `<p:r>` and vice-versa.
-	elemQName := local
-	if prefix != "" {
-		elemQName = prefix + ":" + local
 	}
 
 	// Push xml:space stack entry for this element (inherit parent's value by default)
@@ -867,11 +871,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			return pctx.error(ctx, err)
 		}
 	}
-	qname := local
-	if prefix != "" {
-		qname = prefix + ":" + local
-	}
-	pctx.pushNodeEntry(nodeEntry{local: local, prefix: prefix, uri: nsuri, qname: qname})
+	pctx.pushNodeEntry(nodeEntry{local: local, prefix: prefix, uri: nsuri, qname: elemQName})
 	pctx.nsNrTab = append(pctx.nsNrTab, nbNs)
 	pctx.attrBuf = attrs[:0]
 	pctx.nsDeclaredBuf = nsDeclared[:0]
@@ -977,16 +977,25 @@ func (pctx *parserCtx) parseAttributeValue(ctx context.Context, normalize bool) 
 	return
 }
 
-// This is based on xmlParseAttValueComplex
-func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte, normalize bool) (value string, entities int, err error) {
+// parseAttributeValueInternal parses an attribute value up to its closing
+// quote qch (0 for none) with the parser in the psAttributeValue state,
+// restoring the previous state on every return. A value without references
+// or characters that need rewriting is taken by the UTF-8 fast path; anything
+// else goes through parseAttributeValueComplex. Neither this function nor the
+// fast path uses defer: a function with this many returns cannot open-code
+// one, and the runtime defer call would be paid on every attribute value.
+func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte, normalize bool) (string, int, error) {
 	prevState := pctx.instate
 	pctx.instate = psAttributeValue
-	defer func() { pctx.instate = prevState }()
+	value, entities, err := pctx.parseAttributeValueInState(ctx, qch, normalize)
+	pctx.instate = prevState
+	return value, entities, err
+}
 
+func (pctx *parserCtx) parseAttributeValueInState(ctx context.Context, qch byte, normalize bool) (string, int, error) {
 	cur := pctx.getCursor()
 	if cur == nil {
-		err = pctx.error(ctx, errNoCursor)
-		return
+		return "", 0, pctx.error(ctx, errNoCursor)
 	}
 
 	if !normalize {
@@ -997,22 +1006,24 @@ func (pctx *parserCtx) parseAttributeValueInternal(ctx context.Context, qch byte
 				// (before advancing) so a value of cap+1..cap+UTFMax bytes is
 				// rejected, matching the slow path's per-iteration check.
 				if pctx.nodeContentTooLong(nBytes) {
-					err = pctx.error(ctx, ErrNodeContentTooLarge)
-					return
+					return "", 0, pctx.error(ctx, ErrNodeContentTooLarge)
 				}
 				if !pctx.literalStringValid(v) {
-					err = pctx.error(ctx, ErrInvalidChar)
-					return
+					return "", 0, pctx.error(ctx, ErrInvalidChar)
 				}
-				if err = u8.AdvanceFast(nBytes); err != nil {
-					return
+				if err := u8.AdvanceFast(nBytes); err != nil {
+					return "", 0, err
 				}
-				value = v
-				return
+				return v, 0, nil
 			}
 		}
 	}
 
+	return pctx.parseAttributeValueComplex(ctx, cur, qch, normalize)
+}
+
+// This is based on xmlParseAttValueComplex
+func (pctx *parserCtx) parseAttributeValueComplex(ctx context.Context, cur strcursor.Cursor, qch byte, normalize bool) (value string, entities int, err error) {
 	inSpace := false
 	b := bufferPool.Get()
 	defer releaseBuffer(b)
@@ -1461,20 +1472,15 @@ func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
 }
 
 func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {
-	l, p, err := pctx.parseQName(ctx)
-	if err != nil {
-		err = pctx.error(ctx, err)
-		return
-	}
-
 	// Special-attribute (tokenized-type) declarations are keyed by the attribute's
 	// full QName exactly as written, so an instance attribute is matched by its own
 	// QName (prefix + local): `p:id` matches an `<!ATTLIST r p:id …>` declaration and
 	// NOT an unprefixed `<!ATTLIST r id …>` (and vice-versa). Matches libxml2, which
 	// keys special-attribute state on the fully-qualified name.
-	attrQName := l
-	if p != "" {
-		attrQName = p + ":" + l
+	l, p, attrQName, err := pctx.parseQName(ctx)
+	if err != nil {
+		err = pctx.error(ctx, err)
+		return
 	}
 
 	normalize := false

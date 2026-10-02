@@ -235,7 +235,10 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	}
 
 	pctx.instate = psContent
-	if err := pctx.parseElement(ctx); err != nil {
+	pctx.armBodyPoll(ctx)
+	err := pctx.parseElement(ctx)
+	pctx.bodyNeverDone = false
+	if err != nil {
 		return pctx.error(ctx, err)
 	}
 
@@ -288,7 +291,7 @@ func (pctx *parserCtx) parseContent(ctx context.Context) error {
 		// Check the context BEFORE cur.Done(), which may refill the cursor
 		// from an io.Reader and block; this lets a cancelled context be
 		// observed between reads, ahead of any blocking refill.
-		if err := ctx.Err(); err != nil {
+		if err := pctx.pollErr(ctx); err != nil {
 			return err
 		}
 		if cur.Done() || pctx.stopped {

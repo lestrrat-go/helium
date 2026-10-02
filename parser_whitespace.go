@@ -55,7 +55,7 @@ func (pctx *parserCtx) skipBlankRun(ctx context.Context, cur blankScanner) (bool
 	advanced := false
 	total := 0
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := pctx.pollErr(ctx); err != nil {
 			return advanced, err
 		}
 		i := 0
@@ -114,6 +114,14 @@ func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 	}
 	cur := pctx.getCursor()
 	if cur == nil {
+		return false
+	}
+	// Most calls (between attributes, before '>' or '/>') sit on a non-blank
+	// byte. A non-zero Peek means a byte is present, so there is no run to
+	// skip, no input to wait for, and no read error to surface: return before
+	// the bounded scan and its context poll. A zero Peek (a NUL byte, or no
+	// byte at all) takes the full scan, which tells those cases apart.
+	if c := cur.Peek(); c != 0 && !isBlankByte(c) {
 		return false
 	}
 	advanced, err := pctx.skipBlankRun(ctx, cur)
@@ -326,16 +334,14 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 		return false
 	}
 	// Whitespace immediately after a text node — or where the element's first
-	// child is a text node — is part of that character-data run.
-	if last := pdn.lastChild; last != nil {
-		if _, ok := AsNode[*Text](last); ok {
-			return false
-		}
+	// child is a text node — is part of that character-data run. A plain type
+	// assertion plus a nil check answers what AsNode[*Text] answers without its
+	// reflect-based typed-nil probe, which this per-run check cannot afford.
+	if t, ok := pdn.lastChild.(*Text); ok && t != nil {
+		return false
 	}
-	if first := pdn.firstChild; first != nil {
-		if _, ok := AsNode[*Text](first); ok {
-			return false
-		}
+	if t, ok := pdn.firstChild.(*Text); ok && t != nil {
+		return false
 	}
 
 	return true

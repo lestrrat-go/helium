@@ -294,11 +294,11 @@ func (pctx *parserCtx) fastCharacters(data []byte) error {
 		return errors.New("text content placed in wrong location")
 	}
 
+	// A plain type assertion plus a nil check answers what AsNode[*Text]
+	// answers, without its reflect-based typed-nil probe, on every text run.
 	pdn := parent.baseDocNode()
-	if last := pdn.lastChild; last != nil {
-		if t, ok := AsNode[*Text](last); ok {
-			return t.AppendText(data)
-		}
+	if t, ok := pdn.lastChild.(*Text); ok && t != nil {
+		return t.AppendText(data)
 	}
 
 	text := pctx.doc.CreateText(data)

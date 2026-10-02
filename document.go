@@ -936,10 +936,12 @@ func (d *Document) IsMixedElement(name string) (bool, error) {
 // own decl switch, in which EMPTY and UNDEFINED fall through to the heuristic
 // instead of counting as mixed.
 func (d *Document) elementDeclType(name string) (enum.ElementType, bool) {
-	for _, dtd := range []*DTD{d.intSubset, d.extSubset} {
-		if dtd == nil {
-			continue
+	if dtd := d.intSubset; dtd != nil {
+		if edecl, ok := dtd.GetElementDesc(name); ok {
+			return edecl.decltype, true
 		}
+	}
+	if dtd := d.extSubset; dtd != nil {
 		if edecl, ok := dtd.GetElementDesc(name); ok {
 			return edecl.decltype, true
 		}
