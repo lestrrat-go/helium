@@ -241,6 +241,98 @@ func TestStripBlanks(t *testing.T) {
 			})
 		}
 	})
+
+	// The element declaration that classifies a whitespace run is found by the
+	// element's qualified name exactly as written: a declaration for p:r applies
+	// to <p:r> and not to <r>, and the other way round. Names longer than a short
+	// lookup buffer and non-ASCII names resolve the same way. With no usable
+	// declaration the run falls back to the markup heuristic, which keeps
+	// whitespace that follows a text child.
+	t.Run("element declarations keyed by qualified name", func(t *testing.T) {
+		long := strings.Repeat("l", 70)
+		testcases := []struct {
+			name  string
+			input string
+			want  string
+		}{
+			{
+				name:  "prefixed element content",
+				input: "<!DOCTYPE p:r [<!ELEMENT p:r (p:c)*><!ELEMENT p:c (#PCDATA)>]><p:r xmlns:p=\"urn:p\">\n  <p:c>x</p:c>\n</p:r>",
+				want:  `<p:r xmlns:p="urn:p"><p:c>x</p:c></p:r>`,
+			},
+			{
+				name:  "prefixed ANY",
+				input: "<!DOCTYPE p:r [<!ELEMENT p:r ANY>]><p:r xmlns:p=\"urn:p\">\n  <p:c>x</p:c>\n</p:r>",
+				want:  "<p:r xmlns:p=\"urn:p\">\n  <p:c>x</p:c>\n</p:r>",
+			},
+			{
+				name:  "unprefixed declaration does not match a prefixed element",
+				input: "<!DOCTYPE p:r [<!ELEMENT r ANY>]><p:r xmlns:p=\"urn:p\">\n  <c>x</c>\n</p:r>",
+				want:  `<p:r xmlns:p="urn:p"><c>x</c></p:r>`,
+			},
+			{
+				name:  "prefixed declaration does not match an unprefixed element",
+				input: "<!DOCTYPE r [<!ELEMENT p:r ANY>]><r xmlns:p=\"urn:p\">\n  <c>x</c>\n</r>",
+				want:  `<r xmlns:p="urn:p"><c>x</c></r>`,
+			},
+			{
+				name:  "unprefixed ANY",
+				input: "<!DOCTYPE r [<!ELEMENT r ANY>]><r>\n  <c>x</c>\n</r>",
+				want:  "<r>\n  <c>x</c>\n</r>",
+			},
+			{
+				name:  "prefixed EMPTY falls back to the heuristic",
+				input: "<!DOCTYPE p:r [<!ELEMENT p:r EMPTY>]><p:r xmlns:p=\"urn:p\">\n  <c>x</c>\n</p:r>",
+				want:  `<p:r xmlns:p="urn:p"><c>x</c></p:r>`,
+			},
+			{
+				name:  "long prefixed name",
+				input: "<!DOCTYPE p:" + long + " [<!ELEMENT p:" + long + " ANY>]><p:" + long + " xmlns:p=\"urn:p\">\n  <c>x</c>\n</p:" + long + ">",
+				want:  "<p:" + long + " xmlns:p=\"urn:p\">\n  <c>x</c>\n</p:" + long + ">",
+			},
+			{
+				name:  "long unprefixed name",
+				input: "<!DOCTYPE " + long + " [<!ELEMENT " + long + " ANY>]><" + long + ">\n  <c>x</c>\n</" + long + ">",
+				want:  "<" + long + ">\n  <c>x</c>\n</" + long + ">",
+			},
+			{
+				name:  "non-ASCII prefixed ANY",
+				input: "<!DOCTYPE é:r [<!ELEMENT é:r ANY>]><é:r xmlns:é=\"urn:e\">\n  <c>x</c>\n</é:r>",
+				want:  "<é:r xmlns:é=\"urn:e\">\n  <c>x</c>\n</é:r>",
+			},
+			{
+				name:  "non-ASCII prefixed element content",
+				input: "<!DOCTYPE é:r [<!ELEMENT é:r (c)*>]><é:r xmlns:é=\"urn:e\">\n  <c>x</c>\n</é:r>",
+				want:  `<é:r xmlns:é="urn:e"><c>x</c></é:r>`,
+			},
+			{
+				name:  "no declaration",
+				input: "<r>\n  <c>x</c>\n</r>",
+				want:  `<r><c>x</c></r>`,
+			},
+			{
+				name:  "no declaration with a text first child",
+				input: "<r>x<c/>  <c/></r>",
+				want:  "<r>x<c/>  <c/></r>",
+			},
+			{
+				name:  "no declaration with a text last child",
+				input: "<r><c/>x  <c/></r>",
+				want:  "<r><c/>x  <c/></r>",
+			},
+		}
+
+		for _, tc := range testcases {
+			t.Run(tc.name, func(t *testing.T) {
+				doc, err := helium.NewParser().StripBlanks(true).Parse(t.Context(), []byte(tc.input))
+				require.NoError(t, err, "Parse should succeed")
+
+				got, err := helium.WriteString(doc.DocumentElement())
+				require.NoError(t, err, "WriteString should succeed")
+				require.Equal(t, tc.want, got, "whitespace classification must follow the declaration for the element's qualified name")
+			})
+		}
+	})
 }
 
 func TestWhitespacePreserved(t *testing.T) {

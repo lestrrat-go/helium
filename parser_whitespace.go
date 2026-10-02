@@ -326,16 +326,14 @@ func (ctx *parserCtx) areBlanksBytes(s []byte, blankChars bool) bool {
 		return false
 	}
 	// Whitespace immediately after a text node — or where the element's first
-	// child is a text node — is part of that character-data run.
-	if last := pdn.lastChild; last != nil {
-		if _, ok := AsNode[*Text](last); ok {
-			return false
-		}
+	// child is a text node — is part of that character-data run. A plain type
+	// assertion plus a nil check answers what AsNode[*Text] answers without its
+	// reflect-based typed-nil probe, which this per-run check cannot afford.
+	if t, ok := pdn.lastChild.(*Text); ok && t != nil {
+		return false
 	}
-	if first := pdn.firstChild; first != nil {
-		if _, ok := AsNode[*Text](first); ok {
-			return false
-		}
+	if t, ok := pdn.firstChild.(*Text); ok && t != nil {
+		return false
 	}
 
 	return true
