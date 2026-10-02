@@ -70,7 +70,7 @@ func TestLintOutputThroughSymlink(t *testing.T) {
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>x</root>`)
 
 	realTarget := filepath.Join(dir, "real.xml")
-	require.NoError(t, os.WriteFile(realTarget, []byte("old"), 0o640))
+	writeFileMode(t, realTarget, "old", 0o640)
 	link := filepath.Join(dir, "link.xml")
 	require.NoError(t, os.Symlink(realTarget, link))
 
@@ -144,6 +144,9 @@ func TestLintOutputExistingFileStickyBitPreserved(t *testing.T) {
 	require.NotZero(t, fi.Mode()&os.ModeSticky, "sticky bit should be preserved")
 }
 
+// TestLintOutputNewFileModeRespectsUmask sets the umask, which is process-wide
+// state, so it does not call t.Parallel: it runs in the sequential phase, when
+// no other test of the binary creates files.
 func TestLintOutputNewFileModeRespectsUmask(t *testing.T) {
 	// os.CreateTemp makes the temp 0600; a NEW --output destination must end up
 	// with the usual os.Create mode (0666 masked by umask), not 0600.
@@ -190,7 +193,7 @@ func TestLintOutputExistingFileModePreserved(t *testing.T) {
 	dir := t.TempDir()
 	xmlFile := writeFile(t, dir, "doc.xml", `<?xml version="1.0"?><root>x</root>`)
 	outFile := filepath.Join(dir, "out.xml")
-	require.NoError(t, os.WriteFile(outFile, []byte("old"), 0o640))
+	writeFileMode(t, outFile, "old", 0o640)
 
 	_, errOut, code := executeArgs(t, strings.NewReader(""), "lint", "--output", outFile, xmlFile)
 	require.Equal(t, heliumcmd.ExitOK, code, "stderr: %s", errOut)
@@ -198,4 +201,14 @@ func TestLintOutputExistingFileModePreserved(t *testing.T) {
 	fi, err := os.Stat(outFile)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o640), fi.Mode().Perm())
+}
+
+// writeFileMode writes content to path and sets its permission bits to perm
+// with an explicit chmod. os.WriteFile applies the process umask, so a test
+// that asserts a fixture's mode would otherwise depend on the umask of the
+// shell that runs it.
+func writeFileMode(t *testing.T, path, content string, perm os.FileMode) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, []byte(content), perm))
+	require.NoError(t, os.Chmod(path, perm))
 }
