@@ -215,6 +215,11 @@ type parserCtx struct {
 	nsDeclaredBuf    []string          // reusable scratch buffer of ns prefixes declared on the current start tag
 	baseURIScopes    []baseURIScope    // per-input baseURI overrides (restored when the input is popped)
 	versionScopes    []versionScope    // per-input XML-version overrides (restored when the input is popped)
+
+	// nameCacheFast is the direct-mapped cache internNameBytes consults before
+	// nameCache.
+	nameCacheFast [nameCacheSlots]string
+
 	// externalPEScopes records, per pushed external parameter-entity input, the
 	// entity whose replacement text the input holds. activeExternalPECount is the
 	// set of external PEs currently on the input stack (count per entity, to

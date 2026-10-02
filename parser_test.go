@@ -3,6 +3,7 @@ package helium_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -824,6 +825,46 @@ func TestParseName(t *testing.T) {
 		p := helium.NewParser()
 		_, err := p.Parse(t.Context(), xml)
 		require.Error(t, err)
+	})
+
+	// Thousands of distinct names of one length that differ only in their
+	// inner bytes, used as element, attribute and prefixed names, in forward
+	// and then reverse order, across two parses with one parser. Every name
+	// must come back as written however the parser caches names it has seen.
+	t.Run("many similar names", func(t *testing.T) {
+		t.Parallel()
+
+		p := helium.NewParser()
+		for _, prefix := range []string{"n", "m"} {
+			names := make([]string, 0, 3000)
+			for i := range 3000 {
+				names = append(names, fmt.Sprintf("%s%04dz", prefix, i))
+			}
+			reversed := slices.Clone(names)
+			slices.Reverse(reversed)
+			var sb strings.Builder
+			sb.WriteString(`<r xmlns:p="urn:p">`)
+			for _, order := range [][]string{names, reversed} {
+				for _, name := range order {
+					fmt.Fprintf(&sb, `<%s %s="%s" p:%s="x"/>`, name, name, name, name)
+				}
+			}
+			sb.WriteString(`</r>`)
+
+			doc, err := p.Parse(t.Context(), []byte(sb.String()))
+			require.NoError(t, err)
+			var got []string
+			for child := range helium.Children(doc.DocumentElement()) {
+				elem := child.(*helium.Element)
+				attrs := elem.Attributes()
+				require.Len(t, attrs, 2)
+				require.Equal(t, elem.Name(), attrs[0].Name())
+				require.Equal(t, elem.Name(), attrs[0].Value())
+				require.Equal(t, "p:"+elem.Name(), attrs[1].Name())
+				got = append(got, elem.Name())
+			}
+			require.Equal(t, slices.Concat(names, reversed), got)
+		}
 	})
 }
 
