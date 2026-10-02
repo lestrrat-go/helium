@@ -158,40 +158,6 @@ func (w Writer) XMLVersion(v string) Writer {
 	return w
 }
 
-// isXML11RestrictedChar reports whether r is an XML 1.1 restricted character:
-// a control character that is a valid XML 1.1 Char but must be serialized as a
-// character reference and never appear literally (XML 1.1 §2.11).
-// Tab (U+0009), LF (U+000A), and CR (U+000D) are excluded — they are handled by
-// the ordinary escaping rules.
-func isXML11RestrictedChar(r rune) bool {
-	switch {
-	case r >= 0x1 && r <= 0x8:
-		return true
-	case r == 0xB || r == 0xC:
-		return true
-	case r >= 0xE && r <= 0x1F:
-		return true
-	case r >= 0x7F && r <= 0x84:
-		return true
-	case r >= 0x86 && r <= 0x9F:
-		return true
-	default:
-		return false
-	}
-}
-
-// isXML11SerializeAsCharRef reports whether r must be written as a character
-// reference, and never literally, in XML 1.1 output. This is the XML 1.1
-// RestrictedChar set (isXML11RestrictedChar) PLUS the two end-of-line characters
-// NEL (U+0085) and LINE SEPARATOR (U+2028). Both are excluded from RestrictedChar,
-// but XML 1.1 §2.11 line-ending normalization translates them to U+000A on input,
-// so a literal occurrence would not round-trip; emitting them as character
-// references preserves the value. In XML 1.0 neither is a line-ending character,
-// so this is consulted only on the xml11 path and 1.0 output stays byte-identical.
-func isXML11SerializeAsCharRef(r rune) bool {
-	return isXML11RestrictedChar(r) || r == 0x85 || r == 0x2028
-}
-
 // isXML11Char implements the XML 1.1 Char production (excluding U+0000):
 // Char ::= [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF].
 func isXML11Char(r rune) bool {
@@ -287,7 +253,7 @@ func (w *Writer) writeEscaped(s string, escape escapeMode) {
 			// stay byte-identical.
 			if w.xml11 {
 				if b := s[i]; b < 0x20 || b >= 0x7F {
-					if r, width := utf8.DecodeRuneInString(s[i:]); isXML11SerializeAsCharRef(r) {
+					if r, width := utf8.DecodeRuneInString(s[i:]); xmlchar.IsXML11SerializeAsCharRef(r) {
 						if start < i {
 							w.writeStr(s[start:i])
 						}
