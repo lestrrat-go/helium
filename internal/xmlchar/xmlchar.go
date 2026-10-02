@@ -1,4 +1,6 @@
-// Package xmlchar provides XML 1.0 NCName character classification functions.
+// Package xmlchar provides XML character classification functions: the XML 1.0
+// and XML 1.1 Char productions, literal-character validity, and the NCName,
+// QName, and Name productions.
 package xmlchar
 
 import (
@@ -13,6 +15,59 @@ func IsChar(r rune) bool {
 		return r == 0x9 || r == 0xA || r == 0xD || r >= 0x20
 	}
 	return (r >= 0x100 && r <= 0xD7FF) || (r >= 0xE000 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0x10FFFF)
+}
+
+// IsXML11Char implements the XML 1.1 §2.2 Char production:
+//
+//	Char ::= [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+//
+// The C0/C1 control characters (0x1-0x1F, 0x7F-0x9F) the XML 1.0 Char
+// production forbids are valid XML 1.1 characters; only U+0000 is disallowed.
+// XML 1.1 requires the restricted characters to appear as character references
+// and never literally, so on its own this predicate governs only the
+// character-reference value check; IsLiteralChar governs literal text.
+func IsXML11Char(r rune) bool {
+	if r < 0x100 {
+		return r > 0
+	}
+	return (r >= 0x100 && r <= 0xD7FF) || (r >= 0xE000 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0x10FFFF)
+}
+
+// IsXML11RestrictedChar reports whether r is an XML 1.1 RestrictedChar
+// (§2.2): a control character that is a valid XML 1.1 Char but must appear as a
+// character reference and never literally. Tab (U+0009), LF (U+000A), CR
+// (U+000D), and NEL (U+0085) are not restricted.
+//
+//	RestrictedChar ::= [#x1-#x8] | [#xB-#xC] | [#xE-#x1F] | [#x7F-#x84] | [#x86-#x9F]
+func IsXML11RestrictedChar(r rune) bool {
+	switch {
+	case r >= 0x1 && r <= 0x8:
+		return true
+	case r == 0xB || r == 0xC:
+		return true
+	case r >= 0xE && r <= 0x1F:
+		return true
+	case r >= 0x7F && r <= 0x84:
+		return true
+	case r >= 0x86 && r <= 0x9F:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsLiteralChar reports whether r may appear literally (not as a character
+// reference) in an XML 1.1 document (xml11) or an XML 1.0 document (!xml11):
+// Char for XML 1.0, Char minus RestrictedChar for XML 1.1. It is the single
+// definition of literal-character validity; the parser's run validators and the
+// character-data scanner in internal/strcursor are both built from it. It does
+// not judge UTF-8 decoding: callers reject a width-one utf8.RuneError (invalid
+// UTF-8) themselves, since a real U+FFFD is a valid character.
+func IsLiteralChar(r rune, xml11 bool) bool {
+	if xml11 {
+		return IsXML11Char(r) && !IsXML11RestrictedChar(r)
+	}
+	return IsChar(r)
 }
 
 // IsAllSpace reports whether every byte of b is XML 1.0 §2.3 whitespace (the S

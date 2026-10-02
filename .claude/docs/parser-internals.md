@@ -75,16 +75,28 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 - Namespace prefix undeclaration (`xmlns:pfx=""`) — `parser_element.go` `validatePrefixedNamespaceDecl`
 - Restricted characters — raw literal values reject in text, attributes, comments, PIs, CDATA, non-PUBLIC DTD
   literals, cached external-PE bodies, and external-DTD `IGNORE` sections via `parser_content.go`
-  `isLiteralCharValue`, `parser_dtd_attr.go` `scanQuotedLiteral`, and `parser_dtd_subset.go`
+  `isLiteralChar` / `isLiteralCharWidth`, `parser_dtd_attr.go` `scanQuotedLiteral`, and `parser_dtd_subset.go`
   `parseConditionalSections` / `loadExternalParameterEntityContent`; cached PE bodies use their effective
-  TextDecl version. `IGNORE` scans decode non-delimiter UTF-8 as runes before validation. Whole runs (char
-  data, simple attribute values, external-PE bodies) go through `literalBytesValid` / `literalStringValid`,
-  which resolve the version once per call, check printable ASCII eight bytes at a time (`literalWordValid`),
-  check other ASCII bytes by table (`literalASCIIValid`), and decode only non-ASCII bytes as runes; they check
-  every byte themselves, so callers need not pre-scan the run. Character references
-  accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` / `parseStringCharRef` /
-  `isXML11CharValue`; parsed internal entity values retain XML 1.1 restricted-character-reference segments for
-  nested reparse while `Entity.Content()` remains decoded
+  TextDecl version. `IGNORE` scans decode non-delimiter UTF-8 as runes before validation. The per-character
+  rule lives in one place, `internal/xmlchar` `IsLiteralChar` (XML 1.0 `IsChar`; XML 1.1 `IsXML11Char` minus
+  `IsXML11RestrictedChar`); every check below is built from it. Invalid UTF-8 (a width-one `RuneError`) is
+  rejected by each caller, while a real U+FFFD is valid.
+- Text runs on a `UTF8Cursor` are validated by the scanner itself: `parseCharDataContent`,
+  `parseCharDataChunkedSAX`, and `streamCharDataChunks` pass `pctx.isXML11()` to `ScanCharDataSlice`, which
+  returns a validity flag with the run. Where a run stops is the same in both versions (`<`, `&`, `]]>`, invalid
+  UTF-8, or a character outside the XML 1.0 Char production); an XML 1.1 RestrictedChar (DEL, U+0080-U+0084,
+  U+0086-U+009F) stays in the run and clears the flag, so the parser raises `ErrInvalidChar` at the run start
+  after the node-content cap check, without a second pass over the bytes. The scanner's per-version byte
+  table (`charDataByteClass`) is built from `IsChar` / `IsLiteralChar`; restricted ASCII bytes end its 16-byte
+  fast path, are recorded, and the run continues.
+- Other whole runs (char data from a non-UTF-8 cursor via `parseCharDataBuffered`/`ScanCharDataInto`, simple
+  attribute values from `ScanSimpleAttrValue`, external-PE bodies) go through `literalBytesValid` /
+  `literalStringValid`, which resolve the version once per call, check printable ASCII eight bytes at a time
+  (`literalWordValid`), check other ASCII bytes by table (`literalASCIIValid`), and decode only non-ASCII bytes
+  as runes; they check every byte themselves, so callers need not pre-scan the run.
+- Character references accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` /
+  `parseStringCharRef` / `xmlchar.IsXML11Char`; parsed internal entity values retain XML 1.1
+  restricted-character-reference segments for nested reparse while `Entity.Content()` remains decoded
 
 ### SAX & Tree Building
 - `sax` (sax.SAX2Handler) — callbacks (default: TreeBuilder; `Parser.SAXHandler(nil)` restores that default, so this is

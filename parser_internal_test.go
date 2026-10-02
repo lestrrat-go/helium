@@ -11,6 +11,7 @@ import (
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/strcursor"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
 )
@@ -852,10 +853,10 @@ func referenceLiteralValid(b []byte, xml11 bool) bool {
 		if r == utf8.RuneError && w == 1 {
 			return false
 		}
-		if xml11 && (!isXML11CharValue(uint32(r)) || isXML11RestrictedChar(r)) {
+		if xml11 && (!xmlchar.IsXML11Char(r) || xmlchar.IsXML11RestrictedChar(r)) {
 			return false
 		}
-		if !xml11 && !isXMLCharValue(uint32(r)) {
+		if !xml11 && !xmlchar.IsChar(r) {
 			return false
 		}
 		b = b[w:]

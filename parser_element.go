@@ -60,7 +60,9 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		// Bound the scan to the node-content cap (plus a rune of slack) so an
 		// oversized delimiter-free run is detected and rejected before the whole
 		// run — and the cursor's internal buffer — is materialized.
-		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], pctx.nodeContentScanBudget())
+		// The scan validates every character it consumes against the
+		// document's XML version, so the run needs no second validity pass.
+		data, i, valid := u8.ScanCharDataSlice(pctx.charBuf[:0], pctx.nodeContentScanBudget(), pctx.isXML11())
 		if i <= 0 {
 			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
 				return pctx.error(ctx, ErrMisplacedCDATAEnd)
@@ -70,7 +72,7 @@ func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
 		if pctx.nodeContentTooLong(i) {
 			return pctx.error(ctx, ErrNodeContentTooLarge)
 		}
-		if !pctx.literalBytesValid(data) {
+		if !valid {
 			return pctx.error(ctx, ErrInvalidChar)
 		}
 
@@ -215,7 +217,8 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 
 		prev := len(acc)
 		var i int
-		acc, i = u8.ScanCharDataSlice(acc, limit)
+		var valid bool
+		acc, i, valid = u8.ScanCharDataSlice(acc, limit, pctx.isXML11())
 		if i <= 0 {
 			if first {
 				if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
@@ -230,7 +233,7 @@ func (pctx *parserCtx) parseCharDataChunkedSAX(ctx context.Context, u8 *strcurso
 			break
 		}
 		first = false
-		if !pctx.literalBytesValid(acc[prev:]) {
+		if !valid {
 			return pctx.error(ctx, ErrInvalidChar)
 		}
 
@@ -317,11 +320,11 @@ func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.U
 			return err
 		}
 
-		data, i := u8.ScanCharDataSlice(pctx.charBuf[:0], limit)
+		data, i, valid := u8.ScanCharDataSlice(pctx.charBuf[:0], limit, pctx.isXML11())
 		if i <= 0 {
 			return nil
 		}
-		if !pctx.literalBytesValid(data) {
+		if !valid {
 			return pctx.error(ctx, ErrInvalidChar)
 		}
 

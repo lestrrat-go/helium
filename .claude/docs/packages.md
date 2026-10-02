@@ -2342,10 +2342,12 @@ Generic typed sequence utilities.
 
 ## internal/strcursor/
 
-String cursor for character-by-character parsing.
+String cursor for character-by-character parsing. `UTF8Cursor` (`utf8cursor.go`) adds byte-level fast paths;
+`ScanCharDataSlice(dst, maxBytes, xml11)` scans a text run and reports whether every scanned character may appear
+literally under the given XML version, so the parser does not re-validate the run.
 
-- Files: `strcursor.go`
-- Imports: none
+- Files: `strcursor.go`, `utf8cursor.go`
+- Imports: internal/xmlchar
 
 ## internal/unparsedtext/
 
@@ -2419,10 +2421,14 @@ Parser option bitset type and constants. Bit positions match libxml2's XML_PARSE
 
 ## internal/xmlchar/
 
-XML 1.0 character classification and name validation. Single source of truth for the NCName/QName/Name productions, plus
-XML Char range, encoding-name, and PI-target validation shared across packages.
+XML character classification and name validation. Single source of truth for the NCName/QName/Name productions, plus
+XML Char range, literal-character, encoding-name, and PI-target validation shared across packages.
 
 - **IsChar(rune) → bool** — XML 1.0 Char production (legal document character)
+- **IsXML11Char(rune) → bool** — XML 1.1 Char production (every code point but U+0000, surrogates, U+FFFE/U+FFFF)
+- **IsXML11RestrictedChar(rune) → bool** — XML 1.1 RestrictedChar (must appear only as a character reference)
+- **IsLiteralChar(rune, xml11 bool) → bool** — may the character appear literally: XML 1.0 Char, or XML 1.1 Char
+  minus RestrictedChar. The parser's literal checks and `strcursor.ScanCharDataSlice` are built from it
 - **IsNCNameStartChar(rune) → bool** — XML 1.0 NCName start character production
 - **IsNCNameChar(rune) → bool** — XML 1.0 NCName continuation character production
 - **IsValidNCName(string) → bool** — validates a complete NCName string

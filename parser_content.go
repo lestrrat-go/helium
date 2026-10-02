@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -241,7 +242,7 @@ func (pctx *parserCtx) isLiteralChar(r rune) bool {
 	if r == utf8.RuneError {
 		return false
 	}
-	return pctx.isLiteralCharValue(uint32(r))
+	return xmlchar.IsLiteralChar(r, pctx.isXML11())
 }
 
 // isLiteralCharWidth is the width-aware counterpart of isLiteralChar. A real
@@ -250,31 +251,18 @@ func (pctx *parserCtx) isLiteralCharWidth(r rune, w int) bool {
 	if r == utf8.RuneError && w == 1 {
 		return false
 	}
-	return pctx.isLiteralCharValue(uint32(r))
+	return xmlchar.IsLiteralChar(r, pctx.isXML11())
 }
 
-func (pctx *parserCtx) isLiteralCharValue(c uint32) bool {
-	return literalCharValueValid(c, pctx.isXML11())
-}
-
-// literalCharValueValid reports whether c may appear literally in an XML 1.1
-// document (xml11) or an XML 1.0 document (!xml11).
-func literalCharValueValid(c uint32, xml11 bool) bool {
-	if xml11 {
-		return isXML11CharValue(c) && !isXML11RestrictedChar(rune(c))
-	}
-	return isXMLCharValue(c)
-}
-
-// literalASCIIValid holds literalCharValueValid for every ASCII byte, indexed
+// literalASCIIValid holds xmlchar.IsLiteralChar for every ASCII byte, indexed
 // [0] for XML 1.0 and [1] for XML 1.1.
 var literalASCIIValid = buildLiteralASCIIValid()
 
 func buildLiteralASCIIValid() [2][utf8.RuneSelf]bool {
 	var tbl [2][utf8.RuneSelf]bool
-	for c := range uint32(utf8.RuneSelf) {
-		tbl[0][c] = literalCharValueValid(c, false)
-		tbl[1][c] = literalCharValueValid(c, true)
+	for c := range rune(utf8.RuneSelf) {
+		tbl[0][c] = xmlchar.IsLiteralChar(c, false)
+		tbl[1][c] = xmlchar.IsLiteralChar(c, true)
 	}
 	return tbl
 }
@@ -333,7 +321,7 @@ func (pctx *parserCtx) literalBytesValid(b []byte) bool {
 		if r == utf8.RuneError && w == 1 {
 			return false
 		}
-		if !literalCharValueValid(uint32(r), xml11) {
+		if !xmlchar.IsLiteralChar(r, xml11) {
 			return false
 		}
 		i += w
@@ -365,7 +353,7 @@ func (pctx *parserCtx) literalStringValid(s string) bool {
 		if r == utf8.RuneError && w == 1 {
 			return false
 		}
-		if !literalCharValueValid(uint32(r), xml11) {
+		if !xmlchar.IsLiteralChar(r, xml11) {
 			return false
 		}
 		i += w
@@ -380,32 +368,6 @@ func stringWord(s string) uint64 {
 	_ = s[7]
 	return uint64(s[0]) | uint64(s[1])<<8 | uint64(s[2])<<16 | uint64(s[3])<<24 |
 		uint64(s[4])<<32 | uint64(s[5])<<40 | uint64(s[6])<<48 | uint64(s[7])<<56
-}
-
-func isXMLCharValue(c uint32) bool {
-	if c < 0x100 {
-		return (0x9 <= c && c <= 0xa) || c == 0xd || 0x20 <= c
-	}
-	return (0x100 <= c && c <= 0xd7ff) || (0xe000 <= c && c <= 0xfffd) || (0x10000 <= c && c <= 0x10ffff)
-}
-
-// isXML11CharValue implements the XML 1.1 Char production:
-//
-//	Char ::= [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
-//
-// The C0/C1 control characters (0x1-0x1F, 0x7F-0x9F) the XML 1.0 Char
-// production forbids are valid XML 1.1 characters; only U+0000 is disallowed.
-// XML 1.1 requires the restricted characters to appear as character references
-// and never literally, so this predicate governs only the char-reference
-// value check.
-func isXML11CharValue(c uint32) bool {
-	if c == 0 {
-		return false
-	}
-	if c < 0x100 {
-		return true
-	}
-	return (0x100 <= c && c <= 0xd7ff) || (0xe000 <= c && c <= 0xfffd) || (0x10000 <= c && c <= 0x10ffff)
 }
 
 var (

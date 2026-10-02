@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
 )
 
@@ -375,9 +376,9 @@ func parseStringCharRef(s []byte, xml11 bool) (r rune, width int, err error) {
 	width++
 
 	r = val
-	charOK := isXMLCharValue(uint32(val))
+	charOK := xmlchar.IsChar(val)
 	if !charOK && xml11 {
-		charOK = isXML11CharValue(uint32(val))
+		charOK = xmlchar.IsXML11Char(val)
 	}
 	if !charOK {
 		return utf8.RuneError, 0, fmt.Errorf("invalid XML char value %d", val)
@@ -803,11 +804,11 @@ func (ctx *parserCtx) parseCharRef() (r rune, err error) {
 		return
 	}
 
-	charOK := isXMLCharValue(uint32(val))
+	charOK := xmlchar.IsChar(val)
 	if !charOK && ctx.isXML11() {
 		// XML 1.1 permits character references to the C0/C1 control
 		// characters the 1.0 Char production forbids (all but U+0000).
-		charOK = isXML11CharValue(uint32(val))
+		charOK = xmlchar.IsXML11Char(val)
 	}
 	if charOK && val <= unicode.MaxRune {
 		r = val
