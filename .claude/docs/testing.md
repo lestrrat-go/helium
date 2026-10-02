@@ -89,7 +89,7 @@ bug that prompted it.
 | `parser_xmlchar_test.go` | root | XML character validation and attribute-value parsing |
 | `parser_sax_test.go` | root | SAX/dispatch/stop-parser regression coverage |
 | `parser_push_test.go` | root | Push parser coverage |
-| `writer_test.go` | root | Core serialization, writer options, write errors, per-node allocation bounds, benchmarks |
+| `writer_test.go` | root | Core serialization, writer options, write errors, allocation bounds (`TestWriteToAllocations`: escaped text, escaped attributes, and prefixed elements on the XML and XHTML paths allocate nothing per repeat), benchmarks |
 | `writer_escape_test.go` | root | Invalid-character rejection, character maps, normalization, injection rejection |
 | `writer_namespace_test.go` | root | Namespace emission and subtree reconciliation |
 | `writer_dtd_test.go` | root | DTD serialization (subset/escaping/formatting/self-close, entity and literal emission) |
@@ -344,8 +344,9 @@ validated against an in-memory `<order>` of 1000 items. Every case runs once per
 `<case>/1.1`; `assert_cta_1000` runs only at 1.1. Compilation times `Compiler.Compile` with a parsed schema
 document; validation times `Validator.Validate` with a compiled schema and parsed instance document.
 
-`BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml` and `relaxng/test/comps_0.xml` with
-`helium.Write` into `io.Discard`. `BenchmarkIdentityTransform` (`xslt3/identity_bench_test.go`) runs an identity
+`BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml`, `relaxng/test/comps_0.xml`, and
+`relaxng/test/ISO19005-1-XMP_Packet.rng` (`xmprng`: every element `rng:`-prefixed, about thirty namespace
+declarations on the root) with `helium.Write` into `io.Discard`. `BenchmarkIdentityTransform` (`xslt3/identity_bench_test.go`) runs an identity
 transform over `comps_0.xml` in two stylesheet forms (`template`: a `match="@*|node()"` copy rule; `mode`:
 `xsl:mode on-no-match="shallow-copy"`), each timed as `writer` (`TransformToWriter`, transform plus serialization)
 and `tree` (`Transform` only).
