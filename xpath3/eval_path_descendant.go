@@ -312,9 +312,9 @@ func descendantStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec 
 		return nil, err
 	}
 
-	w := descendantWalker{evalFn: evalFn, step: step}
+	w := descendantWalker{step: step}
 	for _, c := range tops {
-		if _, err := w.walk(ctx, ec, c); err != nil {
+		if _, err := w.walk(evalFn, ctx, ec, c); err != nil {
 			return nil, err
 		}
 	}
@@ -329,7 +329,7 @@ func descendantStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec 
 // charge nothing, so the second step's charges can wait until the walk ends.
 func descendantStepQuietPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, contexts []helium.Node, step vmLocationStep) ([]helium.Node, error) {
 	total := 0
-	w := descendantWalker{evalFn: evalFn, step: step, counting: true}
+	w := descendantWalker{step: step, counting: true}
 	for i := 0; i < len(contexts); {
 		c := contexts[i]
 		w.sizes.reset(contexts[i+1 : i+1+nestedContextRun(contexts, i)])
@@ -340,7 +340,7 @@ func descendantStepQuietPredicates(evalFn exprEvaluator, ctx context.Context, ec
 		if ec.maxNodes < 1 {
 			return nil, ixpath.ErrNodeSetLimit
 		}
-		visited, err := w.walk(ctx, ec, c)
+		visited, err := w.walk(evalFn, ctx, ec, c)
 		if err != nil {
 			return nil, err
 		}
@@ -369,8 +369,11 @@ func descendantStepQuietPredicates(evalFn exprEvaluator, ctx context.Context, ec
 // predicates), it also counts the subtree, fails where countDescendantOrSelf
 // fails, measures the nested context subtrees in sizes, and adds the
 // candidates to candidates for the caller to charge.
+//
+// The evaluator is a parameter of walk rather than a field: a field would let
+// the method value the VM passes as evalFn escape to the heap on every
+// evaluation.
 type descendantWalker struct {
-	evalFn     exprEvaluator
 	step       vmLocationStep
 	counting   bool
 	out        []helium.Node
@@ -382,7 +385,7 @@ type descendantWalker struct {
 
 // walk walks the subtree of c. When counting, it returns the number of
 // subtree nodes.
-func (w *descendantWalker) walk(ctx context.Context, ec *evalContext, c helium.Node) (int, error) {
+func (w *descendantWalker) walk(evalFn exprEvaluator, ctx context.Context, ec *evalContext, c helium.Node) (int, error) {
 	step := w.step
 	w.stack = append(w.stack[:0], descendantEntry{node: c})
 	visited := 0
@@ -436,7 +439,7 @@ func (w *descendantWalker) walk(ctx context.Context, ec *evalContext, c helium.N
 		}
 		selected := w.matched
 		for _, pred := range step.Predicates {
-			selected, err = applyVMPredicate(w.evalFn, ctx, ec, selected, pred)
+			selected, err = applyVMPredicate(evalFn, ctx, ec, selected, pred)
 			if err != nil {
 				return 0, err
 			}
