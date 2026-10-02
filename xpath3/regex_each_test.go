@@ -3,7 +3,6 @@ package xpath3_test
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
@@ -233,34 +232,36 @@ func TestRegexEachSubmatchIndexLimitContract(t *testing.T) {
 // ^(a+)+b stays on Go's linear RE2 engine — it must NOT be routed through the
 // backtracking regexp2 engine, where the nested quantifier over a non-matching
 // input would explode into catastrophic backtracking and trip the match timeout
-// (surfacing as XTDE1140 in xsl:analyze-string). On RE2 it completes promptly
-// with no match and no error regardless of input length.
+// (surfacing as XTDE1140 in xsl:analyze-string). On RE2 it completes with no
+// match and no error regardless of input length. The engine choice is checked
+// directly, so the verdict does not depend on how fast the machine runs it.
 func TestRegexEachSubmatchIndexLeadingContextStaysLinear(t *testing.T) {
 	t.Parallel()
 
 	re, err := xpath3.CompileRegex("^(a+)+b", "")
 	require.NoError(t, err)
+	require.False(t, re.BacktrackingForTesting(), "^(a+)+b must compile to the linear RE2 engine")
+
+	// Positive control: a backreference needs the backtracking engine.
+	backref, err := xpath3.CompileRegex(`(a)\1`, "")
+	require.NoError(t, err)
+	require.True(t, backref.BacktrackingForTesting())
 
 	// 50 'a's with no trailing 'b': a backtracking engine would explore ~2^50
 	// splits (well past the 5s default timeout); RE2 dispatches it in linear time.
 	input := strings.Repeat("a", 50)
 
-	done := make(chan struct{})
-	var matches int
-	var eachErr error
-	go func() {
-		eachErr = re.EachSubmatchIndex(input, -1, func(_ []int) bool {
-			matches++
-			return true
-		})
-		close(done)
-	}()
+	counter := &submatchCounter{}
+	require.NoError(t, re.EachSubmatchIndex(input, -1, counter.visit))
+	require.Zero(t, counter.matches, "^(a+)+b must not match a run of only 'a'")
+}
 
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("EachSubmatchIndex did not return promptly; pattern likely ran on the backtracking engine")
-	}
-	require.NoError(t, eachErr)
-	require.Zero(t, matches, "^(a+)+b must not match a run of only 'a'")
+// submatchCounter counts the matches EachSubmatchIndex reports.
+type submatchCounter struct {
+	matches int
+}
+
+func (c *submatchCounter) visit(_ []int) bool {
+	c.matches++
+	return true
 }
