@@ -31,11 +31,18 @@ var descendantFusionExprs = []string{
 	"{D}b[xs:integer(substring(@id, 2)) > 1]",
 	".{D}b", ".{D}@id", ".{D}*[1]", "/a{D}b", "/a{D}@*", "/*/*{D}node()", "..{D}b",
 	"{D}b/c", "{D}b{D}c", "{D}*{D}@id", "{D}b/..", "{D}b{D}c[1]",
-	// `//` from several context nodes: siblings, nested nodes (which take
-	// the step-by-step evaluation), text and attribute nodes.
+	// Predicates that only select, which the walk applies in one pass.
+	"{D}b[@id][1]", "{D}*[@id = 'b1'][1]", "{D}*[2][@id]", "{D}*[@p:k]", "{D}*[@id = 'nosuch']",
+	"{D}@*[2]", "{D}node()[1][@id]", "{D}*[@*][last()]",
+	// `//` from several context nodes: siblings, text and attribute nodes
+	// (which take the step-by-step evaluation), and nested nodes.
 	"/a/b{D}c", "/*/*{D}node()", "/*/*{D}@*", "/*/*{D}*[1]", "/*/*{D}*[last()]", "/*/node(){D}node()",
 	"/*/*{D}b[@id]", "{D}text(){D}node()", "{D}@id{D}node()", "/*/*{D}*{D}c", "count(/*/*{D}*)",
 	"(/*/*{D}*)[2]", "/*/*{D}b | $other/*{D}b", "{D}*[@id]{D}b[1]",
+	"{D}a{D}b", "{D}*{D}*", "{D}*{D}node()", "{D}node(){D}node()", "{D}node(){D}@*", "{D}a{D}b[1]",
+	"{D}a{D}b[last()]", "{D}*{D}*[@id]", "{D}*{D}b[@id = 'b2']", "{D}a{D}b[.{D}c]", "{D}*{D}*[2][@id]",
+	"/descendant::*{D}c", "/descendant::*{D}@id", "/descendant::node(){D}node()", "{D}b/descendant::*{D}c",
+	"count({D}*{D}*)", "({D}*{D}b)[2]", "/*/descendant-or-self::*{D}b", "{D}a[b]{D}*[1]",
 	"$other{D}b", "$nodes{D}b", "$nodes{D}@id", "$ents{D}node()",
 	"count({D}*)", "count({D}node())", "count({D}@*)", "count({D}b[@id])", "count({D}nosuch)",
 	"exists({D}b)", "exists({D}nosuch)", "empty({D}b)", "empty({D}nosuch)",
@@ -98,10 +105,65 @@ func TestDescendantStepFusionRandom(t *testing.T) {
 	}
 }
 
+// TestDescendantStepFusionAnnotated repeats TestDescendantStepFusion from
+// the document node with a type annotation on every attribute, so a
+// predicate comparing an attribute with a string ([@id = 'b1']) evaluates
+// the comparison instead of selecting by the attribute's text.
+func TestDescendantStepFusionAnnotated(t *testing.T) {
+	t.Parallel()
+	for _, d := range stepOrderDocs {
+		f := newStepOrderFixture(t, d)
+		r, err := evalWith(t, f.eval, f.doc, "//@*")
+		require.NoError(t, err)
+		attrs, err := r.Nodes()
+		require.NoError(t, err)
+		annotations := make(map[helium.Node]string, len(attrs))
+		for _, a := range attrs {
+			annotations[a] = "xs:string"
+		}
+		f.eval = f.eval.Namespaces(map[string]string{"p": "urn:p"}).TypeAnnotations(annotations)
+		for _, tmpl := range descendantFusionExprs {
+			fused := strings.ReplaceAll(tmpl, "{D}", "//")
+			unfused := strings.ReplaceAll(tmpl, "{D}", descendantUnfused)
+			require.Equal(t, f.describeResult(t, f.doc, unfused, false), f.describeResult(t, f.doc, fused, false), "%s|%s", d.name, fused)
+		}
+	}
+}
+
+// TestDescendantNestedContextsAllocate checks that `//` from nested context
+// nodes walks the outermost subtrees once: over 1,000 nested elements, the
+// fused form allocates at least 500 times less than the step-by-step form,
+// which traverses the subtree of every context node into a slice of its own.
+// It measures allocations, so it does not run in parallel.
+func TestDescendantNestedContextsAllocate(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("<r>")
+	for range 500 {
+		b.WriteString("<a><a><b/></a><b/></a>")
+	}
+	b.WriteString("</r>")
+	doc := parseStepOrderDoc(t, b.String(), false)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+	for _, tmpl := range []string{"count({D}a{D}b)", "count({D}a{D}b[1])", "count({D}a{D}*[b])", "count({D}a{D}@*)"} {
+		fused := xpath3.NewCompiler().MustCompile(strings.ReplaceAll(tmpl, "{D}", "//"))
+		unfused := xpath3.NewCompiler().MustCompile(strings.ReplaceAll(tmpl, "{D}", descendantUnfused))
+		fusedAllocs := testing.AllocsPerRun(5, func() {
+			_, err := eval.Evaluate(t.Context(), fused, doc)
+			require.NoError(t, err)
+		})
+		unfusedAllocs := testing.AllocsPerRun(5, func() {
+			_, err := eval.Evaluate(t.Context(), unfused, doc)
+			require.NoError(t, err)
+		})
+		require.Less(t, fusedAllocs+500, unfusedAllocs, tmpl)
+	}
+}
+
 // The paths descendantLimitCases run their `//` from.
 const (
 	dosRoot          = "/"
 	dosGrandchildren = "/*/*"
+	dosElements      = "/descendant::*"
 )
 
 // descendantLimitCases are `//` expressions whose operation charges and
@@ -116,11 +178,18 @@ var descendantLimitCases = []struct {
 	{"{D}b[1]", dosRoot}, {"{D}b[last()]", dosRoot}, {"{D}*[@id]", dosRoot}, {"{D}*[@id][last()]", dosRoot},
 	{"{D}@*[last()]", dosRoot}, {"{D}*[.{D}c]", dosRoot}, {"count({D}*)", dosRoot}, {"exists({D}b)", dosRoot},
 	{"({D}b)[1]", dosRoot}, {"({D}*)[last()]", dosRoot}, {"{D}b{D}c", dosRoot},
+	// Predicates that only select.
+	{"{D}b[@id][1]", dosRoot}, {"{D}*[@id = 'b2']", dosRoot}, {"{D}*[2][@id]", dosRoot}, {"{D}@*[1]", dosRoot},
 	// Several context nodes.
 	{"/a/b{D}c", "/a/b"}, {"/*/node(){D}node()", "/*/node()"}, {"/*{D}b{D}c", "/*"},
 	{"/*/*{D}node()", dosGrandchildren}, {"/*/*{D}@*", dosGrandchildren}, {"/*/*{D}*[1]", dosGrandchildren},
 	{"/*/*{D}*[last()]", dosGrandchildren}, {"/*/*{D}*[@id]", dosGrandchildren},
 	{"count(/*/*{D}*)", dosGrandchildren}, {"/*/*{D}b{D}c", dosGrandchildren},
+	// Nested context nodes.
+	{"/descendant::*{D}b", dosElements}, {"/descendant::*{D}@id", dosElements},
+	{"/descendant::*{D}*[1]", dosElements}, {"/descendant::*{D}*[last()]", dosElements},
+	{"/descendant::*{D}*[@id]", dosElements}, {"/descendant::*{D}*[.{D}c]", dosElements},
+	{"count(/descendant::*{D}node())", dosElements}, {"/descendant::node(){D}node()", "/descendant::node()"},
 }
 
 // TestDescendantStepFusionLimits checks that a `//` path charges the same
@@ -181,7 +250,7 @@ func TestDescendantStepFusionCancel(t *testing.T) {
 	doc := parseStepOrderDoc(t, stepOrderDocs[0].src, false)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	for _, expr := range []string{"//b", "//b[1]", "//@id", "count(//*)"} {
+	for _, expr := range []string{"//b", "//b[1]", "//b[@id]", "//@id", "count(//*)", "//*//b", "//*//b[1]", "//*//b[c]"} {
 		compiled := xpath3.NewCompiler().MustCompile(expr)
 		_, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, compiled, doc)
 		require.ErrorIs(t, err, context.Canceled, expr)
