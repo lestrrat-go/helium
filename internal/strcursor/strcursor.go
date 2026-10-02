@@ -623,6 +623,9 @@ func (c *RuneCursor) Read(buf []byte) (int, error) {
 // ByteCursor — simple byte buffer (no linked list, already O(1))
 // ---------------------------------------------------------------------------
 
+// newlineBytes is the LF that ByteCursor counts lines by.
+var newlineBytes = []byte{'\n'}
+
 // ByteCursor reads bytes from an io.Reader.
 type ByteCursor struct {
 	buf     []byte
@@ -805,25 +808,40 @@ func (c *ByteCursor) PeekString(n int) string {
 	return string(c.buf[c.bufpos : c.bufpos+n])
 }
 
+// Advance consumes n bytes, updating the line number, column, and line text.
 func (c *ByteCursor) Advance(n int) error {
 	if err := c.fillBuffer(n); err != nil {
 		return err
 	}
-	if i := bytes.IndexByte(c.buf[c.bufpos:c.bufpos+n], '\n'); i > -1 {
-		c.lineno++
-		c.column = n - i + 1
-		c.line = append(c.line[:0], c.buf[c.bufpos+i:c.bufpos+n]...)
-	} else {
-		c.column += n
-		c.line = append(c.line, c.buf[c.bufpos:c.bufpos+n]...)
-	}
-	c.bufpos += n
+	c.consumed(n)
 	return nil
 }
 
-// AdvanceFast advances by n bytes, skipping line buffer tracking.
+// AdvanceFast consumes n bytes exactly like Advance. ByteCursor keeps no
+// cheaper path, because its line text is copied as bytes are consumed.
 func (c *ByteCursor) AdvanceFast(n int) error {
 	return c.Advance(n)
+}
+
+// consumed moves the cursor past the next n buffered bytes and updates the
+// line number, column, and line text the same way UTF8Cursor counts them: only
+// an LF starts a new line, and the column is 1 plus the number of bytes since
+// the last LF, so a CR, a tab, and each byte of a multi-byte character count as
+// one column. Every method that consumes bytes goes through here, so error
+// positions inside parameter-entity text and the external subset are measured
+// the same way as in the document body. The caller must have buffered n bytes.
+func (c *ByteCursor) consumed(n int) {
+	segment := c.buf[c.bufpos : c.bufpos+n]
+	c.bufpos += n
+	lastNewline := bytes.LastIndexByte(segment, '\n')
+	if lastNewline < 0 {
+		c.column += n
+		c.line = append(c.line, segment...)
+		return
+	}
+	c.lineno += bytes.Count(segment, newlineBytes)
+	c.column = n - lastNewline
+	c.line = append(c.line[:0], segment[lastNewline+1:]...)
 }
 
 // ScanCharDataInto scans XML character data into dst with EOL normalization.
@@ -869,7 +887,7 @@ func (c *ByteCursor) hasPrefix(s []byte, consume bool) bool {
 		return false
 	}
 	if consume {
-		c.bufpos += n
+		c.consumed(n)
 	}
 	return true
 }
@@ -911,6 +929,9 @@ func (c *ByteCursor) Unused() io.Reader {
 	return ret
 }
 
+// Read hands the unconsumed bytes to a wrapping reader, as switchEncoding does
+// when it puts a UTF8Cursor or a decoder over this cursor. It does not update
+// the line number or column: the wrapping cursor counts positions from there.
 func (c *ByteCursor) Read(buf []byte) (int, error) {
 	nread := 0
 	if c.bufpos < c.buflen {

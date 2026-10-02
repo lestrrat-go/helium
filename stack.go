@@ -119,9 +119,9 @@ func (s *nodeStack) PeekOne() *nodeEntry {
 	return &l[0]
 }
 
-// the reason we're using any here is that we may have to
-// push a ByteCursor or a RuneCursor, and they don't share
-// a common API
+// Push adds an input cursor: a *strcursor.ByteCursor for the raw document
+// bytes, parameter-entity text, and the external subset, or the
+// *strcursor.UTF8Cursor that switchEncoding pushes over the decoded document.
 func (s *inputStack) Push(c any) {
 	s.Stack.Push(c)
 }
