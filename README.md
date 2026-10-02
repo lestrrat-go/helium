@@ -232,12 +232,12 @@ libxml2bench ./bench`:
 
 | File | Helium | `encoding/xml` | libxml2 (cgo) |
 |------|--------|----------------|---------------|
-| 118 KB | 79 MB/s | 71 MB/s | 125 MB/s |
-| 287 KB | 101 MB/s | 85 MB/s | 164 MB/s |
-| 608 KB | 105 MB/s | 75 MB/s | 91 MB/s |
+| 118 KB | 103 MB/s | 71 MB/s | 127 MB/s |
+| 287 KB | 133 MB/s | 85 MB/s | 161 MB/s |
+| 608 KB | 140 MB/s | 76 MB/s | 90 MB/s |
 
 Helium allocates far fewer objects than `encoding/xml` in this benchmark. On the
-608 KB file, Helium makes about 4,400 allocations per parse and `encoding/xml`
+608 KB file, Helium makes about 2,700 allocations per parse and `encoding/xml`
 makes about 125,000.
 
 To run the benchmarks yourself:
