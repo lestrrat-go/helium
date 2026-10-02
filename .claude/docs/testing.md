@@ -320,6 +320,15 @@ expression must render exactly like its reference, which spells `//` as
 op per descendant-or-self node, so `TestDescendantStepFusionLimits` requires the reference's smallest passing
 `OpLimit` to be exactly that much higher, and both forms to fail on the same `MaxNodesForTesting` limits.
 
+`xpath3/vm_path_nodes_test.go` checks the VM node-list consumers the same way. Each template marks an operand
+`«X»`: the fast form reads `(X)`, the reference `(if (true()) then X else ())`, which hands X on as a sequence of
+node items and charges nothing, so both forms must render alike, need the same smallest `OpLimit` and fail on the
+same `MaxNodesForTesting` limits. `TestNodeListTypeAnnotations` validates a document against a schema with list and
+union types and requires every node item to equal the one `.` gives for its node. `TestNodeListResult` checks the
+`Result` accessors of a node-list result against the reference, and the sequential
+`TestNodeListConsumersAllocate` requires each fast form to allocate at least 1,000 times less than its reference
+over 2,000 nodes.
+
 ## Build Tags
 
 - `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)

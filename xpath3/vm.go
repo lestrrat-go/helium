@@ -3,6 +3,8 @@ package xpath3
 import (
 	"context"
 	"fmt"
+
+	"github.com/lestrrat-go/helium"
 )
 
 type vmOpcode uint8
@@ -98,6 +100,10 @@ func (vmPathExpr) exprNode() {}
 type vmInstruction struct {
 	op      vmOpcode
 	payload any
+	// ebv is set on a node-list producer (nodeListInstruction) whose parent only
+	// takes the effective boolean value of its result. The instruction
+	// then evaluates to xs:boolean (vm.evalEBV).
+	ebv bool
 }
 
 // streamInfo holds precomputed static-analysis properties so that
@@ -478,6 +484,10 @@ func (b *vmBuilder) lowerBinaryExpr(expr BinaryExpr) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
+	if expr.Op == TokenAnd || expr.Op == TokenOr {
+		b.markEBV(left)
+		b.markEBV(right)
+	}
 	return BinaryExpr{Op: expr.Op, Left: left, Right: right}, nil
 }
 
@@ -575,6 +585,9 @@ func (b *vmBuilder) lowerFilterExpr(expr FilterExpr) (Expr, error) {
 	preds, err := b.lowerChildExprSlice(expr.Predicates)
 	if err != nil {
 		return nil, err
+	}
+	for _, pred := range preds {
+		b.markEBV(pred)
 	}
 	return FilterExpr{Expr: base, Predicates: preds}, nil
 }
@@ -710,6 +723,7 @@ func (b *vmBuilder) lowerQuantifiedExpr(expr QuantifiedExpr) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
+	b.markEBV(satisfies)
 	return QuantifiedExpr{Some: expr.Some, Bindings: bindings, Satisfies: satisfies}, nil
 }
 
@@ -718,6 +732,7 @@ func (b *vmBuilder) lowerIfExpr(expr IfExpr) (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
+	b.markEBV(cond)
 	thenExpr, err := b.lowerChildExpr(expr.Then)
 	if err != nil {
 		return nil, err
@@ -901,7 +916,12 @@ func (b *vmBuilder) lowerPredicate(expr Expr) (Expr, error) {
 			Fallback: fallback,
 		}, nil
 	}
-	return b.lowerChildExpr(expr)
+	lowered, err := b.lowerChildExpr(expr)
+	if err != nil {
+		return nil, err
+	}
+	b.markEBV(lowered)
+	return lowered, nil
 }
 
 func isImmediateVMExpr(expr Expr) bool {
@@ -999,9 +1019,21 @@ type vm struct {
 	program *vmProgram
 }
 
-func (p *vmProgram) execute(ctx context.Context, ec *evalContext) (Sequence, error) {
+// execute evaluates the program. When its root is a node-list producer and
+// the nodes carry no type annotations, so that nodeItemFor(n) is
+// NodeItem{Node: n} and the node list alone describes the result, it returns
+// the node list and true; otherwise it returns the result sequence.
+func (p *vmProgram) execute(ctx context.Context, ec *evalContext) (Sequence, []helium.Node, bool, error) {
 	machine := vm{program: p}
-	return machine.evalExpr(ctx, ec, compiledExprRef{index: p.root})
+	root := compiledExprRef{index: p.root}
+	if ec.typeAnnotations == nil {
+		nodes, ok, err := machine.evalNodeListRef(ctx, ec, root)
+		if ok {
+			return nil, nodes, true, err
+		}
+	}
+	seq, err := machine.evalExpr(ctx, ec, root)
+	return seq, nil, false, err
 }
 
 func (v *vm) evalExpr(ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
@@ -1030,6 +1062,9 @@ func (v *vm) evalInstruction(ctx context.Context, ec *evalContext, ref compiledE
 		return nil, fmt.Errorf("%w: invalid VM instruction %d", ErrUnsupportedExpr, ref.index)
 	}
 	inst := v.program.instructions[ref.index]
+	if inst.ebv {
+		return v.evalEBV(ctx, ec, inst)
+	}
 	switch inst.op {
 	case vmOpLiteral:
 		return vmEvalPayload(inst, func(e LiteralExpr) (Sequence, error) { return evalLiteral(e) })
@@ -1048,21 +1083,21 @@ func (v *vm) evalInstruction(ctx context.Context, ec *evalContext, ref compiledE
 	case vmOpConcat:
 		return vmEvalPayload(inst, func(e ConcatExpr) (Sequence, error) { return evalConcatExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpSimpleMap:
-		return vmEvalPayload(inst, func(e SimpleMapExpr) (Sequence, error) { return evalSimpleMapExpr(v.evalExpr, ctx, ec, e) })
+		return vmEvalPayload(inst, func(e SimpleMapExpr) (Sequence, error) { return v.evalSimpleMapExpr(ctx, ec, e) })
 	case vmOpRange:
 		return vmEvalPayload(inst, func(e RangeExpr) (Sequence, error) { return evalRangeExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpUnion:
-		return vmEvalPayload(inst, func(e UnionExpr) (Sequence, error) { return evalUnionExpr(v.evalExpr, ctx, ec, e) })
+		return vmEvalPayload(inst, func(e UnionExpr) (Sequence, error) { return v.evalUnionExpr(ctx, ec, e) })
 	case vmOpIntersectExcept:
 		return vmEvalPayload(inst, func(e IntersectExceptExpr) (Sequence, error) {
-			return evalIntersectExceptExpr(v.evalExpr, ctx, ec, e)
+			return v.evalIntersectExceptExpr(ctx, ec, e)
 		})
 	case vmOpFilter:
 		return vmEvalPayload(inst, func(e FilterExpr) (Sequence, error) { return v.evalFilterExpr(ctx, ec, e) })
 	case vmOpPath:
-		return vmEvalPayload(inst, func(e vmPathExpr) (Sequence, error) { return evalVMPathExpr(v.evalExpr, ctx, ec, e) })
+		return vmEvalPayload(inst, func(e vmPathExpr) (Sequence, error) { return v.evalPathExpr(ctx, ec, e) })
 	case vmOpPathStep:
-		return vmEvalPayload(inst, func(e PathStepExpr) (Sequence, error) { return evalPathStepExpr(v.evalExpr, ctx, ec, e) })
+		return vmEvalPayload(inst, func(e PathStepExpr) (Sequence, error) { return v.evalPathStepExpr(ctx, ec, e) })
 	case vmOpLookup:
 		return vmEvalPayload(inst, func(e LookupExpr) (Sequence, error) { return evalLookupExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpUnaryLookup:

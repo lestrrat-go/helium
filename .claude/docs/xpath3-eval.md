@@ -97,15 +97,34 @@ keeps every observable effect of the two-step evaluation:
   limits, the first charges and the registration come before any predicate runs; the second pass marks each
   parent's selected children on the walk stack and emits them when they are popped.
 
-#### Node-list consumers (`vm_path_nodes.go`)
-`vm.evalLocationPathRef` evaluates an operand that is a compiled location path to its node list, with the
-recursion accounting of `evalWith`. A one-argument static call whose argument is a location path resolves the
-function after evaluating the path; the built-in `fn:count`, `fn:exists`, `fn:empty`, `fn:boolean`, `fn:not` and
-`fn:head` (all `item()*`) compute their result from the node list without creating a node item per node, and any
-other function (including a user function that shadows one of them) gets the node items through
-`callResolvedFunction`. A filter expression over a location path passes the node list to its predicates; a numeric
-literal predicate (`(//x)[1]`) charges the per-node ops and the first node's recursion check of `applyPredicate`
-and then selects by position without evaluating the literal per node.
+#### Node lists between instructions (`vm_path_nodes.go`)
+A node-list producer is an instruction whose result is always the `nodeItemFor` wrapping of a node list (or an
+error): a location path, a union, an intersect/except, a `vmPathExpr` with a location path after its first operand,
+and a filter expression over a producer (`nodeListInstruction`). `vm.evalNodeListRef` evaluates such an operand to
+its `[]helium.Node`, with the recursion accounting of `evalWith`, and these consumers read the list instead of a
+sequence of node items:
+- A one-argument static call resolves the function after evaluating the argument; the built-in `fn:count`,
+  `fn:exists`, `fn:empty`, `fn:boolean`, `fn:not` and `fn:head` (all `item()*`) compute their result from the node
+  list, and any other function (including a user function that shadows one of them) gets the node items through
+  `callResolvedFunction`.
+- Union and intersect/except read producer operands as node lists (`vm.evalOperand`), and are producers
+  themselves.
+- A filter expression over a producer passes the node list to its predicates; a numeric literal predicate
+  (`(//x)[1]`) charges the per-node ops and the first node's recursion check of `applyPredicate` and then selects
+  by position without evaluating the literal per node.
+- The first operand of `E1/path`, of a non-axis path step `E1/E2` and of a simple map `E1 ! E2` is read as a node
+  list; each node is the context node, as for a node item.
+- A producer in a position that only takes its effective boolean value (a step or filter predicate, an `if`
+  condition, an `and`/`or` operand, a quantified `satisfies`) is marked `vmInstruction.ebv` at lowering
+  (`vmBuilder.markEBV`) and evaluates to `xs:boolean` (non-empty node list); a predicate never takes a single
+  `xs:boolean` as a position, so the outcome is the one the node sequence gives. The walk still runs to the end,
+  so op charges and node-set limits are unchanged.
+- `Evaluator.Evaluate` and `Expression.EvaluateReuse` keep the node list in the `Result` when the root is a
+  producer and the evaluator has no type annotations (`vmProgram.execute`), so `nodeItemFor(n)` is
+  `NodeItem{Node: n}`; `Result.Sequence()` builds the `ItemSlice` on first use (see `xpath3-api.md`).
+
+Raw AST evaluation (`dispatchExpr`, `evalLocationPath`) has none of these paths and no `//` fusion; `Compile` and
+`CompileExpr` lower every expression to VM instructions, so it only runs for the immediate leaves.
 
 ### UnionExpr / IntersectExceptExpr
 `evalUnionExpr` gathers the nodes of both operands into one buffer (left, then right; a non-node item raises
@@ -114,7 +133,8 @@ returns. When the concatenation is a subsequence of one element's attribute list
 (`@*|node()`, `@id|*`, `*[1]|*[last()]`) it is already in document order and free of duplicates, so it is
 returned as is and the document order index is not built. Otherwise the sort keys are resolved and two operands
 that are each strictly increasing are merged in one pass; anything else is deduplicated and sorted. Every result
-node is wrapped again with `nodeItemFor`. `evalIntersectExceptExpr` filters the left operand by node identity
+node is wrapped again with `nodeItemFor`; the VM (`vm.unionNodes`) reads producer operands as node lists and hands
+the merged list to node-list consumers unwrapped. `evalIntersectExceptExpr` filters the left operand by node identity
 (`makeNodeIdentityKey`) and orders the result with `ixpath.DeduplicateNodes`. xpath1 keeps
 `ixpath.MergeNodeSets` for its union.
 

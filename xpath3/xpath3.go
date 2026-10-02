@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
+	"slices"
+	"sync"
 
 	"github.com/lestrrat-go/helium"
 )
@@ -58,13 +61,59 @@ func (e *Expression) DumpVM(w io.Writer) error {
 
 // Result holds the outcome of an XPath 3.1 evaluation.
 type Result struct {
+	// seq is the result sequence, or a *resultNodes for a result that is a
+	// list of nodes without type annotations.
 	seq Sequence
+}
+
+// resultNodes is a result that is a list of nodes without type annotations.
+// Its sequence, the NodeItem of every node, is built by the first call that
+// needs it and shared by every copy of the Result value. It implements
+// Sequence through that sequence, but the Result accessors read the node list
+// directly and Sequence returns the built ItemSlice.
+type resultNodes struct {
+	nodes []helium.Node
+	once  sync.Once
+	seq   ItemSlice
+}
+
+// sequence returns the NodeItem of every node, building it on first use.
+func (rn *resultNodes) sequence() ItemSlice {
+	rn.once.Do(rn.build)
+	return rn.seq
+}
+
+func (rn *resultNodes) Len() int              { return len(rn.nodes) }
+func (rn *resultNodes) Get(i int) Item        { return rn.sequence()[i] }
+func (rn *resultNodes) Items() iter.Seq[Item] { return rn.sequence().Items() }
+func (rn *resultNodes) Materialize() []Item   { return rn.sequence() }
+
+func (rn *resultNodes) build() {
+	seq := make(ItemSlice, len(rn.nodes))
+	for i, n := range rn.nodes {
+		seq[i] = NodeItem{Node: n}
+	}
+	rn.seq = seq
+}
+
+// items returns the result sequence.
+func (r Result) items() Sequence {
+	if rn, ok := r.seq.(*resultNodes); ok {
+		return rn.sequence()
+	}
+	return r.seq
 }
 
 // Copy returns a deep copy of the Result whose backing storage is
 // independent of any EvalState. Use this to retain a Result beyond
 // the next EvaluateReuse call.
 func (r Result) Copy() Result {
+	if rn, ok := r.seq.(*resultNodes); ok {
+		if len(rn.nodes) == 0 {
+			return Result{}
+		}
+		return Result{seq: &resultNodes{nodes: slices.Clone(rn.nodes)}}
+	}
 	if seqLen(r.seq) == 0 {
 		return Result{}
 	}
@@ -73,11 +122,14 @@ func (r Result) Copy() Result {
 
 // Sequence returns the raw result sequence.
 func (r *Result) Sequence() Sequence {
-	return r.seq
+	return r.items()
 }
 
 // IsNodeSet returns true if the result consists entirely of nodes.
 func (r *Result) IsNodeSet() bool {
+	if _, ok := r.seq.(*resultNodes); ok {
+		return true
+	}
 	for item := range seqItems(r.seq) {
 		if _, ok := item.(NodeItem); !ok {
 			return false
@@ -89,6 +141,12 @@ func (r *Result) IsNodeSet() bool {
 // Nodes extracts all nodes from the result.
 // Returns ErrNotNodeSet if any non-node items are present.
 func (r *Result) Nodes() ([]helium.Node, error) {
+	if rn, ok := r.seq.(*resultNodes); ok {
+		if len(rn.nodes) == 0 {
+			return nil, nil
+		}
+		return slices.Clone(rn.nodes), nil
+	}
 	if seqLen(r.seq) == 0 {
 		return nil, nil
 	}
@@ -105,6 +163,9 @@ func (r *Result) Nodes() ([]helium.Node, error) {
 
 // IsAtomic returns true if the result is a single atomic value.
 func (r *Result) IsAtomic() bool {
+	if _, ok := r.seq.(*resultNodes); ok {
+		return false
+	}
 	if seqLen(r.seq) != 1 {
 		return false
 	}
@@ -115,7 +176,7 @@ func (r *Result) IsAtomic() bool {
 // Atomics extracts all atomic values from the result.
 func (r *Result) Atomics() ([]AtomicValue, error) {
 	var result []AtomicValue
-	for item := range seqItems(r.seq) {
+	for item := range seqItems(r.items()) {
 		av, ok := item.(AtomicValue)
 		if !ok {
 			return nil, fmt.Errorf("%w: item is %T, not AtomicValue", ErrTypeMismatch, item)
@@ -127,6 +188,9 @@ func (r *Result) Atomics() ([]AtomicValue, error) {
 
 // IsBoolean returns the boolean value and true if the result is a single boolean.
 func (r *Result) IsBoolean() (bool, bool) {
+	if _, ok := r.seq.(*resultNodes); ok {
+		return false, false
+	}
 	if seqLen(r.seq) != 1 {
 		return false, false
 	}
@@ -140,6 +204,9 @@ func (r *Result) IsBoolean() (bool, bool) {
 
 // IsNumber returns the float64 value and true if the result is a single number.
 func (r *Result) IsNumber() (float64, bool) {
+	if _, ok := r.seq.(*resultNodes); ok {
+		return 0, false
+	}
 	if seqLen(r.seq) != 1 {
 		return 0, false
 	}
@@ -152,6 +219,9 @@ func (r *Result) IsNumber() (float64, bool) {
 
 // IsString returns the string value and true if the result is a single string.
 func (r *Result) IsString() (string, bool) {
+	if _, ok := r.seq.(*resultNodes); ok {
+		return "", false
+	}
 	if seqLen(r.seq) != 1 {
 		return "", false
 	}
@@ -163,11 +233,19 @@ func (r *Result) IsString() (string, bool) {
 	return s, ok
 }
 
-func (e *Expression) evaluate(ctx context.Context, ec *evalContext) (Sequence, error) {
+// evaluate evaluates the expression. When the expression is a node-list
+// producer and the nodes need no type annotations (vmProgram.execute), it
+// returns the node list and true, and the caller keeps the list in the
+// Result; otherwise it returns the result sequence.
+func (e *Expression) evaluate(ctx context.Context, ec *evalContext) (Sequence, []helium.Node, bool, error) {
 	if err := e.requireCompiledProgram(); err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
-	return e.program.execute(ctx, ec)
+	seq, nodes, isNodes, err := e.program.execute(ctx, ec)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return seq, nodes, isNodes, nil
 }
 
 func (e *Expression) astExpr() Expr {

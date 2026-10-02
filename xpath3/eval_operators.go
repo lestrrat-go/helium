@@ -201,6 +201,26 @@ func evalSimpleMapExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContex
 	return result, nil
 }
 
+// simpleMapNodes evaluates E1 ! E2 for the E1 that evaluates to the node
+// items of nodes, as evalSimpleMapExpr does: each node in turn is the
+// context node.
+func simpleMapNodes(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e SimpleMapExpr, nodes []helium.Node) (Sequence, error) {
+	var result ItemSlice
+	for i, n := range nodes {
+		frame := ec.pushNodeContext(n, i+1, len(nodes))
+		r, err := evalFn(ctx, ec, e.Right)
+		ec.restoreContext(frame)
+		if err != nil {
+			return nil, err
+		}
+		result, err = appendBoundedSeq(ctx, ec, result, r, ec.maxNodes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
 func evalRangeExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e RangeExpr) (Sequence, error) {
 	startSeq, err := evalFn(ctx, ec, e.Start)
 	if err != nil {
@@ -327,6 +347,17 @@ func evalIntersectExceptExpr(evalFn exprEvaluator, ctx context.Context, ec *eval
 	if !ok1 || !ok2 {
 		return nil, ErrUnionNotNodeSet
 	}
+	result, err := intersectExceptNodes(ec, e.Op, leftNodes, rightNodes)
+	if err != nil {
+		return nil, err
+	}
+	return nodeItemsFor(ctx, ec, result), nil
+}
+
+// intersectExceptNodes returns the nodes of leftNodes that are (op is
+// TokenIntersect) or are not (TokenExcept) in rightNodes, in document order
+// and free of duplicates.
+func intersectExceptNodes(ec *evalContext, op TokenType, leftNodes, rightNodes []helium.Node) ([]helium.Node, error) {
 	rightSet := make(map[nodeIdentityKey]struct{}, len(rightNodes))
 	for _, n := range rightNodes {
 		rightSet[makeNodeIdentityKey(n)] = struct{}{}
@@ -340,22 +371,14 @@ func evalIntersectExceptExpr(evalFn exprEvaluator, ctx context.Context, ec *eval
 		}
 		seen[key] = struct{}{}
 		_, inRight := rightSet[key]
-		if e.Op == TokenIntersect && inRight {
+		if op == TokenIntersect && inRight {
 			result = append(result, n)
-		} else if e.Op == TokenExcept && !inRight {
+		} else if op == TokenExcept && !inRight {
 			result = append(result, n)
 		}
 	}
 	// XPath requires intersect/except results in document order
-	result, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
-	if err != nil {
-		return nil, err
-	}
-	seq := make(ItemSlice, len(result))
-	for i, n := range result {
-		seq[i] = nodeItemFor(ctx, ec, n)
-	}
-	return seq, nil
+	return ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
 }
 
 func evalFilterExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e FilterExpr) (Sequence, error) {
@@ -486,6 +509,17 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 	if !ok {
 		return nil, ErrPathNotNodeSet
 	}
+	nodes, err := vmPathStepNodes(evalFn, ctx, ec, e, baseNodes)
+	if err != nil {
+		return nil, err
+	}
+	return nodeItemsFor(ctx, ec, nodes), nil
+}
+
+// vmPathStepNodes evaluates the location path e.Path from every node of
+// baseNodes and returns the results merged in document order, or in the
+// order of baseNodes when e.OrderFilter is fn:reverse or fn:sort.
+func vmPathStepNodes(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e vmPathExpr, baseNodes []helium.Node) ([]helium.Node, error) {
 	result := make([]helium.Node, 0, len(baseNodes))
 	for _, n := range baseNodes {
 		frame := ec.pushNodeContext(n, 1, 1)
@@ -496,20 +530,10 @@ func evalVMPathExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, 
 		}
 		result = append(result, subNodes...)
 	}
-	var deduped []helium.Node
 	if filterPreservesOrder(ctx, ec, e.OrderFilter) {
-		deduped, err = ixpath.DeduplicateNodesPreserveOrder(result, ec.maxNodes)
-	} else {
-		deduped, err = ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
+		return ixpath.DeduplicateNodesPreserveOrder(result, ec.maxNodes)
 	}
-	if err != nil {
-		return nil, err
-	}
-	seq := make(ItemSlice, len(deduped))
-	for i, n := range deduped {
-		seq[i] = nodeItemFor(ctx, ec, n)
-	}
-	return seq, nil
+	return ixpath.DeduplicateNodes(result, ec.docOrder, ec.maxNodes)
 }
 
 // filterPreservesOrder returns true if the filter expression is a call to the
@@ -552,6 +576,12 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	if !ok {
 		return nil, ErrPathNotNodeSet
 	}
+	return pathStepFromNodes(evalFn, ctx, ec, e, baseNodes)
+}
+
+// pathStepFromNodes evaluates E1/E2 for a non-axis E2 and the E1 whose
+// nodes are baseNodes.
+func pathStepFromNodes(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e PathStepExpr, baseNodes []helium.Node) (Sequence, error) {
 	allNodes := make([]helium.Node, 0, len(baseNodes))
 	allItems := make(ItemSlice, 0, len(baseNodes))
 	hasNodes := false
@@ -590,6 +620,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	}
 
 	if hasNodes {
+		var err error
 		if filterPreservesOrder(ctx, ec, e.Left) {
 			allNodes, err = ixpath.DeduplicateNodesPreserveOrder(allNodes, ec.maxNodes)
 		} else {
@@ -598,11 +629,7 @@ func evalPathStepExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		if err != nil {
 			return nil, err
 		}
-		seq := make(ItemSlice, len(allNodes))
-		for i, n := range allNodes {
-			seq[i] = nodeItemFor(ctx, ec, n)
-		}
-		return seq, nil
+		return nodeItemsFor(ctx, ec, allNodes), nil
 	}
 	return allItems, nil
 }

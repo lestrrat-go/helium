@@ -183,7 +183,7 @@ expressions.
 ## Result
 
 ```go
-type Result struct { seq Sequence }
+type Result struct { seq Sequence } // seq is a *resultNodes for a node-list result
 
 func (r *Result) Sequence() Sequence
 func (r *Result) IsNodeSet() bool                  // true for empty sequence + all-node sequences
@@ -196,6 +196,14 @@ func (r *Result) IsString() (string, bool)
 func (r Result) StringValue() string                  // XPath string value of the sequence
 func (r Result) Copy() Result                          // deep copy with independent backing (see Reuse)
 ```
+
+When the expression is a node-list producer and the evaluator has no type annotations, the `Result` holds the node
+list (a `*resultNodes` in `seq`, which implements `Sequence` through its built `ItemSlice`) instead of a sequence.
+`Nodes()` returns a copy of the list, `IsNodeSet()` is true, `StringValue()` reads a single node directly, and
+`Sequence()` builds the `ItemSlice` of `NodeItem{Node: n}` on its first call (`sync.Once`, so concurrent callers get
+the same slice) and returns that slice on every call. A caller that only reads `Nodes()` never pays for a node item
+per node. For such a result `Evaluate` allocates the `Result` and its `resultNodes` in one `resultBox`;
+`EvaluateReuse` keeps the `resultNodes` in the `EvalState`.
 
 ## Regex
 

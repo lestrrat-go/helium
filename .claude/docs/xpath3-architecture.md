@@ -142,7 +142,7 @@ func NodePrefix(n helium.Node) string
 | `evaluator.go` | Expression evaluator interface |
 | `vm.go` | AST lowering to indexed instruction graph + VM executor |
 | `vm_dump.go` | Text disassembly for compiled VM instructions |
-| `vm_path_nodes.go` | VM node-list consumers: `fn:count`/`exists`/`empty`/`boolean`/`not`/`head` and filter expressions over a location path read its node list without wrapping each node |
+| `vm_path_nodes.go` | VM node lists: node-list producers (location path, union, intersect/except, `E1/path`, filter over a producer) hand their `[]helium.Node` to consumers that only need the nodes (`fn:count`/`exists`/`empty`/`boolean`/`not`/`head`, set-operator operands, filter/path/path-step/simple-map bases, effective-boolean-value operands, the `Result`) without wrapping each node |
 | `compare.go` | `GeneralCompare`, `ValueCompare`, `NodeCompare`, type promotion |
 | `cast.go` | `CastAtomic`, `CastFromString` |
 | `cast_numeric.go` | Numeric-specific casting |
