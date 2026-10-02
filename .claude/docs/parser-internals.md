@@ -58,6 +58,11 @@ Central state struct (`parserctx.go`). Key fields:
 - `inputTab` (inputStack) — LIFO stack of ByteCursor/UTF8Cursor; `switchEncoding`, external DTDs and parameter
   entities push new cursors, all before element content starts (see the `pushInput` comment)
 - `getCursor()` — current cursor; auto-pops exhausted ones, caches the active cursor between calls
+- `UTF8Cursor` buffering (`internal/strcursor/utf8cursor.go`) — `fillBuffer` reads into the free space after the
+  buffered bytes and compacts only when a request does not fit after `bufpos`, growing the buffer when it still
+  does not. `compact` keeps the current line's text from `lineStart` (the last LF, at most `LineContextMax` = 1024
+  bytes back), so `Line()` returns the same text however reads split the input; a reader returning a few bytes per
+  `Read` moves that text once per buffer, not once per read
 - Element content reads one concrete `*strcursor.UTF8Cursor`. `contentCursor` (`parser_document.go`) fetches it
   once where content starts: `parseDocument` for the root element, and `parseContentInput` for a sub-parse
   (internal and external entity content, `ParseInNodeContext`). `parseContent`, `parseElement`,

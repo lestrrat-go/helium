@@ -27,4 +27,6 @@ func Example_helium_parse_error_inspect() {
 	// cause: '</' is required
 	// formatted:
 	// parser error : '</' is required
+	// <root>
+	//       ^
 }
