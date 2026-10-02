@@ -2,6 +2,7 @@ package helium_test
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -333,6 +334,75 @@ func TestStripBlanks(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("declared content type per element", func(t *testing.T) {
+		t.Parallel()
+
+		// Element content (a, p:a) drops every blank run, including the one
+		// after a character reference; mixed and ANY content (m, p:m, q:a)
+		// keeps them all; EMPTY (e) and undeclared (u, p:u) elements drop only
+		// the runs between markup. Entity replacement text is classified
+		// without the enclosing element's declaration.
+		const (
+			body = `<r xmlns:p="urn:p" xmlns:q="urn:p">` +
+				`<a><b/><b/>&amp;<b/></a><p:a><b/><b/>&amp;<b/></p:a><q:a> <b/> <b/> &amp; <b/> </q:a>` +
+				`<m> <b/> <b/> &amp; <b/> </m><p:m> <b/> <b/> &amp; <b/> </p:m><e><b/> &amp; <b/></e>` +
+				`<u><b/><b/> &amp; <b/></u><p:u><b/><b/> &amp; <b/></p:u>` +
+				`<a><a><b/></a><m> <b/> </m><b/></a>`
+			wantRefs        = body + `<a>&ws;</a><m>&ws;</m><u>  </u></r>`
+			wantSubstituted = body + `<a><b/> </a><m><b/> </m><u>  </u></r>`
+		)
+		for _, tc := range declaredWhitespaceCases {
+			for _, substitute := range []bool{false, true} {
+				for _, saxPath := range []bool{false, true} {
+					p := helium.NewParser().StripBlanks(true).SubstituteEntities(substitute)
+					if tc.external {
+						fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(declaredWhitespaceDecls)}}
+						p = p.BlockXXE(false).LoadExternalDTD(true).FS(fsys)
+					}
+					if saxPath {
+						p = p.SAXHandler(&saxTreeBuilder{TreeBuilder: helium.NewTreeBuilder()})
+					}
+					doc, err := p.Parse(t.Context(), []byte(tc.src))
+					require.NoError(t, err)
+					got, err := helium.WriteString(doc.DocumentElement())
+					require.NoError(t, err)
+					want := wantRefs
+					if substitute {
+						want = wantSubstituted
+					}
+					require.Equal(t, want, got, "%s, substitute %t, SAX path %t", tc.name, substitute, saxPath)
+
+					if saxPath {
+						continue
+					}
+					// The push parser and a fragment parsed in the document's
+					// context classify the same way.
+					pp := p.NewPushParser(t.Context())
+					for chunk := range slices.Chunk([]byte(tc.src), 7) {
+						require.NoError(t, pp.Push(chunk))
+					}
+					pushed, err := pp.Close()
+					require.NoError(t, err)
+					got, err = helium.WriteString(pushed.DocumentElement())
+					require.NoError(t, err)
+					require.Equal(t, want, got, "%s, substitute %t, push parser", tc.name, substitute)
+
+					first, err := p.ParseInNodeContext(t.Context(), doc.DocumentElement(),
+						[]byte(`<a> <b/> &#38; <b/> </a> <m> <b/> </m> <p:a> <b/> &#38; </p:a> <u> <b/> &#38; </u>`))
+					require.NoError(t, err)
+					var fragment strings.Builder
+					for n := first; n != nil; n = n.NextSibling() {
+						s, err := helium.WriteString(n)
+						require.NoError(t, err)
+						fragment.WriteString(s)
+					}
+					require.Equal(t, `<a><b/>&amp;<b/></a><m> <b/> </m><p:a xmlns:p="urn:p"><b/>&amp;</p:a><u><b/> &amp; </u>`,
+						fragment.String(), "%s, substitute %t, fragment", tc.name, substitute)
+				}
+			}
+		}
+	})
 }
 
 func TestWhitespacePreserved(t *testing.T) {
@@ -609,4 +679,48 @@ func TestOverCapWhitespace(t *testing.T) {
 		require.ErrorIs(t, berr, helium.ErrNodeContentTooLarge,
 			"the same EBCDIC bytes via Parse([]byte) must fail identically")
 	})
+}
+
+// declaredWhitespaceDecls declares element, mixed, ANY and EMPTY content for
+// unprefixed and prefixed element names. p:a and q:a bind the same namespace
+// and local name but are declared differently, and p:u is not declared, since
+// a declaration is looked up by the name as written.
+const declaredWhitespaceDecls = `<!ELEMENT r (a|p:a|q:a|m|p:m|e|u|p:u)*>
+<!ELEMENT a (b|a|m)*>
+<!ELEMENT p:a (b)*>
+<!ELEMENT q:a ANY>
+<!ELEMENT m (#PCDATA|b)*>
+<!ELEMENT p:m ANY>
+<!ELEMENT e EMPTY>
+<!ELEMENT b EMPTY>
+<!ENTITY ws " <b/> ">`
+
+// declaredWhitespaceBody gives each element several whitespace runs, one of
+// them after a character reference, where only a declaration makes it
+// ignorable; nests declared elements inside one another; and expands an
+// entity holding whitespace inside element and mixed content.
+const declaredWhitespaceBody = `<r xmlns:p="urn:p" xmlns:q="urn:p">
+ <a> <b/> <b/> &#38; <b/> </a>
+ <p:a> <b/> <b/> &#38; <b/> </p:a>
+ <q:a> <b/> <b/> &#38; <b/> </q:a>
+ <m> <b/> <b/> &#38; <b/> </m>
+ <p:m> <b/> <b/> &#38; <b/> </p:m>
+ <e> <b/> &#38; <b/> </e>
+ <u> <b/> <b/> &#38; <b/> </u>
+ <p:u> <b/> <b/> &#38; <b/> </p:u>
+ <a> <a> <b/> </a> <m> <b/> </m> <b/> </a>
+ <a>&ws;</a>
+ <m>&ws;</m>
+ <u>  </u>
+</r>`
+
+// declaredWhitespaceCases parse the same document with its declarations in
+// the internal subset and in an external subset.
+var declaredWhitespaceCases = []struct {
+	name     string
+	src      string
+	external bool
+}{
+	{name: "internal subset", src: "<!DOCTYPE r [\n" + declaredWhitespaceDecls + "\n]>\n" + declaredWhitespaceBody},
+	{name: "external subset", src: `<!DOCTYPE r SYSTEM "d.dtd">` + "\n" + declaredWhitespaceBody, external: true},
 }

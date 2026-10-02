@@ -1,6 +1,8 @@
 package helium_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -225,4 +227,224 @@ func TestParseAttrValue(t *testing.T) {
 			require.Equal(t, "x y", attrs[0].Value(), "whitespace %q must normalize to space", ws)
 		}
 	})
+
+	// An attribute value holding a C0 control, DEL, a C1 control, or another
+	// non-ASCII character, after ASCII runs of lengths around the 16-byte scan
+	// stride, in both XML versions and both quote styles. XML 1.0 accepts every
+	// Char literally; XML 1.1 rejects its RestrictedChar (C0 controls other than
+	// tab, LF and CR, DEL, and U+0080-U+0084, U+0086-U+009F).
+	t.Run("XML 1.0 and 1.1 characters", func(t *testing.T) {
+		t.Parallel()
+
+		const run = "abcdefghijklmnopqrstuvwxyz0123456789"
+		for _, tc := range attrCharCases {
+			for _, version := range []string{"1.0", "1.1"} {
+				wantErr := tc.err10
+				if version == "1.1" {
+					wantErr = tc.err11
+				}
+				for _, n := range []int{0, 1, 7, 8, 15, 16, 17, 31, 32, 33} {
+					for _, quote := range []string{`"`, `'`} {
+						value := run[:n] + string(tc.r) + "z"
+						src := `<?xml version="` + version + `"?><r a=` + quote + value + quote + `/>`
+						doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+						if wantErr {
+							// A C0 control ends the fast scan and the slow path stops
+							// at it, so the value is reported unclosed where the
+							// control sits; an XML 1.1 RestrictedChar is reported
+							// at the start of the value.
+							want := fmt.Sprintf("invalid char at line 1, column 7\n -> '<r a=%s' <-- around here", quote)
+							if tc.r < 0x20 {
+								want = fmt.Sprintf("string not closed at line 1, column %d\n -> '<r a=%s%s' <-- around here",
+									7+n, quote, run[:n])
+							}
+							require.EqualError(t, err, want, "U+%04X, XML %s, %d leading bytes", tc.r, version, n)
+							continue
+						}
+						require.NoError(t, err, "U+%04X, XML %s, %d leading bytes", tc.r, version, n)
+						attrs := doc.DocumentElement().Attributes()
+						require.Len(t, attrs, 1)
+						require.Equal(t, value, attrs[0].Value(), "U+%04X, XML %s, %d leading bytes", tc.r, version, n)
+					}
+				}
+			}
+		}
+	})
+
+	// The tree the parser builds for each attribute value: one Text child for
+	// a value without references, the Text/EntityRef list for a value whose
+	// entity references are kept, no child for an empty value, the namespace of
+	// a prefixed attribute, and the default and type flags from the DTD.
+	t.Run("node shape", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tc := range attrShapeCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				p := helium.NewParser().SubstituteEntities(tc.substitute).DefaultDTDAttributes(tc.defaults)
+				doc, err := p.Parse(t.Context(), []byte(tc.src))
+				require.NoError(t, err)
+				require.Equal(t, tc.want, describeAttributes(doc))
+				for _, id := range tc.ids {
+					require.NotNil(t, doc.GetElementByID(id), "ID %q registered", id)
+				}
+			})
+		}
+	})
+}
+
+// attrCharCases lists characters whose literal use in an attribute value
+// differs between XML 1.0 and XML 1.1, with whether each version rejects it.
+var attrCharCases = []struct {
+	r     rune
+	err10 bool
+	err11 bool
+}{
+	{r: 0x01, err10: true, err11: true},
+	{r: 0x08, err10: true, err11: true},
+	{r: 0x0B, err10: true, err11: true},
+	{r: 0x1F, err10: true, err11: true},
+	{r: 0x7E},
+	{r: 0x7F, err11: true},
+	{r: 0x80, err11: true},
+	{r: 0x84, err11: true},
+	{r: 0x85},
+	{r: 0x86, err11: true},
+	{r: 0x9F, err11: true},
+	{r: 0xA0},
+	{r: 0xE9},
+	{r: 0x2028},
+	{r: 0xFFFD},
+	{r: 0x1F600},
+}
+
+// attrShapeNoDTD and attrShapeDTD are documents whose attributes cover the
+// values the parser's tree fast path builds differently: with and without '&',
+// with entity and character references, empty, holding the other quote,
+// prefixed, defaulted from the DTD, and ID-typed.
+const (
+	attrShapeNoDTD = `<r xmlns:p="urn:p" plain="abc" amp="a&amp;b" lt="a&lt;b" cref="&#65;z&#x42;" p:pre="pv" ` +
+		`p:amp="1&amp;2" empty="" p:empty="" dq='say "hi"' sq="it's" ` +
+		`long="0123456789abcdefghijklmnopqrstuvwxyz" u="é中😀"><c p:x="y" z=""/></r>`
+	attrShapeDTD = `<!DOCTYPE r [
+<!ENTITY e "ent">
+<!ATTLIST r d CDATA "def&e;x" p:d CDATA "pd" id ID #IMPLIED plain CDATA "dflt">
+<!ATTLIST c xml:id ID #IMPLIED>
+]>
+<r xmlns:p="urn:p" ref="x&e;y" p:ref="1&e;2" id="i1" mixed="&e;&amp;&e;" plain="abc"><c xml:id="c1" v="w"/></r>`
+)
+
+// attrShapeCases pairs each attribute-shape document and parser setting with
+// describeAttributes' rendering of the tree the default parser builds.
+var attrShapeCases = []struct {
+	name       string
+	src        string
+	substitute bool
+	defaults   bool
+	ids        []string
+	want       string
+}{
+	{name: "no DTD", src: attrShapeNoDTD, want: `<r>
+  plain prefix="" uri="" default=false atype=0 value="abc" children=[ 3:"abc" ]
+  amp prefix="" uri="" default=false atype=0 value="a&b" children=[ 3:"a&b" ]
+  lt prefix="" uri="" default=false atype=0 value="a<b" children=[ 3:"a<b" ]
+  cref prefix="" uri="" default=false atype=0 value="AzB" children=[ 3:"AzB" ]
+  p:pre prefix="p" uri="urn:p" default=false atype=0 value="pv" children=[ 3:"pv" ]
+  p:amp prefix="p" uri="urn:p" default=false atype=0 value="1&2" children=[ 3:"1&2" ]
+  empty prefix="" uri="" default=false atype=0 value="" children=[ ]
+  p:empty prefix="p" uri="urn:p" default=false atype=0 value="" children=[ ]
+  dq prefix="" uri="" default=false atype=0 value="say \"hi\"" children=[ 3:"say \"hi\"" ]
+  sq prefix="" uri="" default=false atype=0 value="it's" children=[ 3:"it's" ]
+  long prefix="" uri="" default=false atype=0 value="0123456789abcdefghijklmnopqrstuvwxyz" children=[ 3:"0123456789abcdefghijklmnopqrstuvwxyz" ]
+  u prefix="" uri="" default=false atype=0 value="é中😀" children=[ 3:"é中😀" ]
+<c>
+  p:x prefix="p" uri="urn:p" default=false atype=0 value="y" children=[ 3:"y" ]
+  z prefix="" uri="" default=false atype=0 value="" children=[ ]
+`},
+	{name: "no DTD substituted", src: attrShapeNoDTD, substitute: true, want: `<r>
+  plain prefix="" uri="" default=false atype=0 value="abc" children=[ 3:"abc" ]
+  amp prefix="" uri="" default=false atype=0 value="a&b" children=[ 3:"a&b" ]
+  lt prefix="" uri="" default=false atype=0 value="a<b" children=[ 3:"a<b" ]
+  cref prefix="" uri="" default=false atype=0 value="AzB" children=[ 3:"AzB" ]
+  p:pre prefix="p" uri="urn:p" default=false atype=0 value="pv" children=[ 3:"pv" ]
+  p:amp prefix="p" uri="urn:p" default=false atype=0 value="1&2" children=[ 3:"1&2" ]
+  empty prefix="" uri="" default=false atype=0 value="" children=[ ]
+  p:empty prefix="p" uri="urn:p" default=false atype=0 value="" children=[ ]
+  dq prefix="" uri="" default=false atype=0 value="say \"hi\"" children=[ 3:"say \"hi\"" ]
+  sq prefix="" uri="" default=false atype=0 value="it's" children=[ 3:"it's" ]
+  long prefix="" uri="" default=false atype=0 value="0123456789abcdefghijklmnopqrstuvwxyz" children=[ 3:"0123456789abcdefghijklmnopqrstuvwxyz" ]
+  u prefix="" uri="" default=false atype=0 value="é中😀" children=[ 3:"é中😀" ]
+<c>
+  p:x prefix="p" uri="urn:p" default=false atype=0 value="y" children=[ 3:"y" ]
+  z prefix="" uri="" default=false atype=0 value="" children=[ ]
+`},
+	{name: "DTD", src: attrShapeDTD, ids: []string{"i1", "c1"}, want: `<r>
+  ref prefix="" uri="" default=false atype=0 value="xenty" children=[ 3:"x" 5:"ent" 3:"y" ]
+  p:ref prefix="p" uri="urn:p" default=false atype=0 value="1ent2" children=[ 3:"1" 5:"ent" 3:"2" ]
+  id prefix="" uri="" default=false atype=2 value="i1" children=[ 3:"i1" ]
+  mixed prefix="" uri="" default=false atype=0 value="ent&ent" children=[ 5:"ent" 3:"&" 5:"ent" ]
+  plain prefix="" uri="" default=false atype=1 value="abc" children=[ 3:"abc" ]
+<c>
+  xml:id prefix="xml" uri="http://www.w3.org/XML/1998/namespace" default=false atype=2 value="c1" children=[ 3:"c1" ]
+  v prefix="" uri="" default=false atype=0 value="w" children=[ 3:"w" ]
+`},
+	{name: "DTD defaulted", src: attrShapeDTD, defaults: true, ids: []string{"i1", "c1"}, want: `<r>
+  ref prefix="" uri="" default=false atype=0 value="xenty" children=[ 3:"x" 5:"ent" 3:"y" ]
+  p:ref prefix="p" uri="urn:p" default=false atype=0 value="1ent2" children=[ 3:"1" 5:"ent" 3:"2" ]
+  id prefix="" uri="" default=false atype=2 value="i1" children=[ 3:"i1" ]
+  mixed prefix="" uri="" default=false atype=0 value="ent&ent" children=[ 5:"ent" 3:"&" 5:"ent" ]
+  plain prefix="" uri="" default=false atype=1 value="abc" children=[ 3:"abc" ]
+  d prefix="" uri="" default=true atype=1 value="defentx" children=[ 3:"def" 5:"ent" 3:"x" ]
+  p:d prefix="p" uri="urn:p" default=true atype=1 value="pd" children=[ 3:"pd" ]
+<c>
+  xml:id prefix="xml" uri="http://www.w3.org/XML/1998/namespace" default=false atype=2 value="c1" children=[ 3:"c1" ]
+  v prefix="" uri="" default=false atype=0 value="w" children=[ 3:"w" ]
+`},
+	{name: "DTD substituted", src: attrShapeDTD, substitute: true, ids: []string{"i1", "c1"}, want: `<r>
+  ref prefix="" uri="" default=false atype=0 value="xenty" children=[ 3:"xenty" ]
+  p:ref prefix="p" uri="urn:p" default=false atype=0 value="1ent2" children=[ 3:"1ent2" ]
+  id prefix="" uri="" default=false atype=2 value="i1" children=[ 3:"i1" ]
+  mixed prefix="" uri="" default=false atype=0 value="ent&ent" children=[ 3:"ent&ent" ]
+  plain prefix="" uri="" default=false atype=1 value="abc" children=[ 3:"abc" ]
+<c>
+  xml:id prefix="xml" uri="http://www.w3.org/XML/1998/namespace" default=false atype=2 value="c1" children=[ 3:"c1" ]
+  v prefix="" uri="" default=false atype=0 value="w" children=[ 3:"w" ]
+`},
+	{name: "DTD substituted and defaulted", src: attrShapeDTD, substitute: true, defaults: true, ids: []string{"i1", "c1"},
+		want: `<r>
+  ref prefix="" uri="" default=false atype=0 value="xenty" children=[ 3:"xenty" ]
+  p:ref prefix="p" uri="urn:p" default=false atype=0 value="1ent2" children=[ 3:"1ent2" ]
+  id prefix="" uri="" default=false atype=2 value="i1" children=[ 3:"i1" ]
+  mixed prefix="" uri="" default=false atype=0 value="ent&ent" children=[ 3:"ent&ent" ]
+  plain prefix="" uri="" default=false atype=1 value="abc" children=[ 3:"abc" ]
+  d prefix="" uri="" default=true atype=1 value="defentx" children=[ 3:"defentx" ]
+  p:d prefix="p" uri="urn:p" default=true atype=1 value="pd" children=[ 3:"pd" ]
+<c>
+  xml:id prefix="xml" uri="http://www.w3.org/XML/1998/namespace" default=false atype=2 value="c1" children=[ 3:"c1" ]
+  v prefix="" uri="" default=false atype=0 value="w" children=[ 3:"w" ]
+`},
+}
+
+// describeAttributes renders every attribute in doc's element tree: its name,
+// namespace, default and type flags, value, and the node list holding the
+// value.
+func describeAttributes(doc *helium.Document) string {
+	var sb strings.Builder
+	for n := range helium.Descendants(doc) {
+		elem, ok := n.(*helium.Element)
+		if !ok {
+			continue
+		}
+		fmt.Fprintf(&sb, "<%s>\n", elem.Name())
+		for _, attr := range elem.Attributes() {
+			fmt.Fprintf(&sb, "  %s prefix=%q uri=%q default=%t atype=%d value=%q children=[",
+				attr.Name(), attr.Prefix(), attr.URI(), attr.IsDefault(), attr.AType(), attr.Value())
+			for child := range helium.Children(attr) {
+				fmt.Fprintf(&sb, " %d:%q", child.Type(), child.Content())
+			}
+			sb.WriteString(" ]\n")
+		}
+	}
+	return sb.String()
 }

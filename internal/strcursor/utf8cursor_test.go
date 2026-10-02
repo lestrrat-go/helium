@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/strcursor"
@@ -411,5 +412,225 @@ func TestRuneCursorReadShortBufferPartialRuneFit(t *testing.T) {
 	require.Equal(t, "é", string(rest[:m]))
 	if err != nil {
 		require.Equal(t, io.EOF, err)
+	}
+}
+
+// TestUTF8CursorAdvanceFastLineColumn checks that AdvanceFast leaves the same
+// line number and column as Advance, which walks the run byte by byte, for
+// runs of 0-40 bytes with no newline, one newline at every position, two
+// newlines at every pair of positions, and nothing but newlines, starting at
+// the first column, mid-line, and on a later line.
+func TestUTF8CursorAdvanceFastLineColumn(t *testing.T) {
+	t.Parallel()
+
+	for n := range 41 {
+		runs := [][]byte{bytes.Repeat([]byte("x"), n), bytes.Repeat([]byte("\n"), n)}
+		for p := range n {
+			run := bytes.Repeat([]byte("x"), n)
+			run[p] = '\n'
+			runs = append(runs, run)
+			for q := p + 1; q < n; q++ {
+				pair := bytes.Repeat([]byte("x"), n)
+				pair[p] = '\n'
+				pair[q] = '\n'
+				runs = append(runs, pair)
+			}
+		}
+		for _, run := range runs {
+			for _, prefix := range []string{"", "ab", "a\nbcd"} {
+				checkAdvanceFast(t, prefix, run)
+			}
+		}
+	}
+}
+
+// checkAdvanceFast advances one cursor over prefix and run with AdvanceFast and
+// another with Advance, and compares where they report the position.
+func checkAdvanceFast(t *testing.T, prefix string, run []byte) {
+	t.Helper()
+
+	input := append(append([]byte(prefix), run...), "<tail"...)
+	fast := strcursor.NewUTF8Cursor(bytes.NewReader(input))
+	slow := strcursor.NewUTF8Cursor(bytes.NewReader(input))
+	require.NoError(t, fast.Advance(len(prefix)))
+	require.NoError(t, slow.Advance(len(prefix)))
+	require.NoError(t, fast.AdvanceFast(len(run)))
+	require.NoError(t, slow.Advance(len(run)))
+	if fast.LineNumber() != slow.LineNumber() || fast.Column() != slow.Column() {
+		require.Failf(t, "AdvanceFast disagrees with Advance",
+			"prefix %q run %q: line %d column %d, want line %d column %d",
+			prefix, run, fast.LineNumber(), fast.Column(), slow.LineNumber(), slow.Column())
+	}
+}
+
+// attrValuePieces extends charDataPieces with both quote characters, so the
+// attribute-value differential test sees values that end, and values that
+// hold the other quote.
+var attrValuePieces = append([]string{`"`, `'`, `a"b`, `a'b`}, charDataPieces...)
+
+// TestUTF8CursorScanSimpleAttrValue checks ScanSimpleAttrValue against
+// referenceScanSimpleAttrValue, a byte-at-a-time model, for both quote
+// characters, under byte budgets on both sides of the value length, and with
+// input split across reads.
+func TestUTF8CursorScanSimpleAttrValue(t *testing.T) {
+	t.Parallel()
+
+	t.Run("each piece at every offset of a 16-byte block", func(t *testing.T) {
+		t.Parallel()
+
+		for _, piece := range attrValuePieces {
+			for off := range 34 {
+				for _, quote := range []byte{'"', '\''} {
+					input := []byte(strings.Repeat("x", off) + piece + "0123456789abcdefghij" + string(quote) + " b")
+					for _, budget := range []int{0, off - 1, off, off + 1, off + 2, off + 20, off + 40} {
+						checkScanSimpleAttrValue(t, input, quote, max(budget, 0), 0)
+					}
+					checkScanSimpleAttrValue(t, input, quote, 0, 1)
+					checkScanSimpleAttrValue(t, input, quote, 0, 3)
+					checkScanSimpleAttrValue(t, input, quote, 0, 17)
+				}
+			}
+		}
+	})
+
+	t.Run("each piece at the cursor buffer edge", func(t *testing.T) {
+		t.Parallel()
+
+		for _, piece := range attrValuePieces {
+			for off := 8192 - 20; off <= 8192+2; off++ {
+				input := []byte(strings.Repeat("x", off) + piece + `tail"`)
+				checkScanSimpleAttrValue(t, input, '"', 0, 0)
+				checkScanSimpleAttrValue(t, input, '"', 0, 4096)
+				checkScanSimpleAttrValue(t, input, '"', off, 0)
+				checkScanSimpleAttrValue(t, input, '"', off+8, 0)
+			}
+		}
+	})
+
+	t.Run("random inputs", func(t *testing.T) {
+		t.Parallel()
+
+		rng := rand.New(rand.NewPCG(5, 6))
+		var buf []byte
+		for range 20000 {
+			buf = buf[:0]
+			for range rng.IntN(24) {
+				if rng.IntN(5) == 0 {
+					buf = append(buf, byte(rng.IntN(0x100)))
+					continue
+				}
+				buf = append(buf, attrValuePieces[rng.IntN(len(attrValuePieces))]...)
+			}
+			if rng.IntN(4) != 0 {
+				buf = append(buf, '"')
+			}
+			budget := 0
+			if rng.IntN(2) == 0 {
+				budget = 1 + rng.IntN(60)
+			}
+			chunk := 0
+			if rng.IntN(2) == 0 {
+				chunk = 1 + rng.IntN(9)
+			}
+			for _, quote := range []byte{'"', '\''} {
+				checkScanSimpleAttrValue(t, buf, quote, budget, chunk)
+			}
+		}
+	})
+}
+
+// checkScanSimpleAttrValue scans input with ScanSimpleAttrValue and compares
+// the value and byte count with referenceScanSimpleAttrValue. chunk > 0 feeds
+// the cursor chunk bytes per read; budget is the maxBytes argument.
+func checkScanSimpleAttrValue(t *testing.T, input []byte, quote byte, budget, chunk int) {
+	t.Helper()
+
+	var r io.Reader = bytes.NewReader(input)
+	if chunk > 0 {
+		r = &chunkedReader{data: input, chunk: chunk}
+	}
+	cur := strcursor.NewUTF8Cursor(r)
+	got, n := cur.ScanSimpleAttrValue(quote, budget)
+	want, wantN := referenceScanSimpleAttrValue(input, quote, budget)
+	if got != want || n != wantN {
+		require.Failf(t, "ScanSimpleAttrValue disagrees with the reference",
+			"input %q (%d bytes), quote %q, budget %d, chunk %d: value tail %q n %d, want tail %q n %d",
+			tail(input), len(input), quote, budget, chunk, tail([]byte(got)), n, tail([]byte(want)), wantN)
+	}
+}
+
+// referenceScanSimpleAttrValue models the simple attribute-value scan one
+// character at a time: the value ends at quote; '&', '<', any byte below 0x20,
+// invalid UTF-8, a character outside the XML 1.0 Char production, running out
+// of input, and more than budget bytes (when budget > 0) all reject the value.
+func referenceScanSimpleAttrValue(input []byte, quote byte, budget int) (string, int) {
+	off := 0
+	for {
+		if budget > 0 && off > budget {
+			return "", 0
+		}
+		if off >= len(input) {
+			return "", 0
+		}
+		b := input[off]
+		if b == quote {
+			return string(input[:off]), off
+		}
+		if b == '&' || b == '<' || b < 0x20 {
+			return "", 0
+		}
+		if b < utf8.RuneSelf {
+			off++
+			continue
+		}
+		r, w := utf8.DecodeRune(input[off:])
+		if r == utf8.RuneError && w == 1 {
+			return "", 0
+		}
+		if !xmlchar.IsChar(r) {
+			return "", 0
+		}
+		off += w
+	}
+}
+
+// TestUTF8CursorScanSimpleAttrValueCharacters scans a value holding each code
+// point in turn. The scan must accept exactly the characters at or above U+0020
+// that are XML 1.0 Chars, other than the quote, '&' and '<'; every one of them
+// is an XML 1.0 literal character, which is why the parser does not recheck a
+// value this scan accepted in an XML 1.0 document.
+func TestUTF8CursorScanSimpleAttrValueCharacters(t *testing.T) {
+	t.Parallel()
+
+	var input []byte
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if r == '"' || utf8.RuneLen(r) < 0 {
+			continue
+		}
+		input = append(input, 'x')
+		input = utf8.AppendRune(input, r)
+		input = append(input, '"')
+	}
+
+	cur := strcursor.NewUTF8Cursor(bytes.NewReader(input))
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if r == '"' || utf8.RuneLen(r) < 0 {
+			continue
+		}
+		width := 1 + utf8.RuneLen(r)
+		v, n := cur.ScanSimpleAttrValue('"', 0)
+		accept := r >= 0x20 && r != '&' && r != '<' && xmlchar.IsChar(r)
+		if (n > 0) != accept {
+			t.Fatalf("U+%04X: scan accepted %t, want %t", r, n > 0, accept)
+		}
+		if n > 0 {
+			if n != width || v != "x"+string(r) {
+				t.Fatalf("U+%04X: scanned %q (%d bytes)", r, v, n)
+			}
+			if !xmlchar.IsLiteralChar(r, false) {
+				t.Fatalf("U+%04X: accepted but not an XML 1.0 literal character", r)
+			}
+		}
+		require.NoError(t, cur.Advance(width+1))
 	}
 }

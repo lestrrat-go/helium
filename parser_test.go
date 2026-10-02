@@ -766,6 +766,40 @@ func TestParseMalformed(t *testing.T) {
 		_, err := p.Parse(t.Context(), []byte(ok))
 		require.NoError(t, err, "canonical xml prefix binding must be accepted")
 	})
+
+	// The line and column reported for an error right after a run of
+	// character data or a name, for runs of 0-40 bytes with no newline or one
+	// newline at every position, after a first line of text.
+	t.Run("error position after a run", func(t *testing.T) {
+		t.Parallel()
+
+		for n := range 41 {
+			for nl := -1; nl < n; nl++ {
+				run := []byte(strings.Repeat("x", n))
+				if nl >= 0 {
+					run[nl] = '\n'
+				}
+				// The text run is consumed whole; \x01 then stops the next
+				// scan, and the error is reported there. The second document
+				// puts the run in the content of an element named with n
+				// bytes, so the name scan also precedes the error.
+				docs := []string{
+					"<r>a\nbc" + string(run) + "\x01</r>",
+					"<r>a\nbc<" + strings.Repeat("n", max(n, 1)) + ">" + string(run) + "\x01</r>",
+				}
+				for _, src := range docs {
+					_, err := helium.NewParser().Parse(t.Context(), []byte(src))
+					var perr helium.ErrParseError
+					require.ErrorAs(t, err, &perr, "src %q", src)
+					pos := strings.IndexByte(src, 0x01)
+					line := 1 + strings.Count(src[:pos], "\n")
+					column := pos - strings.LastIndexByte(src[:pos], '\n')
+					require.Equal(t, line, perr.LineNumber, "line of %q", src)
+					require.Equal(t, column, perr.Column, "column of %q", src)
+				}
+			}
+		}
+	})
 }
 
 func TestParseName(t *testing.T) {

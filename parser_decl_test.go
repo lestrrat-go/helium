@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"strings"
 	"testing"
+	"testing/iotest"
 	"unicode/utf16"
 
 	"github.com/lestrrat-go/helium"
@@ -936,4 +938,55 @@ func TestEncodingDeclaration(t *testing.T) {
 		_, err = helium.NewParser().Parse(t.Context(), []byte(valid))
 		require.NoError(t, err, "valid 7-bit US-ASCII must parse")
 	})
+
+	// ISO-8859-1 input with ASCII runs of every length 0-17 around non-ASCII
+	// and C1 bytes, in text and in an attribute value, read whole and one byte
+	// at a time. Every byte decodes to the code point of the same value.
+	t.Run("ISO-8859-1 ASCII runs", func(t *testing.T) {
+		t.Parallel()
+
+		const ascii = "abc>d'e f\tgh\nijklmnopqrstuvwxyz"
+		for _, mid := range []byte{0xE9, 0x80, 0x85, 0x9F, 0xA0, 0xFF} {
+			for pre := range 18 {
+				for post := range 18 {
+					var raw []byte
+					raw = append(raw, ascii[:pre]...)
+					raw = append(raw, mid)
+					raw = append(raw, ascii[:post]...)
+					raw = append(raw, mid, mid)
+					var want []rune
+					for _, b := range raw {
+						want = append(want, rune(b))
+					}
+
+					var src []byte
+					src = append(src, `<?xml version="1.0" encoding="ISO-8859-1"?><r a="`...)
+					src = append(src, raw...)
+					src = append(src, `">`...)
+					src = append(src, raw...)
+					src = append(src, `</r>`...)
+
+					doc, err := helium.NewParser().Parse(t.Context(), src)
+					require.NoError(t, err, "src %q", src)
+					checkLatin1Doc(t, doc, string(want))
+
+					doc, err = helium.NewParser().ParseReader(t.Context(), iotest.OneByteReader(bytes.NewReader(src)))
+					require.NoError(t, err, "src %q, one byte per read", src)
+					checkLatin1Doc(t, doc, string(want))
+				}
+			}
+		}
+	})
+}
+
+// checkLatin1Doc checks that the root element of doc holds want as its text
+// and as attribute a, the latter with tab and newline normalized to spaces.
+func checkLatin1Doc(t *testing.T, doc *helium.Document, want string) {
+	t.Helper()
+
+	root := doc.DocumentElement()
+	require.Equal(t, want, string(root.Content()))
+	attrs := root.Attributes()
+	require.Len(t, attrs, 1)
+	require.Equal(t, strings.NewReplacer("\t", " ", "\n", " ").Replace(want), attrs[0].Value())
 }
