@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -41,13 +42,24 @@ var nodeListExprs = []string{
 	"«//b | //c»/@id", "«//b | //c»/c", "«//b»/string(@id)", "«//b | //c»/(c | .)",
 	"«//b»/(1)", "«//b»/(1, .)", "«//b» ! string(@id)", "«//b» ! position()", "«//b | //c» ! last()",
 	"«//b» ! .", "«//nosuch» ! 1",
-	// Effective boolean values.
-	"//*[«.//c»]", "//b[«c»]", "//*[«@id | c»]", "//*[«b except b[c]»]", "(//*)[«c»]", "//b[«(c)[1]»]",
+	// Effective boolean values of operands that are not location paths or
+	// path expressions.
+	"//*[«@id | c»]", "//*[«b except b[c]»]", "//b[«(c)[1]»]",
+	// Errors.
+	"«//b» | 1", "1 | «//b»", "«//b» except 1", "(1, «//b»)[1]/c", "«//b»/(., 1)",
+}
+
+// nodeListExistsExprs are nodeListExprs templates whose marked operand is a
+// location path or a path expression in a place that only takes whether it
+// selects a node, so the fast form stops at the first node it selects
+// (pathExists) while the reference form evaluates it in full. Both select the
+// same nodes, but the fast form may charge fewer operations and may stay
+// under a node-set limit the reference form hits.
+var nodeListExistsExprs = []string{
+	"//*[«.//c»]", "//b[«c»]", "(//*)[«c»]",
 	"if («//c») then 1 else 2", "if («//nosuch») then 1 else 2", "«//c» and «//b»", "«//nosuch» or «//b»",
 	"«//b» and «//nosuch»", "some $x in //b satisfies «$x/c»", "every $x in //b satisfies «$x//c»",
 	"//b[«.//c» or «@id»]", "//*[not(«c»)]",
-	// Errors.
-	"«//b» | 1", "1 | «//b»", "«//b» except 1", "(1, «//b»)[1]/c", "«//b»/(., 1)",
 }
 
 // nodeListForms returns the fast and the reference form of a nodeListExprs
@@ -70,7 +82,7 @@ func TestNodeListConsumers(t *testing.T) {
 			if ctxNode == nil {
 				continue
 			}
-			for _, tmpl := range nodeListExprs {
+			for _, tmpl := range slices.Concat(nodeListExprs, nodeListExistsExprs) {
 				fast, ref := nodeListForms(tmpl)
 				want := f.describeResult(t, ctxNode, ref, false)
 				got := f.describeResult(t, ctxNode, fast, false)
@@ -92,7 +104,7 @@ func TestNodeListConsumersRandom(t *testing.T) {
 			if ctxNode == nil {
 				continue
 			}
-			for _, tmpl := range nodeListExprs {
+			for _, tmpl := range slices.Concat(nodeListExprs, nodeListExistsExprs) {
 				fast, ref := nodeListForms(tmpl)
 				require.Equal(t, f.describeResult(t, ctxNode, ref, false), f.describeResult(t, ctxNode, fast, false), fast)
 			}
@@ -102,7 +114,8 @@ func TestNodeListConsumersRandom(t *testing.T) {
 
 // TestNodeListConsumersLimits checks that reading an operand as a node list
 // charges the same operations and fails on the same node-set limits as
-// reading its node items.
+// reading its node items. An operand of nodeListExistsExprs stops at its
+// first node, so it only has to do no more work than its reference.
 func TestNodeListConsumersLimits(t *testing.T) {
 	t.Parallel()
 	for _, d := range stepOrderDocs {
@@ -121,6 +134,33 @@ func TestNodeListConsumersLimits(t *testing.T) {
 				require.Equal(t, errors.Is(refErr, xpath3.ErrNodeSetLimit), errors.Is(fastErr, xpath3.ErrNodeSetLimit), "%s maxNodes=%d", name, limit)
 			}
 		}
+		for _, tmpl := range nodeListExistsExprs {
+			fast, ref := nodeListForms(tmpl)
+			name := d.name + "|" + fast
+			if _, err := evalWith(t, f.eval, f.doc, ref); err != nil {
+				continue
+			}
+			requireNoMoreWork(t, f.eval, f.doc, fast, ref, name)
+		}
+	}
+}
+
+// requireNoMoreWork checks that fast, an expression whose location paths stop
+// at the first node they select, needs no more operations than ref, the same
+// expression evaluated in full, and only fails on a node-set limit that ref
+// fails on too.
+func requireNoMoreWork(t *testing.T, eval xpath3.Evaluator, node helium.Node, fast, ref, name string) {
+	t.Helper()
+	require.LessOrEqual(t, smallestOpLimitWith(t, eval, node, fast), smallestOpLimitWith(t, eval, node, ref), name)
+	for _, limit := range []int{1, 2, 3, 5, 8, 13} {
+		limited := eval.MaxNodesForTesting(limit)
+		_, fastErr := evalWith(t, limited, node, fast)
+		if fastErr == nil {
+			continue
+		}
+		require.ErrorIs(t, fastErr, xpath3.ErrNodeSetLimit, "%s maxNodes=%d", name, limit)
+		_, refErr := evalWith(t, limited, node, ref)
+		require.Error(t, refErr, "%s maxNodes=%d", name, limit)
 	}
 }
 

@@ -93,7 +93,7 @@ func (v xpath3Value) nodeSet() []helium.Node {
 // sequence of more than one item that starts with an atomic value has no
 // effective boolean value, and the returned error carries FORG0006.
 func (v xpath3Value) effectiveBoolean() (bool, error) {
-	return xpath3.EBV(v.result.Sequence())
+	return v.result.EBV()
 }
 
 // stringValue is the XSLT 2.0 and later <xsl:value-of> conversion: every item

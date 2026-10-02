@@ -1786,3 +1786,84 @@ func TestExpression_StreamInfo_EQNameFunction(t *testing.T) {
 			"EQName Q{...}%s() must be recorded under local name %q", fn, fn)
 	}
 }
+
+// resultEBVExprs evaluate to every kind of result: the empty sequence, node
+// lists and node sequences, atomic values of every type the effective boolean
+// value is defined for, NaN, and sequences and items it is not defined for.
+var resultEBVExprs = []string{
+	"()", "//b", "//nosuch", "(//b)[1]", "//b | //c", "/", "//@id", "//b/c", "(//b, 1)", "(//b, 'x', 1)",
+	"if (true()) then //b else ()", "reverse(//b)", "true()", "false()", "1", "0", "-1", "1.5", "0.0",
+	"xs:double('NaN')", "xs:float('NaN')", "xs:double('INF')", "xs:double('-0')", "xs:float('0')",
+	"12345678901234567890", "xs:decimal('0')", "xs:unsignedByte(0)", "'a'", "''", "xs:untypedAtomic('')",
+	"xs:untypedAtomic('x')", "xs:anyURI('')", "xs:anyURI('u')", "xs:token('t')", "xs:normalizedString('')",
+	"(1, 2)", "('a', //b)", "(true(), true())", "1 to 1", "1 to 3", "xs:date('2000-01-01')", "xs:QName('a')",
+	"xs:hexBinary('00')", "xs:duration('P1D')", "[1]", "map{}", "function() { 1 }", "(//b)[1]/@id ! data()",
+	"//b ! string(@id)",
+}
+
+// TestResultEBV checks that Result.EBV returns what EBV returns for the
+// result sequence, error codes included, for results that hold node lists,
+// with and without type annotations, and for every other kind of result,
+// from Evaluate and from EvaluateReuse.
+func TestResultEBV(t *testing.T) {
+	t.Parallel()
+	doc := mustParseXML(t, `<a><b id="1"><c/></b><b id="2"/><c/></a>`)
+	annotations := map[helium.Node]string{doc.DocumentElement(): "xs:untyped"}
+	evaluators := map[string]xpath3.Evaluator{
+		"plain":     xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions),
+		"annotated": xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).TypeAnnotations(annotations),
+	}
+	for name, eval := range evaluators {
+		state := eval.NewEvalState(doc)
+		for _, src := range resultEBVExprs {
+			expr := xpath3.NewCompiler().MustCompile(src)
+			r, err := eval.Evaluate(t.Context(), expr, doc)
+			require.NoError(t, err, "%s|%s", name, src)
+			got, gotErr := r.EBV()
+			want, wantErr := xpath3.EBV(r.Sequence())
+			requireSameEBV(t, want, wantErr, got, gotErr, name+"|"+src)
+
+			reused, err := expr.EvaluateReuse(t.Context(), state, doc)
+			require.NoError(t, err, "%s|%s", name, src)
+			got, gotErr = reused.EBV()
+			requireSameEBV(t, want, wantErr, got, gotErr, name+"|reuse|"+src)
+		}
+	}
+	// A few values the rules fix.
+	eval := evaluators["plain"]
+	for src, want := range map[string]any{
+		"/*/b": true, "//nosuch": false, "(//b, 1)": true, "xs:double('NaN')": false, "''": false, "'a'": true,
+		"(1, 2)": "FORG0006", "('a', //b)": "FORG0006", "[1]": "FORG0006", "xs:date('2000-01-01')": "FORG0006",
+	} {
+		r, err := eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(src), doc)
+		require.NoError(t, err, src)
+		got, err := r.EBV()
+		if code, ok := want.(string); ok {
+			var xerr *xpath3.XPathError
+			require.ErrorAs(t, err, &xerr, src)
+			require.Equal(t, code, xerr.Code, src)
+			continue
+		}
+		require.NoError(t, err, src)
+		require.Equal(t, want, got, src)
+	}
+	var zero xpath3.Result
+	b, err := zero.EBV()
+	require.NoError(t, err)
+	require.False(t, b)
+}
+
+// requireSameEBV checks that two effective boolean values, or their errors,
+// agree: the same value, or errors with the same code.
+func requireSameEBV(t *testing.T, want bool, wantErr error, got bool, gotErr error, msg string) {
+	t.Helper()
+	if wantErr == nil {
+		require.NoError(t, gotErr, msg)
+		require.Equal(t, want, got, msg)
+		return
+	}
+	var wantX, gotX *xpath3.XPathError
+	require.ErrorAs(t, wantErr, &wantX, msg)
+	require.ErrorAs(t, gotErr, &gotX, msg)
+	require.Equal(t, wantX.Code, gotX.Code, msg)
+}

@@ -3,6 +3,7 @@ package xpath3
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/lestrrat-go/helium"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
@@ -21,7 +22,9 @@ import (
 // effective boolean value, and the result of the whole expression
 // (Evaluator.Evaluate keeps the node list in the Result). The producer is
 // evaluated exactly as v.evalExpr evaluates it, with the same recursion
-// accounting, so results, errors and limits do not change.
+// accounting, so results, errors and limits do not change. The exception is
+// a location path or E1/path whose consumer only needs to know whether it
+// selects a node: it stops at its first node (eval_path_exists.go).
 
 // nodeListInstruction returns the index of the instruction expr refers to
 // when that instruction is a node-list producer: its result is always the
@@ -119,13 +122,101 @@ func (v *vm) instructionNodes(ctx context.Context, ec *evalContext, inst vmInstr
 }
 
 // evalEBV evaluates the node-list producer inst, whose parent only takes its
-// effective boolean value (vmInstruction.ebv), to xs:boolean.
+// effective boolean value (vmInstruction.ebv), to xs:boolean. A location path
+// stops at the first node it selects (instructionExists).
 func (v *vm) evalEBV(ctx context.Context, ec *evalContext, inst vmInstruction) (Sequence, error) {
+	found, ok, err := v.instructionExists(ctx, ec, inst)
+	if ok {
+		if err != nil {
+			return nil, err
+		}
+		return SingleBoolean(found), nil
+	}
 	nodes, err := v.instructionNodes(ctx, ec, inst)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(len(nodes) > 0), nil
+}
+
+// instructionExists reports whether the node-list producer inst evaluates to
+// a non-empty node list, when inst is a location path or a path expression
+// E1/path: the path stops at the first node it selects (pathExists). ok is
+// false, and nothing is evaluated, for any other producer.
+//
+// For E1/path, E1 is evaluated in full; the path stops early when E1 is one
+// node, and otherwise runs in full from every node of E1, because the merge
+// of the results of several E1 nodes registers their documents in the order
+// cache in an order only the full results give.
+func (v *vm) instructionExists(ctx context.Context, ec *evalContext, inst vmInstruction) (bool, bool, error) {
+	switch inst.op {
+	case vmOpLocationPath:
+		lp, ok := AsExpr[vmLocationPathExpr](inst.payload)
+		if !ok {
+			return false, false, nil
+		}
+		found, err := pathExists(v.evalExpr, ctx, ec, lp, false)
+		return found, true, err
+	case vmOpPath:
+		e, ok := AsExpr[vmPathExpr](inst.payload)
+		if !ok || e.Path == nil {
+			return false, false, nil
+		}
+		found, err := v.pathExprExists(ctx, ec, e)
+		return found, true, err
+	}
+	return false, false, nil
+}
+
+// pathExprExists reports whether the path expression E1/path e, whose Path
+// is not nil, selects a node.
+func (v *vm) pathExprExists(ctx context.Context, ec *evalContext, e vmPathExpr) (bool, error) {
+	base, err := v.evalOperand(ctx, ec, e.Filter)
+	if err != nil {
+		return false, err
+	}
+	baseNodes, ok := base.nodeList()
+	if !ok {
+		return false, ErrPathNotNodeSet
+	}
+	if len(baseNodes) != 1 {
+		nodes, err := vmPathStepNodes(v.evalExpr, ctx, ec, e, baseNodes)
+		if err != nil {
+			return false, err
+		}
+		return len(nodes) > 0, nil
+	}
+	// vmPathStepNodes merges the result with DeduplicateNodes, which
+	// registers its document when it holds more than one node, unless E1 is a
+	// call to fn:reverse or fn:sort.
+	resultRegisters := !filterPreservesOrder(ctx, ec, e.OrderFilter)
+	frame := ec.pushNodeContext(baseNodes[0], 1, 1)
+	found, err := pathExists(v.evalExpr, ctx, ec, *e.Path, resultRegisters)
+	ec.restoreContext(frame)
+	return found, err
+}
+
+// evalExistsRef evaluates expr, when it refers to a location path or a path
+// expression E1/path, to whether it selects a node (instructionExists), with
+// the recursion accounting of evalWith. ok reports whether expr is such a
+// reference; when it is false nothing was evaluated.
+func (v *vm) evalExistsRef(ctx context.Context, ec *evalContext, expr Expr) (bool, bool, error) {
+	index, ok := nodeListInstruction(v.program.instructions, expr)
+	if !ok {
+		return false, false, nil
+	}
+	inst := v.program.instructions[index]
+	if inst.op != vmOpLocationPath && inst.op != vmOpPath {
+		return false, false, nil
+	}
+	// The recursion accounting of evalWith, as in evalNodeListRef.
+	ec.depth++
+	if ec.maxRecursionDepth > 0 && ec.depth > ec.maxRecursionDepth {
+		return false, true, ErrRecursionLimit
+	}
+	found, ok, err := v.instructionExists(ctx, ec, inst)
+	ec.depth--
+	return found, ok, err
 }
 
 // vmOperand is an evaluated operand: the node list of a node-list producer,
@@ -180,6 +271,9 @@ func (v *vm) evalFunctionCall(ctx context.Context, ec *evalContext, e FunctionCa
 	if len(e.Args) != 1 {
 		return evalFunctionCall(v.evalExpr, ctx, ec, e)
 	}
+	if seq, ok, err := v.callExistsFunction(ctx, ec, e); ok {
+		return seq, err
+	}
 	nodes, ok, err := v.evalNodeListRef(ctx, ec, e.Args[0])
 	if !ok {
 		return evalFunctionCall(v.evalExpr, ctx, ec, e)
@@ -196,6 +290,80 @@ func (v *vm) evalFunctionCall(ctx context.Context, ec *evalContext, e FunctionCa
 	}
 	args := []Sequence{enrichNodeItems(ctx, ec, nodeItemsFor(ctx, ec, nodes))}
 	return callResolvedFunction(ctx, ec, r, args)
+}
+
+// callExistsFunction evaluates the one-argument call e when it calls the
+// built-in fn:exists, fn:empty, fn:boolean or fn:not on a location path or a
+// path expression E1/path, which then stops at the first node it selects
+// (instructionExists). ok is false, and nothing is evaluated, otherwise.
+//
+// The function is resolved before its argument is evaluated. Resolving one of
+// these names in the fn namespace with one argument ends at the user
+// functions or the built-ins, never at a FunctionResolver, so the order is
+// not observable. When resolution fails, the caller evaluates the argument
+// before reporting the failure, as evalFunctionCall does.
+func (v *vm) callExistsFunction(ctx context.Context, ec *evalContext, e FunctionCall) (Sequence, bool, error) {
+	name, ok := existsBuiltin(ctx, ec, e)
+	if !ok {
+		return nil, false, nil
+	}
+	found, ok, err := v.evalExistsRef(ctx, ec, e.Args[0])
+	if !ok {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, true, err
+	}
+	switch name {
+	case fnNameEmpty, fnNameNot:
+		return SingleBoolean(!found), true, nil
+	}
+	return SingleBoolean(found), true, nil
+}
+
+// existsBuiltin returns the local name of the function the one-argument call
+// e calls, and true, when that function is the built-in fn:exists, fn:empty,
+// fn:boolean or fn:not. It returns false when the call names another
+// function or does not resolve.
+func existsBuiltin(ctx context.Context, ec *evalContext, e FunctionCall) (string, bool) {
+	if !isExistsFunctionName(ec, e.Prefix, e.Name) {
+		return "", false
+	}
+	r, err := resolveFunctionInfo(ctx, ec, e.Prefix, e.Name, 1)
+	if err != nil {
+		return "", false
+	}
+	return r.name, r.isBuiltin && r.uri == NSFn
+}
+
+// isExistsFunctionName reports whether the function name prefix:name is
+// fn:exists, fn:empty, fn:boolean or fn:not, in any of its spellings.
+func isExistsFunctionName(ec *evalContext, prefix, name string) bool {
+	uri := NSFn
+	local := name
+	switch {
+	case prefix == "" && strings.HasPrefix(name, "Q{"):
+		idx := strings.Index(name, "}")
+		if idx < 0 {
+			return false
+		}
+		uri = name[2:idx]
+		local = name[idx+1:]
+	case prefix != "":
+		resolved, err := resolvePrefix(ec, prefix)
+		if err != nil {
+			return false
+		}
+		uri = resolved
+	}
+	if uri != NSFn {
+		return false
+	}
+	switch local {
+	case fnNameExists, fnNameEmpty, fnNameBoolean, fnNameNot:
+		return true
+	}
+	return false
 }
 
 // Local names of the fn: functions callNodeListFunction computes.

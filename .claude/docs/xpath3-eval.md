@@ -125,11 +125,50 @@ sequence of node items:
 - A producer in a position that only takes its effective boolean value (a step or filter predicate, an `if`
   condition, an `and`/`or` operand, a quantified `satisfies`) is marked `vmInstruction.ebv` at lowering
   (`vmBuilder.markEBV`) and evaluates to `xs:boolean` (non-empty node list); a predicate never takes a single
-  `xs:boolean` as a position, so the outcome is the one the node sequence gives. The walk still runs to the end,
-  so op charges and node-set limits are unchanged.
+  `xs:boolean` as a position, so the outcome is the one the node sequence gives. A location path or a path
+  expression `E1/path` there stops at its first node (`vm.instructionExists`, see "Early stop" below); a union,
+  intersect/except or filter runs to the end.
+- The built-in `fn:exists`, `fn:empty`, `fn:boolean` and `fn:not` with a location path or `E1/path` argument
+  (`vm.callExistsFunction`) resolve the function first, and when it is the built-in the argument stops at its
+  first node. Only these four names in the fn namespace are resolved early; with one argument they resolve to a
+  user function or the built-in, never through a `FunctionResolver`, so the order is not observable, and a
+  failed resolution falls back to the normal order (argument first, then the error).
 - `Evaluator.Evaluate` and `Expression.EvaluateReuse` keep the node list in the `Result` when the root is a
   producer and the evaluator has no type annotations (`vmProgram.execute`), so `nodeItemFor(n)` is
   `NodeItem{Node: n}`; `Result.Sequence()` builds the `ItemSlice` on first use (see `xpath3-api.md`).
+
+#### Early stop (`eval_path_exists.go`)
+`pathExists` answers whether a location path selects a node. `pathExistsSplit` picks the step where it starts
+to run depth first; the steps before it run one at a time (`evalVMSteps`). Depth first runs, before the last
+step group, only child, attribute and self steps (each node they select comes from one context node, so no work
+repeats) and one `//` walk (`descendant-or-self::node()` plus a child or attribute step), either over the whole
+context list of the first group or, when depth first starts at the path's single start node, from nodes whose
+subtrees do not overlap. Every other step before the last group, and every `//` walk but the last, runs one at
+a time. The next step runs from each selected node as soon as it is selected, and the last step stops at its
+first node.
+- A child step with no predicates or only node-local ones (`nodeLocalPredicates`: `[@a]`, or `[@a = 's']`
+  without type annotations) takes children one at a time (`runChildren`; in a `//` walk, `walkChild` tests each
+  node when the walk pops it). Any other step builds a context node's whole candidate list, charges it and
+  applies the predicates to it, so `position()`/`last()` keep their meaning; only the last predicate of the last
+  step stops at its first kept node (`countPredicateUpTo`, which charges each node before evaluating it).
+- Charges: one op per enumerated candidate and per walked node, the nested-context subtree sizes when a walk
+  subtree completes, and one per node a predicate is evaluated for. The walk batches its charges
+  (`pathProbe.pending`) and flushes them before a non-quiet predicate, before the next step and when it stops.
+  Node-set limits apply to each step's selected count so far (`pathProbe.counts`), to each walked subtree and to
+  the walked total. So the early stop never does more work than the full evaluation and fails only where it
+  fails (depth first may meet another of its errors first); when nothing is selected it does the same work, charges the same ops and fails on the same limits.
+  When it stops early, the `OpLimit`/node-set-limit errors and the predicate errors (XPath 3.1 §2.3.4) of the
+  nodes it did not reach do not fire.
+- Order cache: a step result of more than one node registers its document (`OrderStepResult`), and a `//` walk
+  registers it when it covers more than one node, before any predicate runs. The probe registers at the same
+  points (`pathProbe.reserve`) and stops only when that is settled: it registered the document, or the last group is
+  a `//` walk. Otherwise it keeps looking for a second node, and after `foundSlack` (16) more nodes asks the cache
+  once whether the document is registered already (`ixpath.DocumentRegistered`, `pathProbe.stopFound`).
+- `E1/path` evaluates E1 in full; with exactly one E1 node the path stops early, and the merge's registration of
+  a result of more than one node counts too (`resultRegisters`, off when E1 is `fn:reverse`/`fn:sort`). With
+  several E1 nodes it runs in full, because the merge registers their documents in an order only the full results
+  give.
+- Probes come from `pathProbePool`, which keeps their buffers (capacity up to 1024) between evaluations.
 
 Raw AST evaluation (`dispatchExpr`, `evalLocationPath`) has none of these paths and no `//` fusion; `Compile` and
 `CompileExpr` lower every expression to VM instructions, so it only runs for the immediate leaves.

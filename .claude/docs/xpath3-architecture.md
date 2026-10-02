@@ -29,7 +29,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 | File | Contents |
 |------|----------|
 | `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, `PushXDMChildren` (one step of a pre-order walk stack), all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
-| `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
+| `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot`, `DocumentRegistered` (whether a node's document has a registration order, indexed or reserved) |
 | `union.go` | `UnionNodeSets` (xpath3 union: `MergeNodeSets` result, skipping the index for one element's attributes then children, and merging two sorted operands in one pass), `inElementOrder`, `mergeIncreasingRuns` |
 | `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `OrderedFrom` (its one-input skip condition), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)` (an element's or document's string-value is its `Content()`: Text/CDATA descendants with entity references expanded through owned children only; a document's leaves out its DTD), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
@@ -133,6 +133,7 @@ func NodePrefix(n helium.Node) string
 | `eval.go` | `evalContext`, raw AST eval trampoline |
 | `eval_path.go` | Location paths, node tests, predicates, literal/variable/sequence eval |
 | `eval_path_descendant.go` | `//` fusion: `descendant-or-self::node()` + child/attribute step as one pre-order walk of each outermost context node's subtree, measuring the subtrees of nested context nodes |
+| `eval_path_exists.go` | Early stop: `pathExists` evaluates a location path that only has to select a node (effective-boolean-value operand, `fn:exists`/`empty`/`boolean`/`not` argument) depth first and stops at its first node; `pathExistsSplit`, `pathProbe`, `pathProbePool` |
 | `eval_operators.go` | Binary/unary logic ops, concat, simple map, range, union, intersect/except, filter, path steps |
 | `eval_arithmetic.go` | Integer/decimal/float arithmetic, unary negation, type promotion helpers |
 | `eval_control.go` | FLWOR, quantified, if/else, try/catch, lookup expressions |

@@ -169,14 +169,17 @@ const (
 // descendantLimitCases are `//` expressions whose operation charges and
 // node-set limits TestDescendantStepFusionLimits compares with the
 // one-step-at-a-time evaluation. The first {D} is the one under test; dos is
-// the path it runs from.
+// the path it runs from. A path whose value only decides whether it selects
+// a node stops at its first node instead (pathExists), so the cases count the
+// nodes of such a path rather than test them; eval_path_exists_test.go
+// covers the early stop.
 var descendantLimitCases = []struct {
 	tmpl string
 	dos  string
 }{
 	{"{D}b", dosRoot}, {"{D}*", dosRoot}, {"{D}node()", dosRoot}, {"{D}@id", dosRoot}, {"{D}@*", dosRoot},
 	{"{D}b[1]", dosRoot}, {"{D}b[last()]", dosRoot}, {"{D}*[@id]", dosRoot}, {"{D}*[@id][last()]", dosRoot},
-	{"{D}@*[last()]", dosRoot}, {"{D}*[.{D}c]", dosRoot}, {"count({D}*)", dosRoot}, {"exists({D}b)", dosRoot},
+	{"{D}@*[last()]", dosRoot}, {"{D}*[count(.{D}c) > 0]", dosRoot}, {"count({D}*)", dosRoot}, {"head({D}b)", dosRoot},
 	{"({D}b)[1]", dosRoot}, {"({D}*)[last()]", dosRoot}, {"{D}b{D}c", dosRoot},
 	// Predicates that only select.
 	{"{D}b[@id][1]", dosRoot}, {"{D}*[@id = 'b2']", dosRoot}, {"{D}*[2][@id]", dosRoot}, {"{D}@*[1]", dosRoot},
@@ -188,7 +191,7 @@ var descendantLimitCases = []struct {
 	// Nested context nodes.
 	{"/descendant::*{D}b", dosElements}, {"/descendant::*{D}@id", dosElements},
 	{"/descendant::*{D}*[1]", dosElements}, {"/descendant::*{D}*[last()]", dosElements},
-	{"/descendant::*{D}*[@id]", dosElements}, {"/descendant::*{D}*[.{D}c]", dosElements},
+	{"/descendant::*{D}*[@id]", dosElements}, {"/descendant::*{D}*[count(.{D}c) > 0]", dosElements},
 	{"count(/descendant::*{D}node())", dosElements}, {"/descendant::node(){D}node()", "/descendant::node()"},
 }
 

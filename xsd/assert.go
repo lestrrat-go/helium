@@ -138,7 +138,7 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 				}
 				continue
 			}
-			ok, err := xpath3.EBV(res.Sequence())
+			ok, err := res.EBV()
 			if err != nil {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
 					fmt.Sprintf("Failed to evaluate the assertion '%s': %v.", a.Test, err))
