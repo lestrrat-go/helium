@@ -9,13 +9,14 @@ import (
 )
 
 // This file evaluates the abbreviation `//` followed by a child or attribute
-// step (`//x`, `//x[p]`, `//@a`) as one walk of the context node's subtree.
+// step (`//x`, `//x[p]`, `//@a`, `a//x`) as one walk of each context node's
+// subtree.
 //
 // `//` expands to a descendant-or-self::node() step, so `//x` is two steps:
 // the whole subtree, then the x children of each of its nodes. The second
 // step runs from context nodes at many depths, so its result has to be sorted
 // into document order, which builds the whole-document order index. The walk
-// in this file visits the subtree in pre-order instead and emits each result
+// in this file visits each subtree in pre-order instead and emits each result
 // node when it is reached, so the result comes out in document order:
 //
 //   - a child of a subtree node is emitted when the walk visits it;
@@ -29,21 +30,25 @@ import (
 //
 // The fused walk charges what the two steps charge and fails where they fail:
 //
-//   - the descendant-or-self step fails with ErrNodeSetLimit when the subtree
-//     holds more than maxNodes nodes, then charges one operation per subtree
-//     node and registers the document in the order cache (when the subtree
-//     has more than one node);
+//   - the descendant-or-self step walks each context node's subtree in turn,
+//     failing with ErrNodeSetLimit when one subtree holds more than maxNodes
+//     nodes and charging one operation per subtree node after each subtree;
+//     it then fails with ErrNodeSetLimit when the subtrees hold more than
+//     maxNodes nodes together, and registers the document in the order cache
+//     when they hold more than one;
 //   - the second step charges, for every subtree node, the candidates it
 //     enumerates (XDM children or attributes), then applies the predicates.
 //
-// When the second step has predicates, a first pass counts the subtree, so the
-// node-set limit, the first charge and the registration happen before any
-// predicate runs, as in the two-step evaluation. Without predicates nothing
-// can fail or observe the order of the charges in between, so one pass does
-// both.
+// When the second step has predicates, a first pass counts the subtrees, so
+// the node-set limits, the first charges and the registration happen before
+// any predicate runs, as in the two-step evaluation. Without predicates
+// nothing can fail or observe the order of the second step's charges, so one
+// pass does both.
 //
-// The fusion applies only from a single context node that ixpath.OrderedFrom
-// accepts; any other context list evaluates the two steps one by one.
+// The fusion needs context nodes whose subtrees are disjoint and in document
+// order, and whose pre-order walks match the order index
+// (fusesDescendantContexts); any other context list evaluates the two steps
+// one by one.
 
 // fusesDescendantStep reports whether steps[i] is descendant-or-self::node()
 // without predicates and steps[i+1] is a child or attribute step.
@@ -66,48 +71,124 @@ func fusesDescendantStep(steps []vmLocationStep, i int) bool {
 	return false
 }
 
-// evalVMDescendantStep evaluates descendant-or-self::node()/step from the
-// single context node c, where step is a child or attribute step. c must pass
-// ixpath.OrderedFrom.
-func evalVMDescendantStep(evalFn exprEvaluator, ctx context.Context, ec *evalContext, c helium.Node, step vmLocationStep) ([]helium.Node, error) {
-	if len(step.Predicates) == 0 {
-		return descendantStepNoPredicates(ctx, ec, c, step)
+// fusesDescendantContexts reports whether the fused walk can run from the
+// context list nodes, which is sorted in document order and duplicate-free.
+// Every node must pass ixpath.OrderedFrom. With more than one node, none may
+// be an attribute or namespace node (whose position sits between an element
+// and its children) and none may lie in the subtree of another, so the
+// subtrees are disjoint and follow each other in document order.
+func fusesDescendantContexts(nodes []helium.Node) bool {
+	if len(nodes) == 0 {
+		return false
 	}
-	return descendantStepWithPredicates(evalFn, ctx, ec, c, step)
+	if len(nodes) == 1 {
+		return ixpath.OrderedFrom(nodes[0])
+	}
+	// top is the last node that no earlier node contains. Sorted nodes put a
+	// node inside an earlier subtree only inside the subtree of top: an
+	// earlier subtree that held it would hold top as well.
+	var top, prevParent helium.Node
+	for i, n := range nodes {
+		switch n.Type() {
+		case helium.AttributeNode, helium.NamespaceNode:
+			return false
+		}
+		if !ixpath.OrderedFrom(n) {
+			return false
+		}
+		parent := n.Parent()
+		// A sibling of the previous node is not inside top: top would be an
+		// ancestor of their parent, and so of the previous node too.
+		if i > 0 && (parent == nil || parent != prevParent) && hasAncestor(n, top) {
+			return false
+		}
+		top = n
+		prevParent = parent
+	}
+	return true
 }
 
-// descendantStepNoPredicates walks the subtree of c once, collecting the
-// step's matches in document order.
-func descendantStepNoPredicates(ctx context.Context, ec *evalContext, c helium.Node, step vmLocationStep) ([]helium.Node, error) {
-	stack, err := startDescendantWalk(ctx, ec, c)
-	if err != nil {
+// hasAncestor reports whether a is an ancestor of n.
+func hasAncestor(n, a helium.Node) bool {
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p == a {
+			return true
+		}
+	}
+	return false
+}
+
+// evalVMDescendantStep evaluates descendant-or-self::node()/step from the
+// context list contexts, where step is a child or attribute step. contexts
+// must pass fusesDescendantContexts.
+func evalVMDescendantStep(evalFn exprEvaluator, ctx context.Context, ec *evalContext, contexts []helium.Node, step vmLocationStep) ([]helium.Node, error) {
+	if len(step.Predicates) == 0 {
+		return descendantStepNoPredicates(ctx, ec, contexts, step)
+	}
+	return descendantStepWithPredicates(evalFn, ctx, ec, contexts, step)
+}
+
+// descendantStepNoPredicates walks the subtree of every context node once,
+// collecting the step's matches in document order.
+func descendantStepNoPredicates(ctx context.Context, ec *evalContext, contexts []helium.Node, step vmLocationStep) ([]helium.Node, error) {
+	var out []helium.Node
+	total := 0
+	// candidates counts what the second step enumerates. On the child axis
+	// it is every subtree node but the context nodes.
+	candidates := 0
+	for _, c := range contexts {
+		var visited, traversed int
+		var err error
+		out, visited, traversed, err = appendDescendantMatches(ctx, ec, out, c, step)
+		if err != nil {
+			return nil, err
+		}
+		if err := ec.countOps(ctx, visited); err != nil {
+			return nil, err
+		}
+		total += visited
+		candidates += traversed
+	}
+	if err := finishDescendantOrSelfStep(ec, contexts[0], total); err != nil {
 		return nil, err
 	}
+	if err := ec.countOps(ctx, candidates); err != nil {
+		return nil, err
+	}
+	return clampDescendantResult(ec, out)
+}
+
+// appendDescendantMatches walks the subtree of c, appending the matches of
+// step to out. It returns the number of subtree nodes and the number of
+// candidates the step enumerates from them.
+func appendDescendantMatches(ctx context.Context, ec *evalContext, out []helium.Node, c helium.Node, step vmLocationStep) ([]helium.Node, int, int, error) {
+	stack, err := startDescendantWalk(ctx, ec, c)
+	if err != nil {
+		return nil, 0, 0, err
+	}
 	visited := 1
-	var out []helium.Node
-	// candidates counts what the second step enumerates. On the child axis
-	// it is every subtree node but c, which the walk counts in visited.
 	candidates := 0
 	if step.Axis == AxisAttribute {
 		var traversed int
 		out, traversed, err = appendAxisNodeMatches(ctx, out, ec, c, AxisAttribute, step.NodeTest)
 		if err != nil {
-			return nil, err
+			return nil, 0, 0, err
 		}
 		candidates += traversed
 	}
 	for len(stack) > 0 {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, 0, 0, err
 		}
 		last := len(stack) - 1
 		cur := stack[last]
 		stack = stack[:last]
 		visited++
 		if visited > ec.maxNodes {
-			return nil, ixpath.ErrNodeSetLimit
+			return nil, 0, 0, ixpath.ErrNodeSetLimit
 		}
 		if step.Axis == AxisChild {
+			candidates++
 			if matchNodeTest(step.NodeTest, cur, AxisChild, ec) {
 				out = append(out, cur)
 			}
@@ -115,25 +196,16 @@ func descendantStepNoPredicates(ctx context.Context, ec *evalContext, c helium.N
 			var traversed int
 			out, traversed, err = appendAxisNodeMatches(ctx, out, ec, cur, AxisAttribute, step.NodeTest)
 			if err != nil {
-				return nil, err
+				return nil, 0, 0, err
 			}
 			candidates += traversed
 		}
 		stack, err = ixpath.PushXDMChildren(ctx, stack, cur)
 		if err != nil {
-			return nil, err
+			return nil, 0, 0, err
 		}
 	}
-	if step.Axis == AxisChild {
-		candidates = visited - 1
-	}
-	if err := chargeDescendantOrSelfStep(ctx, ec, c, visited); err != nil {
-		return nil, err
-	}
-	if err := ec.countOps(ctx, candidates); err != nil {
-		return nil, err
-	}
-	return ixpath.OrderStepResult(out, []helium.Node{c}, AxisDescendant, ec.docOrder, ec.maxNodes)
+	return out, visited, candidates, nil
 }
 
 // descendantEntry is a node waiting on the pre-order walk stack. selected
@@ -143,63 +215,75 @@ type descendantEntry struct {
 	selected bool
 }
 
-// descendantStepWithPredicates counts the subtree of c, charges the
-// descendant-or-self step, then walks the subtree again, applying the second
-// step and its predicates to every subtree node in document order.
-func descendantStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, c helium.Node, step vmLocationStep) ([]helium.Node, error) {
-	visited, err := countDescendantOrSelf(ctx, ec, c)
-	if err != nil {
-		return nil, err
-	}
-	if err := chargeDescendantOrSelfStep(ctx, ec, c, visited); err != nil {
-		return nil, err
-	}
-
-	stack := []descendantEntry{{node: c}}
-	var out, matched []helium.Node
-	for len(stack) > 0 {
-		last := len(stack) - 1
-		cur := stack[last]
-		stack = stack[:last]
-		if cur.selected {
-			out = append(out, cur.node)
-		}
-
-		start := len(stack)
-		var traversed int
-		if step.Axis == AxisChild {
-			stack, matched, traversed, err = pushMatchingChildEntries(ctx, ec, stack, matched[:0], cur.node, step.NodeTest)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			matched, traversed, err = appendAxisNodeMatches(ctx, matched[:0], ec, cur.node, AxisAttribute, step.NodeTest)
-			if err != nil {
-				return nil, err
-			}
-			stack, err = pushChildEntries(ctx, stack, cur.node)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if err := ec.countOps(ctx, traversed); err != nil {
+// descendantStepWithPredicates counts the subtree of every context node and
+// charges the descendant-or-self step, then walks the subtrees again,
+// applying the second step and its predicates to every subtree node in
+// document order.
+func descendantStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, contexts []helium.Node, step vmLocationStep) ([]helium.Node, error) {
+	total := 0
+	for _, c := range contexts {
+		visited, err := countDescendantOrSelf(ctx, ec, c)
+		if err != nil {
 			return nil, err
 		}
-		selected := matched
-		for _, pred := range step.Predicates {
-			selected, err = applyVMPredicate(evalFn, ctx, ec, selected, pred)
-			if err != nil {
+		if err := ec.countOps(ctx, visited); err != nil {
+			return nil, err
+		}
+		total += visited
+	}
+	if err := finishDescendantOrSelfStep(ec, contexts[0], total); err != nil {
+		return nil, err
+	}
+
+	var out, matched []helium.Node
+	var stack []descendantEntry
+	for _, c := range contexts {
+		stack = append(stack, descendantEntry{node: c})
+		var err error
+		for len(stack) > 0 {
+			last := len(stack) - 1
+			cur := stack[last]
+			stack = stack[:last]
+			if cur.selected {
+				out = append(out, cur.node)
+			}
+
+			start := len(stack)
+			var traversed int
+			if step.Axis == AxisChild {
+				stack, matched, traversed, err = pushMatchingChildEntries(ctx, ec, stack, matched[:0], cur.node, step.NodeTest)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				matched, traversed, err = appendAxisNodeMatches(ctx, matched[:0], ec, cur.node, AxisAttribute, step.NodeTest)
+				if err != nil {
+					return nil, err
+				}
+				stack, err = pushChildEntries(ctx, stack, cur.node)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if err := ec.countOps(ctx, traversed); err != nil {
 				return nil, err
 			}
+			selected := matched
+			for _, pred := range step.Predicates {
+				selected, err = applyVMPredicate(evalFn, ctx, ec, selected, pred)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if step.Axis == AxisChild {
+				markSelectedEntries(stack[start:], selected)
+			} else {
+				out = append(out, selected...)
+			}
+			slices.Reverse(stack[start:])
 		}
-		if step.Axis == AxisChild {
-			markSelectedEntries(stack[start:], selected)
-		} else {
-			out = append(out, selected...)
-		}
-		slices.Reverse(stack[start:])
 	}
-	return ixpath.OrderStepResult(out, []helium.Node{c}, AxisDescendant, ec.docOrder, ec.maxNodes)
+	return clampDescendantResult(ec, out)
 }
 
 // startDescendantWalk begins the descendant-or-self walk from c the way
@@ -245,23 +329,38 @@ func countDescendantOrSelf(ctx context.Context, ec *evalContext, c helium.Node) 
 	return visited, nil
 }
 
-// chargeDescendantOrSelfStep charges the descendant-or-self::node() step from
-// c, whose result has visited nodes, and registers the document of c in the
-// order cache where ixpath.OrderStepResult would.
-func chargeDescendantOrSelfStep(ctx context.Context, ec *evalContext, c helium.Node, visited int) error {
-	if err := ec.countOps(ctx, visited); err != nil {
-		return err
+// finishDescendantOrSelfStep ends the descendant-or-self::node() step whose
+// result has total nodes the way ixpath.OrderStepResult ends it: a result of
+// more than maxNodes nodes fails, and a result of more than one node
+// registers the document of c in the order cache.
+func finishDescendantOrSelfStep(ec *evalContext, c helium.Node, total int) error {
+	if total > ec.maxNodes {
+		return ixpath.ErrNodeSetLimit
 	}
-	if visited > 1 {
+	if total > 1 {
 		ec.docOrder.ReserveDocument(c)
 	}
 	return nil
 }
 
-// pushMatchingChildEntries pushes the XDM children of n onto stack in document order
-// and appends the ones that match test to matched, enumerating them as the
-// child step does (appendAxisNodeMatches). It returns the grown stack and
-// matched slices and the number of children enumerated.
+// clampDescendantResult ends the second step the way ixpath.OrderStepResult
+// ends a step whose result is already in document order: a result of more
+// than maxNodes nodes fails, and the capacity of a longer-than-one result is
+// clamped.
+func clampDescendantResult(ec *evalContext, out []helium.Node) ([]helium.Node, error) {
+	if len(out) <= 1 {
+		return out, nil
+	}
+	if len(out) > ec.maxNodes {
+		return nil, ixpath.ErrNodeSetLimit
+	}
+	return out[:len(out):len(out)], nil
+}
+
+// pushMatchingChildEntries pushes the XDM children of n onto stack in
+// document order and appends the ones that match test to matched,
+// enumerating them as the child step does (appendAxisNodeMatches). It returns
+// the grown stack and matched slices and the number of children enumerated.
 func pushMatchingChildEntries(ctx context.Context, ec *evalContext, stack []descendantEntry, matched []helium.Node, n helium.Node, test NodeTest) ([]descendantEntry, []helium.Node, int, error) {
 	if _, ok := n.(*helium.Attribute); ok {
 		return stack, matched, 0, nil

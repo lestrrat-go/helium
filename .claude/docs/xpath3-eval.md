@@ -78,20 +78,23 @@ cancellation (each operand is individually capped, but the concatenation must be
 items, and `evalVMPathExpr` (`E1/path`) takes the node list for each E1 node directly.
 
 #### `//` fusion (`eval_path_descendant.go`)
-A bare `descendant-or-self::node()` step (what `//` abbreviates) followed by a child or attribute step, evaluated
-from a single context node that `ixpath.OrderedFrom` accepts (not inside entity content), runs as one pre-order
-walk of the context node's subtree instead of two steps. Child matches are emitted when the walk reaches them and
-attributes when it reaches their element, so the result is in document order and the second step never builds the
-whole-document order index. Any other context list (several nodes, entity content, an `Entity` node) evaluates the
-steps one by one. The fused walk keeps every observable effect of the two-step evaluation:
-- it fails with `ErrNodeSetLimit` when the subtree has more than `maxNodes` nodes, as the descendant-or-self
-  traversal does;
-- it charges the descendant-or-self step (one op per subtree node), then registers the document in the order
-  cache when the subtree has more than one node (`DocOrderCache.ReserveDocument`, where `OrderStepResult` would),
-  then charges the ops the second step's per-node enumeration charges (XDM children or attributes);
+A bare `descendant-or-self::node()` step (what `//` abbreviates) followed by a child or attribute step runs as
+one pre-order walk of each context node's subtree instead of two steps, when `fusesDescendantContexts` accepts the
+context list: every node passes `ixpath.OrderedFrom` (not inside entity content, not an `Entity`), and with several
+nodes none is an attribute or namespace node and none lies inside another's subtree (a node whose parent differs
+from the previous node's is checked against the last top-level node's ancestors). Child matches are emitted when
+the walk reaches them and attributes when it reaches their element, so the result is in document order and neither
+step builds the whole-document order index. Any other context list evaluates the steps one by one. The fused walk
+keeps every observable effect of the two-step evaluation:
+- per context node it fails with `ErrNodeSetLimit` when the subtree has more than `maxNodes` nodes and then
+  charges one op per subtree node, as the descendant-or-self traversal does;
+- it then fails with `ErrNodeSetLimit` when all subtrees together exceed `maxNodes`, and registers the document in
+  the order cache when they hold more than one node (`DocOrderCache.ReserveDocument`, where `OrderStepResult` or
+  `DeduplicateNodes` would), then charges the ops the second step's per-node enumeration charges (XDM children or
+  attributes), and applies the node-set limit to the result;
 - predicates of the second step run per parent, on that parent's candidate list (so `position()`/`last()` keep
-  their meaning), in document order of the parents. With predicates, a first pass counts the subtree so the
-  limit, the first charge and the registration come before any predicate runs; the second pass marks each
+  their meaning), in document order of the parents. With predicates, a first pass counts the subtrees so the
+  limits, the first charges and the registration come before any predicate runs; the second pass marks each
   parent's selected children on the walk stack and emits them when they are popped.
 
 #### Node-list consumers (`vm_path_nodes.go`)

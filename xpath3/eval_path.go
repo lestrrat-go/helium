@@ -207,9 +207,9 @@ func evalVMLocationPathNodes(evalFn exprEvaluator, ctx context.Context, ec *eval
 	for i := 0; i < len(lp.Steps); i++ {
 		step := lp.Steps[i]
 		switch {
-		case len(nodes) == 1 && fusesDescendantStep(lp.Steps, i) && ixpath.OrderedFrom(nodes[0]):
+		case fusesDescendantStep(lp.Steps, i) && fusesDescendantContexts(nodes):
 			i++
-			nodes, err = evalVMDescendantStep(evalFn, ctx, ec, nodes[0], lp.Steps[i])
+			nodes, err = evalVMDescendantStep(evalFn, ctx, ec, nodes, lp.Steps[i])
 		case len(step.Predicates) > 0:
 			nodes, err = evalVMStepWithPredicates(evalFn, ctx, ec, nodes, step)
 		default:

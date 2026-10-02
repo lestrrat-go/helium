@@ -31,6 +31,11 @@ var descendantFusionExprs = []string{
 	"{D}b[xs:integer(substring(@id, 2)) > 1]",
 	".{D}b", ".{D}@id", ".{D}*[1]", "/a{D}b", "/a{D}@*", "/*/*{D}node()", "..{D}b",
 	"{D}b/c", "{D}b{D}c", "{D}*{D}@id", "{D}b/..", "{D}b{D}c[1]",
+	// `//` from several context nodes: siblings, nested nodes (which take
+	// the step-by-step evaluation), text and attribute nodes.
+	"/a/b{D}c", "/*/*{D}node()", "/*/*{D}@*", "/*/*{D}*[1]", "/*/*{D}*[last()]", "/*/node(){D}node()",
+	"/*/*{D}b[@id]", "{D}text(){D}node()", "{D}@id{D}node()", "/*/*{D}*{D}c", "count(/*/*{D}*)",
+	"(/*/*{D}*)[2]", "/*/*{D}b | $other/*{D}b", "{D}*[@id]{D}b[1]",
 	"$other{D}b", "$nodes{D}b", "$nodes{D}@id", "$ents{D}node()",
 	"count({D}*)", "count({D}node())", "count({D}@*)", "count({D}b[@id])", "count({D}nosuch)",
 	"exists({D}b)", "exists({D}nosuch)", "empty({D}b)", "empty({D}nosuch)",
@@ -93,18 +98,34 @@ func TestDescendantStepFusionRandom(t *testing.T) {
 	}
 }
 
-// descendantLimitExprs are absolute `//` expressions whose operation charges
-// and node-set limit TestDescendantStepFusionLimits compares with the
-// one-step-at-a-time evaluation.
-var descendantLimitExprs = []string{
-	"{D}b", "{D}*", "{D}node()", "{D}@id", "{D}@*", "{D}b[1]", "{D}b[last()]", "{D}*[@id]",
-	"{D}*[@id][last()]", "{D}@*[last()]", "{D}*[.{D}c]", "count({D}*)", "exists({D}b)",
-	"({D}b)[1]", "({D}*)[last()]", "{D}b{D}c",
+// The paths descendantLimitCases run their `//` from.
+const (
+	dosRoot          = "/"
+	dosGrandchildren = "/*/*"
+)
+
+// descendantLimitCases are `//` expressions whose operation charges and
+// node-set limits TestDescendantStepFusionLimits compares with the
+// one-step-at-a-time evaluation. The first {D} is the one under test; dos is
+// the path it runs from.
+var descendantLimitCases = []struct {
+	tmpl string
+	dos  string
+}{
+	{"{D}b", dosRoot}, {"{D}*", dosRoot}, {"{D}node()", dosRoot}, {"{D}@id", dosRoot}, {"{D}@*", dosRoot},
+	{"{D}b[1]", dosRoot}, {"{D}b[last()]", dosRoot}, {"{D}*[@id]", dosRoot}, {"{D}*[@id][last()]", dosRoot},
+	{"{D}@*[last()]", dosRoot}, {"{D}*[.{D}c]", dosRoot}, {"count({D}*)", dosRoot}, {"exists({D}b)", dosRoot},
+	{"({D}b)[1]", dosRoot}, {"({D}*)[last()]", dosRoot}, {"{D}b{D}c", dosRoot},
+	// Several context nodes.
+	{"/a/b{D}c", "/a/b"}, {"/*/node(){D}node()", "/*/node()"}, {"/*{D}b{D}c", "/*"},
+	{"/*/*{D}node()", dosGrandchildren}, {"/*/*{D}@*", dosGrandchildren}, {"/*/*{D}*[1]", dosGrandchildren},
+	{"/*/*{D}*[last()]", dosGrandchildren}, {"/*/*{D}*[@id]", dosGrandchildren},
+	{"count(/*/*{D}*)", dosGrandchildren}, {"/*/*{D}b{D}c", dosGrandchildren},
 }
 
 // TestDescendantStepFusionLimits checks that a `//` path charges the same
 // number of operations as the path evaluated one step at a time, and fails
-// on the same node-set limit. The reference expression's extra self step
+// on the same node-set limits. The reference expression's extra self step
 // charges one operation per node of the descendant-or-self result, so its
 // smallest passing operation limit is that many operations higher.
 func TestDescendantStepFusionLimits(t *testing.T) {
@@ -115,13 +136,17 @@ func TestDescendantStepFusionLimits(t *testing.T) {
 			d.build(t, doc)
 		}
 		eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
-		dosSize := evalCount(t, eval, doc, "count(/descendant-or-self::node())")
-		for _, tmpl := range descendantLimitExprs {
-			fused := strings.ReplaceAll(tmpl, "{D}", "//")
-			// Only the first `//` runs from the document node; spell out
-			// that one, so the extra self step runs exactly once.
-			unfused := strings.ReplaceAll(strings.Replace(tmpl, "{D}", descendantUnfused, 1), "{D}", "//")
+		for _, tc := range descendantLimitCases {
+			fused := strings.ReplaceAll(tc.tmpl, "{D}", "//")
+			// Spell out only the `//` under test, so the extra self step
+			// runs exactly once.
+			unfused := strings.ReplaceAll(strings.Replace(tc.tmpl, "{D}", descendantUnfused, 1), "{D}", "//")
 			name := d.name + "|" + fused
+			dosExpr := "count(" + tc.dos + "/descendant-or-self::node())"
+			if tc.dos == dosRoot {
+				dosExpr = "count(/descendant-or-self::node())"
+			}
+			dosSize := evalCount(t, eval, doc, dosExpr)
 
 			fusedOps := smallestOpLimit(t, doc, fused)
 			unfusedOps := smallestOpLimit(t, doc, unfused)
@@ -131,9 +156,12 @@ func TestDescendantStepFusionLimits(t *testing.T) {
 			_, err := evalWith(t, eval.OpLimit(fusedOps-1), doc, fused)
 			require.ErrorIs(t, err, xpath3.ErrOpLimit, name)
 
-			// The descendant-or-self result is the largest node-set either
-			// form builds, so both fail exactly when it exceeds the limit.
+			// Both forms fail when the descendant-or-self result exceeds the
+			// limit, and agree on the limits around it.
 			for _, limit := range []int{dosSize - 1, dosSize, dosSize + 1} {
+				if limit < 1 {
+					continue
+				}
 				limited := eval.MaxNodesForTesting(limit)
 				_, fusedErr := evalWith(t, limited, doc, fused)
 				_, unfusedErr := evalWith(t, limited, doc, unfused)

@@ -132,7 +132,7 @@ func NodePrefix(n helium.Node) string
 | `compile_direct.go` | `Compile()` fast path for simple path-like expressions and simple predicate comparisons, with shared parser fallback |
 | `eval.go` | `evalContext`, raw AST eval trampoline |
 | `eval_path.go` | Location paths, node tests, predicates, literal/variable/sequence eval |
-| `eval_path_descendant.go` | `//` fusion: `descendant-or-self::node()` + child/attribute step from one context node as one pre-order walk |
+| `eval_path_descendant.go` | `//` fusion: `descendant-or-self::node()` + child/attribute step as one pre-order walk of each context node's subtree |
 | `eval_operators.go` | Binary/unary logic ops, concat, simple map, range, union, intersect/except, filter, path steps |
 | `eval_arithmetic.go` | Integer/decimal/float arithmetic, unary negation, type promotion helpers |
 | `eval_control.go` | FLWOR, quantified, if/else, try/catch, lookup expressions |
