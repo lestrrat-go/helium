@@ -2073,7 +2073,7 @@ func evaluatePredicateWithPosition(ctx context.Context, ec *execContext, pred xp
 	if f, ok := result.IsNumber(); ok {
 		return f == float64(pos)
 	}
-	b, err := xpath3.EBV(result.Sequence())
+	b, err := result.EBV()
 	if err != nil {
 		return false
 	}

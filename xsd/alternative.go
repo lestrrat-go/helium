@@ -519,7 +519,7 @@ func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *he
 			// matched); evaluation continues to the next alternative.
 			continue
 		}
-		ok, err := xpath3.EBV(res.Sequence())
+		ok, err := res.EBV()
 		if err == nil && ok && alt.Type != nil {
 			return alt.Type
 		}

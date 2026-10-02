@@ -16,7 +16,7 @@ func (ec *execContext) execIf(ctx context.Context, inst *ifInst) error {
 	if err != nil {
 		return err
 	}
-	b, err := xpath3.EBV(result.Sequence())
+	b, err := result.EBV()
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (ec *execContext) execChoose(ctx context.Context, inst *chooseInst) error {
 			ec.defaultCollation = savedWhenCollation
 			return err
 		}
-		b, err := xpath3.EBV(result.Sequence())
+		b, err := result.EBV()
 		if err != nil {
 			ec.xpathDefaultNS = savedNS
 			ec.hasXPathDefaultNS = savedHas

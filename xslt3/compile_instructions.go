@@ -464,7 +464,7 @@ func (c *compiler) evaluateUseWhen(ctx context.Context, expr string) (bool, erro
 		// XPST0017, XPST0051, XPST0081) and dynamic errors to be reported.
 		return false, err
 	}
-	b, err := xpath3.EBV(result.Sequence())
+	b, err := result.EBV()
 	if err != nil {
 		return true, nil //nolint:nilerr // use-when defaults to true on EBV failure
 	}

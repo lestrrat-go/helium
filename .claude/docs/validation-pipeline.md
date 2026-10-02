@@ -92,7 +92,7 @@ schema error, mirroring IDC); the result is stored on `TypeDef.Assertions` (the 
 `IDConstraint`). `validateElementContent` extracts the content switch into `validateContentByType` and, after
 attributes+content validate, calls `checkAssertions`, which walks the type's base chain and evaluates each
 test with the element as context node via `xpath3.NewEvaluator(...).Namespaces(a.Namespaces).Evaluate(ctx,
-expr, elem)` then `xpath3.EBV` — false → validity error. StrictPrefixes is intentionally NOT set so xs:/fn:
+expr, elem)` then `Result.EBV` — false → validity error. StrictPrefixes is intentionally NOT set so xs:/fn:
 keep default bindings. `parseAssert` also handles `<xs:assert>` inside a simpleContent extension/restriction
 (`parseSimpleContentChildren`). `$value` is bound (via `Evaluator.Variables`) to the element's TYPED simple
 value for a simpleContent type (`assertValueSequence`→`buildValueSequence`; empty sequence for complex

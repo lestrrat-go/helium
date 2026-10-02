@@ -709,7 +709,7 @@ func (ec *execContext) execAssert(ctx context.Context, inst *assertInst) error {
 	if err != nil {
 		return err
 	}
-	b, err := xpath3.EBV(result.Sequence())
+	b, err := result.EBV()
 	if err != nil {
 		return err
 	}

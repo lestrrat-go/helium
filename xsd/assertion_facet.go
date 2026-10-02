@@ -171,7 +171,7 @@ func checkSimpleTypeAssertions(ctx context.Context, value string, valueNS map[st
 			res, err := ev.Evaluate(ctx, a.compiled, nil)
 			ok := false
 			if err == nil {
-				ok, err = xpath3.EBV(res.Sequence())
+				ok, err = res.EBV()
 			}
 			if err != nil {
 				vc.reportValidityError(ctx, filename, line, elemName,

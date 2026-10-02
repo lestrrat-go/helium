@@ -604,7 +604,7 @@ XPath 3.1 expression parsing and evaluation.
   parser used by `fn:parse-xml`/`fn:parse-xml-fragment`/`fn:doc`; supplies parse policy — limits, FS,
   XXE/network; unset → default `helium.NewParser()`)
 - `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`,
-  `Sequence()`, `StringValue()`, `Copy()`
+  `Sequence()`, `EBV()`, `StringValue()`, `Copy()`
 - **Reuse:** `Evaluator.NewEvalState(Node) → *EvalState` builds reusable state; `Expression.EvaluateReuse`
   runs against it. The returned `Result` is valid only until the next `EvaluateReuse` on the same `EvalState`
   (backing storage is overwritten) — use `Result.Copy()` to retain it. `EvalState` has

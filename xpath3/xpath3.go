@@ -125,6 +125,19 @@ func (r *Result) Sequence() Sequence {
 	return r.items()
 }
 
+// EBV returns the effective boolean value of the result (XPath 3.1 §2.4.3),
+// the value EBV(r.Sequence()) returns: false for the empty sequence, true
+// for a sequence that starts with a node, the value of a single boolean,
+// string, untypedAtomic, anyURI or numeric item, and a FORG0006 error for
+// anything else. A node-list result answers from its node list without
+// building its sequence.
+func (r *Result) EBV() (bool, error) {
+	if rn, ok := r.seq.(*resultNodes); ok {
+		return len(rn.nodes) > 0, nil
+	}
+	return EBV(r.seq)
+}
+
 // IsNodeSet returns true if the result consists entirely of nodes.
 func (r *Result) IsNodeSet() bool {
 	if _, ok := r.seq.(*resultNodes); ok {
