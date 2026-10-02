@@ -711,21 +711,27 @@ func TestUTF8CursorLineAcrossReads(t *testing.T) {
 		"long two-byte line":  "<r>\n" + strings.Repeat("é", 6000) + "\n" + "x" + strings.Repeat("é", 6000),
 		"line ends at buffer": strings.Repeat("a", 8191) + "\n" + strings.Repeat("b", 9000),
 	}
+	// Text a cursor is started after (StartAt) comes first on its first line.
+	prefixes := []string{"", `<?xml version="1.0"?>`, strings.Repeat("é", 700)}
 	for name, input := range inputs {
-		for _, chunk := range []int{1, 2, 3, 7, 4093, 0} {
-			rng := rand.New(rand.NewPCG(uint64(len(input)), uint64(chunk)))
-			var r io.Reader = strings.NewReader(input)
-			if chunk > 0 {
-				r = &chunkedReader{data: []byte(input), chunk: chunk}
-			}
-			cur := strcursor.NewUTF8Cursor(r)
-			pos := 0
-			for pos < len(input) {
-				_ = cur.PeekAt(rng.IntN(64))
-				step := min(1+rng.IntN(300), len(input)-pos)
-				require.NoError(t, cur.Advance(step))
-				pos += step
-				require.Equal(t, referenceLine(input[:pos]), cur.Line(), "%s, %d-byte reads, at byte %d", name, chunk, pos)
+		for _, prefix := range prefixes {
+			for _, chunk := range []int{1, 2, 3, 7, 4093, 0} {
+				rng := rand.New(rand.NewPCG(uint64(len(input)), uint64(chunk)))
+				var r io.Reader = strings.NewReader(input)
+				if chunk > 0 {
+					r = &chunkedReader{data: []byte(input), chunk: chunk}
+				}
+				cur := strcursor.NewUTF8Cursor(r)
+				cur.StartAt(strcursor.Position{Line: 1, Column: len(prefix) + 1, LineText: prefix})
+				pos := 0
+				for pos < len(input) {
+					_ = cur.PeekAt(rng.IntN(64))
+					step := min(1+rng.IntN(300), len(input)-pos)
+					require.NoError(t, cur.Advance(step))
+					pos += step
+					require.Equal(t, referenceLine(prefix+input[:pos]), cur.Line(),
+						"%s, %d-byte prefix, %d-byte reads, at byte %d", name, len(prefix), chunk, pos)
+				}
 			}
 		}
 	}

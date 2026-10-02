@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/internal/encoding"
@@ -103,19 +104,19 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 		return
 	}
 
-	if cur.Consume(patUTF8) {
+	if consumeBOM(cur, patUTF8) {
 		encoding = encUTF8
 		ctx.autoEncoding = encUTF8
 		return
 	}
 
-	if cur.Consume(patUTF16BE2B) {
+	if consumeBOM(cur, patUTF16BE2B) {
 		encoding = encUTF16BE
 		ctx.autoEncoding = encUTF16BE
 		return
 	}
 
-	if cur.Consume(patUTF16LE2B) {
+	if consumeBOM(cur, patUTF16LE2B) {
 		encoding = encUTF16LE
 		ctx.autoEncoding = encUTF16LE
 		return
@@ -124,6 +125,18 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	encoding = encNone
 	err = errors.New("failed to detect encoding")
 	return
+}
+
+// consumeBOM consumes the byte-order mark bom when the input starts with it,
+// leaving the position unchanged: a byte-order mark is not part of the text,
+// and libxml2 does not count it in the column either.
+func consumeBOM(cur *strcursor.ByteCursor, bom []byte) bool {
+	at := strcursor.PositionOf(cur)
+	if !cur.Consume(bom) {
+		return false
+	}
+	cur.StartAt(at)
+	return true
 }
 
 // nonASCIIExternalEncoding reports the encoding family that an external
@@ -224,7 +237,7 @@ func (ctx *parserCtx) switchEncoding() error {
 			return ErrByteCursorRequired
 		}
 		ctx.popInput()
-		ctx.pushInput(strcursor.NewUTF8Cursor(cur))
+		ctx.pushInput(utf8CursorAfter(cur, cur))
 		return nil
 	}
 
@@ -240,9 +253,21 @@ func (ctx *parserCtx) switchEncoding() error {
 
 	b := enc.NewDecoder().Reader(cur)
 	ctx.popInput()
-	ctx.pushInput(strcursor.NewUTF8Cursor(b))
+	ctx.pushInput(utf8CursorAfter(b, cur))
 
 	return nil
+}
+
+// utf8CursorAfter returns a UTF8Cursor over r, the rest of the input that cur
+// has read so far, starting at cur's position. The column after an XML
+// declaration or TextDecl that cur consumed then counts the declaration, as
+// in libxml2, and the line text starts with it. cur has read only
+// ASCII-compatible bytes: the declaration, or a byte-order mark, which
+// consumeBOM does not count.
+func utf8CursorAfter(r io.Reader, cur *strcursor.ByteCursor) *strcursor.UTF8Cursor {
+	u := strcursor.NewUTF8Cursor(r)
+	u.StartAt(strcursor.PositionOf(cur))
+	return u
 }
 
 // checkBOMEncodingConflict reports a fatal error when the document declared an

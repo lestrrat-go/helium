@@ -31,7 +31,7 @@ INPUT ([]byte or io.Reader)
   → ByteCursor on inputStack
   → detectEncoding() — BOM/pattern/EBCDIC scan
   → parseXMLDecl() — version, encoding, standalone
-  → switchEncoding() — UTF8Cursor over the bytes (UTF-8) or the decoder
+  → switchEncoding() — UTF8Cursor over the bytes (UTF-8) or the decoder, continuing the ByteCursor's position
   → SetDocumentLocator SAX callback
   → StartDocument SAX → create Document
   → parseMisc() — comments, PIs before DOCTYPE
@@ -186,7 +186,9 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 
 `detectEncoding()` order: UCS-4 BE/LE/2143/3412 (PEEK, not consume) → EBCDIC invariant prefix → UTF-8 BOM →
 UTF-16 BOM → UTF-16 by context → default ASCII/UTF-8. `switchEncoding()` pops the ByteCursor, pushes a
-`UTF8Cursor` over it (UTF-8) or over a decoder. UTF-16 switches encoding before parsing the decl; EBCDIC extracts the name
+`UTF8Cursor` over it (UTF-8) or over a decoder, started at the ByteCursor's line, column, and line text
+(`utf8CursorAfter`), so positions after a byte-level XML declaration count it. A consumed byte-order mark leaves
+the position unchanged (`consumeBOM`). UTF-16 switches encoding before parsing the decl; EBCDIC extracts the name
 from the invariant charset (default IBM-037); ASCII-compatible parses the decl at byte level then switches.
 
 - BOM vs declared encoding — `checkBOMEncodingConflict` (`parser_encoding.go`): a declared name resolving to a
@@ -239,7 +241,10 @@ gives every node of the expansion). Each invariant lives at its function:
   document entity (libxml2 rejects only a UTF-16 name there). UTF-16 / UCS-4 / EBCDIC content
   (`nonASCIIExternalEncoding`) is decoded first and its TextDecl read on the rune cursor; EBCDIC is recognized
   by an encoded `<?xm` and takes its code page from the TextDecl via `encoding.ExtractEBCDICEncoding`
-  (default IBM-037). A TextDecl name contradicting a UTF-16 BOM is not checked on that path
+  (default IBM-037). A TextDecl name contradicting a UTF-16 BOM is not checked on that path. The decoder
+  also returns the position past the TextDecl (`strcursor.Position`); the external subset cursor, the external
+  parameter-entity cursor (`Entity.contentStart`, cached with the content), and the external general entity's
+  nested parser start there, so error positions are relative to the resource and count the TextDecl
 - Document XMLDecl VersionNum constraint (§2.8) — `checkDocumentVersion` (`parser_xml_decl.go`), applied on
   all four document-declaration paths (`parseXMLDecl`, `parseXMLDeclFromCursor`, and both `LenientXMLDecl`
   variants — that option relaxes pseudo-attribute ORDER only), never on a TextDecl. `versionNumLen`

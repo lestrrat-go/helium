@@ -12,6 +12,7 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
 	"github.com/lestrrat-go/helium/sax"
 )
@@ -937,7 +938,8 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	// not be "xml". A malformed TextDecl (e.g. a standalone pseudo-attribute, or a
 	// version-only declaration) is rejected here by parseTextDecl.
 	var entityVersion string
-	content, entityVersion, err = pctx.decodeExternalPEContentVersion(ctx, uri, content)
+	var contentStart strcursor.Position
+	content, entityVersion, contentStart, err = pctx.decodeExternalPEContentVersion(ctx, uri, content)
 	if err != nil {
 		return nil, err
 	}
@@ -962,6 +964,9 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	defer func() {
 		_ = newctx.release()
 	}()
+	// Positions are relative to the entity and count its TextDecl; switchEncoding
+	// carries this start into the UTF-8 cursor the content is parsed from.
+	newctx.getByteCursor().StartAt(contentStart)
 
 	if pctx.doc == nil {
 		pctx.doc = NewDocument("1.0", "", StandaloneExplicitNo)
