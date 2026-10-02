@@ -1058,7 +1058,7 @@ func (v *vm) evalInstruction(ctx context.Context, ec *evalContext, ref compiledE
 			return evalIntersectExceptExpr(v.evalExpr, ctx, ec, e)
 		})
 	case vmOpFilter:
-		return vmEvalPayload(inst, func(e FilterExpr) (Sequence, error) { return evalFilterExpr(v.evalExpr, ctx, ec, e) })
+		return vmEvalPayload(inst, func(e FilterExpr) (Sequence, error) { return v.evalFilterExpr(ctx, ec, e) })
 	case vmOpPath:
 		return vmEvalPayload(inst, func(e vmPathExpr) (Sequence, error) { return evalVMPathExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpPathStep:
@@ -1084,7 +1084,7 @@ func (v *vm) evalInstruction(ctx context.Context, ec *evalContext, ref compiledE
 	case vmOpTreatAs:
 		return vmEvalPayload(inst, func(e TreatAsExpr) (Sequence, error) { return evalTreatAsExpr(v.evalExpr, ctx, ec, e) })
 	case vmOpFunctionCall:
-		return vmEvalPayload(inst, func(e FunctionCall) (Sequence, error) { return evalFunctionCall(v.evalExpr, ctx, ec, e) })
+		return vmEvalPayload(inst, func(e FunctionCall) (Sequence, error) { return v.evalFunctionCall(ctx, ec, e) })
 	case vmOpDynamicFunctionCall:
 		return vmEvalPayload(inst, func(e DynamicFunctionCall) (Sequence, error) {
 			return evalDynamicFunctionCall(v.evalExpr, ctx, ec, e)

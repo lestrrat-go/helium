@@ -28,10 +28,10 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 
 | File | Contents |
 |------|----------|
-| `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
+| `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, `PushXDMChildren` (one step of a pre-order walk stack), all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
 | `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot` |
 | `union.go` | `UnionNodeSets` (xpath3 union: `MergeNodeSets` result, skipping the index for one element's attributes then children, and merging two sorted operands in one pass), `inElementOrder`, `mergeIncreasingRuns` |
-| `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
+| `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `OrderedFrom` (its one-input skip condition), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)` (an element's or document's string-value is its `Content()`: Text/CDATA descendants with entity references expanded through owned children only; a document's leaves out its DTD), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
 | `limits.go` | `DefaultMaxRecursionDepth=5000`, `DefaultMaxNodeSetLength=10_000_000`, `ErrNodeSetLimit` |
 
@@ -57,11 +57,13 @@ func (c *DocOrderCache) Position(n helium.Node) int
 func (c *DocOrderCache) Compare(a, b helium.Node) int
 func (c *DocOrderCache) Less(a, b helium.Node) bool
 func (c *DocOrderCache) Reset() // clear cache; callers MUST call after mutating the document
+func (c *DocOrderCache) ReserveDocument(n helium.Node) // register n's document without indexing it
 func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func MergeNodeSets(a, b []helium.Node, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func UnionNodeSets(nodes []helium.Node, split int, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
 func DocumentRoot(n helium.Node) helium.Node
 func OrderStepResult(out, inputs []helium.Node, axis AxisType, cache *DocOrderCache, maxNodes int) ([]helium.Node, error)
+func OrderedFrom(n helium.Node) bool
 ```
 
 `OrderStepResult` returns what `DeduplicateNodes(out, cache, maxNodes)` returns for a
@@ -77,10 +79,11 @@ skip checks while `sameDepth` walks them), always sorts: the index places an ent
 content at the last reference to it while a raw axis walk from inside the content climbs
 through the `Entity` and the DTD, so a following step from there, or the child steps of
 two entities, or of an entity and an element, come out of document order. A skipping
-step reserves its document's registration order in the cache (unexported
-`reserveDocument`) without indexing it, so the order between documents stays the one
+step reserves its document's registration order in the cache (`ReserveDocument`)
+without indexing it, so the order between documents stays the one
 indexing would have produced. `Position`, `Compare` and every indexing path index a
-reserved document on first use, under its reserved order. xpath1 and xpath3 end every
+reserved document on first use, under its reserved order. `OrderedFrom(n)` reports
+whether the one-input skip applies to the input `n`. xpath1 and xpath3 end every
 axis step of a location path with it. In xpath3 the other node-ordering sites keep
 `DeduplicateNodes`: a path step whose step expression is not an axis step (`E1/(a|b)`,
 `E1/f()`, `E1/$v`, `evalPathStepExpr`), the merge of the per-node results of `E1/E2`
@@ -129,6 +132,7 @@ func NodePrefix(n helium.Node) string
 | `compile_direct.go` | `Compile()` fast path for simple path-like expressions and simple predicate comparisons, with shared parser fallback |
 | `eval.go` | `evalContext`, raw AST eval trampoline |
 | `eval_path.go` | Location paths, node tests, predicates, literal/variable/sequence eval |
+| `eval_path_descendant.go` | `//` fusion: `descendant-or-self::node()` + child/attribute step from one context node as one pre-order walk |
 | `eval_operators.go` | Binary/unary logic ops, concat, simple map, range, union, intersect/except, filter, path steps |
 | `eval_arithmetic.go` | Integer/decimal/float arithmetic, unary negation, type promotion helpers |
 | `eval_control.go` | FLWOR, quantified, if/else, try/catch, lookup expressions |
@@ -138,6 +142,7 @@ func NodePrefix(n helium.Node) string
 | `evaluator.go` | Expression evaluator interface |
 | `vm.go` | AST lowering to indexed instruction graph + VM executor |
 | `vm_dump.go` | Text disassembly for compiled VM instructions |
+| `vm_path_nodes.go` | VM node-list consumers: `fn:count`/`exists`/`empty`/`boolean`/`not`/`head` and filter expressions over a location path read its node list without wrapping each node |
 | `compare.go` | `GeneralCompare`, `ValueCompare`, `NodeCompare`, type promotion |
 | `cast.go` | `CastAtomic`, `CastFromString` |
 | `cast_numeric.go` | Numeric-specific casting |

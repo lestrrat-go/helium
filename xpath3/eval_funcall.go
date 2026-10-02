@@ -36,7 +36,12 @@ func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	if err != nil {
 		return nil, err
 	}
+	return callResolvedFunction(ctx, ec, r, args)
+}
 
+// callResolvedFunction coerces args to the declared parameter types of r and
+// calls it. args holds evaluated, enriched arguments and no placeholders.
+func callResolvedFunction(ctx context.Context, ec *evalContext, r resolvedFunction, args []Sequence) (Sequence, error) {
 	// Enforce declared parameter signatures, mirroring the function-item /
 	// named-function-reference path. Coerced values are stored back into args so
 	// typed functions observe the converted values (e.g. xs:integer→xs:double).
