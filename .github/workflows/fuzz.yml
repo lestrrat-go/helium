@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ['.', 'c14n', 'catalog', 'html', 'relaxng', 'schematron', 'sink', 'stream', 'xinclude', 'xpath1', 'xpath3', 'xpointer', 'xsd', 'xmldsig1', 'xmlenc1', 'xslt3']
+        package: ['.', 'c14n', 'catalog', 'html', 'internal/strcursor', 'relaxng', 'schematron', 'sink', 'stream', 'xinclude', 'xpath1', 'xpath3', 'xpointer', 'xsd', 'xmldsig1', 'xmlenc1', 'xslt3']
     name: "Fuzz ${{ matrix.package }}"
     steps:
       - name: Checkout repository
@@ -30,6 +30,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Compute artifact name
+        id: artifact-name
+        # Artifact names cannot contain '/', so a nested package such as
+        # internal/strcursor uploads as internal-strcursor.
+        env:
+          PKG: ${{ matrix.package }}
+        run: echo "slug=${PKG//\//-}" >> "$GITHUB_OUTPUT"
       - name: Restore fuzz cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -143,7 +150,7 @@ jobs:
         if: ${{ always() && steps.fuzz-diagnostics.outputs.has-files == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: fuzz-diagnostics-${{ matrix.package }}
+          name: fuzz-diagnostics-${{ steps.artifact-name.outputs.slug }}
           path: ${{ runner.temp }}/fuzz-output/diagnostics/
           if-no-files-found: error
           retention-days: 30
@@ -185,7 +192,7 @@ jobs:
         if: ${{ always() && steps.failing-corpus.outputs.has-files == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: fuzz-corpus-${{ matrix.package }}
+          name: fuzz-corpus-${{ steps.artifact-name.outputs.slug }}
           path: ${{ runner.temp }}/fuzz-failures/
           if-no-files-found: error
           retention-days: 30
