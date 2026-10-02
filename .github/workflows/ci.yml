@@ -63,6 +63,38 @@ jobs:
       - name: Run tests
         run: go test ${{ matrix.race }} -timeout 20m ./...
 
+  # Tier 2: the suite on a 32-bit platform, where int is 32 bits, so size,
+  # count and limit arithmetic that wraps past 2^31-1 fails here. 386 binaries
+  # run natively on the x86-64 runner. 32-bit ARM is vetted (which type-checks
+  # the tests too) but not run: under qemu user emulation the suite would take
+  # far longer than the job timeout.
+  test-32bit:
+    name: test (386; vet arm)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Vet for 32-bit ARM
+        env:
+          GOARCH: arm
+          GOARM: "7"
+        run: go vet ./...
+
+      - name: Run tests on 386
+        env:
+          GOARCH: "386"
+        run: go test -timeout 20m ./...
+
   verify:
     needs: lint
     runs-on: ubuntu-latest
