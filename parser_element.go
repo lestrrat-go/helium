@@ -24,119 +24,49 @@ import (
  *
  * [14] CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
  */
-func (pctx *parserCtx) parseCharData(ctx context.Context, cdata bool) error {
-	if cdata {
-		_, err := pctx.parseCDataContent()
-		return err
-	}
-	return pctx.parseCharDataContent(ctx)
-}
-
-func (pctx *parserCtx) parseCharDataContent(ctx context.Context) error {
-	cur := pctx.getCursor()
-	if cur == nil {
-		return pctx.error(ctx, errNoCursor)
-	}
-
-	// Fast path: UTF8Cursor can scan directly into a []byte slice,
-	// avoiding the bytes.Buffer intermediate.
-	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-		// Streaming SAX consumers that configured a char-buffer size get
-		// bounded memory: scan and deliver the run in fixed-size chunks. Buffering the whole
-		// delimiter-free run would also grow the cursor's internal buffer,
-		// leaving only the delivery chunked.
-		// pctx.doc == nil ensures no DOM is being built. A SAX wrapper that
-		// delegates to a TreeBuilder has pctx.treeBuilder == nil (it is not the
-		// concrete *TreeBuilder) yet pctx.doc is populated (TreeBuilder.StartDocument
-		// set it). Such wrappers must use the single-shot classification path so a
-		// large whitespace run is classified over the whole run and delivered via
-		// IgnorableWhitespace (which StripBlanks drops), with no downgrade
-		// to Characters by the chunked path's blankBudget cap.
-		if pctx.charBufferSize > 0 && pctx.treeBuilder == nil && pctx.doc == nil &&
-			pctx.sax != nil && !pctx.disableSAX {
-			return pctx.parseCharDataChunkedSAX(ctx, u8)
-		}
-
-		// Bound the scan to the node-content cap (plus a rune of slack) so an
-		// oversized delimiter-free run is detected and rejected before the whole
-		// run — and the cursor's internal buffer — is materialized.
-		// The scan validates every character it consumes against the
-		// document's XML version, so the run needs no second validity pass.
-		data, i, valid := u8.ScanCharDataSlice(pctx.charBuf[:0], pctx.nodeContentScanBudget(), pctx.isXML11())
-		if i <= 0 {
-			if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
-				return pctx.error(ctx, ErrMisplacedCDATAEnd)
-			}
-			return errors.New("invalid char data")
-		}
-		if pctx.nodeContentTooLong(i) {
-			return pctx.error(ctx, ErrNodeContentTooLarge)
-		}
-		if !valid {
-			return pctx.error(ctx, ErrInvalidChar)
-		}
-
-		if err := cur.AdvanceFast(i); err != nil {
-			return err
-		}
-
-		// Keep the grown buffer for next call.
-		pctx.charBuf = data
-
-		if pctx.areBlanksBytes(data, false) {
-			if pctx.treeBuilder != nil && !pctx.disableSAX {
-				if err := pctx.fastIgnorableWhitespace(data); err != nil {
-					return err
-				}
-			} else if s := pctx.sax; s != nil && !pctx.disableSAX {
-				if err := pctx.deliverCharacters(ctx, s.IgnorableWhitespace, data); err != nil {
-					return err
-				}
-			}
-		} else {
-			if pctx.treeBuilder != nil && !pctx.disableSAX {
-				if err := pctx.fastCharacters(data); err != nil {
-					return err
-				}
-			} else if s := pctx.sax; s != nil && !pctx.disableSAX {
-				if err := pctx.deliverCharacters(ctx, s.Characters, data); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+func (pctx *parserCtx) parseCharDataContent(ctx context.Context, u8 *strcursor.UTF8Cursor) error {
+	// Streaming SAX consumers that configured a char-buffer size get
+	// bounded memory: scan and deliver the run in fixed-size chunks. Buffering the whole
+	// delimiter-free run would also grow the cursor's internal buffer,
+	// leaving only the delivery chunked.
+	// pctx.doc == nil ensures no DOM is being built. A SAX wrapper that
+	// delegates to a TreeBuilder has pctx.treeBuilder == nil (it is not the
+	// concrete *TreeBuilder) yet pctx.doc is populated (TreeBuilder.StartDocument
+	// set it). Such wrappers must use the single-shot classification path so a
+	// large whitespace run is classified over the whole run and delivered via
+	// IgnorableWhitespace (which StripBlanks drops), with no downgrade
+	// to Characters by the chunked path's blankBudget cap.
+	if pctx.charBufferSize > 0 && pctx.treeBuilder == nil && pctx.doc == nil &&
+		pctx.sax != nil && !pctx.disableSAX {
+		return pctx.parseCharDataChunkedSAX(ctx, u8)
 	}
 
-	return pctx.parseCharDataBuffered(ctx, cur)
-}
-
-// parseCharDataBuffered is parseCharDataContent for cursors other than
-// *strcursor.UTF8Cursor: it scans the run into a pooled bytes.Buffer. It is
-// kept out of parseCharDataContent so that the UTF-8 path, which runs for
-// nearly every text node, carries no defer.
-func (pctx *parserCtx) parseCharDataBuffered(ctx context.Context, cur strcursor.Cursor) error {
-	buf := bufferPool.Get()
-	defer releaseBuffer(buf)
-
-	i := cur.ScanCharDataInto(buf, pctx.nodeContentScanBudget())
+	// Bound the scan to the node-content cap (plus a rune of slack) so an
+	// oversized delimiter-free run is detected and rejected before the whole
+	// run — and the cursor's internal buffer — is materialized.
+	// The scan validates every character it consumes against the
+	// document's XML version, so the run needs no second validity pass.
+	data, i, valid := u8.ScanCharDataSlice(pctx.charBuf[:0], pctx.nodeContentScanBudget(), pctx.isXML11())
 	if i <= 0 {
-		if cur.Peek() == ']' && cur.PeekAt(1) == ']' && cur.PeekAt(2) == '>' {
+		if u8.Peek() == ']' && u8.PeekAt(1) == ']' && u8.PeekAt(2) == '>' {
 			return pctx.error(ctx, ErrMisplacedCDATAEnd)
 		}
 		return errors.New("invalid char data")
 	}
-	if pctx.nodeContentTooLong(buf.Len()) {
+	if pctx.nodeContentTooLong(i) {
 		return pctx.error(ctx, ErrNodeContentTooLarge)
 	}
-	if !pctx.literalBytesValid(buf.Bytes()) {
+	if !valid {
 		return pctx.error(ctx, ErrInvalidChar)
 	}
 
-	if err := cur.AdvanceFast(i); err != nil {
+	if err := u8.AdvanceFast(i); err != nil {
 		return err
 	}
 
-	data := buf.Bytes()
+	// Keep the grown buffer for next call.
+	pctx.charBuf = data
+
 	if pctx.areBlanksBytes(data, false) {
 		if pctx.treeBuilder != nil && !pctx.disableSAX {
 			if err := pctx.fastIgnorableWhitespace(data); err != nil {
@@ -158,7 +88,6 @@ func (pctx *parserCtx) parseCharDataBuffered(ctx context.Context, cur strcursor.
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -339,7 +268,7 @@ func (pctx *parserCtx) streamCharDataChunks(ctx context.Context, u8 *strcursor.U
 	}
 }
 
-func (pctx *parserCtx) parseElement(ctx context.Context) error {
+func (pctx *parserCtx) parseElement(ctx context.Context, cur *strcursor.UTF8Cursor) error {
 	pctx.elemDepth++
 	defer func() { pctx.elemDepth-- }()
 
@@ -351,21 +280,17 @@ func (pctx *parserCtx) parseElement(ctx context.Context) error {
 	// For example, given <foo>bar</foo>, the next token would
 	// be bar</foo>. Given <foo />, the next token would
 	// be />
-	if err := pctx.parseStartTag(ctx); err != nil {
+	if err := pctx.parseStartTag(ctx, cur); err != nil {
 		return pctx.error(ctx, err)
 	}
 
-	cur := pctx.getCursor()
-	if cur == nil {
-		return pctx.error(ctx, errNoCursor)
-	}
 	if cur.Peek() != '/' || cur.PeekAt(1) != '>' {
-		if err := pctx.parseContent(ctx); err != nil {
+		if err := pctx.parseContent(ctx, cur); err != nil {
 			return pctx.error(ctx, err)
 		}
 	}
 
-	if err := pctx.parseEndTag(ctx); err != nil {
+	if err := pctx.parseEndTag(ctx, cur); err != nil {
 		return pctx.error(ctx, err)
 	}
 
@@ -434,11 +359,7 @@ func (pctx *parserCtx) validateDefaultNamespaceDecl(ctx context.Context, uri str
 	return nil
 }
 
-func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
-	cur := pctx.getCursor()
-	if cur == nil {
-		return pctx.error(ctx, errNoCursor)
-	}
+func (pctx *parserCtx) parseStartTag(ctx context.Context, cur *strcursor.UTF8Cursor) error {
 	if cur.Peek() != '<' {
 		return pctx.error(ctx, ErrStartTagRequired)
 	}
@@ -452,7 +373,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// the qualified name — an unprefixed `<!ATTLIST id …>` does not apply to
 	// `<p:r>` and vice-versa. The node stack keeps it for end-tag matching and
 	// element-declaration lookups.
-	local, prefix, elemQName, err := pctx.parseQName(ctx)
+	local, prefix, elemQName, err := pctx.parseQName(ctx, cur)
 	if local == "" {
 		return pctx.error(ctx, fmt.Errorf("local name empty! local = %s, prefix = %s, err = %s", local, prefix, err))
 	}
@@ -493,7 +414,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 	// attribute is about to be added at or past the threshold.
 	var attrSet map[attrKey]struct{}
 	for pctx.instate != psEOF {
-		pctx.skipBlanks(ctx)
+		pctx.skipBlanksUTF8(ctx, cur)
 		if cur.Peek() == '>' {
 			if err := cur.Advance(1); err != nil {
 				return err
@@ -504,7 +425,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 		if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
 			break
 		}
-		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, elemQName)
+		attname, aprefix, attvalue, err := pctx.parseAttribute(ctx, cur, elemQName)
 		if err != nil {
 			return pctx.error(ctx, err)
 		}
@@ -553,7 +474,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			if !isBlankByte(cur.Peek()) {
 				return pctx.error(ctx, ErrSpaceRequired)
 			}
-			pctx.skipBlanks(ctx)
+			pctx.skipBlanksUTF8(ctx, cur)
 			continue
 		} else if aprefix == lexicon.PrefixXMLNS {
 			// <elem xmlns:foo="...">
@@ -615,7 +536,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
 			if !isBlankByte(cur.Peek()) {
 				return pctx.error(ctx, ErrSpaceRequired)
 			}
-			pctx.skipBlanks(ctx)
+			pctx.skipBlanksUTF8(ctx, cur)
 			continue
 		}
 
@@ -891,11 +812,7 @@ func (pctx *parserCtx) parseStartTag(ctx context.Context) error {
  *
  * [NS 9] ETag ::= '</' QName S? '>'
  */
-func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
-	cur := pctx.getCursor()
-	if cur == nil {
-		return pctx.error(ctx, errNoCursor)
-	}
+func (pctx *parserCtx) parseEndTag(ctx context.Context, cur *strcursor.UTF8Cursor) error {
 	if cur.Peek() == '/' && cur.PeekAt(1) == '>' {
 		if err := cur.Advance(2); err != nil {
 			return err
@@ -910,7 +827,7 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 			return pctx.error(ctx, errors.New("expected end tag '"+e.Name()+"'"))
 		}
 
-		pctx.skipBlanks(ctx)
+		pctx.skipBlanksUTF8(ctx, cur)
 
 		if cur.Peek() != '>' {
 			return pctx.error(ctx, ErrGtRequired)
@@ -950,12 +867,11 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context) error {
 	return nil
 }
 
-func (pctx *parserCtx) parseAttributeValue(ctx context.Context, normalize bool) (value string, entities int, err error) {
-	cur := pctx.getCursor()
-	if cur == nil {
-		err = pctx.error(ctx, errNoCursor)
-		return
-	}
+// parseAttributeValue parses a quoted start-tag attribute value from cur. It
+// sets the psAttributeValue state as parseAttributeValueInternal does, and
+// calls parseAttributeValueUTF8 directly, since element content always reads
+// from a UTF-8 cursor.
+func (pctx *parserCtx) parseAttributeValue(ctx context.Context, cur *strcursor.UTF8Cursor, normalize bool) (value string, entities int, err error) {
 	qch := cur.Peek()
 	switch qch {
 	case '"', '\'':
@@ -967,7 +883,10 @@ func (pctx *parserCtx) parseAttributeValue(ctx context.Context, normalize bool) 
 		return
 	}
 
-	value, entities, err = pctx.parseAttributeValueInternal(ctx, qch, normalize)
+	prevState := pctx.instate
+	pctx.instate = psAttributeValue
+	value, entities, err = pctx.parseAttributeValueUTF8(ctx, cur, qch, normalize)
+	pctx.instate = prevState
 	if err != nil {
 		return
 	}
@@ -1001,32 +920,39 @@ func (pctx *parserCtx) parseAttributeValueInState(ctx context.Context, qch byte,
 		return "", 0, pctx.error(ctx, errNoCursor)
 	}
 
+	if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
+		return pctx.parseAttributeValueUTF8(ctx, u8, qch, normalize)
+	}
+	return pctx.parseAttributeValueComplex(ctx, cur, qch, normalize)
+}
+
+// parseAttributeValueUTF8 is parseAttributeValueInState on a UTF-8 cursor: a
+// value without references or characters that need rewriting is taken by the
+// simple-value scan, and anything else goes through parseAttributeValueComplex.
+func (pctx *parserCtx) parseAttributeValueUTF8(ctx context.Context, cur *strcursor.UTF8Cursor, qch byte, normalize bool) (string, int, error) {
 	if !normalize {
-		if u8, ok := cur.(*strcursor.UTF8Cursor); ok {
-			if v, nBytes := u8.ScanSimpleAttrValue(qch, pctx.nodeContentScanBudget()); nBytes > 0 {
-				// The scan budget is cap+utf8.UTFMax, so a successful scan can
-				// run slightly over the cap; re-check the exact byte count here
-				// (before advancing) so a value of cap+1..cap+UTFMax bytes is
-				// rejected, matching the slow path's per-iteration check.
-				if pctx.nodeContentTooLong(nBytes) {
-					return "", 0, pctx.error(ctx, ErrNodeContentTooLarge)
-				}
-				// The scan accepts an ASCII byte only at or above 0x20 and a
-				// non-ASCII character only when it is well-formed UTF-8 and an
-				// xmlchar.IsChar, which is xmlchar.IsLiteralChar's XML 1.0 rule,
-				// so an XML 1.0 value needs no second pass. XML 1.1 also rejects
-				// its RestrictedChar (DEL, U+0080-U+0084, U+0086-U+009F).
-				if pctx.isXML11() && !pctx.literalStringValid(v) {
-					return "", 0, pctx.error(ctx, ErrInvalidChar)
-				}
-				if err := u8.AdvanceFast(nBytes); err != nil {
-					return "", 0, err
-				}
-				return v, 0, nil
+		if v, nBytes := cur.ScanSimpleAttrValue(qch, pctx.nodeContentScanBudget()); nBytes > 0 {
+			// The scan budget is cap+utf8.UTFMax, so a successful scan can
+			// run slightly over the cap; re-check the exact byte count here
+			// (before advancing) so a value of cap+1..cap+UTFMax bytes is
+			// rejected, matching the slow path's per-iteration check.
+			if pctx.nodeContentTooLong(nBytes) {
+				return "", 0, pctx.error(ctx, ErrNodeContentTooLarge)
 			}
+			// The scan accepts an ASCII byte only at or above 0x20 and a
+			// non-ASCII character only when it is well-formed UTF-8 and an
+			// xmlchar.IsChar, which is xmlchar.IsLiteralChar's XML 1.0 rule,
+			// so an XML 1.0 value needs no second pass. XML 1.1 also rejects
+			// its RestrictedChar (DEL, U+0080-U+0084, U+0086-U+009F).
+			if pctx.isXML11() && !pctx.literalStringValid(v) {
+				return "", 0, pctx.error(ctx, ErrInvalidChar)
+			}
+			if err := cur.AdvanceFast(nBytes); err != nil {
+				return "", 0, err
+			}
+			return v, 0, nil
 		}
 	}
-
 	return pctx.parseAttributeValueComplex(ctx, cur, qch, normalize)
 }
 
@@ -1479,13 +1405,13 @@ func (pctx *parserCtx) validateAttributeDefaultsWFC(ctx context.Context) error {
 	return nil
 }
 
-func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (local string, prefix string, value string, err error) {
+func (pctx *parserCtx) parseAttribute(ctx context.Context, cur *strcursor.UTF8Cursor, elemName string) (local string, prefix string, value string, err error) {
 	// Special-attribute (tokenized-type) declarations are keyed by the attribute's
 	// full QName exactly as written, so an instance attribute is matched by its own
 	// QName (prefix + local): `p:id` matches an `<!ATTLIST r p:id …>` declaration and
 	// NOT an unprefixed `<!ATTLIST r id …>` (and vice-versa). Matches libxml2, which
 	// keys special-attribute state on the fully-qualified name.
-	l, p, attrQName, err := pctx.parseQName(ctx)
+	l, p, attrQName, err := pctx.parseQName(ctx, cur)
 	if err != nil {
 		err = pctx.error(ctx, err)
 		return
@@ -1509,13 +1435,8 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	if p == lexicon.PrefixXML && l == "id" {
 		normalize = true
 	}
-	pctx.skipBlanks(ctx)
+	pctx.skipBlanksUTF8(ctx, cur)
 
-	cur := pctx.getCursor()
-	if cur == nil {
-		err = pctx.error(ctx, errNoCursor)
-		return
-	}
 	if cur.Peek() != '=' {
 		err = pctx.error(ctx, ErrEqualSignRequired)
 		return
@@ -1523,7 +1444,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	if err := cur.Advance(1); err != nil {
 		return "", "", "", err
 	}
-	pctx.skipBlanks(ctx)
+	pctx.skipBlanksUTF8(ctx, cur)
 
 	isNamespace := (l == lexicon.PrefixXMLNS && p == "") || p == lexicon.PrefixXMLNS
 	savedReplaceEntities := pctx.replaceEntities
@@ -1532,7 +1453,7 @@ func (pctx *parserCtx) parseAttribute(ctx context.Context, elemName string) (loc
 	}
 
 	pctx.attrNormChanged = false
-	v, entities, err := pctx.parseAttributeValue(ctx, normalize)
+	v, entities, err := pctx.parseAttributeValue(ctx, cur, normalize)
 
 	pctx.replaceEntities = savedReplaceEntities
 

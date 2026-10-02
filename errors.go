@@ -217,6 +217,7 @@ var (
 	ErrNetworkAccessForbidden = errors.New("network access forbidden")
 	errParserStopped          = errors.New("parser stopped")
 	errNoCursor               = errors.New("parser has no input")
+	errContentCursor          = errors.New("element content requires a UTF-8 input cursor")
 )
 
 // isParseAbort reports whether err signals that parsing must stop immediately,

@@ -55,8 +55,22 @@ INPUT ([]byte or io.Reader)
 Central state struct (`parserctx.go`). Key fields:
 
 ### Input Management
-- `inputTab` (inputStack) — LIFO stack of ByteCursor/UTF8Cursor; entity expansion + external DTDs push new cursors
+- `inputTab` (inputStack) — LIFO stack of ByteCursor/UTF8Cursor; `switchEncoding`, external DTDs and parameter
+  entities push new cursors, all before element content starts (see the `pushInput` comment)
 - `getCursor()` — current cursor; auto-pops exhausted ones, caches the active cursor between calls
+- Element content reads one concrete `*strcursor.UTF8Cursor`. `contentCursor` (`parser_document.go`) fetches it
+  once where content starts: `parseDocument` for the root element, and `parseContentInput` for a sub-parse
+  (internal and external entity content, `ParseInNodeContext`). `parseContent`, `parseElement`,
+  `parseStartTag`, `parseEndTag`, `parseAttribute`, `parseAttributeValue`, `parseQName` and
+  `parseCharDataContent` take it as a parameter, so its small methods inline instead of going through
+  `strcursor.Cursor`. Every entry point installs a UTF-8 cursor before content (`switchEncoding` decodes
+  every other encoding into one), so `contentCursor`'s `errContentCursor` is unreachable; `TestContentCursor`
+  (`parser_document_test.go`) and the `FuzzParse`/`FuzzParseRoundtrip` targets assert it never surfaces.
+  Functions the DTD and prolog share (`skipBlanks`, `parseAttributeValueInternal`, `parseAttributeValueComplex`, `parseQNameSlow`,
+  `parseNCName`, `parseName`, `parseReference`, `parseComment`, `parsePI`) keep reading the cursor from the
+  stack through the interface; `parseAttributeValueInState` hands a UTF-8 cursor to the one fast path,
+  `parseAttributeValueUTF8`. Start/end tags skip blanks with `skipBlanksUTF8`/`skipBlankRunUTF8`, the same
+  scan as `skipBlanks`/`skipBlankRun` on the concrete cursor
 
 ### Parser State Machine
 States: `psStart`, `psContent`, `psPrologue`, `psEpilogue`, `psCDATA`, `psDTD`, `psEntityDecl`,
@@ -91,8 +105,7 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
   after the node-content cap check, without a second pass over the bytes. The scanner's per-version byte
   table (`charDataByteClass`) is built from `IsChar` / `IsLiteralChar`; restricted ASCII bytes end its 16-byte
   fast path, are recorded, and the run continues.
-- Other whole runs (char data from a non-UTF-8 cursor via `parseCharDataBuffered`/`ScanCharDataInto`, XML 1.1
-  simple attribute values from `ScanSimpleAttrValue`, external-PE bodies) go through `literalBytesValid` /
+- Other whole runs (XML 1.1 simple attribute values from `ScanSimpleAttrValue`, external-PE bodies) go through `literalBytesValid` /
   `literalStringValid`, which resolve the version once per call, check printable ASCII eight bytes at a time
   (`literalWordValid`), check other ASCII bytes by table (`literalASCIIValid`), and decode only non-ASCII bytes
   as runes; they check every byte themselves, so callers need not pre-scan the run. An XML 1.0 simple attribute
@@ -316,7 +329,7 @@ the negative-sentinel option disables the cap for trusted input.
 - **Node-content cap** (`MaxNodeContentSize`, 10 MiB; `resolveLimit`/`nodeContentTooLong`) — caps a single
   indivisible run: CDATA/comment/PI (`parseCDataContent`/`parsePI`/`parseComment`, `parser_content.go`), DTD
   quoted literals (`scanQuotedLiteral`, `parser_dtd_attr.go`), char data (`parseCharDataContent` via
-  `nodeContentScanBudget` + `ScanCharDataSlice`/`ScanCharDataInto`), attribute values
+  `nodeContentScanBudget` + `ScanCharDataSlice`), attribute values
   (`parseAttributeValueInternal` fast path + `writeAttr*`/`attrEntitySink` slow path). Over-cap →
   `ErrNodeContentTooLarge`. Entity sub-parses inherit the cap via `inheritNestedParserState`; the
   streaming-SAX char-data path is exempt (already chunked).
@@ -328,7 +341,7 @@ the negative-sentinel option disables the cap for trusted input.
 - **Character buffering** (`deliverCharacters`, `CharBufferSize`) — UTF-8-boundary-respecting chunking; bounded
   streaming-SAX char-data path `parseCharDataChunkedSAX` (no DOM built) with a documented over-budget blank-run
   reclassification policy.
-- **UTF-8 fast paths** — `parseQName`/`parseNCName`/`parseAttributeValueInternal` try
+- **UTF-8 fast paths** — `parseQName`/`parseNCName`/`parseAttributeValueUTF8` try
   `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the
   cursor buffer, invalidating borrowed slices), and use `AdvanceFast()` when the run is proven newline-free.
   `AdvanceFast` counts newlines in one loop for runs up to `advanceScanInline` (32) bytes and with
@@ -337,7 +350,7 @@ the negative-sentinel option disables the cap for trusted input.
   skip exactly where the byte-at-a-time walk would. See `internal/strcursor/utf8cursor.go`.
 - **Qualified names** — `parseQName` returns the local name, the prefix, and the whole QName as written. Its
   ASCII fast path interns the whole name once and slices the prefix and local name out of it, so a
-  prefixed name costs no concatenation; `parseQNameSlow` (non-ASCII, non-UTF-8 cursor, malformed) joins
+  prefixed name costs no concatenation; `parseQNameSlow` (non-ASCII, malformed) joins
   `prefix:local` once. `parseStartTag` keys ATTLIST defaults and the node stack (end-tag matching,
   `elementDeclType` whitespace lookups) on that name, and `parseAttribute` keys tokenized-type lookups on
   the attribute's. `DTD.LookupElement` builds its `name:prefix` key in a stack buffer, so a lookup

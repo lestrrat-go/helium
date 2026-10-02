@@ -1027,7 +1027,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	if err := newctx.doc.AddChild(newRoot); err != nil {
 		return nil, err
 	}
-	if err := newctx.parseContent(innerCtx); err != nil {
+	if err := newctx.parseContentInput(innerCtx); err != nil {
 		return nil, err
 	}
 	// A clean parseContent may mask a transcoding/decode error (e.g. an unpaired
@@ -1145,7 +1145,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
-	if err := newctx.parseContent(innerCtx); err != nil {
+	if err := newctx.parseContentInput(innerCtx); err != nil {
 		return nil, err
 	}
 	// A clean parseContent may mask a transcoding/decode error (e.g. an unpaired

@@ -72,6 +72,7 @@ bug that prompted it.
 |------|---------|---------|
 | `libxml2_compat_test.go` | root, html, catalog | Golden file comparison suite |
 | `parser_test.go` | root | Core parse entry points: `Parse`/`ParseFile`, names/QNames, namespaces, malformed input, options, recovery |
+| `parser_document_test.go` | root | Element content across input encodings (UTF-8 with/without declaration or BOM, XML 1.1, US-ASCII, ISO-8859-1, windows-1252, UTF-16, UCS-4, EBCDIC 037, Shift_JIS, EUC-JP) and entry points (`Parse`, `ParseReader`, one-byte push, `ParseInNodeContext`, internal and external entity content): tree and error text must match the UTF-8 baseline, and no parse may return `ErrContentCursorForTesting` |
 | `parser_decl_test.go` | root | XML declaration, lenient declaration, BOM/UCS-4/UTF-16 encoding detection, encoding declarations |
 | `parser_reader_test.go` | root | `ParseReader` streaming, EBCDIC decoding, context cancellation |
 | `parser_dtd_test.go` | root | External DTD loading: size/read limits, malformed declarations, PE expansion |

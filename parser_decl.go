@@ -488,13 +488,9 @@ func (pctx *parserCtx) parseName(ctx context.Context) (name string, err error) {
 // The ASCII fast path interns the whole name once and takes the prefix and the
 // local name as substrings of it, so a prefixed name costs one intern lookup
 // and no concatenation. On error all three names are empty.
-func (pctx *parserCtx) parseQName(ctx context.Context) (local, prefix, qname string, err error) {
-	cur := pctx.getCursor()
-	if cur == nil {
-		return "", "", "", pctx.error(ctx, errNoCursor)
-	}
-	if u8, ok := cur.(*strcursor.UTF8Cursor); ok && cur.Peek() < utf8.RuneSelf {
-		name, colon, ok := u8.ScanQNameBytes()
+func (pctx *parserCtx) parseQName(ctx context.Context, cur *strcursor.UTF8Cursor) (local, prefix, qname string, err error) {
+	if cur.Peek() < utf8.RuneSelf {
+		name, colon, ok := cur.ScanQNameBytes()
 		if ok {
 			// Bound the full QName (prefix + ':' + local), not just each part,
 			// so a prefixed name can't exceed the cap by splitting across the
@@ -510,7 +506,7 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local, prefix, qname str
 				prefix = qname[:colon]
 				local = qname[colon+1:]
 			}
-			if err := u8.AdvanceFast(len(name)); err != nil {
+			if err := cur.AdvanceFast(len(name)); err != nil {
 				return "", "", "", err
 			}
 			return local, prefix, qname, nil
@@ -524,8 +520,9 @@ func (pctx *parserCtx) parseQName(ctx context.Context) (local, prefix, qname str
 }
 
 // parseQNameSlow is parseQName for input the ASCII fast path does not handle:
-// a non-UTF-8 cursor, a non-ASCII name, or a malformed name. It returns the
-// local name and the prefix; on error both are empty.
+// a non-ASCII name or a malformed name. It reads through parseNCName and
+// parseName, which the DTD shares, so it takes the cursor as the interface.
+// It returns the local name and the prefix; on error both are empty.
 func (pctx *parserCtx) parseQNameSlow(ctx context.Context, cur strcursor.Cursor) (local string, prefix string, err error) {
 	var v string
 	v, err = pctx.parseNCName(ctx)

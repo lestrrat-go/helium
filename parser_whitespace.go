@@ -140,6 +140,69 @@ func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 	return false
 }
 
+// skipBlanksUTF8 is skipBlanks for element content (start tags, end tags,
+// attributes), on the cursor the caller already holds. The DTD and the prolog
+// keep skipBlanks, which reads the cursor from the input stack. The element
+// callers never read a result, so it returns none. handlePEReference is kept
+// so the two stay identical: in the element states it consumes nothing.
+func (pctx *parserCtx) skipBlanksUTF8(ctx context.Context, cur *strcursor.UTF8Cursor) {
+	if pctx.blankRunErr != nil {
+		return
+	}
+	if c := cur.Peek(); c != 0 && !isBlankByte(c) {
+		return
+	}
+	advanced, err := pctx.skipBlankRunUTF8(ctx, cur)
+	if err != nil {
+		pctx.blankRunErr = err
+		return
+	}
+	if advanced && cur.Peek() == '%' {
+		_ = pctx.handlePEReference(ctx)
+	}
+}
+
+// skipBlankRunUTF8 is skipBlankRun on a concrete UTF-8 cursor, so the per-byte
+// peeks are direct calls the compiler can inline instead of calls through
+// blankScanner. The two must stay identical; skipBlankRun's comments give the
+// reasons for each step.
+func (pctx *parserCtx) skipBlankRunUTF8(ctx context.Context, cur *strcursor.UTF8Cursor) (bool, error) {
+	limit := pctx.blankRunLimit()
+	advanced := false
+	total := 0
+	for {
+		if err := pctx.pollErr(ctx); err != nil {
+			return advanced, err
+		}
+		i := 0
+		for i < blankScanChunk && isBlankByte(cur.PeekAt(i)) {
+			i++
+		}
+		if i > 0 {
+			total += i
+			if limit > 0 && total > limit {
+				return advanced, ErrNodeContentTooLarge
+			}
+			if err := cur.Advance(i); err != nil {
+				return advanced, err
+			}
+			advanced = true
+		}
+		if i == blankScanChunk {
+			continue
+		}
+		if !cur.HasByteAt(0) {
+			if err := cur.Err(); err != nil {
+				return advanced, err
+			}
+			if err := ctx.Err(); err != nil {
+				return advanced, err
+			}
+		}
+		return advanced, nil
+	}
+}
+
 // skipBlanksPE is the DTD-declaration whitespace skip that ALSO expands
 // parameter-entity references inside or adjacent to markup declarations in the
 // EXTERNAL subset, mirroring libxml2's xmlSkipBlankCharsPE. It reports whether it

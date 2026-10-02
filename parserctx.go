@@ -440,6 +440,17 @@ func releaseBuffer(b *bytes.Buffer) {
 	bufferPool.Put(b)
 }
 
+// pushInput makes in the current input. A parser pushes inputs only before its
+// element content starts: the document's byte cursor (init), the UTF-8 cursor
+// switchEncoding installs over it, an external subset, and a parameter
+// entity's replacement text. Element content never pushes onto the stack it
+// is reading from. A general entity reference in content (parseReference)
+// and a node-context fragment (ParseInNodeContext) are parsed by a child
+// parserCtx with its own stack, and an internal-subset parameter entity
+// cannot supply the `]>` that ends the DTD. The element-content functions
+// rely on this: they take the *strcursor.UTF8Cursor that contentCursor
+// returns as a parameter and never look it up again, so a push during content
+// would leave them reading the wrong input.
 func (ctx *parserCtx) pushInput(in any) {
 	ctx.inputTab.Push(in)
 	ctx.cachedCursor = nil // invalidate cache
