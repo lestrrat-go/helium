@@ -357,7 +357,7 @@ func TestStripBlanks(t *testing.T) {
 				for _, saxPath := range []bool{false, true} {
 					p := helium.NewParser().StripBlanks(true).SubstituteEntities(substitute)
 					if tc.external {
-						fsys := fstest.MapFS{"d.dtd": &fstest.MapFile{Data: []byte(declaredWhitespaceDecls)}}
+						fsys := fstest.MapFS{dtdSystemID: &fstest.MapFile{Data: []byte(declaredWhitespaceDecls)}}
 						p = p.BlockXXE(false).LoadExternalDTD(true).FS(fsys)
 					}
 					if saxPath {
@@ -722,5 +722,5 @@ var declaredWhitespaceCases = []struct {
 	external bool
 }{
 	{name: "internal subset", src: "<!DOCTYPE r [\n" + declaredWhitespaceDecls + "\n]>\n" + declaredWhitespaceBody},
-	{name: "external subset", src: `<!DOCTYPE r SYSTEM "d.dtd">` + "\n" + declaredWhitespaceBody, external: true},
+	{name: "external subset", src: `<!DOCTYPE r SYSTEM "` + dtdSystemID + `">` + "\n" + declaredWhitespaceBody, external: true},
 }

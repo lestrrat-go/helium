@@ -238,9 +238,9 @@ func TestParseAttrValue(t *testing.T) {
 
 		const run = "abcdefghijklmnopqrstuvwxyz0123456789"
 		for _, tc := range attrCharCases {
-			for _, version := range []string{"1.0", "1.1"} {
+			for _, version := range []string{"1.0", ver11} {
 				wantErr := tc.err10
-				if version == "1.1" {
+				if version == ver11 {
 					wantErr = tc.err11
 				}
 				for _, n := range []int{0, 1, 7, 8, 15, 16, 17, 31, 32, 33} {
