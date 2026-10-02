@@ -618,8 +618,27 @@ All delegate to Go `math` package.
 A picture component's width modifier (F&O 3.1 §9.8.4.2, `,min-width("-"max-width)?`) has an
 implementation-defined limit: a minimum width above `maxPictureMinWidth` (1000) raises FOFD1340, so one
 component never pads past 1000 characters and output stays linear in the picture length. A maximum width has
-no limit, because it only shortens output. The year modulus (§9.8.4.4) applies only for a maximum width
-below 19 digits (`maxInt64Digits`); a wider maximum keeps every digit of any int64 year.
+no limit, because it only shortens output. An omitted max-width means `*` (`dtWidth.maxOmitted` records the
+omission), so `[Y,2]` prints the full year `2012`.
+
+How each component uses the maximum width:
+
+- Year (§9.8.4.4, `normalizeDateNumericValue`): the year is output modulo 10^N. N is a finite maximum width,
+  or else the digit-sign count of a decimal digit pattern with two or more digit signs (`[Y01]`, `[Y,2-2]` and
+  `[Y,1-2]` print `12`). Otherwise the year prints in full. A modulus of 19 digits or more (`maxInt64Digits`)
+  is skipped, because it keeps every digit of any int64 year.
+- Other decimal components `M D d F W w H h m s` (§9.8.4.3, `formatDateDecimal`): the maximum width is
+  ignored, so `[D,1-1]` on day 25 prints `25`. Only the minimum width pads.
+- Fractional seconds (§9.8.4.5, `formatFractionalSeconds`): a maximum width truncates the digits. A
+  width modifier with an omitted maximum keeps exactly the minimum width (`[f,3]` prints three digits). An
+  explicit `*` maximum keeps every significant digit (`[f,1-*]`), as W3C format-dateTime-013t and
+  format-time-024t expect.
+- Names (`[MNn]`, `[FNn]`, `applyNameWidth`): a name longer than the maximum width is cut to the minimum width
+  when one is given (`[FNn,3-4]` prints `Wed`), else to the maximum width. A name shorter than the minimum
+  width is padded with trailing spaces.
+- Timezones (§9.8.4.6, `formatTimezone`): a width never shortens the offset, except that a maximum width no
+  larger than the hour digits on a default `[Z]`/`[z]` drops zero minutes (`[z,2-2]` prints `GMT-05`, W3C
+  format-date-017).
 
 ### `functions_unparsed_text.go`
 `unparsed-text`, `unparsed-text-lines`, `unparsed-text-available`
