@@ -116,6 +116,14 @@ func (pctx *parserCtx) skipBlanks(ctx context.Context) bool {
 	if cur == nil {
 		return false
 	}
+	// Most calls (between attributes, before '>' or '/>') sit on a non-blank
+	// byte. A non-zero Peek means a byte is present, so there is no run to
+	// skip, no input to wait for, and no read error to surface: return before
+	// the bounded scan and its context poll. A zero Peek (a NUL byte, or no
+	// byte at all) takes the full scan, which tells those cases apart.
+	if c := cur.Peek(); c != 0 && !isBlankByte(c) {
+		return false
+	}
 	advanced, err := pctx.skipBlankRun(ctx, cur)
 	if err != nil {
 		pctx.blankRunErr = err
