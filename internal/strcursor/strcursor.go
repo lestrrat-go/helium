@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"io"
 	"math/bits"
+	"strings"
 	"unicode/utf8"
 	"unsafe"
 
@@ -58,6 +59,36 @@ type Cursor interface {
 	// maxBytes <= 0 means unbounded.
 	ScanCharDataInto(dst *bytes.Buffer, maxBytes int) int
 	Unused() io.Reader
+}
+
+// Position is where a cursor's next byte sits in its input: the line number,
+// the column, and the text of that line before the byte. A cursor that takes
+// over an input another cursor has started, such as the UTF8Cursor that
+// replaces a ByteCursor after the XML declaration, starts at the earlier
+// cursor's Position, so its positions count the bytes that cursor consumed.
+type Position struct {
+	Line     int
+	Column   int
+	LineText string
+}
+
+// PositionOf returns the position of c's next byte, with a copy of the line
+// text.
+func PositionOf(c Cursor) Position {
+	return Position{Line: c.LineNumber(), Column: c.Column(), LineText: strings.Clone(c.Line())}
+}
+
+// lineTail returns the last LineContextMax bytes of s, dropping the leftover
+// bytes of a character the cut splits.
+func lineTail(s string) string {
+	if len(s) <= LineContextMax {
+		return s
+	}
+	s = s[len(s)-LineContextMax:]
+	for i := 0; i < utf8.UTFMax-1 && s != "" && !utf8.RuneStart(s[0]); i++ {
+		s = s[1:]
+	}
+	return s
 }
 
 // Unused wraps remaining buffered bytes plus the underlying reader.
@@ -909,6 +940,15 @@ func (c *ByteCursor) ConsumeString(s string) bool {
 	return c.hasPrefix([]byte(s), true)
 }
 
+// StartAt sets the position of the next byte to p, as if the cursor had
+// consumed p.LineText on line p.Line. Call it before the cursor has consumed
+// anything, or to restore a position read with PositionOf.
+func (c *ByteCursor) StartAt(p Position) {
+	c.lineno = p.Line
+	c.column = p.Column
+	c.line = append(c.line[:0], p.LineText...)
+}
+
 func (c *ByteCursor) Line() string {
 	return unsafe.String(unsafe.SliceData(c.line), len(c.line))
 }
@@ -932,7 +972,8 @@ func (c *ByteCursor) Unused() io.Reader {
 
 // Read hands the unconsumed bytes to a wrapping reader, as switchEncoding does
 // when it puts a UTF8Cursor or a decoder over this cursor. It does not update
-// the line number or column: the wrapping cursor counts positions from there.
+// the line number or column: the wrapping cursor starts at this cursor's
+// PositionOf and counts positions from there.
 func (c *ByteCursor) Read(buf []byte) (int, error) {
 	nread := 0
 	if c.bufpos < c.buflen {

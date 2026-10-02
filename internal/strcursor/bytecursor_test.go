@@ -347,3 +347,79 @@ func TestCursorPosition(t *testing.T) {
 		})
 	}
 }
+
+// startCursor is a cursor whose first position can be set.
+type startCursor interface {
+	strcursor.Cursor
+	StartAt(strcursor.Position)
+}
+
+// TestCursorStartAt checks that a cursor started at a position counts on from
+// it: the column and line text continue the given line until an LF ends it.
+func TestCursorStartAt(t *testing.T) {
+	const decl = `<?xml version="1.0"?>`
+	cases := []struct {
+		name  string
+		start strcursor.Position
+		input string
+		ops   []positionOp
+	}{
+		{
+			name:  "after a declaration",
+			start: strcursor.Position{Line: 1, Column: len(decl) + 1, LineText: decl},
+			input: "<r>é\ncd",
+			ops: []positionOp{
+				{method: methodAdvance, n: 5, line: 1, col: 27, text: decl + "<r>é"},
+				{method: methodAdvance, n: 1, line: 2, col: 1, text: ""},
+				{method: methodAdvance, n: 2, line: 2, col: 3, text: "cd"},
+			},
+		},
+		{
+			name:  "on a later line",
+			start: strcursor.Position{Line: 3, Column: 5, LineText: " ab "},
+			input: "x>\ny",
+			ops: []positionOp{
+				{method: methodConsumeString, s: "x>", ok: true, line: 3, col: 7, text: " ab x>"},
+				{method: methodAdvanceFast, n: 2, line: 4, col: 2, text: "y"},
+			},
+		},
+		{
+			name:  "at the start",
+			start: strcursor.Position{Line: 1, Column: 1},
+			input: "ab",
+			ops: []positionOp{
+				{method: methodAdvance, n: 2, line: 1, col: 3, text: "ab"},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cursors := map[string]startCursor{
+				"ByteCursor": strcursor.NewByteCursor(strings.NewReader(tc.input)),
+				"UTF8Cursor": strcursor.NewUTF8Cursor(strings.NewReader(tc.input)),
+			}
+			for name, cur := range cursors {
+				t.Run(name, func(t *testing.T) {
+					cur.StartAt(tc.start)
+					require.Equal(t, tc.start, strcursor.PositionOf(cur))
+					for _, op := range tc.ops {
+						applyPositionOp(t, cur, op)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestUTF8CursorContinuesByteCursor reads an XML declaration on a ByteCursor,
+// then the rest of the input on a UTF8Cursor started at the ByteCursor's
+// position, as the parser does when it switches encoding.
+func TestUTF8CursorContinuesByteCursor(t *testing.T) {
+	const decl = "<?xml version=\"1.0\"\n encoding=\"UTF-8\"?>"
+	bc := strcursor.NewByteCursor(strings.NewReader(decl + "<r>&x;"))
+	require.NoError(t, bc.Advance(len(decl)))
+	cur := strcursor.NewUTF8Cursor(bc)
+	cur.StartAt(strcursor.PositionOf(bc))
+	applyPositionOp(t, cur, positionOp{method: methodAdvance, n: 4, line: 2, col: 24, text: ` encoding="UTF-8"?><r>&`})
+}

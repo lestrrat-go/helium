@@ -668,7 +668,7 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	// declared encoding) before the declaration loop, which would otherwise
 	// reject the '<?xml' as a processing instruction whose target may not be
 	// "xml". This is the same treatment external parameter/general entities get.
-	data, textDeclVersion, err := ctx.decodeExternalPEContentVersion(ctxif, resolved, data)
+	data, textDeclVersion, dataStart, err := ctx.decodeExternalPEContentVersion(ctxif, resolved, data)
 	if err != nil {
 		return err
 	}
@@ -692,7 +692,9 @@ func (t *TreeBuilder) ExternalSubset(ctxif context.Context, name, eid, uri strin
 	ctx.baseURI = resolved
 
 	baseLen := ctx.inputTab.Len()
-	ctx.pushInputWithVersion(strcursor.NewByteCursor(bytes.NewReader(data)), textDeclVersion)
+	dtdCur := strcursor.NewByteCursor(bytes.NewReader(data))
+	dtdCur.StartAt(dataStart)
+	ctx.pushInputWithVersion(dtdCur, textDeclVersion)
 	// The DTD cursor we just pushed is the enclosing content cursor for the
 	// shared declaration step: it lives one level above baseLen.
 	dtdFloor := ctx.inputTab.Len()

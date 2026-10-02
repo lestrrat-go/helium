@@ -2344,7 +2344,9 @@ Generic typed sequence utilities.
 
 String cursor for character-by-character parsing. `UTF8Cursor` (`utf8cursor.go`) adds byte-level fast paths;
 `ScanCharDataSlice(dst, maxBytes, xml11)` scans a text run and reports whether every scanned character may appear
-literally under the given XML version, so the parser does not re-validate the run.
+literally under the given XML version, so the parser does not re-validate the run. `Position` (line, column, line
+text) is read with `PositionOf` and set with `StartAt` on `ByteCursor` and `UTF8Cursor`, so a cursor that takes over
+an input another cursor started (the encoding switch, content past a TextDecl) continues its positions.
 
 - Files: `strcursor.go`, `utf8cursor.go`
 - Imports: internal/xmlchar

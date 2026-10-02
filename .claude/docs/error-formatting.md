@@ -132,8 +132,18 @@ inside parameter-entity text or the external subset is located within that input
 context. `ByteCursor` and `UTF8Cursor` (`internal/strcursor`) count the same way in every advancing method: only an
 LF starts a line, and the column is 1 plus the bytes since the last LF (a CR, a tab, and each byte of a multi-byte
 character are one column). libxml2's context caret is byte-based too, but its internal column counts characters.
-The `UTF8Cursor` that `switchEncoding` pushes starts at line 1, column 1 after the XML declaration, so a column on
-the declaration's line leaves out the declaration's bytes.
+For a decoded encoding (UTF-16, UCS-4, EBCDIC, ISO-8859-1, Shift_JIS, ...) the column counts bytes of the decoded
+UTF-8 text, never bytes of the source encoding, so the same document reports the same column in every encoding.
+
+The cursor that `switchEncoding` pushes continues the position of the `ByteCursor` it replaces
+(`utf8CursorAfter`, `strcursor.PositionOf` → `StartAt`): an error on the line the XML declaration ends on counts
+the declaration in its line and column, and `Line` starts with the declaration's text on that line, as in libxml2
+(`<?xml version="1.0"?><r>&bad;</r>` reports line 1, column 30). A byte-order mark is not counted (`consumeBOM`
+leaves the position unchanged), matching libxml2's column; libxml2's context line still shows the mark's bytes, and
+helium's leaves them out. External parsed entities, the external DTD subset, and external parameter entities count
+their TextDecl the same way: `decodeExternalPEContentVersion` returns the position past the TextDecl, and the cursor
+that parses the decoded content starts there, so positions are relative to the resource and include the TextDecl
+(`TestErrorPositionAfterXMLDeclaration`, `TestErrorPositionAfterTextDeclaration`, `parser_error_position_test.go`).
 
 `Line` is the text of the current line from its last LF up to the error position. On a `UTF8Cursor` (element content,
 and every input after `switchEncoding`) it is cut to its last `strcursor.LineContextMax` (1024) bytes, dropping the

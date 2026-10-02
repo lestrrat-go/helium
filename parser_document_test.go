@@ -33,6 +33,11 @@ type contentEncoding struct {
 const (
 	// utf8Name is the encoding declaration value of the UTF-8 cases.
 	utf8Name = "UTF-8"
+	// The encoding declaration values of the UTF-16 cases with a byte-order
+	// mark, the UCS-4 cases, and the Shift_JIS cases.
+	utf16Name    = "UTF-16"
+	ucs4Name     = "UCS-4"
+	shiftJISName = "Shift_JIS"
 	// The nameText values: Latin and CJK for the Unicode encodings, Latin-1
 	// for the single-byte ones, and Japanese for Shift_JIS and EUC-JP.
 	mixedNameText    = "café-日本"
@@ -50,15 +55,15 @@ var contentEncodings = []contentEncoding{
 	{label: "US-ASCII", name: "US-ASCII", version: ver10, enc: charmap.ISO8859_1, nameText: "plain-ascii"},
 	{label: "ISO-8859-1", name: "ISO-8859-1", version: ver10, enc: charmap.ISO8859_1, nameText: latinNameText},
 	{label: "windows-1252", name: "windows-1252", version: ver10, enc: charmap.Windows1252, nameText: "café-œž"},
-	{label: "UTF-16LE with BOM", name: "UTF-16", version: ver10, enc: unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), nameText: mixedNameText},
-	{label: "UTF-16BE with BOM", name: "UTF-16", version: ver10, enc: unicode.UTF16(unicode.BigEndian, unicode.UseBOM), nameText: mixedNameText},
+	{label: "UTF-16LE with BOM", name: utf16Name, version: ver10, enc: unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), nameText: mixedNameText},
+	{label: "UTF-16BE with BOM", name: utf16Name, version: ver10, enc: unicode.UTF16(unicode.BigEndian, unicode.UseBOM), nameText: mixedNameText},
 	{label: "UTF-16LE with BOM undeclared", version: ver10, enc: unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), nameText: mixedNameText},
 	{label: "UTF-16LE without BOM", name: "UTF-16LE", version: ver10, enc: unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM), nameText: mixedNameText},
 	{label: "UTF-16BE without BOM", name: "UTF-16BE", version: ver10, enc: unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM), nameText: mixedNameText},
-	{label: "UCS-4BE", name: "UCS-4", version: ver10, enc: utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM), nameText: mixedNameText},
-	{label: "UCS-4LE", name: "UCS-4", version: ver10, enc: utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM), nameText: mixedNameText},
+	{label: "UCS-4BE", name: ucs4Name, version: ver10, enc: utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM), nameText: mixedNameText},
+	{label: "UCS-4LE", name: ucs4Name, version: ver10, enc: utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM), nameText: mixedNameText},
 	{label: "EBCDIC 037", name: "IBM037", version: ver10, enc: charmap.CodePage037, nameText: latinNameText},
-	{label: "Shift_JIS", name: "Shift_JIS", version: ver10, enc: japanese.ShiftJIS, nameText: japaneseNameText},
+	{label: shiftJISName, name: shiftJISName, version: ver10, enc: japanese.ShiftJIS, nameText: japaneseNameText},
 	{label: "EUC-JP", name: "EUC-JP", version: ver10, enc: japanese.EUCJP, nameText: japaneseNameText},
 }
 
@@ -108,6 +113,12 @@ func (e contentEncoding) declLine() string {
 	return `<?xml version="` + e.version + `" encoding="` + e.name + `"?>` + "\n"
 }
 
+// firstLineDecl is the XML declaration of a document whose prolog and root
+// start tag share the declaration's line: declLine without its line end.
+func (e contentEncoding) firstLineDecl() string {
+	return strings.TrimSuffix(e.declLine(), "\n")
+}
+
 // baselineDeclLine is declLine for the UTF-8 baseline of the same document.
 func (e contentEncoding) baselineDeclLine() string {
 	return `<?xml version="` + e.version + `"?>` + "\n"
@@ -134,6 +145,12 @@ func (e contentEncoding) fill(s string) string {
 
 func contentBodyWith(bad string) string {
 	return strings.Replace(contentBody, "BAD", bad, 1)
+}
+
+// contentBodyOnFirstLine is contentBodyWith(bad) with the malformed construct
+// moved onto the root start tag's line, right after the tag.
+func contentBodyOnFirstLine(bad string) string {
+	return strings.Replace(contentBodyWith(""), ">\n", ">"+bad+"\n", 1)
 }
 
 // entityValue escapes s for use inside a double-quoted entity value.
@@ -263,6 +280,11 @@ func (e contentEncoding) textDecl() string {
 // requires the tree and the error text to match the same document in UTF-8.
 // Element content is parsed from a *strcursor.UTF8Cursor taken once where
 // content starts; none of these cases may reach it on another cursor type.
+// Each document is also parsed with its prolog and the malformed construct on
+// the XML declaration's (or TextDecl's) line. The error's column and context
+// line then count the declaration, whose text names the encoding, so that
+// document is compared with the same text read as UTF-8 with the declared
+// encoding ignored.
 func TestContentCursor(t *testing.T) {
 	t.Parallel()
 
@@ -306,6 +328,20 @@ func TestContentCursor(t *testing.T) {
 							}
 							got := ep.parse(t, cfg.p, e, e.declLine()+subset+body, e.textDecl()+ext)
 							require.Equal(t, want, got, "%s, %s parser", variant.name, cfg.name)
+						}
+
+						lineBody := e.fill(contentBodyOnFirstLine(variant.bad))
+						lineDoc := e.firstLineDecl() + strings.ReplaceAll(subset, "\n", "") + lineBody
+						lineExt := e.textDecl() + lineBody
+						for _, cfg := range parsers {
+							want := ep.parse(t, cfg.p.IgnoreEncoding(true), baseline, lineDoc, lineExt)
+							if variant.bad == "" {
+								require.NotContains(t, want, "\nERROR: ", "%s parser, declaration line", cfg.name)
+							} else if strings.Contains(want, "\nERROR: ") {
+								require.Contains(t, want, " at line 1, column ", "%s, %s parser, declaration line", variant.name, cfg.name)
+							}
+							got := ep.parse(t, cfg.p, e, lineDoc, lineExt)
+							require.Equal(t, want, got, "%s, %s parser, declaration line", variant.name, cfg.name)
 						}
 					}
 				})

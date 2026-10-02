@@ -785,7 +785,9 @@ func (pctx *parserCtx) parsePEReference(ctx context.Context, pad bool) error {
 				// resolves against the PE's location, not the containing DTD. The
 				// override (and the active-recursion mark) is cleared when this
 				// pushed cursor is popped.
-				pctx.pushExternalPEInput(strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad))), peURI, peVersion, ent)
+				peCur := strcursor.NewByteCursor(bytes.NewReader(padPEContent(content, pad)))
+				peCur.StartAt(ent.contentStart)
+				pctx.pushExternalPEInput(peCur, peURI, peVersion, ent)
 			}
 			pctx.hasPERefs = true
 			pctx.hasExternalPERef = true
@@ -914,7 +916,7 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 	// bytes means a later reference (from either path) reuses them consistently,
 	// instead of one path getting raw bytes that embed the TextDecl into a
 	// general entity's stored value.
-	content, textDeclVersion, err := pctx.decodeExternalPEContentVersion(ctx, uri, content)
+	content, textDeclVersion, contentStart, err := pctx.decodeExternalPEContentVersion(ctx, uri, content)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -931,18 +933,25 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 	e.content = string(content)
 	e.resolvedURI = uri
 	e.textDeclVersion = textDeclVersion
+	e.contentStart = contentStart
 	return content, uri, textDeclVersion, nil
 }
 
-// decodeExternalPEContentVersion returns decoded external content and its
-// effective XML version. A TextDecl version overrides the referencing
-// document's version after compatibility is checked. A leading UTF-8
-// byte-order mark is not part of the replacement text, so it is dropped, and a
-// TextDecl may follow it (XML §4.3.3).
-func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
+// inputStart is the position of the first byte of an input.
+var inputStart = strcursor.Position{Line: 1, Column: 1}
+
+// decodeExternalPEContentVersion returns decoded external content, its
+// effective XML version, and the position of the content's first byte in the
+// resource. A TextDecl version overrides the referencing document's version
+// after compatibility is checked. A leading UTF-8 byte-order mark is not part
+// of the replacement text, so it is dropped, and a TextDecl may follow it (XML
+// §4.3.3). The returned position is past the TextDecl, so the cursor that
+// parses the content counts the TextDecl in its line and column, as libxml2
+// does; a byte-order mark is not counted.
+func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcURI string, content []byte) ([]byte, string, strcursor.Position, error) {
 	entityVersion := pctx.documentVersion()
 	if len(content) == 0 {
-		return content, entityVersion, nil
+		return content, entityVersion, inputStart, nil
 	}
 
 	// UTF-16 / UCS-4 / EBCDIC external content is not ASCII-compatible: the body,
@@ -955,7 +964,7 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 
 	body := bytes.TrimPrefix(content, patUTF8)
 	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(body))) {
-		return body, entityVersion, nil
+		return body, entityVersion, inputStart, nil
 	}
 
 	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
@@ -968,7 +977,7 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 	// standalone-bearing declaration is rejected, and never leniently accepted.
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
-		return nil, "", err
+		return nil, "", strcursor.Position{}, err
 	}
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
@@ -982,34 +991,35 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 	// autoEncoding, which checkBOMEncodingConflict compares with the TextDecl's
 	// encoding below.
 	if _, err := sub.detectEncoding(); err != nil {
-		return nil, "", sub.error(ctx, err)
+		return nil, "", strcursor.Position{}, sub.error(ctx, err)
 	}
 	if err := sub.parseTextDecl(ctx); err != nil {
-		return nil, "", err
+		return nil, "", strcursor.Position{}, err
 	}
 	// A TextDecl naming an encoding other than UTF-8 after a UTF-8 byte-order
 	// mark is fatal (XML §4.3.3), as it is for the document entity. libxml2
 	// rejects a UTF-16 name there but accepts any other name and decodes the
 	// body in it.
 	if err := sub.checkBOMEncodingConflict(); err != nil {
-		return nil, "", sub.error(ctx, err)
+		return nil, "", strcursor.Position{}, sub.error(ctx, err)
 	}
 	if err := sub.switchEncoding(); err != nil {
 		// Wrap through sub.error so the failure (e.g. an unsupported declared
 		// encoding) carries srcURI, matching the parseTextDecl branch; otherwise
 		// it would be rewrapped at the caller's location and lose the source file.
-		return nil, "", sub.error(ctx, err)
+		return nil, "", strcursor.Position{}, sub.error(ctx, err)
 	}
 
 	cur := sub.getCursor()
 	if cur == nil {
-		return nil, sub.version, nil
+		return nil, sub.version, inputStart, nil
 	}
+	at := strcursor.PositionOf(cur)
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
-		return nil, "", sub.error(ctx, err)
+		return nil, "", strcursor.Position{}, sub.error(ctx, err)
 	}
-	return rest, sub.version, nil
+	return rest, sub.version, at, nil
 }
 
 // decodeNonASCIIExternalContent decodes an external resource's replacement text
@@ -1021,14 +1031,15 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 // decoded. EBCDIC is recognized only by an encoded leading '<?xm'; its code
 // page is the name in that TextDecl, read through the EBCDIC invariant
 // characters as for the document entity (parseDocument), defaulting to IBM-037.
-// The TextDecl is consumed on the decoded rune cursor after switchEncoding,
+// The returned position is past the TextDecl, as for
+// decodeExternalPEContentVersion. The TextDecl is consumed on the decoded rune cursor after switchEncoding,
 // enforcing the same grammar as the ASCII path (VersionInfo OPTIONAL,
 // EncodingDecl REQUIRED, NO StandaloneDecl). srcURI scopes any error to the
 // source resource.
-func (pctx *parserCtx) decodeNonASCIIExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
+func (pctx *parserCtx) decodeNonASCIIExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, string, strcursor.Position, error) {
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
-		return nil, "", err
+		return nil, "", strcursor.Position{}, err
 	}
 	defer func() { _ = sub.release() }()
 	sub.options = pctx.options
@@ -1043,7 +1054,7 @@ func (pctx *parserCtx) decodeNonASCIIExternalContent(ctx context.Context, srcURI
 	// reading the TextDecl or the body.
 	enc, err := sub.detectEncoding()
 	if err != nil {
-		return nil, "", sub.error(ctx, err)
+		return nil, "", strcursor.Position{}, sub.error(ctx, err)
 	}
 	sub.detectedEncoding = enc
 	if enc == encEBCDIC {
@@ -1053,12 +1064,12 @@ func (pctx *parserCtx) decodeNonASCIIExternalContent(ctx context.Context, srcURI
 		}
 	}
 	if err := sub.switchEncoding(); err != nil {
-		return nil, "", sub.error(ctx, err)
+		return nil, "", strcursor.Position{}, sub.error(ctx, err)
 	}
 
 	cur := sub.getCursor()
 	if cur == nil {
-		return nil, sub.version, nil
+		return nil, sub.version, inputStart, nil
 	}
 
 	// Consume an optional leading TextDecl on the decoded rune cursor. The
@@ -1073,17 +1084,18 @@ func (pctx *parserCtx) decodeNonASCIIExternalContent(ctx context.Context, srcURI
 	// contradicts a UTF-16 BOM is ignored.
 	if looksLikeXMLDeclString(cur) {
 		if err := sub.parseTextDeclFromCursor(ctx); err != nil {
-			return nil, "", err
+			return nil, "", strcursor.Position{}, err
 		}
 		cur = sub.getCursor()
 		if cur == nil {
-			return nil, sub.version, nil
+			return nil, sub.version, inputStart, nil
 		}
 	}
 
+	at := strcursor.PositionOf(cur)
 	rest, err := io.ReadAll(cur.Unused())
 	if err != nil {
-		return nil, "", sub.error(ctx, err)
+		return nil, "", strcursor.Position{}, sub.error(ctx, err)
 	}
-	return rest, sub.version, nil
+	return rest, sub.version, at, nil
 }

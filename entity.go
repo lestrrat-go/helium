@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/strcursor"
 )
 
 // attrEntityWFC classifies whether a general entity's TRANSITIVE replacement
@@ -63,6 +64,10 @@ type Entity struct {
 	// entity replacement text. It scopes version-dependent validation while the cached
 	// input is parsed without changing the owning document's recorded version.
 	textDeclVersion string
+	// contentStart is the position of the cached external parameter entity
+	// content's first byte in its resource: past the TextDecl, so error
+	// positions on the TextDecl's line count it.
+	contentStart strcursor.Position
 	// owner      bool       // does the entity own children
 	checked      int   // was the entity content checked
 	attrWFCFlags int   // attribute-value WFC memoization (entWFCValidated/entWFCChecked)

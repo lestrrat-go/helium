@@ -27,23 +27,45 @@ var errorContextEncodings = []struct {
 	enc   xenc.Encoding
 }{
 	{label: utf8Name, name: utf8Name},
-	{label: "UTF-16LE", name: "UTF-16", enc: unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)},
-	{label: "UTF-16BE", name: "UTF-16", enc: unicode.UTF16(unicode.BigEndian, unicode.UseBOM)},
-	{label: "UCS-4LE", name: "UCS-4", enc: utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM)},
-	{label: "UCS-4BE", name: "UCS-4", enc: utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM)},
+	{label: "UTF-16LE", name: utf16Name, enc: unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)},
+	{label: "UTF-16BE", name: utf16Name, enc: unicode.UTF16(unicode.BigEndian, unicode.UseBOM)},
+	{label: "UCS-4LE", name: ucs4Name, enc: utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM)},
+	{label: "UCS-4BE", name: ucs4Name, enc: utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM)},
 	{label: latin1Name, name: latin1Name, enc: charmap.ISO8859_1},
 	{label: "EBCDIC 037", name: "IBM037", enc: charmap.CodePage037},
 }
 
 // errorContextDocs are the malformed document bodies of
 // TestErrorContextChunking. context is the text the error's context line must
-// show; a long line's context is cut, so for those only its end is given.
+// show; a long line's context is cut, so for those only its end is given. A
+// sameLine body follows the XML declaration on its line, so its context line
+// is the declaration followed by context.
 var errorContextDocs = []struct {
-	name    string
-	body    string
-	context string
-	cut     bool
+	name     string
+	body     string
+	context  string
+	cut      bool
+	sameLine bool
 }{
+	{
+		name:     "undeclared entity on the declaration line",
+		body:     "<r>&nope;</r>",
+		context:  "<r>&nope;",
+		sameLine: true,
+	},
+	{
+		name:     "duplicate attribute on the declaration line",
+		body:     "<r>café<d a=\"1\" a=\"2\"/>\n</r>",
+		context:  `<r>café<d a="1" a="2"`,
+		sameLine: true,
+	},
+	{
+		name:     "undeclared entity where the declaration line passes the kept context",
+		body:     "<r>" + strings.Repeat("é", 500) + "&nope;</r>",
+		context:  "&nope;",
+		cut:      true,
+		sameLine: true,
+	},
 	{
 		name:    "duplicate attribute on a short line",
 		body:    "<r>\n  <c>café</c>\n  <d a=\"1\" a=\"2\"/>\n</r>",
@@ -129,11 +151,29 @@ func errorContextLine(t *testing.T, msg string) string {
 	return line
 }
 
+// requireErrorContext checks the context line of the error text msg: decl,
+// the declaration that shares the error's line ("" when it is on a line of its
+// own), followed by the document's context, cut for a long line.
+func requireErrorContext(t *testing.T, msg, decl, context string, cut bool) {
+	t.Helper()
+	line := errorContextLine(t, msg)
+	require.True(t, strings.HasSuffix(line, context), "context line %q must end with %q", line, context)
+	require.True(t, utf8.ValidString(line), "context line %q must be valid UTF-8", line)
+	if cut {
+		require.LessOrEqual(t, len(line), 1024, "the context of a long line must be cut")
+		require.NotContains(t, line, "<?xml", "the context of a long line must be cut")
+		return
+	}
+	require.Equal(t, decl+context, line)
+}
+
 // TestErrorContextChunking parses malformed documents in several encodings
 // from the whole input, through ParseReader with fixed-size short reads, and
 // through the push parser with fixed-size pushes, and requires every parse to
 // report the same error text: message, line, column, and context line. The
-// whole-input parse of each encoding must also match the UTF-8 one.
+// whole-input parse of each encoding must also match the UTF-8 one; when the
+// error is on the declaration's line, whose text names the encoding, it must
+// match the same text read as UTF-8 with the declared encoding ignored.
 func TestErrorContextChunking(t *testing.T) {
 	t.Parallel()
 
@@ -141,32 +181,40 @@ func TestErrorContextChunking(t *testing.T) {
 		t.Run(doc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := helium.NewParser().Parse(t.Context(), []byte(`<?xml version="1.0"?>`+"\n"+doc.body))
-			want := errorText(t, err)
-			line := errorContextLine(t, want)
-			require.True(t, strings.HasSuffix(line, doc.context), "context line %q must end with %q", line, doc.context)
-			require.True(t, utf8.ValidString(line), "context line %q must be valid UTF-8", line)
-			if doc.cut {
-				require.Less(t, len(line), len(doc.body), "the context of a long line must be cut")
-			} else {
-				require.Equal(t, doc.context, line)
+			sep := "\n"
+			if doc.sameLine {
+				sep = ""
 			}
+			baseDecl := `<?xml version="1.0"?>`
+			_, err := helium.NewParser().Parse(t.Context(), []byte(baseDecl+sep+doc.body))
+			want := errorText(t, err)
+			if !doc.sameLine {
+				baseDecl = ""
+			}
+			requireErrorContext(t, want, baseDecl, doc.context, doc.cut)
 
 			for _, e := range errorContextEncodings {
 				t.Run(e.label, func(t *testing.T) {
 					t.Parallel()
 
-					input := []byte(`<?xml version="1.0" encoding="` + e.name + `"?>` + "\n" + doc.body)
+					decl := `<?xml version="1.0" encoding="` + e.name + `"?>`
+					input := []byte(decl + sep + doc.body)
+					wantEnc := want
+					if doc.sameLine {
+						_, err := helium.NewParser().IgnoreEncoding(true).Parse(t.Context(), input)
+						wantEnc = errorText(t, err)
+						requireErrorContext(t, wantEnc, decl, doc.context, doc.cut)
+					}
 					if e.enc != nil {
 						encoded, encErr := e.enc.NewEncoder().Bytes(input)
 						require.NoError(t, encErr)
 						input = encoded
 					}
 					_, parseErr := helium.NewParser().Parse(t.Context(), input)
-					require.Equal(t, want, errorText(t, parseErr), "whole input")
+					require.Equal(t, wantEnc, errorText(t, parseErr), "whole input")
 					for _, n := range chunkSizes {
-						require.Equal(t, want, parseReaderChunked(t, input, n), "ParseReader, %d-byte reads", n)
-						require.Equal(t, want, pushChunked(t, input, n), "push parser, %d-byte pushes", n)
+						require.Equal(t, wantEnc, parseReaderChunked(t, input, n), "ParseReader, %d-byte reads", n)
+						require.Equal(t, wantEnc, pushChunked(t, input, n), "push parser, %d-byte pushes", n)
 					}
 				})
 			}

@@ -175,6 +175,10 @@ type UTF8Cursor struct {
 	in      io.Reader
 	lineno  int
 	readErr error // sticky non-EOF read error (e.g. a transcoding/decode error)
+	// startText is the text before the first byte on line startLine, set by
+	// StartAt. Line puts it before the buffered text until an LF ends that line.
+	startText string
+	startLine int
 }
 
 // NewUTF8Cursor creates a UTF8Cursor wrapping an existing io.Reader.
@@ -616,13 +620,29 @@ func (c *UTF8Cursor) ConsumeString(s string) bool {
 	return true
 }
 
+// StartAt sets the position of the first byte to p, as if the cursor had
+// consumed p.LineText on line p.Line. Call it before the cursor has consumed
+// anything.
+func (c *UTF8Cursor) StartAt(p Position) {
+	c.lineno = p.Line
+	c.column = p.Column
+	c.startLine = p.Line
+	c.startText = lineTail(p.LineText)
+}
+
 // Line returns the content of the current line up to the cursor position, cut
 // to its last LineContextMax bytes. A cut that lands inside a multi-byte
 // character drops that character's remaining bytes. The text is found on demand
 // in the buffer, which compact keeps it in, so it does not depend on how the
-// input was split across reads.
+// input was split across reads. On the line StartAt began, the line text it
+// was given comes first.
 func (c *UTF8Cursor) Line() string {
 	start := c.lineStart()
+	// Until an LF is consumed, every consumed byte is still buffered from
+	// offset 0 unless the line already fills LineContextMax bytes.
+	if c.startText != "" && c.lineno == c.startLine && c.bufpos-start < LineContextMax {
+		return lineTail(c.startText + string(c.buf[start:c.bufpos]))
+	}
 	if c.bufpos-start == LineContextMax {
 		for i := 0; i < utf8.UTFMax-1 && start < c.bufpos && !utf8.RuneStart(c.buf[start]); i++ {
 			start++

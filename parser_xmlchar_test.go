@@ -246,17 +246,20 @@ func TestParseAttrValue(t *testing.T) {
 				for _, n := range []int{0, 1, 7, 8, 15, 16, 17, 31, 32, 33} {
 					for _, quote := range []string{`"`, `'`} {
 						value := run[:n] + string(tc.r) + "z"
-						src := `<?xml version="` + version + `"?><r a=` + quote + value + quote + `/>`
+						decl := `<?xml version="` + version + `"?>`
+						src := decl + `<r a=` + quote + value + quote + `/>`
 						doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
 						if wantErr {
 							// A C0 control ends the fast scan and the slow path stops
 							// at it, so the value is reported unclosed where the
 							// control sits; an XML 1.1 RestrictedChar is reported
-							// at the start of the value.
-							want := fmt.Sprintf("invalid char at line 1, column 7\n -> '<r a=%s' <-- around here", quote)
+							// at the start of the value. The column and the context
+							// line count the XML declaration on the same line.
+							want := fmt.Sprintf("invalid char at line 1, column %d\n -> '%s<r a=%s' <-- around here",
+								len(decl)+7, decl, quote)
 							if tc.r < 0x20 {
-								want = fmt.Sprintf("string not closed at line 1, column %d\n -> '<r a=%s%s' <-- around here",
-									7+n, quote, run[:n])
+								want = fmt.Sprintf("string not closed at line 1, column %d\n -> '%s<r a=%s%s' <-- around here",
+									len(decl)+7+n, decl, quote, run[:n])
 							}
 							require.EqualError(t, err, want, "U+%04X, XML %s, %d leading bytes", tc.r, version, n)
 							continue
