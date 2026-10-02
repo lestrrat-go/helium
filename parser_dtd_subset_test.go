@@ -768,3 +768,227 @@ func TestInternalSubsetClosedByParameterEntity(t *testing.T) {
 		}
 	}
 }
+
+// condSectNestingFS holds the external subsets and external parameter entities
+// for TestConditionalSectionEntityNesting. The ".ent" files are referenced as
+// external parameter entities from an internal subset; the ".dtd" files are
+// external subsets.
+func condSectNestingFS() fstest.MapFS {
+	return fstest.MapFS{
+		// Referenced from the internal subset.
+		"inc-open.ent":  {Data: []byte(`<![INCLUDE[<!ELEMENT r ANY>`)},
+		"ign-open.ent":  {Data: []byte(`<![IGNORE[<!ELEMENT r EMPTY>`)},
+		"nest-open.ent": {Data: []byte(`<![INCLUDE[ <![INCLUDE[<!ELEMENT r ANY>]]>`)},
+		"pe-close.ent":  {Data: []byte(`<![INCLUDE[<!ELEMENT r ANY> %close;`)},
+		"inc-whole.ent": {Data: []byte(`<![INCLUDE[<!ELEMENT r ANY><!ENTITY g "whole">]]>`)},
+		"ign-whole.ent": {Data: []byte(`<![IGNORE[<!ENTITY g "ignored">]]><!ELEMENT r ANY><!ENTITY g "kept">`)},
+
+		// External subsets.
+		"inc-open.dtd": {Data: []byte(`<!ENTITY % open "<![INCLUDE[">` + "\n" +
+			`%open; <!ELEMENT r ANY> <!ENTITY g "inc"> ]]>`)},
+		"ign-open.dtd": {Data: []byte(`<!ENTITY % open "<![IGNORE[">` + "\n" +
+			`%open; <!ENTITY g "ignored"> ]]> <!ELEMENT r ANY> <!ENTITY g "kept">`)},
+		"pe-close.dtd": {Data: []byte(`<!ENTITY % close "]]>">` + "\n" +
+			`<![INCLUDE[ <!ELEMENT r ANY> <!ENTITY g "pe-close"> %close; <!ENTITY g "after">`)},
+		"nest-inner.dtd": {Data: []byte(`<!ENTITY % open "<![INCLUDE[">` + "\n" +
+			`<![INCLUDE[ %open; <!ELEMENT r ANY> <!ENTITY g "inner"> ]]> ]]>`)},
+		"nest-both.dtd": {Data: []byte(`<!ENTITY % open "<![INCLUDE[ <![INCLUDE[">` + "\n" +
+			`%open; <!ELEMENT r ANY> <!ENTITY g "both"> ]]> ]]>`)},
+		"nest-ign.dtd": {Data: []byte(`<!ENTITY % open "<![IGNORE[ <![INCLUDE[">` + "\n" +
+			`%open; <!ENTITY g "ignored"> ]]> ]]> <!ELEMENT r ANY> <!ENTITY g "kept">`)},
+		"inc-trunc.dtd": {Data: []byte(`<!ENTITY % open "<![INCLUDE[">` + "\n" +
+			`%open; <!ELEMENT r ANY> <!ENTITY g "trunc">`)},
+		"ign-trunc.dtd": {Data: []byte(`<!ENTITY % open "<![IGNORE[">` + "\n" +
+			`%open; <!ELEMENT r ANY> <!ENTITY g "trunc">`)},
+		"whole.dtd": {Data: []byte(`<!ENTITY % sec "<![INCLUDE[ <!ELEMENT r ANY> <!ENTITY g 'whole'> ]]>">` + "\n" +
+			`%sec;`)},
+		"whole-ign.dtd": {Data: []byte(`<!ENTITY % sec "<![IGNORE[ <!ENTITY g 'ignored'> ]]>">` + "\n" +
+			`%sec; <!ELEMENT r ANY> <!ENTITY g "kept">`)},
+		"pe-in-include.dtd": {Data: []byte(`<!ENTITY % decl "<!ELEMENT r ANY><!ENTITY g 'decl'>">` + "\n" +
+			`<![INCLUDE[ %decl; ]]>`)},
+		"literal.dtd": {Data: []byte(`<![INCLUDE[ <!ELEMENT r ANY>` + "\n" +
+			`<![IGNORE[ <!ENTITY g "ignored"> <![INCLUDE[ ]]> ]]>` + "\n" +
+			`<![INCLUDE[ <!ENTITY g "literal"> ]]> ]]>`)},
+	}
+}
+
+func condSectNestingParser(validate bool) helium.Parser {
+	return helium.NewParser().
+		BlockXXE(false).
+		LoadExternalDTD(true).
+		SubstituteEntities(true).
+		ValidateDTD(validate).
+		FS(condSectNestingFS())
+}
+
+// TestConditionalSectionEntityNesting covers the closing side of XML 1.0 §3.4
+// "Proper Conditional Section/PE Nesting": the "<![", "[" and "]]>" of a
+// conditional section must come from the same parameter-entity replacement
+// text. A section that a parameter entity opens and the input below it closes
+// is a well-formedness error in the internal subset, where the replacement
+// text of a PE between declarations must match extSubsetDecl (§2.8 WFC: PE
+// Between Declarations). In the external subset it is only a validity error,
+// so it is reported only when validating, like the opening side.
+func TestConditionalSectionEntityNesting(t *testing.T) {
+	t.Parallel()
+
+	runners := []struct {
+		name  string
+		parse func(*testing.T, helium.Parser, []byte) (*helium.Document, error)
+	}{
+		{name: "Parse", parse: parseInternalSubsetViaBytes},
+		{name: "ParseReader", parse: parseInternalSubsetViaReader},
+		{name: "push", parse: parseInternalSubsetViaPush},
+	}
+
+	// Internal subset: fatal whether or not validation is on.
+	fatal := []struct {
+		name string
+		doc  string
+		want error
+	}{
+		{
+			name: "include opened by an external pe and closed below it",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "inc-open.ent"> %ext; ]]> ]><r/>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "ignore opened by an external pe and closed below it",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "ign-open.ent"> %ext; ]]> <!ELEMENT r ANY>]><r/>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "outer section opened by an external pe and closed below it",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "nest-open.ent"> %ext; ]]> ]><r/>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "section closed by a nested pe",
+			doc:  `<!DOCTYPE r [<!ENTITY % close "]]>"><!ENTITY % ext SYSTEM "pe-close.ent"> %ext; ]><r/>`,
+			want: helium.ErrEntityBoundary,
+		},
+		{
+			name: "section opened by an external pe and never closed",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "inc-open.ent"> %ext; ]><r/>`,
+			want: helium.ErrConditionalSectionNotFinished,
+		},
+	}
+
+	// External subset: a validity error. Without validation the section closes
+	// where the "]]>" is and the document parses.
+	validity := []struct {
+		name string
+		dtd  string
+		want string
+	}{
+		{name: "include opened by a pe and closed below it", dtd: "inc-open.dtd", want: "inc"},
+		{name: "ignore opened by a pe and closed below it", dtd: "ign-open.dtd", want: "kept"},
+		{name: "include closed by a pe", dtd: "pe-close.dtd", want: "pe-close"},
+		{name: "inner section opened by a pe and closed below it", dtd: "nest-inner.dtd", want: "inner"},
+		{name: "two sections opened by a pe and closed below it", dtd: "nest-both.dtd", want: "both"},
+		{name: "ignore with a nested section opened by a pe", dtd: "nest-ign.dtd", want: "kept"},
+	}
+
+	// A section that a PE opens and nothing closes must not run into the
+	// document after the external subset.
+	truncated := []string{"inc-trunc.dtd", "ign-trunc.dtd"}
+
+	// Sections that keep each delimiter in one entity parse with and without
+	// validation.
+	accepted := []struct {
+		name string
+		doc  string
+		want string
+	}{
+		{
+			name: "internal subset pe holds a whole include section",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "inc-whole.ent"> %ext; ]><r>&g;</r>`,
+			want: "whole",
+		},
+		{
+			name: "internal subset pe holds a whole ignore section",
+			doc:  `<!DOCTYPE r [<!ENTITY % ext SYSTEM "ign-whole.ent"> %ext; ]><r>&g;</r>`,
+			want: "kept",
+		},
+		{
+			name: "external subset pe holds a whole include section",
+			doc:  `<!DOCTYPE r SYSTEM "whole.dtd"><r>&g;</r>`,
+			want: "whole",
+		},
+		{
+			name: "external subset pe holds a whole ignore section",
+			doc:  `<!DOCTYPE r SYSTEM "whole-ign.dtd"><r>&g;</r>`,
+			want: "kept",
+		},
+		{
+			name: "pe inside an include section supplies whole declarations",
+			doc:  `<!DOCTYPE r SYSTEM "pe-in-include.dtd"><r>&g;</r>`,
+			want: "decl",
+		},
+		{
+			name: "nested sections open and close in the external subset file",
+			doc:  `<!DOCTYPE r SYSTEM "literal.dtd"><r>&g;</r>`,
+			want: "literal",
+		},
+	}
+
+	for _, runner := range runners {
+		for _, validate := range []bool{false, true} {
+			mode := "/novalid/"
+			if validate {
+				mode = "/valid/"
+			}
+
+			for _, tc := range fatal {
+				t.Run(runner.name+mode+tc.name, func(t *testing.T) {
+					t.Parallel()
+					doc, err := runner.parse(t, condSectNestingParser(validate), []byte(tc.doc))
+					require.Error(t, err)
+					require.Nil(t, doc)
+					require.ErrorIs(t, err, tc.want)
+					var perr helium.ErrParseError
+					require.ErrorAs(t, err, &perr)
+					require.Equal(t, helium.ErrorLevelFatal, perr.Level)
+					if tc.want == helium.ErrEntityBoundary {
+						require.Contains(t, err.Error(), "all markup of the conditional section is not in the same entity")
+					}
+				})
+			}
+
+			for _, tc := range validity {
+				doc := `<!DOCTYPE r SYSTEM "` + tc.dtd + `"><r>&g;</r>`
+				t.Run(runner.name+mode+tc.name, func(t *testing.T) {
+					t.Parallel()
+					parsed, err := runner.parse(t, condSectNestingParser(validate), []byte(doc))
+					if validate {
+						require.ErrorIs(t, err, helium.ErrEntityBoundary)
+						require.Contains(t, err.Error(), "all markup of the conditional section is not in the same entity")
+						return
+					}
+					require.NoError(t, err)
+					require.NotNil(t, parsed.DocumentElement())
+					require.Equal(t, tc.want, string(parsed.DocumentElement().Content()))
+				})
+			}
+
+			for _, dtd := range truncated {
+				doc := `<!DOCTYPE r SYSTEM "` + dtd + `"><r>&g;</r>`
+				t.Run(runner.name+mode+"unterminated "+dtd, func(t *testing.T) {
+					t.Parallel()
+					_, err := runner.parse(t, condSectNestingParser(validate), []byte(doc))
+					require.ErrorIs(t, err, helium.ErrConditionalSectionNotFinished)
+				})
+			}
+
+			for _, tc := range accepted {
+				t.Run(runner.name+mode+tc.name, func(t *testing.T) {
+					t.Parallel()
+					doc, err := runner.parse(t, condSectNestingParser(validate), []byte(tc.doc))
+					require.NoError(t, err)
+					require.NotNil(t, doc.DocumentElement())
+					require.Equal(t, tc.want, string(doc.DocumentElement().Content()))
+				})
+			}
+		}
+	}
+}

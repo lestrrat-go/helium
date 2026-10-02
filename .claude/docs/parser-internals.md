@@ -238,6 +238,15 @@ gives every node of the expansion). Each invariant lives at its function:
   (XXE-gated, base-URI- and TextDecl-version-scoped, active-PE recursion guard)
 - PE references inside/adjacent to markup decls (external subset) — `skipBlanksPE` (`parser_whitespace.go`) +
   `dtdRefetch`; boundary violations → `ErrEntityBoundary` (VC Proper Declaration/Group/PE Nesting)
+- Conditional sections across PE boundaries (§3.4 VC Proper Conditional Section/PE Nesting) —
+  `parseConditionalSections` reads the section's content input from the stack directly, so an exhausted
+  PE input that opened the section cannot be auto-popped and let the input below supply the `]]>`.
+  `resumeCondSectionBelow` handles a content input that ran out first: in the internal subset it is fatal
+  (§2.8 WFC PE Between Declarations; `ErrEntityBoundary` when `]]>` follows, else
+  `ErrConditionalSectionNotFinished`); in the external subset the section continues in the input below, never
+  past `dtdInputFloor`. `checkCondSectionClose` reports a `]]>` from a different input than the section
+  content (that resumed case, or a PE-supplied `]]>`) as `ErrEntityBoundary`; in the external subset only when
+  validating, matching the opening-side `checkCondSectionEntityBoundary`. INCLUDE and IGNORE follow the same rule
 - WFC PEs in Internal Subset (§2.8) — `expandEntityValueForRefCheck` `%` branch → `ErrPEReferenceInInternalSubset`
 - Attribute-value entity WFCs (No External Ref / No `<` / Entity Declared) — `checkEntityInAttValue` /
   `lookupGeneralEntity`, memoized via `entWFCValidated`/`entWFCChecked`; DTD defaults re-scanned by
