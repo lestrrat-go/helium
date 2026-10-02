@@ -202,17 +202,19 @@ A test that guards a memory or work bound gives the same verdict on every machin
 
 ### 32-bit Platforms
 
-`ci.yml`'s `test-32bit` job runs the whole suite with `GOARCH=386`, where `int` is 32 bits, and vets the tree
-with `GOARCH=arm GOARM=7` (the ARM suite is not run: under qemu it would far exceed the job timeout). Size,
-count, and limit arithmetic does not narrow an int64 to int or sum ints where the result can pass 2^31-1; it
-parses in int64 and saturates at `math.MaxInt`, or compares in int64.
+386 is the supported 32-bit platform: `ci.yml`'s `test-32bit` job runs the whole suite with `GOARCH=386`,
+where `int` is 32 bits. Size, count, and limit arithmetic does not narrow an int64 to int or sum ints where the
+result can pass 2^31-1; it parses in int64 and saturates at `math.MaxInt`, compares in int64, or range-checks
+into int and reports an error.
 
 - A test guarding such arithmetic uses a value just past 2^31 or 2^32 (`1<<32 + 5` truncates to 5), so the
   64-bit jobs fail too when a value is narrowed. Compare a length against `min(value, math.MaxInt)`.
 - Where the code saturates at `math.MaxInt`, an `export_test.go` hook starts the counter next to it
   (`CountOpsForTesting` in xpath1 and xpath3), since no test can run that many operations.
-- A limit that genuinely depends on the int size (the xpath3 date/time result-year limit) is asserted per
-  platform by branching on `strconv.IntSize`.
+- A limit that genuinely depends on the int size is asserted per platform by branching on `strconv.IntSize`:
+  the xpath3 date/time result-year limit, an xs:yearMonthDuration month total past 2^31-1 (FODT0002 where int
+  is 32 bits; `requireDurationResult` in `xpath3/arithmetic_datetime_test.go`), and an xslt3 package-version
+  component past 2^31-1.
 
 ### SAX Event Normalization
 

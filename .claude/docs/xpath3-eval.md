@@ -395,6 +395,8 @@ The limits hold where int is 32 bits:
 - A `Sequence` length is an int, so `NewRangeSequence` reports a range longer than `math.MaxInt` as
   `math.MaxInt` items (`rangeLen`); every length limit still rejects it.
 - An array index that fits int64 but not int raises FOAY0001 (`checkedArrayIndex`).
+- A yearMonthDuration month total that does not fit int raises FODT0002 (see `xpath3-types.md`, "Duration
+  month range").
 - Date/time ± duration moves at most `maxSafeAddDateYears` (1e11 years where int is 64 bits, `math.MaxInt/4`
   where it is 32 bits) and passes `time.AddDate` operands that fit int (`addMonths` splits months into years
   and months, `addDays` adds days in chunks). A result year past `maxResultYear` (`math.MaxInt/2`) raises

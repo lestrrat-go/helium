@@ -748,10 +748,10 @@ func HasTimezone(t time.Time) bool {
 }
 
 // Duration is the value of an xs:duration, xs:yearMonthDuration, or
-// xs:dayTimeDuration. Months is an int64 on every platform, so the range of a
-// yearMonthDuration does not depend on the size of int.
+// xs:dayTimeDuration. Months is an int: where int is 32 bits, a month total
+// above 2^31-1 is a duration overflow (FODT0002) wherever one is computed.
 type Duration struct {
-	Months   int64    // total months (years*12 + months)
+	Months   int      // total months (years*12 + months)
 	Seconds  float64  // total seconds (days*86400 + hours*3600 + minutes*60 + seconds)
 	FracSec  *big.Rat // exact fractional seconds component (the part after decimal in 'S'), nil if integer
 	SecRat   *big.Rat // exact total dayTime seconds magnitude (>=0); authoritative when non-nil, sign carried by Negative

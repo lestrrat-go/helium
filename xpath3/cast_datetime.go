@@ -389,10 +389,15 @@ func validateTimezoneInString(s string) error {
 	return nil
 }
 
+// errDurationMonthsRange reports a duration whose month total fits int64 but
+// not int, which happens only where int is 32 bits. A cast raises it as
+// FODT0002 (duration overflow).
+var errDurationMonthsRange = errors.New("duration month count out of int range")
+
 // addCheckedMonths adds two non-negative month counts, reporting ok=false on
-// int64 overflow. A year/month total that exceeds the int64 Duration.Months
-// field (e.g. P768614336404564650Y11M) must be rejected BEFORE it wraps to an
-// invalid negative lexical form.
+// int64 overflow. A year/month total that exceeds int64 (e.g.
+// P768614336404564650Y11M) must be rejected BEFORE it wraps to an invalid
+// negative lexical form.
 func addCheckedMonths(a, b int64) (int64, bool) {
 	if b > math.MaxInt64-a {
 		return 0, false
@@ -408,6 +413,9 @@ func parseXSDDuration(s string) (Duration, error) {
 
 	d := Duration{}
 	i := 0
+	// totalMonths accumulates the year/month parts in int64 and is narrowed
+	// to the int Duration.Months field once parsing is done.
+	var totalMonths int64
 
 	if s[i] == '-' {
 		d.Negative = true
@@ -496,11 +504,11 @@ func parseXSDDuration(s string) (Duration, error) {
 				if n > math.MaxInt64/12 {
 					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
 				}
-				months, ok := addCheckedMonths(d.Months, n*12)
+				months, ok := addCheckedMonths(totalMonths, n*12)
 				if !ok {
 					return Duration{}, fmt.Errorf("duration overflow: %sY", numStr)
 				}
-				d.Months = months
+				totalMonths = months
 			case 'M':
 				if lastOrder >= 2 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
@@ -510,11 +518,11 @@ func parseXSDDuration(s string) (Duration, error) {
 				if err != nil {
 					return Duration{}, fmt.Errorf("invalid duration number: %q", numStr)
 				}
-				months, ok := addCheckedMonths(d.Months, n)
+				months, ok := addCheckedMonths(totalMonths, n)
 				if !ok {
 					return Duration{}, fmt.Errorf("duration overflow: %sM", numStr)
 				}
-				d.Months = months
+				totalMonths = months
 			case 'D':
 				if lastOrder >= 3 {
 					return Duration{}, fmt.Errorf("invalid duration: %q", s)
@@ -588,6 +596,10 @@ func parseXSDDuration(s string) (Duration, error) {
 	}
 	if !seenComponent || (sawTimeMarker && !seenTimeComponent) {
 		return Duration{}, fmt.Errorf("invalid duration: %q", s)
+	}
+	d.Months = int(totalMonths)
+	if int64(d.Months) != totalMonths {
+		return Duration{}, fmt.Errorf("%w: %q", errDurationMonthsRange, s)
 	}
 
 	// Record the exact dayTime seconds magnitude. d.Negative carries the sign,

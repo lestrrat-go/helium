@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -459,41 +460,63 @@ func TestDateTimeAddDateOverflow(t *testing.T) {
 	})
 }
 
+// requireDurationResult evaluates expr and requires its string value to be
+// want. A month total past 2^31-1 does not fit int where int is 32 bits, so when
+// monthsPastInt32 is set and int is 32 bits, expr must instead raise FODT0002
+// (duration overflow). The same case thus asserts the exact value where int is
+// 64 bits and the overflow where it is 32 bits.
+func requireDurationResult(t *testing.T, doc *helium.Document, expr, want string, monthsPastInt32 bool) {
+	t.Helper()
+	if monthsPastInt32 && strconv.IntSize == 32 {
+		err := evalExprErr(t, doc, expr)
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: codeFODT0002})
+		return
+	}
+	seq := evalExpr(t, doc, expr)
+	require.Equal(t, 1, seq.Len())
+	got, err := xpath3.AtomicToString(seq.Get(0).(xpath3.AtomicValue))
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
 // TestDurationArithmeticPastInt32 verifies date/time and yearMonthDuration
-// arithmetic whose month or day counts lie just past 2^31. Each count fits in a
-// 64-bit int but not a 32-bit one, so a count narrowed to int would wrap and give
-// a different value where int is 32 bits; the expected values are the same on
-// every platform.
+// arithmetic whose month or day counts lie near or just past 2^31. Where int is
+// 64 bits every case gives its value. Where int is 32 bits a month total past
+// 2^31-1 raises FODT0002 wherever it is computed (cast, +, -, *, div, sum), and
+// never wraps; day counts and month totals that fit still give the same value.
 func TestDurationArithmeticPastInt32(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
 	tests := []struct {
-		expr string
-		want string
+		expr            string
+		want            string
+		monthsPastInt32 bool
 	}{
 		// 2147483653 months: the cast itself must hold the month count.
-		{`xs:yearMonthDuration("P2147483653M")`, "P178956971Y1M"},
-		{`xs:date("2000-01-31") + xs:yearMonthDuration("P178956971Y1M")`, "178958971-02-28"},
-		{`xs:date("2000-01-31") - xs:yearMonthDuration("P178956971Y1M")`, "-178954972-12-31"},
+		{`xs:yearMonthDuration("P2147483653M")`, "P178956971Y1M", true},
+		{`xs:date("2000-01-31") + xs:yearMonthDuration("P178956971Y1M")`, "178958971-02-28", true},
+		{`years-from-duration(xs:yearMonthDuration("-P178956971Y5M"))`, "-178956971", true},
+		// Operands that fit; the results do not where int is 32 bits.
+		{`xs:yearMonthDuration("P178956970Y") + xs:yearMonthDuration("P1Y")`, "P178956971Y", true},
+		{`xs:yearMonthDuration("P178956970Y") - xs:yearMonthDuration("-P1Y")`, "P178956971Y", true},
+		{`sum((xs:yearMonthDuration("P178956970Y"), xs:yearMonthDuration("P1Y")))`, "P178956971Y", true},
+		{`xs:yearMonthDuration("P100000000Y") * xs:double(2.5)`, "P250000000Y", true},
+		{`xs:yearMonthDuration("P100000000Y") * 2.5`, "P250000000Y", true},
+		{`xs:yearMonthDuration("P100000000Y") div 0.4`, "P250000000Y", true},
+		// 2147483640 months fits on every platform; the date move must not
+		// overflow time.AddDate's int month arithmetic.
+		{`xs:date("2000-01-31") + xs:yearMonthDuration("P178956970Y")`, "178958970-01-31", false},
+		{`xs:date("2000-01-31") - xs:yearMonthDuration("P178956970Y")`, "-178954970-01-31", false},
+		// The sum of the two exceeds 2^31-1 months, but the average does not.
+		{`avg((xs:yearMonthDuration("P178956970Y"), xs:yearMonthDuration("P178956970Y")))`, "P178956970Y", false},
+		{`months-from-duration(xs:yearMonthDuration("-P178956970Y5M"))`, "-5", false},
 		// 2147483653 days.
-		{`xs:dateTime("2000-03-01T12:00:00Z") + xs:dayTimeDuration("P2147483653D")`, "5881610-09-15T12:00:00Z"},
-		{`xs:dateTime("2000-03-01T12:00:00Z") - xs:dayTimeDuration("P2147483653D")`, "-5877611-08-16T12:00:00Z"},
-		// 3000000000 months from a float and from a decimal multiplier.
-		{`xs:yearMonthDuration("P100000000Y") * xs:double(2.5)`, "P250000000Y"},
-		{`xs:yearMonthDuration("P100000000Y") * 2.5`, "P250000000Y"},
-		{`xs:yearMonthDuration("P178956970Y") + xs:yearMonthDuration("P1Y")`, "P178956971Y"},
-		{`sum((xs:yearMonthDuration("P178956970Y"), xs:yearMonthDuration("P1Y")))`, "P178956971Y"},
-		{`avg((xs:yearMonthDuration("P178956971Y"), xs:yearMonthDuration("P178956971Y")))`, "P178956971Y"},
-		{`years-from-duration(xs:yearMonthDuration("-P178956971Y5M"))`, "-178956971"},
-		{`months-from-duration(xs:yearMonthDuration("-P178956971Y5M"))`, "-5"},
+		{`xs:dateTime("2000-03-01T12:00:00Z") + xs:dayTimeDuration("P2147483653D")`, "5881610-09-15T12:00:00Z", false},
+		{`xs:dateTime("2000-03-01T12:00:00Z") - xs:dayTimeDuration("P2147483653D")`, "-5877611-08-16T12:00:00Z", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.expr, func(t *testing.T) {
-			seq := evalExpr(t, doc, tc.expr)
-			require.Equal(t, 1, seq.Len())
-			got, err := xpath3.AtomicToString(seq.Get(0).(xpath3.AtomicValue))
-			require.NoError(t, err)
-			require.Equal(t, tc.want, got)
+			requireDurationResult(t, doc, tc.expr, tc.want, tc.monthsPastInt32)
 		})
 	}
 }
@@ -519,12 +542,14 @@ func TestDurationTimesInfinityOverflows(t *testing.T) {
 
 // TestDateArithmeticResultYearLimit verifies the platform limit on a date/time
 // arithmetic result year. Where int is 32 bits, time.Time reports the year as an
-// int, so a result year past about ±1e9 raises FODT0001 instead of wrapping.
+// int, so a result year past about ±1.07e9 raises FODT0001 instead of wrapping.
 // Where int is 64 bits the same expression succeeds.
 func TestDateArithmeticResultYearLimit(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
-	const expr = `xs:date("999999999-01-01") + xs:yearMonthDuration("P500000000Y") + xs:yearMonthDuration("P500000000Y")`
+	// 2147483640 months fits int everywhere; 999999999 + 178956970 years
+	// passes the 32-bit result-year limit.
+	const expr = `xs:date("999999999-01-01") + xs:yearMonthDuration("P178956970Y")`
 	if strconv.IntSize == 32 {
 		err := evalExprErr(t, doc, expr)
 		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0001"})
@@ -533,5 +558,5 @@ func TestDateArithmeticResultYearLimit(t *testing.T) {
 	seq := evalExpr(t, doc, expr)
 	got, err := xpath3.AtomicToString(seq.Get(0).(xpath3.AtomicValue))
 	require.NoError(t, err)
-	require.Equal(t, "1999999999-01-01", got)
+	require.Equal(t, "1178956969-01-01", got)
 }

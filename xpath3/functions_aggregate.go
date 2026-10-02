@@ -222,9 +222,9 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		if d.Negative {
-			totalMonths.Sub(totalMonths, big.NewInt(d.Months))
+			totalMonths.Sub(totalMonths, big.NewInt(int64(d.Months)))
 		} else {
-			totalMonths.Add(totalMonths, big.NewInt(d.Months))
+			totalMonths.Add(totalMonths, big.NewInt(int64(d.Months)))
 		}
 	}
 	// fn:avg is defined as fn:sum(...) div count, so the intermediate sum must
@@ -248,12 +248,12 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 	if negative {
 		absInt = new(big.Int).Neg(avgInt)
 	}
-	if !absInt.IsInt64() {
+	if !absInt.IsInt64() || absInt.Int64() > int64(math.MaxInt) {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeYearMonthDuration,
-		Value:    Duration{Months: absInt.Int64(), Negative: negative},
+		Value:    Duration{Months: int(absInt.Int64()), Negative: negative},
 	}), nil
 }
 
@@ -608,13 +608,13 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 		}), nil
 	}
 
-	// Accumulate months via big.Int so a total near the int64 limit does not
-	// wrap to an invalid negative lexical; reject anything that overflows int64.
+	// Accumulate months via big.Int so a total near the int limit does not wrap
+	// to an invalid negative lexical; reject anything that overflows int.
 	totalMonths := new(big.Int)
 	for item := range seqItems(seq) {
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
-		m := big.NewInt(d.Months)
+		m := big.NewInt(int64(d.Months))
 		if d.Negative {
 			totalMonths.Sub(totalMonths, m)
 		} else {
@@ -626,12 +626,12 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 	if negative {
 		absMonths = new(big.Int).Neg(totalMonths)
 	}
-	if !absMonths.IsInt64() {
+	if !absMonths.IsInt64() || absMonths.Int64() > int64(math.MaxInt) {
 		return nil, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration sum overflow"}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeYearMonthDuration,
-		Value:    Duration{Months: absMonths.Int64(), Negative: negative},
+		Value:    Duration{Months: int(absMonths.Int64()), Negative: negative},
 	}), nil
 }
 

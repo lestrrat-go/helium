@@ -114,7 +114,7 @@ type AtomicValue struct {
 | `TypeDate` | xs:date | `time.Time` |
 | `TypeDateTime` | xs:dateTime | `time.Time` |
 | `TypeTime` | xs:time | `time.Time` |
-| `TypeDuration` | xs:duration | `Duration` struct (`Months int64`, so the range is the same on every platform) |
+| `TypeDuration` | xs:duration | `Duration` struct |
 | `TypeDayTimeDuration` | xs:dayTimeDuration | `Duration` struct |
 | `TypeYearMonthDuration` | xs:yearMonthDuration | `Duration` struct |
 | `TypeAnyURI` | xs:anyURI | `string` |
@@ -123,6 +123,23 @@ type AtomicValue struct {
 | `TypeHexBinary` | xs:hexBinary | `[]byte` |
 | `TypeUntypedAtomic` | xs:untypedAtomic | `string` |
 | `TypeAnyAtomicType` | xs:anyAtomicType | (abstract) |
+
+### Duration month range (32-bit limit)
+
+`Duration.Months` is an `int`. Every place that produces a month total computes it in int64 or exact `big.Int`
+and range-checks it into `int`: the lexical parse (`parseXSDDuration` accumulates in int64 and returns
+`errDurationMonthsRange` when the total does not fit `int`, which `durationCastError` raises as FODT0002),
+yearMonthDuration `+`/`-`, `*`/`div` by a double/float or an integer/decimal, `fn:sum`, and `fn:avg`. A month
+total that does not fit `int` raises FODT0002 (duration overflow) and never wraps. A dayTimeDuration cast of a
+string with a month part stays FORG0001.
+
+Where int is 64 bits the range is that of int64. Where int is 32 bits (386) a month total above 2^31-1
+(about 178,956,970 years) is a duration overflow, so a yearMonthDuration valid on 64-bit can raise FODT0002
+on 386, and `castable as` reports false for it. For example `xs:yearMonthDuration("-P3214267297Y")` (about
+3.86e10 months), the operand of QT3 `cbcl-subtract-yearMonthDuration-from-date-002` and
+`cbcl-subtract-yearMonthDuration-from-dateTime-002`, raises FODT0002 on 386 where those cases expect FODT0001.
+Both cases depend on XQuery (`XQ10+`), so the XPath QT3 run does not include them, and the 386 QT3 results
+match 64-bit case for case.
 
 ## FunctionItem
 

@@ -417,7 +417,7 @@ func fnYearsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
 	if d.Negative {
 		years = -years
 	}
-	return SingleInteger(years), nil
+	return SingleInteger(int64(years)), nil
 }
 
 func fnMonthsFromDuration(_ context.Context, args []Sequence) (Sequence, error) {
@@ -432,7 +432,7 @@ func fnMonthsFromDuration(_ context.Context, args []Sequence) (Sequence, error) 
 	if d.Negative {
 		months = -months
 	}
-	return SingleInteger(months), nil
+	return SingleInteger(int64(months)), nil
 }
 
 // dayTimeWholeSeconds returns the floor of the absolute total dayTime seconds

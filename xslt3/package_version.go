@@ -9,10 +9,8 @@ import (
 // Version format: NumericPart ("-" NamePart)?
 // NumericPart: Integer ("." Integer)*
 // NamePart: NCName
-// Numbers holds int64 components on every platform, so a component above
-// 2^31-1 parses the same where int is 32 bits.
 type PackageVersion struct {
-	Numbers []int64
+	Numbers []int
 	Name    string // name suffix after "-" (e.g., "alpha" in "1.0-alpha")
 	Raw     string // original version string
 }
@@ -35,7 +33,7 @@ func ParsePackageVersion(s string) PackageVersion {
 
 	// Parse numeric parts
 	for part := range strings.SplitSeq(numPart, ".") {
-		n, err := strconv.ParseInt(part, 10, 64)
+		n, err := strconv.Atoi(part)
 		if err != nil {
 			// Non-numeric version component - treat as name
 			pv.Name = s
@@ -54,11 +52,11 @@ func (v PackageVersion) Compare(other PackageVersion) int {
 	maxLen := max(len(v.Numbers), len(other.Numbers))
 
 	for i := range maxLen {
-		var a int64
+		a := 0
 		if i < len(v.Numbers) {
 			a = v.Numbers[i]
 		}
-		var b int64
+		b := 0
 		if i < len(other.Numbers) {
 			b = other.Numbers[i]
 		}
@@ -92,7 +90,7 @@ type VersionConstraint struct {
 	// Exact version (nil if wildcard or range)
 	Exact *PackageVersion
 	// Prefix match: "1.*" means Numbers=[1], matchPrefix=true
-	Prefix  []int64
+	Prefix  []int
 	IsRange bool
 	// Range bounds (inclusive)
 	RangeFrom PackageVersion
@@ -150,9 +148,9 @@ func ParseVersionConstraint(s string) VersionConstraint {
 	// Check for prefix wildcard: "1.*"
 	if strings.HasSuffix(s, ".*") {
 		prefix := s[:len(s)-2]
-		var nums []int64
+		var nums []int
 		for p := range strings.SplitSeq(prefix, ".") {
-			n, err := strconv.ParseInt(p, 10, 64)
+			n, err := strconv.Atoi(p)
 			if err != nil {
 				break
 			}

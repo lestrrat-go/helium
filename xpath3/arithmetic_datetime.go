@@ -168,10 +168,10 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 			rm = -rm
 		}
 		// lm/rm are signed month totals. Accumulate via big.Int so a result near
-		// the int64 limit (e.g. summing two large yearMonthDurations) does not wrap
-		// to an invalid negative lexical; reject anything that overflows int64.
-		lBig := big.NewInt(lm)
-		rBig := big.NewInt(rm)
+		// the int limit (e.g. summing two large yearMonthDurations) does not wrap
+		// to an invalid negative lexical; reject anything that overflows int.
+		lBig := big.NewInt(int64(lm))
+		rBig := big.NewInt(int64(rm))
 		resBig := new(big.Int)
 		if op == TokenPlus {
 			resBig.Add(lBig, rBig)
@@ -183,12 +183,12 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 		if negative {
 			absBig = new(big.Int).Neg(resBig)
 		}
-		if !absBig.IsInt64() {
+		if !absBig.IsInt64() || absBig.Int64() > int64(math.MaxInt) {
 			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration arithmetic overflow"}
 		}
 		return SingleAtomic(AtomicValue{
 			TypeName: typeName,
-			Value:    Duration{Months: absBig.Int64(), Negative: negative},
+			Value:    Duration{Months: int(absBig.Int64()), Negative: negative},
 		}), true, nil
 	}
 
@@ -318,7 +318,13 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 
 	// Per XPath F&O spec: months are rounded "half towards positive infinity"
 	// i.e. math.Floor(months + 0.5)
-	resMonths := int64(math.Floor(months + 0.5))
+	// The rounded count is at most 2^53, so it fits int64; where int is 32
+	// bits a count past 2^31-1 is a duration overflow.
+	roundedMonths := int64(math.Floor(months + 0.5))
+	resMonths := int(roundedMonths)
+	if int64(resMonths) != roundedMonths {
+		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow: month count out of int range"}
+	}
 	resSecs := secs
 	negative := resMonths < 0 || (resMonths == 0 && resSecs < 0)
 	if negative {
@@ -339,7 +345,7 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 // integer/decimal operands precise — e.g. P9007199254740993M * 1 stays
 // P9007199254740993M instead of rounding through float64.
 func arithmeticYearMonthDurationRat(op TokenType, d Duration, nRat *big.Rat) (Sequence, bool, error) {
-	months := big.NewInt(d.Months)
+	months := big.NewInt(int64(d.Months))
 	if d.Negative {
 		months.Neg(months)
 	}
@@ -361,13 +367,13 @@ func arithmeticYearMonthDurationRat(op TokenType, d Duration, nRat *big.Rat) (Se
 	if negative {
 		absInt = new(big.Int).Neg(resInt)
 	}
-	if !absInt.IsInt64() {
+	if !absInt.IsInt64() || absInt.Int64() > int64(math.MaxInt) {
 		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration arithmetic overflow"}
 	}
 
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeYearMonthDuration,
-		Value:    Duration{Months: absInt.Int64(), Negative: negative},
+		Value:    Duration{Months: int(absInt.Int64()), Negative: negative},
 	}), true, nil
 }
 
@@ -407,13 +413,13 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		// time.AddDate computes the result via int month arithmetic that silently
 		// wraps for magnitudes near math.MaxInt, so reject month magnitudes beyond a
 		// conservative bound that keeps the result within representable years.
-		if months > maxSafeAddDateMonths || months < -maxSafeAddDateMonths {
+		if int64(months) > maxSafeAddDateMonths || int64(months) < -maxSafeAddDateMonths {
 			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: month count out of range"}
 		}
-		if !resultYearFits(t, max(months, -months)/12+1) {
+		if !resultYearFits(t, int64(max(months, -months)/12+1)) {
 			return nil, true, &XPathError{Code: errCodeFODT0001, Message: "date/time arithmetic overflow: result year out of range"}
 		}
-		t = addMonths(t, months)
+		t = addMonths(t, int64(months))
 	}
 
 	// Add seconds exactly: split into whole seconds and a sub-second nanosecond
@@ -696,7 +702,7 @@ func durationFromRatSeconds(secsRat *big.Rat) (float64, *big.Rat) {
 func durationToRat(d Duration, isYM bool) *big.Rat {
 	var r *big.Rat
 	if isYM {
-		r = new(big.Rat).SetInt64(d.Months)
+		r = new(big.Rat).SetInt64(int64(d.Months))
 	} else if d.SecRat != nil {
 		// SecRat holds the EXACT total dayTime seconds magnitude (>=0). Prefer it
 		// over the lossy float64 Seconds field so that values beyond 2^53 (e.g.

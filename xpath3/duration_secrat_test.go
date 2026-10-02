@@ -337,14 +337,16 @@ func TestYearMonthDurationMulExactMonths(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
 	tests := []struct {
-		name string
-		expr string
-		want string
+		name            string
+		expr            string
+		want            string
+		monthsPastInt32 bool
 	}{
 		{
-			name: "large month total times one is identity",
-			expr: `xs:yearMonthDuration("P9007199254740993M") * 1`,
-			want: canonYM9007, // 9007199254740993 months
+			name:            "large month total times one is identity",
+			expr:            `xs:yearMonthDuration("P9007199254740993M") * 1`,
+			want:            canonYM9007, // 9007199254740993 months
+			monthsPastInt32: true,
 		},
 		{
 			name: "half rounds toward positive infinity",
@@ -365,12 +367,7 @@ func TestYearMonthDurationMulExactMonths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			seq := evalExpr(t, doc, tt.expr)
-			require.Equal(t, 1, seq.Len())
-			av := seq.Get(0).(xpath3.AtomicValue)
-			got, err := xpath3.AtomicToString(av)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			requireDurationResult(t, doc, tt.expr, tt.want, tt.monthsPastInt32)
 		})
 	}
 }
@@ -383,9 +380,10 @@ func TestDurationMulDoubleFloatExact(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
 	tests := []struct {
-		name string
-		expr string
-		want string
+		name            string
+		expr            string
+		want            string
+		monthsPastInt32 bool
 	}{
 		{
 			// Canonical dayTime form breaks the magnitude into days/hours; the
@@ -415,19 +413,22 @@ func TestDurationMulDoubleFloatExact(t *testing.T) {
 			want: wantTrue,
 		},
 		{
-			name: "yearMonth times xs:double(1) keeps exact months",
-			expr: `xs:yearMonthDuration("P9007199254740993M") * xs:double("1")`,
-			want: canonYM9007, // 9007199254740993 months
+			name:            "yearMonth times xs:double(1) keeps exact months",
+			expr:            `xs:yearMonthDuration("P9007199254740993M") * xs:double("1")`,
+			want:            canonYM9007, // 9007199254740993 months
+			monthsPastInt32: true,
 		},
 		{
-			name: "yearMonth times xs:float(1) keeps exact months",
-			expr: `xs:yearMonthDuration("P9007199254740993M") * xs:float("1")`,
-			want: canonYM9007,
+			name:            "yearMonth times xs:float(1) keeps exact months",
+			expr:            `xs:yearMonthDuration("P9007199254740993M") * xs:float("1")`,
+			want:            canonYM9007,
+			monthsPastInt32: true,
 		},
 		{
-			name: "yearMonth div xs:double(1) keeps exact months",
-			expr: `xs:yearMonthDuration("P9007199254740993M") div xs:double("1")`,
-			want: canonYM9007,
+			name:            "yearMonth div xs:double(1) keeps exact months",
+			expr:            `xs:yearMonthDuration("P9007199254740993M") div xs:double("1")`,
+			want:            canonYM9007,
+			monthsPastInt32: true,
 		},
 		{
 			name: "dayTime times xs:double(1) equals times 1",
@@ -438,12 +439,7 @@ func TestDurationMulDoubleFloatExact(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			seq := evalExpr(t, doc, tt.expr)
-			require.Equal(t, 1, seq.Len())
-			av := seq.Get(0).(xpath3.AtomicValue)
-			got, err := xpath3.AtomicToString(av)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			requireDurationResult(t, doc, tt.expr, tt.want, tt.monthsPastInt32)
 		})
 	}
 }
@@ -522,14 +518,16 @@ func TestAvgYearMonthDurationExactMonths(t *testing.T) {
 	doc := mustParseXML(t, "<root/>")
 
 	tests := []struct {
-		name string
-		expr string
-		want string
+		name            string
+		expr            string
+		want            string
+		monthsPastInt32 bool
 	}{
 		{
-			name: "avg of two large equal durations",
-			expr: `avg(( xs:yearMonthDuration("P9007199254740993M"), xs:yearMonthDuration("P9007199254740993M") ))`,
-			want: canonYM9007, // 9007199254740993 months
+			name:            "avg of two large equal durations",
+			expr:            `avg(( xs:yearMonthDuration("P9007199254740993M"), xs:yearMonthDuration("P9007199254740993M") ))`,
+			want:            canonYM9007, // 9007199254740993 months
+			monthsPastInt32: true,
 		},
 		{
 			name: "avg rounds half toward positive infinity",
@@ -540,12 +538,7 @@ func TestAvgYearMonthDurationExactMonths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			seq := evalExpr(t, doc, tt.expr)
-			require.Equal(t, 1, seq.Len())
-			av := seq.Get(0).(xpath3.AtomicValue)
-			got, err := xpath3.AtomicToString(av)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			requireDurationResult(t, doc, tt.expr, tt.want, tt.monthsPastInt32)
 		})
 	}
 }
