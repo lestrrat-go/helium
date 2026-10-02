@@ -1011,7 +1011,12 @@ func (pctx *parserCtx) parseAttributeValueInState(ctx context.Context, qch byte,
 				if pctx.nodeContentTooLong(nBytes) {
 					return "", 0, pctx.error(ctx, ErrNodeContentTooLarge)
 				}
-				if !pctx.literalStringValid(v) {
+				// The scan accepts an ASCII byte only at or above 0x20 and a
+				// non-ASCII character only when it is well-formed UTF-8 and an
+				// xmlchar.IsChar, which is xmlchar.IsLiteralChar's XML 1.0 rule,
+				// so an XML 1.0 value needs no second pass. XML 1.1 also rejects
+				// its RestrictedChar (DEL, U+0080-U+0084, U+0086-U+009F).
+				if pctx.isXML11() && !pctx.literalStringValid(v) {
 					return "", 0, pctx.error(ctx, ErrInvalidChar)
 				}
 				if err := u8.AdvanceFast(nBytes); err != nil {

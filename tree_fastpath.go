@@ -2,6 +2,7 @@ package helium
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -169,10 +170,14 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 		return errors.New("element placed in wrong location")
 	}
 
-	e, err := doc.CreateElement(localname)
-	if err != nil {
-		return err
-	}
+	// Build the element as CreateElement does, without its colon check:
+	// parseQName returns an NCName as the local name (its parseName fallback
+	// runs only when parseNCName has already failed on the same input, so it
+	// fails too), so localname never holds a colon.
+	e := doc.allocElement()
+	e.name = localname
+	e.etype = ElementNode
+	e.doc = doc
 	e.SetLine(pctx.LineNumber())
 	if pctx.currentEntityURI != "" {
 		e.entityBaseURI = pctx.currentEntityURI
@@ -215,8 +220,13 @@ func (pctx *parserCtx) fastStartElement(localname, prefix, uri string, attrs []a
 			}
 		}
 
+		// A value without '&' holds no reference, so CreateAttribute would
+		// build the same single Text child createLiteralAttribute builds
+		// (stringToNodeList's no-reference path), and its colon check cannot
+		// fire: attr.localname is an NCName from parseQName, or the local name
+		// of a DTD default that CreateAttribute already accepted.
 		var created *Attribute
-		if pctx.replaceEntities {
+		if pctx.replaceEntities || strings.IndexByte(attr.value, '&') < 0 {
 			created = doc.createLiteralAttribute(attr.localname, attr.value, ns)
 		} else {
 			var err error
