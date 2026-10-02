@@ -242,7 +242,9 @@ func appendDescendantMatches(ctx context.Context, ec *evalContext, out []helium.
 		if err := ctx.Err(); err != nil {
 			return nil, 0, 0, err
 		}
-		sizes.close(len(stack), visited)
+		if len(sizes.pending) > 0 {
+			sizes.close(len(stack), visited)
+		}
 		last := len(stack) - 1
 		cur := stack[last]
 		stack = stack[:last]
@@ -250,7 +252,9 @@ func appendDescendantMatches(ctx context.Context, ec *evalContext, out []helium.
 		if visited > ec.maxNodes {
 			return nil, 0, 0, ixpath.ErrNodeSetLimit
 		}
-		sizes.open(cur, len(stack), visited)
+		if sizes.next < len(sizes.nested) {
+			sizes.open(cur, len(stack), visited)
+		}
 		if step.Axis == AxisChild {
 			candidates++
 			if matchNodeTest(step.NodeTest, cur, AxisChild, ec) {
@@ -269,7 +273,9 @@ func appendDescendantMatches(ctx context.Context, ec *evalContext, out []helium.
 			return nil, 0, 0, err
 		}
 	}
-	sizes.close(0, visited)
+	if len(sizes.pending) > 0 {
+		sizes.close(0, visited)
+	}
 	return out, visited, candidates, nil
 }
 
@@ -306,34 +312,13 @@ func descendantStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec 
 		return nil, err
 	}
 
-	var out, matched []helium.Node
-	var stack []descendantEntry
+	w := descendantWalker{evalFn: evalFn, step: step}
 	for _, c := range tops {
-		stack = append(stack, descendantEntry{node: c})
-		for len(stack) > 0 {
-			last := len(stack) - 1
-			cur := stack[last]
-			stack = stack[:last]
-			if cur.selected {
-				out = append(out, cur.node)
-			}
-			start := len(stack)
-			var traversed int
-			var err error
-			stack, matched, traversed, err = enumerateDescendantCandidates(ctx, ec, stack, matched[:0], cur.node, step)
-			if err != nil {
-				return nil, err
-			}
-			if err := ec.countOps(ctx, traversed); err != nil {
-				return nil, err
-			}
-			out, err = selectDescendantCandidates(evalFn, ctx, ec, stack[start:], out, matched, step)
-			if err != nil {
-				return nil, err
-			}
+		if _, err := w.walk(ctx, ec, c); err != nil {
+			return nil, err
 		}
 	}
-	return clampDescendantResult(ec, out)
+	return clampDescendantResult(ec, w.out)
 }
 
 // descendantStepQuietPredicates walks the subtree of every outermost context
@@ -344,108 +329,129 @@ func descendantStepWithPredicates(evalFn exprEvaluator, ctx context.Context, ec 
 // charge nothing, so the second step's charges can wait until the walk ends.
 func descendantStepQuietPredicates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, contexts []helium.Node, step vmLocationStep) ([]helium.Node, error) {
 	total := 0
-	candidates := 0
-	var out, matched []helium.Node
-	var stack []descendantEntry
-	var sizes nestedSubtrees
+	w := descendantWalker{evalFn: evalFn, step: step, counting: true}
 	for i := 0; i < len(contexts); {
 		c := contexts[i]
-		sizes.reset(contexts[i+1 : i+1+nestedContextRun(contexts, i)])
+		w.sizes.reset(contexts[i+1 : i+1+nestedContextRun(contexts, i)])
+		// The checks startDescendantWalk makes before the walk.
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		if ec.maxNodes < 1 {
 			return nil, ixpath.ErrNodeSetLimit
 		}
-		visited := 0
-		stack = append(stack[:0], descendantEntry{node: c})
-		for len(stack) > 0 {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			sizes.close(len(stack), visited)
-			last := len(stack) - 1
-			cur := stack[last]
-			stack = stack[:last]
-			visited++
-			if visited > ec.maxNodes {
-				return nil, ixpath.ErrNodeSetLimit
-			}
-			sizes.open(cur.node, len(stack), visited)
-			if cur.selected {
-				out = append(out, cur.node)
-			}
-			start := len(stack)
-			var traversed int
-			var err error
-			stack, matched, traversed, err = enumerateDescendantCandidates(ctx, ec, stack, matched[:0], cur.node, step)
-			if err != nil {
-				return nil, err
-			}
-			candidates += traversed
-			out, err = selectDescendantCandidates(evalFn, ctx, ec, stack[start:], out, matched, step)
-			if err != nil {
-				return nil, err
-			}
+		visited, err := w.walk(ctx, ec, c)
+		if err != nil {
+			return nil, err
 		}
-		sizes.close(0, visited)
-		if err := chargeDescendantOrSelf(ctx, ec, visited, sizes.sizes); err != nil {
+		if err := chargeDescendantOrSelf(ctx, ec, visited, w.sizes.sizes); err != nil {
 			return nil, err
 		}
 		total += visited
-		i += 1 + len(sizes.sizes)
+		i += 1 + len(w.sizes.sizes)
 	}
 	if err := finishDescendantOrSelfStep(ec, contexts[0], total); err != nil {
 		return nil, err
 	}
-	if err := ec.countOps(ctx, candidates); err != nil {
+	if err := ec.countOps(ctx, w.candidates); err != nil {
 		return nil, err
 	}
-	return clampDescendantResult(ec, out)
+	return clampDescendantResult(ec, w.out)
 }
 
-// enumerateDescendantCandidates enumerates the candidates of the second step
-// from the subtree node n, which the walk just popped: the XDM children of n
-// go onto stack in document order, and the candidates that match the step's
-// node test (children or attributes of n) are appended to matched. It returns
-// the grown stack and matched slices and the number of candidates the step
-// enumerated.
-func enumerateDescendantCandidates(ctx context.Context, ec *evalContext, stack []descendantEntry, matched []helium.Node, n helium.Node, step vmLocationStep) ([]descendantEntry, []helium.Node, int, error) {
-	if step.Axis == AxisChild {
-		return pushMatchingChildEntries(ctx, ec, stack, matched, n, step.NodeTest)
-	}
-	matched, traversed, err := appendAxisNodeMatches(ctx, matched, ec, n, AxisAttribute, step.NodeTest)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	stack, err = pushChildEntries(ctx, stack, n)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	return stack, matched, traversed, nil
+// descendantWalker applies the second step and its predicates to every node
+// of a subtree, in pre-order. It emits each child the step selects when the
+// walk pops it, and the attributes the step selects when the walk reaches
+// their element.
+//
+// Without counting, it charges the candidates of each node before applying
+// the predicates, as the step-by-step evaluation does. With counting (quiet
+// predicates), it also counts the subtree, fails where countDescendantOrSelf
+// fails, measures the nested context subtrees in sizes, and adds the
+// candidates to candidates for the caller to charge.
+type descendantWalker struct {
+	evalFn     exprEvaluator
+	step       vmLocationStep
+	counting   bool
+	out        []helium.Node
+	matched    []helium.Node
+	stack      []descendantEntry
+	sizes      nestedSubtrees
+	candidates int
 }
 
-// selectDescendantCandidates applies the predicates of the second step to
-// the candidates matched that enumerateDescendantCandidates found for one
-// node, whose children are the entries. A selected child is marked, to be
-// emitted when the walk pops it; selected attributes are appended to out at
-// once. The entries are then reversed, so the first child is popped next.
-func selectDescendantCandidates(evalFn exprEvaluator, ctx context.Context, ec *evalContext, entries []descendantEntry, out, matched []helium.Node, step vmLocationStep) ([]helium.Node, error) {
-	selected := matched
-	for _, pred := range step.Predicates {
-		var err error
-		selected, err = applyVMPredicate(evalFn, ctx, ec, selected, pred)
-		if err != nil {
-			return nil, err
+// walk walks the subtree of c. When counting, it returns the number of
+// subtree nodes.
+func (w *descendantWalker) walk(ctx context.Context, ec *evalContext, c helium.Node) (int, error) {
+	step := w.step
+	w.stack = append(w.stack[:0], descendantEntry{node: c})
+	visited := 0
+	for len(w.stack) > 0 {
+		if w.counting {
+			if err := ctx.Err(); err != nil {
+				return 0, err
+			}
+			if len(w.sizes.pending) > 0 {
+				w.sizes.close(len(w.stack), visited)
+			}
 		}
+		last := len(w.stack) - 1
+		cur := w.stack[last]
+		w.stack = w.stack[:last]
+		if w.counting {
+			visited++
+			if visited > ec.maxNodes {
+				return 0, ixpath.ErrNodeSetLimit
+			}
+			if w.sizes.next < len(w.sizes.nested) {
+				w.sizes.open(cur.node, len(w.stack), visited)
+			}
+		}
+		if cur.selected {
+			w.out = append(w.out, cur.node)
+		}
+
+		start := len(w.stack)
+		var traversed int
+		var err error
+		if step.Axis == AxisChild {
+			w.stack, w.matched, traversed, err = pushMatchingChildEntries(ctx, ec, w.stack, w.matched[:0], cur.node, step.NodeTest)
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			w.matched, traversed, err = appendAxisNodeMatches(ctx, w.matched[:0], ec, cur.node, AxisAttribute, step.NodeTest)
+			if err != nil {
+				return 0, err
+			}
+			w.stack, err = pushChildEntries(ctx, w.stack, cur.node)
+			if err != nil {
+				return 0, err
+			}
+		}
+		if w.counting {
+			w.candidates += traversed
+		} else if err := ec.countOps(ctx, traversed); err != nil {
+			return 0, err
+		}
+		selected := w.matched
+		for _, pred := range step.Predicates {
+			selected, err = applyVMPredicate(w.evalFn, ctx, ec, selected, pred)
+			if err != nil {
+				return 0, err
+			}
+		}
+		if step.Axis == AxisChild {
+			markSelectedEntries(w.stack[start:], selected)
+		} else {
+			w.out = append(w.out, selected...)
+		}
+		slices.Reverse(w.stack[start:])
 	}
-	if step.Axis == AxisChild {
-		markSelectedEntries(entries, selected)
-	} else {
-		out = append(out, selected...)
+	if len(w.sizes.pending) > 0 {
+		w.sizes.close(0, visited)
 	}
-	slices.Reverse(entries)
-	return out, nil
+	return visited, nil
 }
 
 // startDescendantWalk begins the descendant-or-self walk from c the way
@@ -477,7 +483,9 @@ func countDescendantOrSelf(ctx context.Context, ec *evalContext, c helium.Node, 
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		sizes.close(len(stack), visited)
+		if len(sizes.pending) > 0 {
+			sizes.close(len(stack), visited)
+		}
 		last := len(stack) - 1
 		cur := stack[last]
 		stack = stack[:last]
@@ -485,13 +493,17 @@ func countDescendantOrSelf(ctx context.Context, ec *evalContext, c helium.Node, 
 		if visited > ec.maxNodes {
 			return 0, ixpath.ErrNodeSetLimit
 		}
-		sizes.open(cur, len(stack), visited)
+		if sizes.next < len(sizes.nested) {
+			sizes.open(cur, len(stack), visited)
+		}
 		stack, err = ixpath.PushXDMChildren(ctx, stack, cur)
 		if err != nil {
 			return 0, err
 		}
 	}
-	sizes.close(0, visited)
+	if len(sizes.pending) > 0 {
+		sizes.close(0, visited)
+	}
 	return visited, nil
 }
 
@@ -512,7 +524,9 @@ func chargeDescendantOrSelf(ctx context.Context, ec *evalContext, visited int, n
 }
 
 // nestedSubtrees measures the subtrees of the context nodes that lie inside
-// the subtree a walk visits. The walk pops nodes in pre-order from a stack
+// the subtree a walk visits. The walks call open only while a nested node is
+// still ahead (next < len(nested)) and close only while a subtree is pending,
+// so a walk without nested context nodes pays two comparisons per node. The walk pops nodes in pre-order from a stack
 // that holds the pending XDM children; when it pops a nested context node,
 // the node's descendants are exactly the nodes it pops while the stack is
 // longer than it was right after that pop.
@@ -538,10 +552,14 @@ type pendingSubtree struct {
 // in document order, reusing the buffers of the previous measure.
 func (s *nestedSubtrees) reset(nested []helium.Node) {
 	s.nested = nested
-	s.sizes = slices.Grow(s.sizes[:0], len(nested))[:len(nested)]
-	clear(s.sizes)
 	s.next = 0
 	s.pending = s.pending[:0]
+	if len(nested) == 0 {
+		s.sizes = s.sizes[:0]
+		return
+	}
+	s.sizes = slices.Grow(s.sizes[:0], len(nested))[:len(nested)]
+	clear(s.sizes)
 }
 
 // open records that the walk popped n, leaving stackLen entries on the
