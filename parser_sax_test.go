@@ -423,7 +423,7 @@ func TestSAXEvents(t *testing.T) {
 			"SAX.StartElementNS(c, p, 'urn:p', 0, 1, 1, a='d...', 1)\n" +
 			"SAX.EndElementNS(c, p, 'urn:p')\n" +
 			"SAX.StartElementNS(ŕ, é, 'urn:e', 0, 1, 0, é:a='1...', 1)\n" +
-			"SAX.StartElementNS(r, NULL, NULL, 0, 0, 0)\n" +
+			"SAX.StartElementNS(r, NULL, NULL, 0, 0, 0)\n" + //nolint:dupword // NULL prefix and NULL URI
 			"SAX.EndElementNS(r, NULL, NULL)\n" +
 			"SAX.EndElementNS(ŕ, é, 'urn:e')\n" +
 			"SAX.EndElementNS(r, p, 'urn:p')\n"
