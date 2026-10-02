@@ -284,6 +284,8 @@ the negative-sentinel option disables the cap for trusted input.
 - **Blank-run cap** (`skipBlankRun`/`blankRunLimit`, `parser_whitespace.go`) — the same cap bounds a
   contiguous whitespace run in 4 KiB chunks; sticky `blankRunErr`, preferred by `errorAtLevel`. DTD
   subset/INCLUDE loops call `skipBlankRun` directly (not `skipBlanks`, which consumes `%pe;` unexpanded).
+  `skipBlanks` returns before the scan when the cursor holds a non-blank byte (a non-zero `Peek`), so only
+  an actual run, a NUL, or an exhausted input reaches `skipBlankRun` and its context poll.
 - **Character buffering** (`deliverCharacters`, `CharBufferSize`) — UTF-8-boundary-respecting chunking; bounded
   streaming-SAX char-data path `parseCharDataChunkedSAX` (no DOM built) with a documented over-budget blank-run
   reclassification policy.
@@ -291,6 +293,13 @@ the negative-sentinel option disables the cap for trusted input.
   `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the
   cursor buffer, invalidating borrowed slices), and use `AdvanceFast()` when the run is proven newline-free.
   See `internal/strcursor/utf8cursor.go`.
+- **Qualified names** — `parseQName` returns the local name, the prefix, and the whole QName as written. Its
+  ASCII fast path interns the whole name once and slices the prefix and local name out of it, so a
+  prefixed name costs no concatenation; `parseQNameSlow` (non-ASCII, non-UTF-8 cursor, malformed) joins
+  `prefix:local` once. `parseStartTag` keys ATTLIST defaults and the node stack (end-tag matching,
+  `elementDeclType` whitespace lookups) on that name, and `parseAttribute` keys tokenized-type lookups on
+  the attribute's. `DTD.LookupElement` builds its `name:prefix` key in a stack buffer, so a lookup
+  allocates nothing for names that fit.
 - **Name interning** (`intern.go`) — global lexicon seed with a `(first byte, length)` cheap-check before the map probe.
 - **Entity-amplification / external bounds** — see Entity Expansion above.
 - **Start-tag duplicate detection** (`parser_element.go` `attrDupSetThreshold` = 32) — per-start-tag attribute
@@ -315,6 +324,12 @@ has no blocking read; `ParseReader` needs a context-honoring reader; the push pa
 `sync.Cond` unblocked by a watcher goroutine on `ctx.Done()`). Bounded scanners (blank scan, char-data,
 char-ref) re-check `ctx.Err()` and disambiguate exhaustion from a sticky cursor read error via
 `HasByteAt`/`Err()` for push-cancel safety. See `parseDocument`, `skipBlankRun`, and the `push` package.
+
+`parseDocument` hands the parse a `documentContext` (`parser.go`): value layers for the parser context and
+the document locator over the caller's context, plus the `stopFuncKey` value `StopParser` reads. The
+per-step polls in `parseContent` and `skipBlankRun` go through `pollErr`, which asks the caller's context
+directly (the value layers do not change `Err`) and skips the call when the caller's `Done` is nil, i.e.
+the context can never be cancelled. Any other context, such as a nested parse's, is asked as given.
 
 ## Push Parser
 
