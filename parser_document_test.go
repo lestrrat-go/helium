@@ -20,9 +20,7 @@ import (
 // version, bom whether the input starts with a byte-order mark, and enc the
 // transcoder from UTF-8 (nil for UTF-8 itself). nameText is a name and text
 // the encoding can represent, so element names, attribute values, and text
-// carry characters beyond ASCII wherever the encoding has them. extGap, when
-// set, says why an external entity in this encoding does not parse today; the
-// external-entity case skips it with that reason.
+// carry characters beyond ASCII wherever the encoding has them.
 type contentEncoding struct {
 	label    string
 	name     string
@@ -30,7 +28,6 @@ type contentEncoding struct {
 	bom      bool
 	enc      xenc.Encoding
 	nameText string
-	extGap   string
 }
 
 const (
@@ -47,11 +44,7 @@ var contentEncodings = []contentEncoding{
 	{label: "UTF-8 without declaration", version: ver10, nameText: mixedNameText},
 	{label: "UTF-8 declared", name: utf8Name, version: ver10, nameText: mixedNameText},
 	{label: "UTF-8 with BOM", version: ver10, bom: true, nameText: mixedNameText},
-	{
-		label: "UTF-8 declared with BOM", name: utf8Name, version: ver10, bom: true, nameText: mixedNameText,
-		extGap: "an external entity starting with a UTF-8 BOM and a text declaration fails with " +
-			`"XML declaration allowed only at the start of the document"`,
-	},
+	{label: "UTF-8 declared with BOM", name: utf8Name, version: ver10, bom: true, nameText: mixedNameText},
 	{label: "XML 1.1 UTF-8", name: utf8Name, version: ver11, nameText: mixedNameText},
 	{label: "XML 1.1 ISO-8859-1", name: "ISO-8859-1", version: ver11, enc: charmap.ISO8859_1, nameText: latinNameText},
 	{label: "US-ASCII", name: "US-ASCII", version: ver10, enc: charmap.ISO8859_1, nameText: "plain-ascii"},
@@ -64,11 +57,7 @@ var contentEncodings = []contentEncoding{
 	{label: "UTF-16BE without BOM", name: "UTF-16BE", version: ver10, enc: unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM), nameText: mixedNameText},
 	{label: "UCS-4BE", name: "UCS-4", version: ver10, enc: utf32.UTF32(utf32.BigEndian, utf32.IgnoreBOM), nameText: mixedNameText},
 	{label: "UCS-4LE", name: "UCS-4", version: ver10, enc: utf32.UTF32(utf32.LittleEndian, utf32.IgnoreBOM), nameText: mixedNameText},
-	{
-		label: "EBCDIC 037", name: "IBM037", version: ver10, enc: charmap.CodePage037, nameText: latinNameText,
-		extGap: "an external entity is not decoded from EBCDIC, so its text declaration fails with " +
-			`"XML declaration allowed only at the start of the document"`,
-	},
+	{label: "EBCDIC 037", name: "IBM037", version: ver10, enc: charmap.CodePage037, nameText: latinNameText},
 	{label: "Shift_JIS", name: "Shift_JIS", version: ver10, enc: japanese.ShiftJIS, nameText: japaneseNameText},
 	{label: "EUC-JP", name: "EUC-JP", version: ver10, enc: japanese.EUCJP, nameText: japaneseNameText},
 }
@@ -186,12 +175,10 @@ func rootOf(doc *helium.Document) helium.Node {
 
 // contentEntryPoint parses one content-cursor case through one entry point. It
 // receives the document text and the text of the external entity ext.ent, and
-// encodes whichever of the two the entry point exercises. external marks the
-// entry point that reads ext.ent.
+// encodes whichever of the two the entry point exercises.
 type contentEntryPoint struct {
-	name     string
-	parse    func(t *testing.T, p helium.Parser, e contentEncoding, doc, ext string) string
-	external bool
+	name  string
+	parse func(t *testing.T, p helium.Parser, e contentEncoding, doc, ext string) string
 }
 
 func contentParse(t *testing.T, p helium.Parser, e contentEncoding, doc, _ string) string {
@@ -285,7 +272,7 @@ func TestContentCursor(t *testing.T) {
 		{name: "push parser one byte at a time", parse: contentPush},
 		{name: "ParseInNodeContext", parse: contentInNodeContext},
 		{name: "internal entity content", parse: contentInternalEntity},
-		{name: "external entity content", parse: contentExternalEntity, external: true},
+		{name: "external entity content", parse: contentExternalEntity},
 	}
 	parsers := []struct {
 		name string
@@ -301,9 +288,6 @@ func TestContentCursor(t *testing.T) {
 			for _, e := range contentEncodings {
 				t.Run(e.label, func(t *testing.T) {
 					t.Parallel()
-					if ep.external && e.extGap != "" {
-						t.Skip(e.extGap)
-					}
 					baseline := e
 					baseline.name = ""
 					baseline.enc = nil

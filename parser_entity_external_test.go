@@ -15,6 +15,9 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/iofs"
 	"github.com/stretchr/testify/require"
+	xenc "golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/unicode"
 )
 
 // finiteFile is an fs.File that yields exactly n bytes of 'A' and then io.EOF.
@@ -1028,4 +1031,178 @@ func TestParseExternalEntity(t *testing.T) {
 		_, err := p.Parse(t.Context(), []byte(input))
 		require.NoError(t, err, "well-formed UTF-16 external entity must load")
 	})
+}
+
+// extEncodingResource is one kind of external resource whose replacement text
+// goes through the shared TextDecl decoder: an external general entity, an
+// external parameter entity, and the external DTD subset. doc references the
+// resource stored as file, whose text is body with TEXT replaced; every doc
+// expands to a root element whose content is that text.
+type extEncodingResource struct {
+	name string
+	file string
+	doc  string
+	body string
+}
+
+var extEncodingResources = []extEncodingResource{
+	{
+		name: "general entity",
+		file: "gen.ent",
+		doc:  `<?xml version="1.0"?>` + "\n" + `<!DOCTYPE r [<!ENTITY ext SYSTEM "gen.ent">]>` + "\n" + `<r>&ext;</r>`,
+		body: `<e>TEXT</e>`,
+	},
+	{
+		name: "parameter entity",
+		file: "pe.ent",
+		doc:  `<?xml version="1.0"?>` + "\n" + `<!DOCTYPE r [<!ENTITY % pe SYSTEM "pe.ent"> %pe;]>` + "\n" + `<r>&x;</r>`,
+		body: `<!ENTITY x "TEXT">`,
+	},
+	{
+		name: "external subset",
+		file: "sub.dtd",
+		doc:  `<?xml version="1.0"?>` + "\n" + `<!DOCTYPE r SYSTEM "sub.dtd">` + "\n" + `<r>&x;</r>`,
+		body: `<!ENTITY x "TEXT">`,
+	},
+}
+
+// extEncodingCase is one encoding of an external resource. The resource is
+// prefix, then decl and the body encoded with enc (UTF-8 when nil). reject
+// records the verdict of xmllint (libxml2 2.9.14) on the same files, except
+// where a case's comment says how helium differs; wantErr, when set, is the
+// error the rejection must carry.
+type extEncodingCase struct {
+	name    string
+	prefix  []byte
+	decl    string
+	enc     xenc.Encoding
+	text    string
+	reject  bool
+	wantErr error
+}
+
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
+const (
+	// extEncodingText is the text every accepted extEncodingCase decodes to,
+	// unless the case names ASCII text.
+	extEncodingText = "café"
+	// entryParse and entryParseReader name the Parse and ParseReader entry
+	// points in subtest messages.
+	entryParse       = "Parse"
+	entryParseReader = "ParseReader"
+)
+
+var extEncodingCases = []extEncodingCase{
+	{name: "UTF-8 with BOM and text declaration", prefix: utf8BOM, decl: `<?xml version="1.0" encoding="UTF-8"?>`, text: extEncodingText},
+	{name: "UTF-8 with BOM and version-less text declaration", prefix: utf8BOM, decl: `<?xml encoding="UTF-8"?>`, text: extEncodingText},
+	{name: "UTF-8 with BOM and no text declaration", prefix: utf8BOM, text: extEncodingText},
+	{
+		name: "UTF-8 with BOM declaring UTF-16", prefix: utf8BOM, decl: `<?xml version="1.0" encoding="UTF-16"?>`,
+		text: "cafe", reject: true, wantErr: helium.ErrEncodingBOMMismatch,
+	},
+	// libxml2 accepts this one and decodes the body as ISO-8859-1. XML §4.3.3
+	// makes the conflict fatal, and helium rejects it as it does for the
+	// document entity.
+	{
+		name: "UTF-8 with BOM declaring ISO-8859-1", prefix: utf8BOM, decl: `<?xml version="1.0" encoding="ISO-8859-1"?>`,
+		text: "cafe", reject: true, wantErr: helium.ErrEncodingBOMMismatch,
+	},
+	{name: "IBM037 with text declaration", decl: `<?xml version="1.0" encoding="IBM037"?>`, enc: charmap.CodePage037, text: extEncodingText},
+	{name: "IBM037 with version-less text declaration", decl: `<?xml encoding="IBM037"?>`, enc: charmap.CodePage037, text: extEncodingText},
+	{name: "IBM01140 with text declaration", decl: `<?xml version="1.0" encoding="IBM01140"?>`, enc: charmap.CodePage1140, text: extEncodingText},
+	{
+		name: "EBCDIC text declaration without an encoding", decl: `<?xml version="1.0"?>`, enc: charmap.CodePage037,
+		text: extEncodingText, reject: true,
+	},
+	{name: "EBCDIC without text declaration", enc: charmap.CodePage037, text: extEncodingText, reject: true},
+	{
+		name: "UTF-16LE with BOM and text declaration", decl: `<?xml version="1.0" encoding="UTF-16"?>`,
+		enc: unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), text: extEncodingText,
+	},
+	{name: "UTF-8 without BOM or text declaration", text: extEncodingText},
+	{name: "UTF-8 with text declaration", decl: `<?xml version="1.0" encoding="UTF-8"?>`, text: extEncodingText},
+	{name: "ISO-8859-1 with text declaration", decl: `<?xml version="1.0" encoding="ISO-8859-1"?>`, enc: charmap.ISO8859_1, text: extEncodingText},
+}
+
+func (c extEncodingCase) encode(t *testing.T, s string) []byte {
+	t.Helper()
+	if c.enc == nil {
+		return append(append([]byte{}, c.prefix...), s...)
+	}
+	out, err := c.enc.NewEncoder().Bytes([]byte(s))
+	require.NoError(t, err, "encode %s", c.name)
+	return append(append([]byte{}, c.prefix...), out...)
+}
+
+// extEncodingEntryPoint parses doc with p through one parser entry point.
+type extEncodingEntryPoint struct {
+	name  string
+	parse func(t *testing.T, p helium.Parser, doc []byte) (*helium.Document, error)
+}
+
+func extEncodingParse(t *testing.T, p helium.Parser, doc []byte) (*helium.Document, error) {
+	t.Helper()
+	return p.Parse(t.Context(), doc)
+}
+
+func extEncodingParseReader(t *testing.T, p helium.Parser, doc []byte) (*helium.Document, error) {
+	t.Helper()
+	return p.ParseReader(t.Context(), bytes.NewReader(doc))
+}
+
+func extEncodingPush(t *testing.T, p helium.Parser, doc []byte) (*helium.Document, error) {
+	t.Helper()
+	pp := p.NewPushParser(t.Context())
+	var pushErr error
+	for i := range doc {
+		if pushErr = pp.Push(doc[i : i+1]); pushErr != nil {
+			break
+		}
+	}
+	parsed, err := pp.Close()
+	if err != nil {
+		return parsed, err
+	}
+	return parsed, pushErr
+}
+
+// TestExternalEntityEncoding decodes an external general entity, an external
+// parameter entity, and the external subset from each encoding a resource may
+// arrive in, through Parse, ParseReader, and the push parser. A byte-order mark
+// may precede the text declaration (XML §4.3.3), and an EBCDIC resource is
+// decoded from the name in its text declaration, as for the document entity.
+func TestExternalEntityEncoding(t *testing.T) {
+	t.Parallel()
+
+	entryPoints := []extEncodingEntryPoint{
+		{name: entryParse, parse: extEncodingParse},
+		{name: entryParseReader, parse: extEncodingParseReader},
+		{name: "push parser one byte at a time", parse: extEncodingPush},
+	}
+	for _, res := range extEncodingResources {
+		t.Run(res.name, func(t *testing.T) {
+			t.Parallel()
+			for _, c := range extEncodingCases {
+				t.Run(c.name, func(t *testing.T) {
+					t.Parallel()
+					body := c.encode(t, c.decl+strings.ReplaceAll(res.body, "TEXT", c.text))
+					fsys := fstest.MapFS{res.file: &fstest.MapFile{Data: body}}
+					p := helium.NewParser().BlockXXE(false).LoadExternalDTD(true).SubstituteEntities(true).FS(fsys)
+					for _, ep := range entryPoints {
+						parsed, err := ep.parse(t, p, []byte(res.doc))
+						if c.reject {
+							require.Error(t, err, "%s must reject the resource", ep.name)
+							if c.wantErr != nil {
+								require.ErrorIs(t, err, c.wantErr, ep.name)
+							}
+							continue
+						}
+						require.NoError(t, err, ep.name)
+						require.Equal(t, c.text, string(parsed.DocumentElement().Content()), ep.name)
+					}
+				})
+			}
+		})
+	}
 }

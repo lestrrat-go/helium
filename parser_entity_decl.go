@@ -1010,10 +1010,10 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
 	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
-	// A leading TextDecl (and any declared encoding) has already been consumed and
-	// the body decoded to UTF-8 by decodeExternalPEContentVersion above, so the byte
-	// stream here never begins with a '<?xml' declaration; detectEncoding /
-	// switchEncoding still handle a BOM-only external entity carrying no TextDecl.
+	// A leading byte-order mark and TextDecl (and any declared encoding) have
+	// already been consumed and the body decoded to UTF-8 by
+	// decodeExternalPEContentVersion above, so the byte stream here no longer
+	// begins with that mark or a '<?xml' declaration.
 	if err := newctx.switchEncoding(); err != nil {
 		return nil, err
 	}

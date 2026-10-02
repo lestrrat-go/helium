@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/iolimit"
 	"github.com/lestrrat-go/helium/internal/strcursor"
 	"github.com/lestrrat-go/helium/sax"
@@ -935,23 +936,26 @@ func (pctx *parserCtx) loadExternalParameterEntityContent(ctx context.Context, e
 
 // decodeExternalPEContentVersion returns decoded external content and its
 // effective XML version. A TextDecl version overrides the referencing
-// document's version after compatibility is checked.
+// document's version after compatibility is checked. A leading UTF-8
+// byte-order mark is not part of the replacement text, so it is dropped, and a
+// TextDecl may follow it (XML §4.3.3).
 func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
 	entityVersion := pctx.documentVersion()
 	if len(content) == 0 {
 		return content, entityVersion, nil
 	}
 
-	// UTF-16 / UCS-4 external content is not ASCII-compatible: the body, a
-	// leading byte-order mark, and any leading TextDecl are all encoded, so the
-	// byte-level "<?xml" scan below cannot see the TextDecl. Detect a fixed-width
-	// encoding from the BOM/leading '<' and decode on a rune cursor instead.
-	if fixedWidthUnicodeEncoding(content) != "" {
-		return pctx.decodeFixedWidthExternalContent(ctx, srcURI, content)
+	// UTF-16 / UCS-4 / EBCDIC external content is not ASCII-compatible: the body,
+	// a leading byte-order mark, and any leading TextDecl are all encoded, so the
+	// byte-level "<?xml" scan below cannot see the TextDecl. Detect the encoding
+	// from the BOM or the encoded leading '<' and decode on a rune cursor instead.
+	if nonASCIIExternalEncoding(content) != "" {
+		return pctx.decodeNonASCIIExternalContent(ctx, srcURI, content)
 	}
 
-	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(content))) {
-		return content, entityVersion, nil
+	body := bytes.TrimPrefix(content, patUTF8)
+	if !looksLikeXMLDecl(strcursor.NewByteCursor(bytes.NewReader(body))) {
+		return body, entityVersion, nil
 	}
 
 	// Parse the TextDecl on a throwaway context over a COPY of the bytes, so the
@@ -974,10 +978,21 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 	// than this doc-less sub-context's default.
 	sub.version = pctx.documentVersion()
 
-	if bcur := sub.getByteCursor(); bcur != nil && looksLikeXMLDecl(bcur) {
-		if err := sub.parseTextDecl(ctx); err != nil {
-			return nil, "", err
-		}
+	// detectEncoding consumes a leading UTF-8 byte-order mark and records it in
+	// autoEncoding, which checkBOMEncodingConflict compares with the TextDecl's
+	// encoding below.
+	if _, err := sub.detectEncoding(); err != nil {
+		return nil, "", sub.error(ctx, err)
+	}
+	if err := sub.parseTextDecl(ctx); err != nil {
+		return nil, "", err
+	}
+	// A TextDecl naming an encoding other than UTF-8 after a UTF-8 byte-order
+	// mark is fatal (XML §4.3.3), as it is for the document entity. libxml2
+	// rejects a UTF-16 name there but accepts any other name and decodes the
+	// body in it.
+	if err := sub.checkBOMEncodingConflict(); err != nil {
+		return nil, "", sub.error(ctx, err)
 	}
 	if err := sub.switchEncoding(); err != nil {
 		// Wrap through sub.error so the failure (e.g. an unsupported declared
@@ -997,16 +1012,20 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 	return rest, sub.version, nil
 }
 
-// decodeFixedWidthExternalContent decodes an external resource's replacement text
-// that is in a fixed-width Unicode encoding (UTF-16 / UCS-4), returning the body
-// as UTF-8. The encoding is externally known — fixed by the byte-order mark or
-// the encoded shape of the leading '<' — so an OPTIONAL leading TextDecl need not
-// (re)declare it and a resource with no TextDecl at all (e.g. a UTF-16 external
-// DTD subset that opens on a comment) is still decoded. When a TextDecl IS present
-// it is consumed on the decoded rune cursor after switchEncoding, enforcing the
-// same grammar as the ASCII path (VersionInfo OPTIONAL, EncodingDecl REQUIRED, NO
-// StandaloneDecl). srcURI scopes any error to the source resource.
-func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
+// decodeNonASCIIExternalContent decodes an external resource's replacement text
+// that is in an encoding which is not ASCII-compatible, returning the body as
+// UTF-8. For UTF-16 / UCS-4 the encoding is externally known — fixed by the
+// byte-order mark or the encoded shape of the leading '<' — so an OPTIONAL
+// leading TextDecl need not (re)declare it and a resource with no TextDecl at
+// all (e.g. a UTF-16 external DTD subset that opens on a comment) is still
+// decoded. EBCDIC is recognized only by an encoded leading '<?xm'; its code
+// page is the name in that TextDecl, read through the EBCDIC invariant
+// characters as for the document entity (parseDocument), defaulting to IBM-037.
+// The TextDecl is consumed on the decoded rune cursor after switchEncoding,
+// enforcing the same grammar as the ASCII path (VersionInfo OPTIONAL,
+// EncodingDecl REQUIRED, NO StandaloneDecl). srcURI scopes any error to the
+// source resource.
+func (pctx *parserCtx) decodeNonASCIIExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, string, error) {
 	sub := &parserCtx{}
 	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
 		return nil, "", err
@@ -1019,14 +1038,20 @@ func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcU
 	// than this doc-less sub-context's default.
 	sub.version = pctx.documentVersion()
 
-	// Detect the fixed-width encoding (consuming a 2-byte BOM; peeking a BOM-less
-	// 4-byte pattern) and switch the sub-cursor to a UTF-8-decoding rune cursor
-	// before reading the TextDecl or the body.
+	// Detect the encoding (consuming a 2-byte BOM; peeking a BOM-less 4-byte
+	// pattern) and switch the sub-cursor to a UTF-8-decoding rune cursor before
+	// reading the TextDecl or the body.
 	enc, err := sub.detectEncoding()
 	if err != nil {
 		return nil, "", sub.error(ctx, err)
 	}
 	sub.detectedEncoding = enc
+	if enc == encEBCDIC {
+		sub.encoding = encoding.ExtractEBCDICEncoding(content)
+		if sub.encoding == "" {
+			sub.encoding = "ibm037"
+		}
+	}
 	if err := sub.switchEncoding(); err != nil {
 		return nil, "", sub.error(ctx, err)
 	}
@@ -1037,16 +1062,15 @@ func (pctx *parserCtx) decodeFixedWidthExternalContent(ctx context.Context, srcU
 	}
 
 	// Consume an optional leading TextDecl on the decoded rune cursor. The
-	// encoding was already fixed by the BOM/leading-'<' shape, so the declared
-	// encoding is informational; a standalone pseudo-attribute or a missing
-	// encoding is still rejected by parseTextDeclFromCursor.
+	// encoding was already fixed by the BOM/leading-'<' shape or the EBCDIC
+	// name, so the declared encoding drives no further switch; a standalone
+	// pseudo-attribute or a missing encoding is still rejected by
+	// parseTextDeclFromCursor.
 	//
-	// NOTE (deferred follow-up): XML §4.3.3 applies per external parsed entity,
-	// so a BOM here that contradicts this TextDecl's declared encoding is also a
-	// fatal error. checkBOMEncodingConflict currently runs only at the document
-	// entity (parser_document.go); extending it to external-entity scope (using
-	// the entity's own BOM + TextDecl encoding) is a separate change with no W3C
-	// xml corpus case exercising it. Not covered here.
+	// XML §4.3.3 applies per external parsed entity, so a UTF-16 BOM here that
+	// contradicts this TextDecl's declared encoding is also a fatal error.
+	// checkBOMEncodingConflict does not run on this path: a declared name that
+	// contradicts a UTF-16 BOM is ignored.
 	if looksLikeXMLDeclString(cur) {
 		if err := sub.parseTextDeclFromCursor(ctx); err != nil {
 			return nil, "", err

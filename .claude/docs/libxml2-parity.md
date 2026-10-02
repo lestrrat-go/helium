@@ -198,6 +198,12 @@ These are architectural choices, not bugs:
   bytes still follow it fails closed with `ErrContentSizeExceeded` (`html/encoding_reader.go`
   deferredLatin1Reader).
 - Namespace stack: frame-based visibleNSStack vs flat arrays
+- Byte-order mark vs declared encoding: a document entity, or an external general entity, external
+  parameter entity or external subset, whose leading UTF-8 or UTF-16 BOM contradicts the encoding its XML or
+  text declaration names is a fatal `ErrEncodingBOMMismatch` (XML §4.3.3; W3C hst-lhs-007/008). libxml2 warns
+  and decodes in the declared encoding, except that it rejects a UTF-16 name after a UTF-8 BOM. For external
+  resources helium checks only a UTF-8 BOM: a UTF-16 BOM decodes the resource as UTF-16 whatever its text
+  declaration names, where libxml2 rejects a non-Unicode name there.
 - `xml:id` value normalization: the parser applies tokenized-type (xs:ID) normalization — trim +
   internal-space collapse — to an `xml:id` attribute even when it is NOT DTD-declared, per the xml:id
   Recommendation §4 + XML §3.3.3 (so `GetElementByID`/`fn:id`/XPath string-value see the collapsed id).

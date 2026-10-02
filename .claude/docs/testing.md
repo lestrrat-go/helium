@@ -80,7 +80,7 @@ bug that prompted it.
 | `parser_attlist_test.go` | root | `<!ATTLIST>` parsing and attribute-value validation by declared type |
 | `parser_entity_test.go` | root | General entity substitution, predefined entities, references, entity-value validation, undeclared entities, SAX `GetEntity` error paths |
 | `parser_entity_param_test.go` | root | Parameter entities and PE/markup boundary rules |
-| `parser_entity_external_test.go` | root | External general and parameter entities, text declarations, base-URI resolution |
+| `parser_entity_external_test.go` | root | External general and parameter entities, text declarations, resource encodings (BOM, EBCDIC, UTF-16) across the external entity and subset loaders, base-URI resolution |
 | `parser_entity_limits_test.go` | root | Entity amplification, depth and size caps |
 | `parser_limits_test.go` | root | Depth, name-length, node-content and char-buffer limits |
 | `parser_security_test.go` | root | FS confinement, safe defaults, network gating, XXE |
