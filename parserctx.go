@@ -219,8 +219,8 @@ type parserCtx struct {
 	versionScopes    []versionScope    // per-input XML-version overrides (restored when the input is popped)
 
 	// nameCacheFast is the direct-mapped cache internNameBytes consults before
-	// nameCache.
-	nameCacheFast [nameCacheSlots]string
+	// nameCache. init allocates it with nameCacheSize slots, a power of two.
+	nameCacheFast []string
 
 	// peScopes records, per pushed parameter-entity input (internal or
 	// external), the entity whose replacement text the input holds. activePECount
@@ -783,6 +783,7 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader, size int) error {
 	// resolves against the document root, not its own moving base.
 	ctx.documentBaseURI = ctx.baseURI
 	ctx.inputLen = size
+	ctx.nameCacheFast = make([]string, nameCacheSize(size))
 	ctx.pushInput(strcursor.NewByteCursor(in, ctx.inputBufSize()))
 	ctx.detectedEncoding = encUTF8
 	ctx.encoding = ""

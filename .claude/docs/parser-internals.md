@@ -385,8 +385,9 @@ the negative-sentinel option disables the cap for trusted input.
   the attribute's. `DTD.LookupElement` builds its `name:prefix` key in a stack buffer, so a lookup
   allocates nothing for names that fit.
 - **Name interning** (`intern.go`) — `internNameBytes` first checks a per-parse direct-mapped cache
-  (`parserCtx.nameCacheFast`, `nameCacheSlots` slots keyed by length and three bytes); a hit costs one string
-  comparison. A miss goes to the global lexicon seed (a `(first byte, length)` cheap-check before the map probe)
+  (`parserCtx.nameCacheFast`, keyed by length and three bytes); a hit costs one string comparison. `init`
+  allocates `nameCacheSize(size)` slots: one per 16 input bytes rounded up to a power of two, between 16 and
+  256, and 256 for a stream of unknown size. A miss goes to the global lexicon seed (a `(first byte, length)` cheap-check before the map probe)
   and the per-parse map, and the result replaces the slot, so every cached string is the one the map holds.
 - **Entity-amplification / external bounds** — see Entity Expansion above.
 - **Start-tag duplicate detection** (`parser_element.go` `attrDupSetThreshold` = 32) — per-start-tag attribute
