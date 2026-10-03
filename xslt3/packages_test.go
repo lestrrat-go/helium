@@ -496,3 +496,166 @@ func TestOverrideUseWhen(t *testing.T) {
 		})
 	}
 }
+
+// overrideScopePackage is a used package with a public mode m whose own rule
+// reports "pkg".
+const overrideScopePackage = `<?xml version="1.0"?>
+<xsl:package name="http://example.com/pkg" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:mode name="m" visibility="public"/>
+  <xsl:template match="*" mode="m">[pkg]</xsl:template>
+</xsl:package>`
+
+// The standard attributes on xsl:use-package and xsl:override (XSLT 3.0 §3.5:
+// [xsl:]version, xpath-default-namespace, expand-text, default-collation,
+// default-mode) apply to the declarations inside them, exactly as they do on
+// any other ancestor of a declaration, and an overriding xsl:template honors
+// its own default-collation and default-mode.
+func TestOverrideStandardAttributes(t *testing.T) {
+	t.Parallel()
+
+	const caseBlind = "http://www.w3.org/2005/xpath-functions/collation/html-ascii-case-insensitive"
+	cases := []struct {
+		name      string
+		useAttrs  string
+		overAttrs string
+		template  string
+		want      string
+	}{
+		{
+			name:      "version on xsl:override",
+			overAttrs: `version="1.0"`,
+			template:  `<xsl:template match="a[@n = true()]" mode="m">[ov]</xsl:template>`,
+			want:      "<out>[ov]</out>",
+		},
+		{
+			name:     "version on xsl:use-package",
+			useAttrs: `version="1.0"`,
+			template: `<xsl:template match="a[@n = true()]" mode="m">[ov]</xsl:template>`,
+			want:     "<out>[ov]</out>",
+		},
+		{
+			name:     "version 3.0 control",
+			template: `<xsl:template match="a[@n = true()]" mode="m">[ov]</xsl:template>`,
+			want:     "<out>[pkg]</out>",
+		},
+		{
+			name:      "xpath-default-namespace on xsl:override",
+			overAttrs: `xpath-default-namespace="urn:q"`,
+			template:  `<xsl:template match="z" mode="m">[ov]</xsl:template>`,
+			want:      "<out>[pkg][ov]</out>",
+		},
+		{
+			name:      "expand-text on xsl:override",
+			overAttrs: `expand-text="yes"`,
+			template:  `<xsl:template match="a" mode="m">[{1+1}]</xsl:template>`,
+			want:      "<out>[2]</out>",
+		},
+		{
+			name:      "default-collation on xsl:override",
+			overAttrs: `default-collation="` + caseBlind + `"`,
+			template:  `<xsl:template match="a" mode="m">[<xsl:value-of select="compare('a', 'A')"/>]</xsl:template>`,
+			want:      "<out>[0]</out>",
+		},
+		{
+			name:     "default-collation on the overriding template",
+			template: `<xsl:template match="a" mode="m" default-collation="` + caseBlind + `">[<xsl:value-of select="compare('a', 'A')"/>]</xsl:template>`,
+			want:     "<out>[0]</out>",
+		},
+		{
+			name:     "default-mode on the overriding template",
+			template: `<xsl:template match="a" default-mode="m">[ov]</xsl:template>`,
+			want:     "<out>[ov]</out>",
+		},
+		{
+			name:     "default-mode on xsl:use-package",
+			useAttrs: `default-mode="m"`,
+			template: `<xsl:template match="a">[ov]</xsl:template>`,
+			want:     "<out>[ov]</out>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:use-package name="http://example.com/pkg" ` + tc.useAttrs + `>
+    <xsl:override ` + tc.overAttrs + `>` + tc.template + `</xsl:override>
+  </xsl:use-package>
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/*" mode="m"/></out></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			ss, err := xslt3.NewCompiler().
+				PackageResolver(modeAllPackageResolver{source: overrideScopePackage}).
+				Compile(t.Context(), doc)
+			require.NoError(t, err)
+
+			source := `<doc><a n="2"/></doc>`
+			if strings.Contains(tc.template, `match="z"`) {
+				source = `<doc xmlns:q="urn:q"><a/><q:z/></doc>`
+			}
+			src, err := helium.NewParser().Parse(t.Context(), []byte(source))
+			require.NoError(t, err)
+
+			result, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, result, tc.want)
+		})
+	}
+}
+
+// Namespace declarations on xsl:use-package and xsl:override are in scope
+// only for the elements inside them: a later top-level template neither
+// copies them to its literal result elements nor sees a prefix rebound.
+func TestOverrideNamespaceScope(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		useAttrs  string
+		overrides string
+		want      string
+	}{
+		{
+			name:     "declaration on xsl:use-package",
+			useAttrs: `xmlns:r="urn:r"`,
+			want:     `<out xmlns:p="urn:a"/>`,
+		},
+		{
+			name:     "rebinding on xsl:use-package",
+			useAttrs: `xmlns:p="urn:b"`,
+			want:     `<out xmlns:p="urn:a"/>`,
+		},
+		{
+			name:      "rebinding on xsl:override",
+			overrides: `<xsl:override xmlns:p="urn:b"><xsl:template match="a" mode="m">[ov]</xsl:template></xsl:override>`,
+			want:      `<out xmlns:p="urn:a"/>`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:p="urn:a">
+  <xsl:use-package name="http://example.com/pkg" ` + tc.useAttrs + `>` + tc.overrides + `</xsl:use-package>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			ss, err := xslt3.NewCompiler().
+				PackageResolver(modeAllPackageResolver{source: overrideScopePackage}).
+				Compile(t.Context(), doc)
+			require.NoError(t, err)
+
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+			require.NoError(t, err)
+
+			result, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, result, tc.want)
+		})
+	}
+}
