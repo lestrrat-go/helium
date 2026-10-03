@@ -132,7 +132,7 @@ func TestParentlessNamespaceNodeIdentity(t *testing.T) {
 func TestParentlessNamespaceNodeOrder(t *testing.T) {
 	doc := parseNamespaceAxisDoc(t)
 	const expr = `let $x := ($ns[1] | $ns[1]) return string-join((($ns[2] | $ns[1]) ! string(), "/", ` +
-		`($ns[2] | $ns[1]) ! string(), "/", string($ns[1] << $ns[2])), ",")`
+		`($ns[2] | $ns[1]) ! string(), "/", string($ns[1] << $ns[2]), "/", string(count($x))), ",")`
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	require.NoError(t, err)
 
@@ -155,7 +155,7 @@ func TestParentlessNamespaceNodeOrder(t *testing.T) {
 			require.NoError(t, err)
 			got, ok := result.IsString()
 			require.True(t, ok)
-			require.Equal(t, "urn:1,urn:2,/,urn:1,urn:2,/,true", got)
+			require.Equal(t, "urn:1,urn:2,/,urn:1,urn:2,/,true,/,1", got)
 		})
 	}
 }

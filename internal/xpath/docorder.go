@@ -75,9 +75,10 @@ func (c *DocOrderCache) sortKeyLocked(n helium.Node) sortKey {
 	if n.Type() != helium.NamespaceNode {
 		return unknownSortKey
 	}
-	// Namespace node wrappers are created fresh on every namespace-axis
-	// traversal, so they are never indexed. They take the odd slot the
-	// stride-2 walk leaves right after their parent element.
+	// The namespace axis creates its wrappers fresh on every traversal, so
+	// they are never indexed. They take the odd slot the stride-2 walk leaves
+	// right after their parent element. (A parentless wrapper is a root, which
+	// ensureSortKeyLocked indexes as its own document.)
 	parent := n.Parent()
 	if parent == nil {
 		return unknownSortKey
@@ -153,9 +154,9 @@ func (c *DocOrderCache) indexInDocOrder(nodes []helium.Node) bool {
 
 // Position returns the document-order position of a node, or -1 if unknown.
 //
-// Namespace nodes are virtual (NamespaceNodeWrapper is created fresh on each
-// namespace axis traversal) so they cannot be indexed during BuildFrom.
-// They receive position parent_pos + 1, which is a dedicated slot between the
+// Namespace nodes of an element are virtual (the namespace axis creates a
+// fresh NamespaceNodeWrapper on each traversal) so they cannot be indexed
+// during BuildFrom. They receive position parent_pos + 1, which is a dedicated slot between the
 // parent element and its first attribute/child (indexWalk uses stride 2).
 // SliceStable preserves input order for equal positions, keeping
 // same-parent namespace nodes in their traversal order. Namespace nodes
