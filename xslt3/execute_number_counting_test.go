@@ -498,3 +498,64 @@ func TestNumberCountingAfterValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestNumberDoctype checks xsl:number in a document with a DOCTYPE
+// declaration. XDM has no node kind for a DTD, so the DOCTYPE is not a child
+// of the document node: it is neither a preceding sibling nor a preceding node
+// of anything, and count="node()" never counts it. The same holds for an
+// entity reference, which XDM does not expose either. Comments and processing
+// instructions on either side of the DOCTYPE are document children and are
+// counted.
+func TestNumberDoctype(t *testing.T) {
+	const allLevels = `[<xsl:number count="node()"/>,<xsl:number level="any" count="node()"/>,` +
+		`<xsl:number level="multiple" count="node()"/>]`
+	const misc = `<?p1 x?><!--c1--><!DOCTYPE r [<!ELEMENT r ANY>]><!--c2--><r><x/></r>`
+	testCases := []struct {
+		name   string
+		source string
+		body   string
+		want   string
+	}{
+		{
+			name:   "document element",
+			source: `<!DOCTYPE r [<!ELEMENT r ANY>]><r/>`,
+			body:   `<xsl:for-each select="r">` + allLevels + `</xsl:for-each>`,
+			want:   `[1,1,1]`,
+		},
+		{
+			name:   "document element after comments and processing instructions",
+			source: misc,
+			body:   `<xsl:for-each select="r">` + allLevels + `</xsl:for-each>`,
+			want:   `[4,4,4]`,
+		},
+		{
+			name:   "child of the document element",
+			source: misc,
+			body:   `<xsl:for-each select="r/x">` + allLevels + `</xsl:for-each>`,
+			want:   `[1,5,4.1]`,
+		},
+		{
+			name:   "nodes after the DOCTYPE",
+			source: misc,
+			body:   `<xsl:for-each select="node()">` + allLevels + `</xsl:for-each>`,
+			want:   `[1,1,1][2,2,2][3,3,3][4,4,4]`,
+		},
+		{
+			name:   "any from the document element",
+			source: misc,
+			body:   `<xsl:for-each select="r/x"><xsl:number level="any" count="node()" from="r"/></xsl:for-each>`,
+			want:   `2`,
+		},
+		{
+			name:   "entity reference before the counted node",
+			source: `<!DOCTYPE r [<!ENTITY e "<y/>">]><r><x/>&e;<z/></r>`,
+			body:   `<xsl:for-each select="r/z">` + allLevels + `</xsl:for-each>`,
+			want:   `[2,3,1.2]`,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			require.Equal(t, testCase.want, runNumberStylesheet(t, testCase.source, "", testCase.body, nil))
+		})
+	}
+}

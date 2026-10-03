@@ -1138,3 +1138,82 @@ func transformStepPredicate(t *testing.T, compat bool, match string) string {
 	require.NoError(t, err)
 	return strings.TrimSpace(out)
 }
+
+// TestPatternDoctype checks patterns on a document that has a DOCTYPE
+// declaration. XDM has no node kind for a DTD, so the DOCTYPE is not a child
+// of the document node: a positional predicate counts only the comments,
+// processing instructions and element around it. An entity reference is not
+// an XDM child of its element either. Each pattern must match exactly the
+// nodes //(pattern) selects (XSLT 3.0 §5.5.3).
+func TestPatternDoctype(t *testing.T) {
+	const onlyElem = `<!DOCTYPE r [<!ELEMENT r ANY>]><r/>`
+	const misc = `<?p1 x?><!--c1--><!DOCTYPE r [<!ELEMENT r ANY>]><!--c2--><r/><?p2 y?>`
+	const entity = `<!DOCTYPE r [<!ENTITY e "<y/>">]><r><x/>&e;<z/></r>`
+	const rLabel = "[r:]"
+
+	tests := []struct {
+		name  string
+		src   string
+		match string
+		sel   string // the select expression that returns the nodes match matches
+		want  string
+	}{
+		{"first node only element", onlyElem, "node()[1]", "//(node()[1])", rLabel},
+		{"last node only element", onlyElem, "node()[last()]", "//(node()[last()])", rLabel},
+		{"first element only element", onlyElem, "*[1]", "//(*[1])", rLabel},
+		{"any node", misc, "node()", "//(node())", "[p1:x][:c1][:c2][r:][p2:y]"},
+		{"first node", misc, "node()[1]", "//(node()[1])", "[p1:x]"},
+		{"last node", misc, "node()[last()]", "//(node()[last()])", "[p2:y]"},
+		{"third node", misc, "node()[3]", "//(node()[3])", "[:c2]"},
+		{"node position eq", misc, "node()[position() = 4]", "//(node()[position() = 4])", rLabel},
+		{"first element", misc, "*[1]", "//(*[1])", rLabel},
+		{"second comment", misc, "comment()[2]", "//(comment()[2])", "[:c2]"},
+		{"last comment", misc, "comment()[last()]", "//(comment()[last()])", "[:c2]"},
+		{"first processing instruction", misc,
+			"processing-instruction()[1]", "//(processing-instruction()[1])", "[p1:x]"},
+		{"last processing instruction", misc,
+			"processing-instruction()[last()]", "//(processing-instruction()[last()])", "[p2:y]"},
+		{"third descendant of the document", misc,
+			"document-node()/descendant::node()[3]", "/descendant::node()[3]", "[:c2]"},
+		{"fourth descendant of the document", misc,
+			"document-node()/descendant::node()[4]", "/descendant::node()[4]", rLabel},
+		{"second node after entity reference", entity, "node()[2]", "//(node()[2])", "[z:]"},
+		{"last node after entity reference", entity, "node()[last()]", "//(node()[last()])", "[r:][z:]"},
+		{"third descendant after entity reference", entity,
+			"document-node()/descendant::node()[3]", "/descendant::node()[3]", "[z:]"},
+		{"second descendant of element after entity reference", entity,
+			"r/descendant::node()[2]", "//(r/descendant::node()[2])", "[z:]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out><m><xsl:apply-templates select="//node()"/></m>` +
+				`<s><xsl:for-each select="` + tc.sel + `">` + patternDoctypeLabel + `</xsl:for-each></s></out>` +
+				`</xsl:template>
+  <xsl:template match="` + tc.match + `">` + patternDoctypeLabel + `</xsl:template>
+  <xsl:template match="node()" priority="-5"/>
+</xsl:stylesheet>`
+			require.Equal(t, "<out><m>"+tc.want+"</m><s>"+tc.want+"</s></out>", transformDoctype(t, xsltSrc, tc.src))
+		})
+	}
+}
+
+// patternDoctypeLabel writes the context node as [name:string-value].
+const patternDoctypeLabel = `[<xsl:value-of select="name()"/>:<xsl:value-of select="."/>]`
+
+// transformDoctype compiles xsltSrc, applies it to srcXML, and returns the
+// serialized result without surrounding whitespace.
+func transformDoctype(t *testing.T, xsltSrc, srcXML string) string {
+	t.Helper()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(t.Context())
+	require.NoError(t, err)
+	return strings.TrimSpace(out)
+}
