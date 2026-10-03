@@ -226,6 +226,10 @@ type parserCtx struct {
 	// nameCache. init allocates it with nameCacheSize slots, a power of two.
 	nameCacheFast []string
 
+	// values holds the strings of parsed attribute values (valueArena). It
+	// belongs to this parse alone; a nested parser context starts its own.
+	values valueArena
+
 	// peScopes records, per pushed parameter-entity input (internal or
 	// external), the entity whose replacement text the input holds. activePECount
 	// is the set of PEs currently on the input stack (count per entity, to

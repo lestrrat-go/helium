@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unsafe"
 
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
@@ -576,6 +577,10 @@ func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
 	return attr
 }
 
+// createLiteralAttribute builds an attribute whose value holds no entity
+// reference: a single Text child with value as its content, or no child for an
+// empty value. The Text shares value's bytes (see below), which is safe for any
+// string; the parser's values come from its valueArena.
 func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *Attribute {
 	var attr *Attribute
 	if d != nil {
@@ -588,7 +593,20 @@ func (d *Document) createLiteralAttribute(name, value string, ns *Namespace) *At
 		return attr
 	}
 
-	t := d.CreateText([]byte(value))
+	var t *Text
+	if d != nil {
+		t = d.allocText()
+	} else {
+		t = &Text{}
+	}
+	t.etype = TextNode
+	t.name = textNodeName
+	t.doc = d
+	// The text reads value's bytes in place instead of copying them. Nothing
+	// writes a Text's content bytes in place: the slice's capacity equals its
+	// length, so AppendText moves the content to new memory before it appends,
+	// and every reader (rawContent) treats the bytes as read-only.
+	t.content = unsafe.Slice(unsafe.StringData(value), len(value))
 	setFirstChild(attr, t)
 	setLastChild(attr, t)
 	t.parent = attr

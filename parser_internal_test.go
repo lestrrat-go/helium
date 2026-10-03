@@ -772,9 +772,9 @@ func sameSpecialAttrSet(a, b map[specialAttrKey]struct{}) bool {
 	return ok
 }
 
-// TestLiteralBytesValid compares literalBytesValid and literalStringValid with
-// a rune-at-a-time reference that decodes every character. The validators are
-// unexported, which is why this test lives in the internal test file.
+// TestLiteralBytesValid compares literalBytesValid with a rune-at-a-time
+// reference that decodes every character. The validator is unexported, which
+// is why this test lives in the internal test file.
 func TestLiteralBytesValid(t *testing.T) {
 	t.Parallel()
 
@@ -837,9 +837,6 @@ func checkLiteralValidators(t *testing.T, pctx *parserCtx, b []byte) {
 	want := referenceLiteralValid(b, pctx.version == xmlVersion11)
 	if got := pctx.literalBytesValid(b); got != want {
 		require.Equal(t, want, got, "literalBytesValid(%q) for XML %s", b, pctx.version)
-	}
-	if got := pctx.literalStringValid(string(b)); got != want {
-		require.Equal(t, want, got, "literalStringValid(%q) for XML %s", b, pctx.version)
 	}
 }
 

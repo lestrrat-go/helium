@@ -120,10 +120,10 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
   after the node-content cap check, without a second pass over the bytes. The scanner's per-version byte
   table (`charDataByteClass`) is built from `IsChar` / `IsLiteralChar`; restricted ASCII bytes end its 16-byte
   fast path, are recorded, and the run continues.
-- Other whole runs (XML 1.1 simple attribute values from `ScanSimpleAttrValue`, external-PE bodies) go through `literalBytesValid` /
-  `literalStringValid`, which resolve the version once per call, check printable ASCII eight bytes at a time
-  (`literalWordValid`), check other ASCII bytes by table (`literalASCIIValid`), and decode only non-ASCII bytes
-  as runes; they check every byte themselves, so callers need not pre-scan the run. An XML 1.0 simple attribute
+- Other whole runs (XML 1.1 simple attribute values from `ScanSimpleAttrValue`, external-PE bodies) go through
+  `literalBytesValid`, which resolves the version once per call, checks printable ASCII eight bytes at a time
+  (`literalWordValid`), checks other ASCII bytes by table (`literalASCIIValid`), and decodes only non-ASCII bytes
+  as runes; it checks every byte itself, so callers need not pre-scan the run. An XML 1.0 simple attribute
   value skips that pass: `ScanSimpleAttrValue` accepts only ASCII at or above 0x20 and well-formed UTF-8 that
   is an `xmlchar.IsChar`, which is `IsLiteralChar`'s XML 1.0 rule (`parseAttributeValueInState`)
 - Character references accept their XML 1.1 values via `parser_entity_ref.go` `parseCharRef` /
@@ -344,6 +344,9 @@ duplicate-checking setters where parser invariants already guarantee the `xmlAdd
 `fastStartElement` (`tree_fastpath.go`) draws the element from the document slab without `CreateElement`'s
 colon check (the local name is an NCName from `parseQName`), and builds an attribute whose value has no `&`
 as a single Text child (`createLiteralAttribute`), the node list `CreateAttribute` builds for such a value.
+That Text's content shares the value string's bytes instead of copying them into the text slab; its capacity
+equals its length, so an `AppendText` moves it to new memory before writing, and nothing writes a Text's
+content in place.
 Elements and text runs under an element are linked by `appendFastChildElem`, which appends after the recorded
 tail under the same conditions `resolveOwnedTail` trusts it, and `fastEndElement` reads the parent pointer
 directly. Both
@@ -373,8 +376,9 @@ the negative-sentinel option disables the cap for trusted input.
   streaming-SAX char-data path `parseCharDataChunkedSAX` (no DOM built) with a documented over-budget blank-run
   reclassification policy.
 - **UTF-8 fast paths** — `parseQName`/`parseNCName`/`parseAttributeValueUTF8` try
-  `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, intern before advancing (advance may compact the
-  cursor buffer, invalidating borrowed slices). A QName, a matched end-tag name, and a simple attribute
+  `ScanQNameBytes`/`ScanNCNameBytes`/`ScanSimpleAttrValue`, which return slices borrowed from the cursor
+  buffer, and intern or copy them before advancing (advance may compact the cursor buffer, invalidating borrowed
+  slices). A QName, a matched end-tag name, and a simple attribute
   value hold no newline, so they advance with `AdvanceNoNewline`, which moves the column by the run length
   without reading the bytes again when the run is buffered; character data and `parseNCName` advance with
   `AdvanceFast`, which counts newlines in one loop for runs up to `advanceScanInline` (32) bytes and with
@@ -390,6 +394,13 @@ the negative-sentinel option disables the cap for trusted input.
   `elementDeclType` whitespace lookups) on that name, and `parseAttribute` keys tokenized-type lookups on
   the attribute's. `DTD.LookupElement` builds its `name:prefix` key in a stack buffer, so a lookup
   allocates nothing for names that fit.
+- **Attribute value strings** (`value_arena.go`) — `parseAttributeValueUTF8` (simple values) and
+  `parseAttributeValueComplex` copy each value into `parserCtx.values`, a per-parse `valueArena`, and return an
+  `unsafe.String` view of the copy, so a document's attribute values cost one allocation per chunk instead of one
+  per value. Chunks start at 256 bytes and double up to 8 KiB; a value over 1 KiB gets its own allocation. The
+  chunks are ordinary heap memory owned by that one parse: they never go to a pool and the arena never writes
+  bytes it has handed out, so a value a SAX handler, the DOM, or the ID table keeps never changes. A nested
+  parser context has its own arena. A retained value keeps its whole chunk alive.
 - **Name interning** (`intern.go`) — `internNameBytes` first checks a per-parse direct-mapped cache
   (`parserCtx.nameCacheFast`, keyed by length and three bytes); a hit costs one string comparison. `init`
   allocates `nameCacheSize(size)` slots: one per 16 input bytes rounded up to a power of two, between 16 and

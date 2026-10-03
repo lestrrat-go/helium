@@ -89,6 +89,7 @@ bug that prompted it.
 | `parser_xml11_test.go` | root | XML 1.1 characters and prefix undeclaration |
 | `parser_xmlchar_test.go` | root | XML character validation and attribute-value parsing |
 | `parser_sax_test.go` | root | SAX/dispatch/stop-parser regression coverage |
+| `parser_attribute_value_test.go` | root | Attribute value strings: a SAX handler keeps stable values across `Parse`, one-byte `ParseReader` and push parses; parallel parses; appending to a value leaves later values intact |
 | `parser_push_test.go` | root | Push parser coverage |
 | `writer_test.go` | root | Core serialization, writer options, write errors, allocation bounds (`TestWriteToAllocations`: escaped text, escaped attributes, and prefixed elements on the XML and XHTML paths allocate nothing per repeat), benchmarks |
 | `writer_escape_test.go` | root | Invalid-character rejection, character maps, normalization, injection rejection |
