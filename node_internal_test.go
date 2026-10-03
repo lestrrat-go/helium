@@ -16,7 +16,7 @@ func TestCrossDocumentMove(t *testing.T) {
 	// overwritten after A.Free() recycles its slab chunks into the global pool:
 	// A.Free is a no-op once a node escaped, so the moved node keeps its content.
 	t.Run("subtree survives the source Free", func(t *testing.T) {
-		a := NewDocument("1.0", "", StandaloneImplicitNo)
+		a := newPooledDocument()
 		moved, err := a.CreateElement("moved")
 		require.NoError(t, err)
 		txt := a.CreateText([]byte("ORIGINAL-CONTENT"))
@@ -58,7 +58,7 @@ func TestCrossDocumentMove(t *testing.T) {
 	// actually redrawn from the pool — a wrongly recycled chunk zeroes the moved
 	// attribute and fails the assertions.
 	t.Run("attribute move survives the source Free", func(t *testing.T) {
-		a := NewDocument("1.0", "UTF-8", StandaloneImplicitNo)
+		a := newPooledDocument()
 		aroot, err := a.CreateElement("aroot")
 		require.NoError(t, err)
 		require.NoError(t, a.AddChild(aroot))
@@ -143,6 +143,15 @@ func TestCrossDocumentMove(t *testing.T) {
 	})
 }
 
+// newPooledDocument returns a document whose slab allocators draw pooled chunks
+// from the first node on, as a parsed document's do, so a test can check that
+// Free does not recycle a chunk still holding a moved node.
+func newPooledDocument() *Document {
+	d := NewDocument("1.0", "", StandaloneImplicitNo)
+	d.pooledSlabs = true
+	return d
+}
+
 // recycleNamespaceSlab allocates enough namespaces in a fresh document to draw
 // chunks back out of the shared pool and overwrite any chunk a freed document
 // returned to it.
@@ -165,7 +174,7 @@ func TestAddNamespaceDecl(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, a.AddChild(el))
 
-		b := NewDocument("1.0", "", StandaloneImplicitNo)
+		b := newPooledDocument()
 		ns, err := b.CreateNamespace("p", "urn:new")
 		require.NoError(t, err)
 
@@ -193,7 +202,7 @@ func TestAddNamespaceDecl(t *testing.T) {
 		require.NoError(t, a.AddChild(el))
 		require.NoError(t, el.DeclareNamespace("p", "urn:old")) // A-owned slot
 
-		b := NewDocument("1.0", "", StandaloneImplicitNo)
+		b := newPooledDocument()
 		ns, err := b.CreateNamespace("p", "urn:new")
 		require.NoError(t, err)
 
@@ -273,7 +282,7 @@ func TestSetNamespace(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, a.AddChild(el))
 
-		b := NewDocument("1.0", "", StandaloneImplicitNo)
+		b := newPooledDocument()
 		ns, err := b.CreateNamespace("p", "urn:original")
 		require.NoError(t, err)
 
@@ -294,7 +303,7 @@ func TestSetNamespace(t *testing.T) {
 	// stays <p:root>, and never mutates to the reused binding.
 	t.Run("CreateElementNS namespace survives the source Free", func(t *testing.T) {
 		dest := NewDocument("1.0", "", StandaloneImplicitNo)
-		src := NewDocument("1.0", "", StandaloneImplicitNo)
+		src := newPooledDocument()
 		ns, err := src.CreateNamespace("p", "urn:original")
 		require.NoError(t, err)
 
@@ -789,4 +798,93 @@ func TestNodeLinkAccessorsMatchFields(t *testing.T) {
 				"NextSibling must return docnode.next unchanged")
 		})
 	}
+}
+
+func TestSlabGrowth(t *testing.T) {
+	// A built document takes the small heap chunks of the growth schedule
+	// first, and draws its first pooled chunk only once they are used up.
+	t.Run("built document starts with small chunks", func(t *testing.T) {
+		doc := NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		require.NoError(t, root.AddChild(doc.CreateText([]byte("short"))))
+		require.Empty(t, doc.elemChunks, "the first element must come from a small heap chunk")
+		require.Empty(t, doc.textChunks, "the first text node must come from a small heap chunk")
+		require.Empty(t, doc.textContentChunks, "short text content must come from a small heap chunk")
+
+		scheduled := 0
+		for _, n := range slabGrowthSizes {
+			scheduled += n
+		}
+		for range scheduled - 1 {
+			_, err := doc.CreateElement("e")
+			require.NoError(t, err)
+		}
+		require.Empty(t, doc.elemChunks, "the growth schedule must cover %d elements", scheduled)
+		_, err = doc.CreateElement("e")
+		require.NoError(t, err)
+		require.Len(t, doc.elemChunks, 1, "the element after the growth schedule must come from a pooled chunk")
+	})
+
+	// A parsed document draws pooled chunks from its first node on, so Free
+	// hands them to the next parse.
+	t.Run("parsed document starts with pooled chunks", func(t *testing.T) {
+		doc, err := NewParser().Parse(t.Context(), []byte(`<root xmlns:p="urn:p" p:a="v">text</root>`))
+		require.NoError(t, err)
+		require.Len(t, doc.elemChunks, 1)
+		require.Len(t, doc.textChunks, 1)
+		require.Len(t, doc.nsChunks, 1)
+		require.Len(t, doc.attrChunks, 1)
+		require.Len(t, doc.textContentChunks, 1)
+		doc.Free()
+	})
+
+	// The HTML parser builds its documents through NewHTMLDocument, which
+	// draws pooled chunks from the first node on as well.
+	t.Run("HTML document starts with pooled chunks", func(t *testing.T) {
+		doc := NewHTMLDocument()
+		_, err := doc.CreateElement("html")
+		require.NoError(t, err)
+		require.Len(t, doc.elemChunks, 1)
+		doc.Free()
+	})
+
+	// Nodes and text content allocated across every chunk boundary keep their
+	// own values: no node or content slice overlaps another.
+	t.Run("values survive chunk boundaries", func(t *testing.T) {
+		const n = 600
+		doc := NewDefaultDocument()
+		root, err := doc.CreateElement("root")
+		require.NoError(t, err)
+		require.NoError(t, doc.SetDocumentElement(root))
+		for i := range n {
+			e, err := doc.CreateElement("e" + strconv.Itoa(i))
+			require.NoError(t, err)
+			require.NoError(t, root.AddChild(e))
+			attr, err := doc.CreateAttribute("a", strconv.Itoa(i), nil)
+			require.NoError(t, err)
+			require.NoError(t, e.AddChild(attr))
+			ns, err := doc.CreateNamespace("p", "urn:"+strconv.Itoa(i))
+			require.NoError(t, err)
+			require.NoError(t, e.AddNamespaceDecl(ns))
+			// Every tenth text is longer than the first text-content chunk.
+			text := bytes.Repeat([]byte(strconv.Itoa(i)+"."), 1+(i%10)*40)
+			require.NoError(t, e.AddChild(doc.CreateText(text)))
+		}
+
+		i := 0
+		for e := range ChildElements(root) {
+			require.Equal(t, "e"+strconv.Itoa(i), e.LocalName())
+			v, ok := e.GetAttribute("a")
+			require.True(t, ok)
+			require.Equal(t, strconv.Itoa(i), v)
+			nsDefs := e.Namespaces()
+			require.Len(t, nsDefs, 1)
+			require.Equal(t, "urn:"+strconv.Itoa(i), nsDefs[0].URI())
+			require.Equal(t, bytes.Repeat([]byte(strconv.Itoa(i)+"."), 1+(i%10)*40), e.Content())
+			i++
+		}
+		require.Equal(t, n, i)
+	})
 }

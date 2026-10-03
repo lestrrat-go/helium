@@ -122,6 +122,7 @@ func (pctx *parserCtx) fastLookupAttributeNamespace(doc *Document, prefix string
 
 func (pctx *parserCtx) fastStartDocument() {
 	pctx.doc = NewDocument(pctx.version, pctx.encoding, pctx.standalone)
+	pctx.doc.pooledSlabs = true
 	pctx.doc.idsSkip = pctx.loadsubset.IsSet(SkipIDs)
 	pctx.doc.url = pctx.baseURI
 }

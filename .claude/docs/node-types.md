@@ -662,11 +662,21 @@ matching the other strict leaves.
 
 ### Cross-Document Slab Safety
 
-`Document` allocates its high-frequency nodes (`Element`, `Text`, `Namespace`, `Attribute`) and parsed
-text-content bytes from per-document SLAB allocators backed by process-global `sync.Pool`s (`document.go`).
-`Document.Free()` returns those chunks to the pools for reuse by a later parse. A node's struct and content
-bytes therefore physically live in its owning document's slab, so recycling a chunk that a still-live node
-references would let a subsequent parse overwrite that node.
+`Document` allocates its high-frequency nodes (`Element`, `Text`, `Namespace`, `Attribute`) and text-content
+bytes from per-document SLAB allocators (`document.go`). A pooled chunk holds `slabSize` (256) nodes or
+`textContentSlabSize` (64 KiB) of text and comes from a process-global `sync.Pool`; `Document.Free()` returns
+pooled chunks to the pools for reuse by a later parse. A document the parser did not build (`NewDocument`,
+`NewDefaultDocument`, `CopyDoc`, and every xslt3 temporary tree or result document) follows a growth schedule
+first: each node allocator takes small heap chunks of `slabGrowthSizes` (8, then 32 nodes) and
+the text-content allocator heap chunks of `textContentGrowthSizes` (256, then 2048 bytes, or the request size
+when larger), and only then draws pooled chunks. The per-type counters (`elemGrowth`, `textGrowth`, `nsGrowth`,
+`attrGrowth`, `textContentGrowth`) record how far each allocator is through its schedule. Heap chunks are never
+put in a pool; GC reclaims them. A small built tree therefore holds a few KiB of chunks. The XML parser sets
+`pooledSlabs` on the document it builds (`TreeBuilder.StartDocument`, `fastStartDocument`), and so does
+`NewHTMLDocument`, through which the HTML parser builds its documents. Such a document skips the schedule, so a
+parse followed by `Free` keeps reusing pooled chunks from its first node on. A node's struct and content bytes
+physically live in its owning document's slab, so recycling a chunk that a still-live node references would let a
+subsequent parse overwrite that node.
 
 The insertion paths (`addChildPreflight`/`addSiblingPreflight`/`replaceNode`, via `noteCrossDocumentEscape`)
 permit linking a node into a DIFFERENT document than the one that owns it — XInclude merges an included

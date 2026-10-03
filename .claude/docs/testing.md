@@ -481,10 +481,13 @@ for every fifth match template. The instruction benchmarks time `Transform` (res
 over 50 runs of 100, `group-starting-with` with a `rec[@head]` pattern), `BenchmarkPredicatePatterns`
 (`predicate-template`: a `match="rec[@head]"` template beside a `match="rec"` fallback; `predicate-templates-20`:
 twenty `match="rec[@cat='cN']"` templates beside the same fallback), `BenchmarkNumbering` (`number-single`: a
-bare `xsl:number`; `number-any`: `level="any" count="rec"`; `format-number` with a grouping picture) and
+bare `xsl:number`; `number-any`: `level="any" count="rec"`; `format-number` with a grouping picture),
 `BenchmarkFunctionCall` (`simple`: one two-parameter `xsl:function` call per record; `recursive`: a recursive
-factorial, up to nine nested calls per record). Each case compiles once and checks its output once before the timed
-loop; the compile case also checks that `Compile` leaves the stylesheet document unchanged.
+factorial, up to nine nested calls per record) and `BenchmarkTemporaryTree` (`variable`: an `xsl:variable` holding
+a one-element temporary tree per record, read through its string value; `function`: an `xsl:function` whose body
+builds one element per call, copied into the result), which measures the cost of setting up each small temporary
+tree's document. Each case compiles once and checks its output once before the timed loop; the compile case also
+checks that `Compile` leaves the stylesheet document unchanged.
 
 XML Signature benchmarks (`xmldsig1/xmldsig1_bench_test.go`) run `BenchmarkSignEnveloped` (`Signer.SignEnveloped`)
 and `BenchmarkVerify` (`Verifier.Verify`) over two inputs: `saml_1KB`, an inline SAML 2.0 assertion, and
