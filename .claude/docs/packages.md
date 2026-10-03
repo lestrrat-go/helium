@@ -950,7 +950,9 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   namespace nodes in the order the `internal/xpath` namespace axis returns them, so `match` and `select` agree;
   a last step on the `descendant` or `descendant-or-self` axis, alone or after other steps, counts the position
   among the nodes it selects from each ancestor that matches the preceding steps (the node itself included for
-  `descendant-or-self`), and an absolute one accepts any descendant of the document node;
+  `descendant-or-self`), and an absolute one accepts any descendant of the document node; a descendant step has
+  no "-or-top" form, so it never matches a parentless node; on every axis, each predicate after the first
+  counts positions in the list the earlier predicates left (`passesChainedPredicates`);
   a pattern matched by evaluation (intersect/except, filter, `$var`, function-call patterns) finds the candidate
   in the result by `internal/xpath.SameNode`, so a namespace node of an element matches by that element and prefix),
   `execute*.go` (runtime), `functions*.go` (built-ins + `fn:transform` bridge), `stylesheet.go`,
