@@ -103,11 +103,10 @@ func (c *DocOrderCache) ensureSortKeyLocked(n helium.Node) sortKey {
 			}
 			return sortKey{docOrder: pk.docOrder, position: pk.position + 1}
 		}
-		// A parentless wrapper resolves to itself as a root; index it anyway so
-		// document registration order matches a plain BuildFrom on the node.
-		c.buildFromLocked(DocumentRoot(n))
-		return unknownSortKey
 	}
+	// A parentless namespace wrapper resolves to itself as a root, so it is
+	// indexed as its own document like any other root, and this first lookup
+	// returns the same key every later one does.
 	c.buildFromLocked(DocumentRoot(n))
 	if k, ok := c.keys[n]; ok {
 		return k

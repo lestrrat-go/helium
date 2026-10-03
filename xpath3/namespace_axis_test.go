@@ -123,3 +123,39 @@ func TestParentlessNamespaceNodeIdentity(t *testing.T) {
 		})
 	}
 }
+
+// TestParentlessNamespaceNodeOrder checks that parentless namespace nodes keep
+// one document order for a whole evaluation (XDM 3.1 §2.4): the order between
+// nodes of different trees is implementation-dependent but stable. $ns[1] is
+// registered first by the union bound to $x, so every later union and << must
+// put it before $ns[2], whether or not the two nodes share a prefix.
+func TestParentlessNamespaceNodeOrder(t *testing.T) {
+	doc := parseNamespaceAxisDoc(t)
+	const expr = `let $x := ($ns[1] | $ns[1]) return string-join((($ns[2] | $ns[1]) ! string(), "/", ` +
+		`($ns[2] | $ns[1]) ! string(), "/", string($ns[1] << $ns[2])), ",")`
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name             string
+		prefix1, prefix2 string
+	}{
+		{"same prefix", "p", "p"},
+		{"different prefixes", "p", "q"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ns := xpath3.ItemSlice{
+				xpath3.NodeItem{Node: helium.NewNamespaceNodeWrapper(helium.NewNamespace(tc.prefix1, "urn:1"), nil)},
+				xpath3.NodeItem{Node: helium.NewNamespaceNodeWrapper(helium.NewNamespace(tc.prefix2, "urn:2"), nil)},
+			}
+			result, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+				Variables(map[string]xpath3.Sequence{"ns": ns}).
+				Evaluate(t.Context(), compiled, doc)
+			require.NoError(t, err)
+			got, ok := result.IsString()
+			require.True(t, ok)
+			require.Equal(t, "urn:1,urn:2,/,urn:1,urn:2,/,true", got)
+		})
+	}
+}
