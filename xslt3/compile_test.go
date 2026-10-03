@@ -1107,6 +1107,66 @@ func TestUnionPattern(t *testing.T) {
 		require.Contains(t, result, "<out/>")
 	})
 
+	// xsl:next-match applies the same conflict rule: the split branches of one
+	// empty-body union rule never conflict with each other.
+	t.Run("next-match empty body no false conflict", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="root/*"/></out></xsl:template>
+  <xsl:template match="a" priority="5"><x/><xsl:next-match/></xsl:template>
+  <xsl:template match="a | a"/>
+</xsl:stylesheet>`)
+
+		source, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/></root>`))
+		require.NoError(t, err)
+
+		result, err := ss.Transform(source).
+			OnMultipleMatch(xslt3.OnMultipleMatchFail).
+			Serialize(t.Context())
+		require.NoError(t, err, "split union branches must not self-conflict")
+		require.Contains(t, result, "<out><x/></out>")
+	})
+
+	// A mode="#all" template appears twice in the default mode's list; the
+	// next-match conflict check must not count it against itself.
+	t.Run("next-match mode all template", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="root/*"/></out></xsl:template>
+  <xsl:template match="a" priority="5"><x/><xsl:next-match/></xsl:template>
+  <xsl:template match="a" mode="#all"><y/></xsl:template>
+</xsl:stylesheet>`)
+
+		source, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/></root>`))
+		require.NoError(t, err)
+
+		result, err := ss.Transform(source).
+			OnMultipleMatch(xslt3.OnMultipleMatchFail).
+			Serialize(t.Context())
+		require.NoError(t, err)
+		require.Contains(t, result, "<out><x/><y/></out>")
+	})
+
+	// A genuine conflict found by xsl:next-match is the same dynamic error
+	// XTDE0540 that template selection raises.
+	t.Run("next-match genuine conflict", func(t *testing.T) {
+		ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="root/*"/></out></xsl:template>
+  <xsl:template match="a" priority="5"><x/><xsl:next-match/></xsl:template>
+  <xsl:template match="a" priority="1"><y/></xsl:template>
+  <xsl:template match="a" priority="1"><z/></xsl:template>
+</xsl:stylesheet>`)
+
+		source, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/></root>`))
+		require.NoError(t, err)
+
+		_, err = ss.Transform(source).
+			OnMultipleMatch(xslt3.OnMultipleMatchFail).
+			Serialize(t.Context())
+		require.ErrorContains(t, err, "XTDE0540")
+	})
+
 	// A genuine conflict between two DIFFERENT templates of equal precedence and
 	// priority must still raise XTDE0540 under on-multiple-match="fail".
 	t.Run("genuine conflict still fails", func(t *testing.T) {

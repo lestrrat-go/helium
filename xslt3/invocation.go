@@ -36,7 +36,7 @@ const (
 	OnMultipleMatchDefault OnMultipleMatchMode = iota
 	// OnMultipleMatchUseLast selects the last matching template.
 	OnMultipleMatchUseLast
-	// OnMultipleMatchFail raises XTRE0540 on ambiguous matches.
+	// OnMultipleMatchFail raises XTDE0540 on ambiguous matches.
 	OnMultipleMatchFail
 )
 
