@@ -674,7 +674,11 @@ when larger), and only then draws pooled chunks. The per-type counters (`elemGro
 put in a pool; GC reclaims them. A small built tree therefore holds a few KiB of chunks. The XML parser sets
 `pooledSlabs` on the document it builds (`TreeBuilder.StartDocument`, `fastStartDocument`), and so does
 `NewHTMLDocument`, through which the HTML parser builds its documents. Such a document skips the schedule, so a
-parse followed by `Free` keeps reusing pooled chunks from its first node on. A node's struct and content bytes
+parse followed by `Free` keeps reusing pooled chunks from its first node on. Node allocation does not clear a
+node: every node chunk is zero when it is handed out (fresh from the runtime, a fresh growth-schedule slice, or
+a pooled chunk `Free` cleared), and `Free` clears the used nodes of each node chunk before putting it back
+(`recycleNodeChunks`; only the last chunk of each type is partly used), so a pooled chunk holds no pointers into
+the freed tree. Text-content byte chunks are not cleared. A node's struct and content bytes
 physically live in its owning document's slab, so recycling a chunk that a still-live node references would let a
 subsequent parse overwrite that node.
 

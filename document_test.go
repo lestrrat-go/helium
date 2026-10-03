@@ -2,12 +2,76 @@ package helium_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
+
+// dirtyFreedTree sets fields the parser leaves unset on every element,
+// attribute and text node of doc, and adds slab-backed nodes to each, so a
+// slab chunk reused after doc.Free holds non-zero data in every node slot.
+func dirtyFreedTree(t *testing.T, doc *helium.Document) {
+	t.Helper()
+	var nodes []helium.Node
+	for d := range helium.Descendants(doc) {
+		nodes = append(nodes, d)
+	}
+	for _, d := range nodes {
+		switch v := d.(type) {
+		case *helium.Element:
+			for attr := range helium.Attributes(v) {
+				attr.SetAType(enum.AttrID)
+				attr.SetDefault(true)
+			}
+			require.NoError(t, v.SetAttribute("m", "v"))
+			require.NoError(t, v.DeclareNamespace("x", "urn:x"))
+			k, err := doc.CreateElement("k")
+			require.NoError(t, err)
+			require.NoError(t, v.AddChild(k))
+		case *helium.Text:
+			k, err := doc.CreateElement("k")
+			require.NoError(t, err)
+			require.NoError(t, v.AddSibling(k))
+		}
+	}
+}
+
+// requireCleanElement checks a child of the document dirtyFreedTree's
+// counterpart parses: an <e a=""> holding one "x" text node, or an empty <f/>.
+func requireCleanElement(t *testing.T, e *helium.Element) {
+	t.Helper()
+	require.Nil(t, e.Namespace(), "element %s", e.Name())
+	require.Empty(t, e.Namespaces(), "element %s", e.Name())
+	if e.Name() == "f" {
+		require.Nil(t, e.FirstChild())
+		require.Nil(t, e.LastChild())
+		require.Empty(t, e.Attributes())
+		return
+	}
+	require.Equal(t, "e", e.Name())
+	attrs := e.Attributes()
+	require.Len(t, attrs, 1)
+	attr := attrs[0]
+	require.Equal(t, "a", attr.Name())
+	require.Nil(t, attr.FirstChild(), "empty attribute value must have no children")
+	require.Empty(t, attr.Value())
+	require.Nil(t, attr.NextAttribute())
+	require.Equal(t, enum.AttributeType(0), attr.AType())
+	require.False(t, attr.IsDefault())
+
+	text, ok := e.FirstChild().(*helium.Text)
+	require.True(t, ok, "first child of e must be a text node")
+	require.Equal(t, "x", string(text.Content()))
+	require.Nil(t, text.NextSibling())
+	require.Nil(t, text.PrevSibling())
+	require.Nil(t, text.FirstChild())
+	require.Equal(t, helium.Node(e), text.Parent())
+	require.Equal(t, helium.Node(text), e.LastChild())
+}
 
 func TestDocument(t *testing.T) {
 	t.Parallel()
@@ -81,6 +145,45 @@ func TestDocument(t *testing.T) {
 		require.NoError(t, err)
 		doc.Free()
 		doc.Free() // idempotent
+	})
+
+	// A parse after Free reuses the freed document's slab chunks. Its nodes
+	// must start empty: nothing the freed tree held (links, attributes,
+	// namespaces, attribute types) may show through a field the new parse
+	// leaves unset.
+	t.Run("nodes parsed after free start empty", func(t *testing.T) {
+		const n = 300 // more than one slab chunk per node type
+		var dirty strings.Builder
+		dirty.WriteString(`<p:r xmlns:p="urn:p" p:z="0">`)
+		for range n {
+			dirty.WriteString(`<p:e xmlns:q="urn:q" q:a="1" b="2">t</p:e>`)
+		}
+		dirty.WriteString(`</p:r>`)
+		a, err := helium.NewParser().Parse(t.Context(), []byte(dirty.String()))
+		require.NoError(t, err)
+		dirtyFreedTree(t, a)
+		a.Free()
+
+		var clean strings.Builder
+		clean.WriteString(`<r>`)
+		for range n {
+			clean.WriteString(`<e a="">x</e><f/>`)
+		}
+		clean.WriteString(`</r>`)
+		b, err := helium.NewParser().Parse(t.Context(), []byte(clean.String()))
+		require.NoError(t, err)
+		defer b.Free()
+
+		root := b.DocumentElement()
+		require.Nil(t, root.Namespace())
+		require.Empty(t, root.Namespaces())
+		require.Empty(t, root.Attributes())
+		count := 0
+		for e := range helium.ChildElements(root) {
+			count++
+			requireCleanElement(t, e)
+		}
+		require.Equal(t, 2*n, count)
 	})
 
 	t.Run("HTML document", func(t *testing.T) {

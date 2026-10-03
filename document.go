@@ -198,18 +198,10 @@ func (d *Document) Free() {
 	if d.slabEscaped {
 		return
 	}
-	for _, c := range d.elemChunks {
-		elemChunkPool.Put(c)
-	}
-	for _, c := range d.textChunks {
-		textChunkPool.Put(c)
-	}
-	for _, c := range d.nsChunks {
-		nsChunkPool.Put(c)
-	}
-	for _, c := range d.attrChunks {
-		attrChunkPool.Put(c)
-	}
+	recycleNodeChunks(elemChunkPool, d.elemChunks, len(d.elemSlab))
+	recycleNodeChunks(textChunkPool, d.textChunks, len(d.textSlab))
+	recycleNodeChunks(nsChunkPool, d.nsChunks, len(d.nsSlab))
+	recycleNodeChunks(attrChunkPool, d.attrChunks, len(d.attrSlab))
 	for _, c := range d.textContentChunks {
 		textContentChunkPool.Put(c)
 	}
@@ -548,7 +540,6 @@ func (d *Document) allocNamespace() *Namespace {
 		d.nsSlab = chunk[:]
 	}
 	ns := &d.nsSlab[0]
-	*ns = Namespace{}
 	d.nsSlab = d.nsSlab[1:]
 	return ns
 }
@@ -563,7 +554,6 @@ func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
 		d.attrSlab = chunk[:]
 	}
 	attr := &d.attrSlab[0]
-	*attr = Attribute{}
 	d.attrSlab = d.attrSlab[1:]
 	attr.etype = AttributeNode
 	attr.name = name
@@ -707,6 +697,32 @@ func growthChunk[T any](pooled bool, taken *uint8) []T {
 	return make([]T, n)
 }
 
+// recycleNodeChunks zeroes the used nodes of each chunk and returns the chunk
+// to p. Node allocation does not clear a node: a chunk is zero when it comes
+// from p, either fresh from the runtime or cleared here, and a growth-schedule
+// chunk is a fresh heap slice. Clearing here also keeps a pooled chunk from
+// holding pointers into the freed tree.
+//
+// chunks are in allocation order and only the last one can be partly used. A
+// document draws a pooled chunk only once its growth schedule is used up, so
+// while it holds any pooled chunk its slab is the unused tail of the last one:
+// unused (the slab's length) counts the nodes in that tail, which are still
+// zero, so only the used prefix is cleared.
+//
+// Free is the only path that returns a node chunk to a pool, and it goes
+// through here.
+func recycleNodeChunks[T any](p *pool.Pool[*[slabSize]T], chunks []*[slabSize]T, unused int) {
+	last := len(chunks) - 1
+	for i, c := range chunks {
+		used := slabSize
+		if i == last {
+			used -= unused
+		}
+		clear(c[:used])
+		p.Put(c)
+	}
+}
+
 var (
 	elemChunkPool        = pool.New(func() *[slabSize]Element { return new([slabSize]Element) }, nil)
 	textChunkPool        = pool.New(func() *[slabSize]Text { return new([slabSize]Text) }, nil)
@@ -766,7 +782,6 @@ func (d *Document) allocElement() *Element {
 		d.elemSlab = chunk[:]
 	}
 	e := &d.elemSlab[0]
-	*e = Element{}
 	d.elemSlab = d.elemSlab[1:]
 	return e
 }
@@ -845,7 +860,6 @@ func (d *Document) allocText() *Text {
 		d.textSlab = chunk[:]
 	}
 	t := &d.textSlab[0]
-	*t = Text{}
 	d.textSlab = d.textSlab[1:]
 	return t
 }
