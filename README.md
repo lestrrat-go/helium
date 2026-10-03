@@ -222,8 +222,8 @@ The files are `spec_0.xml` (118 KB, ISO-8859-1, with an internal DTD subset),
 `testdata/libxml2-compat`. The `encoding/xml` loop decodes the ISO-8859-1 file
 through a `CharsetReader`. Numbers are the median of 5 runs on an AMD Ryzen 9
 7900X3D with Go 1.26.8, from `go test -run '^$' -bench
-'Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$' -benchmem -count=5 -tags
-libxml2bench ./bench`:
+'Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$/^[0-9]+KB$' -benchmem
+-count=5 -tags libxml2bench ./bench`:
 
 | File | Helium | `encoding/xml` | libxml2 (cgo) |
 |------|--------|----------------|---------------|
@@ -238,9 +238,9 @@ makes about 125,000.
 To run the benchmarks yourself:
 
 ```text
-go test -bench='BenchmarkHeliumParse|BenchmarkStdlibXMLDecode' -benchmem ./bench/
+go test -run '^$' -bench='Benchmark(HeliumParse|StdlibXMLDecode)$/^[0-9]+KB$' -benchmem ./bench/
 # Include libxml2 (requires cgo and libxml2-dev):
-go test -tags cgo,libxml2bench -bench=. -benchmem ./bench/
+go test -run '^$' -tags cgo,libxml2bench -bench='Benchmark(HeliumParse|StdlibXMLDecode|Libxml2Parse)$/^[0-9]+KB$' -benchmem ./bench/
 ```
 
 # Current status
