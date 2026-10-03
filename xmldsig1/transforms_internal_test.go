@@ -823,6 +823,53 @@ func TestCanonicalizeEnvelopedDetachedInputs(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestCanonicalizeSubtreeMatchesDocumentWalk covers the parts of the document
+// canonicalizeSubtree no longer walks when c14n starts at the subtree: a
+// relative namespace URI anywhere in the document still fails the
+// canonicalization with the same first error as the whole-document walk, and an
+// entity reference inside the subtree still resolves prefixes declared on the
+// subtree's ancestors. Each case runs every method against the whole-document
+// walk (canonicalizeNodeSetMode) over the same node set.
+func TestCanonicalizeSubtreeMatchesDocumentWalk(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		xml     string
+		target  string
+		wantErr bool
+	}{
+		{name: "relative namespace before subtree", xml: `<r><x xmlns:rel="rel/uri"/><s><t/></s></r>`, target: "s", wantErr: true},
+		{name: "relative namespace after subtree", xml: `<r><s><t/></s><x><y xmlns:rel="rel/uri"/></x></r>`, target: "s", wantErr: true},
+		{name: "relative namespace on ancestor", xml: `<r xmlns:rel="rel/uri"><m><s/></m></r>`, target: "s", wantErr: true},
+		{name: "relative namespaces inside and after subtree", xml: `<r><s><t xmlns:in="in/rel"/></s><x xmlns:rel="rel/uri"/></r>`, target: "s", wantErr: true},
+		{name: "relative namespace in entity outside subtree", xml: `<!DOCTYPE r [<!ENTITY e "<q xmlns:rel='rel/uri'/>">]><r>&e;<s/></r>`, target: "s", wantErr: true},
+		{name: "entity in subtree uses ancestor prefix", xml: `<!DOCTYPE r [<!ENTITY e "<a:q a:at='1'>v</a:q>">]><r xmlns:a="urn:a" xmlns="urn:d"><m xml:lang="en"><s>&e;</s></m></r>`, target: "s"},
+		{name: "entity referenced inside and before subtree", xml: `<!DOCTYPE r [<!ENTITY e "<p:q xmlns:p='urn:p'>v</p:q>">]><r>&e;<s>&e;</s></r>`, target: "s"},
+		{name: "entity referenced inside and after subtree", xml: `<!DOCTYPE r [<!ENTITY e "<q xmlns='urn:d'>v</q>">]><r><s>&e;</s><x>&e;</x></r>`, target: "s"},
+		{name: "absolute namespaces only", xml: `<r xmlns:a="urn:a"><x xmlns:b="urn:b"/><s a:at="1"><t/></s><y xmlns:c="urn:c"/></r>`, target: "s"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.xml))
+			require.NoError(t, err)
+			target := findLocal(doc, tc.target)
+			require.NotNil(t, target)
+			for _, method := range envelopedEquivalenceMethods {
+				mode, comments, err := resolveC14NMode(method)
+				require.NoError(t, err)
+				nodes, err := collectCanonicalizationNodes(t.Context(), target, mode)
+				require.NoError(t, err)
+				want, wantErr := canonicalizeNodeSetMode(mode, comments, nodes, doc, nil)
+				got, gotErr := canonicalizeSubtree(t.Context(), method, target, nil)
+				require.Equal(t, fmt.Sprint(wantErr), fmt.Sprint(gotErr), method)
+				require.Equal(t, string(want), string(got), method)
+				require.Equal(t, tc.wantErr, gotErr != nil, method)
+			}
+		})
+	}
+}
+
 // TestTransformNamespace guards against namespace confusion in Transform
 // elements.
 func TestTransformNamespace(t *testing.T) {

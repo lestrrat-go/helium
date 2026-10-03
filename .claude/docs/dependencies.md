@@ -17,8 +17,8 @@ xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, i
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/lexer, internal/xpath1/number
 xpointer       → helium, xpath1, internal/xpath1/lexer, internal/xmlchar, internal/intconv
-c14n           → helium, internal/lexicon, internal/domutil
-xmldsig1       → helium, c14n, xpath1, internal/lexicon, internal/domutil, internal/xpath1/lexer, internal/xmlbase64, internal/xmlchar
+c14n           → helium, internal/lexicon, internal/domutil, internal/c14nctl
+xmldsig1       → helium, c14n, xpath1, internal/c14nctl, internal/lexicon, internal/domutil, internal/xpath1/lexer, internal/xmlbase64, internal/xmlchar
 xmldsig1/transform → helium, xmldsig1, xslt3  (opt-in xslt3-backed XSLTTransformer; kept out of xmldsig1 so the core never imports xslt3)
 xmlenc1        → helium, c14n, internal/domutil, internal/xmlbase64  (c14n converts the node-set a same-document xenc:CipherReference names into octets; c14n imports neither xmlenc1 nor xmldsig1, so the edge is one-way)
 html           → helium, sax, push, internal/xmlchar
@@ -52,6 +52,7 @@ internal/xmlbase64 → helium (DecodeElement counts/charges/decodes a base64 val
 internal/writerctl → (none)
 internal/nodelink → (none)
 internal/nslookup → (none)
+internal/c14nctl → (none)  (c14n installs its hook in init; xmldsig1 calls it)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, enum, internal/lexicon, internal/nslookup, internal/xmlchar
 internal/xpathstream → xpath3, internal/lexicon
@@ -62,7 +63,7 @@ test           → helium
 sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil,
 internal/encoding, internal/intconv, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence,
 internal/strcursor,
-internal/writerctl, internal/xpath1/lexer, internal/xsdregex, internal/uripath
+internal/writerctl, internal/c14nctl, internal/xpath1/lexer, internal/xsdregex, internal/uripath
 
 ## Core layer
 helium (root) → sax, enum, internal/*

@@ -522,9 +522,19 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
     failing URIs are never memoized.
   - Node-set mode: nearest visible ancestor = top of `visibleAncestors`; each slot lazily fills a reused
     first-wins prefix→URI map from the ordered, duplicate-keeping `nsNodesByElement`.
-- Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go` (`bindingStack`),
-  `sort.go`, `escape.go` (byte-table escaping)
-- Imports: helium
+- Subtree start (internal, `subtree.go`): `internal/c14nctl.SubtreeRoot` sets `cfg.subtreeRoot`. With a node set
+  that lies in that element's subtree (the caller's contract), `processSubtree` checks the elements before the subtree
+  for relative namespace URIs in document order, pushes the ancestors' scope frames outermost first, processes the
+  root, then checks the elements after it, so bytes and the first error equal the whole-document walk without
+  visiting the rest of the document. `subtreeAncestors` falls back to the whole-document walk when an ancestor is not
+  an element (entity content), is the excluded element, or has a member in the node set, when the chain does not
+  end at the canonicalized document, or when a DTD subset declares an entity with element content
+  (`hasElementEntities`: the whole-document walk renders such shared elements' in-set namespace nodes as text at
+  references outside the subtree). xmldsig1 uses it for every single-subtree node set (`canonicalizeSubtree`, the
+  enveloped `#id` path).
+- Files: `c14n.go` (API), `canonicalizer.go` (engine), `subtree.go` (subtree start), `xmlbase.go` (xml:base join),
+  `nsstack.go` (`bindingStack`), `sort.go`, `escape.go` (byte-table escaping)
+- Imports: helium, internal/lexicon, internal/domutil, internal/c14nctl
 
 ## xpath1/
 
@@ -1737,7 +1747,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   Manifest inner-reference validation), `xslt_transform.go` (XSLT transform seam: `XSLTTransformer` +
   `parseXSLTTransform`), `reference_resolver.go` (external-reference resolver API + FSReferenceResolver),
   `keyinfo.go`, `retrieval_method.go` (ds:RetrievalMethod dereferencing), `errors.go`
-- Imports: helium, c14n/, xpath1/ (XPath filter transform), internal/xpath1/lexer
+- Imports: helium, c14n/, xpath1/ (XPath filter transform), internal/c14nctl (subtree start), internal/xpath1/lexer
 
 ## xmlenc1/
 
@@ -2431,6 +2441,15 @@ Generic bitset operations for bitmask types.
 
 - **Set[T](*T, T)** / **IsSet[T](T, T) → bool**
 - Files: `bitset.go`
+
+## internal/c14nctl/
+
+Bridge for unexported `c14n.Canonicalizer` configuration. Package c14n installs `SubtreeRoot` during init;
+xmldsig1 uses it to start a node-set walk at one element subtree. The hook is typed with `any` because c14n imports
+this package to register it.
+
+- Files: `c14nctl.go`
+- Imports: none
 
 ## internal/nslookup/
 
