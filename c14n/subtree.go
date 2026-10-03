@@ -33,10 +33,14 @@ func subtreeRootHook(c, root any) any {
 // and reports whether the walk can start at subtreeRoot. It cannot when an
 // ancestor is not an element (subtreeRoot lies in entity replacement content),
 // is the excluded element, has a member in the node set (the element itself,
-// one of its namespace nodes or one of its attributes), or when the chain does
-// not end at the canonicalized document. The whole-document walk handles those
-// cases.
+// one of its namespace nodes or one of its attributes), when the chain does
+// not end at the canonicalized document, or when the document declares an
+// entity with element content (see hasElementEntities). The whole-document
+// walk handles those cases.
 func (c *canonicalizer) subtreeAncestors() ([]*helium.Element, bool) {
+	if c.hasElementEntities() {
+		return nil, false
+	}
 	var chain []*helium.Element
 	for n := c.subtreeRoot.Parent(); ; n = n.Parent() {
 		if n == nil {
@@ -56,6 +60,31 @@ func (c *canonicalizer) subtreeAncestors() ([]*helium.Element, bool) {
 	}
 	slices.Reverse(chain)
 	return chain, true
+}
+
+// hasElementEntities reports whether the document's internal or external DTD
+// subset declares an entity whose replacement content holds an element. Such an
+// element is shared by every reference to the entity, so a node set built from
+// the subtree can hold its namespace nodes, and the whole-document walk renders
+// those as text at a reference outside the subtree too (renderNSNodesAsText on
+// the omitted expansion). Starting at the subtree would drop that text.
+func (c *canonicalizer) hasElementEntities() bool {
+	for _, dtd := range []*helium.DTD{c.doc.IntSubset(), c.doc.ExtSubset()} {
+		if dtd == nil {
+			continue
+		}
+		for n := dtd.FirstChild(); n != nil; n = n.NextSibling() {
+			if n.Type() != helium.EntityNode {
+				continue
+			}
+			for child := range helium.Children(n) {
+				if child.Type() == helium.ElementNode {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // hasNodeSetMembers reports whether e, one of its namespace nodes, or one of

@@ -527,8 +527,10 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
   for relative namespace URIs in document order, pushes the ancestors' scope frames outermost first, processes the
   root, then checks the elements after it, so bytes and the first error equal the whole-document walk without
   visiting the rest of the document. `subtreeAncestors` falls back to the whole-document walk when an ancestor is not
-  an element (entity content), is the excluded element, or has a member in the node set, or when the chain does not
-  end at the canonicalized document. xmldsig1 uses it for every single-subtree node set (`canonicalizeSubtree`, the
+  an element (entity content), is the excluded element, or has a member in the node set, when the chain does not
+  end at the canonicalized document, or when a DTD subset declares an entity with element content
+  (`hasElementEntities`: the whole-document walk renders such shared elements' in-set namespace nodes as text at
+  references outside the subtree). xmldsig1 uses it for every single-subtree node set (`canonicalizeSubtree`, the
   enveloped `#id` path).
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `subtree.go` (subtree start), `xmlbase.go` (xml:base join),
   `nsstack.go` (`bindingStack`), `sort.go`, `escape.go` (byte-table escaping)

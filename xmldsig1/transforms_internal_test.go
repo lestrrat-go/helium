@@ -844,6 +844,8 @@ func TestCanonicalizeSubtreeMatchesDocumentWalk(t *testing.T) {
 		{name: "relative namespaces inside and after subtree", xml: `<r><s><t xmlns:in="in/rel"/></s><x xmlns:rel="rel/uri"/></r>`, target: "s", wantErr: true},
 		{name: "relative namespace in entity outside subtree", xml: `<!DOCTYPE r [<!ENTITY e "<q xmlns:rel='rel/uri'/>">]><r>&e;<s/></r>`, target: "s", wantErr: true},
 		{name: "entity in subtree uses ancestor prefix", xml: `<!DOCTYPE r [<!ENTITY e "<a:q a:at='1'>v</a:q>">]><r xmlns:a="urn:a" xmlns="urn:d"><m xml:lang="en"><s>&e;</s></m></r>`, target: "s"},
+		{name: "entity referenced inside and before subtree", xml: `<!DOCTYPE r [<!ENTITY e "<p:q xmlns:p='urn:p'>v</p:q>">]><r>&e;<s>&e;</s></r>`, target: "s"},
+		{name: "entity referenced inside and after subtree", xml: `<!DOCTYPE r [<!ENTITY e "<q xmlns='urn:d'>v</q>">]><r><s>&e;</s><x>&e;</x></r>`, target: "s"},
 		{name: "absolute namespaces only", xml: `<r xmlns:a="urn:a"><x xmlns:b="urn:b"/><s a:at="1"><t/></s><y xmlns:c="urn:c"/></r>`, target: "s"},
 	}
 	for _, tc := range cases {

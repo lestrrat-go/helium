@@ -886,6 +886,26 @@ func TestSubtreeRootMatchesDocumentWalk(t *testing.T) {
 	})
 }
 
+// TestSubtreeRootSkipsRestOfDocument shows the subtree walk runs: given a
+// node set that breaks the option's contract with a member outside the
+// subtree, it renders only the subtree, where the whole-document walk also
+// renders that member.
+func TestSubtreeRootSkipsRestOfDocument(t *testing.T) {
+	t.Parallel()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><x>out</x><s>in</s></r>`))
+	require.NoError(t, err)
+	nodes := evaluateNodeSet(t, doc, `//x/text() | //s | //s/text()`, nil)
+	canon := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes)
+
+	whole, err := canon.CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `out<s>in</s>`, string(whole))
+
+	sub, err := subtreeRoot(t, canon, findElement(doc, "s")).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<s>in</s>`, string(sub))
+}
+
 // subtreeRoot applies the internal subtree-root option to canon.
 func subtreeRoot(t *testing.T, canon c14n.Canonicalizer, root *helium.Element) c14n.Canonicalizer {
 	t.Helper()
