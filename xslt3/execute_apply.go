@@ -651,12 +651,13 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 				if other.ImportPrec < tmpl.ImportPrec || (other.ImportPrec == tmpl.ImportPrec && other.Priority < tmpl.Priority) {
 					break
 				}
-				// Split union pattern branches share the same Body slice
-				if len(other.Body) > 0 && len(tmpl.Body) > 0 && &other.Body[0] == &tmpl.Body[0] {
+				// Split union pattern branches originate from the same template
+				// rule and never conflict with each other (spec bug 30402).
+				if other.splitOriginID != 0 && other.splitOriginID == tmpl.splitOriginID {
 					continue
 				}
 				if other.Match != nil && other.Match.matchPattern(ctx, ec, node) {
-					return dynamicError(errCodeXTRE0540,
+					return dynamicError(errCodeXTDE0540,
 						"ambiguous rule match for node %v in mode %q (on-multiple-match=fail)",
 						node, mode)
 				}

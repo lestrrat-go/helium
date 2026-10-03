@@ -116,7 +116,7 @@ func (ec *execContext) nodeIsTyped(node helium.Node) bool {
 }
 
 // findBestTemplate finds the highest-priority matching template for a node.
-// Returns XTRE0540 when on-multiple-match="fail" and two templates match
+// Returns XTDE0540 when on-multiple-match="fail" and two templates match
 // with equal priority and import precedence.
 func (ec *execContext) findBestTemplate(ctx context.Context, node helium.Node, mode string) (*template, error) {
 	// Set currentNode to the candidate so current() works in pattern predicates
