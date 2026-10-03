@@ -253,3 +253,62 @@ func TestUsePackageNestedOverrideUnionRule(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, result, "<out>[union][union]</out>")
 }
+
+// overrideChecksPackage is a used package with a public mode and a public
+// named template, so an xsl:override template may name either.
+const overrideChecksPackage = `<?xml version="1.0"?>
+<xsl:package name="http://example.com/pkg" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:mode name="m" visibility="public"/>
+  <xsl:template match="*" mode="m">[pkg]</xsl:template>
+  <xsl:template name="t" visibility="public">[t]</xsl:template>
+</xsl:package>`
+
+// An xsl:template inside xsl:override is still an xsl:template: the static
+// rules on its attributes and its match pattern apply exactly as they do to a
+// top-level xsl:template.
+func TestOverrideTemplateStaticErrors(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		template string
+		code     string
+	}{
+		{name: "valid", template: `<xsl:template match="a" mode="m" priority="-1.5">[ok]</xsl:template>`},
+		{name: "priority with exponent", template: `<xsl:template match="a" mode="m" priority="1e3">[p]</xsl:template>`, code: "XTSE0530"},
+		{name: "priority with trailing text", template: `<xsl:template match="a" mode="m" priority="0.5x">[p]</xsl:template>`, code: "XTSE0530"},
+		{name: "unknown attribute", template: `<xsl:template match="a" mode="m" bogus="1">[p]</xsl:template>`, code: "XTSE0090"},
+		{name: "neither match nor name", template: `<xsl:template mode="m">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "mode without match", template: `<xsl:template name="t" mode="m">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "priority without match", template: `<xsl:template name="t" priority="1">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "visibility without name", template: `<xsl:template match="a" mode="m" visibility="public">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "empty mode", template: `<xsl:template match="a" mode="">[p]</xsl:template>`, code: "XTSE0550"},
+		{name: "duplicate mode", template: `<xsl:template match="a" mode="m m">[p]</xsl:template>`, code: "XTSE0550"},
+		{name: "invalid name", template: `<xsl:template name="1t">[p]</xsl:template>`, code: "XTSE0020"},
+		{name: "unknown function in pattern", template: `<xsl:template match="a[no-such-function()]" mode="m">[p]</xsl:template>`, code: "XPST0017"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:use-package name="http://example.com/pkg">
+    <xsl:override>` + tc.template + `</xsl:override>
+  </xsl:use-package>
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/a" mode="m"/></out></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().
+				PackageResolver(modeAllPackageResolver{source: overrideChecksPackage}).
+				Compile(t.Context(), doc)
+			if tc.code == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.code)
+		})
+	}
+}
