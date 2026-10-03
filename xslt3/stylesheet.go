@@ -297,6 +297,10 @@ type template struct {
 	Version          string      // effective version (from template or stylesheet)
 	OwnerPackage     *Stylesheet // package that defined this template (nil = main stylesheet)
 	OriginalTemplate *template   // original template being overridden (for xsl:original calls)
+	// explicitPriority reports a priority attribute on the template. Without
+	// one, a union match pattern is split into one rule per alternative
+	// (templateRules).
+	explicitPriority bool
 	// splitOriginID identifies the originating template rule when a union match
 	// pattern (P1 | P2) is split into separate template entries. All split
 	// branches of one rule share the same non-zero id so the on-multiple-match

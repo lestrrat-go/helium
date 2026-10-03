@@ -312,6 +312,7 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 			return nil, staticError(errCodeXTSE0010, "invalid priority %q: %v", prio, err)
 		}
 		tmpl.Priority = f
+		tmpl.explicitPriority = true
 	} else if tmpl.Match != nil && len(tmpl.Match.Alternatives) == 1 {
 		tmpl.Priority = tmpl.Match.Alternatives[0].priority
 	}

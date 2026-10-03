@@ -933,7 +933,9 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   orchestration), `compile_*.go`
   (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),
   `compile_patterns.go` (match-pattern compilation and bottom-up matching; every step predicate is compiled once
-  per pattern, and each per-alternative rule split from a union template copies the whole pattern (namespace
+  per pattern; a union template without a `priority` becomes one rule per alternative with that alternative's
+  default priority via `templateRules` (`compile_templates.go`), used for local, used-package, and
+  `xsl:override` templates alike, and each split rule copies the whole pattern (namespace
   context, xpath-default-namespace, backwards-compatible flag, the shared compiled predicates); a
   predicate that calls none of `position`/`last`/`function-lookup` and yields a non-number is decided from the
   candidate node alone, without counting its siblings, XSLT 3.0 §5.5.3; any other predicate counts the node's
