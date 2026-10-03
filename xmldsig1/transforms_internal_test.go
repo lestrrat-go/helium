@@ -554,6 +554,59 @@ func TestCanonicalizeEnvelopedMatchesCopyAndUnlink(t *testing.T) {
 			checkEnvelopedEquivalence(t, tc.name, []byte(tc.xml))
 		})
 	}
+	for _, tc := range envelopedEquivalenceBuilt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compareEnvelopedDocument(t, buildActiveNamespaceDocument(t, tc.rootPrefix, tc.rootURI, tc.childPrefix, tc.childURI, tc.inSignature))
+		})
+	}
+}
+
+// envelopedEquivalenceBuilt are documents built through the DOM API whose
+// child element gets an active namespace without a declaration. A parser never
+// produces this shape: when the prefix is already bound to another URI, c14n
+// and helium.CopyDoc disagree on what the element declares, and
+// canonicalizeEnveloped takes the copy path.
+var envelopedEquivalenceBuilt = []struct {
+	name                  string
+	rootPrefix, rootURI   string
+	childPrefix, childURI string
+	inSignature           bool
+}{
+	{name: "built-conflicting-default", rootPrefix: "", rootURI: "urn:p", childPrefix: "", childURI: "urn:c"},
+	{name: "built-conflicting-prefixed", rootPrefix: "p", rootURI: "urn:1", childPrefix: "p", childURI: "urn:2"},
+	{name: "built-unbound-prefix", rootPrefix: "p", rootURI: "urn:1", childPrefix: "q", childURI: "urn:q"},
+	{name: "built-conflict-inside-signature", rootPrefix: "p", rootURI: "urn:1", childPrefix: "p", childURI: "urn:2", inSignature: true},
+}
+
+// buildActiveNamespaceDocument builds <r> declaring rootPrefix=rootURI with an
+// enveloped ds:Signature and a <c> whose active namespace is
+// childPrefix=childURI with no declaration. inSignature places <c> inside the
+// Signature instead of beside it.
+func buildActiveNamespaceDocument(t *testing.T, rootPrefix, rootURI, childPrefix, childURI string, inSignature bool) *helium.Document {
+	t.Helper()
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	root, err := doc.CreateElement("r")
+	require.NoError(t, err)
+	require.NoError(t, root.DeclareNamespace(rootPrefix, rootURI))
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	sig, err := doc.CreateElement("Signature")
+	require.NoError(t, err)
+	require.NoError(t, sig.DeclareNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, sig.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, root.AddChild(sig))
+
+	child, err := doc.CreateElement("c")
+	require.NoError(t, err)
+	require.NoError(t, child.SetActiveNamespace(childPrefix, childURI))
+	require.NoError(t, child.AddChild(doc.CreateText([]byte("v"))))
+	parent := root
+	if inSignature {
+		parent = sig
+	}
+	require.NoError(t, parent.AddChild(child))
+	return doc
 }
 
 // checkEnvelopedEquivalence parses data with entities kept and with entities

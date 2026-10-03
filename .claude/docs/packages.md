@@ -497,7 +497,10 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
   ExcludeSubtree(*Element)
 - ExcludeSubtree(e) skips e's subtree in the walk (`processElement` returns at e; an excluded document element
   leaves the top-level nodes after it rendered as before-root), giving the bytes of the document with e detached
-  without changing or copying it. xmldsig1's enveloped-signature transform canonicalizes the live document with it.
+  without changing or copying it. xmldsig1's enveloped-signature transform (`canonicalizeEnveloped`) canonicalizes
+  the live document with it, except for a DOM-built document where an element's active namespace conflicts with the
+  in-scope declaration of its prefix (`hasConflictingActiveNamespace`): c14n resolves such a prefix through the
+  declarations while `CopyDoc` and the serializer declare it on the element, so that case canonicalizes a freed copy.
 - Terminal: **Canonicalize(*Document, io.Writer) → error**, **CanonicalizeTo(*Document) → ([]byte, error)**
 - Predefined `xml` namespace binding is implicit and never renders as `xmlns:xml` in whole-document or
   node-set output. `xml:*` names and inherited attributes retain mode-specific canonicalization behavior.
