@@ -679,8 +679,8 @@ node: every node chunk is zero when it is handed out (fresh from the runtime, a 
 a pooled chunk `Free` cleared), and `Free` clears the used nodes of each node chunk before putting it back
 (`recycleNodeChunks`; only the last chunk of each type is partly used), so a pooled chunk holds no pointers into
 the freed tree. Text-content byte chunks are not cleared. A node's struct and content bytes
-physically live in its owning document's slab, so recycling a chunk that a still-live node references would let a
-subsequent parse overwrite that node.
+physically live in its owning document's slab, so recycling a chunk that a still-live node references would zero
+that node during `Free` and let a subsequent parse overwrite it.
 
 The insertion paths (`addChildPreflight`/`addSiblingPreflight`/`replaceNode`, via `noteCrossDocumentEscape`)
 permit linking a node into a DIFFERENT document than the one that owns it — XInclude merges an included

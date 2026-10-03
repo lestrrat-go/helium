@@ -191,8 +191,9 @@ func NewDocument(version, encoding string, standalone DocumentStandaloneType) *D
 //
 // If any of this document's slab-backed nodes was moved into another document
 // (via AddChild/AddSibling/Replace), Free does NOT recycle its chunks: a moved
-// node still references one of them, so returning it to the pool would let a
-// later parse overwrite the live node. In that case Free is a no-op and GC
+// node still references one of them, and Free zeroes every chunk it returns
+// to the pool, so recycling it would wipe the live node and let a later parse
+// overwrite it. In that case Free is a no-op and GC
 // reclaims the chunks once they are no longer referenced.
 func (d *Document) Free() {
 	if d.slabEscaped {
