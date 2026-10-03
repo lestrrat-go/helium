@@ -1109,9 +1109,9 @@ func TestPatternAxisPositionalPredicate(t *testing.T) {
 	}
 }
 
-// TestPatternNamespaceNodeMatch checks that every pattern form that can select
-// a namespace node matches exactly the namespace nodes the equivalent select
-// expression returns (XSLT 3.0 §5.5.3). The namespace axis builds fresh nodes
+// TestPatternNamespaceNodeMatch checks that each pattern form below that
+// selects namespace nodes matches exactly the namespace nodes the equivalent
+// select expression returns (XSLT 3.0 §5.5.3). The namespace axis builds fresh nodes
 // on each traversal, so the node a template is applied to is never the same Go
 // value as the one the pattern's own evaluation returns; a namespace node is
 // identified by its parent element and its prefix. The source declares a and
@@ -1137,6 +1137,7 @@ func TestPatternNamespaceNodeMatch(t *testing.T) {
 		{"filter", "(namespace::*)[2]", "//(namespace::*)[2]", "[doc:a=urn:a][r:a=urn:a]"},
 		{"variable", "$ns", "$ns", rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
 		{"variable filter", "$ns[. = 'urn:p2']", "$ns[. = 'urn:p2']", "[r:p=urn:p2]"},
+		{"key", "key('k', 'urn:a')", "key('k', 'urn:a')", "[doc:a=urn:a][r:a=urn:a]"},
 		{"prefix name", "namespace::p", "//*/namespace::p", "[doc:p=urn:p][r:p=urn:p2]"},
 		{"implicit xml", "namespace::xml", "//*/namespace::xml", docXML + rXML},
 		{"parent step", "r/namespace::*", "//r/namespace::*", rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
@@ -1151,6 +1152,7 @@ func TestPatternNamespaceNodeMatch(t *testing.T) {
 			const show = `[<xsl:value-of select="name(..)"/>:<xsl:value-of select="name()"/>=<xsl:value-of select="."/>]`
 			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:output omit-xml-declaration="yes"/>
+  <xsl:key name="k" match="namespace-node()" use="."/>
   <xsl:variable name="ns" select="//r/namespace::*"/>
   <xsl:template match="/"><out><m><xsl:apply-templates select="//*/namespace::*"/></m>` +
 				`<s><xsl:for-each select="` + tc.sel + `">` + show + `</xsl:for-each></s></out></xsl:template>
@@ -1167,6 +1169,47 @@ func TestPatternNamespaceNodeMatch(t *testing.T) {
 			out, err := ss.Transform(src).Serialize(t.Context())
 			require.NoError(t, err)
 			require.Equal(t, "<out><m>"+tc.want+"</m><s>"+tc.want+"</s></out>", strings.TrimSpace(out))
+		})
+	}
+}
+
+// TestPatternParentlessNamespaceNodeMatch checks that parentless namespace
+// nodes, which xsl:namespace and xsl:copy-of build in a variable, keep their
+// own identity: two of them with the same prefix are different nodes, so a
+// pattern holding one of them matches only that one (XPath 3.1 §2.1.2).
+func TestPatternParentlessNamespaceNodeMatch(t *testing.T) {
+	const srcXML = `<doc xmlns:p="urn:p"><r xmlns:p="urn:p2"/></doc>`
+	tests := []struct {
+		name string
+		ns   string // the content of the namespace-node()* variable $ns
+		want string
+	}{
+		{"xsl:namespace", `<xsl:namespace name="p">urn:1</xsl:namespace><xsl:namespace name="p">urn:2</xsl:namespace>`,
+			"[p=urn:1]"},
+		{"xsl:copy-of", `<xsl:copy-of select="//*/namespace::p"/>`, "[p=urn:p]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:variable name="ns" as="namespace-node()*">` + tc.ns + `</xsl:variable>
+  <xsl:variable name="first" select="$ns[1]"/>
+  <xsl:template match="/"><out><xsl:apply-templates select="$ns"/>` +
+				`<xsl:value-of select="count($ns), $ns[1] is $ns[2]"/></out></xsl:template>
+  <xsl:template match="$first" priority="1">[<xsl:value-of select="name()"/>=<xsl:value-of select="."/>]</xsl:template>
+  <xsl:template match="namespace-node()"/>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+			require.NoError(t, err)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "<out>"+tc.want+"2 false</out>", strings.TrimSpace(out))
 		})
 	}
 }
