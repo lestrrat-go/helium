@@ -121,6 +121,7 @@ bug that prompted it.
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `xmldsig1_bench_test.go` | xmldsig1 | Enveloped signing and verification benchmarks |
+| `stack_test.go` | internal/stack | `Stack`/`KeyedStack` push, pop, peek and lookup; popped slots are cleared, and a stack keeps its capacity through a walk back up and a second descent to the same depth |
 | `bytecursor_test.go` | internal/strcursor | ByteCursor read-error and zero-progress handling; `TestCursorPosition` checks line, column, and line text after every advancing method on both ByteCursor and UTF8Cursor |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast`/`AdvanceNoNewline` line/column against `Advance` |
 
@@ -448,8 +449,10 @@ iso-8859-1), `schemas/test/nvdcve_0.xml` (`287KB`) and `relaxng/test/comps_0.xml
 sub-cases per size: `BytesReader` reads from a `bytes.Reader`, and `64BReads` wraps it in `cappedReader`, which returns
 at most 64 bytes per `Read`, so most tags and text runs straddle a read boundary. A cap of a few KB times the same as
 `BytesReader`, because the parser's input buffer is 8KB. `BenchmarkHeliumParseSmall` times documents of 1KB or less
-through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with
-`encoding/xml` for comparison.
+through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkHeliumParseDepth` times `Parse` on generated
+documents of 4000 `<a>` elements under one `<root>`, nested in chains of 8, 16, 24 and 40 (`depth8` … `depth40`), so
+every case parses about the same markup and a per-level cost of the parser's stacks shows as time and memory that grow
+with depth. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with `encoding/xml` for comparison.
 
 `BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml`, `relaxng/test/comps_0.xml`, and
 `relaxng/test/ISO19005-1-XMP_Packet.rng` (`xmprng`: every element `rng:`-prefixed, about thirty namespace

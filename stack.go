@@ -101,14 +101,17 @@ func (s *nodeStack) Push(e nodeEntry) {
 	s.Stack.Push(e)
 }
 
-func (s *nodeStack) Pop() *nodeEntry {
-	l := s.Peek(1)
-	if len(l) != 1 {
-		return nil
+// Pop removes the top entry. It truncates the slice directly: the parser pops
+// once per end tag, and the backing array keeps its capacity so the next
+// descent to the same depth does not reallocate. The popped slot is cleared so
+// its strings do not stay reachable from the stack.
+func (s *nodeStack) Pop() {
+	n := len(s.Stack)
+	if n == 0 {
+		return
 	}
-	e := &l[0]
-	s.Stack.Pop()
-	return e
+	s.Stack[n-1] = nodeEntry{}
+	s.Stack = s.Stack[:n-1]
 }
 
 func (s *nodeStack) PeekOne() *nodeEntry {
@@ -126,12 +129,12 @@ func (s *inputStack) Push(c any) {
 	s.Stack.Push(c)
 }
 
+// Pop removes the top input and returns it, or returns nil when the stack is
+// empty.
 func (s *inputStack) Pop() any {
-	defer s.Stack.Pop()
-	if e := s.PeekOne(); e != nil {
-		return e
-	}
-	return nil
+	e := s.PeekOne()
+	s.Stack.Pop()
+	return e
 }
 
 func (s *inputStack) PeekOne() any {

@@ -863,3 +863,33 @@ func referenceLiteralValid(b []byte, xml11 bool) bool {
 	}
 	return true
 }
+
+// TestNodeStackPop checks the parser's element stack: Pop removes the top
+// entry, clears its slot, and keeps the backing array, so a second descent to
+// the same depth reuses it.
+func TestNodeStackPop(t *testing.T) {
+	t.Parallel()
+
+	const depth = 64
+	var s nodeStack
+	s.Pop()
+	require.Nil(t, s.PeekOne(), "Pop on an empty stack is a no-op")
+
+	for i := range depth {
+		s.Push(nodeEntry{local: fmt.Sprint("e", i), qname: fmt.Sprint("e", i)})
+	}
+	grown := s.Cap()
+
+	for range depth - 1 {
+		s.Pop()
+		require.Equal(t, grown, s.Cap(), "Pop keeps the backing array")
+	}
+	require.Equal(t, "e0", s.PeekOne().Name())
+	require.Equal(t, nodeEntry{}, s.Stack[:2][1], "the popped slot is cleared")
+
+	for i := 1; i < depth; i++ {
+		s.Push(nodeEntry{local: "a", qname: "a"})
+	}
+	require.Equal(t, grown, s.Cap(), "a second descent to the same depth reuses the backing array")
+	require.Equal(t, depth, s.Len())
+}

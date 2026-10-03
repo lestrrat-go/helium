@@ -2528,10 +2528,16 @@ XML Schema / XPath regular-expression translation and compilation, shared by `xs
 
 ## internal/stack/
 
-Generic stack with capacity shrinking.
+Generic slice-backed LIFO stacks for the parser's input, element and namespace stacks.
 
-- **stackPop(StackImpl, n)** — pop n items and shrink if oversized
-- Files: `stack.go`
+- **Stack[T]** — `Push`, `Pop(n...)`, `Peek(n)`, `Len`, `Cap`
+- **KeyedStack[T Keyed]** — the same plus `Lookup(key)` from the top; `Push` rejects a duplicate key with
+  `ErrDuplicateItem`
+- Pop never shrinks the backing array, so a parse that returns to a depth it reached before does not reallocate;
+  popped slots are cleared so they keep nothing reachable
+- `nsstack/` — prefix→URI `KeyedStack` whose `Push` drops a duplicate prefix; only its own test imports it (the
+  parser's `nsStack` in `stack.go` appends duplicates so a child can shadow a binding)
+- Files: `stack.go` (package doc, `truncate`), `simple.go` (`Stack`), `unique.go` (`KeyedStack`)
 
 ## internal/heliumtest/
 
