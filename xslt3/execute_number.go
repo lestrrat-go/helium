@@ -279,7 +279,7 @@ func (ec *execContext) numberSingle(ctx context.Context, inst *numberInst, node 
 	// sibling the previous evaluation counted.
 	memoNode, memoCount := ec.numberMemoFor(inst, node)
 	count := 1
-	for sib := target.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
+	for sib := numberPrevSibling(target); sib != nil; sib = sib.PrevSibling() {
 		if sib == memoNode {
 			count += memoCount
 			break
@@ -335,7 +335,7 @@ func (ec *execContext) numberMultiple(ctx context.Context, inst *numberInst, nod
 	nums := make([]int, len(ancestors))
 	for i, anc := range ancestors {
 		count := 1
-		for sib := anc.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
+		for sib := numberPrevSibling(anc); sib != nil; sib = sib.PrevSibling() {
 			if ec.numberNodeMatches(ctx, inst, sib, node) {
 				count++
 			}
@@ -378,7 +378,11 @@ func (ec *execContext) numberAny(ctx context.Context, inst *numberInst, node hel
 // walk that started at node produced count. For level="single" node is the
 // counted node and the walk visits its preceding siblings; for level="any"
 // node is the selected node and the walk visits the preceding nodes and
-// ancestors back to the nearest from match.
+// ancestors back to the nearest from match. Both walks take their first
+// backward step through numberPrevSibling, so an attribute or namespace node
+// has no preceding siblings and a stored count never includes the other
+// attributes of an element; no walk reaches an attribute or namespace node
+// after its start.
 //
 // A later walk by the same instruction that reaches node can stop there and
 // add count, because from that point it would visit the same nodes and get
@@ -453,10 +457,25 @@ func (ec *execContext) storeNumberMemo(inst *numberInst, selected, node helium.N
 	ec.numberMemos[inst] = memo
 }
 
-// prevInDocOrder returns the previous node in document order.
+// numberPrevSibling returns the node before node on the XDM
+// preceding-sibling axis. helium links an element's attributes to each other
+// as siblings, but XDM gives attribute and namespace nodes no siblings, so for
+// those it returns nil. Siblings of any other node are never attributes or
+// namespace nodes, so a walk can continue with PrevSibling.
+func numberPrevSibling(node helium.Node) helium.Node {
+	switch node.Type() {
+	case helium.AttributeNode, helium.NamespaceNode:
+		return nil
+	}
+	return node.PrevSibling()
+}
+
+// prevInDocOrder returns the previous node in document order, skipping
+// attribute and namespace nodes as XPath's preceding axis does: from an
+// attribute or namespace node the walk goes straight to its parent element.
 func (ec *execContext) prevInDocOrder(node helium.Node) helium.Node {
 	// Previous sibling's deepest last descendant
-	if prev := node.PrevSibling(); prev != nil {
+	if prev := numberPrevSibling(node); prev != nil {
 		return ec.lastDescendant(prev)
 	}
 	// Otherwise, parent (including document node)
