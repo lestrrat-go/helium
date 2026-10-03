@@ -441,6 +441,15 @@ validated against the same `<order>`. Every case runs once per version as `<case
 `assert_cta_1000` and `assert_paths_1000` run only at 1.1. Compilation times `Compiler.Compile` with a parsed schema
 document; validation times `Validator.Validate` with a compiled schema and parsed instance document.
 
+Parse benchmarks (`bench/parse_bench_test.go`) share a corpus of `relaxng/test/spec_0.xml` (`118KB`, declared
+iso-8859-1), `schemas/test/nvdcve_0.xml` (`287KB`) and `relaxng/test/comps_0.xml` (`608KB`), loaded by `loadCorpus`.
+`BenchmarkHeliumParse` times `Parse` on the byte slice. `BenchmarkHeliumParseReader` times `ParseReader` in two
+sub-cases per size: `BytesReader` reads from a `bytes.Reader`, and `64BReads` wraps it in `cappedReader`, which returns
+at most 64 bytes per `Read`, so most tags and text runs straddle a read boundary. A cap of a few KB times the same as
+`BytesReader`, because the parser's input buffer is 8KB. `BenchmarkHeliumParseSmall` times documents of 1KB or less
+through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with
+`encoding/xml` for comparison.
+
 `BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml`, `relaxng/test/comps_0.xml`, and
 `relaxng/test/ISO19005-1-XMP_Packet.rng` (`xmprng`: every element `rng:`-prefixed, about thirty namespace
 declarations on the root) with `helium.Write` into `io.Discard`. `BenchmarkIdentityTransform` (`xslt3/identity_bench_test.go`) runs an identity

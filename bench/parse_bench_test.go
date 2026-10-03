@@ -72,6 +72,62 @@ func BenchmarkHeliumParse(b *testing.B) {
 	}
 }
 
+// smallReadSize caps each Read in the ParseReader benchmark's "64BReads" case.
+// It is small enough that most tags and text runs straddle a Read, so the case
+// times the parser's refills across read boundaries. A cap of a few KB times
+// the same as an uncapped bytes.Reader, because the parser's input buffer is
+// only 8KB.
+const smallReadSize = 64
+
+// cappedReader returns at most size bytes per Read, the way a stream that
+// delivers its input in pieces does.
+type cappedReader struct {
+	r    io.Reader
+	size int
+}
+
+func (c *cappedReader) Read(p []byte) (int, error) {
+	if len(p) > c.size {
+		p = p[:c.size]
+	}
+	return c.r.Read(p)
+}
+
+// BenchmarkHeliumParseReader times ParseReader over the corpus: "BytesReader"
+// hands the parser a bytes.Reader that fills as much of its buffer as each Read
+// asks for, and "64BReads" caps every Read at smallReadSize bytes.
+func BenchmarkHeliumParseReader(b *testing.B) {
+	loadCorpus(b)
+	for _, tc := range corpus {
+		data := *tc.data
+		b.Run(tc.name+"/BytesReader", func(b *testing.B) {
+			p := helium.NewParser()
+			b.SetBytes(int64(len(data)))
+			b.ReportAllocs()
+			for b.Loop() {
+				parseReaderOnce(b, p, bytes.NewReader(data))
+			}
+		})
+		b.Run(tc.name+"/64BReads", func(b *testing.B) {
+			p := helium.NewParser()
+			b.SetBytes(int64(len(data)))
+			b.ReportAllocs()
+			for b.Loop() {
+				parseReaderOnce(b, p, &cappedReader{r: bytes.NewReader(data), size: smallReadSize})
+			}
+		})
+	}
+}
+
+func parseReaderOnce(b *testing.B, p helium.Parser, r io.Reader) {
+	b.Helper()
+	doc, err := p.ParseReader(b.Context(), r)
+	if err != nil {
+		b.Fatal(err)
+	}
+	doc.Free()
+}
+
 // smallDocs are documents small enough that the fixed per-parse setup cost,
 // not the bytes, decides the parse time.
 var smallDocs = []struct {
