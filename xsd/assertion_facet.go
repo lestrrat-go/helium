@@ -168,11 +168,7 @@ func checkSimpleTypeAssertions(ctx context.Context, value string, valueNS map[st
 			if decls != nil {
 				ev = ev.SchemaDeclarations(decls)
 			}
-			res, err := ev.Evaluate(ctx, a.compiled, nil)
-			ok := false
-			if err == nil {
-				ok, err = res.EBV()
-			}
+			ok, err := ev.EvaluateEBV(ctx, a.compiled, nil)
 			if err != nil {
 				vc.reportValidityError(ctx, filename, line, elemName,
 					fmt.Sprintf("Failed to evaluate the assertion '%s': %v.", a.Test, err))

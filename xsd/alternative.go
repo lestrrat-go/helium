@@ -513,13 +513,9 @@ func (vc *validationContext) applyTypeAlternatives(ctx context.Context, elem *he
 		if alt.BaseURI != "" {
 			ev = ev.BaseURI(alt.BaseURI)
 		}
-		res, err := ev.Evaluate(ctx, alt.compiled, cta)
-		if err != nil {
-			// A failing alternative test does not select the type (treated as not
-			// matched); evaluation continues to the next alternative.
-			continue
-		}
-		ok, err := res.EBV()
+		// A failing alternative test does not select the type (treated as not
+		// matched); evaluation continues to the next alternative.
+		ok, err := ev.EvaluateEBV(ctx, alt.compiled, cta)
 		if err == nil && ok && alt.Type != nil {
 			return alt.Type
 		}

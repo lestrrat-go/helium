@@ -705,11 +705,7 @@ func (ec *execContext) execAssert(ctx context.Context, inst *assertInst) error {
 	if inst.Test == nil {
 		return nil
 	}
-	result, err := ec.evalXPath(ctx, inst.Test, ec.contextNode)
-	if err != nil {
-		return err
-	}
-	b, err := result.EBV()
+	b, err := ec.evalXPathEBV(ctx, inst.Test, ec.contextNode)
 	if err != nil {
 		return err
 	}

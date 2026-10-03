@@ -457,6 +457,30 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 	return &box.result, nil
 }
 
+// EvaluateEBV evaluates the compiled expression against the given context
+// node and returns the effective boolean value of its result (XPath 3.1
+// §2.4.3): the value and errors that Evaluate followed by Result.EBV give.
+// ctx is used for cancellation/deadlines only, not for configuration.
+//
+// Because only the boolean is needed, a location path or path expression
+// E1/path that is the whole expression stops at the first node it selects,
+// as it does in a predicate or as the argument of fn:exists. When it stops
+// early, the OpLimit and node-set-limit errors and the predicate errors
+// (XPath 3.1 §2.3.4) of the nodes it did not reach do not fire. A node
+// result never builds node items, with or without type annotations.
+func (e Evaluator) EvaluateEBV(ctx context.Context, expr *Expression, node helium.Node) (bool, error) {
+	if err := expr.requireCompiledProgram(); err != nil {
+		return false, err
+	}
+
+	ec := e.newEvalCtx(node)
+
+	if err := expr.prefixPlan.Validate(ec.namespaces, ec.strictPrefixes, ec.schemaDeclarations); err != nil {
+		return false, err
+	}
+	return expr.program.executeEBV(ctx, ec)
+}
+
 // resultBox holds the Result Evaluate returns and the node list it may
 // refer to.
 type resultBox struct {

@@ -91,8 +91,9 @@ children of complexType/restriction/extension (1.1 only), captures the in-scope 
 schema error, mirroring IDC); the result is stored on `TypeDef.Assertions` (the `Assertion` struct mirrors
 `IDConstraint`). `validateElementContent` extracts the content switch into `validateContentByType` and, after
 attributes+content validate, calls `checkAssertions`, which walks the type's base chain and evaluates each
-test with the element as context node via `xpath3.NewEvaluator(...).Namespaces(a.Namespaces).Evaluate(ctx,
-expr, elem)` then `Result.EBV` — false → validity error. StrictPrefixes is intentionally NOT set so xs:/fn:
+test with the element as context node via `xpath3.NewEvaluator(...).Namespaces(a.Namespaces).EvaluateEBV(ctx,
+expr, elem)` — false → validity error, an evaluation error or a result with no effective boolean value → "Failed
+to evaluate the assertion" validity error. StrictPrefixes is intentionally NOT set so xs:/fn:
 keep default bindings. `parseAssert` also handles `<xs:assert>` inside a simpleContent extension/restriction
 (`parseSimpleContentChildren`). `$value` is bound (via `Evaluator.Variables`) to the element's TYPED simple
 value for a simpleContent type (`assertValueSequence`→`buildValueSequence`; empty sequence for complex
@@ -2297,12 +2298,14 @@ schema naming one is refused rather than guessed at. The resolved binding is fro
 (`Schema.QueryBinding()`) along with the engine the `Validator` runs.
 
 `engine` (`engine.go`) is the seam between the two: it compiles an expression to a `compiledExpr` and builds a
-namespace-bound `runner`, whose `evaluate` returns a `value`. The `value` interface holds the per-binding
-conversions — `nodeSet`, `effectiveBoolean`, `stringValue`, `nodeName` — so compilation and validation never
-name a concrete XPath package. Differences that matter:
+namespace-bound `runner`, whose `evaluate` returns a `value` and whose `test` returns the truth value of an
+`<assert>`/`<report>` test. The `value` interface holds the other per-binding conversions — `nodeSet`,
+`stringValue`, `nodeName` — so compilation and validation never name a concrete XPath package. Differences that
+matter:
 
-- `effectiveBoolean` cannot fail under XPath 1.0. Under XPath 3.1 a sequence of more than one item starting with an
-  atomic value raises FORG0006, which is reported and treated as a false test.
+- `test`'s boolean conversion cannot fail under XPath 1.0. Under XPath 3.1 a sequence of more than one item starting
+  with an atomic value raises FORG0006, which is reported and treated as a false test. The 3.1 `test` runs
+  `xpath3.Evaluator.EvaluateEBV`, so a test that is a node path stops at its first node.
 - `stringValue` (`<value-of>`) takes the string-value of the first node under XPath 1.0, and joins every atomized item
   with a single space under XPath 3.1 (the XSLT 2.0-and-later rule).
 - `<let>` binds an XPath 1.0 object under the 1.0 binding, and a whole sequence under 3.1.

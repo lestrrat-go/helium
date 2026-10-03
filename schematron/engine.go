@@ -40,6 +40,12 @@ type runner interface {
 	// evaluate evaluates expr with node as the context node.
 	evaluate(ctx context.Context, expr compiledExpr, node helium.Node) (value, error)
 
+	// test evaluates expr with node as the context node and returns the
+	// truth value used by <assert> and <report>. XPath 3.1 raises an error
+	// for a result that has no effective boolean value; XPath 1.0 never
+	// fails on the conversion.
+	test(ctx context.Context, expr compiledExpr, node helium.Node) (bool, error)
+
 	// bind returns a runner with an additional variable in scope. The value
 	// must have been produced by the same engine.
 	bind(name string, v value) runner
@@ -54,11 +60,6 @@ type value interface {
 	// made up entirely of nodes. A rule context that yields anything but
 	// nodes selects nothing.
 	nodeSet() []helium.Node
-
-	// effectiveBoolean reports the truth value used by <assert> and
-	// <report>. XPath 3.1 raises an error for sequences that have no
-	// effective boolean value; XPath 1.0 never fails.
-	effectiveBoolean() (bool, error)
 
 	// stringValue returns the text <value-of> contributes to a message.
 	stringValue() string
