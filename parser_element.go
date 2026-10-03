@@ -821,8 +821,12 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context, cur *strcursor.UTF8Curso
 			return err
 		}
 	} else {
-		if !cur.ConsumeString("</") {
+		if cur.PeekAt(0) != '<' || cur.PeekAt(1) != '/' {
 			return pctx.error(ctx, ErrLtSlashRequired)
+		}
+		// "</" holds no newline, so the column moves by two.
+		if err := cur.AdvanceNoNewline(2); err != nil {
+			return err
 		}
 
 		e := pctx.peekNode()
@@ -857,7 +861,7 @@ func (pctx *parserCtx) parseEndTag(ctx context.Context, cur *strcursor.UTF8Curso
 			return pctx.error(ctx, err)
 		}
 	}
-	pctx.popNode()
+	pctx.nodeTab.Pop()
 
 	if len(pctx.spaceTab) > 1 {
 		pctx.spaceTab = pctx.spaceTab[:len(pctx.spaceTab)-1]

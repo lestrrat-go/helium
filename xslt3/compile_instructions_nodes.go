@@ -488,7 +488,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if countAttr := getAttr(elem, "count"); countAttr != "" {
-		p, err := compilePattern(countAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
+		p, err := c.compilePattern(countAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if err != nil {
 			return nil, err
 		}
@@ -496,12 +496,13 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if fromAttr := getAttr(elem, "from"); fromAttr != "" {
-		p, err := compilePattern(fromAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
+		p, err := c.compilePattern(fromAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if err != nil {
 			return nil, err
 		}
 		inst.From = p
 	}
+	inst.memoizable = !patternReadsVariables(inst.Count) && !patternReadsVariables(inst.From)
 
 	if valueAttr := getAttr(elem, "value"); valueAttr != "" {
 		// XTSE0975: when value is present, select/level/count/from must be absent.
@@ -588,6 +589,20 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	return inst, nil
+}
+
+// patternReadsVariables reports whether any alternative of p references a
+// variable it does not bind itself. A nil pattern reads none.
+func patternReadsVariables(p *pattern) bool {
+	if p == nil {
+		return false
+	}
+	for _, alt := range p.Alternatives {
+		if len(alt.compiled.StaticReferences(nil).FreeVariables) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *compiler) compileNamespace(ctx context.Context, elem *helium.Element) (*namespaceInst, error) {

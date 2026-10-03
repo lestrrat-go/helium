@@ -98,6 +98,8 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 - `nsTab` (nsStack) — prefix→URI bindings; `Push`/`Lookup`/`Pop(n)`
 - `nsNrTab []int` — namespace count per element level (pop exact count on close)
 - `spaceTab []int` — xml:space stack (-1=inherit, 0=default, 1=preserve)
+- The `internal/stack` stacks (`inputTab`, `nodeTab`, `nsTab`) keep their capacity on pop and clear the popped slots,
+  so walking back up and down the tree reuses one backing array; `nodeStack.Pop` truncates its slice directly
 
 ### XML 1.1 Version-Gated Rules
 `pctx.isXML11()` gates version-specific rules; every non-1.1 document stays byte-identical:

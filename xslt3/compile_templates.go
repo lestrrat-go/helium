@@ -101,7 +101,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
-		p, err := compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
+		p, err := c.compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if err != nil {
 			return err
 		}
@@ -340,6 +340,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 					xpathDefaultNS:    tmpl.Match.xpathDefaultNS,
 					hasXPathDefaultNS: tmpl.Match.hasXPathDefaultNS,
 					nsBindings:        tmpl.Match.nsBindings,
+					predicates:        tmpl.Match.predicates,
 				}
 				split.Priority = alt.priority
 				split.splitOriginID = originID

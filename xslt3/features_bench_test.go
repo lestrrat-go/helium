@@ -158,8 +158,9 @@ type featureBenchCase struct {
 }
 
 // runFeatureBenchCases compiles each case once, transforms the shared source
-// once to check the output, then times xslt3.Transform (result tree only, no
-// serialization) per case.
+// (featureBenchRecords records in groupByCats categories) once to check the
+// output, then times xslt3.Transform (result tree only, no serialization) per
+// case.
 func runFeatureBenchCases(b *testing.B, cases []featureBenchCase) {
 	b.Helper()
 	src, err := helium.NewParser().Parse(b.Context(), buildFeatureSource(featureBenchRecords, groupByCats))
@@ -182,7 +183,8 @@ func runFeatureBenchCases(b *testing.B, cases []featureBenchCase) {
 	}
 }
 
-// groupByCats is the number of distinct @cat values in the grouping source.
+// groupByCats is the number of distinct @cat values in the source every
+// instruction-level benchmark transforms.
 const groupByCats = 50
 
 const groupByStylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -253,6 +255,67 @@ func BenchmarkForEachGroup(b *testing.B) {
 		{name: "group-by", xsl: groupByStylesheet, check: checkGroupBy},
 		{name: "group-adjacent", xsl: groupAdjacentStylesheet, check: checkGroupAdjacent},
 		{name: "group-starting-with", xsl: groupStartingWithStylesheet, check: checkGroupStartingWith},
+	})
+}
+
+const predicateTemplateStylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/recs"><out><xsl:apply-templates select="rec"/></out></xsl:template>
+  <xsl:template match="rec[@head]"><h/></xsl:template>
+  <xsl:template match="rec"><r/></xsl:template>
+</xsl:stylesheet>`
+
+// predicateTemplateCount is the number of match="rec[@cat='cN']" templates
+// in the predicate-templates benchmark case.
+const predicateTemplateCount = 20
+
+// buildPredicateTemplatesStylesheet generates a stylesheet with one
+// match="rec[@cat='cN']" template for each of the first n categories, plus a
+// match="rec" fallback for the rest.
+func buildPredicateTemplatesStylesheet(n int) string {
+	var b strings.Builder
+	b.WriteString(`<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">`)
+	b.WriteString(`<xsl:template match="/recs"><out><xsl:apply-templates select="rec"/></out></xsl:template>`)
+	for i := range n {
+		fmt.Fprintf(&b, `<xsl:template match="rec[@cat='c%d']"><c/></xsl:template>`, i)
+	}
+	b.WriteString(`<xsl:template match="rec"><r/></xsl:template>`)
+	b.WriteString(`</xsl:stylesheet>`)
+	return b.String()
+}
+
+// checkPredicateTemplate expects the 50 head records to match rec[@head] and
+// every other record to fall through to rec.
+func checkPredicateTemplate(tb testing.TB, out string) {
+	tb.Helper()
+	require.Equal(tb, featureBenchRecords/100, strings.Count(out, "<h/>"))
+	require.Equal(tb, featureBenchRecords-featureBenchRecords/100, strings.Count(out, "<r/>"))
+}
+
+// checkPredicateTemplates expects the records in the first 20 of the 50
+// categories to match a rec[@cat='cN'] template and the rest to fall through
+// to rec.
+func checkPredicateTemplates(tb testing.TB, out string) {
+	tb.Helper()
+	matched := featureBenchRecords / groupByCats * predicateTemplateCount
+	require.Equal(tb, matched, strings.Count(out, "<c/>"))
+	require.Equal(tb, featureBenchRecords-matched, strings.Count(out, "<r/>"))
+}
+
+// BenchmarkPredicatePatterns times xslt3.Transform for template rules whose
+// match patterns carry a predicate, applied to each of the 5000 records:
+//
+//   - predicate-template: one match="rec[@head]" template beside a
+//     match="rec" fallback;
+//   - predicate-templates-20: twenty match="rec[@cat='cN']" templates beside a
+//     match="rec" fallback, so every record is tested against each of them.
+func BenchmarkPredicatePatterns(b *testing.B) {
+	runFeatureBenchCases(b, []featureBenchCase{
+		{name: "predicate-template", xsl: predicateTemplateStylesheet, check: checkPredicateTemplate},
+		{
+			name:  "predicate-templates-20",
+			xsl:   buildPredicateTemplatesStylesheet(predicateTemplateCount),
+			check: checkPredicateTemplates,
+		},
 	})
 }
 

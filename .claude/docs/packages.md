@@ -493,7 +493,14 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
 W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
 
 - **NewCanonicalizer(Mode) → Canonicalizer** — create fluent builder for the given mode
-- Canonicalizer methods: Comments(), NodeSet([]Node), InclusiveNamespaces([]string), StrictXMLAttributes()
+- Canonicalizer methods: Comments(), NodeSet([]Node), InclusiveNamespaces([]string), StrictXMLAttributes(),
+  ExcludeSubtree(*Element)
+- ExcludeSubtree(e) skips e's subtree in the walk (`processElement` returns at e; an excluded document element
+  leaves the top-level nodes after it rendered as before-root), giving the bytes of the document with e detached
+  without changing or copying it. xmldsig1's enveloped-signature transform (`canonicalizeEnveloped`) canonicalizes
+  the live document with it, except for a DOM-built document where an element's active namespace conflicts with the
+  in-scope declaration of its prefix (`hasConflictingActiveNamespace`): c14n resolves such a prefix through the
+  declarations while `CopyDoc` and the serializer declare it on the element, so that case canonicalizes a freed copy.
 - Terminal: **Canonicalize(*Document, io.Writer) → error**, **CanonicalizeTo(*Document) → ([]byte, error)**
 - Predefined `xml` namespace binding is implicit and never renders as `xmlns:xml` in whole-document or
   node-set output. `xml:*` names and inherited attributes retain mode-specific canonicalization behavior.
@@ -515,9 +522,19 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
     failing URIs are never memoized.
   - Node-set mode: nearest visible ancestor = top of `visibleAncestors`; each slot lazily fills a reused
     first-wins prefix→URI map from the ordered, duplicate-keeping `nsNodesByElement`.
-- Files: `c14n.go` (API), `canonicalizer.go` (engine), `xmlbase.go` (xml:base join), `nsstack.go` (`bindingStack`),
-  `sort.go`, `escape.go` (byte-table escaping)
-- Imports: helium
+- Subtree start (internal, `subtree.go`): `internal/c14nctl.SubtreeRoot` sets `cfg.subtreeRoot`. With a node set
+  that lies in that element's subtree (the caller's contract), `processSubtree` checks the elements before the subtree
+  for relative namespace URIs in document order, pushes the ancestors' scope frames outermost first, processes the
+  root, then checks the elements after it, so bytes and the first error equal the whole-document walk without
+  visiting the rest of the document. `subtreeAncestors` falls back to the whole-document walk when an ancestor is not
+  an element (entity content), is the excluded element, or has a member in the node set, when the chain does not
+  end at the canonicalized document, or when a DTD subset declares an entity with element content
+  (`hasElementEntities`: the whole-document walk renders such shared elements' in-set namespace nodes as text at
+  references outside the subtree). xmldsig1 uses it for every single-subtree node set (`canonicalizeSubtree`, the
+  enveloped `#id` path).
+- Files: `c14n.go` (API), `canonicalizer.go` (engine), `subtree.go` (subtree start), `xmlbase.go` (xml:base join),
+  `nsstack.go` (`bindingStack`), `sort.go`, `escape.go` (byte-table escaping)
+- Imports: helium, internal/lexicon, internal/domutil, internal/c14nctl
 
 ## xpath1/
 
@@ -874,17 +891,45 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   Text method before adaptive quoting, including normalization and character maps.
 - XPath evaluation (`execute.go`): every expression goes through `execContext.evalXPath` /
   `evalPatternExpr`, which take a cached evaluator from `scopedXPathEvaluator` and apply only the dynamic focus
-  with `Evaluator.Focus`. The cache holds the base evaluator (`baseXPathEvaluator`, rebuilt on namespace,
-  base-URI, package, or pattern changes) plus the per-scope overlays (variables, functions, type/nilled/ID
-  annotations, schema, collation, doc-order cache), and its XPath 1.0 compat variant. It is rebuilt only when
-  one of those inputs changes (`scopedEvalKey`; maps compare by identity). `collectAllVars` caches its map
+  with `Evaluator.Focus`. `baseXPathEvaluator` caches base evaluators keyed on xpath-default-namespace,
+  base URI, package, pattern mode and, during pattern matching, the identity of the pattern's namespace map
+  (`baseEvalKey`): two entries outside pattern matching and two during it, so per-node pattern matching never
+  evicts the template body's evaluator. The compiler interns pattern namespace maps
+  (`compiler.internPatternNamespaces`), so patterns with the same in-scope namespaces share one entry.
+  `scopedXPathEvaluator` caches four evaluators that overlay a base evaluator with the per-scope inputs
+  (variables, functions, type/nilled/ID annotations, schema, collation, doc-order cache), each with its XPath
+  1.0 compat variant, and builds one only when no entry matches all inputs (`scopedEvalKey`; the base evaluator
+  by generation number, maps by identity). `collectAllVars` caches its map
   keyed on the global-variable generation, the innermost local scope that holds bindings
   (`visibleVarScope`), `localVarsVer` (bumped by `setVar`/`setVarDeferred` and by popping a scope that held
   bindings), and the current package. The returned map is shared, so callers copy it before adding bindings
   (`xsl:evaluate` does).
+- `xsl:number` counting (`execute_number.go`): `from` follows XSLT 3.0 §12.3, where the root of a tree always
+  matches it. `level="single"` gives an empty result when a `from` match lies strictly between the selected node
+  and the counted node (`numberWithinFrom`); `level="multiple"` keeps only counted ancestors at or below the
+  innermost `from` match; `level="any"` counts back to the nearest preceding `from` match. `level="single"` and
+  `level="any"` walk back from the counted node and stop at the node the same instruction's previous evaluation
+  started from, adding its count (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in
+  document order is linear. The memo is off when the `count` or `from` pattern references a variable
+  (`numberInst.memoizable`); without a `count` pattern it applies only to a selected node of the same kind and
+  expanded name. It relies on trees visible to `xsl:number` keeping their shape and annotations during a run;
+  `xsl:source-document` and `xsl:merge-source` validate or strip annotations on a cached document in place, so
+  they clear `numberMemos` first.
+- User `xsl:function` calls (`functions_user.go`): `xslFunction.prepareCall` runs once at compile time. It parses
+  the parameter and return sequence types for both xpath3 coercion (`FuncParamTypes`/`FuncReturnType`) and
+  `checkSequenceType`, and marks a body made only of select-form `xsl:sequence` instructions as `selectOnly`. Each
+  call writes its body into an output frame whose insertion point is a `_xsl_fn_result` wrapper element. A
+  `selectOnly` body only captures items into its frame and never adds a node to the wrapper, so all such calls on
+  one `execContext` share one scratch wrapper (`functionOutputRoot`), recursive and nested calls included. Any other
+  body gets a fresh wrapper document, which is never freed: the nodes the body builds are allocated from it and
+  returned to the caller, and the `execContext` keeps per-node state keyed by node identity.
 - Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder +
   orchestration), `compile_*.go`
   (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),
+  `compile_patterns.go` (match-pattern compilation and bottom-up matching; every step predicate is compiled once
+  per pattern, and the per-alternative rules split from a union template share those compiled predicates; a
+  predicate that calls none of `position`/`last`/`function-lookup` and yields a non-number is decided from the
+  candidate node alone, without counting its siblings, XSLT 3.0 §5.5.3),
   `execute*.go` (runtime), `functions*.go` (built-ins + `fn:transform` bridge), `stylesheet.go`,
   `invocation.go`, `instruction.go`, `parameters.go`, `options.go`, `dispatch_index.go` (per-mode template
   dispatch index: buckets templates by node kind/expanded name so `findFirstMatch`/`hasConflictingMatch` skip
@@ -1702,7 +1747,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   Manifest inner-reference validation), `xslt_transform.go` (XSLT transform seam: `XSLTTransformer` +
   `parseXSLTTransform`), `reference_resolver.go` (external-reference resolver API + FSReferenceResolver),
   `keyinfo.go`, `retrieval_method.go` (ds:RetrievalMethod dereferencing), `errors.go`
-- Imports: helium, c14n/, xpath1/ (XPath filter transform), internal/xpath1/lexer
+- Imports: helium, c14n/, xpath1/ (XPath filter transform), internal/c14nctl (subtree start), internal/xpath1/lexer
 
 ## xmlenc1/
 
@@ -2397,6 +2442,15 @@ Generic bitset operations for bitmask types.
 - **Set[T](*T, T)** / **IsSet[T](T, T) → bool**
 - Files: `bitset.go`
 
+## internal/c14nctl/
+
+Bridge for unexported `c14n.Canonicalizer` configuration. Package c14n installs `SubtreeRoot` during init;
+xmldsig1 uses it to start a node-set walk at one element subtree. The hook is typed with `any` because c14n imports
+this package to register it.
+
+- Files: `c14nctl.go`
+- Imports: none
+
 ## internal/nslookup/
 
 Read-only bridge for namespace declaration access. Package helium installs the
@@ -2506,10 +2560,16 @@ XML Schema / XPath regular-expression translation and compilation, shared by `xs
 
 ## internal/stack/
 
-Generic stack with capacity shrinking.
+Generic slice-backed LIFO stacks for the parser's input, element and namespace stacks.
 
-- **stackPop(StackImpl, n)** — pop n items and shrink if oversized
-- Files: `stack.go`
+- **Stack[T]** — `Push`, `Pop(n...)`, `Peek(n)`, `Len`, `Cap`
+- **KeyedStack[T Keyed]** — the same plus `Lookup(key)` from the top; `Push` rejects a duplicate key with
+  `ErrDuplicateItem`
+- Pop never shrinks the backing array, so a parse that returns to a depth it reached before does not reallocate;
+  popped slots are cleared so they keep nothing reachable
+- `nsstack/` — prefix→URI `KeyedStack` whose `Push` drops a duplicate prefix; only its own test imports it (the
+  parser's `nsStack` in `stack.go` appends duplicates so a child can shadow a binding)
+- Files: `stack.go` (package doc, `truncate`), `simple.go` (`Stack`), `unique.go` (`KeyedStack`)
 
 ## internal/heliumtest/
 

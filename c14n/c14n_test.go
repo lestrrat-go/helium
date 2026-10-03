@@ -3,6 +3,7 @@ package c14n_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/c14n"
+	"github.com/lestrrat-go/helium/internal/c14nctl"
 	"github.com/lestrrat-go/helium/xpath1"
 	"github.com/stretchr/testify/require"
 )
@@ -759,6 +761,171 @@ func TestEntityReferenceReplacementReservedXMLPrefixRegressionGuards(t *testing.
 	plainGot, err := c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(plainDoc)
 	require.NoError(t, err)
 	require.Equal(t, `<r><e xml:lang="en">t</e></r>`, string(plainGot))
+}
+
+// parseExcludeSubtreeDoc parses the TestExcludeSubtree input and returns it
+// with its <a:s> element. Each subtest parses its own copy: an error message
+// names an element, which fills that element's lazily cached name.
+func parseExcludeSubtreeDoc(t *testing.T) (*helium.Document, *helium.Element) {
+	t.Helper()
+	const src = `<?lead?><r xmlns:a="urn:a"><a:x>1<a:s xmlns:rel="rel/uri"><a:in/></a:s>2</a:x><y/></r><?trail?>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	x, ok := helium.AsNode[*helium.Element](doc.DocumentElement().FirstChild())
+	require.True(t, ok)
+	s, ok := helium.AsNode[*helium.Element](x.FirstChild().NextSibling())
+	require.True(t, ok)
+	return doc, s
+}
+
+func TestExcludeSubtree(t *testing.T) {
+	t.Parallel()
+
+	t.Run("whole document", func(t *testing.T) {
+		t.Parallel()
+		doc, s := parseExcludeSubtreeDoc(t)
+		// The excluded subtree is skipped entirely, so its relative namespace
+		// URI is never checked.
+		got, err := c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(s).CanonicalizeTo(doc)
+		require.NoError(t, err)
+		require.Equal(t, "<?lead?>\n<r xmlns:a=\"urn:a\"><a:x>12</a:x><y></y></r>\n<?trail?>", string(got))
+
+		_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+		require.ErrorContains(t, err, "relative namespace URI")
+	})
+	t.Run("node set", func(t *testing.T) {
+		t.Parallel()
+		doc, s := parseExcludeSubtreeDoc(t)
+		nodes := evaluateNodeSet(t, doc, `(//. | //@* | //namespace::*)[ancestor-or-self::a:x]`, map[string]string{"a": "urn:a"})
+		got, err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).NodeSet(nodes).ExcludeSubtree(s).CanonicalizeTo(doc)
+		require.NoError(t, err)
+		require.Equal(t, `<a:x xmlns:a="urn:a">12</a:x>`, string(got))
+	})
+	t.Run("document element", func(t *testing.T) {
+		t.Parallel()
+		// Top-level nodes render as they would in a document without a
+		// document element.
+		doc, _ := parseExcludeSubtreeDoc(t)
+		got, err := c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(doc.DocumentElement()).CanonicalizeTo(doc)
+		require.NoError(t, err)
+		require.Equal(t, "<?lead?>\n<?trail?>\n", string(got))
+	})
+	t.Run("detached element", func(t *testing.T) {
+		t.Parallel()
+		// An element outside the document excludes nothing, so the walk
+		// reaches the relative namespace URI.
+		doc, s := parseExcludeSubtreeDoc(t)
+		other, err := doc.CreateElement("other")
+		require.NoError(t, err)
+		_, err = c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(other).CanonicalizeTo(doc)
+		require.ErrorContains(t, err, "relative namespace URI")
+		_, err = c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(s).ExcludeSubtree(nil).CanonicalizeTo(doc)
+		require.ErrorContains(t, err, "relative namespace URI")
+	})
+}
+
+// TestSubtreeRootMatchesDocumentWalk checks the internal subtree-root option
+// against the whole-document walk for node sets the subtree walk cannot take
+// (members on an ancestor, a root inside entity content or inside an excluded
+// subtree, a root from another document) and for one it takes.
+func TestSubtreeRootMatchesDocumentWalk(t *testing.T) {
+	t.Parallel()
+	const src = `<!DOCTYPE r [<!ENTITY e "<p:q xmlns:p='urn:p'><p:in/></p:q>">]>` +
+		`<r xmlns:a="urn:a" a:at="1"><m xml:lang="en"><s a:b="2"><t>x</t></s>&e;</m><ex><u/></ex></r>`
+	cases := []struct {
+		name    string
+		expr    string
+		root    string
+		exclude string
+	}{
+		{name: "subtree only", expr: `(//. | //@* | //namespace::*)[ancestor-or-self::s]`, root: "s"},
+		{name: "ancestor element in set", expr: `(//. | //@* | //namespace::*)[ancestor-or-self::s] | //m`, root: "s"},
+		{name: "ancestor attribute in set", expr: `(//. | //@* | //namespace::*)[ancestor-or-self::s] | /r/@*`, root: "s"},
+		{name: "ancestor namespace node in set", expr: `(//. | //@* | //namespace::*)[ancestor-or-self::s] | /r/namespace::*`, root: "s"},
+		{name: "root inside excluded subtree", expr: `(//. | //@* | //namespace::*)[ancestor-or-self::u]`, root: "u", exclude: "ex"},
+		{name: "root is excluded", expr: `(//. | //@* | //namespace::*)[ancestor-or-self::ex]`, root: "ex", exclude: "ex"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+			nodes := evaluateNodeSet(t, doc, tc.expr, nil)
+			root := findElement(doc, tc.root)
+			require.NotNil(t, root)
+			for _, mode := range []c14n.Mode{c14n.C14N10, c14n.ExclusiveC14N10, c14n.C14N11} {
+				canon := c14n.NewCanonicalizer(mode).NodeSet(nodes)
+				if tc.exclude != "" {
+					canon = canon.ExcludeSubtree(findElement(doc, tc.exclude))
+				}
+				want, wantErr := canon.CanonicalizeTo(doc)
+				got, gotErr := subtreeRoot(t, canon, root).CanonicalizeTo(doc)
+				require.Equal(t, fmt.Sprint(wantErr), fmt.Sprint(gotErr))
+				require.Equal(t, string(want), string(got))
+			}
+		})
+	}
+
+	t.Run("entity content and foreign root", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		other, err := helium.NewParser().Parse(t.Context(), []byte(src))
+		require.NoError(t, err)
+		in := findElement(doc.IntSubset(), "p:in")
+		require.NotNil(t, in)
+		nodes := evaluateNodeSet(t, doc, `//node()`, nil)
+		for _, root := range []*helium.Element{in, other.DocumentElement()} {
+			canon := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes)
+			want, err := canon.CanonicalizeTo(doc)
+			require.NoError(t, err)
+			got, err := subtreeRoot(t, canon, root).CanonicalizeTo(doc)
+			require.NoError(t, err)
+			require.Equal(t, string(want), string(got))
+		}
+	})
+}
+
+// TestSubtreeRootSkipsRestOfDocument shows the subtree walk runs: given a
+// node set that breaks the option's contract with a member outside the
+// subtree, it renders only the subtree, where the whole-document walk also
+// renders that member.
+func TestSubtreeRootSkipsRestOfDocument(t *testing.T) {
+	t.Parallel()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r><x>out</x><s>in</s></r>`))
+	require.NoError(t, err)
+	nodes := evaluateNodeSet(t, doc, `//x/text() | //s | //s/text()`, nil)
+	canon := c14n.NewCanonicalizer(c14n.C14N10).NodeSet(nodes)
+
+	whole, err := canon.CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `out<s>in</s>`, string(whole))
+
+	sub, err := subtreeRoot(t, canon, findElement(doc, "s")).CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, `<s>in</s>`, string(sub))
+}
+
+// subtreeRoot applies the internal subtree-root option to canon.
+func subtreeRoot(t *testing.T, canon c14n.Canonicalizer, root *helium.Element) c14n.Canonicalizer {
+	t.Helper()
+	started, ok := c14nctl.SubtreeRoot(canon, root).(c14n.Canonicalizer)
+	require.True(t, ok)
+	return started
+}
+
+// findElement returns the first element under n, in document order, whose
+// qualified name is name.
+func findElement(n helium.Node, name string) *helium.Element {
+	for c := range helium.Children(n) {
+		if e, ok := helium.AsNode[*helium.Element](c); ok && e.Name() == name {
+			return e
+		}
+		if found := findElement(c, name); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 func TestRelativeNamespaceURIRejected(t *testing.T) {

@@ -5,10 +5,15 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	helium "github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/c14n"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/stretchr/testify/require"
 )
@@ -361,12 +366,11 @@ func TestCanonicalizeSubtreeEntityFreeUnchanged(t *testing.T) {
 }
 
 // TestCanonicalizeEnvelopedMatchesDetach is the byte-equivalence contract for
-// the clone-based enveloped transform: the canonical bytes produced by cloning
-// the document and omitting the Signature from the copy MUST equal the bytes
-// produced by physically detaching the Signature from the live tree (the
-// previous, mutating implementation). This guarantees the fix does not change
-// any digest/signature value for valid documents while eliminating the live
-// DOM mutation. It also asserts the live tree is byte-for-byte unchanged after
+// the enveloped transform: the canonical bytes produced by skipping the
+// Signature subtree during canonicalization MUST equal the bytes produced by
+// physically detaching the Signature from the live tree. This guarantees no
+// digest/signature value changes for valid documents while the live DOM is
+// never mutated. It also asserts the live tree is byte-for-byte unchanged after
 // the call.
 func TestCanonicalizeEnvelopedMatchesDetach(t *testing.T) {
 	const sigXML = `<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo/></ds:Signature>`
@@ -448,11 +452,420 @@ func TestCanonicalizeEnvelopedMatchesDetach(t *testing.T) {
 			got, err := canonicalizeEnveloped(t.Context(), tc.method, doc, target, sig, wholeDoc, nil)
 			require.NoError(t, err)
 
-			require.Equal(t, string(want), string(got), "clone-based enveloped bytes must match the detach-based reference")
+			require.Equal(t, string(want), string(got), "enveloped bytes must match the detach-based reference")
 
 			liveAfter, err := helium.WriteString(doc)
 			require.NoError(t, err)
 			require.Equal(t, liveBefore, liveAfter, "canonicalizeEnveloped must not mutate the live document")
+		})
+	}
+}
+
+// envelopedEquivalenceMethods are the canonicalization methods the enveloped
+// equivalence test runs. The exclusive ones also run with
+// envelopedEquivalencePrefixes as their InclusiveNamespaces PrefixList.
+var envelopedEquivalenceMethods = []string{C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments}
+
+var envelopedEquivalencePrefixes = []string{"#default", "a", "b", "ds", "x", "foo"}
+
+// envelopedEquivalenceSynthetic are hand-written inputs for the shapes the
+// testdata corpus covers thinly: a Signature deep in the tree under comments,
+// entities, xmlns="" and inherited xml:base/xml:lang/xml:id; a Signature as the
+// document element with top-level nodes on both sides; nested and sibling
+// Signatures; a Signature inside an unexpanded entity; and relative namespace
+// URIs inside and outside the Signature.
+var envelopedEquivalenceSynthetic = []struct {
+	name string
+	xml  string
+}{
+	{
+		name: "deep-signature",
+		xml: `<?xml version="1.0"?>
+<!DOCTYPE r [<!ENTITY e "<x:q xmlns:x='urn:x'>ent</x:q>"><!ENTITY t "text&#38;#38;more">]>
+<?lead pi?>
+<!-- top comment -->
+<r xmlns="urn:d" xmlns:a="urn:a" xml:lang="en" xml:base="http://ex.com/b/" xml:space="preserve" xml:id="r1">
+  <a:p xmlns:b="urn:b" xml:base="c/"><!-- c1 --><b:q a:at="1">t&amp;&lt;&t;</b:q>
+    <w xmlns="" xml:lang="fr">
+      <ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Id="S" xml:base="sig/"><ds:SignedInfo xmlns:z="urn:z"><!-- in sig --><ds:Reference URI=""/></ds:SignedInfo><ds:Object><a:o xmlns="urn:o">obj<inner xml:lang="de"/></a:o></ds:Object></ds:Signature>
+      <after b:x="y">&e;</after>
+    </w>
+  </a:p>
+  <tail><?pi data?></tail>
+</r>
+<?trailing pi?>
+<!-- trailing comment -->`,
+	},
+	{
+		name: "signature-document-element",
+		xml:  `<?lead?><!--c--><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xml:lang="en"><ds:SignedInfo/><ds:Object><o/></ds:Object></ds:Signature><?trail?><!--t-->`,
+	},
+	{
+		name: "nested-signatures",
+		xml:  `<r xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:Signature Id="outer"><ds:SignedInfo/><ds:Object><inner><ds:Signature Id="in"><ds:SignedInfo/></ds:Signature></inner></ds:Object></ds:Signature><s/>text<ds:Signature/>more</r>`,
+	},
+	{
+		name: "signature-in-entity",
+		xml:  `<!DOCTYPE r [<!ENTITY s "<ds:Signature xmlns:ds='http://www.w3.org/2000/09/xmldsig#'><ds:SignedInfo/></ds:Signature>">]><r><a/>&s;<b>&s;</b></r>`,
+	},
+	{
+		name: "relative-namespace-inside-signature",
+		xml:  `<r><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:rel="rel/uri"><ds:SignedInfo/></ds:Signature><s><t/></s></r>`,
+	},
+	{
+		name: "relative-namespace-outside-signature",
+		xml:  `<r><x xmlns:rel="rel/uri"/><s><t/></s><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo/></ds:Signature></r>`,
+	},
+}
+
+// TestCanonicalizeEnvelopedMatchesCopyAndUnlink checks canonicalizeEnveloped,
+// which skips the Signature subtree while canonicalizing the live document,
+// against a reference that deep-copies the document, unlinks the copied
+// Signature and canonicalizes the copy. The inputs are the c14n golden inputs,
+// the xmldsig1 testdata and envelopedEquivalenceSynthetic, each parsed with
+// entities kept and with entities substituted. Every method runs with and
+// without an InclusiveNamespaces PrefixList, for a whole-document reference and
+// for a spread of #id targets, including the Signature, its parent and an
+// element inside it. Bytes and failure must both match.
+func TestCanonicalizeEnvelopedMatchesCopyAndUnlink(t *testing.T) {
+	t.Parallel()
+
+	paths, err := filepath.Glob("../testdata/libxml2-compat/c14n/*/test/*.xml")
+	require.NoError(t, err)
+	require.NotEmpty(t, paths)
+	more, err := filepath.Glob("testdata/*.xml")
+	require.NoError(t, err)
+	paths = append(paths, more...)
+	more, err = filepath.Glob("testdata/*/*.xml")
+	require.NoError(t, err)
+	paths = append(paths, more...)
+
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		t.Run(strings.TrimPrefix(filepath.ToSlash(path), "../"), func(t *testing.T) {
+			t.Parallel()
+			checkEnvelopedEquivalence(t, path, data)
+		})
+	}
+	for _, tc := range envelopedEquivalenceSynthetic {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			checkEnvelopedEquivalence(t, tc.name, []byte(tc.xml))
+		})
+	}
+	for _, tc := range envelopedEquivalenceBuilt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			compareEnvelopedDocument(t, buildActiveNamespaceDocument(t, tc.rootPrefix, tc.rootURI, tc.childPrefix, tc.childURI, tc.inSignature))
+		})
+	}
+}
+
+// envelopedEquivalenceBuilt are documents built through the DOM API whose
+// child element gets an active namespace without a declaration. A parser never
+// produces this shape: when the prefix is already bound to another URI, c14n
+// and helium.CopyDoc disagree on what the element declares, and
+// canonicalizeEnveloped takes the copy path.
+var envelopedEquivalenceBuilt = []struct {
+	name                  string
+	rootPrefix, rootURI   string
+	childPrefix, childURI string
+	inSignature           bool
+}{
+	{name: "built-conflicting-default", rootPrefix: "", rootURI: "urn:p", childPrefix: "", childURI: "urn:c"},
+	{name: "built-conflicting-prefixed", rootPrefix: "p", rootURI: "urn:1", childPrefix: "p", childURI: "urn:2"},
+	{name: "built-unbound-prefix", rootPrefix: "p", rootURI: "urn:1", childPrefix: "q", childURI: "urn:q"},
+	{name: "built-conflict-inside-signature", rootPrefix: "p", rootURI: "urn:1", childPrefix: "p", childURI: "urn:2", inSignature: true},
+}
+
+// buildActiveNamespaceDocument builds <r> declaring rootPrefix=rootURI with an
+// enveloped ds:Signature and a <c> whose active namespace is
+// childPrefix=childURI with no declaration. inSignature places <c> inside the
+// Signature instead of beside it.
+func buildActiveNamespaceDocument(t *testing.T, rootPrefix, rootURI, childPrefix, childURI string, inSignature bool) *helium.Document {
+	t.Helper()
+	doc := helium.NewDocument("1.0", "", helium.StandaloneImplicitNo)
+	root, err := doc.CreateElement("r")
+	require.NoError(t, err)
+	require.NoError(t, root.DeclareNamespace(rootPrefix, rootURI))
+	require.NoError(t, doc.SetDocumentElement(root))
+
+	sig, err := doc.CreateElement("Signature")
+	require.NoError(t, err)
+	require.NoError(t, sig.DeclareNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, sig.SetActiveNamespace(nsPrefix, NamespaceDSig))
+	require.NoError(t, root.AddChild(sig))
+
+	child, err := doc.CreateElement("c")
+	require.NoError(t, err)
+	require.NoError(t, child.SetActiveNamespace(childPrefix, childURI))
+	require.NoError(t, child.AddChild(doc.CreateText([]byte("v"))))
+	parent := root
+	if inSignature {
+		parent = sig
+	}
+	require.NoError(t, parent.AddChild(child))
+	return doc
+}
+
+// checkEnvelopedEquivalence parses data with entities kept and with entities
+// substituted, and compares canonicalizeEnveloped against the copy-and-unlink
+// reference on every document that parses.
+func checkEnvelopedEquivalence(t *testing.T, baseURI string, data []byte) {
+	t.Helper()
+	parsers := []helium.Parser{
+		helium.NewParser().BaseURI(baseURI),
+		helium.NewParser().BlockXXE(false).SubstituteEntities(true).LoadExternalDTD(true).DefaultDTDAttributes(true).BaseURI(baseURI).FS(helium.PermissiveFS()),
+	}
+	parsed := 0
+	for _, p := range parsers {
+		doc, err := p.Parse(t.Context(), data)
+		if err != nil {
+			continue
+		}
+		parsed++
+		before, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		compareEnvelopedDocument(t, doc)
+		after, err := helium.WriteString(doc)
+		require.NoError(t, err)
+		require.Equal(t, before, after, "canonicalizeEnveloped must not mutate the live document")
+	}
+	require.NotZero(t, parsed, "no parser accepted the input")
+}
+
+// compareEnvelopedDocument runs the comparison for every Signature in doc, or,
+// in a document without one, for a few elements spread across it standing in
+// for the Signature.
+func compareEnvelopedDocument(t *testing.T, doc *helium.Document) {
+	t.Helper()
+	var elems []*helium.Element
+	collectEquivalenceElements(doc, &elems)
+	if len(elems) == 0 {
+		return
+	}
+	var sigs []*helium.Element
+	for _, e := range elems {
+		if e.LocalName() == "Signature" {
+			sigs = append(sigs, e)
+		}
+	}
+	if len(sigs) == 0 {
+		sigs = spreadElements(elems, 4)
+	}
+	for _, sig := range sigs {
+		targets := spreadElements(elems, 12)
+		targets = append(targets, sig)
+		if parent, ok := helium.AsNode[*helium.Element](sig.Parent()); ok {
+			targets = append(targets, parent)
+		}
+		if inner := firstChildElement(sig); inner != nil {
+			targets = append(targets, inner)
+		}
+		compareEnvelopedSignature(t, doc, sig, targets)
+	}
+}
+
+// compareEnvelopedSignature builds the copy-and-unlink reference for sig once
+// and compares every method, PrefixList and target against it.
+func compareEnvelopedSignature(t *testing.T, doc *helium.Document, sig *helium.Element, targets []*helium.Element) {
+	t.Helper()
+	ctx := t.Context()
+	clone, cloneTargets := copyAndUnlinkSignature(t, doc, sig, targets)
+	defer clone.Free()
+
+	for _, method := range envelopedEquivalenceMethods {
+		prefixLists := [][]string{nil}
+		if mode, _, _ := resolveC14NMode(method); mode == c14n.ExclusiveC14N10 {
+			prefixLists = append(prefixLists, envelopedEquivalencePrefixes)
+		}
+		for _, prefixes := range prefixLists {
+			want, wantErr := referenceEnvelopedBytes(ctx, method, clone, nil, prefixes)
+			got, gotErr := canonicalizeEnveloped(ctx, method, doc, nil, sig, true, prefixes)
+			requireSameCanonicalResultf(t, want, wantErr, got, gotErr, "whole document, method %s, prefixes %v", method, prefixes)
+
+			for i, target := range targets {
+				want, wantErr := referenceEnvelopedBytes(ctx, method, clone, cloneTargets[i], prefixes)
+				got, gotErr := canonicalizeEnveloped(ctx, method, doc, target, sig, false, prefixes)
+				requireSameCanonicalResultf(t, want, wantErr, got, gotErr, "target %s, method %s, prefixes %v", target.Name(), method, prefixes)
+			}
+		}
+	}
+}
+
+func requireSameCanonicalResultf(t *testing.T, want []byte, wantErr error, got []byte, gotErr error, format string, args ...any) {
+	t.Helper()
+	msg := fmt.Sprintf(format, args...)
+	require.Equal(t, wantErr != nil, gotErr != nil, "%s: reference error %v, got error %v", msg, wantErr, gotErr)
+	require.Equal(t, string(want), string(got), msg)
+}
+
+// copyAndUnlinkSignature deep-copies doc, finds the copies of sig and of each
+// target by their child-index paths, and unlinks the copied Signature. The
+// paths are resolved before the unlink, which would shift the indexes of the
+// Signature's following siblings.
+func copyAndUnlinkSignature(t *testing.T, doc *helium.Document, sig *helium.Element, targets []*helium.Element) (*helium.Document, []*helium.Element) {
+	t.Helper()
+	clone, err := helium.CopyDoc(doc)
+	require.NoError(t, err)
+
+	cloneSig, ok := helium.AsNode[*helium.Element](nodeAtChildIndexPath(clone, childIndexPathOf(sig)))
+	require.True(t, ok, "Signature copy not found")
+	cloneTargets := make([]*helium.Element, len(targets))
+	for i, target := range targets {
+		cloneTargets[i], ok = helium.AsNode[*helium.Element](nodeAtChildIndexPath(clone, childIndexPathOf(target)))
+		require.True(t, ok, "target copy not found")
+	}
+	helium.UnlinkNode(cloneSig)
+	return clone, cloneTargets
+}
+
+// referenceEnvelopedBytes canonicalizes the copy with the Signature unlinked:
+// the whole document when target is nil, else target's node set.
+func referenceEnvelopedBytes(ctx context.Context, method string, clone *helium.Document, target *helium.Element, prefixes []string) ([]byte, error) {
+	mode, comments, err := resolveC14NMode(method)
+	if err != nil {
+		return nil, err
+	}
+	canon := c14n.NewCanonicalizer(mode)
+	if comments {
+		canon = canon.Comments()
+	}
+	if mode == c14n.ExclusiveC14N10 && len(prefixes) > 0 {
+		canon = canon.InclusiveNamespaces(prefixes)
+	}
+	if target == nil {
+		return canon.CanonicalizeTo(clone)
+	}
+	nodes, err := collectCanonicalizationNodes(ctx, target, mode)
+	if err != nil {
+		return nil, err
+	}
+	return canon.NodeSet(nodes).CanonicalizeTo(clone)
+}
+
+// collectEquivalenceElements appends every element under n in document order,
+// including the replacement content of entity declarations in the DTD.
+func collectEquivalenceElements(n helium.Node, out *[]*helium.Element) {
+	for c := range helium.Children(n) {
+		if e, ok := helium.AsNode[*helium.Element](c); ok {
+			*out = append(*out, e)
+		}
+		collectEquivalenceElements(c, out)
+	}
+}
+
+// spreadElements returns up to n elements evenly spaced across elems, first
+// one included.
+func spreadElements(elems []*helium.Element, n int) []*helium.Element {
+	if len(elems) <= n {
+		return slices.Clone(elems)
+	}
+	out := make([]*helium.Element, 0, n)
+	for i := range n {
+		out = append(out, elems[i*len(elems)/n])
+	}
+	return out
+}
+
+func firstChildElement(e *helium.Element) *helium.Element {
+	for c := range helium.Children(e) {
+		if child, ok := helium.AsNode[*helium.Element](c); ok {
+			return child
+		}
+	}
+	return nil
+}
+
+// childIndexPathOf returns the child indexes that lead from n's document down
+// to n.
+func childIndexPathOf(n helium.Node) []int {
+	var rev []int
+	for cur := n; cur.Type() != helium.DocumentNode; cur = cur.Parent() {
+		idx := 0
+		for c := cur.Parent().FirstChild(); c != cur; c = c.NextSibling() {
+			idx++
+		}
+		rev = append(rev, idx)
+	}
+	slices.Reverse(rev)
+	return rev
+}
+
+// nodeAtChildIndexPath follows a childIndexPathOf path down from doc.
+func nodeAtChildIndexPath(doc *helium.Document, path []int) helium.Node {
+	var cur helium.Node = doc
+	for _, idx := range path {
+		cur = cur.FirstChild()
+		for range idx {
+			cur = cur.NextSibling()
+		}
+	}
+	return cur
+}
+
+// TestCanonicalizeEnvelopedDetachedInputs covers the two inputs that are not
+// attached to the document: a detached Signature omits nothing, and a detached
+// #id target is an error.
+func TestCanonicalizeEnvelopedDetachedInputs(t *testing.T) {
+	t.Parallel()
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<r xmlns:a="urn:a"><a:x>1</a:x></r>`))
+	require.NoError(t, err)
+	sig, err := doc.CreateElement("Signature")
+	require.NoError(t, err)
+
+	got, err := canonicalizeEnveloped(t.Context(), ExcC14N10, doc, nil, sig, true, nil)
+	require.NoError(t, err)
+	require.Equal(t, `<r><a:x xmlns:a="urn:a">1</a:x></r>`, string(got))
+
+	_, err = canonicalizeEnveloped(t.Context(), ExcC14N10, doc, sig, sig, false, nil)
+	require.Error(t, err)
+}
+
+// TestCanonicalizeSubtreeMatchesDocumentWalk covers the parts of the document
+// canonicalizeSubtree no longer walks when c14n starts at the subtree: a
+// relative namespace URI anywhere in the document still fails the
+// canonicalization with the same first error as the whole-document walk, and an
+// entity reference inside the subtree still resolves prefixes declared on the
+// subtree's ancestors. Each case runs every method against the whole-document
+// walk (canonicalizeNodeSetMode) over the same node set.
+func TestCanonicalizeSubtreeMatchesDocumentWalk(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		xml     string
+		target  string
+		wantErr bool
+	}{
+		{name: "relative namespace before subtree", xml: `<r><x xmlns:rel="rel/uri"/><s><t/></s></r>`, target: "s", wantErr: true},
+		{name: "relative namespace after subtree", xml: `<r><s><t/></s><x><y xmlns:rel="rel/uri"/></x></r>`, target: "s", wantErr: true},
+		{name: "relative namespace on ancestor", xml: `<r xmlns:rel="rel/uri"><m><s/></m></r>`, target: "s", wantErr: true},
+		{name: "relative namespaces inside and after subtree", xml: `<r><s><t xmlns:in="in/rel"/></s><x xmlns:rel="rel/uri"/></r>`, target: "s", wantErr: true},
+		{name: "relative namespace in entity outside subtree", xml: `<!DOCTYPE r [<!ENTITY e "<q xmlns:rel='rel/uri'/>">]><r>&e;<s/></r>`, target: "s", wantErr: true},
+		{name: "entity in subtree uses ancestor prefix", xml: `<!DOCTYPE r [<!ENTITY e "<a:q a:at='1'>v</a:q>">]><r xmlns:a="urn:a" xmlns="urn:d"><m xml:lang="en"><s>&e;</s></m></r>`, target: "s"},
+		{name: "entity referenced inside and before subtree", xml: `<!DOCTYPE r [<!ENTITY e "<p:q xmlns:p='urn:p'>v</p:q>">]><r>&e;<s>&e;</s></r>`, target: "s"},
+		{name: "entity referenced inside and after subtree", xml: `<!DOCTYPE r [<!ENTITY e "<q xmlns='urn:d'>v</q>">]><r><s>&e;</s><x>&e;</x></r>`, target: "s"},
+		{name: "absolute namespaces only", xml: `<r xmlns:a="urn:a"><x xmlns:b="urn:b"/><s a:at="1"><t/></s><y xmlns:c="urn:c"/></r>`, target: "s"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.xml))
+			require.NoError(t, err)
+			target := findLocal(doc, tc.target)
+			require.NotNil(t, target)
+			for _, method := range envelopedEquivalenceMethods {
+				mode, comments, err := resolveC14NMode(method)
+				require.NoError(t, err)
+				nodes, err := collectCanonicalizationNodes(t.Context(), target, mode)
+				require.NoError(t, err)
+				want, wantErr := canonicalizeNodeSetMode(mode, comments, nodes, doc, nil)
+				got, gotErr := canonicalizeSubtree(t.Context(), method, target, nil)
+				require.Equal(t, fmt.Sprint(wantErr), fmt.Sprint(gotErr), method)
+				require.Equal(t, string(want), string(got), method)
+				require.Equal(t, tc.wantErr, gotErr != nil, method)
+			}
 		})
 	}
 }

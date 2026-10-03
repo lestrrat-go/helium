@@ -268,6 +268,13 @@ type xslFunction struct {
 	ImportPrec    int          // import precedence for XTSE0770 conflict detection
 	OriginalFunc  *xslFunction // original function being overridden (for xsl:original calls)
 	IsOverride    bool         // true if this function was defined in xsl:override
+
+	// Call-time data that prepareCall derives once from the fields above.
+	selectOnly      bool                  // Body holds only select-form xsl:sequence instructions
+	paramTypes      []xpath3.SequenceType // Params' types for xpath3 argument coercion; nil if any fails to parse
+	returnType      *xpath3.SequenceType  // As for xpath3; nil if As is empty or fails to parse
+	paramCheckTypes []sequenceType        // Params' types for checkSequenceType (XTTE0790)
+	returnCheckType sequenceType          // As for checkSequenceType (XTTE0780)
 }
 
 // template is a compiled xsl:template.

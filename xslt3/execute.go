@@ -109,6 +109,8 @@ type execContext struct {
 	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
 	nodeMemoIDs                  map[helium.Node]uint64        // stable per-transform node identities for function caching
 	nextNodeMemoID               uint64
+	fnScratchDoc                 *helium.Document                         // output wrapper shared by every select-only xsl:function call
+	fnScratchRoot                *helium.Element                          // fnScratchDoc's document element; always childless
 	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef       // per-invocation cache for parameter-document output defs
 	paramDocPresences            map[*resultDocumentInst]paramDocPresence // per-invocation cache for parameter-document plain-boolean presence flags
 	primaryCharacterMaps         []string                                 // character map names from xsl:result-document targeting primary output
@@ -137,21 +139,27 @@ type execContext struct {
 	// traverses a tree while it is still being built must clear this map (or
 	// not memoize) at that seam. Lazily allocated; nil means empty.
 	xmlSpacePreserveMemo map[*helium.Element]bool
+	// numberMemos holds, per xsl:number instruction, the count its last
+	// level="single" or level="any" evaluation produced, so numbering a list
+	// in document order walks back only to the previous numbered node (see
+	// numberMemo). Lazily allocated; nil means empty.
+	numberMemos map[*numberInst]numberMemo
 
-	// cached base XPath evaluator — rebuilt when invalidation keys change
-	cachedBaseEval                  xpath3.Evaluator
-	cachedBaseEvalValid             bool
-	cachedBaseEvalXPathDefaultNS    string
-	cachedBaseEvalHasXPathDefaultNS bool
-	cachedBaseEvalBaseURI           string
-	cachedBaseEvalPackage           *Stylesheet
-	cachedBaseEvalInPattern         bool
-	cachedBaseEvalPatternNSPtr      uintptr // identity of the pattern ns snapshot baked into the cached evaluator
-	cachedBaseEvalGen               uint64  // incremented each time the base evaluator is rebuilt
+	// baseEvals caches the base XPath evaluators baseXPathEvaluator built:
+	// row 0 serves evaluation outside pattern matching and row 1 serves
+	// pattern matching, so switching between the two for every matched node
+	// evicts neither. Each row is refilled round-robin from baseEvalNext.
+	// baseEvalGen is the generation number handed to the last evaluator
+	// built; scopedXPathEvaluator keys its own cache on it.
+	baseEvals    [2][baseEvalSlots]baseEvalEntry
+	baseEvalNext [2]int
+	baseEvalGen  uint64
 
-	// scopedEval caches the base evaluator plus the per-scope overlays
-	// (variables, functions, schema state, collation); see scopedXPathEvaluator.
-	scopedEval scopedEvalCache
+	// scopedEvals caches the base evaluator plus the per-scope overlays
+	// (variables, functions, schema state, collation); see
+	// scopedXPathEvaluator. It is refilled round-robin from scopedEvalNext.
+	scopedEvals    [scopedEvalSlots]scopedEvalCache
+	scopedEvalNext int
 
 	// localVarsVer is incremented whenever a binding is added to a local
 	// variable scope (setVar/setVarDeferred) and when a scope that holds
@@ -168,6 +176,11 @@ type execContext struct {
 	nilledGen      uint64
 	nilledNodes    map[helium.Node]struct{}
 	nilledNodesGen uint64
+
+	// patternPredicates holds the matching pattern's compiled step predicates
+	// (pattern.predicates) during pattern matching, beside patternNamespaces
+	// and patternCompat.
+	patternPredicates map[*xpath3.Expr]*patternPredicate
 }
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
@@ -1201,33 +1214,69 @@ func (ec *execContext) xpathContext(ctx context.Context) context.Context {
 	return withExecContext(ctx, ec)
 }
 
-// baseXPathEvaluator returns the cached base XPath evaluator, rebuilding
-// it only when the invalidation keys change (variable generation, xpath
-// default namespace, or effective base URI).
-func (ec *execContext) baseXPathEvaluator() xpath3.Evaluator {
-	baseURI := ec.effectiveStaticBaseURI()
-	if ec.cachedBaseEvalValid &&
-		ec.cachedBaseEvalXPathDefaultNS == ec.xpathDefaultNS &&
-		ec.cachedBaseEvalHasXPathDefaultNS == ec.hasXPathDefaultNS &&
-		ec.cachedBaseEvalBaseURI == baseURI &&
-		ec.cachedBaseEvalPackage == ec.currentPackage &&
-		ec.cachedBaseEvalInPattern == ec.inPatternMatch &&
-		ec.cachedBaseEvalPatternNSPtr == mapIdentity(ec.patternNamespaces) {
-		return ec.cachedBaseEval
+// baseEvalSlots is the number of base evaluators baseXPathEvaluator keeps per
+// mode (outside pattern matching, and during it).
+const baseEvalSlots = 2
+
+// baseEvalKey identifies every input of buildBaseXPathEvaluator that varies
+// within one transform.
+type baseEvalKey struct {
+	xpathDefaultNS    string
+	hasXPathDefaultNS bool
+	baseURI           string
+	pkg               *Stylesheet
+	inPattern         bool
+	// patternNS is the identity of the matching pattern's namespace map
+	// (pattern.nsBindings), which the evaluator's namespaces are built from
+	// during pattern matching; it is 0 outside pattern matching, where the
+	// map is not read. The compiler interns those maps, so patterns with the
+	// same in-scope namespaces share one evaluator.
+	patternNS uintptr
+}
+
+// baseEvalEntry is one cached base evaluator. gen is 0 for an empty entry.
+type baseEvalEntry struct {
+	key  baseEvalKey
+	eval xpath3.Evaluator
+	gen  uint64
+	// patternNS holds the map key.patternNS identifies, so the map stays
+	// reachable while it is cached and its address cannot be reused by a
+	// different map.
+	patternNS map[string]string
+}
+
+// baseXPathEvaluator returns a base XPath evaluator for the current static
+// context (xpath-default-namespace, effective base URI, package, and, during
+// pattern matching, the pattern's namespaces) together with its generation
+// number. Evaluators are cached per baseEvalKey and built only on a miss.
+func (ec *execContext) baseXPathEvaluator() (xpath3.Evaluator, uint64) {
+	key := baseEvalKey{
+		xpathDefaultNS:    ec.xpathDefaultNS,
+		hasXPathDefaultNS: ec.hasXPathDefaultNS,
+		baseURI:           ec.effectiveStaticBaseURI(),
+		pkg:               ec.currentPackage,
+		inPattern:         ec.inPatternMatch,
+	}
+	mode := 0
+	var patternNS map[string]string
+	if ec.inPatternMatch {
+		mode = 1
+		patternNS = ec.patternNamespaces
+		key.patternNS = mapIdentity(patternNS)
+	}
+	row := &ec.baseEvals[mode]
+	for i := range row {
+		if row[i].gen != 0 && row[i].key == key {
+			return row[i].eval, row[i].gen
+		}
 	}
 
-	eval := ec.buildBaseXPathEvaluator(baseURI)
-
-	ec.cachedBaseEval = eval
-	ec.cachedBaseEvalGen++
-	ec.cachedBaseEvalValid = true
-	ec.cachedBaseEvalXPathDefaultNS = ec.xpathDefaultNS
-	ec.cachedBaseEvalHasXPathDefaultNS = ec.hasXPathDefaultNS
-	ec.cachedBaseEvalBaseURI = baseURI
-	ec.cachedBaseEvalPackage = ec.currentPackage
-	ec.cachedBaseEvalInPattern = ec.inPatternMatch
-	ec.cachedBaseEvalPatternNSPtr = mapIdentity(ec.patternNamespaces)
-	return eval
+	eval := ec.buildBaseXPathEvaluator(key.baseURI)
+	ec.baseEvalGen++
+	slot := &row[ec.baseEvalNext[mode]]
+	ec.baseEvalNext[mode] = (ec.baseEvalNext[mode] + 1) % baseEvalSlots
+	*slot = baseEvalEntry{key: key, eval: eval, gen: ec.baseEvalGen, patternNS: patternNS}
+	return eval, ec.baseEvalGen
 }
 
 // buildBaseXPathEvaluator constructs the base evaluator from scratch.
@@ -1443,7 +1492,11 @@ type scopedEvalKey struct {
 	docOrder    *xpath3.DocOrderCache
 }
 
-// scopedEvalCache holds the evaluator scopedXPathEvaluator last built, plus its
+// scopedEvalSlots is the number of scoped evaluators scopedXPathEvaluator
+// keeps.
+const scopedEvalSlots = 4
+
+// scopedEvalCache holds one evaluator scopedXPathEvaluator built, plus its
 // XPath 1.0 compatibility-mode variant, which is built on first use.
 type scopedEvalCache struct {
 	key         scopedEvalKey
@@ -1457,16 +1510,16 @@ type scopedEvalCache struct {
 // except the dynamic focus: variables, functions, schema state, collation, and
 // the doc-order cache. These change only when a variable scope, package,
 // collation, or schema state changes, so the result is cached and rebuilt only
-// when one of its inputs (scopedEvalKey) differs. compat selects the XPath 1.0
-// compatibility-mode variant.
+// when none of the cached ones matches all of its inputs (scopedEvalKey).
+// compat selects the XPath 1.0 compatibility-mode variant.
 func (ec *execContext) scopedXPathEvaluator(ctx context.Context, compat bool) xpath3.Evaluator {
 	vars := ec.collectAllVars(ctx)
-	base := ec.baseXPathEvaluator()
+	base, baseGen := ec.baseXPathEvaluator()
 	fns := ec.xsltFunctions()
 	fnsNS := ec.xsltFunctionsNS()
 	nilled := ec.nilledElementNodes()
 	key := scopedEvalKey{
-		baseGen:     ec.cachedBaseEvalGen,
+		baseGen:     baseGen,
 		vars:        mapIdentity(vars),
 		fns:         mapIdentity(fns),
 		fnsNS:       mapIdentity(fnsNS),
@@ -1477,8 +1530,16 @@ func (ec *execContext) scopedXPathEvaluator(ctx context.Context, compat bool) xp
 		collation:   ec.defaultCollation,
 		docOrder:    ec.docOrderCache,
 	}
-	cache := &ec.scopedEval
-	if !cache.valid || cache.key != key {
+	var cache *scopedEvalCache
+	for i := range ec.scopedEvals {
+		if ec.scopedEvals[i].valid && ec.scopedEvals[i].key == key {
+			cache = &ec.scopedEvals[i]
+			break
+		}
+	}
+	if cache == nil {
+		cache = &ec.scopedEvals[ec.scopedEvalNext]
+		ec.scopedEvalNext = (ec.scopedEvalNext + 1) % scopedEvalSlots
 		eval := base.Variables(vars).Functions(fns, fnsNS)
 		if ec.typeAnnotations != nil {
 			eval = eval.TypeAnnotations(ec.typeAnnotations)

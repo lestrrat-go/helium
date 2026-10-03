@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -53,16 +54,78 @@ var corpus = []struct {
 	{"608KB", &largeXML},
 }
 
+// BenchmarkHeliumParse times Parse over the corpus, with a new Parser per
+// call. The case named after the size alone parses under context.Background
+// and frees each document; "cancellable" parses under the benchmark's
+// cancellable context, the kind a server request carries; "no-free" never
+// calls Document.Free, the way most callers use the result.
 func BenchmarkHeliumParse(b *testing.B) {
 	loadCorpus(b)
 	for _, tc := range corpus {
 		data := *tc.data
 		b.Run(tc.name, func(b *testing.B) {
+			benchmarkParse(b, context.Background(), data, true)
+		})
+		b.Run(tc.name+"/cancellable", func(b *testing.B) {
+			benchmarkParse(b, b.Context(), data, true)
+		})
+		b.Run(tc.name+"/no-free", func(b *testing.B) {
+			benchmarkParse(b, context.Background(), data, false)
+		})
+	}
+}
+
+// benchmarkParse parses data under ctx once per iteration, freeing each
+// document when free is set and otherwise leaving it to the garbage collector.
+func benchmarkParse(b *testing.B, ctx context.Context, data []byte, free bool) {
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		doc, err := helium.NewParser().Parse(ctx, data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if free {
+			doc.Free()
+		}
+	}
+}
+
+// nestedElements is the number of <a> elements in each BenchmarkHeliumParseDepth
+// document, so every depth parses about the same amount of markup.
+const nestedElements = 4000
+
+// nestedDoc builds a <root> holding nestedElements/depth chains of depth
+// nested <a> elements, so the parse descends to depth and climbs back out
+// nestedElements/depth times.
+func nestedDoc(depth int) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("<root>")
+	for range nestedElements / depth {
+		for range depth {
+			buf.WriteString("<a>")
+		}
+		for range depth {
+			buf.WriteString("</a>")
+		}
+	}
+	buf.WriteString("</root>")
+	return buf.Bytes()
+}
+
+// BenchmarkHeliumParseDepth times Parse over documents of the same element
+// count nested to different depths, so a per-level cost of the parser's
+// stacks shows up as a time that grows with depth.
+func BenchmarkHeliumParseDepth(b *testing.B) {
+	for _, depth := range []int{8, 16, 24, 40} {
+		data := nestedDoc(depth)
+		b.Run("depth"+strconv.Itoa(depth), func(b *testing.B) {
+			p := helium.NewParser()
 			b.SetBytes(int64(len(data)))
 			b.ReportAllocs()
-			b.ResetTimer()
-			for range b.N {
-				doc, err := helium.NewParser().Parse(context.Background(), data)
+			for b.Loop() {
+				doc, err := p.Parse(context.Background(), data)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -95,37 +158,46 @@ func (c *cappedReader) Read(p []byte) (int, error) {
 
 // BenchmarkHeliumParseReader times ParseReader over the corpus: "BytesReader"
 // hands the parser a bytes.Reader that fills as much of its buffer as each Read
-// asks for, and "64BReads" caps every Read at smallReadSize bytes.
+// asks for, and "64BReads" caps every Read at smallReadSize bytes. Both parse
+// under the benchmark's cancellable context; their "background" cases parse
+// under context.Background, which matches BenchmarkHeliumParse's base case.
 func BenchmarkHeliumParseReader(b *testing.B) {
 	loadCorpus(b)
 	for _, tc := range corpus {
 		data := *tc.data
 		b.Run(tc.name+"/BytesReader", func(b *testing.B) {
-			p := helium.NewParser()
-			b.SetBytes(int64(len(data)))
-			b.ReportAllocs()
-			for b.Loop() {
-				parseReaderOnce(b, p, bytes.NewReader(data))
-			}
+			benchmarkParseReader(b, b.Context(), data, 0)
+		})
+		b.Run(tc.name+"/BytesReader/background", func(b *testing.B) {
+			benchmarkParseReader(b, context.Background(), data, 0)
 		})
 		b.Run(tc.name+"/64BReads", func(b *testing.B) {
-			p := helium.NewParser()
-			b.SetBytes(int64(len(data)))
-			b.ReportAllocs()
-			for b.Loop() {
-				parseReaderOnce(b, p, &cappedReader{r: bytes.NewReader(data), size: smallReadSize})
-			}
+			benchmarkParseReader(b, b.Context(), data, smallReadSize)
+		})
+		b.Run(tc.name+"/64BReads/background", func(b *testing.B) {
+			benchmarkParseReader(b, context.Background(), data, smallReadSize)
 		})
 	}
 }
 
-func parseReaderOnce(b *testing.B, p helium.Parser, r io.Reader) {
-	b.Helper()
-	doc, err := p.ParseReader(b.Context(), r)
-	if err != nil {
-		b.Fatal(err)
+// benchmarkParseReader parses data through ParseReader under ctx once per
+// iteration and frees each document. A readSize above zero caps every Read at
+// that many bytes.
+func benchmarkParseReader(b *testing.B, ctx context.Context, data []byte, readSize int) {
+	p := helium.NewParser()
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	for b.Loop() {
+		var r io.Reader = bytes.NewReader(data)
+		if readSize > 0 {
+			r = &cappedReader{r: r, size: readSize}
+		}
+		doc, err := p.ParseReader(ctx, r)
+		if err != nil {
+			b.Fatal(err)
+		}
+		doc.Free()
 	}
-	doc.Free()
 }
 
 // smallDocs are documents small enough that the fixed per-parse setup cost,

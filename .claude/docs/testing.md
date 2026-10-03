@@ -121,6 +121,7 @@ bug that prompted it.
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
 | `xmldsig1_bench_test.go` | xmldsig1 | Enveloped signing and verification benchmarks |
+| `stack_test.go` | internal/stack | `Stack`/`KeyedStack` push, pop, peek and lookup; popped slots are cleared, and a stack keeps its capacity through a walk back up and a second descent to the same depth |
 | `bytecursor_test.go` | internal/strcursor | ByteCursor read-error and zero-progress handling; `TestCursorPosition` checks line, column, and line text after every advancing method on both ByteCursor and UTF8Cursor |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast`/`AdvanceNoNewline` line/column against `Advance` |
 
@@ -444,12 +445,21 @@ document; validation times `Validator.Validate` with a compiled schema and parse
 
 Parse benchmarks (`bench/parse_bench_test.go`) share a corpus of `relaxng/test/spec_0.xml` (`118KB`, declared
 iso-8859-1), `schemas/test/nvdcve_0.xml` (`287KB`) and `relaxng/test/comps_0.xml` (`608KB`), loaded by `loadCorpus`.
-`BenchmarkHeliumParse` times `Parse` on the byte slice. `BenchmarkHeliumParseReader` times `ParseReader` in two
-sub-cases per size: `BytesReader` reads from a `bytes.Reader`, and `64BReads` wraps it in `cappedReader`, which returns
-at most 64 bytes per `Read`, so most tags and text runs straddle a read boundary. A cap of a few KB times the same as
-`BytesReader`, because the parser's input buffer is 8KB. `BenchmarkHeliumParseSmall` times documents of 1KB or less
-through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with
-`encoding/xml` for comparison.
+`BenchmarkHeliumParse` times `Parse` on the byte slice, with a new `Parser` per call. Its case named after the size
+alone (`608KB`) parses under `context.Background()` and frees each document; `<size>/cancellable` parses under
+`b.Context()`, a cancellable context like a server request's; `<size>/no-free` parses under `context.Background()` and
+never calls `Document.Free` (most callers never do), so its node slabs come from the heap instead of the slab pool
+every time. `BenchmarkHeliumParseReader` times `ParseReader` in two reader cases per size: `BytesReader` reads from a
+`bytes.Reader`, and `64BReads` wraps it in `cappedReader`, which returns at most 64 bytes per `Read`, so most tags and
+text runs straddle a read boundary. A cap of a few KB times the same as `BytesReader`, because the parser's input
+buffer is 8KB. Each reader case runs under `b.Context()`, and its `/background` case (`608KB/BytesReader/background`)
+under `context.Background()`, so `Parse` and `ParseReader` can be compared under the same context. Keep the unsuffixed
+names and what they measure fixed: benchstat matches results by name across recorded runs. `BenchmarkHeliumParseSmall`
+times documents of 1KB or less through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkHeliumParseDepth` times
+`Parse` on generated documents of 4000 `<a>` elements under one `<root>`, nested in chains of 8, 16, 24 and 40
+(`depth8` … `depth40`), so every case parses about the same markup and a per-level cost of the parser's stacks shows
+as time and memory that grow with depth. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with `encoding/xml` for
+comparison.
 
 `BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml`, `relaxng/test/comps_0.xml`, and
 `relaxng/test/ISO19005-1-XMP_Packet.rng` (`xmprng`: every element `rng:`-prefixed, about thirty namespace
@@ -468,14 +478,16 @@ against an `xslt3`-binding schema of such `assert`/`report` tests.
 variable, one `xsl:function` per ten templates, one named template per twenty, and a named mode holding a template
 for every fifth match template. The instruction benchmarks time `Transform` (result tree only) over a flat
 5000-record `<recs>` document: `BenchmarkForEachGroup` (`group-by` over 50 interleaved categories, `group-adjacent`
-over 50 runs of 100, `group-starting-with` with a `rec[@head]` pattern), `BenchmarkNumbering` (`number-single`: a
-bare `xsl:number`; `number-any`: `level="any" count="rec"`; `format-number` with a grouping picture) and
+over 50 runs of 100, `group-starting-with` with a `rec[@head]` pattern), `BenchmarkPredicatePatterns`
+(`predicate-template`: a `match="rec[@head]"` template beside a `match="rec"` fallback; `predicate-templates-20`:
+twenty `match="rec[@cat='cN']"` templates beside the same fallback), `BenchmarkNumbering` (`number-single`: a
+bare `xsl:number`; `number-any`: `level="any" count="rec"`; `format-number` with a grouping picture),
 `BenchmarkFunctionCall` (`simple`: one two-parameter `xsl:function` call per record; `recursive`: a recursive
-factorial, up to nine nested calls per record) and `BenchmarkTemporaryTree` (`variable`: an `xsl:variable` holding a
-one-element temporary tree per record, read through its string value; `function`: an `xsl:function` whose body
+factorial, up to nine nested calls per record) and `BenchmarkTemporaryTree` (`variable`: an `xsl:variable` holding
+a one-element temporary tree per record, read through its string value; `function`: an `xsl:function` whose body
 builds one element per call, copied into the result), which measures the cost of setting up each small temporary
-tree's document. Each case compiles once and checks its output once before the timed
-loop; the compile case also checks that `Compile` leaves the stylesheet document unchanged.
+tree's document. Each case compiles once and checks its output once before the timed loop; the compile case also
+checks that `Compile` leaves the stylesheet document unchanged.
 
 XML Signature benchmarks (`xmldsig1/xmldsig1_bench_test.go`) run `BenchmarkSignEnveloped` (`Signer.SignEnveloped`)
 and `BenchmarkVerify` (`Verifier.Verify`) over two inputs: `saml_1KB`, an inline SAML 2.0 assertion, and

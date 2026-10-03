@@ -26,6 +26,8 @@ type canonicalizerCfg struct {
 	nodeSetSet        bool // true once NodeSet was explicitly configured (even if empty)
 	inclusivePrefixes []string
 	strictXMLAttrs    bool
+	exclude           *helium.Element
+	subtreeRoot       *helium.Element // set only through internal/c14nctl
 }
 
 // Canonicalizer configures XML canonicalization. It is a value-style
@@ -98,6 +100,22 @@ func (c Canonicalizer) StrictXMLAttributes() Canonicalizer {
 	return c
 }
 
+// ExcludeSubtree omits e and all of its descendants from the canonical form,
+// producing the same bytes as canonicalizing the document with e detached from
+// its parent. The document itself is not modified. This is the subtree removal
+// the XML Signature enveloped-signature transform performs (libxml2 expresses
+// it as an is_visible_callback that rejects the Signature subtree).
+//
+// It combines with every other option: in node-set mode, members of the node
+// set that lie inside e's subtree are not emitted. An element outside the
+// canonicalized document, or nil, excludes nothing. Calling ExcludeSubtree
+// again replaces the previously excluded element.
+func (c Canonicalizer) ExcludeSubtree(e *helium.Element) Canonicalizer {
+	c = c.clone()
+	c.cfg.exclude = e
+	return c
+}
+
 // InclusiveNamespaces specifies prefixes that should be treated as
 // inclusive when using ExclusiveC14N10 mode. Use "" (empty string) or
 // "#default" for the default namespace.
@@ -121,6 +139,8 @@ func (c Canonicalizer) Canonicalize(doc *helium.Document, out io.Writer) error {
 	}
 	can.withComments = cfg.withComments
 	can.strictXMLAttrs = cfg.strictXMLAttrs
+	can.exclude = cfg.exclude
+	can.subtreeRoot = cfg.subtreeRoot
 	if cfg.nodeSetSet {
 		can.nodeSet = make(map[helium.Node]struct{}, len(cfg.nodeSet))
 		for _, n := range cfg.nodeSet {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -30,6 +31,79 @@ type pattern struct {
 	// processing (effective version < 2.0); its predicate expressions then
 	// evaluate in XPath 1.0 compatibility mode (§3.10.1).
 	compat bool
+	// predicates holds the compiled form of every step predicate in the
+	// pattern's location paths, keyed by the predicate's address in the AST
+	// (&step.Predicates[i]). It is built once by compilePattern and only read
+	// while matching.
+	predicates map[*xpath3.Expr]*patternPredicate
+}
+
+// patternPredicate is one step predicate of a match pattern, compiled once
+// when the pattern is compiled.
+type patternPredicate struct {
+	compiled *xpath3.Expression
+	// focusFree is true when the predicate calls none of fn:position, fn:last
+	// and fn:function-lookup (matched by local name alone, in any namespace).
+	// Its value for a node then does not depend on the node's position among
+	// the nodes the step selects, so unless the value is a number (a position
+	// test) the predicate can be decided from the node alone (XSLT 3.0
+	// §5.5.3).
+	focusFree bool
+}
+
+// patternPredicateCollector compiles the step predicates of a pattern's
+// location paths for compilePattern.
+type patternPredicateCollector struct {
+	nsBindings map[string]string
+	predicates map[*xpath3.Expr]*patternPredicate
+}
+
+// visit is the xpathstream.WalkExpr callback. It records the predicates of
+// every step of a location path and does not descend into them: a path nested
+// inside a predicate is evaluated as an expression, never matched step by
+// step.
+func (c *patternPredicateCollector) visit(expr xpath3.Expr) bool {
+	lp, ok := expr.(xpath3.LocationPath)
+	if !ok {
+		return true
+	}
+	for i := range lp.Steps {
+		for j := range lp.Steps[i].Predicates {
+			c.add(&lp.Steps[i].Predicates[j])
+		}
+	}
+	return false
+}
+
+func (c *patternPredicateCollector) add(pred *xpath3.Expr) {
+	compiled, err := xpath3.NewCompiler().CompileExpr(*pred)
+	if err != nil {
+		// Leave it out: matching compiles it on use and treats a failure as
+		// a non-match, as it does for any predicate not found here.
+		return
+	}
+	if c.predicates == nil {
+		c.predicates = make(map[*xpath3.Expr]*patternPredicate)
+	}
+	c.predicates[pred] = &patternPredicate{
+		compiled:  compiled,
+		focusFree: isFocusFreePredicate(compiled, c.nsBindings),
+	}
+}
+
+// isFocusFreePredicate reports whether a predicate's value is independent of
+// the context position and size. Only fn:position and fn:last read them, and
+// fn:function-lookup can return either one as a function item bound to the
+// current focus. The names are matched on their local part alone, so a
+// same-named function in another namespace also counts as focus-dependent.
+func isFocusFreePredicate(compiled *xpath3.Expression, nsBindings map[string]string) bool {
+	for _, fn := range compiled.StaticReferences(nsBindings).FunctionNames {
+		switch fn.Name {
+		case "position", "last", "function-lookup":
+			return false
+		}
+	}
+	return true
 }
 
 // patternAlt is one alternative in a union pattern (separated by |).
@@ -79,8 +153,15 @@ func isNeverMatchingPattern(alt string) bool {
 // context, so both compile-time validation and runtime matching resolve prefixes
 // identically and the predeclared XPath namespaces (fn/math/map/...) apply as a
 // fallback only when a prefix is not lexically bound.
-func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool, compat bool, decls xpath3.SchemaDeclarations) (*pattern, error) {
-	nsBindings := inScopeNamespaces(elem)
+//
+// Patterns whose elements have the same in-scope namespaces share one
+// namespace map (see internPatternNamespaces). The pattern is compiled under
+// backwards-compatible processing when the compiler's effective version is
+// below 2.0.
+func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool) (*pattern, error) {
+	nsBindings := c.internPatternNamespaces(inScopeNamespaces(elem))
+	compat := c.backwardsCompatible()
+	decls := c.schemaDeclsForValidation()
 	alts := splitPatternUnion(s)
 	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, hasXPathDefaultNS: hasXPathDefaultNS, nsBindings: nsBindings, compat: compat}
 	for _, alt := range alts {
@@ -136,6 +217,11 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXP
 	if len(p.Alternatives) == 0 {
 		return nil, staticError(errCodeXTSE0500, "empty pattern %q", s)
 	}
+	collector := patternPredicateCollector{nsBindings: nsBindings}
+	for _, pa := range p.Alternatives {
+		xpathstream.WalkExpr(pa.expr, collector.visit)
+	}
+	p.predicates = collector.predicates
 	// Union patterns (multiple alternatives separated by |) require each
 	// alternative to be a PathPattern. PredicatePatterns (FilterExpr like
 	// .[pred]) are only valid as standalone patterns, not in unions.
@@ -152,6 +238,32 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXP
 		}
 	}
 	return p, nil
+}
+
+// internPatternNamespaces returns the compiler's shared map with the same
+// bindings as ns, registering ns as that map when none exists yet. Every
+// pattern keeps its map for the life of the stylesheet, and the runtime caches
+// one base XPath evaluator per distinct map (baseEvalKey), so sharing the map
+// lets patterns with the same in-scope namespaces share that evaluator. The
+// returned map is never modified.
+func (c *compiler) internPatternNamespaces(ns map[string]string) map[string]string {
+	prefixes := slices.Sorted(maps.Keys(ns))
+	var b strings.Builder
+	for _, prefix := range prefixes {
+		b.WriteString(prefix)
+		b.WriteByte(0)
+		b.WriteString(ns[prefix])
+		b.WriteByte(0)
+	}
+	key := b.String()
+	if shared, ok := c.patternNamespaceMaps[key]; ok {
+		return shared
+	}
+	if c.patternNamespaceMaps == nil {
+		c.patternNamespaceMaps = make(map[string]map[string]string)
+	}
+	c.patternNamespaceMaps[key] = ns
+	return ns
 }
 
 // patternValidateNamespaces builds the prefix→URI map used to statically
@@ -812,22 +924,25 @@ func (p *pattern) matchPattern(ctx context.Context, ec *execContext, node helium
 // matchPattern itself, or once around a dispatch loop that probes many
 // patterns against the same node (see findFirstMatch / hasConflictingMatch).
 // It saves and restores only the fields that vary per pattern:
-// xpath-default-namespace, the pattern's lexical namespace snapshot, and its
-// backwards-compatible-processing flag.
+// xpath-default-namespace, the pattern's lexical namespace snapshot, its
+// backwards-compatible-processing flag, and its compiled step predicates.
 func (p *pattern) matchPatternProbe(ctx context.Context, ec *execContext, node helium.Node) bool {
 	saved := ec.xpathDefaultNS
 	savedHas := ec.hasXPathDefaultNS
 	savedPatternNS := ec.patternNamespaces
 	savedPatternCompat := ec.patternCompat
+	savedPatternPreds := ec.patternPredicates
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.patternNamespaces = p.nsBindings
 	ec.patternCompat = p.compat
+	ec.patternPredicates = p.predicates
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
 		ec.patternNamespaces = savedPatternNS
 		ec.patternCompat = savedPatternCompat
+		ec.patternPredicates = savedPatternPreds
 	}()
 
 	for _, alt := range p.Alternatives {
@@ -866,6 +981,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 	savedInPattern := ec.inPatternMatch
 	savedPatternNS := ec.patternNamespaces
 	savedPatternCompat := ec.patternCompat
+	savedPatternPreds := ec.patternPredicates
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
@@ -873,6 +989,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 	ec.inPatternMatch = true
 	ec.patternNamespaces = p.nsBindings
 	ec.patternCompat = p.compat
+	ec.patternPredicates = p.predicates
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
@@ -881,6 +998,7 @@ func (p *pattern) matchPatternItem(ctx context.Context, ec *execContext, item xp
 		ec.inPatternMatch = savedInPattern
 		ec.patternNamespaces = savedPatternNS
 		ec.patternCompat = savedPatternCompat
+		ec.patternPredicates = savedPatternPreds
 	}()
 
 	for _, alt := range p.Alternatives {
@@ -955,6 +1073,7 @@ func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execCo
 	savedInPattern := ec.inPatternMatch
 	savedPatternNS := ec.patternNamespaces
 	savedPatternCompat := ec.patternCompat
+	savedPatternPreds := ec.patternPredicates
 	ec.xpathDefaultNS = p.xpathDefaultNS
 	ec.hasXPathDefaultNS = p.hasXPathDefaultNS
 	ec.regexGroups = nil
@@ -964,6 +1083,7 @@ func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execCo
 	ec.inPatternMatch = true
 	ec.patternNamespaces = p.nsBindings
 	ec.patternCompat = p.compat
+	ec.patternPredicates = p.predicates
 	defer func() {
 		ec.xpathDefaultNS = saved
 		ec.hasXPathDefaultNS = savedHas
@@ -974,6 +1094,7 @@ func (p *pattern) matchNodeContextItemPositional(ctx context.Context, ec *execCo
 		ec.inPatternMatch = savedInPattern
 		ec.patternNamespaces = savedPatternNS
 		ec.patternCompat = savedPatternCompat
+		ec.patternPredicates = savedPatternPreds
 	}()
 
 	for _, fe := range ctxAlts {
@@ -1292,62 +1413,7 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 	remaining := path.Steps[:len(path.Steps)-1]
 	if lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf {
 		if len(lastStep.Predicates) > 0 {
-			// Position predicates on descendant axis are relative to the full
-			// descendant set of the ancestor node. Walk up to find ancestors
-			// that match the preceding steps, then evaluate predicates in that context.
-			checkDescPreds := func(cur helium.Node, includeSelf bool) bool {
-				if !matchStepsUpward(ctx, ec, remaining, path.Absolute, cur) {
-					return false
-				}
-				// Collect all descendants of cur that match the name test.
-				// For descendant-or-self, include cur itself if it matches.
-				var descendants []helium.Node
-				if includeSelf && nodeMatchesTest(ctx, ec, lastStep.NodeTest, cur) {
-					descendants = append(descendants, cur)
-				}
-				descendants = append(descendants, collectDescendants(ctx, ec, lastStep.NodeTest, cur)...)
-				// Find position of node in the descendant set
-				pos := 0
-				for j, d := range descendants {
-					if d == node {
-						pos = j + 1
-						break
-					}
-				}
-				if pos == 0 {
-					return false
-				}
-				// Evaluate predicates with position context
-				for _, pred := range lastStep.Predicates {
-					if !evaluatePredicateWithPosition(ctx, ec, pred, node, pos, len(descendants)) {
-						return false
-					}
-				}
-				return true
-			}
-			isSelfAxis := lastStep.Axis == xpath3.AxisDescendantOrSelf
-			// For descendant-or-self, start from the node itself (it IS a
-			// descendant-or-self of itself) and walk upward through ancestors.
-			// For descendant (without self), start from parent.
-			startNode := node.Parent()
-			if isSelfAxis {
-				startNode = node
-			}
-			for cur := startNode; cur != nil; cur = cur.Parent() {
-				if checkDescPreds(cur, isSelfAxis) {
-					return true
-				}
-			}
-			// Child-or-top: parentless nodes try matching remaining steps
-			// from the node itself (XSLT 3.0 §19.2).
-			if node.Parent() == nil && node.Type() != helium.DocumentNode {
-				if isSelfAxis && !path.Absolute {
-					if checkDescPreds(node, true) {
-						return true
-					}
-				}
-			}
-			return false
+			return matchDescendantStepPredicates(ctx, ec, path.Absolute, remaining, lastStep, node)
 		}
 		// descendant / descendant-or-self axis: any ancestor may contain the preceding step
 		for cur := node.Parent(); cur != nil; cur = cur.Parent() {
@@ -1368,6 +1434,82 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 		return true
 	}
 	return false
+}
+
+// matchDescendantStepPredicates matches the remaining steps and the
+// predicates of the last step of a multi-step pattern whose last step, on the
+// descendant or descendant-or-self axis, carries predicates. node has already
+// passed the step's node test. A position in those predicates counts among
+// all the nodes the step selects from the ancestor that matches the
+// remaining steps, so the predicates are evaluated per candidate ancestor,
+// unless they are focus-free and can be decided from node alone.
+func matchDescendantStepPredicates(ctx context.Context, ec *execContext, absolute bool, remaining []xpath3.Step, lastStep xpath3.Step, node helium.Node) bool {
+	positional := true
+	switch matchFocusFreePredicates(ctx, ec, lastStep.Predicates, node) {
+	case predicatesFail:
+		return false
+	case predicatesMatch:
+		positional = false
+	}
+	isSelfAxis := lastStep.Axis == xpath3.AxisDescendantOrSelf
+	// For descendant-or-self, start from the node itself (it IS a
+	// descendant-or-self of itself) and walk upward through ancestors.
+	// For descendant (without self), start from parent.
+	startNode := node.Parent()
+	if isSelfAxis {
+		startNode = node
+	}
+	for cur := startNode; cur != nil; cur = cur.Parent() {
+		if matchDescendantStepFrom(ctx, ec, absolute, remaining, lastStep, node, cur, isSelfAxis, positional) {
+			return true
+		}
+	}
+	// Child-or-top: parentless nodes try matching remaining steps
+	// from the node itself (XSLT 3.0 §19.2).
+	if node.Parent() == nil && node.Type() != helium.DocumentNode && isSelfAxis && !absolute {
+		return matchDescendantStepFrom(ctx, ec, absolute, remaining, lastStep, node, node, true, positional)
+	}
+	return false
+}
+
+// matchDescendantStepFrom reports whether cur matches the remaining steps and,
+// when positional is set, whether node passes lastStep's predicates at its
+// position among the nodes the step selects from cur (cur itself included
+// when includeSelf is set). With positional unset the caller has already
+// decided the predicates from node alone.
+func matchDescendantStepFrom(ctx context.Context, ec *execContext, absolute bool, remaining []xpath3.Step, lastStep xpath3.Step, node, cur helium.Node, includeSelf, positional bool) bool {
+	if !matchStepsUpward(ctx, ec, remaining, absolute, cur) {
+		return false
+	}
+	if !positional {
+		return true
+	}
+	// Collect all descendants of cur that match the name test.
+	// For descendant-or-self, include cur itself if it matches.
+	var descendants []helium.Node
+	if includeSelf && nodeMatchesTest(ctx, ec, lastStep.NodeTest, cur) {
+		descendants = append(descendants, cur)
+	}
+	descendants = append(descendants, collectDescendants(ctx, ec, lastStep.NodeTest, cur)...)
+	// Find position of node in the descendant set
+	pos := 0
+	for j, d := range descendants {
+		if d == node {
+			pos = j + 1
+			break
+		}
+	}
+	if pos == 0 {
+		return false
+	}
+	// Evaluate predicates with position context
+	for i := range lastStep.Predicates {
+		pred := ec.patternPredicate(&lastStep.Predicates[i])
+		if pred == nil || !evaluatePredicateWithPosition(ctx, ec, pred.compiled, node, pos, len(descendants)) {
+			return false
+		}
+	}
+	return true
 }
 
 // matchStepsUpward matches remaining pattern steps upward through ancestors.
@@ -1953,11 +2095,25 @@ func matchDocumentTest(ctx context.Context, ec *execContext, dt xpath3.DocumentT
 // For patterns with multiple predicates like x[P1][P2][P3], each predicate
 // filters based on position among siblings matching the node test AND all
 // previous predicates. This implements XSLT 3.0 Section 5.5.3.
+//
+// Focus-free predicates are decided from the node alone (see
+// matchFocusFreePredicates); only the others pay for collecting the siblings.
 func evaluateChainedPredicates(ctx context.Context, ec *execContext, step xpath3.Step, node helium.Node) bool {
+	switch matchFocusFreePredicates(ctx, ec, step.Predicates, node) {
+	case predicatesFail:
+		return false
+	case predicatesMatch:
+		return true
+	}
+
 	// Collect all same-test siblings (including the node itself)
 	siblings := collectMatchingSiblings(ctx, ec, step.NodeTest, node)
 
-	for i, pred := range step.Predicates {
+	for i := range step.Predicates {
+		pred := ec.patternPredicate(&step.Predicates[i])
+		if pred == nil {
+			return false
+		}
 		// Find position and size of node in current filtered sibling set
 		pos := 0
 		for j, sib := range siblings {
@@ -1971,7 +2127,7 @@ func evaluateChainedPredicates(ctx context.Context, ec *execContext, step xpath3
 		}
 
 		// Evaluate the predicate with position/size context
-		if !evaluatePredicateWithPosition(ctx, ec, pred, node, pos, len(siblings)) {
+		if !evaluatePredicateWithPosition(ctx, ec, pred.compiled, node, pos, len(siblings)) {
 			return false
 		}
 
@@ -1979,7 +2135,7 @@ func evaluateChainedPredicates(ctx context.Context, ec *execContext, step xpath3
 		if i < len(step.Predicates)-1 {
 			var filtered []helium.Node
 			for j, sib := range siblings {
-				if evaluatePredicateWithPosition(ctx, ec, pred, sib, j+1, len(siblings)) {
+				if evaluatePredicateWithPosition(ctx, ec, pred.compiled, sib, j+1, len(siblings)) {
 					filtered = append(filtered, sib)
 				}
 			}
@@ -2042,29 +2198,100 @@ func collectMatchingSiblings(ctx context.Context, ec *execContext, test xpath3.N
 	return siblings
 }
 
-// evaluatePredicateWithPosition evaluates a pattern predicate with explicit
-// position and size context.
-func evaluatePredicateWithPosition(ctx context.Context, ec *execContext, pred xpath3.Expr, node helium.Node, pos, size int) bool {
-	compiled, compErr := xpath3.NewCompiler().CompileExpr(pred)
-	if compErr != nil {
-		return false
+// predicateOutcome is the result of matchFocusFreePredicates.
+type predicateOutcome int
+
+const (
+	// predicatesNeedPosition: the predicates cannot be decided from the node
+	// alone; the caller evaluates them with the node's position.
+	predicatesNeedPosition predicateOutcome = iota
+	// predicatesFail: a predicate is false for the node, at any position.
+	predicatesFail
+	// predicatesMatch: every predicate is true for the node, at any position.
+	predicatesMatch
+)
+
+// matchFocusFreePredicates decides a step's predicates from node alone when
+// that is possible. XSLT 3.0 §5.5.3 defines a pattern step's predicates by
+// filtering the nodes the step selects, so a predicate can see the node's
+// position among them; but a focus-free predicate (patternPredicate.focusFree)
+// whose value is not a number has the same truth value at every position. Each
+// predicate is evaluated in order with node as the context item; the first one
+// that is not focus-free, or that yields a number (a position test), makes the
+// outcome predicatesNeedPosition. A false predicate fails the match whatever
+// the later ones are, because a node it rejects is not among the nodes the
+// later predicates filter. An evaluation error fails the match, as it does on
+// the positional path.
+func matchFocusFreePredicates(ctx context.Context, ec *execContext, preds []xpath3.Expr, node helium.Node) predicateOutcome {
+	for i := range preds {
+		pred, ok := ec.patternPredicates[&preds[i]]
+		if !ok || !pred.focusFree {
+			return predicatesNeedPosition
+		}
+		result, err := evalStepPredicate(ctx, ec, pred.compiled, node, 1, 1)
+		if err != nil {
+			recordPatternPredicateError(ec, err)
+			return predicatesFail
+		}
+		if _, isNum := result.IsNumber(); isNum {
+			return predicatesNeedPosition
+		}
+		b, err := result.EBV()
+		if err != nil || !b {
+			return predicatesFail
+		}
 	}
+	return predicatesMatch
+}
+
+// patternPredicate returns the compiled form of the step predicate at pred:
+// the one compilePattern built for the pattern being matched, or else a fresh
+// compilation, marked as not focus-free. It returns nil when the predicate
+// does not compile.
+func (ec *execContext) patternPredicate(pred *xpath3.Expr) *patternPredicate {
+	if compiled, ok := ec.patternPredicates[pred]; ok {
+		return compiled
+	}
+	compiled, err := xpath3.NewCompiler().CompileExpr(*pred)
+	if err != nil {
+		return nil
+	}
+	return &patternPredicate{compiled: compiled}
+}
+
+// evalStepPredicate evaluates a pattern step predicate with node as the
+// context item and the given context position and size, in XPath 1.0
+// compatibility mode when the pattern is backwards-compatible.
+func evalStepPredicate(ctx context.Context, ec *execContext, compiled *xpath3.Expression, node helium.Node, pos, size int) (*xpath3.Result, error) {
 	eval := ec.xpathEvaluator(ctx).
 		Position(pos).
 		Size(size)
 	if ec.patternCompat {
 		eval = eval.XPath10Compat()
 	}
-	result, err := eval.Evaluate(ec.xpathContext(ctx), compiled, node)
+	return eval.Evaluate(ec.xpathContext(ctx), compiled, node)
+}
+
+// recordPatternPredicateError propagates the fatal errors among a predicate's
+// evaluation errors (like XTDE0640 circular key or ErrCircularRef from
+// variable/param evaluation) through the exec context so they can be raised
+// after pattern matching. Every other error only makes the predicate false.
+func recordPatternPredicateError(ec *execContext, err error) {
+	if isXSLTError(err, errCodeXTDE0640) {
+		ec.patternMatchErr = err
+		return
+	}
+	if errors.Is(err, ErrCircularRef) {
+		ec.patternMatchErr = dynamicError(errCodeXTDE0640, "%s", err.Error())
+	}
+}
+
+// evaluatePredicateWithPosition evaluates a compiled pattern predicate with
+// explicit position and size context.
+func evaluatePredicateWithPosition(ctx context.Context, ec *execContext, compiled *xpath3.Expression, node helium.Node, pos, size int) bool {
+	result, err := evalStepPredicate(ctx, ec, compiled, node, pos, size)
 	if err != nil {
-		// Propagate fatal errors (like XTDE0640 circular key or
-		// ErrCircularRef from variable/param evaluation) through
-		// the exec context so they can be raised after pattern matching.
-		if isXSLTError(err, errCodeXTDE0640) {
-			ec.patternMatchErr = err
-		} else if errors.Is(err, ErrCircularRef) {
-			ec.patternMatchErr = dynamicError(errCodeXTDE0640, "%s", err.Error())
-		}
+		recordPatternPredicateError(ec, err)
 		return false
 	}
 	// Numeric predicates: compare to the provided position. Compare as float64:
