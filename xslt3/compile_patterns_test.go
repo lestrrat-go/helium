@@ -1109,6 +1109,68 @@ func TestPatternAxisPositionalPredicate(t *testing.T) {
 	}
 }
 
+// TestPatternNamespaceNodeMatch checks that every pattern form that can select
+// a namespace node matches exactly the namespace nodes the equivalent select
+// expression returns (XSLT 3.0 §5.5.3). The namespace axis builds fresh nodes
+// on each traversal, so the node a template is applied to is never the same Go
+// value as the one the pattern's own evaluation returns; a namespace node is
+// identified by its parent element and its prefix. The source declares a and
+// p on doc and redeclares p on r, and every element also carries the implicit
+// xml namespace. Each match is rendered as [parent:prefix=uri].
+func TestPatternNamespaceNodeMatch(t *testing.T) {
+	const srcXML = `<doc xmlns:a="urn:a" xmlns:p="urn:p"><r xmlns:p="urn:p2" xmlns:c="urn:c"/></doc>`
+	const (
+		docXML = "[doc:xml=http://www.w3.org/XML/1998/namespace]"
+		rXML   = "[r:xml=http://www.w3.org/XML/1998/namespace]"
+	)
+
+	tests := []struct {
+		name  string
+		match string
+		sel   string // the select expression equivalent to match, from the document node
+		want  string
+	}{
+		{"intersect", "namespace::*[2] intersect namespace::*",
+			"//(namespace::*[2] intersect namespace::*)", "[doc:a=urn:a][r:a=urn:a]"},
+		{"except", "namespace::* except namespace::xml", "//(namespace::* except namespace::xml)",
+			"[doc:a=urn:a][doc:p=urn:p][r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"filter", "(namespace::*)[2]", "//(namespace::*)[2]", "[doc:a=urn:a][r:a=urn:a]"},
+		{"variable", "$ns", "$ns", rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"variable filter", "$ns[. = 'urn:p2']", "$ns[. = 'urn:p2']", "[r:p=urn:p2]"},
+		{"prefix name", "namespace::p", "//*/namespace::p", "[doc:p=urn:p][r:p=urn:p2]"},
+		{"implicit xml", "namespace::xml", "//*/namespace::xml", docXML + rXML},
+		{"parent step", "r/namespace::*", "//r/namespace::*", rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"namespace-node", "namespace-node()", "//*/namespace-node()",
+			docXML + "[doc:a=urn:a][doc:p=urn:p]" + rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"namespace-node predicate", "namespace-node()[. = 'urn:p']", "//*/namespace-node()[. = 'urn:p']",
+			"[doc:p=urn:p]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			const show = `[<xsl:value-of select="name(..)"/>:<xsl:value-of select="name()"/>=<xsl:value-of select="."/>]`
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:variable name="ns" select="//r/namespace::*"/>
+  <xsl:template match="/"><out><m><xsl:apply-templates select="//*/namespace::*"/></m>` +
+				`<s><xsl:for-each select="` + tc.sel + `">` + show + `</xsl:for-each></s></out></xsl:template>
+  <xsl:template match="` + tc.match + `" priority="1">` + show + `</xsl:template>
+  <xsl:template match="namespace-node()"/>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+			require.NoError(t, err)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "<out><m>"+tc.want+"</m><s>"+tc.want+"</s></out>", strings.TrimSpace(out))
+		})
+	}
+}
+
 // transformStepPredicate applies a stylesheet with one template for match and
 // a match="rec" fallback to five <rec> siblings and returns the serialized
 // <out> element. The stylesheet is version="1.0" when compat is set and

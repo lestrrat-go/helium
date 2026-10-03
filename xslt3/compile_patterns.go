@@ -2361,12 +2361,9 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 			return false
 		}
 	}
-	if err == nil {
-		for item := range sequence.Items(result.Sequence()) {
-			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
-				return true
-			}
-		}
+	isNS := node.Type() == helium.NamespaceNode
+	if err == nil && sequenceHasNode(result.Sequence(), node, isNS) {
+		return true
 	}
 	// Then try evaluating from each ancestor up to the document root.
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
@@ -2378,10 +2375,26 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 			}
 			continue
 		}
-		for item := range sequence.Items(result.Sequence()) {
-			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
-				return true
-			}
+		if sequenceHasNode(result.Sequence(), node, isNS) {
+			return true
+		}
+	}
+	return false
+}
+
+// sequenceHasNode reports whether seq contains node. isNS tells whether node
+// is a namespace node: the namespace axis builds a fresh wrapper on every
+// traversal, so a namespace node in seq is a different Go value than node and
+// is compared by its parent element and prefix (ixpath.SameNode). Every other
+// node is compared by pointer.
+func sequenceHasNode(seq xpath3.Sequence, node helium.Node, isNS bool) bool {
+	for item := range sequence.Items(seq) {
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok {
+			continue
+		}
+		if ni.Node == node || (isNS && ixpath.SameNode(ni.Node, node)) {
+			return true
 		}
 	}
 	return false
