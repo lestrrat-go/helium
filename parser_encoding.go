@@ -54,6 +54,11 @@ var (
 	patMaybeXMLDecl = []byte{0x3C, 0x3F, 0x78, 0x6D}
 )
 
+// errEncodingNotDetected is detectEncoding's result for input with no
+// byte-order mark or encoding signature: the normal outcome for UTF-8 and
+// ASCII documents, so it is built once.
+var errEncodingNotDetected = errors.New("failed to detect encoding")
+
 func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	cur := ctx.getByteCursor()
 	if cur == nil {
@@ -123,7 +128,7 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	}
 
 	encoding = encNone
-	err = errors.New("failed to detect encoding")
+	err = errEncodingNotDetected
 	return
 }
 
