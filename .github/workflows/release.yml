@@ -79,10 +79,10 @@ jobs:
       suite: ${{ matrix.suite }}
       slow: ${{ matrix.suite == 'xslt30' }}
       # Pin the release gate to the certified harness commit. Update this SHA
-      # only after a newer harness commit passes the manual Conformance run.
-      # This one is the first to carry the xmlenc11 suite, which the matrix
-      # above gates on, so the two must advance together.
-      harness_ref: 64e43b198af90905582c13f91208e8a54f800411
+      # only after a newer harness commit passes the Conformance run with slow
+      # tests on, as this gate runs xslt30. The pinned harness must carry every
+      # suite the matrix above gates on.
+      harness_ref: 8b3d0aaf619b1259f7a6c560444f80bcb6a81b34
 
   release:
     needs: conformance-gate
