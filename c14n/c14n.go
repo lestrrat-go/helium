@@ -27,6 +27,7 @@ type canonicalizerCfg struct {
 	inclusivePrefixes []string
 	strictXMLAttrs    bool
 	exclude           *helium.Element
+	subtreeRoot       *helium.Element // set only through internal/c14nctl
 }
 
 // Canonicalizer configures XML canonicalization. It is a value-style
@@ -139,6 +140,7 @@ func (c Canonicalizer) Canonicalize(doc *helium.Document, out io.Writer) error {
 	can.withComments = cfg.withComments
 	can.strictXMLAttrs = cfg.strictXMLAttrs
 	can.exclude = cfg.exclude
+	can.subtreeRoot = cfg.subtreeRoot
 	if cfg.nodeSetSet {
 		can.nodeSet = make(map[helium.Node]struct{}, len(cfg.nodeSet))
 		for _, n := range cfg.nodeSet {

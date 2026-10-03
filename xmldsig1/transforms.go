@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium/c14n"
+	"github.com/lestrrat-go/helium/internal/c14nctl"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
@@ -147,6 +148,13 @@ func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byt
 	if err != nil {
 		return nil, err
 	}
+	return newCanonicalizer(mode, comments, prefixes).CanonicalizeTo(doc)
+}
+
+// newCanonicalizer returns a c14n.Canonicalizer for mode, with comments when
+// comments is set, and with prefixes as the InclusiveNamespaces PrefixList
+// under Exclusive C14N.
+func newCanonicalizer(mode c14n.Mode, comments bool, prefixes []string) c14n.Canonicalizer {
 	canon := c14n.NewCanonicalizer(mode)
 	if comments {
 		canon = canon.Comments()
@@ -154,13 +162,24 @@ func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byt
 	if mode == c14n.ExclusiveC14N10 && len(prefixes) > 0 {
 		canon = canon.InclusiveNamespaces(prefixes)
 	}
-	return canon.CanonicalizeTo(doc)
+	return canon
+}
+
+// startAtSubtree returns canon with its node-set walk starting at root
+// (internal/c14nctl.SubtreeRoot). The node set must lie in root's subtree.
+func startAtSubtree(canon c14n.Canonicalizer, root *helium.Element) c14n.Canonicalizer {
+	started, ok := c14nctl.SubtreeRoot(canon, root).(c14n.Canonicalizer)
+	if !ok {
+		return canon
+	}
+	return started
 }
 
 // canonicalizeSubtree canonicalizes a single element subtree by canonicalizing
 // the node-set of that subtree against its owning document. The node set goes
 // straight to c14n, so it is built with the reduced, mode-aware namespace
-// membership (see collectCanonicalizationNodes).
+// membership (see collectCanonicalizationNodes). The c14n walk starts at elem
+// instead of visiting every element of the document (startAtSubtree).
 func canonicalizeSubtree(ctx context.Context, method string, elem *helium.Element, prefixes []string) ([]byte, error) {
 	mode, comments, err := resolveC14NMode(method)
 	if err != nil {
@@ -170,7 +189,8 @@ func canonicalizeSubtree(ctx context.Context, method string, elem *helium.Elemen
 	if err != nil {
 		return nil, err
 	}
-	return canonicalizeNodeSetMode(mode, comments, nodes, elem.OwnerDocument(), prefixes)
+	canon := startAtSubtree(newCanonicalizer(mode, comments, prefixes).NodeSet(nodes), elem)
+	return canon.CanonicalizeTo(elem.OwnerDocument())
 }
 
 // canonicalizeNodeSet canonicalizes an explicit node-set against doc using the
@@ -190,16 +210,9 @@ func canonicalizeNodeSet(method string, nodes []helium.Node, doc *helium.Documen
 
 // canonicalizeNodeSetMode is the shared node-set -> octet call for a method URI
 // whose c14n mode is already resolved, so a caller that needed the mode to build
-// the node set does not resolve it twice.
+// the node set does not resolve it twice. It walks the whole document.
 func canonicalizeNodeSetMode(mode c14n.Mode, comments bool, nodes []helium.Node, doc *helium.Document, prefixes []string) ([]byte, error) {
-	canon := c14n.NewCanonicalizer(mode).NodeSet(nodes)
-	if comments {
-		canon = canon.Comments()
-	}
-	if mode == c14n.ExclusiveC14N10 && len(prefixes) > 0 {
-		canon = canon.InclusiveNamespaces(prefixes)
-	}
-	return canon.CanonicalizeTo(doc)
+	return newCanonicalizer(mode, comments, prefixes).NodeSet(nodes).CanonicalizeTo(doc)
 }
 
 // collectDocumentNodes returns the whole-document node-set: every top-level
@@ -630,13 +643,7 @@ func canonicalizeEnveloped(ctx context.Context, method string, doc *helium.Docum
 	if hasConflictingActiveNamespace(doc, sigElem) {
 		return canonicalizeEnvelopedCopy(ctx, method, doc, target, sigElem, wholeDoc, prefixes)
 	}
-	canon := c14n.NewCanonicalizer(mode).ExcludeSubtree(sigElem)
-	if comments {
-		canon = canon.Comments()
-	}
-	if mode == c14n.ExclusiveC14N10 && len(prefixes) > 0 {
-		canon = canon.InclusiveNamespaces(prefixes)
-	}
+	canon := newCanonicalizer(mode, comments, prefixes).ExcludeSubtree(sigElem)
 	if wholeDoc {
 		return canon.CanonicalizeTo(doc)
 	}
@@ -644,7 +651,7 @@ func canonicalizeEnveloped(ctx context.Context, method string, doc *helium.Docum
 	if err != nil {
 		return nil, err
 	}
-	return canon.NodeSet(nodes).CanonicalizeTo(doc)
+	return startAtSubtree(canon.NodeSet(nodes), target).CanonicalizeTo(doc)
 }
 
 // inDocument reports whether n's ancestor chain reaches a document node, that

@@ -23,6 +23,9 @@ type canonicalizer struct {
 	// exclude is the element whose subtree the walk skips as if it were
 	// detached (nil = none).
 	exclude *helium.Element
+	// subtreeRoot is the element a node-set walk may start at (nil = start at
+	// the document); see processSubtree.
+	subtreeRoot *helium.Element
 	// rendered records the namespace bindings visible ancestors have emitted.
 	rendered *bindingStack
 	// scope holds the in-scope namespace bindings of the element being walked.
@@ -128,6 +131,11 @@ func (c *canonicalizer) process() error {
 		}
 	}
 
+	if c.subtreeRoot != nil && c.nodeSet != nil {
+		if ancestors, ok := c.subtreeAncestors(); ok {
+			return c.processSubtree(ancestors)
+		}
+	}
 	return c.processDocument()
 }
 
