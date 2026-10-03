@@ -509,12 +509,11 @@ so a stage added later inherits the poll instead of having to remember it.
 
 What a deadline does NOT bound is the canonicalization those stages feed.
 Canonical XML is written by the `c14n` package, and
-`c14n.Canonicalizer.CanonicalizeTo` takes no context; neither does the
-`helium.CopyDoc` an enveloped canonicalization clones the document with. Once a
-node set is handed over, that stage runs to completion however large it is, and
-giving it a deadline would be a public API change in two other packages. So a
-deadline bounds the node-set stages and the gaps between pipeline steps, NOT the
-whole verify path.
+`c14n.Canonicalizer.CanonicalizeTo` takes no context. Once a node set is handed
+over, that stage runs to completion however large it is, and giving it a
+deadline would be a public API change in another package. So a deadline bounds
+the node-set stages and the gaps between pipeline steps, NOT the whole verify
+path.
 
 What bounds the canonicalization of a subtree is its SIZE. The node set built
 for it carries one namespace node per declaration actually written, plus at most

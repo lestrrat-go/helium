@@ -32,8 +32,8 @@ func (envelopedTransform) URI() string { return TransformEnvelopedSignature }
 
 // Enveloped returns the enveloped-signature transform. When applied during
 // signing or verification, the ds:Signature element and its descendants are
-// omitted from the canonical input. This is done on a deep copy of the
-// document, so the caller's live DOM is never mutated.
+// omitted from the canonical input. The Signature subtree is skipped while the
+// live document is canonicalized, so the caller's DOM is never mutated.
 func Enveloped() Transform { return envelopedTransform{} }
 
 // c14nTransform applies canonicalization.
@@ -418,7 +418,8 @@ func applyXPathFilter(ctx context.Context, nodes []helium.Node, f xpathFilter, m
 // removeSignatureNodes drops every node in the enveloped Signature's own subtree
 // from a node-set, implementing the enveloped-signature transform on the
 // explicit node-set used by the XPath-filter path (the non-XPath path omits the
-// Signature via canonicalizeEnveloped's document clone instead).
+// Signature by skipping its subtree during canonicalization instead, see
+// canonicalizeEnveloped).
 //
 // A dropped node is charged like a kept one: testing it walks its ancestor
 // chain, and a set that lies entirely inside the Signature keeps nothing at all,
@@ -604,128 +605,50 @@ func isDescendantOrSelf(n helium.Node, root *helium.Element) bool {
 // canonicalizeEnveloped computes the canonical bytes for an enveloped
 // signature reference WITHOUT mutating the caller's document. The
 // enveloped-signature transform is defined as canonicalizing the reference
-// content with the ds:Signature element and its descendants omitted; rather
-// than unlinking the live Signature (which races with concurrent readers and
-// risks leaving the caller's DOM corrupted if a restore fails), we deep-copy
-// the document, remove the Signature from the copy, and canonicalize the copy.
+// content with the ds:Signature element and its descendants omitted. The live
+// document is canonicalized with c14n's ExcludeSubtree option set to the
+// Signature, which skips that subtree exactly as if it were detached, so
+// neither the caller's DOM nor a copy of it is ever changed.
 //
-// doc is the caller's (unmodified) document and sigElem is the live Signature
-// element to omit. When wholeDoc is true the whole copied document is
-// canonicalized (URI=""); otherwise the cloned subtree corresponding to the
-// live target element is canonicalized (URI="#id"). The returned bytes are
-// byte-identical to canonicalizing the same tree with the Signature physically
-// detached.
+// doc is the caller's document and sigElem is the live Signature element to
+// omit. When wholeDoc is true the whole document is canonicalized (URI="");
+// otherwise the node set of the target subtree is (URI="#id"). A Signature
+// that is not attached to doc omits nothing. A target inside the Signature
+// canonicalizes to no bytes, since its whole subtree is omitted.
 func canonicalizeEnveloped(ctx context.Context, method string, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, prefixes []string) ([]byte, error) {
-	clone, err := helium.CopyDoc(doc)
+	mode, comments, err := resolveC14NMode(method)
 	if err != nil {
 		return nil, err
 	}
-
-	// Resolve the Signature's twin in the clone by replaying the child-index
-	// path from the document down to the live Signature. CopyDoc preserves
-	// child order, so the path is stable.
-	//
-	// If the Signature is not attached to the document (e.g. an enveloped
-	// transform requested on a detached/enveloping signature that lives outside
-	// the tree), there is nothing in the canonical input to omit, so we
-	// canonicalize the copy unchanged — matching the pre-clone behavior where
-	// unlinking a detached node was a no-op.
-	var cloneSigMut helium.MutableNode
-	if sigPath := childIndexPath(sigElem); sigPath != nil {
-		cloneSig := nodeAtPath(clone, sigPath)
-		mut, ok := cloneSig.(helium.MutableNode)
-		if !ok {
-			return nil, fmt.Errorf("xmldsig1: could not locate Signature element in canonicalization copy")
-		}
-		cloneSigMut = mut
+	canon := c14n.NewCanonicalizer(mode).ExcludeSubtree(sigElem)
+	if comments {
+		canon = canon.Comments()
 	}
-
-	// Resolve the cloned target BEFORE unlinking the cloned Signature. Both
-	// paths are computed against the live (un-unlinked) tree, so they must be
-	// applied to the clone while it still mirrors that structure. If we unlinked
-	// first, a Signature that precedes the target as a sibling would shift the
-	// target's child index and nodeAtPath would resolve the wrong subtree.
-	var cloneTarget *helium.Element
-	if !wholeDoc {
-		targetPath := childIndexPath(target)
-		if targetPath == nil {
-			return nil, fmt.Errorf("xmldsig1: could not locate reference target for enveloped transform")
-		}
-		t, ok := helium.AsNode[*helium.Element](nodeAtPath(clone, targetPath))
-		if !ok {
-			return nil, fmt.Errorf("xmldsig1: reference target in canonicalization copy is not an element")
-		}
-		cloneTarget = t
+	if mode == c14n.ExclusiveC14N10 && len(prefixes) > 0 {
+		canon = canon.InclusiveNamespaces(prefixes)
 	}
-
-	// Now it is safe to unlink the cloned Signature: the cloneTarget pointer is
-	// already held and survives the structural change.
-	if cloneSigMut != nil {
-		helium.UnlinkNode(cloneSigMut)
-	}
-
-	// Whole-document reference: canonicalize the entire copy.
 	if wholeDoc {
-		return canonicalize(method, clone, prefixes)
+		return canon.CanonicalizeTo(doc)
 	}
-
-	// Fragment reference: canonicalize the cloned subtree corresponding to the
-	// live target element.
-	return canonicalizeSubtree(ctx, method, cloneTarget, prefixes)
+	if !inDocument(target) {
+		return nil, fmt.Errorf("xmldsig1: could not locate reference target for enveloped transform")
+	}
+	nodes, err := collectCanonicalizationNodes(ctx, target, mode)
+	if err != nil {
+		return nil, err
+	}
+	return canon.NodeSet(nodes).CanonicalizeTo(doc)
 }
 
-// childIndexPath returns the sequence of child indices that locate n starting
-// from its document's children (index 0 = document's first child). It returns
-// nil if n is not reachable from the document root. The path indexes every node
-// type (text, comment, PI, element), so it survives a faithful deep copy that
-// preserves child ordering.
-func childIndexPath(n helium.Node) []int {
-	var rev []int
+// inDocument reports whether n's ancestor chain reaches a document node, that
+// is, whether n is attached to a document tree.
+func inDocument(n helium.Node) bool {
 	for cur := n; cur != nil; cur = cur.Parent() {
-		if _, ok := helium.AsNode[*helium.Document](cur); ok {
-			// Reached the document node: the accumulated indices form a valid
-			// path. Reverse to root-to-node order.
-			slices.Reverse(rev)
-			return rev
+		if cur.Type() == helium.DocumentNode {
+			return true
 		}
-		parent := cur.Parent()
-		if parent == nil {
-			// Detached from the document before reaching it.
-			return nil
-		}
-		idx := 0
-		found := false
-		for c := parent.FirstChild(); c != nil; c = c.NextSibling() {
-			if c == cur {
-				found = true
-				break
-			}
-			idx++
-		}
-		if !found {
-			return nil
-		}
-		rev = append(rev, idx)
 	}
-	return nil
-}
-
-// nodeAtPath walks the child-index path produced by childIndexPath, starting
-// from doc, and returns the node found there (or nil if the path does not
-// resolve).
-func nodeAtPath(doc *helium.Document, path []int) helium.Node {
-	var cur helium.Node = doc
-	for _, idx := range path {
-		child := cur.FirstChild()
-		for i := 0; i < idx && child != nil; i++ {
-			child = child.NextSibling()
-		}
-		if child == nil {
-			return nil
-		}
-		cur = child
-	}
-	return cur
+	return false
 }
 
 func resolveC14NMode(method string) (c14n.Mode, bool, error) {

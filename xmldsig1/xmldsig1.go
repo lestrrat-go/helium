@@ -649,7 +649,7 @@ func (v Verifier) LenientKeyInfo(lenient bool) Verifier {
 // Verification honors ctx: an already-cancelled or already-expired context
 // short-circuits before any work, and cancellation is rechecked between
 // References. Because a SignedInfo may carry arbitrarily many References and each
-// empty-URI enveloped Reference canonicalizes a copy of the whole document, the
+// empty-URI enveloped Reference canonicalizes the whole document, the
 // per-Reference work scales with the number of References; bound it by passing a
 // ctx with a deadline. On cancellation the context error (ctx.Err()) is returned.
 func (v Verifier) Verify(ctx context.Context, doc *helium.Document) (*VerifyResult, error) {
