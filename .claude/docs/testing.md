@@ -462,6 +462,18 @@ stylesheets whose `xsl:if`/`xsl:when` tests only check whether a node path selec
 `group`). `BenchmarkValidateNodePathTests` (`schematron/validate_bench_test.go`) validates the 500-record catalog
 against an `xslt3`-binding schema of such `assert`/`report` tests.
 
+`xslt3/features_bench_test.go` times stylesheet compilation and single instructions on generated in-memory input.
+`BenchmarkCompileStylesheet` times `Compiler.Compile` alone on a parsed stylesheet at `templates=20`, `100` and
+`500` match templates; the generated stylesheet also carries two keys, a typed global param, a map-valued global
+variable, one `xsl:function` per ten templates, one named template per twenty, and a named mode holding a template
+for every fifth match template. The instruction benchmarks time `Transform` (result tree only) over a flat
+5000-record `<recs>` document: `BenchmarkForEachGroup` (`group-by` over 50 interleaved categories, `group-adjacent`
+over 50 runs of 100, `group-starting-with` with a `rec[@head]` pattern), `BenchmarkNumbering` (`number-single`: a
+bare `xsl:number`; `number-any`: `level="any" count="rec"`; `format-number` with a grouping picture) and
+`BenchmarkFunctionCall` (`simple`: one two-parameter `xsl:function` call per record; `recursive`: a recursive
+factorial, up to nine nested calls per record). Each case compiles once and checks its output once before the timed
+loop; the compile case also checks that `Compile` leaves the stylesheet document unchanged.
+
 XML Signature benchmarks (`xmldsig1/xmldsig1_bench_test.go`) run `BenchmarkSignEnveloped` (`Signer.SignEnveloped`)
 and `BenchmarkVerify` (`Verifier.Verify`) over two inputs: `saml_1KB`, an inline SAML 2.0 assertion, and
 `nvdcve_287KB`, `schemas/test/nvdcve_0.xml`. Each input runs with `rsa-sha256` (RSA-2048) and `ecdsa-p256-sha256`
