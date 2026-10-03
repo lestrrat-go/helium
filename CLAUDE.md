@@ -64,8 +64,9 @@ schema attribute → `Compiler.DefaultQueryBinding(b)` → `QueryBindingXPath1`.
 compiled `Schema`.
 
 `engine`/`runner`/`value` (`engine.go`) is the seam the two engines implement, so `parse.go` and `validate.go` never
-name an XPath package. The `value` methods carry the per-binding semantics: `effectiveBoolean` cannot fail under 1.0 but
-raises FORG0006 for a multi-item atomic sequence under 3.1 (reported, test treated as false); `stringValue`
+name an XPath package. `runner.test` and the `value` methods carry the per-binding semantics: `test` cannot fail on
+the boolean conversion under 1.0 but raises FORG0006 for a multi-item atomic sequence under 3.1 (reported, test treated
+as false; the 3.1 `test` runs `xpath3.Evaluator.EvaluateEBV`); `stringValue`
 (`<value-of>`) takes the first node's string-value under 1.0 and space-joins every atomized item under 3.1; `<let>`
 binds a sequence under 3.1. Rule contexts go through `contextToXPath` in both bindings, so an XSLT match pattern that is
 not an expression (`key('k','v')`) is unsupported. The 3.1 engine passes no URI resolver and no HTTP client, so

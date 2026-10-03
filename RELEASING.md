@@ -112,6 +112,11 @@ harness SHA in `release.yml` to the commit from the latest green nightly:
 gh api repos/lestrrat-go/helium-w3c-tests/commits/main --jq .sha
 ```
 
+To certify a harness commit that no nightly has run, dispatch the `Conformance`
+workflow with `suite=xslt30`, `slow=true`, and `harness_ref` set to that commit.
+The release gate runs xslt30 with slow tests on, so a run without them does not
+certify the pin.
+
 Bump the pin in its own PR. It only advances which tests gate a release; nothing
 else depends on it. The one exception is adding a suite to the
 `conformance-gate` matrix: the pinned harness has to already carry that suite,

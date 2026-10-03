@@ -12,11 +12,7 @@ import (
 )
 
 func (ec *execContext) execIf(ctx context.Context, inst *ifInst) error {
-	result, err := ec.evalXPath(ctx, inst.Test, ec.contextNode)
-	if err != nil {
-		return err
-	}
-	b, err := result.EBV()
+	b, err := ec.evalXPathEBV(ctx, inst.Test, ec.contextNode)
 	if err != nil {
 		return err
 	}
@@ -49,22 +45,15 @@ func (ec *execContext) execChoose(ctx context.Context, inst *chooseInst) error {
 		if when.DefaultCollation != "" {
 			ec.defaultCollation = when.DefaultCollation
 		}
-		var result *xpath3.Result
+		var b bool
 		var err error
 		// Override namespace bindings with per-clause bindings when present
 		if when.Namespaces != nil {
 			eval := ec.withCompat(ec.xpathEvaluator(ctx).Namespaces(when.Namespaces).StrictPrefixes(), when.Test)
-			result, err = eval.Evaluate(ec.xpathContext(ctx), when.Test, ec.contextNode)
+			b, err = eval.EvaluateEBV(ec.xpathContext(ctx), when.Test, ec.contextNode)
 		} else {
-			result, err = ec.evalXPath(ctx, when.Test, ec.contextNode)
+			b, err = ec.evalXPathEBV(ctx, when.Test, ec.contextNode)
 		}
-		if err != nil {
-			ec.xpathDefaultNS = savedNS
-			ec.hasXPathDefaultNS = savedHas
-			ec.defaultCollation = savedWhenCollation
-			return err
-		}
-		b, err := result.EBV()
 		if err != nil {
 			ec.xpathDefaultNS = savedNS
 			ec.hasXPathDefaultNS = savedHas

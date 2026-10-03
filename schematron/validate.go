@@ -79,7 +79,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				}
 
 				for _, t := range r.tests {
-					testResult, err := ruleEv.evaluate(ctx, t.compiled, node)
+					boolVal, err := ruleEv.test(ctx, t.compiled, node)
 
 					// A test XPath that cannot be evaluated, or whose result
 					// has no effective boolean value, must not be treated as
@@ -88,10 +88,6 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 					// a report (fires when true) stays silent — mirroring
 					// libxml2's xmlSchematronRunTest, which returns 0
 					// (false) on evaluation failure.
-					var boolVal bool
-					if err == nil {
-						boolVal, err = testResult.effectiveBoolean()
-					}
 					if err != nil {
 						boolVal = false
 						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))

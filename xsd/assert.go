@@ -129,16 +129,7 @@ func (vc *validationContext) checkAssertions(ctx context.Context, elem *helium.E
 				continue
 			}
 			ev := base.Namespaces(a.Namespaces).Variables(vars)
-			res, err := ev.Evaluate(ctx, a.compiled, root)
-			if err != nil {
-				vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
-					fmt.Sprintf("Failed to evaluate the assertion '%s': %v.", a.Test, err))
-				if firstErr == nil {
-					firstErr = fmt.Errorf("assertion evaluation failed")
-				}
-				continue
-			}
-			ok, err := res.EBV()
+			ok, err := ev.EvaluateEBV(ctx, a.compiled, root)
 			if err != nil {
 				vc.reportValidityError(ctx, vc.filename, elem.Line(), elemDisplayName(elem),
 					fmt.Sprintf("Failed to evaluate the assertion '%s': %v.", a.Test, err))

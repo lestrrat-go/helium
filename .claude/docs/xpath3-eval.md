@@ -133,6 +133,9 @@ sequence of node items:
   first node. Only these four names in the fn namespace are resolved early; with one argument they resolve to a
   user function or the built-in, never through a `FunctionResolver`, so the order is not observable, and a
   failed resolution falls back to the normal order (argument first, then the error).
+- `Evaluator.EvaluateEBV` (`vmProgram.executeEBV`) takes the root as a boolean position: a root location path or
+  `E1/path` stops at its first node (`vm.evalExistsRef`), any other root producer answers from its node list
+  (`evalNodeListRef`), with or without type annotations, and any other root goes through `EBV`.
 - `Evaluator.Evaluate` and `Expression.EvaluateReuse` keep the node list in the `Result` when the root is a
   producer and the evaluator has no type annotations (`vmProgram.execute`), so `nodeItemFor(n)` is
   `NodeItem{Node: n}`; `Result.Sequence()` builds the `ItemSlice` on first use (see `xpath3-api.md`).

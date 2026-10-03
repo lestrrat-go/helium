@@ -348,6 +348,14 @@ and a `MaxNodesForTesting` of 100 that their full evaluation exceeds, `TestPathE
 predicate error on nodes after the first match no longer fires, and `TestPathExistsCancel` that a cancelled context
 stops a probe before it starts and mid-walk (`heliumtest.PollContext`).
 
+`xpath3/evaluator_test.go` checks `Evaluator.EvaluateEBV`. `TestEvaluateEBV` requires it to return the value and
+error code of `Evaluate` followed by `Result.EBV()` for `ebvExprs` and `resultEBVExprs` (node-list producers, other
+node sequences, every atomic kind, FORG0006 cases, dynamic errors) from every node of a document and from an absent
+context node; `TestEvaluateEBVTypeAnnotations` does the same under the type annotations of a schema-validated
+document. `TestEvaluateEBVStopsEarly` shows that a root node path over 2,000 elements, with and without type
+annotations, stays within an `OpLimit` and a `MaxNodesForTesting` of 100 that `Evaluate` exceeds, and that a
+predicate error on nodes after the first match no longer fires.
+
 ## Build Tags
 
 - `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)
