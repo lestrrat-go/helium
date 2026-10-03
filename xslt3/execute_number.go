@@ -262,11 +262,16 @@ func (ec *execContext) numberFromMatches(ctx context.Context, inst *numberInst, 
 }
 
 // numberSingle implements level="single": find the first ancestor-or-self that
-// matches the count pattern, then count preceding siblings that match.
+// matches the count pattern, then count preceding siblings that match. The
+// result is empty when no ancestor-or-self matches count, or when that node
+// lies outside the from subtree (see numberWithinFrom).
 func (ec *execContext) numberSingle(ctx context.Context, inst *numberInst, node helium.Node) []int {
 	// Find the first ancestor-or-self that matches count
 	target := ec.numberFindAncestorOrSelf(ctx, inst, node)
 	if target == nil {
+		return nil
+	}
+	if inst.From != nil && !ec.numberWithinFrom(ctx, inst, node, target) {
 		return nil
 	}
 
@@ -285,6 +290,21 @@ func (ec *execContext) numberSingle(ctx context.Context, inst *numberInst, node 
 	}
 	ec.storeNumberMemo(inst, node, target, count)
 	return []int{count}
+}
+
+// numberWithinFrom reports whether target, an ancestor-or-self of node, lies
+// in the subtree rooted at the innermost ancestor-or-self of node that matches
+// the from pattern (XSLT 3.0 §12.3, level="single"). The root of a tree
+// always matches from, and target is never above the root, so target is
+// outside only when a from match lies strictly between node and target:
+// walking up from node, a from match met before target excludes it.
+func (ec *execContext) numberWithinFrom(ctx context.Context, inst *numberInst, node, target helium.Node) bool {
+	for n := node; n != nil && n != target; n = n.Parent() {
+		if ec.numberFromMatches(ctx, inst, n) {
+			return false
+		}
+	}
+	return true
 }
 
 // numberMultiple implements level="multiple": find all ancestors-or-self that match
@@ -372,7 +392,10 @@ func (ec *execContext) numberAny(ctx context.Context, inst *numberInst, node hel
 //     or strip annotations on a cached document in place, and those sites
 //     clear numberMemos;
 //   - a level="any" walk stops at a from match, so it reaches node only when
-//     no from match lies between the two starting points.
+//     no from match lies between the two starting points;
+//   - for level="single", from only decides whether the result is empty
+//     (numberWithinFrom), and every call checks that before the memo is used,
+//     so a stored count never numbers a node outside its from subtree.
 //
 // A walk that never reaches node (an earlier node, another tree) just counts
 // in full. Without a count pattern a node is counted when it has the selected
