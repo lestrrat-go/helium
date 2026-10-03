@@ -244,6 +244,35 @@ func TestNumberSingleFrom(t *testing.T) {
 			want:   `[1][1][2]`,
 		},
 		{
+			// from is tested on the ancestors of the selected node, not of
+			// the context node.
+			name:   "select names a node outside the context node's from subtree",
+			source: `<r><x/><x><z/></x><y><w/></y></r>`,
+			body:   `<xsl:for-each select="//w">[<xsl:number select="/r/x[2]/z" count="x" from="y"/>]</xsl:for-each>`,
+			want:   `[2]`,
+		},
+		{
+			name:   "select names a node behind a from match",
+			source: `<r><x/><x><y><z/></y></x></r>`,
+			body:   `<xsl:for-each select="r/x[1]">[<xsl:number select="../x[2]/y/z" count="x" from="y"/>]</xsl:for-each>`,
+			want:   `[]`,
+		},
+		{
+			name:   "parentless element tree",
+			source: `<r/>`,
+			body: `<xsl:variable name="e" as="element()"><x><x/><x><y><z/></y></x></x></xsl:variable>` +
+				`[<xsl:number select="$e/x[2]/y/z" count="x" from="y"/>]` +
+				`[<xsl:number select="$e/x[2]" count="x" from="y"/>]`,
+			want: `[][2]`,
+		},
+		{
+			name:   "attribute as the selected node",
+			source: `<r><x/><x a="1"/></r>`,
+			body: `<xsl:for-each select="r/x[2]/@a">[<xsl:number count="x" from="@a"/>]` +
+				`[<xsl:number count="x" from="y"/>]</xsl:for-each>`,
+			want: `[][2]`,
+		},
+		{
 			name:   "multiple stops at the innermost from match",
 			source: `<r><x/><x><y><z/></y></x></r>`,
 			body:   `<xsl:for-each select="//z">[<xsl:number level="multiple" count="x|z" from="y"/>]</xsl:for-each>`,
