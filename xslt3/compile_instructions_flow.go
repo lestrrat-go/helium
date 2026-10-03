@@ -91,6 +91,9 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 				return nil, err
 			}
 			if wp != nil {
+				if err := checkDuplicateWithParam(inst.Params, wp); err != nil {
+					return nil, err
+				}
 				inst.Params = append(inst.Params, wp)
 			}
 		default:
@@ -134,6 +137,9 @@ func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element
 			return nil, err
 		}
 		if wp != nil {
+			if err := checkDuplicateWithParam(inst.Params, wp); err != nil {
+				return nil, err
+			}
 			inst.Params = append(inst.Params, wp)
 		}
 	}
@@ -508,6 +514,18 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	return sk, nil
 }
 
+// checkDuplicateWithParam reports XTSE0670 when wp names the same expanded
+// QName as an earlier sibling xsl:with-param in params. Tunnel and non-tunnel
+// parameters share one name space for this rule.
+func checkDuplicateWithParam(params []*withParam, wp *withParam) error {
+	for _, prev := range params {
+		if prev.Name == wp.Name {
+			return staticError(errCodeXTSE0670, "duplicate xsl:with-param name %q", wp.Name)
+		}
+	}
+	return nil
+}
+
 func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (*withParam, error) {
 	defer c.pushElementVersion(elem)()
 	// Check use-when before compiling: skip this with-param if excluded.
@@ -661,6 +679,9 @@ func (c *compiler) compileNextMatch(ctx context.Context, elem *helium.Element) (
 				return nil, err
 			}
 			if wp != nil {
+				if err := checkDuplicateWithParam(inst.Params, wp); err != nil {
+					return nil, err
+				}
 				inst.Params = append(inst.Params, wp)
 			}
 		}
@@ -692,6 +713,9 @@ func (c *compiler) compileApplyImports(ctx context.Context, elem *helium.Element
 			return nil, err
 		}
 		if wp != nil {
+			if err := checkDuplicateWithParam(inst.Params, wp); err != nil {
+				return nil, err
+			}
 			inst.Params = append(inst.Params, wp)
 		}
 	}
@@ -1097,6 +1121,9 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 				return nil, err
 			}
 			if wp != nil {
+				if err := checkDuplicateWithParam(inst.Params, wp); err != nil {
+					return nil, err
+				}
 				inst.Params = append(inst.Params, wp)
 			}
 		} else if childElem.LocalName() == lexicon.XSLTElementFallback {
