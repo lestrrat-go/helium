@@ -253,3 +253,246 @@ func TestUsePackageNestedOverrideUnionRule(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, result, "<out>[union][union]</out>")
 }
+
+// overrideChecksPackage is a used package with a public mode and a public
+// named template, so an xsl:override template may name either.
+const overrideChecksPackage = `<?xml version="1.0"?>
+<xsl:package name="http://example.com/pkg" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:mode name="m" visibility="public"/>
+  <xsl:template match="*" mode="m">[pkg]</xsl:template>
+  <xsl:template name="t" visibility="public">[t]</xsl:template>
+</xsl:package>`
+
+// An xsl:template inside xsl:override is still an xsl:template: the static
+// rules on its attributes and its match pattern apply exactly as they do to a
+// top-level xsl:template.
+func TestOverrideTemplateStaticErrors(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		template string
+		code     string
+	}{
+		{name: "valid", template: `<xsl:template match="a" mode="m" priority="-1.5">[ok]</xsl:template>`},
+		{name: "priority with surrounding whitespace", template: `<xsl:template match="a" mode="m" priority=" 2 ">[ok]</xsl:template>`},
+		{name: "priority with exponent", template: `<xsl:template match="a" mode="m" priority="1e3">[p]</xsl:template>`, code: "XTSE0530"},
+		{name: "priority with trailing text", template: `<xsl:template match="a" mode="m" priority="0.5x">[p]</xsl:template>`, code: "XTSE0530"},
+		{name: "unknown attribute", template: `<xsl:template match="a" mode="m" bogus="1">[p]</xsl:template>`, code: "XTSE0090"},
+		{name: "neither match nor name", template: `<xsl:template mode="m">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "mode without match", template: `<xsl:template name="t" mode="m">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "priority without match", template: `<xsl:template name="t" priority="1">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "visibility without name", template: `<xsl:template match="a" mode="m" visibility="public">[p]</xsl:template>`, code: "XTSE0500"},
+		{name: "empty mode", template: `<xsl:template match="a" mode="">[p]</xsl:template>`, code: "XTSE0550"},
+		{name: "duplicate mode", template: `<xsl:template match="a" mode="m m">[p]</xsl:template>`, code: "XTSE0550"},
+		{name: "invalid name", template: `<xsl:template name="1t">[p]</xsl:template>`, code: "XTSE0020"},
+		{name: "unknown function in pattern", template: `<xsl:template match="a[no-such-function()]" mode="m">[p]</xsl:template>`, code: "XPST0017"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:use-package name="http://example.com/pkg">
+    <xsl:override>` + tc.template + `</xsl:override>
+  </xsl:use-package>
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/a" mode="m"/></out></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().
+				PackageResolver(modeAllPackageResolver{source: overrideChecksPackage}).
+				Compile(t.Context(), doc)
+			if tc.code == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.code)
+		})
+	}
+}
+
+// overrideDuplicatesPackage exposes one public component of each kind an
+// xsl:override can replace.
+const overrideDuplicatesPackage = `<?xml version="1.0"?>
+<xsl:package name="%s" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template name="t" visibility="public">[t]</xsl:template>
+  <xsl:variable name="v" select="1" visibility="public"/>
+  <xsl:param name="p" select="1"/>
+  <xsl:attribute-set name="s" visibility="public"><xsl:attribute name="x">1</xsl:attribute></xsl:attribute-set>
+</xsl:package>`
+
+// errXTSE3055 is the error code for homonymous overriding declarations.
+const errXTSE3055 = "XTSE3055"
+
+// XSLT 3.0 §3.5.3.2 (XTSE3055): a declaration inside xsl:override must not be
+// homonymous with any other overriding declaration of the using package,
+// whether both sit in the same xsl:use-package or in two of them.
+func TestOverrideDuplicateDeclarations(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		first  string
+		second string
+		// samePackage puts both overrides under one xsl:use-package; otherwise
+		// each overrides a component of its own used package.
+		samePackage bool
+		code        string
+	}{
+		{
+			name:        "distinct names",
+			first:       `<xsl:template name="t">[1]</xsl:template>`,
+			second:      `<xsl:variable name="v" select="2"/>`,
+			samePackage: true,
+		},
+		{
+			name:        "template twice",
+			first:       `<xsl:template name="t">[1]</xsl:template>`,
+			second:      `<xsl:template name="t">[2]</xsl:template>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "variable twice",
+			first:       `<xsl:variable name="v" select="2"/>`,
+			second:      `<xsl:variable name="v" select="3"/>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "param twice",
+			first:       `<xsl:param name="p" select="2"/>`,
+			second:      `<xsl:param name="p" select="3"/>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "attribute set twice",
+			first:       `<xsl:attribute-set name="s"><xsl:attribute name="x">2</xsl:attribute></xsl:attribute-set>`,
+			second:      `<xsl:attribute-set name="s"><xsl:attribute name="x">3</xsl:attribute></xsl:attribute-set>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:   "template in two used packages",
+			first:  `<xsl:template name="t">[1]</xsl:template>`,
+			second: `<xsl:template name="t">[2]</xsl:template>`,
+			code:   errXTSE3055,
+		},
+		{
+			name:        "variable and param with one name",
+			first:       `<xsl:variable name="v" select="2"/>`,
+			second:      `<xsl:param name="v" select="3"/>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "second template excluded by use-when",
+			first:       `<xsl:template name="t">[1]</xsl:template>`,
+			second:      `<xsl:template name="t" use-when="false()">[2]</xsl:template>`,
+			samePackage: true,
+		},
+		{
+			name:   "param in two used packages",
+			first:  `<xsl:param name="p" select="2"/>`,
+			second: `<xsl:param name="p" select="3"/>`,
+			code:   errXTSE3055,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var uses string
+			if tc.samePackage {
+				uses = `<xsl:use-package name="urn:p1"><xsl:override>` + tc.first + tc.second + `</xsl:override></xsl:use-package>`
+			} else {
+				uses = `<xsl:use-package name="urn:p1"><xsl:accept component="*" names="*" visibility="hidden"/>` +
+					`<xsl:override>` + tc.first + `</xsl:override></xsl:use-package>` +
+					`<xsl:use-package name="urn:p2"><xsl:accept component="*" names="*" visibility="hidden"/>` +
+					`<xsl:override>` + tc.second + `</xsl:override></xsl:use-package>`
+			}
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  ` + uses + `
+  <xsl:template name="xsl:initial-template"><out/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().
+				PackageResolver(namedPackageResolver{
+					"urn:p1": fmt.Sprintf(overrideDuplicatesPackage, "urn:p1"),
+					"urn:p2": fmt.Sprintf(overrideDuplicatesPackage, "urn:p2"),
+				}).
+				Compile(t.Context(), doc)
+			if tc.code == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.code)
+		})
+	}
+}
+
+// use-when="false()" on xsl:override, or on one of its children, removes
+// that element before compilation: the excluded declaration neither replaces
+// the used package's component nor counts as an overriding declaration.
+func TestOverrideUseWhen(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		override string
+		want     string
+	}{
+		{
+			name:     "included",
+			override: `<xsl:override><xsl:template name="t">[1]</xsl:template></xsl:override>`,
+			want:     "<out>[1]</out>",
+		},
+		{
+			name:     "excluded child",
+			override: `<xsl:override><xsl:template name="t" use-when="false()">[1]</xsl:template></xsl:override>`,
+			want:     "<out>[t]</out>",
+		},
+		{
+			name: "one of two homonymous children excluded",
+			override: `<xsl:override><xsl:template name="t">[1]</xsl:template>` +
+				`<xsl:template name="t" use-when="false()">[2]</xsl:template></xsl:override>`,
+			want: "<out>[1]</out>",
+		},
+		{
+			name:     "excluded override",
+			override: `<xsl:override use-when="false()"><xsl:template name="t">[1]</xsl:template></xsl:override>`,
+			want:     "<out>[t]</out>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:use-package name="urn:p1">` + tc.override + `</xsl:use-package>
+  <xsl:template match="/"><out><xsl:call-template name="t"/></out></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			ss, err := xslt3.NewCompiler().
+				PackageResolver(namedPackageResolver{"urn:p1": fmt.Sprintf(overrideDuplicatesPackage, "urn:p1")}).
+				Compile(t.Context(), doc)
+			require.NoError(t, err)
+
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+			require.NoError(t, err)
+
+			result, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, result, tc.want)
+		})
+	}
+}

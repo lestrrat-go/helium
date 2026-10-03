@@ -110,42 +110,11 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		c.pendingPatternValidations = append(c.pendingPatternValidations, pendingPatternValidation{p, matchAttr})
 	}
 
-	nameAttr := strings.TrimSpace(getAttr(elem, "name"))
-	if nameAttr != "" && !xmlchar.IsValidQName(nameAttr) && !isValidEQName(nameAttr) {
-		return staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
+	name, err := c.checkTemplateName(ctx, elem, matchAttr)
+	if err != nil {
+		return err
 	}
-	if nameAttr != "" {
-		if err := c.checkQNamePrefix(ctx, nameAttr, "xsl:template"); err != nil {
-			return err
-		}
-	}
-	tmpl.Name = resolveQName(nameAttr, c.nsBindings)
-
-	// XTSE0080: template name must not be in the XSLT namespace
-	// Exception: xsl:initial-template is explicitly allowed (XSLT 3.0 §3.11).
-	if tmpl.Name != "" && strings.HasPrefix(tmpl.Name, "{"+lexicon.NamespaceXSLT+"}") && tmpl.Name != helium.ClarkName(lexicon.NamespaceXSLT, "initial-template") {
-		return staticError(errCodeXTSE0080, "xsl:template name %q is in the XSLT namespace", getAttr(elem, "name"))
-	}
-
-	// XTSE0500: template must have match or name (or both).
-	if matchAttr == "" && tmpl.Name == "" {
-		return staticError(errCodeXTSE0500, "xsl:template must have a @match or @name attribute")
-	}
-	// XTSE0500: template without match must not have mode or priority.
-	if matchAttr == "" {
-		if _, hasMode := elem.GetAttribute("mode"); hasMode {
-			return staticError(errCodeXTSE0500, "xsl:template without @match must not have @mode")
-		}
-		if _, hasPrio := elem.GetAttribute("priority"); hasPrio {
-			return staticError(errCodeXTSE0500, "xsl:template without @match must not have @priority")
-		}
-	}
-	// XTSE0500: template without name must not have visibility.
-	if tmpl.Name == "" {
-		if _, hasVis := elem.GetAttribute("visibility"); hasVis {
-			return staticError(errCodeXTSE0500, "xsl:template without @name must not have @visibility")
-		}
-	}
+	tmpl.Name = name
 
 	// XSLT 3.0 §3.8.2: default-mode on xsl:template affects both the
 	// template's own mode (when mode is omitted) and xsl:apply-templates
@@ -157,39 +126,11 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	}
 	defer func() { c.defaultMode = savedDefaultMode }()
 
-	modeAttr := getAttr(elem, "mode")
-	if modeAttrVal, hasMode := elem.GetAttribute("mode"); hasMode {
-		// XTSE0550: empty mode list is invalid.
-		if strings.TrimSpace(modeAttrVal) == "" {
-			return staticError(errCodeXTSE0550, "mode attribute on xsl:template must not be empty")
-		}
+	if err := c.checkTemplateMode(elem); err != nil {
+		return err
 	}
+	modeAttr := getAttr(elem, "mode")
 	if modeAttr != "" {
-		modeFields := strings.Fields(modeAttr)
-		seenModes := make(map[string]struct{}, len(modeFields))
-		hasAll := false
-		for _, m := range modeFields {
-			if m[0] != '#' && !xmlchar.IsValidQName(m) && !isValidEQName(m) {
-				return staticError(errCodeXTSE0550, "invalid mode name %q on xsl:template", m)
-			}
-			// XTSE0280: check for undeclared prefix in mode name.
-			if idx := strings.IndexByte(m, ':'); idx > 0 {
-				prefix := m[:idx]
-				if _, ok := c.nsBindings[prefix]; !ok {
-					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, m)
-				}
-			}
-			if m == modeAll {
-				hasAll = true
-			}
-			if _, dup := seenModes[m]; dup {
-				return staticError(errCodeXTSE0550, "duplicate mode %q in xsl:template/@mode", m)
-			}
-			seenModes[m] = struct{}{}
-		}
-		if hasAll && len(modeFields) > 1 {
-			return staticError(errCodeXTSE0550, "#all must not appear with other modes in xsl:template/@mode")
-		}
 		// Resolve mode QNames to Clark notation for namespace-aware matching
 		tmpl.Mode = c.resolveMode(ctx, modeAttr)
 	}
@@ -205,13 +146,9 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	}
 
 	if prio := getAttr(elem, "priority"); prio != "" {
-		// XTSE0530: priority must be a valid xs:decimal — no exponent notation.
-		if !isXSDecimal(prio) {
-			return staticError(errCodeXTSE0530, "priority %q is not a valid xs:decimal", prio)
-		}
-		f, err := strconv.ParseFloat(prio, 64)
+		f, err := parseTemplatePriority(prio)
 		if err != nil {
-			return staticError(errCodeXTSE0530, "invalid priority %q: %v", prio, err)
+			return err
 		}
 		tmpl.Priority = f
 		tmpl.explicitPriority = true
@@ -317,6 +254,108 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	}
 
 	return nil
+}
+
+// checkTemplateName validates xsl:template's name attribute and the
+// attribute combinations that depend on match and name (XTSE0020, XTSE0080,
+// XTSE0500), and returns the resolved name ("" when there is none). It applies
+// to a top-level xsl:template and to one inside xsl:override alike.
+func (c *compiler) checkTemplateName(ctx context.Context, elem *helium.Element, matchAttr string) (string, error) {
+	nameAttr := strings.TrimSpace(getAttr(elem, "name"))
+	if nameAttr != "" && !xmlchar.IsValidQName(nameAttr) && !isValidEQName(nameAttr) {
+		return "", staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
+	}
+	if nameAttr != "" {
+		if err := c.checkQNamePrefix(ctx, nameAttr, "xsl:template"); err != nil {
+			return "", err
+		}
+	}
+	name := resolveQName(nameAttr, c.nsBindings)
+
+	// XTSE0080: template name must not be in the XSLT namespace
+	// Exception: xsl:initial-template is explicitly allowed (XSLT 3.0 §3.11).
+	if name != "" && strings.HasPrefix(name, "{"+lexicon.NamespaceXSLT+"}") && name != helium.ClarkName(lexicon.NamespaceXSLT, "initial-template") {
+		return "", staticError(errCodeXTSE0080, "xsl:template name %q is in the XSLT namespace", getAttr(elem, "name"))
+	}
+
+	// XTSE0500: template must have match or name (or both).
+	if matchAttr == "" && name == "" {
+		return "", staticError(errCodeXTSE0500, "xsl:template must have a @match or @name attribute")
+	}
+	// XTSE0500: template without match must not have mode or priority.
+	if matchAttr == "" {
+		if _, hasMode := elem.GetAttribute("mode"); hasMode {
+			return "", staticError(errCodeXTSE0500, "xsl:template without @match must not have @mode")
+		}
+		if _, hasPrio := elem.GetAttribute("priority"); hasPrio {
+			return "", staticError(errCodeXTSE0500, "xsl:template without @match must not have @priority")
+		}
+	}
+	// XTSE0500: template without name must not have visibility.
+	if name == "" {
+		if _, hasVis := elem.GetAttribute("visibility"); hasVis {
+			return "", staticError(errCodeXTSE0500, "xsl:template without @name must not have @visibility")
+		}
+	}
+	return name, nil
+}
+
+// checkTemplateMode validates xsl:template's mode attribute (XTSE0550,
+// XTSE0280). It applies to a top-level xsl:template and to one inside
+// xsl:override alike.
+func (c *compiler) checkTemplateMode(elem *helium.Element) error {
+	if modeAttrVal, hasMode := elem.GetAttribute("mode"); hasMode {
+		// XTSE0550: empty mode list is invalid.
+		if strings.TrimSpace(modeAttrVal) == "" {
+			return staticError(errCodeXTSE0550, "mode attribute on xsl:template must not be empty")
+		}
+	}
+	modeAttr := getAttr(elem, "mode")
+	if modeAttr == "" {
+		return nil
+	}
+	modeFields := strings.Fields(modeAttr)
+	seenModes := make(map[string]struct{}, len(modeFields))
+	hasAll := false
+	for _, m := range modeFields {
+		if m[0] != '#' && !xmlchar.IsValidQName(m) && !isValidEQName(m) {
+			return staticError(errCodeXTSE0550, "invalid mode name %q on xsl:template", m)
+		}
+		// XTSE0280: check for undeclared prefix in mode name.
+		if idx := strings.IndexByte(m, ':'); idx > 0 {
+			prefix := m[:idx]
+			if _, ok := c.nsBindings[prefix]; !ok {
+				return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, m)
+			}
+		}
+		if m == modeAll {
+			hasAll = true
+		}
+		if _, dup := seenModes[m]; dup {
+			return staticError(errCodeXTSE0550, "duplicate mode %q in xsl:template/@mode", m)
+		}
+		seenModes[m] = struct{}{}
+	}
+	if hasAll && len(modeFields) > 1 {
+		return staticError(errCodeXTSE0550, "#all must not appear with other modes in xsl:template/@mode")
+	}
+	return nil
+}
+
+// parseTemplatePriority parses xsl:template's priority attribute, which must
+// be a valid xs:decimal (XTSE0530).
+func parseTemplatePriority(prio string) (float64, error) {
+	// XTSE0530: priority must be a valid xs:decimal — no exponent notation.
+	if !isXSDecimal(prio) {
+		return 0, staticError(errCodeXTSE0530, "priority %q is not a valid xs:decimal", prio)
+	}
+	// xs:decimal ignores leading and trailing whitespace; isXSDecimal already
+	// trims it, so ParseFloat must see the trimmed form too.
+	f, err := strconv.ParseFloat(strings.TrimSpace(prio), 64)
+	if err != nil {
+		return 0, staticError(errCodeXTSE0530, "invalid priority %q: %v", prio, err)
+	}
+	return f, nil
 }
 
 // templateRules returns the template rules a match template contributes to

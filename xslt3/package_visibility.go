@@ -869,17 +869,24 @@ func functionVisKey(qn xpath3.QualifiedName, arity int) string {
 }
 
 // collectOverrideNames scans xsl:override children of xsl:use-package and returns
-// a set of "type:name" keys for components being overridden.
-func (c *compiler) collectOverrideNames(_ context.Context, usePackageElem *helium.Element, nsBindings map[string]string) map[string]struct{} {
+// a set of "type:name" keys for components being overridden. Elements in
+// excluded (removed by use-when) override nothing and are skipped.
+func (c *compiler) collectOverrideNames(_ context.Context, usePackageElem *helium.Element, nsBindings map[string]string, excluded map[*helium.Element]struct{}) map[string]struct{} {
 	names := make(map[string]struct{})
 	for child := range helium.Children(usePackageElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemOverride {
 			continue
 		}
+		if _, skip := excluded[elem]; skip {
+			continue
+		}
 		for oc := range helium.Children(elem) {
 			oe, ok := oc.(*helium.Element)
 			if !ok || oe.URI() != lexicon.NamespaceXSLT {
+				continue
+			}
+			if _, skip := excluded[oe]; skip {
 				continue
 			}
 			switch oe.LocalName() {

@@ -32,6 +32,9 @@ type overrideSet struct {
 	variables      map[string]*variable
 	params         map[string]*param
 	attributeSets  map[string]*attributeSetDef
+	// excluded holds the xsl:override elements and override declarations
+	// that use-when="false()" removed; collectOverrideNames skips them.
+	excluded map[*helium.Element]struct{}
 }
 
 // processOverrides handles xsl:override children of xsl:use-package.
@@ -44,6 +47,7 @@ func (c *compiler) processOverrides(ctx context.Context, usePackageElem *helium.
 		variables:      make(map[string]*variable),
 		params:         make(map[string]*param),
 		attributeSets:  make(map[string]*attributeSetDef),
+		excluded:       make(map[*helium.Element]struct{}),
 	}
 
 	for child := range helium.Children(usePackageElem) {
@@ -64,6 +68,15 @@ func (c *compiler) processOverrides(ctx context.Context, usePackageElem *helium.
 func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *helium.Element, pkg *Stylesheet, oset *overrideSet) error {
 	// Push namespace bindings from override element
 	c.collectNamespaces(ctx, overrideElem)
+
+	excluded, err := c.excludedByUseWhen(ctx, overrideElem)
+	if err != nil {
+		return err
+	}
+	if excluded {
+		oset.excluded[overrideElem] = struct{}{}
+		return nil
+	}
 
 	// Handle default-mode on xsl:override
 	savedDefaultMode := c.defaultMode
@@ -94,6 +107,18 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			return err
 		}
 
+		// A use-when="false()" declaration is removed before compilation, so
+		// it neither overrides anything nor counts toward XTSE3055.
+		c.collectNamespaces(ctx, elem)
+		excluded, err := c.excludedByUseWhen(ctx, elem)
+		if err != nil {
+			return err
+		}
+		if excluded {
+			oset.excluded[elem] = struct{}{}
+			continue
+		}
+
 		switch elem.LocalName() {
 		case xslElemFunction:
 			fn, qn, err := c.compileOverrideFunction(ctx, elem, pkg)
@@ -114,6 +139,9 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 				return err
 			}
 			if tmpl.Name != "" {
+				if err := c.claimOverrideDecl(xslElemTemplate, tmpl.Name); err != nil {
+					return err
+				}
 				oset.namedTemplates[tmpl.Name] = tmpl
 			}
 			if tmpl.Match != nil {
@@ -125,6 +153,9 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			if err != nil {
 				return err
 			}
+			if err := c.claimOverrideDecl(xslElemVariable, v.Name); err != nil {
+				return err
+			}
 			oset.variables[v.Name] = v
 
 		case xslElemParam:
@@ -132,11 +163,18 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			if err != nil {
 				return err
 			}
+			// Variables and parameters share one symbol space.
+			if err := c.claimOverrideDecl(xslElemVariable, p.Name); err != nil {
+				return err
+			}
 			oset.params[p.Name] = p
 
 		case xslElemAttributeSet:
 			as, err := c.compileOverrideAttributeSet(ctx, elem, pkg)
 			if err != nil {
+				return err
+			}
+			if err := c.claimOverrideDecl(xslElemAttributeSet, as.Name); err != nil {
 				return err
 			}
 			oset.attributeSets[as.Name] = as
@@ -148,6 +186,37 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 		}
 	}
 
+	return nil
+}
+
+// excludedByUseWhen reports whether elem's use-when attribute evaluates to
+// false, which removes the element from the stylesheet (XSLT 3.0 §3.13.1).
+func (c *compiler) excludedByUseWhen(ctx context.Context, elem *helium.Element) (bool, error) {
+	uw := getAttr(elem, xslAttrUseWhen)
+	if uw == "" {
+		return false, nil
+	}
+	include, err := c.evaluateUseWhen(ctx, uw)
+	if err != nil {
+		return false, err
+	}
+	return !include, nil
+}
+
+// claimOverrideDecl records an xsl:override declaration of the given
+// component kind and name. XTSE3055: a declaration inside xsl:override must
+// not be homonymous with any other overriding declaration in the using
+// package, whether under the same xsl:use-package or a different one.
+func (c *compiler) claimOverrideDecl(kind, name string) error {
+	key := kind + ":" + name
+	if _, dup := c.overrideDecls[key]; dup {
+		return staticError(errCodeXTSE3055,
+			"xsl:override declares %s %q more than once in the using package", kind, name)
+	}
+	if c.overrideDecls == nil {
+		c.overrideDecls = make(map[string]struct{})
+	}
+	c.overrideDecls[key] = struct{}{}
 	return nil
 }
 
@@ -266,6 +335,9 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 
 // compileOverrideTemplate compiles a template inside xsl:override.
 func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*template, error) {
+	if err := c.validateXSLTAttrs(ctx, elem, templateAllowedAttrs); err != nil {
+		return nil, err
+	}
 	defer c.pushElementVersion(elem)()
 	tmpl := &template{
 		ImportPrec:    c.importPrec,
@@ -294,9 +366,18 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 			return nil, err
 		}
 		tmpl.Match = p
+		// Defer function validation until after all xsl:function declarations are processed.
+		c.pendingPatternValidations = append(c.pendingPatternValidations, pendingPatternValidation{p, matchAttr})
 	}
 
-	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
+	name, err := c.checkTemplateName(ctx, elem, matchAttr)
+	if err != nil {
+		return nil, err
+	}
+	tmpl.Name = name
+	if err := c.checkTemplateMode(elem); err != nil {
+		return nil, err
+	}
 	modeAttr := getAttr(elem, "mode")
 	if modeAttr != "" {
 		tmpl.Mode = c.resolveMode(ctx, modeAttr)
@@ -307,9 +388,9 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 	}
 
 	if prio := getAttr(elem, "priority"); prio != "" {
-		f, err := parseFloat(prio)
+		f, err := parseTemplatePriority(prio)
 		if err != nil {
-			return nil, staticError(errCodeXTSE0010, "invalid priority %q: %v", prio, err)
+			return nil, err
 		}
 		tmpl.Priority = f
 		tmpl.explicitPriority = true
@@ -893,10 +974,4 @@ func isStandardType(as string) bool {
 		return true
 	}
 	return false
-}
-
-func parseFloat(s string) (float64, error) {
-	var f float64
-	_, err := fmt.Sscanf(s, "%f", &f)
-	return f, err
 }
