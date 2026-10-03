@@ -3,6 +3,8 @@ package xmldsig1
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha1" //nolint:gosec // the expected digest of a SHA-1 Reference
+
 	"crypto/rsa"
 	"encoding/base64"
 	"strings"
@@ -1086,7 +1088,6 @@ func TestDigestReferenceErrorPrecedence(t *testing.T) {
 
 	_, digest, _, err = digestReference(t.Context(), &verifierConfig{allowSHA1: true}, doc, nil, parsedReference{uri: payloadFragment, digestAlgorithm: DigestSHA1})
 	require.NoError(t, err)
-	want, err := computeDigest(DigestSHA1, []byte(`<p Id="payload">v</p>`), true)
-	require.NoError(t, err)
-	require.Equal(t, want, digest)
+	want := sha1.Sum([]byte(`<p Id="payload">v</p>`))
+	require.Equal(t, want[:], digest)
 }

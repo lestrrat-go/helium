@@ -384,6 +384,8 @@ func TestExecuteTransformPipelineStreamsSameOctets(t *testing.T) {
 		"enveloped id exc prefixes": {input: input, steps: []transformStep{{algorithm: TransformEnvelopedSignature}, {algorithm: ExcC14N10, prefixes: []string{"a", "#default"}}}},
 		"xpath then c14n 1.1":       {input: input, steps: []transformStep{{algorithm: TransformXPath, xpathExpr: xpathTrueExpr}, {algorithm: C14N11URI}}},
 		"c14n then c14n":            {input: input, steps: []transformStep{{algorithm: ExcC14N10}, {algorithm: C14N10}}},
+		"xpath last":                {input: input, wholeDoc: true, steps: []transformStep{{algorithm: TransformXPath, xpathExpr: "not(self::comment())"}}},
+		"enveloped last":            {input: input, steps: []transformStep{{algorithm: TransformEnvelopedSignature}}},
 		"base64 octets":             {input: `<r Id="t"><b>PHg+eTwveD4=</b></r>`, steps: []transformStep{{algorithm: TransformBase64}}},
 		"relative namespace error":  {input: `<r><x xmlns:rel="rel/uri"/><s Id="t"/></r>`, steps: []transformStep{{algorithm: C14N10}}, wantErr: true},
 	}

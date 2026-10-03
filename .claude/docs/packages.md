@@ -530,7 +530,7 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
   an element (entity content), is the excluded element, or has a member in the node set, when the chain does not
   end at the canonicalized document, or when a DTD subset declares an entity with element content
   (`hasElementEntities`: the whole-document walk renders such shared elements' in-set namespace nodes as text at
-  references outside the subtree). xmldsig1 uses it for every single-subtree node set (`canonicalizeSubtree`, the
+  references outside the subtree). xmldsig1 uses it for every single-subtree node set (`writeCanonicalSubtree`, the
   enveloped `#id` path).
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `subtree.go` (subtree start), `xmlbase.go` (xml:base join),
   `nsstack.go` (`bindingStack`), `sort.go`, `escape.go` (byte-table escaping)
@@ -1658,7 +1658,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   specialized canonicalizers. Materialization preserves owning-document, URI comment-membership,
   namespace-node, XPath, and `here()` semantics. Two node-set collectors exist (`transforms.go`) and the
   difference is load-bearing. `collectCanonicalizationNodes` builds the set that goes straight to c14n
-  (`canonicalizeSubtree`, so SignedInfo, every unmaterialized Reference selection, the detached/enveloped
+  (`writeCanonicalSubtree`, so SignedInfo, every unmaterialized Reference selection, the detached/enveloped
   paths, and the XSLT stylesheet serialization): it is mode-aware and LINEAR — an element carries the bindings
   it changes relative to its parent, plus the in-scope default namespace, plus (exclusive C14N only) its own
   prefix and its attributes' prefixes, while the subtree root carries the whole axis. Inclusive C14N compares
