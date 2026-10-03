@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -63,6 +64,49 @@ func BenchmarkHeliumParse(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				doc, err := helium.NewParser().Parse(context.Background(), data)
+				if err != nil {
+					b.Fatal(err)
+				}
+				doc.Free()
+			}
+		})
+	}
+}
+
+// nestedElements is the number of <a> elements in each BenchmarkHeliumParseDepth
+// document, so every depth parses about the same amount of markup.
+const nestedElements = 4000
+
+// nestedDoc builds a <root> holding nestedElements/depth chains of depth
+// nested <a> elements, so the parse descends to depth and climbs back out
+// nestedElements/depth times.
+func nestedDoc(depth int) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("<root>")
+	for range nestedElements / depth {
+		for range depth {
+			buf.WriteString("<a>")
+		}
+		for range depth {
+			buf.WriteString("</a>")
+		}
+	}
+	buf.WriteString("</root>")
+	return buf.Bytes()
+}
+
+// BenchmarkHeliumParseDepth times Parse over documents of the same element
+// count nested to different depths, so a per-level cost of the parser's
+// stacks shows up as a time that grows with depth.
+func BenchmarkHeliumParseDepth(b *testing.B) {
+	for _, depth := range []int{8, 16, 24, 40} {
+		data := nestedDoc(depth)
+		b.Run("depth"+strconv.Itoa(depth), func(b *testing.B) {
+			p := helium.NewParser()
+			b.SetBytes(int64(len(data)))
+			b.ReportAllocs()
+			for b.Loop() {
+				doc, err := p.Parse(context.Background(), data)
 				if err != nil {
 					b.Fatal(err)
 				}

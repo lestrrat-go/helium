@@ -387,10 +387,6 @@ func (ctx *parserCtx) peekNode() *nodeEntry {
 	return ctx.nodeTab.PeekOne()
 }
 
-func (ctx *parserCtx) popNode() (elem *nodeEntry) {
-	return ctx.nodeTab.Pop()
-}
-
 func (ctx *parserCtx) lookupNamespace(prefix string) string {
 	if prefix == lexicon.PrefixXML {
 		return lexicon.NamespaceXML
