@@ -488,7 +488,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if countAttr := getAttr(elem, "count"); countAttr != "" {
-		p, err := compilePattern(countAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
+		p, err := c.compilePattern(countAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if err != nil {
 			return nil, err
 		}
@@ -496,7 +496,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	if fromAttr := getAttr(elem, "from"); fromAttr != "" {
-		p, err := compilePattern(fromAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS, c.backwardsCompatible(), c.schemaDeclsForValidation())
+		p, err := c.compilePattern(fromAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
 		if err != nil {
 			return nil, err
 		}

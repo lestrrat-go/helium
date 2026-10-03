@@ -881,10 +881,15 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   Text method before adaptive quoting, including normalization and character maps.
 - XPath evaluation (`execute.go`): every expression goes through `execContext.evalXPath` /
   `evalPatternExpr`, which take a cached evaluator from `scopedXPathEvaluator` and apply only the dynamic focus
-  with `Evaluator.Focus`. The cache holds the base evaluator (`baseXPathEvaluator`, rebuilt on namespace,
-  base-URI, package, or pattern changes) plus the per-scope overlays (variables, functions, type/nilled/ID
-  annotations, schema, collation, doc-order cache), and its XPath 1.0 compat variant. It is rebuilt only when
-  one of those inputs changes (`scopedEvalKey`; maps compare by identity). `collectAllVars` caches its map
+  with `Evaluator.Focus`. `baseXPathEvaluator` caches base evaluators keyed on xpath-default-namespace,
+  base URI, package, pattern mode and, during pattern matching, the identity of the pattern's namespace map
+  (`baseEvalKey`): two entries outside pattern matching and two during it, so per-node pattern matching never
+  evicts the template body's evaluator. The compiler interns pattern namespace maps
+  (`compiler.internPatternNamespaces`), so patterns with the same in-scope namespaces share one entry.
+  `scopedXPathEvaluator` caches four evaluators that overlay a base evaluator with the per-scope inputs
+  (variables, functions, type/nilled/ID annotations, schema, collation, doc-order cache), each with its XPath
+  1.0 compat variant, and builds one only when no entry matches all inputs (`scopedEvalKey`; the base evaluator
+  by generation number, maps by identity). `collectAllVars` caches its map
   keyed on the global-variable generation, the innermost local scope that holds bindings
   (`visibleVarScope`), `localVarsVer` (bumped by `setVar`/`setVarDeferred` and by popping a scope that held
   bindings), and the current package. The returned map is shared, so callers copy it before adding bindings

@@ -908,6 +908,76 @@ func TestPattern(t *testing.T) {
 		})
 	})
 
+	// Match patterns that differ only in their namespace bindings, their
+	// backwards-compatible processing, or their xpath-default-namespace are
+	// tried against alternating nodes, interleaved with template-body
+	// evaluation. Each predicate must be evaluated in its own pattern's static
+	// context every time, never in one cached for another pattern or for the
+	// template body.
+	t.Run("predicate static context per pattern", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name string
+			xsl  string
+			src  string
+			want string
+		}{
+			{
+				name: "same prefix bound to different namespaces",
+				xsl: `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/*"/></out></xsl:template>
+  <xsl:template match="a[@p:k]" xmlns:p="urn:one">[a<xsl:value-of select="@id"/>]</xsl:template>
+  <xsl:template match="b[@p:k]" xmlns:p="urn:two">[b<xsl:value-of select="@id"/>]</xsl:template>
+  <xsl:template match="*">-</xsl:template>
+</xsl:stylesheet>`,
+				src: `<doc xmlns:o="urn:one" xmlns:t="urn:two">` +
+					`<a id="1" o:k="x"/><b id="2" t:k="x"/><a id="3" t:k="x"/><b id="4" o:k="x"/>` +
+					`<a id="5" o:k="x"/><b id="6" t:k="x"/></doc>`,
+				want: "<out>[a1][b2]--[a5][b6]</out>",
+			},
+			{
+				name: "backwards-compatible and 3.0 patterns",
+				xsl: `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/*"/></out></xsl:template>
+  <xsl:template match="a[@n = true()]" version="1.0">[a<xsl:value-of select="@n"/>]</xsl:template>
+  <xsl:template match="b[@n = true()]">[b<xsl:value-of select="@n"/>]</xsl:template>
+  <xsl:template match="*">-</xsl:template>
+</xsl:stylesheet>`,
+				src:  `<doc><a n="2"/><b n="2"/><a n="1"/><b n="1"/><a n="3"/><b n="3"/></doc>`,
+				want: "<out>[a2]-[a1][b1][a3]-</out>",
+			},
+			{
+				name: "different xpath-default-namespace",
+				xsl: `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="*/*"/></out></xsl:template>
+  <xsl:template match="*:a[k]" xpath-default-namespace="urn:x">[a<xsl:value-of select="@id"/>]</xsl:template>
+  <xsl:template match="*:b[k]">[b<xsl:value-of select="@id"/>]</xsl:template>
+  <xsl:template match="*">-</xsl:template>
+</xsl:stylesheet>`,
+				src: `<doc xmlns:x="urn:x"><a id="1"><x:k/></a><b id="2"><k/></b>` +
+					`<a id="3"><k/></a><b id="4"><x:k/></b><a id="5"><x:k/></a></doc>`,
+				want: "<out>[a1][b2]--[a5]</out>",
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(tc.xsl))
+				require.NoError(t, err)
+				ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+				require.NoError(t, err)
+				src, err := helium.NewParser().Parse(t.Context(), []byte(tc.src))
+				require.NoError(t, err)
+				out, err := ss.Transform(src).Serialize(t.Context())
+				require.NoError(t, err)
+				require.Contains(t, out, tc.want)
+			})
+		}
+	})
+
 	// Step predicates in match patterns. A predicate that reads neither
 	// position() nor last() is decided from the node alone; a positional or
 	// numeric one counts the node's position among the step's nodes (the five
