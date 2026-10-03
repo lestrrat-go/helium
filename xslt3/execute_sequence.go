@@ -351,6 +351,13 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 				attr, _ := helium.AsNode[*helium.Attribute](v.Node)
 				elem, ok := out.current.(*helium.Element)
 				if ok {
+					// XTDE0410: an attribute must not follow child content.
+					// Inside xsl:where-populated the content is filtered
+					// later, so the order is checked there instead.
+					if !out.wherePopulated && out.hasChildContent(elem) {
+						return dynamicError(errCodeXTDE0410,
+							"cannot add attribute %s after child nodes have been added", attr.Name())
+					}
 					copyAttributeToElement(elem, attr)
 					out.noteOutput()
 				}

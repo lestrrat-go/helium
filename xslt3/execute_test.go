@@ -2005,3 +2005,64 @@ func TestStandaloneAttributeValueIsLiteral(t *testing.T) {
 		})
 	}
 }
+
+// XSLT 3.0 [XTDE0410]: an attribute node that follows a non-attribute node in
+// the content of an element is a dynamic error, whichever instruction
+// supplies the attribute.
+func TestAttributeAfterChildContent(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "xsl:attribute", body: `<c/><xsl:attribute name="x">1</xsl:attribute>`},
+		{name: "xsl:copy-of", body: `<c/><xsl:copy-of select="doc/@x"/>`},
+		{name: "xsl:sequence", body: `<c/><xsl:sequence select="doc/@x"/>`},
+		{name: "xsl:where-populated", body: `<c/><xsl:where-populated><xsl:attribute name="x">1</xsl:attribute></xsl:where-populated>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out>`+tc.body+`</out></xsl:template>
+</xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc x="1"/>`))
+			require.NoError(t, err)
+
+			_, err = ss.Transform(src).Serialize(t.Context())
+			require.ErrorContains(t, err, "XTDE0410")
+		})
+	}
+}
+
+// The placeholder xsl:on-non-empty leaves in the element under construction
+// is not content: an attribute that follows it is still allowed.
+func TestAttributeAfterConditionalPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty select then xsl:sequence", body: `<xsl:on-non-empty select="()"/><xsl:sequence select="doc/@x"/>`, want: `<out x="1"/>`},
+		{name: "empty string then xsl:sequence", body: `<xsl:on-non-empty select="''"/><xsl:sequence select="doc/@x"/>`, want: `<out x="1"/>`},
+		{name: "attribute then xsl:sequence", body: `<xsl:on-non-empty select="doc/@y"/><xsl:sequence select="doc/@x"/>`, want: `<out x="1" y="2"/>`},
+		{name: "empty select then xsl:attribute", body: `<xsl:on-non-empty select="()"/><xsl:attribute name="x">1</xsl:attribute>`, want: `<out x="1"/>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out>`+tc.body+`</out></xsl:template>
+</xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc x="1" y="2"/>`))
+			require.NoError(t, err)
+
+			result, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, result, tc.want)
+		})
+	}
+}

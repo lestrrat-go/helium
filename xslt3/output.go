@@ -60,6 +60,34 @@ func (out *outputFrame) materializeDeferredMarkupSeps() error {
 	return nil
 }
 
+// hasChildContent reports whether elem already has a child that an attribute
+// must not follow (XTDE0410). The placeholder comment an xsl:on-empty or
+// xsl:on-non-empty instruction leaves in elem is not content.
+func (out *outputFrame) hasChildContent(elem *helium.Element) bool {
+	for child := elem.FirstChild(); child != nil; child = child.NextSibling() {
+		if !out.isConditionalPlaceholder(child) {
+			return true
+		}
+	}
+	return false
+}
+
+// isConditionalPlaceholder reports whether n is the placeholder of a pending
+// xsl:on-empty or xsl:on-non-empty instruction.
+func (out *outputFrame) isConditionalPlaceholder(n helium.Node) bool {
+	if n.Type() != helium.CommentNode {
+		return false
+	}
+	for _, scope := range out.conditionalScopes {
+		for _, action := range scope.actions {
+			if action.placeholder != nil && helium.Node(action.placeholder) == n {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 type conditionalKind int
 
 const (
