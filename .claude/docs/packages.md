@@ -765,7 +765,8 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   Invocation.URIResolver to allow or redirect the fetch` (non-http URIs name only `URIResolver`).
 - **Invocation.Do(ctx) → (*Document, error)** / **Invocation.Serialize(ctx) → (string, error)** /
   **Invocation.WriteTo(ctx, io.Writer) → error** / **Invocation.ResolvedOutputDef() → *OutputDef** — terminal execution
-  + resolved primary output metadata
+  + resolved primary output metadata. `Serialize`/`WriteTo` serialize captured primary items directly when the
+  effective method is `json` or `adaptive` and the principal document has no children.
 - **NewParameters() → *Parameters** — mutable XSLT parameter carrier keyed by expanded name
 - **TransformFunction(...TransformOption) → xpath3.Function** — standalone `fn:transform()` for registering on
   a bare `xpath3.Evaluator` (`Evaluator.Functions(nil, {fn:transform: ...})`), for callers driving xpath3
