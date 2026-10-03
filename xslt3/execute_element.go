@@ -924,11 +924,11 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
 	}
 
-	// XTRE0540: cannot add attribute after child content has been added.
+	// XTDE0410: cannot add attribute after child content has been added.
 	// Inside xsl:where-populated the body is evaluated into a temporary tree
 	// and later filtered, so attribute-after-child is permitted during evaluation.
 	if elem.FirstChild() != nil && !out.wherePopulated {
-		return dynamicError(errCodeXTRE0540, "cannot add attribute to element after children have been added")
+		return dynamicError(errCodeXTDE0410, "cannot add attribute to element after children have been added")
 	}
 
 	// Attribute belongs to a namespace: declare the namespace on the element

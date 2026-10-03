@@ -807,9 +807,9 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				attr, ok := v.Node.(*helium.Attribute)
 				if ok {
 					if elem, ok := out.current.(*helium.Element); ok {
-						// XTRE0540: cannot add attribute after child content
+						// XTDE0410: cannot add attribute after child content
 						if elem.FirstChild() != nil {
-							return dynamicError(errCodeXTRE0540,
+							return dynamicError(errCodeXTDE0410,
 								"cannot add attribute to element after children have been added")
 						}
 						if attr.URI() != "" {

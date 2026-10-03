@@ -2005,3 +2005,33 @@ func TestStandaloneAttributeValueIsLiteral(t *testing.T) {
 		})
 	}
 }
+
+// XSLT 3.0 [XTDE0410]: an attribute node that follows a non-attribute node in
+// the content of an element is a dynamic error, whichever instruction
+// supplies the attribute.
+func TestAttributeAfterChildContent(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "xsl:attribute", body: `<c/><xsl:attribute name="x">1</xsl:attribute>`},
+		{name: "xsl:copy-of", body: `<c/><xsl:copy-of select="doc/@x"/>`},
+		{name: "xsl:sequence", body: `<c/><xsl:sequence select="doc/@x"/>`},
+		{name: "xsl:where-populated", body: `<c/><xsl:where-populated><xsl:attribute name="x">1</xsl:attribute></xsl:where-populated>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out>`+tc.body+`</out></xsl:template>
+</xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc x="1"/>`))
+			require.NoError(t, err)
+
+			_, err = ss.Transform(src).Serialize(t.Context())
+			require.ErrorContains(t, err, "XTDE0410")
+		})
+	}
+}

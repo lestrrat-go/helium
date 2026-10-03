@@ -52,7 +52,7 @@ const (
 	errCodeXTDE0050 = "XTDE0050" // required stylesheet parameter not supplied
 	errCodeXTDE0060 = "XTDE0060" // required template parameter not supplied / invalid call-template target
 	errCodeXTDE0160 = "XTDE0160" // multiple output documents same URI
-	errCodeXTDE0410 = "XTDE0410" // duplicate parameter
+	errCodeXTDE0410 = "XTDE0410" // attribute or namespace node after child content
 	errCodeXTDE0420 = "XTDE0420" // namespace conflict
 	errCodeXTDE0430 = "XTDE0430" // variable type error
 	errCodeXTDE0440 = "XTDE0440" // default namespace on element in no namespace
@@ -121,7 +121,7 @@ const (
 	errCodeXTMM9001 = "XTMM9001" // xsl:assert default error code
 
 	// XTRE — Runtime Errors (recoverable)
-	errCodeXTRE0540 = "XTRE0540" // attribute after child content
+	errCodeXTRE0540 = "XTRE0540" // ambiguous rule match in xsl:next-match
 	errCodeXTRE1495 = "XTRE1495" // primary output URI conflict (implicit vs explicit)
 
 	// XTSE — Static Errors

@@ -339,7 +339,7 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *wherePopula
 	for _, attr := range survivingAttrs {
 		if elem, ok := out.current.(*helium.Element); ok {
 			if elem.FirstChild() != nil {
-				return dynamicError(errCodeXTRE0540,
+				return dynamicError(errCodeXTDE0410,
 					"cannot add attribute to element after children have been added")
 			}
 			if attr.URI() != "" {
