@@ -412,11 +412,17 @@ func (ctx *parserCtx) addSpecialAttribute(elemName, attrName string, typ enum.At
 	if _, ok := ctx.attsSpecial[key]; ok {
 		return
 	}
+	if ctx.attsSpecial == nil {
+		ctx.attsSpecial = map[specialAttrKey]enum.AttributeType{}
+	}
 	ctx.attsSpecial[key] = typ
 	// Record whether this binding originates in external markup (external subset or
 	// an external parameter entity), for the VC: Standalone Document Declaration
 	// normalization check (libxml2 XML_SPECIAL_EXTERNAL).
 	if ctx.effectivelyExternal() {
+		if ctx.attsSpecialExternal == nil {
+			ctx.attsSpecialExternal = map[specialAttrKey]struct{}{}
+		}
 		ctx.attsSpecialExternal[key] = struct{}{}
 	}
 }
@@ -544,22 +550,23 @@ func (ctx *parserCtx) addAttributeDefault(elemName, attrName, defaultValue strin
 	if decl := lookupAttributeDecl(ctx.doc, local, prefix, elemName); decl != nil {
 		attr.SetAType(decl.AType())
 	}
+	ctx.allocAttributeDefaults()
 	ctx.attsDefault[elemName] = append(existing, attr)
-	ctx.attributeDefaultSeen()[dkey] = struct{}{}
+	ctx.attsDefaultSeen[dkey] = struct{}{}
 }
 
-// attributeDefaultSeen returns the (elem, attr) dedup set backing
-// addAttributeDefault, allocating it on first use. Only a caller that WRITES
-// to the set (or that must hand the SAME set to a nested sub-parse, see
-// inheritNestedParserState) needs this; a read probes ctx.attsDefaultSeen
-// directly, because indexing a nil map is legal and reports "not seen".
-// Deferring the allocation to the first <!ATTLIST> default keeps a document
-// with no DTD defaults free of a map it would never write to.
-func (ctx *parserCtx) attributeDefaultSeen() map[specialAttrKey]struct{} {
-	if ctx.attsDefaultSeen == nil {
+// allocAttributeDefaults allocates attsDefault and its (elem, attr) dedup set
+// attsDefaultSeen on first use. The two are always allocated, cleared and
+// shared together. Only a caller that WRITES to them (or that must hand the
+// SAME maps to a nested sub-parse, see inheritNestedParserState) needs this; a
+// read probes the maps directly, because indexing a nil map is legal and
+// reports "not seen". Deferring the allocation to the first <!ATTLIST> default
+// keeps a document with no DTD defaults free of maps it would never write to.
+func (ctx *parserCtx) allocAttributeDefaults() {
+	if ctx.attsDefault == nil {
+		ctx.attsDefault = map[string][]*Attribute{}
 		ctx.attsDefaultSeen = map[specialAttrKey]struct{}{}
 	}
-	return ctx.attsDefaultSeen
 }
 
 func (ctx *parserCtx) lookupAttributeDefault(elemName string) ([]*Attribute, bool) {

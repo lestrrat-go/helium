@@ -134,8 +134,9 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 ### DTD & Entities
 - `attsSpecial` / `attsSpecialExternal` — DTD special-attribute normalization keying + external-markup
   provenance (§2.9 standalone VC); see `addSpecialAttribute` / `parseAttribute` (`parser_element.go`).
-  `xml:id` unconditional normalization is a deliberate XPath-3.1/xml:id-§4 divergence from libxml2
-- `attsDefault` — DTD default attributes
+  `xml:id` unconditional normalization is a deliberate XPath-3.1/xml:id-§4 divergence from libxml2.
+  Both are nil until `addSpecialAttribute` records the first declaration
+- `attsDefault` — DTD default attributes (nil until the first default; see `allocAttributeDefaults` below)
 - Entity redeclaration (§4.2: the first declaration binds) — `DTD.AddEntity` returns the existing entity, and
   `parseEntityDecl` records the literal (`orig`) and XML 1.1 replacement spelling only while `Entity.origSet` is
   false (libxml2: `orig == NULL`), so an empty first EntityValue is never overwritten by a later declaration
@@ -397,11 +398,11 @@ the negative-sentinel option disables the cap for trusted input.
   prefix string), so a tag with many attributes or namespace declarations is linear instead of quadratic.
   `addAttributeDefault` (`parser_dtd_attr.go`) uses a map with no threshold (`parserCtx.attsDefaultSeen`,
   shared with `attsDefault` via `inheritNestedParserState`), since it already does a map probe/store per call.
-  That map is DTD-only, so it is allocated lazily by `attributeDefaultSeen` on the first `<!ATTLIST>` default
-  and a document without a DTD allocates nothing for it; `inheritNestedParserState` materializes it through
-  that accessor so parent and nested sub-parse share ONE set (a plain copy of a nil map would let the
-  sub-parse build its own and lose cross-boundary dedup). `parser_attlist_test.go` pins the no-DTD parse
-  allocation count.
+  Both maps are DTD-only, so `allocAttributeDefaults` allocates them together on the first `<!ATTLIST>`
+  default and a document without a DTD allocates nothing for them; `inheritNestedParserState` materializes
+  them through that method so parent and nested sub-parse share ONE pair (a plain copy of nil maps would let
+  the sub-parse build its own and lose cross-boundary dedup). `parser_attlist_test.go` checks that a no-DTD
+  parse leaves the dedup set unallocated.
 
 ## Context Cancellation (parse abort)
 

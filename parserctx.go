@@ -142,7 +142,11 @@ type parserCtx struct {
 	extSubSystem  string
 	extSubURI     string
 	version       string
-	attsSpecial   map[specialAttrKey]enum.AttributeType
+	// attsSpecial maps each tokenized-type attribute declaration to its type.
+	// It and attsSpecialExternal are nil until addSpecialAttribute records the
+	// first one, so a document without a DTD allocates neither; reading or
+	// deleting from a nil map is legal.
+	attsSpecial map[specialAttrKey]enum.AttributeType
 	// attsSpecialExternal records which entries of attsSpecial were declared in the
 	// external subset (mirrors libxml2's XML_SPECIAL_EXTERNAL flag). Used for the
 	// VC: Standalone Document Declaration attribute-normalization check.
@@ -162,11 +166,11 @@ type parserCtx struct {
 	// nothing in a duplicate-declared default's semantics ever needs to
 	// invalidate an entry.
 	//
-	// nil until the first <!ATTLIST> default is recorded: it is allocated by
-	// attributeDefaultSeen, so a document with no DTD defaults (the common
-	// case) never pays for a map it cannot use. Probing a nil map is legal,
-	// so only the write path and the nested-sub-parse seam
-	// (inheritNestedParserState) go through that accessor.
+	// Both maps are nil until the first <!ATTLIST> default is recorded: they
+	// are allocated together by allocAttributeDefaults, so a document with no
+	// DTD defaults (the common case) never pays for maps it cannot use.
+	// Probing a nil map is legal, so only the write path and the
+	// nested-sub-parse seam (inheritNestedParserState) go through that method.
 	attsDefaultSeen map[specialAttrKey]struct{}
 	valid           bool
 	hasPERefs       bool
@@ -792,11 +796,12 @@ func (ctx *parserCtx) init(p *parserConfig, in io.Reader, size int) error {
 	ctx.keepBlanks = true
 	ctx.instate = psStart
 	ctx.standalone = StandaloneImplicitNo
-	ctx.attsSpecial = map[specialAttrKey]enum.AttributeType{}
-	ctx.attsSpecialExternal = map[specialAttrKey]struct{}{}
-	ctx.attsDefault = map[string][]*Attribute{}
-	// Cleared, never allocated: attributeDefaultSeen builds it on the first
-	// <!ATTLIST> default so an ordinary parse allocates no DTD-only map.
+	// Cleared, never allocated: addSpecialAttribute and allocAttributeDefaults
+	// build them on the first declaration that needs them, so an ordinary
+	// parse allocates no DTD-only map.
+	ctx.attsSpecial = nil
+	ctx.attsSpecialExternal = nil
+	ctx.attsDefault = nil
 	ctx.attsDefaultSeen = nil
 	ctx.wellFormed = true
 	ctx.spaceTab = ctx.spaceTab[:0]
