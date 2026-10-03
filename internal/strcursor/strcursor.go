@@ -707,11 +707,6 @@ func (c *ByteCursor) fillBuffer(n int) error {
 		c.buf = newBuf
 	}
 
-	// Clear the rest.
-	for i := remaining; i < len(c.buf); i++ {
-		c.buf[i] = 0
-	}
-
 	// Read until we have enough. A single underlying Read may return fewer
 	// bytes than requested without an error (io.Reader explicitly permits a
 	// short read), as happens with the incremental push-parser stream that

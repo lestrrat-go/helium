@@ -52,17 +52,38 @@ func (pctx *parserCtx) internName(s string) string {
 	return s
 }
 
-// nameCacheSlots is the size of the direct-mapped cache internNameBytes
-// consults before the interning maps. A document repeats a small set of
-// element and attribute names, so most lookups hit their slot and cost one
-// short string comparison instead of a map probe that hashes the whole name.
-const nameCacheSlots = 256
+// nameCacheSlotsMax and nameCacheSlotsMin bound the size of the direct-mapped
+// cache internNameBytes consults before the interning maps. A document repeats
+// a small set of element and attribute names, so most lookups hit their slot
+// and cost one short string comparison instead of a map probe that hashes the
+// whole name.
+const (
+	nameCacheSlotsMin = 16
+	nameCacheSlotsMax = 256
+)
 
-// nameCacheSlot maps a scanned name to its slot in the direct-mapped cache
-// from its length and three of its bytes. b must not be empty.
-func nameCacheSlot(b []byte) int {
+// nameCacheSize returns the number of name-cache slots for an input of size
+// bytes (-1 when unknown): the smallest power of two from nameCacheSlotsMin
+// that gives one slot per 16 input bytes, capped at nameCacheSlotsMax. Every
+// name in the input takes several bytes of markup, so a small input cannot use
+// a larger cache, and allocating one would cost more than its parse.
+func nameCacheSize(size int) int {
+	if size < 0 {
+		return nameCacheSlotsMax
+	}
+	n := nameCacheSlotsMin
+	for n < nameCacheSlotsMax && n*16 < size {
+		n *= 2
+	}
+	return n
+}
+
+// nameCacheSlot maps a scanned name to its slot in a direct-mapped cache of
+// slots entries, a power of two, from the name's length and three of its
+// bytes. b must not be empty.
+func nameCacheSlot(b []byte, slots int) int {
 	n := len(b)
-	return (n*131 + int(b[0])*31 + int(b[n-1])*7 + int(b[n/2])) & (nameCacheSlots - 1)
+	return (n*131 + int(b[0])*31 + int(b[n-1])*7 + int(b[n/2])) & (slots - 1)
 }
 
 // internNameBytes returns a deduplicated string for the given byte slice. A
@@ -75,12 +96,13 @@ func (pctx *parserCtx) internNameBytes(b []byte) string {
 	if len(b) == 0 {
 		return ""
 	}
-	slot := nameCacheSlot(b)
-	if s := pctx.nameCacheFast[slot]; s == string(b) {
+	cache := pctx.nameCacheFast
+	slot := nameCacheSlot(b, len(cache))
+	if s := cache[slot]; s == string(b) {
 		return s
 	}
 	s := pctx.internNameBytesMaps(b)
-	pctx.nameCacheFast[slot] = s
+	cache[slot] = s
 	return s
 }
 

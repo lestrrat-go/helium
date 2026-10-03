@@ -54,6 +54,11 @@ var (
 	patMaybeXMLDecl = []byte{0x3C, 0x3F, 0x78, 0x6D}
 )
 
+// errEncodingNotDetected is detectEncoding's result for input with no
+// byte-order mark or encoding signature: the normal outcome for UTF-8 and
+// ASCII documents, so it is built once.
+var errEncodingNotDetected = errors.New("failed to detect encoding")
+
 func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	cur := ctx.getByteCursor()
 	if cur == nil {
@@ -123,7 +128,7 @@ func (ctx *parserCtx) detectEncoding() (encoding string, err error) {
 	}
 
 	encoding = encNone
-	err = errors.New("failed to detect encoding")
+	err = errEncodingNotDetected
 	return
 }
 
@@ -237,7 +242,7 @@ func (ctx *parserCtx) switchEncoding() error {
 			return ErrByteCursorRequired
 		}
 		ctx.popInput()
-		ctx.pushInput(utf8CursorAfter(cur, cur))
+		ctx.pushInput(utf8CursorAfter(cur, cur, ctx.inputBufSize()))
 		return nil
 	}
 
@@ -253,7 +258,9 @@ func (ctx *parserCtx) switchEncoding() error {
 
 	b := enc.NewDecoder().Reader(cur)
 	ctx.popInput()
-	ctx.pushInput(utf8CursorAfter(b, cur))
+	// A decoder's output may be longer than its input, so the input size
+	// does not bound it: use the default buffer.
+	ctx.pushInput(utf8CursorAfter(b, cur, 0))
 
 	return nil
 }
@@ -263,9 +270,9 @@ func (ctx *parserCtx) switchEncoding() error {
 // declaration or TextDecl that cur consumed then counts the declaration, as
 // in libxml2, and the line text starts with it. cur has read only
 // ASCII-compatible bytes: the declaration, or a byte-order mark, which
-// consumeBOM does not count.
-func utf8CursorAfter(r io.Reader, cur *strcursor.ByteCursor) *strcursor.UTF8Cursor {
-	u := strcursor.NewUTF8Cursor(r)
+// consumeBOM does not count. A positive bufSize sets the cursor's buffer size.
+func utf8CursorAfter(r io.Reader, cur *strcursor.ByteCursor, bufSize int) *strcursor.UTF8Cursor {
+	u := strcursor.NewUTF8Cursor(r, bufSize)
 	u.StartAt(strcursor.PositionOf(cur))
 	return u
 }

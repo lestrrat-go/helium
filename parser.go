@@ -28,17 +28,13 @@ type readerReturningErr struct{ err error }
 
 func (r readerReturningErr) Read([]byte) (int, error) { return 0, r.err }
 
-type stopFuncKey struct{}
-
 // StopParser tells the parser to stop at the next opportunity. Call this
 // from any SAX callback to abort parsing early. The parse functions will
-// return the partial document built so far with a nil error.
+// return the partial document built so far with a nil error. It stops the
+// innermost parse that ctx carries: the one whose callback received ctx.
 func StopParser(ctx context.Context) {
-	if ctx == nil {
-		return
-	}
-	if fn, _ := ctx.Value(stopFuncKey{}).(func()); fn != nil {
-		fn()
+	if pctx := getParserCtx(ctx); pctx != nil {
+		pctx.stop()
 	}
 }
 
@@ -791,7 +787,7 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 	p = p.normalized()
 
 	pctx := &parserCtx{rawInput: b, baseURI: p.cfg.baseURI}
-	if err := pctx.init(p.cfg, bytes.NewReader(b)); err != nil {
+	if err := pctx.init(p.cfg, bytes.NewReader(b), len(b)); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -1021,7 +1017,7 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 		pctx.ebcdicConsumed = counter
 		stream = counter
 	}
-	if err := pctx.init(p.cfg, stream); err != nil {
+	if err := pctx.init(p.cfg, stream, -1); err != nil {
 		return nil, err
 	}
 	// init seeds inputSize from rawInput (nil here, so 0). When the caller
@@ -1130,7 +1126,7 @@ found:
 	}
 
 	newctx := &parserCtx{}
-	if err := newctx.init(p.cfg, bytes.NewReader(data)); err != nil {
+	if err := newctx.init(p.cfg, bytes.NewReader(data), len(data)); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -1176,7 +1172,6 @@ found:
 	}
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
-	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContentInput(innerCtx); err != nil {
 		// errParserStopped is a benign stop (helium.StopParser); any other
 		// error, including context cancellation, propagates with a nil result.

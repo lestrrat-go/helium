@@ -976,7 +976,7 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 	// is REQUIRED, and no StandaloneDecl is permitted — a version-only or
 	// standalone-bearing declaration is rejected, and never leniently accepted.
 	sub := &parserCtx{}
-	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
+	if err := sub.init(nil, bytes.NewReader(content), len(content)); err != nil {
 		return nil, "", strcursor.Position{}, err
 	}
 	defer func() { _ = sub.release() }()
@@ -1038,7 +1038,7 @@ func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcUR
 // source resource.
 func (pctx *parserCtx) decodeNonASCIIExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, string, strcursor.Position, error) {
 	sub := &parserCtx{}
-	if err := sub.init(nil, bytes.NewReader(content)); err != nil {
+	if err := sub.init(nil, bytes.NewReader(content), len(content)); err != nil {
 		return nil, "", strcursor.Position{}, err
 	}
 	defer func() { _ = sub.release() }()

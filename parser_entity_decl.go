@@ -807,13 +807,14 @@ func (pctx *parserCtx) parseEntityDecl(ctx context.Context) error {
 func (pctx *parserCtx) inheritNestedParserState(newctx *parserCtx) {
 	newctx.sax = pctx.sax
 	newctx.treeBuilder = pctx.treeBuilder
-	newctx.attsDefault = pctx.attsDefault
-	// Materialize the parent's dedup set before sharing it. attsDefaultSeen is
-	// allocated lazily, so copying whatever is there could hand the sub-parse a
-	// nil map; the sub-parse would then build a SECOND set of its own and lose
+	// Materialize the parent's default maps before sharing them. They are
+	// allocated lazily, so copying whatever is there could hand the sub-parse
+	// nil maps; the sub-parse would then build a SECOND pair of its own and lose
 	// parent-child dedup of repeated <!ATTLIST> defaults across the entity
-	// boundary. Parent and nested context must hold the SAME map.
-	newctx.attsDefaultSeen = pctx.attributeDefaultSeen()
+	// boundary. Parent and nested context must hold the SAME maps.
+	pctx.allocAttributeDefaults()
+	newctx.attsDefault = pctx.attsDefault
+	newctx.attsDefaultSeen = pctx.attsDefaultSeen
 	newctx.options = pctx.options
 	newctx.loadsubset = pctx.loadsubset
 	newctx.replaceEntities = pctx.replaceEntities
@@ -958,7 +959,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	}
 
 	newctx := &parserCtx{}
-	if err := newctx.init(nil, bytes.NewReader(content)); err != nil {
+	if err := newctx.init(nil, bytes.NewReader(content), len(content)); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -1013,7 +1014,6 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
-	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
 	// A leading byte-order mark and TextDecl (and any declared encoding) have
 	// already been consumed and the body decoded to UTF-8 by
@@ -1094,7 +1094,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	}
 
 	newctx := &parserCtx{}
-	if err := newctx.init(nil, bytes.NewReader(chunk)); err != nil {
+	if err := newctx.init(nil, bytes.NewReader(chunk), len(chunk)); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -1149,7 +1149,6 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	}
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
-	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContentInput(innerCtx); err != nil {
 		return nil, err
 	}

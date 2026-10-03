@@ -1336,3 +1336,59 @@ func TestRecoverOnError(t *testing.T) {
 		require.NotNil(t, doc)
 	})
 }
+
+// One Parser value and one input slice are shared by every goroutine: a parse
+// keeps all of its state, including its cursor buffers and name cache, in its
+// own parser context, so concurrent parses must produce the serial result.
+// Run under -race this also checks that no parse writes shared memory.
+func TestParseConcurrentSharedInput(t *testing.T) {
+	t.Parallel()
+
+	src := []byte(`<?xml version="1.0"?>
+<!DOCTYPE root [
+  <!ENTITY e "<item kind='entity'>&#x41;</item>">
+  <!ATTLIST item kind CDATA "plain">
+]>
+<root xmlns:p="urn:p"><item/><p:item p:a="1">text</p:item>&e;</root>`)
+	p := helium.NewParser().SubstituteEntities(true).DefaultDTDAttributes(true)
+
+	doc, err := p.Parse(t.Context(), src)
+	require.NoError(t, err)
+	want, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Contains(t, want, `<item kind="entity">A</item>`, "the entity and the attribute default must expand")
+
+	const workers = 8
+	results := make([]string, workers)
+	done := make(chan struct{})
+	for i := range workers {
+		go parseConcurrently(t.Context(), p, src, &results[i], done)
+	}
+	for range workers {
+		<-done
+	}
+	for _, got := range results {
+		require.Equal(t, want, got)
+	}
+}
+
+func parseConcurrently(ctx context.Context, p helium.Parser, src []byte, out *string, done chan<- struct{}) {
+	var last string
+	for range 50 {
+		last = parseToString(ctx, p, src)
+	}
+	*out = last
+	done <- struct{}{}
+}
+
+func parseToString(ctx context.Context, p helium.Parser, src []byte) string {
+	doc, err := p.Parse(ctx, src)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	s, err := helium.WriteString(doc)
+	if err != nil {
+		return "write error: " + err.Error()
+	}
+	return s
+}

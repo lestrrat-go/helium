@@ -58,6 +58,12 @@ Central state struct (`parserctx.go`). Key fields:
 - `inputTab` (inputStack) — LIFO stack of ByteCursor/UTF8Cursor; `switchEncoding`, external DTDs and parameter
   entities push new cursors, all before element content starts (see the `pushInput` comment)
 - `getCursor()` — current cursor; auto-pops exhausted ones, caches the active cursor between calls
+- Buffer sizes — `init` takes the input's size (-1 for a stream of unknown length). When the size plus
+  `inputLookahead` (16) is below `smallInputMax` (4096), `inputBufSize` sizes the document `ByteCursor` and the
+  `UTF8Cursor` `switchEncoding` installs over raw UTF-8 bytes to that, so a small document does not allocate the
+  4 KiB and 8 KiB defaults; the slack lets a lookahead past the last byte fit without growing the buffer. A
+  decoder's output can be longer than its input, so a decoding `UTF8Cursor` keeps the default. A sized buffer
+  holds the whole input, so no refill splits a text run where the default buffer would not
 - `UTF8Cursor` buffering (`internal/strcursor/utf8cursor.go`) — `fillBuffer` reads into the free space after the
   buffered bytes and compacts only when a request does not fit after `bufpos`, growing the buffer when it still
   does not. `compact` keeps the current line's text from `lineStart` (the last LF, at most `LineContextMax` = 1024
@@ -130,8 +136,9 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 ### DTD & Entities
 - `attsSpecial` / `attsSpecialExternal` — DTD special-attribute normalization keying + external-markup
   provenance (§2.9 standalone VC); see `addSpecialAttribute` / `parseAttribute` (`parser_element.go`).
-  `xml:id` unconditional normalization is a deliberate XPath-3.1/xml:id-§4 divergence from libxml2
-- `attsDefault` — DTD default attributes
+  `xml:id` unconditional normalization is a deliberate XPath-3.1/xml:id-§4 divergence from libxml2.
+  Both are nil until `addSpecialAttribute` records the first declaration
+- `attsDefault` — DTD default attributes (nil until the first default; see `allocAttributeDefaults` below)
 - Entity redeclaration (§4.2: the first declaration binds) — `DTD.AddEntity` returns the existing entity, and
   `parseEntityDecl` records the literal (`orig`) and XML 1.1 replacement spelling only while `Entity.origSet` is
   false (libxml2: `orig == NULL`), so an empty first EntityValue is never overwritten by a later declaration
@@ -381,8 +388,9 @@ the negative-sentinel option disables the cap for trusted input.
   the attribute's. `DTD.LookupElement` builds its `name:prefix` key in a stack buffer, so a lookup
   allocates nothing for names that fit.
 - **Name interning** (`intern.go`) — `internNameBytes` first checks a per-parse direct-mapped cache
-  (`parserCtx.nameCacheFast`, `nameCacheSlots` slots keyed by length and three bytes); a hit costs one string
-  comparison. A miss goes to the global lexicon seed (a `(first byte, length)` cheap-check before the map probe)
+  (`parserCtx.nameCacheFast`, keyed by length and three bytes); a hit costs one string comparison. `init`
+  allocates `nameCacheSize(size)` slots: one per 16 input bytes rounded up to a power of two, between 16 and
+  256, and 256 for a stream of unknown size. A miss goes to the global lexicon seed (a `(first byte, length)` cheap-check before the map probe)
   and the per-parse map, and the result replaces the slot, so every cached string is the one the map holds.
 - **Entity-amplification / external bounds** — see Entity Expansion above.
 - **Start-tag duplicate detection** (`parser_element.go` `attrDupSetThreshold` = 32) — per-start-tag attribute
@@ -392,11 +400,11 @@ the negative-sentinel option disables the cap for trusted input.
   prefix string), so a tag with many attributes or namespace declarations is linear instead of quadratic.
   `addAttributeDefault` (`parser_dtd_attr.go`) uses a map with no threshold (`parserCtx.attsDefaultSeen`,
   shared with `attsDefault` via `inheritNestedParserState`), since it already does a map probe/store per call.
-  That map is DTD-only, so it is allocated lazily by `attributeDefaultSeen` on the first `<!ATTLIST>` default
-  and a document without a DTD allocates nothing for it; `inheritNestedParserState` materializes it through
-  that accessor so parent and nested sub-parse share ONE set (a plain copy of a nil map would let the
-  sub-parse build its own and lose cross-boundary dedup). `parser_attlist_test.go` pins the no-DTD parse
-  allocation count.
+  Both maps are DTD-only, so `allocAttributeDefaults` allocates them together on the first `<!ATTLIST>`
+  default and a document without a DTD allocates nothing for them; `inheritNestedParserState` materializes
+  them through that method so parent and nested sub-parse share ONE pair (a plain copy of nil maps would let
+  the sub-parse build its own and lose cross-boundary dedup). `parser_attlist_test.go` checks that a no-DTD
+  parse leaves the dedup set unallocated.
 
 ## Context Cancellation (parse abort)
 
@@ -473,8 +481,9 @@ leaves an empty default.
 - **RecoverOnError** — on a recoverable error in `parseContent()`: save `recoverErr`, `disableSAX=true`,
   `skipToRecoverPoint()` (advance to next `<`), continue, return partial document + saved error. Applies to
   genuine parse errors only — NOT context cancellation (above).
-- **StopParser(ctx)** — `stopped=true`, `instate=psEOF`; returns the parsed-so-far document + nil error (partial
-  document, unlike cancellation's nil document + context error).
+- **StopParser(ctx)** — finds the innermost parse through the `parserCtx` that `parseDocument` and every
+  sub-parse store on the callback context (`getParserCtx`), then sets `stopped=true`, `instate=psEOF`; returns
+  the parsed-so-far document + nil error (partial document, unlike cancellation's nil document + context error).
 
 ## Key Parser Fluent Method Effects
 
