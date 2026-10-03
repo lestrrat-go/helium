@@ -130,6 +130,49 @@ func TestBackCompat(t *testing.T) {
 		require.Contains(t, out, "<out>--MM</out>")
 	})
 
+	// A union match pattern is split into one template rule per alternative.
+	// Every split rule keeps the pattern's backwards-compatible processing, so
+	// under version="1.0" the predicate @n = true() converts @n to a boolean
+	// (true for any present attribute) exactly as the non-union form does.
+	// Under version="3.0" the comparison casts "2" to xs:boolean, which fails,
+	// so neither form matches.
+	t.Run("union pattern predicate", func(t *testing.T) {
+		const unionRules = `<xsl:template match="a[@n = true()] | b[@n = true()]">[<xsl:value-of select="name()"/>]</xsl:template>`
+		const separateRules = `<xsl:template match="a[@n = true()]">[<xsl:value-of select="name()"/>]</xsl:template>
+  <xsl:template match="b[@n = true()]">[<xsl:value-of select="name()"/>]</xsl:template>`
+		cases := []struct {
+			name    string
+			version string
+			rules   string
+			want    string
+		}{
+			{name: "union 1.0", version: "1.0", rules: unionRules, want: "<out>[a][b]</out>"},
+			{name: "separate 1.0", version: "1.0", rules: separateRules, want: "<out>[a][b]</out>"},
+			{name: "union 3.0", version: "3.0", rules: unionRules, want: "<out>--</out>"},
+			{name: "separate 3.0", version: "3.0", rules: separateRules, want: "<out>--</out>"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				ss := `<?xml version="1.0"?>
+<xsl:stylesheet version="` + tc.version + `" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/*"/></out></xsl:template>
+  ` + tc.rules + `
+  <xsl:template match="*">-</xsl:template>
+</xsl:stylesheet>`
+				ctx := t.Context()
+				doc, err := helium.NewParser().Parse(ctx, []byte(ss))
+				require.NoError(t, err)
+				ssc, err := xslt3.CompileStylesheet(ctx, doc)
+				require.NoError(t, err)
+				src, err := helium.NewParser().Parse(ctx, []byte(`<doc><a n="2"/><b n="2"/></doc>`))
+				require.NoError(t, err)
+				out, err := ssc.Transform(src).Serialize(ctx)
+				require.NoError(t, err)
+				require.Contains(t, out, tc.want)
+			})
+		}
+	})
+
 	// TestBackCompatLREUnqualifiedVersionNotCompat verifies that an unqualified
 	// version attribute on a literal result element is an ordinary result attribute
 	// (copied to output), NOT the XSLT version — so it does NOT trigger

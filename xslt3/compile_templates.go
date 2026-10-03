@@ -334,14 +334,13 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 			originID := nextSplitOriginID()
 			for _, alt := range tmpl.Match.Alternatives {
 				split := *tmpl // shallow copy shares Body, Params, etc.
-				split.Match = &pattern{
-					source:            tmpl.Match.source,
-					Alternatives:      []*patternAlt{alt},
-					xpathDefaultNS:    tmpl.Match.xpathDefaultNS,
-					hasXPathDefaultNS: tmpl.Match.hasXPathDefaultNS,
-					nsBindings:        tmpl.Match.nsBindings,
-					predicates:        tmpl.Match.predicates,
-				}
+				// Copy the whole pattern so each alternative keeps every
+				// compile-site property (namespace context,
+				// xpath-default-namespace, backwards-compatible processing,
+				// compiled predicates); only the alternative list narrows.
+				altPattern := *tmpl.Match
+				altPattern.Alternatives = []*patternAlt{alt}
+				split.Match = &altPattern
 				split.Priority = alt.priority
 				split.splitOriginID = originID
 				splitCopy := split // allocate separate heap object
