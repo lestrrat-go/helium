@@ -160,7 +160,7 @@ func (c *DocOrderCache) indexInDocOrder(nodes []helium.Node) bool {
 // parent element and its first attribute/child (indexWalk uses stride 2).
 // SliceStable preserves input order for equal positions, keeping
 // same-parent namespace nodes in their traversal order. Namespace nodes
-// are deduplicated by {parent, prefix} in DeduplicateNodes/MergeNodeSets,
+// of an element are deduplicated by NamespaceNodeKey in DeduplicateNodes/MergeNodeSets,
 // so duplicates from different union branches are already eliminated.
 func (c *DocOrderCache) Position(n helium.Node) int {
 	c.mu.Lock()
@@ -350,7 +350,8 @@ func (c *DocOrderCache) Less(a, b helium.Node) bool {
 	return c.Compare(a, b) < 0
 }
 
-// NSNodeKey identifies a namespace node by its parent element and prefix.
+// NSNodeKey identifies a namespace node of an element by that parent element
+// and its prefix (see NamespaceNodeKey).
 // NamespaceNodeWrapper objects are created fresh each time the namespace axis
 // is traversed, so pointer-based identity fails for deduplication.
 type NSNodeKey struct {
@@ -358,12 +359,26 @@ type NSNodeKey struct {
 	Prefix string
 }
 
+// NamespaceNodeKey returns the identity of n when n is a namespace node of an
+// element: that parent element and n's prefix. The namespace axis builds a
+// fresh NamespaceNodeWrapper on every traversal, so two wrappers with the same
+// key are the same node. ok is false for every other node, a parentless
+// namespace node (built once by xsl:namespace or a copy) included, whose
+// identity is its pointer.
+func NamespaceNodeKey(n helium.Node) (NSNodeKey, bool) {
+	if n.Type() != helium.NamespaceNode {
+		return NSNodeKey{}, false
+	}
+	parent := n.Parent()
+	if parent == nil {
+		return NSNodeKey{}, false
+	}
+	return NSNodeKey{Parent: parent, Prefix: n.Name()}, true
+}
+
 // SameNode reports whether a and b are the same node (XPath 3.1 §3.7.2 node
-// identity). Two namespace nodes of an element are the same node when they
-// share that parent element and prefix, because the namespace axis builds a
-// fresh NamespaceNodeWrapper on every traversal. Every other node, a
-// parentless namespace node (built once by xsl:namespace or a copy) included,
-// is identified by its pointer.
+// identity): the same pointer, or two namespace nodes with the same
+// NamespaceNodeKey.
 func SameNode(a, b helium.Node) bool {
 	if a == b {
 		return true
@@ -371,11 +386,12 @@ func SameNode(a, b helium.Node) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	if a.Type() != helium.NamespaceNode || b.Type() != helium.NamespaceNode {
+	ka, ok := NamespaceNodeKey(a)
+	if !ok {
 		return false
 	}
-	parent := a.Parent()
-	return parent != nil && parent == b.Parent() && a.Name() == b.Name()
+	kb, ok := NamespaceNodeKey(b)
+	return ok && ka == kb
 }
 
 // sortByPrecomputedKeys sorts result by precomputed sort keys, avoiding
@@ -475,11 +491,10 @@ func DeduplicateNodes(nodes []helium.Node, cache *DocOrderCache, maxNodes int) (
 		if _, ok := seen[n]; ok {
 			continue
 		}
-		if n.Type() == helium.NamespaceNode {
+		if key, ok := NamespaceNodeKey(n); ok {
 			if nsKeys == nil {
 				nsKeys = make(map[NSNodeKey]struct{})
 			}
-			key := NSNodeKey{Parent: n.Parent(), Prefix: n.Name()}
 			if _, ok := nsKeys[key]; ok {
 				continue
 			}
@@ -516,11 +531,10 @@ func DeduplicateNodesPreserveOrder(nodes []helium.Node, maxNodes int) ([]helium.
 		if _, ok := seen[n]; ok {
 			continue
 		}
-		if n.Type() == helium.NamespaceNode {
+		if key, ok := NamespaceNodeKey(n); ok {
 			if nsKeys == nil {
 				nsKeys = make(map[NSNodeKey]struct{})
 			}
-			key := NSNodeKey{Parent: n.Parent(), Prefix: n.Name()}
 			if _, ok := nsKeys[key]; ok {
 				continue
 			}
@@ -689,11 +703,10 @@ func mergeNodeSetsWithKeys(a, b []helium.Node, keys []sortKey, maxNodes int) ([]
 		if _, ok := seen[n]; ok {
 			return nil
 		}
-		if n.Type() == helium.NamespaceNode {
+		if nsk, ok := NamespaceNodeKey(n); ok {
 			if nsKeys == nil {
 				nsKeys = make(map[NSNodeKey]struct{})
 			}
-			nsk := NSNodeKey{Parent: n.Parent(), Prefix: n.Name()}
 			if _, ok := nsKeys[nsk]; ok {
 				return nil
 			}
