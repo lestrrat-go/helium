@@ -889,7 +889,11 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   (`visibleVarScope`), `localVarsVer` (bumped by `setVar`/`setVarDeferred` and by popping a scope that held
   bindings), and the current package. The returned map is shared, so callers copy it before adding bindings
   (`xsl:evaluate` does).
-- `xsl:number` counting (`execute_number.go`): `level="single"` and `level="any"` walk back from the counted
+- `xsl:number` counting (`execute_number.go`): `from` follows XSLT 3.0 §12.3, where the root of a tree always
+  matches it. `level="single"` gives an empty result when a `from` match lies strictly between the selected node
+  and the counted node (`numberWithinFrom`); `level="multiple"` keeps only counted ancestors at or below the
+  innermost `from` match; `level="any"` counts back to the nearest preceding `from` match.
+  `level="single"` and `level="any"` walk back from the counted
   node and stop at the node the same instruction's previous evaluation started from, adding its count
   (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in document order is linear. The memo
   is off when the `count` or `from` pattern references a variable (`numberInst.memoizable`); without a `count`

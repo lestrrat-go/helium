@@ -189,6 +189,74 @@ func TestNumberCounting(t *testing.T) {
 	}
 }
 
+// TestNumberSingleFrom checks level="single" with a from pattern (XSLT 3.0
+// §12.3): the counted node must lie inside the subtree of the innermost
+// ancestor-or-self of the selected node that matches from, where the root of
+// the tree always matches. Otherwise the place marker is empty.
+func TestNumberSingleFrom(t *testing.T) {
+	testCases := []struct {
+		name   string
+		source string
+		body   string
+		want   string
+	}{
+		{
+			name:   "from match between the selected node and the counted node",
+			source: `<r><x/><x><y><z/></y></x></r>`,
+			body:   `<xsl:for-each select="//z">[<xsl:number count="x" from="y"/>]</xsl:for-each>`,
+			want:   `[]`,
+		},
+		{
+			// The first x has no y ancestor, so the root is its from node and
+			// it is numbered among its siblings.
+			name:   "root counts as the from node when no ancestor matches",
+			source: `<r><x/><y><x/><x/></y></r>`,
+			body:   `<xsl:for-each select="//x">[<xsl:number count="x" from="y"/>]</xsl:for-each>`,
+			want:   `[1][1][2]`,
+		},
+		{
+			name:   "counted node that matches from",
+			source: `<r><x/><x/></r>`,
+			body:   `<xsl:for-each select="r/x">[<xsl:number count="x" from="x"/>]</xsl:for-each>`,
+			want:   `[1][2]`,
+		},
+		{
+			name:   "counted node inside the from subtree",
+			source: `<r><y><x><z/></x><x><z/></x><x><z/></x></y></r>`,
+			body:   `<xsl:for-each select="//z">[<xsl:number count="x" from="y"/>]</xsl:for-each>`,
+			want:   `[1][2][3]`,
+		},
+		{
+			// One instruction numbers z elements in document order, so each
+			// count can reuse the previous one; those behind a y between z and
+			// its x must still come out empty, and the others still count
+			// every earlier x sibling.
+			name: "counts in a row alternate across from boundaries",
+			source: `<r><x><z/></x><x><y><z/></y></x><x><z/></x><x><y><z/></y></x>` +
+				`<x><z/></x></r>`,
+			body: `<xsl:for-each select="//z">[<xsl:number count="x" from="y"/>]</xsl:for-each>`,
+			want: `[1][][3][][5]`,
+		},
+		{
+			name:   "default count with a from match above the selected node",
+			source: `<r><z/><y><a><z/></a></y><z/></r>`,
+			body:   `<xsl:for-each select="//z">[<xsl:number from="a"/>]</xsl:for-each>`,
+			want:   `[1][1][2]`,
+		},
+		{
+			name:   "multiple stops at the innermost from match",
+			source: `<r><x/><x><y><z/></y></x></r>`,
+			body:   `<xsl:for-each select="//z">[<xsl:number level="multiple" count="x|z" from="y"/>]</xsl:for-each>`,
+			want:   `[1]`,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			require.Equal(t, testCase.want, runNumberStylesheet(t, testCase.source, "", testCase.body, nil))
+		})
+	}
+}
+
 // numberSchema types r as a sequence of x elements with element-only
 // content, so validation drops the whitespace between them and annotates
 // each x as xT.
