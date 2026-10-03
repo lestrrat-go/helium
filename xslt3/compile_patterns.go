@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -152,8 +153,15 @@ func isNeverMatchingPattern(alt string) bool {
 // context, so both compile-time validation and runtime matching resolve prefixes
 // identically and the predeclared XPath namespaces (fn/math/map/...) apply as a
 // fallback only when a prefix is not lexically bound.
-func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool, compat bool, decls xpath3.SchemaDeclarations) (*pattern, error) {
-	nsBindings := inScopeNamespaces(elem)
+//
+// Patterns whose elements have the same in-scope namespaces share one
+// namespace map (see internPatternNamespaces). The pattern is compiled under
+// backwards-compatible processing when the compiler's effective version is
+// below 2.0.
+func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXPathDefaultNS bool) (*pattern, error) {
+	nsBindings := c.internPatternNamespaces(inScopeNamespaces(elem))
+	compat := c.backwardsCompatible()
+	decls := c.schemaDeclsForValidation()
 	alts := splitPatternUnion(s)
 	p := &pattern{source: s, xpathDefaultNS: xpathDefaultNS, hasXPathDefaultNS: hasXPathDefaultNS, nsBindings: nsBindings, compat: compat}
 	for _, alt := range alts {
@@ -230,6 +238,32 @@ func compilePattern(s string, elem *helium.Element, xpathDefaultNS string, hasXP
 		}
 	}
 	return p, nil
+}
+
+// internPatternNamespaces returns the compiler's shared map with the same
+// bindings as ns, registering ns as that map when none exists yet. Every
+// pattern keeps its map for the life of the stylesheet, and the runtime caches
+// one base XPath evaluator per distinct map (baseEvalKey), so sharing the map
+// lets patterns with the same in-scope namespaces share that evaluator. The
+// returned map is never modified.
+func (c *compiler) internPatternNamespaces(ns map[string]string) map[string]string {
+	prefixes := slices.Sorted(maps.Keys(ns))
+	var b strings.Builder
+	for _, prefix := range prefixes {
+		b.WriteString(prefix)
+		b.WriteByte(0)
+		b.WriteString(ns[prefix])
+		b.WriteByte(0)
+	}
+	key := b.String()
+	if shared, ok := c.patternNamespaceMaps[key]; ok {
+		return shared
+	}
+	if c.patternNamespaceMaps == nil {
+		c.patternNamespaceMaps = make(map[string]map[string]string)
+	}
+	c.patternNamespaceMaps[key] = ns
+	return ns
 }
 
 // patternValidateNamespaces builds the prefix→URI map used to statically

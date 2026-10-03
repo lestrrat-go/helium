@@ -74,6 +74,11 @@ type compiler struct {
 	declaredAttrSetVis  map[string]string
 	declaredParamVis    map[string]string
 	declaredModeVis     map[string]string
+
+	// patternNamespaceMaps holds the shared in-scope namespace maps of the
+	// patterns compiled so far, keyed by their sorted bindings; see
+	// internPatternNamespaces. Lazily allocated.
+	patternNamespaceMaps map[string]map[string]string
 }
 
 type pendingPatternValidation struct {
