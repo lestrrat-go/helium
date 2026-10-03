@@ -448,17 +448,18 @@ iso-8859-1), `schemas/test/nvdcve_0.xml` (`287KB`) and `relaxng/test/comps_0.xml
 `BenchmarkHeliumParse` times `Parse` on the byte slice, with a new `Parser` per call. Its case named after the size
 alone (`608KB`) parses under `context.Background()` and frees each document; `<size>/cancellable` parses under
 `b.Context()`, a cancellable context like a server request's; `<size>/no-free` parses under `context.Background()` and
-never calls `Document.Free`, as most callers do, so its node slabs come from the heap instead of the slab pool every
-time. `BenchmarkHeliumParseReader` times `ParseReader` in two reader cases per size: `BytesReader` reads from a
+never calls `Document.Free` (most callers never do), so its node slabs come from the heap instead of the slab pool
+every time. `BenchmarkHeliumParseReader` times `ParseReader` in two reader cases per size: `BytesReader` reads from a
 `bytes.Reader`, and `64BReads` wraps it in `cappedReader`, which returns at most 64 bytes per `Read`, so most tags and
 text runs straddle a read boundary. A cap of a few KB times the same as `BytesReader`, because the parser's input
 buffer is 8KB. Each reader case runs under `b.Context()`, and its `/background` case (`608KB/BytesReader/background`)
-under `context.Background()`, so `Parse` and `ParseReader` can be compared under the same context. Keep the
-unsuffixed names and what they measure fixed: benchstat matches results by name across recorded runs. `BenchmarkHeliumParseSmall` times documents of 1KB or less
-through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkHeliumParseDepth` times `Parse` on generated
-documents of 4000 `<a>` elements under one `<root>`, nested in chains of 8, 16, 24 and 40 (`depth8` … `depth40`), so
-every case parses about the same markup and a per-level cost of the parser's stacks shows as time and memory that grow
-with depth. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with `encoding/xml` for comparison.
+under `context.Background()`, so `Parse` and `ParseReader` can be compared under the same context. Keep the unsuffixed
+names and what they measure fixed: benchstat matches results by name across recorded runs. `BenchmarkHeliumParseSmall`
+times documents of 1KB or less through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkHeliumParseDepth` times
+`Parse` on generated documents of 4000 `<a>` elements under one `<root>`, nested in chains of 8, 16, 24 and 40
+(`depth8` … `depth40`), so every case parses about the same markup and a per-level cost of the parser's stacks shows
+as time and memory that grow with depth. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with `encoding/xml` for
+comparison.
 
 `BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml`, `relaxng/test/comps_0.xml`, and
 `relaxng/test/ISO19005-1-XMP_Packet.rng` (`xmprng`: every element `rng:`-prefixed, about thirty namespace
