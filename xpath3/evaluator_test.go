@@ -2,10 +2,15 @@ package xpath3_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xpath3"
+	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -322,4 +327,174 @@ func (c *capturingFn) Call(ctx context.Context, _ []xpath3.Sequence) (xpath3.Seq
 	c.node = xpath3.FnContextNode(ctx)
 	c.dynamic = xpath3.IsDynamicCall(ctx)
 	return atomicSeq(intAtomic(1)), nil
+}
+
+// ebvExprs cover every kind of result EvaluateEBV answers: node-list
+// producers at the root (location paths, E1/path, unions, filters), node
+// sequences built otherwise, single atomic values of every kind with an
+// effective boolean value, sequences that have none (FORG0006), and dynamic
+// errors.
+var ebvExprs = []string{
+	"/r", "/r/b/c", "b", ".", "..", "@*", "//@*[1]", "//text()", "(//b)[2]", "(//b)[100]",
+	"//b | //c", "//b except //b", "//b intersect //b[c]", "(//b)[1]/c", "reverse(//b)/c", "//b[c][last()]",
+	"//b[@id = 'b3']", "//b[number(substring(@id, 2)) > 2]", "$nodes", "$nodes//c", "$empty", "$nodes/nosuch",
+	"(//b, 1)", "(1, //b)", "//b/string(@id)", "(//b)[1]/string(@id)", "//b/nosuch/string()",
+	"()", "1", "0", "-0.0", "0.0e0", "1.5", "xs:double('NaN')", "xs:float('INF')", "''", "'a'", "true()",
+	"false()", "xs:anyURI('')", "xs:anyURI('u')", "xs:untypedAtomic('')", "xs:untypedAtomic('x')",
+	"xs:NCName('n')", "xs:date('2020-01-01')", "xs:QName('xs:int')", "(1, 2)", "('a', 'b')", "map{}",
+	"[1]", "true#0", "exists(//b)", "not(//b)", "empty(//nosuch)", "count(//b) > 0", "//b and //c",
+	"//nosuch or false()", "if (//b) then 0 else 1", "some $b in //b satisfies $b/c",
+	"error()", "1 div 0", "//b[error()]", "//b[xs:integer('x')]", "1 + 'a'",
+}
+
+// ebvDoc is the document ebvExprs run against.
+const ebvDoc = `<r><b id="b1"><c/></b><b id="b2">t</b><b id="b3"><c/><c/></b><!--x--></r>`
+
+// requireEvaluateEBV checks that EvaluateEBV of expr from node gives the
+// value and the error that Evaluate followed by Result.EBV gives.
+func requireEvaluateEBV(t *testing.T, eval xpath3.Evaluator, node helium.Node, expr, msg string) {
+	t.Helper()
+	compiled, err := xpath3.NewCompiler().Compile(expr)
+	require.NoError(t, err, expr)
+	var want bool
+	r, wantErr := eval.Evaluate(t.Context(), compiled, node)
+	if wantErr == nil {
+		want, wantErr = r.EBV()
+	}
+	got, gotErr := eval.EvaluateEBV(t.Context(), compiled, node)
+	var wantX *xpath3.XPathError
+	if wantErr != nil && !errors.As(wantErr, &wantX) {
+		require.ErrorIs(t, gotErr, wantErr, msg)
+		return
+	}
+	requireSameEBV(t, want, wantErr, got, gotErr, msg)
+}
+
+// TestEvaluateEBV checks that EvaluateEBV answers every kind of result with
+// the value and error of Evaluate followed by Result.EBV, from every kind of
+// context node and from an absent one.
+func TestEvaluateEBV(t *testing.T) {
+	t.Parallel()
+	doc := mustParseXML(t, ebvDoc)
+	all, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), xpath3.NewCompiler().MustCompile("//node() | //@*"), doc)
+	require.NoError(t, err)
+	nodes, err := all.Nodes()
+	require.NoError(t, err)
+	b, err := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), xpath3.NewCompiler().MustCompile("/r/b"), doc)
+	require.NoError(t, err)
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Variables(map[string]xpath3.Sequence{
+		"nodes": b.Sequence(),
+		"empty": xpath3.EmptySequence(),
+	})
+	contexts := append([]helium.Node{nil, doc}, nodes...)
+	for _, expr := range slices.Concat(ebvExprs, resultEBVExprs) {
+		for i, node := range contexts {
+			requireEvaluateEBV(t, eval, node, expr, fmt.Sprintf("%s from context %d", expr, i))
+		}
+	}
+}
+
+// ebvSchema types the n elements of ebvSchemaDoc, so that their node items
+// carry type annotations.
+const ebvSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="IntList"><xs:list itemType="xs:int"/></xs:simpleType>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="v" type="IntList" maxOccurs="unbounded"/>
+        <xs:element name="n" type="xs:integer" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="a" type="xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// annotatedEBVDoc returns a document of n integer elements validated
+// against ebvSchema, and an evaluator that carries its type annotations.
+func annotatedEBVDoc(t *testing.T, n int) (*helium.Document, xpath3.Evaluator) {
+	t.Helper()
+	ctx := t.Context()
+	schema, err := xsd.NewCompiler().Compile(ctx, mustParseXML(t, ebvSchema))
+	require.NoError(t, err)
+	var sb strings.Builder
+	sb.WriteString(`<r a="5"><v>1 2</v><v>3</v>`)
+	for i := range n {
+		fmt.Fprintf(&sb, "<n>%d</n>", i)
+	}
+	sb.WriteString("</r>")
+	doc := mustParseXML(t, sb.String())
+	ann := make(xsd.TypeAnnotations)
+	require.NoError(t, xsd.NewValidator(schema).Annotations(&ann).Validate(ctx, doc))
+	return doc, xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).
+		SchemaDeclarations(schema.Declarations()).
+		TypeAnnotations(ann)
+}
+
+// TestEvaluateEBVTypeAnnotations checks EvaluateEBV against Evaluate
+// followed by Result.EBV under type annotations, where node results hold
+// annotated items and predicates compare typed values.
+func TestEvaluateEBVTypeAnnotations(t *testing.T) {
+	t.Parallel()
+	doc, eval := annotatedEBVDoc(t, 5)
+	root := doc.DocumentElement()
+	exprs := []string{
+		"//n", "//v", "/r/*", "//nosuch", "//n[. = 3]", "//n[. > 3]", "//n[. = 30]", "//v[. = 2]", "//v[. = 7]",
+		"(//n)[2]", "//n | //v", "/r[@a = 5]", "/r[@a = '5']", "@a", "data(@a)", "data(//n)", "data(//n[1])",
+		"data(//n[2])", "data(//v[1])", "//n[1] = 0", "//n[. instance of xs:integer]", "exists(//n[. eq 4])",
+		"//n[. eq 'x']", "sum(//n) > 0",
+	}
+	for _, expr := range exprs {
+		for _, node := range []helium.Node{doc, root} {
+			requireEvaluateEBV(t, eval, node, expr, expr)
+		}
+	}
+}
+
+// TestEvaluateEBVStopsEarly checks that a node path that is the whole
+// expression stops at its first node under EvaluateEBV, with and without
+// type annotations: over 2,000 elements it stays within an operation limit
+// and a node-set limit of 100 that Evaluate exceeds. The limits of the nodes
+// it does not reach no longer fire, and neither do the predicate errors of
+// those nodes, as XPath 3.1 §2.3.4 permits.
+func TestEvaluateEBVStopsEarly(t *testing.T) {
+	t.Parallel()
+	doc := earlyStopDoc(t, 2000)
+	annotated, annotatedEval := annotatedEBVDoc(t, 2000)
+	cases := []struct {
+		eval xpath3.Evaluator
+		doc  *helium.Document
+		expr string
+	}{
+		{xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), doc, "//r/b"},
+		{xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), doc, "//c"},
+		{xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), doc, "/r/b/c"},
+		{xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), doc, "//b/@id"},
+		{xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), doc, "//b[@id = '3']/c"},
+		{xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions), doc, "(/r)/b"},
+		{annotatedEval, annotated, "//n"},
+		{annotatedEval, annotated, "/r/n"},
+		{annotatedEval, annotated, "(/r)/n"},
+	}
+	for _, tc := range cases {
+		compiled := xpath3.NewCompiler().MustCompile(tc.expr)
+		for _, limited := range []xpath3.Evaluator{tc.eval.OpLimit(100), tc.eval.MaxNodesForTesting(100)} {
+			got, err := limited.EvaluateEBV(t.Context(), compiled, tc.doc)
+			require.NoError(t, err, tc.expr)
+			require.True(t, got, tc.expr)
+		}
+		_, err := tc.eval.OpLimit(100).Evaluate(t.Context(), compiled, tc.doc)
+		require.ErrorIs(t, err, xpath3.ErrOpLimit, tc.expr)
+		_, err = tc.eval.MaxNodesForTesting(100).Evaluate(t.Context(), compiled, tc.doc)
+		require.ErrorIs(t, err, xpath3.ErrNodeSetLimit, tc.expr)
+	}
+
+	compiled := xpath3.NewCompiler().MustCompile("//b[if (@id = '0') then true() else error()]")
+	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
+	got, err := eval.EvaluateEBV(t.Context(), compiled, doc)
+	require.NoError(t, err)
+	require.True(t, got)
+	_, err = eval.Evaluate(t.Context(), compiled, doc)
+	var xerr *xpath3.XPathError
+	require.ErrorAs(t, err, &xerr)
+	require.Equal(t, "FOER0000", xerr.Code)
 }

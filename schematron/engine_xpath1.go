@@ -75,20 +75,33 @@ func (v xpath1Value) nodeSet() []helium.Node {
 	return v.result.NodeSet
 }
 
-// effectiveBoolean converts an XPath 1.0 result to a boolean. XPath 1.0
-// boolean conversion is total, so the error is always nil.
-func (v xpath1Value) effectiveBoolean() (bool, error) {
+// test evaluates expr and converts its XPath 1.0 result to a boolean. XPath
+// 1.0 boolean conversion is total, so only the evaluation can fail.
+func (r xpath1Runner) test(ctx context.Context, expr compiledExpr, node helium.Node) (bool, error) {
+	e, ok := expr.(*xpath1Expr)
+	if !ok {
+		return false, errWrongEngine
+	}
+	result, err := r.ev.Evaluate(ixpath.WithDocOrderCache(ctx, r.docOrder), e.expr, node)
+	if err != nil {
+		return false, err
+	}
+	return xpath1Value{result: result}.effectiveBoolean(), nil
+}
+
+// effectiveBoolean converts an XPath 1.0 result to a boolean.
+func (v xpath1Value) effectiveBoolean() bool {
 	switch v.result.Type {
 	case xpath1.BooleanResult:
-		return v.result.Bool, nil
+		return v.result.Bool
 	case xpath1.NumberResult:
-		return v.result.Number != 0 && !math.IsNaN(v.result.Number), nil
+		return v.result.Number != 0 && !math.IsNaN(v.result.Number)
 	case xpath1.StringResult:
-		return v.result.String != "", nil
+		return v.result.String != ""
 	case xpath1.NodeSetResult:
-		return len(v.result.NodeSet) > 0, nil
+		return len(v.result.NodeSet) > 0
 	}
-	return false, nil
+	return false
 }
 
 // stringValue converts an XPath 1.0 result to a string.

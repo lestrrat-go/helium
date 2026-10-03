@@ -60,6 +60,19 @@ func (r xpath3Runner) evaluate(ctx context.Context, expr compiledExpr, node heli
 	return xpath3Value{result: result}, nil
 }
 
+// test applies the XPath 3.1 effective boolean value rules to the result of
+// expr. A sequence of more than one item that starts with an atomic value
+// has no effective boolean value, and the returned error carries FORG0006.
+// A node path that is the whole expression stops at its first node
+// (xpath3.Evaluator.EvaluateEBV).
+func (r xpath3Runner) test(ctx context.Context, expr compiledExpr, node helium.Node) (bool, error) {
+	e, ok := expr.(*xpath3Expr)
+	if !ok {
+		return false, errWrongEngine
+	}
+	return r.ev.EvaluateEBV(ctx, e.expr, node)
+}
+
 func (r xpath3Runner) bind(name string, v value) runner {
 	xv, ok := v.(xpath3Value)
 	if !ok {
@@ -87,13 +100,6 @@ func (v xpath3Value) nodeSet() []helium.Node {
 		return nil
 	}
 	return nodes
-}
-
-// effectiveBoolean applies the XPath 3.1 effective boolean value rules. A
-// sequence of more than one item that starts with an atomic value has no
-// effective boolean value, and the returned error carries FORG0006.
-func (v xpath3Value) effectiveBoolean() (bool, error) {
-	return v.result.EBV()
 }
 
 // stringValue is the XSLT 2.0 and later <xsl:value-of> conversion: every item

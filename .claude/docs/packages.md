@@ -583,6 +583,8 @@ XPath 3.1 expression parsing and evaluation.
   clone-on-write; `EvalBorrowing` = setters borrow caller-owned maps/slices without cloning)
   - `Evaluate(ctx, *Expression, Node) → (*Result, error)` — terminal method (`ctx` is cancellation only; config comes
     from the setters below)
+  - `EvaluateEBV(ctx, *Expression, Node) → (bool, error)` — terminal method returning the effective boolean value; a
+    node path that is the whole expression stops at its first node
 - **Expression.Validate(map[string]string) → error** — static namespace-prefix validation;
   **Expression.EvaluateReuse(ctx, *EvalState, Node) → (Result, error)** — low-allocation evaluation;
   **Expression.DumpVM(io.Writer) → error** — compiled VM instruction dump

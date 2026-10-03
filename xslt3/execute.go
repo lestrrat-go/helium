@@ -1531,6 +1531,14 @@ func (ec *execContext) evalXPath(ctx context.Context, expr *xpath3.Expression, n
 	return eval.Evaluate(ec.xpathContext(ctx), expr, node)
 }
 
+// evalXPathEBV evaluates an XPath expression as evalXPath does and returns
+// its effective boolean value. A node path that is the whole expression
+// stops at its first node (xpath3.Evaluator.EvaluateEBV).
+func (ec *execContext) evalXPathEBV(ctx context.Context, expr *xpath3.Expression, node helium.Node) (bool, error) {
+	eval := ec.withFocus(ec.scopedXPathEvaluator(ctx, ec.isCompatExpr(expr)))
+	return eval.EvaluateEBV(ec.xpathContext(ctx), expr, node)
+}
+
 // evalPatternExpr evaluates a match-pattern (or predicate) expression, which is
 // compiled at runtime and so is not in compatExprs. A backwards-compatible
 // pattern evaluates in XPath 1.0 compatibility mode. Unlike a persistent

@@ -1036,6 +1036,30 @@ func (p *vmProgram) execute(ctx context.Context, ec *evalContext) (Sequence, []h
 	return seq, nil, false, err
 }
 
+// executeEBV evaluates the program for the effective boolean value of its
+// result. A root location path or E1/path stops at its first node
+// (instructionExists), and any other node-list producer root answers from
+// its node list. Neither builds node items, so both apply whether or not the
+// evaluator has type annotations: a node sequence is true exactly when it is
+// not empty. Any other root is evaluated as execute evaluates it.
+func (p *vmProgram) executeEBV(ctx context.Context, ec *evalContext) (bool, error) {
+	machine := vm{program: p}
+	root := compiledExprRef{index: p.root}
+	found, ok, err := machine.evalExistsRef(ctx, ec, root)
+	if ok {
+		return found, err
+	}
+	nodes, ok, err := machine.evalNodeListRef(ctx, ec, root)
+	if ok {
+		return len(nodes) > 0, err
+	}
+	seq, err := machine.evalExpr(ctx, ec, root)
+	if err != nil {
+		return false, err
+	}
+	return EBV(seq)
+}
+
 func (v *vm) evalExpr(ctx context.Context, ec *evalContext, expr Expr) (Sequence, error) {
 	return evalWith(v.evalExprBody, ctx, ec, expr)
 }

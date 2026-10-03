@@ -18,6 +18,7 @@ const DefaultEvaluatorOptions EvaluatorOption = 0 // zero value: setters clone
 
 func NewEvaluator(flags EvaluatorOption) Evaluator
 func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error)
+func (e Evaluator) EvaluateEBV(ctx context.Context, expr *Expression, node helium.Node) (bool, error)
 ```
 
 `NewEvaluator` takes an `EvaluatorOption` bitmask (NOT plural `EvaluatorOptions`).
@@ -28,6 +29,17 @@ that data for the lifetime of derived evaluators, contexts, and eval states.
 
 `Evaluate` is the terminal method; `ctx` is for cancellation/deadlines only,
 not configuration. All configuration comes from the fluent setters below.
+
+`EvaluateEBV` is the terminal method for a caller that only needs the effective boolean value of the whole
+expression. It returns the value and the errors that `Evaluate` followed by `Result.EBV()` returns, except that a
+location path or a path expression `E1/path` that is the whole expression stops at its first node, as it does in a
+predicate or as the argument of `fn:exists` (`vmProgram.executeEBV`, see "Early stop" in `xpath3-eval.md`). When
+it stops early, the `OpLimit` and node-set-limit errors and the predicate errors (XPath 3.1 §2.3.4) of the nodes it
+did not reach do not fire. Any other node-list producer at the root (union, intersect/except, filter) answers from
+its node list. Neither builds node items, so both apply under `TypeAnnotations` too. Any other root is evaluated as
+`Evaluate` evaluates it and its sequence goes through `EBV`. xslt3 (`xsl:if`, `xsl:when`, `xsl:assert`),
+schematron's xslt3/xpath3 binding (`runner.test` for `<assert>`/`<report>`) and xsd (`xs:assert`, assertion
+facets, `xs:alternative` tests) take their tests through `EvaluateEBV`.
 
 ### Evaluator fluent setters
 
@@ -205,9 +217,9 @@ list (a `*resultNodes` in `seq`, which implements `Sequence` through its built `
 the same slice) and returns that slice on every call. A caller that only reads `Nodes()` or `EBV()` never pays for a
 node item per node: `EBV()` of such a result is whether the list is non-empty, and for any other result it returns
 what `EBV(r.Sequence())` returns (false for empty, true when the first item is a node, the value of a single boolean,
-string, anyURI, untypedAtomic or numeric item, otherwise an `*XPathError` with code FORG0006). xslt3
-(`xsl:if`/`xsl:when` tests and the other EBV sites), schematron's xslt3/xpath3 binding (`effectiveBoolean`) and xsd
-(`xs:assert`, assertion facets, `xs:alternative` tests) take the boolean through `Result.EBV()`. For such a result `Evaluate` allocates the `Result` and its `resultNodes` in one `resultBox`;
+string, anyURI, untypedAtomic or numeric item, otherwise an `*XPathError` with code FORG0006). xslt3's
+`use-when` and pattern predicates take the boolean through `Result.EBV()`. For such a result `Evaluate` allocates the
+`Result` and its `resultNodes` in one `resultBox`;
 `EvaluateReuse` keeps the `resultNodes` in the `EvalState`.
 
 ## Regex
