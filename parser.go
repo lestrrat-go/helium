@@ -787,7 +787,7 @@ func (p Parser) Parse(ctx context.Context, b []byte) (*Document, error) { //noli
 	p = p.normalized()
 
 	pctx := &parserCtx{rawInput: b, baseURI: p.cfg.baseURI}
-	if err := pctx.init(p.cfg, bytes.NewReader(b)); err != nil {
+	if err := pctx.init(p.cfg, bytes.NewReader(b), len(b)); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -1017,7 +1017,7 @@ func (p Parser) parseReader(ctx context.Context, r io.Reader, srcSize int64) (*D
 		pctx.ebcdicConsumed = counter
 		stream = counter
 	}
-	if err := pctx.init(p.cfg, stream); err != nil {
+	if err := pctx.init(p.cfg, stream, -1); err != nil {
 		return nil, err
 	}
 	// init seeds inputSize from rawInput (nil here, so 0). When the caller
@@ -1126,7 +1126,7 @@ found:
 	}
 
 	newctx := &parserCtx{}
-	if err := newctx.init(p.cfg, bytes.NewReader(data)); err != nil {
+	if err := newctx.init(p.cfg, bytes.NewReader(data), len(data)); err != nil {
 		return nil, err
 	}
 	defer func() {

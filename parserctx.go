@@ -195,6 +195,7 @@ type parserCtx struct {
 	nodeTab     nodeStack
 	sizeentcopy int64 // cumulative entity expansion bytes (non-entity-specific)
 	inputSize   int64 // total input document size
+	inputLen    int   // bytes in the reader init was given, -1 when unknown; see inputBufSize
 	maxAmpl     int   // max entity amplification factor (default 5; 0 = ratio check disabled)
 	// nbentities int
 	inputTab         inputStack
@@ -752,13 +753,37 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (ctx *parserCtx) init(p *parserConfig, in io.Reader) error {
+// smallInputMax is the input size below which the cursors reading the input
+// get a buffer sized to it in place of their default (see inputBufSize).
+const smallInputMax = 4096
+
+// inputLookahead is the slack inputBufSize adds past the end of a known-size
+// input, so a lookahead past the last byte (a prefix test, a scan ending at the
+// end of the input) fits the buffer without growing it.
+const inputLookahead = 16
+
+// inputBufSize returns the buffer size for a cursor reading the raw input that
+// init was given: its size plus inputLookahead when that is below
+// smallInputMax, or 0 (the cursor's default) otherwise or when the size is
+// unknown. A cursor never holds more than the whole input, so a small
+// document does not allocate a full-size buffer.
+func (ctx *parserCtx) inputBufSize() int {
+	if ctx.inputLen < 0 || ctx.inputLen+inputLookahead >= smallInputMax {
+		return 0
+	}
+	return ctx.inputLen + inputLookahead
+}
+
+// init prepares ctx to parse in. size is the number of bytes in holds, or -1
+// when it is unknown.
+func (ctx *parserCtx) init(p *parserConfig, in io.Reader, size int) error {
 	// Capture the top-level document base once, before any external subset or
 	// entity parse moves ctx.baseURI. The confined-FS retry (openExternalResource)
 	// relativizes against this fixed root so a nested resource in a subdirectory
 	// resolves against the document root, not its own moving base.
 	ctx.documentBaseURI = ctx.baseURI
-	ctx.pushInput(strcursor.NewByteCursor(in))
+	ctx.inputLen = size
+	ctx.pushInput(strcursor.NewByteCursor(in, ctx.inputBufSize()))
 	ctx.detectedEncoding = encUTF8
 	ctx.encoding = ""
 	ctx.in = in

@@ -48,7 +48,7 @@ func TestValidateEntityValueRefs(t *testing.T) {
 		doc := NewDocument("1.0", "", StandaloneImplicitNo)
 
 		pctx := &parserCtx{}
-		require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+		require.NoError(t, pctx.init(nil, bytes.NewReader(nil), 0))
 		pctx.doc = doc
 		pctx.sax = handler
 		pctx.treeBuilder = tb
@@ -65,7 +65,7 @@ func TestValidateEntityValueRefs(t *testing.T) {
 		// genuinely doing work. Run parseStringPEReference directly on an unresolved
 		// PE and observe hasPERefs flip true and valid flip false.
 		probe := &parserCtx{}
-		require.NoError(t, probe.init(nil, bytes.NewReader(nil)))
+		require.NoError(t, probe.init(nil, bytes.NewReader(nil), 0))
 		probe.doc = doc
 		probe.sax = handler
 		probe.treeBuilder = tb
@@ -107,7 +107,7 @@ func TestValidateEntityValueRefs(t *testing.T) {
 		t.Parallel()
 
 		pctx := &parserCtx{}
-		require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+		require.NoError(t, pctx.init(nil, bytes.NewReader(nil), 0))
 
 		doc := NewDocument("1.0", "", StandaloneImplicitNo)
 		dtd, err := doc.CreateInternalSubset("r", "", "")
@@ -179,7 +179,7 @@ func TestUndefinedParameterEntity(t *testing.T) {
 	// expandEntityValueForRefCheck), never panic, and must not surface an error.
 	t.Run("decodeEntities expands it to nothing", func(t *testing.T) {
 		pctx := &parserCtx{}
-		require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+		require.NoError(t, pctx.init(nil, bytes.NewReader(nil), 0))
 		doc := NewDocument("1.0", "", StandaloneImplicitNo)
 		tb := NewTreeBuilder()
 		pctx.doc = doc
@@ -689,7 +689,7 @@ func newAttributeDefaultCtx(t *testing.T) *parserCtx {
 	t.Helper()
 
 	pctx := &parserCtx{}
-	require.NoError(t, pctx.init(nil, bytes.NewReader(nil)))
+	require.NoError(t, pctx.init(nil, bytes.NewReader(nil), 0))
 	pctx.doc = NewDocument("1.0", "", StandaloneImplicitNo)
 	return pctx
 }

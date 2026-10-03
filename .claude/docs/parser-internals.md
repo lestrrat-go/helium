@@ -58,6 +58,12 @@ Central state struct (`parserctx.go`). Key fields:
 - `inputTab` (inputStack) — LIFO stack of ByteCursor/UTF8Cursor; `switchEncoding`, external DTDs and parameter
   entities push new cursors, all before element content starts (see the `pushInput` comment)
 - `getCursor()` — current cursor; auto-pops exhausted ones, caches the active cursor between calls
+- Buffer sizes — `init` takes the input's size (-1 for a stream of unknown length). When the size plus
+  `inputLookahead` (16) is below `smallInputMax` (4096), `inputBufSize` sizes the document `ByteCursor` and the
+  `UTF8Cursor` `switchEncoding` installs over raw UTF-8 bytes to that, so a small document does not allocate the
+  4 KiB and 8 KiB defaults; the slack lets a lookahead past the last byte fit without growing the buffer. A
+  decoder's output can be longer than its input, so a decoding `UTF8Cursor` keeps the default. A sized buffer
+  holds the whole input, so no refill splits a text run where the default buffer would not
 - `UTF8Cursor` buffering (`internal/strcursor/utf8cursor.go`) — `fillBuffer` reads into the free space after the
   buffered bytes and compacts only when a request does not fit after `bufpos`, growing the buffer when it still
   does not. `compact` keeps the current line's text from `lineStart` (the last LF, at most `LineContextMax` = 1024

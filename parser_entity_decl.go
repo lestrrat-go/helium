@@ -958,7 +958,7 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 	}
 
 	newctx := &parserCtx{}
-	if err := newctx.init(nil, bytes.NewReader(content)); err != nil {
+	if err := newctx.init(nil, bytes.NewReader(content), len(content)); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -1093,7 +1093,7 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	}
 
 	newctx := &parserCtx{}
-	if err := newctx.init(nil, bytes.NewReader(chunk)); err != nil {
+	if err := newctx.init(nil, bytes.NewReader(chunk), len(chunk)); err != nil {
 		return nil, err
 	}
 	defer func() {

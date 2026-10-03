@@ -56,7 +56,7 @@ type ParseStateForTesting struct {
 func ParseStateOfParseForTesting(ctx context.Context, p Parser, b []byte) (ParseStateForTesting, error) {
 	p = p.normalized()
 	pctx := &parserCtx{rawInput: b, baseURI: p.cfg.baseURI}
-	if err := pctx.init(p.cfg, bytes.NewReader(b)); err != nil {
+	if err := pctx.init(p.cfg, bytes.NewReader(b), len(b)); err != nil {
 		return ParseStateForTesting{}, err
 	}
 	err := pctx.parseDocument(ctx)

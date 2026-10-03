@@ -181,10 +181,19 @@ type UTF8Cursor struct {
 	startLine int
 }
 
-// NewUTF8Cursor creates a UTF8Cursor wrapping an existing io.Reader.
-func NewUTF8Cursor(r io.Reader) *UTF8Cursor {
+// defaultUTF8BufSize is the buffer size NewUTF8Cursor uses unless told otherwise.
+const defaultUTF8BufSize = 8192
+
+// NewUTF8Cursor creates a UTF8Cursor wrapping an existing io.Reader. An
+// optional positive size sets the initial buffer size; the buffer still grows
+// when a single request needs more.
+func NewUTF8Cursor(r io.Reader, size ...int) *UTF8Cursor {
+	n := defaultUTF8BufSize
+	if len(size) > 0 && size[0] > 0 {
+		n = size[0]
+	}
 	return &UTF8Cursor{
-		buf:    make([]byte, 8192),
+		buf:    make([]byte, n),
 		buflen: 0,
 		bufpos: 0,
 		column: 1,
