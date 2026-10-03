@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -474,7 +475,9 @@ func (inv Invocation) Serialize(ctx context.Context) (string, error) {
 }
 
 // WriteTo executes the transformation and writes the serialized result to w.
-// Secondary result documents are delivered through the handler only.
+// Secondary result documents are delivered through the handler only. When the
+// json or adaptive method produces only captured items, those items are
+// serialized as the principal result.
 func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 	if err := inv.validate(); err != nil {
 		return err
@@ -484,6 +487,11 @@ func (inv Invocation) WriteTo(ctx context.Context, w io.Writer) error {
 	inv.cfg.resolved.store(tcfg.resolvedOutputDef)
 	if err != nil {
 		return err
+	}
+	if outDef := tcfg.resolvedOutputDef; outDef != nil && resultDoc.FirstChild() == nil &&
+		isItemSerializationMethod(outDef.Method) &&
+		sequence.Len(tcfg.primaryItems) > 0 {
+		return SerializeItems(w, tcfg.primaryItems, resultDoc, outDef)
 	}
 	return SerializeResult(w, resultDoc, tcfg.resolvedOutputDef)
 }

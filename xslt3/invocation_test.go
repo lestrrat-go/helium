@@ -1318,3 +1318,34 @@ func TestHandlerError(t *testing.T) {
 		require.ErrorIs(t, err, errHandlerAborted)
 	})
 }
+
+// TestSerializePrimaryItems checks that Serialize writes a captured primary
+// item sequence and still serializes a primary result built as a document.
+func TestSerializePrimaryItems(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		body   string
+		want   string
+	}{
+		{"json map", `<xsl:output method="json"/>`, `<xsl:sequence select="map{'a': 1}"/>`, `{"a":1}`},
+		{"json array", `<xsl:output method="json"/>`, `<xsl:sequence select="[1, 'x']"/>`, `[1,"x"]`},
+		{"adaptive atomic", `<xsl:output method="adaptive"/>`, `<xsl:sequence select="1, 'x'"/>`, "1\n\"x\""},
+		{"adaptive element", `<xsl:output method="adaptive"/>`,
+			`<xsl:sequence select="/r"/>`, `<?xml version="1.0" encoding="UTF-8"?><r/>`},
+		{"xml build-tree no", `<xsl:output method="xml" build-tree="no" omit-xml-declaration="yes"/>`,
+			`<xsl:sequence select="/r, 1"/>`, `<r/>1`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">`+
+				tc.output+`<xsl:template match="/">`+tc.body+`</xsl:template></xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<r/>`))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, out)
+		})
+	}
+}
