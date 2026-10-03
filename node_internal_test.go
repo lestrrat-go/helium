@@ -3,6 +3,7 @@ package helium
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -887,4 +888,71 @@ func TestSlabGrowth(t *testing.T) {
 		}
 		require.Equal(t, n, i)
 	})
+
+	// Node allocation does not clear a node, so Free must hand every chunk back
+	// to its pool zeroed: the full chunks and the used prefix of the last,
+	// partly used one.
+	t.Run("Free returns zeroed chunks", func(t *testing.T) {
+		docs := []struct {
+			name string
+			doc  *Document
+		}{
+			{"parsed document", newPooledDocument()},
+			{"built document after its growth schedule", NewDefaultDocument()},
+		}
+		for _, tc := range docs {
+			t.Run(tc.name, func(t *testing.T) {
+				requireFreeZeroesChunks(t, tc.doc)
+			})
+		}
+	})
+}
+
+// requireFreeZeroesChunks builds enough nodes of every slab type in doc to
+// fill at least one pooled chunk and partly use another, frees doc, and checks
+// that every chunk it held is zero.
+func requireFreeZeroesChunks(t *testing.T, doc *Document) {
+	t.Helper()
+	const n = 300
+	root, err := doc.CreateElement("root")
+	require.NoError(t, err)
+	require.NoError(t, doc.SetDocumentElement(root))
+	for i := range n {
+		e, err := doc.CreateElement("e")
+		require.NoError(t, err)
+		require.NoError(t, root.AddChild(e))
+		attr, err := doc.CreateAttribute("a", strconv.Itoa(i), nil)
+		require.NoError(t, err)
+		require.NoError(t, e.AddChild(attr))
+		ns, err := doc.CreateNamespace("p", "urn:p")
+		require.NoError(t, err)
+		require.NoError(t, e.AddNamespaceDecl(ns))
+		require.NoError(t, e.AddChild(doc.CreateText([]byte("t"))))
+	}
+	require.GreaterOrEqual(t, len(doc.elemChunks), 2)
+	require.GreaterOrEqual(t, len(doc.textChunks), 2)
+	require.GreaterOrEqual(t, len(doc.attrChunks), 2)
+	require.GreaterOrEqual(t, len(doc.nsChunks), 2)
+	elems := doc.elemChunks
+	texts := doc.textChunks
+	attrs := doc.attrChunks
+	nss := doc.nsChunks
+
+	doc.Free()
+	requireZeroChunks(t, elems)
+	requireZeroChunks(t, texts)
+	requireZeroChunks(t, attrs)
+	requireZeroChunks(t, nss)
+}
+
+// requireZeroChunks checks that every node in every chunk is the zero value.
+// reflect compares the nodes because Element and Text hold slices and so are
+// not comparable with ==.
+func requireZeroChunks[T any](t *testing.T, chunks []*[slabSize]T) {
+	t.Helper()
+	for i, c := range chunks {
+		for j := range c {
+			require.True(t, reflect.ValueOf(&c[j]).Elem().IsZero(), "chunk %d node %d is not zero", i, j)
+		}
+	}
 }
