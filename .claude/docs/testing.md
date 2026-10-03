@@ -120,6 +120,7 @@ bug that prompted it.
 | `interleave_differential_test.go` | relaxng | Flag-gated interleave differential harness (optional `xmllint` oracle) |
 | `validate_concurrency_test.go` | relaxng | Every golden instance validated from 8 goroutines sharing one `Grammar` (run with `-race`) |
 | `schematron_test.go` | schematron | Schematron golden tests |
+| `xmldsig1_bench_test.go` | xmldsig1 | Enveloped signing and verification benchmarks |
 | `bytecursor_test.go` | internal/strcursor | ByteCursor read-error and zero-progress handling; `TestCursorPosition` checks line, column, and line text after every advancing method on both ByteCursor and UTF8Cursor |
 | `utf8cursor_test.go` | internal/strcursor | UTF-8 cursor boundary/normalization, ASCII QName scanner regression coverage, `ScanCharDataSlice` run/validity checks against a character-at-a-time reference (`FuzzScanCharDataSlice`), `ScanSimpleAttrValue` against a byte-at-a-time reference (`FuzzScanSimpleAttrValue`) and over every code point, and `AdvanceFast`/`AdvanceNoNewline` line/column against `Advance` |
 
@@ -441,6 +442,15 @@ validated against the same `<order>`. Every case runs once per version as `<case
 `assert_cta_1000` and `assert_paths_1000` run only at 1.1. Compilation times `Compiler.Compile` with a parsed schema
 document; validation times `Validator.Validate` with a compiled schema and parsed instance document.
 
+Parse benchmarks (`bench/parse_bench_test.go`) share a corpus of `relaxng/test/spec_0.xml` (`118KB`, declared
+iso-8859-1), `schemas/test/nvdcve_0.xml` (`287KB`) and `relaxng/test/comps_0.xml` (`608KB`), loaded by `loadCorpus`.
+`BenchmarkHeliumParse` times `Parse` on the byte slice. `BenchmarkHeliumParseReader` times `ParseReader` in two
+sub-cases per size: `BytesReader` reads from a `bytes.Reader`, and `64BReads` wraps it in `cappedReader`, which returns
+at most 64 bytes per `Read`, so most tags and text runs straddle a read boundary. A cap of a few KB times the same as
+`BytesReader`, because the parser's input buffer is 8KB. `BenchmarkHeliumParseSmall` times documents of 1KB or less
+through `Parse`, `ParseReader` and a reused `Parser`. `BenchmarkStdlibXMLDecode` tokenizes the same corpus with
+`encoding/xml` for comparison.
+
 `BenchmarkWrite` (`writer_test.go`) serializes the parsed `nvdcve_0.xml`, `relaxng/test/comps_0.xml`, and
 `relaxng/test/ISO19005-1-XMP_Packet.rng` (`xmprng`: every element `rng:`-prefixed, about thirty namespace
 declarations on the root) with `helium.Write` into `io.Discard`. `BenchmarkIdentityTransform` (`xslt3/identity_bench_test.go`) runs an identity
@@ -463,6 +473,14 @@ bare `xsl:number`; `number-any`: `level="any" count="rec"`; `format-number` with
 `BenchmarkFunctionCall` (`simple`: one two-parameter `xsl:function` call per record; `recursive`: a recursive
 factorial, up to nine nested calls per record). Each case compiles once and checks its output once before the timed
 loop; the compile case also checks that `Compile` leaves the stylesheet document unchanged.
+
+XML Signature benchmarks (`xmldsig1/xmldsig1_bench_test.go`) run `BenchmarkSignEnveloped` (`Signer.SignEnveloped`)
+and `BenchmarkVerify` (`Verifier.Verify`) over two inputs: `saml_1KB`, an inline SAML 2.0 assertion, and
+`nvdcve_287KB`, `schemas/test/nvdcve_0.xml`. Each input runs with `rsa-sha256` (RSA-2048) and `ecdsa-p256-sha256`
+keys generated once per benchmark. Both use `NewEnvelopedReference` (whole document, enveloped-signature transform,
+Exclusive C14N, SHA-256) and the `NewSigner` default Exclusive C14N for SignedInfo. Signing inserts a Signature, so
+each sign iteration signs a fresh `helium.CopyDoc` of the parsed input, made with the timer stopped. Verify signs
+one copy before the loop and verifies it every iteration. `SetBytes` is the unsigned input size in both.
 
 RELAX NG benchmarks (`relaxng/relaxng_benchmark_test.go`) use `tutor10_8` (`small`) and `libvirt` from the same
 tree. `BenchmarkValidate/large` validates `libvirt_0.xml` with its single `<disk>` repeated 300 times, built in
