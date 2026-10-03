@@ -62,6 +62,9 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 
 	// Apply schema validation when validation="strict"|"lax" or type is specified.
 	if ec.schemaRegistry != nil && (inst.Validation == validationStrict || inst.Validation == validationLax || inst.TypeName != "") {
+		// doc may be a cached tree that xsl:number already counted in; the
+		// annotations and whitespace stripping below change what it counts.
+		ec.numberMemos = nil
 		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
 		if valErr != nil {
 			if inst.TypeName != "" {
@@ -88,6 +91,8 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	// Apply input-type-annotations="strip": remove all type annotations so
 	// elements are xs:untyped and attributes xs:untypedAtomic.
 	if ec.stylesheet.inputTypeAnnotations == validationStrip && ec.typeAnnotations != nil {
+		// Dropping annotations changes which nodes a typed count pattern matches.
+		ec.numberMemos = nil
 		ec.preserveIDAnnotations()
 		for k := range ec.typeAnnotations {
 			delete(ec.typeAnnotations, k)
@@ -1398,6 +1403,12 @@ func (ec *execContext) checkAccumulatorType(ctx context.Context, def *accumulato
 func (ec *execContext) applyMergeSourceValidation(ctx context.Context, src *mergeSource, doc *helium.Document) error {
 	if ec.schemaRegistry == nil {
 		return nil
+	}
+	// doc may be a cached tree that xsl:number already counted in; validating
+	// or stripping it in place changes what it counts.
+	if src.TypeName != "" || src.Validation == validationStrict || src.Validation == validationLax ||
+		src.Validation == validationStrip {
+		ec.numberMemos = nil
 	}
 	if src.TypeName != "" || src.Validation == validationStrict || src.Validation == validationLax {
 		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)

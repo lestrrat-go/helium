@@ -270,13 +270,20 @@ func (ec *execContext) numberSingle(ctx context.Context, inst *numberInst, node 
 		return nil
 	}
 
-	// Count preceding siblings that match count pattern
+	// Count preceding siblings that match count pattern, stopping at the
+	// sibling the previous evaluation counted.
+	memoNode, memoCount := ec.numberMemoFor(inst, node)
 	count := 1
 	for sib := target.PrevSibling(); sib != nil; sib = sib.PrevSibling() {
+		if sib == memoNode {
+			count += memoCount
+			break
+		}
 		if ec.numberNodeMatches(ctx, inst, sib, node) {
 			count++
 		}
 	}
+	ec.storeNumberMemo(inst, node, target, count)
 	return []int{count}
 }
 
@@ -322,9 +329,16 @@ func (ec *execContext) numberMultiple(ctx context.Context, inst *numberInst, nod
 // that precede (or are) the context node, going back to the nearest from match.
 // The from node itself is included in the count if it matches count.
 func (ec *execContext) numberAny(ctx context.Context, inst *numberInst, node helium.Node) []int {
+	memoNode, memoCount := ec.numberMemoFor(inst, node)
 	count := 0
 	cur := node
 	for cur != nil {
+		// Reaching the node the previous evaluation started from means no
+		// from match lies between the two, so its count carries over.
+		if cur == memoNode {
+			count += memoCount
+			break
+		}
 		if ec.numberNodeMatches(ctx, inst, cur, node) {
 			count++
 		}
@@ -333,10 +347,87 @@ func (ec *execContext) numberAny(ctx context.Context, inst *numberInst, node hel
 		}
 		cur = ec.prevInDocOrder(cur)
 	}
+	ec.storeNumberMemo(inst, node, node, count)
 	if count == 0 {
 		return nil
 	}
 	return []int{count}
+}
+
+// numberMemo records one level="single" or level="any" count: the backward
+// walk that started at node produced count. For level="single" node is the
+// counted node and the walk visits its preceding siblings; for level="any"
+// node is the selected node and the walk visits the preceding nodes and
+// ancestors back to the nearest from match.
+//
+// A later walk by the same instruction that reaches node can stop there and
+// add count, because from that point it would visit the same nodes and get
+// the same answers:
+//   - whether a node matches the count and from patterns depends on that node
+//     alone, since neither pattern reads a variable (numberInst.memoizable);
+//   - the trees xsl:number can see keep their shape and type annotations
+//     during a transform, and the memo keeps node alive, so its address
+//     cannot be reused by another node. Only trees under construction change,
+//     plus one exception: xsl:source-document and xsl:merge-source validate
+//     or strip annotations on a cached document in place, and those sites
+//     clear numberMemos;
+//   - a level="any" walk stops at a from match, so it reaches node only when
+//     no from match lies between the two starting points.
+//
+// A walk that never reaches node (an earlier node, another tree) just counts
+// in full. Without a count pattern a node is counted when it has the selected
+// node's kind and name, so the memo is used only for a selected node with the
+// same kind, local name, and namespace URI.
+type numberMemo struct {
+	node  helium.Node
+	count int
+	kind  helium.ElementType
+	local string
+	uri   string
+}
+
+// numberDefaultKey returns the kind and name the default count pattern
+// compares, matching numberNodeMatches.
+func numberDefaultKey(node helium.Node) (helium.ElementType, string, string) {
+	if elem, ok := node.(*helium.Element); ok {
+		return helium.ElementNode, elem.LocalName(), elem.URI()
+	}
+	return node.Type(), node.Name(), ""
+}
+
+// numberMemoFor returns the node and count of inst's previous evaluation when
+// they apply to numbering selected, and a nil node otherwise.
+func (ec *execContext) numberMemoFor(inst *numberInst, selected helium.Node) (helium.Node, int) {
+	if !inst.memoizable {
+		return nil, 0
+	}
+	memo, ok := ec.numberMemos[inst]
+	if !ok {
+		return nil, 0
+	}
+	if inst.Count == nil {
+		kind, local, uri := numberDefaultKey(selected)
+		if memo.kind != kind || memo.local != local || memo.uri != uri {
+			return nil, 0
+		}
+	}
+	return memo.node, memo.count
+}
+
+// storeNumberMemo records that the walk for selected, starting at node,
+// produced count.
+func (ec *execContext) storeNumberMemo(inst *numberInst, selected, node helium.Node, count int) {
+	if !inst.memoizable {
+		return
+	}
+	memo := numberMemo{node: node, count: count}
+	if inst.Count == nil {
+		memo.kind, memo.local, memo.uri = numberDefaultKey(selected)
+	}
+	if ec.numberMemos == nil {
+		ec.numberMemos = make(map[*numberInst]numberMemo)
+	}
+	ec.numberMemos[inst] = memo
 }
 
 // prevInDocOrder returns the previous node in document order.

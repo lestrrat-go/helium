@@ -139,6 +139,11 @@ type execContext struct {
 	// traverses a tree while it is still being built must clear this map (or
 	// not memoize) at that seam. Lazily allocated; nil means empty.
 	xmlSpacePreserveMemo map[*helium.Element]bool
+	// numberMemos holds, per xsl:number instruction, the count its last
+	// level="single" or level="any" evaluation produced, so numbering a list
+	// in document order walks back only to the previous numbered node (see
+	// numberMemo). Lazily allocated; nil means empty.
+	numberMemos map[*numberInst]numberMemo
 
 	// cached base XPath evaluator — rebuilt when invalidation keys change
 	cachedBaseEval                  xpath3.Evaluator

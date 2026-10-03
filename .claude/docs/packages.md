@@ -889,6 +889,13 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   (`visibleVarScope`), `localVarsVer` (bumped by `setVar`/`setVarDeferred` and by popping a scope that held
   bindings), and the current package. The returned map is shared, so callers copy it before adding bindings
   (`xsl:evaluate` does).
+- `xsl:number` counting (`execute_number.go`): `level="single"` and `level="any"` walk back from the counted
+  node and stop at the node the same instruction's previous evaluation started from, adding its count
+  (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in document order is linear. The memo
+  is off when the `count` or `from` pattern references a variable (`numberInst.memoizable`); without a `count`
+  pattern it applies only to a selected node of the same kind and expanded name. It relies on trees visible to
+  `xsl:number` keeping their shape and annotations during a run; `xsl:source-document` and `xsl:merge-source`
+  validate or strip annotations on a cached document in place, so they clear `numberMemos` first.
 - User `xsl:function` calls (`functions_user.go`): `xslFunction.prepareCall` runs once at compile time. It parses
   the parameter and return sequence types for both xpath3 coercion (`FuncParamTypes`/`FuncReturnType`) and
   `checkSequenceType`, and marks a body made only of select-form `xsl:sequence` instructions as `selectOnly`. Each
