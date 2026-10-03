@@ -29,7 +29,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 | File | Contents |
 |------|----------|
 | `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, `PushXDMChildren` (one step of a pre-order walk stack), all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
-| `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot`, `DocumentRegistered` (whether a node's document has a registration order, indexed or reserved), `SameNode` (node identity: a namespace node with a parent element is that element plus its prefix, any other node its pointer; shared by the xpath3 `is` operator and xslt3 pattern matching) |
+| `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot`, `DocumentRegistered` (whether a node's document has a registration order, indexed or reserved), `NamespaceNodeKey`/`SameNode` (node identity: a namespace node with a parent element is that element plus its prefix, any other node, a parentless namespace node included, its pointer; shared by node-set deduplication, the xpath3 `is`/`union`/`intersect`/`except` operators and `generate-id`, and xslt3 pattern matching) |
 | `union.go` | `UnionNodeSets` (xpath3 union: `MergeNodeSets` result, skipping the index for one element's attributes then children, and merging two sorted operands in one pass), `inElementOrder`, `mergeIncreasingRuns` |
 | `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `OrderedFrom` (its one-input skip condition), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)` (an element's or document's string-value is its `Content()`: Text/CDATA descendants with entity references expanded through owned children only; a document's leaves out its DTD), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
@@ -166,7 +166,7 @@ func NodePrefix(n helium.Node) string
 | `function_library.go` | Function library management |
 | `function_signatures.go` | Function signature declarations |
 | `functions.go` | `Function` interface, `FunctionContext`, registry, `builtinFunc`, `registerFn`/`registerNS` helpers; boolean, not, true, false, error, trace |
-| `functions_node.go` | node-name, local-name, namespace-uri, name, root, path, id, lang, etc. |
+| `functions_node.go` | node-name, local-name, namespace-uri, name, root, path, id, lang, generate-id, etc. |
 | `functions_string.go` | string ops, regex (matches, replace, tokenize), upper/lower-case |
 | `functions_numeric.go` | abs, ceiling, floor, round, round-half-to-even |
 | `functions_aggregate.go` | count, sum, avg, min, max, distinct-values |
@@ -181,7 +181,7 @@ func NodePrefix(n helium.Node) string
 | `functions_json.go` | parse-json, json-doc |
 | `functions_json_xml.go` | json-to-xml, xml-to-json |
 | `functions_serialize.go` | serialize |
-| `functions_misc.go` | static-base-uri, default-collation, environment-variable, current-dateTime, generate-id |
+| `functions_misc.go` | static-base-uri, default-collation, environment-variable, current-dateTime |
 | `functions_constructors.go` | XSD typed atomic constructors (incl. xs:error) |
 | `functions_unparsed_text.go` | unparsed-text, unparsed-text-lines, unparsed-text-available |
 | `errors.go` | `XPathError` (structured error with code), standard error constructors |
