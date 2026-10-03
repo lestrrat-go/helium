@@ -239,6 +239,7 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 		Visibility: getAttr(elem, "visibility"),
 		IsOverride: true,
 	}
+	fn.prepareCall()
 
 	// Inherit the base component's visibility so that processExpose
 	// in the using package does not default it to private. Abstract
