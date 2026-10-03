@@ -349,7 +349,9 @@ func parseTemplatePriority(prio string) (float64, error) {
 	if !isXSDecimal(prio) {
 		return 0, staticError(errCodeXTSE0530, "priority %q is not a valid xs:decimal", prio)
 	}
-	f, err := strconv.ParseFloat(prio, 64)
+	// xs:decimal ignores leading and trailing whitespace; isXSDecimal already
+	// trims it, so ParseFloat must see the trimmed form too.
+	f, err := strconv.ParseFloat(strings.TrimSpace(prio), 64)
 	if err != nil {
 		return 0, staticError(errCodeXTSE0530, "invalid priority %q: %v", prio, err)
 	}

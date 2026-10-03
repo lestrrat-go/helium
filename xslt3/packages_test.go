@@ -276,6 +276,7 @@ func TestOverrideTemplateStaticErrors(t *testing.T) {
 		code     string
 	}{
 		{name: "valid", template: `<xsl:template match="a" mode="m" priority="-1.5">[ok]</xsl:template>`},
+		{name: "priority with surrounding whitespace", template: `<xsl:template match="a" mode="m" priority=" 2 ">[ok]</xsl:template>`},
 		{name: "priority with exponent", template: `<xsl:template match="a" mode="m" priority="1e3">[p]</xsl:template>`, code: "XTSE0530"},
 		{name: "priority with trailing text", template: `<xsl:template match="a" mode="m" priority="0.5x">[p]</xsl:template>`, code: "XTSE0530"},
 		{name: "unknown attribute", template: `<xsl:template match="a" mode="m" bogus="1">[p]</xsl:template>`, code: "XTSE0090"},
