@@ -240,7 +240,7 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	pctx.instate = psContent
 	pctx.armBodyPoll(ctx)
 	err = pctx.parseElement(ctx, u8)
-	pctx.bodyNeverDone = false
+	pctx.disarmBodyPoll()
 	if err != nil {
 		return pctx.error(ctx, err)
 	}

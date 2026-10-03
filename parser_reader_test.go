@@ -17,6 +17,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	heliumencoding "github.com/lestrrat-go/helium/internal/encoding"
+	"github.com/lestrrat-go/helium/internal/heliumtest"
 	"github.com/lestrrat-go/helium/sax"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
@@ -1074,4 +1075,32 @@ func TestParseContextCancel(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled, "Parse must return the context error")
 		require.Empty(t, handler.recorded(), "SAX Error handler must not be invoked on a clean cancellation")
 	})
+}
+
+// TestParseOpenContextPollCount checks that a cancellable context which is not
+// cancelled is not asked for its Err once per element: while the root element
+// is parsed, the parser watches the context's Done channel and calls Err only
+// after Done closes. The number of Err calls therefore does not grow with the
+// document. The PollContext never closes Done, so it only counts.
+func TestParseOpenContextPollCount(t *testing.T) {
+	t.Parallel()
+
+	few := parsePollCount(t, 1)
+	require.Equal(t, few, parsePollCount(t, 1000), "Err calls must not grow with the number of elements")
+
+	ctx := heliumtest.NewPollContext(t.Context(), 0, nil)
+	_, err := helium.NewParser().ParseReader(ctx, strings.NewReader("<root>"+strings.Repeat("<a>x</a> ", 1000)+"</root>"))
+	require.NoError(t, err)
+	require.Less(t, ctx.Polls(), 1000, "ParseReader must not call Err once per element either")
+}
+
+// parsePollCount parses a document of children elements under an open
+// cancellable context and returns how many times the parse called its Err.
+func parsePollCount(t *testing.T, children int) int {
+	t.Helper()
+	ctx := heliumtest.NewPollContext(t.Context(), 0, nil)
+	doc := `<?xml version="1.0"?>` + "\n<root>\n" + strings.Repeat("  <a>x</a>\n", children) + "</root>\n"
+	_, err := helium.NewParser().Parse(ctx, []byte(doc))
+	require.NoError(t, err)
+	return ctx.Polls()
 }

@@ -159,7 +159,9 @@ Tests never pass or fail on elapsed time. Express the protected property as work
 
 - Cancellation/deadline honored mid-run → `heliumtest.PollContext` placing the cancellation or deadline at a
   fixed poll (helium's walks poll through `ctx.Err()`), then assert the context error and a small
-  `PollsAfterExpiry()`. A pre-cancelled context covers the entry checks.
+  `PollsAfterExpiry()`. A pre-cancelled context covers the entry checks. The XML parser checks `Done` before
+  `Err` while it parses a document's root element (`pollErr`), so `PollContext` never expires there; cancel a
+  real context from a SAX callback instead (`TestParseContextCancel`).
 - Laziness, bounded backtracking, linear growth → count work, as described in Resource-Measuring Assertions
   below.
 - Blocking behavior → synchronize on a signal from the code under test (a context whose `Err` or `Done`

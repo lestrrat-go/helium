@@ -419,9 +419,13 @@ char-ref) re-check `ctx.Err()` and disambiguate exhaustion from a sticky cursor 
 `HasByteAt`/`Err()` for push-cancel safety. See `parseDocument`, `skipBlankRun`, and the `push` package.
 
 While the root element is parsed, the per-step polls in `parseContent` and `skipBlankRun` go through
-`pollErr` (`parserctx.go`). `armBodyPoll` reads the parse context's `Done` once; when it is nil (a context
-that can never be cancelled, such as `context.Background()`) `pollErr` returns nil without calling `Err`.
-Every other poll, including every poll of a cancellable context, calls `Err`.
+`pollErr` (`parserctx.go`). `armBodyPoll` reads the parse context's `Done` once. When it is nil (a context
+that can never be cancelled, such as `context.Background()`) `pollErr` returns nil without calling `Err`;
+otherwise it receives from `Done` without blocking and calls `Err` only once `Done` is closed, so an open
+cancellable context costs a channel check per step and a cancellation is seen at the next step. Polls outside
+the root element (prolog, epilogue, entity-content and fragment sub-parses) call `Err` every time. A test
+context that closes `Done` only from inside `Err` (`heliumtest.PollContext`) therefore cannot place a
+cancellation inside a document's root element.
 
 ## Push Parser
 

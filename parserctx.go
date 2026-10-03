@@ -238,8 +238,10 @@ type parserCtx struct {
 	activePECount   map[*Entity]int
 	externalPEDepth int
 
-	// bodyNeverDone is set by armBodyPoll while the root element is parsed
-	// under a context whose Done is nil; see pollErr.
+	// bodyDone and bodyNeverDone are set by armBodyPoll while the root element
+	// is parsed: bodyDone holds the context's Done channel, and bodyNeverDone
+	// records that Done is nil. Both are zero outside that span; see pollErr.
+	bodyDone      <-chan struct{}
 	bodyNeverDone bool
 }
 
@@ -363,16 +365,34 @@ func (pctx *parserCtx) fireSAXCallback(ctx context.Context, typ int, args ...any
 // returns the same value on every call, and a nil Done means the context can
 // never be cancelled, so its Err is always nil.
 func (ctx *parserCtx) armBodyPoll(c context.Context) {
-	ctx.bodyNeverDone = c.Done() == nil
+	ctx.bodyDone = c.Done()
+	ctx.bodyNeverDone = ctx.bodyDone == nil
+}
+
+// disarmBodyPoll ends the span armBodyPoll started, so later polls call Err.
+func (ctx *parserCtx) disarmBodyPoll() {
+	ctx.bodyDone = nil
+	ctx.bodyNeverDone = false
 }
 
 // pollErr is ctx.Err() for the cancellation polls the hot parse loops make
-// once per step. While the root element is parsed under a context that can
-// never be cancelled (armBodyPoll), it returns nil without the call, which
-// would otherwise walk the parse's context.WithValue layers on every step. In
-// every other case, including a cancellable context, it calls Err, so the
-// returned error and the number of Err calls are unchanged.
+// once per step. While the root element is parsed (armBodyPoll) it avoids the
+// Err call, which would otherwise walk the parse's context.WithValue layers on
+// every step: under a context that can never be cancelled it returns nil, and
+// under a cancellable one it receives from Done without blocking and calls Err
+// only once Done is closed. A context's Err is non-nil once its Done is
+// closed, so a cancellation is seen at the first step after it. Outside that
+// span (the prolog, the epilogue, and the nested parsers of entity content and
+// fragments) it calls Err on every poll.
 func (ctx *parserCtx) pollErr(c context.Context) error {
+	if done := ctx.bodyDone; done != nil {
+		select {
+		case <-done:
+			return c.Err()
+		default:
+			return nil
+		}
+	}
 	if ctx.bodyNeverDone {
 		return nil
 	}
