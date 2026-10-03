@@ -11,12 +11,11 @@ import (
 )
 
 func (pctx *parserCtx) parseDocument(ctx context.Context) error {
-	// Store pctx in the context so SAX callbacks (e.g. TreeBuilder) can
-	// retrieve it via getParserCtx. Also store the document locator and
-	// stop function so helium.StopParser works.
+	// Store pctx in the context so SAX callbacks (e.g. TreeBuilder) and
+	// helium.StopParser can retrieve it via getParserCtx. Also store the
+	// document locator.
 	ctx = withParserCtx(ctx, pctx)
 	ctx = sax.WithDocumentLocator(ctx, pctx)
-	ctx = context.WithValue(ctx, stopFuncKey{}, pctx.stop)
 
 	// Honor a context that is already cancelled before any parsing work
 	// (or blocking reads) begins.

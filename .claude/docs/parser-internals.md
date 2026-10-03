@@ -471,8 +471,9 @@ leaves an empty default.
 - **RecoverOnError** — on a recoverable error in `parseContent()`: save `recoverErr`, `disableSAX=true`,
   `skipToRecoverPoint()` (advance to next `<`), continue, return partial document + saved error. Applies to
   genuine parse errors only — NOT context cancellation (above).
-- **StopParser(ctx)** — `stopped=true`, `instate=psEOF`; returns the parsed-so-far document + nil error (partial
-  document, unlike cancellation's nil document + context error).
+- **StopParser(ctx)** — finds the innermost parse through the `parserCtx` that `parseDocument` and every
+  sub-parse store on the callback context (`getParserCtx`), then sets `stopped=true`, `instate=psEOF`; returns
+  the parsed-so-far document + nil error (partial document, unlike cancellation's nil document + context error).
 
 ## Key Parser Fluent Method Effects
 

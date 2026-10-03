@@ -1013,7 +1013,6 @@ func (pctx *parserCtx) parseExternalEntityPrivate(ctx context.Context, uri, decl
 
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
-	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 
 	// A leading byte-order mark and TextDecl (and any declared encoding) have
 	// already been consumed and the body decoded to UTF-8 by
@@ -1149,7 +1148,6 @@ func (pctx *parserCtx) parseBalancedChunkInternal(ctx context.Context, chunk []b
 	}
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
-	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContentInput(innerCtx); err != nil {
 		return nil, err
 	}

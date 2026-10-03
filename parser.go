@@ -28,17 +28,13 @@ type readerReturningErr struct{ err error }
 
 func (r readerReturningErr) Read([]byte) (int, error) { return 0, r.err }
 
-type stopFuncKey struct{}
-
 // StopParser tells the parser to stop at the next opportunity. Call this
 // from any SAX callback to abort parsing early. The parse functions will
-// return the partial document built so far with a nil error.
+// return the partial document built so far with a nil error. It stops the
+// innermost parse that ctx carries: the one whose callback received ctx.
 func StopParser(ctx context.Context) {
-	if ctx == nil {
-		return
-	}
-	if fn, _ := ctx.Value(stopFuncKey{}).(func()); fn != nil {
-		fn()
+	if pctx := getParserCtx(ctx); pctx != nil {
+		pctx.stop()
 	}
 }
 
@@ -1176,7 +1172,6 @@ found:
 	}
 	innerCtx := withParserCtx(ctx, newctx)
 	innerCtx = sax.WithDocumentLocator(innerCtx, newctx)
-	innerCtx = context.WithValue(innerCtx, stopFuncKey{}, newctx.stop)
 	if err := newctx.parseContentInput(innerCtx); err != nil {
 		// errParserStopped is a benign stop (helium.StopParser); any other
 		// error, including context cancellation, propagates with a nil result.
