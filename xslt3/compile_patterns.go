@@ -1382,13 +1382,12 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 	}
 
 	// Check the last step against the node.
-	// For multi-step patterns with descendant axis and predicates, skip
-	// predicate evaluation here — predicates will be evaluated with proper
+	// For a last step on the descendant axis with predicates, skip predicate
+	// evaluation here — predicates will be evaluated with proper
 	// descendant-set position relative to the ancestor later.
 	lastStep := path.Steps[len(path.Steps)-1]
-	hasDescPreds := len(path.Steps) > 1 &&
-		(lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf) &&
-		len(lastStep.Predicates) > 0
+	descendantAxis := lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf
+	hasDescPreds := descendantAxis && len(lastStep.Predicates) > 0
 	if hasDescPreds {
 		// Check name/type test without predicates
 		stepNoPreds := lastStep
@@ -1400,8 +1399,10 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 		return false
 	}
 
-	// If there's only one step and it's absolute, check parent is document
-	if len(path.Steps) == 1 {
+	// If there's only one step on the child axis and it's absolute, check
+	// parent is document. A single descendant step reaches below the children
+	// and goes through the descendant matching below.
+	if len(path.Steps) == 1 && !descendantAxis {
 		if path.Absolute {
 			parent := node.Parent()
 			return parent != nil && parent.Type() == helium.DocumentNode
@@ -1412,12 +1413,17 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 	// Match remaining steps upward.
 	// The axis of the last step determines how to walk to the preceding step.
 	remaining := path.Steps[:len(path.Steps)-1]
-	if lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf {
-		if len(lastStep.Predicates) > 0 {
+	if descendantAxis {
+		if hasDescPreds {
 			return matchDescendantStepPredicates(ctx, ec, path.Absolute, remaining, lastStep, node)
 		}
-		// descendant / descendant-or-self axis: any ancestor may contain the preceding step
-		for cur := node.Parent(); cur != nil; cur = cur.Parent() {
+		// descendant axis: any ancestor may match the preceding steps; for
+		// descendant-or-self, the node itself may too.
+		start := node.Parent()
+		if lastStep.Axis == xpath3.AxisDescendantOrSelf {
+			start = node
+		}
+		for cur := start; cur != nil; cur = cur.Parent() {
 			if matchStepsUpward(ctx, ec, remaining, path.Absolute, cur) {
 				return true
 			}

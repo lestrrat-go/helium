@@ -1138,3 +1138,53 @@ func transformStepPredicate(t *testing.T, compat bool, match string) string {
 	require.NoError(t, err)
 	return strings.TrimSpace(out)
 }
+
+// TestPatternDescendantAxis checks patterns whose last step is on the
+// descendant or descendant-or-self axis. A node matches such a pattern when
+// the equivalent select expression returns it (XSLT 3.0 §5.5.3): a positional
+// predicate counts the node among all the nodes the step selects from some
+// ancestor (or from the node itself for descendant-or-self), not among its
+// siblings, and an absolute pattern accepts every descendant of the document
+// node, not only its children.
+func TestPatternDescendantAxis(t *testing.T) {
+	const srcXML = `<r><a/><b/><c><d/></c></r>`
+
+	tests := []struct {
+		name  string
+		match string
+		sel   string // the select expression that returns the nodes match matches
+		want  string
+	}{
+		{"descendant", "descendant::d", "//(descendant::d)", "[d]"},
+		{"absolute descendant", "/descendant::d", "/descendant::d", "[d]"},
+		{"absolute descendant-or-self", "/descendant-or-self::*", "/descendant-or-self::*", "[r][a][b][c][d]"},
+		{"descendant position", "descendant::*[2]", "//(descendant::*[2])", "[a][b]"},
+		{"descendant node position", "descendant::node()[3]", "//(descendant::node()[3])", "[b][c]"},
+		{"absolute descendant position", "/descendant::*[2]", "/descendant::*[2]", "[a]"},
+		{"absolute descendant last", "/descendant::*[last()]", "/descendant::*[last()]", "[d]"},
+		{"descendant-or-self position", "descendant-or-self::*[2]", "//(descendant-or-self::*[2])", "[a][d]"},
+		{"descendant-or-self after a step", "c/descendant-or-self::c", "//(c/descendant-or-self::c)", "[c]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out><m><xsl:apply-templates select="//node()"/></m>` +
+				`<s><xsl:for-each select="` + tc.sel + `">[<xsl:value-of select="name()"/>]</xsl:for-each></s></out>` +
+				`</xsl:template>
+  <xsl:template match="` + tc.match + `">[<xsl:value-of select="name()"/>]</xsl:template>
+  <xsl:template match="node()" priority="-5"/>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+			require.NoError(t, err)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "<out><m>"+tc.want+"</m><s>"+tc.want+"</s></out>", strings.TrimSpace(out))
+		})
+	}
+}
