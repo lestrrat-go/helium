@@ -490,7 +490,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 			// would make a package that uses this one register its rules
 			// twice, and two splits of one union rule would then conflict
 			// under on-multiple-match="fail".
-			if tmpl.Name == "" {
+			if tmpl.Name == "" || oset.namedTemplates[tmpl.Name] != tmpl {
 				c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
 			}
 			rules := templateRules(tmpl)
