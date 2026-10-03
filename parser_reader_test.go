@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/lestrrat-go/helium"
@@ -141,6 +142,50 @@ type headThenReadErrReader struct {
 	pos         int
 	err         error
 	cancelOnErr context.CancelFunc
+}
+
+// splitAtReader returns data[:at] on its first Read and the rest afterwards,
+// so a test can place a read boundary at any byte offset.
+type splitAtReader struct {
+	data []byte
+	at   int
+}
+
+func (r *splitAtReader) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, io.EOF
+	}
+	n := len(r.data)
+	if r.at > 0 {
+		n = r.at
+		r.at = 0
+	}
+	n = copy(p, r.data[:n])
+	r.data = r.data[n:]
+	return n, nil
+}
+
+// textEventRecorder records Characters and IgnorableWhitespace events in
+// order, each tagged with its kind.
+type textEventRecorder struct {
+	events []string
+}
+
+func (r *textEventRecorder) characters(_ context.Context, ch []byte) error {
+	r.events = append(r.events, "C "+string(ch))
+	return nil
+}
+
+func (r *textEventRecorder) ignorableWhitespace(_ context.Context, ch []byte) error {
+	r.events = append(r.events, "W "+string(ch))
+	return nil
+}
+
+func (r *textEventRecorder) handler() sax.SAX2Handler {
+	h := sax.New()
+	h.SetOnCharacters(sax.CharactersFunc(r.characters))
+	h.SetOnIgnorableWhitespace(sax.IgnorableWhitespaceFunc(r.ignorableWhitespace))
+	return h
 }
 
 // largeDoc builds a document with many sibling elements so the content loop
@@ -335,6 +380,33 @@ func TestParseReader(t *testing.T) {
 					"a cancellation that followed the read failure must not replace it (%s)", name)
 				require.Nil(t, doc, "a failed parse must not return a partial document")
 			})
+		}
+	})
+
+	// A character-data run is one SAX event, classified over the whole run,
+	// wherever a Read ends inside it. The run must not stop where a converted
+	// CR/CRLF, a ']', or a multi-byte character ends at the end of the buffered
+	// bytes: "\r\n   " split after "\r\n" would become Characters "\n" plus
+	// IgnorableWhitespace "   ".
+	t.Run("a read boundary does not split a character-data run", func(t *testing.T) {
+		doc := []byte("<a b=\"1\">\r\n   <c/>x\r\ny]zé中\U0001F600w<d/>\r\n</a>")
+
+		want := &textEventRecorder{}
+		_, err := helium.NewParser().SAXHandler(want.handler()).Parse(t.Context(), doc)
+		require.NoError(t, err)
+
+		got := &textEventRecorder{}
+		_, err = helium.NewParser().SAXHandler(got.handler()).
+			ParseReader(t.Context(), iotest.OneByteReader(bytes.NewReader(doc)))
+		require.NoError(t, err)
+		require.Equal(t, want.events, got.events, "one byte per Read")
+
+		for at := 1; at < len(doc); at++ {
+			got := &textEventRecorder{}
+			_, err := helium.NewParser().SAXHandler(got.handler()).
+				ParseReader(t.Context(), &splitAtReader{data: doc, at: at})
+			require.NoError(t, err, "split at byte %d", at)
+			require.Equal(t, want.events, got.events, "split at byte %d", at)
 		}
 	})
 
