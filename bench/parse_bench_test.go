@@ -66,10 +66,10 @@ func BenchmarkHeliumParse(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			benchmarkParse(b, context.Background(), data, true)
 		})
-		b.Run(tc.name+"/cancellable", func(b *testing.B) {
+		b.Run("cancellable/"+tc.name, func(b *testing.B) {
 			benchmarkParse(b, b.Context(), data, true)
 		})
-		b.Run(tc.name+"/no-free", func(b *testing.B) {
+		b.Run("no-free/"+tc.name, func(b *testing.B) {
 			benchmarkParse(b, context.Background(), data, false)
 		})
 	}

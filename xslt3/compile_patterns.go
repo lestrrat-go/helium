@@ -11,6 +11,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -2177,6 +2178,10 @@ func collectMatchingSiblings(ctx context.Context, ec *execContext, test xpath3.N
 		return []helium.Node{node}
 	}
 
+	if node.Type() == helium.NamespaceNode {
+		return collectMatchingNamespaceNodes(ctx, ec, test, node, parent)
+	}
+
 	// For attribute nodes, iterate the element's attributes instead of children
 	if node.Type() == helium.AttributeNode {
 		if elem, ok := parent.(*helium.Element); ok {
@@ -2196,6 +2201,30 @@ func collectMatchingSiblings(ctx context.Context, ec *execContext, test xpath3.N
 		}
 	}
 	return siblings
+}
+
+// collectMatchingNamespaceNodes collects the namespace nodes of parent that
+// match the given node test, in the order the xpath3 namespace axis returns
+// them, so a positional predicate in a pattern counts the same positions as
+// parent/namespace::*[...] in a select expression. The namespace axis builds
+// fresh wrapper nodes on every traversal, so the wrapper with node's prefix is
+// replaced by node itself: callers find node's position by pointer identity.
+// A cancelled context ends the collection with no nodes, so nothing matches.
+func collectMatchingNamespaceNodes(ctx context.Context, ec *execContext, test xpath3.NodeTest, node, parent helium.Node) []helium.Node {
+	nsNodes, err := ixpath.TraverseAxisSimple(ctx, ixpath.AxisNamespace, parent)
+	if err != nil {
+		return nil
+	}
+	matching := nsNodes[:0]
+	for _, ns := range nsNodes {
+		if ns.Name() == node.Name() {
+			ns = node
+		}
+		if nodeMatchesTest(ctx, ec, test, ns) {
+			matching = append(matching, ns)
+		}
+	}
+	return matching
 }
 
 // predicateOutcome is the result of matchFocusFreePredicates.
