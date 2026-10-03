@@ -9,6 +9,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -364,6 +365,9 @@ func (ec *execContext) execWherePopulated(ctx context.Context, inst *wherePopula
 		if child.Type() == helium.DocumentNode {
 			doc, _ := helium.AsNode[*helium.Document](child)
 			for dc := range helium.Children(doc) {
+				if !ixpath.IsXDMChild(dc) {
+					continue
+				}
 				copied, copyErr := helium.CopyNode(dc, ec.resultDoc)
 				if copyErr != nil {
 					return copyErr

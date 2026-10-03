@@ -6,6 +6,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -833,6 +834,9 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				// the document node intact (pattern matching may need it).
 				doc, _ := helium.AsNode[*helium.Document](v.Node)
 				for dc := range helium.Children(doc) {
+					if !ixpath.IsXDMChild(dc) {
+						continue
+					}
 					copied, copyErr := helium.CopyNode(dc, ec.resultDoc)
 					if copyErr != nil {
 						return copyErr

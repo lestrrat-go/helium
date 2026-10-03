@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/uripath"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -894,6 +895,9 @@ func (ec *execContext) resolveSequencePlaceholders(tmpDoc *helium.Document, plac
 					// document node itself would nest a document inside the temp
 					// tree instead of splicing the source root element.
 					for child := ni.Node.FirstChild(); child != nil; child = child.NextSibling() {
+						if !ixpath.IsXDMChild(child) {
+							continue
+						}
 						copied, copyErr := helium.CopyNode(child, tmpDoc)
 						if copyErr != nil {
 							return copyErr
