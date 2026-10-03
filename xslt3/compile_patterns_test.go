@@ -939,6 +939,7 @@ func TestPattern(t *testing.T) {
 			},
 			{name: "descendant axis attribute test", match: "doc/descendant::rec[@head]", want: "a-c--"},
 			{name: "descendant axis position", match: "doc/descendant::rec[2]", want: "-b---"},
+			{name: "union alternative", match: "rec[@head] | other", want: "a-c--"},
 			// Under XPath 1.0 compatibility mode @n = true() compares
 			// boolean(@n), true for every rec; in 3.0 it casts @n to
 			// xs:boolean, which only "1" survives.
@@ -953,6 +954,29 @@ func TestPattern(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestPatternNamespaceAxisPredicate checks that a namespace-axis pattern step
+// with a focus-free predicate matches the namespace nodes the predicate
+// accepts.
+func TestPatternNamespaceAxisPredicate(t *testing.T) {
+	const xsltSrc = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/namespace::*"/></out></xsl:template>
+  <xsl:template match="namespace::*[. = 'urn:a']">[A:<xsl:value-of select="name()"/>]</xsl:template>
+  <xsl:template match="namespace::*">[<xsl:value-of select="name()"/>]</xsl:template>
+</xsl:stylesheet>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc xmlns:a="urn:a" xmlns:b="urn:b"/>`))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, out, "[A:a]")
+	require.Contains(t, out, "[b]")
 }
 
 // transformStepPredicate applies a stylesheet with one template for match and
