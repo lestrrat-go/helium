@@ -329,47 +329,6 @@ func (pctx *parserCtx) literalBytesValid(b []byte) bool {
 	return true
 }
 
-// literalStringValid is the string counterpart of literalBytesValid.
-func (pctx *parserCtx) literalStringValid(s string) bool {
-	xml11 := pctx.isXML11()
-	ascii := &literalASCIIValid[0]
-	if xml11 {
-		ascii = &literalASCIIValid[1]
-	}
-	i := 0
-	for i < len(s) {
-		if len(s)-i >= 8 && literalWordValid(stringWord(s[i:]), xml11) {
-			i += 8
-			continue
-		}
-		if c := s[i]; c < utf8.RuneSelf {
-			if !ascii[c] {
-				return false
-			}
-			i++
-			continue
-		}
-		r, w := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && w == 1 {
-			return false
-		}
-		if !xmlchar.IsLiteralChar(r, xml11) {
-			return false
-		}
-		i += w
-	}
-	return true
-}
-
-// stringWord packs the first eight bytes of s little-endian, as
-// binary.LittleEndian.Uint64 does for a byte slice. s must hold at least eight
-// bytes.
-func stringWord(s string) uint64 {
-	_ = s[7]
-	return uint64(s[0]) | uint64(s[1])<<8 | uint64(s[2])<<16 | uint64(s[3])<<24 |
-		uint64(s[4])<<32 | uint64(s[5])<<40 | uint64(s[6])<<48 | uint64(s[7])<<56
-}
-
 var (
 	ErrCDATANotFinished = errors.New("invalid CDATA section (premature end)")
 	ErrCDATAInvalid     = errors.New("invalid CDATA section")

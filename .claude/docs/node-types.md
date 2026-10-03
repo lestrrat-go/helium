@@ -682,7 +682,9 @@ a pooled chunk `Free` cleared), and `Free` clears the used nodes of each node ch
 (`recycleNodeChunks`; only the last chunk of each type is partly used), so a pooled chunk holds no pointers into
 the freed tree. Text-content byte chunks are not cleared. A node's struct and content bytes
 physically live in its owning document's slab, so recycling a chunk that a still-live node references would zero
-that node during `Free` and let a subsequent parse overwrite it.
+that node during `Free` and let a subsequent parse overwrite it. The one exception is the Text child the parser's
+DOM fast path gives a reference-free attribute value (`createLiteralAttribute`): its content shares the value
+string's bytes, which live in the parse's `valueArena` (heap memory the GC owns, never pooled), not in a slab.
 
 The insertion paths (`addChildPreflight`/`addSiblingPreflight`/`replaceNode`, via `noteCrossDocumentEscape`)
 permit linking a node into a DIFFERENT document than the one that owns it — XInclude merges an included

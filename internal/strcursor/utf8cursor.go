@@ -832,18 +832,22 @@ func (c *UTF8Cursor) ScanQNameBytes() (name []byte, colon int, ok bool) {
 
 // ScanSimpleAttrValue scans a simple attribute value (no entities, no special
 // whitespace) between the current position and the given quote character.
-// Returns the value string and byte count, or ("", 0) if the value contains
+// Returns the value bytes and byte count, or (nil, 0) if the value contains
 // entities or special characters that require the slow path.
 // Does NOT consume — caller must call Advance(nBytes) after.
 //
-// When maxBytes > 0 the scan bails (returning "", 0) once it has consumed more
+// The returned slice is borrowed from the cursor's buffer: it is valid only
+// until the next call that reads or advances the cursor, which may refill or
+// compact the buffer. Copy it before advancing.
+//
+// When maxBytes > 0 the scan bails (returning nil, 0) once it has consumed more
 // than maxBytes input bytes, so a giant value falls back to the slow path,
 // which enforces the node-content cap and reports the error. This bounds the
 // cursor's internal buffer growth instead of materializing the whole value.
 // maxBytes <= 0 means unbounded.
-func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int) {
+func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) ([]byte, int) {
 	if c.fillBuffer(1) != nil {
-		return "", 0
+		return nil, 0
 	}
 
 	class := &attrValueByteClass[0]
@@ -854,14 +858,14 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 	for {
 		if maxBytes > 0 && off > maxBytes {
 			// Over the caller's byte budget — defer to the slow path.
-			return "", 0
+			return nil, 0
 		}
 		if c.bufpos+off >= c.buflen {
 			if c.fillBuffer(off+1) != nil {
-				return "", 0
+				return nil, 0
 			}
 			if c.bufpos+off >= c.buflen {
-				return "", 0
+				return nil, 0
 			}
 		}
 		// Skip the buffered run of printable ASCII other than the quote, '&'
@@ -871,7 +875,7 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 		// have checked it before each byte.
 		off += scanSafeCharDataASCII(c.buf[c.bufpos+off:c.buflen], class)
 		if maxBytes > 0 && off > maxBytes {
-			return "", 0
+			return nil, 0
 		}
 		if c.bufpos+off >= c.buflen {
 			continue
@@ -879,17 +883,17 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 		b := c.buf[c.bufpos+off]
 		if b == quote {
 			// End of value.
-			return string(c.buf[c.bufpos : c.bufpos+off]), off
+			return c.buf[c.bufpos : c.bufpos+off : c.bufpos+off], off
 		}
 		if b == '&' || b == '<' {
 			// Entity reference or invalid char — need slow path.
-			return "", 0
+			return nil, 0
 		}
 		if b < 0x80 {
 			if b < 0x20 {
 				// Tab, \r, \n, and other control chars need attribute-value
 				// normalization (whitespace -> space) — defer to the slow path.
-				return "", 0
+				return nil, 0
 			}
 			off++
 		} else {
@@ -898,12 +902,12 @@ func (c *UTF8Cursor) ScanSimpleAttrValue(quote byte, maxBytes int) (string, int)
 			if w == 0 || (r == utf8.RuneError && w == 1) {
 				// Invalid or incomplete UTF-8 — fall back to slow path.
 				// (A real U+FFFD decodes as RuneError with width 3 and is valid.)
-				return "", 0
+				return nil, 0
 			}
 			if !xmlchar.IsChar(r) {
 				// XML-forbidden char — fall back to the slow path, which
 				// reports the invalid character.
-				return "", 0
+				return nil, 0
 			}
 			off += w
 		}

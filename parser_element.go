@@ -942,7 +942,7 @@ func (pctx *parserCtx) parseAttributeValueInState(ctx context.Context, qch byte,
 // simple-value scan, and anything else goes through parseAttributeValueComplex.
 func (pctx *parserCtx) parseAttributeValueUTF8(ctx context.Context, cur *strcursor.UTF8Cursor, qch byte, normalize bool) (string, int, error) {
 	if !normalize {
-		if v, nBytes := cur.ScanSimpleAttrValue(qch, pctx.nodeContentScanBudget()); nBytes > 0 {
+		if raw, nBytes := cur.ScanSimpleAttrValue(qch, pctx.nodeContentScanBudget()); nBytes > 0 {
 			// The scan budget is cap+utf8.UTFMax, so a successful scan can
 			// run slightly over the cap; re-check the exact byte count here
 			// (before advancing) so a value of cap+1..cap+UTFMax bytes is
@@ -955,9 +955,12 @@ func (pctx *parserCtx) parseAttributeValueUTF8(ctx context.Context, cur *strcurs
 			// xmlchar.IsChar, which is xmlchar.IsLiteralChar's XML 1.0 rule,
 			// so an XML 1.0 value needs no second pass. XML 1.1 also rejects
 			// its RestrictedChar (DEL, U+0080-U+0084, U+0086-U+009F).
-			if pctx.isXML11() && !pctx.literalStringValid(v) {
+			if pctx.isXML11() && !pctx.literalBytesValid(raw) {
 				return "", 0, pctx.error(ctx, ErrInvalidChar)
 			}
+			// raw is borrowed from the cursor buffer, which the advance below
+			// may compact, so the value is copied out first.
+			v := pctx.values.String(raw)
 			// The simple scan accepts no byte below 0x20, so the value holds
 			// no newline and the column moves by its length.
 			if err := cur.AdvanceNoNewline(nBytes); err != nil {
@@ -1155,7 +1158,7 @@ func (pctx *parserCtx) parseAttributeValueComplex(ctx context.Context, cur strcu
 		}
 	}
 
-	value = b.String()
+	value = pctx.values.String(b.Bytes())
 	if inSpace && normalize {
 		if value[len(value)-1] == 0x20 {
 			// A trailing whitespace run is trimmed, a tokenized-normalization change.

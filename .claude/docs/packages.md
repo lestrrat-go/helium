@@ -484,8 +484,8 @@ XML parsing, DOM tree, serialization. Entry point for all XML processing.
   `parser_dtd_subset.go`, `parser_dtd_element.go`, `parser_dtd_attr.go`, `parser_entity_decl.go`,
   `parser_entity_ref.go`, `parser_state_gen.go`, `document.go`, `element.go`, `attribute.go`, `node.go`,
   `node_leaf.go`, `node_namespace.go`, `node_base.go`, `tree_builder.go`, `tree_namespaces.go`,
-  `tree_fastpath.go`, `writer.go`, `writer_escape.go`, `writer_dtd.go`, `writer_xhtml.go`, `copy.go`,
-  `copy_deep.go`, `copy_dtd.go`, `dtd.go`, `dtd_attr.go`, `dtd_elem.go`, `iter.go`, `errorhandler.go`,
+  `tree_fastpath.go`, `value_arena.go`, `writer.go`, `writer_escape.go`, `writer_dtd.go`, `writer_xhtml.go`,
+  `copy.go`, `copy_deep.go`, `copy_dtd.go`, `dtd.go`, `dtd_attr.go`, `dtd_elem.go`, `iter.go`, `errorhandler.go`,
   `resolver.go`, `doc.go`
 
 ## c14n/

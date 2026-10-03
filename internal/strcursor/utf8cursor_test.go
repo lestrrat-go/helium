@@ -610,7 +610,8 @@ func checkScanSimpleAttrValue(t *testing.T, input []byte, quote byte, budget, ch
 		r = &chunkedReader{data: input, chunk: chunk}
 	}
 	cur := strcursor.NewUTF8Cursor(r)
-	got, n := cur.ScanSimpleAttrValue(quote, budget)
+	gotBytes, n := cur.ScanSimpleAttrValue(quote, budget)
+	got := string(gotBytes)
 	want, wantN := referenceScanSimpleAttrValue(input, quote, budget)
 	if got != want || n != wantN {
 		require.Failf(t, "ScanSimpleAttrValue disagrees with the reference",
@@ -684,7 +685,7 @@ func TestUTF8CursorScanSimpleAttrValueCharacters(t *testing.T) {
 			t.Fatalf("U+%04X: scan accepted %t, want %t", r, n > 0, accept)
 		}
 		if n > 0 {
-			if n != width || v != "x"+string(r) {
+			if n != width || string(v) != "x"+string(r) {
 				t.Fatalf("U+%04X: scanned %q (%d bytes)", r, v, n)
 			}
 			if !xmlchar.IsLiteralChar(r, false) {
