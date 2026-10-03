@@ -938,9 +938,22 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int, xml11 bool) ([]
 	data := c.buf[c.bufpos:c.buflen]
 	dlen := len(data)
 
-	for off < dlen {
-		if maxBytes > 0 && off >= maxBytes {
-			break
+	// The loop condition bounds the scan to maxBytes (maxBytes <= 0 = unbounded).
+	for maxBytes <= 0 || off < maxBytes {
+		// Every branch below may leave off at the end of the buffered bytes
+		// (an ASCII run, a CR/CRLF, a ']', or a multi-byte character), so
+		// refill here before deciding the run is over. Ending the run at a
+		// read boundary would split it into two events and classify each half
+		// on its own.
+		if off >= dlen {
+			if c.fillBuffer(off+1) != nil {
+				break
+			}
+			data = c.buf[c.bufpos:c.buflen]
+			dlen = len(data)
+			if off >= dlen {
+				break
+			}
 		}
 		runLen, bad := scanCharDataASCII(data[off:dlen], class)
 		if maxBytes > 0 && off+runLen > maxBytes {
@@ -959,14 +972,6 @@ func (c *UTF8Cursor) ScanCharDataSlice(dst []byte, maxBytes int, xml11 bool) ([]
 			break
 		}
 		if off >= dlen {
-			if c.fillBuffer(off+1) != nil {
-				break
-			}
-			data = c.buf[c.bufpos:c.buflen]
-			dlen = len(data)
-			if off >= dlen {
-				break
-			}
 			continue
 		}
 
