@@ -85,7 +85,7 @@ type Document struct {
 	// These reduce per-node heap allocation overhead by allocating
 	// nodes in chunks and handing them out one at a time.
 	// Pooled chunks are obtained from global pools and returned on Free().
-	// A document the parser did not build first takes small heap chunks (see
+	// A document the parser did not build takes small heap chunks first (see
 	// slabGrowthSizes), so a small built tree does not hold a full pooled chunk.
 	elemSlab []Element
 	textSlab []Text

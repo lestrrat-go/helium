@@ -840,6 +840,16 @@ func TestSlabGrowth(t *testing.T) {
 		doc.Free()
 	})
 
+	// The HTML parser builds its documents through NewHTMLDocument, which
+	// draws pooled chunks from the first node on as well.
+	t.Run("HTML document starts with pooled chunks", func(t *testing.T) {
+		doc := NewHTMLDocument()
+		_, err := doc.CreateElement("html")
+		require.NoError(t, err)
+		require.Len(t, doc.elemChunks, 1)
+		doc.Free()
+	})
+
 	// Nodes and text content allocated across every chunk boundary keep their
 	// own values: no node or content slice overlaps another.
 	t.Run("values survive chunk boundaries", func(t *testing.T) {

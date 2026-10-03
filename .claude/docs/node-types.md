@@ -666,16 +666,17 @@ matching the other strict leaves.
 bytes from per-document SLAB allocators (`document.go`). A pooled chunk holds `slabSize` (256) nodes or
 `textContentSlabSize` (64 KiB) of text and comes from a process-global `sync.Pool`; `Document.Free()` returns
 pooled chunks to the pools for reuse by a later parse. A document the parser did not build (`NewDocument`,
-`NewDefaultDocument`, `CopyDoc`, and every xslt3 temporary tree or result document) follows a
-growth schedule first: each node allocator takes small heap chunks of `slabGrowthSizes` (8, then 32 nodes) and
+`NewDefaultDocument`, `CopyDoc`, and every xslt3 temporary tree or result document) follows a growth schedule
+first: each node allocator takes small heap chunks of `slabGrowthSizes` (8, then 32 nodes) and
 the text-content allocator heap chunks of `textContentGrowthSizes` (256, then 2048 bytes, or the request size
 when larger), and only then draws pooled chunks. The per-type counters (`elemGrowth`, `textGrowth`, `nsGrowth`,
 `attrGrowth`, `textContentGrowth`) record how far each allocator is through its schedule. Heap chunks are never
-put in a pool; GC reclaims them. So a small built tree holds a few KiB in place of roughly 170 KiB of pooled
-chunks. The XML parser sets `pooledSlabs` on the document it builds (`TreeBuilder.StartDocument`,
-`fastStartDocument`), and `NewHTMLDocument`, through which the HTML parser builds its documents, sets it too. It
-skips the schedule, so a parse followed by `Free` keeps reusing pooled chunks from its first node on. A node's struct and content bytes physically live in its owning document's slab, so
-recycling a chunk that a still-live node references would let a subsequent parse overwrite that node.
+put in a pool; GC reclaims them. A small built tree therefore holds a few KiB of chunks. The XML parser sets
+`pooledSlabs` on the document it builds (`TreeBuilder.StartDocument`, `fastStartDocument`), and so does
+`NewHTMLDocument`, through which the HTML parser builds its documents. Such a document skips the schedule, so a
+parse followed by `Free` keeps reusing pooled chunks from its first node on. A node's struct and content bytes
+physically live in its owning document's slab, so recycling a chunk that a still-live node references would let a
+subsequent parse overwrite that node.
 
 The insertion paths (`addChildPreflight`/`addSiblingPreflight`/`replaceNode`, via `noteCrossDocumentEscape`)
 permit linking a node into a DIFFERENT document than the one that owns it — XInclude merges an included
