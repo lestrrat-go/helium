@@ -534,7 +534,9 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
   enveloped `#id` path).
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `subtree.go` (subtree start), `xmlbase.go` (xml:base join),
   `nsstack.go` (`bindingStack`), `sort.go`, `escape.go` (byte-table escaping)
-- Imports: helium, internal/lexicon, internal/domutil, internal/c14nctl
+- Text, comment and single-text attribute values are read in place through `internal/nodecontent.Raw` (no copy per
+  node); the escape functions only read them.
+- Imports: helium, internal/lexicon, internal/domutil, internal/c14nctl, internal/nodecontent
 
 ## xpath1/
 
@@ -2441,6 +2443,15 @@ Generic bitset operations for bitmask types.
 
 - **Set[T](*T, T)** / **IsSet[T](T, T) → bool**
 - Files: `bitset.go`
+
+## internal/nodecontent/
+
+Read-only bridge for leaf-node content. Package helium installs `Raw` during init; it returns a Text, CDATASection
+or Comment node's own content slice without the copy `Content()` makes (any other node gets `Content()`). Callers
+must not modify the slice or use it after the node changes. c14n uses it for text, comments and attribute values.
+
+- Files: `nodecontent.go`
+- Imports: none
 
 ## internal/c14nctl/
 

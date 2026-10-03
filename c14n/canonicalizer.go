@@ -10,6 +10,7 @@ import (
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/domutil"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/nodecontent"
 )
 
 type canonicalizer struct {
@@ -573,8 +574,9 @@ func (c *canonicalizer) processText(n helium.Node) error {
 	if c.nodeSet != nil && !c.isVisible(n) {
 		return nil
 	}
-	// Both Text and CDATASection are output as escaped text in C14N
-	return escapeText(c.out, n.Content())
+	// Both Text and CDATASection are output as escaped text in C14N. The
+	// content is read in place: escapeText only reads it.
+	return escapeText(c.out, nodecontent.Raw(n))
 }
 
 func (c *canonicalizer) processPI(pi *helium.ProcessingInstruction, beforeRoot bool) error {
@@ -631,7 +633,7 @@ func (c *canonicalizer) writeComment(cm *helium.Comment) error {
 	if _, err := io.WriteString(c.out, "<!--"); err != nil {
 		return err
 	}
-	if err := escapePIOrComment(c.out, cm.Content()); err != nil {
+	if err := escapePIOrComment(c.out, nodecontent.Raw(cm)); err != nil {
 		return err
 	}
 	_, err := io.WriteString(c.out, "-->")
@@ -1520,7 +1522,7 @@ func (c *canonicalizer) writeAttrValue(attr *helium.Attribute) error {
 		return nil
 	}
 	if first.Type() == helium.TextNode && first.NextSibling() == nil {
-		return escapeAttrValue(c.out, first.Content())
+		return escapeAttrValue(c.out, nodecontent.Raw(first))
 	}
 	return escapeAttrValue(c.out, []byte(attr.Value()))
 }

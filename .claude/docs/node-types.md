@@ -305,7 +305,9 @@ Their exported `Content()` returns a **defensive copy** (`bytes.Clone`) so a cal
 corrupt the DOM. Internal read-only hot paths (serializers in `writer.go`/`writer_xhtml.go`) use the
 package-level `rawContent(Node)` helper — backed by an unexported `rawContent()` method on each of those three
 leaf types — to get the raw slice without the copy. The `rawContentNode` interface gates the no-copy path; for
-any other node `rawContent` falls back to `Content()`. PI/EntityRef/Entity/NamespaceNodeWrapper already
+any other node `rawContent` falls back to `Content()`. Sibling packages reach the same helper through the
+`internal/nodecontent.Raw` hook (installed in `node.go` init); c14n reads text, comment and single-text attribute
+values through it. PI/EntityRef/Entity/NamespaceNodeWrapper already
 returned string-derived copies and are unaffected. The same serializers handle an element's or attribute's
 qualified name as its `Prefix()` and `LocalName()` parts and never join them: `checkElementQName`/
 `checkAttributeQName` validate the parts, and `writeQName`/`writeAttrOpen` assemble a prefixed name in the

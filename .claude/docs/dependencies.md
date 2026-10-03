@@ -17,7 +17,7 @@ xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, i
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/lexer, internal/xpath1/number
 xpointer       → helium, xpath1, internal/xpath1/lexer, internal/xmlchar, internal/intconv
-c14n           → helium, internal/lexicon, internal/domutil, internal/c14nctl
+c14n           → helium, internal/lexicon, internal/domutil, internal/c14nctl, internal/nodecontent
 xmldsig1       → helium, c14n, xpath1, internal/c14nctl, internal/lexicon, internal/domutil, internal/xpath1/lexer, internal/xmlbase64, internal/xmlchar
 xmldsig1/transform → helium, xmldsig1, xslt3  (opt-in xslt3-backed XSLTTransformer; kept out of xmldsig1 so the core never imports xslt3)
 xmlenc1        → helium, c14n, internal/domutil, internal/xmlbase64  (c14n converts the node-set a same-document xenc:CipherReference names into octets; c14n imports neither xmlenc1 nor xmldsig1, so the edge is one-way)
@@ -25,7 +25,7 @@ html           → helium, sax, push, internal/xmlchar
 catalog        → helium, internal/catalog, internal/iofs, internal/lexicon, internal/xmlchar
 stream         → internal/encoding, internal/xmlchar
 sax            → helium, enum
-helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs, internal/writerctl, internal/nodelink, internal/nslookup
+helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parser, push, internal/stack, internal/uripath, internal/iofs, internal/writerctl, internal/nodelink, internal/nslookup, internal/nodecontent
                   (helium installs hooks in internal/writerctl in init so xpath3 fn:serialize can enable declaration-only encoding and xslt3 can omit document-child terminators without public methods; the writerctl package imports nothing, so the edge is one-way)
                   (helium installs hooks in internal/nodelink in init so xslt3's strip-space copier can link a
                   freshly built child without AddChild's preflight and bind an EntityRef to its copied declaration;
@@ -34,6 +34,8 @@ helium (root)  → sax, enum, internal/encoding, internal/bitset, internal/parse
                   (helium installs hooks in internal/nslookup in init so internal/domutil can search or read raw
                   namespace declarations one at a time without cloning Element.Namespaces or exposing the mutable
                   nsDefs slice; the nslookup package imports nothing, so the edge is one-way)
+                  (helium installs a hook in internal/nodecontent in init so c14n can read leaf content without the
+                  defensive copy Content() makes; the nodecontent package imports nothing, so the edge is one-way)
 sink           → (none)
 enum           → (none)
 internal/lexicon → (none)
@@ -52,6 +54,7 @@ internal/xmlbase64 → helium (DecodeElement counts/charges/decodes a base64 val
 internal/writerctl → (none)
 internal/nodelink → (none)
 internal/nslookup → (none)
+internal/nodecontent → (none)
 internal/c14nctl → (none)  (c14n installs its hook in init; xmldsig1 calls it)
 internal/xsd/value → internal/lexicon
 internal/domutil → helium, enum, internal/lexicon, internal/nslookup, internal/xmlchar
@@ -63,7 +66,7 @@ test           → helium
 sink, enum, internal/bitset, internal/heliumtest, internal/parser, push, internal/stack, internal/cliutil,
 internal/encoding, internal/intconv, internal/lexicon, internal/icu, internal/nodelink, internal/nslookup, internal/sequence,
 internal/strcursor,
-internal/writerctl, internal/c14nctl, internal/xpath1/lexer, internal/xsdregex, internal/uripath
+internal/writerctl, internal/c14nctl, internal/nodecontent, internal/xpath1/lexer, internal/xsdregex, internal/uripath
 
 ## Core layer
 helium (root) → sax, enum, internal/*
