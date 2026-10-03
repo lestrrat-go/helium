@@ -10,6 +10,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -1282,7 +1283,12 @@ func (ec *execContext) walkAccumulatorTree(ctx context.Context, node helium.Node
 
 	ec.storeAccumulatorSnapshot(ec.accumulatorBeforeByNode, ec.accumulatorBeforeErrorByNode, node, ec.accumulatorState, ec.accumulatorStateError)
 
+	// Only XDM nodes take part: a DOCTYPE declaration or an entity reference
+	// is not a child of its parent in XDM, and neither is anything under it.
 	for child := range helium.Children(node) {
+		if !ixpath.IsXDMChild(child) {
+			continue
+		}
 		if err := ec.walkAccumulatorTree(ctx, child, names); err != nil {
 			return err
 		}

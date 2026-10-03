@@ -12,7 +12,7 @@ xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/
                   (helium.Parser.XInclude injects an xinclude.Processor through the helium.XIncludeProcessor interface — dependency inversion keeps this edge one-way; helium does NOT import xinclude)
 xpath1         → helium, internal/lexicon, internal/domutil, internal/xpath1/lexer
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil, internal/writerctl, internal/intconv
-xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/xpath, internal/xpathstream, internal/domutil, internal/writerctl, internal/intconv, xslt3/internal/elements
+xslt3          → helium, enum, stream, xpath3, xsd, html, internal/iofs, internal/iolimit, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/xmlchar, internal/xpath, internal/xpathstream, internal/domutil, internal/writerctl, internal/intconv, xslt3/internal/elements
 xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, internal/xpath1/lexer, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs, internal/intconv
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/lexer, internal/xpath1/number
