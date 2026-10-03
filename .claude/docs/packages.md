@@ -882,6 +882,12 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   (`visibleVarScope`), `localVarsVer` (bumped by `setVar`/`setVarDeferred` and by popping a scope that held
   bindings), and the current package. The returned map is shared, so callers copy it before adding bindings
   (`xsl:evaluate` does).
+- `xsl:number` counting (`execute_number.go`): `level="single"` and `level="any"` walk back from the counted
+  node and stop at the node the same instruction's previous evaluation started from, adding its count
+  (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in document order is linear. The memo
+  is off when the `count` or `from` pattern references a variable (`numberInst.memoizable`); without a `count`
+  pattern it applies only to a selected node of the same kind and expanded name. It relies on trees visible to
+  `xsl:number` never changing during a run.
 - Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder +
   orchestration), `compile_*.go`
   (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),

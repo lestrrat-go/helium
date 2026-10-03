@@ -502,6 +502,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 		}
 		inst.From = p
 	}
+	inst.memoizable = !patternReadsVariables(inst.Count) && !patternReadsVariables(inst.From)
 
 	if valueAttr := getAttr(elem, "value"); valueAttr != "" {
 		// XTSE0975: when value is present, select/level/count/from must be absent.
@@ -588,6 +589,20 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 	}
 
 	return inst, nil
+}
+
+// patternReadsVariables reports whether any alternative of p references a
+// variable it does not bind itself. A nil pattern reads none.
+func patternReadsVariables(p *pattern) bool {
+	if p == nil {
+		return false
+	}
+	for _, alt := range p.Alternatives {
+		if len(alt.compiled.StaticReferences(nil).FreeVariables) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *compiler) compileNamespace(ctx context.Context, elem *helium.Element) (*namespaceInst, error) {

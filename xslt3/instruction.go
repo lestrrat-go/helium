@@ -308,6 +308,10 @@ type numberInst struct {
 	Select            *xpath3.Expression // XSLT 3.0 select attribute
 	Lang              *avt               // language for word/ordinal numbering
 	LetterValue       *avt               // "alphabetic" or "traditional"
+	// memoizable is true when neither Count nor From reads a variable, so
+	// whether a node matches them depends on the node alone and a count from an
+	// earlier evaluation can be reused (see execContext.numberMemos).
+	memoizable bool
 }
 
 func (*numberInst) instructionTag() {}
