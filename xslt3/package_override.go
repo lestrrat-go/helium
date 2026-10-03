@@ -50,6 +50,12 @@ func (c *compiler) processOverrides(ctx context.Context, usePackageElem *helium.
 		excluded:       make(map[*helium.Element]struct{}),
 	}
 
+	scope, err := c.pushStandardAttrs(ctx, usePackageElem)
+	if err != nil {
+		return nil, err
+	}
+	defer c.restoreStandardAttrs(scope)
+
 	for child := range helium.Children(usePackageElem) {
 		elem, ok := child.(*helium.Element)
 		if !ok || elem.URI() != lexicon.NamespaceXSLT || elem.LocalName() != xslElemOverride {
@@ -64,10 +70,82 @@ func (c *compiler) processOverrides(ctx context.Context, usePackageElem *helium.
 	return oset, nil
 }
 
+// standardAttrScope holds the compiler settings pushStandardAttrs replaced,
+// so restoreStandardAttrs can put them back.
+type standardAttrScope struct {
+	nsBindings        map[string]string
+	version           string
+	xpathDefaultNS    string
+	hasXPathDefaultNS bool
+	expandText        bool
+	defaultCollation  string
+	defaultMode       string
+}
+
+// pushStandardAttrs brings elem's namespace declarations into scope and
+// applies the standard attributes of xsl:use-package, xsl:override, or an
+// overriding xsl:template ([xsl:]version, xpath-default-namespace,
+// expand-text, default-collation, default-mode; XSLT 3.0 §3.5) to the
+// compiler settings the elements inside inherit, and returns the settings it
+// replaced. The namespace bindings are copied first, so neither these
+// declarations nor any an inner element adds outlive the scope.
+func (c *compiler) pushStandardAttrs(ctx context.Context, elem *helium.Element) (standardAttrScope, error) {
+	saved := standardAttrScope{
+		nsBindings:        c.nsBindings,
+		version:           c.effectiveVersion,
+		xpathDefaultNS:    c.xpathDefaultNS,
+		hasXPathDefaultNS: c.hasXPathDefaultNS,
+		expandText:        c.expandText,
+		defaultCollation:  c.defaultCollation,
+		defaultMode:       c.defaultMode,
+	}
+	c.nsBindings = maps.Clone(c.nsBindings)
+	c.pushElementNamespaces(ctx, elem)
+	if et, ok := elem.GetAttribute("expand-text"); ok {
+		v, valid := parseXSDBool(et)
+		if !valid {
+			c.restoreStandardAttrs(saved)
+			return saved, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:%s/@expand-text", et, elem.LocalName())
+		}
+		c.expandText = v
+	}
+	if ver := elementXSLTVersion(elem); ver != "" {
+		c.effectiveVersion = ver
+	}
+	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
+		c.xpathDefaultNS = xdn
+		c.hasXPathDefaultNS = true
+	}
+	if dc := getAttr(elem, "default-collation"); dc != "" {
+		if uri := resolveDefaultCollation(dc); uri != "" {
+			c.defaultCollation = uri
+		}
+	}
+	if dm := getAttr(elem, "default-mode"); dm != "" {
+		c.defaultMode = c.resolveMode(ctx, dm)
+	}
+	return saved, nil
+}
+
+// restoreStandardAttrs puts back the compiler settings pushStandardAttrs
+// replaced.
+func (c *compiler) restoreStandardAttrs(s standardAttrScope) {
+	c.nsBindings = s.nsBindings
+	c.effectiveVersion = s.version
+	c.xpathDefaultNS = s.xpathDefaultNS
+	c.hasXPathDefaultNS = s.hasXPathDefaultNS
+	c.expandText = s.expandText
+	c.defaultCollation = s.defaultCollation
+	c.defaultMode = s.defaultMode
+}
+
 // compileOverrideChildren compiles children of an xsl:override element.
 func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *helium.Element, pkg *Stylesheet, oset *overrideSet) error {
-	// Push namespace bindings from override element
-	c.collectNamespaces(ctx, overrideElem)
+	scope, err := c.pushStandardAttrs(ctx, overrideElem)
+	if err != nil {
+		return err
+	}
+	defer c.restoreStandardAttrs(scope)
 
 	excluded, err := c.excludedByUseWhen(ctx, overrideElem)
 	if err != nil {
@@ -77,13 +155,6 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 		oset.excluded[overrideElem] = struct{}{}
 		return nil
 	}
-
-	// Handle default-mode on xsl:override
-	savedDefaultMode := c.defaultMode
-	if dm := getAttr(overrideElem, "default-mode"); dm != "" {
-		c.defaultMode = c.resolveMode(ctx, dm)
-	}
-	defer func() { c.defaultMode = savedDefaultMode }()
 
 	for child := range helium.Children(overrideElem) {
 		elem, ok := child.(*helium.Element)
@@ -338,26 +409,19 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 	if err := c.validateXSLTAttrs(ctx, elem, templateAllowedAttrs); err != nil {
 		return nil, err
 	}
-	defer c.pushElementVersion(elem)()
+	scope, err := c.pushStandardAttrs(ctx, elem)
+	if err != nil {
+		return nil, err
+	}
+	defer c.restoreStandardAttrs(scope)
+
 	tmpl := &template{
-		ImportPrec:    c.importPrec,
-		MinImportPrec: c.minImportPrec,
-		BaseURI:       c.baseURI,
+		ImportPrec:       c.importPrec,
+		MinImportPrec:    c.minImportPrec,
+		BaseURI:          c.baseURI,
+		XPathDefaultNS:   c.xpathDefaultNS,
+		DefaultCollation: c.defaultCollation,
 	}
-
-	c.collectNamespaces(ctx, elem)
-
-	savedXPathDefaultNS := c.xpathDefaultNS
-	savedHasXPathDefaultNS := c.hasXPathDefaultNS
-	if xdn, ok := elem.GetAttribute("xpath-default-namespace"); ok {
-		c.xpathDefaultNS = xdn
-		c.hasXPathDefaultNS = true
-	}
-	tmpl.XPathDefaultNS = c.xpathDefaultNS
-	defer func() {
-		c.xpathDefaultNS = savedXPathDefaultNS
-		c.hasXPathDefaultNS = savedHasXPathDefaultNS
-	}()
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr != "" {
@@ -438,15 +502,7 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 		}
 	}
 
-	savedExpandText := c.expandText
-	if et, hasET := elem.GetAttribute("expand-text"); hasET {
-		if v, ok := parseXSDBool(et); ok {
-			c.expandText = v
-		}
-	}
-
 	ctxDecl, body, params, err := c.compileTemplateBodyEx(ctx, elem, false)
-	c.expandText = savedExpandText
 	if err != nil {
 		return nil, err
 	}
