@@ -12,6 +12,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -279,7 +280,7 @@ func (ec *execContext) numberSingle(ctx context.Context, inst *numberInst, node 
 	// sibling the previous evaluation counted.
 	memoNode, memoCount := ec.numberMemoFor(inst, node)
 	count := 1
-	for sib := numberPrevSibling(target); sib != nil; sib = sib.PrevSibling() {
+	for sib := numberPrevSibling(target); sib != nil; sib = numberPrevSibling(sib) {
 		if sib == memoNode {
 			count += memoCount
 			break
@@ -335,7 +336,7 @@ func (ec *execContext) numberMultiple(ctx context.Context, inst *numberInst, nod
 	nums := make([]int, len(ancestors))
 	for i, anc := range ancestors {
 		count := 1
-		for sib := numberPrevSibling(anc); sib != nil; sib = sib.PrevSibling() {
+		for sib := numberPrevSibling(anc); sib != nil; sib = numberPrevSibling(sib) {
 			if ec.numberNodeMatches(ctx, inst, sib, node) {
 				count++
 			}
@@ -460,14 +461,19 @@ func (ec *execContext) storeNumberMemo(inst *numberInst, selected, node helium.N
 // numberPrevSibling returns the node before node on the XDM
 // preceding-sibling axis. helium links an element's attributes to each other
 // as siblings, but XDM gives attribute and namespace nodes no siblings, so for
-// those it returns nil. Siblings of any other node are never attributes or
-// namespace nodes, so a walk can continue with PrevSibling.
+// those it returns nil. A DOCTYPE declaration or an entity reference is not an
+// XDM child, so it is skipped.
 func numberPrevSibling(node helium.Node) helium.Node {
 	switch node.Type() {
 	case helium.AttributeNode, helium.NamespaceNode:
 		return nil
 	}
-	return node.PrevSibling()
+	for prev := node.PrevSibling(); prev != nil; prev = prev.PrevSibling() {
+		if ixpath.IsXDMChild(prev) {
+			return prev
+		}
+	}
+	return nil
 }
 
 // prevInDocOrder returns the previous node in document order, skipping
@@ -486,13 +492,20 @@ func (ec *execContext) prevInDocOrder(node helium.Node) helium.Node {
 	return parent
 }
 
-// lastDescendant returns the deepest last descendant of node (or node itself if leaf).
+// lastDescendant returns the deepest last XDM descendant of node (or node
+// itself if it has no XDM children). An entity reference or an XInclude
+// marker among an element's children is not an XDM node, so the walk takes
+// the last child that is.
 func (ec *execContext) lastDescendant(node helium.Node) helium.Node {
-	if node.Type() == helium.ElementNode {
-		elem, _ := helium.AsNode[*helium.Element](node)
-		if last := elem.LastChild(); last != nil {
-			return ec.lastDescendant(last)
+	for node.Type() == helium.ElementNode {
+		last := node.LastChild()
+		for last != nil && !ixpath.IsXDMChild(last) {
+			last = last.PrevSibling()
 		}
+		if last == nil {
+			return node
+		}
+		node = last
 	}
 	return node
 }
