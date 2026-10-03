@@ -1176,7 +1176,7 @@ func TestPatternNamespaceNodeMatch(t *testing.T) {
 // TestPatternParentlessNamespaceNodeMatch checks that parentless namespace
 // nodes, which xsl:namespace and xsl:copy-of build in a variable, keep their
 // own identity: two of them with the same prefix are different nodes, so a
-// pattern holding one of them matches only that one (XPath 3.1 §2.1.2).
+// pattern holding one of them matches only that one (XDM 3.1 §2.3).
 func TestPatternParentlessNamespaceNodeMatch(t *testing.T) {
 	const srcXML = `<doc xmlns:p="urn:p"><r xmlns:p="urn:p2"/></doc>`
 	tests := []struct {

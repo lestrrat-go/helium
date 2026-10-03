@@ -376,8 +376,8 @@ func NamespaceNodeKey(n helium.Node) (NSNodeKey, bool) {
 	return NSNodeKey{Parent: parent, Prefix: n.Name()}, true
 }
 
-// SameNode reports whether a and b are the same node (XPath 3.1 §3.7.2 node
-// identity): the same pointer, or two namespace nodes with the same
+// SameNode reports whether a and b are the same node (XPath 3.1 §3.7.3 node
+// comparisons, XDM 3.1 §2.3 node identity): the same pointer, or two namespace nodes with the same
 // NamespaceNodeKey.
 func SameNode(a, b helium.Node) bool {
 	if a == b {

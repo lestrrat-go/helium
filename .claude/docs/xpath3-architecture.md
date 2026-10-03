@@ -166,7 +166,7 @@ func NodePrefix(n helium.Node) string
 | `function_library.go` | Function library management |
 | `function_signatures.go` | Function signature declarations |
 | `functions.go` | `Function` interface, `FunctionContext`, registry, `builtinFunc`, `registerFn`/`registerNS` helpers; boolean, not, true, false, error, trace |
-| `functions_node.go` | node-name, local-name, namespace-uri, name, root, path, id, lang, etc. |
+| `functions_node.go` | node-name, local-name, namespace-uri, name, root, path, id, lang, generate-id, etc. |
 | `functions_string.go` | string ops, regex (matches, replace, tokenize), upper/lower-case |
 | `functions_numeric.go` | abs, ceiling, floor, round, round-half-to-even |
 | `functions_aggregate.go` | count, sum, avg, min, max, distinct-values |
@@ -181,7 +181,7 @@ func NodePrefix(n helium.Node) string
 | `functions_json.go` | parse-json, json-doc |
 | `functions_json_xml.go` | json-to-xml, xml-to-json |
 | `functions_serialize.go` | serialize |
-| `functions_misc.go` | static-base-uri, default-collation, environment-variable, current-dateTime, generate-id |
+| `functions_misc.go` | static-base-uri, default-collation, environment-variable, current-dateTime |
 | `functions_constructors.go` | XSD typed atomic constructors (incl. xs:error) |
 | `functions_unparsed_text.go` | unparsed-text, unparsed-text-lines, unparsed-text-available |
 | `errors.go` | `XPathError` (structured error with code), standard error constructors |

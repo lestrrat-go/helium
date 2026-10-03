@@ -82,7 +82,7 @@ func TestNamespaceAxisPath(t *testing.T) {
 // TestParentlessNamespaceNodeIdentity checks that parentless namespace nodes,
 // such as the ones XSLT's xsl:namespace builds, keep their own identity: two
 // of them with the same prefix are different nodes for the set operators,
-// path deduplication, `is` and generate-id (XPath 3.1 §2.1.2). Only namespace
+// path deduplication, `is` and generate-id (XDM 3.1 §2.3). Only namespace
 // nodes of an element are identified by that element and their prefix.
 func TestParentlessNamespaceNodeIdentity(t *testing.T) {
 	doc := parseNamespaceAxisDoc(t)
