@@ -224,5 +224,5 @@ func joinReferenceURI(base, uri string) (string, error) {
 // current value kind and the next transform's contract.
 func externalReferenceDigestInput(ctx context.Context, octets []byte, steps []transformStep, runtime transformRuntime) ([]byte, error) {
 	runtime.external = true
-	return executeTransformPipeline(ctx, runtime, newOctetTransformValue(octets), steps)
+	return executeTransformPipeline(ctx, runtime, newOctetTransformValue(octets), steps, nil)
 }

@@ -262,7 +262,7 @@ func processRetrievalMethod(ctx context.Context, budget *verifyBudget, cfg *veri
 	// With transforms, the target node-set is run through the pipeline to octets,
 	// then interpreted by Type exactly as an externally retrieved octet stream.
 	initial := newReferenceNodeSetValue(doc, target, nil, wholeDoc, includeComments, nil)
-	octets, err := executeTransformPipeline(ctx, runtime, initial, steps)
+	octets, err := executeTransformPipeline(ctx, runtime, initial, steps, nil)
 	if err != nil {
 		return err
 	}

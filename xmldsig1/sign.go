@@ -1,9 +1,11 @@
 package xmldsig1
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 
@@ -552,31 +554,36 @@ func buildSignatureSkeleton(doc *helium.Document, cfg *signerConfig) (*helium.El
 // internalRoot, when non-nil, is the enveloping Signature whose own (detached)
 // <Object> content may hold the reference target; it is searched in addition to
 // the document and a target found inside it is canonicalized while detached.
-// signReferenceOctets computes the canonical byte stream a Reference's
-// DigestValue is signed over. It handles a same-document reference (resolving and
+// writeSignReference writes the canonical byte stream a Reference's
+// DigestValue is signed over to out. It handles a same-document reference (resolving and
 // canonicalizing the target subtree/document) and, when a ReferenceResolver is
 // configured, an external reference (dereferencing its octets and applying the
 // transform pipeline through the SAME externalReferenceDigestInput the verifier
 // uses, so the signed digest is byte-identical to what verification recomputes).
 // Without a resolver an external URI stays fail-closed with ErrReferenceNotFound.
-func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Document, sigElem *helium.Element, ref ReferenceConfig, internalRoot *helium.Element) ([]byte, error) {
+func writeSignReference(ctx context.Context, cfg *signerConfig, doc *helium.Document, sigElem *helium.Element, ref ReferenceConfig, internalRoot *helium.Element, out io.Writer) error {
 	// An external reference is dereferenced only through a configured resolver.
 	if _, _, _, ok := referenceURIForm(ref.URI); !ok {
 		if cfg.referenceResolver == nil {
-			return nil, fmt.Errorf("%w: unsupported reference URI: %s",
+			return fmt.Errorf("%w: unsupported reference URI: %s",
 				ErrReferenceNotFound, lexer.DiagnosticExcerpt(ref.URI))
 		}
 		steps := transformSteps(ref)
 		joined, err := joinReferenceURI(doc.URL(), ref.URI)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		octets, err := resolveReferenceOctets(ctx, cfg.referenceResolver, joined)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		runtime := transformRuntime{parser: cfg.parser(), signing: true, external: true}
-		return externalReferenceDigestInput(ctx, octets, steps, runtime)
+		transformed, err := externalReferenceDigestInput(ctx, octets, steps, runtime)
+		if err != nil {
+			return err
+		}
+		_, err = out.Write(transformed)
+		return err
 	}
 
 	// Resolve the reference target. For an enveloping signature the target may
@@ -589,7 +596,7 @@ func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Doc
 		target, err = resolveReference(doc, ref.URI)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Classify the URI's node-set form (§4.3.3.2-3) so the digest is computed
@@ -605,18 +612,21 @@ func signReferenceOctets(ctx context.Context, cfg *signerConfig, doc *helium.Doc
 		signing:        true,
 	}
 	initial := newReferenceNodeSetValue(doc, target, sigElem, wholeDoc, includeComments, internalRoot)
-	return executeTransformPipeline(ctx, runtime, initial, transformSteps(ref))
+	_, err = executeTransformPipeline(ctx, runtime, initial, transformSteps(ref), out)
+	return err
 }
 
 func processReference(ctx context.Context, cfg *signerConfig, doc *helium.Document, sigElem, signedInfo *helium.Element, ref ReferenceConfig, internalRoot *helium.Element) error {
-	canonical, err := signReferenceOctets(ctx, cfg, doc, sigElem, ref, internalRoot)
-	if err != nil {
+	// The canonical octets stream straight into the digest. A SHA-1 digest is
+	// rejected unless the caller opted in via Signer.AllowSHA1(true).
+	sink, digester, algErr := newDigestSink(ref.DigestAlgorithm, cfg.allowSHA1)
+	if err := writeSignReference(ctx, cfg, doc, sigElem, ref, internalRoot, sink); err != nil {
 		return err
 	}
-
-	// Compute digest. A SHA-1 digest is rejected unless the caller opted in
-	// via Signer.AllowSHA1(true).
-	digest, err := computeDigest(ref.DigestAlgorithm, canonical, cfg.allowSHA1)
+	if algErr != nil {
+		return algErr
+	}
+	digest, err := digester.sum()
 	if err != nil {
 		return err
 	}
@@ -745,16 +755,17 @@ func computeAndSetSignatureValue(ctx context.Context, cfg *signerConfig, sigElem
 	// SignedInfo inherits EXACTLY what it would under doc.DocumentElement() while
 	// the caller's document is never mutated. The move is undone on every exit —
 	// normal return, error, or a panic unwinding out of canonicalization.
-	var canonical []byte
+	var buf bytes.Buffer
 	var err error
 	if sigElem.Parent() == nil {
-		canonical, err = canonicalizeDetachedSubtree(ctx, cfg.c14nMethod, sigElem, signedInfo, nil)
+		err = canonicalizeDetachedSubtree(ctx, cfg.c14nMethod, sigElem, signedInfo, nil, &buf)
 	} else {
-		canonical, err = canonicalizeSubtree(ctx, cfg.c14nMethod, signedInfo, nil)
+		err = writeCanonicalSubtree(ctx, cfg.c14nMethod, signedInfo, nil, &buf)
 	}
 	if err != nil {
 		return err
 	}
+	canonical := buf.Bytes()
 
 	sigBytes, err := signBytes(cfg.signatureAlgorithm, key, canonical, cfg.allowSHA1)
 	if err != nil {

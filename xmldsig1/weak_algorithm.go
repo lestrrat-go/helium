@@ -20,7 +20,7 @@ func rejectWeakSignatureAlgorithm(algURI string, allowSHA1 bool) error {
 
 // rejectWeakDigestAlgorithm returns ErrWeakAlgorithm if algURI names a
 // SHA-1-based digest algorithm and allowSHA1 is false. Unknown algorithms pass
-// through here (they are rejected later by computeDigest).
+// through here (they are rejected later by newDigestSink).
 func rejectWeakDigestAlgorithm(algURI string, allowSHA1 bool) error {
 	da, ok := digestAlgorithms[algURI]
 	if !ok {
