@@ -316,7 +316,8 @@ gives every node of the expansion). Each invariant lives at its function:
 
 `TreeBuilder` (`tree_builder.go`) implements `sax.SAX2Handler`, mapping callbacks to DOM nodes:
 
-- `StartDocument` → create Document
+- `StartDocument` → create Document with `pooledSlabs` set, so its slab chunks come from the pools from the first
+  node on (the DOM fast path's `fastStartDocument` does the same; see node-types.md "Cross-Document Slab Safety")
 - `StartElementNS` → create Element, declare namespaces, add attributes, register IDs, append to parent
 - `EndElementNS` → pop element, restore parent
 - `Characters` → AppendText (merges adjacent text)

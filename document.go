@@ -84,7 +84,9 @@ type Document struct {
 	// Slab allocators for high-frequency node types.
 	// These reduce per-node heap allocation overhead by allocating
 	// nodes in chunks and handing them out one at a time.
-	// Chunks are obtained from global pools and returned on Free().
+	// Pooled chunks are obtained from global pools and returned on Free().
+	// A document the parser did not build first takes small heap chunks (see
+	// slabGrowthSizes), so a small built tree does not hold a full pooled chunk.
 	elemSlab []Element
 	textSlab []Text
 	nsSlab   []Namespace
@@ -107,6 +109,21 @@ type Document struct {
 	// would let a later parse overwrite the live node. Set by the tree-insertion
 	// paths (node.go noteCrossDocumentEscape).
 	slabEscaped bool
+
+	// pooledSlabs makes every slab chunk come from the pools from the first
+	// node on. The parser sets it on the document it builds: a parsed document
+	// is commonly released with Free and its chunks reused by the next parse,
+	// which the small heap chunks of the growth schedule would defeat.
+	pooledSlabs bool
+
+	// Number of small heap chunks each slab allocator has taken from its
+	// growth schedule (slabGrowthSizes, textContentGrowthSizes). Once a counter
+	// reaches the end of its schedule, that allocator draws pooled chunks.
+	elemGrowth        uint8
+	textGrowth        uint8
+	nsGrowth          uint8
+	attrGrowth        uint8
+	textContentGrowth uint8
 
 	// offChainChildClaim records that a node has been given this document as its
 	// parent WITHOUT being linked into the document's child list. The DTD-subset
@@ -134,11 +151,15 @@ func NewDefaultDocument() *Document {
 	return doc
 }
 
-// NewHTMLDocument creates a new HTML document (HTMLDocumentNode type).
+// NewHTMLDocument creates a new HTML document (HTMLDocumentNode type). The
+// HTML parser builds its documents through it, so like a document the XML
+// parser builds, it draws its slab chunks from the pools from the first node
+// on.
 func NewHTMLDocument() *Document {
 	doc := &Document{
-		standalone: StandaloneNoXMLDecl,
-		properties: DocHTML,
+		standalone:  StandaloneNoXMLDecl,
+		properties:  DocHTML,
+		pooledSlabs: true,
 	}
 	doc.etype = HTMLDocumentNode
 	doc.name = "(document)"
@@ -519,6 +540,9 @@ func (d *Document) CreateNamespace(prefix, uri string) (*Namespace, error) {
 
 func (d *Document) allocNamespace() *Namespace {
 	if len(d.nsSlab) == 0 {
+		d.nsSlab = growthChunk[Namespace](d.pooledSlabs, &d.nsGrowth)
+	}
+	if len(d.nsSlab) == 0 {
 		chunk := nsChunkPool.Get()
 		d.nsChunks = append(d.nsChunks, chunk)
 		d.nsSlab = chunk[:]
@@ -530,6 +554,9 @@ func (d *Document) allocNamespace() *Namespace {
 }
 
 func (d *Document) allocAttribute(name string, ns *Namespace) *Attribute {
+	if len(d.attrSlab) == 0 {
+		d.attrSlab = growthChunk[Attribute](d.pooledSlabs, &d.attrGrowth)
+	}
 	if len(d.attrSlab) == 0 {
 		chunk := attrChunkPool.Get()
 		d.attrChunks = append(d.attrChunks, chunk)
@@ -654,6 +681,32 @@ func (d *Document) CreateInternalSubset(name, externalID, systemID string) (*DTD
 const slabSize = 256
 const textContentSlabSize = 64 * 1024
 
+// slabGrowthSizes is the growth schedule of the node slab allocators for a
+// document the parser did not build: its first chunks are small heap slices of
+// these sizes, and only once they are used up does it draw pooled chunks of
+// slabSize nodes. A small tree built through the Create* methods, such as an
+// XSLT temporary tree, then holds a few hundred bytes per node type in place of
+// a pooled chunk of tens of kilobytes. textContentGrowthSizes is the same
+// schedule, in bytes, for text content; a request larger than the next size
+// takes a chunk of its own size. Heap chunks are left to the GC and never go to
+// the pools.
+var (
+	slabGrowthSizes        = [...]int{8, 32}
+	textContentGrowthSizes = [...]int{256, 2048}
+)
+
+// growthChunk returns the next small heap chunk from slabGrowthSizes and advances
+// *taken, or nil when pooled is set or the schedule is used up, in which case
+// the caller draws a pooled chunk.
+func growthChunk[T any](pooled bool, taken *uint8) []T {
+	if pooled || int(*taken) >= len(slabGrowthSizes) {
+		return nil
+	}
+	n := slabGrowthSizes[*taken]
+	*taken++
+	return make([]T, n)
+}
+
 var (
 	elemChunkPool        = pool.New(func() *[slabSize]Element { return new([slabSize]Element) }, nil)
 	textChunkPool        = pool.New(func() *[slabSize]Text { return new([slabSize]Text) }, nil)
@@ -705,6 +758,9 @@ func (d *Document) CreateElementNS(localname string, ns *Namespace) (*Element, e
 
 func (d *Document) allocElement() *Element {
 	if len(d.elemSlab) == 0 {
+		d.elemSlab = growthChunk[Element](d.pooledSlabs, &d.elemGrowth)
+	}
+	if len(d.elemSlab) == 0 {
 		chunk := elemChunkPool.Get()
 		d.elemChunks = append(d.elemChunks, chunk)
 		d.elemSlab = chunk[:]
@@ -747,6 +803,10 @@ func (d *Document) allocTextContent(size int) []byte {
 	if size > textContentSlabSize {
 		return make([]byte, size)
 	}
+	if len(d.textContentSlab) < size && !d.pooledSlabs && int(d.textContentGrowth) < len(textContentGrowthSizes) {
+		d.textContentSlab = make([]byte, max(textContentGrowthSizes[d.textContentGrowth], size))
+		d.textContentGrowth++
+	}
 	if len(d.textContentSlab) < size {
 		chunk := textContentChunkPool.Get()
 		d.textContentChunks = append(d.textContentChunks, chunk)
@@ -776,6 +836,9 @@ func (d *Document) growOwnedTextContent(cur []byte, extra int) []byte {
 }
 
 func (d *Document) allocText() *Text {
+	if len(d.textSlab) == 0 {
+		d.textSlab = growthChunk[Text](d.pooledSlabs, &d.textGrowth)
+	}
 	if len(d.textSlab) == 0 {
 		chunk := textChunkPool.Get()
 		d.textChunks = append(d.textChunks, chunk)

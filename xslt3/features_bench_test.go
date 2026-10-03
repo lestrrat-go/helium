@@ -160,9 +160,9 @@ type featureBenchCase struct {
 // runFeatureBenchCases compiles each case once, transforms the shared source
 // once to check the output, then times xslt3.Transform (result tree only, no
 // serialization) per case.
-func runFeatureBenchCases(b *testing.B, cases []featureBenchCase, nCats int) {
+func runFeatureBenchCases(b *testing.B, cases []featureBenchCase) {
 	b.Helper()
-	src, err := helium.NewParser().Parse(b.Context(), buildFeatureSource(featureBenchRecords, nCats))
+	src, err := helium.NewParser().Parse(b.Context(), buildFeatureSource(featureBenchRecords, groupByCats))
 	require.NoError(b, err)
 
 	for _, tc := range cases {
@@ -253,7 +253,7 @@ func BenchmarkForEachGroup(b *testing.B) {
 		{name: "group-by", xsl: groupByStylesheet, check: checkGroupBy},
 		{name: "group-adjacent", xsl: groupAdjacentStylesheet, check: checkGroupAdjacent},
 		{name: "group-starting-with", xsl: groupStartingWithStylesheet, check: checkGroupStartingWith},
-	}, groupByCats)
+	})
 }
 
 const numberSingleStylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -306,7 +306,7 @@ func BenchmarkNumbering(b *testing.B) {
 		{name: "number-single", xsl: numberSingleStylesheet, check: checkNumberSingle},
 		{name: "number-any", xsl: numberAnyStylesheet, check: checkNumberAny},
 		{name: "format-number", xsl: formatNumberStylesheet, check: checkFormatNumber},
-	}, groupByCats)
+	})
 }
 
 const functionSimpleStylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -355,5 +355,54 @@ func BenchmarkFunctionCall(b *testing.B) {
 	runFeatureBenchCases(b, []featureBenchCase{
 		{name: "simple", xsl: functionSimpleStylesheet, check: checkFunctionSimple},
 		{name: "recursive", xsl: functionRecursiveStylesheet, check: checkFunctionRecursive},
-	}, groupByCats)
+	})
+}
+
+const temporaryTreeVariableStylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/recs"><out><xsl:apply-templates select="rec"/></out></xsl:template>
+  <xsl:template match="rec">
+    <xsl:variable name="t"><x><xsl:value-of select="@id"/></x></xsl:variable>
+    <r><xsl:value-of select="$t"/></r>
+  </xsl:template>
+</xsl:stylesheet>`
+
+const temporaryTreeFunctionStylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="urn:bench" exclude-result-prefixes="xs f">
+  <xsl:function name="f:wrap" as="element()">
+    <xsl:param name="id" as="xs:string"/>
+    <w><xsl:value-of select="$id"/></w>
+  </xsl:function>
+  <xsl:template match="/recs"><out><xsl:apply-templates select="rec"/></out></xsl:template>
+  <xsl:template match="rec"><xsl:copy-of select="f:wrap(@id)"/></xsl:template>
+</xsl:stylesheet>`
+
+// checkTemporaryTreeVariable expects record i to output the string value of
+// its temporary tree, its own id.
+func checkTemporaryTreeVariable(tb testing.TB, out string) {
+	tb.Helper()
+	require.Equal(tb, featureBenchRecords, strings.Count(out, "<r>"))
+	require.Contains(tb, out, "<r>r0</r><r>r1</r>")
+}
+
+// checkTemporaryTreeFunction expects record i to output a copy of the element
+// the function built for it.
+func checkTemporaryTreeFunction(tb testing.TB, out string) {
+	tb.Helper()
+	require.Equal(tb, featureBenchRecords, strings.Count(out, "<w>"))
+	require.Contains(tb, out, "<w>r0</w><w>r1</w>")
+}
+
+// BenchmarkTemporaryTree times xslt3.Transform for instructions that build a
+// small temporary tree once per record over the 5000-record document, so the
+// cost of setting up each new tree's document dominates:
+//
+//   - variable: an xsl:variable whose content is one element holding the
+//     record id, read back through its string value;
+//   - function: an xsl:function whose body builds one element holding the
+//     record id, copied into the result.
+func BenchmarkTemporaryTree(b *testing.B) {
+	runFeatureBenchCases(b, []featureBenchCase{
+		{name: "variable", xsl: temporaryTreeVariableStylesheet, check: checkTemporaryTreeVariable},
+		{name: "function", xsl: temporaryTreeFunctionStylesheet, check: checkTemporaryTreeFunction},
+	})
 }
