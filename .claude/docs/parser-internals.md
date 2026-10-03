@@ -397,7 +397,7 @@ the negative-sentinel option disables the cap for trusted input.
 - **Attribute value strings** (`value_arena.go`) — `parseAttributeValueUTF8` (simple values) and
   `parseAttributeValueComplex` copy each value into `parserCtx.values`, a per-parse `valueArena`, and return an
   `unsafe.String` view of the copy, so a document's attribute values cost one allocation per chunk instead of one
-  per value. Chunks start at 256 bytes and double up to 8 KiB; a value over 1 KiB gets its own allocation. The
+  per value. Chunks start at 256 bytes and double up to 2 KiB; a value over 256 bytes gets its own allocation. The
   chunks are ordinary heap memory owned by that one parse: they never go to a pool and the arena never writes
   bytes it has handed out, so a value a SAX handler, the DOM, or the ID table keeps never changes. A nested
   parser context has its own arena. A retained value keeps its whole chunk alive.

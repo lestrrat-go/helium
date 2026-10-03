@@ -8,12 +8,12 @@ const (
 	// attribute values cost little, and each next chunk doubles up to the
 	// maximum.
 	valueArenaFirstChunk = 256
-	valueArenaMaxChunk   = 8 << 10
+	valueArenaMaxChunk   = 2 << 10
 
 	// valueArenaLargeValue is the longest value valueArena packs into a chunk.
-	// A longer one gets an allocation of its own, so it neither wastes the
-	// rest of the current chunk nor forces a chunk larger than the maximum.
-	valueArenaLargeValue = 1 << 10
+	// A longer one gets an allocation of its own, so the arena leaves fewer
+	// than this many bytes unused when it moves on to a new chunk.
+	valueArenaLargeValue = 256
 )
 
 // valueArena turns parsed attribute values into strings with one allocation per
