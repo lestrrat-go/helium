@@ -378,10 +378,11 @@ func (ec *execContext) numberAny(ctx context.Context, inst *numberInst, node hel
 // walk that started at node produced count. For level="single" node is the
 // counted node and the walk visits its preceding siblings; for level="any"
 // node is the selected node and the walk visits the preceding nodes and
-// ancestors back to the nearest from match. Both walks step through
-// numberPrevSibling, so an attribute or namespace node has no preceding
-// siblings and a stored count never includes the other attributes of an
-// element; no walk reaches an attribute or namespace node after its start.
+// ancestors back to the nearest from match. Both walks take their first
+// backward step through numberPrevSibling, so an attribute or namespace node
+// has no preceding siblings and a stored count never includes the other
+// attributes of an element; no walk reaches an attribute or namespace node
+// after its start.
 //
 // A later walk by the same instruction that reaches node can stop there and
 // add count, because from that point it would visit the same nodes and get

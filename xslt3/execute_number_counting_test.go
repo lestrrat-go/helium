@@ -199,6 +199,7 @@ func TestNumberCounting(t *testing.T) {
 // give a wrong number.
 func TestNumberAttributeAndNamespace(t *testing.T) {
 	const twoAttrs = `<r b="1" a="2"/>`
+	const nestedAttrs = `<r><x/><y b="1" a="2"/></r>`
 	testCases := []struct {
 		name   string
 		source string
@@ -231,7 +232,7 @@ func TestNumberAttributeAndNamespace(t *testing.T) {
 		},
 		{
 			name:   "single count attribute or element",
-			source: `<r><x/><y b="1" a="2"/></r>`,
+			source: nestedAttrs,
 			body:   `<xsl:for-each select="r/y/@a"><xsl:number count="@*|*"/></xsl:for-each>`,
 			want:   `1`,
 		},
@@ -240,6 +241,26 @@ func TestNumberAttributeAndNamespace(t *testing.T) {
 			source: `<r a="1" b="2" c="3"/>`,
 			body:   `<xsl:for-each select="r/@*">[<xsl:number count="@*"/>]</xsl:for-each>`,
 			want:   `[1][1][1]`,
+		},
+		{
+			name:   "single repeated over elements then attributes",
+			source: `<r><x a="1"/><y a="1" b="2"/></r>`,
+			body:   `<xsl:for-each select="r/*|r/*/@*">[<xsl:number count="*|@*"/>]</xsl:for-each>`,
+			want:   `[1][1][2][1][1]`,
+		},
+		{
+			name:   "any from the parent element",
+			source: nestedAttrs,
+			body: `<xsl:for-each select="r/y/@a">` +
+				`<xsl:number level="any" count="node()|@*" from="y"/></xsl:for-each>`,
+			want: `2`,
+		},
+		{
+			name:   "any from a sibling attribute",
+			source: nestedAttrs,
+			body: `<xsl:for-each select="r/y/@a">` +
+				`<xsl:number level="any" count="node()|@*" from="@b"/></xsl:for-each>`,
+			want: `4`,
 		},
 		{
 			name:   "any count any attribute",
@@ -261,7 +282,7 @@ func TestNumberAttributeAndNamespace(t *testing.T) {
 		},
 		{
 			name:   "any counts preceding elements but not sibling attributes",
-			source: `<r><x/><y b="1" a="2"/></r>`,
+			source: nestedAttrs,
 			body: `<xsl:for-each select="r/y/@a">` +
 				`<xsl:number level="any" count="node()|@*"/></xsl:for-each>`,
 			want: `4`,
@@ -299,10 +320,17 @@ func TestNumberAttributeAndNamespace(t *testing.T) {
 		},
 		{
 			name:   "multiple count elements and attributes",
-			source: `<r><x/><y b="1" a="2"/></r>`,
+			source: nestedAttrs,
 			body: `<xsl:for-each select="r/y/@a">` +
 				`<xsl:number level="multiple" count="*|@*"/></xsl:for-each>`,
 			want: `1.2.1`,
+		},
+		{
+			name:   "multiple from the parent element",
+			source: nestedAttrs,
+			body: `<xsl:for-each select="r/y/@a">` +
+				`<xsl:number level="multiple" count="*|@*" from="y"/></xsl:for-each>`,
+			want: `2.1`,
 		},
 		{
 			name:   "multiple repeated over attributes",

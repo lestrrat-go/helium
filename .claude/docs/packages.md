@@ -911,8 +911,9 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   and the counted node (`numberWithinFrom`); `level="multiple"` keeps only counted ancestors at or below the
   innermost `from` match; `level="any"` counts back to the nearest preceding `from` match. helium links an
   element's attributes as DOM siblings, but XDM gives attribute and namespace nodes no siblings and keeps them off
-  the preceding axis, so every backward step goes through `numberPrevSibling`, which returns nil for those kinds:
-  a walk from an attribute or namespace node goes straight to its parent. `level="single"` and
+  the preceding axis, so the walks step back from the counted or selected node through `numberPrevSibling`,
+  which returns nil for those kinds: an attribute or namespace node is the first of its siblings for
+  `level="single"`/`"multiple"`, and the `level="any"` walk goes from it straight to its parent. `level="single"` and
   `level="any"` walk back from the counted node and stop at the node the same instruction's previous evaluation
   started from, adding its count (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in
   document order is linear. The memo is off when the `count` or `from` pattern references a variable
