@@ -152,7 +152,7 @@ const (
 	errCodeXTSE0590 = "XTSE0590" // as= references undeclared schema type/element/attribute
 	errCodeXTSE0620 = "XTSE0620" // cannot write to output
 	errCodeXTSE0630 = "XTSE0630" // duplicate global variable or parameter
-	errCodeXTSE0670 = "XTSE0670" // duplicate with-param name in xsl:next-iteration
+	errCodeXTSE0670 = "XTSE0670" // duplicate sibling xsl:with-param name
 	errCodeXTSE0680 = "XTSE0680" // invalid xsl:number
 	errCodeXTSE0690 = "XTSE0690" // required parameter not supplied in call-template
 	errCodeXTSE0710 = "XTSE0710" // undeclared attribute-set reference
