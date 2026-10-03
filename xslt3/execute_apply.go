@@ -95,9 +95,6 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 				if paramValues == nil {
 					paramValues = make(map[string]xpath3.Sequence)
 				}
-				if _, dup := paramValues[wp.Name]; dup {
-					return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:apply-templates", wp.Name)
-				}
 				paramValues[wp.Name] = val
 			}
 		}
@@ -420,9 +417,6 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 			}
 			newTunnelParams[wp.Name] = val
 		} else {
-			if _, dup := paramOverrides[wp.Name]; dup {
-				return dynamicError(errCodeXTDE0410, "duplicate parameter %q in xsl:call-template", wp.Name)
-			}
 			paramOverrides[wp.Name] = val
 		}
 	}

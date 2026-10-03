@@ -1262,3 +1262,47 @@ func namespaceURI(elem *helium.Element, prefix string) string {
 	}
 	return ""
 }
+
+// errXTSE0670 is the error code for duplicate sibling xsl:with-param names.
+const errXTSE0670 = "XTSE0670"
+
+// XSLT 3.0 [XTSE0670]: two sibling xsl:with-param elements naming the same
+// expanded QName are a static error, whichever instruction holds them and
+// whether or not it ever runs or the parameters are tunnel parameters.
+func TestDuplicateWithParam(t *testing.T) {
+	t.Parallel()
+
+	const dup = `<xsl:with-param name="p" select="1"/><xsl:with-param name="p" select="2"/>`
+	cases := []struct {
+		name string
+		body string
+		code string
+	}{
+		{name: "distinct names", body: `<xsl:call-template name="t"><xsl:with-param name="p" select="1"/><xsl:with-param name="q" select="2"/></xsl:call-template>`},
+		{name: "call-template", body: `<xsl:call-template name="t">` + dup + `</xsl:call-template>`, code: errXTSE0670},
+		{name: "apply-templates", body: `<xsl:apply-templates select="nothing">` + dup + `</xsl:apply-templates>`, code: errXTSE0670},
+		{name: "same expanded name", body: `<xsl:call-template name="t"><xsl:with-param xmlns:a="urn:x" name="a:p" select="1"/><xsl:with-param xmlns:b="urn:x" name="b:p" select="2"/></xsl:call-template>`, code: errXTSE0670},
+		{name: "tunnel", body: `<xsl:call-template name="t"><xsl:with-param name="p" select="1" tunnel="yes"/><xsl:with-param name="p" select="2" tunnel="yes"/></xsl:call-template>`, code: errXTSE0670},
+		{name: "apply-imports", body: `<xsl:if test="false()"><xsl:apply-imports>` + dup + `</xsl:apply-imports></xsl:if>`, code: errXTSE0670},
+		{name: "next-match", body: `<xsl:if test="false()"><xsl:next-match>` + dup + `</xsl:next-match></xsl:if>`, code: errXTSE0670},
+		{name: "evaluate", body: `<xsl:evaluate xpath="'1'">` + dup + `</xsl:evaluate>`, code: errXTSE0670},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out>` + tc.body + `</out></xsl:template>
+  <xsl:template name="t" xmlns:c="urn:x"><xsl:param name="p"/><xsl:param name="q"/><xsl:param name="c:p"/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+			require.NoError(t, err)
+
+			_, err = xslt3.CompileStylesheet(t.Context(), doc)
+			if tc.code == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.code)
+		})
+	}
+}

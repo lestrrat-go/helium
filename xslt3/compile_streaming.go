@@ -444,8 +444,6 @@ func (c *compiler) compileNextIteration(ctx context.Context, elem *helium.Elemen
 
 	inst := &nextIterationInst{}
 
-	// Check for duplicate with-param names (XTSE0670).
-	wpNames := make(map[string]struct{})
 	for child := range helium.Children(elem) {
 		childElem, ok := child.(*helium.Element)
 		if !ok {
@@ -459,10 +457,9 @@ func (c *compiler) compileNextIteration(ctx context.Context, elem *helium.Elemen
 			if wp == nil {
 				continue
 			}
-			if _, dup := wpNames[wp.Name]; dup {
-				return nil, staticError(errCodeXTSE0670, "duplicate xsl:with-param name %q in xsl:next-iteration", wp.Name)
+			if err := checkDuplicateWithParam(inst.Params, wp); err != nil {
+				return nil, err
 			}
-			wpNames[wp.Name] = struct{}{}
 			inst.Params = append(inst.Params, wp)
 		}
 	}

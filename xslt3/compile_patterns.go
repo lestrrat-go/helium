@@ -1382,13 +1382,12 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 	}
 
 	// Check the last step against the node.
-	// For multi-step patterns with descendant axis and predicates, skip
-	// predicate evaluation here — predicates will be evaluated with proper
+	// For a last step on the descendant axis with predicates, skip predicate
+	// evaluation here — predicates will be evaluated with proper
 	// descendant-set position relative to the ancestor later.
 	lastStep := path.Steps[len(path.Steps)-1]
-	hasDescPreds := len(path.Steps) > 1 &&
-		(lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf) &&
-		len(lastStep.Predicates) > 0
+	descendantAxis := lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf
+	hasDescPreds := descendantAxis && len(lastStep.Predicates) > 0
 	if hasDescPreds {
 		// Check name/type test without predicates
 		stepNoPreds := lastStep
@@ -1400,8 +1399,10 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 		return false
 	}
 
-	// If there's only one step and it's absolute, check parent is document
-	if len(path.Steps) == 1 {
+	// If there's only one step on the child axis and it's absolute, check
+	// parent is document. A single descendant step reaches below the children
+	// and goes through the descendant matching below.
+	if len(path.Steps) == 1 && !descendantAxis {
 		if path.Absolute {
 			parent := node.Parent()
 			return parent != nil && parent.Type() == helium.DocumentNode
@@ -1412,20 +1413,20 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 	// Match remaining steps upward.
 	// The axis of the last step determines how to walk to the preceding step.
 	remaining := path.Steps[:len(path.Steps)-1]
-	if lastStep.Axis == xpath3.AxisDescendant || lastStep.Axis == xpath3.AxisDescendantOrSelf {
-		if len(lastStep.Predicates) > 0 {
+	if descendantAxis {
+		if hasDescPreds {
 			return matchDescendantStepPredicates(ctx, ec, path.Absolute, remaining, lastStep, node)
 		}
-		// descendant / descendant-or-self axis: any ancestor may contain the preceding step
-		for cur := node.Parent(); cur != nil; cur = cur.Parent() {
-			if matchStepsUpward(ctx, ec, remaining, path.Absolute, cur) {
-				return true
-			}
+		// descendant axis: any ancestor may match the preceding steps; for
+		// descendant-or-self, the node itself may too.
+		start := node.Parent()
+		if lastStep.Axis == xpath3.AxisDescendantOrSelf {
+			start = node
 		}
-		// Child-or-top: parentless non-document nodes try matching
-		// remaining steps from the node itself.
-		if node.Parent() == nil && node.Type() != helium.DocumentNode && !path.Absolute {
-			if matchStepsUpward(ctx, ec, remaining, false, node) {
+		// XSLT 3.0 §5.5.3 gives a descendant step no "-or-top" form, so a
+		// parentless node never matches through the descendant axis.
+		for cur := start; cur != nil; cur = cur.Parent() {
+			if matchStepsUpward(ctx, ec, remaining, path.Absolute, cur) {
 				return true
 			}
 		}
@@ -1438,7 +1439,7 @@ func matchLocationPath(ctx context.Context, ec *execContext, path xpath3.Locatio
 }
 
 // matchDescendantStepPredicates matches the remaining steps and the
-// predicates of the last step of a multi-step pattern whose last step, on the
+// predicates of the last step of a pattern whose last step, on the
 // descendant or descendant-or-self axis, carries predicates. node has already
 // passed the step's node test. A position in those predicates counts among
 // all the nodes the step selects from the ancestor that matches the
@@ -1465,11 +1466,6 @@ func matchDescendantStepPredicates(ctx context.Context, ec *execContext, absolut
 			return true
 		}
 	}
-	// Child-or-top: parentless nodes try matching remaining steps
-	// from the node itself (XSLT 3.0 §19.2).
-	if node.Parent() == nil && node.Type() != helium.DocumentNode && isSelfAxis && !absolute {
-		return matchDescendantStepFrom(ctx, ec, absolute, remaining, lastStep, node, node, true, positional)
-	}
 	return false
 }
 
@@ -1492,25 +1488,7 @@ func matchDescendantStepFrom(ctx context.Context, ec *execContext, absolute bool
 		descendants = append(descendants, cur)
 	}
 	descendants = append(descendants, collectDescendants(ctx, ec, lastStep.NodeTest, cur)...)
-	// Find position of node in the descendant set
-	pos := 0
-	for j, d := range descendants {
-		if d == node {
-			pos = j + 1
-			break
-		}
-	}
-	if pos == 0 {
-		return false
-	}
-	// Evaluate predicates with position context
-	for i := range lastStep.Predicates {
-		pred := ec.patternPredicate(&lastStep.Predicates[i])
-		if pred == nil || !evaluatePredicateWithPosition(ctx, ec, pred.compiled, node, pos, len(descendants)) {
-			return false
-		}
-	}
-	return true
+	return passesChainedPredicates(ctx, ec, lastStep.Predicates, descendants, node)
 }
 
 // matchStepsUpward matches remaining pattern steps upward through ancestors.
@@ -2109,16 +2087,23 @@ func evaluateChainedPredicates(ctx context.Context, ec *execContext, step xpath3
 
 	// Collect all same-test siblings (including the node itself)
 	siblings := collectMatchingSiblings(ctx, ec, step.NodeTest, node)
+	return passesChainedPredicates(ctx, ec, step.Predicates, siblings, node)
+}
 
-	for i := range step.Predicates {
-		pred := ec.patternPredicate(&step.Predicates[i])
+// passesChainedPredicates reports whether node passes preds when they filter
+// selected, the nodes a pattern step selects from one context node in
+// document order, in turn (XSLT 3.0 §5.5.3): each predicate sees the node's
+// position and the size of the list the previous predicates left.
+func passesChainedPredicates(ctx context.Context, ec *execContext, preds []xpath3.Expr, selected []helium.Node, node helium.Node) bool {
+	for i := range preds {
+		pred := ec.patternPredicate(&preds[i])
 		if pred == nil {
 			return false
 		}
-		// Find position and size of node in current filtered sibling set
+		// Find position and size of node in the current filtered list
 		pos := 0
-		for j, sib := range siblings {
-			if sib == node {
+		for j, n := range selected {
+			if n == node {
 				pos = j + 1
 				break
 			}
@@ -2128,19 +2113,19 @@ func evaluateChainedPredicates(ctx context.Context, ec *execContext, step xpath3
 		}
 
 		// Evaluate the predicate with position/size context
-		if !evaluatePredicateWithPosition(ctx, ec, pred.compiled, node, pos, len(siblings)) {
+		if !evaluatePredicateWithPosition(ctx, ec, pred.compiled, node, pos, len(selected)) {
 			return false
 		}
 
-		// For subsequent predicates, filter the sibling list
-		if i < len(step.Predicates)-1 {
+		// For subsequent predicates, filter the list
+		if i < len(preds)-1 {
 			var filtered []helium.Node
-			for j, sib := range siblings {
-				if evaluatePredicateWithPosition(ctx, ec, pred.compiled, sib, j+1, len(siblings)) {
-					filtered = append(filtered, sib)
+			for j, n := range selected {
+				if evaluatePredicateWithPosition(ctx, ec, pred.compiled, n, j+1, len(selected)) {
+					filtered = append(filtered, n)
 				}
 			}
-			siblings = filtered
+			selected = filtered
 		}
 	}
 	return true
