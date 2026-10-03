@@ -913,7 +913,9 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `xsl:number` walks (`numberPrevSibling`, `lastDescendant`), key indexing (`indexKeyTree`) and accumulator
   evaluation (`walkAccumulatorTree`). A DOCTYPE, its declarations, an entity reference with the entity content
   under it, and XInclude markers are not XDM nodes, so no template, pattern position, number, key or accumulator
-  sees them, and an attribute has no children for `xsl:apply-templates`.
+  sees them, and an attribute has no children for `xsl:apply-templates`. A document node added to content is
+  replaced by copies of its XDM children only (`execXSLSequence`, `outputSequence`, `spliceConditionalSequence`,
+  `resolveSequencePlaceholders`, `executeTemplateBodyWithAs`, `execWherePopulated`), so a DOCTYPE is never copied.
 - `xsl:number` counting (`execute_number.go`): `from` follows XSLT 3.0 §12.3, where the root of a tree always matches
   it. `level="single"` gives an empty result when a `from` match lies strictly between the selected node and the
   counted node (`numberWithinFrom`); `level="multiple"` keeps only counted ancestors at or below the innermost `from`

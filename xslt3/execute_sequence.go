@@ -6,6 +6,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -379,6 +380,9 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 				// a document node in a sequence constructor is replaced
 				// by its children).
 				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					if !ixpath.IsXDMChild(child) {
+						continue
+					}
 					copied, copyErr := helium.CopyNode(child, ec.resultDoc)
 					if copyErr != nil {
 						return copyErr
@@ -508,6 +512,9 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			if v.Node.Type() == helium.DocumentNode {
 				// Document nodes: output their children.
 				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					if !ixpath.IsXDMChild(child) {
+						continue
+					}
 					copied, copyErr := helium.CopyNode(child, ec.resultDoc)
 					if copyErr != nil {
 						return copyErr

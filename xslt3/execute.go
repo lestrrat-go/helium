@@ -16,6 +16,7 @@ import (
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -1019,6 +1020,9 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode,
 			switch v.Node.Type() {
 			case helium.DocumentNode:
 				for child := v.Node.FirstChild(); child != nil; child = child.NextSibling() {
+					if !ixpath.IsXDMChild(child) {
+						continue
+					}
 					copied, err := helium.CopyNode(child, ec.resultDoc)
 					if err != nil {
 						return err
