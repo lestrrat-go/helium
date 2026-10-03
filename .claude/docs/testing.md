@@ -471,7 +471,9 @@ against an `xslt3`-binding schema of such `assert`/`report` tests.
 variable, one `xsl:function` per ten templates, one named template per twenty, and a named mode holding a template
 for every fifth match template. The instruction benchmarks time `Transform` (result tree only) over a flat
 5000-record `<recs>` document: `BenchmarkForEachGroup` (`group-by` over 50 interleaved categories, `group-adjacent`
-over 50 runs of 100, `group-starting-with` with a `rec[@head]` pattern), `BenchmarkNumbering` (`number-single`: a
+over 50 runs of 100, `group-starting-with` with a `rec[@head]` pattern), `BenchmarkPredicatePatterns`
+(`predicate-template`: a `match="rec[@head]"` template beside a `match="rec"` fallback; `predicate-templates-20`:
+twenty `match="rec[@cat='cN']"` templates beside the same fallback), `BenchmarkNumbering` (`number-single`: a
 bare `xsl:number`; `number-any`: `level="any" count="rec"`; `format-number` with a grouping picture) and
 `BenchmarkFunctionCall` (`simple`: one two-parameter `xsl:function` call per record; `recursive`: a recursive
 factorial, up to nine nested calls per record). Each case compiles once and checks its output once before the timed

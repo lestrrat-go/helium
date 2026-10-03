@@ -175,6 +175,11 @@ type execContext struct {
 	nilledGen      uint64
 	nilledNodes    map[helium.Node]struct{}
 	nilledNodesGen uint64
+
+	// patternPredicates holds the matching pattern's compiled step predicates
+	// (pattern.predicates) during pattern matching, beside patternNamespaces
+	// and patternCompat.
+	patternPredicates map[*xpath3.Expr]*patternPredicate
 }
 
 func (ec *execContext) setCurrentTemplate(tmpl *template) {
