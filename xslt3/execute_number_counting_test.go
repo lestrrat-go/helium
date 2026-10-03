@@ -189,6 +189,142 @@ func TestNumberCounting(t *testing.T) {
 	}
 }
 
+// TestNumberAttributeAndNamespace checks xsl:number when the selected node is
+// an attribute or namespace node. XDM gives those nodes no siblings and keeps
+// them off the preceding axis (XSLT 3.0 §12.3 counts preceding-sibling::node()
+// for level="single"/"multiple" and preceding::node()|ancestor-or-self::node()
+// for level="any"), so the other attributes of the same element are never
+// counted. The repeated cases number several attributes of one element with
+// one instruction, so a count carried over from the previous attribute would
+// give a wrong number.
+func TestNumberAttributeAndNamespace(t *testing.T) {
+	const twoAttrs = `<r b="1" a="2"/>`
+	testCases := []struct {
+		name   string
+		source string
+		body   string
+		want   string
+	}{
+		{
+			name:   "single count any attribute",
+			source: twoAttrs,
+			body:   `<xsl:for-each select="r/@a"><xsl:number count="@*"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "single count named attribute",
+			source: twoAttrs,
+			body:   `<xsl:for-each select="r/@a"><xsl:number count="@a"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "single default count",
+			source: twoAttrs,
+			body:   `<xsl:for-each select="r/@a"><xsl:number/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "single select attribute",
+			source: twoAttrs,
+			body:   `<xsl:number select="r/@a" count="@*"/>`,
+			want:   `1`,
+		},
+		{
+			name:   "single count attribute or element",
+			source: `<r><x/><y b="1" a="2"/></r>`,
+			body:   `<xsl:for-each select="r/y/@a"><xsl:number count="@*|*"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "single repeated over attributes",
+			source: `<r a="1" b="2" c="3"/>`,
+			body:   `<xsl:for-each select="r/@*">[<xsl:number count="@*"/>]</xsl:for-each>`,
+			want:   `[1][1][1]`,
+		},
+		{
+			name:   "any count any attribute",
+			source: twoAttrs,
+			body:   `<xsl:for-each select="r/@a"><xsl:number level="any" count="@*"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "any count named attribute",
+			source: `<r><x a="1"/><y b="1" a="2"/></r>`,
+			body:   `<xsl:for-each select="r/y/@a"><xsl:number level="any" count="@a"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "any default count",
+			source: `<r><x a="1"/><y b="1" a="2"/></r>`,
+			body:   `<xsl:for-each select="r/y/@a"><xsl:number level="any"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "any counts preceding elements but not sibling attributes",
+			source: `<r><x/><y b="1" a="2"/></r>`,
+			body: `<xsl:for-each select="r/y/@a">` +
+				`<xsl:number level="any" count="node()|@*"/></xsl:for-each>`,
+			want: `4`,
+		},
+		{
+			name:   "any repeated over attributes",
+			source: `<r a="1" b="2" c="3"/>`,
+			body:   `<xsl:for-each select="r/@*">[<xsl:number level="any" count="@*"/>]</xsl:for-each>`,
+			want:   `[1][1][1]`,
+		},
+		{
+			name:   "any repeated over elements then attributes",
+			source: `<r><x/><y a="1" b="2"/></r>`,
+			body: `<xsl:for-each select="//*|//@*">` +
+				`[<xsl:number level="any" count="node()|@*"/>]</xsl:for-each>`,
+			want: `[1][2][3][4][4]`,
+		},
+		{
+			name:   "multiple count any attribute",
+			source: twoAttrs,
+			body:   `<xsl:for-each select="r/@a"><xsl:number level="multiple" count="@*"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "multiple count named attribute",
+			source: twoAttrs,
+			body:   `<xsl:for-each select="r/@a"><xsl:number level="multiple" count="@a"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "multiple default count",
+			source: twoAttrs,
+			body:   `<xsl:for-each select="r/@a"><xsl:number level="multiple"/></xsl:for-each>`,
+			want:   `1`,
+		},
+		{
+			name:   "multiple count elements and attributes",
+			source: `<r><x/><y b="1" a="2"/></r>`,
+			body: `<xsl:for-each select="r/y/@a">` +
+				`<xsl:number level="multiple" count="*|@*"/></xsl:for-each>`,
+			want: `1.2.1`,
+		},
+		{
+			name:   "multiple repeated over attributes",
+			source: `<r a="1" b="2" c="3"/>`,
+			body:   `<xsl:for-each select="r/@*">[<xsl:number level="multiple" count="@*"/>]</xsl:for-each>`,
+			want:   `[1][1][1]`,
+		},
+		{
+			name:   "namespace node default count",
+			source: `<r xmlns:p="urn:p" xmlns:q="urn:q"/>`,
+			body: `<xsl:for-each select="r/namespace::q">[<xsl:number/>,` +
+				`<xsl:number level="any"/>,<xsl:number level="multiple"/>]</xsl:for-each>`,
+			want: `[1,1,1]`,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			require.Equal(t, testCase.want, runNumberStylesheet(t, testCase.source, "", testCase.body, nil))
+		})
+	}
+}
+
 // TestNumberSingleFrom checks level="single" with a from pattern (XSLT 3.0
 // §12.3): the counted node must lie inside the subtree of the innermost
 // ancestor-or-self of the selected node that matches from, where the root of
