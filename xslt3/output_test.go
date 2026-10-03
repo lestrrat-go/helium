@@ -1850,3 +1850,73 @@ func TestSerializeItemsJSONDocumentStringValue(t *testing.T) {
 		}
 	}
 }
+
+// TestSerializeResultSourceDoctype checks serializing a result tree that
+// copied a source document with a DOCTYPE declaration. xsl:copy-of keeps the
+// source's unparsed entities on the copy, so unparsed-entity-uri still works
+// on it, but XDM has no DTD node: the serialized result is the same as for a
+// source without a DTD, with only the document type declaration the output
+// definition asks for, never the source's declaration.
+func TestSerializeResultSourceDoctype(t *testing.T) {
+	const srcXML = `<!DOCTYPE r [<!ELEMENT r ANY><!NOTATION n SYSTEM "n">` +
+		`<!ENTITY u SYSTEM "u.bin" NDATA n>]><r/>`
+	const copyRoot = `<xsl:copy-of select="/"/>`
+	tests := []struct {
+		name   string
+		output string
+		body   string
+		want   string
+	}{
+		{"xml", `<xsl:output omit-xml-declaration="yes"/>`, copyRoot, `<r/>`},
+		{"xml inside an element", `<xsl:output omit-xml-declaration="yes"/>`,
+			`<out><xsl:copy-of select="/"/></out>`, `<out><r/></out>`},
+		{"xml indent", `<xsl:output omit-xml-declaration="yes" indent="yes"/>`, copyRoot, `<r/>`},
+		{"xml doctype-system", `<xsl:output omit-xml-declaration="yes" doctype-system="x.dtd"/>`,
+			copyRoot, `<!DOCTYPE r SYSTEM "x.dtd"><r/>`},
+		{"xml character map", `<xsl:output omit-xml-declaration="yes" use-character-maps="m"/>` +
+			`<xsl:character-map name="m"><xsl:output-character character="!" string="?"/></xsl:character-map>`,
+			copyRoot, `<r/>`},
+		{"html", `<xsl:output method="html" version="4.0"/>`, copyRoot, `<r></r>`},
+		{"html5", `<xsl:output method="html"/>`, copyRoot, `<r></r>`},
+		{"xhtml", `<xsl:output method="xhtml" omit-xml-declaration="yes"/>`, copyRoot, `<r></r>`},
+		{"unparsed entity on the copy", `<xsl:output omit-xml-declaration="yes"/>`,
+			`<xsl:copy-of select="/"/><xsl:value-of select="unparsed-entity-uri('u')"/>`, `<r/>u.bin`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">`+
+				tc.output+`<xsl:template match="/">`+tc.body+`</xsl:template></xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, strings.TrimSpace(out))
+		})
+	}
+
+	t.Run("secondary result document", func(t *testing.T) {
+		t.Parallel()
+		ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/">
+    <xsl:result-document href="secondary.xml" omit-xml-declaration="yes"><xsl:copy-of select="/"/></xsl:result-document>
+  </xsl:template>
+</xsl:stylesheet>`)
+		src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+		require.NoError(t, err)
+		handler := &adaptiveResultDocSerializer{}
+		_, err = ss.Transform(src).ResultDocumentHandler(handler).Do(t.Context())
+		require.NoError(t, err)
+		require.Equal(t, `<r/>`, strings.TrimSpace(handler.serialized))
+	})
+
+	t.Run("caller document keeps its DTD", func(t *testing.T) {
+		t.Parallel()
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+		require.NoError(t, err)
+		var out bytes.Buffer
+		require.NoError(t, xslt3.SerializeResult(&out, doc, nil))
+		require.NotContains(t, out.String(), "DOCTYPE")
+		require.NotNil(t, doc.IntSubset())
+	})
+}

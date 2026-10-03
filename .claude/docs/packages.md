@@ -882,6 +882,10 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `unparsed-entity-uri()`, `unparsed-entity-public-id()`, `type-available()`, `snapshot()`, `copy-of()`,
   `accumulator-before()`/`accumulator-after()`, `current-merge-group()`/`current-merge-key()`, `transform()`
 - Output methods: `xml`, `html`, `xhtml`, `text`, `json`, `adaptive`
+- `SerializeResult` (every principal and secondary result) writes no DTD the document carries: `xsl:copy-of` and
+  `xsl:copy` of a source document keep its DTD on the copy for its unparsed entities, but XDM has no DTD node, so the
+  output definition alone decides the document type declaration. A document with an internal subset is copied
+  (`withoutInternalSubset`) so the caller's document keeps it.
 - Adaptive serialization delegates a singleton element/document item to the XML method. Every XSLT path that
   delegates a document node to `helium.Writer` uses exact-document mode, so writer-added child terminators
   never enter serialized output. Comment and processing-instruction items, including top-level primary and

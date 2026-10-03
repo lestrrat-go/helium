@@ -270,8 +270,27 @@ func isValidOutputXMLVersion(v string) bool {
 	return true
 }
 
+// withoutInternalSubset returns doc without its internal DTD subset, for
+// serialization. A document with no internal subset is returned as is; one
+// with a subset is copied first, so the caller's document keeps its DTD.
+func withoutInternalSubset(doc *helium.Document) (*helium.Document, error) {
+	if doc.IntSubset() == nil {
+		return doc, nil
+	}
+	cp, err := helium.CopyDoc(doc)
+	if err != nil {
+		return nil, err
+	}
+	cp.RemoveInternalSubset()
+	return cp, nil
+}
+
 // SerializeResult writes the result document to a writer according to the
-// output definition. If outDef is nil, defaults to XML output.
+// output definition. If outDef is nil, defaults to XML output. XDM has no DTD
+// node, so a DTD the document carries (for example one xsl:copy-of keeps with
+// a copied source document's unparsed entities) is not written: the output
+// definition alone decides the document type declaration. doc itself is left
+// unchanged.
 func SerializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef) error {
 	var charMap map[rune]string
 	if outDef != nil {
@@ -281,6 +300,10 @@ func SerializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef) error
 }
 
 func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charMaps ...map[rune]string) error {
+	doc, docErr := withoutInternalSubset(doc)
+	if docErr != nil {
+		return docErr
+	}
 	if outDef == nil {
 		outDef = defaultOutputDef()
 	} else {
