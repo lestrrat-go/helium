@@ -907,4 +907,80 @@ func TestPattern(t *testing.T) {
 				"match=\"math:nope\" must fail XTSE3105: math: resolves to the math namespace, but {math-ns}nope is not declared")
 		})
 	})
+
+	// Step predicates in match patterns. A predicate that reads neither
+	// position() nor last() is decided from the node alone; a positional or
+	// numeric one counts the node's position among the step's nodes (the five
+	// <rec> siblings, not the <other> between them). Each case lists, per rec,
+	// its id when the predicated template matched and "-" when the fallback
+	// did.
+	t.Run("step predicates", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name   string
+			compat bool // a version="1.0" stylesheet: backwards-compatible processing
+			match  string
+			want   string
+		}{
+			{name: "attribute test", match: "rec[@head]", want: "a-c--"},
+			{name: "two focus-free predicates", match: "rec[@head][@n = '2']", want: "a----"},
+			{name: "first", match: "rec[1]", want: "a----"},
+			{name: "last", match: "rec[last()]", want: "----e"},
+			{name: "position modulo", match: "rec[position() mod 2 = 0]", want: "-b-d-"},
+			{name: "numeric value", match: "rec[number(@n)]", want: "-b-d-"},
+			{name: "number for some nodes only", match: "rec[if (@head) then 3 else true()]", want: "-bcde"},
+			{name: "focus-free then positional", match: "rec[@head][2]", want: "--c--"},
+			{name: "positional then focus-free", match: "rec[3][@head]", want: "--c--"},
+			{
+				name:  "position through function-lookup",
+				match: "rec[function-lookup(QName('http://www.w3.org/2005/xpath-functions', 'position'), 0)() = 2]",
+				want:  "-b---",
+			},
+			{name: "descendant axis attribute test", match: "doc/descendant::rec[@head]", want: "a-c--"},
+			{name: "descendant axis position", match: "doc/descendant::rec[2]", want: "-b---"},
+			// Under XPath 1.0 compatibility mode @n = true() compares
+			// boolean(@n), true for every rec; in 3.0 it casts @n to
+			// xs:boolean, which only "1" survives.
+			{name: "backwards compatible", compat: true, match: "rec[@n = true()]", want: "abcde"},
+			{name: "not backwards compatible", match: "rec[@n = true()]", want: "----e"},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				require.Equal(t, "<out>"+tc.want+"</out>", transformStepPredicate(t, tc.compat, tc.match))
+			})
+		}
+	})
+}
+
+// transformStepPredicate applies a stylesheet with one template for match and
+// a match="rec" fallback to five <rec> siblings and returns the serialized
+// <out> element. The stylesheet is version="1.0" when compat is set and
+// version="3.0" otherwise.
+func transformStepPredicate(t *testing.T, compat bool, match string) string {
+	t.Helper()
+	version := "3.0"
+	if compat {
+		version = "1.0"
+	}
+	xsltSrc := `<xsl:stylesheet version="` + version + `" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out><xsl:apply-templates select="doc/rec"/></out></xsl:template>
+  <xsl:template match="` + match + `"><xsl:value-of select="@id"/></xsl:template>
+  <xsl:template match="rec">-</xsl:template>
+</xsl:stylesheet>`
+	const srcXML = `<doc><rec id="a" head="y" n="2"/><rec id="b" n="2"/><other/>` +
+		`<rec id="c" head="y" n="x"/><rec id="d" n="4"/><rec id="e" n="1"/></doc>`
+
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(t.Context())
+	require.NoError(t, err)
+	return strings.TrimSpace(out)
 }
