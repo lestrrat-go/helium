@@ -352,6 +352,31 @@ func TestEmptyNodeSetEmitsEmpty(t *testing.T) {
 	require.Len(t, got, 0, "empty node set must emit empty output, got %q", string(got))
 }
 
+// TestCanonicalizeLeavesContentUnchanged guards the in-place reads of text,
+// comment and attribute content: escaping them into the output must not change
+// the document.
+func TestCanonicalizeLeavesContentUnchanged(t *testing.T) {
+	t.Parallel()
+	const src = "<r a=\"x&amp;&lt;&#9;&#13;\"><![CDATA[c<d]]>t&amp;&lt;&gt;&#13;</r>"
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	// A parsed comment cannot hold a CR (the parser normalizes line ends), so
+	// the comment that needs escaping is built through the API.
+	comment := doc.CreateComment([]byte("c\r"))
+	require.NoError(t, doc.DocumentElement().AddChild(comment))
+	before, err := helium.WriteString(doc)
+	require.NoError(t, err)
+
+	got, err := c14n.NewCanonicalizer(c14n.C14N10).Comments().CanonicalizeTo(doc)
+	require.NoError(t, err)
+	require.Equal(t, "<r a=\"x&amp;&lt;&#x9;&#xD;\">c&lt;dt&amp;&lt;&gt;&#xD;<!--c&#xD;--></r>", string(got))
+
+	after, err := helium.WriteString(doc)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	require.Equal(t, "c\r", string(comment.Content()))
+}
+
 func TestNoNodeSetEmitsFullDocument(t *testing.T) {
 	t.Parallel()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root><child/></root>`))

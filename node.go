@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/nodecontent"
 	"github.com/lestrrat-go/helium/internal/nodelink"
 )
 
@@ -1528,6 +1529,18 @@ func unsafeSetNextSibling(n Node, next Node) {
 func init() {
 	nodelink.CorruptSelfNextSibling = nodelinkCorruptSelfNextSibling
 	nodelink.CorruptTypedNilNextSibling = nodelinkCorruptTypedNilNextSibling
+	nodecontent.Raw = nodecontentRaw
+}
+
+// nodecontentRaw adapts rawContent to the untyped internal/nodecontent hook
+// (any in) so a sibling package can read a leaf node's content without a copy
+// and without a public accessor here.
+func nodecontentRaw(n any) []byte {
+	node, ok := n.(Node)
+	if !ok {
+		return nil
+	}
+	return rawContent(node)
 }
 
 // nodelinkCorruptSelfNextSibling adapts unsafeSetNextSibling to the untyped
