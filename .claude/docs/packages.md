@@ -889,6 +889,14 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   pattern it applies only to a selected node of the same kind and expanded name. It relies on trees visible to
   `xsl:number` keeping their shape and annotations during a run; `xsl:source-document` and `xsl:merge-source`
   validate or strip annotations on a cached document in place, so they clear `numberMemos` first.
+- User `xsl:function` calls (`functions_user.go`): `xslFunction.prepareCall` runs once at compile time. It parses
+  the parameter and return sequence types for both xpath3 coercion (`FuncParamTypes`/`FuncReturnType`) and
+  `checkSequenceType`, and marks a body made only of select-form `xsl:sequence` instructions as `selectOnly`. Each
+  call writes its body into an output frame whose insertion point is a `_xsl_fn_result` wrapper element. A
+  `selectOnly` body only captures items into its frame and never adds a node to the wrapper, so all such calls on
+  one `execContext` share one scratch wrapper (`functionOutputRoot`), recursive and nested calls included. Any other
+  body gets a fresh wrapper document, which is never freed: the nodes the body builds are allocated from it and
+  returned to the caller, and the `execContext` keeps per-node state keyed by node identity.
 - Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder +
   orchestration), `compile_*.go`
   (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),
