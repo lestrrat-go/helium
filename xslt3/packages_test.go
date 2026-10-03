@@ -605,3 +605,57 @@ func TestOverrideStandardAttributes(t *testing.T) {
 		})
 	}
 }
+
+// Namespace declarations on xsl:use-package and xsl:override are in scope
+// only for the elements inside them: a later top-level template neither
+// copies them to its literal result elements nor sees a prefix rebound.
+func TestOverrideNamespaceScope(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		useAttrs  string
+		overrides string
+		want      string
+	}{
+		{
+			name:     "declaration on xsl:use-package",
+			useAttrs: `xmlns:r="urn:r"`,
+			want:     `<out xmlns:p="urn:a"/>`,
+		},
+		{
+			name:     "rebinding on xsl:use-package",
+			useAttrs: `xmlns:p="urn:b"`,
+			want:     `<out xmlns:p="urn:a"/>`,
+		},
+		{
+			name:      "rebinding on xsl:override",
+			overrides: `<xsl:override xmlns:p="urn:b"><xsl:template match="a" mode="m">[ov]</xsl:template></xsl:override>`,
+			want:      `<out xmlns:p="urn:a"/>`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:p="urn:a">
+  <xsl:use-package name="http://example.com/pkg" ` + tc.useAttrs + `>` + tc.overrides + `</xsl:use-package>
+  <xsl:template match="/"><out/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			ss, err := xslt3.NewCompiler().
+				PackageResolver(modeAllPackageResolver{source: overrideScopePackage}).
+				Compile(t.Context(), doc)
+			require.NoError(t, err)
+
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+			require.NoError(t, err)
+
+			result, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, result, tc.want)
+		})
+	}
+}
