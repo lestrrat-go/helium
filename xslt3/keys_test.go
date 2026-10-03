@@ -222,3 +222,30 @@ func TestKeyNamespaceNodeMatching(t *testing.T) {
 		require.Contains(t, result, `xml="0"`)
 	})
 }
+
+// TestKeyXDMNodes checks that a key indexes the XDM nodes of a document only.
+// A DOCTYPE declaration is not a child of the document node and an entity
+// reference is not a child of its element, so a key matching node() indexes
+// neither, nor the declarations in the DTD or the content of the entity.
+func TestKeyXDMNodes(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"doctype", `<?p1 x?><!--c1--><!DOCTYPE r [<!ELEMENT r ANY>]><!--c2--><r/><?p2 y?>`, "[p1:x][:c1][:c2][r:][p2:y]"},
+		{"entity reference", `<!DOCTYPE r [<!ENTITY e "<y/>">]><r><x/>&e;<z/></r>`, "[r:][x:][z:]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			const xsltSrc = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output method="text"/>
+  <xsl:key name="k" match="node()" use="'k'"/>
+  <xsl:template match="/"><xsl:for-each select="key('k', 'k')">` + patternDoctypeLabel + `</xsl:for-each>` +
+				`</xsl:template>
+</xsl:stylesheet>`
+			require.Equal(t, tc.want, transformDoctype(t, xsltSrc, tc.src))
+		})
+	}
+}
