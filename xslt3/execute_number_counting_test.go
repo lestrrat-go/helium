@@ -552,6 +552,12 @@ func TestNumberDoctype(t *testing.T) {
 			body:   `<xsl:for-each select="r/z">` + allLevels + `</xsl:for-each>`,
 			want:   `[2,3,1.2]`,
 		},
+		{
+			name:   "entity reference as the last child of a preceding element",
+			source: `<!DOCTYPE r [<!ENTITY e "<y/>">]><r><a><b/>&e;</a><c/></r>`,
+			body:   `<xsl:for-each select="r/c"><xsl:number level="any" count="node()"/></xsl:for-each>`,
+			want:   `4`,
+		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {

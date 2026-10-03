@@ -914,21 +914,20 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   evaluation (`walkAccumulatorTree`). A DOCTYPE, its declarations, an entity reference with the entity content
   under it, and XInclude markers are not XDM nodes, so no template, pattern position, number, key or accumulator
   sees them, and an attribute has no children for `xsl:apply-templates`.
-- `xsl:number` counting (`execute_number.go`): `from` follows XSLT 3.0 §12.3, where the root of a tree always
-  matches it. `level="single"` gives an empty result when a `from` match lies strictly between the selected node
-  and the counted node (`numberWithinFrom`); `level="multiple"` keeps only counted ancestors at or below the
-  innermost `from` match; `level="any"` counts back to the nearest preceding `from` match. helium links an
-  element's attributes as DOM siblings, but XDM gives attribute and namespace nodes no siblings and keeps them off
-  the preceding axis, so the walks step back from the counted or selected node through `numberPrevSibling`,
-  which returns nil for those kinds and skips non-XDM siblings such as a DOCTYPE: an attribute or namespace node is the first of its siblings for
+- `xsl:number` counting (`execute_number.go`): `from` follows XSLT 3.0 §12.3, where the root of a tree always matches
+  it. `level="single"` gives an empty result when a `from` match lies strictly between the selected node and the
+  counted node (`numberWithinFrom`); `level="multiple"` keeps only counted ancestors at or below the innermost `from`
+  match; `level="any"` counts back to the nearest preceding `from` match. helium links an element's attributes as DOM
+  siblings, but XDM gives attribute and namespace nodes no siblings and keeps them off the preceding axis, so the
+  walks step back from the counted or selected node through `numberPrevSibling`, which returns nil for those kinds and
+  skips non-XDM siblings such as a DOCTYPE: an attribute or namespace node is the first of its siblings for
   `level="single"`/`"multiple"`, and the `level="any"` walk goes from it straight to its parent. `level="single"` and
   `level="any"` walk back from the counted node and stop at the node the same instruction's previous evaluation
-  started from, adding its count (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in
-  document order is linear. The memo is off when the `count` or `from` pattern references a variable
-  (`numberInst.memoizable`); without a `count` pattern it applies only to a selected node of the same kind and
-  expanded name. It relies on trees visible to `xsl:number` keeping their shape and annotations during a run;
-  `xsl:source-document` and `xsl:merge-source` validate or strip annotations on a cached document in place, so
-  they clear `numberMemos` first.
+  started from, adding its count (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in document
+  order is linear. The memo is off when the `count` or `from` pattern references a variable (`numberInst.memoizable`);
+  without a `count` pattern it applies only to a selected node of the same kind and expanded name. It relies on trees
+  visible to `xsl:number` keeping their shape and annotations during a run; `xsl:source-document` and
+  `xsl:merge-source` validate or strip annotations on a cached document in place, so they clear `numberMemos` first.
 - User `xsl:function` calls (`functions_user.go`): `xslFunction.prepareCall` runs once at compile time. It parses
   the parameter and return sequence types for both xpath3 coercion (`FuncParamTypes`/`FuncReturnType`) and
   `checkSequenceType`, and marks a body made only of select-form `xsl:sequence` instructions as `selectOnly`. Each
