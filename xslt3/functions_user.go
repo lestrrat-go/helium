@@ -72,32 +72,88 @@ type xslUserFunc struct {
 func (f *xslUserFunc) MinArity() int { return len(f.def.Params) }
 func (f *xslUserFunc) MaxArity() int { return len(f.def.Params) }
 
-func (f *xslUserFunc) FuncParamTypes() []xpath3.SequenceType {
-	pts := make([]xpath3.SequenceType, 0, len(f.def.Params))
-	for _, p := range f.def.Params {
+// FuncParamTypes returns the parameter types prepareCall parsed at compile
+// time. Callers share the slice and must not modify it.
+func (f *xslUserFunc) FuncParamTypes() []xpath3.SequenceType { return f.def.paramTypes }
+
+// FuncReturnType returns the return type prepareCall parsed at compile time.
+func (f *xslUserFunc) FuncReturnType() *xpath3.SequenceType { return f.def.returnType }
+
+// prepareCall derives the data every call needs from the compiled function, so
+// that a call parses no sequence type and inspects no body instruction. It runs
+// once, when the function is compiled.
+func (fn *xslFunction) prepareCall() {
+	fn.paramTypes = make([]xpath3.SequenceType, 0, len(fn.Params))
+	fn.paramCheckTypes = make([]sequenceType, len(fn.Params))
+	for i, p := range fn.Params {
+		if p.As != "" {
+			fn.paramCheckTypes[i] = parseSequenceType(p.As)
+		}
+		if fn.paramTypes == nil {
+			continue
+		}
 		as := p.As
 		if as == "" {
 			as = "item()*"
 		}
 		st, err := xpath3.ParseSequenceType(as)
 		if err != nil {
-			return nil
+			fn.paramTypes = nil
+			continue
 		}
-		pts = append(pts, st)
+		fn.paramTypes = append(fn.paramTypes, st)
 	}
-	return pts
+
+	fn.returnType = nil
+	if fn.As != "" {
+		fn.returnCheckType = parseSequenceType(fn.As)
+		if st, err := xpath3.ParseSequenceType(fn.As); err == nil {
+			fn.returnType = &st
+		}
+	}
+
+	// A body made only of select-form xsl:sequence instructions never adds a
+	// node to the call's output wrapper: execXSLSequence captures each item
+	// into the frame's pendingItems because the frame captures items and its
+	// insertion point is the wrapper itself. Every other instruction (an LRE,
+	// xsl:element, a contained-constructor xsl:sequence, xsl:on-empty,
+	// xsl:try, ...) may build nodes under the wrapper. An empty body writes
+	// nothing either.
+	fn.selectOnly = true
+	for _, inst := range fn.Body {
+		if _, ok := inst.(*xslSequenceInst); !ok {
+			fn.selectOnly = false
+			break
+		}
+	}
 }
 
-func (f *xslUserFunc) FuncReturnType() *xpath3.SequenceType {
-	as := f.def.As
-	if as == "" {
-		return nil
+// functionOutputRoot returns the document and wrapper element a call of def
+// writes its body's output into.
+//
+// A select-only body (see prepareCall) never appends to the wrapper, so every
+// such call on ec shares one scratch wrapper, nested and recursive calls
+// included: each call keeps its items in its own outputFrame, and the wrapper
+// stays childless. Any other body gets a fresh document. That document is not
+// freed after the call: the nodes the body builds are allocated from it and
+// are returned to the caller, and ec keeps per-node state (nsFixupAllowed,
+// typeAnnotations, ...) keyed by node identity, which a recycled slab would
+// alias.
+func (ec *execContext) functionOutputRoot(def *xslFunction) (*helium.Document, *helium.Element, error) {
+	if def.selectOnly && ec.fnScratchRoot != nil {
+		return ec.fnScratchDoc, ec.fnScratchRoot, nil
 	}
-	st, err := xpath3.ParseSequenceType(as)
+	doc := helium.NewDefaultDocument()
+	root, err := doc.CreateElement("_xsl_fn_result")
 	if err != nil {
-		return nil
+		return nil, nil, err
 	}
-	return &st
+	_ = doc.SetDocumentElement(root)
+	if def.selectOnly {
+		ec.fnScratchDoc = doc
+		ec.fnScratchRoot = root
+	}
+	return doc, root, nil
 }
 
 func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
@@ -184,7 +240,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 		if i < len(args) {
 			val := args[i]
 			if param.As != "" {
-				st := parseSequenceType(param.As)
+				st := f.def.paramCheckTypes[i]
 				checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0790, "param $"+param.Name, ec)
 				if err != nil {
 					return nil, err
@@ -207,12 +263,10 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	// For functions returning atomic types, use captureItems mode so that
 	// attribute nodes returned by xsl:sequence are preserved directly
 	// (writing them to a DOM tree loses them as attributes of the wrapper).
-	tmpDoc := helium.NewDefaultDocument()
-	tmpRoot, err := tmpDoc.CreateElement("_xsl_fn_result")
+	tmpDoc, tmpRoot, err := ec.functionOutputRoot(f.def)
 	if err != nil {
 		return nil, err
 	}
-	_ = tmpDoc.SetDocumentElement(tmpRoot)
 
 	atomicReturn := f.def.As != "" && isAtomicTypeName(f.def.As)
 	frame := &outputFrame{current: tmpRoot, doc: tmpDoc, captureItems: true, sequenceMode: true}
@@ -227,6 +281,12 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 		if err := ec.executeInstruction(ctx, inst); err != nil {
 			return nil, err
 		}
+	}
+	if f.def.selectOnly && tmpRoot.FirstChild() != nil {
+		// prepareCall rules this out. Should a node ever land on the shared
+		// wrapper, detach it, so no other call sharing the wrapper sees it,
+		// and return it ahead of the captured items.
+		frame.pendingItems = append(ec.collectNodeChildren(tmpRoot), frame.pendingItems...)
 	}
 
 	// Return captured items if any, otherwise collect from DOM.
@@ -266,8 +326,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 
 	// Type check against the declared as type
 	if f.def.As != "" {
-		st := parseSequenceType(f.def.As)
-		checked, err := checkSequenceType(ctx, result, st, errCodeXTTE0780, "function "+f.def.Name.Name, ec)
+		checked, err := checkSequenceType(ctx, result, f.def.returnCheckType, errCodeXTTE0780, "function "+f.def.Name.Name, ec)
 		if err != nil {
 			return nil, err
 		}

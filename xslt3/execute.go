@@ -109,6 +109,8 @@ type execContext struct {
 	atomicTextNodes              map[helium.Node]struct{}      // text nodes created from atomic item serialization
 	nodeMemoIDs                  map[helium.Node]uint64        // stable per-transform node identities for function caching
 	nextNodeMemoID               uint64
+	fnScratchDoc                 *helium.Document                         // output wrapper shared by every select-only xsl:function call
+	fnScratchRoot                *helium.Element                          // fnScratchDoc's document element; always childless
 	paramDocOutputDefs           map[*resultDocumentInst]*OutputDef       // per-invocation cache for parameter-document output defs
 	paramDocPresences            map[*resultDocumentInst]paramDocPresence // per-invocation cache for parameter-document plain-boolean presence flags
 	primaryCharacterMaps         []string                                 // character map names from xsl:result-document targeting primary output

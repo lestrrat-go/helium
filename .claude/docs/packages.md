@@ -882,6 +882,14 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   (`visibleVarScope`), `localVarsVer` (bumped by `setVar`/`setVarDeferred` and by popping a scope that held
   bindings), and the current package. The returned map is shared, so callers copy it before adding bindings
   (`xsl:evaluate` does).
+- User `xsl:function` calls (`functions_user.go`): `xslFunction.prepareCall` runs once at compile time. It parses
+  the parameter and return sequence types for both xpath3 coercion (`FuncParamTypes`/`FuncReturnType`) and
+  `checkSequenceType`, and marks a body made only of select-form `xsl:sequence` instructions as `selectOnly`. Each
+  call writes its body into an output frame whose insertion point is a `_xsl_fn_result` wrapper element. A
+  `selectOnly` body only captures items into its frame and never adds a node to the wrapper, so all such calls on
+  one `execContext` share one scratch wrapper (`functionOutputRoot`), recursive and nested calls included. Any other
+  body gets a fresh wrapper document, which is never freed: the nodes the body builds are allocated from it and
+  returned to the caller, and the `execContext` keeps per-node state keyed by node identity.
 - Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder +
   orchestration), `compile_*.go`
   (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),

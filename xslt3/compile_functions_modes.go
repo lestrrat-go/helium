@@ -476,6 +476,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 	if c.stylesheet.isPackage {
 		fn.OwnerPackage = c.stylesheet
 	}
+	fn.prepareCall()
 
 	// XTSE0770: it is a static error if a stylesheet contains two or more
 	// functions with the same expanded QName, the same arity, and the same
