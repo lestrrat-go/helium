@@ -761,6 +761,67 @@ func TestEntityReferenceReplacementReservedXMLPrefixRegressionGuards(t *testing.
 	require.Equal(t, `<r><e xml:lang="en">t</e></r>`, string(plainGot))
 }
 
+// parseExcludeSubtreeDoc parses the TestExcludeSubtree input and returns it
+// with its <a:s> element. Each subtest parses its own copy: an error message
+// names an element, which fills that element's lazily cached name.
+func parseExcludeSubtreeDoc(t *testing.T) (*helium.Document, *helium.Element) {
+	t.Helper()
+	const src = `<?lead?><r xmlns:a="urn:a"><a:x>1<a:s xmlns:rel="rel/uri"><a:in/></a:s>2</a:x><y/></r><?trail?>`
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+	require.NoError(t, err)
+	x, ok := helium.AsNode[*helium.Element](doc.DocumentElement().FirstChild())
+	require.True(t, ok)
+	s, ok := helium.AsNode[*helium.Element](x.FirstChild().NextSibling())
+	require.True(t, ok)
+	return doc, s
+}
+
+func TestExcludeSubtree(t *testing.T) {
+	t.Parallel()
+
+	t.Run("whole document", func(t *testing.T) {
+		t.Parallel()
+		doc, s := parseExcludeSubtreeDoc(t)
+		// The excluded subtree is skipped entirely, so its relative namespace
+		// URI is never checked.
+		got, err := c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(s).CanonicalizeTo(doc)
+		require.NoError(t, err)
+		require.Equal(t, "<?lead?>\n<r xmlns:a=\"urn:a\"><a:x>12</a:x><y></y></r>\n<?trail?>", string(got))
+
+		_, err = c14n.NewCanonicalizer(c14n.C14N10).CanonicalizeTo(doc)
+		require.ErrorContains(t, err, "relative namespace URI")
+	})
+	t.Run("node set", func(t *testing.T) {
+		t.Parallel()
+		doc, s := parseExcludeSubtreeDoc(t)
+		nodes := evaluateNodeSet(t, doc, `(//. | //@* | //namespace::*)[ancestor-or-self::a:x]`, map[string]string{"a": "urn:a"})
+		got, err := c14n.NewCanonicalizer(c14n.ExclusiveC14N10).NodeSet(nodes).ExcludeSubtree(s).CanonicalizeTo(doc)
+		require.NoError(t, err)
+		require.Equal(t, `<a:x xmlns:a="urn:a">12</a:x>`, string(got))
+	})
+	t.Run("document element", func(t *testing.T) {
+		t.Parallel()
+		// Top-level nodes render as they would in a document without a
+		// document element.
+		doc, _ := parseExcludeSubtreeDoc(t)
+		got, err := c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(doc.DocumentElement()).CanonicalizeTo(doc)
+		require.NoError(t, err)
+		require.Equal(t, "<?lead?>\n<?trail?>\n", string(got))
+	})
+	t.Run("detached element", func(t *testing.T) {
+		t.Parallel()
+		// An element outside the document excludes nothing, so the walk
+		// reaches the relative namespace URI.
+		doc, s := parseExcludeSubtreeDoc(t)
+		other, err := doc.CreateElement("other")
+		require.NoError(t, err)
+		_, err = c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(other).CanonicalizeTo(doc)
+		require.ErrorContains(t, err, "relative namespace URI")
+		_, err = c14n.NewCanonicalizer(c14n.C14N10).ExcludeSubtree(s).ExcludeSubtree(nil).CanonicalizeTo(doc)
+		require.ErrorContains(t, err, "relative namespace URI")
+	})
+}
+
 func TestRelativeNamespaceURIRejected(t *testing.T) {
 	t.Parallel()
 	// C14N spec requires failure on relative namespace URIs.

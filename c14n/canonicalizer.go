@@ -20,6 +20,9 @@ type canonicalizer struct {
 	nodeSet           map[helium.Node]struct{} // nil = whole document
 	inclusivePrefixes map[string]struct{}
 	strictXMLAttrs    bool // strict W3C node-set xml:* handling (default: libxml2)
+	// exclude is the element whose subtree the walk skips as if it were
+	// detached (nil = none).
+	exclude *helium.Element
 	// rendered records the namespace bindings visible ancestors have emitted.
 	rendered *bindingStack
 	// scope holds the in-scope namespace bindings of the element being walked.
@@ -153,7 +156,9 @@ func (c *canonicalizer) processDocument() error {
 			continue
 		case helium.ElementNode:
 			elem, ok := helium.AsNode[*helium.Element](child)
-			if !ok {
+			if !ok || elem == c.exclude {
+				// An excluded document element is absent, so the top-level
+				// nodes after it still render as if they preceded the root.
 				continue
 			}
 			if err := c.processElement(elem); err != nil {
@@ -304,6 +309,9 @@ func (c *canonicalizer) scopeSnapshot() map[string]string {
 }
 
 func (c *canonicalizer) processElement(e *helium.Element) error {
+	if e == c.exclude {
+		return nil
+	}
 	if err := c.checkForRelativeNamespaces(e); err != nil {
 		return err
 	}
