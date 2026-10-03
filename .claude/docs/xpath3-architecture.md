@@ -29,7 +29,7 @@ string → lexer ([]Token) → parser (Expr AST) → VM lowering (`vmProgram`) �
 | File | Contents |
 |------|----------|
 | `axes.go` | `AxisType` enum, `TraverseAxis(ctx, axis, node, maxNodes)`, `AppendAxis(ctx, dst, axis, node, maxNodes)`, `PushXDMChildren` (one step of a pre-order walk stack), all 13 axis functions, namespace helpers; child and descendant walks enumerate through `helium.Children` (owned-child boundary), so an entity reference has no children or descendants |
-| `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot`, `DocumentRegistered` (whether a node's document has a registration order, indexed or reserved) |
+| `docorder.go` | `DocOrderCache`, `DeduplicateNodes`, `MergeNodeSets`, `DocumentRoot`, `DocumentRegistered` (whether a node's document has a registration order, indexed or reserved), `SameNode` (node identity: a namespace node with a parent element is that element plus its prefix, any other node its pointer; shared by the xpath3 `is` operator and xslt3 pattern matching) |
 | `union.go` | `UnionNodeSets` (xpath3 union: `MergeNodeSets` result, skipping the index for one element's attributes then children, and merging two sorted operands in one pass), `inElementOrder`, `mergeIncreasingRuns` |
 | `steporder.go` | `OrderStepResult` (orders one location step's result, skipping the index when the step shape proves the order), `OrderedFrom` (its one-input skip condition), `allOrderedContexts`, `inEntityContent`, `sameDepth`, `isReverseAxis` |
 | `stringvalue.go` | `StringValue(Node)` (an element's or document's string-value is its `Content()`: Text/CDATA descendants with entity references expanded through owned children only; a document's leaves out its DTD), `LocalNameOf`, `NodeNamespaceURI`, `NodePrefix` |
@@ -156,7 +156,7 @@ func NodePrefix(n helium.Node) string
 | `regex_cache.go` | Bounded LRU cache (`regexLRUCache`) for compiled XPath regexes keyed by pattern+flags; 1024-entry cap with LRU eviction |
 | `static_check.go` | Static expression checks |
 | `streamability.go` | Internal streamability precomputation (unexported) plus exported `StreamInfo` struct + accessor; query helpers moved to `internal/xpathstream` |
-| `node_identity.go` | Node identity comparison |
+| `node_identity.go` | Node identity keys for set operators, `StableNodeID` |
 | `uri_resolution.go` | URI resolution for fn:doc, fn:unparsed-text |
 | `arithmetic_datetime.go` | Date/time arithmetic |
 | `parse_ietf_date.go` | IETF date format parsing |

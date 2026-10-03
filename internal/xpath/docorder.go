@@ -358,6 +358,26 @@ type NSNodeKey struct {
 	Prefix string
 }
 
+// SameNode reports whether a and b are the same node (XPath 3.1 §3.7.2 node
+// identity). Two namespace nodes of an element are the same node when they
+// share that parent element and prefix, because the namespace axis builds a
+// fresh NamespaceNodeWrapper on every traversal. Every other node, a
+// parentless namespace node (built once by xsl:namespace or a copy) included,
+// is identified by its pointer.
+func SameNode(a, b helium.Node) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Type() != helium.NamespaceNode || b.Type() != helium.NamespaceNode {
+		return false
+	}
+	parent := a.Parent()
+	return parent != nil && parent == b.Parent() && a.Name() == b.Name()
+}
+
 // sortByPrecomputedKeys sorts result by precomputed sort keys, avoiding
 // repeated map lookups during the O(n log n) sort phase.
 // Uses SliceStable to preserve input order for equal positions.
