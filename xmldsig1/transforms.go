@@ -1,9 +1,11 @@
 package xmldsig1
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"slices"
 	"strings"
@@ -142,13 +144,13 @@ type xpathFilter struct {
 }
 
 // canonicalize applies the appropriate c14n mode for the given method URI
-// to the document, returning the canonical bytes.
-func canonicalize(method string, doc *helium.Document, prefixes []string) ([]byte, error) {
+// to the document, writing the canonical bytes to out.
+func canonicalize(method string, doc *helium.Document, prefixes []string, out io.Writer) error {
 	mode, comments, err := resolveC14NMode(method)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return newCanonicalizer(mode, comments, prefixes).CanonicalizeTo(doc)
+	return newCanonicalizer(mode, comments, prefixes).Canonicalize(doc, out)
 }
 
 // newCanonicalizer returns a c14n.Canonicalizer for mode, with comments when
@@ -181,16 +183,25 @@ func startAtSubtree(canon c14n.Canonicalizer, root *helium.Element) c14n.Canonic
 // membership (see collectCanonicalizationNodes). The c14n walk starts at elem
 // instead of visiting every element of the document (startAtSubtree).
 func canonicalizeSubtree(ctx context.Context, method string, elem *helium.Element, prefixes []string) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := writeCanonicalSubtree(ctx, method, elem, prefixes, &buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// writeCanonicalSubtree is canonicalizeSubtree writing to out.
+func writeCanonicalSubtree(ctx context.Context, method string, elem *helium.Element, prefixes []string, out io.Writer) error {
 	mode, comments, err := resolveC14NMode(method)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	nodes, err := collectCanonicalizationNodes(ctx, elem, mode)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	canon := startAtSubtree(newCanonicalizer(mode, comments, prefixes).NodeSet(nodes), elem)
-	return canon.CanonicalizeTo(elem.OwnerDocument())
+	return canon.Canonicalize(elem.OwnerDocument(), out)
 }
 
 // canonicalizeNodeSet canonicalizes an explicit node-set against doc using the
@@ -199,20 +210,13 @@ func canonicalizeSubtree(ctx context.Context, method string, elem *helium.Elemen
 // node-set. A comment node is emitted only when it is BOTH in the node-set and
 // the method is a WithComments variant (see effectiveC14NMethod), so a
 // comment-excluding reference form never emits comments regardless of the c14n
-// method.
-func canonicalizeNodeSet(method string, nodes []helium.Node, doc *helium.Document, prefixes []string) ([]byte, error) {
+// method. It writes the canonical bytes to out.
+func canonicalizeNodeSet(method string, nodes []helium.Node, doc *helium.Document, prefixes []string, out io.Writer) error {
 	mode, comments, err := resolveC14NMode(method)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return canonicalizeNodeSetMode(mode, comments, nodes, doc, prefixes)
-}
-
-// canonicalizeNodeSetMode is the shared node-set -> octet call for a method URI
-// whose c14n mode is already resolved, so a caller that needed the mode to build
-// the node set does not resolve it twice. It walks the whole document.
-func canonicalizeNodeSetMode(mode c14n.Mode, comments bool, nodes []helium.Node, doc *helium.Document, prefixes []string) ([]byte, error) {
-	return newCanonicalizer(mode, comments, prefixes).NodeSet(nodes).CanonicalizeTo(doc)
+	return newCanonicalizer(mode, comments, prefixes).NodeSet(nodes).Canonicalize(doc, out)
 }
 
 // collectDocumentNodes returns the whole-document node-set: every top-level
@@ -494,10 +498,10 @@ func removeSignatureNodes(ctx context.Context, nodes []helium.Node, sigElem *hel
 // of the subtree itself. Exclusive Canonical XML emits only visibly-utilized
 // namespaces and performs NO xml:* inheritance, so both an unused inherited
 // namespace and any inherited xml:* on the proxy leave its output byte-identical.
-func canonicalizeDetachedSubtree(ctx context.Context, method string, root, target *helium.Element, prefixes []string) ([]byte, error) {
+func canonicalizeDetachedSubtree(ctx context.Context, method string, root, target *helium.Element, prefixes []string, out io.Writer) error {
 	mode, _, err := resolveC14NMode(method)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	origDoc := root.OwnerDocument()
@@ -505,25 +509,25 @@ func canonicalizeDetachedSubtree(ctx context.Context, method string, root, targe
 
 	proxy, err := tmp.CreateElement("proxy")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if origDoc != nil {
 		if docElem := origDoc.DocumentElement(); docElem != nil {
 			for prefix, ns := range domutil.InScopeNamespaces(docElem, true) {
 				if err := proxy.DeclareNamespace(prefix, ns.URI()); err != nil {
-					return nil, err
+					return err
 				}
 			}
 			if err := copyInheritedXMLAttrs(proxy, docElem, mode); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
 	if err := tmp.SetDocumentElement(proxy); err != nil {
-		return nil, err
+		return err
 	}
 	if err := proxy.AddChild(root); err != nil {
-		return nil, err
+		return err
 	}
 
 	// root is now grafted into the throwaway document. Restore it on EVERY exit —
@@ -553,7 +557,7 @@ func canonicalizeDetachedSubtree(ctx context.Context, method string, root, targe
 	// a corrupted tree is not a defect here.
 	root.SetTreeDoc(tmp)
 
-	return canonicalizeSubtree(ctx, method, target, prefixes)
+	return writeCanonicalSubtree(ctx, method, target, prefixes, out)
 }
 
 // copyInheritedXMLAttrs copies the caller document element's inherited xml:*
@@ -632,26 +636,26 @@ func isDescendantOrSelf(n helium.Node, root *helium.Element) bool {
 // A document whose active namespaces disagree with its declarations (see
 // hasConflictingActiveNamespace) is canonicalized through a copy instead, by
 // canonicalizeEnvelopedCopy.
-func canonicalizeEnveloped(ctx context.Context, method string, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, prefixes []string) ([]byte, error) {
+func canonicalizeEnveloped(ctx context.Context, method string, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, prefixes []string, out io.Writer) error {
 	mode, comments, err := resolveC14NMode(method)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !wholeDoc && !inDocument(target) {
-		return nil, fmt.Errorf("xmldsig1: could not locate reference target for enveloped transform")
+		return fmt.Errorf("xmldsig1: could not locate reference target for enveloped transform")
 	}
 	if hasConflictingActiveNamespace(doc, sigElem) {
-		return canonicalizeEnvelopedCopy(ctx, method, doc, target, sigElem, wholeDoc, prefixes)
+		return canonicalizeEnvelopedCopy(ctx, method, doc, target, sigElem, wholeDoc, prefixes, out)
 	}
 	canon := newCanonicalizer(mode, comments, prefixes).ExcludeSubtree(sigElem)
 	if wholeDoc {
-		return canon.CanonicalizeTo(doc)
+		return canon.Canonicalize(doc, out)
 	}
 	nodes, err := collectCanonicalizationNodes(ctx, target, mode)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return startAtSubtree(canon.NodeSet(nodes), target).CanonicalizeTo(doc)
+	return startAtSubtree(canon.NodeSet(nodes), target).Canonicalize(doc, out)
 }
 
 // inDocument reports whether n's ancestor chain reaches a document node, that
@@ -750,10 +754,10 @@ func (s *activeNamespaceScan) bind(prefix, uri string) {
 // canonicalizeEnvelopedCopy is canonicalizeEnveloped for a document
 // hasConflictingActiveNamespace flags: it deep-copies the document, unlinks
 // the copied Signature and canonicalizes the copy, which it frees afterwards.
-func canonicalizeEnvelopedCopy(ctx context.Context, method string, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, prefixes []string) ([]byte, error) {
+func canonicalizeEnvelopedCopy(ctx context.Context, method string, doc *helium.Document, target, sigElem *helium.Element, wholeDoc bool, prefixes []string, out io.Writer) error {
 	clone, err := helium.CopyDoc(doc)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer clone.Free()
 
@@ -765,7 +769,7 @@ func canonicalizeEnvelopedCopy(ctx context.Context, method string, doc *helium.D
 	if sigPath := childIndexPath(sigElem); sigPath != nil {
 		mut, ok := nodeAtPath(clone, sigPath).(helium.MutableNode)
 		if !ok {
-			return nil, fmt.Errorf("xmldsig1: could not locate Signature element in canonicalization copy")
+			return fmt.Errorf("xmldsig1: could not locate Signature element in canonicalization copy")
 		}
 		cloneSig = mut
 	}
@@ -773,7 +777,7 @@ func canonicalizeEnvelopedCopy(ctx context.Context, method string, doc *helium.D
 	if !wholeDoc {
 		t, ok := helium.AsNode[*helium.Element](nodeAtPath(clone, childIndexPath(target)))
 		if !ok {
-			return nil, fmt.Errorf("xmldsig1: reference target in canonicalization copy is not an element")
+			return fmt.Errorf("xmldsig1: reference target in canonicalization copy is not an element")
 		}
 		cloneTarget = t
 	}
@@ -781,9 +785,9 @@ func canonicalizeEnvelopedCopy(ctx context.Context, method string, doc *helium.D
 		helium.UnlinkNode(cloneSig)
 	}
 	if wholeDoc {
-		return canonicalize(method, clone, prefixes)
+		return canonicalize(method, clone, prefixes, out)
 	}
-	return canonicalizeSubtree(ctx, method, cloneTarget, prefixes)
+	return writeCanonicalSubtree(ctx, method, cloneTarget, prefixes, out)
 }
 
 // childIndexPath returns the sequence of child indices that locate n starting

@@ -1,6 +1,7 @@
 package xmldsig1
 
 import (
+	"bufio"
 	"crypto"
 	"crypto/dsa" // deprecated but standard; used verify-only for legacy XML-DSig interop (dsa-sha1). Signing is not offered.
 	"crypto/ecdsa"
@@ -11,6 +12,8 @@ import (
 	"crypto/rsa"
 	"encoding/asn1"
 	"fmt"
+	"hash"
+	"io"
 	"math/big"
 )
 
@@ -70,14 +73,41 @@ func hashData(hash crypto.Hash, data []byte) []byte {
 	return h.Sum(nil)
 }
 
-// computeDigest hashes data with the algorithm identified by algURI. SHA-1 is
-// rejected with ErrWeakAlgorithm unless allowSHA1 is true.
-func computeDigest(algURI string, data []byte, allowSHA1 bool) ([]byte, error) {
-	hash, err := lookupAlg(digestAlgorithms, algURI, allowSHA1)
-	if err != nil {
+// digestBufferSize is the size of the buffer between a Reference's octets and
+// its digest. Canonicalization writes in small pieces (names, escaped runs,
+// punctuation); the buffer hands the hash whole blocks instead.
+const digestBufferSize = 4096
+
+// digestWriter computes a Reference digest over the octets written to its
+// buffer, so the octets never have to be held in memory.
+type digestWriter struct {
+	h   hash.Hash
+	buf *bufio.Writer
+}
+
+// sum flushes the buffered octets into the hash and returns the digest.
+func (d *digestWriter) sum() ([]byte, error) {
+	if err := d.buf.Flush(); err != nil {
 		return nil, err
 	}
-	return hashData(hash, data), nil
+	return d.h.Sum(nil), nil
+}
+
+// newDigestSink returns the writer a Reference's octets are streamed into (the
+// digestWriter's buffer, which c14n's io.WriteString calls reach without a
+// string conversion) and the digestWriter for the digest algorithm algURI. SHA-1 is rejected
+// with ErrWeakAlgorithm unless allowSHA1 is true. For a rejected algorithm the
+// writer is io.Discard and the error is for the caller to report once the
+// octets have been produced, so a resolution or transform error keeps taking
+// precedence over the algorithm error.
+func newDigestSink(algURI string, allowSHA1 bool) (io.Writer, *digestWriter, error) {
+	alg, err := lookupAlg(digestAlgorithms, algURI, allowSHA1)
+	if err != nil {
+		return io.Discard, nil, err
+	}
+	h := alg.New()
+	buf := bufio.NewWriterSize(h, digestBufferSize)
+	return buf, &digestWriter{h: h, buf: buf}, nil
 }
 
 // signBytes signs data with the algorithm identified by algURI. SHA-1-based

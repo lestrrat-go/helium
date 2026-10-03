@@ -434,7 +434,7 @@ func TestCanonicalizeEnvelopedMatchesDetach(t *testing.T) {
 			helium.UnlinkNode(sig)
 			var want []byte
 			if wholeDoc {
-				want, err = canonicalize(tc.method, doc, nil)
+				want, err = canonicalizeBytes(tc.method, doc, nil)
 			} else {
 				want, err = canonicalizeSubtree(t.Context(), tc.method, target, nil)
 			}
@@ -449,7 +449,7 @@ func TestCanonicalizeEnvelopedMatchesDetach(t *testing.T) {
 			liveBefore, err := helium.WriteString(doc)
 			require.NoError(t, err)
 
-			got, err := canonicalizeEnveloped(t.Context(), tc.method, doc, target, sig, wholeDoc, nil)
+			got, err := envelopedBytes(t.Context(), tc.method, doc, target, sig, wholeDoc, nil)
 			require.NoError(t, err)
 
 			require.Equal(t, string(want), string(got), "enveloped bytes must match the detach-based reference")
@@ -682,12 +682,12 @@ func compareEnvelopedSignature(t *testing.T, doc *helium.Document, sig *helium.E
 		}
 		for _, prefixes := range prefixLists {
 			want, wantErr := referenceEnvelopedBytes(ctx, method, clone, nil, prefixes)
-			got, gotErr := canonicalizeEnveloped(ctx, method, doc, nil, sig, true, prefixes)
+			got, gotErr := envelopedBytes(ctx, method, doc, nil, sig, true, prefixes)
 			requireSameCanonicalResultf(t, want, wantErr, got, gotErr, "whole document, method %s, prefixes %v", method, prefixes)
 
 			for i, target := range targets {
 				want, wantErr := referenceEnvelopedBytes(ctx, method, clone, cloneTargets[i], prefixes)
-				got, gotErr := canonicalizeEnveloped(ctx, method, doc, target, sig, false, prefixes)
+				got, gotErr := envelopedBytes(ctx, method, doc, target, sig, false, prefixes)
 				requireSameCanonicalResultf(t, want, wantErr, got, gotErr, "target %s, method %s, prefixes %v", target.Name(), method, prefixes)
 			}
 		}
@@ -815,11 +815,11 @@ func TestCanonicalizeEnvelopedDetachedInputs(t *testing.T) {
 	sig, err := doc.CreateElement("Signature")
 	require.NoError(t, err)
 
-	got, err := canonicalizeEnveloped(t.Context(), ExcC14N10, doc, nil, sig, true, nil)
+	got, err := envelopedBytes(t.Context(), ExcC14N10, doc, nil, sig, true, nil)
 	require.NoError(t, err)
 	require.Equal(t, `<r><a:x xmlns:a="urn:a">1</a:x></r>`, string(got))
 
-	_, err = canonicalizeEnveloped(t.Context(), ExcC14N10, doc, sig, sig, false, nil)
+	_, err = envelopedBytes(t.Context(), ExcC14N10, doc, sig, sig, false, nil)
 	require.Error(t, err)
 }
 

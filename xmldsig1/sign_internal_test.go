@@ -66,7 +66,7 @@ func TestComputeSignedInfoDetachedProxyMatchesAttach(t *testing.T) {
 
 				// NEW path: canonicalize via the throwaway-document proxy. The
 				// caller's document must be untouched afterward.
-				gotProxy, err := canonicalizeDetachedSubtree(t.Context(), method, sig, si, nil)
+				gotProxy, err := detachedSubtreeBytes(t.Context(), method, sig, si, nil)
 				require.NoError(t, err)
 				require.Nil(t, sig.Parent(), "Signature must remain detached after proxy canonicalization")
 				afterProxy, err := helium.WriteString(doc)

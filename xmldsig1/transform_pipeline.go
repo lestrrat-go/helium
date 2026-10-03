@@ -1,8 +1,10 @@
 package xmldsig1
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/xmlbase64"
@@ -277,7 +279,13 @@ func expressionReferencesHere(expr string) bool {
 // executeTransformPipeline applies every transform in document order, inserting
 // only the node-set/octet conversion required by the next step. A final node-set
 // is converted with inclusive Canonical XML 1.0.
-func executeTransformPipeline(ctx context.Context, runtime transformRuntime, initial transformValue, steps []transformStep) ([]byte, error) {
+//
+// With a nil out it returns the final octets. With a non-nil out it writes them
+// to out and returns nil; a final canonicalization (a canonicalization last
+// step, or the closing node-set conversion) then streams into out without being
+// buffered, which lets a digest hash the canonical form as it is produced. An
+// error can leave out partly written.
+func executeTransformPipeline(ctx context.Context, runtime transformRuntime, initial transformValue, steps []transformStep, out io.Writer) ([]byte, error) {
 	contracts, err := validateTransformSteps(runtime, initial.kind, steps)
 	if err != nil {
 		return nil, err
@@ -285,6 +293,7 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 	value := initial
 	producerIndex := -1
 	producerAlgorithm := ""
+	streamed := false
 	for i, step := range steps {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -313,7 +322,14 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 
 		switch step.algorithm {
 		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
-			octets, err := canonicalizeNodeSetValue(ctx, step.algorithm, value.nodes, step.prefixes)
+			if out != nil && i == len(steps)-1 {
+				if err := canonicalizeNodeSetValue(ctx, step.algorithm, value.nodes, step.prefixes, out); err != nil {
+					return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
+				}
+				streamed = true
+				continue
+			}
+			octets, err := nodeSetValueOctets(ctx, step.algorithm, value.nodes, step.prefixes)
 			if err != nil {
 				return nil, fmt.Errorf("transform %d (%s): %w", i, step.algorithm, err)
 			}
@@ -360,10 +376,19 @@ func executeTransformPipeline(ctx context.Context, runtime transformRuntime, ini
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if value.kind == transformValueNodeSet {
-		return canonicalizeNodeSetValue(ctx, C14N10, value.nodes, nil)
+	switch {
+	case streamed:
+		return nil, nil
+	case out == nil && value.kind == transformValueNodeSet:
+		return nodeSetValueOctets(ctx, C14N10, value.nodes, nil)
+	case out == nil:
+		return value.octets, nil
+	case value.kind == transformValueNodeSet:
+		return nil, canonicalizeNodeSetValue(ctx, C14N10, value.nodes, nil, out)
+	default:
+		_, err := out.Write(value.octets)
+		return nil, err
 	}
-	return value.octets, nil
 }
 
 func convertTransformValue(ctx context.Context, runtime transformRuntime, value transformValue, required transformValueKind, producerIndex int, producerAlgorithm string, consumerIndex int, consumerAlgorithm string) (transformValue, error) {
@@ -389,7 +414,7 @@ func convertTransformValue(ctx context.Context, runtime transformRuntime, value 
 		nodes := &nodeSetValue{doc: doc, nodes: docNodes, materialized: true}
 		return newNodeSetTransformValue(nodes), nil
 	case value.kind == transformValueNodeSet && required == transformValueOctets:
-		octets, err := canonicalizeNodeSetValue(ctx, C14N10, value.nodes, nil)
+		octets, err := nodeSetValueOctets(ctx, C14N10, value.nodes, nil)
 		if err != nil {
 			return transformValue{}, err
 		}
@@ -484,9 +509,11 @@ func applyEnvelopedTransform(ctx context.Context, value *nodeSetValue, sigElem *
 	return nil
 }
 
-func canonicalizeNodeSetValue(ctx context.Context, method string, value *nodeSetValue, prefixes []string) ([]byte, error) {
+// canonicalizeNodeSetValue writes the canonical form of a transform node-set
+// value to out.
+func canonicalizeNodeSetValue(ctx context.Context, method string, value *nodeSetValue, prefixes []string, out io.Writer) error {
 	if value == nil || value.doc == nil {
-		return nil, fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
+		return fmt.Errorf("%w: transform node-set has no owning document", ErrUnsupportedTransform)
 	}
 	if value.referenceSelection {
 		method = effectiveC14NMethod(method, value.includeComments)
@@ -495,19 +522,28 @@ func canonicalizeNodeSetValue(ctx context.Context, method string, value *nodeSet
 		origin := value.origin
 		switch {
 		case origin.envelopedPending:
-			return canonicalizeEnveloped(ctx, method, origin.doc, origin.target, origin.sigElem, origin.wholeDoc, prefixes)
+			return canonicalizeEnveloped(ctx, method, origin.doc, origin.target, origin.sigElem, origin.wholeDoc, prefixes, out)
 		case origin.wholeDoc:
-			return canonicalize(method, origin.doc, prefixes)
+			return canonicalize(method, origin.doc, prefixes, out)
 		case origin.internalRoot != nil && isDescendantOrSelf(origin.target, origin.internalRoot):
-			return canonicalizeDetachedSubtree(ctx, method, origin.internalRoot, origin.target, prefixes)
+			return canonicalizeDetachedSubtree(ctx, method, origin.internalRoot, origin.target, prefixes, out)
 		default:
-			return canonicalizeSubtree(ctx, method, origin.target, prefixes)
+			return writeCanonicalSubtree(ctx, method, origin.target, prefixes, out)
 		}
 	}
 	if !value.materialized {
-		return nil, fmt.Errorf("%w: transform node-set is not materialized", ErrUnsupportedTransform)
+		return fmt.Errorf("%w: transform node-set is not materialized", ErrUnsupportedTransform)
 	}
-	return canonicalizeNodeSet(method, value.nodes, value.doc, prefixes)
+	return canonicalizeNodeSet(method, value.nodes, value.doc, prefixes, out)
+}
+
+// nodeSetValueOctets returns the canonical form of a transform node-set value.
+func nodeSetValueOctets(ctx context.Context, method string, value *nodeSetValue, prefixes []string) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := canonicalizeNodeSetValue(ctx, method, value, prefixes, &buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func base64TransformNodeSetOctets(ctx context.Context, value *nodeSetValue) ([]byte, error) {

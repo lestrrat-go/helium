@@ -530,7 +530,7 @@ W3C Canonical XML. 3 modes: C14N10, ExclusiveC14N10, C14N11.
   an element (entity content), is the excluded element, or has a member in the node set, when the chain does not
   end at the canonicalized document, or when a DTD subset declares an entity with element content
   (`hasElementEntities`: the whole-document walk renders such shared elements' in-set namespace nodes as text at
-  references outside the subtree). xmldsig1 uses it for every single-subtree node set (`canonicalizeSubtree`, the
+  references outside the subtree). xmldsig1 uses it for every single-subtree node set (`writeCanonicalSubtree`, the
   enveloped `#id` path).
 - Files: `c14n.go` (API), `canonicalizer.go` (engine), `subtree.go` (subtree start), `xmlbase.go` (xml:base join),
   `nsstack.go` (`bindingStack`), `sort.go`, `escape.go` (byte-table escaping)
@@ -1590,7 +1590,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   resolver/XSLT callback for that Manifest; the failing `ManifestReference` carries the error, and each
   otherwise prepared peer carries an advisory error wrapping the same cause. After a successful complete
   preparation pass, each inner Reference is resolved + transformed + digested through the SAME
-  `canonicalizeReference`+`computeDigest`+`digestEqual` path (`validateManifestReference`), and the
+  `digestReference`+`digestEqual` path (`validateManifestReference`), and the
   per-reference outcome is recorded in `VerifyResult.Manifests` (`[]ManifestResult{Reference
   *VerifiedReference, Element *helium.Element, References []ManifestReference}`; `ManifestReference{URI,
   DigestAlgorithm string, Element *helium.Element, Valid bool, Err error}`). Results are ADVISORY: a failed
@@ -1647,12 +1647,18 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   executor parses octets through the configured reference parser when a node-set is required and converts
   node-sets with inclusive C14N 1.0 when octets are required or at finalization. Repeated transitions and
   repeated C14N/XSLT/Base64 steps are valid. Base64 has the XMLDSig §6.6.2 exception: node-set input is
-  derived from remaining text-node values instead of generic C14N. The initial same-document node-set stays
+  derived from remaining text-node values instead of generic C14N. Given a writer (`out`), the executor writes
+  its output there instead of returning it, and a final canonicalization (a last C14N step or the closing
+  node-set conversion) streams into the writer unbuffered. Reference digests use this: `processReference`
+  (sign) and `digestReference` (verify, Manifest) stream into a `digestWriter` (`algorithms.go`, a 4 KiB
+  `bufio.Writer` over the hash); a rejected digest algorithm streams into `io.Discard` and is reported after
+  the octets, so resolution and transform errors keep precedence. SignedInfo, RetrievalMethod and external
+  octets stay buffered. The initial same-document node-set stays
   lazy so bare C14N, enveloped+C14N, whole-document, subtree, and detached/enveloping paths retain their exact
   specialized canonicalizers. Materialization preserves owning-document, URI comment-membership,
   namespace-node, XPath, and `here()` semantics. Two node-set collectors exist (`transforms.go`) and the
   difference is load-bearing. `collectCanonicalizationNodes` builds the set that goes straight to c14n
-  (`canonicalizeSubtree`, so SignedInfo, every unmaterialized Reference selection, the detached/enveloped
+  (`writeCanonicalSubtree`, so SignedInfo, every unmaterialized Reference selection, the detached/enveloped
   paths, and the XSLT stylesheet serialization): it is mode-aware and LINEAR — an element carries the bindings
   it changes relative to its parent, plus the in-scope default namespace, plus (exclusive C14N only) its own
   prefix and its attributes' prefixes, while the subtree root carries the whole axis. Inclusive C14N compares
