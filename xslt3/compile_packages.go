@@ -311,9 +311,9 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 			}
 		}
 		if tmpl.Match != nil {
-			modes := resolveTemplateModes(tmpl.Mode)
-			for _, mode := range modes {
-				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+			rules := templateRules(tmpl)
+			for _, mode := range resolveTemplateModes(tmpl.Mode) {
+				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], rules...)
 			}
 		}
 	}
@@ -485,13 +485,20 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 		for _, tmpl := range oset.matchTemplates {
 			tmpl.ImportPrec = c.importPrec - 1
 			tmpl.OwnerPackage = pkg
-			c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
+			// A template with both a name and a match is already in
+			// templates from the namedTemplates loop above. Adding it again
+			// would make a package that uses this one register its rules
+			// twice, and two splits of one union rule would then conflict
+			// under on-multiple-match="fail".
+			if tmpl.Name == "" || oset.namedTemplates[tmpl.Name] != tmpl {
+				c.stylesheet.templates = append(c.stylesheet.templates, tmpl)
+			}
+			rules := templateRules(tmpl)
 			// Resolve mode list: may be multi-mode (e.g. "m3 m4")
-			modes := resolveTemplateModes(tmpl.Mode)
-			for _, mode := range modes {
-				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], tmpl)
+			for _, mode := range resolveTemplateModes(tmpl.Mode) {
+				c.stylesheet.modeTemplates[mode] = append(c.stylesheet.modeTemplates[mode], rules...)
 				// Update the package's mode template list for late binding
-				pkg.modeTemplates[mode] = append(pkg.modeTemplates[mode], tmpl)
+				pkg.modeTemplates[mode] = append(pkg.modeTemplates[mode], rules...)
 			}
 		}
 		for _, v := range oset.variables {
