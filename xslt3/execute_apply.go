@@ -651,6 +651,12 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 				if other.ImportPrec < tmpl.ImportPrec || (other.ImportPrec == tmpl.ImportPrec && other.Priority < tmpl.Priority) {
 					break
 				}
+				// A mode list can hold one template twice (a mode="#all"
+				// template registered in the default mode); it never
+				// conflicts with itself.
+				if other == tmpl {
+					continue
+				}
 				// Split union pattern branches originate from the same template
 				// rule and never conflict with each other (spec bug 30402).
 				if other.splitOriginID != 0 && other.splitOriginID == tmpl.splitOriginID {
