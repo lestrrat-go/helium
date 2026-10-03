@@ -150,7 +150,11 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 	}
 
 	// Parse xsl:override children (collect overridden component names)
-	overrideNames := c.collectOverrideNames(ctx, usePackageElem, nsBindings)
+	var excluded map[*helium.Element]struct{}
+	if oset != nil {
+		excluded = oset.excluded
+	}
+	overrideNames := c.collectOverrideNames(ctx, usePackageElem, nsBindings, excluded)
 
 	// XTSE3055: it is a static error if an override declaration is homonymous
 	// with any other declaration in the using package, regardless of import

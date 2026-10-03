@@ -32,6 +32,9 @@ type overrideSet struct {
 	variables      map[string]*variable
 	params         map[string]*param
 	attributeSets  map[string]*attributeSetDef
+	// excluded holds the xsl:override elements and override declarations
+	// that use-when="false()" removed; collectOverrideNames skips them.
+	excluded map[*helium.Element]struct{}
 }
 
 // processOverrides handles xsl:override children of xsl:use-package.
@@ -44,6 +47,7 @@ func (c *compiler) processOverrides(ctx context.Context, usePackageElem *helium.
 		variables:      make(map[string]*variable),
 		params:         make(map[string]*param),
 		attributeSets:  make(map[string]*attributeSetDef),
+		excluded:       make(map[*helium.Element]struct{}),
 	}
 
 	for child := range helium.Children(usePackageElem) {
@@ -64,6 +68,15 @@ func (c *compiler) processOverrides(ctx context.Context, usePackageElem *helium.
 func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *helium.Element, pkg *Stylesheet, oset *overrideSet) error {
 	// Push namespace bindings from override element
 	c.collectNamespaces(ctx, overrideElem)
+
+	excluded, err := c.excludedByUseWhen(ctx, overrideElem)
+	if err != nil {
+		return err
+	}
+	if excluded {
+		oset.excluded[overrideElem] = struct{}{}
+		return nil
+	}
 
 	// Handle default-mode on xsl:override
 	savedDefaultMode := c.defaultMode
@@ -92,6 +105,18 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 		// values govern its compilation, mirroring top-level elements.
 		if err := c.resolveShadowAttributes(ctx, elem); err != nil {
 			return err
+		}
+
+		// A use-when="false()" declaration is removed before compilation, so
+		// it neither overrides anything nor counts toward XTSE3055.
+		c.collectNamespaces(ctx, elem)
+		excluded, err := c.excludedByUseWhen(ctx, elem)
+		if err != nil {
+			return err
+		}
+		if excluded {
+			oset.excluded[elem] = struct{}{}
+			continue
 		}
 
 		switch elem.LocalName() {
@@ -162,6 +187,20 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 	}
 
 	return nil
+}
+
+// excludedByUseWhen reports whether elem's use-when attribute evaluates to
+// false, which removes the element from the stylesheet (XSLT 3.0 §3.13.1).
+func (c *compiler) excludedByUseWhen(ctx context.Context, elem *helium.Element) (bool, error) {
+	uw := getAttr(elem, xslAttrUseWhen)
+	if uw == "" {
+		return false, nil
+	}
+	include, err := c.evaluateUseWhen(ctx, uw)
+	if err != nil {
+		return false, err
+	}
+	return !include, nil
 }
 
 // claimOverrideDecl records an xsl:override declaration of the given

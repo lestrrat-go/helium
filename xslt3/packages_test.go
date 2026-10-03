@@ -284,7 +284,7 @@ func TestOverrideDuplicateDeclarations(t *testing.T) {
 		code        string
 	}{
 		{
-			name:        "distinct templates",
+			name:        "distinct names",
 			first:       `<xsl:template name="t">[1]</xsl:template>`,
 			second:      `<xsl:variable name="v" select="2"/>`,
 			samePackage: true,
@@ -324,9 +324,22 @@ func TestOverrideDuplicateDeclarations(t *testing.T) {
 			code:   errXTSE3055,
 		},
 		{
-			name:   "variable in two used packages",
-			first:  `<xsl:variable name="v" select="2"/>`,
-			second: `<xsl:variable name="v" select="3"/>`,
+			name:        "variable and param with one name",
+			first:       `<xsl:variable name="v" select="2"/>`,
+			second:      `<xsl:param name="v" select="3"/>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "second template excluded by use-when",
+			first:       `<xsl:template name="t">[1]</xsl:template>`,
+			second:      `<xsl:template name="t" use-when="false()">[2]</xsl:template>`,
+			samePackage: true,
+		},
+		{
+			name:   "param in two used packages",
+			first:  `<xsl:param name="p" select="2"/>`,
+			second: `<xsl:param name="p" select="3"/>`,
 			code:   errXTSE3055,
 		},
 	}
@@ -361,6 +374,65 @@ func TestOverrideDuplicateDeclarations(t *testing.T) {
 				return
 			}
 			require.ErrorContains(t, err, tc.code)
+		})
+	}
+}
+
+// use-when="false()" on xsl:override, or on one of its children, removes
+// that element before compilation: the excluded declaration neither replaces
+// the used package's component nor counts as an overriding declaration.
+func TestOverrideUseWhen(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		override string
+		want     string
+	}{
+		{
+			name:     "included",
+			override: `<xsl:override><xsl:template name="t">[1]</xsl:template></xsl:override>`,
+			want:     "<out>[1]</out>",
+		},
+		{
+			name:     "excluded child",
+			override: `<xsl:override><xsl:template name="t" use-when="false()">[1]</xsl:template></xsl:override>`,
+			want:     "<out>[t]</out>",
+		},
+		{
+			name: "one of two homonymous children excluded",
+			override: `<xsl:override><xsl:template name="t">[1]</xsl:template>` +
+				`<xsl:template name="t" use-when="false()">[2]</xsl:template></xsl:override>`,
+			want: "<out>[1]</out>",
+		},
+		{
+			name:     "excluded override",
+			override: `<xsl:override use-when="false()"><xsl:template name="t">[1]</xsl:template></xsl:override>`,
+			want:     "<out>[t]</out>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:use-package name="urn:p1">` + tc.override + `</xsl:use-package>
+  <xsl:template match="/"><out><xsl:call-template name="t"/></out></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			ss, err := xslt3.NewCompiler().
+				PackageResolver(namedPackageResolver{"urn:p1": fmt.Sprintf(overrideDuplicatesPackage, "urn:p1")}).
+				Compile(t.Context(), doc)
+			require.NoError(t, err)
+
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc/>`))
+			require.NoError(t, err)
+
+			result, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, result, tc.want)
 		})
 	}
 }
