@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"strings"
@@ -298,14 +299,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 }
 
 func verifyReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, bool, error) {
-	target, canonical, external, err := canonicalizeReference(ctx, cfg, doc, sigElem, ref)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// Compute and compare digest. A SHA-1 digest is rejected unless the
-	// caller opted in via Verifier.AllowSHA1(true).
-	computed, err := computeDigest(ref.digestAlgorithm, canonical, cfg.allowSHA1)
+	target, computed, external, err := digestReference(ctx, cfg, doc, sigElem, ref)
 	if err != nil {
 		return nil, false, err
 	}
@@ -379,18 +373,41 @@ func prepareReferenceForVerification(cfg *verifierConfig, doc *helium.Document, 
 	return prepared, nil
 }
 
-// canonicalizeReference resolves a Reference URI and applies its transform
-// pipeline, returning the resolved target element (nil for an external
-// reference), the canonical octet stream that the DigestValue is computed over,
-// and whether the reference was satisfied externally. It is the shared reference
-// node-set → octet path for the verify digest check.
-func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
+// digestReference computes a Reference's digest with its DigestMethod: it
+// streams the octets writeReference produces into the hash, so they are never
+// held in memory. It returns the resolved target element (nil for an external
+// reference), the digest, and whether the reference was satisfied externally.
+// A SHA-1 digest is rejected unless the caller opted in via
+// Verifier.AllowSHA1(true); that error comes after any resolution or transform
+// error and still returns the resolved target.
+func digestReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, []byte, bool, error) {
+	sink, digester, algErr := newDigestSink(ref.digestAlgorithm, cfg.allowSHA1)
+	target, external, err := writeReference(ctx, cfg, doc, sigElem, ref, sink)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if algErr != nil {
+		return target, nil, external, algErr
+	}
+	computed, err := digester.sum()
+	if err != nil {
+		return target, nil, external, err
+	}
+	return target, computed, external, nil
+}
+
+// writeReference resolves a Reference URI and applies its transform pipeline,
+// writing the octet stream the DigestValue is computed over to out. It returns
+// the resolved target element (nil for an external reference) and whether the
+// reference was satisfied externally. It is the shared reference node-set →
+// octet path for the verify digest check.
+func writeReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference, out io.Writer) (*helium.Element, bool, error) {
 	prepared := ref.prepared
 	if prepared == nil {
 		var err error
 		prepared, err = prepareReferenceForVerification(cfg, doc, ref)
 		if err != nil {
-			return nil, nil, false, err
+			return nil, false, err
 		}
 	}
 
@@ -401,25 +418,28 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 		// opted in; otherwise it stays fail-closed as an external reference, so the
 		// default four-form behavior is byte-identical.
 		if cfg.allowXPointer {
-			target, canonical, handled, err := canonicalizeGeneralXPointer(ctx, cfg, doc, sigElem, prepared)
+			target, handled, err := canonicalizeGeneralXPointer(ctx, cfg, doc, sigElem, prepared, out)
 			if handled {
 				if err != nil {
-					return nil, nil, false, err
+					return nil, false, err
 				}
-				return target, canonical, false, nil
+				return target, false, nil
 			}
 		}
 		ref.prepared = prepared
 		octets, err := resolveExternalReference(ctx, cfg, doc, ref)
 		if err != nil {
-			return nil, nil, false, err
+			return nil, false, err
 		}
-		return nil, octets, true, nil
+		if _, err := out.Write(octets); err != nil {
+			return nil, false, err
+		}
+		return nil, true, nil
 	}
 
 	target, err := resolveReference(doc, ref.uri)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, false, err
 	}
 
 	// Classify the URI's node-set form (§4.3.3.2-3). wholeDoc selects the
@@ -427,17 +447,16 @@ func canonicalizeReference(ctx context.Context, cfg *verifierConfig, doc *helium
 	// the selected node-set.
 	_, wholeDoc, includeComments, _ := referenceURIForm(ref.uri)
 
-	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, wholeDoc, includeComments, prepared.steps)
-	if err != nil {
-		return nil, nil, false, err
+	if err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, wholeDoc, includeComments, prepared.steps, out); err != nil {
+		return nil, false, err
 	}
-	return target, canonical, false, nil
+	return target, false, nil
 }
 
 // applyReferenceTransforms starts the shared ordered executor with the lazy
 // node-set selected by a same-document Reference. It is shared by the four core
-// URI forms and the general XPointer resolver.
-func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, steps []transformStep) ([]byte, error) {
+// URI forms and the general XPointer resolver. The octets are written to out.
+func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem, target *helium.Element, wholeDoc, includeComments bool, steps []transformStep, out io.Writer) error {
 	runtime := transformRuntime{
 		parser:              cfg.parser(),
 		xsltTransformer:     cfg.xsltTransformer,
@@ -446,7 +465,8 @@ func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *hel
 		maxXPathFilterNodes: cfg.maxXPathFilterNodesLimit(),
 	}
 	initial := newReferenceNodeSetValue(doc, target, sigElem, wholeDoc, includeComments, nil)
-	return executeTransformPipeline(ctx, runtime, initial, steps)
+	_, err := executeTransformPipeline(ctx, runtime, initial, steps, out)
+	return err
 }
 
 // canonicalizeGeneralXPointer resolves a general XPointer Reference URI (opt-in,
@@ -461,19 +481,18 @@ func applyReferenceTransforms(ctx context.Context, cfg *verifierConfig, doc *hel
 // non-element node-set is ErrAmbiguousReference. The full-XPointer forms include
 // comment nodes, so includeComments is true. here() is NOT registered for a
 // URI-borne XPointer, so an xpointer(here()...) fails closed.
-func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, prepared *preparedReference) (*helium.Element, []byte, bool, error) {
+func canonicalizeGeneralXPointer(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, prepared *preparedReference, out io.Writer) (*helium.Element, bool, error) {
 	if prepared.generalXPointer == nil {
-		return nil, nil, false, nil
+		return nil, false, nil
 	}
 	target, err := resolvePreparedGeneralXPointerTarget(ctx, doc, prepared.generalXPointer)
 	if err != nil {
-		return nil, nil, true, err
+		return nil, true, err
 	}
-	canonical, err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, false, true, prepared.steps)
-	if err != nil {
-		return nil, nil, true, err
+	if err := applyReferenceTransforms(ctx, cfg, doc, sigElem, target, false, true, prepared.steps, out); err != nil {
+		return nil, true, err
 	}
-	return target, canonical, true, nil
+	return target, true, nil
 }
 
 // resolveExternalReference dereferences an external Reference URI through the

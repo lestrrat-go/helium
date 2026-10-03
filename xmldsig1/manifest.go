@@ -20,7 +20,7 @@ type preparedManifestReference struct {
 // the same path but not recursively expanded, which bounds the work.
 //
 // Every inner reference reuses the same fail-closed reference pipeline the
-// top-level references use (canonicalizeReference + computeDigest): an
+// top-level references use (digestReference): an
 // unsupported transform, an unresolved external reference, or a digest mismatch
 // is recorded as that inner reference's Err/Valid=false, never a panic and
 // never a silent pass. Because the results are advisory (XMLDSig core §5.1), an
@@ -113,14 +113,8 @@ func prepareManifestReference(ctx context.Context, budget *verifyBudget, cfg *ve
 func validateManifestReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, item preparedManifestReference) ManifestReference {
 	result := item.result
 	ref := item.ref
-	target, canonical, _, err := canonicalizeReference(ctx, cfg, doc, sigElem, ref)
-	if err != nil {
-		result.Err = err
-		return result
-	}
+	target, computed, _, err := digestReference(ctx, cfg, doc, sigElem, ref)
 	result.Element = target
-
-	computed, err := computeDigest(ref.digestAlgorithm, canonical, cfg.allowSHA1)
 	if err != nil {
 		result.Err = err
 		return result

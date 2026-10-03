@@ -1590,7 +1590,7 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   resolver/XSLT callback for that Manifest; the failing `ManifestReference` carries the error, and each
   otherwise prepared peer carries an advisory error wrapping the same cause. After a successful complete
   preparation pass, each inner Reference is resolved + transformed + digested through the SAME
-  `canonicalizeReference`+`computeDigest`+`digestEqual` path (`validateManifestReference`), and the
+  `digestReference`+`digestEqual` path (`validateManifestReference`), and the
   per-reference outcome is recorded in `VerifyResult.Manifests` (`[]ManifestResult{Reference
   *VerifiedReference, Element *helium.Element, References []ManifestReference}`; `ManifestReference{URI,
   DigestAlgorithm string, Element *helium.Element, Valid bool, Err error}`). Results are ADVISORY: a failed
@@ -1647,7 +1647,13 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   executor parses octets through the configured reference parser when a node-set is required and converts
   node-sets with inclusive C14N 1.0 when octets are required or at finalization. Repeated transitions and
   repeated C14N/XSLT/Base64 steps are valid. Base64 has the XMLDSig §6.6.2 exception: node-set input is
-  derived from remaining text-node values instead of generic C14N. The initial same-document node-set stays
+  derived from remaining text-node values instead of generic C14N. Given a writer (`out`), the executor writes
+  its output there instead of returning it, and a final canonicalization (a last C14N step or the closing
+  node-set conversion) streams into the writer unbuffered. Reference digests use this: `processReference`
+  (sign) and `digestReference` (verify, Manifest) stream into a `digestWriter` (`algorithms.go`, a 4 KiB
+  `bufio.Writer` over the hash); a rejected digest algorithm streams into `io.Discard` and is reported after
+  the octets, so resolution and transform errors keep precedence. SignedInfo, RetrievalMethod and external
+  octets stay buffered. The initial same-document node-set stays
   lazy so bare C14N, enveloped+C14N, whole-document, subtree, and detached/enveloping paths retain their exact
   specialized canonicalizers. Materialization preserves owning-document, URI comment-membership,
   namespace-node, XPath, and `here()` semantics. Two node-set collectors exist (`transforms.go`) and the

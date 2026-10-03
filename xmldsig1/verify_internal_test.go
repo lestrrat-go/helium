@@ -1065,3 +1065,28 @@ func TestVerifyAcceptsInclusiveNamespacesOnExclusiveC14N(t *testing.T) {
 		})
 	}
 }
+
+// TestDigestReferenceErrorPrecedence checks that a Reference whose octets
+// cannot be produced reports that failure even when its digest algorithm is
+// also rejected, and that a rejected algorithm on a resolvable Reference still
+// reports the resolved target.
+func TestDigestReferenceErrorPrecedence(t *testing.T) {
+	doc := mustParse(t, `<r><p Id="payload">v</p></r>`)
+
+	target, digest, _, err := digestReference(t.Context(), &verifierConfig{}, doc, nil, parsedReference{uri: "#missing", digestAlgorithm: DigestSHA1})
+	require.ErrorIs(t, err, ErrReferenceNotFound)
+	require.Nil(t, target)
+	require.Nil(t, digest)
+	require.NotErrorIs(t, err, ErrWeakAlgorithm)
+
+	target, digest, _, err = digestReference(t.Context(), &verifierConfig{}, doc, nil, parsedReference{uri: payloadFragment, digestAlgorithm: DigestSHA1})
+	require.ErrorIs(t, err, ErrWeakAlgorithm)
+	require.Nil(t, digest)
+	require.NotNil(t, target)
+
+	_, digest, _, err = digestReference(t.Context(), &verifierConfig{allowSHA1: true}, doc, nil, parsedReference{uri: payloadFragment, digestAlgorithm: DigestSHA1})
+	require.NoError(t, err)
+	want, err := computeDigest(DigestSHA1, []byte(`<p Id="payload">v</p>`), true)
+	require.NoError(t, err)
+	require.Equal(t, want, digest)
+}

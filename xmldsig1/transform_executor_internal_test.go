@@ -1,7 +1,9 @@
 package xmldsig1
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -272,7 +274,7 @@ func TestExecuteTransformPipelineHereAfterReparse(t *testing.T) {
 			{algorithm: TransformXPath, xpathExpr: xpathHereExpr, xpathHere: hereNode},
 		}
 
-		_, err := executeTransformPipeline(t.Context(), runtime, initial, steps)
+		_, err := executeTransformPipeline(t.Context(), runtime, initial, steps, nil)
 		require.ErrorIs(t, err, ErrHereUnavailable)
 		require.Empty(t, transformer.snapshot(), "here() must be rejected before the octet-producing callback runs")
 	})
@@ -318,7 +320,7 @@ func TestExecuteTransformPipelineEnvelopedOrder(t *testing.T) {
 				allowEnveloped: true,
 			}
 			initial := newReferenceNodeSetValue(doc, doc.DocumentElement(), sig, true, true, nil)
-			out, err := executeTransformPipeline(t.Context(), runtime, initial, steps)
+			out, err := executeTransformPipeline(t.Context(), runtime, initial, steps, nil)
 			require.NoError(t, err)
 			require.Contains(t, string(out), "keep")
 			require.NotContains(t, string(out), "Signature")
@@ -340,7 +342,7 @@ func TestExecuteTransformPipelineEmptyValues(t *testing.T) {
 		initial := newReferenceNodeSetValue(doc, doc.DocumentElement(), nil, false, true, nil)
 		out, err := executeTransformPipeline(t.Context(), transformRuntime{parser: helium.NewParser(), allowEnveloped: true}, initial, []transformStep{
 			{algorithm: TransformXPath, xpathExpr: "false()"},
-		})
+		}, nil)
 		require.NoError(t, err)
 		require.Empty(t, out)
 	})
@@ -362,4 +364,78 @@ func TestExecuteTransformPipelineCancellationBetweenSteps(t *testing.T) {
 	_, err := externalReferenceDigestInput(ctx, []byte("input"), steps, runtime)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Len(t, transformer.snapshot(), 1)
+}
+
+// TestExecuteTransformPipelineStreamsSameOctets checks that writing the
+// pipeline's output to a writer, which streams a final canonicalization, gives
+// exactly the octets (or the error) the buffered result does.
+func TestExecuteTransformPipelineStreamsSameOctets(t *testing.T) {
+	const input = `<!-- lead --><r xmlns="urn:d" xmlns:a="urn:a" xml:lang="en"><a:p Id="t" a:x="1">text &amp; more<!-- c -->` +
+		`<b64>PHg+eTwveD4=</b64><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo/></ds:Signature></a:p></r>`
+	cases := map[string]struct {
+		input    string
+		wholeDoc bool
+		steps    []transformStep
+		wantErr  bool
+	}{
+		"implicit final c14n":       {input: input, wholeDoc: true},
+		"c14n only":                 {input: input, wholeDoc: true, steps: []transformStep{{algorithm: C14N10Comments}}},
+		"enveloped then exc c14n":   {input: input, wholeDoc: true, steps: []transformStep{{algorithm: TransformEnvelopedSignature}, {algorithm: ExcC14N10Comments}}},
+		"enveloped id exc prefixes": {input: input, steps: []transformStep{{algorithm: TransformEnvelopedSignature}, {algorithm: ExcC14N10, prefixes: []string{"a", "#default"}}}},
+		"xpath then c14n 1.1":       {input: input, steps: []transformStep{{algorithm: TransformXPath, xpathExpr: xpathTrueExpr}, {algorithm: C14N11URI}}},
+		"c14n then c14n":            {input: input, steps: []transformStep{{algorithm: ExcC14N10}, {algorithm: C14N10}}},
+		"base64 octets":             {input: `<r Id="t"><b>PHg+eTwveD4=</b></r>`, steps: []transformStep{{algorithm: TransformBase64}}},
+		"relative namespace error":  {input: `<r><x xmlns:rel="rel/uri"/><s Id="t"/></r>`, steps: []transformStep{{algorithm: C14N10}}, wantErr: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			buffered, bufferedErr := runTransformPipelineForTest(t, tc.input, tc.wholeDoc, tc.steps, false)
+			streamed, streamedErr := runTransformPipelineForTest(t, tc.input, tc.wholeDoc, tc.steps, true)
+			require.Equal(t, fmt.Sprint(bufferedErr), fmt.Sprint(streamedErr))
+			require.Equal(t, string(buffered), string(streamed))
+			require.Equal(t, tc.wantErr, streamedErr != nil)
+			require.Equal(t, tc.wantErr, len(streamed) == 0)
+		})
+	}
+}
+
+// runTransformPipelineForTest runs steps over a fresh parse of input, selecting
+// the whole document or the element with Id="t", and returns the octets either
+// as executeTransformPipeline's result or as what it wrote to a writer.
+func runTransformPipelineForTest(t *testing.T, input string, wholeDoc bool, steps []transformStep, stream bool) ([]byte, error) {
+	t.Helper()
+	doc := parseTransformTestDoc(t, input)
+	target := doc.DocumentElement()
+	if !wholeDoc {
+		target = findLocalWithID(doc, "t")
+		require.NotNil(t, target)
+	}
+	sig := findSig(doc.DocumentElement())
+	runtime := transformRuntime{parser: helium.NewParser(), signature: sig, allowEnveloped: true}
+	initial := newReferenceNodeSetValue(doc, target, sig, wholeDoc, true, nil)
+	if !stream {
+		return executeTransformPipeline(t.Context(), runtime, initial, steps, nil)
+	}
+	var buf bytes.Buffer
+	out, err := executeTransformPipeline(t.Context(), runtime, initial, steps, &buf)
+	require.Nil(t, out)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// findLocalWithID returns the first element under n whose Id attribute is id.
+func findLocalWithID(n helium.Node, id string) *helium.Element {
+	for c := range helium.Children(n) {
+		if e, ok := helium.AsNode[*helium.Element](c); ok {
+			if v, _ := e.GetAttribute("Id"); v == id {
+				return e
+			}
+		}
+		if found := findLocalWithID(c, id); found != nil {
+			return found
+		}
+	}
+	return nil
 }
