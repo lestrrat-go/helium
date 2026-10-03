@@ -927,7 +927,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 	// XTDE0410: cannot add attribute after child content has been added.
 	// Inside xsl:where-populated the body is evaluated into a temporary tree
 	// and later filtered, so attribute-after-child is permitted during evaluation.
-	if elem.FirstChild() != nil && !out.wherePopulated {
+	if !out.wherePopulated && out.hasChildContent(elem) {
 		return dynamicError(errCodeXTDE0410, "cannot add attribute to element after children have been added")
 	}
 

@@ -354,7 +354,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 					// XTDE0410: an attribute must not follow child content.
 					// Inside xsl:where-populated the content is filtered
 					// later, so the order is checked there instead.
-					if elem.FirstChild() != nil && !out.wherePopulated {
+					if !out.wherePopulated && out.hasChildContent(elem) {
 						return dynamicError(errCodeXTDE0410,
 							"cannot add attribute %s after child nodes have been added", attr.Name())
 					}

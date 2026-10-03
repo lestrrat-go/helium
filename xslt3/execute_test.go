@@ -2035,3 +2035,34 @@ func TestAttributeAfterChildContent(t *testing.T) {
 		})
 	}
 }
+
+// The placeholder xsl:on-non-empty leaves in the element under construction
+// is not content: an attribute that follows it is still allowed.
+func TestAttributeAfterConditionalPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty select then xsl:sequence", body: `<xsl:on-non-empty select="()"/><xsl:sequence select="doc/@x"/>`, want: `<out x="1"/>`},
+		{name: "empty string then xsl:sequence", body: `<xsl:on-non-empty select="''"/><xsl:sequence select="doc/@x"/>`, want: `<out x="1"/>`},
+		{name: "attribute then xsl:sequence", body: `<xsl:on-non-empty select="doc/@y"/><xsl:sequence select="doc/@x"/>`, want: `<out x="1" y="2"/>`},
+		{name: "empty select then xsl:attribute", body: `<xsl:on-non-empty select="()"/><xsl:attribute name="x">1</xsl:attribute>`, want: `<out x="1"/>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ss := compileStylesheetString(t, `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out>`+tc.body+`</out></xsl:template>
+</xsl:stylesheet>`)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(`<doc x="1" y="2"/>`))
+			require.NoError(t, err)
+
+			result, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Contains(t, result, tc.want)
+		})
+	}
+}
