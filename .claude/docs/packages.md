@@ -887,7 +887,8 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   (`execContext.numberMemos`, keyed by `*numberInst`), so numbering a list in document order is linear. The memo
   is off when the `count` or `from` pattern references a variable (`numberInst.memoizable`); without a `count`
   pattern it applies only to a selected node of the same kind and expanded name. It relies on trees visible to
-  `xsl:number` never changing during a run.
+  `xsl:number` keeping their shape and annotations during a run; `xsl:source-document` and `xsl:merge-source`
+  validate or strip annotations on a cached document in place, so they clear `numberMemos` first.
 - Files: `xslt3.go` (package doc + convenience wrappers), `doc.go`, `compile.go` (compiler builder +
   orchestration), `compile_*.go`
   (imports/packages/schema/templates/functions/modes/formats/patterns/streaming/instruction compilation),

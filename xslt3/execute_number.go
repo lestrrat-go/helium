@@ -365,9 +365,12 @@ func (ec *execContext) numberAny(ctx context.Context, inst *numberInst, node hel
 // the same answers:
 //   - whether a node matches the count and from patterns depends on that node
 //     alone, since neither pattern reads a variable (numberInst.memoizable);
-//   - trees that xsl:number can see are never changed during a transform
-//     (only trees still under construction are), and the memo keeps node
-//     alive, so its address cannot be reused by another node;
+//   - the trees xsl:number can see keep their shape and type annotations
+//     during a transform, and the memo keeps node alive, so its address
+//     cannot be reused by another node. Only trees under construction change,
+//     plus one exception: xsl:source-document and xsl:merge-source validate
+//     or strip annotations on a cached document in place, and those sites
+//     clear numberMemos;
 //   - a level="any" walk stops at a from match, so it reaches node only when
 //     no from match lies between the two starting points.
 //

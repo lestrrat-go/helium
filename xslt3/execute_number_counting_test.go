@@ -1,6 +1,9 @@
 package xslt3_test
 
 import (
+	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/lestrrat-go/helium"
@@ -8,12 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// runNumberStylesheet compiles a stylesheet whose root template body is body,
-// applies it to source, and returns the text output.
-func runNumberStylesheet(t *testing.T, source, body string) string {
+// runNumberStylesheet compiles a stylesheet with top-level declarations decls
+// and a root template whose body is body, applies it to source, and returns
+// the text output. Documents in docs are served by URI suffix.
+func runNumberStylesheet(t *testing.T, source, decls, body string, docs numberDocResolver) string {
 	t.Helper()
-	text := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-<xsl:output method="text"/>
+	text := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+ xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="urn:f" exclude-result-prefixes="xs f">
+<xsl:output method="text"/>` + decls + `
 <xsl:template match="/">` + body + `</xsl:template>
 </xsl:stylesheet>`
 	ssDoc, err := helium.NewParser().Parse(t.Context(), []byte(text))
@@ -22,9 +27,21 @@ func runNumberStylesheet(t *testing.T, source, body string) string {
 	require.NoError(t, err)
 	src, err := helium.NewParser().Parse(t.Context(), []byte(source))
 	require.NoError(t, err)
-	got, err := ss.Transform(src).Serialize(t.Context())
+	got, err := ss.Transform(src).URIResolver(docs).Serialize(t.Context())
 	require.NoError(t, err)
 	return got
+}
+
+// numberDocResolver serves in-memory documents keyed by URI suffix.
+type numberDocResolver map[string]string
+
+func (r numberDocResolver) ResolveURI(uri string) (io.ReadCloser, error) {
+	for suffix, content := range r {
+		if strings.HasSuffix(uri, suffix) {
+			return io.NopCloser(strings.NewReader(content)), nil
+		}
+	}
+	return nil, fmt.Errorf("no document for %q", uri)
 }
 
 // TestNumberCounting checks xsl:number level="single" and level="any" when one
@@ -37,6 +54,7 @@ func TestNumberCounting(t *testing.T) {
 	testCases := []struct {
 		name   string
 		source string
+		decls  string
 		body   string
 		want   string
 	}{
@@ -132,10 +150,90 @@ func TestNumberCounting(t *testing.T) {
 				`[<xsl:number level="any"/>,<xsl:number level="any" select="$t/r/a[$i]"/>]</xsl:for-each>`,
 			want: `[1,1][2,2][3,3]`,
 		},
+		{
+			// The pattern "." also matches r and the document node, which
+			// level="any" counts as ancestors.
+			name:   "count dot",
+			source: `<r><a/><b/><a/></r>`,
+			body: `<xsl:for-each select="r/*">[<xsl:number count="."/>,` +
+				`<xsl:number level="any" count="."/>]</xsl:for-each>`,
+			want: `[1,3][2,4][3,5]`,
+		},
+		{
+			name:   "attributes as the selected node",
+			source: `<r><x a="1" b="2"/><x a="3"/></r>`,
+			body: `<xsl:for-each select="r/x/@*">[<xsl:number/>,` +
+				`<xsl:number level="any" count="x"/>]</xsl:for-each>`,
+			want: `[1,1][1,1][1,2]`,
+		},
+		{
+			// f:n numbers the preceding x with the same two instructions while
+			// they are counting, so the walks interleave.
+			name:   "count pattern runs the same instruction again",
+			source: `<r><x k="y"/><x/><x k="y"/><x k="y"/><x/><x k="y"/></r>`,
+			decls: `<xsl:function name="f:n"><xsl:param name="n"/><xsl:variable name="s">` +
+				`<xsl:for-each select="$n/preceding-sibling::x[1]"><xsl:call-template name="num"/>` +
+				`<xsl:call-template name="numa"/></xsl:for-each></xsl:variable>` +
+				`<xsl:sequence select="string-length($s) ge 0 and $n/@k = 'y'"/></xsl:function>` +
+				`<xsl:template name="num"><xsl:number count="x[f:n(.)]"/></xsl:template>` +
+				`<xsl:template name="numa"><xsl:number level="any" count="x[f:n(.)]"/></xsl:template>`,
+			body: `<xsl:for-each select="r/x">[<xsl:call-template name="num"/>,` +
+				`<xsl:call-template name="numa"/>]</xsl:for-each>`,
+			want: `[1,1][,1][2,2][3,3][,3][4,4]`,
+		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			require.Equal(t, testCase.want, runNumberStylesheet(t, testCase.source, testCase.body))
+			require.Equal(t, testCase.want, runNumberStylesheet(t, testCase.source, testCase.decls, testCase.body, nil))
+		})
+	}
+}
+
+// numberSchema types r as a sequence of x elements with element-only
+// content, so validation drops the whitespace between them and annotates
+// each x as xT.
+const numberSchema = `<xsl:import-schema><xs:schema>
+<xs:element name="r" type="rT"/>
+<xs:complexType name="rT"><xs:sequence><xs:element name="x" maxOccurs="unbounded" type="xT"/></xs:sequence></xs:complexType>
+<xs:complexType name="xT"/>
+</xs:schema></xsl:import-schema>`
+
+// TestNumberCountingAfterValidation numbers nodes of a document before and
+// after xsl:source-document validates that same cached document in place,
+// which removes whitespace text nodes and adds type annotations. Each number
+// must reflect the tree as it is when xsl:number runs.
+func TestNumberCountingAfterValidation(t *testing.T) {
+	docs := numberDocResolver{"a.xml": "<r>\n <x/>\n <x/>\n</r>"}
+	testCases := []struct {
+		name  string
+		decls string
+		body  string
+		want  string
+	}{
+		{
+			name:  "single after whitespace is stripped",
+			decls: numberSchema + `<xsl:template name="n"><xsl:number count="node()"/></xsl:template>`,
+			body: `<xsl:for-each select="doc('mem:a.xml')/r/x[1]">[<xsl:call-template name="n"/>]</xsl:for-each>` +
+				`<xsl:source-document href="mem:a.xml" validation="strict" streamable="no">` +
+				`<xsl:for-each select="r/x[2]">[<xsl:call-template name="n"/>]</xsl:for-each>` +
+				`</xsl:source-document>`,
+			want: `[2][2]`,
+		},
+		{
+			name:  "any after annotations are added",
+			decls: numberSchema + `<xsl:template name="n"><xsl:number level="any" count="element(*, xT)"/></xsl:template>`,
+			body: `<xsl:source-document href="mem:a.xml" streamable="no">` +
+				`<xsl:for-each select="r/x[1]">[<xsl:call-template name="n"/>]</xsl:for-each>` +
+				`</xsl:source-document>` +
+				`<xsl:source-document href="mem:a.xml" validation="strict" streamable="no">` +
+				`<xsl:for-each select="r/x[2]">[<xsl:call-template name="n"/>]</xsl:for-each>` +
+				`</xsl:source-document>`,
+			want: `[][2]`,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			require.Equal(t, testCase.want, runNumberStylesheet(t, `<z/>`, testCase.decls, testCase.body, docs))
 		})
 	}
 }
