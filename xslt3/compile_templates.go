@@ -204,7 +204,6 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		c.recordModeUsage(ctx, tmpl.Mode)
 	}
 
-	hasExplicitPriority := false
 	if prio := getAttr(elem, "priority"); prio != "" {
 		// XTSE0530: priority must be a valid xs:decimal — no exponent notation.
 		if !isXSDecimal(prio) {
@@ -215,7 +214,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 			return staticError(errCodeXTSE0530, "invalid priority %q: %v", prio, err)
 		}
 		tmpl.Priority = f
-		hasExplicitPriority = true
+		tmpl.explicitPriority = true
 	} else if tmpl.Match != nil && len(tmpl.Match.Alternatives) == 1 {
 		tmpl.Priority = tmpl.Match.Alternatives[0].priority
 	}
@@ -311,50 +310,55 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 	}
 
 	if tmpl.Match != nil {
-		// XSLT 3.0 §6.4: A pattern of the form P1 | P2 is treated as
-		// separate template rules with the same body, one per alternative.
-		// Split union patterns into separate template entries so each gets
-		// its own default priority.
-		templates := []*template{tmpl}
-		if !hasExplicitPriority && len(tmpl.Match.Alternatives) > 1 {
-			templates = nil
-			// All split branches of one union rule share a stable origin id so
-			// the on-multiple-match conflict checks can recognize them as a
-			// single rule even when they have an empty body (no &Body[0]
-			// identity to compare). See hasConflictingMatch /
-			// hasConflictingAtomicMatch.
-			//
-			// The id must be unique across the entire compilation, not just
-			// within one stylesheet/package: under xsl:use-package, split
-			// templates from different packages are merged into one mode list,
-			// and a per-stylesheet counter (which restarts at 0 per compile)
-			// would hand identical ids to unrelated union rules from different
-			// packages, wrongly suppressing a genuine cross-package XTDE0540
-			// match. A process-global monotonic counter guarantees uniqueness.
-			originID := nextSplitOriginID()
-			for _, alt := range tmpl.Match.Alternatives {
-				split := *tmpl // shallow copy shares Body, Params, etc.
-				// Copy the whole pattern so each alternative keeps every
-				// compile-site property (namespace context,
-				// xpath-default-namespace, backwards-compatible processing,
-				// compiled predicates); only the alternative list narrows.
-				altPattern := *tmpl.Match
-				altPattern.Alternatives = []*patternAlt{alt}
-				split.Match = &altPattern
-				split.Priority = alt.priority
-				split.splitOriginID = originID
-				splitCopy := split // allocate separate heap object
-				templates = append(templates, &splitCopy)
-			}
-		}
-
 		mode := tmpl.Mode
-		for _, t := range templates {
-			c.registerTemplateInModes(ctx, t, mode)
+		for _, rule := range templateRules(tmpl) {
+			c.registerTemplateInModes(ctx, rule, mode)
 		}
 	}
 
 	return nil
+}
+
+// templateRules returns the template rules a match template contributes to
+// its modes. XSLT 3.0 §6.4: a template rule whose pattern is a union P1 | P2
+// and that has no priority attribute is treated as one template rule per
+// alternative, each with that alternative's default priority (§6.5), so the
+// union is split into one template entry per alternative. Any other template
+// is its own single rule. Every caller that registers a template in a mode
+// list (a local template, a used package's template, an xsl:override
+// template) goes through here so all of them split the same way.
+func templateRules(tmpl *template) []*template {
+	if tmpl.explicitPriority || len(tmpl.Match.Alternatives) <= 1 {
+		return []*template{tmpl}
+	}
+	// All split branches of one union rule share a stable origin id so the
+	// on-multiple-match conflict checks can recognize them as a single rule
+	// even when they have an empty body (no &Body[0] identity to compare).
+	// See hasConflictingMatch / hasConflictingAtomicMatch.
+	//
+	// The id must be unique across the entire compilation, not just within
+	// one stylesheet/package: under xsl:use-package, split templates from
+	// different packages are merged into one mode list, and a per-stylesheet
+	// counter (which restarts at 0 per compile) would hand identical ids to
+	// unrelated union rules from different packages, wrongly suppressing a
+	// genuine cross-package XTDE0540 match. A process-global monotonic counter
+	// guarantees uniqueness.
+	originID := nextSplitOriginID()
+	rules := make([]*template, 0, len(tmpl.Match.Alternatives))
+	for _, alt := range tmpl.Match.Alternatives {
+		split := *tmpl // shallow copy shares Body, Params, etc.
+		// Copy the whole pattern so each alternative keeps every compile-site
+		// property (namespace context, xpath-default-namespace,
+		// backwards-compatible processing, compiled predicates); only the
+		// alternative list narrows.
+		altPattern := *tmpl.Match
+		altPattern.Alternatives = []*patternAlt{alt}
+		split.Match = &altPattern
+		split.Priority = alt.priority
+		split.splitOriginID = originID
+		rules = append(rules, &split)
+	}
+	return rules
 }
 
 // registerTemplateInModes adds a template to the appropriate mode template lists.
