@@ -935,7 +935,9 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `compile_patterns.go` (match-pattern compilation and bottom-up matching; every step predicate is compiled once
   per pattern, and the per-alternative rules split from a union template share those compiled predicates; a
   predicate that calls none of `position`/`last`/`function-lookup` and yields a non-number is decided from the
-  candidate node alone, without counting its siblings, XSLT 3.0 §5.5.3),
+  candidate node alone, without counting its siblings, XSLT 3.0 §5.5.3; any other predicate counts the node's
+  position among the nodes its step's axis selects from the parent: children, attributes, or the parent's
+  namespace nodes in the order the `internal/xpath` namespace axis returns them, so `match` and `select` agree),
   `execute*.go` (runtime), `functions*.go` (built-ins + `fn:transform` bridge), `stylesheet.go`,
   `invocation.go`, `instruction.go`, `parameters.go`, `options.go`, `dispatch_index.go` (per-mode template
   dispatch index: buckets templates by node kind/expanded name so `findFirstMatch`/`hasConflictingMatch` skip

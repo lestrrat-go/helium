@@ -12,7 +12,7 @@ xinclude       → helium, xpointer, internal/encoding, internal/iofs, internal/
                   (helium.Parser.XInclude injects an xinclude.Processor through the helium.XIncludeProcessor interface — dependency inversion keeps this edge one-way; helium does NOT import xinclude)
 xpath1         → helium, internal/lexicon, internal/domutil, internal/xpath1/lexer
 xpath3         → helium, internal/xpath, internal/lexicon, internal/icu, internal/unparsedtext, internal/strcursor, internal/sequence, internal/xsdregex, internal/xmlchar, internal/domutil, internal/writerctl, internal/intconv
-xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/xpathstream, internal/domutil, internal/writerctl, internal/intconv, xslt3/internal/elements
+xslt3          → helium, xpath3, xsd, html, internal/iofs, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/xpath, internal/xpathstream, internal/domutil, internal/writerctl, internal/intconv, xslt3/internal/elements
 xsd            → helium, xpath1, xpath3, internal/domutil, internal/lexicon, internal/xpath1/lexer, internal/xsd/value, internal/xsdregex, internal/uripath, internal/iofs, internal/intconv
 relaxng        → helium, internal/lexicon, internal/iofs, internal/iolimit, internal/xsd/value, internal/xsdregex, internal/xmlchar, internal/uripath
 schematron     → helium, xpath1, xpath3, internal/xpath, internal/xpath1/lexer, internal/xpath1/number
@@ -85,7 +85,7 @@ xsd (root + xpath1 + xpath3 + internal/lexicon + internal/xpath1/lexer), xpointe
 internal/xpath1/lexer + internal/xmlchar), schematron (root + xpath1 + xpath3 + internal/xpath +
 internal/xpath1/lexer + internal/xpath1/number; xpath1 backs the XPath 1.0 queryBinding, xpath3 the XPath 3.1
 one), xinclude (root + xpointer + internal/encoding + internal/iofs + internal/lexicon), xslt3 (root + xpath3 +
-xsd + html + internal/elements), shim (root + stream)
+xsd + html + internal/xpath + internal/elements), shim (root + stream)
 
 ## Application layer
 internal/cli/heliumcmd (CLI implementation)

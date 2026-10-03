@@ -1049,6 +1049,66 @@ func TestPatternNamespaceAxisPredicate(t *testing.T) {
 	require.Contains(t, out, "[b]")
 }
 
+// TestPatternAxisPositionalPredicate checks that a positional predicate on a
+// namespace-axis or attribute-axis pattern step counts the node's position
+// among the nodes that axis selects from the parent element (XSLT 3.0
+// §5.5.3), so the pattern matches exactly the nodes the equivalent select
+// expression returns. The source element e has the in-scope namespaces xml
+// (implicit), a and b (inherited) and c (its own), which the namespace axis
+// returns in that order, and the attributes x, y and z.
+func TestPatternAxisPositionalPredicate(t *testing.T) {
+	const srcXML = `<doc xmlns:a="urn:a" xmlns:b="urn:b"><e xmlns:c="urn:c" x="1" y="2" z="3"/></doc>`
+	const (
+		nsAxis   = "namespace::*"
+		attrAxis = "@*"
+	)
+
+	tests := []struct {
+		name  string
+		axis  string // the axis step the source nodes are selected with
+		match string
+		sel   string // the select expression equivalent to match, from the document node
+		want  string
+	}{
+		{"namespace first", nsAxis, "namespace::*[1]", "doc/e/namespace::*[1]", "[xml]"},
+		{"namespace last", nsAxis, "namespace::*[last()]", "doc/e/namespace::*[last()]", "[c]"},
+		{"namespace position eq", nsAxis, "namespace::*[position() = 2]",
+			"doc/e/namespace::*[position() = 2]", "[a]"},
+		{"namespace numeric", nsAxis, "namespace::*[3]", "doc/e/namespace::*[3]", "[b]"},
+		{"namespace chained", nsAxis, "namespace::*[. != 'urn:a'][2]",
+			"doc/e/namespace::*[. != 'urn:a'][2]", "[b]"},
+		{"namespace parent step", nsAxis, "e/namespace::*[last()]", "doc/e/namespace::*[last()]", "[c]"},
+		{"attribute first", attrAxis, "@*[1]", "doc/e/@*[1]", "[x]"},
+		{"attribute last", attrAxis, "attribute::*[last()]", "doc/e/attribute::*[last()]", "[z]"},
+		{"attribute position eq", attrAxis, "@*[position() = 2]", "doc/e/@*[position() = 2]", "[y]"},
+		{"attribute numeric", attrAxis, "@*[3]", "doc/e/@*[3]", "[z]"},
+		{"attribute chained", attrAxis, "@*[. != '1'][1]", "doc/e/@*[. != '1'][1]", "[y]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out><m><xsl:apply-templates select="doc/e/` + tc.axis + `"/></m>` +
+				`<s><xsl:for-each select="` + tc.sel + `">[<xsl:value-of select="name()"/>]</xsl:for-each></s></out>` +
+				`</xsl:template>
+  <xsl:template match="` + tc.match + `">[<xsl:value-of select="name()"/>]</xsl:template>
+  <xsl:template match="` + tc.axis + `"/>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+			require.NoError(t, err)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "<out><m>"+tc.want+"</m><s>"+tc.want+"</s></out>", strings.TrimSpace(out))
+		})
+	}
+}
+
 // transformStepPredicate applies a stylesheet with one template for match and
 // a match="rec" fallback to five <rec> siblings and returns the serialized
 // <out> element. The stylesheet is version="1.0" when compat is set and
