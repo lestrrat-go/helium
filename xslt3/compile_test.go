@@ -1232,7 +1232,7 @@ func TestDuplicateWithParam(t *testing.T) {
 			t.Parallel()
 			src := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
   <xsl:template match="/"><out>` + tc.body + `</out></xsl:template>
-  <xsl:template name="t"><xsl:param name="p"/><xsl:param name="q"/></xsl:template>
+  <xsl:template name="t" xmlns:c="urn:x"><xsl:param name="p"/><xsl:param name="q"/><xsl:param name="c:p"/></xsl:template>
 </xsl:stylesheet>`
 			doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
 			require.NoError(t, err)
