@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 )
@@ -832,7 +833,13 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 				}
 				newDoc.SetURL(srcDoc.URL())
 			}
+			// CopyDTDInfo already gave newDoc the DTD; the other children
+			// that are not XDM nodes (the DTD node, XInclude markers) are
+			// not copied.
 			for child := range helium.Children(node) {
+				if !ixpath.IsXDMChild(child) {
+					continue
+				}
 				copied, err := helium.CopyNode(child, newDoc)
 				if err != nil {
 					return err

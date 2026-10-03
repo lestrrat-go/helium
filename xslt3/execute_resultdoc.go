@@ -10,6 +10,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -251,7 +252,9 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 		if preserveAnnotations {
 			var children []helium.Node
 			for child := range helium.Children(tmpDoc) {
-				children = append(children, child)
+				if ixpath.IsXDMChild(child) {
+					children = append(children, child)
+				}
 			}
 			for _, child := range children {
 				helium.UnlinkNode(child.(helium.MutableNode)) //nolint:forcetypeassert

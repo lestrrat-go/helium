@@ -12,9 +12,9 @@ import (
 // TestDocumentNodeContentWithDoctype checks a document node added to element
 // content when the source document has a DOCTYPE declaration. The document
 // node is replaced by its children (XSLT 3.0 §5.7.1), and XDM has no node
-// kind for a DTD, so the DOCTYPE is not one of them: each path that splices a
-// document node's children copies the element and the comment around the
-// DOCTYPE, and nothing else.
+// kind for a DTD, so the DOCTYPE is not one of them: each path that splices
+// or copies a document node's children copies the element and the comment
+// around the DOCTYPE, and nothing else.
 func TestDocumentNodeContentWithDoctype(t *testing.T) {
 	const srcXML = `<!--c--><!DOCTYPE r [<!ELEMENT r ANY>]><r/>`
 	const want = `<out><!--c--><r/></out>`
@@ -33,9 +33,26 @@ func TestDocumentNodeContentWithDoctype(t *testing.T) {
 			body:  `<out><xsl:call-template name="t"/></out>`,
 		},
 		{
+			// The leading <x/> keeps the variable from taking the single
+			// document node as its whole value.
 			name: "temporary tree",
-			body: `<xsl:variable name="v"><out><xsl:sequence select="/"/></out></xsl:variable>` +
-				`<xsl:copy-of select="$v"/>`,
+			body: `<xsl:variable name="v"><x/><xsl:sequence select="/"/></xsl:variable>` +
+				`<out><xsl:copy-of select="$v/node() except $v/x"/></out>`,
+		},
+		{
+			name: "xsl:copy-of into a variable with as",
+			body: `<xsl:variable name="v" as="node()*"><xsl:copy-of select="/"/></xsl:variable>` +
+				`<out><xsl:copy-of select="$v/node()"/></out>`,
+		},
+		{
+			name:  "xsl:copy-of from a template with as",
+			decls: `<xsl:template name="t" as="node()*"><xsl:copy-of select="/"/></xsl:template>`,
+			body: `<xsl:variable name="v" as="node()*"><xsl:call-template name="t"/></xsl:variable>` +
+				`<out><xsl:copy-of select="$v/node()"/></out>`,
+		},
+		{
+			name: "xsl:document with validation preserve",
+			body: `<out><xsl:document validation="preserve"><xsl:copy-of select="/"/></xsl:document></out>`,
 		},
 		{
 			name: "xsl:where-populated",
