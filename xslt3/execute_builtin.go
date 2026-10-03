@@ -6,6 +6,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
 	"github.com/lestrrat-go/helium/internal/lexicon"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -42,7 +43,8 @@ func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mod
 	case onNoMatchDeepCopy:
 		return ec.onNoMatchDeepCopy(node)
 	case onNoMatchShallowSkip:
-		if node.Type() == helium.ElementNode {
+		switch node.Type() {
+		case helium.ElementNode:
 			// XSLT 3.0: shallow-skip for elements applies templates to
 			// attributes and children (but does not copy the element).
 			srcElem, _ := helium.AsNode[*helium.Element](node)
@@ -51,40 +53,23 @@ func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mod
 					return err
 				}
 			}
-			for child := range helium.Children(node) {
-				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-					return err
-				}
-			}
-		} else if node.Type() == helium.DocumentNode {
-			for child := range helium.Children(node) {
-				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-					return err
-				}
-			}
+			return ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
+		case helium.DocumentNode:
+			return ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
 		}
 		return nil
 	case onNoMatchDeepSkip:
 		// Per XSLT 3.0 spec (bug #30219): the built-in template rule for
 		// document nodes always processes children, even with deep-skip.
 		if node.Type() == helium.DocumentNode {
-			for child := range helium.Children(node) {
-				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-					return err
-				}
-			}
+			return ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
 		}
 		return nil
 	case onNoMatchFail:
 		// Per XSLT 3.0 spec (bug #30219): the built-in template rule for
 		// document nodes always processes children, even with on-no-match=fail.
 		if node.Type() == helium.DocumentNode {
-			for child := range helium.Children(node) {
-				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-					return err
-				}
-			}
-			return nil
+			return ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
 		}
 		return dynamicError(errCodeXTDE0555, "no matching template in mode %q (on-no-match=fail)", mode)
 	default: // "text-only-copy"
@@ -95,12 +80,7 @@ func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mod
 func (ec *execContext) onNoMatchTextOnlyCopy(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
 	switch node.Type() {
 	case helium.DocumentNode, helium.ElementNode:
-		for child := range helium.Children(node) {
-			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-				return err
-			}
-		}
-		return nil
+		return ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
 	case helium.TextNode, helium.CDATASectionNode:
 		if ec.shouldStripWhitespace(node) {
 			return nil
@@ -136,24 +116,17 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 			}
 			frame := &outputFrame{doc: tmpDoc, current: tmpDoc}
 			ec.outputStack = append(ec.outputStack, frame)
-			for child := range helium.Children(node) {
-				if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-					ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
-					return err
-				}
-			}
+			err := ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
 			ec.outputStack = ec.outputStack[:len(ec.outputStack)-1]
+			if err != nil {
+				return err
+			}
 			// Always capture the document (even empty) so fn:base-uri works.
 			out.pendingItems = append(out.pendingItems, xpath3.NodeItem{Node: tmpDoc})
 			out.noteOutput()
 			return nil
 		}
-		for child := range helium.Children(node) {
-			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-				return err
-			}
-		}
-		return nil
+		return ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
 	case helium.ElementNode:
 		srcElem, _ := helium.AsNode[*helium.Element](node)
 		newElem, err := ec.resultDoc.CreateElement(srcElem.LocalName())
@@ -196,12 +169,7 @@ func (ec *execContext) onNoMatchShallowCopy(ctx context.Context, node helium.Nod
 				return err
 			}
 		}
-		for child := range helium.Children(srcElem) {
-			if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
-				return err
-			}
-		}
-		return nil
+		return ec.applyTemplatesToChildren(ctx, srcElem, mode, paramValues...)
 	case helium.TextNode, helium.CDATASectionNode:
 		text := ec.resultDoc.CreateText(node.Content())
 		return ec.addNode(text)
@@ -656,15 +624,39 @@ func childXMLSpacePreserve(node helium.Node, inherited bool) bool {
 	return inherited
 }
 
+// applyTemplatesToChildren applies templates in mode to the XDM children of
+// node, in document order, as the built-in template rules do. A DOCTYPE
+// declaration or an entity reference is not an XDM child, so no rule sees it.
+func (ec *execContext) applyTemplatesToChildren(ctx context.Context, node helium.Node, mode string, paramValues ...map[string]xpath3.Sequence) error {
+	for child := range helium.Children(node) {
+		if !ixpath.IsXDMChild(child) {
+			continue
+		}
+		if err := ec.applyTemplates(ctx, child, mode, paramValues...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // selectDefaultNodes returns the default node-set for apply-templates
-// (child::node()).
+// (child::node()): the XDM children of node. An attribute or namespace node
+// has no children, and a DOCTYPE declaration or an entity reference is not an
+// XDM child.
 func selectDefaultNodes(node helium.Node) []helium.Node {
-	if normalizeNode(node) == nil {
+	node = normalizeNode(node)
+	if node == nil {
+		return nil
+	}
+	switch node.Type() {
+	case helium.AttributeNode, helium.NamespaceNode:
 		return nil
 	}
 	var nodes []helium.Node
 	for child := range helium.Children(node) {
-		nodes = append(nodes, child)
+		if ixpath.IsXDMChild(child) {
+			nodes = append(nodes, child)
+		}
 	}
 	return nodes
 }

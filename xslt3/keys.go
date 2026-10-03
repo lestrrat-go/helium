@@ -11,6 +11,7 @@ import (
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
+	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
 )
 
@@ -401,14 +402,40 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 		return nil
 	}
 
-	// Walk the document, also visiting attribute and namespace nodes.
-	err := helium.Walk(root, helium.NodeWalkerFunc(func(node helium.Node) error {
+	// Walk the XDM nodes of the tree in document order, also visiting
+	// attribute and namespace nodes. A DOCTYPE declaration or an entity
+	// reference is not an XDM node, so neither it nor anything under it is
+	// indexed.
+	err := indexKeyTree(ctx, root, needsAttrs, needsNSNodes, indexNode)
+	if err != nil {
+		ec.keyBuildingDepth--
+		delete(ec.keyTables, cacheKey)
+		return nil, err
+	}
+
+	ec.keyBuildingDepth--
+	kt.building = false
+	kt.built = true
+	return kt, nil
+}
+
+// indexKeyTree calls indexNode on root and on each XDM descendant of root in
+// document order, as the descendant-or-self axis selects them, and also on
+// the attributes (needsAttrs) and in-scope namespace nodes (needsNSNodes) of
+// each element right after the element. A cancelled context ends the walk
+// with its error.
+func indexKeyTree(ctx context.Context, root helium.Node, needsAttrs, needsNSNodes bool, indexNode func(helium.Node) error) error {
+	stack := []helium.Node{root}
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		node := stack[last]
+		stack = stack[:last]
 		if err := indexNode(node); err != nil {
 			return err
 		}
-		// Also visit attribute and namespace nodes on element nodes.
-		// helium.Walk only visits child nodes; key patterns can match
-		// attribute::* and namespace-node() which require explicit iteration.
+		if node.Type() == helium.AttributeNode {
+			continue
+		}
 		if elem, ok := node.(*helium.Element); ok {
 			if needsAttrs {
 				for _, attr := range elem.Attributes() {
@@ -420,26 +447,20 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 			if needsNSNodes {
 				// Collect in-scope namespace nodes (including inherited ones)
 				// to match XPath namespace axis semantics.
-				nsNodes := collectInScopeNSNodes(elem)
-				for _, nsNode := range nsNodes {
+				for _, nsNode := range collectInScopeNSNodes(elem) {
 					if err := indexNode(nsNode); err != nil {
 						return err
 					}
 				}
 			}
 		}
-		return nil
-	}))
-	if err != nil {
-		ec.keyBuildingDepth--
-		delete(ec.keyTables, cacheKey)
-		return nil, err
+		var err error
+		stack, err = ixpath.PushXDMChildren(ctx, stack, node)
+		if err != nil {
+			return err
+		}
 	}
-
-	ec.keyBuildingDepth--
-	kt.building = false
-	kt.built = true
-	return kt, nil
+	return nil
 }
 
 // lookupKey looks up nodes by key name and typed value in the given document root.

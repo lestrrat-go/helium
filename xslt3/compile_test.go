@@ -1128,6 +1128,24 @@ func TestUnionPattern(t *testing.T) {
 	})
 }
 
+// A priority attribute is an xs:decimal, so leading and trailing whitespace
+// is ignored: priority=" 2 " outranks priority="1".
+func TestTemplatePriorityWhitespace(t *testing.T) {
+	ss := compileStylesheetString(t, `
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template match="/"><out><xsl:apply-templates select="root/*"/></out></xsl:template>
+  <xsl:template match="a" priority=" 2 "><two/></xsl:template>
+  <xsl:template match="a" priority="1"><one/></xsl:template>
+</xsl:stylesheet>`)
+
+	source, err := helium.NewParser().Parse(t.Context(), []byte(`<root><a/></root>`))
+	require.NoError(t, err)
+
+	result, err := ss.Transform(source).Serialize(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, result, "<out><two/></out>")
+}
+
 func TestNamespaceFixup(t *testing.T) {
 	// TestNamespace2614ExcludedLiteralPrefixCanBeRebound covers W3C
 	// namespace-2614. An excluded literal result element prefix is available to

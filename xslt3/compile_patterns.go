@@ -2146,23 +2146,32 @@ func evaluateChainedPredicates(ctx context.Context, ec *execContext, step xpath3
 	return true
 }
 
-// collectDescendants collects all descendant nodes of root that match the
-// given node test, in document order.
+// collectDescendants collects the XDM descendants of root that match the
+// given node test, in document order, as the descendant axis selects them: a
+// DOCTYPE or an entity reference is not a descendant, and neither is anything
+// beneath it. An attribute has no descendants. A cancelled context ends the
+// collection with no nodes, so nothing matches.
 func collectDescendants(ctx context.Context, ec *execContext, test xpath3.NodeTest, root helium.Node) []helium.Node {
-	var result []helium.Node
-	// collectDescendants has no error channel; a tree cycle (ErrWalkCycle) ends
-	// the walk over the traversable portion, degrading to the descendants found
-	// before the cycle, spinning nowhere. Parser-built and result trees are
-	// acyclic, so this arises only on a hand-corrupted tree.
-	_ = helium.Walk(root, helium.NodeWalkerFunc(func(n helium.Node) error {
-		if n == root {
-			return nil // skip the root itself
-		}
-		if nodeMatchesTest(ctx, ec, test, n) {
-			result = append(result, n)
-		}
+	if root.Type() == helium.AttributeNode {
 		return nil
-	}))
+	}
+	stack, err := ixpath.PushXDMChildren(ctx, nil, root)
+	if err != nil {
+		return nil
+	}
+	var result []helium.Node
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		cur := stack[last]
+		stack = stack[:last]
+		if nodeMatchesTest(ctx, ec, test, cur) {
+			result = append(result, cur)
+		}
+		stack, err = ixpath.PushXDMChildren(ctx, stack, cur)
+		if err != nil {
+			return nil
+		}
+	}
 	return result
 }
 
@@ -2194,9 +2203,10 @@ func collectMatchingSiblings(ctx context.Context, ec *execContext, test xpath3.N
 		}
 	}
 
-	// Iterate through all children of the parent
+	// Iterate through the XDM children of the parent: a DOCTYPE or an entity
+	// reference is not a sibling, so it takes no position.
 	for child := range helium.Children(parent) {
-		if nodeMatchesTest(ctx, ec, test, child) {
+		if ixpath.IsXDMChild(child) && nodeMatchesTest(ctx, ec, test, child) {
 			siblings = append(siblings, child)
 		}
 	}
@@ -2361,12 +2371,9 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 			return false
 		}
 	}
-	if err == nil {
-		for item := range sequence.Items(result.Sequence()) {
-			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
-				return true
-			}
-		}
+	isNS := node.Type() == helium.NamespaceNode
+	if err == nil && sequenceHasNode(result.Sequence(), node, isNS) {
+		return true
 	}
 	// Then try evaluating from each ancestor up to the document root.
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
@@ -2378,10 +2385,26 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 			}
 			continue
 		}
-		for item := range sequence.Items(result.Sequence()) {
-			if ni, ok := item.(xpath3.NodeItem); ok && ni.Node == node {
-				return true
-			}
+		if sequenceHasNode(result.Sequence(), node, isNS) {
+			return true
+		}
+	}
+	return false
+}
+
+// sequenceHasNode reports whether seq contains node. isNS tells whether node
+// is a namespace node: the namespace axis builds a fresh wrapper on every
+// traversal, so a namespace node in seq is a different Go value than node and
+// is compared by its parent element and prefix (ixpath.SameNode). Every other
+// node is compared by pointer.
+func sequenceHasNode(seq xpath3.Sequence, node helium.Node, isNS bool) bool {
+	for item := range sequence.Items(seq) {
+		ni, ok := item.(xpath3.NodeItem)
+		if !ok {
+			continue
+		}
+		if ni.Node == node || (isNS && ixpath.SameNode(ni.Node, node)) {
+			return true
 		}
 	}
 	return false

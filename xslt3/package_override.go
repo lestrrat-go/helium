@@ -335,6 +335,9 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 
 // compileOverrideTemplate compiles a template inside xsl:override.
 func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Element, pkg *Stylesheet) (*template, error) {
+	if err := c.validateXSLTAttrs(ctx, elem, templateAllowedAttrs); err != nil {
+		return nil, err
+	}
 	defer c.pushElementVersion(elem)()
 	tmpl := &template{
 		ImportPrec:    c.importPrec,
@@ -363,9 +366,18 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 			return nil, err
 		}
 		tmpl.Match = p
+		// Defer function validation until after all xsl:function declarations are processed.
+		c.pendingPatternValidations = append(c.pendingPatternValidations, pendingPatternValidation{p, matchAttr})
 	}
 
-	tmpl.Name = resolveQName(getAttr(elem, "name"), c.nsBindings)
+	name, err := c.checkTemplateName(ctx, elem, matchAttr)
+	if err != nil {
+		return nil, err
+	}
+	tmpl.Name = name
+	if err := c.checkTemplateMode(elem); err != nil {
+		return nil, err
+	}
 	modeAttr := getAttr(elem, "mode")
 	if modeAttr != "" {
 		tmpl.Mode = c.resolveMode(ctx, modeAttr)
@@ -376,9 +388,9 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 	}
 
 	if prio := getAttr(elem, "priority"); prio != "" {
-		f, err := parseFloat(prio)
+		f, err := parseTemplatePriority(prio)
 		if err != nil {
-			return nil, staticError(errCodeXTSE0010, "invalid priority %q: %v", prio, err)
+			return nil, err
 		}
 		tmpl.Priority = f
 		tmpl.explicitPriority = true
@@ -962,10 +974,4 @@ func isStandardType(as string) bool {
 		return true
 	}
 	return false
-}
-
-func parseFloat(s string) (float64, error) {
-	var f float64
-	_, err := fmt.Sscanf(s, "%f", &f)
-	return f, err
 }

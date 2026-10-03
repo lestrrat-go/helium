@@ -15,19 +15,6 @@ type nodeIdentityKey struct {
 	isNSNode bool
 }
 
-func sameNode(a, b helium.Node) bool {
-	if a == b {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	if a.Type() != helium.NamespaceNode || b.Type() != helium.NamespaceNode {
-		return false
-	}
-	return a.Parent() == b.Parent() && a.Name() == b.Name()
-}
-
 func makeNodeIdentityKey(n helium.Node) nodeIdentityKey {
 	if n != nil && n.Type() == helium.NamespaceNode {
 		return nodeIdentityKey{

@@ -1109,6 +1109,111 @@ func TestPatternAxisPositionalPredicate(t *testing.T) {
 	}
 }
 
+// TestPatternNamespaceNodeMatch checks that each pattern form below that
+// selects namespace nodes matches exactly the namespace nodes the equivalent
+// select expression returns (XSLT 3.0 §5.5.3). The namespace axis builds fresh nodes
+// on each traversal, so the node a template is applied to is never the same Go
+// value as the one the pattern's own evaluation returns; a namespace node is
+// identified by its parent element and its prefix. The source declares a and
+// p on doc and redeclares p on r, and every element also carries the implicit
+// xml namespace. Each match is rendered as [parent:prefix=uri].
+func TestPatternNamespaceNodeMatch(t *testing.T) {
+	const srcXML = `<doc xmlns:a="urn:a" xmlns:p="urn:p"><r xmlns:p="urn:p2" xmlns:c="urn:c"/></doc>`
+	const (
+		docXML = "[doc:xml=http://www.w3.org/XML/1998/namespace]"
+		rXML   = "[r:xml=http://www.w3.org/XML/1998/namespace]"
+	)
+
+	tests := []struct {
+		name  string
+		match string
+		sel   string // the select expression equivalent to match, from the document node
+		want  string
+	}{
+		{"intersect", "namespace::*[2] intersect namespace::*",
+			"//(namespace::*[2] intersect namespace::*)", "[doc:a=urn:a][r:a=urn:a]"},
+		{"except", "namespace::* except namespace::xml", "//(namespace::* except namespace::xml)",
+			"[doc:a=urn:a][doc:p=urn:p][r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"filter", "(namespace::*)[2]", "//(namespace::*)[2]", "[doc:a=urn:a][r:a=urn:a]"},
+		{"variable", "$ns", "$ns", rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"variable filter", "$ns[. = 'urn:p2']", "$ns[. = 'urn:p2']", "[r:p=urn:p2]"},
+		{"key", "key('k', 'urn:a')", "key('k', 'urn:a')", "[doc:a=urn:a][r:a=urn:a]"},
+		{"prefix name", "namespace::p", "//*/namespace::p", "[doc:p=urn:p][r:p=urn:p2]"},
+		{"implicit xml", "namespace::xml", "//*/namespace::xml", docXML + rXML},
+		{"parent step", "r/namespace::*", "//r/namespace::*", rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"namespace-node", "namespace-node()", "//*/namespace-node()",
+			docXML + "[doc:a=urn:a][doc:p=urn:p]" + rXML + "[r:a=urn:a][r:p=urn:p2][r:c=urn:c]"},
+		{"namespace-node predicate", "namespace-node()[. = 'urn:p']", "//*/namespace-node()[. = 'urn:p']",
+			"[doc:p=urn:p]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			const show = `[<xsl:value-of select="name(..)"/>:<xsl:value-of select="name()"/>=<xsl:value-of select="."/>]`
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:key name="k" match="namespace-node()" use="."/>
+  <xsl:variable name="ns" select="//r/namespace::*"/>
+  <xsl:template match="/"><out><m><xsl:apply-templates select="//*/namespace::*"/></m>` +
+				`<s><xsl:for-each select="` + tc.sel + `">` + show + `</xsl:for-each></s></out></xsl:template>
+  <xsl:template match="` + tc.match + `" priority="1">` + show + `</xsl:template>
+  <xsl:template match="namespace-node()"/>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+			require.NoError(t, err)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "<out><m>"+tc.want+"</m><s>"+tc.want+"</s></out>", strings.TrimSpace(out))
+		})
+	}
+}
+
+// TestPatternParentlessNamespaceNodeMatch checks that parentless namespace
+// nodes, which xsl:namespace and xsl:copy-of build in a variable, keep their
+// own identity: two of them with the same prefix are different nodes, so a
+// pattern holding one of them matches only that one (XPath 3.1 §2.1.2).
+func TestPatternParentlessNamespaceNodeMatch(t *testing.T) {
+	const srcXML = `<doc xmlns:p="urn:p"><r xmlns:p="urn:p2"/></doc>`
+	tests := []struct {
+		name string
+		ns   string // the content of the namespace-node()* variable $ns
+		want string
+	}{
+		{"xsl:namespace", `<xsl:namespace name="p">urn:1</xsl:namespace><xsl:namespace name="p">urn:2</xsl:namespace>`,
+			"[p=urn:1]"},
+		{"xsl:copy-of", `<xsl:copy-of select="//*/namespace::p"/>`, "[p=urn:p]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:variable name="ns" as="namespace-node()*">` + tc.ns + `</xsl:variable>
+  <xsl:variable name="first" select="$ns[1]"/>
+  <xsl:template match="/"><out><xsl:apply-templates select="$ns"/>` +
+				`<xsl:value-of select="count($ns), $ns[1] is $ns[2]"/></out></xsl:template>
+  <xsl:template match="$first" priority="1">[<xsl:value-of select="name()"/>=<xsl:value-of select="."/>]</xsl:template>
+  <xsl:template match="namespace-node()"/>
+</xsl:stylesheet>`
+
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+			require.NoError(t, err)
+			ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+			require.NoError(t, err)
+			src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+			require.NoError(t, err)
+			out, err := ss.Transform(src).Serialize(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "<out>"+tc.want+"2 false</out>", strings.TrimSpace(out))
+		})
+	}
+}
+
 // transformStepPredicate applies a stylesheet with one template for match and
 // a match="rec" fallback to five <rec> siblings and returns the serialized
 // <out> element. The stylesheet is version="1.0" when compat is set and
@@ -1128,6 +1233,85 @@ func transformStepPredicate(t *testing.T, compat bool, match string) string {
 	const srcXML = `<doc><rec id="a" head="y" n="2"/><rec id="b" n="2"/><other/>` +
 		`<rec id="c" head="y" n="x"/><rec id="d" n="4"/><rec id="e" n="1"/></doc>`
 
+	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
+	require.NoError(t, err)
+	ss, err := xslt3.CompileStylesheet(t.Context(), doc)
+	require.NoError(t, err)
+	src, err := helium.NewParser().Parse(t.Context(), []byte(srcXML))
+	require.NoError(t, err)
+	out, err := ss.Transform(src).Serialize(t.Context())
+	require.NoError(t, err)
+	return strings.TrimSpace(out)
+}
+
+// TestPatternDoctype checks patterns on a document that has a DOCTYPE
+// declaration. XDM has no node kind for a DTD, so the DOCTYPE is not a child
+// of the document node: a positional predicate counts only the comments,
+// processing instructions and element around it. An entity reference is not
+// an XDM child of its element either. Each pattern must match exactly the
+// nodes //(pattern) selects (XSLT 3.0 §5.5.3).
+func TestPatternDoctype(t *testing.T) {
+	const onlyElem = `<!DOCTYPE r [<!ELEMENT r ANY>]><r/>`
+	const misc = `<?p1 x?><!--c1--><!DOCTYPE r [<!ELEMENT r ANY>]><!--c2--><r/><?p2 y?>`
+	const entity = `<!DOCTYPE r [<!ENTITY e "<y/>">]><r><x/>&e;<z/></r>`
+	const rLabel = "[r:]"
+
+	tests := []struct {
+		name  string
+		src   string
+		match string
+		sel   string // the select expression that returns the nodes match matches
+		want  string
+	}{
+		{"first node only element", onlyElem, "node()[1]", "//(node()[1])", rLabel},
+		{"last node only element", onlyElem, "node()[last()]", "//(node()[last()])", rLabel},
+		{"first element only element", onlyElem, "*[1]", "//(*[1])", rLabel},
+		{"any node", misc, "node()", "//(node())", "[p1:x][:c1][:c2][r:][p2:y]"},
+		{"first node", misc, "node()[1]", "//(node()[1])", "[p1:x]"},
+		{"last node", misc, "node()[last()]", "//(node()[last()])", "[p2:y]"},
+		{"third node", misc, "node()[3]", "//(node()[3])", "[:c2]"},
+		{"node position eq", misc, "node()[position() = 4]", "//(node()[position() = 4])", rLabel},
+		{"first element", misc, "*[1]", "//(*[1])", rLabel},
+		{"second comment", misc, "comment()[2]", "//(comment()[2])", "[:c2]"},
+		{"last comment", misc, "comment()[last()]", "//(comment()[last()])", "[:c2]"},
+		{"first processing instruction", misc,
+			"processing-instruction()[1]", "//(processing-instruction()[1])", "[p1:x]"},
+		{"last processing instruction", misc,
+			"processing-instruction()[last()]", "//(processing-instruction()[last()])", "[p2:y]"},
+		{"third descendant of the document", misc,
+			"document-node()/descendant::node()[3]", "/descendant::node()[3]", "[:c2]"},
+		{"fourth descendant of the document", misc,
+			"document-node()/descendant::node()[4]", "/descendant::node()[4]", rLabel},
+		{"second node after entity reference", entity, "node()[2]", "//(node()[2])", "[z:]"},
+		{"last node after entity reference", entity, "node()[last()]", "//(node()[last()])", "[r:][z:]"},
+		{"third descendant after entity reference", entity,
+			"document-node()/descendant::node()[3]", "/descendant::node()[3]", "[z:]"},
+		{"second descendant of element after entity reference", entity,
+			"r/descendant::node()[2]", "//(r/descendant::node()[2])", "[z:]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			xsltSrc := `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:output omit-xml-declaration="yes"/>
+  <xsl:template match="/"><out><m><xsl:apply-templates select="//node()"/></m>` +
+				`<s><xsl:for-each select="` + tc.sel + `">` + patternDoctypeLabel + `</xsl:for-each></s></out>` +
+				`</xsl:template>
+  <xsl:template match="` + tc.match + `">` + patternDoctypeLabel + `</xsl:template>
+  <xsl:template match="node()" priority="-5"/>
+</xsl:stylesheet>`
+			require.Equal(t, "<out><m>"+tc.want+"</m><s>"+tc.want+"</s></out>", transformDoctype(t, xsltSrc, tc.src))
+		})
+	}
+}
+
+// patternDoctypeLabel writes the context node as [name:string-value].
+const patternDoctypeLabel = `[<xsl:value-of select="name()"/>:<xsl:value-of select="."/>]`
+
+// transformDoctype compiles xsltSrc, applies it to srcXML, and returns the
+// serialized result without surrounding whitespace.
+func transformDoctype(t *testing.T, xsltSrc, srcXML string) string {
+	t.Helper()
 	doc, err := helium.NewParser().Parse(t.Context(), []byte(xsltSrc))
 	require.NoError(t, err)
 	ss, err := xslt3.CompileStylesheet(t.Context(), doc)

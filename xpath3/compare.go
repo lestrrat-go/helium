@@ -295,7 +295,7 @@ func evalNodeComparison(evalFn exprEvaluator, ctx context.Context, ec *evalConte
 	}
 	switch e.Op {
 	case TokenIs:
-		return SingleBoolean(sameNode(ln.Node, rn.Node)), nil
+		return SingleBoolean(ixpath.SameNode(ln.Node, rn.Node)), nil
 	case TokenNodePre:
 		ec.docOrder.BuildFrom(ln.Node)
 		ec.docOrder.BuildFrom(rn.Node)
