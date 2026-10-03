@@ -114,6 +114,9 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 				return err
 			}
 			if tmpl.Name != "" {
+				if err := c.claimOverrideDecl(xslElemTemplate, tmpl.Name); err != nil {
+					return err
+				}
 				oset.namedTemplates[tmpl.Name] = tmpl
 			}
 			if tmpl.Match != nil {
@@ -125,6 +128,9 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			if err != nil {
 				return err
 			}
+			if err := c.claimOverrideDecl(xslElemVariable, v.Name); err != nil {
+				return err
+			}
 			oset.variables[v.Name] = v
 
 		case xslElemParam:
@@ -132,11 +138,18 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			if err != nil {
 				return err
 			}
+			// Variables and parameters share one symbol space.
+			if err := c.claimOverrideDecl(xslElemVariable, p.Name); err != nil {
+				return err
+			}
 			oset.params[p.Name] = p
 
 		case xslElemAttributeSet:
 			as, err := c.compileOverrideAttributeSet(ctx, elem, pkg)
 			if err != nil {
+				return err
+			}
+			if err := c.claimOverrideDecl(xslElemAttributeSet, as.Name); err != nil {
 				return err
 			}
 			oset.attributeSets[as.Name] = as
@@ -148,6 +161,23 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 		}
 	}
 
+	return nil
+}
+
+// claimOverrideDecl records an xsl:override declaration of the given
+// component kind and name. XTSE3055: a declaration inside xsl:override must
+// not be homonymous with any other overriding declaration in the using
+// package, whether under the same xsl:use-package or a different one.
+func (c *compiler) claimOverrideDecl(kind, name string) error {
+	key := kind + ":" + name
+	if _, dup := c.overrideDecls[key]; dup {
+		return staticError(errCodeXTSE3055,
+			"xsl:override declares %s %q more than once in the using package", kind, name)
+	}
+	if c.overrideDecls == nil {
+		c.overrideDecls = make(map[string]struct{})
+	}
+	c.overrideDecls[key] = struct{}{}
 	return nil
 }
 

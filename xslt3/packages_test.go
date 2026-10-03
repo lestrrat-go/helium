@@ -253,3 +253,114 @@ func TestUsePackageNestedOverrideUnionRule(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, result, "<out>[union][union]</out>")
 }
+
+// overrideDuplicatesPackage exposes one public component of each kind an
+// xsl:override can replace.
+const overrideDuplicatesPackage = `<?xml version="1.0"?>
+<xsl:package name="%s" package-version="1.0" version="3.0"
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template name="t" visibility="public">[t]</xsl:template>
+  <xsl:variable name="v" select="1" visibility="public"/>
+  <xsl:param name="p" select="1"/>
+  <xsl:attribute-set name="s" visibility="public"><xsl:attribute name="x">1</xsl:attribute></xsl:attribute-set>
+</xsl:package>`
+
+// errXTSE3055 is the error code for homonymous overriding declarations.
+const errXTSE3055 = "XTSE3055"
+
+// XSLT 3.0 §3.5.3.2 (XTSE3055): a declaration inside xsl:override must not be
+// homonymous with any other overriding declaration of the using package,
+// whether both sit in the same xsl:use-package or in two of them.
+func TestOverrideDuplicateDeclarations(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		first  string
+		second string
+		// samePackage puts both overrides under one xsl:use-package; otherwise
+		// each overrides a component of its own used package.
+		samePackage bool
+		code        string
+	}{
+		{
+			name:        "distinct templates",
+			first:       `<xsl:template name="t">[1]</xsl:template>`,
+			second:      `<xsl:variable name="v" select="2"/>`,
+			samePackage: true,
+		},
+		{
+			name:        "template twice",
+			first:       `<xsl:template name="t">[1]</xsl:template>`,
+			second:      `<xsl:template name="t">[2]</xsl:template>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "variable twice",
+			first:       `<xsl:variable name="v" select="2"/>`,
+			second:      `<xsl:variable name="v" select="3"/>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "param twice",
+			first:       `<xsl:param name="p" select="2"/>`,
+			second:      `<xsl:param name="p" select="3"/>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:        "attribute set twice",
+			first:       `<xsl:attribute-set name="s"><xsl:attribute name="x">2</xsl:attribute></xsl:attribute-set>`,
+			second:      `<xsl:attribute-set name="s"><xsl:attribute name="x">3</xsl:attribute></xsl:attribute-set>`,
+			samePackage: true,
+			code:        errXTSE3055,
+		},
+		{
+			name:   "template in two used packages",
+			first:  `<xsl:template name="t">[1]</xsl:template>`,
+			second: `<xsl:template name="t">[2]</xsl:template>`,
+			code:   errXTSE3055,
+		},
+		{
+			name:   "variable in two used packages",
+			first:  `<xsl:variable name="v" select="2"/>`,
+			second: `<xsl:variable name="v" select="3"/>`,
+			code:   errXTSE3055,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var uses string
+			if tc.samePackage {
+				uses = `<xsl:use-package name="urn:p1"><xsl:override>` + tc.first + tc.second + `</xsl:override></xsl:use-package>`
+			} else {
+				uses = `<xsl:use-package name="urn:p1"><xsl:accept component="*" names="*" visibility="hidden"/>` +
+					`<xsl:override>` + tc.first + `</xsl:override></xsl:use-package>` +
+					`<xsl:use-package name="urn:p2"><xsl:accept component="*" names="*" visibility="hidden"/>` +
+					`<xsl:override>` + tc.second + `</xsl:override></xsl:use-package>`
+			}
+			using := `<?xml version="1.0"?>
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  ` + uses + `
+  <xsl:template name="xsl:initial-template"><out/></xsl:template>
+</xsl:stylesheet>`
+			doc, err := helium.NewParser().Parse(t.Context(), []byte(using))
+			require.NoError(t, err)
+
+			_, err = xslt3.NewCompiler().
+				PackageResolver(namedPackageResolver{
+					"urn:p1": fmt.Sprintf(overrideDuplicatesPackage, "urn:p1"),
+					"urn:p2": fmt.Sprintf(overrideDuplicatesPackage, "urn:p2"),
+				}).
+				Compile(t.Context(), doc)
+			if tc.code == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.code)
+		})
+	}
+}

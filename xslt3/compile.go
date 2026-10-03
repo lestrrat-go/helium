@@ -65,6 +65,7 @@ type compiler struct {
 	usedAttrSetRefs           []string                   // all use-attribute-sets names referenced (for XTSE0710)
 	outputAllowDupExplicit    map[string]bool            // per-output-name: allow-duplicate-names explicitly set (compile-time merge bookkeeping, keyed like stylesheet.outputs)
 	localTemplateNames        map[string]struct{}        // pre-scanned named templates in this module (for XTSE3055)
+	overrideDecls             map[string]struct{}        // "kind:name" of every xsl:override declaration so far (for XTSE3055)
 	localVarNames             map[string]struct{}        // pre-scanned variable names in this module (for XTSE3050)
 	localModeNames            map[string]struct{}        // pre-scanned mode names in this module (for XTSE3050)
 	// Declared visibility snapshots (before xsl:expose modification)
