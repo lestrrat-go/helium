@@ -108,9 +108,9 @@ func TestVersion11WildcardStaticEDC(t *testing.T) {
 			t.Parallel()
 			require.ErrorIs(t, compileV(t, xsd.NewCompiler().Version(xsd.Version11), schema), xsd.ErrCompilationFailed)
 		})
-		t.Run("1.0 ignores "+name, func(t *testing.T) {
+		t.Run("1.0 rejects the xs:alternative in "+name, func(t *testing.T) {
 			t.Parallel()
-			require.NoError(t, compileV(t, xsd.NewCompiler().Version(xsd.Version10), schema))
+			require.ErrorIs(t, compileV(t, xsd.NewCompiler().Version(xsd.Version10), schema), xsd.ErrCompilationFailed)
 		})
 	}
 

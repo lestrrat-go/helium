@@ -12,7 +12,7 @@ import (
 )
 
 // TestVersion11Assert covers XSD 1.1 xs:assert on a complex type: the assertion
-// is evaluated in 1.1, ignored in 1.0, and a malformed test expression is a
+// is evaluated in 1.1, rejected in 1.0, and a malformed test expression is a
 // compile error in 1.1.
 func TestVersion11Assert(t *testing.T) {
 	const schemaXML = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -52,12 +52,11 @@ func TestVersion11Assert(t *testing.T) {
 		require.ErrorIs(t, validate(t, schema, `<range min="5" max="1"/>`), xsd.ErrValidationFailed)
 	})
 
-	t.Run("1.0 ignores xs:assert", func(t *testing.T) {
+	t.Run("1.0 rejects xs:assert", func(t *testing.T) {
 		t.Parallel()
-		schema, err := compile(t, xsd.NewCompiler(), schemaXML)
-		require.NoError(t, err)
-		// The assert would fail, but 1.0 does not enforce it.
-		require.NoError(t, validate(t, schema, `<range min="5" max="1"/>`))
+		// xs:assert is not part of the XSD 1.0 complexType representation.
+		_, err := compile(t, xsd.NewCompiler(), schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 
 	t.Run("1.1 malformed assert XPath is a compile error", func(t *testing.T) {

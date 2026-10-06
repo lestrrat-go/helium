@@ -455,14 +455,13 @@ func (c *compiler) parseComplexType(ctx context.Context, elem *helium.Element, l
 			annotationSeen = true
 		default:
 			// XSD 3.4.2: the direct complexType content model admits only annotation,
-			// simpleContent, complexContent, openContent, a model-group particle
-			// (group|all|sequence|choice), attribute, attributeGroup, anyAttribute, and
-			// assert. Any other child is a schema error (1.1 only — the assert/openContent
-			// cases above are also 1.1-gated, so in 1.0 they reach here and must stay
-			// tolerated; 1.0 keeps its lenient byte-identical behavior).
-			if c.version == Version11 {
-				reportExtraContent(ce, fmt.Sprintf("The element '%s' is not allowed as a child of a 'complexType'.", ce.LocalName()))
-			}
+			// simpleContent, complexContent, a model-group particle
+			// (group|all|sequence|choice), attribute, attributeGroup and anyAttribute,
+			// plus openContent and assert in 1.1. Any other child is a schema error in
+			// both versions. The assert/openContent cases above are 1.1-gated, so in 1.0
+			// they reach here and are reported (1.0 §2.4 requires the §3 XML
+			// representation, which has neither element).
+			reportExtraContent(ce, fmt.Sprintf("The element '%s' is not allowed as a child of a 'complexType'.", ce.LocalName()))
 		}
 	}
 

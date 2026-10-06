@@ -10,7 +10,7 @@ import (
 
 // TestVersion11ConditionalTypeAssignment covers XSD 1.1 xs:alternative: the
 // governing type is chosen by the first matching @test, falling back to the
-// declared type when none match; xsi:type takes precedence; 1.0 ignores it.
+// declared type when none match; xsi:type takes precedence; 1.0 rejects it.
 func TestVersion11ConditionalTypeAssignment(t *testing.T) {
 	// Per XSD 1.1 every alternative's type must be validly derived from the
 	// element's declared type (or xs:error). Holder is the declared type and
@@ -87,12 +87,11 @@ func TestVersion11ConditionalTypeAssignment(t *testing.T) {
 		require.NoError(t, validate(t, v11(t), instance))
 	})
 
-	t.Run("1.0 ignores xs:alternative (always declared Holder)", func(t *testing.T) {
+	t.Run("1.0 rejects xs:alternative", func(t *testing.T) {
 		t.Parallel()
-		schema, err := compile(t, xsd.NewCompiler(), schemaXML)
-		require.NoError(t, err)
-		// kind=pos would select PosHolder in 1.1 (rejecting -5), but 1.0 uses Holder.
-		require.NoError(t, validate(t, schema, `<root kind="pos" value="-5"/>`))
+		// xs:alternative is not part of the XSD 1.0 element representation.
+		_, err := compile(t, xsd.NewCompiler(), schemaXML)
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 
 	t.Run("1.1 malformed alternative test is a compile error", func(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 )
 
 // TestVersion11OpenContent covers XSD 1.1 xs:openContent in interleave and
-// suffix modes, and that 1.0 ignores it.
+// suffix modes, and that 1.0 rejects it.
 func TestVersion11OpenContent(t *testing.T) {
 	schemaFor := func(mode string) string {
 		return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -71,10 +71,10 @@ func TestVersion11OpenContent(t *testing.T) {
 		require.ErrorIs(t, validate(t, s, `<root><a>1</a><x/><b>2</b></root>`), xsd.ErrValidationFailed)
 	})
 
-	t.Run("1.0 ignores openContent (extra element rejected)", func(t *testing.T) {
+	t.Run("1.0 rejects xs:openContent", func(t *testing.T) {
 		t.Parallel()
-		schema, err := compile(t, xsd.NewCompiler(), schemaFor("interleave"))
-		require.NoError(t, err)
-		require.ErrorIs(t, validate(t, schema, `<root><a>1</a><x/><b>2</b></root>`), xsd.ErrValidationFailed)
+		// xs:openContent is not part of the XSD 1.0 complexType representation.
+		_, err := compile(t, xsd.NewCompiler(), schemaFor("interleave"))
+		require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 	})
 }

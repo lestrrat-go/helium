@@ -296,9 +296,10 @@ func TestComplexContent_MixedHandling(t *testing.T) {
 	})
 }
 
-// TestDefaultOpenContent_XSD10Ignored confirms <xs:defaultOpenContent> has no
-// effect under the default XSD 1.0 semantics: a non-declared child is rejected.
-func TestDefaultOpenContent_XSD10Ignored(t *testing.T) {
+// TestDefaultOpenContent_XSD10Rejected confirms a top-level
+// <xs:defaultOpenContent> is a schema error under the default XSD 1.0 semantics,
+// whose xs:schema representation has no such child.
+func TestDefaultOpenContent_XSD10Rejected(t *testing.T) {
 	t.Parallel()
 	const schema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:defaultOpenContent mode="suffix">
@@ -308,12 +309,6 @@ func TestDefaultOpenContent_XSD10Ignored(t *testing.T) {
     <xs:complexType><xs:sequence><xs:element name="a"/></xs:sequence></xs:complexType>
   </xs:element>
 </xs:schema>`
-	s10, err := compileV10(t, schema)
-	require.NoError(t, err)
-	require.NotNil(t, s10)
-	idoc, perr := helium.NewParser().Parse(t.Context(),
-		[]byte(`<doc><a/><extra xmlns="http://open.com/"/></doc>`))
-	require.NoError(t, perr)
-	require.Error(t, xsd.NewValidator(s10).Validate(t.Context(), idoc),
-		"XSD 1.0 must ignore defaultOpenContent and reject the extra child")
+	_, err := compileV10(t, schema)
+	require.Error(t, err)
 }
