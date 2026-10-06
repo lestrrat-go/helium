@@ -1943,16 +1943,22 @@ func (vc *validationContext) collectExpandedChildElements(elem *helium.Element, 
 // the type's attribute declarations. In XSD 1.1 the XML-namespace
 // attributes (xml:lang/space/base/id) are NOT implicitly allowed: they are
 // subject to ordinary attribute-use and wildcard matching, so a wildcard's
-// @notQName can legitimately exclude e.g. xml:space. Only xmlns and the xsi:
+// @notQName can legitimately exclude e.g. xml:space. Only xmlns and the four xsi:
 // processor attributes remain unconditionally special. In 1.0 the historical
 // lenient behavior (XML namespace always allowed) is preserved.
+//
+// Only xsi:type, xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation
+// are exempt (cvc-complex-type clause 3 in 1.0 §3.4.4, clause 2 in 1.1
+// §3.4.4.2). Any other attribute in the xsi namespace (e.g. xsi:bogus) is an
+// ordinary attribute: it must be admitted by an attribute wildcard or it is not
+// allowed.
 func (vc *validationContext) isSpecialAttr(a *helium.Attribute) bool {
 	p := a.Prefix()
 	if p == "xmlns" || (p == "" && a.LocalName() == "xmlns") {
 		return true
 	}
 	if a.URI() == lexicon.NamespaceXSI {
-		return true
+		return isKnownXsiProcessorAttr(a.LocalName())
 	}
 	if vc.version != Version11 && a.URI() == lexicon.NamespaceXML {
 		return true
@@ -2299,7 +2305,7 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 
 	if len(td.Attributes) == 0 && td.AnyAttribute == nil {
 		// No attribute declarations — check that instance has no attributes
-		// (except xsi: namespace attributes and xmlns which are always allowed).
+		// (except the xsi: processor attributes and xmlns, which are always allowed).
 		for a := range helium.Attributes(elem) {
 			if vc.isSpecialAttr(a) {
 				continue
@@ -2340,6 +2346,12 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 	for a := range helium.Attributes(elem) {
 		aqn := QName{Local: a.LocalName(), NS: a.URI()}
 		decl, declared := idx.byName[aqn]
+		if declared && a.URI() == lexicon.NamespaceXSI && !isKnownXsiProcessorAttr(a.LocalName()) {
+			// A ref to a non-standard xsi: name (e.g. ref="xsi:foo") declares no
+			// real attribute, so a present xsi:foo neither satisfies it nor is
+			// allowed by it; only an attribute wildcard can admit it.
+			decl, declared = attrUseEntry{}, false
+		}
 		// True for a present, non-prohibited DECLARED xsi: processor-attribute use
 		// whose value was already validated by validateDeclaredXsiAttrValue below —
 		// so the generic type-based value check is skipped (no double validation);
@@ -2361,8 +2373,8 @@ func (vc *validationContext) validateAttributes(ctx context.Context, elem *heliu
 			declaredUse := allowedXSI || decl.prohibited
 			// XSD 1.1: only the four real xsi: processor attributes participate; a
 			// declared ref to any other xsi: local name (e.g. xsi:foo) is not
-			// specially accepted — it stays skipped as special, so a required use of
-			// it is never satisfied (the instance is rejected as missing).
+			// special and was dropped from the lookup above, so a required use of it
+			// is never satisfied (the instance is rejected as missing).
 			declaredXSI := vc.version == Version11 && a.URI() == lexicon.NamespaceXSI && declaredUse && isKnownXsiProcessorAttr(a.LocalName())
 			// XSD 1.0: an XML-namespace attribute (xml:base/xml:lang/xml:space/xml:id)
 			// is otherwise skipped as always-allowed, but when EXPLICITLY declared as

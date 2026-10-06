@@ -1954,9 +1954,11 @@ func (c *compiler) checkAttributeResolution(ctx context.Context) {
 		}
 		// A ref into the reserved XSI namespace never resolves to a user-declared
 		// global attribute (a schema may not declare an attribute there): the four
-		// processor attributes are provided implicitly, and any other xsi: local name
-		// is tolerated as a skipped special attribute (a required use of it is instead
-		// left unsatisfied at instance validation). Exempt the whole namespace so
+		// processor attributes are provided implicitly. A ref to any other xsi: local
+		// name is accepted here too, although QName resolution (Schema Document)
+		// clause 1 makes it unresolvable; validateAttributes drops such a use from the
+		// attribute-use lookup, so a present attribute of that name needs a wildcard
+		// and a required use of it is never satisfied. Exempt the whole namespace so
 		// neither form is reported as an unresolvable ref.
 		// The XSI namespace is reserved to the four processor attributes and the XML
 		// namespace provides the built-in xml:lang/base/space/id attributes, which are

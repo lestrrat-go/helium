@@ -11,7 +11,8 @@
   being skipped — a present xsi:type satisfies a required use, absence reports missing, and `use="prohibited"`
   REJECTS a present xsi:type (detected via both allowed and prohibited use maps). Applies ONLY to the four
   real processor attributes (`isKnownXsiProcessorAttr`); a declared ref to any other xsi: local name (xsi:foo)
-  stays skipped so a required use is never satisfied. A present non-prohibited use validates its value against
+  is dropped from the attribute-use lookup, so a required use is never satisfied and a present xsi:foo needs a
+  wildcard. A present non-prohibited use validates its value against
   the fixed built-in type (`validateDeclaredXsiAttrValue`: xsi:type→non-empty namespace-resolvable xs:QName;
   xsi:nil→xs:boolean; xsi:schemaLocation→non-empty even list of xs:anyURI tokenized via `value.XSDFields`,
   NBSP not a separator; xsi:noNamespaceSchemaLocation→xs:anyURI), since `ref="xsi:*"` resolves to no typed
@@ -31,6 +32,12 @@
   `fixedValueMatches`), so `" urn:a loc.xsd "` satisfies `fixed="urn:a loc.xsd"`. (anyURI lexical space is
   unrestricted, so the per-token check never fails; even/non-empty is the only reachable literal-validity
   constraint.) Undeclared/implicit xsi processing unchanged — Saxon Complex complex009/complex010.
+- **xsi: exemption is the four processor attributes only** (`validate.go` `isSpecialAttr`, version-INDEPENDENT):
+  only xsi:type/xsi:nil/xsi:schemaLocation/xsi:noNamespaceSchemaLocation skip attribute-use matching
+  (cvc-complex-type clause 3 in 1.0 §3.4.4, clause 2 in 1.1 §3.4.4.2). Any other xsi-namespace attribute
+  (xsi:bogus) is ordinary: rejected "is not allowed" without a wildcard, admitted by a lax wildcard, and
+  rejected by a strict wildcard (no declaration can exist, §3.2.6 xsi: Not Allowed). Tests:
+  `xsd/validate_xsi_attrs_test.go`.
 - **prohibited-attribute / special-attribute vs wildcard fallthrough** (`validate.go` `validateAttributes`,
   version-specific): an instance attribute matching a `use="prohibited"` declared use is rejected OUTRIGHT
   (never re-admitted by `<xs:anyAttribute>`) only in XSD 1.1, which retains the prohibited use in `{attribute
