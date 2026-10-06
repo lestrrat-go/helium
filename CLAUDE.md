@@ -48,8 +48,9 @@ file/function, spec clause, version gating, W3C test evidence, and remaining gap
 
 Do NOT enforce 1.1-only clauses in the 1.0/default path — 1.0 must stay byte-identical to origin. The one exception is
 syntax: an element only XSD 1.1 defines (xs:assert, xs:openContent, xs:defaultOpenContent, xs:override,
-xs:alternative) is a schema error in 1.0, because the 1.0 XML representation has no such element (see
-`xsd11-representation.md`).
+xs:alternative), or an attribute only XSD 1.1 defines on a 1.0 element (e.g. notNamespace, notQName,
+defaultAttributes, xpathDefaultNamespace), is a schema error in 1.0, because the 1.0 XML representation has no such
+element or attribute (see `xsd11-representation.md`).
 
 ## Schematron — Query Binding
 
