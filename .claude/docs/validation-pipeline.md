@@ -1549,8 +1549,8 @@ mode, three construct classes valid in XPath but forbidden in XSD: reluctant
 escape outside the Part 2 escape productions (1.0 [24]/[25]/[26]/[37], 1.1
 [84]/[85]/[86]/[97], the same set): only `\n \r \t \\ \| \. \? \* \+ \( \) \{ \}
 \- \[ \] \^`, `\s \S \i \I \c \C \d \D \w \W` and `\p{…}`/`\P{…}` compile, inside
-or outside a character class, so `a\/b`, `\$` and `[\:]` are FORX0002 schema
-errors. Both checks are scoped to the Compile path because the XPath flavor
+or outside a character class, so `a\/b`, `\$`, `[\:]` and the brace-less `\pL`
+are FORX0002 schema errors. Both checks are scoped to the Compile path because the XPath flavor
 `xpath3` shares (`fn:matches`/`tokenize`/`replace`) legitimately permits
 reluctant quantifiers, `(?:…)` and `\$`. In 1.0 mode only, `rejectXSD10CharClassRanges`
 also rejects a range operator after a completed range (`[^a-d-b-c]`).

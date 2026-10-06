@@ -1429,7 +1429,9 @@ func rejectNonXSDConstructs(pattern string) error {
 // escapes \s \S \i \I \c \C \d \D \w \W, and the category escapes \p{...} and
 // \P{...}. RE2 accepts any escaped punctuation, so without this check a pattern
 // such as 'a\/b' or 'a\$' compiled and matched the escaped character as a
-// literal. The rule applies inside and outside character classes. It runs ONLY
+// literal. A \p or \P must open a '{...}' group (catEsc/complEsc), so the
+// one-letter RE2 form '\pL' is rejected too. The rule applies inside and outside
+// character classes. It runs ONLY
 // on the XSD Compile path: the XPath flavor used by xpath3 (Translate/Validate)
 // additionally allows '\$'.
 func rejectNonXSDEscapes(pattern string) error {
@@ -1443,6 +1445,12 @@ func rejectNonXSDEscapes(pattern string) error {
 			return &regexError{
 				Code:    errCodeFORX0002,
 				Message: fmt.Sprintf("'\\%c' is not a valid escape in XML Schema regular expressions", runes[i+1]),
+			}
+		}
+		if i+1 < len(runes) && (runes[i+1] == 'p' || runes[i+1] == 'P') && (i+2 >= len(runes) || runes[i+2] != '{') {
+			return &regexError{
+				Code:    errCodeFORX0002,
+				Message: fmt.Sprintf("'\\%c' must be followed by '{' in XML Schema regular expressions", runes[i+1]),
 			}
 		}
 		i = skipRegexEsc(runes, i)

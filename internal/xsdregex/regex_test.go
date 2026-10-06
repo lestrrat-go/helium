@@ -456,6 +456,7 @@ func TestCompileRejectsNonXSDEscapes(t *testing.T) {
 	invalid := []string{
 		`a\/b`, `[a\/b]`, `\$`, `[\$]`, `a\:b`, `\#`, `\!`, `\"`, `\'`, `\=`, `\,`,
 		`\&`, `\<`, `\>`, `\@`, `\%`, `\~`, `\_`, `\e`, `\a`, `\f`, `\v`, `[\1]`,
+		`\pL`, `\PL`, `[\pL]`, `a\pLu`,
 	}
 	for _, p := range invalid {
 		for _, xsd11 := range []bool{false, true} {
