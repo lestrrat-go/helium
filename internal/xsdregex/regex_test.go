@@ -446,3 +446,36 @@ func TestNormalizeBackrefsPastInt32(t *testing.T) {
 	require.Equal(t, `(a)\42949672971`, xsdregex.NormalizeBackrefs(`(a)\42949672971`))
 	require.Equal(t, `(a)(?:\1)2`, xsdregex.NormalizeBackrefs(`(a)\12`))
 }
+
+// TestCompileRejectsNonXSDEscapes verifies that the XSD Compile path accepts
+// only the escapes the XML Schema regex grammar defines (Part 2, Appendix F in
+// 1.0, Appendix G in 1.1): RE2 accepts any escaped punctuation, but '\/', '\$',
+// '\:' and the like are not XSD escapes, inside or outside a character class.
+// xmllint rejects them too. The XPath flavor keeps accepting '\$'.
+func TestCompileRejectsNonXSDEscapes(t *testing.T) {
+	invalid := []string{
+		`a\/b`, `[a\/b]`, `\$`, `[\$]`, `a\:b`, `\#`, `\!`, `\"`, `\'`, `\=`, `\,`,
+		`\&`, `\<`, `\>`, `\@`, `\%`, `\~`, `\_`, `\e`, `\a`, `\f`, `\v`, `[\1]`,
+		`\pL`, `\PL`, `[\pL]`, `a\pLu`,
+	}
+	for _, p := range invalid {
+		for _, xsd11 := range []bool{false, true} {
+			_, err := xsdregex.CompileVersion(p, xsd11)
+			require.Errorf(t, err, "XSD Compile (xsd11=%v) must reject non-XSD escape in %q", xsd11, p)
+		}
+	}
+
+	valid := []string{
+		`\n\r\t\\\|\.\?\*\+\(\)\{\}\-\[\]\^`,
+		`[\n\r\t\\\|\.\?\*\+\(\)\{\}\-\[\]\^]`,
+		`\s\S\i\I\c\C\d\D\w\W`, `[\s\d\w]+`, `\p{L}\P{Nd}\p{IsBasicLatin}`, `[\p{L}-[\p{Lu}]]`,
+	}
+	for _, p := range valid {
+		for _, xsd11 := range []bool{false, true} {
+			_, err := xsdregex.CompileVersion(p, xsd11)
+			require.NoErrorf(t, err, "XSD Compile (xsd11=%v) must accept XSD escapes in %q", xsd11, p)
+		}
+	}
+
+	require.NoError(t, xsdregex.Validate(`a\$`, false), "the XPath flavor keeps '\\$'")
+}

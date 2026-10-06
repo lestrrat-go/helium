@@ -1545,10 +1545,15 @@ run an extra `rejectNonXSDConstructs` pass that rejects, in BOTH 1.0 and 1.1
 mode, three construct classes valid in XPath but forbidden in XSD: reluctant
 (non-greedy) quantifiers (`a*?`, `b{1,3}?`), `(?...)` group extensions
 (non-capturing `(?:…)` and inline flags), and unbalanced parentheses
-(`)(`, `(abc`, `abc)`). The check is scoped to the Compile path because the
-XPath flavor `xpath3` shares (`fn:matches`/`tokenize`/`replace`) legitimately
-permits reluctant quantifiers and `(?:…)`. Stray-hyphen character-class ranges
-(`[^a-d-b-c]`) are a known remaining false-accept, deferred.
+(`)(`, `(abc`, `abc)`). A second pass, `rejectNonXSDEscapes`, rejects any `\`
+escape outside the Part 2 escape productions (1.0 [24]/[25]/[26]/[37], 1.1
+[84]/[85]/[86]/[97], the same set): only `\n \r \t \\ \| \. \? \* \+ \( \) \{ \}
+\- \[ \] \^`, `\s \S \i \I \c \C \d \D \w \W` and `\p{…}`/`\P{…}` compile, inside
+or outside a character class, so `a\/b`, `\$`, `[\:]` and the brace-less `\pL`
+are FORX0002 schema errors. Both checks are scoped to the Compile path because the XPath flavor
+`xpath3` shares (`fn:matches`/`tokenize`/`replace`) legitimately permits
+reluctant quantifiers, `(?:…)` and `\$`. In 1.0 mode only, `rejectXSD10CharClassRanges`
+also rejects a range operator after a completed range (`[^a-d-b-c]`).
 
 **Compile-time IDC checks:** a malformed `xs:selector`/`xs:field` `@xpath` is a fatal schema parser error
 (`parseIDConstraint` → `reportIDCXPathError`). The quoted source uses `lexer.DiagnosticExcerpt`, so the

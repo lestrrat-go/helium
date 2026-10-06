@@ -1422,6 +1422,54 @@ func rejectNonXSDConstructs(pattern string) error {
 	return nil
 }
 
+// rejectNonXSDEscapes rejects a '\' escape whose character is not one the XML
+// Schema regex grammar defines (XML Schema Part 2, Appendix F in 1.0 and
+// Appendix G in 1.1, the same set in both): the single-character escapes
+// \n \r \t \\ \| \. \? \* \+ \( \) \{ \} \- \[ \] \^, the multi-character
+// escapes \s \S \i \I \c \C \d \D \w \W, and the category escapes \p{...} and
+// \P{...}. RE2 accepts any escaped punctuation, so without this check a pattern
+// such as 'a\/b' or 'a\$' compiled and matched the escaped character as a
+// literal. A \p or \P must open a '{...}' group (catEsc/complEsc), so the
+// one-letter RE2 form '\pL' is rejected too. The rule applies inside and outside
+// character classes. It runs ONLY
+// on the XSD Compile path: the XPath flavor used by xpath3 (Translate/Validate)
+// additionally allows '\$'.
+func rejectNonXSDEscapes(pattern string) error {
+	runes := []rune(pattern)
+	for i := 0; i < len(runes); {
+		if runes[i] != '\\' {
+			i++
+			continue
+		}
+		if i+1 < len(runes) && !isXSDEscapeChar(runes[i+1]) {
+			return &regexError{
+				Code:    errCodeFORX0002,
+				Message: fmt.Sprintf("'\\%c' is not a valid escape in XML Schema regular expressions", runes[i+1]),
+			}
+		}
+		if i+1 < len(runes) && (runes[i+1] == 'p' || runes[i+1] == 'P') && (i+2 >= len(runes) || runes[i+2] != '{') {
+			return &regexError{
+				Code:    errCodeFORX0002,
+				Message: fmt.Sprintf("'\\%c' must be followed by '{' in XML Schema regular expressions", runes[i+1]),
+			}
+		}
+		i = skipRegexEsc(runes, i)
+	}
+	return nil
+}
+
+// isXSDEscapeChar reports whether c may follow '\' in an XML Schema regular
+// expression (SingleCharEsc, MultiCharEsc, or the \p/\P category escapes).
+func isXSDEscapeChar(c rune) bool {
+	switch c {
+	case 'n', 'r', 't', '\\', '|', '.', '?', '*', '+', '(', ')', '{', '}', '-', '[', ']', '^',
+		's', 'S', 'i', 'I', 'c', 'C', 'd', 'D', 'w', 'W', 'p', 'P':
+		return true
+	default:
+		return false
+	}
+}
+
 // rejectXSD10CharClassRanges rejects a character-class range operator '-' that
 // has no available left endpoint because the immediately-preceding atom was
 // already consumed as the END of a preceding range — e.g. '[a-d-b-c]' (a-d is a
@@ -1683,6 +1731,9 @@ func compilePattern(pattern string, xsd11 bool) (*Regexp, error) {
 	// xpath3's Translate/Validate keep the XPath semantics. relaxng compiles
 	// via Compile, so it is intentionally subject to this rejection too.
 	if err := rejectNonXSDConstructs(pattern); err != nil {
+		return nil, err
+	}
+	if err := rejectNonXSDEscapes(pattern); err != nil {
 		return nil, err
 	}
 	// The XSD 1.0 charRange grammar (Part 2, Appendix F) forbids a mid-group
