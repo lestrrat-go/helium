@@ -495,10 +495,18 @@
   uses the 5th-edition NameChar (W3C regex test reZ006i / bug 13606). Only xpath3's `Translate`/`Validate`
   (`xsdPattern=false`) keeps the U+0346-carved `\c` range. The `\p{Is...}` FORX0002 rejection stays
   version-gated: XSD 1.0 (`Compile`, xsd11=false) keeps it.
+- **1.1-only elements are schema errors in 1.0** (1.0 §2.4 requires the §3 XML representations, which have none
+  of them; xmllint rejects each): a direct `<xs:complexType>` child `<xs:assert>`/`<xs:openContent>`
+  (`read_types.go` stray-child default), a top-level `<xs:override>`/`<xs:defaultOpenContent>`
+  (`compile.go` `isTopLevelSchemaElement(localName, version)`), and an `<xs:element>` child `<xs:alternative>`
+  (`check_elements.go` `checkElementContentOrder`). Derivation bodies already report assert/openContent in 1.0
+  as stray children. Conditional inclusion runs first, so a 1.1 element marked `vc:minVersion="1.1"` is
+  removed before these checks and the schema compiles in 1.0. Tests:
+  `xsd/version10_rejects_11_elements_test.go`.
 - **xs:override** (`override.go`, §4.2.5/§F): WHOLESALE replacement of any top-level component —
   element/attribute/simpleType/complexType/group/attributeGroup/notation — in the referenced document by an
   xs:override child of the same (expanded-name, symbol space); simpleType and complexType share ONE
-  type-definition symbol space (over013). Gated to Version11; 1.0 ignores xs:override entirely.
+  type-definition symbol space (over013). Gated to Version11; in 1.0 a top-level xs:override is a schema error.
   - An override child matching NOTHING in the referenced closure is DROPPED, not added (a dangling reference
     to it is an error — over026; conformance-verified, NOT the literal §4.2.5 "add all children" reading —
     registering unmatched children makes over026 the only failing case); a matched component is SUPPRESSED

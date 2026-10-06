@@ -321,11 +321,11 @@ func TestComplexTypeDirectStrayChild(t *testing.T) {
 		require.Error(t, cerr)
 	})
 
-	t.Run("XSD 1.0 tolerates a stray child under complexType", func(t *testing.T) {
+	t.Run("a stray child under complexType is an error in both versions", func(t *testing.T) {
 		t.Parallel()
 		schema := wrap(`    <xs:element name="x" type="xs:string"/>`)
 		_, v10err := compileV10(t, schema)
-		require.NoError(t, v10err, "1.0 keeps its lenient behavior (byte-identity)")
+		require.Error(t, v10err)
 		_, _, v11err := compileV11(t, schema)
 		require.Error(t, v11err)
 	})
@@ -437,11 +437,10 @@ func TestComplexTypeWrapperAssertExclusivity(t *testing.T) {
 		require.NoError(t, cerr)
 	})
 
-	t.Run("XSD 1.0 tolerates assert beside a wrapper (assert ignored)", func(t *testing.T) {
+	t.Run("XSD 1.0 rejects assert beside a wrapper", func(t *testing.T) {
 		t.Parallel()
-		// In 1.0 xs:assert is not a recognized complexType child, so it is ignored and
-		// the wrapper alone governs — byte-identical to origin.
+		// In 1.0 xs:assert is not a complexType child at all.
 		_, v10err := compileV10(t, wrap(cc+"\n"+assertChild))
-		require.NoError(t, v10err)
+		require.Error(t, v10err)
 	})
 }

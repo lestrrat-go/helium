@@ -1433,7 +1433,7 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 			// compositor (sequence/choice/all) or derivation (extension/restriction)
 			// element that can only appear nested — is a schema-representation error
 			// (W3C mgP059-mgP062). Foreign-namespace children are ignored.
-			if elem.URI() == lexicon.NamespaceXSD && c.filename != "" && !isTopLevelSchemaElement(elem.LocalName()) {
+			if elem.URI() == lexicon.NamespaceXSD && c.filename != "" && !isTopLevelSchemaElement(elem.LocalName(), c.version) {
 				c.schemaError(ctx, schemaParserError(c.diagSource(), elem.Line(), elem.LocalName(), elem.LocalName(),
 					"Element '{"+lexicon.NamespaceXSD+"}"+elem.LocalName()+"' is not allowed as a child of the schema element."))
 			}
@@ -1447,10 +1447,14 @@ func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element
 // simpleType/group/attributeGroup/attribute/notation) are dispatched by the
 // parseSchemaChildren switch; the composition/annotation elements below are
 // handled in earlier phases, so both sets are legitimate top-level children.
-func isTopLevelSchemaElement(localName string) bool {
+// override and defaultOpenContent exist only in XSD 1.1, so a 1.0 schema that
+// carries one is reported (§3.15.2 in 1.0 lists neither).
+func isTopLevelSchemaElement(localName string, version Version) bool {
 	switch localName {
-	case elemAnnotation, elemInclude, elemImport, elemRedefine, elemOverride, elemDefaultOpenContent:
+	case elemAnnotation, elemInclude, elemImport, elemRedefine:
 		return true
+	case elemOverride, elemDefaultOpenContent:
+		return version == Version11
 	default:
 		return false
 	}

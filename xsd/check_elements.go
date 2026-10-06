@@ -295,11 +295,11 @@ func (c *compiler) checkElementAttrVocabulary(ctx context.Context, elem *helium.
 // grammar order, so an <xs:annotation> may not follow any content child, and a
 // type definition (<simpleType>/<complexType>) may not follow an <alternative>
 // or an identity constraint (<unique>/<key>/<keyref>). This is
-// version-INDEPENDENT: the ordering is identical in every XSD version (in 1.0
-// <alternative> is simply absent). It also enforces the CLOSED vocabulary: an
-// XSD-namespace child outside {annotation, simpleType, complexType, alternative,
-// unique, key, keyref} (e.g. a compositor, <xs:attribute>, or <xs:group> ref) is
-// a schema-representation error. Foreign-namespace children are ignored. The
+// version-INDEPENDENT: the ordering is identical in every XSD version. It also
+// enforces the CLOSED vocabulary: an XSD-namespace child outside {annotation,
+// simpleType, complexType, alternative, unique, key, keyref} (e.g. a compositor,
+// <xs:attribute>, or <xs:group> ref) is a schema-representation error, and so is
+// <alternative> in 1.0, whose §3.3.2 representation has no such child. Foreign-namespace children are ignored. The
 // at-most-one-annotation and at-most-one-type cardinality rules, and the
 // annotation's own content model, are enforced separately.
 func (c *compiler) checkElementContentOrder(ctx context.Context, elem *helium.Element) {
@@ -316,12 +316,13 @@ func (c *compiler) checkElementContentOrder(ctx context.Context, elem *helium.El
 			continue
 		}
 		ord, ok := elementContentOrdinal(ce)
-		if !ok {
+		if !ok || (c.version != Version11 && isXSDElement(ce, elemAlternative)) {
 			// The xs:element content model is a CLOSED vocabulary — any other
 			// XSD-namespace child (a compositor like <xs:sequence>, an <xs:attribute>,
 			// an <xs:group> reference, …) can only appear nested and is a
-			// schema-representation error here (W3C attQ002 / groupO024). Foreign-
-			// namespace children are ignored. Version-INDEPENDENT.
+			// schema-representation error here (W3C attQ002 / groupO024). In 1.0
+			// <alternative> is outside the vocabulary too. Foreign-namespace children
+			// are ignored.
 			c.schemaError(ctx, schemaParserError(c.diagSource(), ce.Line(), ce.LocalName(), "element",
 				"Element '{"+lexicon.NamespaceXSD+"}"+ce.LocalName()+"' is not allowed as a child of the element declaration."))
 			continue

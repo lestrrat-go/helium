@@ -257,10 +257,11 @@
       (`isSimpleTypeFacetElement`). openContent/assert body cases stay Version11-gated (in 1.0 an
       `<xs:openContent>`/`<xs:assert>` in a body is a stray child).
     - DIRECT `<xs:complexType>` child grammar enforces the ANNOTATION rule version-INDEPENDENTLY (at most one,
-      must be FIRST child). Its stray-rejecting default (only annotation, simpleContent, complexContent,
-      openContent, a model-group particle (group|all|sequence|choice), attribute, attributeGroup,
-      anyAttribute, assert — else schema error, e.g. a direct `<xs:element>`) stays Version11-gated (1.0 keeps
-      prior lenient default). A schema-level xs:defaultOpenContent must FOLLOW the composition elements
+      must be FIRST child). Its stray-rejecting default (only annotation, simpleContent, complexContent, a
+      model-group particle (group|all|sequence|choice), attribute, attributeGroup, anyAttribute, plus
+      openContent and assert in 1.1 — else schema error, e.g. a direct `<xs:element>`) runs in BOTH versions;
+      in 1.0 a direct `<xs:openContent>`/`<xs:assert>` is a stray child (1.0 §2.4 requires the §3
+      representation, which has neither; xmllint rejects it too). A schema-level xs:defaultOpenContent must FOLLOW the composition elements
       (include/import/redefine/override). `<xs:complexContent>`/@mixed honored version-INDEPENDENTLY, must not
       conflict with `<xs:complexType>`/@mixed, and an extension's content type and its base's must both be
       mixed or both element-only (§3.4.6.2 cos-ct-extends). A global `<xs:complexType>`/@name must be a valid

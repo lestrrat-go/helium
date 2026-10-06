@@ -268,10 +268,10 @@ func TestVersion11CTAStaticErrors(t *testing.T) {
 	})
 }
 
-// TestVersion11CTAStaticIsXSD10ByteIdentical confirms the new CTA static checks
-// are gated on XSD 1.1: in 1.0 an xs:alternative is ignored entirely, so a schema
-// that would trip a 1.1 CTA static error still compiles.
-func TestVersion11CTAStaticIsXSD10ByteIdentical(t *testing.T) {
+// TestVersion11CTAStaticXSD10RejectsAlternative confirms that 1.0 reports the
+// xs:alternative itself, which the XSD 1.0 element representation does not
+// allow, for a schema that would also trip a 1.1 CTA static error.
+func TestVersion11CTAStaticXSD10RejectsAlternative(t *testing.T) {
 	src := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="base"><xs:simpleContent><xs:extension base="xs:string">
     <xs:attribute name="kind" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>
@@ -284,7 +284,7 @@ func TestVersion11CTAStaticIsXSD10ByteIdentical(t *testing.T) {
 	doc, perr := helium.NewParser().Parse(t.Context(), []byte(src))
 	require.NoError(t, perr)
 	_, err := xsd.NewCompiler().Compile(t.Context(), doc) // default = XSD 1.0
-	require.NoError(t, err)
+	require.ErrorIs(t, err, xsd.ErrCompilationFailed)
 }
 
 // TestVersion11CTAElementConsistentTypeTables covers the XSD 1.1 extension to
