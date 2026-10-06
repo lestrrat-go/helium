@@ -22,15 +22,17 @@ Measured against the W3C XML Schema Test Suite:
 
 | Mode | Pass | Skip | XFail | Fail | Total | Pass/Total | Collections |
 |------|-----:|-----:|------:|-----:|------:|-----------:|-------------|
-| **XSD 1.0** (default) | 14,383 | 0 | 16 | 0 | 14,399 | 99.89% | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
+| **XSD 1.0** (default) | 14,378 | 0 | 21 | 0 | 14,399 | 99.85% | Microsoft, NIST, Sun, Boeing, IBM, Saxon, Oracle, W3C-WG |
 | **XSD 1.1** | 1,048 | 0 | 1 | 0 | 1,049 | 99.90% | IBM, Saxon, Oracle, W3C-WG |
 
 Zero cases fail unexpectedly. The XFail cases are documented expected failures
 (`expectations/xsd10.json` and `expectations/xsd11.json` in the sibling
-`helium-w3c-tests` module). The 16 XSD 1.0 xfails are W3C tests that are
+`helium-w3c-tests` module). The 21 XSD 1.0 xfails are W3C tests that are
 spec-disputed/queried (bugzilla 4126/4133/4135/4952/4957, w3c/xsdtests#11),
-1.0-vs-1.1 particle-restriction subsumption tradeoffs that XSD 1.1 abolished, or
-libxml2-parity divergences where helium's behaviour is correct. The one XSD 1.1
+1.0-vs-1.1 particle-restriction subsumption tradeoffs that XSD 1.1 abolished,
+libxml2-parity divergences where helium's behaviour is correct, or five IBM
+XSD 1.1 wildcard tests whose test group lacks `version="1.1"` and whose schemas
+use `notNamespace`/`notQName`, which XSD 1.0 does not define. The one XSD 1.1
 xfail, `saxonMeta/Simple.testSet/simple006`, is a disputed §5.3
 missing-component case: helium accepts it to match the near-identical
 `saxonMeta/Missing/missing006`, which expects valid. Each summary lists the

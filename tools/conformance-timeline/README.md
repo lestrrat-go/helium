@@ -83,10 +83,10 @@ lands in the JUnit **pass bucket** with the marker only in `system-out`. It is n
 passing conformance result — helium does not produce what the case asks for — so it is
 counted as **not-passing** and shown as `⚠`, so it can never round into a perfect score.
 
-Reference xfails: XML 8, XSD 1.0 16, XSD 1.1 1, QT3 4, XSLT 3.0 0.
+Reference xfails: XML 8, XSD 1.0 21, XSD 1.1 1, QT3 4, XSLT 3.0 0.
 
 The committed per-suite summaries list xfails in their own **XFail** row, apart from
-**Pass** (`xsd/summary-xsd10.md` reads Pass 14383 + XFail 16), so their Pass counts
+**Pass** (`xsd/summary-xsd10.md` reads Pass 14378 + XFail 21), so their Pass counts
 match the pass counts this tool reports.
 
 ## Performance-gated cases (`HELIUM_SLOW_TESTS`)
