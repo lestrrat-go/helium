@@ -1,10 +1,8 @@
 package xsd_test
 
 import (
-	"strings"
 	"testing"
 
-	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
 )
@@ -19,22 +17,6 @@ func TestNonProcessorXsiAttributes(t *testing.T) {
 	t.Parallel()
 
 	const xsiNS = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
-
-	validate := func(t *testing.T, v xsd.Version, schemaXML, instanceXML string) (string, error) {
-		t.Helper()
-		schema, errs, cerr := compileWith(t, v, schemaXML)
-		require.NoError(t, cerr, errs)
-		doc, err := helium.NewParser().Parse(t.Context(), []byte(instanceXML))
-		require.NoError(t, err)
-		collector := helium.NewErrorCollector(t.Context(), helium.ErrorLevelNone)
-		verr := xsd.NewValidator(schema).Label("test.xml").ErrorHandler(collector).Validate(t.Context(), doc)
-		_ = collector.Close()
-		var b strings.Builder
-		for _, e := range collector.Errors() {
-			b.WriteString(e.Error())
-		}
-		return b.String(), verr
-	}
 
 	const noAttrs = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="root" nillable="true"><xs:complexType/></xs:element>
@@ -56,35 +38,35 @@ func TestNonProcessorXsiAttributes(t *testing.T) {
 
 			t.Run("rejected on a type without attribute uses", func(t *testing.T) {
 				t.Parallel()
-				out, err := validate(t, v, noAttrs, `<root `+xsiNS+` xsi:bogus="1"/>`)
+				out, err := validateInstanceVersion(t, v, noAttrs, `<root `+xsiNS+` xsi:bogus="1"/>`)
 				require.Error(t, err)
 				require.Contains(t, out, "bogus' is not allowed")
 			})
 
 			t.Run("rejected on a type with attribute uses", func(t *testing.T) {
 				t.Parallel()
-				out, err := validate(t, v, withAttr, `<root `+xsiNS+` a="x" xsi:bogus="1"/>`)
+				out, err := validateInstanceVersion(t, v, withAttr, `<root `+xsiNS+` a="x" xsi:bogus="1"/>`)
 				require.Error(t, err)
 				require.Contains(t, out, "bogus' is not allowed")
 			})
 
 			t.Run("processor attributes stay exempt", func(t *testing.T) {
 				t.Parallel()
-				out, err := validate(t, v, noAttrs, `<root `+xsiNS+` xsi:nil="true" xsi:schemaLocation="urn:a a.xsd" xsi:noNamespaceSchemaLocation="b.xsd"/>`)
+				out, err := validateInstanceVersion(t, v, noAttrs, `<root `+xsiNS+` xsi:nil="true" xsi:schemaLocation="urn:a a.xsd" xsi:noNamespaceSchemaLocation="b.xsd"/>`)
 				require.NoError(t, err, out)
-				out, err = validate(t, v, withAttr, `<root `+xsiNS+` a="x" xsi:type="T"/>`)
+				out, err = validateInstanceVersion(t, v, withAttr, `<root `+xsiNS+` a="x" xsi:type="T"/>`)
 				require.NoError(t, err, out)
 			})
 
 			t.Run("admitted by a lax wildcard", func(t *testing.T) {
 				t.Parallel()
-				_, err := validate(t, v, laxWildcard, `<root `+xsiNS+` xsi:bogus="1"/>`)
+				_, err := validateInstanceVersion(t, v, laxWildcard, `<root `+xsiNS+` xsi:bogus="1"/>`)
 				require.NoError(t, err)
 			})
 
 			t.Run("strict wildcard needs a declaration", func(t *testing.T) {
 				t.Parallel()
-				_, err := validate(t, v, strictWildcard, `<root `+xsiNS+` xsi:bogus="1"/>`)
+				_, err := validateInstanceVersion(t, v, strictWildcard, `<root `+xsiNS+` xsi:bogus="1"/>`)
 				require.Error(t, err)
 			})
 		})
