@@ -395,8 +395,9 @@
   foreign-namespace children ignored (the `@type`-vs-`simpleType` mutual exclusion enforced separately).
 - **wildcard XML representation** (version-INDEPENDENT): `checkWildcardAttrs` (`read_elements.go`) restricts
   `<xs:any>`/`<xs:anyAttribute>` attributes to `{id, namespace, processContents}`, with `{minOccurs,
-  maxOccurs}` on `<xs:any>` only (rejected on `anyAttribute`); `notNamespace`/`notQName` permitted-and-ignored
-  in 1.0, any other attribute a schema error. `checkWildcardChildren` (`read_elements.go`, from
+  maxOccurs}` on `<xs:any>` only (rejected on `anyAttribute`); `notNamespace`/`notQName` permitted here
+  (parsed by `readWildcard` in 1.1 only; 1.0 rejects them in `checkSchemaElementAttrs`), any other attribute a
+  schema error. `checkWildcardChildren` (`read_elements.go`, from
   `readWildcard`) enforces the `(annotation?)` content model: any XSD-namespace child other than
   `<xs:annotation>` — e.g. a nested `<xs:group>` reference (W3C groupO026) or an `<xs:element>` — is a
   schema-representation error; foreign-namespace children are ignored.
@@ -422,8 +423,9 @@
 - **element/attribute closed attribute vocabulary**: `checkElementAttrVocabulary`/`checkAttrVocabulary`
   (`check_elements.go`) reject an unknown UNQUALIFIED attribute on `<xs:element>`/`<xs:attribute>` (the
   schema-for-schemas admits only the declared unqualified attributes plus `anyAttribute namespace="##other"`);
-  foreign-namespace attributes permitted. The `<xs:element>` set is version-INDEPENDENT; the `<xs:attribute>`
-  set is version-SPLIT — `targetNamespace`/`inheritable` are XSD 1.1 additions, so `checkAttrVocabulary`
+  foreign-namespace attributes permitted. The `<xs:element>` set is the union of both versions (its 1.1-only
+  `targetNamespace` is rejected in 1.0 by `checkSchemaElementAttrs`); the `<xs:attribute>` set is
+  version-SPLIT — `targetNamespace`/`inheritable` are XSD 1.1 additions, so `checkAttrVocabulary`
   rejects them under `Version10` as unknown attributes (W3C ibmData S3_2_3/s3_2_3si05).
 - **non-imported-namespace reference** (src-resolve §3.3.2, version-INDEPENDENT):
   `checkNonImportedNamespaceRefs` (`link_refs.go`) rejects an ENTRY-document `<xs:element>` `@type`/`@ref`
@@ -441,10 +443,22 @@
   `<xs:sequence>`, an `<xs:attribute>`, or an `<xs:group>` reference — W3C attQ002/groupO024) is a
   schema-representation error; foreign-namespace children are ignored. Cardinality (at-most-one
   annotation/type) is enforced separately.
-- **schema-namespace attribute prohibition** (version-INDEPENDENT): `checkSchemaNamespaceAttrs`
-  (`check_schema_attrs.go`, a DOM walk not descending into `xs:appinfo`/`xs:documentation` payload) rejects
-  any attribute in the XSD namespace (e.g. `xsd:type`) on an XSD-namespace schema element — only unqualified
-  schema attributes and non-XSD foreign attributes are admissible.
+- **schema-element attribute walk** (`checkSchemaElementAttrs`, `check_schema_attrs.go`): a DOM walk over
+  every XSD-namespace element, not descending into `xs:appinfo`/`xs:documentation` payload, run after
+  conditional inclusion on every entry/included/imported/redefined/overridden document. It applies two rules:
+  - version-INDEPENDENT: any attribute in the XSD namespace (e.g. `xsd:type`) is rejected — only unqualified
+    schema attributes and non-XSD foreign attributes are admissible.
+  - `Version10` only: an unqualified attribute that only the XSD 1.1 schema-for-schemas declares
+    (`xsd11OnlyAttr`, the difference between `http://www.w3.org/2001/XMLSchema.xsd` and
+    `http://www.w3.org/2009/XMLSchema/XMLSchema.xsd`) is rejected with "The attribute 'X' is not allowed.":
+    `notNamespace`/`notQName` on `any`/`anyAttribute`, `defaultAttributesApply` on `complexType`,
+    `targetNamespace` on `element`, `xpathDefaultNamespace` on `selector`/`field`/`schema`, `ref` on
+    `key`/`keyref`/`unique`, `defaultAttributes` on `schema`. `xs:attribute`'s `inheritable`/`targetNamespace`
+    are rejected by `checkAttrVocabulary` instead. Elements pruned by `vc:` conditional inclusion are never
+    checked. libxml2 rejects all of these except the two `xs:schema` attributes (it checks no `xs:schema`
+    attribute). Five W3C ibmMeta wildcard groups (anyAttribute s3_10_6ii01/ii02/ii04, wildcard
+    s3_10_1ii08/ii09) lack `version="1.1"` and expect a valid schema in 1.0; they are recorded as expected
+    failures in the harness's `expectations/xsd10.json`.
 - **element ID value-constraint prohibition** (§3.3.6 Element Declaration Properties Correct, XSD 1.0 ONLY):
   `checkElementDeclConstraints` (`link_refs.go`) rejects an element whose EFFECTIVE type is or derives from
   `xs:ID` (`builtinBaseLocal == "ID"`) carrying a default/fixed — the element analog of au-props-correct.3.

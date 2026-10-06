@@ -488,7 +488,7 @@ func (a *positionAutomaton) stateUnambiguous(reachable []int) bool {
 			if a.schema != nil {
 				version = a.schema.version
 			}
-			if entriesOverlap(a.positions[pi].entry, a.positions[pj].entry, version, a.schema) {
+			if entriesOverlap(a.positions[pi].entry, a.positions[pj].entry, version) {
 				return false
 			}
 		}
@@ -530,7 +530,7 @@ type firstSetEntry struct {
 // regardless of declaration order. The remaining gap is the SEQUENCE case (a
 // minOccurs=0 wildcard preceding an element in a sequence), which the
 // position-based sequence matcher does not yet override.
-func entriesOverlap(a, b firstSetEntry, version Version, schema *Schema) bool {
+func entriesOverlap(a, b firstSetEntry, version Version) bool {
 	// Two element positions overlap (are ambiguous) when they can match the same
 	// element name AND belong to DIFFERENT particles. Two positions with the same
 	// origin are occurrence-copies of ONE element declaration (the same particle),
@@ -554,18 +554,18 @@ func entriesOverlap(a, b firstSetEntry, version Version, schema *Schema) bool {
 		return a.origin != b.origin
 	}
 	// Element vs wildcard: in 1.1 the element wins (no conflict); in 1.0 they
-	// overlap when the wildcard admits the element's full expanded name.
+	// overlap when the wildcard's namespace admits the element's namespace.
 	if !a.isWildcard && b.isWildcard {
 		if version == Version11 {
 			return false
 		}
-		return entryWildcardAllowsName(b, a.qname, schema)
+		return entryWildcardMatchesNS(b, a.qname.NS)
 	}
 	if a.isWildcard && !b.isWildcard {
 		if version == Version11 {
 			return false
 		}
-		return entryWildcardAllowsName(a, b.qname, schema)
+		return entryWildcardMatchesNS(a, b.qname.NS)
 	}
 	// Two wildcards. Occurrence-copies of ONE wildcard particle share an ORIGIN
 	// (applyOccurs re-walks the same textual leaf, see nextOrigin) — the same
@@ -662,14 +662,15 @@ func upaWildcardNSSet(wcNS, targetNS string) map[string]struct{} {
 	}
 }
 
-// entryWildcardAllowsName reports whether a wildcard first-set entry admits an
-// element expanded name, honoring notQName/##defined constraints when the full
-// *Wildcard is available.
-func entryWildcardAllowsName(e firstSetEntry, qn QName, schema *Schema) bool {
+// entryWildcardMatchesNS reports whether a wildcard first-set entry admits a
+// namespace. Only the XSD 1.0 element-vs-wildcard overlap check calls it, and a
+// 1.0 wildcard carries no negated constraint, so namespace matching is the whole
+// test.
+func entryWildcardMatchesNS(e firstSetEntry, ns string) bool {
 	if e.wc != nil {
-		return wildcardAllowsExpandedName(e.wc, qn.Local, qn.NS, schema, false)
+		return wildcardMatches(e.wc, ns)
 	}
-	return wildcardMatchesNS(e.wildcard, e.targetNS, qn.NS)
+	return wildcardMatchesNS(e.wildcard, e.targetNS, ns)
 }
 
 // wildcardMatchesNS checks if a wildcard namespace constraint matches a given namespace.

@@ -956,7 +956,7 @@ governed correctly too — save/reset/restore alongside form/block/final default
 Without this, an override target lacking its own `@defaultAttributes` would inherit the overriding schema's
 default group (W3C ibmMeta/defaultAttributesApply s3_4_2_4ii08). A replacement matched in a DEEPER nested
 include of the target is registered under the DIRECT target's state — a documented edge not exercised by the
-conformance suite. XSD 1.0 schemas ignore both attributes.
+conformance suite. XSD 1.0 rejects both attributes as schema errors (`checkSchemaElementAttrs`).
 
 **Particle occurrence validation** (read phase, `read_particles.go`/`read_elements.go`/`check_elements.go`):
 every particle `minOccurs`/`maxOccurs` is validated as `xs:nonNegativeInteger` (max also allows `unbounded`)

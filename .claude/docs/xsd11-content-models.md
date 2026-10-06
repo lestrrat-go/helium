@@ -386,7 +386,8 @@
     pc must be at least as strong as EVERY base wildcard it INTERSECTS. A GLOBAL attribute in the XSI
     namespace is rejected (no-xsi) — `parseGlobalAttribute` (`read_elements.go`), gated Version11 (the
     pre-existing LOCAL-qualified-attribute XSI check in `check_elements.go` untouched for 1.0).
-  - All gated `Version11`; 1.0 ignores notNamespace/notQName and does NOT merge group wildcards into a type's
+  - All gated `Version11`; 1.0 rejects notNamespace/notQName as schema errors (`checkSchemaElementAttrs`; `readWildcard`
+    parses them only in 1.1, and `resolveDefinedSiblings` runs only in 1.1) and does NOT merge group wildcards into a type's
     `{attribute wildcard}` at validation. 1.0 DOES record each attribute group's `xs:anyAttribute`
     diagnostic-free in `attrGroupWildcards` (`parseNamedAttributeGroup`, via `quietProcessContents`, namespace
     + pc only) so the COMPILE-TIME restriction check (`checkRestrictionAttrs` `effectiveAttrWildcard`, 1.0
