@@ -12,9 +12,9 @@ import (
 // TestNonProcessorXsiAttributes checks that only the four xsi: processor
 // attributes (xsi:type, xsi:nil, xsi:schemaLocation,
 // xsi:noNamespaceSchemaLocation) are exempt from attribute-use matching
-// (cvc-complex-type clause 3, XSD 1.0 and 1.1). Any other attribute in the xsi
-// namespace is an ordinary attribute: without an attribute wildcard that admits
-// it, it is not allowed. xmllint rejects it the same way.
+// (cvc-complex-type clause 3 in XSD 1.0, clause 2 in XSD 1.1). Any other
+// attribute in the xsi namespace is an ordinary attribute: without an attribute
+// wildcard that admits it, it is not allowed. xmllint rejects it the same way.
 func TestNonProcessorXsiAttributes(t *testing.T) {
 	t.Parallel()
 

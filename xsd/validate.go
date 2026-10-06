@@ -1948,9 +1948,10 @@ func (vc *validationContext) collectExpandedChildElements(elem *helium.Element, 
 // lenient behavior (XML namespace always allowed) is preserved.
 //
 // Only xsi:type, xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation
-// are exempt (cvc-complex-type clause 3, in both 1.0 and 1.1). Any other
-// attribute in the xsi namespace (e.g. xsi:bogus) is an ordinary attribute: it
-// must be admitted by an attribute wildcard or it is not allowed.
+// are exempt (cvc-complex-type clause 3 in 1.0 §3.4.4, clause 2 in 1.1
+// §3.4.4.2). Any other attribute in the xsi namespace (e.g. xsi:bogus) is an
+// ordinary attribute: it must be admitted by an attribute wildcard or it is not
+// allowed.
 func (vc *validationContext) isSpecialAttr(a *helium.Attribute) bool {
 	p := a.Prefix()
 	if p == "xmlns" || (p == "" && a.LocalName() == "xmlns") {
