@@ -401,6 +401,13 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 		TargetNS:        c.schema.targetNamespace,
 	}
 
+	// XSD 1.1 negated namespace / name constraints. XSD 1.0 does not define
+	// @notNamespace/@notQName: checkSchemaElementAttrs reports them as schema
+	// errors, so they are not parsed in 1.0.
+	if c.version != Version11 {
+		return wc
+	}
+
 	hasNotNS := hasAttr(elem, attrNotNamespace)
 	// @namespace and @notNamespace are mutually exclusive (XSD 3.10.2,
 	// no-xmlns / src-wildcard): a wildcard may carry at most one of them.
@@ -426,9 +433,9 @@ func (c *compiler) readWildcard(ctx context.Context, elem *helium.Element) *Wild
 // error. Foreign-namespaced attributes are allowed; an XSD-namespaced attribute
 // or an unexpected unqualified attribute is a schema error.
 //
-// This rule is version-INDEPENDENT for the base attribute set. The negated
-// constraints @notNamespace/@notQName are permitted here and parsed by
-// readWildcard when present. The stricter no-occurs grammar of an xs:openContent
+// This rule is version-INDEPENDENT for the base attribute set. The XSD 1.1
+// negated constraints @notNamespace/@notQName are permitted here and parsed by
+// readWildcard in 1.1; in 1.0 checkSchemaElementAttrs rejects them. The stricter no-occurs grammar of an xs:openContent
 // wildcard is enforced separately by parseOpenContentWildcard.
 func (c *compiler) checkWildcardAttrs(ctx context.Context, elem *helium.Element) {
 	src := c.diagSource()
@@ -449,7 +456,8 @@ func (c *compiler) checkWildcardAttrs(ctx context.Context, elem *helium.Element)
 						attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed on 'anyAttribute'."))
 				}
 			case attrNotNamespace, attrNotQName:
-				// Negated wildcard constraints, parsed by readWildcard.
+				// XSD 1.1 negated constraints, parsed by readWildcard (1.0 rejects
+				// them in checkSchemaElementAttrs).
 			default:
 				c.schemaError(ctx, schemaParserErrorAttr(src, line, local, local,
 					attr.LocalName(), "The attribute '"+attr.LocalName()+"' is not allowed."))

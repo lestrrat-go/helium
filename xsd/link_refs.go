@@ -971,11 +971,13 @@ func (c *compiler) resolveRefs(ctx context.Context) {
 		}
 	}
 
-	// Resolve ##definedSibling on element wildcards now that content models
-	// (including expanded group refs) are fully built — BEFORE the restriction-
-	// derivation checks below, which compare base/derived wildcards' resolved
-	// SiblingNames.
-	c.resolveDefinedSiblings()
+	// XSD 1.1: resolve ##definedSibling on element wildcards now that content
+	// models (including expanded group refs) are fully built — BEFORE the
+	// restriction-derivation checks below, which compare base/derived wildcards'
+	// resolved SiblingNames. Only a 1.1 @notQName carries ##definedSibling.
+	if c.version == Version11 {
+		c.resolveDefinedSiblings()
+	}
 
 	// Check restriction attribute compatibility.
 	// Collect and sort by source line for deterministic error ordering.
