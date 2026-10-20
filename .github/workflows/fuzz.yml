@@ -148,7 +148,7 @@ jobs:
 
       - name: Upload fuzz diagnostics
         if: ${{ always() && steps.fuzz-diagnostics.outputs.has-files == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-diagnostics-${{ steps.artifact-name.outputs.slug }}
           path: ${{ runner.temp }}/fuzz-output/diagnostics/
@@ -190,7 +190,7 @@ jobs:
 
       - name: Upload failing corpus
         if: ${{ always() && steps.failing-corpus.outputs.has-files == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-corpus-${{ steps.artifact-name.outputs.slug }}
           path: ${{ runner.temp }}/fuzz-failures/
