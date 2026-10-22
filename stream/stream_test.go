@@ -72,8 +72,44 @@ func TestStartDocumentFull(t *testing.T) {
 	var buf bytes.Buffer
 	w := stream.NewWriter(&buf)
 	require.NoError(t, w.StartDocument("1.0", "ISO-8859-1", "no"))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WriteString("café"))
+	require.NoError(t, w.EndElement())
 	require.NoError(t, w.EndDocument())
-	require.Equal(t, `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>`, strings.TrimRight(buf.String(), "\n"))
+	require.True(t, bytes.Contains(buf.Bytes(), []byte("encoding=\"ISO-8859-1\"")))
+	require.True(t, bytes.Contains(buf.Bytes(), []byte{0xE9}))
+	doc, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, "café", helium.CharacterData(doc.DocumentElement()))
+}
+
+func TestStartDocumentUTF16OutputCanBeParsed(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := stream.NewWriter(&buf)
+	require.NoError(t, w.StartDocument("1.0", "UTF-16", ""))
+	require.NoError(t, w.StartElement("root"))
+	require.NoError(t, w.WriteString("東京"))
+	require.NoError(t, w.EndElement())
+	require.NoError(t, w.EndDocument())
+
+	doc, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, "東京", helium.CharacterData(doc.DocumentElement()))
+}
+
+func TestStartDocumentRejectsUnemittedASCIIEncoding(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"US-ASCII", "ASCII", "ISO646-US"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := stream.NewWriter(&buf)
+			err := w.StartDocument("1.0", name, "")
+			require.ErrorContains(t, err, "unsupported encoding")
+			require.Empty(t, buf.Bytes())
+		})
+	}
 }
 
 func TestStartDocumentEncodingValidation(t *testing.T) {

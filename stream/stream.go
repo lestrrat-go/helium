@@ -10,6 +10,7 @@ import (
 
 	"github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/xmlchar"
+	"golang.org/x/text/transform"
 )
 
 var errNilOutputWriter = errors.New("stream: output writer is nil")
@@ -96,6 +97,8 @@ type nsBindings struct {
 // (libxml2: xmlTextWriter)
 type Writer struct {
 	out           io.Writer
+	rawOut        io.Writer
+	outputEncoder *transform.Writer
 	indent        string // indent string per level; empty = no indentation
 	quoteChar     byte   // attribute quote character ('"' or '\'')
 	singleByte    [1]byte
@@ -121,6 +124,7 @@ type Writer struct {
 func NewWriter(w io.Writer) Writer {
 	return Writer{
 		out:       w,
+		rawOut:    w,
 		quoteChar: '"',
 		state:     stateNone,
 	}
@@ -799,9 +803,7 @@ func (w *Writer) StartDocument(version, enc, standalone string) error {
 	if standalone != "" && standalone != "yes" && standalone != "no" {
 		return fmt.Errorf("stream: invalid standalone value %q (want \"yes\", \"no\", or empty)", standalone)
 	}
-	if version == "1.1" {
-		w.xml11 = true
-	}
+	var outputEncoder *transform.Writer
 	// Validate the encoding name BEFORE writing any output: first against the XML
 	// EncName production (so a syntactically malformed value like "utf 8" cannot
 	// be emitted raw into the declaration), then for actual support. encoding.Load
@@ -811,9 +813,21 @@ func (w *Writer) StartDocument(version, enc, standalone string) error {
 		if !xmlchar.IsValidEncName(enc) {
 			return fmt.Errorf("stream: invalid encoding name %q", enc)
 		}
-		if encoding.Load(enc) == nil {
+		outputEncoding := encoding.Load(enc)
+		if outputEncoding == nil || encoding.IsASCII(enc) {
 			return fmt.Errorf("stream: unsupported encoding %q", enc)
 		}
+		if !w.ensureWritable() {
+			return w.err
+		}
+		outputEncoder = transform.NewWriter(w.rawOut, outputEncoding.NewEncoder())
+	}
+	w.xml11 = version == "1.1"
+	w.outputEncoder = outputEncoder
+	if outputEncoder != nil {
+		w.out = outputEncoder
+	} else {
+		w.out = w.rawOut
 	}
 	w.writeStr("<?xml version=")
 	w.writeByte(w.quoteChar)
@@ -870,6 +884,13 @@ func (w *Writer) EndDocument() error {
 	}
 	if w.indent == "" {
 		w.writeStr("\n")
+	}
+	if w.outputEncoder != nil {
+		if err := w.outputEncoder.Close(); err != nil {
+			w.err = err
+		}
+		w.outputEncoder = nil
+		w.out = w.rawOut
 	}
 	w.state = stateNone
 	return w.Flush()
@@ -1838,7 +1859,7 @@ func (w *Writer) Flush() error {
 	if w.err != nil {
 		return w.err
 	}
-	if f, ok := w.out.(interface{ Flush() error }); ok {
+	if f, ok := w.rawOut.(interface{ Flush() error }); ok {
 		w.err = f.Flush()
 	}
 	return w.err
