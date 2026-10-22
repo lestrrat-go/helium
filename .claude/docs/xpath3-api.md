@@ -29,6 +29,8 @@ that data for the lifetime of derived evaluators, contexts, and eval states.
 
 `Evaluate` is the terminal method; `ctx` is for cancellation/deadlines only,
 not configuration. All configuration comes from the fluent setters below.
+`Evaluate`, `EvaluateEBV`, and `EvaluateReuse` return an already-present context
+error before evaluating the expression.
 
 `EvaluateEBV` is the terminal method for a caller that only needs the effective boolean value of the whole
 expression. It returns the value and the errors that `Evaluate` followed by `Result.EBV()` returns, except that a

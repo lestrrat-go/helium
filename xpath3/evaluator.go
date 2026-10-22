@@ -449,6 +449,9 @@ func (e Evaluator) TraceWriter(w io.Writer) Evaluator {
 // Evaluate evaluates the compiled expression against the given context node.
 // ctx is used for cancellation/deadlines only, not for configuration.
 func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.Node) (*Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := expr.requireCompiledProgram(); err != nil {
 		return nil, err
 	}
@@ -484,6 +487,9 @@ func (e Evaluator) Evaluate(ctx context.Context, expr *Expression, node helium.N
 // (XPath 3.1 §2.3.4) of the nodes it did not reach do not fire. A node
 // result never builds node items, with or without type annotations.
 func (e Evaluator) EvaluateEBV(ctx context.Context, expr *Expression, node helium.Node) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	if err := expr.requireCompiledProgram(); err != nil {
 		return false, err
 	}
