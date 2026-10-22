@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"maps"
+	"slices"
 
 	helium "github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/iofs"
@@ -139,6 +140,9 @@ func cloneSchemaSymbolTables(s *Schema) *Schema {
 	cp.attrGroups = maps.Clone(s.attrGroups)
 	cp.globalAttrs = maps.Clone(s.globalAttrs)
 	cp.substGroups = maps.Clone(s.substGroups)
+	for head, members := range cp.substGroups {
+		cp.substGroups[head] = slices.Clone(members)
+	}
 	// The struct copy above shares s.substClosures' map header. mergeHintSchema
 	// is about to append to cp.substGroups, which would leave that shared cache
 	// stale (silently serving pre-merge closures). Nil it here; the caller
