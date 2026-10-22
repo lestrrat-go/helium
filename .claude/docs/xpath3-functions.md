@@ -606,6 +606,10 @@ All delegate to Go `math` package.
 `static-base-uri`, `default-collation`, `available-environment-variables`, `environment-variable`, `current-dateTime`,
 `current-date`, `current-time`, `implicit-timezone`, `generate-id`
 
+The environment-variable functions read only the map configured with
+`Evaluator.EnvironmentVariables`. An unset map is empty; neither function reads the
+process environment.
+
 ### `format_number.go`
 `format-number` (full ICU-style decimal format patterns)
 

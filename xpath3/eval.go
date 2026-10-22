@@ -39,6 +39,7 @@ type evalContext struct {
 	size                 int
 	vars                 *variableScope
 	namespaces           map[string]string
+	environmentVariables map[string]string
 	functions            map[string]Function
 	fnsNS                map[QualifiedName]Function
 	depth                int

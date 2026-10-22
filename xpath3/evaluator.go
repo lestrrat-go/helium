@@ -36,6 +36,7 @@ type Evaluator struct {
 type evaluatorCfg struct {
 	options                EvaluatorOption
 	namespaces             map[string]string
+	environmentVariables   map[string]string
 	variables              map[string]Sequence
 	varScope               *variableScope             // root scope built once from variables by Variables(); shared read-only by every evaluation
 	functions              map[string]Function        // unqualified calls
@@ -99,6 +100,20 @@ func (e Evaluator) Namespaces(ns map[string]string) Evaluator {
 		e.cfg.namespaces = ns
 	} else {
 		e.cfg.namespaces = maps.Clone(ns)
+	}
+	return e
+}
+
+// EnvironmentVariables sets the variables available to
+// fn:environment-variable and fn:available-environment-variables. The map is
+// cloned unless EvalBorrowing is set. An unset map exposes no process
+// environment variables.
+func (e Evaluator) EnvironmentVariables(vars map[string]string) Evaluator {
+	e = e.clone()
+	if e.borrowing() {
+		e.cfg.environmentVariables = vars
+	} else {
+		e.cfg.environmentVariables = maps.Clone(vars)
 	}
 	return e
 }
@@ -513,6 +528,7 @@ func (e Evaluator) newEvalCtx(node helium.Node) *evalContext {
 
 	// namespaces
 	ec.namespaces = cfg.namespaces
+	ec.environmentVariables = cfg.environmentVariables
 
 	// variables: the root scope is built once by Variables() and shared.
 	ec.vars = cfg.varScope

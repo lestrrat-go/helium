@@ -49,6 +49,7 @@ slices are cloned unless `EvalBorrowing` was set on `NewEvaluator`.
 ```go
 // Bindings & resolvers
 func (e Evaluator) Namespaces(ns map[string]string) Evaluator
+func (e Evaluator) EnvironmentVariables(vars map[string]string) Evaluator
 func (e Evaluator) Variables(vars map[string]Sequence) Evaluator
 func (e Evaluator) Functions(byLocal map[string]Function, byQName map[QualifiedName]Function) Evaluator
 func (e Evaluator) VariableResolver(r VariableResolver) Evaluator
@@ -290,6 +291,10 @@ Pass bindings as plain maps: variables via `Evaluator.Variables(map[string]Seque
 `byQName map[QualifiedName]Function` for namespaced ones). Maps are cloned unless
 `EvalBorrowing` is set. Supply lazy lookups with `Evaluator.VariableResolver` /
 `Evaluator.FunctionResolver`.
+
+`fn:environment-variable` and `fn:available-environment-variables` read only the map
+passed to `Evaluator.EnvironmentVariables`. The default map is empty, so an evaluator
+does not expose the process environment. The map is cloned unless `EvalBorrowing` is set.
 
 **Resource loading is opt-in.** Without an explicit `URIResolver` or `HTTPClient` (`Evaluator.URIResolver` /
 `Evaluator.HTTPClient`), `fn:doc`, `fn:doc-available`, `fn:json-doc`, and the `fn:unparsed-text*` family error
