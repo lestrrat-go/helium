@@ -181,7 +181,6 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 		v.valid = false
 		return false, nil
 	}
-
 	// Create initial state: the root element
 	state := &validState{
 		seq: []helium.Node{root},
@@ -207,6 +206,39 @@ func validateDocument(ctx context.Context, doc *helium.Document, grammar *Gramma
 	}
 
 	return v.valid, nil
+}
+
+// contentChildren returns the nodes that RELAX NG validates as element
+// content, expanding entity references through their parsed replacement tree.
+func contentChildren(ctx context.Context, elem *helium.Element) ([]helium.Node, error) {
+	var children []helium.Node
+	stack := make([]helium.Node, 0)
+	for child := range helium.Children(elem) {
+		stack = append(stack, child)
+	}
+	for left, right := 0, len(stack)-1; left < right; left, right = left+1, right-1 {
+		stack[left], stack[right] = stack[right], stack[left]
+	}
+	for len(stack) > 0 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		child := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if ref, ok := child.(*helium.EntityRef); ok {
+			entity := ref.FirstChild()
+			if entity != nil && entity.Type() == helium.EntityNode {
+				for replacement := entity.LastChild(); replacement != nil; replacement = replacement.PrevSibling() {
+					stack = append(stack, replacement)
+				}
+			}
+			continue
+		}
+		if isContentChild(child) {
+			children = append(children, child)
+		}
+	}
+	return children, nil
 }
 
 // stopped polls the caller's context for one pattern step and reports whether
@@ -331,17 +363,12 @@ func (v *validator) validateElement(pat *pattern, state *validState) int {
 	// Consume this element from the sequence
 	state.seq = state.seq[1:]
 
-	// Validate attributes and content together.
-	// Build child node list, skipping non-content nodes (DTD artifacts, PIs,
-	// comments). Count first so the list is allocated once at its final size.
-	var children []helium.Node
-	if n := countContentChildren(elem); n > 0 {
-		children = make([]helium.Node, 0, n)
-		for child := range helium.Children(elem) {
-			if isContentChild(child) {
-				children = append(children, child)
-			}
-		}
+	// Validate attributes and content together. Entity references contribute
+	// their parsed replacement nodes at the reference site.
+	children, err := contentChildren(v.ctx, elem)
+	if err != nil {
+		v.stopErr = err
+		return -1
 	}
 
 	// Collect instance attributes (skip xmlns declarations). Attributes returns
@@ -442,18 +469,6 @@ func isContentChild(child helium.Node) bool {
 	default:
 		return true
 	}
-}
-
-// countContentChildren returns how many children of elem isContentChild
-// accepts.
-func countContentChildren(elem *helium.Element) int {
-	n := 0
-	for child := range helium.Children(elem) {
-		if isContentChild(child) {
-			n++
-		}
-	}
-	return n
 }
 
 // validateElementBody validates the attribute and content patterns of an element

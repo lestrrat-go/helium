@@ -1132,6 +1132,8 @@ RELAX NG schema compilation and validation.
 - Pattern-based: element, attribute, group, choice, interleave, optional, zeroOrMore, oneOrMore, ref, data, value, list,
   mixed, notAllowed
 - Supports: include with override, externalRef, parentRef, anyName/nsName/ncName, data types
+- Entity references in element content contribute their parsed replacement nodes to validation, including markup
+  replacement content. External entity access remains blocked by default in the parser.
 - Group backtracking for greedy pattern over-consumption
 - Interleave is compile-time partitioned into a routing table per branch (`interleave.go`); every `<interleave>`
   is checked against RELAX NG §7.4 (branches' element/text/attribute name classes must be pairwise disjoint) —
