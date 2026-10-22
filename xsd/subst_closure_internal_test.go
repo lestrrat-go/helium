@@ -428,3 +428,19 @@ func TestSchemaWithInstanceHintsRebuildsSubstClosures(t *testing.T) {
 	err = NewValidator(base).Label("test.xml").Validate(t.Context(), instDoc)
 	require.NoError(t, err, "m2, contributed only by the xsi:schemaLocation hint, must validate as a head member")
 }
+
+func TestCloneSchemaSymbolTablesCopiesSubstitutionGroupMembers(t *testing.T) {
+	t.Parallel()
+
+	head := QName{Local: "head"}
+	base := &Schema{substGroups: map[QName][]*ElementDecl{
+		head: make([]*ElementDecl, 1, 4),
+	}}
+	base.substGroups[head][0] = &ElementDecl{Name: QName{Local: "base"}}
+
+	clone := cloneSchemaSymbolTables(base)
+	clone.substGroups[head] = append(clone.substGroups[head], &ElementDecl{Name: QName{Local: "hint"}})
+
+	baseMembers := base.substGroups[head][:2]
+	require.Nil(t, baseMembers[1], "merging an instance hint must not write into the base schema's slice")
+}
